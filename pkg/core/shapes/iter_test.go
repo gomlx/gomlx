@@ -4,30 +4,31 @@ import (
 	"slices"
 	"testing"
 
+	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 )
 
 func TestShape_Strides(t *testing.T) {
 	// Test case 1: shape with dimensions [2, 3, 4]
-	shape := Make(dtypes.F32, 2, 3, 4)
+	shape := shapes2.Make(dtypes.F32, 2, 3, 4)
 	strides := shape.Strides()
 	require.Equal(t, []int{12, 4, 1}, strides)
 
 	// Test case 2: shape with single dimension
-	shape = Make(dtypes.F32, 5)
+	shape = shapes2.Make(dtypes.F32, 5)
 	strides = shape.Strides()
 	require.Equal(t, []int{1}, strides)
 
 	// Test case 3: shape with dimensions [3, 1, 2]
-	shape = Make(dtypes.F32, 3, 1, 2)
+	shape = shapes2.Make(dtypes.F32, 3, 1, 2)
 	strides = shape.Strides()
 	require.Equal(t, []int{2, 2, 1}, strides)
 }
 
 func TestShape_Iter(t *testing.T) {
 	// Version 1: there is only one value to iterate:
-	shape := Make(dtypes.F32, 1, 1, 1, 1)
+	shape := shapes2.Make(dtypes.F32, 1, 1, 1, 1)
 	collect := make([][]int, 0, shape.Size())
 	for flatIdx, indices := range shape.Iter() {
 		collect = append(collect, slices.Clone(indices))
@@ -36,7 +37,7 @@ func TestShape_Iter(t *testing.T) {
 	require.Equal(t, [][]int{{0, 0, 0, 0}}, collect)
 
 	// Version 2: all axes are "spatial" (dim > 1)
-	shape = Make(dtypes.F64, 3, 2)
+	shape = shapes2.Make(dtypes.F64, 3, 2)
 	collect = make([][]int, 0, shape.Size())
 	var counter int
 	for flatIdx, indices := range shape.Iter() {
@@ -55,7 +56,7 @@ func TestShape_Iter(t *testing.T) {
 	require.Equal(t, want, collect)
 
 	// Version 3: with only 2 spatial axes.
-	shape = Make(dtypes.BF16, 3, 1, 2, 1)
+	shape = shapes2.Make(dtypes.BF16, 3, 1, 2, 1)
 	collect = make([][]int, 0, shape.Size())
 	counter = 0
 	for flatIdx, indices := range shape.Iter() {
@@ -76,7 +77,7 @@ func TestShape_Iter(t *testing.T) {
 
 func TestShape_IterOnAxes(t *testing.T) {
 	// Shape with dimensions [2, 3, 4]
-	shape := Make(dtypes.F32, 2, 3, 4)
+	shape := shapes2.Make(dtypes.F32, 2, 3, 4)
 
 	// Test iteration on the first axis.
 	var collect [][]int
