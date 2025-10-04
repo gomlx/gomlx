@@ -1,5 +1,5 @@
 /*
- *	Copyright 2023 Jan Pfeifer
+ *	Copyright 2025 Jan Pfeifer
  *
  *	Licensed under the Apache License, Version 2.0 (the "License");
  *	you may not use this file except in compliance with the License.
@@ -62,7 +62,7 @@ func SetLast[T any](slice []T, value T) {
 	SetAt(slice, -1, value)
 }
 
-// Copy creates a new (shallow) copy of T. A short cut to a call to `make` and then `copy`.
+// Copy creates a new (shallow) copy of T. A shortcut to a call to `make` and then `copy`.
 func Copy[T any](slice []T) []T {
 	if len(slice) == 0 {
 		return nil
@@ -73,7 +73,7 @@ func Copy[T any](slice []T) []T {
 }
 
 // SlicesInDelta checks whether multidimensional slices s0 and s1 have the same shape and types,
-// and that each of their values are within the given delta. Works with any numeric
+// and that each of their values is within the given delta. Works with any numeric
 // types.
 //
 // If delta <= 0, it checks for equality.
@@ -139,7 +139,7 @@ func Close[T interface{ float32 | float64 }](e0, e1 any) bool {
 	return diff < Epsilon && diff > -Epsilon
 }
 
-// EqualAny is a comparison function that tests for exact equality, and can be fed to DeepSliceCmp.
+// EqualAny is a comparison function that tests for exact equality and can be fed to DeepSliceCmp.
 func EqualAny[T comparable](e0, e1 any) bool {
 	e0v, ok := e0.(T)
 	if !ok {
@@ -166,8 +166,8 @@ func FillSlice[T any](slice []T, value T) {
 }
 
 // FillAnySlice fills a slice with the given value. Both are given as interface{} values,
-// so it works for arbitrary underlying type values. Silently returns if slice is not a
-// slice or if value is not the base type of slice.
+// so it works for arbitrary underlying type values. Silently returns if the slice is not a
+// slice or if the value is not the base type of the slice.
 func FillAnySlice(slice any, value any) {
 	// Check types.
 	sliceT := reflect.TypeOf(slice)
@@ -179,7 +179,7 @@ func FillAnySlice(slice any, value any) {
 		return
 	}
 
-	// Set first value.
+	// Set the first value.
 	sliceV := reflect.ValueOf(slice)
 	valueV := reflect.ValueOf(value)
 	items := sliceV.Len()
@@ -197,7 +197,7 @@ func FillAnySlice(slice any, value any) {
 }
 
 // SliceToGoStr converts the slice to text, in a Go-syntax style that can be copy&pasted back to Go code. Similar
-// to %#v formatting option, but up-to-date for not repeating the inner dimension slice types.
+// to the "%#v" formatting option, but up to date for not repeating the inner-dimension slice types.
 func SliceToGoStr(slice any) string {
 	return fmt.Sprintf("%T%v", slice, recursiveSliceToGoStr(slice))
 }
@@ -273,15 +273,15 @@ func recursiveMDSlice[T any](dims []int, data []T, dataPos int) (reflect.Value, 
 		return reflect.ValueOf(slice), dataPos
 	}
 
-	// Create first sub-slice, and use its type to create the higher order slice.
+	// Create the first sub-slice and use its type to create the higher order slice.
 	var subSlice reflect.Value
-	subSlice, dataPos = recursiveMDSlice(dims[1:], data, dataPos)
+	subSlice, dataPos = recursiveMDSlice[T](dims[1:], data, dataPos)
 	slice := reflect.MakeSlice(reflect.SliceOf(subSlice.Type()), dims[0], dims[0])
 	slice.Index(0).Set(subSlice)
 
 	// Now create the other sub-slices:
 	for ii := 1; ii < dims[0]; ii++ {
-		subSlice, dataPos = recursiveMDSlice(dims[1:], data, dataPos)
+		subSlice, dataPos = recursiveMDSlice[T](dims[1:], data, dataPos)
 		slice.Index(ii).Set(subSlice)
 	}
 	return slice, dataPos
@@ -311,7 +311,7 @@ func Iota[T interface {
 
 const Epsilon = 1e-4
 
-// Map executes the given function sequentially for every element on in, and returns a mapped slice.
+// Map executes the given function sequentially for every element on in and returns a mapped slice.
 func Map[In, Out any](in []In, fn func(e In) Out) (out []Out) {
 	out = make([]Out, len(in))
 	for ii, e := range in {
@@ -378,8 +378,8 @@ func Min[T cmp.Ordered](slice []T) (min T) {
 	return
 }
 
-// Pop last element of the slice, and returns slice with one less element.
-// If slice is empty it returns the zero value for `T` and returns slice unchanged.
+// Pop the last element of the slice and returns slice with one less element.
+// If the slice is empty, it returns the zero value for `T` and returns the slice unchanged.
 func Pop[T any](slice []T) (T, []T) {
 	var value T
 	if len(slice) > 0 {
