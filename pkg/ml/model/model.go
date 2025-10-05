@@ -1,4 +1,4 @@
-// Package models provide helpers to train, execute (inference), save and load models with their weights and hyperparameters.
+// Package model provides helpers to train, execute (inference), save, and load models with their weights and hyperparameters.
 //
 // Note: This package aims to replace the `ml/context` package and all the layers libraries.
 // **It's still in beta**. Any feedback is very welcome.
@@ -20,9 +20,9 @@
 // Example: A model that has a counter, and an increment function.
 //
 //	myModel := &struct{
-//		counter *models.Variable
+//		counter *model.Variable
 //	} {
-//		counter: must.M1(models.VariableWithValue("counter", int32(0))),
+//		counter: must.M1(model.VariableWithValue("counter", int32(0))),
 //	}
 //	incFn := func(g *graph.Graph) *graph.Node {
 //		currentValue := myModel.counter.ValueGraph(g)
@@ -30,12 +30,12 @@
 //		myModel.counter.SetValueGraph(nextValue)  // Updates the counter.
 //		return currentValue
 //	}
-//	incExec := must.M1(models.NewExec(backend, incFn))  // Executor that increments the counter.
+//	incExec := must.M1(model.NewExec(backend, incFn))  // Executor that increments the counter.
 //	incExec.Call1() // -> 0
 //	incExec.Call1() // -> 1
 //	fmt.Printf("current myModel state: %s\n", myModel.counter.Value()) // -> 2
-//	models.Checkpoint(myModel, "~/work/my_counter")
-package models
+//	model.Checkpoint(myModel, "~/work/my_counter")
+package model
 
 // Generate ExecFnSet interface, and a conversion tool to a canonical form.
 //go:generate go run ../../../internal/cmd/builderiface/

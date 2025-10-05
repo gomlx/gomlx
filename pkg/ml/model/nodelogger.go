@@ -1,4 +1,4 @@
-package models
+package model
 
 import "github.com/gomlx/gomlx/pkg/core/graph"
 
