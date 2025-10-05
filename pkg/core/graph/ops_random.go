@@ -4,7 +4,6 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
-	"time"
 
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
@@ -42,17 +41,26 @@ func RngStateFromSeed(seed int64) *tensors.Tensor {
 	return state
 }
 
-// RngState creates a random number generator (RNG) state initialized from the nanosecond clock
-// at the time of the graph creation.
+// RngState creates a random number generator (RNG) state initialized using the OS's cryptographically secure
+// random number generator, if available.
+// If the OS's cryptographically secure random number generator is not available, it will use the current time as
+// seed.
 //
 // Notice it returns a concrete tensor value that can be used to set a variable or
 // constant to be used in a graph.
 //
-// Typical use case would be to use like:
+// A typical use case would be to use like:
 //
 //	rngState := Const(g, RngState())
 func RngState() *tensors.Tensor {
-	return RngStateFromSeed(time.Now().UTC().UnixNano())
+	var stateGo [3]uint64
+	err := initializeRNGState(&stateGo)
+	if err != nil {
+		panic(err)
+	}
+	state := tensors.FromValue(stateGo[:])
+	state.Shape().Assert(RngStateShape.DType, RngStateShape.Dimensions...)
+	return state
 }
 
 // RngStateSplit splits the current state into 2 different states that can be used
