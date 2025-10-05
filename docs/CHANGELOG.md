@@ -8,16 +8,17 @@
     but in special cases there may require small changes.
   * Large refactoring: exported packages moved under `/pkg`. **This requires changes to the import paths**.
     Exceptions:
-    * The `ml/`--being replaced by a new version without the `context.Context` object, under `pkg/ml`. 
-      The older version of `ml` will stay in `github.com/gomlx/gomlx/ml` for a couple of versions, while 
-      being deprecated.
-    * The `backends`: it will move to its own repository later in the year (or early 2026)
+    * The `ml/` packages is being replaced by new versions without the `context.Context` object, under `pkg/ml`. 
+      The older version of `ml` stays in `github.com/gomlx/gomlx/ml` for a couple of versions, until its sunset.
+    * The `backends` package: it will move to its own repository later in the year (or early 2026)
     * The `ui` and `example` packages: since they are just extras, we keep them where they are for now.
-  * New **models** API for machine learning: it aims at replacing the `context` package, and get rid of the `context.Context`
+  * **New API for machine learning**: it aims at replacing the `context` package, and get rid of the `context.Context`
     object: users can use plain Go structs to hold their models.
     * This is a profound change, and all the `ml/` libraries will have new versions under `pkg/ml` with the new API.
     * The `context.Context` based libraries will be marked as deprecated and maintained for a few versions,
       until they are sunset.
+
+<hr/>
 
 * Copied external trivial `must` and `exceptions` packages to `/internal/...`, to remove external dependencies.
 * Package `pkg/ml/models`:
@@ -25,16 +26,17 @@
   * All packages under `github.com/gomlx/gomlx/ml` have been rewritten to the new `models` framework, under
     `github.com/gomlx/gomlx/pkg/ml`
 * Package `inceptionv3` moved to `examples`
-* Package `xla`:  **DEPRECATED**, in the majority of the cases stablehlo will take over without the need of any changes, but you may need changes.
-  * Now registered as backend "oldxla".
+* Package `xla` (the old one): now **DEPRECATED** and called `oldxla`. The package `stablehlo` replaces it, including aliasing the `xla` backend name.
+  * The old version now registered as backend "oldxla".
   * Only included in `github.com/gomlx/gomlx/backends/default` if compiled with the tag `oldxla`.
 * Package `stablehlo`:
-  * Now replacing `xla`. Using `xla` backend will actually use the "stablehlo" backend.
+  * Now completely replacing `xla` by default. Using `GOMLX_BACKEND=xla` will actually use the `stablehlo` backend.
   * Added `github.com/gomlx/gomlx/backends/stablehlo/cpu/dynamic` and `github.com/gomlx/gomlx/backends/stablehlo/cpu/static`
     to optionally force dynamic/static linking of the CPU PJRT plugin.
 * Package `graph`:
   * `NewExec`, `NewExecAny` `Exec`, `ExecOnce` and `ExecOnceN` now return an error on failure.
   * `MustNewExec`, `MustNewExecAny`, `Call`, `CallOnce` and `CallOnceN` panic on failure.
+  * Introduced `Exec[1-4]` and `Call[1-4]` to execute the graph and return exactly 1-4 values.
 * Package `context`:
   * `NewExec`, `NewExecAny` `Exec`, `ExecOnce` and `ExecOnceN` now return an error on failure.
   * `MustNewExec`, `Call`, `CallOnce` and `CallOnceN` panic on failure.

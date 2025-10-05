@@ -27,7 +27,6 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
@@ -40,53 +39,53 @@ import (
 // ExecGraphFn is a type parameter for accepted function types for MustNewExec constructor.
 type ExecGraphFn interface {
 	func(*Graph) *Node |
-		func([]*Node) *Node |
-		func(*Node) *Node |
-		func(*Node, *Node) *Node |
-		func(*Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Graph) (*Node, *Node) |
-		func([]*Node) (*Node, *Node) |
-		func(*Node) (*Node, *Node) |
-		func(*Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Graph) (*Node, *Node, *Node) |
-		func([]*Node) (*Node, *Node, *Node) |
-		func(*Node) (*Node, *Node, *Node) |
-		func(*Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Graph) []*Node |
-		func([]*Node) []*Node |
-		func(*Node) []*Node |
-		func(*Node, *Node) []*Node |
-		func(*Node, *Node, *Node) []*Node |
-		func(*Node, *Node, *Node, *Node) []*Node |
-		func(*Node, *Node, *Node, *Node, *Node) []*Node |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
+	func([]*Node) *Node |
+	func(*Node) *Node |
+	func(*Node, *Node) *Node |
+	func(*Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Graph) (*Node, *Node) |
+	func([]*Node) (*Node, *Node) |
+	func(*Node) (*Node, *Node) |
+	func(*Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Graph) (*Node, *Node, *Node) |
+	func([]*Node) (*Node, *Node, *Node) |
+	func(*Node) (*Node, *Node, *Node) |
+	func(*Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Graph) []*Node |
+	func([]*Node) []*Node |
+	func(*Node) []*Node |
+	func(*Node, *Node) []*Node |
+	func(*Node, *Node, *Node) []*Node |
+	func(*Node, *Node, *Node, *Node) []*Node |
+	func(*Node, *Node, *Node, *Node, *Node) []*Node |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
 }
 
 // ExecGraphFnOneOutput are ExecGraphFn functions that return only one result.
 // See CallOnce.
 type ExecGraphFnOneOutput interface {
 	func(*Graph) *Node |
-		func([]*Node) *Node |
-		func(*Node) *Node |
-		func(*Node, *Node) *Node |
-		func(*Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
+	func([]*Node) *Node |
+	func(*Node) *Node |
+	func(*Node, *Node) *Node |
+	func(*Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
 }
 
-// SideParamsFn is the functions that sets side parameters during execution
+// SideParamsFn is a function that sets side parameters during execution
 // for Graphs that defines those. Typically, this is used to set the variables of a model.
 type SideParamsFn func(graph *Graph, inputBuffers []backends.Buffer, donate []bool)
 
@@ -115,21 +114,29 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 //
 //	var l2NormExec = MustNewExec(backends.New(), L2Norm)
 //	x0 := []float32{2}
-//	fmt.Printf("L2Norm(%v) = %s\n", x0, l2NormExec.Call(x0)[0])
+//	fmt.Printf("L2Norm(%v) = %s\n", x0, l2NormExec.Call1(x0)) // -> 2
 //	x1 := []float64{4, 3}
-//	fmt.Printf("L2Norm(%v) = %s\n", x1, l2NormExec.Call(x1)[0])
+//	fmt.Printf("L2Norm(%v) = %s\n", x1, l2NormExec.Call1(x1))  // -> 5
 //
-// Notice that both calls to Length.Call will need to create different
-// graphs (for different shapes of the input), but they will be cached,
-// and if the same shapes are used in Call again, the cached compiled graph
-// is reused.
+// Notice that both calls to Length.Call1 will need to create different
+// graphs (because they have different shapes of the input), but they will be cached,
+// and if the same shapes are used in Call1 again, the cached compiled graph is reused.
 //
-// Call always outputs a slice with all the outputs, even when there is only
-// one output. All the "Exec.Call..()" methods panic on error, for convenience.
-// The methods named "Exec.Exec..." exact equivalent that return errors instead.
+// For "ergonomics", we provide variations of the same API, depending if you want errors to be returned,
+// or simply panic, and on how many outputs you expect:
 //
-// If there are no inputs (for instance, for some initialization function), then
+//   - Use NewExec or MustNewExec to create new executors.
+//   - Exec returns a slice of outputs, and errors. Exec1 to Exec4 return 1 to 4 outputs exactly, plus an error.
+//   - Call returns a slice of outputs and panics on error. Call1 to Call4 1 to 4 outputs exactly, and panics on error.
+//   - ExecOnce and CallOnce merges NewExec (or MustNewExec), Call1 and then Finalize methods in one convenient call,
+//     for when executing the graph only once. They also have teh ExecOnceN and CallOnceN variations that return a slice
+//     of outputs.
+//
+// If there are no inputs for the graph function (for instance, for some initialization function), then
 // one needs to take a *Graph as the first parameter of the graph function (graphFn).
+//
+// Inside graph building functions, one is expected to panic with an error.
+// The executor captures (recovers) from panics and returns the error.
 //
 // Example using `ExecOnce`, which compiles the graph and immediately runs it.
 //
@@ -137,7 +144,15 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 //		return IotaFull(g, shapes.Make(dtype.Float32, 3, 3))
 //	})
 //	if err != nil { ... }
-//	fmt.Printf("IotaFull(3x3 matrix, float32)=%v\n", iotaMatrix)
+//	fmt.Printf("IotaFull(3x3 matrix, float32)=%v\n", iotaMatrix) // -> [[0 1 2] [3 4 5] [6 7 8]]
+//
+// Example using `ExecOnceN`, which returning 2 values:
+//
+//	iotaMatrices, err := ExecOnceN(backend, func (g *Graph) []*Node {
+//		return []*Node{
+//			IotaFull(g, shapes.Make(dtype.Float32, 2, 2)),
+//			IotaFull(g, shapes.Make(dtype.Float32, 3, 3))}
+//	})
 //
 // # Considerations of inputs of different shapes:
 //
@@ -147,8 +162,6 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 //
 // For safety concerns, there are a maximum number of different instantiations of the graph.
 // It can be set or disabled with SetMaxCache.
-//
-// Errors are returned as panic. See Panicf.
 type Exec struct {
 	backend   backends.Backend
 	deviceNum backends.DeviceNum
@@ -269,91 +282,6 @@ func NewExec[F ExecGraphFn](backend backends.Backend, graphFn F) (*Exec, error) 
 	return NewExecAny(backend, graphFn)
 }
 
-// MustNewExecAny constructs an Exec object that uses the given graphFn to build
-// computation graphs.
-//
-// `graphFn` can take only *Node parameters as input and returns one or more *Node.
-// Except if there are no inputs, in which case graphFn needs to take a *Graph as the first parameter.
-//
-// It panics if the inputs are invalid.
-//
-// See also the generics MustNewExec (or MustNewExec for returning an error), which checks for valid graphFn in compile time.
-func MustNewExecAny(backend backends.Backend, graphFn any) *Exec {
-	return must.M1(NewExecAny(backend, graphFn))
-}
-
-// MustNewExec constructs an Exec object that uses the given graphFn to build
-// computation graphs.
-//
-// graphFn should take *Node as input and return a *Node -- except if there are no (Node) inputs,
-// in which case it should take a single *Graph input.
-//
-// It's a wrapper for MustNewExecAny, but uses generics to type check that
-// graphFn is valid.
-func MustNewExec[F ExecGraphFn](backend backends.Backend, graphFn F) *Exec {
-	return MustNewExecAny(backend, graphFn)
-}
-
-// NewExecOrError is an alias to NewExec.
-//
-// Deprecated: use NewExec instead.
-func NewExecOrError[F ExecGraphFn](backend backends.Backend, graphFn F) (*Exec, error) {
-	return NewExec(backend, graphFn)
-}
-
-// ExecOnce builds the graph and executes it with the given arguments and returns the one output.
-//
-// It's short for a call to MustNewExec, Exec.Exec and Exec.Finalize for functions that return only one output.
-func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args ...any) (*tensors.Tensor, error) {
-	e := MustNewExec(backend, graphFn)
-	defer e.Finalize()
-	results, err := e.Exec(args...)
-	if err != nil {
-		return nil, err
-	}
-	return results[0], nil
-}
-
-// ExecOnceN builds the graph and executes it with the given arguments and returns the various outputs.
-//
-// It's short for a call to MustNewExec, Exec.Exec and Exec.Finalize for functions that return only one output.
-//
-// See ExecOnce for a more convenient version if you have only one output.
-// Also, see CallOnceN or CallOnce if you want it to panic on error.
-func ExecOnceN[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args ...any) ([]*tensors.Tensor, error) {
-	e := MustNewExec(backend, graphFn)
-	defer e.Finalize()
-	results, err := e.Exec(args...)
-	if err != nil {
-		return nil, err
-	}
-	return results, nil
-}
-
-// CallOnce builds the graph and executes it with the given arguments and returns the one output.
-//
-// It's short for a call to MustNewExec, Exec.Call and Exec.Finalize for functions that return only one output.
-// It panics on error.
-//
-// See CallOnceN if you have multiple outputs.
-// Also, see ExecOnceN or ExecOnce if you want any errors returned.
-func CallOnce[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args ...any) *tensors.Tensor {
-	return CallOnceN(backend, graphFn, args...)[0]
-}
-
-// CallOnceN builds the graph and executes it with the given arguments, and returns various outputs.
-//
-// It's short for a call to MustNewExec, Exec.Call and Exec.Finalize.
-// It panics on error.
-//
-// See CallOnce for a more convenient version if you have only one output.
-// Also, see ExecOnceN or ExecOnce if you want any errors returned.
-func CallOnceN[F ExecGraphFn](backend backends.Backend, graphFn F, args ...any) []*tensors.Tensor {
-	e := MustNewExec(backend, graphFn)
-	defer e.Finalize()
-	return e.Call(args...)
-}
-
 // InDevice sets the device num to be used by graphs constructed by Exec.
 // This should be called before any invocations of Call().
 // It returns a reference to itself so calls can be cascaded.
@@ -430,13 +358,20 @@ func (e *Exec) GetNodeLogger() LoggerFn {
 	return e.loggerFn
 }
 
-// Exec parses the arguments into tensors (if they are not yet) and executes
-// the graph corresponding to the shapes of the arguments.
-// If a graph does not yet exist, one is created, compiled and cached for the shapes.
+// Exec executes the computation with the given arguments.
 //
-// It returns the outputs in a slice, even if there is only one output, or an error if it fails.
+// It the input arguments shape has never been seen before, it JIT-compiles a new computation graph for that shape,
+// which can take a while, but is cached and later executions are very fast.
 //
-// Errors (with full stack-traces) are returned.
+// The arguments are first all converted to tensors, if they not yet tensors.
+//
+// Optionally, use DonateTensorBuffer(value) to mark a tensor as a value to be "donated" to the execution (and potentially save some space).
+// See details in DonateTensorBuffer.
+//
+// It returns the outputs in a slice, even if there is only one output, or an error if it fails. See Exec1-Exec4 for
+// aliases that return some exact number of outputs.
+//
+// Errors (with full stack-traces) are returned on failure.
 func (e *Exec) Exec(args ...any) (results []*tensors.Tensor, err error) {
 	results, _, err = e.ExecWithGraph(args...)
 	return
@@ -448,8 +383,9 @@ func (e *Exec) Exec(args ...any) (results []*tensors.Tensor, err error) {
 // Exec creates different computation graphs when the inputs' shapes change,
 // so different calls may return different graphs.
 //
-// It returns the outputs in a slice, even if there is only one output, and the computation graph used.
-// It returns an error if it fails.
+// It returns the outputs in a slice, even if there is only one output. It also returns the computation graph used.
+//
+// Errors (with full stack-traces) are returned on failure.
 func (e *Exec) ExecWithGraph(args ...any) (results []*tensors.Tensor, g *Graph, err error) {
 	err = TryCatch[error](func() {
 		results, g = e.compileAndExecute(true, args...)
@@ -458,38 +394,6 @@ func (e *Exec) ExecWithGraph(args ...any) (results []*tensors.Tensor, g *Graph, 
 		return nil, nil, err
 	}
 	return
-}
-
-// Call parses the arguments into tensors (if they are not yet) and executes
-// the graph corresponding to the shapes of the arguments.
-// If a graph does not yet exist, one is created, compiled and cached for the shapes.
-//
-// It returns the outputs in a slice, even if there is only one output.
-//
-// Errors (with full stack-traces) are raised with `panic`.
-func (e *Exec) Call(args ...any) []*tensors.Tensor {
-	results, _ := e.CallWithGraph(args...)
-	return results
-}
-
-// CallOrError is a deprecated alias to Exec.
-//
-// Deprecated: Use Exec instead.
-func (e *Exec) CallOrError(args ...any) (results []*tensors.Tensor, err error) {
-	return e.Exec(args...)
-}
-
-// CallWithGraph is similar to Call, but it also returns the computation graph used
-// in the call. Since Exec creates different computation graphs for different set of
-// parameters, this can help disambiguate in case the user needs to use the Graph for
-// something else.
-//
-// It returns the outputs in a slice, even if there is only one output, and the graph used
-// to execute the computation.
-//
-// Errors (with full stack-traces) are raised with `panic`.
-func (e *Exec) CallWithGraph(args ...any) (results []*tensors.Tensor, g *Graph) {
-	return e.compileAndExecute(true, args...)
 }
 
 // unwrapListOfTensors will convert something like []any{[]*tensors.Tensor{t1, t2, ...}} to []any{t1, t2,...}
