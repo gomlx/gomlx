@@ -1,8 +1,8 @@
 # GoMLX changelog
 
-# Next: API change: package tree restructure under `pkg`; Backend xla->stablehlo; New `ml` API
+# Next: **API change**: package tree restructure under `pkg`; Backend xla->stablehlo; New `ml` API
 
-* **Highlights** of this release, it may require changes:
+* **Highlights** of this release:
   * Deprecating old "xla" backend (now called "oldxla") in favor of "stablehlo" (aliased to "xla" as well):
     in most cases nothing needs to be done (the `backends/default` will replace one by the other automatically),
     but in special cases there may require small changes.
