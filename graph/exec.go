@@ -129,9 +129,9 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 //   - Use NewExec or MustNewExec to create new executors.
 //   - Exec returns a slice of outputs, and errors. Exec1 to Exec4 return 1 to 4 outputs exactly, plus an error.
 //   - Call returns a slice of outputs and panics on error. Call1 to Call4 1 to 4 outputs exactly, and panics on error.
-//   - ExecOnce and CallOnce merges NewExec (or MustNewExec), Call1 and then Finalize methods in one convenient call,
-//     for when executing the graph only once. They also have teh ExecOnceN and CallOnceN variations that return a slice
-//     of outputs.
+//   - ExecOnce and CallOnce merge NewExec (or MustNewExec), Exec1 (or Call1) and then Finalize methods in one convenient call,
+//     for when executing the graph only once.
+//     There are also ExecOnceN and CallOnceN variations that return a slice of outputs.
 //
 // If there are no inputs for the graph function (for instance, for some initialization function), then
 // one needs to take a *Graph as the first parameter of the graph function (graphFn).
