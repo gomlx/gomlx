@@ -2,7 +2,7 @@ package data
 
 import (
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 )
 
 // NewConstantDataset returns a dataset that yields always the scalar 0.

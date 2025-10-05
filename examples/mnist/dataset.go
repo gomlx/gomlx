@@ -33,10 +33,10 @@ import (
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 
-	timage "github.com/gomlx/gomlx/types/tensors/images"
+	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
 )
 
 const (

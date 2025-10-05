@@ -5,7 +5,7 @@ import (
 	"fmt"
 	humanize "github.com/dustin/go-humanize"
 	. "github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"math"

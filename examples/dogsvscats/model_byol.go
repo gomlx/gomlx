@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/train"
-	timage "github.com/gomlx/gomlx/types/tensors/images"
+	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
 )
 
 // byolModelEmbedding is the core of the BYOL ((Bootstrap Your Own Latent) model.

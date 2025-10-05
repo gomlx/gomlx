@@ -16,7 +16,7 @@
 
 package train
 
-import "github.com/gomlx/gomlx/types/tensors"
+import "github.com/gomlx/gomlx/pkg/core/tensors"
 
 // Dataset for a train.Trainer provides the data, one batch at a time. Flat consists of a slice of *tensors.Tensor
 // for `inputs` and for `labels`.

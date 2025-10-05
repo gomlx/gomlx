@@ -5,7 +5,7 @@ import (
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gomlx/pkg/core/tensors/images"
 )
 
 // KidMetric returns a metric that takes a generated image and a label image and returns a

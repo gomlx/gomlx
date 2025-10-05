@@ -5,7 +5,7 @@ import (
 
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gomlx/pkg/core/tensors/images"
 )
 
 // PreprocessImage makes the image in a format usable to InceptionV3 model.

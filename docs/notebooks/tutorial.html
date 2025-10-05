@@ -7930,7 +7930,7 @@ exit status 2
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="Tensors">Tensors<a class="anchor-link" href="#Tensors">¶</a></h2><p>Tensors are multidimensional arrays of a given data type (<code>dtypes.DType</code>) defined in the package <a href="https://pkg.go.dev/github.com/gomlx/gomlx/types/tensors"><code>github.com/gomlx/gomlx/types/tensors</code></a>.</p>
+<h2 id="Tensors">Tensors<a class="anchor-link" href="#Tensors">¶</a></h2><p>Tensors are multidimensional arrays of a given data type (<code>dtypes.DType</code>) defined in the package <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/tensors"><code>github.com/gomlx/gomlx/pkg/core/tensors</code></a>.</p>
 <p>For GoMLX tensors work as <strong>containers of data</strong> that are used as concrete inputs and outputs for the
 execution of computational graphs. There is only basic support to manipulate tensors directly (it includes access directly to its data): instead usually one does that using computational graphs.  Tensors have a shape (<code>shapes.Shape</code>) just like <code>Node</code>.</p>
 <p>When talking about a tensor, we are referring to the package's <code>tensors.Tensor</code> object (usually a pointer to it).</p>
@@ -8016,7 +8016,7 @@ documentation on <code>Tensor.MutableFlatData(...)</code> to mutate tensors in p
 <li><code>FromScalarAndDimensions[T](value T, dimensions ...int)</code>: creates a tensor with the
 given dimensions, filled with the scalar value given. <code>T</code> must be one of the supported types.</li>
 </ul>
-<p>See more documentation in <a href="https://pkg.go.dev/github.com/gomlx/gomlx/types/tensors">github.com/gomlx/gomlx/types/tensors</a>.</p>
+<p>See more documentation in <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/tensors">github.com/gomlx/gomlx/pkg/core/tensors</a>.</p>
 <p>Errors in the manipulation of Tensors (e.g. invalid values) are also reported back with exception thrown with <code>panic</code>, with full stack-traces, just as
 with the <code>graph</code> package described in the previous package. The errors can easily be caught (with <code>recover()</code> or with <code>exceptions.TryCatch</code> helper) when needed.</p>
 </div>
@@ -8418,7 +8418,7 @@ have been selected in Go directly using <code>math/random</code>, but just for f
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="p">(</span>
     <span class="s2">"github.com/gomlx/gomlx/types/shapes"</span>
-    <span class="s2">"github.com/gomlx/gomlx/types/tensors"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/core/tensors"</span>
 <span class="p">)</span>
 
 <span class="o">//</span> <span class="n">initCoefficients</span> <span class="n">chooses</span> <span class="n">random</span> <span class="n">coefficients</span> <span class="ow">and</span> <span class="n">bias</span><span class="o">.</span> <span class="n">These</span> <span class="n">are</span> <span class="n">the</span> <span class="n">true</span> <span class="n">values</span> <span class="n">the</span> <span class="n">model</span> <span class="n">will</span>

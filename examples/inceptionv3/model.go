@@ -71,8 +71,8 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/images"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )

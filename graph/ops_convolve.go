@@ -20,8 +20,8 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	timage "github.com/gomlx/gomlx/types/tensors/images"
 )
 
 // This file contains all parts of the Convolve implementation.

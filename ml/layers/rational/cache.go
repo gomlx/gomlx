@@ -1,7 +1,7 @@
 package rational
 
 import (
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"sync"
 )
 

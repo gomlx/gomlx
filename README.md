@@ -116,7 +116,7 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 * Various losses and metrics.
 * Pre-Trained models to use: InceptionV3 (image model), many more from HuggingFace using [onnx-gomlx](https://github.com/gomlx/onnx-gomlx).
   See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace. 
-* Read Numpy arrays into GoMLX tensors -- see package `github.com/gomlx/gomlx/types/tensors/numpy`.
+* Read Numpy arrays into GoMLX tensors -- see package `github.com/gomlx/gomlx/pkg/core/tensors/numpy`.
 * Support static linking of PJRT: slower to build the Go program, but deploying it doesn't require installing a PJRT plugin in the machine you are deploying it.
   Use `go build --tags=pjrt_cpu_static` or include `import _ "github.com/gomlx/gomlx/backends/xla/cpu/static"`.
 

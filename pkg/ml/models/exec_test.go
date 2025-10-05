@@ -7,7 +7,7 @@ import (
 
 	_ "github.com/gomlx/gomlx/backends/default"
 	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -31,8 +31,8 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	timages "github.com/gomlx/gomlx/pkg/core/tensors/images"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	timages "github.com/gomlx/gomlx/types/tensors/images"
 )
 
 var nanLogger *nanlogger.NanLogger

@@ -20,7 +20,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"math/rand"
 	"os"
 	"path"

@@ -7,7 +7,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
-	timage "github.com/gomlx/gomlx/types/tensors/images"
+	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
 )
 
 // InceptionV3ModelPrep is executed before training: it downloads the inceptionv3 weights.

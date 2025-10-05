@@ -3,7 +3,7 @@ package context
 import (
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"k8s.io/klog/v2"
 )
 
