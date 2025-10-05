@@ -8,7 +8,7 @@ import (
 	"math"
 
 	. "github.com/gomlx/gomlx/internal/exceptions"
-	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -31,7 +31,7 @@ const (
 // GetChannelsAxis from a given image tensor and configuration. It assumes the
 // leading axis is for the batch dimension. So it either returns 1 or
 // `image.Rank()-1`.
-func GetChannelsAxis(image shapes2.HasShape, config ChannelsAxisConfig) int {
+func GetChannelsAxis(image shapes.HasShape, config ChannelsAxisConfig) int {
 	switch config {
 	case ChannelsFirst:
 		return 1
@@ -48,7 +48,7 @@ func GetChannelsAxis(image shapes2.HasShape, config ChannelsAxisConfig) int {
 //
 // Example: if image has shape `[batch_dim, height, width, channels]`, it will
 // return `[]int{1, 2}`.
-func GetSpatialAxes(image shapes2.HasShape, config ChannelsAxisConfig) (spatialAxes []int) {
+func GetSpatialAxes(image shapes.HasShape, config ChannelsAxisConfig) (spatialAxes []int) {
 	numSpatialDims := image.Shape().Rank() - 2
 	if numSpatialDims <= 0 {
 		return
@@ -73,7 +73,7 @@ func GetSpatialAxes(image shapes2.HasShape, config ChannelsAxisConfig) (spatialA
 // Example: To double the size of an image (or video)
 //
 //	img = Interpolate(img, GetUpSampledSizes(img, ChannelsLast, 2)...).Done()
-func GetUpSampledSizes(image shapes2.HasShape, config ChannelsAxisConfig, factors ...int) (dims []int) {
+func GetUpSampledSizes(image shapes.HasShape, config ChannelsAxisConfig, factors ...int) (dims []int) {
 	dims = image.Shape().Clone().Dimensions
 	if len(factors) == 0 {
 		return dims
@@ -197,9 +197,9 @@ func toTensorGenericsImpl[T dtypes.NumberNotComplex | float16.Float16 | bfloat16
 	imgSize := images[0].Bounds().Size()
 	dtype := dtypes.FromGenericsType[T]()
 	if batch {
-		t = tensors.FromShape(shapes2.Make(dtype, len(images), imgSize.Y, imgSize.X, tt.channels))
+		t = tensors.FromShape(shapes.Make(dtype, len(images), imgSize.Y, imgSize.X, tt.channels))
 	} else {
-		t = tensors.FromShape(shapes2.Make(dtype, imgSize.Y, imgSize.X, tt.channels))
+		t = tensors.FromShape(shapes.Make(dtype, imgSize.Y, imgSize.X, tt.channels))
 	}
 
 	// convertToDType converts RGBA channel value to the given DType.

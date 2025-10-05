@@ -97,7 +97,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -416,7 +416,7 @@ func (g *Graph) Compile(outputs ...*Node) {
 // It is built using DonateTensor.
 type donateBuffer struct {
 	buffer backends.Buffer
-	shape  shapes2.Shape
+	shape  shapes.Shape
 }
 
 // DonateTensorBuffer can be used by Graph.Run, Graph.RunWithMap or as input to Exec.Call, and it marks the Tensor to
@@ -545,7 +545,7 @@ func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool) (outputs
 
 // anyToBuffer converts generic values to a tensor.Device on the requested device number, and whether the buffer can
 // be donated.
-func anyToBuffer(backend backends.Backend, deviceNum backends.DeviceNum, value any) (backends.Buffer, shapes2.Shape, bool) {
+func anyToBuffer(backend backends.Backend, deviceNum backends.DeviceNum, value any) (backends.Buffer, shapes.Shape, bool) {
 	t, ok := value.(*tensors.Tensor)
 	if ok {
 		// If a Tensor is given without Donate, it is assumed not for donation.
@@ -636,7 +636,7 @@ func (g *Graph) getScalarConst(dtype dtypes.DType, value float64) (output *Node)
 	if found {
 		return
 	}
-	output = Const(g, shapes2.CastAsDType(value, dtype))
+	output = Const(g, shapes.CastAsDType(value, dtype))
 	dtypeMap[value] = output
 	return
 }

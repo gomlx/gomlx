@@ -24,7 +24,7 @@ import (
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/losses"
-	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
@@ -205,7 +205,7 @@ func BatchSize(data *Node) *Node {
 		// Assumption is that first dimension of labels will be weight.
 		batchSizeInt = data.Shape().Dimensions[0]
 	}
-	return Const(g, shapes2.CastAsDType(batchSizeInt, data.DType()))
+	return Const(g, shapes.CastAsDType(batchSizeInt, data.DType()))
 }
 
 // upPrecision promotes the precision of `x` if it is float16, to float32.
@@ -234,7 +234,7 @@ func (m *MeanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 	// may be set for reuse, but metrics variables are not.
 	ctx = ctx.Checked(false).In(Scope).In(m.ScopeName())
 	dtype := result.DType()
-	zero := shapes2.CastAsDType(0, dtype)
+	zero := shapes.CastAsDType(0, dtype)
 	totalVar := ctx.VariableWithValue("total", zero).SetTrainable(false)
 	if totalVar == nil {
 		Panicf("variable nil building computation graph for mean metric %q", m.Name())
@@ -271,10 +271,10 @@ func (m *MeanMetric) Reset(ctx *context.Context) {
 		// Assume this was called before the graph was first built, so there is nothing to reset yet.
 		return
 	}
-	totalVar.SetValue(tensors.FromAnyValue(shapes2.CastAsDType(0, totalVar.Value().DType())))
+	totalVar.SetValue(tensors.FromAnyValue(shapes.CastAsDType(0, totalVar.Value().DType())))
 	weightVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "weight")
 	if weightVar != nil {
-		weightVar.SetValue(tensors.FromAnyValue(shapes2.CastAsDType(0, weightVar.Value().DType())))
+		weightVar.SetValue(tensors.FromAnyValue(shapes.CastAsDType(0, weightVar.Value().DType())))
 	} else {
 		Panicf("can't find variable \"weight\" in scope %q", ctx.Scope())
 	}
@@ -320,7 +320,7 @@ func (m *movingAverageMetric) UpdateGraph(ctx *context.Context, labels, predicti
 	// may be set for reuse, but metrics variables are not.
 	ctx = ctx.Checked(false).In(Scope).In(m.ScopeName())
 	dtype := result.DType()
-	zero := shapes2.CastAsDType(0, dtype)
+	zero := shapes.CastAsDType(0, dtype)
 
 	meanVar := ctx.VariableWithValue("mean", zero).SetTrainable(false)
 	if meanVar == nil {
@@ -333,7 +333,7 @@ func (m *movingAverageMetric) UpdateGraph(ctx *context.Context, labels, predicti
 	count = Add(count, OnesLike(count))
 	countVar.SetValueGraph(count)
 
-	weight := Max(Const(g, shapes2.CastAsDType(m.newExampleWeight, dtype)), Reciprocal(count))
+	weight := Max(Const(g, shapes.CastAsDType(m.newExampleWeight, dtype)), Reciprocal(count))
 	mean = Add(Mul(mean, OneMinus(weight)), Mul(result, weight)) // total are the values multiplied by weights, and then summed.
 	meanVar.SetValueGraph(mean)
 
@@ -358,13 +358,13 @@ func BinaryAccuracyGraph(_ *context.Context, labels, predictions []*Node) *Node 
 	// Accuracy is true if diff < 0.5. Notice this will take predictions of 0.5 to be false independent of label
 	// (assuming labels are 1 or 0).
 	dtype := prediction.DType()
-	correctExamples := OneMinus(NonNegativeIndicator(Sub(diff, Const(g, shapes2.CastAsDType(0.5, dtype)))))
-	countExamples := Const(g, shapes2.CastAsDType(correctExamples.Shape().Size(), correctExamples.DType()))
+	correctExamples := OneMinus(NonNegativeIndicator(Sub(diff, Const(g, shapes.CastAsDType(0.5, dtype)))))
+	countExamples := Const(g, shapes.CastAsDType(correctExamples.Shape().Size(), correctExamples.DType()))
 	return Div(ReduceAllSum(correctExamples), countExamples)
 }
 
 func accuracyPPrint(value *tensors.Tensor) string {
-	return fmt.Sprintf("%.2f%%", shapes2.ConvertTo[float64](value.Value())*100.0)
+	return fmt.Sprintf("%.2f%%", shapes.ConvertTo[float64](value.Value())*100.0)
 }
 
 // NewMeanBinaryAccuracy returns a new binary accuracy metric with the given names.
@@ -410,9 +410,9 @@ func BinaryLogitsAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node
 	}
 
 	dtype := logits0.DType()
-	labels0 = Sub(labels0, Const(g, shapes2.CastAsDType(0.5, dtype))) // Labels: -0.5 for false, +0.5 for true.
-	correctExamples := PositiveIndicator(Mul(logits0, labels0))       // 0s are considered a miss.
-	countExamples := Const(g, shapes2.CastAsDType(correctExamples.Shape().Size(), correctExamples.DType()))
+	labels0 = Sub(labels0, Const(g, shapes.CastAsDType(0.5, dtype))) // Labels: -0.5 for false, +0.5 for true.
+	correctExamples := PositiveIndicator(Mul(logits0, labels0))      // 0s are considered a miss.
+	countExamples := Const(g, shapes.CastAsDType(correctExamples.Shape().Size(), correctExamples.DType()))
 	mean := Div(ReduceAllSum(correctExamples), countExamples)
 	return mean
 }
@@ -455,7 +455,7 @@ func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) 
 	}
 
 	// Weights and masks: checks whether either are defined.
-	weightsShape := shapes2.Make(logitsDType, logits0.Shape().Dimensions[:logits0.Rank()-1]...)
+	weightsShape := shapes.Make(logitsDType, logits0.Shape().Dimensions[:logits0.Rank()-1]...)
 	weights, mask := losses.CheckExtraLabelsForWeightsAndMask(weightsShape, labels[1:])
 	modelChoices := ArgMax(logits0, -1, labelsDType)
 	correctExamples := ConvertDType(Equal(modelChoices, Squeeze(labels0, -1)), logitsDType) // correctExamples -> 0/1 per example.

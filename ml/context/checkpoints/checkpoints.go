@@ -90,7 +90,7 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -724,7 +724,7 @@ func (h *Handler) loadCheckpoint(jsonReader, binReader io.Reader, merge bool, me
 	// Load variable values: we assume they are stored in order.
 	var memoryPos int
 	for _, varInfo := range serialized.Variables {
-		tensor := tensors.FromShape(shapes2.Make(varInfo.DType, varInfo.Dimensions...))
+		tensor := tensors.FromShape(shapes.Make(varInfo.DType, varInfo.Dimensions...))
 		if varInfo.Pos != memoryPos {
 			return errors.Errorf("variable %s (%s) position at %d is out-of-order, expected it to be in %d -- "+
 				"if you need to handle checkpoints with variables out-of-order, please open a feature request, it is doable",
@@ -757,7 +757,7 @@ func (h *Handler) loadCheckpoint(jsonReader, binReader io.Reader, merge bool, me
 			}
 			var results []*tensors.Tensor
 			err := TryCatch[error](func() {
-				results = h.mergeExec.Call(current, tensor, shapes2.CastAsDType(mergeWeight, varInfo.DType))
+				results = h.mergeExec.Call(current, tensor, shapes.CastAsDType(mergeWeight, varInfo.DType))
 			})
 			if err != nil {
 				panic(errors.WithMessagef(err, "when taking the mean of variable %q", varInfo.ParameterName))

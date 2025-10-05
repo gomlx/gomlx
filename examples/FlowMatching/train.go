@@ -17,7 +17,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
-	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
@@ -227,7 +227,7 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 		cosineschedule.New(ctx, g, dtype).FromContext().Done()
 
 		// Sample noise at different schedules.
-		t := ctx.RandomUniform(g, shapes2.Make(dtype, batchSize, 1, 1, 1))
+		t := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1, 1, 1))
 		if ctx.IsTraining(g) {
 			// During training, we bias towards the end (larger times t), since it's more detailed shifts.
 			t = Sqrt(t)
@@ -296,7 +296,7 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 				Short:      "KID",
 				MetricType: "KID",
 				Step:       float64(loop.LoopStep),
-				Value:      shapes2.ConvertTo[float64](kidValue.Value()),
+				Value:      shapes.ConvertTo[float64](kidValue.Value()),
 			})
 		plotter.DynamicSampleDone(false)
 	}

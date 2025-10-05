@@ -7,7 +7,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -24,7 +24,7 @@ type PadAxis = backends.PadAxis
 // nodeInputsParameter holds the inputs used for the call to backends.Parameter.
 type nodeInputsParameter struct {
 	name   string
-	shape  shapes2.Shape
+	shape  shapes.Shape
 	handle ParameterHandle
 }
 
@@ -52,7 +52,7 @@ func mustNoError[T any](v T, err error) T {
 // It can be used in two different ways: as a Node when building the Graph, so when defining a
 // function that uses the parameter, or as the key in the map of the inputNodes when executing
 // the computation Graph (see Backend.RunWithMap).
-func Parameter(g *Graph, name string, shape shapes2.Shape) (node *Node) {
+func Parameter(g *Graph, name string, shape shapes.Shape) (node *Node) {
 	g.AssertBuilding()
 	handle := ParameterHandle(len(g.parameters))
 	if name == "" {
@@ -73,7 +73,7 @@ func Parameter(g *Graph, name string, shape shapes2.Shape) (node *Node) {
 	node = &Node{
 		graph:        g,
 		outputOps:    []backends.Op{result},
-		outputShapes: []shapes2.Shape{mustNoError(g.builder.OpShape(result))},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		inputs:       nodeInputs,
 	}
 	g.registerNode(node)
@@ -116,7 +116,7 @@ func splitNode(multiOutputNode *Node) (splitNodes []*Node) {
 		inputNodes := []*Node{multiOutputNode}
 		node := &Node{
 			outputOps:    []backends.Op{op},
-			outputShapes: []shapes2.Shape{multiOutputNode.outputShapes[ii]},
+			outputShapes: []shapes.Shape{multiOutputNode.outputShapes[ii]},
 			graph:        g,
 			inputs:       inputs,
 			inputNodes:   inputNodes,
@@ -135,7 +135,7 @@ var MinConstValueSizeToKeep = 32
 
 // nodeInputsConstant holds the inputs used for the call to backends.Parameter.
 type nodeInputsConstant struct {
-	shape  shapes2.Shape
+	shape  shapes.Shape
 	tensor *tensors.Tensor // Only saved for values < MinConstValueSizeToKeep
 }
 
@@ -178,7 +178,7 @@ func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 	node = &Node{
 		graph:        g,
 		outputOps:    []backends.Op{result},
-		outputShapes: []shapes2.Shape{mustNoError(g.builder.OpShape(result))},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		inputs:       nodeInputs,
 	}
 	g.registerNode(node)
@@ -237,7 +237,7 @@ func ConstAsDType(g *Graph, dtype dtypes.DType, x any) *Node {
 	if dtype == dtypes.InvalidDType {
 		exceptions.Panicf("invalid DType given for ConstAsDType")
 	}
-	return Const(g, shapes2.CastAsDType(x, dtype))
+	return Const(g, shapes.CastAsDType(x, dtype))
 }
 
 // ConstAs creates a constant (slice or scalar) of the same DType and on the same Graph as
@@ -277,7 +277,7 @@ func StopGradient(x *Node) *Node {
 // and we should return the updated `v`, that is, the customized gradient with respect to `x`.
 func IdentityWithCustomGradient(x *Node, gradientFn func(x, v *Node) *Node) *Node {
 	n := Identity(x)
-	n.customVJP = func(node *Node, vjpForOutputs []*Node, _ shapes2.Shape) []*Node {
+	n.customVJP = func(node *Node, vjpForOutputs []*Node, _ shapes.Shape) []*Node {
 		return []*Node{gradientFn(node, vjpForOutputs[0])}
 	}
 	return n
@@ -288,7 +288,7 @@ func IdentityWithCustomGradient(x *Node, gradientFn func(x, v *Node) *Node) *Nod
 // returns [[0 0][1 1]].
 //
 // See also IotaFull.
-func Iota(g *Graph, shape shapes2.Shape, iotaAxis int) *Node {
+func Iota(g *Graph, shape shapes.Shape, iotaAxis int) *Node {
 	if shape.IsScalar() {
 		exceptions.Panicf("cannot Iota a scalar shape, shape=%s", shape)
 	}
@@ -301,11 +301,11 @@ func Iota(g *Graph, shape shapes2.Shape, iotaAxis int) *Node {
 
 // IotaFull creates a constant of the given shape with increasing numbers for all values.
 // So `IotaFull([2,2])` returns `[[0 1][2 3]]`.
-func IotaFull(g *Graph, shape shapes2.Shape) *Node {
+func IotaFull(g *Graph, shape shapes.Shape) *Node {
 	if !shape.Ok() {
 		panic(errors.New("invalid shape"))
 	}
-	return ReshapeWithShape(Iota(g, shapes2.Make(shape.DType, shape.Size()), 0), shape)
+	return ReshapeWithShape(Iota(g, shapes.Make(shape.DType, shape.Size()), 0), shape)
 }
 
 // validateBuildingGraphFromInputs checks that all inputNodes are of the same Graph and that
@@ -381,7 +381,7 @@ func BroadcastPrefix(x *Node, prefixDims ...int) *Node {
 	for i := range shape.Rank() {
 		broadcastAxes[i] = i + len(prefixDims)
 	}
-	outputShape := shapes2.Make(x.DType(), newDims...)
+	outputShape := shapes.Make(x.DType(), newDims...)
 	return backendBroadcastInDim(x, outputShape, broadcastAxes)
 }
 
@@ -439,7 +439,7 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 		}
 	}
 
-	return backendBroadcastInDim(x, shapes2.Make(x.DType(), newDimensions...), preservedAxes)
+	return backendBroadcastInDim(x, shapes.Make(x.DType(), newDimensions...), preservedAxes)
 }
 
 // BroadcastToShape broadcasts x to the given shape.
@@ -451,7 +451,7 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 // Notice that the dtype of shape is ignored, the returned value preserves the dtype of x.
 //
 // This is equivalent to BroadcastToDims(x, shape.Dimensions...).
-func BroadcastToShape(x *Node, shape shapes2.Shape) *Node {
+func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	return BroadcastToDims(x, shape.Dimensions...)
 }
@@ -467,7 +467,7 @@ func BroadcastToShape(x *Node, shape shapes2.Shape) *Node {
 // See also the equivalent BroadcastToShape.
 func BroadcastToDims(x *Node, dimensions ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
-	shape := shapes2.Make(x.DType(), dimensions...)
+	shape := shapes.Make(x.DType(), dimensions...)
 	if x.Shape().IsScalar() && shape.IsScalar() {
 		// Assume nothing to do.
 		return x
@@ -585,7 +585,7 @@ func Reshape(x *Node, dimensions ...int) *Node {
 // ReshapeWithShape reshapes x to the dimensions given by shape.
 // Total size cannot change, neither the DType is allowed to change.
 // Conceptually, this is a limited form of "shape casting."
-func ReshapeWithShape(x *Node, shape shapes2.Shape) *Node {
+func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	if shape.DType != x.DType() {
 		exceptions.Panicf("cannot change dtype (from %s to %s) with ReshapeWithShape",
@@ -630,7 +630,7 @@ func InsertAxes(x *Node, beforeAxes ...int) *Node {
 	slices.Sort(beforeAxes)
 
 	// Create new target shape.
-	toShape := shapes2.Shape{DType: x.DType(), Dimensions: make([]int, toRank)}
+	toShape := shapes.Shape{DType: x.DType(), Dimensions: make([]int, toRank)}
 	iiOriginal, iiNewAxes := 0, 0
 	for ii := range toShape.Dimensions {
 		if iiNewAxes < len(beforeAxes) && beforeAxes[iiNewAxes] <= iiOriginal || iiOriginal == fromRank {
@@ -686,7 +686,7 @@ func ExpandAxes(x *Node, newAxes ...int) *Node {
 	}
 
 	// Create new target shape.
-	toShape := shapes2.Shape{DType: x.DType(), Dimensions: make([]int, toRank)}
+	toShape := shapes.Shape{DType: x.DType(), Dimensions: make([]int, toRank)}
 	iiOriginal, iiNewAxes := 0, 0
 	for axis := range toShape.Dimensions {
 		if iiNewAxes < len(adjustedNewAxes) && adjustedNewAxes[iiNewAxes] == axis {
@@ -1324,7 +1324,7 @@ func Stack(operands []*Node, axis int) *Node {
 }
 
 // concatenateVJP implements a VJP function for the ConcatenateNode operation.
-func concatenateVJP(node, v *Node, _ shapes2.Shape) []*Node {
+func concatenateVJP(node, v *Node, _ shapes.Shape) []*Node {
 	vjps := make([]*Node, 0, len(node.inputNodes))
 	params := node.inputs.(*nodeInputsConcatenate)
 	concatAxis := params.axis

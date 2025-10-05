@@ -30,7 +30,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
-	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	timages "github.com/gomlx/gomlx/types/tensors/images"
 )
@@ -47,7 +47,7 @@ func SinusoidalEmbedding(ctx *context.Context, x *Node) *Node {
 	halfEmbed := context.GetParamOr(ctx, "sinusoidal_embed_size", 32) / 2
 	logMinFreq := math.Log(context.GetParamOr(ctx, "sinusoidal_min_freq", 1.0))
 	logMaxFreq := math.Log(context.GetParamOr(ctx, "sinusoidal_max_freq", 1000.0))
-	frequencies := IotaFull(g, shapes2.Make(x.DType(), halfEmbed))
+	frequencies := IotaFull(g, shapes.Make(x.DType(), halfEmbed))
 	frequencies = AddScalar(
 		MulScalar(frequencies, (logMaxFreq-logMinFreq)/float64(halfEmbed-1.0)),
 		logMinFreq)
@@ -212,7 +212,7 @@ func UpBlock(ctx *context.Context, nanLogger *nanlogger.NanLogger, x *Node, skip
 	return x, skips
 }
 
-func shapeToStr(shape shapes2.HasShape) string {
+func shapeToStr(shape shapes.HasShape) string {
 	parts := make([]string, 1, shape.Shape().Rank())
 	parts[0] = "BatchSize"
 	parts = append(parts, xslices.Map(shape.Shape().Dimensions[1:], strconv.Itoa)...)
@@ -446,7 +446,7 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 		cosineschedule.New(ctx, g, dtype).FromContext().Done()
 
 		// Sample noise at different schedules.
-		diffusionTimes := ctx.RandomUniform(g, shapes2.Make(dtype, batchSize, 1, 1, 1))
+		diffusionTimes := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1, 1, 1))
 		diffusionTimes = Square(diffusionTimes) // Bias towards less noise (smaller diffusion times), since it's most impactful
 		signalRatios, noiseRatios := DiffusionSchedule(ctx, diffusionTimes, true)
 		noisyImages := Add(
@@ -506,7 +506,7 @@ func TransformerBlock(ctx *context.Context, nanLogger *nanlogger.NanLogger, x *N
 	// Create positional embedding variable: it is 1 in every axis, but for the
 	// sequence dimension -- there will be one embedding per position.
 	// Shape: [1, maxLen, embedDim]
-	posEmbedShape := shapes2.Make(dtype, 1, spatialDim, posEmbedDim)
+	posEmbedShape := shapes.Make(dtype, 1, spatialDim, posEmbedDim)
 	posEmbedVar := ctx.VariableWithShape("positional", posEmbedShape)
 	posEmbed := posEmbedVar.ValueGraph(g)
 	posEmbed = BroadcastToDims(posEmbed, batchDim, spatialDim, posEmbedDim) // Broadcast batch axis so we can concatenate it later.

@@ -26,7 +26,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
-	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
@@ -62,7 +62,7 @@ func epsilonForDType(g *Graph, dtype dtypes.DType) *Node {
 	default:
 		Panicf("Unknown epsilon value for dtype %s", dtype)
 	}
-	return Const(g, shapes2.CastAsDType(epsilon, dtype))
+	return Const(g, shapes.CastAsDType(epsilon, dtype))
 }
 
 var (
@@ -175,8 +175,8 @@ func LossFromContext(ctx *context.Context) (LossFn, error) {
 // It raises an exception (panic) if there are more or unknown shaped labels.
 //
 // This function is used by the loss implementations to help handle mask and weights extra label tensors.
-func CheckExtraLabelsForWeightsAndMask(weightsShape shapes2.Shape, labels []*Node) (weights, mask *Node) {
-	maskShape := shapes2.Make(dtypes.Bool, weightsShape.Dimensions...)
+func CheckExtraLabelsForWeightsAndMask(weightsShape shapes.Shape, labels []*Node) (weights, mask *Node) {
+	maskShape := shapes.Make(dtypes.Bool, weightsShape.Dimensions...)
 	for ii, extra := range labels {
 		if mask == nil && extra.Shape().Equal(maskShape) {
 			mask = extra
@@ -212,7 +212,7 @@ func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 	loss = Mul(loss, loss)
 
 	// Factor in weights and mask.
-	weightsShape := shapes2.Make(labels0.DType(), labels0.Shape().Dimensions[:1]...)
+	weightsShape := shapes.Make(labels0.DType(), labels0.Shape().Dimensions[:1]...)
 	weights, mask := CheckExtraLabelsForWeightsAndMask(weightsShape, labels[1:])
 	if weights != nil {
 		loss = Mul(loss, weights)
@@ -405,7 +405,7 @@ func categoricalCrossEntropyLogitsImpl(labels, logits *Node, extras []*Node) *No
 		Panicf("labels(%s) and logits(%s) must have the same shapes", shape, logits.Shape())
 	}
 
-	weightsShape := shapes2.Make(logits.DType(), labels.Shape().Dimensions[:labels.Rank()-1]...)
+	weightsShape := shapes.Make(logits.DType(), labels.Shape().Dimensions[:labels.Rank()-1]...)
 	weights, mask := CheckExtraLabelsForWeightsAndMask(weightsShape, extras)
 
 	var expandedMask *Node
@@ -456,7 +456,7 @@ func CategoricalCrossEntropy(labels, predictions []*Node) *Node {
 	loss := ReduceSum(Neg(Mul(labels0, Log(predictions0))), -1)
 
 	// Factor in weights and mask.
-	weightsShape := shapes2.Make(predictions[0].DType(), labels[0].Shape().Dimensions[:labels[0].Rank()-1]...)
+	weightsShape := shapes.Make(predictions[0].DType(), labels[0].Shape().Dimensions[:labels[0].Rank()-1]...)
 	weights, mask := CheckExtraLabelsForWeightsAndMask(weightsShape, labels[1:])
 	if weights != nil {
 		loss = Mul(loss, weights)
