@@ -1,20 +1,23 @@
 # GoMLX changelog
 
-# Next: Backend xla->stablehlo; Big refactoring started: exported packages to /pkg; New `ml` API
+# Next: API change: package tree restructure under `pkg`; Backend xla->stablehlo; New `ml` API
 
 * **Highlights** of this release, it may require changes:
-  * Deprecating backend "xla" (now called "oldxla") in favor of "stablehlo" (aliased to "xla" as well):
+  * Deprecating old "xla" backend (now called "oldxla") in favor of "stablehlo" (aliased to "xla" as well):
     in most cases nothing needs to be done (the `backends/default` will replace one by the other automatically),
     but in special cases there may require small changes.
+  * Large refactoring: exported packages moved under `/pkg`. **This requires changes to the import paths**.
+    Exceptions:
+    * The `ml/`--being replaced by a new version without the `context.Context` object, under `pkg/ml`. 
+      The older version of `ml` will stay in `github.com/gomlx/gomlx/ml` for a couple of versions, while 
+      being deprecated.
+    * The `backends`: it will move to its own repository later in the year (or early 2026)
+    * The `ui` and `example` packages: since they are just extras, we keep them where they are for now.
   * New **models** API for machine learning: it aims at replacing the `context` package, and get rid of the `context.Context`
-    object: it will let the user organize their own model state in their own Go structs, without requiring the
-    somewhat complex/confusing `Context object.
-    * This will be a profound change, and all the ml/ libraries will be changed to reflect that.
+    object: users can use plain Go structs to hold their models.
+    * This is a profound change, and all the `ml/` libraries will have new versions under `pkg/ml` with the new API.
     * The `context.Context` based libraries will be marked as deprecated and maintained for a few versions,
       until they are sunset.
-  * Big refactoring: exported packages are going to be moved to `/pkg`, plus long-standing reorganization needs.
-    Exception to the 'ml/'--being replaced by the new `models` version, and `backends`, it will move to its own
-    repository later in the year.
 
 * Copied external trivial `must` and `exceptions` packages to `/internal/...`, to remove external dependencies.
 * Package `pkg/ml/models`:
