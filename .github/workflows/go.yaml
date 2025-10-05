@@ -53,7 +53,7 @@ jobs:
     - name: PreTest
       run: |
         export LD_LIBRARY_PATH=/usr/local/lib
-        go test ./graph
+        go test ./pkg/core/graph
 
     - name: Test
       # Exclude tests that have large dependencies (X11):
