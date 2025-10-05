@@ -118,11 +118,12 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 //	x1 := []float64{4, 3}
 //	fmt.Printf("L2Norm(%v) = %s\n", x1, l2NormExec.Call1(x1))  // -> 5
 //
-// Notice that both calls to Length.Call1 will need to create different
-// graphs (because they have different shapes of the input), but they will be cached,
-// and if the same shapes are used in Call1 again, the cached compiled graph is reused.
+// Notice that both calls to l2NormExec.Call1 will need to create different
+// graphs (because they have different input shapes).
+// These JIT-compiled computation graphs are cached,
+// and if the same shapes are used in Call1 again, the cached version is reused.
 //
-// For "ergonomics", we provide variations of the same API, depending if you want errors to be returned,
+// For "ergonomics", we provide variations of the same API, depending on if you want errors to be returned,
 // or simply panic, and on how many outputs you expect:
 //
 //   - Use NewExec or MustNewExec to create new executors.
@@ -201,7 +202,7 @@ var DefaultExecMaxCacheSize = 32
 // NewExecAny constructs an Exec object that uses the given graphFn to build
 // computation graphs.
 //
-// `graphFn` can take only *Node parameters as input and returns one or more *Node.
+// The `graphFn` can take only *Node parameters as input and returns one or more *Node.
 // Except if there are no inputs, in which case graphFn needs to take a *Graph as the first parameter.
 //
 // Please use NewExec if possible, it adds a compile-time check for most valid signatures of graphFn.
