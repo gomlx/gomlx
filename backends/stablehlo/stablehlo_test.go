@@ -7,8 +7,8 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/stablehlo"
-	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/klog/v2"
 )

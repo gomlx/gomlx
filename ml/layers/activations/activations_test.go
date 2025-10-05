@@ -3,8 +3,8 @@ package activations
 import (
 	"testing"
 
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/graphtest"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 
 	_ "github.com/gomlx/gomlx/backends/default"

@@ -1,10 +1,10 @@
 package inceptionv3
 
 import (
-	. "github.com/gomlx/gomlx/graph"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/metrics"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors/images"
 )
 

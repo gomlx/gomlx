@@ -7563,7 +7563,7 @@ There is an <a href="https://github.com/jupyterlab/jupyterlab/issues/15467">issu
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h2 id="Computation-Graphs">Computation Graphs<a class="anchor-link" href="#Computation-Graphs">¶</a></h2><blockquote>
-<p><a href="https://pkg.go.dev/github.com/gomlx/gomlx/graph">Package <code>graph</code> reference documentation</a></p>
+<p><a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/graph">Package <code>graph</code> reference documentation</a></p>
 </blockquote>
 <p>To do machine learning based on neural networks and gradient descent one of the most important
 requirements is the ability to do mathematical computations (mostly matrix multiplications)
@@ -7590,7 +7590,7 @@ able to execute it really fast using <a href="https://github.com/openxla/xla">XL
 <div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">.</span> <span class="s2">"github.com/gomlx/gomlx/graph"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">.</span> <span class="s2">"github.com/gomlx/gomlx/pkg/core/graph"</span>
 
 <span class="n">func</span> <span class="n">SumGraph</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
     <span class="k">return</span> <span class="n">Add</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
@@ -7610,7 +7610,7 @@ able to execute it really fast using <a href="https://github.com/openxla/xla">XL
 <blockquote>
 <p><strong>Note</strong></p>
 <ul>
-<li>The <code>import . "github.com/gomlx/gomlx/graph"</code> import all definitions in computation to the current scope. Usually,
+<li>The <code>import . "github.com/gomlx/gomlx/pkg/core/graph"</code> import all definitions in computation to the current scope. Usually,
 it's easier to work like this on go files that are going to implement graph building functions.</li>
 <li>Our function is named <code>SumGraph</code>: the suffix <code>Graph</code> is just a convention, but it helps identifying functions
 that do graph building.</li>
@@ -7618,8 +7618,8 @@ that do graph building.</li>
 <code>*Graph</code> object to start with, or a <code>*Node</code>, and create new nodes with the corresponding operations.
 So our example will create an <code>Add</code> node that will take the nodes pointed by <code>a</code> and <code>b</code>, build a node
 that represent their summation and then return this <code>*Node</code>.</li>
-<li>Every node contains a reference to the <code>*Graph</code> it's part of (see <a href="https://pkg.go.dev/github.com/gomlx/gomlx/graph#Node.Graph"><code>Node.Graph()</code></a>).</li>
-<li>There is a rich set of operations available in GoMLX, see <a href="https://pkg.go.dev/github.com/gomlx/gomlx/graph#Node"><code>Node</code> documentation</a>.</li>
+<li>Every node contains a reference to the <code>*Graph</code> it's part of (see <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/graph#Node.Graph"><code>Node.Graph()</code></a>).</li>
+<li>There is a rich set of operations available in GoMLX, see <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/graph#Node"><code>Node</code> documentation</a>.</li>
 </ul>
 </blockquote>
 <p>Ok, but this won't tell us what is 1+1 yet. We need to compile and then execute this graph with
@@ -7637,7 +7637,7 @@ some input values.</p>
 <h2 id="Backends-and-executing-Graphs-with-Exec">Backends and executing Graphs with <code>Exec</code><a class="anchor-link" href="#Backends-and-executing-Graphs-with-Exec">¶</a></h2><p><strong>GoMLX</strong> can in principle work with different backends to execute its operations -- this opens up possibilities like executing models in WASM (not implemented yet).
 But the default backend, which must always be imported to execute something is <code>xla</code> -- it will provide a useful error message telling you to import it, if you forget.</p>
 <p>Creating a <code>backends.Backend</code> object is trivial: <code>backends.New()</code>. It can uses the environment variable <code>GOMLX_BACKEND</code>, if one wants to specify an specific backend / plugin (e.g.: <code>"xla:cpu"</code>, <code>"xla:cuda"</code>, etc.).</p>
-<p>With the backend created, <a href="https://pkg.go.dev/github.com/gomlx/gomlx/graph#Exec"><code>Exec</code></a> is the easiest way to compile and execute computation graphs in GoMLX.
+<p>With the backend created, <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/graph#Exec"><code>Exec</code></a> is the easiest way to compile and execute computation graphs in GoMLX.
 To run our <code>SumGraph</code> function above we can do:</p>
 </div>
 </div>
@@ -7730,7 +7730,7 @@ see <a href="https://pkg.go.dev/github.com/gomlx/gomlx/types/shapes">package <co
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="p">(</span>
     <span class="s2">"fmt"</span>
-    <span class="o">.</span> <span class="s2">"github.com/gomlx/gomlx/graph"</span>
+    <span class="o">.</span> <span class="s2">"github.com/gomlx/gomlx/pkg/core/graph"</span>
 <span class="p">)</span>
 
 <span class="n">func</span> <span class="n">SumGraph</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
@@ -7870,7 +7870,7 @@ JIT compiled code later on.</li>
 goroutine 1 [running]:
 github.com/gomlx/gomlx/backends/xla.(*Builder).Add(0xc00028e000, {0xbd3ba0?, 0xc000290000?}, {0xbd3ba0, 0xc000290120})
 	/home/janpf/Projects/gomlx/backends/xla/gen_standard_ops.go:32 +0x137
-github.com/gomlx/gomlx/graph.Add(0xc0001ca580, 0xc0001ca630)
+github.com/gomlx/gomlx/pkg/core/graph.Add(0xc0001ca580, 0xc0001ca630)
 	/home/janpf/Projects/gomlx/graph/gen_backend_ops.go:176 +0x123
 main.SumGraph(0xc0001ca580, 0xc0001ca630)
 	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [4] Line 8 ]]</span> /tmp/gonb_55ad4f33/main.go:17 +0x189
@@ -7878,15 +7878,15 @@ reflect.Value.call({0xbce4e0?, 0xc62b90?, 0xc0000d7850?}, {0xc4ba8a, 0x4}, {0xc0
 	/snap/go/current/src/reflect/value.go:581 +0xca6
 reflect.Value.Call({0xbce4e0?, 0xc62b90?, 0x0?}, {0xc000284150?, 0x0?, 0x0?})
 	/snap/go/current/src/reflect/value.go:365 +0xb9
-github.com/gomlx/gomlx/graph.(*Exec).createAndCacheGraph(0xc0001de120, {0xc0000da000, 0x2, 0xcb59a8?})
+github.com/gomlx/gomlx/pkg/core/graph.(*Exec).createAndCacheGraph(0xc0001de120, {0xc0000da000, 0x2, 0xcb59a8?})
 	/home/janpf/Projects/gomlx/graph/exec.go:536 +0x75c
-github.com/gomlx/gomlx/graph.(*Exec).findOrCreateGraph(0xc0001de120, {0xc0000da000, 0x2, 0x2})
+github.com/gomlx/gomlx/pkg/core/graph.(*Exec).findOrCreateGraph(0xc0001de120, {0xc0000da000, 0x2, 0x2})
 	/home/janpf/Projects/gomlx/graph/exec.go:595 +0x167
-github.com/gomlx/gomlx/graph.(*Exec).compileAndExecute(0xc0001de120, 0x1, {0xc0000d7f20?, 0xc0000061c0?, 0xc0000d7f40?})
+github.com/gomlx/gomlx/pkg/core/graph.(*Exec).compileAndExecute(0xc0001de120, 0x1, {0xc0000d7f20?, 0xc0000061c0?, 0xc0000d7f40?})
 	/home/janpf/Projects/gomlx/graph/exec.go:436 +0x226
-github.com/gomlx/gomlx/graph.(*Exec).CallWithGraph(...)
+github.com/gomlx/gomlx/pkg/core/graph.(*Exec).CallWithGraph(...)
 	/home/janpf/Projects/gomlx/graph/exec.go:386
-github.com/gomlx/gomlx/graph.(*Exec).Call(0xcb59a8?, {0xc0000d7f20?, 0xbce4e0?, 0xc62b90?})
+github.com/gomlx/gomlx/pkg/core/graph.(*Exec).Call(0xcb59a8?, {0xc0000d7f20?, 0xbce4e0?, 0xc62b90?})
 	/home/janpf/Projects/gomlx/graph/exec.go:372 +0x27
 main.main()
 	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [5] Line 3 ]]</span> /tmp/gonb_55ad4f33/main.go:24 +0xbe

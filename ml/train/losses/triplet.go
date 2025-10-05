@@ -17,8 +17,8 @@
 package losses
 
 import (
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
 )
 
 //go:generate enumer -type=PairwiseDistanceMetric -trimprefix=PairwiseDistanceMetric -transform=snake -values -text -json -yaml triplet.go

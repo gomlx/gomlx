@@ -3,9 +3,9 @@ package vnn
 import (
 	"slices"
 
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 

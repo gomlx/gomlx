@@ -1,7 +1,7 @@
 package graph_test
 
 import (
-	. "github.com/gomlx/gomlx/graph"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gopjrt/dtypes"
 	"testing"
 )

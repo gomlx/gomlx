@@ -23,11 +23,11 @@ package cosineschedule
 import (
 	"math"
 
-	. "github.com/gomlx/gomlx/graph"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 

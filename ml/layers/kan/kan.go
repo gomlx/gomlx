@@ -17,11 +17,11 @@ package kan
 
 import (
 	"fmt"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"slices"
 )
 

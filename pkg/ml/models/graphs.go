@@ -4,7 +4,7 @@ import (
 	"sync"
 	"weak"
 
-	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph"
 )
 
 var (

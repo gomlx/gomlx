@@ -2,11 +2,11 @@ package dogsvscats
 
 import (
 	"github.com/gomlx/gomlx/examples/inceptionv3"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
 	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
 )
 

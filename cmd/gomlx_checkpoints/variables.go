@@ -9,10 +9,10 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/simplego"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 

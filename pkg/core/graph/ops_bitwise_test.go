@@ -3,8 +3,8 @@ package graph_test
 import (
 	"testing"
 
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/graphtest"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 )
 
 func TestBitwiseShifts(t *testing.T) {

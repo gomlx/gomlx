@@ -3,7 +3,7 @@ package stablehlo_test
 import (
 	"testing"
 
-	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/stretchr/testify/require"
 )
 

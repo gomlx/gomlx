@@ -3,8 +3,8 @@ package inceptionv3
 import (
 	"math"
 
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors/images"
 )
 

@@ -18,8 +18,6 @@ import (
 	"strings"
 
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
@@ -30,6 +28,8 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	timages "github.com/gomlx/gomlx/pkg/core/tensors/images"
 	"github.com/gomlx/gomlx/pkg/support/xslices"

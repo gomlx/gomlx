@@ -4,7 +4,7 @@ package backends
 //
 // Notice: nothing precludes a specialized backend Builder to support other ops not included here.
 // It requires some careful casting of interfaces by the caller (presumably in package
-// github.com/gomlx/gomlx/graph) and fallback to backends that don't support the specialized op.
+// github.com/gomlx/gomlx/pkg/core/graph) and fallback to backends that don't support the specialized op.
 type OpType int
 
 //go:generate go tool enumer -type=OpType -trimprefix=OpType -output=gen_optype_enumer.go optype.go

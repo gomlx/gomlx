@@ -1,9 +1,9 @@
 package kan
 
 import (
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers/rational"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
 )
 
 // GR-KAN ("Group Rational Kolmogorov-Arnold Networks") is a variation of KAN that uses a rational functions as

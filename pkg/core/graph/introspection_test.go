@@ -1,8 +1,8 @@
 package graph_test
 
 import (
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/graphtest"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/stretchr/testify/require"
 	"testing"
 )

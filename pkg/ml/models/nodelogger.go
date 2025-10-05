@@ -1,6 +1,6 @@
 package models
 
-import "github.com/gomlx/gomlx/graph"
+import "github.com/gomlx/gomlx/pkg/core/graph"
 
 // SetNodeLogger with the function to be called after each execution for the nodes marked for logging during execution.
 // If set this to nil and nothing will be logged (the values are just ignored).

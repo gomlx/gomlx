@@ -46,7 +46,7 @@ its stack-trace. And `Node.Trace()` to access it for printing or debugging.
 
 ## `NanLogger`
 
-The [`nanlogger.NanLogger`](https://pkg.go.dev/github.com/gomlx/gomlx/graph/nanlogger) allows one 
+The [`nanlogger.NanLogger`](https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/graph/nanlogger) allows one 
 to select "traces" on the model, which will panic with a stack trace (and some optional arbitrary
 scope message) whenever a `NaN` or `±Inf` is seen -- or it can be handled by an arbitrary function,
 with relatively low cost to the model.

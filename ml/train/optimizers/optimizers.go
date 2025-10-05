@@ -19,9 +19,9 @@
 package optimizers
 
 import (
-	. "github.com/gomlx/gomlx/graph"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"golang.org/x/exp/maps"
