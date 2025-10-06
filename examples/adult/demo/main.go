@@ -29,7 +29,6 @@ import (
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
@@ -43,6 +42,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
@@ -139,7 +139,7 @@ func main() {
 
 func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) error {
 	backend := backends.MustNew()
-	dataDir = data.ReplaceTildeInDir(dataDir)
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if *flagVerbosity >= 1 {
 		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
 		fmt.Println(commandline.SprintContextSettings(ctx))

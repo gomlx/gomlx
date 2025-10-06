@@ -17,9 +17,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
@@ -318,7 +318,7 @@ func (c *UnpackToTensorsConfig) KeepTemporary() *UnpackToTensorsConfig {
 // files generated thus far. You can change this behavior with KeepTemporary.
 func (c *UnpackToTensorsConfig) Done() (err error) {
 	// Sanity checking.
-	if data.FileExists(c.targetDir) {
+	if fsutil.MustFileExists(c.targetDir) {
 		err = errors.Errorf("target directory %q already exists -- remove it or move it away first ?", c.targetDir)
 		return
 	}

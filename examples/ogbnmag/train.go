@@ -4,12 +4,15 @@ package ogbnmag
 
 import (
 	"fmt"
+	"slices"
+	"strings"
+	"time"
+
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
@@ -18,6 +21,7 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
@@ -26,9 +30,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 	"k8s.io/klog/v2"
-	"slices"
-	"strings"
-	"time"
 )
 
 var (
@@ -115,7 +116,7 @@ func TrainingSchedule(ctx *context.Context, fromStep, toStep int) train.OnStepFn
 
 // Train GNN model based on configuration in `ctx`.
 func Train(backend backends.Backend, ctx *context.Context, dataDir, checkpointPath string, layerWiseEval, report bool, paramsSet []string) error {
-	dataDir = mldata.ReplaceTildeInDir(dataDir)
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	ReuseShareableKernels = context.GetParamOr(ctx, ParamReuseKernels, true)
 	IdentitySubSeeds = context.GetParamOr(ctx, ParamIdentitySubSeeds, true)
 

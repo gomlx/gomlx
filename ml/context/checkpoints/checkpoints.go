@@ -86,12 +86,12 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -178,7 +178,7 @@ func (c *Config) setError(err error) {
 //
 // One must be set either Dir, DirFromBase or TempDir before building the checkpoints.Handler.
 func (c *Config) Dir(dir string) *Config {
-	c.dir = data.ReplaceTildeInDir(dir)
+	c.dir = fsutil.MustReplaceTildeInDir(dir)
 	fi, err := os.Stat(dir)
 	if err != nil && !os.IsNotExist(err) {
 		c.setError(errors.Wrapf(err, "failed to os.Stat(%q)", dir))
@@ -210,9 +210,9 @@ func (c *Config) Dir(dir string) *Config {
 //
 // One must be set either Dir, DirFromBase or TempDir before building the checkpoints.Handler.
 func (c *Config) DirFromBase(dir, baseDir string) *Config {
-	dir = data.ReplaceTildeInDir(dir)
+	dir = fsutil.MustReplaceTildeInDir(dir)
 	if !path.IsAbs(dir) {
-		baseDir = data.ReplaceTildeInDir(baseDir)
+		baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 		dir = path.Join(baseDir, dir)
 	}
 	return c.Dir(dir)

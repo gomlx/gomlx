@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 )
@@ -62,7 +62,7 @@ func parseContextSetting(ctx *context.Context, setting string, paramsSet []strin
 	if strings.HasPrefix(setting, "file:") {
 		// Read parameters from a file.
 		filePath := strings.TrimPrefix(setting, "file:")
-		filePath = data.ReplaceTildeInDir(filePath)
+		filePath = fsutil.MustReplaceTildeInDir(filePath)
 		var contents []byte
 		contents, err = os.ReadFile(filePath)
 		if err != nil {

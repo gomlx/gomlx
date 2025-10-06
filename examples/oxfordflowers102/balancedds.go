@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
@@ -34,7 +35,7 @@ type BalancedDataset struct {
 // It caches the whole OxfordFlowers dataset in a large tensor, that is also yielded, along with the indices
 // of the images to be used (using graph.Gather).
 func NewBalancedDataset(backend backends.Backend, baseDir string, size int) (bds *BalancedDataset, err error) {
-	baseDir = data.ReplaceTildeInDir(baseDir)
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 	imagesCachePath := fmt.Sprintf("all_images_%dx%d.tensor", size, size)
 	labelsCachePath := fmt.Sprintf("all_labels_%dx%d.tensor", size, size)
 	imagesCachePath = path.Join(baseDir, imagesCachePath)
@@ -44,7 +45,7 @@ func NewBalancedDataset(backend backends.Backend, baseDir string, size int) (bds
 		BaseDir: baseDir,
 		Size:    size,
 	}
-	if data.FileExists(imagesCachePath) && data.FileExists(labelsCachePath) {
+	if fsutil.MustFileExists(imagesCachePath) && fsutil.MustFileExists(labelsCachePath) {
 		bds.AllImages, err = tensors.Load(imagesCachePath)
 		if err != nil {
 			err = errors.WithMessagef(err, "attempting to read cache file %q for NewBalancedDataset", imagesCachePath)

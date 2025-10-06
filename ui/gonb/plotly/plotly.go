@@ -21,9 +21,9 @@ import (
 	grob "github.com/MetalBlueberry/go-plotly/generated/v2.34.0/graph_objects"
 	ptypes "github.com/MetalBlueberry/go-plotly/pkg/types"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/plots"
@@ -233,7 +233,7 @@ func (pc *PlotConfig) WithCheckpoint(checkpoint *checkpoints.Handler) *PlotConfi
 
 	// Ignore errors while loading: maybe nothing was written yet.
 	_ = pc.LoadCheckpointData(checkpointDir)
-	checkpointDir = data.ReplaceTildeInDir(checkpointDir)
+	checkpointDir = fsutil.MustReplaceTildeInDir(checkpointDir)
 	filePath := path.Join(checkpointDir, plots.TrainingPlotFileName)
 	pc.fileWriter, pc.errFileWriter = plots.CreatePointsWriter(filePath)
 	pc.enablePointsWriting = true
@@ -268,7 +268,7 @@ type PointFilter func(p *plots.Point) bool
 // Each filter can also remove points by returning false -- only points for which filters returned true are
 // included.
 func (pc *PlotConfig) LoadCheckpointData(dataDirOrFile string, filters ...PointFilter) error {
-	dataDirOrFile = data.ReplaceTildeInDir(dataDirOrFile)
+	dataDirOrFile = fsutil.MustReplaceTildeInDir(dataDirOrFile)
 	fi, err := os.Stat(dataDirOrFile)
 	if err != nil {
 		return errors.Wrapf(err, "plotly.LoadCheckpointData(%q) cannot stat the file", dataDirOrFile)

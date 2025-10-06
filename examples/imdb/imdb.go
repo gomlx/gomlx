@@ -38,6 +38,7 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/pkg/errors"
 )
 
@@ -75,7 +76,7 @@ var (
 //
 // If it's already downloaded, simply load binary file version.
 func Download(baseDir string) error {
-	baseDir = data.ReplaceTildeInDir(baseDir)
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 	loaded, err := loadBinary(baseDir)
 	if err != nil {
 		return err

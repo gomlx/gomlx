@@ -28,60 +28,15 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"os/user"
 	"path"
 	"strings"
 
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 )
-
-// FileExists returns true if file or directory exists.
-func FileExists(path string) bool {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true
-	}
-	if errors.Is(err, os.ErrNotExist) {
-		return false
-	}
-	panic(err)
-}
-
-// ReplaceTildeInDir by the user's home directory. Returns dir if it doesn't start with "~".
-//
-// It may panic with an error if `dir` has an unknown user (e.g: `~unknown/...`)
-func ReplaceTildeInDir(dir string) string {
-	if len(dir) == 0 {
-		return dir
-	}
-	if dir[0] != '~' {
-		return dir
-	}
-	var userName string
-	if dir != "~" && !strings.HasPrefix(dir, "~/") {
-		sepIdx := strings.IndexRune(dir, '/')
-		if sepIdx == -1 {
-			userName = dir[1:]
-		} else {
-			userName = dir[1:sepIdx]
-		}
-	}
-	var usr *user.User
-	var err error
-	if userName == "" {
-		usr, err = user.Current()
-	} else {
-		usr, err = user.Lookup(userName)
-	}
-	if err != nil {
-		panic(errors.Wrapf(err, "failed to lookup home directory for user in path %q", dir))
-	}
-	homeDir := usr.HomeDir
-	return path.Join(homeDir, dir[1+len(userName):])
-}
 
 // ValidateChecksum verifies that the checksum of the file in the given path matches the checksum
 // given. If it fails, it will remove the file (!) and return and error.
@@ -186,7 +141,7 @@ func CopyWithProgressBar(dst io.Writer, src io.Reader, contentLength int64) (n i
 //
 // Optionally, use showProgressBar.
 func Download(url, filePath string, showProgressBar bool) (size int64, err error) {
-	filePath = ReplaceTildeInDir(filePath)
+	filePath = fsutil.MustReplaceTildeInDir(filePath)
 	err = os.MkdirAll(path.Dir(filePath), 0777)
 	if err != nil && !os.IsExist(err) {
 		err = errors.Wrapf(err, "Failed to create the directory for the path: %q", path.Dir(filePath))
@@ -233,8 +188,8 @@ func Download(url, filePath string, showProgressBar bool) (size int64, err error
 //
 // If checkHash is provided, it checks that the file has the hash or fail.
 func DownloadIfMissing(url, filePath, checkHash string) error {
-	filePath = ReplaceTildeInDir(filePath)
-	if !FileExists(filePath) {
+	filePath = fsutil.MustReplaceTildeInDir(filePath)
+	if !fsutil.MustFileExists(filePath) {
 		// Download compressed file first.
 		fmt.Printf("Downloading %s ...\n", url)
 		_, err := Download(url, filePath, true)
@@ -250,7 +205,7 @@ func DownloadIfMissing(url, filePath, checkHash string) error {
 
 // Untar file, using decompression flags according to suffix: .gz for gzip, bz2 for bzip2.
 func Untar(baseDir, tarFile string) error {
-	baseDir = ReplaceTildeInDir(baseDir)
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 	compressionFlag := ""
 	if strings.HasSuffix(tarFile, ".gz") || strings.HasSuffix(tarFile, ".tgz") {
 		compressionFlag = "z"
@@ -271,14 +226,14 @@ func Untar(baseDir, tarFile string) error {
 //
 // If checkHash is provided, it checks that the file has the hash or fail.
 func DownloadAndUntarIfMissing(url, baseDir, tarFile, targetUntarDir, checkHash string) error {
-	baseDir = ReplaceTildeInDir(baseDir)
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 	if !path.IsAbs(tarFile) {
 		tarFile = path.Join(baseDir, tarFile)
 	}
 	if !path.IsAbs(targetUntarDir) {
 		targetUntarDir = path.Join(baseDir, targetUntarDir)
 	}
-	if FileExists(targetUntarDir) {
+	if fsutil.MustFileExists(targetUntarDir) {
 		return nil
 	}
 	err := DownloadIfMissing(url, tarFile, checkHash)
@@ -289,7 +244,7 @@ func DownloadAndUntarIfMissing(url, baseDir, tarFile, targetUntarDir, checkHash 
 	if err != nil {
 		return err
 	}
-	if !FileExists(targetUntarDir) {
+	if !fsutil.MustFileExists(targetUntarDir) {
 		return errors.Errorf("downloaded from %q and untar'ed %q, but didn't get directory %q", url, tarFile, targetUntarDir)
 	}
 	return nil
@@ -302,7 +257,7 @@ func DownloadAndUntarIfMissing(url, baseDir, tarFile, targetUntarDir, checkHash 
 //
 // If checkHash is provided, it checks that the file has the hash or fail.
 func DownloadAndUnzipIfMissing(url, zipFile, unzipBaseDir, targetUnzipDir, checkHash string) error {
-	if FileExists(targetUnzipDir) {
+	if fsutil.MustFileExists(targetUnzipDir) {
 		return nil
 	}
 	err := DownloadIfMissing(url, zipFile, checkHash)
@@ -313,7 +268,7 @@ func DownloadAndUnzipIfMissing(url, zipFile, unzipBaseDir, targetUnzipDir, check
 	if err != nil {
 		return err
 	}
-	if !FileExists(targetUnzipDir) {
+	if !fsutil.MustFileExists(targetUnzipDir) {
 		return errors.Errorf("downloaded from %q and unzip'ed %q, but didn't get directory %q", url, zipFile, targetUnzipDir)
 	}
 	return nil

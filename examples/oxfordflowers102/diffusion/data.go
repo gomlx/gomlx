@@ -3,6 +3,9 @@ package diffusion
 import (
 	"encoding/gob"
 	"fmt"
+	"os"
+	"path"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
@@ -10,10 +13,9 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"os"
-	"path"
 
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
@@ -55,8 +57,8 @@ type Config struct {
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
 func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string, paramsSet []string) *Config {
-	dataDir = data.ReplaceTildeInDir(dataDir)
-	if !data.FileExists(dataDir) {
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
+	if !fsutil.MustFileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
 	}
 	dtype := must.M1(dtypes.DTypeString(

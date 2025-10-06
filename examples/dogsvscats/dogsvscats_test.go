@@ -19,8 +19,11 @@ package dogsvscats
 import (
 	"flag"
 	"fmt"
+
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
+
 	"io"
 	"path"
 	"runtime"
@@ -35,7 +38,7 @@ var (
 )
 
 func buildConfig() *PreprocessingConfiguration {
-	*flagDataDir = data.ReplaceTildeInDir(*flagDataDir)
+	*flagDataDir = fsutil.MustReplaceTildeInDir(*flagDataDir)
 	config := &PreprocessingConfiguration{}
 	*config = *DefaultConfig
 	config.DataDir = *flagDataDir
@@ -47,11 +50,11 @@ func buildConfig() *PreprocessingConfiguration {
 }
 
 func filesDownloaded(config *PreprocessingConfiguration) bool {
-	if !data.FileExists(config.DataDir) {
+	if !fsutil.MustFileExists(config.DataDir) {
 		return false
 	}
 	imagesDir := path.Join(config.DataDir, LocalZipDir)
-	if !data.FileExists(imagesDir) {
+	if !fsutil.MustFileExists(imagesDir) {
 		return false
 	}
 	return true

@@ -32,6 +32,7 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
@@ -125,7 +126,7 @@ func convertBytesToTensor[T dtypes.GoFloat](image []byte, imagesT *tensors.Tenso
 // The first 50k examples are for training, and the last 10k for testing.
 // Only Float32 and Float64 dtypes are supported for now.
 func LoadCifar10(backend backends.Backend, baseDir string, dtype dtypes.DType) (partitioned PartitionedImagesAndLabels) {
-	baseDir = data.ReplaceTildeInDir(baseDir)
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 
 	// Allocate the tensor.
 	images := tensors.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))
@@ -182,7 +183,7 @@ func LoadCifar10(backend backends.Backend, baseDir string, dtype dtypes.DType) (
 // The first 50k examples are for training, and the last 10k for testing.
 // Only Float32 and Float64 dtypes are supported for now.
 func LoadCifar100(backend backends.Backend, baseDir string, dtype dtypes.DType) (partitioned PartitionedImagesAndLabels) {
-	baseDir = data.ReplaceTildeInDir(baseDir)
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 
 	// Allocate the tensor.
 	images := tensors.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))

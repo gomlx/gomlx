@@ -14,7 +14,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/plots"
@@ -205,7 +205,7 @@ func BuildPlots(checkpointPaths []string, modelNames []string, metricsOrder map[
 	// Create a temporary file for the serializedPlots if needed.
 	outputFilePath := *flagPlotOutput
 	if outputFilePath != "" {
-		outputFilePath = data.ReplaceTildeInDir(outputFilePath)
+		outputFilePath = fsutil.MustReplaceTildeInDir(outputFilePath)
 		if !path.IsAbs(outputFilePath) {
 			outputFilePath = path.Join(checkpointPaths[0], outputFilePath)
 		}

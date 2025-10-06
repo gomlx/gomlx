@@ -34,6 +34,7 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gopjrt/dtypes"
 
 	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
@@ -122,7 +123,7 @@ func (img *Image) Set(x, y int, v byte) {
 
 // Download MNIST Dataset to baseDir, unzips it
 func Download(baseDir string) error {
-	baseDir = data.ReplaceTildeInDir(baseDir)
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 	files := []string{TrainImagesFilename, TrainLabelsFilename, TestImagesFilename, TestLabelsFilename}
 	checkHashes := []string{TrainImagesHash, TrainLabelsHash, TestImagesHash, TestLabelsHash}
 	for fileIdx, file := range files {

@@ -14,11 +14,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	lgtable "github.com/charmbracelet/lipgloss/table"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	types "github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
@@ -140,7 +140,7 @@ func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []*t
 // LoadPointsFromCheckpoint loads all plot points saved during training in file [TrainingPlotFileName]
 // in a checkpoint directory.
 func LoadPointsFromCheckpoint(checkpointDir string) ([]Point, error) {
-	checkpointDir = data.ReplaceTildeInDir(checkpointDir)
+	checkpointDir = fsutil.MustReplaceTildeInDir(checkpointDir)
 	filePath := path.Join(checkpointDir, TrainingPlotFileName)
 	return LoadPoints(filePath)
 }

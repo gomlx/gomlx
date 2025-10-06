@@ -20,6 +20,7 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
@@ -116,7 +117,7 @@ func Download(baseDir string) error {
 		// Already loaded.
 		return nil
 	}
-	baseDir = mldata.ReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
 	downloadDir := path.Join(baseDir, DownloadSubdir)
 
 	if err := downloadZip(downloadDir); err != nil {
@@ -150,7 +151,7 @@ func downloadZip(downloadDir string) error {
 	if err != nil {
 		return err
 	}
-	if mldata.FileExists(zipPath) {
+	if fsutil.MustFileExists(zipPath) {
 		// Clean up zip file no longer needed, to save space.
 		if err := os.Remove(zipPath); err != nil {
 			return errors.Wrapf(err, "Failed to remove file %q", zipPath)
@@ -266,7 +267,7 @@ func parseInt32(str string) (int32, error) {
 func parseNumbersFromCSV[E dtypes.NumberNotComplex](inputFilePath, outputFilePath string, numRows, numCols int, parseNumberFn func(string) (E, error)) (*tensors.Tensor, error) {
 	var tensorOut *tensors.Tensor
 	var err error
-	if outputFilePath != "" && mldata.FileExists(outputFilePath) {
+	if outputFilePath != "" && fsutil.MustFileExists(outputFilePath) {
 		tensorOut, err = tensors.Load(outputFilePath)
 		if err == nil {
 			// Read from pre-saved tensor.
@@ -345,7 +346,7 @@ func allEdgesCount(downloadDir string) error {
 			outputFilePath := path.Join(downloadDir, countsFileNames[idxTensor]+".tensor")
 			var counts *tensors.Tensor
 			var err error
-			if mldata.FileExists(outputFilePath) {
+			if fsutil.MustFileExists(outputFilePath) {
 				counts, err = tensors.Load(outputFilePath)
 			} else {
 				fmt.Printf("> Counting elements for edges %s[column %d]: %d entries\n", edgesFiles[idxInput], column, input.Shape().Dimensions[0])

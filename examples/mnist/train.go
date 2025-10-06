@@ -22,13 +22,13 @@ import (
 	"time"
 
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/pkg/errors"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
@@ -103,7 +103,7 @@ func CreateDefaultContext() *context.Context {
 // NewDatasetsConfigurationFromContext create a preprocessing configuration based on hyperparameters
 // set in the context.
 func NewDatasetsConfigurationFromContext(ctx *context.Context, dataDir string) *DatasetsConfiguration {
-	dataDir = data.ReplaceTildeInDir(dataDir)
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	config := &DatasetsConfiguration{}
 	config.DataDir = dataDir
 	config.BatchSize = context.GetParamOr(ctx, "batch_size", 0)
@@ -116,8 +116,8 @@ func NewDatasetsConfigurationFromContext(ctx *context.Context, dataDir string) *
 
 // TrainModel based on configuration and flags.
 func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) error {
-	dataDir = data.ReplaceTildeInDir(dataDir)
-	if !data.FileExists(dataDir) {
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
+	if !fsutil.MustFileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
 	}
 

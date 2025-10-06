@@ -9,7 +9,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/pkg/errors"
 )
@@ -82,7 +82,7 @@ func (m *Manager) Download(ctx context.Context, url string, filePath string, cal
 		},
 	}
 
-	filePath = data.ReplaceTildeInDir(filePath)
+	filePath = fsutil.MustReplaceTildeInDir(filePath)
 	err := os.MkdirAll(path.Dir(filePath), 0777)
 	if err != nil && !os.IsExist(err) {
 		return errors.Wrapf(err, "Failed to create the directory for the path: %q", path.Dir(filePath))

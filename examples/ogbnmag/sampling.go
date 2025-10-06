@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 )
 
 var (
@@ -42,7 +43,7 @@ var (
 func NewSampler(baseDir string) (*sampler.Sampler, error) {
 	var samplerPath string
 	if baseDir != "" {
-		baseDir = mldata.ReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
+		baseDir = fsutil.MustReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
 		samplerPath = path.Join(baseDir, DownloadSubdir, "sampler.bin")
 		s, err := sampler.Load(samplerPath)
 		if err == nil {

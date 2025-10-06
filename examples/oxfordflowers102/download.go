@@ -1,9 +1,6 @@
 package oxfordflowers102
 
 import (
-	"github.com/daniellowtw/matlab"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/pkg/errors"
 	"image"
 	"image/jpeg"
 	"log"
@@ -11,6 +8,11 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"github.com/daniellowtw/matlab"
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -31,7 +33,7 @@ var (
 //
 // After download, the contents of the files are parsed, and the global AllLabels is set.
 func DownloadAndParse(baseDir string) error {
-	baseDir = data.ReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
 	downloadPath := path.Join(baseDir, DownloadSubdir)
 	if err := os.MkdirAll(downloadPath, 0777); err != nil && !os.IsExist(err) {
 		return errors.Wrapf(err, "Failed to create path for downloading %q", downloadPath)

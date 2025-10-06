@@ -25,7 +25,6 @@
   * Experimental package that aims at replacing the `context` package.
   * All packages under `github.com/gomlx/gomlx/ml` have been rewritten to the new `model` framework, under
     `github.com/gomlx/gomlx/pkg/ml`
-* Package `inceptionv3` moved to `examples`
 * Package `xla` (the old one): now **DEPRECATED** and called `oldxla`. The package `stablehlo` replaces it, including aliasing the `xla` backend name.
   * The old version now registered as backend "oldxla".
   * Only included in `github.com/gomlx/gomlx/backends/default` if compiled with the tag `oldxla`.
@@ -41,6 +40,13 @@
 * Package `context`:
   * `NewExec`, `NewExecAny` `Exec`, `ExecOnce` and `ExecOnceN` now return an error on failure.
   * `MustNewExec`, `Call`, `CallOnce` and `CallOnceN` panic on failure.
+* Packages `pkg/support/...`:
+  * Generic supporting functionality that is not core to GoMLX, but that users may also find useful to interact with it
+    are now better (and hopefully more definitively) organized in packages under `pkg/support/`. The following packages were moved/created:
+    * `xslices`, `xmaps`, `xsync`: extensions to the corresponding standard packages.
+    * `set`: previously known as package `types/`
+    * `fsutils`: file system handling utilities, previously in `data`.
+* Package `inceptionv3` moved to `examples`
 
 # v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
 

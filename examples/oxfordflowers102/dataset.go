@@ -18,6 +18,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
@@ -225,7 +226,7 @@ func InMemoryDataset(backend backends.Backend, baseDir string, imageSize int, na
 	inMemoryDataset *data.InMemoryDataset, err error) {
 	var f *os.File
 	if baseDir != "" {
-		baseDir = data.ReplaceTildeInDir(baseDir) // If dir starts with "~", it is replaced.
+		baseDir = fsutil.MustReplaceTildeInDir(baseDir) // If dir starts with "~", it is replaced.
 		inMemoryCacheFile := path.Join(baseDir, fmt.Sprintf("%s_cached_images_%dx%d.bin", name, imageSize, imageSize))
 
 		defer func() {

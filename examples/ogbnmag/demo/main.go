@@ -3,22 +3,23 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+	"time"
+
 	"github.com/gomlx/gomlx/backends"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
-	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
-	"os"
-	"time"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
@@ -137,7 +138,7 @@ func main() {
 	flag.Parse()
 
 	// Change current directory to data directory.
-	*flagDataDir = mldata.ReplaceTildeInDir(*flagDataDir)
+	*flagDataDir = fsutil.MustReplaceTildeInDir(*flagDataDir)
 	if err := os.Chdir(*flagDataDir); err != nil {
 		klog.Fatalf("Failed to change to current directory to %q: %v", *flagDataDir, err)
 	}

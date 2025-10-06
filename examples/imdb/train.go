@@ -21,6 +21,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -120,8 +121,8 @@ func CreateDefaultContext() *context.Context {
 // TrainModel with hyperparameters given in ctx.
 func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
-	dataDir = data.ReplaceTildeInDir(dataDir)
-	if !data.FileExists(dataDir) {
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
+	if !fsutil.MustFileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
 	}
 

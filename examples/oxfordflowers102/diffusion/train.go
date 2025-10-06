@@ -11,7 +11,6 @@ import (
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/metrics"
@@ -20,6 +19,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
@@ -323,7 +323,7 @@ func DisplayTrainingPlots(ctx *context.Context, dataDir, checkpointPath string, 
 
 // CompareModelPlots display several model metrics on the same plots.
 func CompareModelPlots(dataDir string, modelNames ...string) {
-	dataDir = data.ReplaceTildeInDir(dataDir)
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	plots := margaid.New(1024, 400).LogScaleX().LogScaleY()
 	for _, modelName := range modelNames {
 		modelPath := modelName

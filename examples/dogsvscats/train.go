@@ -2,12 +2,14 @@ package dogsvscats
 
 import (
 	"fmt"
+	"os"
+	"time"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
@@ -21,12 +23,11 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"golang.org/x/exp/maps"
 	"k8s.io/klog/v2"
-	"os"
-	"time"
 )
 
 var (
@@ -140,8 +141,8 @@ func CreateDefaultContext() *context.Context {
 
 // TrainModel based on configuration and flags.
 func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bool, paramsSet []string) {
-	dataDir = data.ReplaceTildeInDir(dataDir)
-	if !data.FileExists(dataDir) {
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
+	if !fsutil.MustFileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
 	}
 
@@ -192,7 +193,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 			losses.BinaryCrossentropyLogits,
 			optimizer,
 			[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-			[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+			[]metrics.Interface{meanAccuracyMetric}) // evalMetrics
 	} else {
 		// Pre-training: no loss, no metrics.
 		trainer = train.NewTrainer(backend, ctx, modelFn,

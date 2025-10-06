@@ -2,25 +2,26 @@ package cifar
 
 import (
 	"fmt"
+	"os"
+	"slices"
+	"time"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"os"
-	"slices"
-	"time"
 )
 
 var (
@@ -43,8 +44,8 @@ var Backend backends.Backend
 // TrainCifar10Model with hyperparameters given in ctx.
 func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
-	dataDir = data.ReplaceTildeInDir(dataDir)
-	if !data.FileExists(dataDir) {
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
+	if !fsutil.MustFileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
 	}
 	must.M(DownloadCifar10(dataDir))

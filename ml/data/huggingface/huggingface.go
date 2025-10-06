@@ -16,7 +16,7 @@
 //	)
 //
 //	func HuggingFaceDir() string {
-//		dataDir := data.ReplaceTildeInDir(*flagDataDir)
+//		dataDir := data.MustReplaceTildeInDir(*flagDataDir)
 //		return path.Join(dataDir, "huggingface")
 //	}
 //
@@ -45,6 +45,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/data/downloader"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/pkg/errors"
 )
@@ -85,7 +86,7 @@ type Model struct {
 //
 // Deprecated: this is being moved to https://github.com/gomlx/go-huggingface.
 func New(id string, authToken, baseDir string) (*Model, error) {
-	baseDir = data.ReplaceTildeInDir(baseDir)
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 	if !path.IsAbs(baseDir) {
 		workingDir, err := os.Getwd()
 		if err != nil {
@@ -143,7 +144,7 @@ func (hfm *Model) DownloadInfo() error {
 		return nil
 	}
 	infoFilePath := path.Join(hfm.BaseDir, InfoFile)
-	if !data.FileExists(infoFilePath) {
+	if !fsutil.MustFileExists(infoFilePath) {
 		// Download Model's info file from network.
 		_, err := data.Download(hfm.infoURL(), infoFilePath, true)
 		if err != nil {
@@ -214,7 +215,7 @@ func (hfm *Model) Download() error {
 		if err != nil {
 			return err
 		}
-		if !data.FileExists(f.Path) {
+		if !fsutil.MustFileExists(f.Path) {
 			requireDownload.Insert(f.Name)
 		}
 	}

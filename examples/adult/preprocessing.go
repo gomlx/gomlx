@@ -19,8 +19,11 @@ package adult
 import (
 	"encoding/gob"
 	"fmt"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
+
 	"math/rand"
 	"os"
 	"path"
@@ -166,14 +169,14 @@ func LoadDataFrame(path string) dataframe.DataFrame {
 //
 // It panics in case of error.
 func LoadAndPreprocessData(dir string, numQuantiles int, forceDownload bool, verbosity int) {
-	dir = data.ReplaceTildeInDir(dir) // "~/..." -> "${HOME}/..."
+	dir = fsutil.MustReplaceTildeInDir(dir) // "~/..." -> "${HOME}/..."
 	if Data.VocabulariesFeatures != nil {
 		// Already loaded, nothing to do.
 		return
 	}
 
 	// Make sure the data directory exists.
-	if !data.FileExists(dir) {
+	if !fsutil.MustFileExists(dir) {
 		AssertNoError(os.MkdirAll(dir, 0777))
 	}
 
@@ -293,7 +296,7 @@ func SaveBinaryData(dir string, numQuantiles int) (err error) {
 // Considering using LoadAndPreprocessData instead.
 func LoadBinaryData(dir string, numQuantiles int) (found bool) {
 	filePath := BinaryFilePath(dir, numQuantiles)
-	if !data.FileExists(filePath) {
+	if !fsutil.MustFileExists(filePath) {
 		return false
 	}
 

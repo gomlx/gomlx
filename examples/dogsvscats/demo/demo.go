@@ -25,14 +25,15 @@ package main
 
 import (
 	"flag"
+	"os"
+
 	"github.com/gomlx/gomlx/examples/dogsvscats"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
-	"os"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
@@ -68,8 +69,8 @@ func main() {
 }
 
 func preGenerate(ctx *context.Context, dataDir string) {
-	*flagDataDir = data.ReplaceTildeInDir(*flagDataDir)
-	if !data.FileExists(*flagDataDir) {
+	*flagDataDir = fsutil.MustReplaceTildeInDir(*flagDataDir)
+	if !fsutil.MustFileExists(*flagDataDir) {
 		must.M(os.MkdirAll(*flagDataDir, 0777))
 	}
 	must.M(dogsvscats.Download(*flagDataDir))

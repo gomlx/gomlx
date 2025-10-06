@@ -6,6 +6,7 @@ import (
 
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/data/hdf5"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 )
 
 const (
@@ -32,9 +33,9 @@ func DownloadAndUnpackWeights(baseDir string) (err error) {
 }
 
 func downloadAndUnpackWeightsImpl(baseDir, weightsURL, sha256Checksum, weightsH5Name, unpackedWeightsName string) (err error) {
-	baseDir = data.ReplaceTildeInDir(baseDir)
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 	unpackedWeightPath := path.Join(baseDir, unpackedWeightsName)
-	if data.FileExists(unpackedWeightPath) {
+	if fsutil.MustFileExists(unpackedWeightPath) {
 		// Weights already unpacked, done.
 		return
 	}
@@ -52,7 +53,7 @@ func downloadAndUnpackWeightsImpl(baseDir, weightsURL, sha256Checksum, weightsH5
 
 // PathToTensor returns the path to tensorName (name within the h5 file).
 func PathToTensor(baseDir, tensorName string) string {
-	baseDir = data.ReplaceTildeInDir(baseDir)
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 	return path.Join(baseDir, UnpackedWeightsName, tensorName)
 }
 
@@ -85,7 +86,7 @@ func DownloadAndUnpackWeightsNoTop(baseDir string) (err error) {
 // PathToTensorNoTop returns the path to tensorName (name within the h5 file) for the version of weights without
 // the top layer.
 func PathToTensorNoTop(baseDir, tensorName string) string {
-	baseDir = data.ReplaceTildeInDir(baseDir)
+	baseDir = data.MustReplaceTildeInDir(baseDir)
 	return path.Join(baseDir, UnpackedWeightsNoTopName, tensorName)
 }
 

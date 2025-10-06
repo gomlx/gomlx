@@ -28,6 +28,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
@@ -119,7 +120,7 @@ var (
 // Notice some configuration parameters depends on the model type ("model" hyperparameter): "inception" has a
 // specific size, "byol" model requires image pairs.
 func NewPreprocessingConfigurationFromContext(ctx *context.Context, dataDir string) *PreprocessingConfiguration {
-	dataDir = data.ReplaceTildeInDir(dataDir)
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	modelType := context.GetParamOr(ctx, "model", "")
 	config := &PreprocessingConfiguration{}
 	*config = *DefaultConfig
@@ -148,7 +149,7 @@ func PreGenerate(config *PreprocessingConfiguration, numEpochsForTraining int, f
 
 	// Validation data for evaluation.
 	validPath := path.Join(config.DataDir, PreGeneratedValidationFileName)
-	if !data.FileExists(validPath) || force {
+	if !fsutil.MustFileExists(validPath) || force {
 		f, err := os.Create(validPath)
 		AssertNoError(err)
 		ds := NewDataset("valid", config.DataDir, batchSize, false, nil, config.NumFolds,
@@ -164,7 +165,7 @@ func PreGenerate(config *PreprocessingConfiguration, numEpochsForTraining int, f
 
 	// Training data for evaluation.
 	trainEvalPath := path.Join(config.DataDir, PreGeneratedTrainEvalFileName)
-	if !data.FileExists(trainEvalPath) || force {
+	if !fsutil.MustFileExists(trainEvalPath) || force {
 		f, err := os.Create(trainEvalPath)
 		AssertNoError(err)
 		ds := NewDataset("train-eval", config.DataDir, batchSize, false, nil, config.NumFolds,
@@ -181,7 +182,7 @@ func PreGenerate(config *PreprocessingConfiguration, numEpochsForTraining int, f
 	// Training data.
 	trainPath := path.Join(config.DataDir, PreGeneratedTrainFileName)
 	trainPairPath := path.Join(config.DataDir, PreGeneratedTrainPairFileName)
-	if !data.FileExists(trainPath) || force {
+	if !fsutil.MustFileExists(trainPath) || force {
 		f, err := os.Create(trainPath)
 		AssertNoError(err)
 		f2, err := os.Create(trainPairPath)
