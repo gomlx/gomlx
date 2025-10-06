@@ -35,7 +35,7 @@
 //	incExec.Call1() // -> 1
 //	fmt.Printf("current myModel state: %s\n", myModel.counter.Value()) // -> 2
 //	models.Checkpoint(myModel, "~/work/my_counter")
-package models
+package exec
 
 // Generate ExecFnSet interface, and a conversion tool to a canonical form.
 //go:generate go run ../../../internal/cmd/builderiface/

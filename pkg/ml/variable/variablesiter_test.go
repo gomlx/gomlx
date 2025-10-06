@@ -1,4 +1,4 @@
-package models
+package variable
 
 import (
 	"testing"

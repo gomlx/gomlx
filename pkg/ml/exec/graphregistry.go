@@ -1,16 +1,24 @@
-package models
+package exec
 
 import (
 	"sync"
 	"weak"
 
 	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/ml/variable"
 )
 
 var (
 	graphToExecMu sync.RWMutex
 	graphToExec   = make(map[graph.GraphId]weak.Pointer[Exec])
 )
+
+func init() {
+	// Dependency injection of the registry getter.
+	variable.GetExecutorByGraphId = func(id graph.GraphId) variable.Executor {
+		return getExecByGraphId(id)
+	}
+}
 
 func getExecByGraphId(id graph.GraphId) *Exec {
 	graphToExecMu.RLock()

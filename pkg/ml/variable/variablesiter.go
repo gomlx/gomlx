@@ -1,4 +1,4 @@
-package models
+package variable
 
 import (
 	"cmp"
@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const modelsPkgPath = "github.com/gomlx/gomlx/pkg/ml/models"
+const modelsPkgPath = "github.com/gomlx/gomlx/pkg/ml/exec"
 
 // PathAndVariable refers to a variable within a model struct, at the "Path" location.
 // See details in IterVariables.
