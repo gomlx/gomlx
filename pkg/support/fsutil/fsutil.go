@@ -2,6 +2,7 @@
 package fsutil
 
 import (
+	"io"
 	"os"
 	"os/user"
 	"path"
@@ -74,4 +75,22 @@ func ReplaceTildeInDir(dir string) (string, error) {
 	}
 	homeDir := usr.HomeDir
 	return path.Join(homeDir, dir[1+len(userName):]), nil
+}
+
+// ReportedClose closes the closer object (a file?) and reports in case of error.
+//
+// It reports by setting reportErrPtr if it's set and not in use yet. Otherwise, it logs the error and continues.
+//
+// Use this in a defer statement.
+func ReportedClose(closer io.Closer, name string, reportErrPtr *error) {
+	err := closer.Close()
+	if err == nil {
+		return
+	}
+	if reportErrPtr == nil || *reportErrPtr != nil {
+		// Simply report the closing error.
+		return
+	}
+	// Set the returning error.
+	*reportErrPtr = errors.Wrapf(err, "failed to close %s", name)
 }

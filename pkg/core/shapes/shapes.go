@@ -1,5 +1,5 @@
 /*
- *	Copyright 2023 Jan Pfeifer
+ *	Copyright 2025 Jan Pfeifer
  *
  *	Licensed under the Apache License, Version 2.0 (the "License");
  *	you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
  *	limitations under the License.
  */
 
-// Package shapes defines Shape and DType and associated tools.
+// Package shapes define Shape and DType and associated tools.
 //
 // Shape represents the shape (rank, dimensions, and DType) of either a Tensor or the expected
-// shape of a node in a computation Graph. DType indicates the type of a Tensor's unit element.
+// shape of a node in a computation Graph. DType indicates the data type for a Tensor's unit element.
 //
-// Shape and DType are used both by the concrete tensor values (see tensor package) and when
-// working on the computation graph (see graph package).
+// Shape and DType are used both by the concrete tensor values (see pkg/core/tensors package) and when
+// working on the symbolic computation graph (see pkg/core/graph package).
 //
 // Go float16 support (commonly used by Nvidia GPUs) uses github.com/x448/float16 implementation,
 // and bfloat16 uses a simple implementation in github.com/gomlx/gopjrt/dtypes/bfloat16.
@@ -81,11 +81,16 @@ import (
 // Shape represents the shape of either a Tensor or the expected shape
 // of the value from a computation node.
 //
-// Use Make to create a new shape. See example in package shapes documentation.
+// Use Make to create a new shape. See examples in the package documentation.
 type Shape struct {
-	DType       dtypes.DType
-	Dimensions  []int
-	TupleShapes []Shape // Shapes of the tuple, if this is a tuple.
+	// DType is the data type of the unit element in a tensor.
+	DType dtypes.DType
+
+	// Dimensions is the size of each axis. Its length determines the rank.
+	Dimensions []int
+	// TupleShapes is used if this Shape represents a tuple of elements.
+	// Internal use only.
+	TupleShapes []Shape `json:"tuple,omitempty"` // Shapes of the tuple, if this is a tuple.
 }
 
 // Make returns a Shape structure filled with the values given.
