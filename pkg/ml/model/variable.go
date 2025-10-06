@@ -1,9 +1,4 @@
-<<<<<<<< HEAD:pkg/ml/model/variable.go
 package model
-========
-// Package variable defines the Variable type, used by models to hold weights.
-package variable
->>>>>>>> b1bebb70fa399f07e42a4df4a8b4735919894d8e:pkg/ml/variable/variable.go
 
 import (
 	"fmt"
@@ -12,25 +7,10 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/exec"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
-
-// Executor is an interface for exec.Exec: a Variable needs from the Executor the ability to create an input
-// Node for a Variable, and to create an extra (side) output if the variable is updated.
-//
-// Internal use only.
-type Executor interface {
-	CreateVariableParamNode(v *Variable, g *graph.Graph) *graph.Node
-	CreateVariableOutputNode(v *Variable, g *graph.Graph) *graph.Node
-}
-
-// GetExecutorByGraphId returns the Executor for the given graph id.
-//
-// Internal use only. An injected dependency to break a circular dependency.
-var GetExecutorByGraphId func(id graph.GraphId) Executor
 
 // Variable (or weights) of a model, typically learned during training, but can also be used as large constants.
 //
@@ -287,13 +267,13 @@ func (v *Variable) ValueGraph(g *graph.Graph) *graph.Node {
 	}
 
 	// Find Exec this graph is part of, to create a side input parameter that will hold the variable value.
-	e := GetExecutorByGraphId(gID)
+	e := getExecByGraphId(gID)
 	if e == nil {
 		Panicf("cannot access variable %q in a graph not managed by a exec.Exec -- exec.Variable can only be used "+
 			"for computation graphs created using the exec.Exec executor", v.name)
 		panic(nil)
 	}
-	return e.CreateVariableParamNode(v, g)
+	return e.createVariableParamNode(v, g)
 }
 
 // SetValueGraph sets the value (a *graph.Node) of the variable for the current graph.
@@ -327,7 +307,7 @@ func (v *Variable) SetValueGraph(value *graph.Node) {
 	}
 
 	// Find Exec this graph is part of, to create a side input parameter that will hold the variable value.
-	e := exec.getExecByGraphId(gID)
+	e := getExecByGraphId(gID)
 	if e == nil {
 		Panicf("cannot access variable %q in a graph not managed by a exec.Exec -- exec.Variable can only be used "+
 			"for computation graphs created using the exec.Exec executor", v.name)

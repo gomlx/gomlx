@@ -1,8 +1,4 @@
-<<<<<<<< HEAD:pkg/ml/model/nodelogger.go
 package model
-========
-package exec
->>>>>>>> b1bebb70fa399f07e42a4df4a8b4735919894d8e:pkg/ml/exec/nodelogger.go
 
 import "github.com/gomlx/gomlx/pkg/core/graph"
 

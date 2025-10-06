@@ -1,12 +1,4 @@
-<<<<<<< HEAD:pkg/ml/exec/graphregistry.go
-<<<<<<<< HEAD:pkg/ml/model/graphs.go
 package model
-========
-package exec
->>>>>>>> b1bebb70fa399f07e42a4df4a8b4735919894d8e:pkg/ml/exec/graphregistry.go
-=======
-package models
->>>>>>> parent of b1bebb7 (Middle of refactoring: package models -> packages exec and variable):pkg/ml/models/graphs.go
 
 import (
 	"sync"

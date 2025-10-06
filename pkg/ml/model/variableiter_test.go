@@ -1,8 +1,4 @@
-<<<<<<<< HEAD:pkg/ml/model/variableiter_test.go
 package model
-========
-package variable
->>>>>>>> b1bebb70fa399f07e42a4df4a8b4735919894d8e:pkg/ml/variable/variablesiter_test.go
 
 import (
 	"testing"

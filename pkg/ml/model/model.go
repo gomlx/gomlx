@@ -1,6 +1,6 @@
-// Package model provides helpers to train, execute (inference), save, and load models with their weights and hyperparameters.
+// Package model provides helpers to build, execute, save, and load models with their weights and hyperparameters.
 //
-// Note: This package aims to replace the `ml/context` package and all the layers libraries.
+// Note: This package aims to replace the previous `ml/context` package.
 // **It's still in beta**. Any feedback is very welcome.
 //
 // And this package defines:
@@ -30,17 +30,12 @@
 //		myModel.counter.SetValueGraph(nextValue)  // Updates the counter.
 //		return currentValue
 //	}
-//	incExec := must.M1(model.NewExec(backend, incFn))  // Executor that increments the counter.
-//	incExec.Call1() // -> 0
-//	incExec.Call1() // -> 1
+//	inc := must.M1(model.NewExec(backend, incFn))  // Executor that increments the counter.
+//	inc.Call1() // -> 0
+//	inc.Call1() // -> 1
 //	fmt.Printf("current myModel state: %s\n", myModel.counter.Value()) // -> 2
-<<<<<<<< HEAD:pkg/ml/model/model.go
 //	model.Checkpoint(myModel, "~/work/my_counter")
 package model
-========
-//	models.Checkpoint(myModel, "~/work/my_counter")
-package exec
->>>>>>>> b1bebb70fa399f07e42a4df4a8b4735919894d8e:pkg/ml/exec/models.go
 
 // Generate ExecFnSet interface, and a conversion tool to a canonical form.
 //go:generate go run ../../../internal/cmd/builderiface/

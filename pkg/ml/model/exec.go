@@ -1,8 +1,4 @@
-<<<<<<<< HEAD:pkg/ml/model/exec.go
 package model
-========
-package exec
->>>>>>>> b1bebb70fa399f07e42a4df4a8b4735919894d8e:pkg/ml/exec/exec.go
 
 import (
 	"fmt"
@@ -14,7 +10,6 @@ import (
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/variable"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/pkg/errors"
 )
@@ -37,7 +32,7 @@ type Exec struct {
 	graphs *sets.Set[graph.GraphId]
 
 	// List of variables that have been used per graph built, both as input and as output (if they were modified):
-	sideInputs, sideOutputs map[graph.GraphId][]*variable.Variable
+	sideInputs, sideOutputs map[graph.GraphId][]*Variable
 }
 
 // NewExec creates a new Exec (executor) object taking a builderFn that builds the model's computation graph.
@@ -74,8 +69,8 @@ func NewExec[B BuilderFnSet](backend backends.Backend, builderFn B) (*Exec, erro
 	e := &Exec{
 		backend:     backend,
 		graphs:      &graphsSet,
-		sideInputs:  make(map[graph.GraphId][]*variable.Variable),
-		sideOutputs: make(map[graph.GraphId][]*variable.Variable),
+		sideInputs:  make(map[graph.GraphId][]*Variable),
+		sideOutputs: make(map[graph.GraphId][]*Variable),
 	}
 	var err error
 	var canonicalBuilderFn normalizedBuilderFn
@@ -187,7 +182,7 @@ func (e *Exec) setSideParams(g *graph.Graph, inputBuffers []backends.Buffer, don
 // Since the value of a variable can change in the middle of the graph (e.g: something that uses the
 // variable after a gradient descent is applied) consider using ValueGraph to read the current associated
 // value of a variable in a graph.
-func (e *exec.Exec) CreateVariableParamNode(v *Variable, g *graph.Graph) *graph.Node {
+func (e *Exec) createVariableParamNode(v *Variable, g *graph.Graph) *graph.Node {
 	v.AssertValid()
 	g.AssertValid()
 	gID := g.GraphId()
@@ -208,10 +203,6 @@ func (e *exec.Exec) CreateVariableParamNode(v *Variable, g *graph.Graph) *graph.
 	nodes = &variableNodes{valueNode: paramNode, paramNode: paramNode}
 	v.graphToNodes.Store(gID, nodes)
 	return nodes.paramNode
-}
-
-func (e *exec.Exec) CreateVariableOutputNode(v *Variable, g *graph.Graph) *graph.Node {
-	return nil
 }
 
 // appendSideOutputs at the end of the computation graph building.
