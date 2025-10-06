@@ -39,8 +39,12 @@
 package model
 ========
 //	models.Checkpoint(myModel, "~/work/my_counter")
+<<<<<<< HEAD:pkg/ml/exec/models.go
 package exec
 >>>>>>>> b1bebb70fa399f07e42a4df4a8b4735919894d8e:pkg/ml/exec/models.go
+=======
+package models
+>>>>>>> parent of b1bebb7 (Middle of refactoring: package models -> packages exec and variable):pkg/ml/models/models.go
 
 // Generate ExecFnSet interface, and a conversion tool to a canonical form.
 //go:generate go run ../../../internal/cmd/builderiface/

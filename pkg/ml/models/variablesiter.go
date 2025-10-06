@@ -1,8 +1,12 @@
+<<<<<<< HEAD:pkg/ml/variable/variablesiter.go
 <<<<<<<< HEAD:pkg/ml/model/variableiter.go
 package model
 ========
 package variable
 >>>>>>>> b1bebb70fa399f07e42a4df4a8b4735919894d8e:pkg/ml/variable/variablesiter.go
+=======
+package models
+>>>>>>> parent of b1bebb7 (Middle of refactoring: package models -> packages exec and variable):pkg/ml/models/variablesiter.go
 
 import (
 	"cmp"
@@ -16,11 +20,15 @@ import (
 	"github.com/pkg/errors"
 )
 
+<<<<<<< HEAD:pkg/ml/variable/variablesiter.go
 <<<<<<<< HEAD:pkg/ml/model/variableiter.go
 const modelsPkgPath = "github.com/gomlx/gomlx/pkg/ml/model"
 ========
 const modelsPkgPath = "github.com/gomlx/gomlx/pkg/ml/exec"
 >>>>>>>> b1bebb70fa399f07e42a4df4a8b4735919894d8e:pkg/ml/variable/variablesiter.go
+=======
+const modelsPkgPath = "github.com/gomlx/gomlx/pkg/ml/models"
+>>>>>>> parent of b1bebb7 (Middle of refactoring: package models -> packages exec and variable):pkg/ml/models/variablesiter.go
 
 // PathAndVariable refers to a variable within a model struct, at the "Path" location.
 // See details in IterVariables.

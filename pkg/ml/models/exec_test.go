@@ -1,8 +1,12 @@
+<<<<<<< HEAD:pkg/ml/exec/exec_test.go
 <<<<<<<< HEAD:pkg/ml/model/exec_test.go
 package model
 ========
 package exec
 >>>>>>>> b1bebb70fa399f07e42a4df4a8b4735919894d8e:pkg/ml/exec/exec_test.go
+=======
+package models
+>>>>>>> parent of b1bebb7 (Middle of refactoring: package models -> packages exec and variable):pkg/ml/models/exec_test.go
 
 import (
 	"fmt"
