@@ -193,7 +193,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 			losses.BinaryCrossentropyLogits,
 			optimizer,
 			[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-			[]metrics.Interface{meanAccuracyMetric}) // evalMetrics
+			[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 	} else {
 		// Pre-training: no loss, no metrics.
 		trainer = train.NewTrainer(backend, ctx, modelFn,
