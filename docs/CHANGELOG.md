@@ -37,7 +37,7 @@
   * `NewExec`, `NewExecAny` `Exec`, `ExecOnce` and `ExecOnceN` now return an error on failure.
   * `MustNewExec`, `MustNewExecAny`, `Call`, `CallOnce` and `CallOnceN` panic on failure.
   * Introduced `Exec[1-4]` and `Call[1-4]` to execute the graph and return exactly 1-4 values.
-  * If no seeds are given, initialize random number generator with a cryptographically secure seed—on OSes that provide that.
+  * If no seeds are given, initialize new random number generators with a cryptographically secure seed—on OSes that provide that.
 * Package `context`:
   * `NewExec`, `NewExecAny` `Exec`, `ExecOnce` and `ExecOnceN` now return an error on failure.
   * `MustNewExec`, `Call`, `CallOnce` and `CallOnceN` panic on failure.
