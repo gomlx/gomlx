@@ -43,10 +43,6 @@ type Variable struct {
 	graphToNodes xsync.SyncMap[graph.GraphId, *variableNodes]
 }
 
-// VariableInitializer builds a valueNode that returns a value to initialize a variable of the given
-// shape. It is defined in the Context.
-type VariableInitializer = func(g *graph.Graph, shape shapes.Shape) *graph.Node
-
 // variableNodes is used to store the variable parameter node (fed to the graph) and current value Node for a given graph.
 // They can be different if the variable value is changed during the graph building with Variable.SetValueGraph.
 //
@@ -113,14 +109,6 @@ func MustVariableWithValue(name string, value any) *Variable {
 		value:     valueT,
 		trainable: true, // By default variables are trainable.
 	}
-}
-
-// DefaultInitializer is the default initializer for variables created with VariableWithShape, but otherwise
-// uninitialized. It is a zero initializer.
-//
-// You can set a different initializer with Variable.WithInitializer.
-func DefaultInitializer(g *graph.Graph, shape shapes.Shape) *graph.Node {
-	return graph.Zeros(g, shape)
 }
 
 // VariableWithShape creates a variable with the given shape in the current scope.
