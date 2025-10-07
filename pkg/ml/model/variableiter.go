@@ -21,6 +21,27 @@ type PathAndVariable struct {
 	Variable *Variable
 }
 
+// SetVariablesPaths sets the path of each variable in the model.
+//
+// The path is a string similar to a Go reference to the variable within the model struct.
+//
+// Example:
+//
+//	type A struct { a0, a1 *Variable }
+//	type B struct { manyA []*A }
+//	b := &B{manyA: []*A{&A{a0: v0, a1: v1}, &A{a0: v2, a1: v3}}}
+//	SetVariablesPaths(b)
+//	v3.Path() // --> "manyA[1].a1"
+func SetVariablesPaths(model any) error {
+	for pair, err := range IterVariables(model) {
+		if err != nil {
+			return err
+		}
+		pair.Variable.path = pair.Path
+	}
+	return nil
+}
+
 // IterVariables returns an iterator over the model's non-nil variables, performing a "depth first search" into the model,
 // in a deterministic order (always the same for the same contents).
 //

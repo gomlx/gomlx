@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestIterVariables and SetVariablesPaths.
 func TestIterVariables(t *testing.T) {
 	type SubStruct struct {
 		V1 *Variable
@@ -43,6 +44,9 @@ func TestIterVariables(t *testing.T) {
 		got = append(got, pv)
 	}
 
+	// Also set all variables paths with SetVariablesPaths.
+	require.NoError(t, SetVariablesPaths(test))
+
 	// Expected paths and variables -- sorted in the expected order.
 	want := []PathAndVariable{
 		{Path: "StringMap[a]", Variable: v1},
@@ -61,5 +65,6 @@ func TestIterVariables(t *testing.T) {
 			"path at position %d different: want=%q got=%q", ii, want[ii].Path, got[ii].Path)
 		require.Equal(t, want[ii].Variable, got[ii].Variable,
 			"variable at position %d different", ii)
+		require.Equal(t, want[ii].Path, want[ii].Variable.Path())
 	}
 }

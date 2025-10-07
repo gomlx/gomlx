@@ -24,7 +24,11 @@ import (
 //
 // Always use it by reference (pointer), never by value, to keep all the various views in sync.
 type Variable struct {
-	name, scope string
+	// name of the variable.
+	name string
+
+	// path of the variable within the model containing it.
+	path string
 
 	// trainable indicates whether the variable is trainable.
 	// If set to false, it won't be touched by optimizers of a model.
@@ -89,14 +93,34 @@ func VariableWithValue(name string, value any) (*Variable, error) {
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to parse value %v for variable %q", value, name)
 	}
-
-	// New variable: check, create and register it in Context and return.
 	return &Variable{
 		name:      name,
 		shape:     valueT.Shape(),
 		value:     valueT,
 		trainable: true, // By default variables are trainable.
 	}, nil
+}
+
+// MustVariableWithValue creates or variable initialized with the given value.
+//
+// See VariableWithValue for more details.
+// This version panics if the value cannot be converted to a tensor.
+func MustVariableWithValue(name string, value any) *Variable {
+	valueT := anyValueToTensor(value)
+	return &Variable{
+		name:      name,
+		shape:     valueT.Shape(),
+		value:     valueT,
+		trainable: true, // By default variables are trainable.
+	}
+}
+
+// DefaultInitializer is the default initializer for variables created with VariableWithShape, but otherwise
+// uninitialized. It is a zero initializer.
+//
+// You can set a different initializer with Variable.WithInitializer.
+func DefaultInitializer(g *graph.Graph, shape shapes.Shape) *graph.Node {
+	return graph.Zeros(g, shape)
 }
 
 // VariableWithShape creates a variable with the given shape in the current scope.
@@ -113,9 +137,13 @@ func VariableWithValue(name string, value any) (*Variable, error) {
 //
 // - Context.Unique() and variable already exists (or was loaded);
 // - Context.Reuse() and variable didn't exist (or was not loaded);
-func VariableWithShape(name string, shape shapes.Shape, initializer VariableInitializer) *Variable {
-	//TODO: implement initializers.
-	return nil
+func VariableWithShape(name string, shape shapes.Shape) *Variable {
+	return &Variable{
+		name:        name,
+		shape:       shape,
+		initializer: DefaultInitializer,
+		trainable:   true, // By default variables are trainable.
+	}
 }
 
 // Name of the variable within the scope.
@@ -126,22 +154,12 @@ func (v *Variable) Name() string {
 	return v.name
 }
 
-// Scope is an optional prefix for the variable name that gives context to where it is being used.
+// Path of the variable within the model containing it.
+// It works as a unique id for the variable within the model and is used by tools like gomlx_checkpoints.
 //
-// For example, if you have a FNN model, you may have one "weights" variable per layer. The scope will
-// hold the layer name.
-//
-// Scopes are not obligatory, they are left empty during the variable creation.
-// But they can be set with SetScope or automatically set for all variables in a struct with SetVariablesScope.
-func (v *Variable) Scope() string {
-	return v.scope
-}
-
-// SetScope of a variable.
-//
-// See also SetVariablesScope.
-func (v *Variable) SetScope(scope string) {
-	v.scope = scope
+// The path is set during saving and loading of the model holding the variable or using SetVariablesPaths.
+func (v *Variable) Path() string {
+	return v.path
 }
 
 // String returns the name, and if defined, prefixed with the scope.
@@ -149,10 +167,10 @@ func (v *Variable) String() string {
 	if v == nil || !v.Shape().Ok() {
 		return "INVALID (NIL) VARIABLE"
 	}
-	if v.scope == "" {
+	if v.path == "" {
 		return v.name
 	}
-	return fmt.Sprintf("%s/%s", v.scope, v.name)
+	return fmt.Sprintf("%s (%s)", v.name, v.path)
 }
 
 // IsValid returns whether the variable is holding a valid value.
@@ -200,6 +218,13 @@ func (v *Variable) SetTrainable(trainable bool) *Variable {
 func (v *Variable) IsTrainable() bool {
 	v.AssertValid()
 	return v.trainable
+}
+
+// WithInitializer sets the variable initializer. Returns itself, so calls can be cascaded.
+func (v *Variable) WithInitializer(initializer VariableInitializer) *Variable {
+	v.AssertValid()
+	v.initializer = initializer
+	return v
 }
 
 // Value returns the tensor holding the variable value. Use this to manipulate the value in Go.

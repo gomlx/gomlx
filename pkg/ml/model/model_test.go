@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 	"testing"
 
 	"github.com/gomlx/gomlx/internal/must"
@@ -118,13 +119,21 @@ func TestSaveLoad(t *testing.T) {
 	err := Save(model, tmpBase)
 	require.NoError(t, err)
 
-	jsonPath := tmpBase + ".json"
+	jsonPath := tmpBase + ".jsonl"
 	jsonContents, err := os.ReadFile(jsonPath)
 	var indentedJsonContents bytes.Buffer
 	require.NoError(t, err)
 	fmt.Printf("- Contents of the %s:\n", jsonPath)
-	err = json.Indent(&indentedJsonContents, jsonContents, "  ", "  ")
-	require.NoError(t, err)
+	for ii, part := range strings.Split(string(jsonContents), "\n") {
+		if part == "" {
+			continue
+		}
+		if ii > 0 {
+			indentedJsonContents.WriteString("\n\n  ")
+		}
+		err = json.Indent(&indentedJsonContents, []byte(part), "  ", "  ")
+	}
+	require.NoErrorf(t, err, "Full error: %+v\n", err)
 	fmt.Printf("  %s\n", indentedJsonContents.String())
 
 	// Load model

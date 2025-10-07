@@ -15,7 +15,7 @@ import (
 )
 
 // Exec is an executor of models. It works like graph.Exec, but it handles models variables, passing them
-// automatically as "side inputs" to the graph -- or as "side outputs" if they are updated in the graph.
+// automatically as "side inputs" to the graph, or as "side outputs" if they are updated in the graph.
 type Exec struct {
 	backend backends.Backend
 
