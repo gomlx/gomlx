@@ -8,8 +8,7 @@ import (
 
 // Interface of for a generic random number generator.
 //
-// Use the concrete wrapper Random instead for the more convenient Uniform and Normal methods,
-// as well as being serializable.
+// Use the concrete wrapper Random for a serializable generic random number generator that implements this interface.
 type Interface interface {
 	polymorphicjson.JSONIdentifiable // To make it serializable when using the Random object.
 
