@@ -81,8 +81,8 @@ var (
 	// Deprecated: use ParamLearningRate instead.
 	LearningRateKey = ParamLearningRate
 
-	// ParamClipStepByValue is a clip scalar value for each individual value of the gradient step, after
-	// being scaled by the learning rate and optimizer.
+	// ParamClipStepByValue is a scalar value used to clip each value of the gradient step, after
+	// being scaled by the learning rate and the optimizer.
 	// The step applied will be `ClipScalar(step, -clip_step_by_value, +clip_step_by_value)`.
 	// Defaults to no clipping, and values are expected to be float64.
 	ParamClipStepByValue = "clip_step_by_value"
@@ -396,7 +396,7 @@ func addGradientsToVariablesGraph(ctx *context.Context, grads []*Node, learningR
 // MonotonicProjection transforms the input into a monotonic sequence on the given axis that respects the
 // minimum margin between consecutive points.
 //
-// Here we call "viable" solution, one that respects the given margin between consecutive points. And the goal
+// Here we call "viable solution" one that respects the given margin between consecutive points. And the goal
 // is to find the viable solution that is L2-closest to the original input -- we don't achieve that, but some
 // approximate that is hopefully good enough for most algorithms.
 //
