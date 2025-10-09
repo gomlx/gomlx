@@ -454,29 +454,6 @@ func NewExec[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F
 	return NewExecAny(backend, ctx, ctxGraphFn)
 }
 
-// MustNewExec constructs an Exec object that uses the given ctxGraphFn to build
-// computation graphs with a Context. ctxGraphFn must take a *Context input
-// parameter followed by one or more *Node parameters as input and return one
-// or more *Node.
-//
-// The Context ctx passed will be passed to all computation graph construction calls
-// (ctxGraphFn), as well as during the graph execution later. If set to nil, it automatically
-// creates a new one.
-//
-// Before the execution of a graph, if needed, it initializes the variables in the context.
-//
-// This is a generic wrapper around NewExecAny that checks that types are
-// correct (but doesn't support all possible types of ctxGraphFn).
-//
-// It panics on error.
-func MustNewExec[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F) *Exec {
-	e, err := NewExecAny(backend, ctx, ctxGraphFn)
-	if err != nil {
-		panic(err)
-	}
-	return e
-}
-
 // InDevice sets the device num to be used by graphs constructed by Exec.
 // This should be called before any invocations of Call().
 // It returns a reference to itself so calls can be cascaded.
@@ -541,25 +518,6 @@ func (e *Exec) Exec(args ...any) ([]*tensors.Tensor, error) {
 	return outputs, err
 }
 
-// Call parses the arguments into tensors (if they are not yet) and executes
-// the graph corresponding to the shapes of the arguments.
-//
-// Notice Context shouldn't be passed by Call; it will use automatically the context
-// stored in context.Exec -- you can change it with SetContext.
-//
-// If a graph does not yet exist, one is created, compiled and cached for the shapes
-// of the inputs.
-// It passes the context to the registered ctxGraphFn. After the very first invocation of Call
-// the context is marked as Context.Reuse().
-//
-// It returns the outputs in a slice, even if there is only one output.
-//
-// It panics with an informative error if something goes wrong.
-func (e *Exec) Call(args ...any) []*tensors.Tensor {
-	outputs, _ := e.CallWithGraph(args...)
-	return outputs
-}
-
 // ExecWithGraph is similar to Exec, but it also returns the computation graph used in the call.
 // Since Exec creates different computation graphs for each different set of parameters,
 // this can help disambiguate in case the user needs to use the Graph for something else.
@@ -595,84 +553,8 @@ func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, 
 	return
 }
 
-// CallWithGraph is similar to Call, but it also returns the computation graph used in the call.
-// Since Exec creates different computation graphs for each different set of parameters,
-// this can help disambiguate in case the user needs to use the Graph for something else.
-//
-// It returns the outputs in a slice (it can be empty even) and the graph used to execute the computation.
-//
-// It panics with an informative error if something goes wrong.
-func (e *Exec) CallWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph) {
-	var err error
-	outputs, g, err = e.ExecWithGraph(args...)
-	if err != nil {
-		panic(err)
-	}
-	return
-}
-
 // PreCompile will build the computation graph and compile it, but not yet execute.
 // Useful when one wants to measure the time separately, from graph compilation and its execution.
 func (e *Exec) PreCompile(args ...any) {
 	e.exec.PreCompile(args...)
-}
-
-// ExecOnceN builds the graph and executes it with the given arguments and returns various output.
-//
-// It's short for a call to NewExec, Exec.Call and Exec.Finalize.
-//
-// See ExecOnce for a more convenient version if you have only one output.
-func ExecOnceN[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) ([]*tensors.Tensor, error) {
-	e, err := NewExec(backend, ctx, ctxGraphFn)
-	if err != nil {
-		return nil, err
-	}
-	defer e.Finalize()
-	return e.Exec(args...)
-}
-
-// CallOnceN builds the graph and executes it with the given arguments and returns various output.
-//
-// It's short for a call to NewExec, Exec.Call and Exec.Finalize.
-//
-// See CallOnce for a more convenient version if you have only one output.
-//
-// It panics on error. See ExecOnceN for a version that returns an error.
-func CallOnceN[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) []*tensors.Tensor {
-	outputs, err := ExecOnceN(backend, ctx, ctxGraphFn, args...)
-	if err != nil {
-		panic(err)
-	}
-	return outputs
-}
-
-// ExecOnce builds the graph and executes it with the given arguments and returns the one output.
-//
-// It's short for a call to NewExec, Exec.Call and Exec.Finalize for functions that return only one output.
-//
-// See ExecOnceN if you have multiple (or zero) outputs.
-func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) (*tensors.Tensor, error) {
-	outputs, err := ExecOnceN(backend, ctx, ctxGraphFn, args...)
-	if err != nil {
-		return nil, err
-	}
-	if len(outputs) != 1 {
-		return nil, errors.Errorf("ExecOnce expected one output, got %d", len(outputs))
-	}
-	return outputs[0], nil
-}
-
-// CallOnce builds the graph and executes it with the given arguments and returns the one output.
-//
-// It's short for a call to NewExec, Exec.Call and Exec.Finalize for functions that return only one output.
-//
-// See CallOnceN if you have multiple outputs.
-//
-// It panics on error. See ExecOnce for a version that returns an error.
-func CallOnce[F ExecGraphFnOneOutput](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) *tensors.Tensor {
-	output, err := ExecOnce(backend, ctx, ctxGraphFn, args...)
-	if err != nil {
-		panic(err)
-	}
-	return output
 }

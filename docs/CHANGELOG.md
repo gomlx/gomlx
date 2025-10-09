@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next: **API change**: package tree restructure under `pkg`; Backend xla->stablehlo; New `ml` API
+# Next: **API change**: package tree restructure under `pkg`; Backend xla->stablehlo
 
 * **Highlights** of this release:
   * Deprecating old "xla" backend (now called "oldxla") in favor of "stablehlo" (aliased to "xla" as well):
@@ -8,23 +8,12 @@
     but in special cases there may require small changes.
   * Large refactoring: exported packages moved under `/pkg`. **This requires changes to the import paths**.
     Exceptions:
-    * The `ml/` packages is being replaced by new versions without the `context.Context` object, under `pkg/ml`. 
-      The older version of `ml` stays in `github.com/gomlx/gomlx/ml` for a couple of versions, until its sunset.
     * The `backends` package: it will move to its own repository later in the year (or early 2026)
     * The `ui` and `example` packages: since they are just extras, we keep them where they are for now.
-  * **New API for machine learning**: it aims at replacing the `context` package, and get rid of the `context.Context`
-    object: users can use plain Go structs to hold their models.
-    * This is a profound change, and all the `ml/` libraries will have new versions under `pkg/ml` with the new API.
-    * The `context.Context` based libraries will be marked as deprecated and maintained for a few versions,
-      until they are sunset.
 
 <hr/>
 
 * Copied external trivial `must` and `exceptions` packages to `/internal/...`, to remove external dependencies.
-* Package `pkg/ml/model`:
-  * Experimental package that aims at replacing the `context` package.
-  * All packages under `github.com/gomlx/gomlx/ml` have been rewritten to the new `model` framework, under
-    `github.com/gomlx/gomlx/pkg/ml`
 * Package `xla` (the old one): now **DEPRECATED** and called `oldxla`. The package `stablehlo` replaces it, including aliasing the `xla` backend name.
   * The old version now registered as backend "oldxla".
   * Only included in `github.com/gomlx/gomlx/backends/default` if compiled with the tag `oldxla`.
@@ -40,6 +29,7 @@
 * Package `context`:
   * `NewExec`, `NewExecAny` `Exec`, `ExecOnce` and `ExecOnceN` now return an error on failure.
   * `MustNewExec`, `Call`, `CallOnce` and `CallOnceN` panic on failure.
+  * Introduced `Exec[1-4]` and `Call[1-4]` to execute the graph and return exactly 1-4 values.
 * Packages `pkg/support/...`:
   * Generic supporting functionality that is not core to GoMLX, but that users may also find useful to interact with it
     are now better (and hopefully more definitively) organized in packages under `pkg/support/`. The following packages were moved/created:
