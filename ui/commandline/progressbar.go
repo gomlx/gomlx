@@ -146,7 +146,9 @@ func (pBar *progressBar) onEnd(_ *train.Loop, _ []*tensors.Tensor) error {
 		close(pBar.updates)
 	}
 	pBar.asyncUpdatesDone.Wait()
-	pBar.termenv.ShowCursor()
+	if pBar.termenv != nil {
+		pBar.termenv.ShowCursor()		
+	}
 	fmt.Println()
 	return nil
 }
