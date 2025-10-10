@@ -37,6 +37,7 @@
     * `set`: previously known as package `types/`
     * `fsutils`: file system handling utilities, previously in `data`.
 * Package `inceptionv3` moved to `examples`
+* Package `ui/commandline`: fixed progressbar in GoNB notebooks.
 
 # v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
 
