@@ -26,6 +26,7 @@
 package stablehlo
 
 import (
+	"os"
 	"path"
 	"slices"
 	"strings"
@@ -46,6 +47,19 @@ import (
 //
 // The stablehlo backend also accepts the "xla", "hlo" and "pjrt" aliases.
 const BackendName = "stablehlo"
+
+// Disable XLA logging by default by setting TF_CPP_MIN_LOG_LEVEL to 2 (errors level), if it is not already set.
+// This won't work if the PJRT is linked statically or dynamically before the go program start (without `dlopen` that is).
+func init() {
+	const TensorflowCPPMinLogLevelEnv = "TF_CPP_MIN_LOG_LEVEL"
+	tfLogLevel := os.Getenv(TensorflowCPPMinLogLevelEnv)
+	if tfLogLevel == "" {
+		err := os.Setenv(TensorflowCPPMinLogLevelEnv, "2")
+		if err != nil {
+			klog.Errorf("Failed to set $%s to 2: %v", TensorflowCPPMinLogLevelEnv, err)
+		}
+	}
+}
 
 // New returns a new Backend using the config as a configuration.
 // The config string should be the name of the PJRT plugin to use.

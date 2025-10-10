@@ -21,6 +21,7 @@
   * Now completely replacing `xla` by default. Using `GOMLX_BACKEND=xla` will actually use the `stablehlo` backend.
   * Added `github.com/gomlx/gomlx/backends/stablehlo/cpu/dynamic` and `github.com/gomlx/gomlx/backends/stablehlo/cpu/static`
     to optionally force dynamic/static linking of the CPU PJRT plugin.
+  * Disabled XLA logs by default by setting TF_CPP_MIN_LOG_LEVEL to 2 (errors level), if it is not already set.
 * Package `graph`:
   * `NewExec`, `NewExecAny` `Exec`, `ExecOnce` and `ExecOnceN` now return an error on failure.
   * `MustNewExec`, `MustNewExecAny`, `Call`, `CallOnce` and `CallOnceN` panic on failure.
