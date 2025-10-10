@@ -163,7 +163,7 @@ func makePoolBuilder(x *Node, reductionType ReduceOpType) *PoolBuilder {
 // ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension.
 // The default is `images.ChannelsLast`, meaning the "channels" dimension comes last.
 //
-// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+// Note: `images` refers to package `github.com/gomlx/gomlx/core/tensors/images`.
 //
 // If you don't want to exclude the batch size and channels from the pooling, use FullShape instead.
 //

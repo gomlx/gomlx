@@ -33,7 +33,7 @@ import (
 //   - `channelsConfig`: informs what is the channels axis, commonly set to `images.ChannelsLast`.
 //     Passed to `PreprocessImage` function.
 //
-// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+// Note: `images` refers to package `github.com/gomlx/gomlx/core/tensors/images`.
 func KidMetric(dataDir string, kidImageSize int, maxImageValue float64, channelsConfig images.ChannelsAxisConfig) metrics.Interface {
 	builder := NewKidBuilder(dataDir, kidImageSize, maxImageValue, channelsConfig)
 	return metrics.NewMeanMetric("Kernel Inception Distance", "KID", "KID", builder.BuildGraph, nil)
@@ -67,7 +67,7 @@ type KidBuilder struct {
 //   - `channelsConfig`: informs what is the channels axis, commonly set to `images.ChannelsLast`.
 //     Passed to `PreprocessImage` function.
 //
-// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+// Note: `images` refers to package `github.com/gomlx/gomlx/core/tensors/images`.
 func NewKidBuilder(dataDir string, kidImageSize int, maxImageValue float64, channelsConfig images.ChannelsAxisConfig) *KidBuilder {
 	return &KidBuilder{
 		dataDir:        dataDir,

@@ -58,7 +58,7 @@ type ConvolutionBuilder struct {
 // If one sets ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst), then the shape should be
 // [batch, input_channels, <spatial_dimensions...>] instead.
 //
-// Note: package timage refers to package github.com/gomlx/gomlx/types/tensor/image.
+// Note: package timage refers to package github.com/gomlx/gomlx/core/tensors/images.
 //
 // Alternatively, it provides the method ConvolutionBuilder.AxesConfig which allows arbitrary shape (axes order)
 // configuration of x and the kernel.
@@ -114,7 +114,7 @@ func gatherSlice(indices, params []int) (slice []int) {
 // ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension. The default is
 // `timage.ChannelsLast`, meaning the "channels" dimension comes last.
 //
-// Note: `timage` refers to the package github.com/gomlx/gomlx/types/tensor/image
+// Note: `timage` refers to the package github.com/gomlx/gomlx/core/tensors/images
 //
 // For more fine-control, see AxesConfig.
 //

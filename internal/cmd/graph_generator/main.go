@@ -209,8 +209,8 @@ import (
 	"slices"
 	"strings"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gomlx/core/shapes"
+	"github.com/gomlx/gomlx/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 

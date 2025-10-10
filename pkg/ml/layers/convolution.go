@@ -141,7 +141,7 @@ func (conv *ConvBuilder) UseBias(useBias bool) *ConvBuilder {
 // ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension. The default is
 // `images.ChannelsLast`, meaning the "channels" dimension comes last.
 //
-// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+// Note: `images` refers to package `github.com/gomlx/gomlx/core/tensors/images`.
 //
 // It returns the modified Config object, so calls can be cascaded.
 func (conv *ConvBuilder) ChannelsAxis(channelsAxisConfig images.ChannelsAxisConfig) *ConvBuilder {
