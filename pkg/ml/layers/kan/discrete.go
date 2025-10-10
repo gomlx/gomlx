@@ -434,7 +434,7 @@ func PiecewiseConstantFunction(input, controlPoints, splitPoints *Node) *Node {
 	if inputRank == 0 {
 		input = Reshape(input, 1, 1, 1) // batchSize=1, numInputNodes=1
 	} else if inputRank == 1 {
-		input = Reshape(input, -1, 1) // batchSize=?, numInputNodes=1
+		input = Reshape(input, -1, 1, 1) // batchSize=?, numInputNodes=1
 	} else if inputRank == 2 {
 		input = InsertAxes(input, -1) // Reshape it to [batchSize, numInputGroups, inputGroupSize].
 	} else if inputRank != 3 {
@@ -511,7 +511,7 @@ const (
 
 //go:generate enumer -type=PerturbationType -trimprefix=Perturbation -transform=snake -values -text -json -yaml discrete.go
 
-// PiecewiseConstantFunctionWithInputPerturbation works similarly to PiecewiseConstantFunction, but
+// PiecewiseConstantFunctionWithInputPerturbation works similarly to PiecewiseConstantFunction but
 // adds a "perturbation" of the inputs by a noise distribution of the value, controlled by smoothness.
 //
 // The shapes and inputs are the same as PiecewiseConstantFunction, with the added perturbation type and smoothness parameters.
@@ -535,7 +535,7 @@ func PiecewiseConstantFunctionWithInputPerturbation(input, controlPoints, splitP
 	if inputRank == 0 {
 		input = Reshape(input, 1, 1, 1) // batchSize=1, numInputNodes=1
 	} else if inputRank == 1 {
-		input = Reshape(input, -1, 1) // batchSize=?, numInputNodes=1
+		input = Reshape(input, -1, 1, 1) // batchSize=?, numInputNodes=1
 	} else if inputRank == 2 {
 		input = InsertAxes(input, -1) // Reshape it to [batchSize, numInputGroups, inputGroupSize].
 	} else if inputRank != 3 {
