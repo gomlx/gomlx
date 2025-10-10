@@ -148,11 +148,14 @@ If you want the more advanced/faster **XLA backend** (only available for Linux a
 curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_linux_amd64.sh | bash
 ```
 
-In addition, for **Linux+CUDA (NVidia GPU)** support, run ([see source](https://github.com/gomlx/gopjrt/blob/main/cmd/install_cuda.sh)):
+In addition, for **Linux+CUDA (NVidia GPU)** support, run ([see source](https://github.com/gomlx/gopjrt/blob/main/cmd/install_cuda13.sh)):
 
 ```bash
-curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_cuda.sh | bash
+curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_cuda13.sh | bash
 ```
+
+(There is also an install script for a CUDA 12 version, but there has been some issues in newer boards and large models,
+see [Gopjrt](https://github.com/gomlx/gopjrt) for more details.)
 
 Depending on what data formats you use, you may want to install `hdf5-tools` programs (`sudo apt install hdf5-tools` in Linux).
 
