@@ -60,7 +60,6 @@
 //	...
 //	_ = checkpoints.Build(ctx).
 //		FromEmbed(myModelJson, myModelBin).
-//		Immediate().
 //		Done()
 //
 // TODO:
