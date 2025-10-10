@@ -6,10 +6,10 @@ import (
 	"path"
 
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	mldata "github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	mldata "github.com/gomlx/gomlx/pkg/ml/data"
+	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 )
 

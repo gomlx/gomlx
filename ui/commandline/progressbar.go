@@ -9,8 +9,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	lgtable "github.com/charmbracelet/lipgloss/table"
-	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/ui/notebooks"
 	"github.com/muesli/termenv"
 	"github.com/schollz/progressbar/v3"

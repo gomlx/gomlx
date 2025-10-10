@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
 	"github.com/stretchr/testify/require"
 	"os"
 	"testing"

@@ -1,13 +1,13 @@
 package diffusion
 
 import (
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/ml/train/losses"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/layers"
+	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
+	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/pkg/ml/train/losses"
+	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 )
 

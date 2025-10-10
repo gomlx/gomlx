@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"

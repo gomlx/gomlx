@@ -34,7 +34,7 @@ package adult
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/pkg/ml/data"
 	"github.com/pkg/errors"
 	"log"
 )

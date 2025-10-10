@@ -8152,7 +8152,7 @@ usually of higher rank -- Btw, contributions to the project here are welcome ;)<
 they take inputs, return outputs and everything in between is transient.</p>
 <p>For Machine Learning as well as many types of computations, it's convenient to store intermediary results
 (the model parameters for ML) in between the execution of the computation graphs.</p>
-<p>For that <strong>GoMLX</strong> offers the <a href="https://pkg.go.dev/github.com/gomlx/gomlx/ml/context"><code>context.Context</code></a> object
+<p>For that <strong>GoMLX</strong> offers the <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/ml/context"><code>context.Context</code></a> object
 (completely unrelated to the usual Go's <code>context</code> package), and a corresponding <code>context.Exec</code>.
 It is a container of <strong>variables</strong> (whose values are tensors usually stored on device), and it manages automatically its updates, passing it as extra
 inputs and taking them out (if changed) as extra outputs of the computation graph.</p>
@@ -8327,7 +8327,7 @@ used to keep track how many steps were already executed.</li>
 <li>Yes, if we set <code>--lr=1</code> (the learning rate), it will get to the minimum in one step for the quadratic f(x). 😉</li>
 </ul>
 </blockquote>
-<p>There is more to <a href="https://pkg.go.dev/github.com/gomlx/gomlx/ml/context"><code>context.Context</code></a>, some we'll present
+<p>There is more to <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/ml/context"><code>context.Context</code></a>, some we'll present
 on the next section on <em>Machine Learning</em>, others can be found in its documentation. A few things worth advancing:</p>
 <ul>
 <li><code>Context</code> is always configured at a certain <em>scope</em>, and variables are unique within its scope. Scope
@@ -8583,7 +8583,7 @@ to the model the field names to the Model throught the <code>spec</code>, for in
 <div class="jp-InputPrompt jp-InputArea-prompt">In [15]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="s2">"github.com/gomlx/gomlx/ml/train"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="s2">"github.com/gomlx/gomlx/pkg/ml/train"</span>
 
 <span class="o">//</span> <span class="n">TrivialDataset</span> <span class="n">always</span> <span class="n">returns</span> <span class="n">the</span> <span class="n">whole</span> <span class="n">data</span><span class="o">.</span>
 <span class="nb">type</span> <span class="n">TrivialDataset</span> <span class="n">struct</span> <span class="p">{</span>
@@ -8633,7 +8633,7 @@ If you are workig on public datasets, please consider contributing similar libra
 <li><strong>GoMLX</strong> also include the <code>data.InMemoryDataset</code>, which can be created from tensors in one line</li>
 </ul>
 </blockquote>
-<p>The package <a href="https://pkg.go.dev/github.com/gomlx/gomlx/ml/data">github.com/gomlx/gomlx/ml/data</a> provides several
+<p>The package <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/ml/data">github.com/gomlx/gomlx/pkg/ml/data</a> provides several
 tools to facilitate the work here:</p>
 <ul>
 <li><code>Parallel</code>: parallelizes any dataset, includes some buffer.</li>
@@ -8664,7 +8664,7 @@ and during inference they can be returned directly.</p>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [16]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="s2">"github.com/gomlx/gomlx/ml/context"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="s2">"github.com/gomlx/gomlx/pkg/ml/context"</span>
 
 <span class="n">func</span> <span class="n">modelGraph</span><span class="p">(</span><span class="n">ctx</span> <span class="o">*</span><span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span> <span class="n">spec</span> <span class="nb">any</span><span class="p">,</span> <span class="n">inputs</span> <span class="p">[]</span><span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">([]</span><span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">{</span>
     <span class="n">_</span> <span class="o">=</span> <span class="n">spec</span>  <span class="o">//</span> <span class="n">Not</span> <span class="n">needed</span> <span class="n">here</span><span class="p">,</span> <span class="n">we</span> <span class="n">know</span> <span class="n">the</span> <span class="n">dataset</span><span class="o">.</span>
@@ -8717,7 +8717,7 @@ or plotting of a graph.</p>
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="p">(</span>
     <span class="s2">"os"</span>
     <span class="s2">"github.com/gomlx/gomlx/ui/commandline"</span>
-    <span class="s2">"github.com/gomlx/gomlx/ml/layers/regularizers"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"</span>
 <span class="p">)</span>
 
 <span class="n">var</span> <span class="p">(</span>

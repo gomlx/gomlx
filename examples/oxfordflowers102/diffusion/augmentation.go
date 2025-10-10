@@ -1,9 +1,9 @@
 package diffusion
 
 import (
-	"github.com/gomlx/gomlx/ml/context"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 

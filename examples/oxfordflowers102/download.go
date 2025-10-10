@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/daniellowtw/matlab"
-	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/pkg/ml/data"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/pkg/errors"
 )

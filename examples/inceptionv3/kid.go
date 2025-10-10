@@ -2,10 +2,10 @@ package inceptionv3
 
 import (
 	. "github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/train/metrics"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors/images"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 )
 
 // KidMetric returns a metric that takes a generated image and a label image and returns a
