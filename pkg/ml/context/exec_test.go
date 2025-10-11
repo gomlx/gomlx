@@ -62,7 +62,7 @@ func TestExec(t *testing.T) {
 		x = [][]float64{{1, 1, 1}, {2, 2, 2}}
 		got3 := oneLayer.MustExec(x)[0].Value().([][]float64)[0][0]
 		assert.InDeltaf(t, got, got3, 1e-3,
-			"MustExec to oneLayer(%v) on a larger batch returned %f, but original call returned %f",
+			"Exec to oneLayer(%v) on a larger batch returned %f, but original call returned %f",
 			x, got, got3)
 
 		// If X changes the inner dimension, then the layers.DenseWithBias would require different shaped variables, which should

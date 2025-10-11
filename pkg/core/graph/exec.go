@@ -323,7 +323,7 @@ func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 // Mostly, this is for internal use and end-users will not likely need this. The context.Exec object uses this to pass
 // the variable values as side inputs to the graph.
 //
-// Exec takes care of creating parameters (with graph.Parameter) for every value passed to MustExec before
+// Exec takes care of creating parameters (with graph.Parameter) for every value passed to Exec.Exec before
 // calling the graph building function (the graph building function is executed only the first time, after the
 // graph is compiled it is re-used for future executions).
 //
