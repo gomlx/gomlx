@@ -7312,6 +7312,7 @@ a.anchor-link {
                     processEnvironments: true
                 },
                 displayAlign: 'center',
+                messageStyle: 'none',
                 CommonHTML: {
                     linebreaks: {
                     automatic: true
@@ -7516,7 +7517,7 @@ a.anchor-link {
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p><img alt="[GoMLX Mascot]" src="gomlx_gopher.jpg" style="height:10em; float:left; margin:1em;"/></p>
+<p><img alt="[GoMLX Mascot]" src="gomlx_gopher2.jpg" style="height:10em; float:left; margin:1em;"/></p>
 <h1 id="GoMLX-Tutorial">GoMLX Tutorial<a class="anchor-link" href="#GoMLX-Tutorial">¶</a></h1><p>If you want just to quickly look at an working example, checkout <a href="https://github.com/gomlx/gomlx/blob/main/examples/cifar/cifar.ipynb">examples/cifar/demo/adult.ipynb</a>, for model trained on the UCI Adult Income dataset. More examples in <a href="https://github.com/gomlx/gomlx/tree/main/examples">examples/</a> subdirectory.</p>
 <p>The tutorial won't detail the whole API, but should present all important concepts. Everything else is
 well documented in godoc (in the code), also available in <a href="https://pkg.go.dev/github.com/gomlx/gomlx#section-readme">pkg.go.dev</a>.</p>
@@ -7562,7 +7563,7 @@ There is an <a href="https://github.com/jupyterlab/jupyterlab/issues/15467">issu
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="Computation-Graphs">Computation Graphs<a class="anchor-link" href="#Computation-Graphs">¶</a></h2><blockquote>
+<h2 id="Computation-Graphs-(or-Symbolic-Computation)">Computation Graphs (or Symbolic Computation)<a class="anchor-link" href="#Computation-Graphs-(or-Symbolic-Computation)">¶</a></h2><blockquote>
 <p><a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/graph">Package <code>graph</code> reference documentation</a></p>
 </blockquote>
 <p>To do machine learning based on neural networks and gradient descent one of the most important
@@ -7571,7 +7572,7 @@ fast.</p>
 <p>GoMLX is built on the concept of building "computation graphs", just-in-time compiling them
 and only then executing them to get the desired results. That means one has to write code
 that generates other type of code (computation graph) so to say. We do this because then we are
-able to execute it really fast using <a href="https://github.com/openxla/xla">XLA and PJRT</a>.</p>
+able to execute it really fast using <a href="https://openxla.org/">XLA</a> using various accelerators (GPU, TPUs, etc).</p>
 <p>For example, let's create a computation graph to sum two values:</p>
 <blockquote>
 <p><strong>Note</strong></p>
@@ -7590,9 +7591,9 @@ able to execute it really fast using <a href="https://github.com/openxla/xla">XL
 <div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">.</span> <span class="s2">"github.com/gomlx/gomlx/pkg/core/graph"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">.</span> <span class="s2">"github.com/gomlx/gomlx/pkg/core/graph"</span>
 
-<span class="n">func</span> <span class="n">SumGraph</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
+<span class="n">func</span> <span class="n">Sum</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
     <span class="k">return</span> <span class="n">Add</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
 <span class="p">}</span>
 </pre></div>
@@ -7612,8 +7613,6 @@ able to execute it really fast using <a href="https://github.com/openxla/xla">XL
 <ul>
 <li>The <code>import . "github.com/gomlx/gomlx/pkg/core/graph"</code> import all definitions in computation to the current scope. Usually,
 it's easier to work like this on go files that are going to implement graph building functions.</li>
-<li>Our function is named <code>SumGraph</code>: the suffix <code>Graph</code> is just a convention, but it helps identifying functions
-that do graph building.</li>
 <li>The type <code>*Node</code> represents a node in the computation graph. All graph operations either take a
 <code>*Graph</code> object to start with, or a <code>*Node</code>, and create new nodes with the corresponding operations.
 So our example will create an <code>Add</code> node that will take the nodes pointed by <code>a</code> and <code>b</code>, build a node
@@ -7622,7 +7621,7 @@ that represent their summation and then return this <code>*Node</code>.</li>
 <li>There is a rich set of operations available in GoMLX, see <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/graph#Node"><code>Node</code> documentation</a>.</li>
 </ul>
 </blockquote>
-<p>Ok, but this won't tell us what is 1+1 yet. We need to compile and then execute this graph with
+<p>Ok, but this is "symbolic" only, it won't tell us what is 1+1 yet. We need to compile and then execute this graph with
 some input values.</p>
 </div>
 </div>
@@ -7634,11 +7633,15 @@ some input values.</p>
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="Backends-and-executing-Graphs-with-Exec">Backends and executing Graphs with <code>Exec</code><a class="anchor-link" href="#Backends-and-executing-Graphs-with-Exec">¶</a></h2><p><strong>GoMLX</strong> can in principle work with different backends to execute its operations -- this opens up possibilities like executing models in WASM (not implemented yet).
-But the default backend, which must always be imported to execute something is <code>xla</code> -- it will provide a useful error message telling you to import it, if you forget.</p>
-<p>Creating a <code>backends.Backend</code> object is trivial: <code>backends.New()</code>. It can uses the environment variable <code>GOMLX_BACKEND</code>, if one wants to specify an specific backend / plugin (e.g.: <code>"xla:cpu"</code>, <code>"xla:cuda"</code>, etc.).</p>
+<h2 id="Backends-and-executing-Graphs-with-graph.Exec">Backends and executing Graphs with <code>graph.Exec</code><a class="anchor-link" href="#Backends-and-executing-Graphs-with-graph.Exec">¶</a></h2><p><strong>GoMLX</strong> can work with different backends to execute its operations. Currently 2 backends are supported:</p>
+<ol>
+<li><code>"xla"</code>: It uses <a href="https://openxla.org/">OpenXLA/XLA</a>, a "state of the art" execution engine for ML operations, that supports CPU (with SIMD), various accelerators (GPUs, TPUs), JIT (Just In Time) compilation, providing the best performance. For now though, it only works in Linux/Amd64 platform.</li>
+<li><code>"go"</code> (aka. <em>SimpleGo</em>): A pure Go backend engine. Much slower than <code>xla</code>, but very portable, likely will work in all platforms supported by Go -- tested in Linux, Windows, WASM (yes, it runs in the browser).</li>
+</ol>
+<p>Both backends are included if you <code>import _ "github.com/gomlx/gomlx/backends/default"</code> like in the example below (<code>xla</code> is excluded if not Linux). But you can build your binary only with xla with <code>import _ "github.com/gomlx/gomlx/backends/xla"</code> or only <code>go</code> with <code>import _ "github.com/gomlx/gomlx/backends/simplego"</code>.</p>
+<p>Creating a <code>backends.Backend</code> object is trivial: <code>backends.New()</code> (or <code>backends.MustNew()</code> and it will panic on failure). If the environment variable <code>GOMLX_BACKEND</code> is set, it can define the backend and its configuration (e.g.: <code>"go"</code>, <code>"xla:cpu"</code>, <code>"xla:cuda"</code>, etc.). Here we set it to <code>xla:cpu</code> to force the CPU backend for this tutorial.</p>
 <p>With the backend created, <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/graph#Exec"><code>Exec</code></a> is the easiest way to compile and execute computation graphs in GoMLX.
-To run our <code>SumGraph</code> function above we can do:</p>
+To run our <code>Sum</code> function above we can do:</p>
 </div>
 </div>
 </div>
@@ -7650,21 +7653,27 @@ To run our <code>SumGraph</code> function above we can do:</p>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">_</span> <span class="s2">"github.com/gomlx/gomlx/backends/xla"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="o">%</span><span class="k">env</span> GOMLX_BACKEND=xla:cpu
 
-<span class="n">var</span> <span class="n">backend</span> <span class="o">=</span> <span class="n">backends</span><span class="o">.</span><span class="n">New</span><span class="p">()</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">_</span> <span class="s2">"github.com/gomlx/gomlx/backends/default"</span>
+
+<span class="n">var</span> <span class="n">backend</span> <span class="o">=</span> <span class="n">backends</span><span class="o">.</span><span class="n">MustNew</span><span class="p">()</span>
 
 <span class="o">%%</span>
 
 <span class="o">//</span> <span class="n">Short</span> <span class="n">version</span><span class="p">:</span> <span class="err">`</span><span class="n">ExecOnce</span><span class="err">`</span> <span class="n">will</span> <span class="nb">compile</span> <span class="n">the</span> <span class="n">function</span> <span class="ow">and</span> <span class="n">execute</span> <span class="n">only</span> <span class="n">once</span><span class="o">.</span>
-<span class="n">two</span> <span class="o">:=</span> <span class="n">ExecOnce</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="o">/*</span> <span class="n">GoMLX</span> <span class="n">function</span> <span class="o">*/</span> <span class="n">SumGraph</span><span class="p">,</span> <span class="o">/*</span> <span class="n">Arguments</span> <span class="o">*/</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<span class="n">two</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">ExecOnce</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="o">/*</span> <span class="n">GoMLX</span> <span class="n">function</span> <span class="o">*/</span> <span class="n">Sum</span><span class="p">,</span> <span class="o">/*</span> <span class="n">Arguments</span> <span class="o">*/</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">}</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Short version:</span><span class="se">\t</span><span class="s2">1+1=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">two</span><span class="p">)</span>
 
-<span class="o">//</span> <span class="n">Exec</span> <span class="n">version</span><span class="p">:</span> <span class="err">`</span><span class="n">NewExec</span><span class="err">`</span> <span class="n">will</span> <span class="nb">compile</span> <span class="n">the</span> <span class="n">SumGraph</span> <span class="n">function</span> <span class="n">so</span> <span class="n">it</span> <span class="n">can</span> <span class="n">be</span> <span class="n">executed</span> <span class="n">efficiently</span>
+<span class="o">//</span> <span class="n">Exec</span> <span class="n">version</span><span class="p">:</span> <span class="err">`</span><span class="n">NewExec</span><span class="err">`</span> <span class="n">will</span> <span class="nb">compile</span> <span class="n">the</span> <span class="n">Sum</span> <span class="n">function</span> <span class="n">so</span> <span class="n">it</span> <span class="n">can</span> <span class="n">be</span> <span class="n">executed</span> <span class="n">efficiently</span>
 <span class="o">//</span> <span class="n">many</span> <span class="n">times</span><span class="o">.</span>
-<span class="n">exec</span> <span class="o">:=</span> <span class="n">NewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">SumGraph</span><span class="p">)</span>  
-<span class="n">two</span> <span class="o">=</span> <span class="n">exec</span><span class="o">.</span><span class="n">Call</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Exec version:</span><span class="se">\t</span><span class="s2">1+1=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">two</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+<span class="n">exec</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">NewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">Sum</span><span class="p">)</span>  
+<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">}</span>
+<span class="n">results</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">exec</span><span class="o">.</span><span class="n">Exec</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">}</span>
+<span class="n">two</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Exec version:</span><span class="se">\t</span><span class="s2">1+1=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">two</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -7677,8 +7686,9 @@ To run our <code>SumGraph</code> function above we can do:</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Short version:	1+1=float64(2.0000)
-Exec version:	1+1=2
+<pre>Set: GOMLX_BACKEND="xla:cpu"
+Short version:	1+1=float64(2)
+Exec version:	1+1=int64(2)
 </pre>
 </div>
 </div>
@@ -7695,15 +7705,15 @@ Exec version:	1+1=2
 <p><strong>Note</strong></p>
 <ul>
 <li><code>%%</code> is a shortcut for <code>func main()</code>: everything after it is put inside a <code>main</code> function by <strong>GoNB</strong>, the Go Notebook kernel.</li>
-<li><code>backends.New()</code> creates a <code>backends.Backend</code> object, which connects to an accelerator if present.
+<li><code>backends.New()</code> creates a <code>backends.Backend</code> object, which connects to an accelerator if present. <code>backends.MustNew</code> is the version that panics on error.
 Usually one creates one at the beginning of the program and passes it around.
 Here <strong>GoNB</strong> will keep the global variable <code>manager</code> available to all cells, so we don't need
 to define it again.</li>
-<li>The <code>Exec</code> object created is associated with a graph building function (<code>SumGraph</code> in this case). It lazily
+<li>The <code>Exec</code> object created is associated with a graph building function (<code>Sum</code> in this case). It lazily
 compiles and executes the compiled computation as needed. Naturally the first time <code>Call()</code> is invoked
 it is slow: it has to build the graph and <em>just-in-time</em> (JIT) compile it. But the compiled graph afterwards
 is optimized and very fast to execute, which is what we want for machine learning.</li>
-<li>The <code>Exec.Call(1, 1)</code> method always returns a slice of results, that's why we use <code>[0]</code> to access the
+<li>The <code>Exec.Exec(1, 1)</code> method always returns a slice of results, that's why we use <code>[0]</code> to access the
 first result.</li>
 <li>The results of graph execution are always <strong>tensors</strong> (see section below). They can be converted to Go types
 using <code>.Value()</code> method.</li>
@@ -7714,7 +7724,7 @@ it means is that, for example, if you are going to sum floats instead of ints, <
 to take as input two floats. Or if you want to sum a vector or matrix or ints, or any different <code>shapes.Shape</code>.</p>
 <blockquote>
 <p>For a detailed explanation of <code>Shape</code> and the associate concepts of Axis, Dimensions and <code>DType</code> (the underlying data type),
-see <a href="https://pkg.go.dev/github.com/gomlx/gomlx/types/shapes">package <code>shapes</code> documentation</a>.</p>
+see <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/shapes">package <code>shapes</code> documentation</a>.</p>
 </blockquote>
 <p>To exemplify, let's expand our code a bit:</p>
 </div>
@@ -7728,32 +7738,34 @@ see <a href="https://pkg.go.dev/github.com/gomlx/gomlx/types/shapes">package <co
 <div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="p">(</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
     <span class="s2">"fmt"</span>
     <span class="o">.</span> <span class="s2">"github.com/gomlx/gomlx/pkg/core/graph"</span>
 <span class="p">)</span>
 
-<span class="n">func</span> <span class="n">SumGraph</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
-    <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">. building graph for a.shape=</span><span class="si">%s</span><span class="s2"> and b.shape=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">Shape</span><span class="p">(),</span> <span class="n">b</span><span class="o">.</span><span class="n">Shape</span><span class="p">())</span>
+<span class="o">//</span> <span class="n">Sum</span> <span class="ow">is</span> <span class="n">the</span> <span class="n">symbolic</span> <span class="n">funciton</span> <span class="p">(</span><span class="n">creates</span> <span class="n">a</span> <span class="n">graph</span><span class="p">)</span> <span class="n">of</span> <span class="n">summing</span> <span class="n">two</span> <span class="n">numbers</span><span class="o">.</span>
+<span class="n">func</span> <span class="n">Sum</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
+    <span class="n">g</span> <span class="o">:=</span> <span class="n">a</span><span class="o">.</span><span class="n">Graph</span><span class="p">()</span>  <span class="o">//</span> <span class="n">Graph</span> <span class="n">on</span> <span class="n">which</span> <span class="n">this</span> <span class="n">symbolic</span> <span class="n">computation</span> <span class="ow">is</span> <span class="n">being</span> <span class="n">built</span><span class="o">.</span>
+    <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">- Building graph (GraphId=</span><span class="si">%d</span><span class="s2">) for a.shape=</span><span class="si">%s</span><span class="s2"> and b.shape=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">g</span><span class="o">.</span><span class="n">GraphId</span><span class="p">(),</span> <span class="n">a</span><span class="o">.</span><span class="n">Shape</span><span class="p">(),</span> <span class="n">b</span><span class="o">.</span><span class="n">Shape</span><span class="p">())</span>
     <span class="k">return</span> <span class="n">Add</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
 <span class="p">}</span>
 
 
 <span class="n">func</span> <span class="n">main</span><span class="p">()</span> <span class="p">{</span>
-    <span class="n">sumExec</span> <span class="o">:=</span> <span class="n">NewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">SumGraph</span><span class="p">)</span>
-    <span class="n">two</span> <span class="o">:=</span> <span class="n">sumExec</span><span class="o">.</span><span class="n">Call</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"1+1=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">two</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+    <span class="n">sumExec</span> <span class="o">:=</span> <span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">Sum</span><span class="p">)</span>
+    <span class="n">two</span> <span class="o">:=</span> <span class="n">sumExec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">1+1=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">two</span><span class="p">)</span>
 
     <span class="k">for</span> <span class="n">ii</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">ii</span> <span class="o">&lt;</span> <span class="mi">5</span><span class="p">;</span> <span class="n">ii</span><span class="o">++</span> <span class="p">{</span>
-        <span class="n">sumInts</span> <span class="o">:=</span> <span class="n">sumExec</span><span class="o">.</span><span class="n">Call</span><span class="p">(</span><span class="n">ii</span><span class="p">,</span> <span class="n">ii</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="si">%d</span><span class="s2">+</span><span class="si">%d</span><span class="s2">=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">ii</span><span class="p">,</span> <span class="n">ii</span><span class="p">,</span> <span class="n">sumInts</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+        <span class="n">sumInts</span> <span class="o">:=</span> <span class="n">sumExec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">(</span><span class="n">ii</span><span class="p">,</span> <span class="n">ii</span><span class="p">)</span>
+        <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="si">%d</span><span class="s2">+</span><span class="si">%d</span><span class="s2">=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">ii</span><span class="p">,</span> <span class="n">ii</span><span class="p">,</span> <span class="n">sumInts</span><span class="p">)</span>
     <span class="p">}</span>
 
-    <span class="n">five</span> <span class="o">:=</span> <span class="n">sumExec</span><span class="o">.</span><span class="n">Call</span><span class="p">(</span><span class="mf">3.5</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"3.5+1.5=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">five</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+    <span class="n">five</span> <span class="o">:=</span> <span class="n">sumExec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">(</span><span class="mf">3.5</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">)</span>
+    <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">3.5+1.5=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">five</span><span class="p">)</span>
 
-    <span class="n">many</span> <span class="o">:=</span> <span class="n">sumExec</span><span class="o">.</span><span class="n">Call</span><span class="p">([]</span><span class="n">float32</span><span class="p">{</span><span class="mf">1.1</span><span class="p">,</span> <span class="mf">2.2</span><span class="p">,</span> <span class="mf">3.3</span><span class="p">},</span> <span class="p">[]</span><span class="n">float32</span><span class="p">{</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">})[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"[1.1, 2.2, 3.3] + [10, 10, 10] = %v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">many</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+    <span class="n">many</span> <span class="o">:=</span> <span class="n">sumExec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">([]</span><span class="n">float32</span><span class="p">{</span><span class="mf">1.1</span><span class="p">,</span> <span class="mf">2.2</span><span class="p">,</span> <span class="mf">3.3</span><span class="p">},</span> <span class="n">float32</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
+    <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">[1.1, 2.2, 3.3] + 10 = </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">many</span><span class="p">)</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -7767,17 +7779,20 @@ see <a href="https://pkg.go.dev/github.com/gomlx/gomlx/types/shapes">package <co
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	. building graph for a.shape=(Int64) and b.shape=(Int64)
-1+1=2
-0+0=0
-1+1=2
-2+2=4
-3+3=6
-4+4=8
-	. building graph for a.shape=(Float64) and b.shape=(Float64)
-3.5+1.5=5
-	. building graph for a.shape=(Float32)[3] and b.shape=(Float32)[3]
-[1.1, 2.2, 3.3] + [10, 10, 10] = [11.1 12.2 13.3]
+<pre>
+- Building graph (GraphId=0) for a.shape=(Int64) and b.shape=(Int64)
+	1+1=int64(2)
+	0+0=int64(0)
+	1+1=int64(2)
+	2+2=int64(4)
+	3+3=int64(6)
+	4+4=int64(8)
+
+- Building graph (GraphId=1) for a.shape=(Float64) and b.shape=(Float64)
+	3.5+1.5=float64(5)
+
+- Building graph (GraphId=2) for a.shape=(Float32)[3] and b.shape=(Float32)
+	[1.1, 2.2, 3.3] + 10 = [3]float32{11.1, 12.2, 13.3}
 </pre>
 </div>
 </div>
@@ -7793,21 +7808,46 @@ see <a href="https://pkg.go.dev/github.com/gomlx/gomlx/types/shapes">package <co
 <blockquote>
 <p><strong>Note</strong></p>
 <ul>
-<li>Each time a new graph is created, we added a <code>fmt.Printf</code> to tell us
-the shape of the graph operands. Notice that <code>fmt.Printf</code> is not included in the graph,
-it's only part of the graph building function. We'll see later how to print
-intermediary results in the middle of the execution of the graph.</li>
+<li>Each time new input shapes are found, a new graph is created. We added a <code>fmt.Printf</code> to tell us
+the GraphId and more importantly the shape of the graph operands.
+Notice that <code>fmt.Printf</code> is not part of the computation graph, it's only part of the graph building function.
+We'll see later <code>Node.SetLogged</code> on how to print intermediary results in the middle of the execution of the graph.</li>
 <li>Every <code>Node</code> has an associated shape (<code>shapes.Shape</code> type). A shape is defined by its underlying data type
 <code>shapes.DType</code> and its axes dimensions. For scalars, the shape has zero axes (dimensions). E.g.: <code>(Int64)[]</code> represents
 a scalar <code>int</code> value, and <code>(Float32)[3]</code> represents a vector with 3 <code>float32</code> values. More details
 and the list of data types (aka. <em>dtype</em>) supported in the package <a href="https://pkg.go.dev/github.com/gomlx/gopjrt/dtypes">github.com/gomlx/gopjrt/dtypes</a>.</li>
-<li><code>Exec</code> automatically calls <code>SumGraph</code> whenever the <code>Call()</code> method sees parameters of shapes
-different from it has seen before (there is a cache of pre-compiled graphs kept in memory with limited size).</li>
+<li><code>Exec.MustExec1</code> is an alias to the previous <code>Exec.Exec</code> that conveniently: (a) panics on error; (b) returns the first result.</li>
 </ul>
 </blockquote>
 <p>In general the graph operations only work with the same <code>dtypes.DType</code>.
 If they are different, they are reported back with a <code>panic</code> (works like an exception, and can be caught) with an error with a full stack-trace in the returned result.
 And with that, let's talk how error is handled in GoMLX computational graph building:</p>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=93721733-8372-41dd-a9f8-e822913be569">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="Exec-aliases:"><code>Exec</code> aliases:<a class="anchor-link" href="#Exec-aliases:">¶</a></h3><p>Because the <code>graph.Exec</code> (and later the similar <code>context.Exec</code>, in a few sections below) is so central, we provide some aliases to make it more "ergonomic" to use.</p>
+<p>To create an <code>Exec</code> object:</p>
+<ul>
+<li><code>NewExec</code>, <code>MustNewExec</code>: the first returns an error, the second panics.</li>
+</ul>
+<p>To create, execute and finalize an <code>Exec</code> object in one line, for when we want to execute a computation only once:</p>
+<ul>
+<li><code>Exec.ExecOnce</code> and <code>Exec.ExecOnceN</code>: the first can be used if the computation returns only one result. The second if the computation returns &gt; 1 result, it returns a slice of tensors (see below).</li>
+</ul>
+<p>To execute an <code>Exec</code> object:</p>
+<ul>
+<li><code>Exec.Exec</code>, <code>Exec.Exec1</code>, <code>Exec.Exec2</code>, ... <code>Exec.Exec4</code>: The first returns a slice of tensors; <code>Exec1</code> returns only one tensor, it assumes
+the computation graph has only one output; <code>Exec2</code> returns 2 tensors, and so on. They all also return an error.</li>
+<li><code>Exec.ExecWithGraph</code> executes the computation and returns the results (as a slice of tensors) as well as the <code>graph.Graph</code> object that holds the compiled computation.</li>
+</ul>
+<p>There is always a <code>MustExec...</code> version of each method that panics on error, instead of returning them.</p>
 </div>
 </div>
 </div>
@@ -7818,17 +7858,18 @@ And with that, let's talk how error is handled in GoMLX computational graph buil
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="Error-Handling">Error Handling<a class="anchor-link" href="#Error-Handling">¶</a></h2><p>During the graph building and execution <strong>GoMLX</strong> diverges from the usual Golang idiomatic error handling: it uses exceptions in the form of <code>panic</code> with <code>error</code> object with a stack trace. See the package <a href="https://pkg.go.dev/github.com/gomlx/exceptions">github.com/gomlx/exceptions</a> for convenient wrapper scripts.</p>
+<h2 id="Error-Handling">Error Handling<a class="anchor-link" href="#Error-Handling">¶</a></h2><p>During the <em>graph building</em> (or what we call symbolic computation) <strong>GoMLX</strong> diverges from the usual Golang idiomatic error handling: it uses exceptions in the form of a <code>panic()</code> (with an <code>error</code> object with a stack trace).</p>
+<p>Usually, the symbolic computation functions (like the <code>Sum</code> function we defined above) are called by the <code>Exec.Exec</code> methods. And they capture any panics and return them as errors to the caller.</p>
 <blockquote>
 <p><strong>Note</strong>:
 The author is aware this is controvertial for some. So below are the motivations to use exceptions, as opposed to
 returning an error everywhere:</p>
 <ul>
 <li>While implementing long mathematical functions, introducing error handling in between each operation would
-be too distracting, and unwieldly. Notice the Go language makes the same choice, that's why the division operator <code>/</code>
+be too distracting, and unwieldly. Notice the Go language makes the same choice; e.g.: that's why the division operator <code>/</code>
 doesn't return the result of the division and an error, and instead panics with division by zero.</li>
 <li>Speed of building the computation graph is not a concern: it has no impact on the execution of the
-JIT compiled code later on.</li>
+JIT-compiled code later on.</li>
 </ul>
 </blockquote>
 <p>Let's create an example with an error to see how this works:</p>
@@ -7844,8 +7885,9 @@ JIT compiled code later on.</li>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span>
-<span class="n">sumExec</span> <span class="o">:=</span> <span class="n">NewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">SumGraph</span><span class="p">)</span>
-<span class="n">_</span> <span class="o">=</span> <span class="n">sumExec</span><span class="o">.</span><span class="n">Call</span><span class="p">(</span><span class="mf">1.1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="o">//</span> <span class="n">Error</span><span class="p">:</span> <span class="n">arguments</span> <span class="n">have</span> <span class="n">different</span> <span class="n">dtypes</span> <span class="n">Float64</span> <span class="ow">and</span> <span class="n">Int64</span><span class="o">.</span>
+<span class="n">sumExec</span> <span class="o">:=</span> <span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">Sum</span><span class="p">)</span>
+<span class="n">_</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">sumExec</span><span class="o">.</span><span class="n">Exec</span><span class="p">(</span><span class="mf">1.1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="o">//</span> <span class="n">Error</span><span class="p">:</span> <span class="n">arguments</span> <span class="n">have</span> <span class="n">different</span> <span class="n">dtypes</span> <span class="n">Float64</span> <span class="ow">and</span> <span class="n">Int64</span><span class="o">.</span>
+<span class="n">klog</span><span class="o">.</span><span class="n">Errorf</span><span class="p">(</span><span class="s2">"%+v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">err</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -7858,39 +7900,47 @@ JIT compiled code later on.</li>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	. building graph for a.shape=(Float64) and b.shape=(Int64)
+<pre>
+- Building graph (GraphId=0) for a.shape=(Float64) and b.shape=(Int64)
 </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
-<pre>panic: Backend "xla": failed Add: dtype of first (Float64) and second (Int64) operands don't match
-
-goroutine 1 [running]:
-github.com/gomlx/gomlx/backends/xla.(*Builder).Add(0xc00028e000, {0xbd3ba0?, 0xc000290000?}, {0xbd3ba0, 0xc000290120})
-	/home/janpf/Projects/gomlx/backends/xla/gen_standard_ops.go:32 +0x137
-github.com/gomlx/gomlx/pkg/core/graph.Add(0xc0001ca580, 0xc0001ca630)
-	/home/janpf/Projects/gomlx/graph/gen_backend_ops.go:176 +0x123
-main.SumGraph(0xc0001ca580, 0xc0001ca630)
-	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [4] Line 8 ]]</span> /tmp/gonb_55ad4f33/main.go:17 +0x189
-reflect.Value.call({0xbce4e0?, 0xc62b90?, 0xc0000d7850?}, {0xc4ba8a, 0x4}, {0xc000284150, 0x2, 0x0?})
-	/snap/go/current/src/reflect/value.go:581 +0xca6
-reflect.Value.Call({0xbce4e0?, 0xc62b90?, 0x0?}, {0xc000284150?, 0x0?, 0x0?})
-	/snap/go/current/src/reflect/value.go:365 +0xb9
-github.com/gomlx/gomlx/pkg/core/graph.(*Exec).createAndCacheGraph(0xc0001de120, {0xc0000da000, 0x2, 0xcb59a8?})
-	/home/janpf/Projects/gomlx/graph/exec.go:536 +0x75c
-github.com/gomlx/gomlx/pkg/core/graph.(*Exec).findOrCreateGraph(0xc0001de120, {0xc0000da000, 0x2, 0x2})
-	/home/janpf/Projects/gomlx/graph/exec.go:595 +0x167
-github.com/gomlx/gomlx/pkg/core/graph.(*Exec).compileAndExecute(0xc0001de120, 0x1, {0xc0000d7f20?, 0xc0000061c0?, 0xc0000d7f40?})
-	/home/janpf/Projects/gomlx/graph/exec.go:436 +0x226
-github.com/gomlx/gomlx/pkg/core/graph.(*Exec).CallWithGraph(...)
-	/home/janpf/Projects/gomlx/graph/exec.go:386
-github.com/gomlx/gomlx/pkg/core/graph.(*Exec).Call(0xcb59a8?, {0xc0000d7f20?, 0xbce4e0?, 0xc62b90?})
-	/home/janpf/Projects/gomlx/graph/exec.go:372 +0x27
-main.main()
-	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [5] Line 3 ]]</span> /tmp/gonb_55ad4f33/main.go:24 +0xbe
-exit status 2
+<pre>E1011 09:48:27.498153  999407 main.go:28] cannot broadcast Float64 and Int64 for "Add": they have different dtypes
+github.com/gomlx/gomlx/backends/stablehlo.(*Builder).broadcastForBinaryOps
+	/home/janpf/Projects/gomlx/backends/stablehlo/builder.go:213
+github.com/gomlx/gomlx/backends/stablehlo.(*Builder).Add
+	/home/janpf/Projects/gomlx/backends/stablehlo/gen_binary_ops.go:13
+github.com/gomlx/gomlx/pkg/core/graph.Add
+	/home/janpf/Projects/gomlx/pkg/core/graph/gen_backend_ops.go:191
+main.Sum
+	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell Line 0 ]]</span> /tmp/gonb_099774e5/main.go:20
+reflect.Value.call
+	/snap/go/current/src/reflect/value.go:581
+reflect.Value.Call
+	/snap/go/current/src/reflect/value.go:365
+github.com/gomlx/gomlx/pkg/core/graph.(*Exec).createAndCacheGraph
+	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:539
+github.com/gomlx/gomlx/pkg/core/graph.(*Exec).findOrCreateGraph
+	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:598
+github.com/gomlx/gomlx/pkg/core/graph.(*Exec).compileAndExecute
+	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:447
+github.com/gomlx/gomlx/pkg/core/graph.(*Exec).ExecWithGraph.func1
+	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:392
+github.com/gomlx/gomlx/internal/exceptions.TryCatch[...]
+	/home/janpf/Projects/gomlx/internal/exceptions/exceptions.go:90
+github.com/gomlx/gomlx/pkg/core/graph.(*Exec).ExecWithGraph
+	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:391
+github.com/gomlx/gomlx/pkg/core/graph.(*Exec).Exec
+	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:377
+main.main
+	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [5] Line 3 ]]</span> /tmp/gonb_099774e5/main.go:27
+runtime.main
+	/snap/go/current/src/runtime/proc.go:285
+runtime.goexit
+	/snap/go/current/src/runtime/asm_amd64.s:1693
 </pre>
 </div>
 </div>
@@ -7907,19 +7957,13 @@ exit status 2
 <p><strong>Note</strong></p>
 <ul>
 <li>In the stack-trace above there are 2 lines of interest, that typically help to debug such issues:<ol>
-<li>Where in the graph building function <code>main.SumGraph</code> function the invalid operation was created: <strong>Line 8 of the previous cell</strong>.</li>
+<li>Where in the graph building function <code>main.Sum</code> function the invalid operation was created: <strong>Line 9 of the previous cell</strong>.</li>
 <li>Where in the <code>main</code> function, the graph was attempted to be executed: <strong>Line 3 of this cell</strong>.</li>
 </ol>
 </li>
 <li>You can enable displaying line-numbers in the JupyterLab with "ESC+L" (upper-case L).</li>
 </ul>
 </blockquote>
-<p>If you want to catch errors, <strong>GoMLX</strong> provides a small <code>exceptions</code> library, that defines <code>TryCatch[E]</code>, that will catch arbitrary <code>panic</code> (thrown) exceptions. <strong>GoMLX</strong> only throws <code>error</code> type of exceptions. So you could do:</p>
-<div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s">"github.com/gomlx/exceptions"</span>
-
-<span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">exceptions</span><span class="p">.</span><span class="nx">TryCatch</span><span class="p">[</span><span class="kt">error</span><span class="p">](</span><span class="kd">func</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="nx">_</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">exec</span><span class="p">.</span><span class="nx">Call</span><span class="p">(</span><span class="mf">1.1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">)})</span>
-<span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="err">…</span><span class="w"> </span><span class="p">}</span>
-</pre></div>
 </div>
 </div>
 </div>
@@ -7932,15 +7976,15 @@ exit status 2
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h2 id="Tensors">Tensors<a class="anchor-link" href="#Tensors">¶</a></h2><p>Tensors are multidimensional arrays of a given data type (<code>dtypes.DType</code>) defined in the package <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/tensors"><code>github.com/gomlx/gomlx/pkg/core/tensors</code></a>.</p>
 <p>For GoMLX tensors work as <strong>containers of data</strong> that are used as concrete inputs and outputs for the
-execution of computational graphs. There is only basic support to manipulate tensors directly (it includes access directly to its data): instead usually one does that using computational graphs.  Tensors have a shape (<code>shapes.Shape</code>) just like <code>Node</code>.</p>
-<p>When talking about a tensor, we are referring to the package's <code>tensors.Tensor</code> object (usually a pointer to it).</p>
+execution of computational graphs. There is only basic support to manipulate tensors directly (it includes direct access to its data): instead usually one operates on the tensor using computational graphs and the <code>Exec</code> object. Tensors have a shape (<code>shapes.Shape</code>) just like a <code>graph.Node</code>.</p>
+<p>When talking about a tensor, we are referring to the package's <code>tensors.Tensor</code> object (a pointer to it).</p>
 <p>The tensor raw values can be stored either locally (as a Go slice) or on the device where the graph is being executed. E.g.: a GPU, or even a CPU, in which case it is owned by the <code>backends.Backend</code>.</p>
-<p>While the <code>tensors.Tensor</code> object handles the synchronization automatically among the two, it's important
-that you are aware that there is this distinction, because there is a time cost to transfer data from,
-for example, a GPU to the CPU and back.</p>
+<p>While the <code>tensors.Tensor</code> object handles the synchronization automatically among the local/on-device versions, it's important
+that you are aware that there is this distinction. There is a time cost to transfer data from, for example, a GPU to the CPU and back.</p>
 <p>Effectively, what that means is that, during training, you dont' want to transfer anything locally often,
-for instance to save a checkpoint. But again, most of this is handled automatically by <strong>GoMLX</strong> libraries. Also, because some of the resources are allocated in the accelerator (GPU) or not managed by Go, the garbage collector may not be aware of the memory pressure on these devices.</p>
-<p>Whenever a graph is executed (with <code>Exec.Call</code>) and non-tensor values are converted to tensors, and those are transferred to the device doing the execution automatically.</p>
+for instance to save a checkpoint. Most of this is handled automatically by <strong>GoMLX</strong> libraries, but not everything.
+Example: because some of the resources are allocated in the accelerator (GPU) and not managed by Go, the garbage collector may not be aware of the memory pressure on these devices--there is a <code>Tensor.Finalize</code> call that immediately releases the data associated with a tensor.</p>
+<p>Whenever a graph is executed (with <code>Exec.Exec</code>), non-tensor input values are automatically converted to tensors, and those are transferred to the device doing the execution automatically.</p>
 <p>Example:</p>
 </div>
 </div>
@@ -7954,20 +7998,20 @@ for instance to save a checkpoint. But again, most of this is handled automatica
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span>
-<span class="n">onePlusExec</span> <span class="o">:=</span> <span class="n">NewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">func</span> <span class="p">(</span><span class="n">x</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
+<span class="n">onePlusExec</span> <span class="o">:=</span> <span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">func</span> <span class="p">(</span><span class="n">x</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
     <span class="k">return</span> <span class="n">OnePlus</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> 
 <span class="p">})</span>
-<span class="o">//</span> <span class="n">exec</span><span class="o">.</span><span class="n">Call</span> <span class="n">will</span> <span class="k">return</span> <span class="n">a</span> <span class="o">*</span><span class="n">tensor</span><span class="o">.</span><span class="n">Tensor</span><span class="o">.</span>
-<span class="n">counter</span> <span class="o">:=</span> <span class="n">onePlusExec</span><span class="o">.</span><span class="n">Call</span><span class="p">(</span><span class="mi">0</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-<span class="o">//</span> <span class="n">counter</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span> <span class="n">will</span> <span class="n">first</span> <span class="n">transfer</span> <span class="n">counter</span> <span class="n">to</span> <span class="n">local</span> <span class="k">with</span> <span class="n">counter</span><span class="o">.</span><span class="n">Local</span><span class="p">()</span><span class="o">.</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"counter.type=%T, counter.shape=</span><span class="si">%s</span><span class="s2">, counter=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">counter</span><span class="p">,</span> <span class="n">counter</span><span class="o">.</span><span class="n">Shape</span><span class="p">(),</span> <span class="n">counter</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+<span class="o">//</span> <span class="n">exec</span><span class="o">.</span><span class="n">MustExec1</span> <span class="n">will</span> <span class="k">return</span> <span class="n">a</span> <span class="o">*</span><span class="n">tensor</span><span class="o">.</span><span class="n">Tensor</span><span class="o">.</span>
+<span class="n">counter</span> <span class="o">:=</span> <span class="n">onePlusExec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="o">//</span> <span class="n">counter</span><span class="o">.</span><span class="n">String</span><span class="p">()</span> <span class="n">will</span> <span class="n">first</span> <span class="n">transfer</span> <span class="n">counter</span> <span class="n">to</span> <span class="n">local</span> <span class="p">(</span><span class="n">using</span> <span class="n">counter</span><span class="o">.</span><span class="n">Local</span><span class="p">())</span> <span class="n">to</span> <span class="nb">print</span> <span class="n">its</span> <span class="n">values</span><span class="o">.</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"counter.type=%T, counter=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">counter</span><span class="p">,</span> <span class="n">counter</span><span class="o">.</span><span class="n">String</span><span class="p">())</span>
 <span class="k">for</span> <span class="n">ii</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">ii</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">;</span> <span class="n">ii</span><span class="o">++</span> <span class="p">{</span>
     <span class="o">//</span> <span class="n">Since</span> <span class="n">the</span> <span class="n">counter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">being</span> <span class="n">used</span> <span class="n">locally</span> <span class="n">between</span> <span class="n">the</span> <span class="n">calls</span><span class="p">,</span> <span class="n">the</span> <span class="n">tensor</span> <span class="n">will</span> <span class="n">only</span> <span class="n">use</span> <span class="n">the</span> 
     <span class="o">//</span> <span class="n">device</span> <span class="n">storage</span><span class="o">.</span>
-    <span class="n">counter</span> <span class="o">=</span> <span class="n">onePlusExec</span><span class="o">.</span><span class="n">Call</span><span class="p">(</span><span class="n">counter</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">counter</span> <span class="o">=</span> <span class="n">onePlusExec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">(</span><span class="n">counter</span><span class="p">)</span>
 <span class="p">}</span>
-<span class="o">//</span> <span class="n">counter</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span> <span class="n">will</span> <span class="n">first</span> <span class="n">transfer</span> <span class="n">the</span> <span class="n">counter</span> <span class="n">value</span> <span class="n">locally</span><span class="p">,</span> <span class="ow">and</span> <span class="n">then</span> <span class="n">convert</span> <span class="n">to</span> <span class="n">a</span> <span class="n">Go</span> <span class="n">value</span><span class="o">.</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"counter=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">counter</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+<span class="o">//</span> <span class="n">Again</span> <span class="n">counter</span><span class="o">.</span><span class="n">String</span><span class="p">()</span> <span class="p">(</span><span class="n">called</span> <span class="n">implicitly</span> <span class="n">by</span> <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">)</span> <span class="n">will</span> <span class="n">first</span> <span class="n">transfer</span> <span class="n">the</span> <span class="n">counter</span> <span class="n">value</span> <span class="n">locally</span><span class="p">,</span> <span class="ow">and</span> <span class="n">then</span> <span class="n">convert</span> <span class="n">to</span> <span class="n">a</span> <span class="n">Go</span> <span class="n">value</span><span class="o">.</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"counter=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">counter</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -7980,8 +8024,8 @@ for instance to save a checkpoint. But again, most of this is handled automatica
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>counter.type=*tensors.Tensor, counter.shape=(Int64), counter=1
-counter=11
+<pre>counter.type=*tensors.Tensor, counter=int64(1)
+counter=int64(11)
 </pre>
 </div>
 </div>
@@ -7997,28 +8041,39 @@ counter=11
 <blockquote>
 <p><strong>Note</strong>:</p>
 <ul>
-<li>In the first call to <code>onePlusExec.Call(0)</code>, the Go constant <code>0</code> is automatically converted to a <code>*tensor.Tensor</code>
+<li>In the first call to <code>onePlusExec.MustExec1(0)</code>, the Go constant <code>0</code> is automatically converted to a <code>*tensor.Tensor</code>
 by the <code>graph.Exec</code> and fed to the graph. It returns a <code>[]*tensor.Tensor</code> with one element, containing <code>0+1=1</code>.</li>
 <li>The returned tensor is initially only stored on device. But when we print it, it is automatically transferred to Go.</li>
 <li>While executing the loop the counter will not be transferred locally, everything happens efficiently in the accelerator device (GPU, TPU, or even the CPU executor).</li>
-<li>When we print the final result in <code>counter.Value()</code> again the data is transferred locally.</li>
+<li>When we print the final result in <code>counter.String()</code> again the data is transferred locally automatically.</li>
 </ul>
 </blockquote>
-<p>There are several ways to create tensors, the most common:</p>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=98f8f8c2-9716-4212-87ef-7dc7b884c11f">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="New-tensors">New tensors<a class="anchor-link" href="#New-tensors">¶</a></h3><p>There are several ways to create tensors, the most common:</p>
 <ul>
 <li><code>tensors.FromValue[S](value S)</code>: Generics conversion, works with any supported <code>DType</code> scalar
 as well as with any arbitrary multidimensional slice. Slices of rank &gt; 1 must be regular, that is
 all the sub-slices must have the same shape. E.g: <code>FromValue([][]float{{1,2}, {3, 5}, {7, 11}})</code>.
-There is also a non-generic version <code>tensors.FromAnyValue(value any)</code>. This is what <code>Exec.Call()</code>
+There is also a non-generic version <code>tensors.FromAnyValue(value any)</code>. This is what <code>Exec.Exec()</code>
 uses to convert arbitrary values to a tensor.</li>
 <li><code>FromShape(shape shapes.Shape)</code>: creates a Local tensor with the given shape, and initialized to zero. See
 documentation on <code>Tensor.MutableFlatData(...)</code> to mutate tensors in place.</li>
 <li><code>FromScalarAndDimensions[T](value T, dimensions ...int)</code>: creates a tensor with the
 given dimensions, filled with the scalar value given. <code>T</code> must be one of the supported types.</li>
 </ul>
+<p>You can print the contents of a <code>tensors.Tensor</code> simply using <code>Tensor.String()</code>, or convert it back to the
+corresponding Go type using <code>Tensor.Value()</code> (it returns an <code>any</code> that you can cast to the expected type).</p>
 <p>See more documentation in <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/tensors">github.com/gomlx/gomlx/pkg/core/tensors</a>.</p>
-<p>Errors in the manipulation of Tensors (e.g. invalid values) are also reported back with exception thrown with <code>panic</code>, with full stack-traces, just as
-with the <code>graph</code> package described in the previous package. The errors can easily be caught (with <code>recover()</code> or with <code>exceptions.TryCatch</code> helper) when needed.</p>
+<p>Errors in the manipulation of Tensors (e.g. invalid values) are also reported back with exception thrown with <code>panic</code>, with full stack-traces -- they only happen due to invalid inputs (nil values, wrong data types, etc.). The errors can easily be caught (with <code>recover()</code> or with <code>exceptions.TryCatch</code> helper) when needed.</p>
 </div>
 </div>
 </div>
@@ -8029,13 +8084,13 @@ with the <code>graph</code> package described in the previous package. The error
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="Gradients">Gradients<a class="anchor-link" href="#Gradients">¶</a></h2><p>Another important functionality required to train machine learning models based on gradient descent is calculating the gradients of some value being optimized with respect to some variable / quantity.</p>
-<p><strong>GoMLX</strong> does this statically, during graph building time. It adds to the graph the computation for the gradient.</p>
+<h2 id="Gradients">Gradients<a class="anchor-link" href="#Gradients">¶</a></h2><p>An important functionality required to train machine learning models based on gradient descent is calculating the gradients of some value (loss) being optimized with respect to some variable / quantity.</p>
+<p><strong>GoMLX</strong> does this symbolically, during graph building time. It adds to the graph the computation for the gradient.</p>
 <p>Example: let's calculate the gradient of the function $f(x, y) = x^2 + xy$ for a few values of $x$ and $y$.
 Algebraically we have:</p>
 <p>$$
 \begin{aligned}
-(x, y) &amp;= x^2 + xy \\
+f(x, y) &amp;= x^2 + xy \\
 df/dx(x,y) &amp;= 2x + y \\
 df/dy(x,y) &amp;= x \\
 \end{aligned}
@@ -8064,11 +8119,11 @@ $$</p>
 <span class="p">}</span>
 
 <span class="o">%%</span>
-<span class="n">exec</span> <span class="o">:=</span> <span class="n">NewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">gradOfF</span><span class="p">)</span>
+<span class="n">exec</span> <span class="o">:=</span> <span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">gradOfF</span><span class="p">)</span>
 <span class="n">x</span> <span class="o">:=</span> <span class="p">[]</span><span class="n">float64</span><span class="p">{</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">}</span>
 <span class="n">y</span> <span class="o">:=</span> <span class="p">[]</span><span class="n">float64</span><span class="p">{</span><span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">30</span><span class="p">}</span>
-<span class="n">results</span> <span class="o">:=</span> <span class="n">exec</span><span class="o">.</span><span class="n">Call</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"f(x=%v, y=%v)=%v,</span><span class="se">\n\t</span><span class="s2">df/dx=%v,</span><span class="se">\n\t</span><span class="s2">df/dy=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">results</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">results</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+<span class="n">output</span><span class="p">,</span> <span class="n">gradX</span><span class="p">,</span> <span class="n">gradY</span> <span class="o">:=</span> <span class="n">exec</span><span class="o">.</span><span class="n">MustExec3</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"f(x=%v, y=%v)=</span><span class="si">%s</span><span class="s2">,</span><span class="se">\n\t</span><span class="s2">df/dx=</span><span class="si">%s</span><span class="s2">,</span><span class="se">\n\t</span><span class="s2">df/dy=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">gradX</span><span class="p">,</span> <span class="n">gradY</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -8081,9 +8136,9 @@ $$</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>f(x=[0 1 2], y=[10 20 30])=[0 21 64],
-	df/dx=[10 22 34],
-	df/dy=[0 1 2]
+<pre>f(x=[0 1 2], y=[10 20 30])=[3]float64{0, 21, 64},
+	df/dx=[3]float64{10, 22, 34},
+	df/dy=[3]float64{0, 1, 2}
 </pre>
 </div>
 </div>
@@ -8099,14 +8154,14 @@ $$</p>
 <blockquote>
 <p><strong>Note</strong>:</p>
 <ul>
-<li>For now GoMLX only calculates gradients of a scalar (typically a model loss) with respect to arbitrary tensors.
-It does not yet calculate <strong>jacobians</strong>, that is, if the value we are deriving is not a scalar. That's the reason
-of the <code>ReduceAllSum</code> in the example, the result is the derivative of the sum of all the 3 inputs.</li>
-<li>A question that may arise is whether it calculates the second derivative (<em>hessian</em>). In principle the machinery
-to do that is in place, but there are 2 limitations: (1) not all operations have their derivative implemented,
-in particular some of the operations that are only used when calculating the first derivative; (2) it only
-calculates the gradient with respect to a scalar, in most cases the hessian will be the gradient of a gradient,
-usually of higher rank -- Btw, contributions to the project here are welcome ;)</li>
+<li>As of yet, GoMLX only calculates gradients of a scalar (typically a model loss) with respect to arbitrary tensors.
+It does not yet calculate <strong>jacobians</strong>, that is, if the value we are deriving is not a scalar.</li>
+<li>A question that may arise is whether it calculates the second derivative (<em>hessian</em>).
+In principle the machinery to do that is in place, but there are 2 limitations:
+(1) not all operations have their derivative implemented, in particular some of the operations that are only used when calculating the first derivative;
+(2) it only calculates the gradient with respect to a scalar, in most cases the hessian will be the gradient of a gradient,
+usually of higher rank.</li>
+<li>It's not impossible (or hard) to add support for those. If you need it, contributions to the project here are welcome ;)</li>
 </ul>
 </blockquote>
 </div>
@@ -8142,6 +8197,17 @@ usually of higher rank -- Btw, contributions to the project here are welcome ;)<
 </div>
 </div>
 </div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=b532f529-5e83-4aed-a70d-e163594fafec">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h1 id="Machine-Learning-with-GoMLX">Machine Learning with GoMLX<a class="anchor-link" href="#Machine-Learning-with-GoMLX">¶</a></h1>
+</div>
+</div>
+</div>
+</div>
 <div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=c1bc04a1-30df-4a5a-aede-07dedf2a3798">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
@@ -8150,15 +8216,96 @@ usually of higher rank -- Btw, contributions to the project here are welcome ;)<
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h2 id="Variables-and-Context">Variables and Context<a class="anchor-link" href="#Variables-and-Context">¶</a></h2><p>Computation graphs are <a href="https://en.wikipedia.org/wiki/Pure_function">pure functions</a>: they have no state,
 they take inputs, return outputs and everything in between is transient.</p>
-<p>For Machine Learning as well as many types of computations, it's convenient to store intermediary results
-(the model parameters for ML) in between the execution of the computation graphs.</p>
-<p>For that <strong>GoMLX</strong> offers the <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/ml/context"><code>context.Context</code></a> object
+<p>For Machine Learning as well as many types of computations, it's convenient to use and update "contextual" information
+about a model being trained or executed, like its weights/parameters.
+We want to be able to easily access and update these weights in the middle of a computation graph.</p>
+<p>To allow this <strong>GoMLX</strong> offers the <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/ml/context"><code>context.Context</code></a> object
 (completely unrelated to the usual Go's <code>context</code> package), and a corresponding <code>context.Exec</code>.
-It is a container of <strong>variables</strong> (whose values are tensors usually stored on device), and it manages automatically its updates, passing it as extra
-inputs and taking them out (if changed) as extra outputs of the computation graph.</p>
-<p>This may sound more complex than it is in practice. Let's see an example, where we try to find $argmin_{x}{f(x)}$ where
-$f(x) = ax^2 + bx + c$. If we solve it literally we should get, for $a &gt; 0$, $argmin_{x}{f(x)} = \frac{-b}{2a}$. Instead
-we solve it numerically, using gradient descent:</p>
+It is a container of <strong>variables</strong>, and it manages automatically its updates, passing it as "side
+inputs" and returning them as "side outputs" if they were updated in the computation graph.</p>
+<p>This may sound more complex than it is in practice. Let's see a simple example of maintaining a counter:</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=92acdfcb-bb9a-4665-a879-a6b4596408a6">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [9]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">"github.com/gomlx/gomlx/pkg/ml/context"</span>
+
+<span class="o">%%</span>
+<span class="n">ctx</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">New</span><span class="p">()</span>
+<span class="n">exec</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">func</span><span class="p">(</span><span class="n">ctx</span> <span class="o">*</span><span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span> <span class="n">g</span> <span class="o">*</span><span class="n">Graph</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
+    <span class="n">counterVar</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">VariableWithValue</span><span class="p">(</span><span class="s2">"count"</span><span class="p">,</span> <span class="n">int32</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
+    <span class="n">count</span> <span class="o">:=</span> <span class="n">counterVar</span><span class="o">.</span><span class="n">ValueGraph</span><span class="p">(</span><span class="n">g</span><span class="p">)</span>
+    <span class="n">count</span> <span class="o">=</span> <span class="n">AddScalar</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">counterVar</span><span class="o">.</span><span class="n">SetValueGraph</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">count</span>
+<span class="p">})</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="s2">"Counting:"</span><span class="p">)</span>
+<span class="k">for</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">count=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">exec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">())</span>
+<span class="p">}</span>
+<span class="n">counterVar</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"count"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"- State of counter=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">counterVar</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Counting:
+	count=int32(11)
+	count=int32(12)
+	count=int32(13)
+- State of counter=%!s(int32=13)
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=804ecc5b-cdb2-4177-acc6-e839c991b2ef">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<blockquote>
+<p><strong>Note</strong>:</p>
+<ul>
+<li>We are using <code>context.Exec</code>, while before we were using <code>graph.Exec</code>. The main difference is that
+<code>context.Exec</code> compiles and executes graph functions that take a context as its first parameter, and it
+automatically handles the passing of variables as side inputs and outputs (for those variables updated)
+of the computation graph.</li>
+<li>During graph building, we access and set the variables's symbolic values (<code>graph.Node</code>) with <code>Variable.ValueGraph</code> and <code>VariableSetValueGraph</code>.</li>
+<li>Outside graph building, we can access the last value set to a variable by using <code>Variable.Value()</code> and
+<code>Variable.SetValue</code>. They return/take concrete <code>*tensor.Tensor</code> types.</li>
+</ul>
+</blockquote>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=955465cb-f563-43d7-90e2-d23e6b762c3d">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="Finding-$argmin_%7Bx%7D%7Bf(x)%7D$-example">Finding $argmin_{x}{f(x)}$ example<a class="anchor-link" href="#Finding-$argmin_%7Bx%7D%7Bf(x)%7D$-example">¶</a></h3><p>A more elaborate example: let's find $argmin_{x}{f(x)}$ where $f(x) = ax^2 + bx + c$.</p>
+<p>If we solve it literally we should get, for $a &gt; 0$, $argmin_{x}{f(x)} = \frac{-b}{2a}$.</p>
+<p>Instead, we solve it numerically, using gradient descent:</p>
 </div>
 </div>
 </div>
@@ -8167,10 +8314,10 @@ we solve it numerically, using gradient descent:</p>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [9]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [10]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="s2">"flag"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">"flag"</span>
 
 <span class="n">var</span> <span class="p">(</span>
     <span class="n">flagA</span> <span class="o">=</span> <span class="n">flag</span><span class="o">.</span><span class="n">Float64</span><span class="p">(</span><span class="s2">"a"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s2">"Value of a in the equation ax^2+bx+c"</span><span class="p">)</span>
@@ -8219,11 +8366,11 @@ we solve it numerically, using gradient descent:</p>
 
 <span class="n">func</span> <span class="n">Solve</span><span class="p">()</span> <span class="p">{</span>
     <span class="n">ctx</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">New</span><span class="p">()</span>
-    <span class="n">exec</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">NewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">minimizeF</span><span class="p">)</span>
+    <span class="n">exec</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">minimizeF</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">ii</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">ii</span> <span class="o">&lt;</span> <span class="o">*</span><span class="n">flagNumSteps</span><span class="o">-</span><span class="mi">1</span><span class="p">;</span> <span class="n">ii</span><span class="o">++</span> <span class="p">{</span>
-        <span class="n">_</span> <span class="o">=</span> <span class="n">exec</span><span class="o">.</span><span class="n">Call</span><span class="p">()</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">exec</span><span class="o">.</span><span class="n">MustExec</span><span class="p">()</span>
     <span class="p">}</span>
-    <span class="n">y</span> <span class="o">:=</span> <span class="n">exec</span><span class="o">.</span><span class="n">Call</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">y</span> <span class="o">:=</span> <span class="n">exec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">()</span>
     <span class="n">x</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"x"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span>
     <span class="n">stepNum</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"stepNum"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span>
     <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Minimum found at x=</span><span class="si">%g</span><span class="s2">, f(x)=</span><span class="si">%g</span><span class="s2"> after </span><span class="si">%f</span><span class="s2"> steps.</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">x</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">y</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">stepNum</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
@@ -8253,7 +8400,7 @@ we solve it numerically, using gradient descent:</p>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [10]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [11]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span> <span class="o">--</span><span class="n">a</span><span class="o">=</span><span class="mi">1</span> <span class="o">--</span><span class="n">b</span><span class="o">=</span><span class="mi">2</span> <span class="o">--</span><span class="n">c</span><span class="o">=</span><span class="mi">3</span> <span class="o">--</span><span class="n">steps</span><span class="o">=</span><span class="mi">10</span> <span class="o">--</span><span class="n">lr</span><span class="o">=</span><span class="mf">0.5</span>
@@ -8270,7 +8417,7 @@ we solve it numerically, using gradient descent:</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Minimum found at x=-0.9999999999999999, f(x)=2 after 10.000000 steps.
+<pre>Minimum found at x=-1, f(x)=2 after 10.000000 steps.
 </pre>
 </div>
 </div>
@@ -8281,7 +8428,7 @@ we solve it numerically, using gradient descent:</p>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [11]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [12]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span> <span class="o">--</span><span class="n">a</span><span class="o">=</span><span class="mi">2</span> <span class="o">--</span><span class="n">b</span><span class="o">=</span><span class="mi">12</span> <span class="o">--</span><span class="n">c</span><span class="o">=</span><span class="mi">20</span> <span class="o">--</span><span class="n">steps</span><span class="o">=</span><span class="mi">10</span> <span class="o">--</span><span class="n">lr</span><span class="o">=</span><span class="mf">0.5</span>
@@ -8314,14 +8461,6 @@ we solve it numerically, using gradient descent:</p>
 <blockquote>
 <p><strong>Note</strong>:</p>
 <ul>
-<li>We are using <code>context.Exec</code>, while before we were using <code>computation.Exec</code>. The main difference is that
-<code>context.Exec</code> compiles and executes graph functions that take a context as its first parameter, and it
-automatically handles the passing of variables as side inputs and outputs (for those variables updated)
-of the computation graph.</li>
-<li>During graph building, we access and set the variables with <code>Variable.ValueGraph</code> and <code>VariableSetValueGraph</code>:
-They return/take <code>*Node</code> types, that can be used in the graph.</li>
-<li>Outside graph building, we can access the last value set to a variable by using <code>Variable.Value()</code> and
-<code>Variable.SetValue</code>. They return/take concrete <code>*tensor.Tensor</code> types.</li>
 <li>We created two variables, one for "x" that we were optimizing to minimize $f(x)$, and one variable "stepNum",
 used to keep track how many steps were already executed.</li>
 <li>Yes, if we set <code>--lr=1</code> (the learning rate), it will get to the minimum in one step for the quadratic f(x). 😉</li>
@@ -8336,7 +8475,7 @@ the actual data (variables, graph and model parameters).</li>
 <li><code>Context</code> also holds model parameters (concrete Go values), which are also scoped.
 Those can be hyperparameters for the models (learning rate, regularization, etc.) or anything the user or
 any library may create a convention for. They are more convenient than using hundreds of flags.
-See example of its usage in the <a href="">UCI Adult</a> example.</li>
+See example of its usage in the <a href="https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/main.go">UCI Adult</a> example.</li>
 <li>Similarly <code>Context</code> also holds "Graph parameters". Those are very similar to model parameters, but they
 have one value per Graph. So if a model is created with parameters of different shape (or for training/evaluation),
 each version will have its own Graph parameters. Don't worry about this now -- if you need it later
@@ -8352,7 +8491,7 @@ when building complex graphs, the funcitonality will be there.</li>
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="Machine-Learning-(ML)">Machine Learning (ML)<a class="anchor-link" href="#Machine-Learning-(ML)">¶</a></h2><p>The previous sections presented the fundamentals of what is needed to implement machine learning. This section
+<h2 id="Training-a-machine-learning-model">Training a machine learning model<a class="anchor-link" href="#Training-a-machine-learning-model">¶</a></h2><p>The previous sections presented the fundamentals of what is needed to implement machine learning. This section
 we present various sub-packages that provide high level ML layers and tools that make building, training and
 evaluating a model trivial.</p>
 <p>First is the package <code>layers</code> (see code in <a href="../../../tree/main/ml/layers/">ml/layers</a>. It provides several composable ML layers.
@@ -8381,7 +8520,7 @@ which trains a linear model on nosiy generated data.</p>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [12]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [13]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="n">const</span> <span class="p">(</span>
@@ -8413,18 +8552,18 @@ have been selected in Go directly using <code>math/random</code>, but just for f
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [13]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [14]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="p">(</span>
-    <span class="s2">"github.com/gomlx/gomlx/types/shapes"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/core/shapes"</span>
     <span class="s2">"github.com/gomlx/gomlx/pkg/core/tensors"</span>
 <span class="p">)</span>
 
 <span class="o">//</span> <span class="n">initCoefficients</span> <span class="n">chooses</span> <span class="n">random</span> <span class="n">coefficients</span> <span class="ow">and</span> <span class="n">bias</span><span class="o">.</span> <span class="n">These</span> <span class="n">are</span> <span class="n">the</span> <span class="n">true</span> <span class="n">values</span> <span class="n">the</span> <span class="n">model</span> <span class="n">will</span>
 <span class="o">//</span> <span class="n">attempt</span> <span class="n">to</span> <span class="n">learn</span><span class="o">.</span>
 <span class="n">func</span> <span class="n">initCoefficients</span><span class="p">(</span><span class="n">backend</span> <span class="n">backends</span><span class="o">.</span><span class="n">Backend</span><span class="p">,</span> <span class="n">numVariables</span> <span class="nb">int</span><span class="p">)</span> <span class="p">(</span><span class="n">coefficients</span><span class="p">,</span> <span class="n">bias</span> <span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="p">{</span>
-    <span class="n">e</span> <span class="o">:=</span> <span class="n">NewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">func</span><span class="p">(</span><span class="n">g</span> <span class="o">*</span><span class="n">Graph</span><span class="p">)</span> <span class="p">(</span><span class="n">coefficients</span><span class="p">,</span> <span class="n">bias</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">e</span> <span class="o">:=</span> <span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">func</span><span class="p">(</span><span class="n">g</span> <span class="o">*</span><span class="n">Graph</span><span class="p">)</span> <span class="p">(</span><span class="n">coefficients</span><span class="p">,</span> <span class="n">bias</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">{</span>
         <span class="n">rngState</span> <span class="o">:=</span> <span class="n">Const</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">RngState</span><span class="p">())</span>
         <span class="n">rngState</span><span class="p">,</span> <span class="n">coefficients</span> <span class="o">=</span> <span class="n">RandomNormal</span><span class="p">(</span><span class="n">rngState</span><span class="p">,</span> <span class="n">shapes</span><span class="o">.</span><span class="n">Make</span><span class="p">(</span><span class="n">dtypes</span><span class="o">.</span><span class="n">Float64</span><span class="p">,</span> <span class="n">numVariables</span><span class="p">))</span>
         <span class="n">coefficients</span> <span class="o">=</span> <span class="n">AddScalar</span><span class="p">(</span><span class="n">MulScalar</span><span class="p">(</span><span class="n">coefficients</span><span class="p">,</span> <span class="n">CoefficientSigma</span><span class="p">),</span> <span class="n">CoefficientMu</span><span class="p">)</span>
@@ -8432,8 +8571,7 @@ have been selected in Go directly using <code>math/random</code>, but just for f
         <span class="n">bias</span> <span class="o">=</span> <span class="n">AddScalar</span><span class="p">(</span><span class="n">MulScalar</span><span class="p">(</span><span class="n">bias</span><span class="p">,</span> <span class="n">BiasSigma</span><span class="p">),</span> <span class="n">BiasMu</span><span class="p">)</span>
         <span class="k">return</span>
     <span class="p">})</span>
-    <span class="n">results</span> <span class="o">:=</span> <span class="n">e</span><span class="o">.</span><span class="n">Call</span><span class="p">()</span>
-    <span class="n">coefficients</span><span class="p">,</span> <span class="n">bias</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">results</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">coefficients</span><span class="p">,</span> <span class="n">bias</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">MustExec2</span><span class="p">()</span>
     <span class="k">return</span>
 <span class="p">}</span>
 
@@ -8452,7 +8590,7 @@ have been selected in Go directly using <code>math/random</code>, but just for f
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Example of target: coefficients=[-3.4 -7.17 3.85], bias=-15.3
+<pre>Example of target: coefficients=[-1.03 6.14 3.05], bias=-18.1
 </pre>
 </div>
 </div>
@@ -8488,11 +8626,11 @@ selected coefficients plus some normal noise.</p>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [14]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [15]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="n">func</span> <span class="n">buildExamples</span><span class="p">(</span><span class="n">backend</span> <span class="n">backends</span><span class="o">.</span><span class="n">Backend</span><span class="p">,</span> <span class="n">coef</span><span class="p">,</span> <span class="n">bias</span> <span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">numExamples</span> <span class="nb">int</span><span class="p">,</span> <span class="n">noise</span> <span class="n">float64</span><span class="p">)</span> <span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">labels</span> <span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="p">{</span>
-    <span class="n">e</span> <span class="o">:=</span> <span class="n">NewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">func</span><span class="p">(</span><span class="n">coef</span><span class="p">,</span> <span class="n">bias</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">labels</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">e</span> <span class="o">:=</span> <span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">func</span><span class="p">(</span><span class="n">coef</span><span class="p">,</span> <span class="n">bias</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">labels</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">{</span>
         <span class="n">g</span> <span class="o">:=</span> <span class="n">coef</span><span class="o">.</span><span class="n">Graph</span><span class="p">()</span>
         <span class="n">numFeatures</span> <span class="o">:=</span> <span class="n">coef</span><span class="o">.</span><span class="n">Shape</span><span class="p">()</span><span class="o">.</span><span class="n">Dimensions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
@@ -8513,8 +8651,7 @@ selected coefficients plus some normal noise.</p>
         <span class="p">}</span>
         <span class="k">return</span>
     <span class="p">})</span>
-    <span class="n">examples</span> <span class="o">:=</span> <span class="n">e</span><span class="o">.</span><span class="n">Call</span><span class="p">(</span><span class="n">coef</span><span class="p">,</span> <span class="n">bias</span><span class="p">)</span>
-    <span class="n">inputs</span><span class="p">,</span> <span class="n">labels</span> <span class="o">=</span> <span class="n">examples</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">examples</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">inputs</span><span class="p">,</span> <span class="n">labels</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">MustExec2</span><span class="p">(</span><span class="n">coef</span><span class="p">,</span> <span class="n">bias</span><span class="p">)</span>
     <span class="k">return</span>
 <span class="p">}</span>
 
@@ -8542,13 +8679,13 @@ selected coefficients plus some normal noise.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[7.07 1.15 -3.4], bias=4.38
+<pre>Target: coefficients=[0.728 -6.22 8.15], bias=-24.2
 5 dataset examples:
-	x=[0.0184 1.35 -0.627]; label=[8.5]
-	x=[0.876 -1.57 0.0963]; label=[8.32]
-	x=[0.493 -0.332 0.89]; label=[3.87]
-	x=[-0.535 0.923 1.01]; label=[-2.15]
-	x=[0.701 0.357 0.696]; label=[7.72]
+	x=[1.73 0.207 0.162]; label=[-22.8]
+	x=[-1.17 0.725 0.0552]; label=[-29]
+	x=[0.617 1.31 0.898]; label=[-24.5]
+	x=[-0.214 -0.102 1.3]; label=[-13.1]
+	x=[1.16 0.758 0.545]; label=[-23.8]
 </pre>
 </div>
 </div>
@@ -8580,10 +8717,10 @@ to the model the field names to the Model throught the <code>spec</code>, for in
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [15]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [16]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="s2">"github.com/gomlx/gomlx/pkg/ml/train"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">"github.com/gomlx/gomlx/pkg/ml/train"</span>
 
 <span class="o">//</span> <span class="n">TrivialDataset</span> <span class="n">always</span> <span class="n">returns</span> <span class="n">the</span> <span class="n">whole</span> <span class="n">data</span><span class="o">.</span>
 <span class="nb">type</span> <span class="n">TrivialDataset</span> <span class="n">struct</span> <span class="p">{</span>
@@ -8642,7 +8779,7 @@ We could have used that instead of defining <code>TrivialDataset</code>, but we 
 datasets.</li>
 <li><code>ConstantDataset</code>: trivial Dataset that returns always empty inputs and labels. Used when one is going to generate
 the data dynamically -- it could also have been used for this example.
-See example in <a href="https://github.com/gomlx/gomlx/blob/main/examples/discretekan/kan_shapes.ipynb">KAN Shapes demo</a>.</li>
+See example in <a href="https://github.com/gomlx/gomlx/blob/main/examples/discretekan/kans_shapes.ipynb">KANs Shapes demo</a>.</li>
 <li>Downloading of datasets (with progress-bar) and checksum functions.</li>
 </ul>
 <h3 id="ModelFn">ModelFn<a class="anchor-link" href="#ModelFn">¶</a></h3><p>Next we build a model, that for our <code>train</code> package means implementing a function with the following signature:</p>
@@ -8661,10 +8798,10 @@ and during inference they can be returned directly.</p>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [16]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [17]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="s2">"github.com/gomlx/gomlx/pkg/ml/context"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">"github.com/gomlx/gomlx/pkg/ml/context"</span>
 
 <span class="n">func</span> <span class="n">modelGraph</span><span class="p">(</span><span class="n">ctx</span> <span class="o">*</span><span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span> <span class="n">spec</span> <span class="nb">any</span><span class="p">,</span> <span class="n">inputs</span> <span class="p">[]</span><span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">([]</span><span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">{</span>
     <span class="n">_</span> <span class="o">=</span> <span class="n">spec</span>  <span class="o">//</span> <span class="n">Not</span> <span class="n">needed</span> <span class="n">here</span><span class="p">,</span> <span class="n">we</span> <span class="n">know</span> <span class="n">the</span> <span class="n">dataset</span><span class="o">.</span>
@@ -8711,10 +8848,10 @@ or plotting of a graph.</p>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [17]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [18]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="p">(</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
     <span class="s2">"os"</span>
     <span class="s2">"github.com/gomlx/gomlx/ui/commandline"</span>
     <span class="s2">"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"</span>
@@ -8763,7 +8900,7 @@ or plotting of a graph.</p>
     <span class="n">metrics</span> <span class="o">:=</span> <span class="n">must</span><span class="o">.</span><span class="n">M1</span><span class="p">(</span><span class="n">loop</span><span class="o">.</span><span class="n">RunSteps</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNumSteps</span><span class="p">))</span>
     <span class="n">_</span> <span class="o">=</span> <span class="n">metrics</span>  <span class="o">//</span> <span class="n">We</span> <span class="n">are</span> <span class="ow">not</span> <span class="n">interested</span> <span class="ow">in</span> <span class="n">them</span> <span class="ow">in</span> <span class="n">this</span> <span class="n">example</span><span class="o">.</span>
 
-    <span class="o">//</span> <span class="n">Print</span> <span class="n">learned</span> <span class="n">coefficients</span> <span class="ow">and</span> <span class="n">bias</span> <span class="o">--</span> <span class="kn">from</span> <span class="nn">the</span> <span class="n">weights</span> <span class="ow">in</span> <span class="n">the</span> <span class="n">dense</span> <span class="n">layer</span><span class="o">.</span>
+    <span class="o">//</span> <span class="n">Print</span> <span class="n">learned</span> <span class="n">coefficients</span> <span class="ow">and</span> <span class="n">bias</span> <span class="o">--</span> <span class="kn">from</span><span class="w"> </span><span class="nn">the</span> <span class="n">weights</span> <span class="ow">in</span> <span class="n">the</span> <span class="n">dense</span> <span class="n">layer</span><span class="o">.</span>
     <span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">()</span>
     <span class="n">coefVar</span><span class="p">,</span> <span class="n">biasVar</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">GetVariableByScopeAndName</span><span class="p">(</span><span class="s2">"/dense"</span><span class="p">,</span> <span class="s2">"weights"</span><span class="p">),</span> <span class="n">ctx</span><span class="o">.</span><span class="n">GetVariableByScopeAndName</span><span class="p">(</span><span class="s2">"/dense"</span><span class="p">,</span> <span class="s2">"biases"</span><span class="p">)</span>
     <span class="n">learnedCoef</span><span class="p">,</span> <span class="n">learnedBias</span> <span class="o">:=</span> <span class="n">coefVar</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">biasVar</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span>
@@ -8784,12 +8921,12 @@ or plotting of a graph.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[-5.43 -1.65 -4.84], bias=6.74
+<pre>Target: coefficients=[-5.96 5.39 0.652], bias=13.7
 Training data (inputs, labels): ((Float64)[10000 3], (Float64)[10000 1])
 
-Training (100 steps):  100% [========================================] (4946 steps/s) [step=99] [loss+=0.144] [~loss+=5.162] [~loss=5.120]                       
+      <span class="ansi-bold"> 100% [========================================] (12516 steps/s)</span> [step=99] [loss+=0.225] [~loss+=13] [~loss=12.9]        ]         
 
-Learned: coefficients=[[-5.31] [-1.62] [-4.73]], bias=[6.59]
+Learned: coefficients=[[-5.83] [5.26] [0.649]], bias=[13.4]
 </pre>
 </div>
 </div>
@@ -8832,11 +8969,11 @@ the only metrics are the default ones, the batch and mean of the loss -- the mea
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [18]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [19]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="s2">"github.com/gomlx/gomlx/ui/gonb/plotly"</span>
-<span class="kn">import</span> <span class="s2">"os"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">"github.com/gomlx/gomlx/ui/gonb/plotly"</span>
+<span class="kn">import</span><span class="w"> </span><span class="s2">"os"</span>
 
 <span class="n">func</span> <span class="n">AttachToLoop</span><span class="p">(</span><span class="n">loop</span> <span class="o">*</span><span class="n">train</span><span class="o">.</span><span class="n">Loop</span><span class="p">)</span> <span class="p">{</span>
     <span class="n">commandline</span><span class="o">.</span><span class="n">AttachProgressBar</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span> <span class="o">//</span> <span class="n">Attaches</span> <span class="n">a</span> <span class="n">progress</span> <span class="n">bar</span> <span class="n">to</span> <span class="n">the</span> <span class="n">loop</span><span class="o">.</span> 
@@ -8857,7 +8994,7 @@ the only metrics are the default ones, the batch and mean of the loss -- the mea
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[-1.74 3.39 1.23], bias=3.83
+<pre>Target: coefficients=[-10.3 3.62 3.39], bias=10.3
 Training data (inputs, labels): ((Float64)[10000 3], (Float64)[10000 1])
 
 </pre>
@@ -8871,7 +9008,7 @@ Training data (inputs, labels): ((Float64)[10000 3], (Float64)[10000 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Training (5000 steps):    3% [&gt;.......................................] (5847 steps/s) [0s:0s] [step=164] [loss+=0.058] [~loss+=0.864] [~loss=0.851]           </pre>
+<pre>      <span class="ansi-bold">   3% [&gt;.......................................] (16238 steps/s) [0s:0s]</span> [step=164] [loss+=0.182] [~loss+=6.15] [~loss=6.04]        </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8882,7 +9019,7 @@ Training data (inputs, labels): ((Float64)[10000 3], (Float64)[10000 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Training (5000 steps):  100% [========================================] (7731 steps/s) [step=4999] [loss+=0.056] [~loss+=0.056] [~loss=0.040]                
+<pre>      <span class="ansi-bold"> 100% [========================================] (14194 steps/s)</span> [step=4999] [loss+=0.172] [~loss+=0.172] [~loss=0.0414]                
 </pre>
 </div>
 </div>
@@ -8895,7 +9032,15 @@ Training data (inputs, labels): ((Float64)[10000 3], (Float64)[10000 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="c009bce7"></div>
+<div id="0613c8a6"></div>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>
+Learned: coefficients=[[-10.3] [3.62] [3.38]], bias=[10.3]
+</pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8903,14 +9048,14 @@ Training data (inputs, labels): ((Float64)[10000 3], (Float64)[10000 1])
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
 <script charset="UTF-8">
 (() => {
-	const src="https://cdn.plot.ly/plotly-2.29.1.min.js";
+	const src="https://cdn.plot.ly/plotly-2.34.0.min.js";
 	var runJSFn = function(module) {
 		
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[50,105,166,233,307,388,477,575,683,802,933,1077,1235,1409,1600,1810,2041,2295,2574,2881,3219,3591,4000,4450,4945,5000],"y":[0.20895878106969332,0.06811382585215044,0.057801127149099116,0.05661154728024009,0.056439977955424964,0.05641246253029679,0.05640771161093451,0.05640686339693764,0.05640671080191187,0.05640668361750642,0.05640667887964526,0.05640667807870456,0.05640667794817435,0.056406677927718626,0.05640667792468548,0.05640667792425935,0.05640667792420318,0.05640667792419629,0.0564066779241955,0.05640667792419542,0.05640667792419542,0.05640667792419541,0.05640667792419541,0.05640667792419541,0.05640667792419542,0.0564066779241954]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[50,105,166,233,307,388,477,575,683,802,933,1077,1235,1409,1600,1810,2041,2295,2574,2881,3219,3591,4000,4450,4945,5000],"y":[3.04046758972866,1.514965165550895,0.8483762316711083,0.4605627128574725,0.2485611910743032,0.1415479309550457,0.09121554377243252,0.06940680954538224,0.060797578694555675,0.057734514736091216,0.0567626017978059,0.056490397404634525,0.05642378549575442,0.05640965447424207,0.05640711447651813,0.056406730820851715,0.0564066831141016,0.05640667832830659,0.05640667794867058,0.05640667792531434,0.056406677924232665,0.056406677924196,0.05640667792419536,0.05640667792419536,0.05640667792419536,0.05640667792419536]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[50,105,166,233,307,388,477,575,683,802,933,1077,1235,1409,1600,1810,2041,2295,2574,2881,3219,3591,4000,4450,4945,5000],"y":[3.030542069930682,1.5025077420203579,0.8344778455892791,0.4457239556140513,0.2331696006551615,0.12586150175060995,0.07538370735353377,0.05350901053420014,0.04487242646655728,0.04179904835818538,0.04082360753699584,0.040550305125469935,0.04048337814095688,0.040469161106301346,0.040466597960316215,0.04046620781856825,0.040466158182070645,0.040466152797027984,0.040466152229497065,0.04046615214806689,0.04046615212960663,0.0404661521245809,0.04046615212321292,0.0404661521228561,0.04046615212276785,0.040466152122764054]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('c009bce7', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[1.2742347340350595,0.25540553083712525,0.18161262041346496,0.17315265653092768,0.17193625371864366,0.17174128673619304,0.17170756497179746,0.17170152029789532,0.17170042592519627,0.1717002292322393,0.17170019455351956,0.17170018860579295,0.17170018761932215,0.17170018746146307,0.17170018743747315,0.1717001874340053,0.171700187433533,0.17170018743347276,0.17170018743346563,0.17170018743346485,0.17170018743346474,0.17170018743346474,0.17170018743346477,0.17170018743346477,0.17170018743346477,0.17170018743346477]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[22.270259530545527,10.967771993655955,6.033250945824556,3.1628735385064317,1.5938292022590366,0.8018253817045112,0.4293180723139131,0.2679131521509437,0.20419689400562316,0.18152740086260807,0.17433435137614628,0.1723197886005523,0.17182679921127864,0.17172221664679183,0.1717034183235775,0.1717005789176608,0.17170022584359193,0.17170019042426612,0.17170018761460298,0.17170018744174517,0.17170018743374255,0.17170018743347204,0.17170018743346682,0.17170018743346682,0.17170018743346682,0.17170018743346682]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[22.18833742330724,10.865563788492464,5.919458710115562,3.041502793715651,1.4679933490319985,0.6736030610502256,0.29991610911280686,0.1379746354254266,0.07403514072491024,0.05128109360262994,0.044058935807736455,0.0420352240037681,0.04153956872488948,0.04143424107315943,0.04141523550775433,0.041412335721307404,0.04141196397998514,0.04141192256411565,0.04141191781597074,0.04141191702586067,0.041411916827349134,0.041411916770560636,0.04141191675451212,0.04141191675016344,0.041411916749043376,0.04141191674899381]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('0613c8a6', data);
 
 	}
 	
@@ -8948,14 +9093,6 @@ Training data (inputs, labels): ((Float64)[10000 3], (Float64)[10000 1])
 </script>
 </div>
 </div>
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>
-Learned: coefficients=[[-1.73] [3.38] [1.23]], bias=[3.83]
-</pre>
-</div>
-</div>
 </div>
 </div>
 </div>
@@ -8989,20 +9126,20 @@ For machine learning, we highly recommend diving into the <code>context.Context<
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h2 id="Debugging">Debugging<a class="anchor-link" href="#Debugging">¶</a></h2><p>Unfortunately, the computers just "don't get it": they do exactly what we tell them to do,
 as opposed to what we want them to do, and thus programs fail or crash.
-GoMLX provides different ways to track down various types of errors. The most commonly used below:</p>
+And AIs sometimes "get it", but still write wrong programs.</p>
+<p>GoMLX provides different ways to track down various types of errors. The most commonly used below:</p>
 <h3 id="Good-old-%22printf%22">Good old "printf"<a class="anchor-link" href="#Good-old-%22printf%22">¶</a></h3><p>It's convenient because of Go fast compilation (change something and run to see what one gets is
 almost instant). Logging results to stdout is a valid way of developing. During graph building development,
 often one prints the shape of the <code>Node</code> being operated to confirm (or not) one's expectations.</p>
-<h3 id="Errors-reported-with-panic----Go-%22exceptions%22.">Errors reported with <code>panic</code> -- Go "exceptions".<a class="anchor-link" href="#Errors-reported-with-panic----Go-%22exceptions%22.">¶</a></h3><p>Errors during the building of the graph are reported back with <code>panic</code>. These can be caught in Go with <code>recover</code>,
-but <strong>GoMLX</strong> offers the <code>exceptions</code> library to make it easy.
-All libraries always <code>panic</code> helpful error messages -- they can be printed with <code>"%+v"</code> to get
-full stack-trace output.</p>
+<h3 id="Errors-in-GoMLX-have-stacktrace">Errors in <strong>GoMLX</strong> have stacktrace<a class="anchor-link" href="#Errors-in-GoMLX-have-stacktrace">¶</a></h3><p>Errors during the building of the graph are reported back with <code>panic</code>.
+The <code>graph.Exec</code> or <code>context.Exec</code> recover and convert them to errors for you.</p>
+<p>These errors include a stack-trace the tells you exactly where things happened. The stack-grace can be printed with <code>"%+v"</code> format string.</p>
 <h3 id="Node-Shape-Asserts">Node Shape Asserts<a class="anchor-link" href="#Node-Shape-Asserts">¶</a></h3><p>During the writing of complex models, it's very common to add comments on the expected shapes of the graph nodes, to
 facilitate the reader (and developer) of the code to have the right mental model of what is going on.</p>
 <p>GoMLX provides a series of <em>assert</em> methods that can be used instead. They serve both as documentation, and an early
 exit in case of some unexpected results.</p>
 <p>For example, a <code>modelGraph</code> function could contain:</p>
-<div class="highlight"><pre><span></span><span class="nx">batch_size</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">Shape</span><span class="p">().</span><span class="nx">Dimensions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<div class="highlight"><pre><span></span><span class="w">    </span><span class="nx">batch_size</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">Shape</span><span class="p">().</span><span class="nx">Dimensions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 <span class="w">    </span><span class="o">...</span>
 <span class="w">    </span><span class="nx">layer</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">Concatenate</span><span class="p">(</span><span class="nx">allEmbeddings</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
 <span class="w">    </span><span class="nx">layer</span><span class="p">.</span><span class="nx">AssertDims</span><span class="p">(</span><span class="nx">batchSize</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="w">  </span><span class="c1">// 2D tensor, with batch size as the leading dimension.</span>
@@ -9015,8 +9152,8 @@ interest. Creating a specialized loggers that handle arbitrary nodes is trivial.
 <h3 id="Catching-NaN-and-Inf-in-your-training">Catching <code>NaN</code> and <code>Inf</code> in your training<a class="anchor-link" href="#Catching-NaN-and-Inf-in-your-training">¶</a></h3><p>This is a common source of headaches when training complex models.
 The package <code>nanlogger</code> implements a specialized logger and monitor results on arbitrary nodes in the graph,
 and will <code>panic</code> with custom messages (and a stack-trace) a the first sight of a <code>NaN</code> (or <code>±Inf</code>).</p>
-<h3 id="More-Debugging">More Debugging<a class="anchor-link" href="#More-Debugging">¶</a></h3><p>Tests and these methods have been enough to develop most of GoMLX so far. But there are other
-debugging tools that could be made, see discussion in the <a href="https://github.com/gomlx/gomlx/blob/main/docs/debugging.md">Debugging</a> document. Let us know if you need something specialized.</p>
+<h3 id="More-Debugging">More Debugging<a class="anchor-link" href="#More-Debugging">¶</a></h3><p>Tests and these methods have been enough to develop most of GoMLX so far.
+But there are other debugging tools that could be made, see discussion in the <a href="https://github.com/gomlx/gomlx/blob/main/docs/debugging.md">Debugging</a> document. Let us know if you need something specialized.</p>
 <hr/>
 <p>Happy coding and <a href="https://arxiv.org/abs/1803.03635">good luck</a> on modeling!!</p>
 </div>
