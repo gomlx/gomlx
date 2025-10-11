@@ -331,7 +331,7 @@ func (win *window) OnEnd(loop *train.Loop, metrics []*tensors.Tensor) error {
 // - name: is used for the window name.
 //
 // When the loop ends, the GUI is kept alive, until the user closes it.
-// Call WaitForGUIs() to wait for all GUI apps to be closed by the user.
+// MustExec WaitForGUIs() to wait for all GUI apps to be closed by the user.
 //
 // It is a no-op if the GUI was already created.
 func AttachGUI(loop *train.Loop, name string) {

@@ -383,7 +383,7 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 	return
 }
 
-// callGraphFn for TrainStep or EvalStep makes sure the builds the arguments for the Call() method, plus
+// callGraphFn for TrainStep or EvalStep makes sure the builds the arguments for the MustExec() method, plus
 // do standard checks on inputs and labels.
 func (r *Trainer) callGraphFn(
 	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node),
@@ -404,7 +404,7 @@ func (r *Trainer) callGraphFn(
 		}
 	}
 
-	// Create arguments as []any and run trainStepExecMap.Call().
+	// Create arguments as []any and run trainStepExecMap.MustExec().
 	numParams := len(inputs) + len(labels)
 	inputsAndLabels := make([]any, 0, numParams)
 	for _, t := range inputs {
@@ -420,11 +420,11 @@ func (r *Trainer) callGraphFn(
 		exec = r.createExecutor(spec, len(inputs), len(labels), graphFn)
 		execMap[spec] = exec
 		for _, handler := range r.onExecCreationHandlers {
-			handler(exec, graphType) // Call handler for training.
+			handler(exec, graphType) // MustExec handler for training.
 		}
 	}
 
-	// Exec.Call(), collect metrics:
+	// Exec.MustExec(), collect metrics:
 	err := TryCatch[error](func() { metrics = exec.Call(inputsAndLabels...) })
 
 	if err != nil {

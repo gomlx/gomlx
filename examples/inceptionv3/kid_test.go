@@ -51,7 +51,7 @@ func noisyImages(t *testing.T, manager backends.Backend, batch *tensors.Tensor) 
 			return noisyBatch
 		})
 	})
-	return noisyImagesExec.Call(batch)[0]
+	return noisyImagesExec.MustExec(batch)[0]
 }
 
 func TestKidMetric(t *testing.T) {

@@ -62,7 +62,7 @@ func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args 
 // It's short for a call to MustNewExec, Exec.Exec and Exec.Finalize for functions that return only one output.
 //
 // See ExecOnce for a more convenient version if you have only one output.
-// Also, see CallOnceN or CallOnce if you want it to panic on error.
+// Also, see MustExecOnceN or MustExecOnce if you want it to panic on error.
 func ExecOnceN[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args ...any) ([]*tensors.Tensor, error) {
 	e := MustNewExec(backend, graphFn)
 	defer e.Finalize()
@@ -73,31 +73,31 @@ func ExecOnceN[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args
 	return results, nil
 }
 
-// CallOnce builds the graph and executes it with the given arguments and returns the one output.
+// MustExecOnce builds the graph and executes it with the given arguments and returns the one output.
 //
-// It's short for a call to MustNewExec, Exec.Call and Exec.Finalize for functions that return only one output.
+// It's short for a call to MustNewExec, Exec.MustExec and Exec.Finalize for functions that return only one output.
 // It panics on error.
 //
-// See CallOnceN if you have multiple outputs.
+// See MustExecOnceN if you have multiple outputs.
 // Also, see ExecOnceN or ExecOnce if you want any errors returned.
-func CallOnce[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args ...any) *tensors.Tensor {
-	return CallOnceN(backend, graphFn, args...)[0]
+func MustExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args ...any) *tensors.Tensor {
+	return MustExecOnceN(backend, graphFn, args...)[0]
 }
 
-// CallOnceN builds the graph and executes it with the given arguments, and returns various outputs.
+// MustExecOnceN builds the graph and executes it with the given arguments, and returns various outputs.
 //
-// It's short for a call to MustNewExec, Exec.Call and Exec.Finalize.
+// It's short for a call to MustNewExec, Exec.MustExec and Exec.Finalize.
 // It panics on error.
 //
-// See CallOnce for a more convenient version if you have only one output.
+// See MustExecOnce for a more convenient version if you have only one output.
 // Also, see ExecOnceN or ExecOnce if you want any errors returned.
-func CallOnceN[F ExecGraphFn](backend backends.Backend, graphFn F, args ...any) []*tensors.Tensor {
+func MustExecOnceN[F ExecGraphFn](backend backends.Backend, graphFn F, args ...any) []*tensors.Tensor {
 	e := MustNewExec(backend, graphFn)
 	defer e.Finalize()
-	return e.Call(args...)
+	return e.MustExec(args...)
 }
 
-// Call executes the computation with the given arguments.
+// MustExec executes the computation with the given arguments.
 //
 // It the input arguments shape has never been seen before, it JIT-compiles a new computation graph for that shape,
 // which can take a while, but is cached and later executions are very fast.
@@ -111,19 +111,12 @@ func CallOnceN[F ExecGraphFn](backend backends.Backend, graphFn F, args ...any) 
 // aliases that return some exact number of outputs.
 //
 // It panics on errors (with full stack-traces).
-func (e *Exec) Call(args ...any) []*tensors.Tensor {
-	results, _ := e.CallWithGraph(args...)
+func (e *Exec) MustExec(args ...any) []*tensors.Tensor {
+	results, _ := e.MustExecWithGraph(args...)
 	return results
 }
 
-// CallOrError is a deprecated alias to Exec.
-//
-// Deprecated: Use Exec instead.
-func (e *Exec) CallOrError(args ...any) (results []*tensors.Tensor, err error) {
-	return e.Exec(args...)
-}
-
-// CallWithGraph is similar to Call, but it also returns the computation graph used
+// MustExecWithGraph is similar to MustExec, but it also returns the computation graph used
 // in the call.
 //
 // The underlying Exec creates different computation graphs when the inputs' shapes change,
@@ -132,7 +125,7 @@ func (e *Exec) CallOrError(args ...any) (results []*tensors.Tensor, err error) {
 // It returns the outputs in a slice, even if there is only one output. It also returns the computation graph used.
 //
 // It panics on errors (with full stack-traces).
-func (e *Exec) CallWithGraph(args ...any) (results []*tensors.Tensor, g *Graph) {
+func (e *Exec) MustExecWithGraph(args ...any) (results []*tensors.Tensor, g *Graph) {
 	return e.compileAndExecute(true, args...)
 }
 
@@ -200,54 +193,54 @@ func (e *Exec) Exec4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Te
 	return results[0], results[1], results[2], results[3], nil
 }
 
-// Call1 executes the graph with the given arguments and returns one output.
+// MustExec1 executes the graph with the given arguments and returns one output.
 //
 // It panics on errors (with full stack-traces) or if the graph doesn't return exactly one output.
 //
-// See Call for more details.
-func (e *Exec) Call1(args ...any) *tensors.Tensor {
-	results := e.Call(args...)
+// See MustExec for more details.
+func (e *Exec) MustExec1(args ...any) *tensors.Tensor {
+	results := e.MustExec(args...)
 	if len(results) != 1 {
-		exceptions.Panicf("graph %q returned %d results, as opposed to exactly one as expected by Call1", e.Name(), len(results))
+		exceptions.Panicf("graph %q returned %d results, as opposed to exactly one as expected by MustExec1", e.Name(), len(results))
 	}
 	return results[0]
 }
 
-// Call2 executes the graph with the given arguments and returns two outputs.
+// MustExec2 executes the graph with the given arguments and returns two outputs.
 //
 // It panics on errors (with full stack-traces) or if the graph doesn't return exactly two outputs.
 //
-// See Call for more details.
-func (e *Exec) Call2(args ...any) (*tensors.Tensor, *tensors.Tensor) {
-	results := e.Call(args...)
+// See MustExec for more details.
+func (e *Exec) MustExec2(args ...any) (*tensors.Tensor, *tensors.Tensor) {
+	results := e.MustExec(args...)
 	if len(results) != 2 {
-		exceptions.Panicf("graph %q returned %d results, as opposed to exactly two as expected by Call2", e.Name(), len(results))
+		exceptions.Panicf("graph %q returned %d results, as opposed to exactly two as expected by MustExec2", e.Name(), len(results))
 	}
 	return results[0], results[1]
 }
 
-// Call3 executes the graph with the given arguments and returns three outputs.
+// MustExec3 executes the graph with the given arguments and returns three outputs.
 //
 // It panics on errors (with full stack-traces) or if the graph doesn't return exactly three outputs.
 //
-// See Call for more details.
-func (e *Exec) Call3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
-	results := e.Call(args...)
+// See MustExec for more details.
+func (e *Exec) MustExec3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
+	results := e.MustExec(args...)
 	if len(results) != 3 {
-		exceptions.Panicf("graph %q returned %d results, as opposed to exactly three as expected by Call3", e.Name(), len(results))
+		exceptions.Panicf("graph %q returned %d results, as opposed to exactly three as expected by MustExec3", e.Name(), len(results))
 	}
 	return results[0], results[1], results[2]
 }
 
-// Call4 executes the graph with the given arguments and returns four outputs.
+// MustExec4 executes the graph with the given arguments and returns four outputs.
 //
 // It panics on errors (with full stack-traces) or if the graph doesn't return exactly four outputs.
 //
-// See Call for more details.
-func (e *Exec) Call4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
-	results := e.Call(args...)
+// See MustExec for more details.
+func (e *Exec) MustExec4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
+	results := e.MustExec(args...)
 	if len(results) != 4 {
-		exceptions.Panicf("graph %q returned %d results, as opposed to exactly four as expected by Call4", e.Name(), len(results))
+		exceptions.Panicf("graph %q returned %d results, as opposed to exactly four as expected by MustExec4", e.Name(), len(results))
 	}
 	return results[0], results[1], results[2], results[3]
 }

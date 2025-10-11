@@ -35,7 +35,7 @@ var (
 
 // NewSampler will create a [sampler.Sampler] and configure it with the OGBN-MAG graph definition.
 //
-// Usually, one will want to use the [NewSamplerStrategy] instead, which will calls this. Call this instead if
+// Usually, one will want to use the [NewSamplerStrategy] instead, which will calls this. MustExec this instead if
 // crafting a custom sampling strategy.
 //
 // `baseDir` is used to store a cached sampler called `sampler.bin` for faster startup.

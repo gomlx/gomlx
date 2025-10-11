@@ -41,7 +41,7 @@ var (
 // (see ParamDropBlockProbability and ParamDropBlockSize). But they can be optionally configured as well.
 //
 // It returns a configuration object, that can be further configured.
-// Call Done when finished configuring and it will return the regularized value.
+// MustExec Done when finished configuring and it will return the regularized value.
 //
 // [1] "DropBlock: A regularization method for convolutional networks", Golnaz Ghiasi, Tsung{-}Yi Lin and Quoc V. Le, https://arxiv.org/abs/1810.12890v1
 func DropBlock(ctx *context.Context, x *Node) *DropBlockConfig {

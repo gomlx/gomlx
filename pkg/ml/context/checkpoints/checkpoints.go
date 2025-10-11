@@ -756,7 +756,7 @@ func (h *Handler) loadCheckpoint(jsonReader, binReader io.Reader, merge bool, me
 			}
 			var results []*tensors.Tensor
 			err := TryCatch[error](func() {
-				results = h.mergeExec.Call(current, tensor, shapes.CastAsDType(mergeWeight, varInfo.DType))
+				results = h.mergeExec.MustExec(current, tensor, shapes.CastAsDType(mergeWeight, varInfo.DType))
 			})
 			if err != nil {
 				panic(errors.WithMessagef(err, "when taking the mean of variable %q", varInfo.ParameterName))

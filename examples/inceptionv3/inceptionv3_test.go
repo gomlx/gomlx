@@ -78,7 +78,7 @@ func TestBuildGraph(t *testing.T) {
 		max, mean = ReduceAllMax(diff), ReduceAllMean(diff)
 		return
 	})
-	results := diffStats.Call(wantT, predictionT)
+	results := diffStats.MustExec(wantT, predictionT)
 	fmt.Printf("\tPredictions difference to previous truth: max=%f, mean=%f\n",
 		results[0].Value(), results[1].Value())
 

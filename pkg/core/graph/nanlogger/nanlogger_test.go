@@ -53,23 +53,23 @@ func TestNanLogger(t *testing.T) {
 	l.AttachToExec(e)
 
 	// Checks that without any NaN, nothing happens.
-	require.NotPanics(t, func() { e.Call([]float32{1.0, 3.0}) })
+	require.NotPanics(t, func() { e.MustExec([]float32{1.0, 3.0}) })
 	assert.Equal(t, 0, numHandlerCalls)
 
 	// Check that NaN is observed, with the correct scope.
-	require.NotPanics(t, func() { e.Call([]float32{-1.0, 1.0}) })
+	require.NotPanics(t, func() { e.MustExec([]float32{-1.0, 1.0}) })
 	require.Equal(t, 1, numHandlerCalls)
 	require.Equal(t, []string{"scope1"}, lastHandledScope)
 
 	// Check now that Inf is observed, with the correct scope.
 	// Notice we are also using float32, so it should just work.
-	require.NotPanics(t, func() { e.Call([]float32{0.0, 1.0}) })
+	require.NotPanics(t, func() { e.MustExec([]float32{0.0, 1.0}) })
 	require.Equal(t, 2, numHandlerCalls)
 	require.Equal(t, []string{"base", "scope2"}, lastHandledScope)
 
 	// Check that the NaN happens before the Inf, and should be the one
 	// reported.
-	require.NotPanics(t, func() { e.Call([]float32{0.0, -1.0}) })
+	require.NotPanics(t, func() { e.MustExec([]float32{0.0, -1.0}) })
 	require.Equal(t, 3, numHandlerCalls)
 	require.Equal(t, []string{"scope1"}, lastHandledScope)
 }

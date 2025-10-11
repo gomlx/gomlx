@@ -371,7 +371,7 @@ func (c *Config) GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predicte
 		_, noise := RandomNormal(state, shapes.Make(c.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise
-	}).Call()[0]
+	}).MustExec()[0]
 	flowerIds := tensors.FromValue(xslices.Iota(int32(0), numImages))
 	generator := c.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
 	return generator.Generate()
@@ -446,7 +446,7 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tens
 		if (n > 0 && step%n == 0) || step == g.numDiffusionSteps-1 {
 			diffusionSteps = append(diffusionSteps, step)
 			diffusionTimes = append(diffusionTimes, nextDiffusionTime)
-			predictedImages = append(predictedImages, g.denormalizerExec.Call(imagesBatch)[0])
+			predictedImages = append(predictedImages, g.denormalizerExec.MustExec(imagesBatch)[0])
 		}
 	}
 	return
@@ -467,7 +467,7 @@ func (c *Config) GenerateNoise(numImages int) *tensors.Tensor {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(c.DType, numImages, c.ImageSize, c.ImageSize, 3))
 		return noise
-	}).Call()[0]
+	}).MustExec()[0]
 }
 
 // GenerateFlowerIds generates random flower ids: this is the type of flowers, one of the 102.

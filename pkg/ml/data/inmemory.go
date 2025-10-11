@@ -326,7 +326,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 				end := min(start+MaxExamplesToConcat, len(allExamples))
 				examplesSlice := allExamples[start:end]
 				examplesAsAny := xslices.Map(examplesSlice, convertToAny)
-				err = TryCatch[error](func() { newAllExamples[jj] = concatenateExec.Call(examplesAsAny...)[0] })
+				err = TryCatch[error](func() { newAllExamples[jj] = concatenateExec.MustExec(examplesAsAny...)[0] })
 				if err != nil {
 					err = errors.WithMessagef(err, "while concatenating %s examples into large tensor", getElementDesc(inputsAndLabelsIdx))
 					return

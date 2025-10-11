@@ -305,7 +305,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 		}
 		t.Run(testName, func(t *testing.T) {
 			// Larger example, with multiple axes.
-			y0 := graph.CallOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+			y0 := graph.MustExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 				return graph.DotGeneral(lhs, []int{1}, []int{3, 0}, rhs, []int{1}, []int{0, 2})
 			},
 				tensors.FromFlatDataAndDimensions(xslices.Iota(float32(1), 2*3*1*5), 2, 3, 1, 5),
@@ -332,7 +332,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 			require.Equal(t, want, y0.Value())
 
 			// Axis transposition example:
-			y1 := graph.CallOnce(backend, func(g *graph.Graph) *graph.Node {
+			y1 := graph.MustExecOnce(backend, func(g *graph.Graph) *graph.Node {
 				lhs := graph.MulScalar(graph.OnePlus(graph.IotaFull(g, shapes.Make(F32, 2, 1, 3))), 1)
 				rhs := graph.Ones(g, shapes.Make(F32, 1, 3, 2))
 				return graph.DotGeneral(lhs, []int{1}, []int{2, 0}, rhs, []int{0}, []int{1, 2})
@@ -343,7 +343,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 			require.Equal(t, want1, y1.Value())
 
 			// A very large example: expected value computed using XLA.
-			y3 := graph.CallOnce(backend, func(g *graph.Graph) *graph.Node {
+			y3 := graph.MustExecOnce(backend, func(g *graph.Graph) *graph.Node {
 				lhs := graph.MulScalar(graph.OnePlus(graph.IotaFull(g, shapes.Make(dtypes.F64, 16, 13, 384))), 1e-5)
 				rhs := graph.Ones(g, shapes.Make(dtypes.F64, 384, 1536))
 				out := graph.DotGeneral(
@@ -357,7 +357,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 			// BFloat16 example.
 			t.Run("BFloat16", func(t *testing.T) {
 				bf16 := bfloat16.FromFloat32
-				y2 := graph.CallOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+				y2 := graph.MustExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 					return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
 				},
 					[][]bfloat16.BFloat16{{bf16(1), bf16(2), bf16(3)}},
@@ -387,7 +387,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 				exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
 					return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
 				})
-				got := exec.Call(lhs, rhs)[0]
+				got := exec.MustExec(lhs, rhs)[0]
 				requireSameTensorsFloat32(t, want, got, 1e-3)
 				fmt.Printf("\tgot=%s\n", got.Shape())
 				fmt.Printf("\twant=%s\n", want.Shape())
@@ -401,7 +401,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 						defer wg.Done()
 						const numRepeats = 1000
 						for range numRepeats {
-							got := exec.Call(lhs, rhs)[0]
+							got := exec.MustExec(lhs, rhs)[0]
 							numCalls.Add(1)
 							requireSameTensorsFloat32(t, want, got, 1e-3)
 						}
@@ -419,7 +419,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 				want, err := tensors.Load("dotgeneral_out_2_test.bin")
 				require.NoError(t, err)
 				fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
-				got := graph.CallOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+				got := graph.MustExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 					return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
 				}, lhs, rhs)
 				fmt.Printf("\tgot=%s\n", got.Shape())
@@ -434,7 +434,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 				want, err := tensors.Load("dotgeneral_out_2_test.bin")
 				require.NoError(t, err)
 				fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
-				got := graph.CallOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+				got := graph.MustExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 					lhs = graph.ConvertDType(lhs, dtypes.BFloat16)
 					rhs = graph.ConvertDType(rhs, dtypes.BFloat16)
 					output := graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
@@ -454,15 +454,15 @@ func TestDotGeneral_Dot(t *testing.T) {
 		return graph.Dot(lhs, rhs)
 	})
 
-	y0 := exec.Call([]float32{1, 2, 3}, []float32{10, 11, 12})[0]
+	y0 := exec.MustExec([]float32{1, 2, 3}, []float32{10, 11, 12})[0]
 	fmt.Printf("\ty0=%s\n", y0.GoStr())
 	assert.Equal(t, float32(10+22+36), y0.Value())
 
-	y1 := exec.Call([][]float32{{1, 2, 3}, {2, 4, 6}}, []float32{10, 11, 12})[0]
+	y1 := exec.MustExec([][]float32{{1, 2, 3}, {2, 4, 6}}, []float32{10, 11, 12})[0]
 	fmt.Printf("\ty1=%s\n", y1.GoStr())
 	assert.Equal(t, []float32{10 + 22 + 36, 20 + 44 + 72}, y1.Value())
 
-	y2 := exec.Call([][]float32{{1, 2, 3}, {2, 4, 6}}, [][]float32{{10}, {11}, {12}})[0]
+	y2 := exec.MustExec([][]float32{{1, 2, 3}, {2, 4, 6}}, [][]float32{{10}, {11}, {12}})[0]
 	fmt.Printf("\ty2=%s\n", y2.GoStr())
 	assert.Equal(t, [][]float32{{10 + 22 + 36}, {20 + 44 + 72}}, y2.Value())
 }

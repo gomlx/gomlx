@@ -296,7 +296,7 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensor
 	if !found {
 		klog.Warningf("NanLogger (%q) received traced node for unknown Graph %d (%q)!?", l.uniqueMessageID, g.GraphId(), g.Name())
 		if l.prevLoggerFn != nil {
-			// Call previous logger on remaining messages.
+			// MustExec previous logger on remaining messages.
 			l.prevLoggerFn(g, messages, values, nodes)
 		}
 	}
@@ -329,7 +329,7 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensor
 					firstTrace = trace
 				}
 			} else {
-				// Call handler on the traced node.
+				// MustExec handler on the traced node.
 				l.handler(trace)
 			}
 		}
@@ -345,7 +345,7 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensor
 
 	// Report other values first, since they may help debug.
 	if l.prevLoggerFn != nil && len(messages) > 0 {
-		// Call previous logger on remaining messages.
+		// MustExec previous logger on remaining messages.
 		l.prevLoggerFn(g, messages, values, nodes)
 	}
 	return

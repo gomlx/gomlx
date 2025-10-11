@@ -217,14 +217,14 @@ func BenchmarkScatter(b *testing.B) {
 					_, state = RandomNormal(rngState, shapes.Make(dtype, NumEntries, EmbeddingSize))
 					_, value = RandomNormal(rngState, shapes.Make(dtype, BatchSize, EmbeddingSize))
 					return
-				}).Call(rngStateT)
+				}).MustExec(rngStateT)
 				stateT, valuesT := results[0], results[1]
 
 				// Precompile graph for given inputNodes. It also makes sure the inputNodes are transferred to the accelerator.
-				scatterExec.Call(stateT, indicesT, valuesT)[0].FinalizeAll()
+				scatterExec.MustExec(stateT, indicesT, valuesT)[0].FinalizeAll()
 				b.Run(fmt.Sprintf("sorted-%v_unique-%v_dtype-%s", sorted, unique, dtype), func(b *testing.B) {
 					for range b.N {
-						results := scatterExec.Call(stateT, indicesT, valuesT)
+						results := scatterExec.MustExec(stateT, indicesT, valuesT)
 						stateT.FinalizeAll()
 						stateT = results[0]
 					}
@@ -255,7 +255,7 @@ func TestScatterSumGradient(t *testing.T) {
 	operand := []float32{0, 0, 0, 0, -1}
 	updates := []float32{1, 3, 5, 7, 11, 13}
 	indices := []int32{0, 0, 0, 1, 1, 3}
-	outputs := CallOnceN(backend, func(inputs []*Node) []*Node {
+	outputs := MustExecOnceN(backend, func(inputs []*Node) []*Node {
 		operand, indices, updates := inputs[0], inputs[1], inputs[2]
 		indices = ExpandAxes(indices, -1)
 		g := operand.Graph()
@@ -304,7 +304,7 @@ func TestScatterMaxGradient(t *testing.T) {
 	operand := []float32{negInf, negInf, negInf, negInf, -1}
 	updates := []float32{1, 3, 5, 7, 11, 13}
 	indices := []int32{0, 0, 0, 1, 1, 3}
-	outputs := CallOnceN(backend, func(inputs []*Node) []*Node {
+	outputs := MustExecOnceN(backend, func(inputs []*Node) []*Node {
 		operand, indices, updates := inputs[0], inputs[1], inputs[2]
 		indices = ExpandAxes(indices, -1)
 		g := operand.Graph()
@@ -353,7 +353,7 @@ func TestScatterMinGradient(t *testing.T) {
 	operand := []float32{posInf, posInf, posInf, posInf, 100}
 	updates := []float32{1, 3, 5, 7, 11, 13}
 	indices := []int32{0, 0, 0, 1, 1, 3}
-	outputs := CallOnceN(backend, func(inputs []*Node) []*Node {
+	outputs := MustExecOnceN(backend, func(inputs []*Node) []*Node {
 		operand, indices, updates := inputs[0], inputs[1], inputs[2]
 		indices = ExpandAxes(indices, -1)
 		g := operand.Graph()

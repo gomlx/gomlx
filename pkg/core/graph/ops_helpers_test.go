@@ -200,7 +200,7 @@ func TestGradDotGeneralBatchContracting(t *testing.T) {
 
 			exec := MustNewExec(backend, testFn)
 			fmt.Printf("Executing GradDotGeneralBatchContracting:\n")
-			parts := exec.Call()
+			parts := exec.MustExec()
 			for ii, name := range []string{"lhs", "rhs", "dot", "grad_lhs", "grad_rhs"} {
 				fmt.Printf("\t%s: %s\n", name, parts[ii].GoStr())
 			}
@@ -274,7 +274,7 @@ func TestGradDotGeneralBatchContractingCrossing(t *testing.T) {
 			}
 
 			exec := MustNewExec(backend, testFn)
-			parts := exec.Call()
+			parts := exec.MustExec()
 			fmt.Printf("Executing TestGradDotGeneral:\n")
 			for ii, name := range []string{"lhs", "rhs", "dot", "grad_lhs", "grad_rhs"} {
 				fmt.Printf("\t%s: %s\n", name, parts[ii].GoStr())

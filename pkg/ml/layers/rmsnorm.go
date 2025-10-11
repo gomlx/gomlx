@@ -4,10 +4,10 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
@@ -31,7 +31,7 @@ type RMSNormBuilder struct {
 //
 // Where g_i is a learnable gain (scale), enabled by default.
 //
-// Call RMSNormBuilder.Done when you finished the configuration.
+// MustExec RMSNormBuilder.Done when you finished the configuration.
 func RMSNorm(ctx *context.Context, operand *Node) *RMSNormBuilder {
 	return &RMSNormBuilder{
 		ctx:               ctx,

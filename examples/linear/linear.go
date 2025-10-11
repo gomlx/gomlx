@@ -60,7 +60,7 @@ func initCoefficients(backend backends.Backend, numVariables int) (coefficients,
 		bias = AddScalar(MulScalar(bias, BiasSigma), BiasMu)
 		return
 	})
-	results := e.Call()
+	results := e.MustExec()
 	coefficients, bias = results[0], results[1]
 	return
 }
@@ -87,7 +87,7 @@ func buildExamples(backend backends.Backend, coef, bias *tensors.Tensor, numExam
 		}
 		return
 	})
-	examples := e.Call(coef, bias)
+	examples := e.MustExec(coef, bias)
 	inputs, labels = examples[0], examples[1]
 	return
 }

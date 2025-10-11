@@ -185,7 +185,7 @@ func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*t
 		m.InvalidateOnDevice()
 	}
 
-	// Call "OnStep" hooks.
+	// MustExec "OnStep" hooks.
 	loop.onStep.Enumerate(func(hook *hookWithName[OnStepFn]) {
 		if err != nil {
 			// After the first error stop.

@@ -31,7 +31,7 @@ type ReluConfig struct {
 // The Relu forces the initializer of the variable to be random: a zero value here
 // would lead to NaN.
 //
-// This returns a configuration object. Call ReluConfig.Done when finished and it
+// This returns a configuration object. MustExec ReluConfig.Done when finished and it
 // will compute the Relu of the operand as specified.
 func Relu(ctx *context.Context, operand *Node) *ReluConfig {
 	if operand.Rank() < 2 {

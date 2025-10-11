@@ -61,7 +61,7 @@ func Plot(name string, univariateFunctions ...Univariate) {
 			outputs := fn(inputs)
 			return []*Node{inputs, outputs}
 		})
-		results := exec.Call()
+		results := exec.MustExec()
 		inputs, outputs := results[0].Value().([]float64), results[1].Value().([]float64)
 		var fnName string
 		if len(fnNames) > fnIdx {

@@ -37,7 +37,7 @@ import (
 
 // GenerateNoise generates random noise that can be used to generate images.
 func GenerateNoise(cfg *diffusion.Config, numImages int) *tensors.Tensor {
-	return CallOnce(cfg.Backend, func(g *Graph) *Node {
+	return MustExecOnce(cfg.Backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(cfg.DType, numImages, cfg.ImageSize, cfg.ImageSize, 3))
 		return noise
@@ -153,7 +153,7 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tens
 		}
 		if (n > 0 && step%n == 0) || step == g.numSteps-1 {
 			times = append(times, endTime)
-			predictedImages = append(predictedImages, g.denormalizerExec.Call(imagesBatch)[0])
+			predictedImages = append(predictedImages, g.denormalizerExec.MustExec(imagesBatch)[0])
 		}
 	}
 	return
@@ -520,7 +520,7 @@ func GenerateImagesOfAllFlowerTypes(cfg *diffusion.Config, numDiffusionSteps int
 		_, noise := RandomNormal(state, shapes.Make(cfg.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise
-	}).Call()[0]
+	}).MustExec()[0]
 	flowerIds := tensors.FromValue(xslices.Iota(int32(0), numImages))
 	generator := NewImagesGenerator(cfg, noise, flowerIds, numDiffusionSteps)
 	return generator.Generate()

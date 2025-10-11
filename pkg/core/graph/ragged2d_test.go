@@ -34,7 +34,7 @@ func TestRagged2D_ReduceSumCols(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	// The inputs as fed as parameters, which prevents constant subexpression optimization.
 	// This was used to point out a difference in CPU/GPU versions.
-	output := CallOnce(backend, func(flat, rowIDs *Node) *Node {
+	output := MustExecOnce(backend, func(flat, rowIDs *Node) *Node {
 		r := MakeRagged2D(3, flat, rowIDs)
 		output := r.ReduceSumCols()
 		output.SetLogged("#full Ragged2D.ReduceSumCols")

@@ -474,9 +474,9 @@ func PapersSeedDatasets(manager backends.Backend) (trainDS, validDS, testDS *mld
 	var trainLabels, validLabels, testLabels *tensors.Tensor
 	err = TryCatch[error](func() {
 		getLabels := MustNewExec(manager, getLabelsGraph)
-		trainLabels = getLabels.Call(TrainSplit, PapersLabels)[0]
-		validLabels = getLabels.Call(ValidSplit, PapersLabels)[0]
-		testLabels = getLabels.Call(TestSplit, PapersLabels)[0]
+		trainLabels = getLabels.MustExec(TrainSplit, PapersLabels)[0]
+		validLabels = getLabels.MustExec(ValidSplit, PapersLabels)[0]
+		testLabels = getLabels.MustExec(TestSplit, PapersLabels)[0]
 	})
 	if err != nil {
 		return

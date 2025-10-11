@@ -245,7 +245,7 @@ func (ds *batchedDataset) lockedBatchTensor(parts []*tensors.Tensor) (batched *t
 	for _, part := range parts {
 		partsAny = append(partsAny, part)
 	}
-	err = TryCatch[error](func() { batched = ds.batchExec.Call(partsAny...)[0] })
+	err = TryCatch[error](func() { batched = ds.batchExec.MustExec(partsAny...)[0] })
 	if err != nil {
 		return
 	}

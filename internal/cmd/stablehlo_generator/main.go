@@ -123,7 +123,7 @@ func GenerateSingleOp(method backendparser.Method) {
 		w("\t%sNode := nodes[%d]\n", opsParam, i)
 	}
 
-	// Call the method from the stablehlo backend.
+	// MustExec the method from the stablehlo backend.
 	w("\tvalue, err := b.fn.%s(", method.Name)
 	for i, param := range method.Parameters {
 		if i > 0 {

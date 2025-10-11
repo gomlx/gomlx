@@ -73,7 +73,7 @@ type ExecGraphFn interface {
 }
 
 // ExecGraphFnOneOutput are ExecGraphFn functions that return only one result.
-// See CallOnce.
+// See MustExecOnce.
 type ExecGraphFnOneOutput interface {
 	func(*Graph) *Node |
 		func([]*Node) *Node |
@@ -90,7 +90,7 @@ type ExecGraphFnOneOutput interface {
 type SideParamsFn func(graph *Graph, inputBuffers []backends.Buffer, donate []bool)
 
 // LoggerFn is the function used to log nodes marked for logging. It is called
-// after the Call method, with the list of messages and corresponding values
+// after the MustExec method, with the list of messages and corresponding values
 // of the evaluated nodes.
 type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, nodes []NodeId)
 
@@ -114,24 +114,24 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 //
 //	var l2NormExec = MustNewExec(backends.New(), L2Norm)
 //	x0 := []float32{2}
-//	fmt.Printf("L2Norm(%v) = %s\n", x0, l2NormExec.Call1(x0)) // -> 2
+//	fmt.Printf("L2Norm(%v) = %s\n", x0, l2NormExec.MustExec1(x0)) // -> 2
 //	x1 := []float64{4, 3}
-//	fmt.Printf("L2Norm(%v) = %s\n", x1, l2NormExec.Call1(x1))  // -> 5
+//	fmt.Printf("L2Norm(%v) = %s\n", x1, l2NormExec.MustExec1(x1))  // -> 5
 //
-// Notice that both calls to l2NormExec.Call1 will need to create different
+// Notice that both calls to l2NormExec.MustExec1 will need to create different
 // graphs (because they have different input shapes).
 // These JIT-compiled computation graphs are cached,
-// and if the same shapes are used in Call1 again, the cached version is reused.
+// and if the same shapes are used in MustExec1 again, the cached version is reused.
 //
 // For "ergonomics", we provide variations of the same API, depending on if you want errors to be returned,
 // or simply panic, and on how many outputs you expect:
 //
 //   - Use NewExec or MustNewExec to create new executors.
-//   - Exec returns a slice of outputs, and errors. Exec1 to Exec4 return 1 to 4 outputs exactly, plus an error.
-//   - Call returns a slice of outputs and panics on error. Call1 to Call4 1 to 4 outputs exactly, and panics on error.
-//   - ExecOnce and CallOnce merge NewExec (or MustNewExec), Exec1 (or Call1) and then Finalize methods in one convenient call,
+//   - Exec returns a slice of outputs and errors. Exec1 to Exec4 return 1 to 4 outputs exactly, plus an error.
+//   - MustExec returns a slice of outputs and panics on error. MustExec1 to MustExec4 1 to 4 outputs exactly, and panics on error.
+//   - ExecOnce and MustExecOnce merge NewExec (or MustNewExec), Exec1 (or MustExec1) and then Finalize methods in one convenient call,
 //     for when executing the graph only once.
-//     There are also ExecOnceN and CallOnceN variations that return a slice of outputs.
+//     There are also ExecOnceN and MustExecOnceN variations that return a slice of outputs.
 //
 // If there are no inputs for the graph function (for instance, for some initialization function), then
 // one needs to take a *Graph as the first parameter of the graph function (graphFn).
@@ -174,7 +174,7 @@ type Exec struct {
 	name                        string
 
 	// MaxCacheSize: if more than these different graph instantiations are
-	// created, Exec starts returning errors in Call.
+	// created, Exec starts returning errors in MustExec.
 	maxCacheSize int
 
 	// setSideParams for graphs that take them.
@@ -284,7 +284,7 @@ func NewExec[F ExecGraphFn](backend backends.Backend, graphFn F) (*Exec, error) 
 }
 
 // InDevice sets the device num to be used by graphs constructed by Exec.
-// This should be called before any invocations of Call().
+// This should be called before any invocations of MustExec().
 // It returns a reference to itself so calls can be cascaded.
 func (e *Exec) InDevice(deviceNum backends.DeviceNum) *Exec {
 	e.deviceNum = deviceNum
@@ -298,7 +298,7 @@ func (e *Exec) DeviceNum() backends.DeviceNum {
 }
 
 // SetName sets the name of Exec, used to provide the name to graphs created.
-// This should be called before any invocations of Call().
+// This should be called before any invocations of MustExec().
 // It returns a reference to itself so calls can be cascaded.
 func (e *Exec) SetName(name string) *Exec {
 	e.name = name
@@ -325,14 +325,14 @@ func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 // Mostly, this is for internal use and end-users will not likely need this. The context.Exec object uses this to pass
 // the variable values as side inputs to the graph.
 //
-// Exec takes care of creating parameters (with graph.Parameter) for every value passed to Call before
+// Exec takes care of creating parameters (with graph.Parameter) for every value passed to MustExec before
 // calling the graph building function (the graph building function is executed only the first time, after the
 // graph is compiled it is re-used for future executions).
 //
 // But a graph building functions may want to create extra parameters itself (with graph.Parameter), which we call
 // "side parameters".
 //
-// The values to feed these "side parameters" are not passed to Exec.Call, but instead set with a SideParamsFn, which
+// The values to feed these "side parameters" are not passed to Exec.MustExec, but instead set with a SideParamsFn, which
 // is configured here.
 //
 // SideParamsFn is called after the graph is already built, just before the execution.
@@ -485,7 +485,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []*tensors.
 	}
 	results = g.RunWithBuffers(argsAsBuffer, argsDonate)
 
-	// Call logger on logged nodes, even if no node is marked for logging (it serves as a hook).
+	// MustExec logger on logged nodes, even if no node is marked for logging (it serves as a hook).
 	numGraphFnOutputs := entry.numOutputs - len(entry.loggedMessages)
 	if e.loggerFn != nil {
 		var loggerResults []*tensors.Tensor

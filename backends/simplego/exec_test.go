@@ -80,7 +80,7 @@ func TestGomlxIntegration(t *testing.T) {
 	require.NotPanics(t, func() { _ = backend.(*Backend) })
 
 	// Checks that basic graph building and execution works.
-	y := graph.CallOnce(backend, func(x *graph.Node) *graph.Node { return graph.Neg(x) }, float32(7))
+	y := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node { return graph.Neg(x) }, float32(7))
 	fmt.Printf("\ty=-x: x=7, y=%s\n", y.GoStr())
 	require.Equal(t, float32(-7), y.Value())
 
