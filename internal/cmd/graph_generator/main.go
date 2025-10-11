@@ -208,9 +208,10 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/core/shapes"
-	"github.com/gomlx/gomlx/support/xslices"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
@@ -334,14 +335,20 @@ func GenerateBackendOps(methods []*MethodInfo) {
 	// Sort by backend method name:
 	slices.SortFunc(methods, func(a, b *MethodInfo) int { return strings.Compare(a.BackendName, b.BackendName) })
 
-	fileName := path.Join(must.M1(os.Getwd()), backendsOpsFile)
+	curDir := must.M1(os.Getwd())
+	fileName := path.Join(curDir, backendsOpsFile)
 	f := must.M1(os.Create(fileName))
 	must.M(backendOpsTemplate.Execute(f, methods))
 	cmd := exec.Command("go", "fmt", fileName)
 	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())
-	cmd = exec.Command("go", "tool", "enumer", "-type=NodeType", "-trimprefix=NodeType", "-yaml", "-json", "-text", "-values", fileName)
+	fmt.Printf("✅ graph_generator:       \tsuccessfully generated %s\n", fileName)
+
+	// Generate enumer for NodeType:
+	enumerOutput := path.Join(curDir, "gen_nodetype_enumer.go")
+	cmd = exec.Command("go", "tool", "enumer", "-type=NodeType", "-trimprefix=NodeType", "-yaml", "-json", "-text", "-values",
+		"-output="+enumerOutput, fileName)
 	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("✅ graph_generator:       \tsuccessfully generated %s\n", fileName)
+	fmt.Printf("✅ graph_generator:       \tsuccessfully generated %s\n", enumerOutput)
 }
