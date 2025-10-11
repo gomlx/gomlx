@@ -7,9 +7,11 @@
     in most cases nothing needs to be done (the `backends/default` will replace one by the other automatically),
     but in special cases there may require small changes.
   * Large refactoring: exported GoMLX packages moved under `/pkg`. **This requires changes to the import paths**.
-    Exceptions:
+    It cleans some external dependencies from the core packages (under `pkg`).
+    A couple of exceptions:
     * The `backends` package: it will move to its own repository later in the year (or early 2026)
-    * The `ui` and `example` packages: since they are just extras, we keep them where they are for now.
+    * The `ui` and `example` packages: since they are just extras, we keep them where they are for now. 
+      The core `GoMLX` doesn't depend on them, so we are more lax with their external dependencies. 
   * Normalized graph.Exec and context.Exec API:
     * Now using `Exec.Exec*` methods to include an error in the return, and `Exec.MustExec*` to panic instead.
 
