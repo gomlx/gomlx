@@ -44,6 +44,10 @@
 * Package `inceptionv3` moved to `examples`
 * Package `ui/commandline`: fixed progressbar in GoNB notebooks.
 * Package `kan`: fixed `PiecewiseConstant*` layers for inputs of rank 1.
+* Packages `downloader` and `huggingface`: had been already deprecated for a while, now removed. 
+  See https://github.com/gomlx/go-huggingface for a replacement.
+* Package `hdf5` moved to under `examples/inceptionv3`, for now the only example that uses it.
+  If you need this, please let us know, maybe we move it to under support, or move it to https://github.com/gomlx/go-huggingface.
 
 # v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
 

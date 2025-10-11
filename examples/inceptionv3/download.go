@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path"
 
+	"github.com/gomlx/gomlx/examples/inceptionv3/hdf5"
 	"github.com/gomlx/gomlx/pkg/ml/data"
-	"github.com/gomlx/gomlx/pkg/ml/data/hdf5"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 )
 
