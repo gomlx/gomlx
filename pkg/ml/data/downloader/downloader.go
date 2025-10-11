@@ -15,7 +15,7 @@ import (
 )
 
 // ProgressCallback is called as download progresses.
-//   - totalBytes may be set to 0 if total size is not yet known.
+//   - totalBytes may be set to 0 if the total size is not yet known.
 type ProgressCallback func(downloadedBytes, totalBytes int64)
 
 // Manager handles downloads, reporting back progress and errors.

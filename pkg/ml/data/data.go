@@ -136,8 +136,8 @@ func CopyWithProgressBar(dst io.Writer, src io.Reader, contentLength int64) (n i
 	return
 }
 
-// Download file from url and save at given path. Attempts to create directory
-// if it doesn't yet exist.
+// Download file from url and save it at the given path.
+// It attempts to create the directory if it doesn't yet exist.
 //
 // Optionally, use showProgressBar.
 func Download(url, filePath string, showProgressBar bool) (size int64, err error) {
