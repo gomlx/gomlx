@@ -6,7 +6,7 @@
   * Deprecating old "xla" backend (now called "oldxla") in favor of "stablehlo" (aliased to "xla" as well):
     in most cases nothing needs to be done (the `backends/default` will replace one by the other automatically),
     but in special cases there may require small changes.
-  * Large refactoring: exported packages moved under `/pkg`. **This requires changes to the import paths**.
+  * Large refactoring: exported GoMLX packages moved under `/pkg`. **This requires changes to the import paths**.
     Exceptions:
     * The `backends` package: it will move to its own repository later in the year (or early 2026)
     * The `ui` and `example` packages: since they are just extras, we keep them where they are for now.
