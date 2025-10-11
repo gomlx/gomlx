@@ -284,7 +284,7 @@ func (win *window) OnStart(loop *train.Loop, _ train.Dataset) error {
 }
 
 // OnStep is called every time the training loop moves forward.
-// It will also check if the training was cancelled by the user. If so, it returns an error.
+// It will also check if the user canceled the training. If so, it returns an error.
 func (win *window) OnStep(loop *train.Loop, metrics []*tensors.Tensor) error {
 	if win.cancelled {
 		return stderrors.New("training cancelled by user request")
