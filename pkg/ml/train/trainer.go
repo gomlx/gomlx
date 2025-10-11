@@ -383,8 +383,8 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 	return
 }
 
-// callGraphFn for TrainStep or EvalStep makes sure the builds the arguments for the MustExec() method, plus
-// do standard checks on inputs and labels.
+// callGraphFn for TrainStep or EvalStep makes sure the builds the arguments for execution,
+// plus do standard checks on inputs and labels.
 func (r *Trainer) callGraphFn(
 	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node),
 	graphType GraphType, execMap map[any]*context.Exec, spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
@@ -404,7 +404,7 @@ func (r *Trainer) callGraphFn(
 		}
 	}
 
-	// Create arguments as []any and run trainStepExecMap.MustExec().
+	// Create arguments as []any and run trainStepExecMap.Exec().
 	numParams := len(inputs) + len(labels)
 	inputsAndLabels := make([]any, 0, numParams)
 	for _, t := range inputs {
@@ -420,13 +420,13 @@ func (r *Trainer) callGraphFn(
 		exec = r.createExecutor(spec, len(inputs), len(labels), graphFn)
 		execMap[spec] = exec
 		for _, handler := range r.onExecCreationHandlers {
-			handler(exec, graphType) // MustExec handler for training.
+			handler(exec, graphType) // Call the handler for training.
 		}
 	}
 
-	// Exec.MustExec(), collect metrics:
-	err := TryCatch[error](func() { metrics = exec.MustExec(inputsAndLabels...) })
-
+	// Collect metrics:
+	var err error
+	metrics, err = exec.Exec(inputsAndLabels...)
 	if err != nil {
 		panic(errors.WithMessage(err, "failed to execute train/eval step"))
 	}

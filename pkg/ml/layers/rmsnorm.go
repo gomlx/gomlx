@@ -31,7 +31,7 @@ type RMSNormBuilder struct {
 //
 // Where g_i is a learnable gain (scale), enabled by default.
 //
-// MustExec RMSNormBuilder.Done when you finished the configuration.
+// Call RMSNormBuilder.Done when you finished the configuration.
 func RMSNorm(ctx *context.Context, operand *Node) *RMSNormBuilder {
 	return &RMSNormBuilder{
 		ctx:               ctx,

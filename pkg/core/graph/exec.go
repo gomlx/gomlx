@@ -89,13 +89,11 @@ type ExecGraphFnOneOutput interface {
 // for Graphs that defines those. Typically, this is used to set the variables of a model.
 type SideParamsFn func(graph *Graph, inputBuffers []backends.Buffer, donate []bool)
 
-// LoggerFn is the function used to log nodes marked for logging. It is called
-// after the MustExec method, with the list of messages and corresponding values
-// of the evaluated nodes.
+// LoggerFn is the function used to log nodes marked for logging.
+// It is called after the Exec method, with the list of messages and corresponding values of the evaluated nodes.
 type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, nodes []NodeId)
 
-// Exec creates and executes computation graphs as needed
-// based on the inputs shapes.
+// Exec creates and executes computation graphs as needed based on the inputs shapes.
 //
 // It simplifies the process of executing a graph building
 // function with real values. For example, assume you wrote:
@@ -485,7 +483,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []*tensors.
 	}
 	results = g.RunWithBuffers(argsAsBuffer, argsDonate)
 
-	// MustExec logger on logged nodes, even if no node is marked for logging (it serves as a hook).
+	// Call the logger on logged nodes, even if no node is marked for logging (it serves as a hook).
 	numGraphFnOutputs := entry.numOutputs - len(entry.loggedMessages)
 	if e.loggerFn != nil {
 		var loggerResults []*tensors.Tensor

@@ -30,7 +30,7 @@ func (nT *nTimes) onStep(loop *Loop, metrics []*tensors.Tensor) error {
 		}
 	}
 
-	// MustExec hook at this step.
+	// Call hook at this step.
 	nT.nUsed++
 	return nT.fn(loop, metrics)
 }

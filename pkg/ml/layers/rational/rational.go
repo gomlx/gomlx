@@ -32,7 +32,7 @@ import (
 
 // Config holds the configuration for a learnable rational function.
 //
-// MustExec its several methods to configure, and Done when configuration is finished to apply the rational function.
+// Call its several methods to configure, and Done when configuration is finished to apply the rational function.
 type Config struct {
 	ctx   *context.Context
 	input *Node
