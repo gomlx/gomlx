@@ -34,8 +34,9 @@ package simplego
 
 import (
 	"math"
+
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/pkg/errors"
