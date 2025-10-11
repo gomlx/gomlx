@@ -308,7 +308,7 @@ func (e *Exec) buildGraphFn() {
 		argsWithContext[0] = reflect.ValueOf(e.context)
 		copy(argsWithContext[1:], args)
 
-		// MustExec ctxGraphFn, the results will be a slice of *Node.
+		// Call ctxGraphFn, the results will be a slice of *Node.
 		ctxGraphFnResults := reflect.ValueOf(e.ctxGraphFn).Call(argsWithContext)
 
 		// Find the graph.
@@ -431,7 +431,8 @@ func (e *Exec) GetNodeLogger() graph.LoggerFn {
 }
 
 // InDevice sets the device num to be used by graphs constructed by Exec.
-// This should be called before any invocations of MustExec().
+//
+// This should be called before any invocations of the Exec methods.
 // It returns a reference to itself so calls can be cascaded.
 func (e *Exec) InDevice(deviceNum backends.DeviceNum) *Exec {
 	e.exec.InDevice(deviceNum)
