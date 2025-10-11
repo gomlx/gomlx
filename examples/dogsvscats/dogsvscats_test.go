@@ -68,12 +68,12 @@ func BenchmarkDataset(b *testing.B) {
 		b.Skipf("Files not yet downloaded to %q. Use demo to download files.", config.DataDir)
 	}
 	trainDS, trainEvalDS, _ := CreateDatasets(config)
-	datasets := []train.Dataset{trainDS, trainEvalDS}
+	allDatasets := []train.Dataset{trainDS, trainEvalDS}
 	for dsIdx, dsType := range []string{"train-augmented", "eval"} {
 		dsIdx := dsIdx
 		for _, useParallelism := range []bool{false, true} {
 			name := dsType
-			ds := train.Dataset(datasets[dsIdx])
+			ds := train.Dataset(allDatasets[dsIdx])
 			ds.Reset()
 			if useParallelism {
 				name = fmt.Sprintf("%s-parallel(%d)", name, runtime.NumCPU())
