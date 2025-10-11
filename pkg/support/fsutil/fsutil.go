@@ -2,7 +2,11 @@
 package fsutil
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/user"
 	"path"
@@ -93,4 +97,49 @@ func ReportedClose(closer io.Closer, name string, reportErrPtr *error) {
 	}
 	// Set the returning error.
 	*reportErrPtr = errors.Wrapf(err, "failed to close %s", name)
+}
+
+// ValidateChecksum verifies that the checksum of the file in the given path matches the checksum
+// given. If it fails, it will remove the file (!) and return and error.
+func ValidateChecksum(path, checkHash string) error {
+	hasher := sha256.New()
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = f.Close() // Discard the error on Close.
+	}()
+
+	_, err = io.Copy(hasher, f)
+	if err != nil {
+		return err
+	}
+	fileHash := hex.EncodeToString(hasher.Sum(nil))
+	if fileHash != strings.ToLower(checkHash) {
+		err = errors.Errorf("file %q sha256 hash is %q, but expected %q, deleting file.",
+			path, fileHash, checkHash)
+		if e2 := os.Remove(path); e2 != nil {
+			log.Printf("Failed to remove %q, which failed checksum test. Please remove it. %+v", path, e2)
+		}
+		return err
+	}
+	return nil
+}
+
+// ByteCountIEC converts a byte count to string using the appropriate unit (B, Kb, MiB, GiB, ...).
+// It uses the binary prefix system from IEC -- so powers of 1024 (as opposed to powers 1000).
+func ByteCountIEC[T interface {
+	int | int64 | uint64 | uint | uintptr
+}](count T) string {
+	const unit = 1024
+	if count < unit {
+		return fmt.Sprintf("%d B", count)
+	}
+	div, exp := int64(unit), 0
+	for n := count / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(count)/float64(div), "KMGTPE"[exp])
 }

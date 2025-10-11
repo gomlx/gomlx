@@ -28,7 +28,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/data"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
@@ -124,7 +124,7 @@ func main() {
 	fmt.Printf("Training data (inputs, labels): (%s, %s)\n\n", inputs.Shape(), labels.Shape())
 
 	// Create an in-memory dataset from the tensors.
-	dataset := must.M1(data.InMemoryFromData(backend, "linear dataset", []any{inputs}, []any{labels})).
+	dataset := must.M1(datasets.InMemoryFromData(backend, "linear dataset", []any{inputs}, []any{labels})).
 		Infinite(true).Shuffle().BatchSize(*flagNumExamples, false)
 	// dataset := &Dataset{"training", []*tensors.Tensor{inputs}, []*tensors.Tensor{labels}}
 

@@ -10,7 +10,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/pkg/ml/data"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
@@ -161,9 +161,9 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	testEvalDS = NewDataset("test-eval", TypeTest, maxLen, batchSize, false)
 
 	// Parallelize generation of batches.
-	trainDS = data.Parallel(trainDS)
-	trainEvalDS = data.Parallel(trainEvalDS)
-	testEvalDS = data.Parallel(testEvalDS)
+	trainDS = datasets.Parallel(trainDS)
+	trainEvalDS = datasets.Parallel(trainEvalDS)
+	testEvalDS = datasets.Parallel(testEvalDS)
 
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler

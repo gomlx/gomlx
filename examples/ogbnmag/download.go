@@ -13,13 +13,14 @@ import (
 	"strconv"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/examples/downloader"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	mldata "github.com/gomlx/gomlx/pkg/ml/data"
+	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
@@ -147,7 +148,7 @@ func downloadZip(downloadDir string) error {
 	}
 
 	zipPath := path.Join(downloadDir, ZipFile)
-	err := mldata.DownloadAndUnzipIfMissing(ZipURL, zipPath, downloadDir, path.Join(downloadDir, "mag"), ZipChecksum)
+	err := downloader.DownloadAndUnzipIfMissing(ZipURL, zipPath, downloadDir, path.Join(downloadDir, "mag"), ZipChecksum)
 	if err != nil {
 		return err
 	}
@@ -281,7 +282,7 @@ func parseNumbersFromCSV[E dtypes.NumberNotComplex](inputFilePath, outputFilePat
 	rowNum, rawDataPos := 0, 0
 	tensorOut.MutableFlatData(func(flatAny any) {
 		rawData := flatAny.([]E)
-		err = mldata.ParseGzipCSVFile(inputFilePath, func(row []string) error {
+		err = downloader.ParseGzipCSVFile(inputFilePath, func(row []string) error {
 			if len(row) != numCols {
 				return errors.Errorf("line %d has %d columns, we expected %q rows to have %d columns", rowNum+1, len(row), inputFilePath, numCols)
 			}
@@ -459,7 +460,7 @@ func getLabelsGraph(indices, allLabels *Node) *Node {
 	return Gather(allLabels, indices, false)
 }
 
-// PapersSeedDatasets returns the train, validation and test datasets (`data.InMemoryDataset`) with only the papers seed nodes,
+// PapersSeedDatasets returns the train, validation and test datasets (`datasets.InMemoryDataset`) with only the papers seed nodes,
 // to be used with FNN (Feedforward Neural Networks). See [MakeDataset] to make a dataset with sampled sub-graphs for
 // GNNs.
 //

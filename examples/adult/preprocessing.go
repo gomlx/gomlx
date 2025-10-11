@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/examples/downloader"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 
@@ -33,7 +34,6 @@ import (
 
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
-	"github.com/gomlx/gomlx/pkg/ml/data"
 	"github.com/pkg/errors"
 )
 
@@ -73,11 +73,11 @@ func DownloadDataset(dir string, force bool, verbosity int) {
 	for _, urlAndPath := range dataNames {
 		filePath := path.Join(dir, urlAndPath.path)
 		if force {
-			_, err := data.Download(urlAndPath.url, filePath, true)
+			_, err := downloader.Download(urlAndPath.url, filePath, true)
 			AssertNoError(err)
-			AssertNoError(data.ValidateChecksum(filePath, urlAndPath.checkSum))
+			AssertNoError(fsutil.ValidateChecksum(filePath, urlAndPath.checkSum))
 		} else {
-			AssertNoError(data.DownloadIfMissing(urlAndPath.url, filePath, urlAndPath.checkSum))
+			AssertNoError(downloader.DownloadIfMissing(urlAndPath.url, filePath, urlAndPath.checkSum))
 		}
 		if verbosity >= 1 {
 			fmt.Printf("\t%s => %s\n", urlAndPath.url, filePath)

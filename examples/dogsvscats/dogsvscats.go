@@ -36,10 +36,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gomlx/gomlx/examples/downloader"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/ml/data"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
@@ -91,7 +91,7 @@ var (
 func Download(baseDir string) error {
 	zipFilePath := path.Join(baseDir, LocalZipFile)
 	targetZipPath := path.Join(baseDir, LocalZipDir)
-	if err := data.DownloadAndUnzipIfMissing(DownloadURL, zipFilePath, baseDir, targetZipPath, DownloadChecksum); err != nil {
+	if err := downloader.DownloadAndUnzipIfMissing(DownloadURL, zipFilePath, baseDir, targetZipPath, DownloadChecksum); err != nil {
 		return err
 	}
 	return PrefilterValidImages(baseDir)

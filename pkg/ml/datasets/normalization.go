@@ -14,9 +14,11 @@
  *	limitations under the License.
  */
 
-package data
+package datasets
 
 import (
+	"io"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
@@ -25,14 +27,13 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/pkg/errors"
-	"io"
 )
 
 // Normalization calculates the normalization parameters `mean` and `stddev` for the `inputsIndex`-th input
 // from the given dataset.
 //
-// These values can later be used for normalization by simply applying `Div(Sub(x, mean), stddev)`. To use
-// as side inputs in an ML model, just set them to variables.
+// These values can later be used for normalization by simply applying `Div(Sub(x, mean), stddev)`.
+// To use as side inputs in an ML model, set them to variables.
 //
 // The parameter `independentAxes` list axes that should not be normalized together.
 // A typical value is -1, the feature axis (last axis), so that each feature gets its own normalization.

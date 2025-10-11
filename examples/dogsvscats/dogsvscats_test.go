@@ -20,7 +20,7 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/gomlx/gomlx/pkg/ml/data"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 
@@ -80,7 +80,7 @@ func BenchmarkDataset(b *testing.B) {
 			}
 			b.Run(name, func(b *testing.B) {
 				if useParallelism {
-					ds = data.CustomParallel(ds).Buffer(10).Start()
+					ds = datasets.CustomParallel(ds).Buffer(10).Start()
 				}
 				for ii := 0; ii < b.N; ii++ {
 					_, _, _, err := ds.Yield()

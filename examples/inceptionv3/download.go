@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path"
 
+	"github.com/gomlx/gomlx/examples/downloader"
 	"github.com/gomlx/gomlx/examples/inceptionv3/hdf5"
-	"github.com/gomlx/gomlx/pkg/ml/data"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 )
 
@@ -41,7 +41,7 @@ func downloadAndUnpackWeightsImpl(baseDir, weightsURL, sha256Checksum, weightsH5
 	}
 
 	weightsH5Path := path.Join(baseDir, weightsH5Name)
-	err = data.DownloadIfMissing(weightsURL, weightsH5Path, sha256Checksum)
+	err = downloader.DownloadIfMissing(weightsURL, weightsH5Path, sha256Checksum)
 	if err != nil {
 		return err
 	}

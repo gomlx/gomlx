@@ -30,9 +30,10 @@ import (
 	"path"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/examples/downloader"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/data"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -129,7 +130,7 @@ func Download(baseDir string) error {
 	for fileIdx, file := range files {
 		downloadURLFile, _ := url.JoinPath(DownloadURL, file)
 		filePath := path.Join(baseDir, file)
-		if err := data.DownloadIfMissing(downloadURLFile, filePath, checkHashes[fileIdx]); err != nil {
+		if err := downloader.DownloadIfMissing(downloadURLFile, filePath, checkHashes[fileIdx]); err != nil {
 			return fmt.Errorf("data.DownloadAndUnzipIfMissing: %w", err)
 		}
 	}
@@ -149,7 +150,7 @@ var (
 //   - name:
 //   - baseDir:
 //   - mode: choose between 'train' and 'test'
-func NewDataset(backend backends.Backend, name, baseDir, mode string, dtype dtypes.DType) (ds *data.InMemoryDataset, err error) {
+func NewDataset(backend backends.Backend, name, baseDir, mode string, dtype dtypes.DType) (ds *datasets.InMemoryDataset, err error) {
 	imagesFile := mnistFiles[mode][ImageFileType]
 	labelsFile := mnistFiles[mode][LabelFileType]
 
@@ -162,7 +163,7 @@ func NewDataset(backend backends.Backend, name, baseDir, mode string, dtype dtyp
 		return nil, err
 	}
 
-	return data.InMemoryFromData(
+	return datasets.InMemoryFromData(
 		backend,
 		name,
 		[]any{timage.ToTensor(dtype).Batch(images)},
@@ -259,7 +260,7 @@ type DatasetsConfiguration struct {
 	// UseParallelism when using Dataset.
 	UseParallelism bool
 
-	// BufferSize used for data.ParallelDataset, to cache intermediary batches. This value is used
+	// BufferSize used for datasets.ParallelDataset, to cache intermediary batches. This value is used
 	// for each dataset.
 	BufferSize int
 

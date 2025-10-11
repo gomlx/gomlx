@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/data"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -109,7 +109,7 @@ func (bds *BalancedDataset) readAllImages() error {
 	bds.AllLabels = tensors.FromShape(shapes.Make(dtypes.Int32, NumExamples))
 	tensors.MutableFlatData[uint8](bds.AllImages, func(flatAllImages []uint8) {
 		tensors.MutableFlatData[int32](bds.AllLabels, func(flatAllLabels []int32) {
-			ds := data.Parallel(NewDataset(dtypes.Uint8, bds.Size))
+			ds := datasets.Parallel(NewDataset(dtypes.Uint8, bds.Size))
 			pbar := progressbar.Default(int64(NumExamples), "Processing images")
 			for exampleIdx := range NumExamples {
 				_, inputs, labels, yieldErr := ds.Yield()

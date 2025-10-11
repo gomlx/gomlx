@@ -27,11 +27,12 @@ import (
 	"reflect"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/examples/downloader"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/data"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
@@ -68,12 +69,12 @@ const (
 )
 
 func DownloadCifar10(baseDir string) error {
-	return data.DownloadAndUntarIfMissing(C10Url, baseDir, C10TarName, C10SubDir,
+	return downloader.DownloadAndUntarIfMissing(C10Url, baseDir, C10TarName, C10SubDir,
 		"c4a38c50a1bc5f3a1c5537f2155ab9d68f9f25eb1ed8d9ddda3db29a59bca1dd")
 }
 
 func DownloadCifar100(baseDir string) error {
-	return data.DownloadAndUntarIfMissing(C100Url, baseDir, C100TarName, C100SubDir,
+	return downloader.DownloadAndUntarIfMissing(C100Url, baseDir, C100TarName, C100SubDir,
 		"58a81ae192c23a4be8b1804d68e518ed807d710a4eb253b1f2a199162a40d8ec")
 }
 
@@ -311,7 +312,7 @@ func init() {
 // It automatically downloads the data from the web, and then loads the data into memory if it hasn't been
 // loaded yet.
 // It caches the result, so multiple Datasets can be created without any extra costs in time/memory.
-func NewDataset(backend backends.Backend, name, baseDir string, source DataSource, dtype dtypes.DType, partition Partition) *data.InMemoryDataset {
+func NewDataset(backend backends.Backend, name, baseDir string, source DataSource, dtype dtypes.DType, partition Partition) *datasets.InMemoryDataset {
 	if source > C100 {
 		Panicf("Invalid source value %d, only C10 or C100 accepted", source)
 	}
@@ -331,7 +332,7 @@ func NewDataset(backend backends.Backend, name, baseDir string, source DataSourc
 		imagesAndLabelsCache[source][dtype] = partitioned
 	}
 	imagesAndLabels := partitioned[partition]
-	ds, err := data.InMemoryFromData(backend, name, []any{imagesAndLabels.images}, []any{imagesAndLabels.labels})
+	ds, err := datasets.InMemoryFromData(backend, name, []any{imagesAndLabels.images}, []any{imagesAndLabels.labels})
 	if err != nil {
 		panic(err)
 	}

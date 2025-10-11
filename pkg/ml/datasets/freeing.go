@@ -1,10 +1,11 @@
-package data
+package datasets
 
 import (
+	"io"
+
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/pkg/errors"
-	"io"
 )
 
 // freeingDataset implements a `train.Dataset` that frees inputs and labels GPU memory after each use.

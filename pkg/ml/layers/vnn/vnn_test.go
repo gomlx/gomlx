@@ -11,7 +11,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/data"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
@@ -254,7 +254,7 @@ func TestVNNTrain(t *testing.T) {
 	// Create a dataset from the generated data.
 	inputsTensor := tensors.FromFlatDataAndDimensions(inputsData, numSamples, numInputs, vecDim)
 	labelsTensor := tensors.FromFlatDataAndDimensions(labelsData, numSamples)
-	ds, err := data.InMemoryFromData(backend, "VNN: negative cosine distance",
+	ds, err := datasets.InMemoryFromData(backend, "VNN: negative cosine distance",
 		[]any{inputsTensor}, []any{labelsTensor})
 	require.NoError(t, err)
 	dsEval := ds.Copy().BatchSize(1, false)

@@ -1,87 +1,21 @@
-/*
- *	Copyright 2023 Jan Pfeifer
- *
- *	Licensed under the Apache License, Version 2.0 (the "License");
- *	you may not use this file except in compliance with the License.
- *	You may obtain a copy of the License at
- *
- *	http://www.apache.org/licenses/LICENSE-2.0
- *
- *	Unless required by applicable law or agreed to in writing, software
- *	distributed under the License is distributed on an "AS IS" BASIS,
- *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *	See the License for the specific language governing permissions and
- *	limitations under the License.
- */
-
-// Package data is a collection of tools that facilitate data loading and preprocessing.
-package data
+// Package downloader provides functions for downloading and extracting files.
+package downloader
 
 import (
 	"compress/gzip"
-	"crypto/sha256"
 	"encoding/csv"
-	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path"
 	"strings"
 
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 )
-
-// ValidateChecksum verifies that the checksum of the file in the given path matches the checksum
-// given. If it fails, it will remove the file (!) and return and error.
-func ValidateChecksum(path, checkHash string) error {
-	hasher := sha256.New()
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = f.Close() // Discard reading error on Close.
-	}()
-
-	_, err = io.Copy(hasher, f)
-	if err != nil {
-		return err
-	}
-	fileHash := hex.EncodeToString(hasher.Sum(nil))
-	if fileHash != strings.ToLower(checkHash) {
-		err = errors.Errorf("file %q sha256 hash is %q, but expected %q, deleting file.",
-			path, fileHash, checkHash)
-		if e2 := os.Remove(path); e2 != nil {
-			log.Printf("Failed to remove %q, which failed checksum test. Please remove it. %+v", path, e2)
-		}
-		return err
-	}
-	return nil
-}
-
-// ByteCountIEC converts a byte count to string using the appropriate unit (B, Kb, MiB, GiB, ...).
-// It uses the binary prefix system from IEC -- so powers of 1024 (as opposed to powers 1000).
-func ByteCountIEC[T interface {
-	int | int64 | uint64 | uint | uintptr
-}](count T) string {
-	const unit = 1024
-	if count < unit {
-		return fmt.Sprintf("%d B", count)
-	}
-	div, exp := int64(unit), 0
-	for n := count / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %ciB", float64(count)/float64(div), "KMGTPE"[exp])
-}
 
 // copyBytesBar copies bytes from an io.Reader to an io.Writer while displaying a progressbar.
 // It requires knowing the contentLength.
@@ -101,7 +35,7 @@ func newCopyBytesBar(w io.Writer, contentLength int64) *copyBytesBar {
 	}
 	bar.numUnits = (contentLength + bar.barUnit - 1) / bar.barUnit
 	bar.bar = progressbar.NewOptions(int(bar.numUnits),
-		progressbar.OptionSetDescription(fmt.Sprintf("%s", ByteCountIEC(contentLength))),
+		progressbar.OptionSetDescription(fmt.Sprintf("%s", fsutil.ByteCountIEC(contentLength))),
 		progressbar.OptionUseANSICodes(true),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionSetTheme(progressbar.ThemeUnicode),
@@ -190,7 +124,7 @@ func Download(url, filePath string, showProgressBar bool) (size int64, err error
 func DownloadIfMissing(url, filePath, checkHash string) error {
 	filePath = fsutil.MustReplaceTildeInDir(filePath)
 	if !fsutil.MustFileExists(filePath) {
-		// Download compressed file first.
+		// Download the compressed file first.
 		fmt.Printf("Downloading %s ...\n", url)
 		_, err := Download(url, filePath, true)
 		if err != nil {
@@ -200,7 +134,7 @@ func DownloadIfMissing(url, filePath, checkHash string) error {
 	if checkHash == "" {
 		return nil
 	}
-	return ValidateChecksum(filePath, checkHash)
+	return fsutil.ValidateChecksum(filePath, checkHash)
 }
 
 // Untar file, using decompression flags according to suffix: .gz for gzip, bz2 for bzip2.
@@ -315,40 +249,4 @@ func ParseGzipCSVFile(filePath string, perRowFn func(row []string) error) error 
 		}
 	}
 	return nil
-}
-
-// takeDataset implements a `train.Dataset` that only yields `take` batches.
-type takeDataset struct {
-	ds          train.Dataset
-	count, take int
-}
-
-// Take returns a wrapper to `ds`, a `train.Dataset` that only yields `n` batches.
-func Take(ds train.Dataset, n int) train.Dataset {
-	return &takeDataset{
-		ds:   ds,
-		take: n,
-	}
-}
-
-// Name implements train.Dataset. It returns the dataset name.
-func (ds *takeDataset) Name() string {
-	return fmt.Sprintf("%s [Take %d]", ds.ds.Name(), ds.take)
-}
-
-// Reset implements train.Dataset.
-func (ds *takeDataset) Reset() {
-	ds.ds.Reset()
-	ds.count = 0
-}
-
-// Yield implements train.Dataset.
-func (ds *takeDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
-	if ds.count >= ds.take {
-		err = io.EOF
-		return
-	}
-	ds.count++
-	spec, inputs, labels, err = ds.ds.Yield()
-	return
 }

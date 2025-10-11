@@ -1,4 +1,4 @@
-package data
+package datasets
 
 import (
 	"github.com/gomlx/gomlx/backends"

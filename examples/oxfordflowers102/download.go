@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/daniellowtw/matlab"
-	"github.com/gomlx/gomlx/pkg/ml/data"
+	"github.com/gomlx/gomlx/examples/downloader"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/pkg/errors"
 )
@@ -44,12 +44,12 @@ func DownloadAndParse(baseDir string) error {
 		filePath := path.Join(downloadPath, file.File)
 		url := DownloadBaseURL + file.File
 		if file.UntarDir == "" {
-			err := data.DownloadIfMissing(url, filePath, file.Checksum)
+			err := downloader.DownloadIfMissing(url, filePath, file.Checksum)
 			if err != nil {
 				return errors.Wrapf(err, "Failed to download %q from %q", file.File, url)
 			}
 		} else {
-			err := data.DownloadAndUntarIfMissing(url, baseDir, filePath, file.UntarDir, file.Checksum)
+			err := downloader.DownloadAndUntarIfMissing(url, baseDir, filePath, file.UntarDir, file.Checksum)
 			if err != nil {
 				return errors.Wrapf(err, "Failed to download and untar %q from %q", file.File, url)
 			}

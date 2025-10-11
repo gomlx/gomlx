@@ -48,10 +48,11 @@
   See https://github.com/gomlx/go-huggingface for a replacement.
 * Package `hdf5` moved to under `examples/inceptionv3`, for now the only example that uses it.
   If you need this, please let us know, maybe we move it to under support, or move it to https://github.com/gomlx/go-huggingface.
+* Package `data` renamed to `datasets`; Split downloading functionality under `examples/downloader`.
 
 # v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
 
-- Updated dependency to new Gopjrt v0.8.2 -- issues with the CUDA PJRT backward compatibility (lack of).
+- Updated dependency to new Gopjrt v0.8.2 because of CUDA PJRT (lack of) backward compatibility issues.
 - Package `stablehlo`:
   - Added support for comparison of bool values, and added corresponding tests.
   - Fixed wrong checking for during shapeinference.Gather

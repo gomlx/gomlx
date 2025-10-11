@@ -26,7 +26,7 @@ import (
 
 	"github.com/gomlx/gomlx/examples/inceptionv3"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/data"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -88,7 +88,7 @@ type PreprocessingConfiguration struct {
 	// UseParallelism when using Dataset.
 	UseParallelism bool
 
-	// BufferSize used for data.ParallelDataset, to cache intermediary batches. This value is used
+	// BufferSize used for datasets.ParallelDataset, to cache intermediary batches. This value is used
 	// for each dataset.
 	BufferSize int
 
@@ -254,13 +254,13 @@ func CreateDatasets(config *PreprocessingConfiguration) (trainDS, trainEvalDS, v
 	// Read tensors in parallel:
 	if config.UseParallelism {
 		if trainDS != nil {
-			trainDS = data.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
+			trainDS = datasets.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
 		}
 		if trainEvalDS != nil {
-			trainEvalDS = data.CustomParallel(trainEvalDS).Buffer(config.BufferSize).Start()
+			trainEvalDS = datasets.CustomParallel(trainEvalDS).Buffer(config.BufferSize).Start()
 		}
 		if validationEvalDS != nil {
-			validationEvalDS = data.CustomParallel(validationEvalDS).Buffer(config.BufferSize).Start()
+			validationEvalDS = datasets.CustomParallel(validationEvalDS).Buffer(config.BufferSize).Start()
 		}
 	}
 

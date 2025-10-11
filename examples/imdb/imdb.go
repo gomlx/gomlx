@@ -35,8 +35,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gomlx/gomlx/examples/downloader"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/data"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/pkg/errors"
@@ -87,7 +87,7 @@ func Download(baseDir string) error {
 		return nil
 	}
 
-	if err := data.DownloadAndUntarIfMissing(DownloadURL, baseDir, LocalTarFile, LocalDir, TarHash); err != nil {
+	if err := downloader.DownloadAndUntarIfMissing(DownloadURL, baseDir, LocalTarFile, LocalDir, TarHash); err != nil {
 		return errors.Wrapf(err, "imdb.Download failed")
 	}
 	LoadedVocab, LoadedExamples, err = LoadIndividualFiles(baseDir)

@@ -8,7 +8,7 @@ import (
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	mldata "github.com/gomlx/gomlx/pkg/ml/data"
+	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 )
