@@ -24,7 +24,7 @@ func TestRMSNorm(t *testing.T) {
 		{{3, 4}, {5, 6}, {7, 8}},
 		{{3 * 2, 4 * 2}, {5 * 2, 6 * 2}, {7 * 2, 8 * 2}},
 	}
-	got := exec.Call(x)[0]
+	got := exec.MustExec(x)[0]
 	require.NoError(t, got.Shape().CheckDims(2, 3, 2), "shape should not have changed")
 	want := [][][]float32{{
 		{0.52091914, 0.6945589}, {0.86819863, 1.0418383}, {1.2154781, 1.3891178},

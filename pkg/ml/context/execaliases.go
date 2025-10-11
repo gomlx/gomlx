@@ -7,19 +7,37 @@ import (
 	"github.com/pkg/errors"
 )
 
-// MustNewExec constructs an Exec object that uses the given ctxGraphFn to build
-// computation graphs with a Context. ctxGraphFn must take a *Context input
-// parameter followed by one or more *Node parameters as input and return one
-// or more *Node.
+// NewExec constructs an Exec object for the given context and symbolic computation function ctxGraphFn.
 //
-// The Context ctx passed will be passed to all computation graph construction calls
-// (ctxGraphFn), as well as during the graph execution later. If set to nil, it automatically
-// creates a new one.
+// The ctxGraphFn is called to build the computation graphs with a Context.
+// It must take a *Context input parameter followed by one or more *Node parameters as input and return one or more *Node.
+// Alternatively, it can, instead of *Node inputs, take a *Graph object when there are no input tensors.
 //
-// Before the execution of a graph, if needed, it initializes the variables in the context.
+// The Context ctx passed in the construction is used in all calls to ctxGraphFn, as well as during the graph execution later.
+// If set to nil, it automatically creates a new empty context.
+//
+// Before the execution of a graph, it initializes the variables as needed, using the configured initializer.
+// And variables updated in the graph (using Variable.SetValueGraph) are updated also during execution.
+// More details see Exec.
 //
 // This is a generic wrapper around NewExecAny that checks that types are
 // correct (but doesn't support all possible types of ctxGraphFn).
+func NewExec[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F) (*Exec, error) {
+	return NewExecAny(backend, ctx, ctxGraphFn)
+}
+
+// MustNewExec constructs an Exec object for the given context and symbolic computation function ctxGraphFn.
+//
+// The ctxGraphFn is called to build the computation graphs with a Context.
+// It must take a *Context input parameter followed by one or more *Node parameters as input and return one or more *Node.
+// Alternatively, it can, instead of *Node inputs, take a *Graph object when there are no input tensors.
+//
+// The Context ctx passed in the construction is used in all calls to ctxGraphFn, as well as during the graph execution later.
+// If set to nil, it automatically creates a new empty context.
+//
+// Before the execution of a graph, it initializes the variables as needed, using the configured initializer.
+// And variables updated in the graph (using Variable.SetValueGraph) are updated also during execution.
+// More details see Exec.
 //
 // It panics on error.
 func MustNewExec[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F) *Exec {
@@ -30,33 +48,30 @@ func MustNewExec[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraph
 	return e
 }
 
-// Call parses the arguments into tensors (if they are not yet) and executes
+// MustExec parses the arguments into tensors (if they are not yet) and executes
 // the graph corresponding to the shapes of the arguments.
 //
-// Notice Context shouldn't be passed by Call; it will use automatically the context
-// stored in context.Exec -- you can change it with SetContext.
+// Notice it uses the Context object used during creation -- if needed, you can change it with SetContext.
 //
-// If a graph does not yet exist, one is created, compiled and cached for the shapes
-// of the inputs.
-// It passes the context to the registered ctxGraphFn. After the very first invocation of Call
-// the context is marked as Context.Reuse().
+// If a graph does not yet exist, one is created (using ctxGraphFn provided during creation), compiled, and cached
+// for these shapes of the inputs.
+// After the very first invocation of Exec, the context is marked as Context.Reuse().
 //
-// It returns the outputs in a slice, even if there is only one output.
+// It returns the outputs in a slice. See MustExec1, MustExec2, ..., MustExec4 as aliases when you expect a fixed number of outputs.
 //
 // It panics with an informative error if something goes wrong.
-func (e *Exec) Call(args ...any) []*tensors.Tensor {
-	outputs, _ := e.CallWithGraph(args...)
+func (e *Exec) MustExec(args ...any) []*tensors.Tensor {
+	outputs, _ := e.MustExecWithGraph(args...)
 	return outputs
 }
 
-// CallWithGraph is similar to Call, but it also returns the computation graph used in the call.
-// Since Exec creates different computation graphs for each different set of parameters,
+// MustExecWithGraph is similar to MustExec, but it also returns the computation graph used in the call.
+//
+// Since Exec creates different computation graphs when the inputs shapes change,
 // this can help disambiguate in case the user needs to use the Graph for something else.
 //
-// It returns the outputs in a slice (it can be empty even) and the graph used to execute the computation.
-//
 // It panics with an informative error if something goes wrong.
-func (e *Exec) CallWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph) {
+func (e *Exec) MustExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph) {
 	var err error
 	outputs, g, err = e.ExecWithGraph(args...)
 	if err != nil {
@@ -67,7 +82,7 @@ func (e *Exec) CallWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph) 
 
 // ExecOnceN builds the graph and executes it with the given arguments and returns various output.
 //
-// It's short for a call to NewExec, Exec.Call and Exec.Finalize.
+// It's short for a call to NewExec, Exec.MustExec, and Exec.Finalize.
 //
 // See ExecOnce for a more convenient version if you have only one output.
 func ExecOnceN[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) ([]*tensors.Tensor, error) {
@@ -79,14 +94,14 @@ func ExecOnceN[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn
 	return e.Exec(args...)
 }
 
-// CallOnceN builds the graph and executes it with the given arguments and returns various output.
+// MustExecOnceN builds the graph and executes it with the given arguments and returns various output.
 //
-// It's short for a call to NewExec, Exec.Call and Exec.Finalize.
+// It's short for a call to NewExec, Exec.MustExec, and Exec.Finalize.
 //
-// See CallOnce for a more convenient version if you have only one output.
+// See MustExecOnce for a more convenient version if you have only one output.
 //
 // It panics on error. See ExecOnceN for a version that returns an error.
-func CallOnceN[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) []*tensors.Tensor {
+func MustExecOnceN[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) []*tensors.Tensor {
 	outputs, err := ExecOnceN(backend, ctx, ctxGraphFn, args...)
 	if err != nil {
 		panic(err)
@@ -96,7 +111,7 @@ func CallOnceN[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn
 
 // ExecOnce builds the graph and executes it with the given arguments and returns the one output.
 //
-// It's short for a call to NewExec, Exec.Call and Exec.Finalize for functions that return only one output.
+// It's short for a call to NewExec, Exec.MustExec, and Exec.Finalize for functions that return only one output.
 //
 // See ExecOnceN if you have multiple (or zero) outputs.
 func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) (*tensors.Tensor, error) {
@@ -110,14 +125,14 @@ func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, ctx *Context, ct
 	return outputs[0], nil
 }
 
-// CallOnce builds the graph and executes it with the given arguments and returns the one output.
+// MustExecOnce builds the graph and executes it with the given arguments and returns the one output.
 //
-// It's short for a call to NewExec, Exec.Call and Exec.Finalize for functions that return only one output.
+// It's short for a call to NewExec, Exec.MustExec, and Exec.Finalize for functions that return only one output.
 //
-// See CallOnceN if you have multiple outputs.
+// See MustExecOnceN if you have multiple outputs.
 //
 // It panics on error. See ExecOnce for a version that returns an error.
-func CallOnce[F ExecGraphFnOneOutput](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) *tensors.Tensor {
+func MustExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) *tensors.Tensor {
 	output, err := ExecOnce(backend, ctx, ctxGraphFn, args...)
 	if err != nil {
 		panic(err)
@@ -189,54 +204,54 @@ func (e *Exec) Exec4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Te
 	return results[0], results[1], results[2], results[3], nil
 }
 
-// Call1 executes the graph with the given arguments and returns one output.
+// MustExec1 executes the graph with the given arguments and returns one output.
 //
 // It panics on errors (with full stack-traces) or if the graph doesn't return exactly one output.
 //
-// See Call for more details.
-func (e *Exec) Call1(args ...any) *tensors.Tensor {
-	results := e.Call(args...)
+// See MustExec for more details.
+func (e *Exec) MustExec1(args ...any) *tensors.Tensor {
+	results := e.MustExec(args...)
 	if len(results) != 1 {
-		exceptions.Panicf("graph %q returned %d results, as opposed to exactly one as expected by Call1", e.Name(), len(results))
+		exceptions.Panicf("graph %q returned %d results, as opposed to exactly one as expected by MustExec1", e.Name(), len(results))
 	}
 	return results[0]
 }
 
-// Call2 executes the graph with the given arguments and returns two outputs.
+// MustExec2 executes the graph with the given arguments and returns two outputs.
 //
 // It panics on errors (with full stack-traces) or if the graph doesn't return exactly two outputs.
 //
-// See Call for more details.
-func (e *Exec) Call2(args ...any) (*tensors.Tensor, *tensors.Tensor) {
-	results := e.Call(args...)
+// See MustExec for more details.
+func (e *Exec) MustExec2(args ...any) (*tensors.Tensor, *tensors.Tensor) {
+	results := e.MustExec(args...)
 	if len(results) != 2 {
-		exceptions.Panicf("graph %q returned %d results, as opposed to exactly two as expected by Call2", e.Name(), len(results))
+		exceptions.Panicf("graph %q returned %d results, as opposed to exactly two as expected by MustExec2", e.Name(), len(results))
 	}
 	return results[0], results[1]
 }
 
-// Call3 executes the graph with the given arguments and returns three outputs.
+// MustExec3 executes the graph with the given arguments and returns three outputs.
 //
 // It panics on errors (with full stack-traces) or if the graph doesn't return exactly three outputs.
 //
-// See Call for more details.
-func (e *Exec) Call3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
-	results := e.Call(args...)
+// See MustExec for more details.
+func (e *Exec) MustExec3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
+	results := e.MustExec(args...)
 	if len(results) != 3 {
-		exceptions.Panicf("graph %q returned %d results, as opposed to exactly three as expected by Call3", e.Name(), len(results))
+		exceptions.Panicf("graph %q returned %d results, as opposed to exactly three as expected by MustExec3", e.Name(), len(results))
 	}
 	return results[0], results[1], results[2]
 }
 
-// Call4 executes the graph with the given arguments and returns four outputs.
+// MustExec4 executes the graph with the given arguments and returns four outputs.
 //
 // It panics on errors (with full stack-traces) or if the graph doesn't return exactly four outputs.
 //
-// See Call for more details.
-func (e *Exec) Call4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
-	results := e.Call(args...)
+// See MustExec for more details.
+func (e *Exec) MustExec4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
+	results := e.MustExec(args...)
 	if len(results) != 4 {
-		exceptions.Panicf("graph %q returned %d results, as opposed to exactly four as expected by Call4", e.Name(), len(results))
+		exceptions.Panicf("graph %q returned %d results, as opposed to exactly four as expected by MustExec4", e.Name(), len(results))
 	}
 	return results[0], results[1], results[2], results[3]
 }

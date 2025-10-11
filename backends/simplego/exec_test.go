@@ -92,7 +92,7 @@ func TestGomlxIntegration(t *testing.T) {
 		return counter
 	})
 	for ii := range 10 {
-		got := exec.Call()[0]
+		got := exec.MustExec()[0]
 		require.Equal(t, int64(ii), got.Value())
 	}
 }

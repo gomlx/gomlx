@@ -221,7 +221,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	})
 
 	// For each paper: paperIdx (residual connection) + 1000*paperIdx + 0.025*paperIdx + (0+1+2+3+4)/1000
-	logits := execGnn.Call()[0]
+	logits := execGnn.MustExec()[0]
 	fmt.Printf("\tGNN seeds states: %s\n", logits)
 	//want := [][]float32{{0.010}, {1001.035}, {2002.060}, {3003.085}, {4004.110}, {5005.135}, {6006.160}, {7007.185}, {8008.210}, {9009.235}}
 	want := [][]float32{{0.02}, {2002.07}, {4004.12}, {6006.17}, {8008.22}, {10010.27},
@@ -243,7 +243,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 		lw.NodePrediction(ctx.In("model"), graphStates, edges)
 		return graphStates["seeds"]
 	})
-	logits = execLayerWise.Call()[0]
+	logits = execLayerWise.MustExec()[0]
 	fmt.Printf("\tLayerWiseGNN seeds states: %s\n", logits)
 	require.Equal(t, want, logits.Value())
 }
@@ -265,7 +265,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 			return graphStates["seeds"].Value
 		})
 
-		sampledLogits := execGnn.Call()[0]
+		sampledLogits := execGnn.MustExec()[0]
 		fmt.Printf("\tGNN seeds states: %s\n", sampledLogits.GoStr())
 
 		// Uncomment to list variables used in model.
@@ -283,7 +283,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 			lw.NodePrediction(ctx, graphStates, edges)
 			return graphStates["seeds"]
 		})
-		lwLogits := execLayerWise.Call()[0]
+		lwLogits := execLayerWise.MustExec()[0]
 		fmt.Printf("\tLayerWiseGNN seeds states: %s\n", lwLogits.GoStr())
 		require.True(t, sampledLogits.InDelta(lwLogits, 1e-4))
 	}

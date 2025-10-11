@@ -161,7 +161,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 			return ConvertDType(predictionsAndMask[0], dtypes.Float32)
 		})
 		var results []*tensors.Tensor
-		require.NotPanics(t, func() { results = executor.Call(inputs) })
+		require.NotPanics(t, func() { results = executor.MustExec(inputs) })
 		predictionsGNN := results[0]
 		fmt.Printf("predictionsGNN:\n%s\n", predictionsGNN)
 
@@ -173,7 +173,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 				Slice(allPredictions, AxisElem(seedId), AxisRange()),
 				dtypes.Float32)
 		})
-		require.NotPanics(t, func() { results = executor.Call() })
+		require.NotPanics(t, func() { results = executor.MustExec() })
 		predictionsLW := results[0]
 		fmt.Printf("\npredictionsLW:\n%s\n", predictionsLW)
 		require.True(t, predictionsGNN.InDelta(predictionsLW, 0.05))
@@ -244,7 +244,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 		require.NoError(t, err, "Dataset.Yield")
 		inputs = append(inputs, labels[0])
 		var results []*tensors.Tensor
-		require.NotPanics(t, func() { results = executor.Call(inputs) })
+		require.NotPanics(t, func() { results = executor.MustExec(inputs) })
 		correct += int(results[0].Value().(int32))
 		total += int(results[1].Value().(int32))
 		predictionsGNN = append(predictionsGNN, results[2].Value().([]int32)...)
@@ -265,7 +265,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 		return predictions
 	})
 	var results []*tensors.Tensor
-	require.NotPanics(t, func() { results = executor.Call() })
+	require.NotPanics(t, func() { results = executor.MustExec() })
 	predictionsLW := results[0].Value().([]int32)
 	correct = 0
 	labels := tensors.CopyFlatData[int32](PapersLabels)

@@ -59,7 +59,7 @@ func testSimpleFunc(t *testing.T, name string, input any,
 	ctx := context.New().WithInitializer(IotaP1Initializer)
 	exec := context.MustNewExec(backend, ctx, fn)
 	var outputs []*tensors.Tensor
-	require.NotPanicsf(t, func() { outputs = exec.Call(input) }, "%s: failed to exec graph", name)
+	require.NotPanicsf(t, func() { outputs = exec.MustExec(input) }, "%s: failed to exec graph", name)
 	fmt.Printf("\t%s(%v) = %s\n", name, input, outputs[0].GoStr())
 	require.Truef(t, xslices.SlicesInDelta(outputs[0].Value(), want, xslices.Epsilon),
 		"%s(%v): want=%v, got=%v", name, input, want, outputs[0].GoStr())
@@ -71,7 +71,7 @@ func testSimpleFuncMany(t *testing.T, name string, inputs []any,
 	ctx := context.New().WithInitializer(IotaP1Initializer)
 	exec := context.MustNewExec(backend, ctx, fn)
 	var outputs []*tensors.Tensor
-	require.NotPanicsf(t, func() { outputs = exec.Call(inputs...) }, "%s: failed to exec graph", name)
+	require.NotPanicsf(t, func() { outputs = exec.MustExec(inputs...) }, "%s: failed to exec graph", name)
 	parts := make([]string, len(inputs))
 	for ii, input := range inputs {
 		parts[ii] = fmt.Sprintf("%v", input)

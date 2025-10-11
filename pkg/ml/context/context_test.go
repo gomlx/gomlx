@@ -354,7 +354,7 @@ func TestContext_SetLoader(t *testing.T) {
 		return v0.ValueGraph(g), v1.ValueGraph(g)
 	})
 	var results []*tensors.Tensor
-	require.NotPanics(t, func() { results = e.Call() }, "Failed to run context.Exec")
+	require.NotPanics(t, func() { results = e.MustExec() }, "Failed to run context.Exec")
 	gotV0 := tensors.ToScalar[float32](results[0])
 	gotV1 := tensors.ToScalar[int64](results[1])
 	if gotV0 != 2 || gotV1 != 3 {

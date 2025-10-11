@@ -46,7 +46,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 	})
 
 	for ii := 0; ii < 2*periodInSteps; ii++ {
-		require.NotPanicsf(t, func() { _ = cosineExec.Call() }, "cosineExec.MustExec failed to execute graph for ii=%d", ii)
+		require.NotPanicsf(t, func() { _ = cosineExec.MustExec() }, "cosineExec.MustExec failed to execute graph for ii=%d", ii)
 
 		// Checks correct step number.
 		stepVar := ctx.GetVariableByScopeAndName(fmt.Sprintf("/%s/%s", optimizers.Scope, Scope), optimizers.GlobalStepVariableName)
@@ -78,5 +78,5 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 			Done()
 		return optimizers.LearningRateVar(ctx, dtypes.Float32, 0.001).ValueGraph(graph)
 	})
-	require.NotPanics(t, func() { _ = cosineExec.Call() }, "cosineExec.MustExec failed to execute graph when ctx.IsTraining() == false")
+	require.NotPanics(t, func() { _ = cosineExec.MustExec() }, "cosineExec.MustExec failed to execute graph when ctx.IsTraining() == false")
 }

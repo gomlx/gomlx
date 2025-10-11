@@ -65,7 +65,7 @@ func TestBuildGraph(t *testing.T) {
 		require.True(t, g.GetNodeByAlias("/inceptionV3/conv_093/output") != nil)
 		return output
 	})
-	predictionT := inceptionV3Exec.Call(imgT)[0]
+	predictionT := inceptionV3Exec.MustExec(imgT)[0]
 	prediction := predictionT.Value().([][]float32)[0] // The last [0] takes the first element of the batch of 1.
 
 	// Compare with the expected result:

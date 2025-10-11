@@ -350,7 +350,7 @@ func convertPapersEmbeddings(backend backends.Backend, ctx *context.Context) {
 	e := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 		return ConvertDType(papersVar.ValueGraph(g), dtype)
 	})
-	converted := e.Call()[0]
+	converted := e.MustExec()[0]
 	papersVar.SetValuePreservingOld(converted) // We don't want to destroy the unconverted values, in case we need it again (it happens in tests).
 	klog.V(1).Infof("Converted papers embeddings to %s: new shape is %s", dtype, papersVar.Shape())
 }

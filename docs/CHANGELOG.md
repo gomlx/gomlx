@@ -10,6 +10,8 @@
     Exceptions:
     * The `backends` package: it will move to its own repository later in the year (or early 2026)
     * The `ui` and `example` packages: since they are just extras, we keep them where they are for now.
+  * Normalized graph.Exec and context.Exec API:
+    * Now using `Exec.Exec*` methods to include an error in the return, and `Exec.MustExec*` to panic instead.
 
 <hr/>
 
@@ -24,13 +26,15 @@
   * Disabled XLA logs by default by setting TF_CPP_MIN_LOG_LEVEL to 2 (errors level), if it is not already set.
 * Package `graph`:
   * `NewExec`, `NewExecAny` `Exec`, `ExecOnce` and `ExecOnceN` now return an error on failure.
-  * `MustNewExec`, `MustNewExecAny`, `Call`, `CallOnce` and `CallOnceN` panic on failure.
-  * Introduced `Exec[1-4]` and `Call[1-4]` to execute the graph and return exactly 1-4 values.
+  * `MustNewExec`, `MustNewExecAny`, `MustExec`, `MustExecOnce` and `MustExecOnceN` panic on failure.
+  * Introduced `Exec[1-4]` and `MustExec[1-4]` to execute the graph and return exactly 1-4 values.
   * If no seeds are given, initialize new random number generators with a cryptographically secure seed—on OSes that provide that.
+  * Improved `Exec` tests.
 * Package `context`:
   * `NewExec`, `NewExecAny` `Exec`, `ExecOnce` and `ExecOnceN` now return an error on failure.
-  * `MustNewExec`, `Call`, `CallOnce` and `CallOnceN` panic on failure.
-  * Introduced `Exec[1-4]` and `Call[1-4]` to execute the graph and return exactly 1-4 values.
+  * `MustNewExec`, `MustNewExecAny`, `MustExec`, `MustExecOnce` and `MustExecOnceN` panic on failure.
+  * Introduced `Exec[1-4]` and `MustExec[1-4]` to execute the graph and return exactly 1-4 values.
+  * Improved documentation.
 * Packages `pkg/support/...`:
   * Generic supporting functionality that is not core to GoMLX, but that users may also find useful to interact with it
     are now better (and hopefully more definitively) organized in packages under `pkg/support/`. The following packages were moved/created:

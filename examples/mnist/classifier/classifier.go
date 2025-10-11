@@ -87,7 +87,7 @@ func New(checkpointDir string) (*Classifier, error) {
 func (c *Classifier) Classify(img image.Image) (int32, error) {
 	input := images.ToTensor(dtypes.Float32).Single(img)
 	var outputs []*tensors.Tensor
-	err := exceptions.TryCatch[error](func() { outputs = c.exec.Call(input) })
+	err := exceptions.TryCatch[error](func() { outputs = c.exec.MustExec(input) })
 	if err != nil {
 		return 0, err
 	}

@@ -609,7 +609,7 @@ func (ctx *Context) InitializeVariables(backend backends.Backend) {
 	e.isInitializeVariablesExec = true // Disallow recursive creation of variables within variable initialization.
 	var values []*tensors.Tensor
 	err := TryCatch[error](func() {
-		values = e.Call()
+		values = e.MustExec()
 	})
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to compile/run variable initialization graph"))

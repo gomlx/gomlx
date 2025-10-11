@@ -14,7 +14,7 @@ func TestRandomBernoulli(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := New()
 	ctx.RngStateFromSeed(42) // Always the same result.
-	gotT := CallOnce(backend, ctx, func(ctx *Context, g *Graph) *Node {
+	gotT := MustExecOnce(backend, ctx, func(ctx *Context, g *Graph) *Node {
 		ctx.SetTraining(g, true)
 		values := ctx.RandomBernoulli(graph.Const(g, 0.13), shapes.Make(dtypes.Float32, 100, 100, 100))
 		require.NoError(t, values.Shape().CheckDims(100, 100, 100))

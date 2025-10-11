@@ -148,7 +148,7 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tens
 			if step == g.numSteps-1 {
 				endTime = 1.0 // Avoiding numeric issues.
 			}
-			imagesBatch = g.stepExec.Call(
+			imagesBatch = g.stepExec.MustExec(
 				DonateTensorBuffer(imagesBatch, backend), g.flowerIds, startTime, endTime)[0]
 		}
 		if (n > 0 && step%n == 0) || step == g.numSteps-1 {
@@ -583,7 +583,7 @@ func (kg *KidGenerator) Eval() (metric *tensors.Tensor) {
 		if metric != nil {
 			metric.FinalizeAll()
 		}
-		metric = kg.evalExec.Call(generatedImages, datasetImages)[0]
+		metric = kg.evalExec.MustExec(generatedImages, datasetImages)[0]
 	}
 	if count == 0 {
 		exceptions.Panicf("evaluation dataset %s yielded no batches, no data to evaluate KID", kg.ds)

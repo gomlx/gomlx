@@ -219,7 +219,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 			require.NoErrorf(t, err, "Failed datasets: %+v", err)
 			fmt.Printf("\nInput:\t%v\n", inputs[0].Value())
 			fmt.Printf("Label:\t%v\n", labels[0].Value())
-			results = inferenceExec.Call(inputs[0])
+			results = inferenceExec.MustExec(inputs[0])
 			tmp := results[0].Value().([][]float32)[0]
 			var rounded []int
 			for _, v := range tmp {

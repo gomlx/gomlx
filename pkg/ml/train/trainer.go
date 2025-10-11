@@ -425,7 +425,7 @@ func (r *Trainer) callGraphFn(
 	}
 
 	// Exec.MustExec(), collect metrics:
-	err := TryCatch[error](func() { metrics = exec.Call(inputsAndLabels...) })
+	err := TryCatch[error](func() { metrics = exec.MustExec(inputsAndLabels...) })
 
 	if err != nil {
 		panic(errors.WithMessage(err, "failed to execute train/eval step"))
