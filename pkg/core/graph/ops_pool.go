@@ -17,7 +17,6 @@
 package graph
 
 import (
-	"fmt"
 	"slices"
 
 	"github.com/gomlx/gomlx/backends"
@@ -537,7 +536,6 @@ func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, stride
 	}
 	var grad *Node
 	if requiresAdjustment {
-		fmt.Printf("dilateConvolveToMatchSumPooling: padConfig=%+v\n", padConfig)
 		grad = Pad(expanded, zero, padConfig...)
 	} else {
 		grad = expanded
