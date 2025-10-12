@@ -97,7 +97,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		})
 	}
 
-	// Use standard training loop.
+	// Use the standard training loop.
 	loop := train.NewLoop(trainer)
 	if verbosity >= 0 {
 		commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
@@ -127,7 +127,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 
 	// Generate samples from fixed noise to monitor the training.
 	generator := NewImagesGenerator(config, samplesNoise, samplesFlowerIds, 20)
-	// KID is a InceptionV3 based pretrained model only used to measured similarity of the
+	// KID is an InceptionV3 based pretrained model only used to measured similarity of the
 	// images between generated flowers and the original. It's a metric.
 	var kid *KidGenerator
 	if context.GetParamOr(ctx, "kid", false) {
@@ -145,7 +145,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 			})
 	}
 
-	// Loop for given number of steps.
+	// Loop for the given number of steps.
 	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
 	globalStep := int(optimizers.GetGlobalStep(ctx))
 	if globalStep > 0 {

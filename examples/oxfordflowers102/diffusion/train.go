@@ -55,6 +55,7 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoint
 		DirFromBase(checkpointPath, c.DataDir).
 		Keep(numCheckpointsToKeep).
 		ExcludeParams(excludeParams...).
+		Immediate().
 		Done())
 	c.Checkpoint = checkpoint // Save in config.
 
@@ -181,7 +182,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 		backend, ctx, config.BuildTrainingModelGraph(), customLoss,
 		optimizers.FromContext(ctx),
 		[]metrics.Interface{movingImagesLoss, movingNoiseLoss, movingMAE}, // trainMetrics
-		[]metrics.Interface{meanImagesLoss, meanMAE})                      // evalMetrics
+		[]metrics.Interface{meanImagesLoss, meanMAE}) // evalMetrics
 	if nanLogger != nil {
 		trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
 			nanLogger.AttachToExec(exec)

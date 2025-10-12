@@ -148,12 +148,12 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tens
 			if step == g.numSteps-1 {
 				endTime = 1.0 // Avoiding numeric issues.
 			}
-			imagesBatch = g.stepExec.MustExec(
-				DonateTensorBuffer(imagesBatch, backend), g.flowerIds, startTime, endTime)[0]
+			imagesBatch = g.stepExec.MustExec1(
+				DonateTensorBuffer(imagesBatch, backend), g.flowerIds, startTime, endTime)
 		}
 		if (n > 0 && step%n == 0) || step == g.numSteps-1 {
 			times = append(times, endTime)
-			predictedImages = append(predictedImages, g.denormalizerExec.MustExec(imagesBatch)[0])
+			predictedImages = append(predictedImages, g.denormalizerExec.MustExec1(imagesBatch))
 		}
 	}
 	return
