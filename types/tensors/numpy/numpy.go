@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -344,6 +345,12 @@ func FromNpzReader(r io.ReaderAt, size int64) (map[string]*tensors.Tensor, error
 
 	results := make(map[string]*tensors.Tensor)
 	for _, f := range zipReader.File {
+		//for extra safety=)
+		cleanPath := path.Clean(f.Name)
+		if path.IsAbs(cleanPath) || strings.HasPrefix(cleanPath, "..") {
+			return nil, errors.Errorf("malicious path in .npz archive: %q (normalized to %q)", f.Name, cleanPath)
+		}
+
 		if !strings.HasSuffix(f.Name, ".npy") {
 			// .npz might contain other metadata files, skip non .npy files.
 			// Or, log a warning if unexpected.

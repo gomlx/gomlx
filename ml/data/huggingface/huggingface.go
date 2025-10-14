@@ -188,12 +188,20 @@ func (hfm *Model) EnumerateFileNames() iter.Seq2[FileNameAndPath, error] {
 	return func(yield func(FileNameAndPath, error) bool) {
 		for _, si := range hfm.Info.Siblings {
 			fileName := si.Name
-			if path.IsAbs(fileName) || strings.Index(fileName, "..") != -1 {
-				yield(FileNameAndPath{}, errors.Errorf("model %q contains illegal file name %q -- it cannot be an absolute path, nor contain \"..\"",
-					hfm.ID, fileName))
+			//more secure way to check path
+			cleanPath := path.Clean(fileName)
+			if path.IsAbs(cleanPath) || strings.HasPrefix(cleanPath, "..") {
+				yield(FileNameAndPath{}, errors.Errorf("model %q contains illegal file name %q -- traversal attempt (%s)", hfm.ID, fileName, cleanPath))
 				return
 			}
 			filePath := path.Join(hfm.BaseDir, fileName)
+			cleanFull := path.Clean(filePath)
+			cleanBase := path.Clean(hfm.BaseDir)
+			if !strings.HasPrefix(cleanFull, cleanBase) {
+				// Или: rel, err := filepath.Rel(cleanBase, cleanFull); if err != nil || strings.Contains(rel, "..") { block }
+				yield(FileNameAndPath{}, errors.Errorf("path traversal attempt in %q -> %s", fileName, cleanFull))
+				return
+			}
 			if !yield(FileNameAndPath{Name: fileName, Path: filePath}, nil) {
 				return
 			}

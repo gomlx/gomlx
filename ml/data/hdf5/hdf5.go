@@ -61,9 +61,14 @@ func ParseFile(filePath string) (contents Hdf5Contents, err error) {
 	matches := regexpH5Datasets.FindAllStringSubmatch(string(contentsBytes), -1)
 	contents = make(Hdf5Contents, len(matches))
 	for _, match := range matches {
-		contents[match[1]] = &Hdf5Dataset{
+		groupPath := match[1]
+		//in case someone inserted args into dataset name('--help', etc)
+		if strings.HasPrefix(groupPath, "-") {
+			return nil, errors.Errorf("invalid dataset name starting with '-': %q", groupPath)
+		}
+		contents[groupPath] = &Hdf5Dataset{
 			FilePath:  filePath,
-			GroupPath: match[1],
+			GroupPath: groupPath,
 		}
 	}
 
