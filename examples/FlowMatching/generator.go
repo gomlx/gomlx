@@ -148,12 +148,12 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tens
 			if step == g.numSteps-1 {
 				endTime = 1.0 // Avoiding numeric issues.
 			}
-			imagesBatch = g.stepExec.MustExec1(
-				DonateTensorBuffer(imagesBatch, backend), g.flowerIds, startTime, endTime)
+			imagesBatch = g.stepExec.MustExec(
+				DonateTensorBuffer(imagesBatch, backend), g.flowerIds, startTime, endTime)[0]
 		}
 		if (n > 0 && step%n == 0) || step == g.numSteps-1 {
 			times = append(times, endTime)
-			predictedImages = append(predictedImages, g.denormalizerExec.MustExec1(imagesBatch))
+			predictedImages = append(predictedImages, g.denormalizerExec.MustExec(imagesBatch)[0])
 		}
 	}
 	return
@@ -362,6 +362,9 @@ func PlotModelEvolution(cfg *diffusion.Config, imagesPerSample int, animate bool
 //
 // Plotting results only work if in a Jupyter (with GoNB kernel) notebook.
 func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int, displayEveryNSteps int) {
+	if !gonbui.IsNotebook {
+		exceptions.Panicf("DisplayImagesAcrossTime requires a Jupyter notebook.")
+	}
 	if cfg.Checkpoint == nil {
 		exceptions.Panicf("DisplayImagesAcrossDiffusionSteps requires a model loaded from a checkpoint, see Config.AttachCheckpoint.")
 	}
