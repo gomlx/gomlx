@@ -17,10 +17,10 @@ import (
 )
 
 // ExtraMetricFn is any function that will give extra values to display along the progress bar.
-// It is called at each time the progress bar is updated and it should return a name and the current value when it is called.
+// It is called at each time the progress bar is updated, and it should return a name and the current value when it is called.
 type ExtraMetricFn func() (name, value string)
 
-// RefreshPeriod is the time between updates in th terminal.
+// RefreshPeriod is the time between terminal updates.
 var RefreshPeriod = time.Second * 3
 
 // progressBar holds a progressbar being displayed.
