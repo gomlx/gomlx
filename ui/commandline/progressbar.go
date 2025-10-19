@@ -226,6 +226,7 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 				} else {
 					pBar.statsTable.Row("Global Step", update.metrics[0])
 				}
+				pBar.statsTable.Row("Median train step duration", FormatDuration(loop.MedianTrainStepDuration()))
 				for metricIdx, metricObj := range loop.Trainer.TrainMetrics() {
 					pBar.statsTable.Row(metricObj.Name(), update.metrics[1+metricIdx])
 				}
@@ -237,7 +238,7 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 				// For command-line, we clear the previous lines that will be overwritten.
 				pBar.termenv.HideCursor()
 				if !pBar.isFirstOutput {
-					numLinesToBackup := len(update.metrics) + 1 + 2 + len(pBar.extraMetricFns)
+					numLinesToBackup := len(update.metrics) + 2 + 2 + len(pBar.extraMetricFns)
 					pBar.termenv.CursorPrevLine(numLinesToBackup)
 				}
 				pBar.isFirstOutput = false
