@@ -51,6 +51,8 @@
 * Package `hdf5` moved to under `examples/inceptionv3`, for now the only example that uses it.
   If you need this, please let us know, maybe we move it to under support, or move it to https://github.com/gomlx/go-huggingface.
 * Package `data` renamed to `datasets`; Split downloading functionality under `examples/downloader`.
+* Package `commandline`:
+  * Progressbar now shows the median step duration.
 
 # v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
 
