@@ -63,13 +63,13 @@
 //		Done()
 //
 // TODO:
-//  1. Compress checkpoints.
-//  2. Allow to specify parts of the model to load / scope where they should be loaded to, for
+//  1. Allow to specify parts of the model to load / scope where they should be loaded to, for
 //     transfer learning.
 package checkpoints
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -82,6 +82,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
+
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/graph"
@@ -93,9 +97,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/pkg/errors"
-	"k8s.io/klog/v2"
 )
 
 var (
@@ -103,7 +104,7 @@ var (
 	DirPermMode = os.FileMode(0770)
 )
 
-// Config for the checkpoints Handler to be created. This is created with Build() and
+// Config for the checkpoints' Handler to be created. This is created with Build() and
 // configured with the various methods. Once finished, call Done() and it will output
 // a checkpoints.Handler that loads (if there are any previously saved checkpoints) and
 // saves checkpoints.
@@ -156,7 +157,7 @@ func Build(ctx *context.Context) *Config {
 	return c
 }
 
-// Load creates configuration to load a checkpoint.
+// Load creates the configuration to load a checkpoint.
 // It's identical to Build, except it will fail if the checkpoint does not already exist.
 //
 // Use Dir or DirWithBase to configure location of checkpoint.
@@ -175,7 +176,7 @@ func (c *Config) setError(err error) {
 
 // Dir sets the directory where to save / load the checkpoints.
 //
-// One must be set either Dir, DirFromBase or TempDir before building the checkpoints.Handler.
+// One must be set either Dir, DirFromBase, or TempDir before building the checkpoints.Handler.
 func (c *Config) Dir(dir string) *Config {
 	c.dir = fsutil.MustReplaceTildeInDir(dir)
 	fi, err := os.Stat(dir)
@@ -196,7 +197,7 @@ func (c *Config) Dir(dir string) *Config {
 		return c
 	}
 
-	// Create directory.
+	// Create the directory.
 	err = os.MkdirAll(dir, DirPermMode)
 	if err != nil {
 		c.setError(errors.Wrapf(err, "trying to create dir %q", dir))
@@ -236,7 +237,7 @@ func (c *Config) DirFromBase(dir, baseDir string) *Config {
 //	_ = checkpoints.Build(ctx).FromEmbed(myModelJson, myModelBin).Done()
 func (c *Config) FromEmbed(json string, binary []byte) *Config {
 	c.jsonReader = bytes.NewBufferString(json)
-	c.binReader = bytes.NewBuffer(binary)
+	c.binReader, _ = getLoadVarFilesFromReader(bytes.NewReader(binary))
 	return c
 }
 
@@ -329,7 +330,7 @@ func (c *Config) Keep(n int) *Config {
 // TakeMean loads the mean of the last `n` checkpoints.
 // If `n <= 0`, take the mean of all available checkpoints.
 // Notice that only trainable variables are averaged. Variables that have
-// integer values or are not marked as trainable (e.g. the global step),
+// integer values or are not marked as trainable (e.g., the global step),
 // are taken from the most recent checkpoint instead.
 //
 // The default is 1, so only load the most recent checkpoint.
@@ -447,7 +448,7 @@ func (c *Config) MustDone() *Handler {
 	return h
 }
 
-// Handler handles saving and loading of checkpoints for a context.Context. See example in
+// Handler handles saving and loading of checkpoints for a context.Context. See example in the
 // package documentation.
 //
 // It is created and configured using Build(), followed by options setting and then calling
@@ -456,7 +457,7 @@ func (c *Config) MustDone() *Handler {
 // Loading data into Handler happens at its creation time: it loads from the latest checkpoint.
 // (Hyper-)Parameters are immediately loaded into the context then (if not Config.ExcludeAllParams)
 // but the loaded variable values are only "consumed" (used) one at a time, as the variables are
-// created during the graph building (e.g: when building the model).
+// created during the graph building (e.g., when building the model).
 //
 // Saving of checkpoints is explicit, by calling Handler.Save(). Usually this is
 // done by configuring train.Loop to call it using train.EveryNSteps or train.NTimesDuringLoop.
@@ -466,7 +467,7 @@ func (c *Config) MustDone() *Handler {
 //
 // There can be more than one Handler attached to a Context -- they are used for loading in order
 // they are created (so the first one created takes priority). Multiple Handler set up can
-// be used for instance for transfer learning, where parts of the model are loaded from somewhere
+// be used, for instance, for transfer learning, where parts of the model are loaded from somewhere
 // else.
 //
 // A Handler can only be "attached" to one context.Context. If one wants to load the same
@@ -672,11 +673,15 @@ func (h *Handler) loadCheckpointFromFile(baseName string, merge bool, mergeWeigh
 
 	// Open files for reading.
 	binFileName := filepath.Join(h.config.dir, baseName+BinDataSuffix)
-	binFile, err := os.Open(binFileName)
+	f, err := os.Open(binFileName)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to open checkpoint data file %s", h, binFileName)
 	}
-	defer func() { _ = binFile.Close() }()
+	defer func() { _ = f.Close() }()
+	binFile, err := getLoadVarFilesFromReader(f)
+	if err != nil {
+		return errors.Wrapf(err, "%s: failed to read checkpoint data file %s", h, binFileName)
+	}
 
 	jsonFileName := filepath.Join(h.config.dir, baseName+JsonNameSuffix)
 	jsonFile, err := os.Open(jsonFileName)
@@ -839,7 +844,7 @@ func (h *Handler) Save() error {
 	baseName := h.newCheckpointBaseName(globalStep)
 	h.checkpointsCount += 1 // Bump unique number.
 	varFileName := filepath.Join(h.config.dir, baseName+BinDataSuffix)
-	varFile, err := os.Create(varFileName)
+	varFile, err := getSaveVarFiles(varFileName)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to create checkpoint data file %s", h, varFileName)
 	}
@@ -1073,10 +1078,57 @@ func (h *Handler) LoadedVariables() map[string]*tensors.Tensor {
 	return h.variableValues
 }
 
-// ExcludeVarsFromSaving enumerate variables to be excluded from saving.
+// ExcludeVarsFromSaving enumerates variables to be excluded from saving.
 // The function can be called multiple times, adding variables to be excluded from saving.
 func (h *Handler) ExcludeVarsFromSaving(vars ...*context.Variable) {
 	for _, v := range vars {
 		h.config.varsToExclude.Insert(v)
 	}
+}
+
+const (
+	zipHeader = "gomlx_00"
+	lenHeader = 8
+)
+
+// getLoadVarFilesFromReader returns a reader to the decompressed binary variables.  It is compliant with legacy format,
+// i.e., non-compressed.
+func getLoadVarFilesFromReader(f io.ReadSeeker) (io.Reader, error) {
+	buf := make([]byte, lenHeader)
+	_, err := f.Read(buf)
+	if err != nil {
+		return nil, errors.Wrap(err, "read header")
+	}
+	if string(buf) == zipHeader {
+		rd, err := gzip.NewReader(f)
+		if err != nil {
+			return nil, errors.Wrap(err, "read gzip header")
+		}
+		var rd1 bytes.Buffer
+		_, err = rd1.ReadFrom(rd)
+		if err != nil {
+			return nil, errors.Wrap(err, "read zip")
+		}
+		return &rd1, nil
+	}
+	_, err = f.Seek(0, io.SeekStart)
+	if err != nil {
+		return nil, errors.Wrap(err, "seek header")
+	}
+	return f, nil
+}
+
+// getSaveVarFiles creates a new file at the specified path, writes a predefined header "gomlx_00", and returns a gzip
+// writer for the file.  It is the responsibility of the caller to call the writer's Flush function before closing.
+// Returns an error if the file creation or header writing process fails.
+func getSaveVarFiles(path string) (*gzip.Writer, error) {
+	f, err := os.Create(path)
+	if err != nil {
+		return nil, errors.Wrap(err, "create file")
+	}
+	_, err = f.Write([]byte(zipHeader))
+	if err != nil {
+		return nil, errors.Wrap(err, "write header")
+	}
+	return gzip.NewWriter(f), nil
 }
