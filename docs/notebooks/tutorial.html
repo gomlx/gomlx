@@ -7635,13 +7635,14 @@ some input values.</p>
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h2 id="Backends-and-executing-Graphs-with-graph.Exec">Backends and executing Graphs with <code>graph.Exec</code><a class="anchor-link" href="#Backends-and-executing-Graphs-with-graph.Exec">¶</a></h2><p><strong>GoMLX</strong> can work with different backends to execute its operations. Currently 2 backends are supported:</p>
 <ol>
-<li><code>"xla"</code>: It uses <a href="https://openxla.org/">OpenXLA/XLA</a>, a "state of the art" execution engine for ML operations, that supports CPU (with SIMD), various accelerators (GPUs, TPUs), JIT (Just In Time) compilation, providing the best performance. For now though, it only works in Linux/Amd64 platform.</li>
+<li><code>"xla"</code>: It uses <a href="https://openxla.org/">OpenXLA/XLA</a>, a "state of the art" execution engine for ML operations, that supports CPU (with SIMD), various accelerators (GPUs, TPUs), JIT (Just In Time) compilation, providing the best performance. For now though, it only works in Linux/amd64 platform.</li>
 <li><code>"go"</code> (aka. <em>SimpleGo</em>): A pure Go backend engine. Much slower than <code>xla</code>, but very portable, likely will work in all platforms supported by Go -- tested in Linux, Windows, WASM (yes, it runs in the browser).</li>
 </ol>
-<p>Both backends are included if you <code>import _ "github.com/gomlx/gomlx/backends/default"</code> like in the example below (<code>xla</code> is excluded if not Linux). But you can build your binary only with xla with <code>import _ "github.com/gomlx/gomlx/backends/xla"</code> or only <code>go</code> with <code>import _ "github.com/gomlx/gomlx/backends/simplego"</code>.</p>
-<p>Creating a <code>backends.Backend</code> object is trivial: <code>backends.New()</code> (or <code>backends.MustNew()</code> and it will panic on failure). If the environment variable <code>GOMLX_BACKEND</code> is set, it can define the backend and its configuration (e.g.: <code>"go"</code>, <code>"xla:cpu"</code>, <code>"xla:cuda"</code>, etc.). Here we set it to <code>xla:cpu</code> to force the CPU backend for this tutorial.</p>
-<p>With the backend created, <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/graph#Exec"><code>Exec</code></a> is the easiest way to compile and execute computation graphs in GoMLX.
-To run our <code>Sum</code> function above we can do:</p>
+<p>Both backends are included if you <code>import _ "github.com/gomlx/gomlx/backends/default"</code> like in the example below (<code>xla</code> is excluded if not Linux).
+But you can build your binary only with xla with <code>import _ "github.com/gomlx/gomlx/backends/stablehlo"</code> or only <code>go</code> with <code>import _ "github.com/gomlx/gomlx/backends/simplego"</code>.</p>
+<p>Creating a <code>backends.Backend</code> object is trivial: <code>backends.New()</code> (or <code>backends.MustNew()</code>). If the environment variable <code>GOMLX_BACKEND</code> is set, it can define the backend and its configuration (e.g.: <code>"go"</code>, <code>"xla:cpu"</code>, <code>"xla:cuda"</code>, etc.). Here we set it to <code>xla:cpu</code> to force the CPU backend for this tutorial.</p>
+<p>With the backend created, <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/graph#Exec"><code>Exec</code></a> is the easiest way to compile and execute computation graphs in GoMLX.</p>
+<p>To run our <code>Sum</code> function above we can do:</p>
 </div>
 </div>
 </div>
@@ -8770,7 +8771,7 @@ If you are workig on public datasets, please consider contributing similar libra
 <li><strong>GoMLX</strong> also include the <code>data.InMemoryDataset</code>, which can be created from tensors in one line</li>
 </ul>
 </blockquote>
-<p>The package <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/ml/data">github.com/gomlx/gomlx/pkg/ml/data</a> provides several
+<p>The package <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/ml/data">github.com/gomlx/gomlx/pkg/ml/datasets</a> provides several
 tools to facilitate the work here:</p>
 <ul>
 <li><code>Parallel</code>: parallelizes any dataset, includes some buffer.</li>
