@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# v0.24.0: **API change**: package tree restructured under `pkg`; Backend xla->stablehlo
+# v0.24.0: **API change**: package tree restructured under `pkg`, `Exec` normalization; Backend `xla` now provided by `stablehlo`
 
 * **Highlights** of this release:
   * Deprecating old "xla" backend (now called "oldxla") in favor of "stablehlo" (aliased to "xla" as well):
@@ -11,7 +11,8 @@
       machine learning packages (`train`, `losses`, `optimizers`, `layers`, `metrics`, `data`, `ui`, `inceptionv3`) are under `pkg/ml`;
       supporting packages (`fsutil`, `sets`, `xslices`, `xsync`) are under `pkg/support`.
     * Normalized `graph.Exec` and `context.Exec` slightly changed the API: 
-      the `Exec.Exec...` methods now return an error, and the `Exec.MustExec...` methods panic.
+      the `Exec.Exec...` methods now return an error, and the `Exec.MustExec...` methods panic (instead of the old `Exec.Call` format);
+      The `graph.NewExec` and `context.NewExec` return errors, and the `graph.MustNewExec` and `context.MustNewExec` panic.
     * File utilities under the old `ml/data` now are under `pkg/support/fsutil`, and the package `ml/data` itself was 
       renamed `pkg/ml/datasets` and now only holds the various datasets types.
     * Packages that were not moved:
