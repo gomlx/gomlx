@@ -8,7 +8,7 @@
     but in special cases there may require small changes.
   * Large refactoring: exported GoMLX packages moved under `/pkg`. The following changes: 
     * **This requires changes to the import paths**: core packages (`tensors`, `shapes` and `graph`) are under `pkg/core`;
-      machine learning packages (`train`, `losses`, `optimizers`, `layers`, `metrics`, `data`, `ui`, `inceptionv3`) are under `pkg/ml`;
+      machine learning packages (`context`, `layers`, `train`, `datasets`, ...) are under `pkg/ml`;
       supporting packages (`fsutil`, `sets`, `xslices`, `xsync`) are under `pkg/support`.
     * Normalized `graph.Exec` and `context.Exec` slightly changed the API: 
       the `Exec.Exec...` methods now return an error, and the `Exec.MustExec...` methods panic (instead of the old `Exec.Call` format);
