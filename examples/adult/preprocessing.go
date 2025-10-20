@@ -19,8 +19,12 @@ package adult
 import (
 	"encoding/gob"
 	"fmt"
+
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/examples/downloader"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
+
 	"math/rand"
 	"os"
 	"path"
@@ -30,7 +34,6 @@ import (
 
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
-	"github.com/gomlx/gomlx/ml/data"
 	"github.com/pkg/errors"
 )
 
@@ -70,11 +73,11 @@ func DownloadDataset(dir string, force bool, verbosity int) {
 	for _, urlAndPath := range dataNames {
 		filePath := path.Join(dir, urlAndPath.path)
 		if force {
-			_, err := data.Download(urlAndPath.url, filePath, true)
+			_, err := downloader.Download(urlAndPath.url, filePath, true)
 			AssertNoError(err)
-			AssertNoError(data.ValidateChecksum(filePath, urlAndPath.checkSum))
+			AssertNoError(fsutil.ValidateChecksum(filePath, urlAndPath.checkSum))
 		} else {
-			AssertNoError(data.DownloadIfMissing(urlAndPath.url, filePath, urlAndPath.checkSum))
+			AssertNoError(downloader.DownloadIfMissing(urlAndPath.url, filePath, urlAndPath.checkSum))
 		}
 		if verbosity >= 1 {
 			fmt.Printf("\t%s => %s\n", urlAndPath.url, filePath)
@@ -166,14 +169,14 @@ func LoadDataFrame(path string) dataframe.DataFrame {
 //
 // It panics in case of error.
 func LoadAndPreprocessData(dir string, numQuantiles int, forceDownload bool, verbosity int) {
-	dir = data.ReplaceTildeInDir(dir) // "~/..." -> "${HOME}/..."
+	dir = fsutil.MustReplaceTildeInDir(dir) // "~/..." -> "${HOME}/..."
 	if Data.VocabulariesFeatures != nil {
 		// Already loaded, nothing to do.
 		return
 	}
 
 	// Make sure the data directory exists.
-	if !data.FileExists(dir) {
+	if !fsutil.MustFileExists(dir) {
 		AssertNoError(os.MkdirAll(dir, 0777))
 	}
 
@@ -293,7 +296,7 @@ func SaveBinaryData(dir string, numQuantiles int) (err error) {
 // Considering using LoadAndPreprocessData instead.
 func LoadBinaryData(dir string, numQuantiles int) (found bool) {
 	filePath := BinaryFilePath(dir, numQuantiles)
-	if !data.FileExists(filePath) {
+	if !fsutil.MustFileExists(filePath) {
 		return false
 	}
 

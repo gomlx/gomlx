@@ -3,10 +3,10 @@ package diffusion
 import (
 	"fmt"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
+	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/janpfeifer/must"
 	"github.com/stretchr/testify/require"
 	"io"
 	"testing"
@@ -57,10 +57,10 @@ func loopDataset(b *testing.B, ds train.Dataset, n int) {
 func BenchmarkDatasets(b *testing.B) {
 	config := getTestConfig()
 	ds := flowers.NewDataset(dtypes.Float32, config.ImageSize)
-	dsBatched := data.Batch(config.Backend, ds, config.BatchSize, true, true)
+	dsBatched := datasets.Batch(config.Backend, ds, config.BatchSize, true, true)
 	require.NoError(b, flowers.DownloadAndParse(config.DataDir))
 
-	dsParallel := data.Parallel(dsBatched)
+	dsParallel := datasets.Parallel(dsBatched)
 
 	// Warmup.
 	loopDataset(b, dsParallel, 100) // Warms up both dsParallel and the underlying dsBatched.

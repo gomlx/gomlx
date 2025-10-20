@@ -19,8 +19,8 @@ package mnist
 import (
 	"testing"
 
-	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gopjrt/dtypes"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -29,7 +29,7 @@ import (
 func TestDataset(t *testing.T) {
 	// Where the dataset is downloaded -- it only downloads if not yet there.
 	dataDir := "~/tmp/mnist"
-	dataDir = data.ReplaceTildeInDir(dataDir)
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if err := Download(dataDir); err != nil {
 		t.Errorf("Download: %v", err)
 		return

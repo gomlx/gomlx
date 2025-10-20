@@ -2,31 +2,32 @@ package dogsvscats
 
 import (
 	"fmt"
-	"github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/graph/nanlogger"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/ml/layers/fnn"
-	"github.com/gomlx/gomlx/ml/layers/kan"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
-	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/ui/commandline"
-	"github.com/gomlx/gomlx/ui/gonb/plotly"
-	"github.com/janpfeifer/must"
-	"golang.org/x/exp/maps"
-	"k8s.io/klog/v2"
 	"os"
 	"time"
+
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/pkg/ml/layers"
+	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
+	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
+	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
+	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/ml/train/losses"
+	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
+	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/ui/commandline"
+	"github.com/gomlx/gomlx/ui/gonb/plotly"
+	"golang.org/x/exp/maps"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -140,8 +141,8 @@ func CreateDefaultContext() *context.Context {
 
 // TrainModel based on configuration and flags.
 func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bool, paramsSet []string) {
-	dataDir = data.ReplaceTildeInDir(dataDir)
-	if !data.FileExists(dataDir) {
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
+	if !fsutil.MustFileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
 	}
 

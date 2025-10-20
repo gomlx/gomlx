@@ -3,13 +3,13 @@ package dogsvscats
 // This file implements the baseline CNN model, including the FNN layers on top.
 
 import (
-	"github.com/gomlx/exceptions"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/ml/layers/fnn"
+	"github.com/gomlx/gomlx/internal/exceptions"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/layers"
+	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
+	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
 )
 
 // CnnModelGraph builds the CNN model for our demo.

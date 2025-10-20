@@ -8,7 +8,7 @@ import (
 	"fmt"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 )
 

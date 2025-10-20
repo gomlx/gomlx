@@ -8,8 +8,8 @@ import (
 	"text/template"
 
 	"github.com/gomlx/gomlx/internal/backendparser"
-	"github.com/gomlx/gomlx/types"
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"k8s.io/klog/v2"
 )
 
@@ -49,7 +49,7 @@ var (
 		"Sin":        "Sine",
 	}
 
-	UnaryOpsToExclude = types.SetWith(
+	UnaryOpsToExclude = sets.MakeWith(
 		"Identity", "Conj", "IsNaN",
 		"Abs", // Abs is excluded because we special-handle values of complex types.
 	)

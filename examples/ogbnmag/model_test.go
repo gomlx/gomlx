@@ -6,10 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"github.com/dustin/go-humanize"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/tensors"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,7 +40,7 @@ func TestModel(t *testing.T) {
 	testGraphFn := func(ctx *context.Context, inputs []*Node) []*Node {
 		return MagModelGraph(ctx, spec, inputs)
 	}
-	testGraphExec := context.NewExec(backend, ctx, testGraphFn)
+	testGraphExec := context.MustNewExec(backend, ctx, testGraphFn)
 
 	var inputs []*tensors.Tensor
 	spec, inputs, _, err = trainDS.Yield()
@@ -50,7 +50,7 @@ func TestModel(t *testing.T) {
 	}
 	fmt.Printf("One sample (batch) size is %s bytes\n", humanize.Bytes(totalSizeBytes))
 	require.NoError(t, err)
-	outputs := testGraphExec.Call(inputs)
+	outputs := testGraphExec.MustExec(inputs)
 	for ii, output := range outputs {
 		fmt.Printf("output #%d=%s\n", ii, output.Shape())
 	}

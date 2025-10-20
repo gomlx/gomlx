@@ -3,15 +3,6 @@ package oxfordflowers102
 import (
 	"encoding/gob"
 	"fmt"
-	"github.com/disintegration/imaging"
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensors"
-	timage "github.com/gomlx/gomlx/types/tensors/images"
-	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/pkg/errors"
 	"image"
 	"io"
 	"math"
@@ -20,6 +11,17 @@ import (
 	"path"
 	"sync"
 	"time"
+
+	"github.com/disintegration/imaging"
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
 )
 
 // Dataset implements train.Dataset, and yields one image at a time.
@@ -43,7 +45,7 @@ type Dataset struct {
 // The images are resized and cropped to `imageSize x imageSize` pixel,
 // cut from the middle.
 //
-// It doesn't support batch, but you can use GoMLX's `data.Batch` for that.
+// It doesn't support batch, but you can use GoMLX's `datasets.Batch` for that.
 func NewDataset(dtype dtypes.DType, imageSize int) *Dataset {
 	return &Dataset{
 		name:      "Oxford Flowers 102",
@@ -205,7 +207,7 @@ func (ds *Dataset) Reset() {
 	ds.mu.Unlock()
 }
 
-// InMemoryDataset creates a `data.InMemoryDataset` with the Oxford Flowers 102, of the given `imageSize` for both,
+// InMemoryDataset creates a `datasets.InMemoryDataset` with the Oxford Flowers 102, of the given `imageSize` for both,
 // height and width -- image is resized and then cropped at the center.
 //
 // A cache version is automatically saved at the `baseDir` and prefixed with `name`, if it is not empty.
@@ -221,10 +223,10 @@ func (ds *Dataset) Reset() {
 // images, if they are not yet downloaded.
 func InMemoryDataset(backend backends.Backend, baseDir string, imageSize int, name string,
 	partitionSeed int64, partitionFrom, partitionTo float64) (
-	inMemoryDataset *data.InMemoryDataset, err error) {
+	inMemoryDataset *datasets.InMemoryDataset, err error) {
 	var f *os.File
 	if baseDir != "" {
-		baseDir = data.ReplaceTildeInDir(baseDir) // If dir starts with "~", it is replaced.
+		baseDir = fsutil.MustReplaceTildeInDir(baseDir) // If dir starts with "~", it is replaced.
 		inMemoryCacheFile := path.Join(baseDir, fmt.Sprintf("%s_cached_images_%dx%d.bin", name, imageSize, imageSize))
 
 		defer func() {
@@ -237,7 +239,7 @@ func InMemoryDataset(backend backends.Backend, baseDir string, imageSize int, na
 		if err == nil {
 			// Reads from cached file.
 			dec := gob.NewDecoder(f)
-			inMemoryDataset, err = data.GobDeserializeInMemory(backend, nil, dec)
+			inMemoryDataset, err = datasets.GobDeserializeInMemory(backend, nil, dec)
 			_ = f.Close()
 			return
 		}
@@ -264,7 +266,7 @@ func InMemoryDataset(backend backends.Backend, baseDir string, imageSize int, na
 	start := time.Now()
 	fmt.Printf("Creating InMemoryDataset for %q with images cropped and scaled to %dx%d...\n", name, imageSize, imageSize)
 	ds := NewDataset(dtypes.Uint8, imageSize).Partition(partitionSeed, partitionFrom, partitionTo)
-	inMemoryDataset, err = data.InMemory(backend, data.Parallel(ds), false)
+	inMemoryDataset, err = datasets.InMemory(backend, datasets.Parallel(ds), false)
 	elapsed := time.Since(start)
 	fmt.Printf("\t- %s to process dataset.\n", elapsed)
 	if err != nil {

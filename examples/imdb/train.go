@@ -5,28 +5,29 @@ import (
 	"os"
 	"time"
 
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/ml/layers/fnn"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
-	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
+	"github.com/gomlx/gomlx/pkg/ml/layers"
+	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
+	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
+	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/ml/train/losses"
+	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
+	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/gomlx/gopjrt/dtypes"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/internal/must"
 	"golang.org/x/exp/maps"
 )
 
@@ -120,8 +121,8 @@ func CreateDefaultContext() *context.Context {
 // TrainModel with hyperparameters given in ctx.
 func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
-	dataDir = data.ReplaceTildeInDir(dataDir)
-	if !data.FileExists(dataDir) {
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
+	if !fsutil.MustFileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
 	}
 
@@ -160,9 +161,9 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	testEvalDS = NewDataset("test-eval", TypeTest, maxLen, batchSize, false)
 
 	// Parallelize generation of batches.
-	trainDS = data.Parallel(trainDS)
-	trainEvalDS = data.Parallel(trainEvalDS)
-	testEvalDS = data.Parallel(testEvalDS)
+	trainDS = datasets.Parallel(trainDS)
+	trainEvalDS = datasets.Parallel(trainEvalDS)
+	testEvalDS = datasets.Parallel(testEvalDS)
 
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler

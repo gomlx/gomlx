@@ -1,13 +1,14 @@
 package sampler
 
 import (
-	. "github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"io"
 	"math/rand/v2"
 	"sync"
+
+	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 // Dataset is created by a configured [Strategy].

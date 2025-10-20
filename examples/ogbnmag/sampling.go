@@ -2,13 +2,15 @@ package ogbnmag
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	mldata "github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
 	"os"
 	"path"
+
+	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 )
 
 var (
@@ -41,7 +43,7 @@ var (
 func NewSampler(baseDir string) (*sampler.Sampler, error) {
 	var samplerPath string
 	if baseDir != "" {
-		baseDir = mldata.ReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
+		baseDir = fsutil.MustReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
 		samplerPath = path.Join(baseDir, DownloadSubdir, "sampler.bin")
 		s, err := sampler.Load(samplerPath)
 		if err == nil {

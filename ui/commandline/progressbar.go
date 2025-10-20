@@ -9,18 +9,18 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	lgtable "github.com/charmbracelet/lipgloss/table"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/ui/notebooks"
 	"github.com/muesli/termenv"
 	"github.com/schollz/progressbar/v3"
 )
 
 // ExtraMetricFn is any function that will give extra values to display along the progress bar.
-// It is called at each time the progress bar is updated and it should return a name and the current value when it is called.
+// It is called at each time the progress bar is updated, and it should return a name and the current value when it is called.
 type ExtraMetricFn func() (name, value string)
 
-// RefreshPeriod is the time between updates in th terminal.
+// RefreshPeriod is the time between terminal updates.
 var RefreshPeriod = time.Second * 3
 
 // progressBar holds a progressbar being displayed.
@@ -146,7 +146,9 @@ func (pBar *progressBar) onEnd(_ *train.Loop, _ []*tensors.Tensor) error {
 		close(pBar.updates)
 	}
 	pBar.asyncUpdatesDone.Wait()
-	pBar.termenv.ShowCursor()
+	if pBar.termenv != nil {
+		pBar.termenv.ShowCursor()
+	}
 	fmt.Println()
 	return nil
 }
@@ -224,6 +226,7 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 				} else {
 					pBar.statsTable.Row("Global Step", update.metrics[0])
 				}
+				pBar.statsTable.Row("Median train step duration", FormatDuration(loop.MedianTrainStepDuration()))
 				for metricIdx, metricObj := range loop.Trainer.TrainMetrics() {
 					pBar.statsTable.Row(metricObj.Name(), update.metrics[1+metricIdx])
 				}
@@ -235,7 +238,7 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 				// For command-line, we clear the previous lines that will be overwritten.
 				pBar.termenv.HideCursor()
 				if !pBar.isFirstOutput {
-					numLinesToBackup := len(update.metrics) + 1 + 2 + len(pBar.extraMetricFns)
+					numLinesToBackup := len(update.metrics) + 2 + 2 + len(pBar.extraMetricFns)
 					pBar.termenv.CursorPrevLine(numLinesToBackup)
 				}
 				pBar.isFirstOutput = false

@@ -11,10 +11,10 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/internal/xlabuilderparser"
-	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"k8s.io/klog/v2"
 )
 
@@ -24,7 +24,7 @@ const (
 
 var (
 	// methodsToExclude from support. Typically, deprecated functions.
-	methodsToExclude = types.SetWith(
+	methodsToExclude = sets.MakeWith(
 		"And", "Or", "Xor", "Not", "ReduceAnd", "ReduceOr", "ReduceXor", "ScatterAdd",
 		"SelectAndScatterSum", // SelectAndScatterSum is deprecated and doesn't work.
 	)
@@ -36,7 +36,7 @@ package xla
 
 import (
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/pkg/errors"

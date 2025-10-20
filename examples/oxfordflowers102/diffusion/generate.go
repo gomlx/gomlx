@@ -4,24 +4,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"github.com/gomlx/exceptions"
-	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/models/inceptionv3"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
-	timage "github.com/gomlx/gomlx/types/tensors/images"
-	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/gomlx/gomlx/types/xsync"
-	"github.com/janpfeifer/gonb/cache"
-	"github.com/janpfeifer/gonb/gonbui"
-	"github.com/janpfeifer/gonb/gonbui/dom"
-	"github.com/janpfeifer/gonb/gonbui/widgets"
-	"github.com/janpfeifer/must"
 	"image"
 	"io"
 	"math"
@@ -32,6 +14,25 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+
+	"github.com/gomlx/gomlx/examples/inceptionv3"
+	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
+	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/must"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/gomlx/pkg/support/xsync"
+	"github.com/janpfeifer/gonb/cache"
+	"github.com/janpfeifer/gonb/gonbui"
+	"github.com/janpfeifer/gonb/gonbui/dom"
+	"github.com/janpfeifer/gonb/gonbui/widgets"
 )
 
 // PlotImagesTensor plots images in tensor format, all in one row.
@@ -221,7 +222,7 @@ func (c *Config) DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSt
 
 	fmt.Printf("DisplayImagesAcrossDiffusionSteps(%d images, %d steps): noise.shape=%s\n", numImages, numDiffusionSteps, noise.Shape())
 	fmt.Printf("\tModel #params:\t%d\n", ctx.NumParameters())
-	fmt.Printf("\t Model memory:\t%s\n", data.ByteCountIEC(ctx.Memory()))
+	fmt.Printf("\t Model memory:\t%s\n", fsutil.ByteCountIEC(ctx.Memory()))
 	gonbui.DisplayHtml("<p><b>Noise</b></p>")
 	PlotImagesTensor(noise)
 
@@ -365,12 +366,12 @@ func (c *Config) GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predicte
 	numImages := flowers.NumLabels
 	ctx.RngStateReset()
 	imageSize := c.ImageSize
-	noise := NewExec(c.Backend, func(g *Graph) *Node {
+	noise := MustNewExec(c.Backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(c.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise
-	}).Call()[0]
+	}).MustExec()[0]
 	flowerIds := tensors.FromValue(xslices.Iota(int32(0), numImages))
 	generator := c.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
 	return generator.Generate()
@@ -408,8 +409,8 @@ func (c *Config) NewImagesGenerator(noise, flowerIds *tensors.Tensor, numDiffusi
 		flowerIds:         flowerIds,
 		numImages:         numImages,
 		numDiffusionSteps: numDiffusionSteps,
-		diffusionStepExec: context.NewExec(c.Backend, ctx, DenoiseStepGraph),
-		denormalizerExec: NewExec(c.Backend, func(image *Node) *Node {
+		diffusionStepExec: context.MustNewExec(c.Backend, ctx, DenoiseStepGraph),
+		denormalizerExec: MustNewExec(c.Backend, func(image *Node) *Node {
 			return c.DenormalizeImages(image)
 		}),
 	}
@@ -434,7 +435,7 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tens
 	for step := 0; step < g.numDiffusionSteps; step++ {
 		diffusionTime := 1.0 - float64(step)*stepSize
 		nextDiffusionTime := math.Max(diffusionTime-stepSize, 0)
-		parts := g.diffusionStepExec.Call(noisyImages, diffusionTime, nextDiffusionTime, g.flowerIds)
+		parts := g.diffusionStepExec.MustExec(noisyImages, diffusionTime, nextDiffusionTime, g.flowerIds)
 		if imagesBatch != nil {
 			imagesBatch.FinalizeAll() // Immediate release of (GPU) memory for intermediary results.
 		}
@@ -445,7 +446,7 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tens
 		if (n > 0 && step%n == 0) || step == g.numDiffusionSteps-1 {
 			diffusionSteps = append(diffusionSteps, step)
 			diffusionTimes = append(diffusionTimes, nextDiffusionTime)
-			predictedImages = append(predictedImages, g.denormalizerExec.Call(imagesBatch)[0])
+			predictedImages = append(predictedImages, g.denormalizerExec.MustExec(imagesBatch)[0])
 		}
 	}
 	return
@@ -462,11 +463,11 @@ func (g *ImagesGenerator) Generate() (batchedImages *tensors.Tensor) {
 
 // GenerateNoise generates random noise that can be used to generate images.
 func (c *Config) GenerateNoise(numImages int) *tensors.Tensor {
-	return NewExec(c.Backend, func(g *Graph) *Node {
+	return MustNewExec(c.Backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(c.DType, numImages, c.ImageSize, c.ImageSize, 3))
 		return noise
-	}).Call()[0]
+	}).MustExec()[0]
 }
 
 // GenerateFlowerIds generates random flower ids: this is the type of flowers, one of the 102.
@@ -504,7 +505,7 @@ func (c *Config) NewKidGenerator(evalDS train.Dataset, numDiffusionStep int) *Ki
 		generator:      c.NewImagesGenerator(noise, flowerIds, numDiffusionStep),
 		kid:            inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
 	}
-	kg.evalExec = context.NewExec(c.Backend, kg.ctxInceptionV3, kg.EvalStepGraph)
+	kg.evalExec = context.MustNewExec(c.Backend, kg.ctxInceptionV3, kg.EvalStepGraph)
 	return kg
 }
 
@@ -535,7 +536,7 @@ func (kg *KidGenerator) Eval() (metric *tensors.Tensor) {
 		if metric != nil {
 			metric.FinalizeAll()
 		}
-		metric = kg.evalExec.Call(generatedImages, datasetImages)[0]
+		metric = kg.evalExec.MustExec(generatedImages, datasetImages)[0]
 	}
 	if count == 0 {
 		exceptions.Panicf("evaluation dataset %s yielded no batches, no data to evaluate KID", kg.ds)

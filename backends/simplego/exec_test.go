@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/initializers"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 )
@@ -80,19 +80,19 @@ func TestGomlxIntegration(t *testing.T) {
 	require.NotPanics(t, func() { _ = backend.(*Backend) })
 
 	// Checks that basic graph building and execution works.
-	y := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node { return graph.Neg(x) }, float32(7))
+	y := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node { return graph.Neg(x) }, float32(7))
 	fmt.Printf("\ty=-x: x=7, y=%s\n", y.GoStr())
 	require.Equal(t, float32(-7), y.Value())
 
 	ctx := context.New()
-	exec := context.NewExec(backend, ctx, func(ctx *context.Context, g *graph.Graph) *graph.Node {
+	exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *graph.Graph) *graph.Node {
 		counterVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("counter", shapes.Make(dtypes.Int64))
 		counter := counterVar.ValueGraph(g)
 		counterVar.SetValueGraph(graph.OnePlus(counter))
 		return counter
 	})
 	for ii := range 10 {
-		got := exec.Call()[0]
+		got := exec.MustExec()[0]
 		require.Equal(t, int64(ii), got.Value())
 	}
 }

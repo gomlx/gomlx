@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/internal/must"
 	"k8s.io/klog/v2"
 )
 

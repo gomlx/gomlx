@@ -2,17 +2,18 @@ package gnn
 
 import (
 	"fmt"
+	"testing"
+
 	samplerPkg "github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/layers"
+	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
@@ -213,14 +214,14 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	}
 
 	// Normal GNN executor.
-	execGnn := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+	execGnn := context.MustNewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 		graphStates := createDenseTestStateGraphWithMask(strategy, g, dtypes.Float32, withCitation)
 		NodePrediction(ctx.In("model"), strategy, graphStates)
 		return graphStates["seeds"].Value
 	})
 
 	// For each paper: paperIdx (residual connection) + 1000*paperIdx + 0.025*paperIdx + (0+1+2+3+4)/1000
-	logits := execGnn.Call()[0]
+	logits := execGnn.MustExec()[0]
 	fmt.Printf("\tGNN seeds states: %s\n", logits)
 	//want := [][]float32{{0.010}, {1001.035}, {2002.060}, {3003.085}, {4004.110}, {5005.135}, {6006.160}, {7007.185}, {8008.210}, {9009.235}}
 	want := [][]float32{{0.02}, {2002.07}, {4004.12}, {6006.17}, {8008.22}, {10010.27},
@@ -237,12 +238,12 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	// Layer-Wise Inference: should return the same values.
 	lw, err := LayerWiseGNN(ctx, strategy)
 	require.NoError(t, err)
-	execLayerWise := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+	execLayerWise := context.MustNewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 		graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
 		lw.NodePrediction(ctx.In("model"), graphStates, edges)
 		return graphStates["seeds"]
 	})
-	logits = execLayerWise.Call()[0]
+	logits = execLayerWise.MustExec()[0]
 	fmt.Printf("\tLayerWiseGNN seeds states: %s\n", logits)
 	require.Equal(t, want, logits.Value())
 }
@@ -258,13 +259,13 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		setCommonTestParams(ctx)
 
 		// Normal GNN executor.
-		execGnn := context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) *Node {
+		execGnn := context.MustNewExec(manager, ctx, func(ctx *context.Context, g *Graph) *Node {
 			graphStates := createDenseTestStateGraphWithMask(strategy, g, dtypes.Float32, withCitation)
 			NodePrediction(ctx, strategy, graphStates)
 			return graphStates["seeds"].Value
 		})
 
-		sampledLogits := execGnn.Call()[0]
+		sampledLogits := execGnn.MustExec()[0]
 		fmt.Printf("\tGNN seeds states: %s\n", sampledLogits.GoStr())
 
 		// Uncomment to list variables used in model.
@@ -277,12 +278,12 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		// Layer-Wise Inference: should return the same values.
 		lw, err := LayerWiseGNN(ctx, strategy)
 		require.NoError(t, err)
-		execLayerWise := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+		execLayerWise := context.MustNewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 			graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
 			lw.NodePrediction(ctx, graphStates, edges)
 			return graphStates["seeds"]
 		})
-		lwLogits := execLayerWise.Call()[0]
+		lwLogits := execLayerWise.MustExec()[0]
 		fmt.Printf("\tLayerWiseGNN seeds states: %s\n", lwLogits.GoStr())
 		require.True(t, sampledLogits.InDelta(lwLogits, 1e-4))
 	}

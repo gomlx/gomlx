@@ -12,11 +12,11 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dustin/go-humanize"
-	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
@@ -53,9 +53,9 @@ var (
 //	$ GOMLX_BACKEND=stablehlo:cpu go test -tags=stablehlo,perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
 func TestDotGeneral_PerformanceTable(t *testing.T) {
 	filterPerfs := *flagPerfTests != ""
-	perfsToRun := types.SetWith(strings.Split(*flagPerfTests, ",")...)
+	perfsToRun := sets.MakeWith(strings.Split(*flagPerfTests, ",")...)
 	filterDTypes := *flagPerfDTypes != ""
-	dtypesToRun := types.SetWith(strings.Split(*flagPerfDTypes, ",")...)
+	dtypesToRun := sets.MakeWith(strings.Split(*flagPerfDTypes, ",")...)
 
 	// IMPORTANT: Populate this slice with the shapes and parameters of the dot-product.
 	// lhsDims: [Batch, LhsCross, Contracting]
@@ -237,14 +237,14 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			rhsTensor := tensors.FromBuffer(backend, rhsBuffer)
 
 			// Create the program that does the DotGeneral.
-			testExec := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
+			testExec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
 				return graph.DotGeneral(lhs, benchCase.lhsContractingAxes, benchCase.lhsBatchAxes,
 					rhs, benchCase.rhsContractingAxes, benchCase.rhsBatchAxes)
 			})
 
 			// Warm-up runs
 			for i := 0; i < numWarmupRuns; i++ {
-				output := testExec.Call(lhsTensor, rhsTensor)[0]
+				output := testExec.MustExec(lhsTensor, rhsTensor)[0]
 				output.FinalizeAll()
 			}
 
@@ -252,7 +252,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			startTime := time.Now()
 			var numRuns int
 			for numRuns < minNumTimedRuns || time.Since(startTime) < minTestTime { // i := 0; i < numTimedRuns; i++ {
-				output := testExec.Call(lhsTensor, rhsTensor)[0]
+				output := testExec.MustExec(lhsTensor, rhsTensor)[0]
 				output.FinalizeAll()
 				numRuns++
 			}

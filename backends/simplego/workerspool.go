@@ -122,7 +122,7 @@ func (w *workersPool) StartIfAvailable(task func()) bool {
 // WorkerIsAsleep indicates the worker (the one that called the method) is going to sleep waiting
 // for other workers, and temporarily increases the available number of workers.
 //
-// Call WorkerRestarted when the worker is ready to run again.
+// CallWorkerRestarted when the worker is ready to run again.
 func (w *workersPool) WorkerIsAsleep() {
 	w.extraParallelism.Add(1)
 }

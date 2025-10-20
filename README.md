@@ -66,7 +66,7 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
   * [Dogs & Cats classifier demo](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html); 
   * [IMDB Movie Review demo](https://gomlx.github.io/gomlx/notebooks/imdb.html); 
   * [Diffusion model for Oxford Flowers 102 dataset (generates random flowers)](examples/oxfordflowers102/OxfordFlowers102_Diffusion.ipynb);
-    * [Flow Matching Study Notebook](https://github.com/gomlx/gomlx/blob/main/examples/FlowMatching/flow_matching.ipynb) based on Meta's ["Flow Matching Guide and Code"](https://ai.meta.com/research/publications/flow-matching-guide-and-code/).
+    * [Flow Matching Study Notebook](https://gomlx.github.io/gomlx/notebooks/flow_matching.html) based on Meta's ["Flow Matching Guide and Code"](https://ai.meta.com/research/publications/flow-matching-guide-and-code/).
   * [GoMLX/Gemma](https://github.com/gomlx/gemma), a **GoMLX** implementation of 
     [Google DeepMind's Gemma v2 model](https://github.com/google-deepmind/gemma) ([blog post](https://ai.google.dev/gemma))
   * [GNN model for OGBN-MAG (experimental)](examples/ogbnmag/ogbn-mag.ipynb).
@@ -116,9 +116,9 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 * Various losses and metrics.
 * Pre-Trained models to use: InceptionV3 (image model), many more from HuggingFace using [onnx-gomlx](https://github.com/gomlx/onnx-gomlx).
   See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace. 
-* Read Numpy arrays into GoMLX tensors -- see package `github.com/gomlx/gomlx/types/tensors/numpy`.
+* Read Numpy arrays into GoMLX tensors -- see package `github.com/gomlx/gomlx/pkg/core/tensors/numpy`.
 * Support static linking of PJRT: slower to build the Go program, but deploying it doesn't require installing a PJRT plugin in the machine you are deploying it.
-  Use `go build --tags=pjrt_cpu_static` or include `import _ "github.com/gomlx/gomlx/backends/xla/cpu/static"`.
+  Use `go build --tags=pjrt_cpu_static` or include `import _ "github.com/gomlx/gomlx/backends/stablehlo/cpu/static"`.
 
 ## 👥 Support
 
@@ -249,12 +249,15 @@ In the future we plan to also export models to ONNX or StableHLO and one could u
   - `XLA_FLAGS`: optional controls for XLA backend. It should be set to a semi-colon (";") separated list of options. If you set to `--help` 
     the backend will print out some help for all options. There is also a description in the page [XLA Flags Guidance](https://openxla.org/xla/flags_guidance).
 - **What backends to include when using GoMLX ?**
-  - The recommendation is to use `import _ "github.com/gomlx/gomlx/backends/default"` which will import `XLA` and
-    `SimpleGo` backends. If you add `-tags=noxla` to the compiler it won't include *XLA*.
-  - `import _ "github.com/gomlx/gomlx/backends/simplego"` to include only `SimpleGo`.
+  - The recommendation is to use `import _ "github.com/gomlx/gomlx/backends/default"` which will import `xla` (alias to `stablehlo`) and
+    `go` (_SimpleGo_) backends. If you add `-tags=noxla` to the compiler it won't include *XLA*.
+  - `import _ "github.com/gomlx/gomlx/backends/simplego"` to include only `go`.
     If you are working on a platform not supported by *XLA*, or you don't want to install
     its C++ library.
-  - `import _ "github.com/gomlx/gomlx/backends/xla"` to import only XLA.
+  - `import _ "github.com/gomlx/gomlx/backends/stablehlo"` to import only XLA (stablehlo).
+  - A deprecated version of *XLA* backend (named `oldxla`) is available if you `import _ "github.com/gomlx/gomlx/backends/xla"`.
+    This is temporary only, and will be removed in future releases. It is also included if you 
+    `import _ "github.com/gomlx/gomlx/backends/default"` and use `-tags=oldxla` when building.
 
 ## 🤝 Collaborating
 

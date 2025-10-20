@@ -14,9 +14,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/plots"
 	"github.com/janpfeifer/gonb/gonbui/plotly"
 	"github.com/pkg/errors"
@@ -37,7 +37,7 @@ var (
 
 // createSortedMetricTypes collects all metric types and sort them.
 func createSortedMetricTypes(metricsOrder map[ModelNameAndMetric]int) []string {
-	metricTypesSet := types.MakeSet[string]()
+	metricTypesSet := sets.Make[string]()
 	for info := range metricsOrder {
 		metricTypesSet.Insert(info.MetricType)
 	}
@@ -205,7 +205,7 @@ func BuildPlots(checkpointPaths []string, modelNames []string, metricsOrder map[
 	// Create a temporary file for the serializedPlots if needed.
 	outputFilePath := *flagPlotOutput
 	if outputFilePath != "" {
-		outputFilePath = data.ReplaceTildeInDir(outputFilePath)
+		outputFilePath = fsutil.MustReplaceTildeInDir(outputFilePath)
 		if !path.IsAbs(outputFilePath) {
 			outputFilePath = path.Join(checkpointPaths[0], outputFilePath)
 		}

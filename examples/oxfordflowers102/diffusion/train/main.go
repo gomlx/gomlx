@@ -2,10 +2,10 @@ package main
 
 import (
 	"flag"
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
+	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ui/commandline"
-	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"

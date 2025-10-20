@@ -35,9 +35,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/examples/downloader"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/pkg/errors"
 )
 
@@ -75,7 +76,7 @@ var (
 //
 // If it's already downloaded, simply load binary file version.
 func Download(baseDir string) error {
-	baseDir = data.ReplaceTildeInDir(baseDir)
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 	loaded, err := loadBinary(baseDir)
 	if err != nil {
 		return err
@@ -86,7 +87,7 @@ func Download(baseDir string) error {
 		return nil
 	}
 
-	if err := data.DownloadAndUntarIfMissing(DownloadURL, baseDir, LocalTarFile, LocalDir, TarHash); err != nil {
+	if err := downloader.DownloadAndUntarIfMissing(DownloadURL, baseDir, LocalTarFile, LocalDir, TarHash); err != nil {
 		return errors.Wrapf(err, "imdb.Download failed")
 	}
 	LoadedVocab, LoadedExamples, err = LoadIndividualFiles(baseDir)

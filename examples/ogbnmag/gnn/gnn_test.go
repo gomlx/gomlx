@@ -1,13 +1,14 @@
 package gnn
 
 import (
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
 	"testing"
+
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 )
 
 func TestPoolMessagesWithFixedShape(t *testing.T) {

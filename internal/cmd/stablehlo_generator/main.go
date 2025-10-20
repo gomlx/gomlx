@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/internal/backendparser"
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/must"
 	"k8s.io/klog/v2"
 )
 

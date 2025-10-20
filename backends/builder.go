@@ -3,7 +3,8 @@ package backends
 import (
 	"slices"
 
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // Op represents the output of an operation, during the computation graph building time.
@@ -18,7 +19,7 @@ type Op any
 //  1. Not implement standard operations by returning an error -- this restricts what type of models it can support.
 //     See Backend.Capabilities and package github.com/gomlx/gomlx/backends/notimplemented
 //  2. Support specialized operations beyond those defined in this interface -- this requires
-//     careful interface casting by the caller (in package github.com/gomlx/gomlx/graph) and
+//     careful interface casting by the caller (in package github.com/gomlx/gomlx/pkg/core/graph) and
 //     fallback to backends that don't support these specialized ops.
 type Builder interface {
 	// Compile the computation built. This immediately invalidates the Builder and returns an Executable that
@@ -123,5 +124,9 @@ const (
 	// ReduceOpMin reduces by taking the minimum value.
 	ReduceOpMin
 )
+
+// RngStateShape is the default shape for the random number generator state.
+// It dependents on the algorithm, but for now we are using Philox.
+var RngStateShape = shapes.Make(dtypes.Uint64, 3)
 
 //go:generate go tool enumer -type ReduceOpType -trimprefix=ReduceOp -output=gen_reduceoptype_enumer.go builder.go

@@ -7,10 +7,11 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
@@ -34,7 +35,7 @@ type BalancedDataset struct {
 // It caches the whole OxfordFlowers dataset in a large tensor, that is also yielded, along with the indices
 // of the images to be used (using graph.Gather).
 func NewBalancedDataset(backend backends.Backend, baseDir string, size int) (bds *BalancedDataset, err error) {
-	baseDir = data.ReplaceTildeInDir(baseDir)
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 	imagesCachePath := fmt.Sprintf("all_images_%dx%d.tensor", size, size)
 	labelsCachePath := fmt.Sprintf("all_labels_%dx%d.tensor", size, size)
 	imagesCachePath = path.Join(baseDir, imagesCachePath)
@@ -44,7 +45,7 @@ func NewBalancedDataset(backend backends.Backend, baseDir string, size int) (bds
 		BaseDir: baseDir,
 		Size:    size,
 	}
-	if data.FileExists(imagesCachePath) && data.FileExists(labelsCachePath) {
+	if fsutil.MustFileExists(imagesCachePath) && fsutil.MustFileExists(labelsCachePath) {
 		bds.AllImages, err = tensors.Load(imagesCachePath)
 		if err != nil {
 			err = errors.WithMessagef(err, "attempting to read cache file %q for NewBalancedDataset", imagesCachePath)
@@ -108,7 +109,7 @@ func (bds *BalancedDataset) readAllImages() error {
 	bds.AllLabels = tensors.FromShape(shapes.Make(dtypes.Int32, NumExamples))
 	tensors.MutableFlatData[uint8](bds.AllImages, func(flatAllImages []uint8) {
 		tensors.MutableFlatData[int32](bds.AllLabels, func(flatAllLabels []int32) {
-			ds := data.Parallel(NewDataset(dtypes.Uint8, bds.Size))
+			ds := datasets.Parallel(NewDataset(dtypes.Uint8, bds.Size))
 			pbar := progressbar.Default(int64(NumExamples), "Processing images")
 			for exampleIdx := range NumExamples {
 				_, inputs, labels, yieldErr := ds.Yield()

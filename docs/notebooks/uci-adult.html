@@ -7312,6 +7312,7 @@ a.anchor-link {
                     processEnvironments: true
                 },
                 displayAlign: 'center',
+                messageStyle: 'none',
                 CommonHTML: {
                     linebreaks: {
                     automatic: true
@@ -7545,9 +7546,8 @@ Also known as "Census Income" dataset.</p>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [1]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="o">!</span>*rm<span class="w"> </span>-f<span class="w"> </span>go.work<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>go<span class="w"> </span>work<span class="w"> </span>init<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>go<span class="w"> </span>work<span class="w"> </span>use<span class="w"> </span>.<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">HOME</span><span class="si">}</span><span class="s2">/Projects/gomlx"</span><span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">HOME</span><span class="si">}</span><span class="s2">/Projects/gonb"</span><span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">HOME</span><span class="si">}</span><span class="s2">/Projects/gopjrt"</span><span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">HOME</span><span class="si">}</span><span class="s2">/Projects/bsplines"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="o">!</span>*rm<span class="w"> </span>-f<span class="w"> </span>go.work<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>go<span class="w"> </span>work<span class="w"> </span>init<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>go<span class="w"> </span>work<span class="w"> </span>use<span class="w"> </span>.<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">HOME</span><span class="si">}</span><span class="s2">/Projects/gomlx"</span><span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">HOME</span><span class="si">}</span><span class="s2">/Projects/gopjrt"</span>
 <span class="o">%</span><span class="k">goworkfix</span>
-<span class="o">%</span><span class="k">env</span> GOMLX_BACKEND=cpu
 </pre></div>
 </div>
 </div>
@@ -7560,11 +7560,8 @@ Also known as "Census Income" dataset.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	- Added replace rule for module "github.com/gomlx/bsplines" to local directory "/home/janpf/Projects/bsplines".
-	- Added replace rule for module "github.com/gomlx/gomlx" to local directory "/home/janpf/Projects/gomlx".
-	- Added replace rule for module "github.com/janpfeifer/gonb" to local directory "/home/janpf/Projects/gonb".
+<pre>	- Added replace rule for module "github.com/gomlx/gomlx" to local directory "/home/janpf/Projects/gomlx".
 	- Added replace rule for module "github.com/gomlx/gopjrt" to local directory "/home/janpf/Projects/gopjrt".
-Set: GOMLX_BACKEND="cpu"
 </pre>
 </div>
 </div>
@@ -7594,7 +7591,7 @@ In this examle we set it to <code>~/work/uci-adult</code>. Verbosity can be cont
 <div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="p">(</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
     <span class="s2">"flag"</span>
     
     <span class="s2">"github.com/gomlx/gomlx/examples/adult"</span>
@@ -7666,15 +7663,17 @@ Sample Continuous:
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>total 170M
--rw-r--r-- 1 janpf janpf 3.8M Jul 20 18:36 adult.data
--rw-r--r-- 1 janpf janpf 1.3M Jul 20 18:36 adult_data-100_quantiles.bin
--rw-r--r-- 1 janpf janpf 2.0M Jul 20 18:36 adult.test
-drwxr-x--- 2 janpf janpf 4.0K Aug  9 11:50 base_model
+-rw-r--r-- 1 janpf janpf 3.8M Jul 20  2024 adult.data
+-rw-r--r-- 1 janpf janpf 2.0M Jul 20  2024 adult.test
+-rw-r--r-- 1 janpf janpf 1.3M Jul 20  2024 adult_data-100_quantiles.bin
+drwxr-x--- 2 janpf janpf 4.0K Oct 11 11:11 base_model
 drwxr-xr-x 2 janpf janpf 4.0K Jun  4  2009 cifar-10-batches-bin
--rw-r--r-- 1 janpf janpf 163M Aug 15 09:33 cifar-10-binary.tar.gz
-drwxr-x--- 2 janpf janpf 4.0K Aug  2 10:47 fnn
-drwxr-x--- 2 janpf janpf 4.0K Jul 21 20:24 kan_baseline
-drwxr-x--- 2 janpf janpf 4.0K Aug  9 11:51 kan_model
+-rw-r--r-- 1 janpf janpf 163M Aug 15  2024 cifar-10-binary.tar.gz
+drwxr-x--- 2 janpf janpf 4.0K Aug  2  2024 fnn
+drwxr-x--- 2 janpf janpf 4.0K Jul 21  2024 kan_baseline
+drwxr-x--- 2 janpf janpf 4.0K Oct 11 11:11 kan_model
+drwxr-x--- 2 janpf janpf 4.0K Feb 23  2025 test
+drwxr-x--- 2 janpf janpf 4.0K Jun 18 05:14 test_model
 </pre>
 </div>
 </div>
@@ -7700,14 +7699,15 @@ drwxr-x--- 2 janpf janpf 4.0K Aug  9 11:51 kan_model
 <div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="p">(</span>
-    <span class="s2">"github.com/gomlx/gomlx/ml/context"</span>
-    <span class="s2">"github.com/gomlx/gomlx/ml/layers"</span>
-    <span class="s2">"github.com/gomlx/gomlx/ml/layers/fnn"</span>
-    <span class="s2">"github.com/gomlx/gomlx/ml/layers/kan"</span>
-    <span class="s2">"github.com/gomlx/gomlx/ml/layers/regularizers"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/ml/context"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/ml/layers"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/ml/layers/fnn"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/ml/layers/kan"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"</span>
     <span class="s2">"github.com/gomlx/gomlx/ui/commandline"</span>
-    <span class="s2">"github.com/gomlx/gomlx/ml/train/optimizers"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/ml/train/optimizers"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"</span>
 	<span class="s2">"github.com/janpfeifer/must"</span>    
 <span class="p">)</span>
 
@@ -7715,7 +7715,7 @@ drwxr-x--- 2 janpf janpf 4.0K Aug  9 11:51 kan_model
 <span class="n">var</span> <span class="n">settings</span> <span class="o">=</span> <span class="n">commandline</span><span class="o">.</span><span class="n">CreateContextSettingsFlag</span><span class="p">(</span><span class="n">createDefaultContext</span><span class="p">(),</span> <span class="s2">"set"</span><span class="p">)</span>
 
 <span class="n">func</span> <span class="n">createDefaultContext</span><span class="p">()</span> <span class="o">*</span><span class="n">context</span><span class="o">.</span><span class="n">Context</span> <span class="p">{</span>
-	<span class="n">ctx</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">NewContext</span><span class="p">()</span>
+	<span class="n">ctx</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">New</span><span class="p">()</span>
 	<span class="n">ctx</span><span class="o">.</span><span class="n">RngStateReset</span><span class="p">()</span>
 	<span class="n">ctx</span><span class="o">.</span><span class="n">SetParams</span><span class="p">(</span><span class="nb">map</span><span class="p">[</span><span class="n">string</span><span class="p">]</span><span class="nb">any</span><span class="p">{</span>
 		<span class="s2">"train_steps"</span><span class="p">:</span>     <span class="mi">5000</span><span class="p">,</span>
@@ -7728,7 +7728,7 @@ drwxr-x--- 2 janpf janpf 4.0K Aug  9 11:51 kan_model
 		<span class="n">optimizers</span><span class="o">.</span><span class="n">ParamLearningRate</span><span class="p">:</span>        <span class="mf">0.001</span><span class="p">,</span>
 		<span class="n">optimizers</span><span class="o">.</span><span class="n">ParamAdamEpsilon</span><span class="p">:</span>         <span class="mf">1e-7</span><span class="p">,</span>
 		<span class="n">optimizers</span><span class="o">.</span><span class="n">ParamAdamDType</span><span class="p">:</span>           <span class="s2">""</span><span class="p">,</span>
-		<span class="n">optimizers</span><span class="o">.</span><span class="n">ParamCosineScheduleSteps</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+		<span class="n">cosineschedule</span><span class="o">.</span><span class="n">ParamPeriodSteps</span><span class="p">:</span>     <span class="mi">0</span><span class="p">,</span>
 		<span class="n">activations</span><span class="o">.</span><span class="n">ParamActivation</span><span class="p">:</span>         <span class="s2">"sigmoid"</span><span class="p">,</span>
 		<span class="n">layers</span><span class="o">.</span><span class="n">ParamDropoutRate</span><span class="p">:</span>             <span class="mf">0.0</span><span class="p">,</span>
 		<span class="n">regularizers</span><span class="o">.</span><span class="n">ParamL2</span><span class="p">:</span>                <span class="mf">1e-5</span><span class="p">,</span>
@@ -7788,6 +7788,40 @@ drwxr-x--- 2 janpf janpf 4.0K Aug  9 11:51 kan_model
 </div>
 </div>
 </div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=cdd4b781-3e38-41b2-8621-b4abbf2d6ef3">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span> <span class="o">-</span><span class="nb">set</span><span class="o">=</span><span class="s2">"batch_size=17;fnn_num_hidden_layers=12"</span>
+<span class="n">ctx</span><span class="p">,</span> <span class="n">paramsSet</span> <span class="o">:=</span> <span class="n">contextFromSettings</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">name</span> <span class="o">:=</span> <span class="nb">range</span> <span class="n">paramsSet</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="n">value</span><span class="p">,</span> <span class="n">found</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">GetParam</span><span class="p">(</span><span class="n">name</span><span class="p">);</span> <span class="n">found</span> <span class="p">{</span>
+        <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="si">%s</span><span class="s2">=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>	batch_size=17
+	fnn_num_hidden_layers=12
+</pre>
+</div>
+</div>
+</div>
+</div>
 </div>
 <div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=028b783b-56f0-457c-b28e-7bb0dd7e94da">
 <div class="jp-Cell-inputWrapper" tabindex="0">
@@ -7811,24 +7845,24 @@ train, or our eval loop to draw batches to evaluate.</p>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [6]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="p">(</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
     <span class="s2">"flag"</span>
     <span class="s2">"fmt"</span>
     <span class="s2">"io"</span>
 
     <span class="s2">"github.com/gomlx/gomlx/backends"</span>
     <span class="s2">"github.com/gomlx/gomlx/examples/adult"</span>
-    <span class="s2">"github.com/gomlx/gomlx/ml/train"</span>
-    <span class="s2">"github.com/gomlx/gomlx/types/tensors"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/ml/train"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/core/tensors"</span>
 
-    <span class="n">_</span> <span class="s2">"github.com/gomlx/gomlx/backends/xla"</span>
+    <span class="n">_</span> <span class="s2">"github.com/gomlx/gomlx/backends/default"</span>
 <span class="p">)</span>
 
 <span class="o">//</span> <span class="n">Global</span> <span class="n">backend</span> <span class="n">created</span> <span class="n">an</span> <span class="n">initialization</span><span class="p">,</span> <span class="n">used</span> <span class="n">everywhere</span><span class="o">.</span>
-<span class="n">var</span> <span class="n">backend</span> <span class="o">=</span> <span class="n">backends</span><span class="o">.</span><span class="n">New</span><span class="p">()</span>
+<span class="n">var</span> <span class="n">backend</span> <span class="o">=</span> <span class="n">backends</span><span class="o">.</span><span class="n">MustNew</span><span class="p">()</span>
 
 <span class="o">//</span> <span class="n">BuildDatasets</span> <span class="n">returns</span> <span class="mi">3</span> <span class="err">`</span><span class="n">train</span><span class="o">.</span><span class="n">Dataset</span><span class="err">`</span><span class="p">:</span>
 <span class="o">//</span> <span class="o">*</span> <span class="n">trainingSampler</span> <span class="ow">is</span> <span class="n">an</span> <span class="n">endless</span> <span class="n">random</span> <span class="n">sampler</span> <span class="n">used</span> <span class="k">for</span> <span class="n">training</span><span class="o">.</span>
@@ -7852,7 +7886,7 @@ train, or our eval loop to draw batches to evaluate.</p>
 <span class="o">//</span> <span class="n">We</span> <span class="n">could</span> <span class="n">do</span> <span class="n">this</span> <span class="n">easily</span> <span class="k">with</span> <span class="n">GoMLX</span> <span class="n">computation</span> <span class="n">model</span> <span class="p">(</span><span class="n">just</span> <span class="err">`</span><span class="n">ReduceAllSum</span><span class="err">`</span><span class="p">),</span> <span class="n">but</span>
 <span class="o">//</span> <span class="n">this</span> <span class="n">examples</span> <span class="n">shows</span> <span class="n">it</span><span class="s1">'s also ok to mix Go computations.</span>
 <span class="n">func</span> <span class="n">PositiveRatio</span><span class="p">(</span><span class="n">ds</span> <span class="n">train</span><span class="o">.</span><span class="n">Dataset</span><span class="p">)</span> <span class="n">float32</span> <span class="p">{</span>
-    <span class="n">ds</span><span class="o">.</span><span class="n">Reset</span><span class="p">()</span>  <span class="o">//</span> <span class="n">Start</span> <span class="kn">from</span> <span class="nn">beginning.</span>
+    <span class="n">ds</span><span class="o">.</span><span class="n">Reset</span><span class="p">()</span>  <span class="o">//</span> <span class="n">Start</span> <span class="kn">from</span><span class="w"> </span><span class="nn">beginning.</span>
     <span class="n">var</span> <span class="nb">sum</span> <span class="n">float32</span>
     <span class="n">var</span> <span class="n">count</span> <span class="n">float32</span>
     <span class="k">for</span> <span class="p">{</span>
@@ -7871,6 +7905,8 @@ train, or our eval loop to draw batches to evaluate.</p>
 <span class="p">}</span>
 
 <span class="o">%%</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Backend: </span><span class="si">%s</span><span class="s2"> - </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">backend</span><span class="p">,</span> <span class="n">backend</span><span class="o">.</span><span class="n">Description</span><span class="p">())</span>
+
 <span class="n">adult</span><span class="o">.</span><span class="n">LoadAndPreprocessData</span><span class="p">(</span><span class="o">*</span><span class="n">flagDataDir</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNumQuantiles</span><span class="p">,</span> <span class="o">*</span><span class="n">flagForceDownload</span><span class="p">,</span> <span class="o">*</span><span class="n">flagVerbosity</span><span class="p">)</span>    
 <span class="n">ctx</span><span class="p">,</span> <span class="n">_</span> <span class="o">:=</span> <span class="n">contextFromSettings</span><span class="p">()</span>
 <span class="n">trainingDS</span><span class="p">,</span> <span class="n">trainingEvalDS</span><span class="p">,</span> <span class="n">testEvalDS</span> <span class="o">:=</span> <span class="n">BuildDatasets</span><span class="p">(</span><span class="n">ctx</span><span class="p">)</span>
@@ -7880,11 +7916,11 @@ train, or our eval loop to draw batches to evaluate.</p>
 <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">}</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Inputs of batch (size </span><span class="si">%d</span><span class="s2">):</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">GetParamOr</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s2">"batch_size"</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">categorical:</span><span class="se">\n\t\t</span><span class="s2">Features=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">adult</span><span class="o">.</span><span class="n">Data</span><span class="o">.</span><span class="n">VocabulariesFeatures</span><span class="p">)</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t\t</span><span class="s2">Values: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">StringN</span><span class="p">(</span><span class="mi">16</span><span class="p">))</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t\t</span><span class="s2">Values: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">continuous:</span><span class="se">\n\t\t</span><span class="s2">Features=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">adult</span><span class="o">.</span><span class="n">Data</span><span class="o">.</span><span class="n">QuantilesFeatures</span><span class="p">)</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t\t</span><span class="s2">Values: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">StringN</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">weights: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">StringN</span><span class="p">(</span><span class="mi">5</span><span class="p">))</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Labels of batch:</span><span class="se">\n\t</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">labels</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">StringN</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t\t</span><span class="s2">Values: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">weights: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Labels of batch:</span><span class="se">\n\t</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">labels</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Labels distributions:</span><span class="se">\n\t</span><span class="s2">Train:</span><span class="se">\t</span><span class="si">%.2f%%</span><span class="s2"> positive</span><span class="se">\n\t</span><span class="s2">Test:</span><span class="se">\t</span><span class="si">%.2f%%</span><span class="s2"> positive</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span>
            <span class="n">PositiveRatio</span><span class="p">(</span><span class="n">trainingEvalDS</span><span class="p">)</span><span class="o">*</span><span class="mf">100.0</span><span class="p">,</span> <span class="n">PositiveRatio</span><span class="p">(</span><span class="n">testEvalDS</span><span class="p">)</span><span class="o">*</span><span class="mf">100.0</span><span class="p">)</span>
 </pre></div>
@@ -7899,17 +7935,46 @@ train, or our eval loop to draw batches to evaluate.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Inputs of batch (size 128):
+<pre>Backend: stablehlo - stablehlo:cuda - PJRT "cuda" plugin (/home/janpf/.local/lib/gomlx/pjrt/pjrt_c_api_cuda_plugin.so) v0.76 [StableHLO]
+Inputs of batch (size 128):
 	categorical:
 		Features=[workclass education marital-status occupation relationship race sex native-country]
-		Values: (Int64)[128 8]: (... too large, 1024 values ..., first 16 values: [4 16 5 3 2 5 2 39 4 12 5 7 5 3 2 39])
+		Values: [128][8]int64{
+ {4, 10, 3, ..., 5, 2, 39},
+ {4, 2, 5, ..., 5, 1, 39},
+ {4, 16, 3, ..., 5, 2, 39},
+ ...,
+ {5, 12, 5, ..., 5, 1, 39},
+ {4, 16, 5, ..., 5, 1, 39},
+ {7, 9, 1, ..., 5, 1, 39}}
 	continuous:
 		Features=[age education-num capital-gain capital-loss hours-per-week]
-		Values: (Float32)[128 5]: (... too large, 640 values ..., first 10 values: [23 10 0 0 40 41 9 0 0 40])
-	weights: (Float32)[128 1]: (... too large, 128 values ..., first 5 values: [175266 157025 98642 328216 303462])
+		Values: [128][5]float32{
+ {42, 13, 0, 0, 40},
+ {17, 7, 0, 0, 25},
+ {46, 10, 0, 0, 40},
+ ...,
+ {28, 9, 0, 0, 35},
+ {19, 10, 0, 0, 25},
+ {48, 11, 0, 0, 56}}
+	weights: [128][1]float32{
+ {2.799e+05},
+ {1.107e+05},
+ {1.744e+05},
+ ...,
+ {1.533e+05},
+ {2.714e+05},
+ {1.835e+05}}
 
 Labels of batch:
-	(Float32)[128 1]: (... too large, 128 values ..., first 10 values: [0 0 1 1 0 0 0 0 0 0])
+	[128][1]float32{
+ {1},
+ {0},
+ {0},
+ ...,
+ {0},
+ {0},
+ {1}}
 
 Labels distributions:
 	Train:	24.08% positive
@@ -7941,20 +8006,21 @@ You can also use shape asserts in the middle of the <code>ModelGraph</code>, as 
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [6]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [7]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="p">(</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
     <span class="s2">"fmt"</span>
     <span class="s2">"io"</span>
 
-    <span class="o">.</span> <span class="s2">"github.com/gomlx/gomlx/graph"</span>
+    <span class="o">.</span> <span class="s2">"github.com/gomlx/gomlx/pkg/core/graph"</span>
 
-    <span class="s2">"github.com/gomlx/gomlx/ml/context"</span>
     <span class="s2">"github.com/gomlx/gomlx/examples/adult"</span>
-    <span class="s2">"github.com/gomlx/gomlx/ml/train"</span>
-    <span class="s2">"github.com/gomlx/gomlx/ml/train/optimizers"</span>
-    <span class="s2">"github.com/gomlx/gomlx/types/shapes"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/core/shapes"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/ml/context"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/ml/train"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/ml/train/optimizers"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"</span>
     <span class="s2">"github.com/gomlx/gopjrt/dtypes"</span>
 <span class="p">)</span>
 
@@ -7983,7 +8049,7 @@ You can also use shape asserts in the middle of the <code>ModelGraph</code>, as 
     <span class="n">ctx</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">In</span><span class="p">(</span><span class="s2">"model"</span><span class="p">)</span>
     
 	<span class="o">//</span> <span class="n">Use</span> <span class="n">Cosine</span> <span class="n">schedule</span> <span class="n">of</span> <span class="n">the</span> <span class="n">learning</span> <span class="n">rate</span><span class="p">,</span> <span class="k">if</span> <span class="n">hyperparameter</span> <span class="ow">is</span> <span class="nb">set</span> <span class="n">to</span> <span class="n">a</span> <span class="n">value</span> <span class="o">&gt;</span> <span class="mf">0.</span>
-	<span class="n">optimizers</span><span class="o">.</span><span class="n">CosineAnnealingSchedule</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">g</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">FromContext</span><span class="p">()</span><span class="o">.</span><span class="n">Done</span><span class="p">()</span>
+	<span class="n">cosineschedule</span><span class="o">.</span><span class="n">New</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">g</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">FromContext</span><span class="p">()</span><span class="o">.</span><span class="n">Done</span><span class="p">()</span>
 
 	<span class="n">categorical</span><span class="p">,</span> <span class="n">continuous</span> <span class="o">:=</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
 	<span class="n">batchSize</span> <span class="o">:=</span> <span class="n">categorical</span><span class="o">.</span><span class="n">Shape</span><span class="p">()</span><span class="o">.</span><span class="n">Dimensions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
@@ -8098,13 +8164,14 @@ it is working.</p>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [7]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [8]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="p">(</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
     <span class="s2">"fmt"</span>
     <span class="s2">"time"</span>
     <span class="s2">"github.com/gomlx/gomlx/ui/gonb/plotly"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/support/fsutil"</span>
 <span class="p">)</span>
 
 <span class="n">var</span> <span class="p">(</span>
@@ -8115,7 +8182,7 @@ it is working.</p>
 <span class="p">)</span>
 
 <span class="n">func</span> <span class="n">trainModel</span><span class="p">(</span><span class="n">ctx</span> <span class="o">*</span><span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span> <span class="n">paramsSet</span> <span class="p">[]</span><span class="n">string</span><span class="p">)</span> <span class="p">{</span>
-    <span class="o">*</span><span class="n">flagDataDir</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">ReplaceTildeInDir</span><span class="p">(</span><span class="o">*</span><span class="n">flagDataDir</span><span class="p">)</span>
+    <span class="o">*</span><span class="n">flagDataDir</span> <span class="o">=</span> <span class="n">must</span><span class="o">.</span><span class="n">M1</span><span class="p">(</span><span class="n">fsutil</span><span class="o">.</span><span class="n">ReplaceTildeInDir</span><span class="p">(</span><span class="o">*</span><span class="n">flagDataDir</span><span class="p">))</span>
 
     <span class="o">//</span> <span class="n">Load</span> <span class="n">data</span> <span class="ow">and</span> <span class="n">create</span> <span class="n">datasets</span><span class="o">.</span>
     <span class="n">adult</span><span class="o">.</span><span class="n">LoadAndPreprocessData</span><span class="p">(</span><span class="o">*</span><span class="n">flagDataDir</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNumQuantiles</span><span class="p">,</span> <span class="o">*</span><span class="n">flagForceDownload</span><span class="p">,</span> <span class="o">*</span><span class="n">flagVerbosity</span><span class="p">)</span>    
@@ -8202,16 +8269,16 @@ it is working.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Training (100 steps):  100% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span>] (145 steps/s) [step=99] [loss+=0.537] [~loss+=0.618] [~loss=0.618] [~acc=75.56%]        
-	[Step 100] median train step: 346 microseconds
+<pre>      <span class="ansi-bold"> 100% [========================================] (2791 steps/s)</span> [step=99] [loss+=0.457] [~loss+=0.508] [~loss=0.508] [~acc=75.28%]                 
+	[Step 100] median train step: 272 microseconds
 Results on batched train:
-	Mean Loss+Regularization (#loss+): 0.537
-	Mean Loss (#loss): 0.537
-	Mean Accuracy (#acc): 80.49%
+	Mean Loss+Regularization (#loss+): 0.452
+	Mean Loss (#loss): 0.451
+	Mean Accuracy (#acc): 78.66%
 Results on test:
-	Mean Loss+Regularization (#loss+): 0.535
-	Mean Loss (#loss): 0.535
-	Mean Accuracy (#acc): 80.65%
+	Mean Loss+Regularization (#loss+): 0.445
+	Mean Loss (#loss): 0.444
+	Mean Accuracy (#acc): 79.13%
 </pre>
 </div>
 </div>
@@ -8236,7 +8303,7 @@ Results on test:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [8]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [9]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">//</span> <span class="n">Remove</span> <span class="n">previously</span> <span class="n">trained</span> <span class="n">model</span> <span class="o">--</span> <span class="n">skip</span> <span class="n">this</span> <span class="n">cell</span><span class="p">,</span> <span class="k">if</span> <span class="n">you</span> <span class="n">want</span> <span class="n">to</span> <span class="k">continue</span> <span class="n">training</span><span class="o">.</span>
@@ -8251,7 +8318,7 @@ Results on test:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [9]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [10]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span> <span class="o">--</span><span class="n">checkpoint</span> <span class="n">base_model</span> <span class="o">-</span><span class="nb">set</span><span class="o">=</span><span class="s2">"plots=true;train_steps=5000"</span>
@@ -8273,7 +8340,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Training (5000 steps):   14% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">&gt;</span>...................................] (434 steps/s) [1s:9s] [step=724] [loss+=0.312] [~loss+=0.321] [~loss=0.320] [~acc=85.96%]         </pre>
+<pre>      <span class="ansi-bold">  14% [====&gt;...................................] (145 steps/s) [1s:29s]</span> [step=724] [loss+=0.326] [~loss+=0.34] [~loss=0.339] [~acc=84.89%]         </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8284,7 +8351,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Training (5000 steps):  100% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span>] (1851 steps/s) [step=4999] [loss+=0.244] [~loss+=0.273] [~loss=0.273] [~acc=87.31%]        
+<pre>      <span class="ansi-bold"> 100% [========================================] (1677 steps/s)</span> [step=4999] [loss+=0.256] [~loss+=0.277] [~loss=0.277] [~acc=87.12%]                
 
 [saving checkpoint@5000] [median train step (ms): 0]
 </pre>
@@ -8299,7 +8366,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="c1a98470"></div>
+<div id="7e3b3b8c"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8307,14 +8374,14 @@ Results on test:
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
 <script charset="UTF-8">
 (() => {
-	const src="https://cdn.plot.ly/plotly-2.29.1.min.js";
+	const src="https://cdn.plot.ly/plotly-2.34.0.min.js";
 	var runJSFn = function(module) {
 		
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.7937886118888855,0.8434130549430847,0.8589439392089844,0.8685312867164612,0.8695253729820251,0.8723758459091187,0.8726909756660461,0.8723211288452148,0.8749131560325623,0.8730595707893372]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8433709144592285,0.8562697768211365,0.8650839924812317,0.8697521686553955,0.868892252445221,0.8734375238418579,0.8734375238418579,0.8748809695243835,0.8742360472679138,0.8738982081413269]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8446655869483948,0.8571954965591431,0.8617407083511353,0.8672071695327759,0.8675757050514221,0.8714452385902405,0.8723665475845337,0.8716909289360046,0.8713223934173584,0.8705239295959473]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('c1a98470', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.7269666194915771,0.8162895441055298,0.8482275605201721,0.8608152270317078,0.8639834523200989,0.8682395219802856,0.8724878430366516,0.8725658059120178,0.8746618628501892,0.8712087273597717]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.766438364982605,0.8290899991989136,0.8558398485183716,0.8637941479682922,0.8687079548835754,0.8717484474182129,0.8737139701843262,0.8736832737922668,0.8736218214035034,0.8738982081413269]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.7694244384765625,0.8307228684425354,0.8570725917816162,0.8646274209022522,0.8672071099281311,0.8705852627754211,0.8720594048500061,0.8714451789855957,0.8708924055099487,0.8725507855415344]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('7e3b3b8c', data);
 
 	}
 	
@@ -8361,7 +8428,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="d3bf24ba"></div>
+<div id="feff46bf"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8369,14 +8436,14 @@ Results on test:
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
 <script charset="UTF-8">
 (() => {
-	const src="https://cdn.plot.ly/plotly-2.29.1.min.js";
+	const src="https://cdn.plot.ly/plotly-2.34.0.min.js";
 	var runJSFn = function(module) {
 		
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.42675960063934326,0.35901567339897156,0.28152868151664734,0.2837333381175995,0.35376933217048645,0.23814454674720764,0.2352365255355835,0.2960764169692993,0.20783597230911255,0.24353507161140442]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.5270055532455444,0.3760952353477478,0.32104596495628357,0.2952928841114044,0.2878308892250061,0.281466007232666,0.27845442295074463,0.2781280279159546,0.27174440026283264,0.2729887068271637]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.5267854332923889,0.3758259415626526,0.32079461216926575,0.29504501819610596,0.28757908940315247,0.2812092900276184,0.27819177508354187,0.27785828709602356,0.271465003490448,0.27270156145095825]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.42131277918815613,0.33868905901908875,0.3080936074256897,0.29107463359832764,0.28811389207839966,0.27719831466674805,0.2745787501335144,0.27183622121810913,0.2728064954280853,0.2707022428512573]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.4210287034511566,0.33843404054641724,0.3078455328941345,0.29082444310188293,0.2878606617450714,0.2769404351711273,0.27431583404541016,0.2715666592121124,0.2725261151790619,0.2704138159751892]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.41851606965065,0.3392176628112793,0.31141844391822815,0.29676178097724915,0.29403167963027954,0.28450459241867065,0.2818538248538971,0.27999556064605713,0.2808435261249542,0.2794818580150604]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.4182319641113281,0.338962584733963,0.3111703097820282,0.29651159048080444,0.2937784492969513,0.28424668312072754,0.28159093856811523,0.2797260582447052,0.2805631458759308,0.27919337153434753]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('d3bf24ba', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.4226234555244446,0.3452995717525482,0.38318413496017456,0.2913883626461029,0.2770567536354065,0.3125132620334625,0.2588064670562744,0.2664164900779724,0.4103950262069702,0.2561657130718231]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.5508931279182434,0.39875710010528564,0.34018614888191223,0.3106018304824829,0.2975700795650482,0.28505441546440125,0.2788419723510742,0.27620095014572144,0.2741292417049408,0.2774876058101654]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.5503711700439453,0.3982165455818176,0.3396303653717041,0.31003710627555847,0.29699772596359253,0.2844766080379486,0.2782573699951172,0.27560991048812866,0.2735307514667511,0.27688202261924744]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss+Regularization on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.4441646635532379,0.3708602786064148,0.3281300365924835,0.3036792576313019,0.2895769476890564,0.2810986638069153,0.27546772360801697,0.2734532356262207,0.27184370160102844,0.2712819576263428]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.4436342120170593,0.3703134059906006,0.32757046818733215,0.3031121790409088,0.28900331258773804,0.28051939606666565,0.2748825252056122,0.27286094427108765,0.27124422788619995,0.2706758677959442]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss+Regularization on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.43958985805511475,0.36744460463523865,0.32787200808525085,0.3066028654575348,0.2937926948070526,0.2879522442817688,0.2836534380912781,0.2822444438934326,0.2807850241661072,0.280303418636322]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.43905943632125854,0.3668977916240692,0.3273124396800995,0.3060357868671417,0.2932190001010895,0.28737300634384155,0.2830682694911957,0.28165218234062195,0.2801855206489563,0.27969738841056824]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('feff46bf', data);
 
 	}
 	
@@ -8417,15 +8484,15 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	[Step 5000] median train step: 271 microseconds
+<pre>	[Step 5000] median train step: 257 microseconds
 Results on batched train:
 	Mean Loss+Regularization (#loss+): 0.271
-	Mean Loss (#loss): 0.270
+	Mean Loss (#loss): 0.271
 	Mean Accuracy (#acc): 87.39%
 Results on test:
-	Mean Loss+Regularization (#loss+): 0.279
-	Mean Loss (#loss): 0.279
-	Mean Accuracy (#acc): 87.05%
+	Mean Loss+Regularization (#loss+): 0.28
+	Mean Loss (#loss): 0.28
+	Mean Accuracy (#acc): 87.26%
 </pre>
 </div>
 </div>
@@ -8450,7 +8517,7 @@ let's train further, another 5k steps, for 10K steps in total.</p>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [10]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [11]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span> <span class="o">--</span><span class="n">checkpoint</span> <span class="n">base_model</span> <span class="o">-</span><span class="nb">set</span><span class="o">=</span><span class="s2">"plots=true;train_steps=10000"</span>
@@ -8487,7 +8554,7 @@ let's train further, another 5k steps, for 10K steps in total.</p>
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>	- restarting training from global_step=5000
-Training (5000 steps):  100% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span>] (2074 steps/s) [step=9999] [loss+=0.351] [~loss+=0.274] [~loss=0.273] [~acc=87.45%]        
+      <span class="ansi-bold"> 100% [========================================] (1684 steps/s)</span> [step=9999] [loss+=0.357] [~loss+=0.276] [~loss=0.275] [~acc=87.07%]                 
 
 [saving checkpoint@10000] [median train step (ms): 0]
 </pre>
@@ -8502,7 +8569,7 @@ Training (5000 steps):  100% [<span class="ansi-green-fg">=</span><span class="a
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="daa29841"></div>
+<div id="b786df2f"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8510,14 +8577,14 @@ Training (5000 steps):  100% [<span class="ansi-green-fg">=</span><span class="a
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
 <script charset="UTF-8">
 (() => {
-	const src="https://cdn.plot.ly/plotly-2.29.1.min.js";
+	const src="https://cdn.plot.ly/plotly-2.34.0.min.js";
 	var runJSFn = function(module) {
 		
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.7937886118888855,0.8434130549430847,0.8589439392089844,0.8685312867164612,0.8695253729820251,0.8723758459091187,0.8726909756660461,0.8723211288452148,0.8749131560325623,0.8730595707893372,0.8726382851600647,0.8733475208282471,0.8731081485748291,0.8732872009277344,0.8744889497756958]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.8433709144592285,0.8562697768211365,0.8650839924812317,0.8697521686553955,0.868892252445221,0.8734375238418579,0.8734375238418579,0.8748809695243835,0.8742360472679138,0.8738982081413269,0.874021053314209,0.8750959634780884,0.8746967315673828,0.8737753629684448,0.8746967315673828]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.8446655869483948,0.8571954965591431,0.8617407083511353,0.8672071695327759,0.8675757050514221,0.8714452385902405,0.8723665475845337,0.8716909289360046,0.8713223934173584,0.8705239295959473,0.8719980120658875,0.8719980120658875,0.8726736903190613,0.8708310127258301,0.8732264637947083]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('daa29841', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.7269666194915771,0.8162895441055298,0.8482275605201721,0.8608152270317078,0.8639834523200989,0.8682395219802856,0.8724878430366516,0.8725658059120178,0.8746618628501892,0.8712087273597717,0.8725284934043884,0.8732799291610718,0.8738941550254822,0.8747294545173645,0.8706986904144287]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.766438364982605,0.8290899991989136,0.8558398485183716,0.8637941479682922,0.8687079548835754,0.8717484474182129,0.8737139701843262,0.8736832737922668,0.8736218214035034,0.8738982081413269,0.8742360472679138,0.8743281960487366,0.8738982081413269,0.8746353387832642,0.8749117255210876]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.7694244384765625,0.8307228684425354,0.8570725917816162,0.8646274209022522,0.8672071099281311,0.8705852627754211,0.8720594048500061,0.8714451789855957,0.8708924055099487,0.8725507855415344,0.871260941028595,0.8719979524612427,0.8718137145042419,0.872489333152771,0.8720594048500061]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('b786df2f', data);
 
 	}
 	
@@ -8564,7 +8631,7 @@ Training (5000 steps):  100% [<span class="ansi-green-fg">=</span><span class="a
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="643ca01f"></div>
+<div id="05959d39"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8572,14 +8639,14 @@ Training (5000 steps):  100% [<span class="ansi-green-fg">=</span><span class="a
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
 <script charset="UTF-8">
 (() => {
-	const src="https://cdn.plot.ly/plotly-2.29.1.min.js";
+	const src="https://cdn.plot.ly/plotly-2.34.0.min.js";
 	var runJSFn = function(module) {
 		
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.42675960063934326,0.35901567339897156,0.28152868151664734,0.2837333381175995,0.35376933217048645,0.23814454674720764,0.2352365255355835,0.2960764169692993,0.20783597230911255,0.24353507161140442,0.25072574615478516,0.19076673686504364,0.2839549481868744,0.2929862141609192,0.35117241740226746]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.5270055532455444,0.3760952353477478,0.32104596495628357,0.2952928841114044,0.2878308892250061,0.281466007232666,0.27845442295074463,0.2781280279159546,0.27174440026283264,0.2729887068271637,0.2752784788608551,0.27059537172317505,0.27048271894454956,0.2704029083251953,0.27359476685523987]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.5267854332923889,0.3758259415626526,0.32079461216926575,0.29504501819610596,0.28757908940315247,0.2812092900276184,0.27819177508354187,0.27785828709602356,0.271465003490448,0.27270156145095825,0.2749888598918915,0.27029523253440857,0.27017247676849365,0.27008140087127686,0.273270845413208]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.42131277918815613,0.33868905901908875,0.3080936074256897,0.29107463359832764,0.28811389207839966,0.27719831466674805,0.2745787501335144,0.27183622121810913,0.2728064954280853,0.2707022428512573,0.27000877261161804,0.2692931890487671,0.26880061626434326,0.2708037793636322,0.2690841853618622]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.4210287034511566,0.33843404054641724,0.3078455328941345,0.29082444310188293,0.2878606617450714,0.2769404351711273,0.27431583404541016,0.2715666592121124,0.2725261151790619,0.2704138159751892,0.2697181701660156,0.2689915895462036,0.2684890031814575,0.27048105001449585,0.268760085105896]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.41851606965065,0.3392176628112793,0.31141844391822815,0.29676178097724915,0.29403167963027954,0.28450459241867065,0.2818538248538971,0.27999556064605713,0.2808435261249542,0.2794818580150604,0.2795686423778534,0.27979111671447754,0.2798588275909424,0.282130628824234,0.28060275316238403]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.4182319641113281,0.338962584733963,0.3111703097820282,0.29651159048080444,0.2937784492969513,0.28424668312072754,0.28159093856811523,0.2797260582447052,0.2805631458759308,0.27919337153434753,0.2792779803276062,0.27948951721191406,0.27954724431037903,0.28180786967277527,0.28027862310409546]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('643ca01f', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.4226234555244446,0.3452995717525482,0.38318413496017456,0.2913883626461029,0.2770567536354065,0.3125132620334625,0.2588064670562744,0.2664164900779724,0.4103950262069702,0.2561657130718231,0.32356327772140503,0.27137428522109985,0.21954771876335144,0.2632410228252411,0.35677018761634827]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.5508931279182434,0.39875710010528564,0.34018614888191223,0.3106018304824829,0.2975700795650482,0.28505441546440125,0.2788419723510742,0.27620095014572144,0.2741292417049408,0.2774876058101654,0.2746809124946594,0.2703832983970642,0.26690518856048584,0.2679648995399475,0.275875449180603]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.5503711700439453,0.3982165455818176,0.3396303653717041,0.31003710627555847,0.29699772596359253,0.2844766080379486,0.2782573699951172,0.27560991048812866,0.2735307514667511,0.27688202261924744,0.2740737199783325,0.2697662115097046,0.2662745714187622,0.2673187851905823,0.275226891040802]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss+Regularization on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.4441646635532379,0.3708602786064148,0.3281300365924835,0.3036792576313019,0.2895769476890564,0.2810986638069153,0.27546772360801697,0.2734532356262207,0.27184370160102844,0.2712819576263428,0.2709904909133911,0.26974987983703613,0.2698941230773926,0.26885664463043213,0.26798853278160095]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.4436342120170593,0.3703134059906006,0.32757046818733215,0.3031121790409088,0.28900331258773804,0.28051939606666565,0.2748825252056122,0.27286094427108765,0.27124422788619995,0.2706758677959442,0.2703821659088135,0.26913154125213623,0.269262433052063,0.26820969581604004,0.26733991503715515]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss+Regularization on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.43958985805511475,0.36744460463523865,0.32787200808525085,0.3066028654575348,0.2937926948070526,0.2879522442817688,0.2836534380912781,0.2822444438934326,0.2807850241661072,0.280303418636322,0.2800664007663727,0.27963632345199585,0.28101038932800293,0.2795065641403198,0.2787140905857086]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.43905943632125854,0.3668977916240692,0.3273124396800995,0.3060357868671417,0.2932190001010895,0.28737300634384155,0.2830682694911957,0.28165218234062195,0.2801855206489563,0.27969738841056824,0.27945804595947266,0.27901792526245117,0.28037863969802856,0.27885955572128296,0.27806556224823]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('05959d39', data);
 
 	}
 	
@@ -8620,15 +8687,15 @@ Training (5000 steps):  100% [<span class="ansi-green-fg">=</span><span class="a
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	[Step 10000] median train step: 261 microseconds
+<pre>	[Step 10000] median train step: 264 microseconds
 Results on batched train:
-	Mean Loss+Regularization (#loss+): 0.269
-	Mean Loss (#loss): 0.269
-	Mean Accuracy (#acc): 87.47%
+	Mean Loss+Regularization (#loss+): 0.268
+	Mean Loss (#loss): 0.267
+	Mean Accuracy (#acc): 87.49%
 Results on test:
-	Mean Loss+Regularization (#loss+): 0.281
-	Mean Loss (#loss): 0.280
-	Mean Accuracy (#acc): 87.32%
+	Mean Loss+Regularization (#loss+): 0.279
+	Mean Loss (#loss): 0.278
+	Mean Accuracy (#acc): 87.21%
 </pre>
 </div>
 </div>
@@ -8651,7 +8718,7 @@ Results on test:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [11]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [12]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">//</span> <span class="n">Remove</span> <span class="n">previously</span> <span class="n">trained</span> <span class="n">model</span> <span class="o">--</span> <span class="n">skip</span> <span class="n">this</span> <span class="n">cell</span><span class="p">,</span> <span class="k">if</span> <span class="n">you</span> <span class="n">want</span> <span class="n">to</span> <span class="k">continue</span> <span class="n">training</span><span class="o">.</span>
@@ -8666,10 +8733,10 @@ Results on test:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [12]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [13]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span> <span class="o">--</span><span class="n">checkpoint</span> <span class="n">kan_model</span> <span class="o">-</span><span class="nb">set</span><span class="o">=</span><span class="s2">"kan=true;activation=swish;plots=true;train_steps=5000"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span> <span class="o">--</span><span class="n">checkpoint</span> <span class="n">kan_model</span> <span class="o">-</span><span class="nb">set</span><span class="o">=</span><span class="s2">"kan=true;activation=swish;plots=true;train_steps=10_000"</span>
 <span class="n">trainModel</span><span class="p">(</span><span class="n">contextFromSettings</span><span class="p">())</span>
 </pre></div>
 </div>
@@ -8688,7 +8755,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Training (5000 steps):   14% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">&gt;</span>...................................] (93 steps/s) [9s:45s] [step=724] [loss+=0.223] [~loss+=0.287] [~loss=0.284] [~acc=86.97%]        </pre>
+<pre>      <span class="ansi-bold">   7% [=&gt;......................................] (129 steps/s) [1s:1m12s]</span> [step=719] [loss+=4.16] [~loss+=4.18] [~loss=0.391] [~acc=81.86%]        </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8699,9 +8766,9 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Training (5000 steps):  100% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span>] (89 steps/s) [step=4999] [loss+=0.355] [~loss+=0.275] [~loss=0.271] [~acc=87.33%]        
+<pre>      <span class="ansi-bold"> 100% [========================================] (1868 steps/s)</span> [step=9999] [loss+=1.18] [~loss+=1.18] [~loss=0.287] [~acc=86.91%]                 
 
-[saving checkpoint@5000] [median train step (ms): 10]
+[saving checkpoint@10000] [median train step (ms): 0]
 </pre>
 </div>
 </div>
@@ -8714,7 +8781,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="94af4cd2"></div>
+<div id="835e2a0e"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8722,14 +8789,14 @@ Results on test:
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
 <script charset="UTF-8">
 (() => {
-	const src="https://cdn.plot.ly/plotly-2.29.1.min.js";
+	const src="https://cdn.plot.ly/plotly-2.34.0.min.js";
 	var runJSFn = function(module) {
 		
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8416311740875244,0.8647996783256531,0.869182825088501,0.8692054152488708,0.8703174591064453,0.8699591755867004,0.8662679195404053,0.8754479885101318,0.8728297352790833,0.8732562065124512]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8542734980583191,0.8709192276000977,0.8717176914215088,0.8736525177955627,0.8704277873039246,0.8743895888328552,0.8731611371040344,0.8732532858848572,0.8748809695243835,0.875986635684967]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8557214140892029,0.866777241230011,0.8664087057113647,0.8703396320343018,0.8670843243598938,0.8708924651145935,0.871629536151886,0.8715680837631226,0.8705853223800659,0.8738406896591187]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('94af4cd2', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.7663748860359192,0.8038637042045593,0.8196468949317932,0.8323032259941101,0.8393768668174744,0.843164324760437,0.8502743244171143,0.8509316444396973,0.8574152588844299,0.8617863059043884,0.8691856861114502,0.8696191906929016,0.868792712688446,0.8691139221191406]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.7891649603843689,0.8043364882469177,0.8260188698768616,0.8373207449913025,0.8371672034263611,0.8458585739135742,0.8467798829078674,0.8534135818481445,0.8609686493873596,0.8659439086914062,0.869015097618103,0.8679401874542236,0.8717484474182129,0.8708270788192749]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.7884036302566528,0.8057858347892761,0.8302929401397705,0.834408164024353,0.8378477096557617,0.8416558504104614,0.8432528376579285,0.848596453666687,0.855598509311676,0.8584238886833191,0.8655487298965454,0.8621705770492554,0.8673913478851318,0.8648116588592529]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('835e2a0e', data);
 
 	}
 	
@@ -8776,7 +8843,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="868e8251"></div>
+<div id="c53985e3"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8784,14 +8851,14 @@ Results on test:
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
 <script charset="UTF-8">
 (() => {
-	const src="https://cdn.plot.ly/plotly-2.29.1.min.js";
+	const src="https://cdn.plot.ly/plotly-2.34.0.min.js";
 	var runJSFn = function(module) {
 		
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.3237004578113556,0.33384424448013306,0.2757982611656189,0.27678292989730835,0.25649648904800415,0.26953139901161194,0.3184759020805359,0.30758991837501526,0.26198476552963257,0.3545679450035095]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.34699735045433044,0.29650261998176575,0.2875652313232422,0.2830050587654114,0.2804998755455017,0.27900266647338867,0.2825952470302582,0.2746221423149109,0.27062177658081055,0.27495935559272766]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.34349051117897034,0.2928921580314636,0.2839066982269287,0.279329776763916,0.2768245339393616,0.2753317058086395,0.2789410650730133,0.271014541387558,0.2670837938785553,0.27149397134780884]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.31580105423927307,0.28592240810394287,0.28146958351135254,0.2760150134563446,0.2807018458843231,0.2725469768047333,0.27241334319114685,0.27077990770339966,0.268953800201416,0.26904618740081787]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.3122362792491913,0.2822903096675873,0.27779799699783325,0.27233588695526123,0.27703094482421875,0.26887568831443787,0.26876726746559143,0.267182320356369,0.26542457938194275,0.2655952274799347]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.3176562786102295,0.29083868861198425,0.2884231507778168,0.284187376499176,0.28821784257888794,0.2832659184932709,0.2835799753665924,0.2829762399196625,0.2832277715206146,0.2819880545139313]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.31409168243408203,0.2872065305709839,0.2847515940666199,0.28050822019577026,0.2845468819141388,0.27959465980529785,0.27993398904800415,0.2793787121772766,0.27969858050346375,0.2785370647907257]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('868e8251', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[4.584485054016113,4.340404510498047,4.107605457305908,3.9142377376556396,3.622657299041748,3.42984938621521,3.0959739685058594,2.836299180984497,2.435443639755249,2.1504478454589844,1.7941548824310303,1.5945879220962524,1.1909154653549194,1.1777129173278809]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[4.602348327636719,4.379591941833496,4.170017242431641,3.9454991817474365,3.7105531692504883,3.454376220703125,3.1721043586730957,2.867478370666504,2.538705587387085,2.192687749862671,1.841402292251587,1.5139445066452026,1.2168511152267456,1.1782050132751465]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.5088871121406555,0.4259694516658783,0.3889908194541931,0.3614184856414795,0.34805554151535034,0.3390008211135864,0.33034321665763855,0.3246315121650696,0.31637266278266907,0.3044726550579071,0.29017025232315063,0.2876596450805664,0.2863348424434662,0.28657567501068115]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss+Regularization on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[4.504115104675293,4.302556037902832,4.100859642028809,3.886643171310425,3.6675243377685547,3.403834819793701,3.1319642066955566,2.8239893913269043,2.496661424636841,2.1540944576263428,1.8164552450180054,1.493667483329773,1.1971896886825562,1.1628382205963135]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.4624846577644348,0.4095672369003296,0.3785771429538727,0.3577468991279602,0.3566412031650543,0.33616626262664795,0.3340076804161072,0.32068946957588196,0.30920013785362244,0.29573556780815125,0.28980281949043274,0.28662657737731934,0.28076356649398804,0.2846183776855469]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss+Regularization on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[4.502460479736328,4.299856662750244,4.096503257751465,3.888585090637207,3.6665146350860596,3.408569812774658,3.137086868286133,2.831362247467041,2.505298376083374,2.163961172103882,1.827559232711792,1.5039606094360352,1.207655668258667,1.1743108034133911]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.4608307480812073,0.40686818957328796,0.3742211163043976,0.35968926548957825,0.35563191771507263,0.3409016728401184,0.3391309380531311,0.3280620276927948,0.31783804297447205,0.3056023120880127,0.30090704560279846,0.29691973328590393,0.2912299633026123,0.2960908114910126]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('c53985e3', data);
 
 	}
 	
@@ -8832,15 +8899,15 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	[Step 5000] median train step: 10580 microseconds
+<pre>	[Step 10000] median train step: 313 microseconds
 Results on batched train:
-	Mean Loss+Regularization (#loss+): 0.269
-	Mean Loss (#loss): 0.266
-	Mean Accuracy (#acc): 87.60%
+	Mean Loss+Regularization (#loss+): 1.16
+	Mean Loss (#loss): 0.285
+	Mean Accuracy (#acc): 87.08%
 Results on test:
-	Mean Loss+Regularization (#loss+): 0.282
-	Mean Loss (#loss): 0.279
-	Mean Accuracy (#acc): 87.38%
+	Mean Loss+Regularization (#loss+): 1.17
+	Mean Loss (#loss): 0.296
+	Mean Accuracy (#acc): 86.48%
 </pre>
 </div>
 </div>

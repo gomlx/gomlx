@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

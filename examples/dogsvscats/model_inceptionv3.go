@@ -1,13 +1,13 @@
 package dogsvscats
 
 import (
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/ml/layers/fnn"
-	"github.com/gomlx/gomlx/models/inceptionv3"
-	timage "github.com/gomlx/gomlx/types/tensors/images"
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/examples/inceptionv3"
+	"github.com/gomlx/gomlx/internal/must"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
 )
 
 // InceptionV3ModelPrep is executed before training: it downloads the inceptionv3 weights.

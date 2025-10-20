@@ -7,8 +7,8 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/stablehlo"
-	"github.com/gomlx/gomlx/graph"
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/klog/v2"
 )
@@ -44,7 +44,7 @@ func TestMain(m *testing.M) {
 
 func TestCompileAndRun(t *testing.T) {
 	// Just return a constant.
-	exec := graph.NewExec(backend, func(g *graph.Graph) *graph.Node { return graph.Const(g, float32(-7)) })
-	y0 := exec.Call()[0]
+	exec := graph.MustNewExec(backend, func(g *graph.Graph) *graph.Node { return graph.Const(g, float32(-7)) })
+	y0 := exec.MustExec()[0]
 	assert.Equal(t, float32(-7), y0.Value())
 }

@@ -2,29 +2,30 @@ package diffusion
 
 import (
 	"fmt"
+	"os"
+	"path"
+	"time"
+
 	"github.com/gomlx/gomlx/backends"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/nanlogger"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/internal/must"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
+	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	stdplots "github.com/gomlx/gomlx/ui/plots"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
-	"os"
-	"path"
-	"time"
 )
 
 const (
@@ -54,6 +55,7 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoint
 		DirFromBase(checkpointPath, c.DataDir).
 		Keep(numCheckpointsToKeep).
 		ExcludeParams(excludeParams...).
+		Immediate().
 		Done())
 	c.Checkpoint = checkpoint // Save in config.
 
@@ -180,7 +182,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 		backend, ctx, config.BuildTrainingModelGraph(), customLoss,
 		optimizers.FromContext(ctx),
 		[]metrics.Interface{movingImagesLoss, movingNoiseLoss, movingMAE}, // trainMetrics
-		[]metrics.Interface{meanImagesLoss, meanMAE})                      // evalMetrics
+		[]metrics.Interface{meanImagesLoss, meanMAE}) // evalMetrics
 	if nanLogger != nil {
 		trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
 			nanLogger.AttachToExec(exec)
@@ -322,7 +324,7 @@ func DisplayTrainingPlots(ctx *context.Context, dataDir, checkpointPath string, 
 
 // CompareModelPlots display several model metrics on the same plots.
 func CompareModelPlots(dataDir string, modelNames ...string) {
-	dataDir = data.ReplaceTildeInDir(dataDir)
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	plots := margaid.New(1024, 400).LogScaleX().LogScaleY()
 	for _, modelName := range modelNames {
 		modelPath := modelName

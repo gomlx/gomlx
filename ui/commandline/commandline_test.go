@@ -1,7 +1,7 @@
 package commandline
 
 import (
-	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"

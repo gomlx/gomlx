@@ -19,8 +19,11 @@ package dogsvscats
 import (
 	"flag"
 	"fmt"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
+
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
+
 	"io"
 	"path"
 	"runtime"
@@ -35,7 +38,7 @@ var (
 )
 
 func buildConfig() *PreprocessingConfiguration {
-	*flagDataDir = data.ReplaceTildeInDir(*flagDataDir)
+	*flagDataDir = fsutil.MustReplaceTildeInDir(*flagDataDir)
 	config := &PreprocessingConfiguration{}
 	*config = *DefaultConfig
 	config.DataDir = *flagDataDir
@@ -47,11 +50,11 @@ func buildConfig() *PreprocessingConfiguration {
 }
 
 func filesDownloaded(config *PreprocessingConfiguration) bool {
-	if !data.FileExists(config.DataDir) {
+	if !fsutil.MustFileExists(config.DataDir) {
 		return false
 	}
 	imagesDir := path.Join(config.DataDir, LocalZipDir)
-	if !data.FileExists(imagesDir) {
+	if !fsutil.MustFileExists(imagesDir) {
 		return false
 	}
 	return true
@@ -65,19 +68,19 @@ func BenchmarkDataset(b *testing.B) {
 		b.Skipf("Files not yet downloaded to %q. Use demo to download files.", config.DataDir)
 	}
 	trainDS, trainEvalDS, _ := CreateDatasets(config)
-	datasets := []train.Dataset{trainDS, trainEvalDS}
+	allDatasets := []train.Dataset{trainDS, trainEvalDS}
 	for dsIdx, dsType := range []string{"train-augmented", "eval"} {
 		dsIdx := dsIdx
 		for _, useParallelism := range []bool{false, true} {
 			name := dsType
-			ds := train.Dataset(datasets[dsIdx])
+			ds := train.Dataset(allDatasets[dsIdx])
 			ds.Reset()
 			if useParallelism {
 				name = fmt.Sprintf("%s-parallel(%d)", name, runtime.NumCPU())
 			}
 			b.Run(name, func(b *testing.B) {
 				if useParallelism {
-					ds = data.CustomParallel(ds).Buffer(10).Start()
+					ds = datasets.CustomParallel(ds).Buffer(10).Start()
 				}
 				for ii := 0; ii < b.N; ii++ {
 					_, _, _, err := ds.Yield()

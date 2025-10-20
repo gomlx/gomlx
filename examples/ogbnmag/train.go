@@ -4,31 +4,32 @@ package ogbnmag
 
 import (
 	"fmt"
-	. "github.com/gomlx/exceptions"
+	"slices"
+	"strings"
+	"time"
+
 	"github.com/gomlx/gomlx/backends"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/nanlogger"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	mldata "github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/layers/kan"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
-	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/tensors"
+	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/must"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/ml/train/losses"
+	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
+	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/gomlx/gomlx/ui/notebooks"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/janpfeifer/must"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 	"k8s.io/klog/v2"
-	"slices"
-	"strings"
-	"time"
 )
 
 var (
@@ -115,7 +116,7 @@ func TrainingSchedule(ctx *context.Context, fromStep, toStep int) train.OnStepFn
 
 // Train GNN model based on configuration in `ctx`.
 func Train(backend backends.Backend, ctx *context.Context, dataDir, checkpointPath string, layerWiseEval, report bool, paramsSet []string) error {
-	dataDir = mldata.ReplaceTildeInDir(dataDir)
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	ReuseShareableKernels = context.GetParamOr(ctx, ParamReuseKernels, true)
 	IdentitySubSeeds = context.GetParamOr(ctx, ParamIdentitySubSeeds, true)
 
@@ -346,10 +347,10 @@ func convertPapersEmbeddings(backend backends.Backend, ctx *context.Context) {
 		return
 	}
 
-	e := context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+	e := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 		return ConvertDType(papersVar.ValueGraph(g), dtype)
 	})
-	converted := e.Call()[0]
+	converted := e.MustExec()[0]
 	papersVar.SetValuePreservingOld(converted) // We don't want to destroy the unconverted values, in case we need it again (it happens in tests).
 	klog.V(1).Infof("Converted papers embeddings to %s: new shape is %s", dtype, papersVar.Shape())
 }

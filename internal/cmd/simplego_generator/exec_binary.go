@@ -7,8 +7,8 @@ import (
 	"path"
 	"text/template"
 
-	"github.com/gomlx/gomlx/types"
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"k8s.io/klog/v2"
 )
 
@@ -18,7 +18,7 @@ const (
 
 // methodsToExclude from generating the API, they are maintained manually,
 // or simply excluded (deprecated methods).
-var methodsToExclude = types.SetWith(
+var methodsToExclude = sets.MakeWith(
 	"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
 	"And", "Or", "Xor", "Not", "ReduceAnd", "ReduceOr", "ReduceXor", "ScatterAdd")
 
@@ -34,8 +34,9 @@ package simplego
 
 import (
 	"math"
+
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/pkg/errors"

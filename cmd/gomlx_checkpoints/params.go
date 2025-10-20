@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"golang.org/x/exp/maps"
 )
 
@@ -30,7 +30,7 @@ func Params(ctxs, scopedCtxs []*context.Context, names []string) {
 
 	// List params set on all models.
 	type scopeKey struct{ Scope, Key string }
-	scopeKeySet := types.MakeSet[scopeKey]()
+	scopeKeySet := sets.Make[scopeKey]()
 	for _, ctx := range ctxs {
 		ctx.EnumerateParams(func(scope, key string, value any) {
 			scopeKeySet.Insert(scopeKey{Scope: scope, Key: key})

@@ -34,16 +34,16 @@ package adult
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/pkg/errors"
 	"log"
 )
 
-// NewDataset creates a new `data.InMemoryDataset` (can be used for training and evaluation) for the
+// NewDataset creates a new `datasets.InMemoryDataset` (can be used for training and evaluation) for the
 // MCI Adult dataset.
-func NewDataset(backend backends.Backend, rawData *RawData, name string) *data.InMemoryDataset {
+func NewDataset(backend backends.Backend, rawData *RawData, name string) *datasets.InMemoryDataset {
 	tensorData := rawData.CreateTensors(backend)
-	ds, err := data.InMemoryFromData(backend, name,
+	ds, err := datasets.InMemoryFromData(backend, name,
 		[]any{tensorData.CategoricalTensor, tensorData.ContinuousTensor, tensorData.WeightsTensor},
 		[]any{tensorData.LabelsTensor})
 	if err != nil {

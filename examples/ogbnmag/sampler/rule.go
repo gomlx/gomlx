@@ -2,8 +2,9 @@ package sampler
 
 import (
 	"fmt"
-	. "github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/types/shapes"
+
+	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
 // Rule defines one rule of the sampling strategy.

@@ -9,11 +9,11 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/simplego"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/internal/must"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/janpfeifer/must"
 )
 
 var (
@@ -28,7 +28,7 @@ var (
 // ListVariables list the variables of a model, with their shape and MAV (max absolute value), RMS (root-mean-square) and MaxAV (max absolute value) values.
 func ListVariables(ctx *context.Context) {
 	fmt.Println(titleStyle.Render(fmt.Sprintf("Variables in scope %q", ctx.Scope())))
-	metricsFn := NewExec(backends.MustNew(), func(x *Node) (mav, rms, maxAV *Node) {
+	metricsFn := MustNewExec(backends.MustNew(), func(x *Node) (mav, rms, maxAV *Node) {
 		x = ConvertDType(x, dtypes.Float64)
 		mav = ReduceAllMean(Abs(x))
 		rms = Sqrt(ReduceAllMean(Square(x)))
@@ -48,7 +48,7 @@ func ListVariables(ctx *context.Context) {
 		if shape.Size() == 1 {
 			mav = fmt.Sprintf("%8v", v.Value().Value())
 		} else if shape.DType.IsFloat() {
-			metrics := metricsFn.Call(v.Value())
+			metrics := metricsFn.MustExec(v.Value())
 			mav = fmt.Sprintf("%.3g", metrics[0].Value().(float64))
 			rms = fmt.Sprintf("%.3g", metrics[1].Value().(float64))
 			maxAV = fmt.Sprintf("%.3g", metrics[2].Value().(float64))
@@ -117,7 +117,7 @@ func PerturbVars(checkpointPath string, x float64) {
 		if !v.Trainable || !(v.DType().IsFloat() || v.DType().IsComplex()) {
 			continue
 		}
-		newValue := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+		newValue := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 			value := v.ValueGraph(g)
 			// Perturbation from -1 to 1
 			perturbation := OneMinus(MulScalar(ctx.RandomUniform(g, value.Shape()), 2))

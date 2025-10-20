@@ -20,8 +20,8 @@ package commandline
 import (
 	"fmt"
 
-	. "github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/ml/train"
+	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/ml/train"
 )
 
 // ReportEval reports on the command line the results of evaluating the datasets using trainer.Eval.

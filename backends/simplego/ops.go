@@ -3,9 +3,8 @@ package simplego
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
-	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
@@ -454,8 +453,8 @@ func (b *Builder) RngBitGenerator(stateOp backends.Op, shape shapes.Shape) (newS
 		return nil, nil, err
 	}
 	state := inputs[0]
-	if !state.shape.Equal(graph.RngStateShape) {
-		err := errors.Errorf("expected random state to be shaped %s, got state.shape=%s instead for RngBitGenerator", graph.RngStateShape, state.shape)
+	if !state.shape.Equal(backends.RngStateShape) {
+		err := errors.Errorf("expected random state to be shaped %s, got state.shape=%s instead for RngBitGenerator", backends.RngStateShape, state.shape)
 		return nil, nil, err
 	}
 	outputShapes := []shapes.Shape{

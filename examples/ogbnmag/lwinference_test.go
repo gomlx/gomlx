@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	mldata "github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
-	"github.com/gomlx/gomlx/types/tensors"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
+	"github.com/gomlx/gomlx/pkg/ml/layers"
+	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
@@ -156,24 +156,24 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 		}
 
 		// Execute normal inference model for the inputs.
-		executor := context.NewExec(backend, ctx, func(ctx *context.Context, inputs []*Node) *Node {
+		executor := context.MustNewExec(backend, ctx, func(ctx *context.Context, inputs []*Node) *Node {
 			predictionsAndMask := MagModelGraph(ctx, strategy, inputs)
 			return ConvertDType(predictionsAndMask[0], dtypes.Float32)
 		})
 		var results []*tensors.Tensor
-		require.NotPanics(t, func() { results = executor.Call(inputs) })
+		require.NotPanics(t, func() { results = executor.MustExec(inputs) })
 		predictionsGNN := results[0]
 		fmt.Printf("predictionsGNN:\n%s\n", predictionsGNN)
 
 		// Layer-Wise inference
 		modelFn := BuildLayerWiseInferenceModel(strategy, false) // Function that builds the LW inference model.
-		executor = context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+		executor = context.MustNewExec(backend, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 			allPredictions := modelFn(ctx, g)
 			return ConvertDType(
 				Slice(allPredictions, AxisElem(seedId), AxisRange()),
 				dtypes.Float32)
 		})
-		require.NotPanics(t, func() { results = executor.Call() })
+		require.NotPanics(t, func() { results = executor.MustExec() })
 		predictionsLW := results[0]
 		fmt.Printf("\npredictionsLW:\n%s\n", predictionsLW)
 		require.True(t, predictionsGNN.InDelta(predictionsLW, 0.05))
@@ -215,7 +215,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	ctx = ctx.Reuse()
 
 	// Execute normal inference model for the inputs.
-	executor := context.NewExec(backend, ctx, func(ctx *context.Context, inputs []*Node) []*Node {
+	executor := context.MustNewExec(backend, ctx, func(ctx *context.Context, inputs []*Node) []*Node {
 		labels := inputs[len(inputs)-1]
 		inputs = inputs[:len(inputs)-1]
 		predictionsAndMask := MagModelGraph(ctx, strategy, inputs)
@@ -244,7 +244,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 		require.NoError(t, err, "Dataset.Yield")
 		inputs = append(inputs, labels[0])
 		var results []*tensors.Tensor
-		require.NotPanics(t, func() { results = executor.Call(inputs) })
+		require.NotPanics(t, func() { results = executor.MustExec(inputs) })
 		correct += int(results[0].Value().(int32))
 		total += int(results[1].Value().(int32))
 		predictionsGNN = append(predictionsGNN, results[2].Value().([]int32)...)
@@ -258,14 +258,14 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	// Layer-Wise inference
 	modelFn := BuildLayerWiseInferenceModel(strategy, false) // Function that builds the LW inference model.
 	numToCompare := len(predictionsGNN)
-	executor = context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+	executor = context.MustNewExec(backend, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 		logits := modelFn(ctx, g)
 		predictions := ArgMax(logits, -1, dtypes.Int32)
 		predictions = Slice(predictions, AxisRange(0, numToCompare))
 		return predictions
 	})
 	var results []*tensors.Tensor
-	require.NotPanics(t, func() { results = executor.Call() })
+	require.NotPanics(t, func() { results = executor.MustExec() })
 	predictionsLW := results[0].Value().([]int32)
 	correct = 0
 	labels := tensors.CopyFlatData[int32](PapersLabels)

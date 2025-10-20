@@ -3,15 +3,16 @@ package diffusion
 import (
 	"flag"
 	"fmt"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/types/shapes"
+	"testing"
+
+	"github.com/gomlx/gomlx/internal/must"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/janpfeifer/must"
 	"github.com/stretchr/testify/assert"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
@@ -48,7 +49,7 @@ func TestUNetModelGraph(t *testing.T) {
 	assert.True(t, noisyImages.Shape().Equal(filtered.Shape()), "Filtered images after UNetModelGraph should have the same shape as its input images")
 	fmt.Printf("     filtered.shape:\t%s\n", filtered.Shape())
 	fmt.Printf("U-Net Model #params:\t%d\n", ctx.NumParameters())
-	fmt.Printf(" U-Net Model memory:\t%s\n", data.ByteCountIEC(ctx.Memory()))
+	fmt.Printf(" U-Net Model memory:\t%s\n", fsutil.ByteCountIEC(ctx.Memory()))
 }
 
 // getZeroPredictions calls the model with some placeholder images.
@@ -81,7 +82,7 @@ func TestTrainingModelGraph(t *testing.T) {
 	fmt.Printf("predictedImages.shape:\t%s\n", predictions[0].Shape())
 	fmt.Printf("           loss.shape:\t%s\n", predictions[1].Shape())
 	fmt.Printf("        Model #params:\t%d\n", ctx.NumParameters())
-	fmt.Printf("         Model memory:\t%s\n", data.ByteCountIEC(ctx.Memory()))
+	fmt.Printf("         Model memory:\t%s\n", fsutil.ByteCountIEC(ctx.Memory()))
 }
 
 func TestImagesGenerator(t *testing.T) {

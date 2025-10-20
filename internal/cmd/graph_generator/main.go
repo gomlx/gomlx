@@ -11,8 +11,8 @@ import (
 	"text/template"
 
 	"github.com/gomlx/gomlx/internal/backendparser"
-	"github.com/gomlx/gomlx/types"
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"k8s.io/klog/v2"
 )
 
@@ -27,7 +27,7 @@ func main() {
 var (
 	// methodsNotExported list methods that will have a non-exported "backend<Method>" function written, that can
 	// be used by the public graphs implementation.
-	methodsNotExported = types.SetWith(
+	methodsNotExported = sets.MakeWith(
 		"ArgMinMax", "Broadcast", "BroadcastInDim",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
 		"Concatenate", "ConvertDType", "ConvGeneral", "DotGeneral", "FFT", "Gather", "Iota",
@@ -47,16 +47,16 @@ var (
 		"Transpose", "Where")
 
 	// methodsNotGenerated but for which there is still a NodeType.
-	methodsNotGenerated = types.SetWith(
+	methodsNotGenerated = sets.MakeWith(
 		"Constant", "Parameter")
 
 	// methodsExcluded from generating and even from having a NodeType.
 	// These are utility methods, not part of building a graph.
-	methodsExcluded = types.SetWith(
+	methodsExcluded = sets.MakeWith(
 		"Name", "Compile", "OpShape")
 
 	// methodsNoGradient will add a stop gradient to the node.
-	methodsNoGradient = types.SetWith(
+	methodsNoGradient = sets.MakeWith(
 		"And", "Or", "Xor", "LogicalNot",
 		"Equal", "NotEqual", "GreaterOrEqual", "GreaterThan", "LessOrEqual", "LessThan",
 		"EqualTotalOrder", "NotEqualTotalOrder", "GreaterOrEqualTotalOrder", "GreaterThanTotalOrder", "LessOrEqualTotalOrder", "LessThanTotalOrder")
@@ -208,9 +208,10 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
@@ -334,14 +335,20 @@ func GenerateBackendOps(methods []*MethodInfo) {
 	// Sort by backend method name:
 	slices.SortFunc(methods, func(a, b *MethodInfo) int { return strings.Compare(a.BackendName, b.BackendName) })
 
-	fileName := path.Join(must.M1(os.Getwd()), backendsOpsFile)
+	curDir := must.M1(os.Getwd())
+	fileName := path.Join(curDir, backendsOpsFile)
 	f := must.M1(os.Create(fileName))
 	must.M(backendOpsTemplate.Execute(f, methods))
 	cmd := exec.Command("go", "fmt", fileName)
 	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())
-	cmd = exec.Command("go", "tool", "enumer", "-type=NodeType", "-trimprefix=NodeType", "-yaml", "-json", "-text", "-values", fileName)
+	fmt.Printf("✅ graph_generator:       \tsuccessfully generated %s\n", fileName)
+
+	// Generate enumer for NodeType:
+	enumerOutput := path.Join(curDir, "gen_nodetype_enumer.go")
+	cmd = exec.Command("go", "tool", "enumer", "-type=NodeType", "-trimprefix=NodeType", "-yaml", "-json", "-text", "-values",
+		"-output="+enumerOutput, fileName)
 	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("✅ graph_generator:       \tsuccessfully generated %s\n", fileName)
+	fmt.Printf("✅ graph_generator:       \tsuccessfully generated %s\n", enumerOutput)
 }

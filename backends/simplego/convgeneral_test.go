@@ -4,9 +4,9 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 )
@@ -265,7 +265,7 @@ func TestConvGeneral(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// The result should be the same for the all dtypes:
 			for _, dtype := range []dtypes.DType{dtypes.Float32, dtypes.BFloat16, dtypes.Float64, dtypes.Int32, dtypes.Uint64} {
-				output, err := graph.ExecOnceOrErr(backend, func(g *graph.Graph) *graph.Node {
+				output, err := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
 					tc.input.DType = dtype
 					input := graph.IotaFull(g, tc.input)
 					tc.kernel.DType = dtype

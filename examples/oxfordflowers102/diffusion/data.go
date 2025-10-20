@@ -3,20 +3,22 @@ package diffusion
 import (
 	"encoding/gob"
 	"fmt"
-	"github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/backends"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/nanlogger"
-	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/janpfeifer/must"
-	"github.com/pkg/errors"
 	"os"
 	"path"
 
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/must"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
+
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
 
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 )
@@ -55,8 +57,8 @@ type Config struct {
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
 func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string, paramsSet []string) *Config {
-	dataDir = data.ReplaceTildeInDir(dataDir)
-	if !data.FileExists(dataDir) {
+	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
+	if !fsutil.MustFileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
 	}
 	dtype := must.M1(dtypes.DTypeString(
@@ -79,7 +81,7 @@ func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string, p
 }
 
 // CreateInMemoryDatasets returns a train and a validation InMemoryDataset.
-func (c *Config) CreateInMemoryDatasets() (trainDS, validationDS *data.InMemoryDataset) {
+func (c *Config) CreateInMemoryDatasets() (trainDS, validationDS *datasets.InMemoryDataset) {
 	trainDS = must.M1(
 		flowers.InMemoryDataset(c.Backend, c.DataDir, c.ImageSize, "train", PartitionSeed, ValidationFraction, 1.0))
 	validationDS = must.M1(
@@ -123,12 +125,12 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 
 	trainDS, _ := c.CreateInMemoryDatasets()
 	trainDS.BatchSize(128, false)
-	ds := data.MapWithGraphFn(c.Backend, nil, trainDS, func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
+	ds := datasets.MapWithGraphFn(c.Backend, nil, trainDS, func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
 		images := c.PreprocessImages(inputs[0], false)
 		return []*Node{images}, labels
 	})
 	normalizationMean, normalizationStdDev = must.M2(
-		data.Normalization(c.Backend, ds, 0, -1)) // mean/stddev for each channel (axis=-1) separately.
+		datasets.Normalization(c.Backend, ds, 0, -1)) // mean/stddev for each channel (axis=-1) separately.
 	mean, stddev = normalizationMean, normalizationStdDev
 
 	// Save for future times.
@@ -166,7 +168,7 @@ func (c *Config) PreprocessImages(images *Node, normalize bool) *Node {
 
 	images = Div(
 		Sub(images, mean),
-		data.ReplaceZerosByOnes(stddev))
+		datasets.ReplaceZerosByOnes(stddev))
 	images = ConvertDType(images, c.DType)
 	c.NanLogger.TraceFirstNaN(images, "PreprocessImages:"+c.DType.String())
 	return images
@@ -182,7 +184,7 @@ func (c *Config) DenormalizeImages(images *Node) *Node {
 	stddev := Const(g, stddevT)
 
 	images = Add(
-		Mul(images, data.ReplaceZerosByOnes(stddev)),
+		Mul(images, datasets.ReplaceZerosByOnes(stddev)),
 		mean)
 	images = ClipScalar(images, 0.0, 255.0)
 	return images

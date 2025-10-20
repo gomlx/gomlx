@@ -2,16 +2,17 @@ package ogbnmag
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/ml/context"
-	mldata "github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/stretchr/testify/require"
 	"io"
 	"testing"
+
+	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
+	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDatasets(t *testing.T) {
@@ -44,8 +45,8 @@ func TestDatasets(t *testing.T) {
 		{"shuffled_train", shuffledTrainDS, TrainSplit},
 	} {
 		seedsInSplit := tensors.CopyFlatData[int32](testCase.Seeds)
-		wanted := types.MakeSet[int32](len(seedsInSplit))
-		seen := types.MakeSet[int32](len(seedsInSplit))
+		wanted := sets.Make[int32](len(seedsInSplit))
+		seen := sets.Make[int32](len(seedsInSplit))
 		for _, idx := range seedsInSplit {
 			if wanted.Has(idx) {
 				require.Falsef(t, wanted.Has(idx), "Dataset %q split has index %d more than once!?",

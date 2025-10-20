@@ -23,18 +23,18 @@ import (
 	"fmt"
 
 	"github.com/gomlx/gomlx/backends"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/internal/must"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
+	"github.com/gomlx/gomlx/pkg/ml/layers"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/ml/train/losses"
+	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -50,7 +50,7 @@ const (
 // initCoefficients chooses random coefficients and bias. These are the true values the model will
 // attempt to learn.
 func initCoefficients(backend backends.Backend, numVariables int) (coefficients, bias *tensors.Tensor) {
-	e := NewExec(backend, func(g *Graph) (coefficients, bias *Node) {
+	e := MustNewExec(backend, func(g *Graph) (coefficients, bias *Node) {
 		rngState := Const(g, RngState())
 		rngState, coefficients = RandomNormal(rngState, shapes.Make(dtypes.Float64, numVariables))
 		coefficients = AddScalar(
@@ -60,13 +60,13 @@ func initCoefficients(backend backends.Backend, numVariables int) (coefficients,
 		bias = AddScalar(MulScalar(bias, BiasSigma), BiasMu)
 		return
 	})
-	results := e.Call()
+	results := e.MustExec()
 	coefficients, bias = results[0], results[1]
 	return
 }
 
 func buildExamples(backend backends.Backend, coef, bias *tensors.Tensor, numExamples int, noise float64) (inputs, labels *tensors.Tensor) {
-	e := NewExec(backend, func(coef, bias *Node) (inputs, labels *Node) {
+	e := MustNewExec(backend, func(coef, bias *Node) (inputs, labels *Node) {
 		g := coef.Graph()
 		numFeatures := coef.Shape().Dimensions[0]
 
@@ -87,7 +87,7 @@ func buildExamples(backend backends.Backend, coef, bias *tensors.Tensor, numExam
 		}
 		return
 	})
-	examples := e.Call(coef, bias)
+	examples := e.MustExec(coef, bias)
 	inputs, labels = examples[0], examples[1]
 	return
 }
@@ -124,7 +124,7 @@ func main() {
 	fmt.Printf("Training data (inputs, labels): (%s, %s)\n\n", inputs.Shape(), labels.Shape())
 
 	// Create an in-memory dataset from the tensors.
-	dataset := must.M1(data.InMemoryFromData(backend, "linear dataset", []any{inputs}, []any{labels})).
+	dataset := must.M1(datasets.InMemoryFromData(backend, "linear dataset", []any{inputs}, []any{labels})).
 		Infinite(true).Shuffle().BatchSize(*flagNumExamples, false)
 	// dataset := &Dataset{"training", []*tensors.Tensor{inputs}, []*tensors.Tensor{labels}}
 

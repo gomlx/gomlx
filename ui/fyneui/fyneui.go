@@ -38,22 +38,23 @@ package fyneui
 import (
 	stderrors "errors"
 	"fmt"
+	"os"
+	"os/signal"
+	"sync"
+	"time"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
-	"github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xsync"
+	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
-	"os"
-	"os/signal"
-	"sync"
-	"time"
 )
 
 var (
@@ -283,7 +284,7 @@ func (win *window) OnStart(loop *train.Loop, _ train.Dataset) error {
 }
 
 // OnStep is called every time the training loop moves forward.
-// It will also check if the training was cancelled by the user. If so, it returns an error.
+// It will also check if the user canceled the training. If so, it returns an error.
 func (win *window) OnStep(loop *train.Loop, metrics []*tensors.Tensor) error {
 	if win.cancelled {
 		return stderrors.New("training cancelled by user request")
@@ -329,8 +330,8 @@ func (win *window) OnEnd(loop *train.Loop, metrics []*tensors.Tensor) error {
 // - loop: training loop to attach to.
 // - name: is used for the window name.
 //
-// When the loop ends, the GUI is kept alive, until the user closes it.
-// Call WaitForGUIs() to wait for all GUI apps to be closed by the user.
+// When the loop ends, the GUI is kept alive until the user closes it.
+// Call WaitForGUIs() to wait the user to close all GUI apps.
 //
 // It is a no-op if the GUI was already created.
 func AttachGUI(loop *train.Loop, name string) {

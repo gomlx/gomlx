@@ -8,20 +8,22 @@ package ogbnmag
 
 import (
 	"fmt"
-	"github.com/gomlx/exceptions"
-	. "github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/backends"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	mldata "github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/pkg/errors"
 	"os"
 	"path"
 	"strconv"
+
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/examples/downloader"
+	. "github.com/gomlx/gomlx/internal/exceptions"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -116,7 +118,7 @@ func Download(baseDir string) error {
 		// Already loaded.
 		return nil
 	}
-	baseDir = mldata.ReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
+	baseDir = fsutil.MustReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
 	downloadDir := path.Join(baseDir, DownloadSubdir)
 
 	if err := downloadZip(downloadDir); err != nil {
@@ -146,11 +148,11 @@ func downloadZip(downloadDir string) error {
 	}
 
 	zipPath := path.Join(downloadDir, ZipFile)
-	err := mldata.DownloadAndUnzipIfMissing(ZipURL, zipPath, downloadDir, path.Join(downloadDir, "mag"), ZipChecksum)
+	err := downloader.DownloadAndUnzipIfMissing(ZipURL, zipPath, downloadDir, path.Join(downloadDir, "mag"), ZipChecksum)
 	if err != nil {
 		return err
 	}
-	if mldata.FileExists(zipPath) {
+	if fsutil.MustFileExists(zipPath) {
 		// Clean up zip file no longer needed, to save space.
 		if err := os.Remove(zipPath); err != nil {
 			return errors.Wrapf(err, "Failed to remove file %q", zipPath)
@@ -266,7 +268,7 @@ func parseInt32(str string) (int32, error) {
 func parseNumbersFromCSV[E dtypes.NumberNotComplex](inputFilePath, outputFilePath string, numRows, numCols int, parseNumberFn func(string) (E, error)) (*tensors.Tensor, error) {
 	var tensorOut *tensors.Tensor
 	var err error
-	if outputFilePath != "" && mldata.FileExists(outputFilePath) {
+	if outputFilePath != "" && fsutil.MustFileExists(outputFilePath) {
 		tensorOut, err = tensors.Load(outputFilePath)
 		if err == nil {
 			// Read from pre-saved tensor.
@@ -280,7 +282,7 @@ func parseNumbersFromCSV[E dtypes.NumberNotComplex](inputFilePath, outputFilePat
 	rowNum, rawDataPos := 0, 0
 	tensorOut.MutableFlatData(func(flatAny any) {
 		rawData := flatAny.([]E)
-		err = mldata.ParseGzipCSVFile(inputFilePath, func(row []string) error {
+		err = downloader.ParseGzipCSVFile(inputFilePath, func(row []string) error {
 			if len(row) != numCols {
 				return errors.Errorf("line %d has %d columns, we expected %q rows to have %d columns", rowNum+1, len(row), inputFilePath, numCols)
 			}
@@ -345,7 +347,7 @@ func allEdgesCount(downloadDir string) error {
 			outputFilePath := path.Join(downloadDir, countsFileNames[idxTensor]+".tensor")
 			var counts *tensors.Tensor
 			var err error
-			if mldata.FileExists(outputFilePath) {
+			if fsutil.MustFileExists(outputFilePath) {
 				counts, err = tensors.Load(outputFilePath)
 			} else {
 				fmt.Printf("> Counting elements for edges %s[column %d]: %d entries\n", edgesFiles[idxInput], column, input.Shape().Dimensions[0])
@@ -458,7 +460,7 @@ func getLabelsGraph(indices, allLabels *Node) *Node {
 	return Gather(allLabels, indices, false)
 }
 
-// PapersSeedDatasets returns the train, validation and test datasets (`data.InMemoryDataset`) with only the papers seed nodes,
+// PapersSeedDatasets returns the train, validation and test datasets (`datasets.InMemoryDataset`) with only the papers seed nodes,
 // to be used with FNN (Feedforward Neural Networks). See [MakeDataset] to make a dataset with sampled sub-graphs for
 // GNNs.
 //
@@ -471,11 +473,11 @@ func PapersSeedDatasets(manager backends.Backend) (trainDS, validDS, testDS *mld
 		err = errors.New("data is not loaded yet, please call ogbnmag.Download() first")
 	}
 	var trainLabels, validLabels, testLabels *tensors.Tensor
-	err = exceptions.TryCatch[error](func() {
-		getLabels := NewExec(manager, getLabelsGraph)
-		trainLabels = getLabels.Call(TrainSplit, PapersLabels)[0]
-		validLabels = getLabels.Call(ValidSplit, PapersLabels)[0]
-		testLabels = getLabels.Call(TestSplit, PapersLabels)[0]
+	err = TryCatch[error](func() {
+		getLabels := MustNewExec(manager, getLabelsGraph)
+		trainLabels = getLabels.MustExec(TrainSplit, PapersLabels)[0]
+		validLabels = getLabels.MustExec(ValidSplit, PapersLabels)[0]
+		testLabels = getLabels.MustExec(TestSplit, PapersLabels)[0]
 	})
 	if err != nil {
 		return

@@ -2,30 +2,31 @@ package fm
 
 import (
 	"fmt"
+	"path"
+	"time"
+
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
-	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/internal/must"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/ml/train/losses"
+	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
+	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	stdplots "github.com/gomlx/gomlx/ui/plots"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
-	"path"
-	"time"
 )
 
-// TrainModel with given config -- it includes the context with hyperparameters.
+// TrainModel with a given config -- it includes the context with hyperparameters.
 func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd bool, verbosity int) {
 	ctx := config.Context
 	paramsSet := config.ParamsSet
@@ -86,7 +87,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(
-		backend, ctx, BuildTrainingModelGraph(config), customLoss,
+		backend, ctx, BuildTrainComputation(config), customLoss,
 		optimizers.FromContext(ctx),
 		[]metrics.Interface{}, // trainMetrics
 		[]metrics.Interface{}) // evalMetrics
@@ -96,10 +97,10 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		})
 	}
 
-	// Use standard training loop.
+	// Use a standard training loop.
 	loop := train.NewLoop(trainer)
 	if verbosity >= 0 {
-		commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+		commandline.AttachProgressBar(loop)
 	}
 
 	// Checkpoint saving: every 3 minutes of training.
@@ -190,11 +191,11 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	}
 }
 
-// BuildTrainingModelGraph builds the ModelFn for training and evaluation.
+// BuildTrainComputation builds the ModelFn for training and evaluation.
 //
 // It generates the random noise as the "source distribution" for each example image,
 // as well as random values of t -> [0,1), used to train.
-func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
+func BuildTrainComputation(config *diffusion.Config) train.ModelFn {
 	return func(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		g := inputs[0].Graph()
 
@@ -247,7 +248,7 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 		config.NanLogger.TraceFirstNaN(predictedVelocity, "predictedVelocity")
 
 		// Calculate our loss inside the model: use losses.ParamLoss to define the loss, and if not set,
-		// back-off to "diffusion_loss" hyperparam (for backward compatibility).
+		// back-off to "diffusion_loss" hyper-param (for backward compatibility).
 		// Defaults to "mae" (mean-absolute-error).
 		lossName := context.GetParamOr(ctx, losses.ParamLoss,
 			context.GetParamOr(ctx, "diffusion_loss", "mse"))
@@ -305,5 +306,6 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 	imagesPath := fmt.Sprintf("%s%07d.tensor", diffusion.GeneratedSamplesPrefix, loop.LoopStep)
 	imagesPath = path.Join(checkpoint.Dir(), imagesPath)
 	must.M(sampledImages.Save(imagesPath))
+
 	return nil
 }
