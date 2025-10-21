@@ -15,8 +15,6 @@ require (
 	k8s.io/klog/v2 v2.130.1
 )
 
-replace github.com/gomlx/gomlx => ../../
-
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.3.2 // indirect
