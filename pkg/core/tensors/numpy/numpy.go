@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -86,14 +87,14 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 		return nil, errors.Wrapf(err, "failed to parse .npy header")
 	}
 
-	// Create tensor shape.
+	// Create the tensor shape.
 	dtype, err := npyDTypeToGomlx(dtypeStr)
 	if err != nil {
 		return nil, err
 	}
 	shape := shapes.Make(dtype, shapeInts...)
 
-	// Create tensor and read data into it.
+	// Create the tensor and read data into it.
 	tensor := tensors.FromShape(shape)
 	tensor.MutableBytes(func(data []byte) {
 		if !fortranOrder || shape.Rank() <= 1 {
@@ -259,7 +260,7 @@ func parseNpyHeader(header string) (dtype string, shape []int, fortranOrder bool
 			shape = append(shape, val)
 		}
 	}
-	// If shape has only one empty element and the original string was like "()", it means scalar.
+	// If the shape has only one empty element and the original string was like "()", it means scalar.
 	// If the original string was like "(N,)", len(parts) might be 2 with the last empty.
 	// The current logic with `if p == ""` handles trailing commas correctly for non-empty dtypes.
 	// For scalar `()`, `shapeStr` will be empty, leading to `shape = []int{}`.
@@ -344,6 +345,12 @@ func FromNpzReader(r io.ReaderAt, size int64) (map[string]*tensors.Tensor, error
 
 	results := make(map[string]*tensors.Tensor)
 	for _, f := range zipReader.File {
+		// For extra safety.
+		cleanPath := path.Clean(f.Name)
+		if path.IsAbs(cleanPath) || strings.HasPrefix(cleanPath, "..") {
+			return nil, errors.Errorf("invalid (malicious?) path in .npz archive: %q (normalized to %q)", f.Name, cleanPath)
+		}
+
 		if !strings.HasSuffix(f.Name, ".npy") {
 			// .npz might contain other metadata files, skip non .npy files.
 			// Or, log a warning if unexpected.
