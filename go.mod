@@ -14,7 +14,7 @@ require (
 	github.com/erkkah/margaid v0.3.0
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/bsplines v0.2.0
-	github.com/gomlx/gopjrt v0.8.2
+	github.com/gomlx/gopjrt v0.8.3
 	github.com/gomlx/stablehlo v0.0.5
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.1
@@ -87,7 +87,7 @@ require (
 	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 	gonum.org/v1/gonum v0.16.0 // indirect
-	google.golang.org/protobuf v1.36.9 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

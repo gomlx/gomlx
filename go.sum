@@ -112,6 +112,8 @@ github.com/gomlx/exceptions v0.0.3 h1:HKnTgEjj4jlmhr8zVFkTP9qmV1ey7ypYYosQ8GzXWu
 github.com/gomlx/exceptions v0.0.3/go.mod h1:uHL0TQwJ0xaV2/snJOJV6hSE4yRmhhfymuYgNredGxU=
 github.com/gomlx/gopjrt v0.8.2 h1:xBohaxRDt1YMHpuPB2O6bJgEPmqPFNNvQ/Gmvtwszcw=
 github.com/gomlx/gopjrt v0.8.2/go.mod h1:PFS2tITbe94NfjY1mZkhCpGogn8R0bKi90aIr3g8dHw=
+github.com/gomlx/gopjrt v0.8.3 h1:X9CC/Xz+WK7CE5LnXoxKTNLgZSUjAz/mS+8Jgj+fTpg=
+github.com/gomlx/gopjrt v0.8.3/go.mod h1:XxRE5FOqAdgUBuK2J7wlb57MgVcX/dbL3b+qfVBMCVQ=
 github.com/gomlx/stablehlo v0.0.5 h1:AZBYm/FkBlNKcXqrEB6hSu9bJ03X8E+FvsKaqcEeu6c=
 github.com/gomlx/stablehlo v0.0.5/go.mod h1:K7IWlkApRzQCYydaOElGb2LDo0dK+LDKddiaRyhqnVc=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
@@ -271,6 +273,7 @@ gonum.org/v1/plot v0.15.2 h1:Tlfh/jBk2tqjLZ4/P8ZIwGrLEWQSPDLRm/SNWKNXiGI=
 gonum.org/v1/plot v0.15.2/go.mod h1:DX+x+DWso3LTha+AdkJEv5Txvi+Tql3KAGkehP0/Ubg=
 google.golang.org/protobuf v1.36.9 h1:w2gp2mA27hUeUzj9Ex9FBjsBm40zfaDtEWow293U7Iw=
 google.golang.org/protobuf v1.36.9/go.mod h1:fuxRtAxBytpl4zzqUh6/eyUujkJdNiuEkXntxiD/uRU=
+google.golang.org/protobuf v1.36.10/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f h1:BLraFXnmrev5lT+xlilqcH8XK9/i0At2xKjWk4p6zsU=
 gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
