@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+# v0.24.1: Added Mac support for XLA
+
+* Updated dependency to Gopjrt v0.8.4 
+* Include `stablehlo` (== `xla`) by default for MacOS in Darwin. 
+
 # v0.24.0: **API change**: package tree restructured under `pkg`, `Exec` normalization; Backend `xla` now provided by `stablehlo`
 
 * **Highlights** of this release:
