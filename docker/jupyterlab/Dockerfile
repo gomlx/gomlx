@@ -45,7 +45,7 @@ EOF
 #######################################################################################################
 # Go, GoNB and gopjrt
 #######################################################################################################
-ARG GO_VERSION="1.25.1"
+ARG GO_VERSION="1.25.3"
 ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
 
 # Download Go in users home directory.
@@ -74,19 +74,23 @@ RUN go install github.com/go-delve/delve/cmd/dlv@latest
 #######################################################################################################
 FROM gomlx_jupyterlab_base AS gomlx_jupyterlab_gopjrt
 
-# Clone and install gopjrt.
+# Clone and install gopjrt_installer.
 USER ${NB_USER}
 WORKDIR ${HOME}
 RUN <<EOF
 mkdir Projects
 cd Projects
 git clone https://github.com/gomlx/gopjrt.git
+cd gopjrt/cmd/gopjrt_installer
+go install .
 EOF
 
-# Install gopjrt libraries and CUDA 13 PJRT.
+# Install cpu and cuda (13) PJRT plugins in /usr/local (requires root).
 USER root
-WORKDIR ${HOME}/Projects/gopjrt
-RUN ./cmd/install_linux_amd64.sh && ./cmd/install_cuda13.sh
+RUN <<EOF
+sudo $(go env GOPATH)/bin/gopjrt_installer -plugin linux -version latest -path /usr/local
+sudo $(go env GOPATH)/bin/gopjrt_installer -plugin cuda13 -version latest -path /usr/local
+EOF
 
 # Test gopjrt
 USER ${NB_USER}
