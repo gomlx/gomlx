@@ -43,10 +43,12 @@ jobs:
         go-version: "1.25.x"
 
     - name: Install gopjrt shared libraries
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: bash
       run: |
         go install github.com/gomlx/gopjrt/cmd/gopjrt_installer@latest
-        sudo $(go env GOPATH)/bin/gopjrt_installer -plugin linux -version latest -path /usr/local
+        sudo env GH_TOKEN=$GH_TOKEN $(go env GOPATH)/bin/gopjrt_installer -plugin linux -version latest -path /usr/local
 
     - name: PreTest
       run: |
