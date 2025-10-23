@@ -28,7 +28,7 @@ jobs:
         shell: bash
         run: |
           go install github.com/gomlx/gopjrt/cmd/gopjrt_installer@latest
-          sudo env GH_TOKEN=$GH_TOKEN $(go env GOPATH)/bin/gopjrt_installer -plugin darwin -version latest -path /usr/local
+          sudo env GH_TOKEN=$GH_TOKEN $(go env GOPATH)/bin/gopjrt_installer -plugin darwin -version latest -path /usr/local -vmodule=utils=1
 
       - name: PreTest
         run: |
