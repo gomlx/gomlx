@@ -28,6 +28,8 @@ github.com/gofrs/uuid v4.4.0+incompatible h1:3qXRTX8/NbyulANqlc0lchS1gqAVxRgsuW1
 github.com/gofrs/uuid v4.4.0+incompatible/go.mod h1:b2aQJv3Z4Fp6yNu3cdSllBxTCLRxnplIgP/c0N/04lM=
 github.com/gomlx/gomlx v0.24.0 h1:OOqobvTFA9QLl7NI2/X46PUdUMBcJMqA3WPMA2lyJIw=
 github.com/gomlx/gomlx v0.24.0/go.mod h1:hWlx+o9uhKBQaZTMqFg6y/60ocKT/qf91TskuI8dcMY=
+github.com/gomlx/gomlx v0.24.1 h1:52Gdjk9hgfrA2Oah5roa7pmmD7WEm4D8UfHaXcg8ZhY=
+github.com/gomlx/gomlx v0.24.1/go.mod h1:IFuL3ILLfJgY6XHkgwQtV6R0Nn61+tt7MV84xkzFj9A=
 github.com/gomlx/gopjrt v0.8.4 h1:OPf7Yliff97WoTUU6kGIDd3SJDhh+kntCn7TOtAvrOY=
 github.com/gomlx/gopjrt v0.8.4/go.mod h1:XxRE5FOqAdgUBuK2J7wlb57MgVcX/dbL3b+qfVBMCVQ=
 github.com/gomlx/stablehlo v0.0.5 h1:AZBYm/FkBlNKcXqrEB6hSu9bJ03X8E+FvsKaqcEeu6c=
