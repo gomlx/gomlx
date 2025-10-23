@@ -7669,7 +7669,7 @@ But you can build your binary only with xla with <code>import _ "github.com/goml
 
 <span class="o">//</span> <span class="n">Exec</span> <span class="n">version</span><span class="p">:</span> <span class="err">`</span><span class="n">NewExec</span><span class="err">`</span> <span class="n">will</span> <span class="nb">compile</span> <span class="n">the</span> <span class="n">Sum</span> <span class="n">function</span> <span class="n">so</span> <span class="n">it</span> <span class="n">can</span> <span class="n">be</span> <span class="n">executed</span> <span class="n">efficiently</span>
 <span class="o">//</span> <span class="n">many</span> <span class="n">times</span><span class="o">.</span>
-<span class="n">exec</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">NewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">Sum</span><span class="p">)</span>  
+<span class="n">exec</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">NewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">Sum</span><span class="p">)</span>
 <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">}</span>
 <span class="n">results</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">exec</span><span class="o">.</span><span class="n">Exec</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">}</span>
@@ -7711,7 +7711,7 @@ Usually one creates one at the beginning of the program and passes it around.
 Here <strong>GoNB</strong> will keep the global variable <code>manager</code> available to all cells, so we don't need
 to define it again.</li>
 <li>The <code>Exec</code> object created is associated with a graph building function (<code>Sum</code> in this case). It lazily
-compiles and executes the compiled computation as needed. Naturally the first time <code>Call()</code> is invoked
+compiles and executes the compiled computation as needed. Naturally the first time <code>Exec()</code> is invoked
 it is slow: it has to build the graph and <em>just-in-time</em> (JIT) compile it. But the compiled graph afterwards
 is optimized and very fast to execute, which is what we want for machine learning.</li>
 <li>The <code>Exec.Exec(1, 1)</code> method always returns a slice of results, that's why we use <code>[0]</code> to access the
@@ -7817,7 +7817,7 @@ We'll see later <code>Node.SetLogged</code> on how to print intermediary results
 <code>shapes.DType</code> and its axes dimensions. For scalars, the shape has zero axes (dimensions). E.g.: <code>(Int64)[]</code> represents
 a scalar <code>int</code> value, and <code>(Float32)[3]</code> represents a vector with 3 <code>float32</code> values. More details
 and the list of data types (aka. <em>dtype</em>) supported in the package <a href="https://pkg.go.dev/github.com/gomlx/gopjrt/dtypes">github.com/gomlx/gopjrt/dtypes</a>.</li>
-<li><code>Exec.MustExec1</code> is an alias to the previous <code>Exec.Exec</code> that conveniently: (a) panics on error; (b) returns the first result.</li>
+<li><code>Exec.MustExec1</code> is an alias to the previous <code>Exec.Exec1</code> that conveniently: (a) panics on error; (b) returns the first result.</li>
 </ul>
 </blockquote>
 <p>In general the graph operations only work with the same <code>dtypes.DType</code>.
@@ -8000,14 +8000,14 @@ Example: because some of the resources are allocated in the accelerator (GPU) an
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span>
 <span class="n">onePlusExec</span> <span class="o">:=</span> <span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">func</span> <span class="p">(</span><span class="n">x</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
-    <span class="k">return</span> <span class="n">OnePlus</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> 
+    <span class="k">return</span> <span class="n">OnePlus</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
 <span class="p">})</span>
 <span class="o">//</span> <span class="n">exec</span><span class="o">.</span><span class="n">MustExec1</span> <span class="n">will</span> <span class="k">return</span> <span class="n">a</span> <span class="o">*</span><span class="n">tensor</span><span class="o">.</span><span class="n">Tensor</span><span class="o">.</span>
 <span class="n">counter</span> <span class="o">:=</span> <span class="n">onePlusExec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 <span class="o">//</span> <span class="n">counter</span><span class="o">.</span><span class="n">String</span><span class="p">()</span> <span class="n">will</span> <span class="n">first</span> <span class="n">transfer</span> <span class="n">counter</span> <span class="n">to</span> <span class="n">local</span> <span class="p">(</span><span class="n">using</span> <span class="n">counter</span><span class="o">.</span><span class="n">Local</span><span class="p">())</span> <span class="n">to</span> <span class="nb">print</span> <span class="n">its</span> <span class="n">values</span><span class="o">.</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"counter.type=%T, counter=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">counter</span><span class="p">,</span> <span class="n">counter</span><span class="o">.</span><span class="n">String</span><span class="p">())</span>
 <span class="k">for</span> <span class="n">ii</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">ii</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">;</span> <span class="n">ii</span><span class="o">++</span> <span class="p">{</span>
-    <span class="o">//</span> <span class="n">Since</span> <span class="n">the</span> <span class="n">counter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">being</span> <span class="n">used</span> <span class="n">locally</span> <span class="n">between</span> <span class="n">the</span> <span class="n">calls</span><span class="p">,</span> <span class="n">the</span> <span class="n">tensor</span> <span class="n">will</span> <span class="n">only</span> <span class="n">use</span> <span class="n">the</span> 
+    <span class="o">//</span> <span class="n">Since</span> <span class="n">the</span> <span class="n">counter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">being</span> <span class="n">used</span> <span class="n">locally</span> <span class="n">between</span> <span class="n">the</span> <span class="n">calls</span><span class="p">,</span> <span class="n">the</span> <span class="n">tensor</span> <span class="n">will</span> <span class="n">only</span> <span class="n">use</span> <span class="n">the</span>
     <span class="o">//</span> <span class="n">device</span> <span class="n">storage</span><span class="o">.</span>
     <span class="n">counter</span> <span class="o">=</span> <span class="n">onePlusExec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">(</span><span class="n">counter</span><span class="p">)</span>
 <span class="p">}</span>
@@ -8342,23 +8342,23 @@ of the computation graph.</li>
     <span class="o">//</span> <span class="n">Create</span> <span class="ow">or</span> <span class="n">reuse</span> <span class="n">existing</span> <span class="n">variable</span> <span class="s2">"x"</span> <span class="o">--</span> <span class="n">no</span> <span class="n">graph</span> <span class="n">operation</span> <span class="ow">is</span> <span class="n">created</span> <span class="k">with</span> <span class="n">this</span><span class="p">,</span> <span class="n">it</span><span class="s1">'s</span>
     <span class="o">//</span> <span class="n">only</span> <span class="n">a</span> <span class="n">reference</span><span class="o">.</span>
     <span class="n">xVar</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">VariableWithShape</span><span class="p">(</span><span class="s2">"x"</span><span class="p">,</span> <span class="n">shapes</span><span class="o">.</span><span class="n">Make</span><span class="p">(</span><span class="n">dtypes</span><span class="o">.</span><span class="n">Float64</span><span class="p">))</span>
-    
+
     <span class="n">x</span> <span class="o">:=</span> <span class="n">xVar</span><span class="o">.</span><span class="n">ValueGraph</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>                        <span class="o">//</span> <span class="n">Read</span> <span class="n">variable</span> <span class="k">for</span> <span class="n">the</span> <span class="n">current</span> <span class="n">graph</span><span class="o">.</span>
     <span class="n">y</span> <span class="o">:=</span> <span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>                                          <span class="o">//</span> <span class="n">Value</span> <span class="n">of</span> <span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span>
-    
+
     <span class="o">//</span> <span class="n">Gradient</span> <span class="n">always</span> <span class="k">return</span> <span class="n">a</span> <span class="nb">slice</span><span class="p">,</span> <span class="n">we</span> <span class="n">take</span> <span class="n">the</span> <span class="n">first</span> <span class="n">element</span> <span class="k">for</span> <span class="n">grad</span> <span class="n">of</span> <span class="n">X</span><span class="o">.</span>
-    <span class="n">gradX</span> <span class="o">:=</span> <span class="n">Gradient</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">x</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> 
-    
+    <span class="n">gradX</span> <span class="o">:=</span> <span class="n">Gradient</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">x</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
     <span class="o">//</span> <span class="n">stepNum</span> <span class="o">+=</span> <span class="mi">1</span>
     <span class="n">stepNumVar</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">VariableWithValue</span><span class="p">(</span><span class="s2">"stepNum"</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>  <span class="o">//</span> <span class="n">Creates</span> <span class="n">the</span> <span class="n">variable</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">existing</span><span class="p">,</span> <span class="ow">or</span> <span class="n">retrieve</span> <span class="n">it</span> <span class="k">if</span> <span class="n">already</span> <span class="n">exists</span><span class="o">.</span>
     <span class="n">stepNum</span> <span class="o">:=</span> <span class="n">stepNumVar</span><span class="o">.</span><span class="n">ValueGraph</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
     <span class="n">stepNum</span> <span class="o">=</span> <span class="n">OnePlus</span><span class="p">(</span><span class="n">stepNum</span><span class="p">)</span>
     <span class="n">stepNumVar</span><span class="o">.</span><span class="n">SetValueGraph</span><span class="p">(</span><span class="n">stepNum</span><span class="p">)</span>
-    
+
     <span class="o">//</span> <span class="n">step</span> <span class="o">=</span> <span class="o">-</span><span class="n">learningRate</span> <span class="o">*</span> <span class="n">gradX</span> <span class="o">/</span> <span class="n">Sqrt</span><span class="p">(</span><span class="n">stepNum</span><span class="p">)</span>
     <span class="n">step</span> <span class="o">:=</span> <span class="n">Div</span><span class="p">(</span><span class="n">gradX</span><span class="p">,</span> <span class="n">Sqrt</span><span class="p">(</span><span class="n">stepNum</span><span class="p">))</span>
     <span class="n">step</span> <span class="o">=</span> <span class="n">MulScalar</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="o">-*</span><span class="n">flagLearningRate</span><span class="p">)</span>
-    
+
     <span class="o">//</span> <span class="n">x</span> <span class="o">+=</span> <span class="n">step</span>
     <span class="n">x</span> <span class="o">=</span> <span class="n">Add</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
     <span class="n">xVar</span><span class="o">.</span><span class="n">SetValueGraph</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
@@ -8578,7 +8578,7 @@ have been selected in Go directly using <code>math/random</code>, but just for f
 
 <span class="o">%%</span>
 <span class="n">coef</span><span class="p">,</span> <span class="n">bias</span> <span class="o">:=</span> <span class="n">initCoefficients</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Example of target: coefficients=%0.3v, bias=%0.3v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">coef</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">bias</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span> 
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Example of target: coefficients=%0.3v, bias=%0.3v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">coef</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">bias</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
 </pre></div>
 </div>
 </div>
@@ -8660,7 +8660,7 @@ selected coefficients plus some normal noise.</p>
 <span class="n">coef</span><span class="p">,</span> <span class="n">bias</span> <span class="o">:=</span> <span class="n">initCoefficients</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
 <span class="n">numExamples</span> <span class="o">:=</span> <span class="mi">5</span>
 <span class="n">inputsTensor</span><span class="p">,</span> <span class="n">labelsTensor</span> <span class="o">:=</span> <span class="n">buildExamples</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">coef</span><span class="p">,</span> <span class="n">bias</span><span class="p">,</span> <span class="n">numExamples</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">)</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Target: coefficients=%0.3v, bias=%0.3v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">coef</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">bias</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span> 
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Target: coefficients=%0.3v, bias=%0.3v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">coef</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">bias</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
 
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="si">%d</span><span class="s2"> dataset examples:</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">numExamples</span><span class="p">)</span>
 <span class="n">inputs</span> <span class="o">:=</span> <span class="n">inputsTensor</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span><span class="o">.</span><span class="p">([][]</span><span class="n">float64</span><span class="p">)</span>
@@ -8868,7 +8868,7 @@ or plotting of a graph.</p>
 
 <span class="o">//</span> <span class="n">AttachToLoop</span> <span class="n">decorators</span><span class="o">.</span> <span class="n">It</span> <span class="n">will</span> <span class="n">be</span> <span class="n">redefined</span> <span class="n">later</span><span class="o">.</span>
 <span class="n">func</span> <span class="n">AttachToLoop</span><span class="p">(</span><span class="n">loop</span> <span class="o">*</span><span class="n">train</span><span class="o">.</span><span class="n">Loop</span><span class="p">)</span> <span class="p">{</span>
-    <span class="n">commandline</span><span class="o">.</span><span class="n">AttachProgressBar</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span> <span class="o">//</span> <span class="n">Attaches</span> <span class="n">a</span> <span class="n">progress</span> <span class="n">bar</span> <span class="n">to</span> <span class="n">the</span> <span class="n">loop</span><span class="o">.</span> 
+    <span class="n">commandline</span><span class="o">.</span><span class="n">AttachProgressBar</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span> <span class="o">//</span> <span class="n">Attaches</span> <span class="n">a</span> <span class="n">progress</span> <span class="n">bar</span> <span class="n">to</span> <span class="n">the</span> <span class="n">loop</span><span class="o">.</span>
 <span class="p">}</span>
 
 <span class="o">//</span> <span class="n">TrainMain</span><span class="p">()</span> <span class="n">does</span> <span class="n">everything</span> <span class="n">to</span> <span class="n">train</span> <span class="n">the</span> <span class="n">linear</span> <span class="n">model</span><span class="o">.</span>
@@ -8877,7 +8877,7 @@ or plotting of a graph.</p>
 
     <span class="o">//</span> <span class="n">Select</span> <span class="n">coefficients</span> <span class="n">that</span> <span class="n">we</span> <span class="n">will</span> <span class="k">try</span> <span class="n">to</span> <span class="n">predic</span><span class="o">.</span>
     <span class="n">trueCoefficients</span><span class="p">,</span> <span class="n">trueBias</span> <span class="o">:=</span> <span class="n">initCoefficients</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNumFeatures</span><span class="p">)</span>
-    <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Target: coefficients=%0.3v, bias=%0.3v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">trueCoefficients</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">trueBias</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span> 
+    <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Target: coefficients=%0.3v, bias=%0.3v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">trueCoefficients</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">trueBias</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
 
     <span class="o">//</span> <span class="n">Generate</span> <span class="n">training</span> <span class="n">data</span> <span class="k">with</span> <span class="n">noise</span><span class="o">.</span>
     <span class="n">inputs</span><span class="p">,</span> <span class="n">labels</span> <span class="o">:=</span> <span class="n">buildExamples</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">trueCoefficients</span><span class="p">,</span> <span class="n">trueBias</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNumExamples</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNoise</span><span class="p">)</span>
@@ -8925,7 +8925,7 @@ or plotting of a graph.</p>
 <pre>Target: coefficients=[-5.96 5.39 0.652], bias=13.7
 Training data (inputs, labels): ((Float64)[10000 3], (Float64)[10000 1])
 
-      <span class="ansi-bold"> 100% [========================================] (12516 steps/s)</span> [step=99] [loss+=0.225] [~loss+=13] [~loss=12.9]        ]         
+      <span class="ansi-bold"> 100% [========================================] (12516 steps/s)</span> [step=99] [loss+=0.225] [~loss+=13] [~loss=12.9]        ]
 
 Learned: coefficients=[[-5.83] [5.26] [0.649]], bias=[13.4]
 </pre>
@@ -8977,7 +8977,7 @@ the only metrics are the default ones, the batch and mean of the loss -- the mea
 <span class="kn">import</span><span class="w"> </span><span class="s2">"os"</span>
 
 <span class="n">func</span> <span class="n">AttachToLoop</span><span class="p">(</span><span class="n">loop</span> <span class="o">*</span><span class="n">train</span><span class="o">.</span><span class="n">Loop</span><span class="p">)</span> <span class="p">{</span>
-    <span class="n">commandline</span><span class="o">.</span><span class="n">AttachProgressBar</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span> <span class="o">//</span> <span class="n">Attaches</span> <span class="n">a</span> <span class="n">progress</span> <span class="n">bar</span> <span class="n">to</span> <span class="n">the</span> <span class="n">loop</span><span class="o">.</span> 
+    <span class="n">commandline</span><span class="o">.</span><span class="n">AttachProgressBar</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span> <span class="o">//</span> <span class="n">Attaches</span> <span class="n">a</span> <span class="n">progress</span> <span class="n">bar</span> <span class="n">to</span> <span class="n">the</span> <span class="n">loop</span><span class="o">.</span>
     <span class="n">_</span> <span class="o">=</span> <span class="n">plotly</span><span class="o">.</span><span class="n">New</span><span class="p">()</span><span class="o">.</span><span class="n">Dynamic</span><span class="p">()</span><span class="o">.</span><span class="n">ScheduleExponential</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">)</span>
 <span class="p">}</span>
 
@@ -9020,7 +9020,7 @@ Training data (inputs, labels): ((Float64)[10000 3], (Float64)[10000 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold"> 100% [========================================] (14194 steps/s)</span> [step=4999] [loss+=0.172] [~loss+=0.172] [~loss=0.0414]                
+<pre>      <span class="ansi-bold"> 100% [========================================] (14194 steps/s)</span> [step=4999] [loss+=0.172] [~loss+=0.172] [~loss=0.0414]
 </pre>
 </div>
 </div>
@@ -9051,7 +9051,7 @@ Learned: coefficients=[[-10.3] [3.62] [3.38]], bias=[10.3]
 (() => {
 	const src="https://cdn.plot.ly/plotly-2.34.0.min.js";
 	var runJSFn = function(module) {
-		
+
 	if (!module) {
 		module = window.Plotly;
 	}
@@ -9059,7 +9059,7 @@ Learned: coefficients=[[-10.3] [3.62] [3.38]], bias=[10.3]
 	module.newPlot('0613c8a6', data);
 
 	}
-	
+
     if (typeof requirejs === "function") {
         // Use RequireJS to load module.
 		let srcWithoutExtension = src.substring(0, src.lastIndexOf(".js"));
@@ -9086,10 +9086,10 @@ Learned: coefficients=[[-10.3] [3.62] [3.38]], bias=[10.3]
 	var script = document.createElement("script");
 
 	script.charset = "utf-8";
-	
+
 	script.src = src;
 	script.onload = script.onreadystatechange = function () { runJSFn(null); };
-	document.head.appendChild(script);	
+	document.head.appendChild(script);
 })();
 </script>
 </div>
