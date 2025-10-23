@@ -4,6 +4,9 @@
 
 * Updated dependency to Gopjrt v0.8.4: added macOS (darwin/arm64) support and cpu PJRT plugin.
 * Include `stablehlo` (== `xla`) by default for MacOS in Darwin. 
+* GitHub actions:
+  * Added macOS tests.
+  * Removed unnecessary `apt install` of packages.
 
 # v0.24.0: 2025/10/21 **API change**: package tree restructured under `pkg`, `Exec` normalization; Backend `xla` now provided by `stablehlo`
 

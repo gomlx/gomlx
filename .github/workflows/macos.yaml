@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  tests:
+  macos-tests:
     runs-on: macos-latest
 
     steps:
@@ -41,4 +41,4 @@ jobs:
         # Also excludes tests that have large dependencies (e.g.: X11):
         run: |
           export LD_LIBRARY_PATH=/usr/local/lib
-          go test -short $(go list ./... | grep -v "ui/fyneui" | grep -v "examples/ogbnmag")
+          go test -short $(go list ./... | grep -v "backends/xla" | grep -v "ui/fyneui" | grep -v "examples/ogbnmag")
