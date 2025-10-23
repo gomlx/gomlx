@@ -1,0 +1,42 @@
+name: Tests(macOS)
+
+# Triggers the workflow on push or pull request events but only for the "main" branch
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+
+      - name: Install gopjrt shared libraries
+        shell: bash
+        run: |
+          go install github.com/gomlx/gopjrt/cmd/gopjrt_installer@latest
+          sudo $(go env GOPATH)/bin/gopjrt_installer -plugin darwin -version latest -path /usr/local
+
+      - name: PreTest
+        run: |
+          export LD_LIBRARY_PATH=/usr/local/lib
+          go test ./pkg/core/graph
+
+      - name: Test
+        # Tests only run with --short, since the full tests involve downloading datasets and would be too costly for a GitHub action.
+        # The non-short tests work well locally (in the development box) because the datasets are cached.
+        # Also excludes tests that have large dependencies (e.g.: X11):
+        run: |
+          export LD_LIBRARY_PATH=/usr/local/lib
+          go test -short $(go list ./... | grep -v "ui/fyneui" | grep -v "examples/ogbnmag")

@@ -1,7 +1,4 @@
-# Tests only run with --short, since the full tests involve downloading datasets
-# and would be too costly for a Github actions.
-# Locally in the development box it works because the datasets are cached.
-name: "Tests" # The name of the workflow that will appear on Github
+name: "Tests"
 permissions:
   # read|write|none
   actions: read
@@ -18,6 +15,7 @@ permissions:
   security-events: read
   statuses: read
 
+# Triggers the workflow on push or pull request events but only for the "main" branch
 on:
   push:
     branches: [ main ]
@@ -27,8 +25,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    runs-on: ubuntu-24.04  # Eventually revert back to ubuntu-latest.
+  tests:
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
@@ -48,7 +46,7 @@ jobs:
       shell: bash
       run: |
         go install github.com/gomlx/gopjrt/cmd/gopjrt_installer@latest
-        sudo gopjrt_installer -plugin linux -version latest -path /usr/local
+        sudo $(go env GOPATH)/bin/gopjrt_installer -plugin linux -version latest -path /usr/local
 
     - name: PreTest
       run: |
@@ -56,7 +54,9 @@ jobs:
         go test ./pkg/core/graph
 
     - name: Test
-      # Exclude tests that have large dependencies (X11):
+      # Tests only run with --short, since the full tests involve downloading datasets and would be too costly for a GitHub action.
+      # The non-short tests work well locally (in the development box) because the datasets are cached.
+      # Also excludes tests that have large dependencies (e.g.: X11):
       run: |
         export LD_LIBRARY_PATH=/usr/local/lib
         go test -short $(go list ./... | grep -v "ui/fyneui" | grep -v "examples/ogbnmag")
