@@ -2,7 +2,7 @@
 
 # v0.24.1: Added Mac support for XLA
 
-* Updated dependency to Gopjrt v0.8.4 
+* Updated dependency to Gopjrt v0.8.4: added macOS (darwin/arm64) support and cpu PJRT plugin.
 * Include `stablehlo` (== `xla`) by default for MacOS in Darwin. 
 
 # v0.24.0: **API change**: package tree restructured under `pkg`, `Exec` normalization; Backend `xla` now provided by `stablehlo`
