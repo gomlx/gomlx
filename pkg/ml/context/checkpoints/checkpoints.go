@@ -208,7 +208,7 @@ func (c *Config) Dir(dir string) *Config {
 // DirFromBase sets the directory where to save / load the checkpoints.
 // If `dir` is not an absolute path, assumes it is a subdirectory of baseDir.
 //
-// One must be set either Dir, DirFromBase or TempDir before building the checkpoints.Handler.
+// One must be set either Dir, DirFromBase, or TempDir before building the checkpoints.Handler.
 func (c *Config) DirFromBase(dir, baseDir string) *Config {
 	dir = fsutil.MustReplaceTildeInDir(dir)
 	if !path.IsAbs(dir) {
@@ -264,7 +264,7 @@ func (c *Config) Immediate() *Config {
 //
 // Any errors are reported on the return to the call to the method Done.
 //
-// One must be set either Dir, DirFromBase or TempDir before building the checkpoints.Handler.
+// One must be set either Dir, DirFromBase, or TempDir before building the checkpoints.Handler.
 func (c *Config) TempDir(dir, pattern string) *Config {
 	newDir, err := os.MkdirTemp(dir, pattern)
 	if err != nil {
@@ -492,6 +492,9 @@ type serializedData struct {
 
 	// Variables maps context.Variable.GetParameterName() to its position in storage.
 	Variables []serializedVar
+	// BinFormat describes the format used by the binary file.  It is informative.
+	// The current valid values are "gzip" and "uncompressed"
+	BinFormat string
 }
 
 // serializedVar contains information about the variable that was serialized.
@@ -668,7 +671,9 @@ func (h *Handler) loadCheckpointFromFile(baseName string, merge bool, mergeWeigh
 		klog.Infof("loading: %q\n", baseName)
 	}
 	if h.ctx != nil {
-		return errors.Errorf("%s tried to loadCheckpointFromFile(%q) after being attached to a Context, this is not allowed", h, baseName)
+		return errors.Errorf(
+			"%s tried to loadCheckpointFromFile(%q) after being attached to a Context, this is not allowed",
+			h, baseName)
 	}
 
 	// Open files for reading.
@@ -689,10 +694,9 @@ func (h *Handler) loadCheckpointFromFile(baseName string, merge bool, mergeWeigh
 		return errors.Wrapf(err, "%s: failed to open checkpoint metadata file %s", h, jsonFileName)
 	}
 	defer func() { _ = jsonFile.Close() }()
-
-	err = h.loadCheckpoint(jsonFile, binFile, merge, mergeWeight)
-	if err != nil {
-		err = errors.WithMessagef(err, "failed loading checkpoint from %s{%s,%s}", baseName, JsonNameSuffix, BinDataSuffix)
+	if err = h.loadCheckpoint(jsonFile, binFile, merge, mergeWeight); err != nil {
+		err = errors.WithMessagef(err,
+			"failed loading checkpoint from %s{%s,%s}", baseName, JsonNameSuffix, BinDataSuffix)
 		return err
 	}
 	return nil
@@ -813,13 +817,16 @@ func (h *Handler) takeMean(baseNames []string) error {
 // Save creates a new checkpoint and save the context variables and (optionally) Params.
 //
 // All variables in the context are saved, as well as those previously loaded -- this allows one
-// to load the variables only for a part of the model, update that part and save again with everything.
+// to load the variables only for a part of the model, update that part, and save again with everything.
 //
 // Params is (de-) serialized with package json.
 //
 // If the handler is nil, this is a no-op: so it's safe to simply be called, even if the user hasn't configured a
 // checkpoint.
-func (h *Handler) Save() error {
+//
+// By default, the binary file is compressed.  The option WithCompression overrides the default behavior.  This
+// information is reported in the JSON file.
+func (h *Handler) Save(opts ...HandlerOptions) error {
 	if h == nil {
 		return nil
 	}
@@ -829,6 +836,8 @@ func (h *Handler) Save() error {
 
 	// Read globalStep if one is set.
 	globalStep := optimizers.GetGlobalStep(h.ctx)
+	// Update the binary format in JSON.
+	h.serialized.BinFormat = collectHandlerOptions(opts...).binFormat.String()
 
 	// Copy over Params.
 	if h.config.includeParams {
@@ -844,7 +853,7 @@ func (h *Handler) Save() error {
 	baseName := h.newCheckpointBaseName(globalStep)
 	h.checkpointsCount += 1 // Bump unique number.
 	varFileName := filepath.Join(h.config.dir, baseName+BinDataSuffix)
-	varFile, err := getSaveVarFiles(varFileName)
+	varFile, err := getSaveVarFiles(varFileName, opts...)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to create checkpoint data file %s", h, varFileName)
 	}
@@ -906,11 +915,12 @@ func (h *Handler) Save() error {
 	if err != nil {
 		return err
 	}
-	err = varFile.Close()
-	if err != nil {
+	if err := varFile.Flush(); err != nil {
+		return errors.Wrapf(err, "%s: failed to flush checkpoint data file %s", h, varFileName)
+	}
+	if err := varFile.Close(); err != nil {
 		return errors.Wrapf(err, "%s: failed to close checkpoint data file %s", h, varFileName)
 	}
-
 	// Write all the metadata, including Params.
 	enc := json.NewEncoder(jsonFile)
 	enc.SetIndent("", "\t")
@@ -922,7 +932,6 @@ func (h *Handler) Save() error {
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to close checkpoint metadata file %s", h, jsonFileName)
 	}
-
 	// Remove excess checkpoints.
 	return h.keepNCheckpoints()
 }
@@ -1118,13 +1127,30 @@ func getLoadVarFilesFromReader(f io.ReadSeeker) (io.Reader, error) {
 	return f, nil
 }
 
+type flushWriter interface {
+	Write([]byte) (int, error)
+	Close() error
+	Flush() error
+}
+
+type flushNullWriter struct {
+	io.WriteCloser
+}
+
+func (fw flushNullWriter) Flush() error {
+	return nil
+}
+
 // getSaveVarFiles creates a new file at the specified path, writes a predefined header "gomlx_00", and returns a gzip
 // writer for the file.  It is the responsibility of the caller to call the writer's Flush function before closing.
 // Returns an error if the file creation or header writing process fails.
-func getSaveVarFiles(path string) (*gzip.Writer, error) {
+func getSaveVarFiles(path string, opts ...HandlerOptions) (flushWriter, error) {
 	f, err := os.Create(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "create file")
+	}
+	if collectHandlerOptions(opts...).binFormat == BinUncompressed {
+		return &flushNullWriter{f}, nil
 	}
 	_, err = f.Write([]byte(zipHeader))
 	if err != nil {

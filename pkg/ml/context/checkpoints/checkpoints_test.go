@@ -319,5 +319,24 @@ func Test_compressedBin(t *testing.T) {
 	b2, err := io.ReadAll(zRd)
 	require.NoError(t, err)
 	require.Equal(t, buffer, b2)
+}
 
+func Test_uncompressedBin(t *testing.T) {
+	dirT := t.TempDir()
+	const size = 10240
+
+	sZip := path.Join(dirT, "test.zip.bin")
+	buffer := make([]byte, size)
+	_, _ = rand.Read(buffer)
+
+	wr, err := getSaveVarFiles(sZip, WithCompression(BinUncompressed))
+	require.NoError(t, err)
+	_, err = wr.Write(buffer)
+	require.NoError(t, err)
+	_ = wr.Flush()
+	_ = wr.Close()
+
+	buffer2, err := os.ReadFile(sZip)
+	require.NoError(t, err)
+	require.Equal(t, buffer, buffer2)
 }
