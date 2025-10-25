@@ -14,7 +14,7 @@ require (
 	github.com/erkkah/margaid v0.3.0
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/bsplines v0.2.0
-	github.com/gomlx/gopjrt v0.8.2
+	github.com/gomlx/gopjrt v0.8.4
 	github.com/gomlx/stablehlo v0.0.5
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.1
@@ -63,7 +63,6 @@ require (
 	github.com/hack-pad/safejs v0.1.1 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20241217141322-fcc2cadd6f08 // indirect
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
@@ -87,7 +86,7 @@ require (
 	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 	gonum.org/v1/gonum v0.16.0 // indirect
-	google.golang.org/protobuf v1.36.9 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

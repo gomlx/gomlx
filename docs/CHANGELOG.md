@@ -1,25 +1,38 @@
 # GoMLX changelog
 
-# Next: **API change**: package tree restructure under `pkg`; Backend xla->stablehlo
+# v0.24.1: 2025/10/23 Adding Darwin (Mac) support for CPU PJRT plugin
+
+* Updated dependency to Gopjrt v0.8.4: added macOS (darwin/arm64) support and cpu PJRT plugin.
+* Include `stablehlo` (== `xla`) by default for MacOS in Darwin. 
+* GitHub actions:
+  * Added macOS tests.
+  * Removed unnecessary `apt install` of packages.
+
+# v0.24.0: 2025/10/21 **API change**: package tree restructured under `pkg`, `Exec` normalization; Backend `xla` now provided by `stablehlo`
 
 * **Highlights** of this release:
   * Deprecating old "xla" backend (now called "oldxla") in favor of "stablehlo" (aliased to "xla" as well):
-    in most cases nothing needs to be done (the `backends/default` will replace one by the other automatically),
+    in most cases nothing needs to be done (the `github.com/gomlx/gomlx/backends/default` will replace one by the other automatically),
     but in special cases there may require small changes.
-  * Large refactoring: exported GoMLX packages moved under `/pkg`. **This requires changes to the import paths**.
-    It cleans some external dependencies from the core packages (under `pkg`).
-    A couple of exceptions:
-    * The `backends` package: it will move to its own repository later in the year (or early 2026)
-    * The `ui` and `example` packages: since they are just extras, we keep them where they are for now. 
-      The core `GoMLX` doesn't depend on them, so we are more lax with their external dependencies. 
-  * Normalized graph.Exec and context.Exec API:
-    * Now using `Exec.Exec*` methods to include an error in the return, and `Exec.MustExec*` to panic instead.
+  * Large refactoring: exported GoMLX packages moved under `/pkg`. The following changes: 
+    * **This requires changes to the import paths**: core packages (`tensors`, `shapes` and `graph`) are under `pkg/core`;
+      machine learning packages (`context`, `layers`, `train`, `datasets`, ...) are under `pkg/ml`;
+      supporting packages (`fsutil`, `sets`, `xslices`, `xsync`) are under `pkg/support`.
+    * Normalized `graph.Exec` and `context.Exec` slightly changed the API: 
+      the `Exec.Exec...` methods now return an error, and the `Exec.MustExec...` methods panic (instead of the old `Exec.Call` format);
+      The `graph.NewExec` and `context.NewExec` return errors, and the `graph.MustNewExec` and `context.MustNewExec` panic.
+    * File utilities under the old `ml/data` now are under `pkg/support/fsutil`, and the package `ml/data` itself was 
+      renamed `pkg/ml/datasets` and now only holds the various datasets types.
+    * Packages that were not moved:
+      * The `backends` package: it will move to its own repository later in the year (or early 2026)
+      * The `ui` and `example` packages: since they are just extras, we keep them where they are for now. 
+        The core `GoMLX` doesn't depend on them, so we are more lax with their external dependencies. 
 
 <hr/>
 
 * Copied external trivial `must` and `exceptions` packages to `/internal/...`, to remove external dependencies.
 * Package `xla` (the old one): now **DEPRECATED** and called `oldxla`. The package `stablehlo` replaces it, including aliasing the `xla` backend name.
-  * The old version now registered as backend "oldxla".
+  * The old version is now registered as backend "oldxla".
   * Only included in `github.com/gomlx/gomlx/backends/default` if compiled with the tag `oldxla`.
 * Package `stablehlo`:
   * Now completely replacing `xla` by default. Using `GOMLX_BACKEND=xla` will actually use the `stablehlo` backend.
@@ -42,7 +55,7 @@
     are now better (and hopefully more definitively) organized in packages under `pkg/support/`. The following packages were moved/created:
     * `xslices`, `xmaps`, `xsync`: extensions to the corresponding standard packages.
     * `set`: previously known as package `types/`
-    * `fsutils`: file system handling utilities, previously in `data`.
+    * `fsutil`: file system handling utilities, previously in `data`.
 * Package `inceptionv3` moved to `examples`
 * Package `ui/commandline`: fixed progressbar in GoNB notebooks.
 * Package `kan`: fixed `PiecewiseConstant*` layers for inputs of rank 1.
@@ -51,6 +64,9 @@
 * Package `hdf5` moved to under `examples/inceptionv3`, for now the only example that uses it.
   If you need this, please let us know, maybe we move it to under support, or move it to https://github.com/gomlx/go-huggingface.
 * Package `data` renamed to `datasets`; Split downloading functionality under `examples/downloader`.
+* Package `commandline`:
+  * Progressbar now shows the median step duration.
+* Updated and refreshed all notebooks, including the tutorial.
 
 # v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
 

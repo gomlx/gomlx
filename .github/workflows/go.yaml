@@ -1,7 +1,4 @@
-# Tests only run with --short, since the full tests involve downloading datasets
-# and would be too costly for a Github actions.
-# Locally in the development box it works because the datasets are cached.
-name: "Tests" # The name of the workflow that will appear on Github
+name: "Tests"
 permissions:
   # read|write|none
   actions: read
@@ -18,6 +15,7 @@ permissions:
   security-events: read
   statuses: read
 
+# Triggers the workflow on push or pull request events but only for the "main" branch
 on:
   push:
     branches: [ main ]
@@ -27,62 +25,66 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    runs-on: ubuntu-24.04  # Eventually revert back to ubuntu-latest.
+  linux-tests:
+    runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install apt packages
-      shell: bash
-      run: |
-        sudo apt-get install -y --no-install-recommends \
-          "wget" "gcc" "libunwind8" "libunwind-dev" "liblzma5" "hdf5-tools"
+  #    - name: Install apt packages
+  #      shell: bash
+  #      run: |
+  #        sudo apt-get install -y --no-install-recommends \
+  #          "wget" "gcc" "libunwind8" "libunwind-dev" "liblzma5" "hdf5-tools"
 
-    - name: Install Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: "1.24.x"
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
 
-    - name: Install gopjrt shared libraries
-      shell: bash
-      run: |
-        curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_linux_amd64.sh \
-          | bash
+      - name: Install gopjrt shared libraries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          go install github.com/gomlx/gopjrt/cmd/gopjrt_installer@latest
+          sudo env GH_TOKEN=$GH_TOKEN $(go env GOPATH)/bin/gopjrt_installer -plugin linux -version latest -path /usr/local
 
-    - name: PreTest
-      run: |
-        export LD_LIBRARY_PATH=/usr/local/lib
-        go test ./pkg/core/graph
+      - name: PreTest
+        run: |
+          export LD_LIBRARY_PATH=/usr/local/lib
+          go test ./pkg/core/graph
 
-    - name: Test
-      # Exclude tests that have large dependencies (X11):
-      run: |
-        export LD_LIBRARY_PATH=/usr/local/lib
-        go test -short $(go list ./... | grep -v "ui/fyneui" | grep -v "examples/ogbnmag")
+      - name: Test
+        # Tests only run with --short, since the full tests involve downloading datasets and would be too costly for a GitHub action.
+        # The non-short tests work well locally (in the development box) because the datasets are cached.
+        # Also excludes tests that have large dependencies (e.g.: X11):
+        run: |
+          export LD_LIBRARY_PATH=/usr/local/lib
+          go test -short $(go list ./... | grep -v "backends/xla" | grep -v "ui/fyneui" | grep -v "examples/ogbnmag")
 
-    - name: Go Coverage Badge
-      if: github.ref == 'refs/heads/main'
-      uses: tj-actions/coverage-badge-go@v2
-      with:
-        green: 80
-        filename: docs/coverage.out
+      - name: Go Coverage Badge
+        if: github.ref == 'refs/heads/main'
+        uses: tj-actions/coverage-badge-go@v2
+        with:
+          green: 80
+          filename: docs/coverage.out
 
-    - name: Commit README.md changes
-      if: github.ref == 'refs/heads/main'
-      run: |
-        if git diff --quiet -- 'README.md' ; then
-          echo "README.md not modified."
-        else
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add README.md
-          git commit -m "chore: Updated coverage badge."
-        fi
+      - name: Commit README.md changes
+        if: github.ref == 'refs/heads/main'
+        run: |
+          if git diff --quiet -- 'README.md' ; then
+            echo "README.md not modified."
+          else
+            git config --local user.email "action@github.com"
+            git config --local user.name "GitHub Action"
+            git add README.md
+            git commit -m "chore: Updated coverage badge."
+          fi
 
-    - name: Push Changes
-      if: github.ref == 'refs/heads/main'
-      uses: ad-m/github-push-action@master
-      with:
-        github_token: ${{ github.token }}
-        branch: ${{ github.ref }}
+      - name: Push Changes
+        if: github.ref == 'refs/heads/main'
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ github.token }}
+          branch: ${{ github.ref }}
