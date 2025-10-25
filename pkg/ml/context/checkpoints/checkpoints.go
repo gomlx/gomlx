@@ -1096,8 +1096,8 @@ func (h *Handler) ExcludeVarsFromSaving(vars ...*context.Variable) {
 }
 
 const (
-	zipHeader = "gomlx_00"
-	lenHeader = 8
+	zipHeader = "gomlx_gzip"
+	lenHeader = 10
 )
 
 // getLoadVarFilesFromReader returns a reader to the decompressed binary variables.  It is compliant with legacy format,
