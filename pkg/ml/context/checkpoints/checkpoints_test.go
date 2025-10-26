@@ -295,7 +295,7 @@ func Test_compressedBin(t *testing.T) {
 	_, _ = rand.Read(buffer)
 	_ = os.WriteFile(s, buffer, 0666)
 
-	wr, err := getSaveVarFiles(sZip)
+	wr, err := getSaveVarFiles(sZip, BinGZIP)
 	require.NoError(t, err)
 	_, err = wr.Write(buffer)
 	require.NoError(t, err)
@@ -329,7 +329,7 @@ func Test_uncompressedBin(t *testing.T) {
 	buffer := make([]byte, size)
 	_, _ = rand.Read(buffer)
 
-	wr, err := getSaveVarFiles(sZip, WithCompression(BinUncompressed))
+	wr, err := getSaveVarFiles(sZip, BinUncompressed)
 	require.NoError(t, err)
 	_, err = wr.Write(buffer)
 	require.NoError(t, err)
