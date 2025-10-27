@@ -467,7 +467,7 @@ func (c *Config) GenerateNoise(numImages int) *tensors.Tensor {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(c.DType, numImages, c.ImageSize, c.ImageSize, 3))
 		return noise
-	}).MustExec()[0]
+	}).MustExec1()
 }
 
 // GenerateFlowerIds generates random flower ids: this is the type of flowers, one of the 102.
