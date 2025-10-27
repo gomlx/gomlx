@@ -6,6 +6,8 @@
   * Renamed tests to "Linux" and "Darwin".
   * Updated badges in README.md.
 * Updated dependency to Gopjrt v0.8.5, fixing xlabuilder for new C compilers.
+* Removed `ui/fyneui`:
+  * It was incomplete, and better supported as a separate package to avoid the dependencies.
 
 # v0.24.1: 2025/10/23 Adding Darwin (Mac) support for CPU PJRT plugin
 
