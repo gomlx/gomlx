@@ -2,6 +2,7 @@
 
 # Next
 
+* Added `.golangci.yml` and fixed some lint-warnings.
 * Github actions (workflows):
   * Renamed tests to "Linux" and "Darwin".
   * Updated badges in README.md.

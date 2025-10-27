@@ -1,0 +1,58 @@
+version: "2"
+
+run:
+  timeout: 3m
+  concurrency: 4
+
+# -----------------
+# LINTERS settings
+# -----------------
+linters:
+  disable-all: true
+  enable:
+    # --- A Good Baseline ---
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+    # --- Highly Recommended Additions ---
+    # (goimports was removed from here)
+    - gocritic
+    - gocyclo
+    - misspell
+    - revive
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+
+# -----------------
+# FORMATTERS settings (NEW SECTION)
+# -----------------
+formatters:
+  enable:
+    # goimports was moved here
+    - goimports
+
+formatters-settings:
+  goimports:
+    # The setting was moved here
+    local-prefixes: github.com/my-org/my-project
+
+# -----------------
+# ISSUES settings
+# -----------------
+issues:
+  exclude-dirs:
+    - vendor
+    - \.git
+    - \.idea
+  exclude-rules:
+    - path: ".*_gen\\.go|.*\\.pb\\.go"
+      linters:
+        - "*"
+    - path: _test\.go
+      linters:
+        - errcheck
