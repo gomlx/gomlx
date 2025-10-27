@@ -3,6 +3,7 @@
 # Next
 
 * Added `.golangci.yml` and fixed many lint-warnings.
+  - Based on https://gist.github.com/maratori/47a4d00457a92aa426dbd48a18776322
 * Github actions (workflows):
   * Renamed tests to "Linux" and "Darwin".
   * Updated badges in README.md.
