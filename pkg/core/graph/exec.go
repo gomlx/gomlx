@@ -39,50 +39,50 @@ import (
 // ExecGraphFn is a type parameter for accepted function types for MustNewExec constructor.
 type ExecGraphFn interface {
 	func(*Graph) *Node |
-		func([]*Node) *Node |
-		func(*Node) *Node |
-		func(*Node, *Node) *Node |
-		func(*Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Graph) (*Node, *Node) |
-		func([]*Node) (*Node, *Node) |
-		func(*Node) (*Node, *Node) |
-		func(*Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Graph) (*Node, *Node, *Node) |
-		func([]*Node) (*Node, *Node, *Node) |
-		func(*Node) (*Node, *Node, *Node) |
-		func(*Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Graph) []*Node |
-		func([]*Node) []*Node |
-		func(*Node) []*Node |
-		func(*Node, *Node) []*Node |
-		func(*Node, *Node, *Node) []*Node |
-		func(*Node, *Node, *Node, *Node) []*Node |
-		func(*Node, *Node, *Node, *Node, *Node) []*Node |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
+	func([]*Node) *Node |
+	func(*Node) *Node |
+	func(*Node, *Node) *Node |
+	func(*Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Graph) (*Node, *Node) |
+	func([]*Node) (*Node, *Node) |
+	func(*Node) (*Node, *Node) |
+	func(*Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Graph) (*Node, *Node, *Node) |
+	func([]*Node) (*Node, *Node, *Node) |
+	func(*Node) (*Node, *Node, *Node) |
+	func(*Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Graph) []*Node |
+	func([]*Node) []*Node |
+	func(*Node) []*Node |
+	func(*Node, *Node) []*Node |
+	func(*Node, *Node, *Node) []*Node |
+	func(*Node, *Node, *Node, *Node) []*Node |
+	func(*Node, *Node, *Node, *Node, *Node) []*Node |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
 }
 
 // ExecGraphFnOneOutput are ExecGraphFn functions that return only one result.
 // See MustExecOnce.
 type ExecGraphFnOneOutput interface {
 	func(*Graph) *Node |
-		func([]*Node) *Node |
-		func(*Node) *Node |
-		func(*Node, *Node) *Node |
-		func(*Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
+	func([]*Node) *Node |
+	func(*Node) *Node |
+	func(*Node, *Node) *Node |
+	func(*Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
 }
 
 // SideParamsFn is a function that sets side parameters during execution
@@ -395,14 +395,14 @@ func (e *Exec) ExecWithGraph(args ...any) (results []*tensors.Tensor, g *Graph, 
 	return
 }
 
-// unwrapListOfTensors will convert something like []any{[]*tensors.Tensor{t1, t2, ...}} to []any{t1, t2,...}
+// unwrapListOfTensors converts something like []any{[]*tensors.Tensor{t1, t2, ...}} to []any{t1, t2,...}.
+// If args is something else, it remains untouched.
 func unwrapListOfTensors(args []any) []any {
 	if len(args) != 1 {
 		return args
 	}
-	switch v := args[0].(type) {
-	case []*tensors.Tensor:
-		return xslices.Map(v, func(x *tensors.Tensor) any { return x })
+	if list, ok := args[0].([]*tensors.Tensor); ok {
+		return xslices.Map(list, func(x *tensors.Tensor) any { return x })
 	}
 	// Otherwise, process as usual.
 	return args
@@ -510,12 +510,13 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execGraphC
 	g := entry.graph
 	var argsV []reflect.Value
 	var args []*Node
-	if e.inputAsSlice {
+	switch {
+	case e.inputAsSlice:
 		args = make([]*Node, 0, len(argsShapes))
-	} else if e.inputIsGraph {
+	case e.inputIsGraph:
 		// Notice in this case len(argsShapes) == 0
 		argsV = []reflect.Value{reflect.ValueOf(g)}
-	} else {
+	default:
 		argsV = make([]reflect.Value, 0, len(argsShapes))
 	}
 	for ii, shape := range argsShapes {
