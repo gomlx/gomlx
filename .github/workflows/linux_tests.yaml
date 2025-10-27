@@ -1,4 +1,4 @@
-name: "Tests"
+name: "Linux"
 permissions:
   # read|write|none
   actions: read
@@ -30,12 +30,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-  #    - name: Install apt packages
-  #      shell: bash
-  #      run: |
-  #        sudo apt-get install -y --no-install-recommends \
-  #          "wget" "gcc" "libunwind8" "libunwind-dev" "liblzma5" "hdf5-tools"
 
       - name: Install Go
         uses: actions/setup-go@v5

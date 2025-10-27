@@ -1,5 +1,12 @@
 # GoMLX changelog
 
+# Next
+
+* Github actions (workflows):
+  * Renamed tests to "Linux" and "Darwin".
+  * Updated badges in README.md.
+* Updated dependency to Gopjrt v0.8.5, fixing xlabuilder for new C compilers.
+
 # v0.24.1: 2025/10/23 Adding Darwin (Mac) support for CPU PJRT plugin
 
 * Updated dependency to Gopjrt v0.8.4: added macOS (darwin/arm64) support and cpu PJRT plugin.
