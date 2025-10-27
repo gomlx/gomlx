@@ -3,7 +3,8 @@
 [![GoDev](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/gomlx/gomlx?tab=doc)
 [![GitHub](https://img.shields.io/github/license/gomlx/gomlx)](https://github.com/Kwynto/gosession/blob/master/LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/gomlx/gomlx)](https://goreportcard.com/report/github.com/gomlx/gomlx)
-[![TestStatus](https://github.com/gomlx/gomlx/actions/workflows/go.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/go.yaml)
+[![Linux Tests](https://github.com/gomlx/gomlx/actions/workflows/linux_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/linux_tests.yaml)
+[![Darwin Tests](https://github.com/gomlx/gomlx/actions/workflows/darwin_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/darwin_tests.yaml)
 ![Coverage](https://img.shields.io/badge/Coverage-72.5%25-yellow)
 [![Slack](https://img.shields.io/badge/Slack-GoMLX-purple.svg?logo=slack)](https://app.slack.com/client/T029RQSE6/C08TX33BX6U)
 
