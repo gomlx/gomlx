@@ -54,7 +54,7 @@ func Try(fn func()) (exception any) {
 		exception = convertRuntimePanic(exception)
 	}()
 	fn()
-	return
+	return exception
 }
 
 // TryCatch executes `fn` and in case of `panic`, it recovers if of the type `E`.
@@ -81,14 +81,13 @@ func TryCatch[E any](fn func()) (exception E) {
 		var ok bool
 		exception, ok = e.(E)
 		if !ok {
-			// Re-throw an exception of a different type.
+			// Re-throw an exception with the unexpected type.
 			panic(e)
 		}
 		// Return the recovered exception.
-		return
 	}()
 	fn()
-	return
+	return exception
 }
 
 // Panicf is a shortcut to `panic(errors.Errorf(format, args...))`.
