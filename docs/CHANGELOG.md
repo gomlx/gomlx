@@ -2,7 +2,7 @@
 
 # Next
 
-* Added `.golangci.yml` and fixed many lint-warnings.
+* Added `.golangci.yml` and fixed many (still a long way to go) lint-warnings.
   - Based on https://gist.github.com/maratori/47a4d00457a92aa426dbd48a18776322
 * Github actions (workflows):
   * Renamed tests to "Linux" and "Darwin".
@@ -10,6 +10,8 @@
 * Updated dependency to Gopjrt v0.8.5, fixing xlabuilder for new C compilers.
 * Removed `ui/fyneui`:
   * It was incomplete, and it would be better offered as a separate package to avoid the dependencies.
+* Package `graph`:
+  * Fixed/improved documentation.
 
 # v0.24.1: 2025/10/23 Adding Darwin (Mac) support for CPU PJRT plugin
 
