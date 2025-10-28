@@ -366,7 +366,8 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 		exceptions.Panicf("DisplayImagesAcrossTime requires a Jupyter notebook.")
 	}
 	if cfg.Checkpoint == nil {
-		exceptions.Panicf("DisplayImagesAcrossDiffusionSteps requires a model loaded from a checkpoint, see Config.AttachCheckpoint.")
+		exceptions.Panicf("DisplayImagesAcrossDiffusionSteps requires a model loaded from a checkpoint, see " +
+			"Config.AttachCheckpoint.")
 	}
 	ctx := cfg.Context.Checked(false)
 	ctx.RngStateReset()
@@ -376,7 +377,8 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 	generator := NewImagesGenerator(cfg, noise, flowerIds, numSteps)
 	generatedImages, generationTimes := generator.GenerateEveryN(displayEveryNSteps)
 
-	fmt.Printf("DisplayImagesAcrossDiffusionSteps(%d images, %d steps): noise.shape=%s\n", numImages, numSteps, noise.Shape())
+	fmt.Printf("DisplayImagesAcrossDiffusionSteps(%d images, %d steps): noise.shape=%s\n",
+		numImages, numSteps, noise.Shape())
 	fmt.Printf("\tModel #params:\t%d\n", ctx.NumParameters())
 	fmt.Printf("\t Model memory:\t%s\n", fsutil.ByteCountIEC(ctx.Memory()))
 	for ii, generatedImage := range generatedImages {

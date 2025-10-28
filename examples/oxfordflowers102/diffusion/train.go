@@ -43,9 +43,12 @@ const (
 // For new models if creates the noise + flowerIds samples used to monitor the model quality evolving.
 //
 // The returned handler is also set into Config.Checkpoint.
-func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoints.Handler, noise, flowerIds *tensors.Tensor) {
+//
+// If no path is given (checkpointPath == "") then no checkpoint is created, and it returns nil for all values.
+func (c *Config) AttachCheckpoint(checkpointPath string) (
+	checkpoint *checkpoints.Handler, noise, flowerIDs *tensors.Tensor) {
 	if checkpointPath == "" {
-		return
+		return checkpoint, noise, flowerIDs
 	}
 	numCheckpointsToKeep := context.GetParamOr(c.Context, "num_checkpoints", 5)
 	excludeParams := make([]string, 0, len(c.ParamsSet)+len(ParamsExcludedFromLoading))
@@ -66,14 +69,15 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoint
 	c.BatchSize = context.GetParamOr(c.Context, "batch_size", 64)
 	c.EvalBatchSize = context.GetParamOr(c.Context, "eval_batch_size", 128)
 
-	// Load/generate sampled noise/flowerIds.
-	noisePath, flowerIdsPath := path.Join(checkpoint.Dir(), NoiseSamplesFile), path.Join(checkpoint.Dir(), FlowerIdsSamplesFile)
+	// Load/generate sampled noise/flowerIDs.
+	noisePath := path.Join(checkpoint.Dir(), NoiseSamplesFile)
+	flowerIdsPath := path.Join(checkpoint.Dir(), FlowerIdsSamplesFile)
 	var err error
 	noise, err = tensors.Load(noisePath)
 	if err == nil {
-		flowerIds, err = tensors.Load(flowerIdsPath)
+		flowerIDs, err = tensors.Load(flowerIdsPath)
 		if err == nil {
-			return
+			return checkpoint, noise, flowerIDs
 		}
 	}
 	if !os.IsNotExist(err) {
@@ -83,10 +87,10 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoint
 	// Create new noise and flower ids -- and save it for future training.
 	numSamples := context.GetParamOr(c.Context, "samples_during_training", 64)
 	noise = c.GenerateNoise(numSamples)
-	flowerIds = c.GenerateFlowerIds(numSamples)
+	flowerIDs = c.GenerateFlowerIds(numSamples)
 	must.M(noise.Save(noisePath))
-	must.M(flowerIds.Save(flowerIdsPath))
-	return
+	must.M(flowerIDs.Save(flowerIdsPath))
+	return checkpoint, noise, flowerIDs
 }
 
 // TrainModel with hyperparameters given in Context.
@@ -182,7 +186,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 		backend, ctx, config.BuildTrainingModelGraph(), customLoss,
 		optimizers.FromContext(ctx),
 		[]metrics.Interface{movingImagesLoss, movingNoiseLoss, movingMAE}, // trainMetrics
-		[]metrics.Interface{meanImagesLoss, meanMAE}) // evalMetrics
+		[]metrics.Interface{meanImagesLoss, meanMAE})                      // evalMetrics
 	if nanLogger != nil {
 		trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
 			nanLogger.AttachToExec(exec)

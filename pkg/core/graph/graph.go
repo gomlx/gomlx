@@ -1,5 +1,5 @@
 /*
- *	Copyright 2023 Jan Pfeifer
+ *	Copyright 2025 Jan Pfeifer
  *
  *	Licensed under the Apache License, Version 2.0 (the "License");
  *	you may not use this file except in compliance with the License.
@@ -15,76 +15,88 @@
  */
 
 // Package graph is the core package for GoMLX. It is used to create and run computation graphs
-// on XLA/PJRT (using github.com/gomlx/gopjrt) -- a just-in-time compiler that allows for very
-// efficient numerical computations.
+// on different backends.
 //
-// It requires PJRT plugins corresponding to accelerators ("cpu, "cuda", "tpu", etc.) to be available
-// (see github.com/gomlx/gopjrt) to compile and execute programs. Gopjrt is distributed with a "cpu"
-// plugin, and it describes how to install a "cuda" plugin, for Nvidia graphics cards.
-//
-// It also includes an autograd system and many useful higher level machine learning tools.
+// The graph package also includes an automatic differentiation system and many useful higher level machine learning
+// operations.
 //
 // The main elements in the package (or related) are:
 //
-//   - Backend: manages an XLA/PJRT (through gopjrt) connection: a PJRT plugin and a client.
-//     The whole computation building, compilation and execution runs within the scope of a Backend.
+//   - Exec is the driver that manages the lifecycle (Graph creation, compilation, caching, and execution) across
+//     different input shapes. This is where most use cases start.
 //
-//   - Graph: created by the Backend, this is used to construct a computation graph that can then
-//     be "just-in-time" compiled and executed efficiently.
-//     To construct a `Graph` one puts together nodes or "ops" defining the desired sequence of operations.
+//   - Graph is the blueprint for a specific computation with specific input shapes.
+//     It's usually created by an Exec object, built by an ExecGraphFn, and then cached and executed by the Exec.
 //
-//   - Node: represents the result of an operation ("outputOps" for short). E.g: Add, Sub, Mul, Sigmoid,
-//     Reshape, etc. Each node has a fixed shape that is known in "graph building time" (see discussion
-//     below).
+//   - Node represents a symbolic value in the computation. This can be an input parameter, a variable/constant,
+//     or the result of an operation ("op" for short, e.g.: Add, Sub, Mul, Sigmoid, Reshape, etc.).
+//     Each node has a fixed shape known in "graph building time" (see discussion below).
 //
-//   - context.Context: created by the Backend, a higher level abstraction convenient when building gradient
-//     descent based machine learning (ML) models (like Neural Networks). It organizes Variable objects into
-//     "scope", which usually holds the learnable weights for ML. It also allows for loading/saving of these values.
+//   - context.Context and context.Exec (from the pkg/ml/context package):
+//     higher level abstractions that include variable handling and modeling check pointing.
+//     They work very similarly to graph.Exec and should be used when building gradient descent-based machine
+//     learning (ML) on models (with variables), like Neural Networks.
+//
+// ## Backends
+//
+// The default backend is XLA/PJRT (using github.com/gomlx/gopjrt) -- a just-in-time compiler that allows for very
+// efficient numerical computations.
+// There is also a pure Go backend that is much slower, but functional for many use cases and very portable (e.g.,
+// it works in WebAssembly in a browser).
+// Other backends are in the plans, and one can implement their own custom backends -- only the operations one uses.
+//
+// You have to import the backend(s) you are going to support. You can also import the default selection with:
+//
+//	import _ "github.com/gomlx/gomlx/backends/default"
 //
 // ## Error Handling
 //
-// Graph (and its Nodes) and context.Context methods "throw" errors with `panic`. This prevents having to manage
-// error returning for every function call.
-// It always throws meaningful error messages, with the full stack, to ease tracking bugs and solve issues.
+// Graph (and its Node's) and context.Context methods "throw" errors with panic(). This prevents having to manage
+// error returning for every operation (Add, Sub, Mul, etc.) and makes the code much more readable.
+// It always throws meaningful error messages, with the full stacktrace, to ease tracking bugs and solve issues.
 //
 // Notice that unfortunately, there is no way to statically, in compile time, check for many
 // of the errors that for a human would be relatively easy to spot without running the program.
-// There is no way in Go to run arbitrary logic in compile time.
+// But typically compilation of the computation graph happens early in the execution of a program,
+// so such errors are caught early. Here we commonly further split the usual "compile time / runtime" into
+// "compile time / graph building time / runtime", where "graph building time" is when the graph for a model is built
+// and compiled, before it's executed and used.
+// It is similar to the compilation of regexps or templates in Go.
 //
-// ## Delayed Execution
+// ## Writing Code With Graphs
 //
-// When using ML frameworks, it usually requires the user to think about different "times" that
-// things are happening. The same is true for GoMLX, and it is helpful to keep those in mind
-// upfront, to have the right mental model:
+// When using ML frameworks, it's convenient to split the usual "compile time / runtime" into 3 phases:
 //
-//   - **Compile time**: this is during Go compilation. Some amount of type checking is done here, but
-//     most of the tensor shape compatibility cannot be done statically here, unfortunately. Even if for
-//     a human it would be obvious without compiling and running a program that some operation among
-//     different shaped tensors shouldn't be allowed, there is no way in Go to run
-//     arbitrary logic in compile time to validate tensor shape compatibility. So most of the checking is
-//     left to "graph building time".
-//     Maybe one day one can write a gomlx_linter the runs before the compiler that could catch some of these.
+//   - Compile time: this is during Go compilation. Some amount of type checking is done here, but
+//     most of the tensor shape compatibility (adding tensors of different shapes types of errors) cannot be done
+//     statically here, unfortunately.
 //
-//   - **Graph building time**: this is when one is building a computation Graph, using the various
-//     ops (Add, Sub, Mul, ReduceSum, etc.). No actual computation happens here, just the building
-//     of the Graph (it's a kind of program) that will be executed later. This happens in "runtime",
-//     meaning after the Go program is compiled. And only in graph building time that proper shapes
-//     are checked, and good error (with stack traces) are reported back. This means that development
-//     often involves coding, and then running the Graph building to see if shapes are correct and
-//     what one wants -- Graph building is very fast, since not data is actually manipulated.
-//     Creating tests that just build the graph is the recommended way to develop.
-//     Quick sketching of code can be done on a Jupyter Notebook — see
-//     [github.com/janpfeifer/gonb](https://github.com/janpfeifer/gonb) for Jupyter notebook support
+//   - Graph building time: this is when one is building a computation Graph, using the various
+//     ops (Add, Sub, Mul, ReduceSum, etc.). No actual computation happens here; all is symbolic manipulation
+//     of Node (virtual tensors if you will), that will be executed later. This happens in "runtime",
+//     meaning after the Go program is compiled, but usually very early in a program.
+//     Here shapes are checked and useful errors (with stack-traces) are reported back.
+//     This means that development often involves coding and then running the Graph building to see if shapes are
+//     correct and what one wants -- graph building is very fast, since no data is actually manipulated.
+//     Creating tests that just build the graph is the recommended way to develop -- or have it happen very early
+//     in the program.
+//     Quick sketching of code can be done conveniently on a Jupyter Notebook — see [1] for Jupyter notebook support
 //     for the Go language.
-//     Once the model is built, it is usually "just in time" (JIT) compiled, and can be run.
 //
-//   - **Computation/Training/Evaluation time**: this happens after the Graph is built and compiled,
-//     and all one does is feed values in, and get the computation out -- using a very fast just-in-time
+//   - Training/Evaluation/Runtime: this happens after the Graph is built and compiled,
+//     and all one does is feed values in and get the computation out -- using a very fast just-in-time
 //     compiled code.
 //     Error reports here are terser and harder to debug (they come from the underlying C++
-//     library), but usually most of the issues are caught in Graph building time.
-//     In particular, there is a `nanlogger` library that helps identify where `NaN` or `Inf` first appears
-//     in the middle of computation — handy to debug the math.
+//     library), but usually most of the issues are caught during the graph building time.
+//     One hard issue that occurs while training models are `NaN` (due to explosion of gradients), which is
+//     unrelated to the library itself, but rather the math.
+//     Under the package graph there is a `nanlogger` library that helps identify where `NaN` or `Inf` first appears
+//     in the middle of computation.
+//
+//     TODO: provide annotations and a linter to validate shapes pre-compilation. Alternatively,
+//     create an intermediary language with proper shape checking.
+//
+// [1]: Jupyter Notebook kernel for Go: https://github.com/janpfeifer/gonb
 package graph
 
 //go:generate go run ../../../internal/cmd/graph_generator
@@ -114,10 +126,10 @@ type Graph struct {
 	id   GraphId
 	name string
 
-	// nodes includes all nodes known to Graph.
+	// nodes include all nodes known to Graph.
 	nodes []*Node
 
-	// parameters keeps track of parameter nodes, its names and a mapping of name to index.
+	// parameters keeps track of parameter nodes its names and a mapping of name to index.
 	parameters            []*Node
 	parametersNames       []string
 	parameterNameToHandle map[string]ParameterHandle
@@ -127,7 +139,7 @@ type Graph struct {
 	// scalars maintains a cache of scalar values already created in the current Graph for re-use.
 	scalars scalarCache
 
-	// tensorConstants maintains a cache of tensors that have been converted to a constant node in the graph,
+	// tensorConstants maintains a cache of tensors that have been converted to a constant node in the graph
 	// to avoid creating duplicate nodes.
 	tensorConstants tensorConstCache
 
@@ -149,17 +161,18 @@ var (
 
 // tensorConstCache provides a cache of tensors used (converted to constants) in Graph, so they can be reused if needed.
 //
-// Notice this has the disadvantage of holding a reference to the tensor, while the Graph is alive, so it won't be
+// Notice this has the disadvantage of holding a reference to the tensor while the Graph is alive, so it won't be
 // GC-ed until the graph is destroyed.
 type tensorConstCache map[*tensors.Tensor]*Node
 
 // NewGraph constructs an empty Graph.
 //
-// Empty Graph's can still be further configured (e.g. Graph.WithName) until one starts building a computation with them.
+// An empty Graph can be further configured (e.g., with Graph.WithName) until one starts building a computation.
 //
-// After building a computation they can be compiled (see Graph.Compile) at which point they can only be executed.
+// After building a computation, they can be compiled (see Graph.Compile), at which point the Graph becomes immutable
+// and can only be executed.
 //
-// If they are finalized (see Graph.Finalize) resources are released immediately (instead of waiting for the GC) and
+// If it is finalized (see Graph.Finalize), resources are released immediately (instead of waiting for the GC), and
 // the Graph can no longer be used.
 func NewGraph(backend backends.Backend, name string) *Graph {
 	muGraphCount.Lock()
@@ -201,14 +214,12 @@ type ParameterHandle int
 const InvalidParameterHandle = ParameterHandle(-1)
 
 // ParamsMap is a shortcut for the map of parameters and their values passed to a graph
-// execution. The values are anything that is accepted by tensor.FromAnyValue().
+// execution. The values can be anything accepted by tensor.FromAnyValue().
 type ParamsMap map[*Node]any
 
 // WithName sets the name of the Graph.
 //
-// It can only be called just after creation of the graph with NewGraph.
-// Once any operation is created with the graph, the graph configuration (e.g.: Graph.WithName) become immutable,
-// and changing them will panic.
+// It can only be called before starting the build a Graph.
 //
 // It returns the graph passed, so configuring methods can be cascaded.
 func (g *Graph) WithName(name string) *Graph {
@@ -242,7 +253,7 @@ func (g *Graph) Name() string { return g.name }
 // Finalize frees the associated data with the compiled graph (if it is compiled) and
 // all the nodes.
 // The graph is left in an unusable state.
-// It is safe to call it more than once — subsequent calls are no-ops.
+// It is safe to call it more than once. Calls on a finalized Graph are no-ops.
 func (g *Graph) Finalize() {
 	if g == nil {
 		return
@@ -262,17 +273,18 @@ func (g *Graph) Finalize() {
 	g.backend = nil
 }
 
-// GraphId is a globally unique id (even across Backend's) of the graph. It's a counter that starts with 0.
+// GraphId is a globally unique id (even across different Backend's) of the graph. It's a counter that starts with 0.
 func (g *Graph) GraphId() GraphId {
 	return g.id
 }
 
-// IsValid returns whether the Graph is in a valid state: it is valid if it is in a configuring, building or compiled state.
+// IsValid returns whether the Graph is in a valid state: it is valid if it is in a configuring, building,
+// or compiled state.
 func (g *Graph) IsValid() bool {
 	return !(g == nil || g.backend == nil)
 }
 
-// AssertValid panics if graph is nil, or if it has already been finalized.
+// AssertValid panics if the graph is nil or if it has already been finalized.
 func (g *Graph) AssertValid() {
 	if g == nil {
 		exceptions.Panicf("the Graph is nil")
@@ -282,8 +294,8 @@ func (g *Graph) AssertValid() {
 	}
 }
 
-// AssertConfiguring panics if graph is not in "configuring" phase: that is, if one already started
-// building a computation with it, or if it has already been compiled.
+// AssertConfiguring panics if the graph is not in a "configuring" phase: that is, if one already started
+// building a computation with it, or if it has already been compiled (immutable).
 // It also panics if it is not valid (e.g.: if it has been finalized).
 func (g *Graph) AssertConfiguring() {
 	g.AssertValid()
@@ -295,17 +307,19 @@ func (g *Graph) AssertConfiguring() {
 	}
 }
 
-// AssertBuilding panics if graph is nil, has been finalized, or has already been compiled and therefore immutable.
-// If Graph was in a configuring state (just after creation) this triggers it to enter into a "building" state.
+// AssertBuilding panics if the graph is nil, has been finalized, or has already been compiled and therefore immutable.
+// If the Graph was in a configuring state (just after the creation), this triggers it to enter into a "building" state.
 func (g *Graph) AssertBuilding() {
 	g.AssertValid()
 	if g.executable != nil {
-		exceptions.Panicf("Graph %q has already been compiled, one cannot further build computations with it", g.name)
+		exceptions.Panicf("Graph %q has already been compiled, one cannot further build computations with it",
+			g.name)
 	}
 	_ = g.build()
 }
 
-// AssertCompiled panics if graph is nil, if it has already been finalized or if it is not yet compiled.
+// AssertCompiled panics if the graph is nil, if it has already been finalized, or if it is not yet compiled (still
+// building).
 func (g *Graph) AssertCompiled() {
 	g.AssertValid()
 	if g.executable == nil {
@@ -365,7 +379,7 @@ func (g *Graph) Nodes() []*Node {
 // At least one output must be given.
 func (g *Graph) Compile(outputs ...*Node) {
 	g.AssertValid()
-	g.AssertBuilding() // But by then end of this call it will be in "compiled" state.
+	g.AssertBuilding()
 	if len(outputs) == 0 {
 		exceptions.Panicf("no outputs selected when Graph.Compile graph %q", g.name)
 	}
@@ -373,19 +387,20 @@ func (g *Graph) Compile(outputs ...*Node) {
 	// Sanity check on the output nodes.
 	for ii, node := range outputs {
 		if node.NumOutputs() != 1 {
-			exceptions.Panicf("Graph(%q).Compile cannot take multi-output nodes (output #%d: %s), this type of Node is internal only", g.name, ii, node)
+			exceptions.Panicf("Graph(%q).Compile cannot take multi-output nodes (output #%d: %s), this type of Node"+
+				" is internal only", g.name, ii, node)
 		}
 		if node == nil {
 			exceptions.Panicf("output node %d is nil when compiling graph %q", ii, g.name)
 			panic(nil) // Never executed, just to quiet warning below.
 		}
 		if node.Graph() != g {
-			exceptions.Panicf("output node %d is part of a different graph (name=%q) than the one being compiled (name=%q)",
-				ii, node.graph.name, g.name)
+			exceptions.Panicf("output node %d is part of a different graph (name=%q) than the one being "+
+				"compiled (name=%q)", ii, node.graph.name, g.name)
 		}
 	}
 
-	// Create "identities" for duplicate outputs, and create a mapping if there are any:
+	// Create "identities" for duplicate outputs and create a mapping if there are any:
 	outputsSet := sets.Make[*Node]()
 	for ii, node := range outputs {
 		if outputsSet.Has(node) {
@@ -419,12 +434,12 @@ type donateBuffer struct {
 	shape  shapes.Shape
 }
 
-// DonateTensorBuffer can be used by Graph.Run, Graph.RunWithMap or as input to Exec.Exec or Exec.MustExec, and it marks the Tensor to
-// donate its on-device buffer to the execution.
+// DonateTensorBuffer can be used by Graph.Run, Graph.RunWithMap, or as input to Exec.Exec or Exec.MustExec,
+// and it marks the Tensor to donate its on-device buffer to the execution.
 //
 // This allows the accelerator (GPU) to reuse the space of the donated buffer, which saves space if the original
 // value is no longer used.
-// Useful in particular is updating some state in a loop.
+// In particular, this is very useful when updating some state (variable) in a loop.
 //
 // This doesn't work if the tensor shares the buffer with
 // the device (usually CPU plugins). You can check that with IsShared().
@@ -437,26 +452,25 @@ type donateBuffer struct {
 //
 // Notice that after this, t's value in the device becomes invalid.
 func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum ...backends.DeviceNum) any {
-	//if t.IsShared() {
-	//	exceptions.Panicf("DonateTensorBuffer can only be used for non-shared tensors, for tensor shaped %s", t.Shape())
-	//}
 	d := &donateBuffer{shape: t.Shape()}
-	d.buffer = t.DonateBuffer(backend, deviceNum...) // DonateBuffer may destroy the tensor, if there is no local storage.
+	d.buffer = t.DonateBuffer(backend, deviceNum...) // DonateBuffer may destroy the tensor if there is no local storage.
 	return d
 }
 
-// Run the compiled Graph with the inputs given in order -- same order as the parameters were created.
+// Run the compiled Graph with the inputs given in order -- the same order as the parameters were created.
 //
 // The values for inputs can be:
 //
-// 1. A tensors.Tensor.
-// 2. Any multi-dimensional slice (e.g.: [][]float32 for a 2D float32 value) that is dynamically converted to a temporary tensor.
-// 3. The output of DonateTensorBuffer, which then donates the device buffer being used by a tensor -- if there are any.
+//  1. A tensors.Tensor.
+//  2. Any multi-dimensional slice (e.g.: [][]float32 for a 2D float32 value) that is dynamically converted to a
+//     temporary tensor.
+//  3. The output of DonateTensorBuffer, which then donates the device buffer being used by a tensor -- if there are any.
 //
-// This is a very "bare bones" way to running the Graph. Typically, one would use the Exec object instead (which
+// This is a very "bare-bones" way of running the Graph. Typically, one would use the Exec object instead (which
 // dynamically generates a new Graph for inputs of different shapes when needed).
 //
-// To donate the inputs buffers (if they are no longer used, e.g. when updating a state), consider using DonateTensorBuffer.
+// To donate the inputs buffers (if they are no longer used, e.g., when updating a state), consider using
+// DonateTensorBuffer.
 func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
 	deviceNum := backends.DeviceNum(0) // Hard-coded for now.
@@ -475,13 +489,18 @@ func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 
 // RunWithMap runs the compiled graph with the inputs given as a map of the corresponding parameter node to tensor value to use.
 //
-// The params can use Go values, Local tensors or Device tensors. Go values and Local tensors will be transferred to
-// Device tensors (located in the Backend's accelerator memory) before the graph is executed.
+// The values for the inputs can be:
 //
-// This is a very "bare bones" way to running the Graph. Typically, one would use the Exec object instead (which
+//  1. A tensors.Tensor.
+//  2. Any multi-dimensional slice (e.g.: [][]float32 for a 2D float32 value) that is dynamically converted to a
+//     temporary tensor.
+//  3. The output of DonateTensorBuffer, which then donates the device buffer being used by a tensor -- if there are any.
+//
+// This is a very "bare-bones" way of running the Graph. Typically, one would use the Exec object instead (which
 // dynamically generates a new Graph for inputs of different shapes when needed).
 //
-// To donate the inputs buffers (if they are no longer used, e.g. when updating a state), consider using DonateTensorBuffer.
+// To donate the inputs buffers (if they are no longer used, e.g., when updating a state), consider using
+// DonateTensorBuffer.
 func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
 	deviceNum := backends.DeviceNum(0) // Hard-coded for now.
@@ -509,7 +528,7 @@ func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
 
 // RunWithBuffers executes the graph using as inputs the on-device buffers.
 //
-// For the normal user, consider using the Exec wrapper, or Graph.Run.
+// This is mostly internal, for the normal use cases, consider using the Exec object or Graph.Run.
 //
 // The donate slice indicates which buffers can be donated to the execution -- they are immediately finalized after
 // the execution is finished.

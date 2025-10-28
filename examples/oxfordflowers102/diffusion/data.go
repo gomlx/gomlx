@@ -25,7 +25,7 @@ import (
 
 var (
 	// PartitionSeed used for the dataset splitting into train/validation.
-	PartitionSeed = int64(42) // Some arbitrary number.
+	PartitionSeed = int64(42) //nolint:mnd // Some fixed arbitrary number for a deterministic split.
 
 	// ValidationFraction where the rest is used for training. There is no test set.
 	ValidationFraction = 0.1 // 10% of data.
