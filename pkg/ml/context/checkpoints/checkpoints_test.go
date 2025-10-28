@@ -21,21 +21,24 @@ package checkpoints
 // * Test what happens with saving/loading of objects in Params: do they need to be filtered?
 
 import (
+	"crypto/rand"
 	"fmt"
+	"io"
+	"os"
+	"path"
+	"testing"
+
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"os"
-	"path"
-	"testing"
-
-	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 func TestCheckpoints(t *testing.T) {
@@ -126,7 +129,7 @@ func TestCheckpoints(t *testing.T) {
 		// Check that the only variable ("global_step") is present.
 		count := 0
 		for v := range ctx.IterVariables() {
-			//fmt.Printf("\tvariable %q -> %s\n", v.ScopeAndName(), v.Shape())
+			// fmt.Printf("\tvariable %q -> %s\n", v.ScopeAndName(), v.Shape())
 			require.NoError(t, v.Shape().Check(dtypes.Int64))
 			count++
 		}
@@ -280,4 +283,60 @@ func TestParams(t *testing.T) {
 	} else {
 		assert.NoErrorf(t, os.RemoveAll(dir), "Removing directory used for testing %q", dir)
 	}
+}
+
+func Test_compressedBin(t *testing.T) {
+	dirT := t.TempDir()
+	const size = 10240
+
+	sZip := path.Join(dirT, "test.zip.bin")
+	s := path.Join(dirT, "test.bin")
+	buffer := make([]byte, size)
+	_, _ = rand.Read(buffer)
+	_ = os.WriteFile(s, buffer, 0666)
+
+	wr, err := getSaveVarFiles(sZip, BinGZIP)
+	require.NoError(t, err)
+	_, err = wr.Write(buffer)
+	require.NoError(t, err)
+	_ = wr.Flush()
+	_ = wr.Close()
+
+	f, err := os.Open(sZip)
+	require.NoError(t, err)
+	defer func() { _ = f.Close() }()
+	zRd, err := getLoadVarFilesFromReader(f)
+	require.NoError(t, err)
+	b1, err := io.ReadAll(zRd)
+	require.NoError(t, err)
+	require.Equal(t, buffer, b1)
+
+	f1, err := os.Open(s)
+	require.NoError(t, err)
+	defer func() { _ = f1.Close() }()
+	zRd, err = getLoadVarFilesFromReader(f1)
+	require.NoError(t, err)
+	b2, err := io.ReadAll(zRd)
+	require.NoError(t, err)
+	require.Equal(t, buffer, b2)
+}
+
+func Test_uncompressedBin(t *testing.T) {
+	dirT := t.TempDir()
+	const size = 10240
+
+	sZip := path.Join(dirT, "test.zip.bin")
+	buffer := make([]byte, size)
+	_, _ = rand.Read(buffer)
+
+	wr, err := getSaveVarFiles(sZip, BinUncompressed)
+	require.NoError(t, err)
+	_, err = wr.Write(buffer)
+	require.NoError(t, err)
+	_ = wr.Flush()
+	_ = wr.Close()
+
+	buffer2, err := os.ReadFile(sZip)
+	require.NoError(t, err)
+	require.Equal(t, buffer, buffer2)
 }
