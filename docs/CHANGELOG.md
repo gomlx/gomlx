@@ -12,6 +12,7 @@
   * It was incomplete, and it would be better offered as a separate package to avoid the dependencies.
 * Package `graph`:
   * Fixed/improved documentation.
+  * Added `IsNegative`, `IsPositive`, `IsNonNegative`, `IsNonPositive`.
 
 # v0.24.1: 2025/10/23 Adding Darwin (Mac) support for CPU PJRT plugin
 

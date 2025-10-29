@@ -642,3 +642,47 @@ func TestCosineSimilarity(t *testing.T) {
 		[][]float32{{0, 0, 0}},
 	})
 }
+
+func TestUtil(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "NegativeIndicator",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{Const(g, []float32{-2, -1, 0, 1, 2})}
+			outputs = []*Node{NegativeIndicator(inputs[0])}
+			return
+		}, []any{[]float32{1, 1, 0, 0, 0}}, -1)
+
+	graphtest.RunTestGraphFn(t, "PositiveIndicator",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{Const(g, []float32{-2, -1, 0, 1, 2})}
+			outputs = []*Node{PositiveIndicator(inputs[0])}
+			return
+		}, []any{[]float32{0, 0, 0, 1, 1}}, -1)
+
+	graphtest.RunTestGraphFn(t, "IsPositive",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{Const(g, []float32{-2, -1, 0, 1, 2})}
+			outputs = []*Node{IsPositive(inputs[0])}
+			return
+		}, []any{[]bool{false, false, false, true, true}}, -1)
+
+	graphtest.RunTestGraphFn(t, "IsNegative",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{Const(g, []float32{-2, -1, 0, 1, 2})}
+			outputs = []*Node{IsNegative(inputs[0])}
+			return
+		}, []any{[]bool{true, true, false, false, false}}, -1)
+
+	graphtest.RunTestGraphFn(t, "IsNonNegative",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{Const(g, []float32{-2, -1, 0, 1, 2})}
+			outputs = []*Node{IsNonNegative(inputs[0])}
+			return
+		}, []any{[]bool{false, false, true, true, true}}, -1)
+
+	graphtest.RunTestGraphFn(t, "IsNonPositive",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{Const(g, []float32{-2, -1, 0, 1, 2})}
+			outputs = []*Node{IsNonPositive(inputs[0])}
+			return
+		}, []any{[]bool{true, true, true, false, false}}, -1)
+}
