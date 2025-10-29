@@ -72,7 +72,7 @@ func createDefaultContext() *context.Context {
 		// From the command-line, an easy way to monitor the metrics being generated during the training of a model
 		// is using the gomlx_checkpoints tool:
 		//
-		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(bat)/#loss,E(tes)/#loss' --loop=3s fnn
+		//	$ gomlx_checkpoints -metrics -metrics_labels -metrics_types=accuracy --metrics_names='E(bat)/#loss,E(tes)/#loss' -loop=3s fnn
 		"plots": true,
 
 		optimizers.ParamOptimizer:       "adam",
