@@ -4,7 +4,7 @@
 
 * Added `.golangci.yml` and fixed many (still a long way to go) lint-warnings.
   - Based on https://gist.github.com/maratori/47a4d00457a92aa426dbd48a18776322
-* Github actions (workflows):
+* GitHub actions (workflows):
   * Renamed tests to "Linux" and "Darwin".
   * Updated badges in README.md.
 * Updated dependency to Gopjrt v0.8.5, fixing xlabuilder for new C compilers.
@@ -13,11 +13,14 @@
 * Package `graph`:
   * Fixed/improved documentation.
   * Added `IsNegative`, `IsPositive`, `IsNonNegative`, `IsNonPositive`.
+  * Added `SubScalar` and tests for the '*Scalar' functions.
+* Package `cosineschedule`:
+  * Added `WarmUpSteps` and `NumCycles` hyperparameters.
 
 # v0.24.1: 2025/10/23 Adding Darwin (Mac) support for CPU PJRT plugin
 
 * Updated dependency to Gopjrt v0.8.4: added macOS (darwin/arm64) support and cpu PJRT plugin.
-* Include `stablehlo` (== `xla`) by default for MacOS in Darwin. 
+* Include `stablehlo` (== `xla`) by default for macOS in Darwin. 
 * GitHub actions:
   * Added macOS tests.
   * Removed unnecessary `apt install` of packages.

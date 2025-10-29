@@ -92,11 +92,16 @@ func Square(x *Node) *Node {
 	return Mul(x, x)
 }
 
-// AddScalar converts scalar to a constant with x's DType and returns `x + scalar`
-// with proper broadcasting.
+// AddScalar converts scalar to a constant with x's DType and returns `x + scalar` with proper broadcasting.
 func AddScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Add(x, Scalar(g, x.DType(), scalar))
+}
+
+// SubScalar converts scalar to a constant with x's DType and returns `x - scalar` with proper broadcasting.
+func SubScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
+	g := x.Graph()
+	return Sub(x, Scalar(g, x.DType(), scalar))
 }
 
 // ModScalar converts scalar to a constant with x's DType and returns `x % scalar`
