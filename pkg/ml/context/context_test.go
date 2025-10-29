@@ -125,13 +125,17 @@ func TestParams(t *testing.T) {
 	assert.Equal(t, 7.0, got)
 	assert.Equal(t, 7.0, GetParamOr(ctx, "x", 0.0))
 	assert.Equal(t, 0.0, GetParamOr(ctx, "foo", 0.0))
+	assert.Equal(t, 7.0, MustGetParam[float64](ctx, "x"))
+	assert.Equal(t, 7, MustGetParam[int](ctx, "x")) // Auto-conversion float64 -> int
 
 	// If set to nil, GetParamOr will return the default.
 	assert.Equal(t, float32(11), GetParamOr(ctx, "nil", float32(11)))
 	assert.Equal(t, "blah", GetParamOr(ctx, "nil", "blah"))
 
-	// Wrong type should panic.
+	// The wrong type should panic.
 	assert.Panics(t, func() { _ = GetParamOr(ctx, "x", "string value") })
+	// Missing value should panic for MustGetParam.
+	assert.Panics(t, func() { MustGetParam[float64](ctx, "foo") })
 
 	// String type parameter
 	ctx.SetParam("a", "type A")
