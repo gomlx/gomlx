@@ -38,7 +38,7 @@ var (
 	//
 	// If left at 0, the default, it is disabled.
 	//
-	// ParamPeriodSteps and ParamPeriodCyles are mutually exclusive.
+	// ParamPeriodSteps and ParamPeriodCycles are mutually exclusive.
 	//
 	//  Requires calling `New().FromContext().Done()` at the start of your model.
 	//

@@ -25,6 +25,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
@@ -104,4 +105,42 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 			require.InDeltaf(t, float32(wantLR), lr, 1e-4, "wantLR=%g, lr=%g, step=%d", wantLR, lr, ii)
 		}
 	})
+
+	t.Run("numCycles with warmUp", func(t *testing.T) {
+		ctx := context.New().Checked(false)
+		const warmUpSteps = 10
+		const numCycles = 2
+		const stepsPerCycle = 100
+		const numSteps = numCycles*stepsPerCycle + warmUpSteps
+		lastStepVar := train.GetTrainLastStepVar(ctx)
+		lastStepVar.SetValue(tensors.FromScalar(int64(numSteps)))
+		cosineExec, err := context.NewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
+			ctx.SetTraining(graph, true)
+			New(ctx, graph, dtypes.Float32).
+				NumCycles(numCycles).
+				LearningRate(baseLearningRate).
+				MinLearningRate(minLearningRate).
+				WarmUpSteps(warmUpSteps).
+				Done()
+			return optimizers.LearningRateVar(ctx, dtypes.Float32, 1e3).ValueGraph(graph)
+		})
+		require.NoError(t, err)
+		for ii := range numSteps {
+			lrT, err := cosineExec.Exec1()
+			require.NoErrorf(t, err, "failed for step %d", ii)
+
+			// Check learning rate is following cosine formulation.
+			lr := tensors.ToScalar[float32](lrT)
+			var ratio float64
+			if ii < warmUpSteps {
+				ratio = float64(ii) / float64(warmUpSteps)
+			} else {
+				cycle := float64(ii-warmUpSteps) / float64(stepsPerCycle)
+				ratio = (math.Cos((cycle-math.Floor(cycle))*math.Pi) + 1.0) / 2.0
+			}
+			wantLR := ratio*(baseLearningRate-minLearningRate) + minLearningRate
+			require.InDeltaf(t, float32(wantLR), lr, 1e-4, "wantLR=%g, lr=%g, step=%d", wantLR, lr, ii)
+		}
+	})
+
 }
