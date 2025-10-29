@@ -14,16 +14,16 @@
  *	limitations under the License.
  */
 
-// Package cosineschedule cosine annealing schedule for the learning rate.
-// See details https://paperswithcode.com/method/cosine-annealing.
+// Package cosineschedule implements a cosine annealing schedule for the learning rate.
+// See New for details and example of usage, and original paper description in [1]
 //
-// See New for details and example of usage.
+// [1] https://paperswithcode.com/method/cosine-annealing.
 package cosineschedule
 
 import (
 	"math"
 
-	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/train"
@@ -33,60 +33,95 @@ import (
 
 var (
 	// ParamPeriodSteps enables cosine annealing (cosine schedule) for the learning rate.
+	// The cosine schedule will have a cosine-like decrease of the learning rate during the given number of steps,
+	// and then restart -- there is a discontinuity in the learning rate at every new period.
 	//
-	// This parameter defines the number of steps in a cosine annealing period.
+	// If left at 0, the default, it is disabled.
 	//
-	//  * 0: Disables cosine annealing (default).
-	//  * Positive value: Sets the period to the specified number of steps.
-	//  * Negative value: Sets the period to a fraction of the total training steps.
-	//      * -1: Period equals the total number of training steps (common setting).
-	//      * -2: Period equals half the total number of training steps, and so on.
+	// ParamPeriodSteps and ParamPeriodCyles are mutually exclusive.
 	//
 	//  Requires calling `New().FromContext().Done()` at the start of your model.
 	//
-	//  Only affects training; no effect during inference or evaluation.
+	//  This only affects training; there is no effect during inference or evaluation.
 	ParamPeriodSteps = "cosine_schedule_steps"
 
-	// ParamMinLearningRate is the minimum value of the learning rate, during
+	// ParamCycles enables cosine annealing (cosine schedule) for the learning rate.
+	// The cosine schedule will split the train steps into ParamCycles cycles of with a cosine-like decrease of
+	// the learning rate. There is a discontinuity in the learning rate at every new cycle.
+	//
+	// If left at 0, the default, it is disabled.
+	//
+	// ParamPeriodSteps and ParamCycles are mutually exclusive.
+	//
+	//  Requires calling `New().FromContext().Done()` at the start of your model.
+	//
+	//  This only affects training; there is no effect during inference or evaluation.
+	ParamCycles = "cosine_schedule_cycles"
+
+	// ParamWarmUpSteps is the number of warmup steps: during these initial steps the learning rate
+	// linearly increases from 0 to the learning rate defined by ParamLearningRate.
+	// Only after the warmup steps the cosine annealing schedule starts.
+	// The default is 0, which means no warmup.
+	// Only values > 0 are allowed.
+	//
+	// If ParamPeriodSteps and ParamCycles are both set to 0, cosine annealing schedule is disabled
+	// and this value is ignored.
+	ParamWarmUpSteps = "cosine_schedule_warmup_steps"
+
+	// ParamMinLearningRate is the minimum value of the learning rate during the
 	// cosine annealing schedule.
 	// Defaults to 0.0.
-	ParamMinLearningRate = "cosine_annealing_min_learning_rate"
+	ParamMinLearningRate = "cosine_schedule_min_learning_rate"
 )
 
-// Config is returned by New to configure the cosine annealing schedule
-// strategy. When finished to configure, call `Done`.
+// Config of the cosine annealing schedule strategy.
+// New creates it and once configured, call Config.Done to add it into the computation graph.
 type Config struct {
 	graph                         *Graph
 	ctx                           *context.Context
 	dtype                         dtypes.DType
 	learningRate, minLearningRate float64
-	periodNumSteps                int
+	periodNumSteps, numCycles     int
+	warmUpSteps                   int
 }
 
 // New creates a configuration to apply a cosine annealing schedule for the learning rate.
-// See details https://paperswithcode.com/method/cosine-annealing.
+// See details in [1].
+// The cosine schedule only affects training; there is no effect during inference or evaluation.
 //
-// This is slightly different in the sense that $T_i$ is fixed to what here is called [PeriodInSteps].
-//
-// It returns a Config that can be configured. When finished configuring call
+// It returns a Config that can be configured. When finished configuring, call
 // `Done` and it will generate the computation graph that updates the learning rate at every
 // training step.
 //
-// Example with only one cycle (assuming `*flagNumSteps` is the number of training steps):
+// If you don't set ParamPeriodSteps or ParamCycles, the cosine annealing schedule is disabled.
 //
-//	func modelGraph(cxt *context.Context, inputs []*Node) *Node {
+// (*) The paper describes a cosine schedule with a warmup, but this is not implemented here.
+//
+//	The warmup is implemented in the context, see ParamWarmUpSteps.
+//
+// Example with only one cycle, and a warmup of 1000 steps.
+// We assume that the learning rate is set in the context as the parameter "learning_rate"
+// (== optimizers.ParamLearningRate):
+//
+//	func MyModelGraph(cxt *context.Context, inputs []*Node) *Node {
 //		...
 //		g := inputs[0].Graph()
-//		cosineschedule.New(ctx, g, dtypes.Float32).PeriodInSteps(*flagNumSteps).Done()
+//		cosineschedule.New(ctx, g, dtypes.Float32).
+//			MinLearningRate(0.001).
+//			WarmUpSteps(1000).
+//			NumCycles(1).Done()
 //	}
 //
-// Or more simply, just pass the hyperparameters in the context (see [ParamPeriodSteps]):
+// Or more simply, pass the hyperparameters in the context (see ParamPeriodSteps, ParamMinLearningRate, and
+// ParamWarmUpSteps):
 //
 //	func modelGraph(cxt *context.Context, inputs []*Node) *Node {
 //		...
 //		g := inputs[0].Graph()
 //		cosineschedule.New(ctx, g, dtypes.Float32).FromContext().Done()
 //	}
+//
+// [1] https://paperswithcode.com/method/cosine-annealing.
 func New(ctx *context.Context, graph *Graph, dtype dtypes.DType) *Config {
 	return &Config{
 		ctx:   ctx,
@@ -98,41 +133,91 @@ func New(ctx *context.Context, graph *Graph, dtype dtypes.DType) *Config {
 // FromContext configures the cosine annealing from the context, using the keys
 // [ParamPeriodSteps] and [ParamMinLearningRate].
 func (opt *Config) FromContext() *Config {
-	opt.periodNumSteps = context.GetParamOr(opt.ctx, ParamPeriodSteps, 0)
-	opt.learningRate = context.GetParamOr(opt.ctx, optimizers.ParamLearningRate, 0.0)
-	opt.minLearningRate = context.GetParamOr(opt.ctx, ParamMinLearningRate, 0.0)
+	opt.PeriodSteps(context.GetParamOr(opt.ctx, ParamPeriodSteps, 0))
+	opt.NumCycles(context.GetParamOr(opt.ctx, ParamCycles, 0))
+	opt.LearningRate(context.GetParamOr(opt.ctx, optimizers.ParamLearningRate, 0.0))
+	opt.MinLearningRate(context.GetParamOr(opt.ctx, ParamMinLearningRate, 0.0))
+	opt.WarmUpSteps(context.GetParamOr(opt.ctx, ParamWarmUpSteps, 0))
 	return opt
 }
 
-// PeriodInSteps sets the number of steps for one period of the cosine schedule. The effective
-// learning rate decreases over the given period of training steps, and then is restarted at
+// PeriodSteps sets the number of steps for one period of the cosine schedule. The effective
+// learning rate decreases over the given period of training steps and then is restarted at
 // each new period.
 //
-// It's common to use only one period (so no annealing, just a cosine schedule), in which case
-// just set to the number of steps that will be used for training.
+// If left at 0, the default, it is disabled.
 //
-// The default is -1, which will trigger an exception when building the graph, so it must be
-// defined. If set to 0, the cosine annealing schedule is silently disabled.
-func (opt *Config) PeriodInSteps(periodSteps int) *Config {
-	opt.periodNumSteps = periodSteps
+// PeriodSteps and NumCycles are mutually exclusive.
+func (opt *Config) PeriodSteps(steps int) *Config {
+	if steps < 0 {
+		exceptions.Panicf("PeriodSteps requires steps >= 0, but got %d", steps)
+	}
+	opt.periodNumSteps = steps
+	return opt
+}
+
+// PeriodInSteps is an alias to PeriodSteps.
+// Deprecated: use PeriodSteps instead.
+func (opt *Config) PeriodInSteps(steps int) *Config {
+	return opt.PeriodSteps(steps)
+}
+
+// NumCycles sets the number of cycles for the cosine schedule.
+// The effective learning rate decreases over the given number of cycles and then is restarted at each new cycle.
+//
+// If left at 0, the default, it is disabled.
+//
+// PeriodSteps and NumCycles are mutually exclusive.
+//
+// Note: it depends on the train.Loop object to report how many steps the model is going to be trained for.
+// This works fine if one is using Loop.RunSteps, but if one is using Loop.RunEpochs, the number of steps
+// is not known until the end of the first epoch.
+func (opt *Config) NumCycles(numCycles int) *Config {
+	if numCycles < 0 {
+		exceptions.Panicf("numCycles must be >= 0, but got %d", numCycles)
+	}
+	opt.numCycles = numCycles
 	return opt
 }
 
 // MinLearningRate at the end of the cosine cycle. Defaults to 0.0.
 func (opt *Config) MinLearningRate(minLearningRate float64) *Config {
+	if minLearningRate < 0 {
+		exceptions.Panicf("minLearningRate must be >= 0, but got %g", minLearningRate)
+	}
 	opt.minLearningRate = minLearningRate
 	return opt
 }
 
-// LearningRate at the start of the cosine cycle. If not given, it will try to read from the context
-// params (keyed by ParamLearningRate). If neither are set, it will fail and return an error in the
-// context and graph.
+// WarmUpSteps sets the number of steps to linearly increase the learning rate from 0 to the
+// learning rate defined by ParamLearningRate.
+//
+// The default is 0, which means no warmup.
+func (opt *Config) WarmUpSteps(warmUpSteps int) *Config {
+	if warmUpSteps < 0 {
+		exceptions.Panicf("warmUpSteps must be >= 0, but got %d", warmUpSteps)
+	}
+	opt.warmUpSteps = warmUpSteps
+	return opt
+}
+
+// LearningRate at the start of the cosine cycle.
+// If not given, it will try to read from the context params (keyed by ParamLearningRate).
+// If neither is set, it will fail and return an error in the context and graph.
 func (opt *Config) LearningRate(learningRate float64) *Config {
+	if learningRate < 0 {
+		exceptions.Panicf("learningRate must be >= 0, but got %g", learningRate)
+	}
 	opt.learningRate = learningRate
 	return opt
 }
 
-const Scope = "cosine_schedule"
+const (
+	Scope = "cosine_schedule"
+
+	// DefaultLastStep is the default value for the last step of the training while one is not yet known.
+	DefaultLastStep = 1_000_000_000
+)
 
 // Done finalizes the configuration of New and generates the computation
 // graph code to implement it.
@@ -142,47 +227,67 @@ func (opt *Config) Done() {
 	ctx := opt.ctx.Checked(false)
 	graph := opt.graph
 
-	if !ctx.IsTraining(opt.graph) || opt.periodNumSteps == 0 {
+	if !ctx.IsTraining(opt.graph) || (opt.periodNumSteps <= 0 && opt.numCycles <= 0) {
+		// Nothing to do.
+		return
+	}
+	if opt.periodNumSteps > 0 && opt.numCycles > 0 {
+		exceptions.Panicf("PeriodSteps (%d) and NumCycles (%d) are mutually exclusive, but both were set",
+			opt.periodNumSteps, opt.numCycles)
 		return
 	}
 
 	lrValue := opt.learningRate
-	if lrValue == 0 {
+	if lrValue <= 0 {
 		lrValue = context.GetParamOr(opt.ctx, optimizers.ParamLearningRate, 0.0)
 		if lrValue == 0 {
-			Panicf("learning rate not configured for New and also "+
+			exceptions.Panicf("learning rate not configured for New and also "+
 				"not set in the context as parameter %q", optimizers.ParamLearningRate)
 			return
 		}
 	}
-	lrMinValue := opt.minLearningRate
+	lrMinValue := max(opt.minLearningRate, 0.0)
 
 	// Current training step: cosine schedule keeps its own "global step" counter.
 	cosineStep := optimizers.IncrementGlobalStepGraph(ctx.In(optimizers.Scope).In(Scope), graph, opt.dtype)
-	cosineStep = MinusOne(cosineStep) // Since the count starts at 1.
+	cosineStep = MinusOne(cosineStep) // The value before the increment.
+	adjustedCosineStep := cosineStep
+	if opt.warmUpSteps > 0 {
+		// Shift the cosineStep by the warmUp steps.
+		adjustedCosineStep = SubScalar(adjustedCosineStep, opt.warmUpSteps)
+	}
 
 	// Calculate the fraction of the cycle we are in.
 	var cycle *Node
 	if opt.periodNumSteps > 0 {
-		cycle = DivScalar(cosineStep, float64(opt.periodNumSteps))
-
+		cycle = DivScalar(adjustedCosineStep, float64(opt.periodNumSteps))
 	} else {
-		// If opt.periodNumSteps < 0, the actual period is calculated as a fraction of the total number of steps
-		// to be trained (train.GetTrainLastStepVar).
+		// opt.numCyles > 0
 		lastStep := train.GetTrainLastStepVar(ctx).ValueGraph(graph)
-		periodNumSteps := DivScalar(ConvertDType(lastStep, opt.dtype), -opt.periodNumSteps)
-		cycle = Div(cosineStep, periodNumSteps)
-
-		// Since if using RunEpoch() the last step may not be known for a while (and set to -1) we have to check for
-		// that case.
-		cycle = MaxScalar(cycle, 0)
+		lastStep = Where(IsNegative(lastStep), Const(graph, DefaultLastStep), lastStep)
+		if opt.warmUpSteps > 0 {
+			lastStep = SubScalar(lastStep, opt.warmUpSteps)
+		}
+		periodNumSteps := DivScalar(ConvertDType(lastStep, opt.dtype), opt.numCycles)
+		cycle = Div(adjustedCosineStep, periodNumSteps)
 	}
-	cycle = Sub(cycle, Floor(cycle)) // Take only the fractional part: so always in range `[0.0, 1.0)`.
+
+	// A cycle represents the fraction of a half-circle (180 degrees, or pi radians).
+	cycle = Sub(cycle, Floor(cycle)) // Take only the fractional part: so always in the range `[0.0, 1.0)`.
 
 	// Calculate cosine schedule.
-	cosine := Cos(MulScalar(cycle, math.Pi))
-	lr := MulScalar(OnePlus(cosine), 0.5)                         // (Cos()+1.0)/2.0
+	cosine := Cos(MulScalar(cycle, math.Pi))                      // from -1.0 to 1.0
+	lr := DivScalar(OnePlus(cosine), 2)                           // (Cos()+1.0)/2.0 -> from 0.0 to 1.0
 	lr = AddScalar(MulScalar(lr, lrValue-lrMinValue), lrMinValue) // Now from lrMin to lrMax
+
+	// Calculate and merge warmup schedule.
+	if opt.warmUpSteps > 0 {
+		ratio := DivScalar(cosineStep, opt.warmUpSteps)
+		ratio = MinScalar(ratio, 1.0)
+		warmUpLR := AddScalar(MulScalar(ratio, lrValue-lrMinValue), lrMinValue)
+		// Apply the learning rate only if in the warmup period.
+		lr = Where(IsNegative(adjustedCosineStep), warmUpLR, lr)
+	}
 
 	// Update learning rate.
 	lrVar := optimizers.LearningRateVarWithValue(ctx, opt.dtype, lrValue)

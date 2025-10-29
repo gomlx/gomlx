@@ -41,37 +41,37 @@ import (
 //nolint:goimports,golines // See https://youtrack.jetbrains.com/issue/GO-19556/Goland-formatter-gofmt
 type ExecGraphFn interface {
 	func(*Graph) *Node |
-	func([]*Node) *Node |
-	func(*Node) *Node |
-	func(*Node, *Node) *Node |
-	func(*Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
-	func(*Graph) (*Node, *Node) |
-	func([]*Node) (*Node, *Node) |
-	func(*Node) (*Node, *Node) |
-	func(*Node, *Node) (*Node, *Node) |
-	func(*Node, *Node, *Node) (*Node, *Node) |
-	func(*Node, *Node, *Node, *Node) (*Node, *Node) |
-	func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-	func(*Graph) (*Node, *Node, *Node) |
-	func([]*Node) (*Node, *Node, *Node) |
-	func(*Node) (*Node, *Node, *Node) |
-	func(*Node, *Node) (*Node, *Node, *Node) |
-	func(*Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Graph) []*Node |
-	func([]*Node) []*Node |
-	func(*Node) []*Node |
-	func(*Node, *Node) []*Node |
-	func(*Node, *Node, *Node) []*Node |
-	func(*Node, *Node, *Node, *Node) []*Node |
-	func(*Node, *Node, *Node, *Node, *Node) []*Node |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
+		func([]*Node) *Node |
+		func(*Node) *Node |
+		func(*Node, *Node) *Node |
+		func(*Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Graph) (*Node, *Node) |
+		func([]*Node) (*Node, *Node) |
+		func(*Node) (*Node, *Node) |
+		func(*Node, *Node) (*Node, *Node) |
+		func(*Node, *Node, *Node) (*Node, *Node) |
+		func(*Node, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Graph) (*Node, *Node, *Node) |
+		func([]*Node) (*Node, *Node, *Node) |
+		func(*Node) (*Node, *Node, *Node) |
+		func(*Node, *Node) (*Node, *Node, *Node) |
+		func(*Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Graph) []*Node |
+		func([]*Node) []*Node |
+		func(*Node) []*Node |
+		func(*Node, *Node) []*Node |
+		func(*Node, *Node, *Node) []*Node |
+		func(*Node, *Node, *Node, *Node) []*Node |
+		func(*Node, *Node, *Node, *Node, *Node) []*Node |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
 }
 
 // ExecGraphFnOneOutput are ExecGraphFn functions that return only one result.
@@ -80,13 +80,13 @@ type ExecGraphFn interface {
 //nolint:goimports,golines // See https://youtrack.jetbrains.com/issue/GO-19556/Goland-formatter-gofmt
 type ExecGraphFnOneOutput interface {
 	func(*Graph) *Node |
-	func([]*Node) *Node |
-	func(*Node) *Node |
-	func(*Node, *Node) *Node |
-	func(*Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
+		func([]*Node) *Node |
+		func(*Node) *Node |
+		func(*Node, *Node) *Node |
+		func(*Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
 }
 
 // SideParamsFn is a function that sets side parameters during execution

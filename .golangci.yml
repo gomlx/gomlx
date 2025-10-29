@@ -19,9 +19,16 @@ issues:
   max-same-issues: 20
 
   exclude-rules:
-    - path: gen_.*\.go
-    - linters:
-      - dupl
+    - path: 'gen_.*\.go$'
+      linters:
+        - dupl
+
+    - path: '(.+)_test\.go$'
+      linters:
+        - nakedret
+        - mnd
+        - funlen
+        - dupl
 
 formatters:
   enable:

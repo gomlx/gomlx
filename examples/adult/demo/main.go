@@ -72,7 +72,7 @@ func createDefaultContext() *context.Context {
 		// From the command-line, an easy way to monitor the metrics being generated during the training of a model
 		// is using the gomlx_checkpoints tool:
 		//
-		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(bat)/#loss,E(tes)/#loss' --loop=3s fnn
+		//	$ gomlx_checkpoints -metrics -metrics_labels -metrics_types=accuracy --metrics_names='E(bat)/#loss,E(tes)/#loss' -loop=3s fnn
 		"plots": true,
 
 		optimizers.ParamOptimizer:       "adam",
@@ -110,18 +110,23 @@ func createDefaultContext() *context.Context {
 }
 
 var (
-	flagDataDir    = flag.String("data", "~/work/uci-adult", "Directory to save and load downloaded and generated dataset files.")
+	flagDataDir = flag.String("data", "~/work/uci-adult",
+		"Directory to save and load downloaded and generated dataset files.")
 	flagCheckpoint = flag.String("checkpoint", "", "Checkpoint subdirectory under the --data directory. "+
 		"If empty does not use checkpoints. If absolute path, use that instead.")
 	flagForceDownload = flag.Bool("force_download", false, "Force re-download of Adult dataset files.")
 
-	flagNumQuantiles = flag.Int("quantiles", 100, "Max number of quantiles to use for numeric features, used during piece-wise linear calibration. It will only use unique values, so if there are fewer variability, fewer quantiles are used.")
-	flagEmbeddingDim = flag.Int("embedding_dim", 8, "Default embedding dimension for categorical values.")
-	flagVerbosity    = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
+	flagNumQuantiles = flag.Int("quantiles", 100,
+		"Max number of quantiles to use for numeric features, used during piece-wise linear calibration. "+
+			"It will only use unique values, so if there are fewer variability, fewer quantiles are used.")
+	flagEmbeddingDim = flag.Int("embedding_dim", 8,
+		"Default embedding dimension for categorical values.")
+	flagVerbosity = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
 
 	flagUseCategorical       = flag.Bool("use_categorical", true, "Use categorical features.")
 	flagUseContinuous        = flag.Bool("use_continuous", true, "Use continuous features.")
-	flagTrainableCalibration = flag.Bool("trainable_calibration", true, "Allow piece-wise linear calibration to adjust outputs.")
+	flagTrainableCalibration = flag.Bool("trainable_calibration", true,
+		"Allow piece-wise linear calibration to adjust outputs.")
 )
 
 func main() {
@@ -147,8 +152,9 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 
 	// Checkpoints loading (and saving)
 	var checkpoint *checkpoints.Handler
+	const keepCheckpoints = 3
 	if checkpointPath != "" {
-		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
+		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", keepCheckpoints)
 		checkpoint = must.M1(checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
@@ -178,16 +184,17 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 
 	// Metrics we are interested.
 	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
+	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy",
+		"~acc", 0.01)
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	trainer := train.NewTrainer(backend, ctx, ModelGraph, losses.BinaryCrossentropyLogits,
+	trainer := train.NewTrainer(backend, ctx, Model, losses.BinaryCrossentropyLogits,
 		optimizers.FromContext(ctx),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
-	// Use standard training loop.
+	// Use a standard training loop.
 	loop := train.NewLoop(trainer)
 	commandline.ProgressbarStyle = progressbar.ThemeUnicode
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
@@ -197,7 +204,6 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				fmt.Printf("\n[saving checkpoint@%d] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
 				return checkpoint.Save()
 			})
 	}
@@ -225,14 +231,14 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 		if err != nil {
 			return err
 		}
-		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep,
+			loop.MedianTrainStepDuration().Microseconds())
 		fmt.Println()
 		// Update batch normalization averages, if they are used.
 		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			must.M(checkpoint.Save())
 		}
-
 	} else {
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number larger than "+
 			"current global step.\n", trainSteps)
@@ -252,12 +258,12 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	return commandline.ReportEval(trainer, trainEvalDS, testEvalDS)
 }
 
-// ModelGraph outputs the logits (not the probabilities). The parameter inputs should contain 3 tensors:
+// Model outputs the logits (not the probabilities). The parameter inputs should contain 3 tensors:
 //
 // - categorical inputs, shaped  `(int64)[batch_size, len(VocabulariesFeatures)]`
 // - continuous inputs, shaped `(float32)[batch_size, len(Quantiles)]`
 // - weights: not currently used, but shaped `(float32)[batch_size, 1]`.
-func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func Model(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	_ = spec // Not used, since the dataset is always the same.
 	g := inputs[0].Graph()
 	dtype := inputs[1].DType() // From continuous features.
@@ -282,7 +288,7 @@ func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 			vocab := adult.Data.Vocabularies[catIdx]
 			vocabSize := len(vocab)
 			embedding := layers.Embedding(embedCtx, split, ModelDType, vocabSize, *flagEmbeddingDim, false)
-			embedding.AssertDims(batchSize, *flagEmbeddingDim) // 2-dim tensor, with batch size as the leading dimension.
+			embedding.AssertDims(batchSize, *flagEmbeddingDim)
 			allEmbeddings = append(allEmbeddings, embedding)
 		}
 	}
@@ -304,7 +310,7 @@ func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		}
 	}
 	logits := Concatenate(allEmbeddings, -1)
-	logits.AssertDims(batchSize, -1) // 2-dim tensor, with batch size as the leading dimension (-1 means it is not checked).
+	logits.AssertDims(batchSize, -1)
 
 	// Model itself is an FNN or a KAN.
 	if context.GetParamOr(ctx, "kan", false) {

@@ -92,11 +92,16 @@ func Square(x *Node) *Node {
 	return Mul(x, x)
 }
 
-// AddScalar converts scalar to a constant with x's DType and returns `x + scalar`
-// with proper broadcasting.
+// AddScalar converts scalar to a constant with x's DType and returns `x + scalar` with proper broadcasting.
 func AddScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Add(x, Scalar(g, x.DType(), scalar))
+}
+
+// SubScalar converts scalar to a constant with x's DType and returns `x - scalar` with proper broadcasting.
+func SubScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
+	g := x.Graph()
+	return Sub(x, Scalar(g, x.DType(), scalar))
 }
 
 // ModScalar converts scalar to a constant with x's DType and returns `x % scalar`
@@ -219,12 +224,40 @@ func PositiveIndicator(x *Node) *Node {
 	return Add(Sign(Sub(Sign(x), one)), one)
 }
 
+// IsPositive returns a boolean indicating whether x > 0.
+func IsPositive(x *Node) *Node {
+	g := validateBuildingGraphFromInputs(x)
+	zero := ScalarZero(g, x.DType())
+	return GreaterThan(x, zero)
+}
+
+// IsNonNegative returns a boolean indicating whether x >= 0.
+func IsNonNegative(x *Node) *Node {
+	g := validateBuildingGraphFromInputs(x)
+	zero := ScalarZero(g, x.DType())
+	return GreaterOrEqual(x, zero)
+}
+
 // NegativeIndicator returns 1 where x < 0, 0 otherwise.
 // E.g: NegativeIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [0, 0, 0, 1, 1], with the same shape/dtype as x.
 func NegativeIndicator(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
 	one := ScalarOne(g, x.DType())
 	return Sub(one, Sign(Add(Sign(x), one)))
+}
+
+// IsNegative returns a boolean indicating whether x < 0.
+func IsNegative(x *Node) *Node {
+	g := validateBuildingGraphFromInputs(x)
+	zero := ScalarZero(g, x.DType())
+	return LessThan(x, zero)
+}
+
+// IsNonPositive returns a boolean indicating whether x <= 0.
+func IsNonPositive(x *Node) *Node {
+	g := validateBuildingGraphFromInputs(x)
+	zero := ScalarZero(g, x.DType())
+	return LessOrEqual(x, zero)
 }
 
 // MirroredLog1p is similar to Log1p, but it is mirrored to negative numbers.
