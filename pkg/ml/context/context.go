@@ -398,6 +398,43 @@ func (ctx *Context) GetParam(key string) (value any, found bool) {
 	return ctx.data.params.Get(ctx.scope, key)
 }
 
+// MustGetParam is like GetParam, but panics if the parameter is not found, or if it is not of type T.
+//
+// This is helpful when reading a hyperparameter that must be defined in a context during model building.
+//
+// It tries to cast the value to the given type. If it fails, it tries to convert the
+// value to the given type (so an `int` will be converted to a `float64` transparently).
+// If that also fails, an explaining exception is thrown.
+func MustGetParam[T any](ctx *Context, key string) T {
+	var t T
+	valueAny, found := ctx.GetParam(key)
+	if !found {
+		Panicf("parameter %q (of type %T) not found in scope %q (and its parents)", key, t, ctx.Scope())
+	}
+
+	v := reflect.ValueOf(valueAny)
+	typeOfT := reflect.TypeOf(t)
+	valueT := reflect.New(typeOfT)
+	if valueT.Type().Implements(textUnmarshalerType) && v.Kind() == reflect.String {
+		if err := valueT.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(v.String())); err != nil {
+			Panicf("can't UnmarshalText %s to %s", v.String(), typeOfT.String())
+		}
+		return valueT.Elem().Interface().(T)
+		// Try converting; for instance, a float32 could be converted to float64.
+	} else if !v.CanConvert(typeOfT) {
+		Panicf("MustGetParam/GetParamOr[%T](ctx, %q): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T -- "+
+			"Notice that when reloading a context from a checkpoint involves decoding them from Json, and "+
+			"the original type of the param may have been decoded incorrectly causing this error. "+
+			"Many types are automatically corrected, if one is missing please report, or fix it in package "+
+			"`checkpoints`, in function `serializedParam.jsonDecodeTypeConvert`. "+
+			"Unfortunately, custom parameter types won't work with `checkpoints` (saving/loading), but generic "+
+			"`map[string]any` are handled correctly by Json and "+
+			"are usually enough for these hyperparameters.",
+			v, key, ctx.Scope(), key, valueAny, valueAny, v)
+	}
+	return v.Convert(typeOfT).Interface().(T)
+}
+
 // GetParamOr either returns the value for the given param key in the context `ctx`,
 // searching successively from the current scope back to the root scope ("/"), or if the
 // key is not found or the key is set to nil, it returns the given default value.
@@ -416,29 +453,7 @@ func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
 	if ok {
 		return value
 	}
-
-	// Try T.TextUnmarshaler(valueAny)
-	v := reflect.ValueOf(valueAny)
-	typeOfT := reflect.TypeOf(defaultValue)
-	valueT := reflect.New(typeOfT)
-	if valueT.Type().Implements(textUnmarshalerType) && v.Kind() == reflect.String {
-		if err := valueT.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(v.String())); err != nil {
-			Panicf("can't UnmarshalText %s to %s", v.String(), typeOfT.String())
-		}
-		return valueT.Elem().Interface().(T)
-		// Try converting, for instance, a float32 could be converted to float64.
-	} else if !v.CanConvert(typeOfT) {
-		Panicf("GetParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T -- "+
-			"Notice that when reloading a context from a checkpoint involves decoding them from Json, and "+
-			"the original type of the param may have been decoded incorrectly causing this error. "+
-			"Many types are automatically corrected, if one is missing please report, or fix it in package "+
-			"`checkpoints`, in function `serializedParam.jsonDecodeTypeConvert`. "+
-			"Unfortunately, custom parameter types won't work with `checkpoints` (saving/loading), but generic "+
-			"`map[string]any` are handled correctly by Json and "+
-			"are usually enough for these hyperparameters.",
-			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny, v)
-	}
-	return v.Convert(typeOfT).Interface().(T)
+	return MustGetParam[T](ctx, key)
 }
 
 var textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
@@ -492,6 +507,48 @@ func (ctx *Context) GetGraphParam(g *Graph, key string) (value any, found bool) 
 	return graphParams.Get(ctx.scope, key)
 }
 
+// MustGetGraphParam is like GetGraphParam, but panics if the parameter is not found, or if it is not of type T.
+//
+// This is helpful when reading a graph hyperparameter that must be defined in a context during model building.
+//
+// It tries to cast the value to the given type. If it fails, it tries to convert the
+// value to the given type (so an `int` will be converted to a `float64` transparently).
+// If that also fails, an explaining exception is thrown.
+//
+// This is similar to MustGetParam, but it's used for parameters that are graph-specific.
+// For example, Context.IsTraining and Context.SetTraining use a Graph parameter to
+// set the training state, as the same Context is used for evaluation/inference graphs and
+// training graphs, and their values will be different.
+func MustGetGraphParam[T any](ctx *Context, g *Graph, key string) T {
+	var t T
+	valueAny, found := ctx.GetGraphParam(g, key)
+	if !found {
+		Panicf("parameter %q (of type %T) not found in scope %q (and its parents)", key, t, ctx.Scope())
+	}
+
+	v := reflect.ValueOf(valueAny)
+	typeOfT := reflect.TypeOf(t)
+	valueT := reflect.New(typeOfT)
+	if valueT.Type().Implements(textUnmarshalerType) && v.Kind() == reflect.String {
+		if err := valueT.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(v.String())); err != nil {
+			Panicf("can't UnmarshalText %s to %s", v.String(), typeOfT.String())
+		}
+		return valueT.Elem().Interface().(T)
+		// Try converting; for instance, a float32 could be converted to float64.
+	} else if !v.CanConvert(typeOfT) {
+		Panicf("MustGetGraphParam/GetGraphParamOr[%T](ctx, %q): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T -- "+
+			"Notice that when reloading a context from a checkpoint involves decoding them from Json, and "+
+			"the original type of the param may have been decoded incorrectly causing this error. "+
+			"Many types are automatically corrected, if one is missing please report, or fix it in package "+
+			"`checkpoints`, in function `serializedParam.jsonDecodeTypeConvert`. "+
+			"Unfortunately, custom parameter types won't work with `checkpoints` (saving/loading), but generic "+
+			"`map[string]any` are handled correctly by Json and "+
+			"are usually enough for these hyperparameters.",
+			v, key, ctx.Scope(), key, valueAny, valueAny, v)
+	}
+	return v.Convert(typeOfT).Interface().(T)
+}
+
 // GetGraphParamOr either returns the value for the given param key for the given graph,
 // searching successively from the current scope back to the root scope ("/"), or if the
 // key is not found, or the value is set to nil, it returns the given default value.
@@ -502,13 +559,13 @@ func (ctx *Context) GetGraphParam(g *Graph, key string) (value any, found bool) 
 //
 // It's a convenience method around `ctx.GetGraphParam`.
 //
-// This is very similar to GetParamOr, but used for parameters that are graph specific.
-// For example Context.IsTraining and Context.SetTraining uses a Graph parameter to
+// This is very similar to GetParamOr, but it's used for parameters that are graph-specific.
+// For example, Context.IsTraining and Context.SetTraining use a Graph parameter to
 // set this state, as the same Context is used for evaluation/inference graphs and
-// training graphs, and they will have different values.
+// training graphs, and their values will be different.
 func GetGraphParamOr[T any](ctx *Context, g *Graph, key string, defaultValue T) T {
-	// GetGraphParam from Context object and cast to the give type. If
-	// parameter key is not defined, or if it cannot be cast to the given type,
+	// GetGraphParam from the Context object and cast to the give type.
+	// If the parameter key is not defined, or if it cannot be cast to the given type,
 	// return defaultValue instead.
 	//
 	// It's a typed wrapper to Context.GetGraphParam()
@@ -521,21 +578,7 @@ func GetGraphParamOr[T any](ctx *Context, g *Graph, key string, defaultValue T) 
 		return value
 	}
 
-	// Try converting, for instance, a float32 could be converted to float64.
-	v := reflect.ValueOf(valueAny)
-	typeOfT := reflect.TypeOf(defaultValue)
-	if !v.CanConvert(typeOfT) {
-		Panicf("GetParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T -- "+
-			"Notice that when reloading a context from a checkpoint involves decoding them from Json, and "+
-			"the original type of the param may have been decoded incorrectly causing this error. "+
-			"Many types are automatically corrected, if one is missing please report, or fix it in package "+
-			"`checkpoints`, in function `serializedParam.jsonDecodeTypeConvert`. "+
-			"Unfortunately, custom parameter types won't work with `checkpoints` (saving/loading), but generic "+
-			"`map[string]any` are handled correctly by Json and "+
-			"are usually enough for these hyperparameters.",
-			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny, v)
-	}
-	return v.Convert(typeOfT).Interface().(T)
+	return MustGetGraphParam[T](ctx, g, key)
 }
 
 // SetGraphParam sets the given Graph param in the current scope. It will be visible (by
