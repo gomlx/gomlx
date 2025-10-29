@@ -15,7 +15,7 @@
   * Added `IsNegative`, `IsPositive`, `IsNonNegative`, `IsNonPositive`.
   * Added `SubScalar` and tests for the '*Scalar' functions.
 * Package `cosineschedule`:
-  * Added `WarmUpSteps` and `NumCycles` hyperparameters.
+  * Added `WarmUpSteps` and `NumCycles` hyperparameters -- removed overloading of `periodSteps`.
 
 # v0.24.1: 2025/10/23 Adding Darwin (Mac) support for CPU PJRT plugin
 
