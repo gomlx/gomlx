@@ -3,10 +3,11 @@ package simplego
 import (
 	"sync"
 
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/pkg/errors"
+
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
 var dotGeneralNormalizeShapeDTypeMap = NewDTypeMap("DotGeneralNormalizeShape")
@@ -161,11 +162,9 @@ func execDotGeneralSmall(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 	}
 
 	tmpOutput := output
-	outputDtype := dtype
 	castToFloat32 := dtype == dtypes.BFloat16 || dtype == dtypes.Float16
 	if castToFloat32 {
-		outputDtype = dtypes.Float32
-		outputShape := shapes.Make(outputDtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize)
+		outputShape := shapes.Make(dtypes.Float32, params.batchSize, params.lhsCrossSize, params.rhsCrossSize)
 		tmpOutput = backend.getBufferForShape(outputShape)
 		tmpOutput.Zeros()
 	}
