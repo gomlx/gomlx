@@ -268,8 +268,8 @@ If you find this project helpful, please consider
 Your contribution helps us (currently mostly [me](https://github.com/janpfeifer)) dedicate more time to maintenance and 
 new features for the entire GoMLX ecosystem. 
 
-It also helps us acquire access (buying or cloud) to hardware for expanding support (ROCm, Apple Metal, 
-Multi-GPU, etc.).
+It also helps us acquire access (buying or cloud) to hardware for more portability: e.g.: ROCm, Apple Metal (GPU), 
+Multi-GPU/TPU, NVidia DGX Spark, Tenstorrent, etc.
 
 ## 🚀 Advanced Topics
 
