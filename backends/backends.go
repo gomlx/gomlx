@@ -43,6 +43,9 @@ type Backend interface {
 	// NumDevices return the number of devices available for this Backend.
 	NumDevices() DeviceNum
 
+	// DeviceDescription returns a description of the device at the given deviceNum.
+	DeviceDescription(deviceNum DeviceNum) string
+
 	// Capabilities returns information about what is supported by this backend.
 	Capabilities() Capabilities
 
