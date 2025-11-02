@@ -256,8 +256,8 @@ See the section Support above to get in touch (Slack channel or Google Groups)!
 If you find this project helpful, please consider 
 [supporting our work through GitHub Sponsors](https://github.com/sponsors/gomlx). 
 
-Your contribution helps us (currently mostly [me](https://github.com/janpfeifer)) dedicate more time to maintenance and 
-new features for the entire GoMLX ecosystem. 
+Your contribution helps us (currently mostly [me](https://github.com/janpfeifer)) dedicate more time to maintenance
+and add new features for the entire GoMLX ecosystem.
 
 It also helps us acquire access (buying or cloud) to hardware for more portability: e.g.: ROCm, Apple Metal (GPU), 
 Multi-GPU/TPU, NVidia DGX Spark, Tenstorrent, etc.
@@ -268,6 +268,16 @@ Multi-GPU/TPU, NVidia DGX Spark, Tenstorrent, etc.
 * [TODO](docs/TODO.md)
 * [Error Handling](docs/error_handling.md)
 * [Developing](docs/developing.md)
+
+##  💖 Thanks
+
+* [Go](golang.org)
+* [OpenXLA](https://github.com/openxla/xla)
+* [TensorFlow](https://www.tensorflow.org/)
+* [Jax](https://github.com/jax-ml/jax)
+* [PyTorch](https://pytorch.org/)
+* [ONNX](https://onnx.ai/)
+* [HuggingFace](https://huggingface.co/)
 
 ## ⚖️ License 
 
