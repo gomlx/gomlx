@@ -1,18 +1,17 @@
 package simplego
 
 import (
-	"crypto/rand"
-	"io"
 	"reflect"
 	"strings"
 	"sync"
 	"unsafe"
 
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/pkg/errors"
 )
 
 // Compile-time check:
@@ -63,7 +62,7 @@ func (b *Backend) getBuffer(dtype dtypes.DType, length int) *Buffer {
 	pool := b.getBufferPool(dtype, length)
 	buf := pool.Get().(*Buffer)
 	buf.valid = true
-	//buf.randomize() // Useful to find where zero-initialized is needed but missing.
+	// buf.randomize() // Useful to find where zero-initialized is needed but missing.
 	return buf
 }
 
@@ -77,14 +76,14 @@ func (b *Backend) getBufferForShape(shape shapes.Shape) *Buffer {
 	return buf
 }
 
-// randomize fills the buffer with random bits -- useful for testing.
-func (b *Buffer) randomize() {
-	bBuf := b.mutableBytes()
-	_, err := io.ReadFull(rand.Reader, bBuf)
-	if err != nil {
-		panic(errors.Wrapf(err, "failed ot fill buffer with random bits"))
-	}
-}
+// // randomize fills the buffer with random bits -- useful for testing.
+// func (b *Buffer) randomize() {
+// 	bBuf := b.mutableBytes()
+// 	_, err := io.ReadFull(rand.Reader, bBuf)
+// 	if err != nil {
+// 		panic(errors.Wrapf(err, "failed to fill buffer with random bits"))
+// 	}
+// }
 
 // putBuffer back into the backend pool of buffers.
 // After this any references to buffer should be dropped.
@@ -231,8 +230,8 @@ func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) error {
 		}
 		return errors.Errorf("BufferFinalize(%p): %s -- buffer was already isFinalized!?\n", buffer, strings.Join(issues, ", "))
 	}
-	//fmt.Printf("> BufferFinalize(%p): shape=%s\n", buffer, buffer.shape)
-	//fmt.Printf("\tStack trace:\n%s\n", debug.Stack())
+	// fmt.Printf("> BufferFinalize(%p): shape=%s\n", buffer, buffer.shape)
+	// fmt.Printf("\tStack trace:\n%s\n", debug.Stack())
 	b.putBuffer(buffer)
 	return nil
 }

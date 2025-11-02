@@ -3,12 +3,13 @@ package simplego
 import (
 	"testing"
 
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/stretchr/testify/require"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/stretchr/testify/require"
 )
 
 // Aliases
@@ -25,10 +26,7 @@ func TestConvGeneral(t *testing.T) {
 		paddings                           [][2]int
 		inputDilations, kernelDilations    []int
 		channelGroupCount, batchGroupCount int
-
-		expectedError string
-
-		// want should be multi-dimensional slice of float64.
+		// want should be multidimensional slice of float64.
 		want any
 	}
 	testCases := []testCase{

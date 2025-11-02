@@ -7,9 +7,10 @@ import (
 	"path"
 	"text/template"
 
+	"k8s.io/klog/v2"
+
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/support/sets"
-	"k8s.io/klog/v2"
 )
 
 const (
@@ -67,7 +68,8 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 {{- if .IsCommutative}}// Add is commutative, so if any of the two is scalar, make the rhs the scalar one.
 	if lhsIsScalarOr1 && !rhsIsScalarOr1 {
 		lhs, rhs = rhs, lhs
-		lhsIsScalarOr1, rhsIsScalarOr1 = rhsIsScalarOr1, lhsIsScalarOr1
+		// if lhsIsScalarOr1 and/or rhsIsScalarOr1 variables should stay "alive", then uncomment the line below.
+		// lhsIsScalarOr1, rhsIsScalarOr1 = rhsIsScalarOr1, lhsIsScalarOr1
 	}
 {{- else }}
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
