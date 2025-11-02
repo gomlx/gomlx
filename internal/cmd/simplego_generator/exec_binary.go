@@ -68,6 +68,8 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 {{- if .IsCommutative}}// Add is commutative, so if any of the two is scalar, make the rhs the scalar one.
 	if lhsIsScalarOr1 && !rhsIsScalarOr1 {
 		lhs, rhs = rhs, lhs
+		// if lhsIsScalarOr1 and/or rhsIsScalarOr1 variables should stay "alive", then uncomment the line below.
+		// lhsIsScalarOr1, rhsIsScalarOr1 = rhsIsScalarOr1, lhsIsScalarOr1
 	}
 {{- else }}
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
