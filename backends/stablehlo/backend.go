@@ -22,6 +22,7 @@ type Backend struct {
 	pluginName       string
 	hasSharedBuffers bool
 	capabilities     backends.Capabilities
+	numDevices       int
 	DotGeneralConfig
 }
 
@@ -57,7 +58,7 @@ func (backend *Backend) Description() string {
 	if backend.CheckValid() != nil {
 		return fmt.Sprintf("%s: in an invalid state!", BackendName)
 	}
-	return fmt.Sprintf("%s:%s - %s", BackendName, backend.pluginName, backend.plugin)
+	return fmt.Sprintf("%s:%s - %s [%d device(s)]", BackendName, backend.pluginName, backend.plugin, backend.numDevices)
 }
 
 // NumDevices return the number of devices available for this Backend.
