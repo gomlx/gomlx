@@ -68,7 +68,7 @@ func (backend *Backend) NumDevices() backends.DeviceNum {
 	return backends.DeviceNum(len(backend.client.AddressableDevices()))
 }
 
-// Finalize releases all the associated resources immediately, and makes the backend invalid.
+// Finalize releases all the associated resources immediately and makes the backend invalid.
 func (backend *Backend) Finalize() {
 	if backend.plugin == nil {
 		return

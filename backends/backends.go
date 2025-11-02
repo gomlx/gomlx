@@ -46,7 +46,7 @@ type Backend interface {
 	// Capabilities returns information about what is supported by this backend.
 	Capabilities() Capabilities
 
-	// Builder creates a new builder used to define a new named computation.
+	// Builder creates a new builder used to define a newly named computation.
 	Builder(name string) Builder
 
 	// DataInterface is the sub-interface that defines the API to transfer Buffer to/from accelerators for the backend.
