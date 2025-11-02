@@ -6,12 +6,13 @@ import (
 	"math/bits"
 	"strings"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
+
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
 func init() {
@@ -164,7 +165,7 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	resultingDims = append(resultingDims, rhsCrossDims...)
 	result, err := b.Reshape(dotGeneral, resultingDims...)
 
-	//fmt.Printf("DotGeneral(*lhs*: %s, c:%v, b:%v; *rhs*:  %s, c:%v, b:%v) -> %s\n",
+	// fmt.Printf("DotGeneral(*lhs*: %s, c:%v, b:%v; *rhs*:  %s, c:%v, b:%v) -> %s\n",
 	//	lhs.shape, lhsContractingAxes, lhsBatchAxes, rhs.shape, rhsContractingAxes, rhsBatchAxes,
 	//	result.(*Node).shape)
 
@@ -313,7 +314,7 @@ func (b *Builder) Dot(lhsOp, rhsOp backends.Op) (backends.Op, error) {
 
 var dotGeneralVersionsCheckDelta = 1e-3
 
-func dotGeneralCheckVersions(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, outputLarge, outputSmall *Buffer) error {
+func dotGeneralCheckVersions(_ *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, outputLarge, outputSmall *Buffer) error {
 	if klog.V(1).Enabled() {
 		var value0 float64
 		dtype := outputLarge.shape.DType

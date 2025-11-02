@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/stretchr/testify/require"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/stretchr/testify/require"
 )
 
 func TestBuilder_Compile(t *testing.T) {
@@ -40,6 +41,7 @@ func TestBuilder_Compile(t *testing.T) {
 
 	// Check that it fails if fed incompatible parameters.
 	i0, err = backend.BufferFromFlatData(0, []float32{1, 2, 3, 4}, shapes.Make(dtypes.Float32, 4))
+	require.NoError(t, err)
 	_, err = exec.Execute([]backends.Buffer{i0}, []bool{true})
 	require.Error(t, err)
 

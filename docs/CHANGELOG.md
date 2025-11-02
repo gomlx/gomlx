@@ -18,6 +18,7 @@
   * Added `WarmUpSteps` and `NumCycles` hyperparameters -- removed overloading of `periodSteps`.
 * Package `context`:
   * Added `context.MustGetParam[T](ctx, key)` and `context.MustGetGraphParam[T](ctx, graph, key)`.
+* Added sponsorship badge and section to README.md. Also added the `FUNDING.yml` pointing to sponsorship.
 
 # v0.24.1: 2025/10/23 Adding Darwin (Mac) support for CPU PJRT plugin
 

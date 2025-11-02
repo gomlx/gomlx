@@ -5,14 +5,14 @@ import (
 	"math/rand/v2"
 	"slices"
 
-	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/pkg/errors"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 func init() {
@@ -350,7 +350,7 @@ func execReduceMinBFloat16(operand, output *Buffer, it *reduceOutputIterator, dt
 
 var reduceSumDTypeMap = NewDTypeMap("ReduceSum")
 
-func execReduceSumGeneric[T PODNumericConstraints](operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+func execReduceSumGeneric[T PODNumericConstraints](operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 0.
 	initialValue := T(0)
 	outputFlat := output.flat.([]T)
@@ -367,7 +367,7 @@ func execReduceSumGeneric[T PODNumericConstraints](operand, output *Buffer, it *
 
 func init() { reduceSumDTypeMap.Register(dtypes.BFloat16, execReduceSumBFloat16) }
 
-func execReduceSumBFloat16(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+func execReduceSumBFloat16(operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 0.
 	initialValue := bfloat16.FromFloat32(0)
 	outputFlat := output.flat.([]bfloat16.BFloat16)
@@ -385,7 +385,7 @@ func execReduceSumBFloat16(operand, output *Buffer, it *reduceOutputIterator, dt
 
 var reduceProductDTypeMap = NewDTypeMap("ReduceProduct")
 
-func execReduceProductGeneric[T PODNumericConstraints](operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+func execReduceProductGeneric[T PODNumericConstraints](operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 1.
 	initialValue := T(1)
 	outputFlat := output.flat.([]T)
@@ -402,7 +402,7 @@ func execReduceProductGeneric[T PODNumericConstraints](operand, output *Buffer, 
 
 func init() { reduceProductDTypeMap.Register(dtypes.BFloat16, execReduceProductBFloat16) }
 
-func execReduceProductBFloat16(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+func execReduceProductBFloat16(operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 1.
 	initialValue := bfloat16.FromFloat32(1)
 	outputFlat := output.flat.([]bfloat16.BFloat16)
@@ -424,7 +424,7 @@ var (
 	reduceBitwiseXorDTypeMap = NewDTypeMap("ReduceBitwiseXor")
 )
 
-func execReduceBitwiseAndGeneric[T PODIntegerConstraints](operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+func execReduceBitwiseAndGeneric[T PODIntegerConstraints](operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 1.
 	initialValue := ^T(0)
 	outputFlat := output.flat.([]T)
@@ -439,7 +439,7 @@ func execReduceBitwiseAndGeneric[T PODIntegerConstraints](operand, output *Buffe
 	}
 }
 
-func execReduceBitwiseOrGeneric[T PODIntegerConstraints](operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+func execReduceBitwiseOrGeneric[T PODIntegerConstraints](operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 1.
 	initialValue := T(0)
 	outputFlat := output.flat.([]T)
@@ -454,7 +454,7 @@ func execReduceBitwiseOrGeneric[T PODIntegerConstraints](operand, output *Buffer
 	}
 }
 
-func execReduceBitwiseXorGeneric[T PODIntegerConstraints](operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+func execReduceBitwiseXorGeneric[T PODIntegerConstraints](operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 1.
 	initialValue := T(0)
 	outputFlat := output.flat.([]T)
@@ -469,7 +469,7 @@ func execReduceBitwiseXorGeneric[T PODIntegerConstraints](operand, output *Buffe
 	}
 }
 
-func execReduceLogicalAnd(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+func execReduceLogicalAnd(operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 1.
 	outputFlat := output.flat.([]bool)
 	for outputIdx := range outputFlat {
@@ -483,7 +483,7 @@ func execReduceLogicalAnd(operand, output *Buffer, it *reduceOutputIterator, dty
 	}
 }
 
-func execReduceLogicalOr(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+func execReduceLogicalOr(operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 1.
 	outputFlat := output.flat.([]bool)
 	for outputIdx := range outputFlat {
@@ -497,7 +497,7 @@ func execReduceLogicalOr(operand, output *Buffer, it *reduceOutputIterator, dtyp
 	}
 }
 
-func execReduceLogicalXor(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+func execReduceLogicalXor(operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 1.
 	outputFlat := output.flat.([]bool)
 	for outputIdx := range outputFlat {
@@ -772,7 +772,7 @@ func execGather(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 			stride *= operandShape.Dimensions[axis]
 		}
 	}
-	//fmt.Printf("operandByteStrides: %v\n", operandByteStrides)
+	// fmt.Printf("operandByteStrides: %v\n", operandByteStrides)
 	slicesSize := 1
 	for _, sliceDim := range gatherParams.sliceSizes {
 		slicesSize *= sliceDim
@@ -856,8 +856,8 @@ func execGatherGeneric[T PODIntegerConstraints](params ...any) any {
 		for axis, idx := range operandStartIndices {
 			operandBytesIdx += operandByteStrides[axis] * idx
 		}
-		//fmt.Printf("\toperand: start=%v, idx(bytes)=%d\n", operandStartIndices, operandBytesIdx)
-		//fmt.Printf("\toutput: idx(bytes)=%d\n", outputBytesIdx)
+		// fmt.Printf("\toperand: start=%v, idx(bytes)=%d\n", operandStartIndices, operandBytesIdx)
+		// fmt.Printf("\toutput: idx(bytes)=%d\n", outputBytesIdx)
 
 		// Traverse sliceSizes in the operand copying over the result.
 		for ii := range sliceIndices {
@@ -1099,7 +1099,7 @@ func execConvertDTypeGeneric[FromT PODNumericConstraints, ToT PODNumericConstrai
 	}
 }
 
-func execConvertDTypeFromBFloat16[FromT bfloat16.BFloat16, ToT PODNumericConstraints](operand, output *Buffer) {
+func execConvertDTypeFromBFloat16[_ bfloat16.BFloat16, ToT PODNumericConstraints](operand, output *Buffer) {
 	operandFlat := operand.flat.([]bfloat16.BFloat16)
 	outputFlat := output.flat.([]ToT)
 	for idx, value := range operandFlat {
@@ -1107,7 +1107,7 @@ func execConvertDTypeFromBFloat16[FromT bfloat16.BFloat16, ToT PODNumericConstra
 	}
 }
 
-func execConvertDTypeToBFloat16[FromT PODNumericConstraints, ToT bfloat16.BFloat16](operand, output *Buffer) {
+func execConvertDTypeToBFloat16[FromT PODNumericConstraints, _ bfloat16.BFloat16](operand, output *Buffer) {
 	operandFlat := operand.flat.([]FromT)
 	outputFlat := output.flat.([]bfloat16.BFloat16)
 	for idx, value := range operandFlat {
@@ -1115,7 +1115,7 @@ func execConvertDTypeToBFloat16[FromT PODNumericConstraints, ToT bfloat16.BFloat
 	}
 }
 
-func execConvertDTypeFromBool[FromT bool, ToT PODNumericConstraints](operand, output *Buffer) {
+func execConvertDTypeFromBool[_ bool, ToT PODNumericConstraints](operand, output *Buffer) {
 	operandFlat := operand.flat.([]bool)
 	outputFlat := output.flat.([]ToT)
 	for idx, value := range operandFlat {
@@ -1127,7 +1127,7 @@ func execConvertDTypeFromBool[FromT bool, ToT PODNumericConstraints](operand, ou
 	}
 }
 
-func execConvertDTypeToBool[FromT PODNumericConstraints, ToT bool](operand, output *Buffer) {
+func execConvertDTypeToBool[FromT PODNumericConstraints, _ bool](operand, output *Buffer) {
 	operandFlat := operand.flat.([]FromT)
 	outputFlat := output.flat.([]bool)
 	for idx, value := range operandFlat {
@@ -1136,7 +1136,7 @@ func execConvertDTypeToBool[FromT PODNumericConstraints, ToT bool](operand, outp
 }
 
 func init() {
-	// Manually register bool x bfloat16 convertion functions.
+	// Manually register bool x bfloat16 conversion functions.
 	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Bool, execConvertDTypeBFloat16ToBool)
 	convertDTypePairMap.Register(dtypes.Bool, dtypes.BFloat16, execConvertDTypeBoolToBFloat16)
 }
@@ -1233,7 +1233,7 @@ func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, out
 	}
 	indirectScatterIndices := make([]int, indexVectorSize)
 	elemIndices := make([]int, indexVectorSize)
-	//fmt.Printf("\tindexVectorSize=%d, indexVectorStride=%d\n", numBatchAxes, indexVectorStride)
+	// fmt.Printf("\tindexVectorSize=%d, indexVectorStride=%d\n", numBatchAxes, indexVectorStride)
 
 	// Initialize iterator over the updates:
 	updatesIt := newSubIndicesIterator(updatesShape, scatterParams.updateWindowAxes...)
@@ -1262,7 +1262,7 @@ func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, out
 			flatIndirectIndex += indexVectorStride
 		}
 		deferenceIndicesFn(indicesFlat, indirectScatterIndices, elemIndices)
-		//fmt.Printf("\tindices%v = indices.flat[%d] = %v\n", indicesIt.PerAxisIdx, indicesIt.FlatIdx, elemIndices)
+		// fmt.Printf("\tindices%v = indices.flat[%d] = %v\n", indicesIt.PerAxisIdx, indicesIt.FlatIdx, elemIndices)
 
 		// Prepare innerOutputIt to start from the position set indices.
 		for axis := range innerOutputIt.PerAxisIdx {
@@ -1285,11 +1285,11 @@ func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, out
 		for {
 			outputIdx := innerOutputIt.FlatIdx
 			updatesIdx := innerUpdatesIt.FlatIdx
-			//fmt.Println("\t\tCombine:")
-			//fmt.Printf("\t\t- updates%v (updatesFlat[%d])=%v\n", innerUpdatesIt.PerAxisIdx, updatesIdx, updatesFlat[updatesIdx])
-			//fmt.Printf("\t\t-  output%v (outputFlat[%d])=%v\n", innerOutputIt.PerAxisIdx, outputIdx, outputFlat[outputIdx])
+			// fmt.Println("\t\tCombine:")
+			// fmt.Printf("\t\t- updates%v (updatesFlat[%d])=%v\n", innerUpdatesIt.PerAxisIdx, updatesIdx, updatesFlat[updatesIdx])
+			// fmt.Printf("\t\t-  output%v (outputFlat[%d])=%v\n", innerOutputIt.PerAxisIdx, outputIdx, outputFlat[outputIdx])
 			outputFlat[outputIdx] = combineFn(outputFlat[outputIdx], updatesFlat[updatesIdx])
-			//fmt.Printf("\t\t- result=%v\n", outputFlat[outputIdx])
+			// fmt.Printf("\t\t- result=%v\n", outputFlat[outputIdx])
 			if !innerUpdatesIt.Increment() {
 				break
 			}
@@ -1700,7 +1700,7 @@ func execArgMinMaxGenericBFloat16(
 // =================================================================================================================
 // ReduceWindow ----------------------------------------------------------------------------------------------------
 // =================================================================================================================
-func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	operand := inputs[0]
 	operandShape := operand.shape
 	rank := operandShape.Rank()
@@ -1766,14 +1766,14 @@ func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 	for axis := range rank {
 		windowSizes[axis] = (effWindowDimensions[axis]-1)*effWindowDilations[axis] + 1
 	}
-	//fmt.Printf("windowSizes=%v\n", windowSizes)
+	// fmt.Printf("windowSizes=%v\n", windowSizes)
 
 	// Find the shift from an output position to the corresponding window start in the operand.
 	operandShifts := make([]int, rank)
 	for axis := range rank {
 		operandShifts[axis] = -effPaddings[axis][0]
 	}
-	//fmt.Printf("operandShifts=%v\n", operandShifts)
+	// fmt.Printf("operandShifts=%v\n", operandShifts)
 
 	// Find operand strides to convert operand indices to a flat index.
 	operandStrides := make([]int, rank)
@@ -1796,10 +1796,10 @@ func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 	windowIndices := make([]int, rank)
 	operandIndices := make([]int, rank)
 	for outputFlatIdx, outputIndices := range outputShape.Iter() {
-		//fmt.Printf("Output %v:\n", outputIndices)
+		// fmt.Printf("Output %v:\n", outputIndices)
 	iterWindowIndices:
 		for _, windowIndices = range windowShape.IterOn(windowIndices) {
-			//fmt.Printf("\t- window %v\n", windowIndices)
+			// fmt.Printf("\t- window %v\n", windowIndices)
 			for axis := range rank {
 				operandIdx := outputIndices[axis]*effStrides[axis] + operandShifts[axis]
 				operandIdx += windowIndices[axis] * effWindowDilations[axis]

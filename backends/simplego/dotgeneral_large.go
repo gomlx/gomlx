@@ -1,10 +1,11 @@
 package simplego
 
 import (
-	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/support/xsync"
 )
 
 // This file contains the implementation for dot-general operations on large tensors -- except the batch
@@ -43,7 +44,6 @@ func init() {
 			dim *= 2
 			log2Dim++
 		}
-		dim /= 2
 		log2Dim--
 		DotGeneralTargetBlockLog2Dim[dtype] = log2Dim
 	}
@@ -152,7 +152,7 @@ func dgCopyFlatToBlockShape[T interface {
 			outputIdx[1]*outputStrides[1] +
 			outputIdx[0]*outputStrides[0]
 		outputData[outputFlatIdx] = sourceData[sourceFlatIdx]
-		//fmt.Printf("\toutput%v (flat %d) = source%v (flat %d)\n", outputIdx, outputFlatIdx, sourceIdx, sourceFlatIdx)
+		// fmt.Printf("\toutput%v (flat %d) = source%v (flat %d)\n", outputIdx, outputFlatIdx, sourceIdx, sourceFlatIdx)
 
 		// Increment position.
 		for axis := rank - 1; axis >= 0; axis-- {
