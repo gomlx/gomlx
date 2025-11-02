@@ -83,20 +83,11 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 > see [jax/issues/32800](https://github.com/jax-ml/jax/issues/32800) for the request to Apple developers 
 > to update their support for GPU XLA.
 
-> **🚀 NEW 🚀**: Adding [StableHLO](https://github.com/gomlx/stablehlo) support as a beta `stablehlo` backend.
-> It will replace the current `xla` backend since both use PJRT plugins. Benefits include:
-> - Simpler installation (only PJRT plugins needed)
-> - Wider hardware compatibility (ROCm, Apple Metal, Intel)
-> - Access to new functionality, only made available to StableHLO (and not the older "XlaBuilder")
-> - It can be included by importing `_ "github.com/gomlx/gomlx/backends/stablehlo"`, or if you are already importing
->   the default `_ "github.com/gomlx/gomlx/backends/default"` backends, add the `-tags=stablehlo` to your Go build/run
->   command, and it will also be included.
-
 > **🚀 NEW 🚀**: `gomlx_checkpoints`, the command line tool to inspect checkpoints of train(-ing) models,
-> now also generate plots with loss and arbitrary evaluation metrics using Plotly.
+> now also **generate plots** with loss and arbitrary evaluation metrics using Plotly.
 > See [example of training session](https://gomlx.github.io/gomlx/notebooks/gomlx_checkpoints_plot_example.html),
-> with the effects of a change of learning rate during the training.
-
+> with the effects of a learning rate change during the training.
+> It also allows plotting different models together, to compare their evolution.
 
 * Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
@@ -223,7 +214,7 @@ In the future we plan to also export models to ONNX or StableHLO, and one could 
    - Compile models to binary as in C-libraries and/or WebAssembly, to be linked and consumed (inference) anywhere
      (any language).
 
-## FAQ
+## 🤔 FAQ
 
 - **What are the environment variables used by GoMLX?** 
   - `GOMLX_BACKEND`: defines the backend engine to use (if using `backends.New()`). The value is formatted as "<backend_name>[:<backend_config>]",
