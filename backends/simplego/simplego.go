@@ -140,6 +140,11 @@ func (b *Backend) NumDevices() backends.DeviceNum {
 	return 1
 }
 
+// DeviceDescription returns a description of the device with the given deviceNum.
+func (b *Backend) DeviceDescription(deviceNum backends.DeviceNum) string {
+	return "device#0"
+}
+
 // Capabilities returns information about what is supported by this backend.
 func (b *Backend) Capabilities() backends.Capabilities {
 	return Capabilities
