@@ -66,7 +66,7 @@ func (backend *Backend) NumDevices() backends.DeviceNum {
 	if backend.CheckValid() != nil {
 		return 0
 	}
-	return backends.DeviceNum(len(backend.client.AddressableDevices()))
+	return backends.DeviceNum(backend.numDevices)
 }
 
 // DeviceDescription returns a description of the deviceNum.

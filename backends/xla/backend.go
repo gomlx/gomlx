@@ -19,6 +19,7 @@ import (
 type Backend struct {
 	plugin           *pjrt.Plugin
 	client           *pjrt.Client
+	numDevices       int
 	pluginName       string
 	hasSharedBuffers bool
 	capabilities     backends.Capabilities
@@ -64,7 +65,23 @@ func (backend *Backend) NumDevices() backends.DeviceNum {
 	if backend.CheckValid() != nil {
 		return 0
 	}
-	return backends.DeviceNum(len(backend.client.AddressableDevices()))
+	return backends.DeviceNum(backend.numDevices)
+}
+
+// DeviceDescription returns a description of the deviceNum.
+func (backend *Backend) DeviceDescription(deviceNum backends.DeviceNum) string {
+	if backend.CheckValid() != nil {
+		return fmt.Sprintf("%s: in an invalid state!", BackendName)
+	}
+	if int(deviceNum) >= backend.numDevices || int(deviceNum) < 0 {
+		return fmt.Sprintf("invalid deviceNum %d", deviceNum)
+	}
+	pjrtDevice := backend.client.AddressableDevices()[int(deviceNum)]
+	pjrtDesc, err := pjrtDevice.GetDescription()
+	if err != nil {
+		return fmt.Sprintf("failed to get description for device %d: %v", deviceNum, err)
+	}
+	return fmt.Sprintf("%s [processId=%d]", pjrtDesc.DebugString(), pjrtDesc.ProcessIndex())
 }
 
 // Finalize releases all the associated resources immediately, and makes the backend invalid.
