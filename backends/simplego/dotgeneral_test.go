@@ -451,9 +451,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 }
 
 func TestDotGeneral_Dot(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
-		return graph.Dot(lhs, rhs)
-	})
+	exec := graph.MustNewExec(backend, graph.Dot)
 
 	y0 := exec.MustExec([]float32{1, 2, 3}, []float32{10, 11, 12})[0]
 	fmt.Printf("\ty0=%s\n", y0.GoStr())

@@ -8,16 +8,17 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -35,33 +36,33 @@ var (
 )
 
 func TestExecSpecialOps_Identity(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Identity(x) })
+	exec := graph.MustNewExec(backend, graph.Identity)
 	y0 := exec.MustExec(bfloat16.FromFloat32(7))[0]
-	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	// fmt.Printf("\ty0=%s\n", y0.GoStr())
 	assert.Equal(t, bfloat16.FromFloat32(7), y0.Value())
 }
 
 func TestExecSpecialOps_Where(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(cond, onTrue, onFalse *graph.Node) *graph.Node { return graph.Where(cond, onTrue, onFalse) })
+	exec := graph.MustNewExec(backend, graph.Where)
 
 	// All scalars.
 	y0 := exec.MustExec(true, bfloat16.FromFloat32(7), bfloat16.FromFloat32(11))[0]
-	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	// fmt.Printf("\ty0=%s\n", y0.GoStr())
 	assert.Equal(t, bfloat16.FromFloat32(7), y0.Value())
 
 	// Scalar cond, non-scalar values.
 	y1 := exec.MustExec(false, []uint8{1, 2}, []uint8{11, 12})[0]
-	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	// fmt.Printf("\ty1=%s\n", y1.GoStr())
 	assert.Equal(t, []uint8{11, 12}, y1.Value())
 
 	// Non-scalar cond, scalar values.
 	y2 := exec.MustExec([]bool{true, false}, int32(1), int32(0))[0]
-	fmt.Printf("\ty2=%s\n", y2.GoStr())
+	// fmt.Printf("\ty2=%s\n", y2.GoStr())
 	assert.Equal(t, []int32{1, 0}, y2.Value())
 
 	// Non-scalar cond and values.
 	y3 := exec.MustExec([]bool{false, true, true}, []float32{1, 2, 3}, []float32{101, 102, 103})[0]
-	fmt.Printf("\ty3=%s\n", y3.GoStr())
+	// fmt.Printf("\ty3=%s\n", y3.GoStr())
 	assert.Equal(t, []float32{101, 2, 3}, y3.Value())
 }
 
@@ -70,7 +71,7 @@ func TestExecSpecialOps_Reshape(t *testing.T) {
 
 	// Reshape scalar to array.
 	y0 := exec.MustExec([]int32{42, 0, 1, 2})[0]
-	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	// fmt.Printf("\ty0=%s\n", y0.GoStr())
 	assert.NoError(t, y0.Shape().Check(dtypes.Int32, 2, 2))
 }
 
@@ -82,34 +83,34 @@ func TestExecSpecialOps_Reduce(t *testing.T) {
 	y0 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceMin(x, -1)
 	}, [][]float32{{7, 0, 9}, {0, 3, 2}, {1001, 101, 11}})
-	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	// fmt.Printf("\ty0=%s\n", y0.GoStr())
 	assert.Equal(t, []float32{0, 0, 11}, y0.Value())
 
 	y1 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceMax(x, -1)
 	}, []float64{-1e8, -1e6, -1e16})
-	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	// fmt.Printf("\ty1=%s\n", y1.GoStr())
 	assert.Equal(t, -1.0e6, y1.Value())
 
 	input2 := tensors.FromFlatDataAndDimensions(xslices.Iota[uint32](0, 32), 2, 2, 2, 2, 2)
-	fmt.Printf("\tinput2=%s\n", input2.GoStr())
+	// fmt.Printf("\tinput2=%s\n", input2.GoStr())
 	y2 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceSum(x, 1, 3)
 	}, input2)
-	fmt.Printf("\ty2=%s\n", y2.GoStr())
+	// fmt.Printf("\ty2=%s\n", y2.GoStr())
 	want2 := [][][]uint32{{{20, 24}, {36, 40}}, {{84, 88}, {100, 104}}}
 	assert.Equal(t, want2, y2.Value())
 
 	y3 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceMultiply(x, 0)
 	}, []float32{-1e-2, 1e5, -1e-3})
-	fmt.Printf("\ty3=%s\n", y3.GoStr())
+	// fmt.Printf("\ty3=%s\n", y3.GoStr())
 	assert.Equal(t, float32(1), y3.Value())
 
 	y4 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceMin(x, 0)
 	}, []bfloat16.BFloat16{bf16(-11), bf16(-17), bf16(-8)})
-	fmt.Printf("\ty4=%s\n", y4.GoStr())
+	// fmt.Printf("\ty4=%s\n", y4.GoStr())
 	assert.Equal(t, bf16(-17), y4.Value())
 
 	// Test full reduction to scalar if no axes are given.
@@ -117,7 +118,7 @@ func TestExecSpecialOps_Reduce(t *testing.T) {
 		return graph.ReduceSum(x)
 	},
 		[][]bfloat16.BFloat16{{bf16(-11), bf16(-17)}, {bf16(8), bf16(21)}})
-	fmt.Printf("\ty5=%s\n", y5.GoStr())
+	// fmt.Printf("\ty5=%s\n", y5.GoStr())
 	assert.Equal(t, bf16(1), y5.Value())
 }
 
@@ -125,13 +126,13 @@ func TestExecSpecialOps_ReduceBitwise(t *testing.T) {
 	y0 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceBitwiseAnd(x, -1)
 	}, []int32{7, 3, 2})
-	fmt.Printf("\tReduceBitwiseAnd: y0=%s\n", y0.GoStr())
+	// fmt.Printf("\tReduceBitwiseAnd: y0=%s\n", y0.GoStr())
 	assert.Equal(t, int32(2), y0.Value())
 
 	y1 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceBitwiseOr(x)
 	}, [][]uint8{{3}, {12}, {17}})
-	fmt.Printf("\tReduceBitwiseOr: y1=%s\n", y1.GoStr())
+	// fmt.Printf("\tReduceBitwiseOr: y1=%s\n", y1.GoStr())
 	assert.Equal(t, uint8(31), y1.Value())
 
 	y2 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
@@ -145,19 +146,19 @@ func TestExecSpecialOps_ReduceLogical(t *testing.T) {
 	y0 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceLogicalAnd(x, -1)
 	}, [][]bool{{true, false}, {true, true}})
-	fmt.Printf("\tReduceLogicalAnd: y0=%s\n", y0.GoStr())
+	// fmt.Printf("\tReduceLogicalAnd: y0=%s\n", y0.GoStr())
 	assert.Equal(t, []bool{false, true}, y0.Value())
 
 	y1 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceLogicalOr(x, 0)
 	}, [][]bool{{true, false}, {false, false}})
-	fmt.Printf("\tReduceLogicalOr: y1=%s\n", y1.GoStr())
+	// fmt.Printf("\tReduceLogicalOr: y1=%s\n", y1.GoStr())
 	assert.Equal(t, []bool{true, false}, y1.Value())
 
 	y2 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceLogicalXor(x, -1)
 	}, [][]bool{{true, false}, {true, true}})
-	fmt.Printf("\tReduceLogicalXor: y2=%s\n", y2.GoStr())
+	// fmt.Printf("\tReduceLogicalXor: y2=%s\n", y2.GoStr())
 	assert.Equal(t, []bool{true, false}, y2.Value())
 }
 
@@ -169,7 +170,7 @@ func TestExecSpecialOps_transposeIterator(t *testing.T) {
 	for range operand.Size() {
 		transposedFlatIndices = append(transposedFlatIndices, it.next())
 	}
-	fmt.Printf("\ttransposedFlatIndices=%#v\n", transposedFlatIndices)
+	// fmt.Printf("\ttransposedFlatIndices=%#v\n", transposedFlatIndices)
 	want := []int{
 		// Operand axis 2 (the first being iterated) becomes output axis 0, in row-major order,
 		// this is the largest one, with strides of 6:
@@ -188,7 +189,7 @@ func TestExecSpecialOps_Transpose(t *testing.T) {
 	y0 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.TransposeAllAxes(x, 2, 0, 1)
 	}, operand)
-	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	// fmt.Printf("\ty0=%s\n", y0.GoStr())
 	assert.NoError(t, y0.Shape().Check(dtypes.Float32, 4, 2, 3))
 	want := [][][]float32{
 		{{0, 4, 8}, {12, 16, 20}},
@@ -202,14 +203,14 @@ func TestExecSpecialOps_Iota(t *testing.T) {
 	y0 := graph.MustExecOnce(backend, func(g *graph.Graph) *graph.Node {
 		return graph.Iota(g, shapes.Make(dtypes.Int8, 2, 3), 1)
 	})
-	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	// fmt.Printf("\ty0=%s\n", y0.GoStr())
 	assert.NoError(t, y0.Shape().Check(dtypes.Int8, 2, 3))
 	require.Equal(t, [][]int8{{0, 1, 2}, {0, 1, 2}}, y0.Value())
 
 	y1 := graph.MustExecOnce(backend, func(g *graph.Graph) *graph.Node {
 		return graph.Iota(g, shapes.Make(dtypes.BFloat16, 2, 3), 0)
 	})
-	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	// fmt.Printf("\ty1=%s\n", y1.GoStr())
 	assert.NoError(t, y1.Shape().Check(dtypes.BFloat16, 2, 3))
 	bf16 := bfloat16.FromFloat32
 	require.Equal(t, [][]bfloat16.BFloat16{{bf16(0), bf16(0), bf16(0)}, {bf16(1), bf16(1), bf16(1)}}, y1.Value())
@@ -220,7 +221,7 @@ func TestExecSpecialOps_Broadcast(t *testing.T) {
 	y0 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.BroadcastPrefix(x, 2, 3)
 	}, []int8{1, 3})
-	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	// fmt.Printf("\ty0=%s\n", y0.GoStr())
 	assert.NoError(t, y0.Shape().Check(dtypes.Int8, 2, 3, 2))
 	require.Equal(t, [][][]int8{{{1, 3}, {1, 3}, {1, 3}}, {{1, 3}, {1, 3}, {1, 3}}}, y0.Value())
 }
@@ -229,14 +230,14 @@ func TestExecSpecialOps_BroadcastInDim(t *testing.T) {
 	y0 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ExpandAndBroadcast(x, []int{2, 3, 2}, []int{0})
 	}, [][]int8{{1, 3}})
-	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	// fmt.Printf("\ty0=%s\n", y0.GoStr())
 	assert.NoError(t, y0.Shape().Check(dtypes.Int8, 2, 3, 2))
 	assert.Equal(t, [][][]int8{{{1, 3}, {1, 3}, {1, 3}}, {{1, 3}, {1, 3}, {1, 3}}}, y0.Value())
 
 	y1 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ExpandAndBroadcast(x, []int{2}, []int{0})
 	}, bf16(42))
-	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	// fmt.Printf("\ty1=%s\n", y1.GoStr())
 	assert.NoError(t, y1.Shape().Check(dtypes.BFloat16, 2))
 	assert.Equal(t, []bfloat16.BFloat16{bf16(42), bf16(42)}, y1.Value())
 }
@@ -252,7 +253,7 @@ func TestExecSpecialOps_gatherIterator(t *testing.T) {
 	outputShape, err := shapeinference.Gather(operandShape, startIndicesShape, startVectorAxis,
 		offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, false)
 	require.NoError(t, err)
-	fmt.Printf("\toutputShape=%s\n", outputShape)
+	// fmt.Printf("\toutputShape=%s\n", outputShape)
 	require.NoError(t, outputShape.Check(dtypes.F32, 3, 3, 2, 1))
 	it := newGatherIterator(startIndicesShape, startVectorAxis, outputShape, offsetOutputAxes)
 	var gotStartIndices [][]int
@@ -263,8 +264,8 @@ func TestExecSpecialOps_gatherIterator(t *testing.T) {
 		gotStartIndices = append(gotStartIndices, slices.Clone(indices))
 		gotOutputIndices = append(gotOutputIndices, outputBytesIdx)
 	}
-	fmt.Printf("\tgatherStartIndicesIterator got startIndices=%#v\n", gotStartIndices)
-	fmt.Printf("\tgatherStartIndicesIterator got outputBytesIndices=%#v\n", gotOutputIndices)
+	// fmt.Printf("\tgatherStartIndicesIterator got startIndices=%#v\n", gotStartIndices)
+	// fmt.Printf("\tgatherStartIndicesIterator got outputBytesIndices=%#v\n", gotOutputIndices)
 	wantStartIndirectIndices := [][]int{{0, 2, 4}, {1, 3, 5}, {6, 8, 10}, {7, 9, 11}, {12, 14, 16}, {13, 15, 17}}
 	assert.Equal(t, wantStartIndirectIndices, gotStartIndices)
 	dataSize := operandShape.DType.Size() // == 4 for Float32
@@ -280,14 +281,14 @@ func TestExecSpecialOps_Gather(t *testing.T) {
 		operand := graph.IotaFull(g, shapes.Make(dtypes.F32, 4, 3, 2, 2))
 		startIndices := graph.Const(g, [][][]int{{{0, 1}, {0, 1}, {0, 1}}, {{0, 0}, {0, 0}, {1, 1}}, {{0, 0}, {1, 1}, {0, 0}}})
 		startVectorAxis := 1
-		fmt.Printf("\tstartIndices.shape=%s, startVectorAxis=%d\n", startIndices.Shape(), startVectorAxis)
+		// fmt.Printf("\tstartIndices.shape=%s, startVectorAxis=%d\n", startIndices.Shape(), startVectorAxis)
 		offsetOutputAxes := []int{1, 3}
 		collapsedSliceAxes := []int{0, 2}
 		startIndexMap := []int{0, 2, 3}
 		sliceSizes := []int{1, 3, 1, 1}
 		return graph.BackendGather(operand, startIndices, startVectorAxis, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, false)
 	})
-	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	// fmt.Printf("\ty0=%s\n", y0.GoStr())
 	want := [][][][]float32{
 		{{{0}, {15}}, {{4}, {19}}, {{8}, {23}}},
 		{{{1}, {1}}, {{5}, {5}}, {{9}, {9}}},
@@ -302,7 +303,7 @@ func TestExecSpecialOps_Concatenate(t *testing.T) {
 		in2 := graph.Const(g, []float32{4, 5})
 		return graph.Concatenate([]*graph.Node{in1, in2}, 0)
 	})
-	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	// fmt.Printf("\ty1=%s\n", y1.GoStr())
 	want1 := []float32{1, 2, 3, 4, 5}
 	require.NoError(t, y1.Shape().Check(dtypes.Float32, 5))
 	require.Equal(t, want1, y1.Value())
@@ -313,7 +314,7 @@ func TestExecSpecialOps_Concatenate(t *testing.T) {
 		in2 := graph.Const(g, [][]int8{{5, 6}})
 		return graph.Concatenate([]*graph.Node{in1, in2}, 0)
 	})
-	fmt.Printf("\ty2=%s\n", y2.GoStr())
+	// fmt.Printf("\ty2=%s\n", y2.GoStr())
 	want2 := [][]int8{{1, 2}, {3, 4}, {5, 6}}
 	require.NoError(t, y2.Shape().Check(dtypes.Int8, 3, 2))
 	require.Equal(t, want2, y2.Value())
@@ -325,7 +326,7 @@ func TestExecSpecialOps_Concatenate(t *testing.T) {
 		in3 := graph.Const(g, [][]bfloat16.BFloat16{{bf16(7)}, {bf16(8)}})
 		return graph.Concatenate([]*graph.Node{in1, in2, in3}, 1)
 	})
-	fmt.Printf("\ty3=%s\n", y3.GoStr())
+	// fmt.Printf("\ty3=%s\n", y3.GoStr())
 	want3 := [][]bfloat16.BFloat16{{bf16(1), bf16(3), bf16(4), bf16(7)}, {bf16(2), bf16(5), bf16(6), bf16(8)}}
 	require.NoError(t, y3.Shape().Check(dtypes.BFloat16, 2, 4))
 	require.Equal(t, want3, y3.Value())
@@ -336,7 +337,7 @@ func TestExecSpecialOps_Concatenate(t *testing.T) {
 		in2 := graph.Const(g, [][][]int32{{{5, 6}, {7, 8}}, {{9, 10}, {11, 12}}}) // Shape (2, 2, 2)
 		return graph.Concatenate([]*graph.Node{in1, in2}, 1)
 	})
-	fmt.Printf("\ty4=%s\n", y4.GoStr())
+	// fmt.Printf("\ty4=%s\n", y4.GoStr())
 	want4 := [][][]int32{{{1, 2}, {5, 6}, {7, 8}}, {{3, 4}, {9, 10}, {11, 12}}} // Shape (2, 3, 2)
 	require.NoError(t, y4.Shape().Check(dtypes.Int32, 2, 3, 2))
 	require.Equal(t, want4, y4.Value())
@@ -347,7 +348,7 @@ func TestExecSpecialOps_Concatenate(t *testing.T) {
 		in2 := graph.Const(g, [][][]float64{{{5}}, {{6}}})       // Shape (2, 1, 1)
 		return graph.Concatenate([]*graph.Node{in1, in2}, 2)
 	})
-	fmt.Printf("\ty5=%s\n", y5.GoStr())
+	// fmt.Printf("\ty5=%s\n", y5.GoStr())
 	want5 := [][][]float64{{{1, 2, 5}}, {{3, 4, 6}}} // Shape (2, 1, 3)
 	require.NoError(t, y5.Shape().Check(dtypes.Float64, 2, 1, 3))
 	require.Equal(t, want5, y5.Value())
@@ -358,35 +359,35 @@ func TestExecSpecialOps_ConvertDType(t *testing.T) {
 	y0 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ConvertDType(x, dtypes.Float32)
 	}, int32(42))
-	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	// fmt.Printf("\ty0=%s\n", y0.GoStr())
 	assert.Equal(t, float32(42.0), y0.Value())
 
 	// Test float32 to bfloat16
 	y1 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ConvertDType(x, dtypes.BFloat16)
 	}, float32(3.14))
-	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	// fmt.Printf("\ty1=%s\n", y1.GoStr())
 	assert.Equal(t, bf16(3.14), y1.Value())
 
 	// Test bfloat16 to int32
 	y2 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ConvertDType(x, dtypes.Int32)
 	}, bf16(7.8))
-	fmt.Printf("\ty2=%s\n", y2.GoStr())
+	// fmt.Printf("\ty2=%s\n", y2.GoStr())
 	assert.Equal(t, int32(7), y2.Value())
 
 	// Test bool to int32
 	y3 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ConvertDType(x, dtypes.Int32)
 	}, true)
-	fmt.Printf("\ty3=%s\n", y3.GoStr())
+	// fmt.Printf("\ty3=%s\n", y3.GoStr())
 	assert.Equal(t, int32(1), y3.Value())
 
 	// Test float32 to bool
 	y4 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ConvertDType(x, dtypes.Bool)
 	}, float32(1.0))
-	fmt.Printf("\ty4=%s\n", y4.GoStr())
+	// fmt.Printf("\ty4=%s\n", y4.GoStr())
 	assert.Equal(t, true, y4.Value())
 }
 
@@ -404,7 +405,7 @@ func TestExecSpecialOps_Scatter(t *testing.T) {
 		scatterAxesToOperandAxes := []int{0, 1}
 		return graph.BackendScatterMax(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, true, true)
 	})
-	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	// fmt.Printf("\ty0=%s\n", y0.GoStr())
 	want := [][][]float32{{{0, 0, 0, 0, 0}, {1, 3, 5, 7, 9}}, {{2, 4, 6, 8, 10}, {0, 0, 0, 0, 0}}}
 	assert.Equal(t, want, y0.Value())
 
@@ -420,7 +421,7 @@ func TestExecSpecialOps_Scatter(t *testing.T) {
 		scatterAxesToOperandAxes := []int{0, 2}
 		return graph.BackendScatterSum(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, true, true)
 	})
-	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	// fmt.Printf("\ty1=%s\n", y1.GoStr())
 	want = [][][]float32{{{1, 2}, {1, 4}, {1, 6}, {1, 8}, {1, 10}}, {{3, 1}, {5, 1}, {7, 1}, {9, 1}, {11, 1}}}
 	assert.Equal(t, want, y1.Value())
 
@@ -435,7 +436,7 @@ func TestExecSpecialOps_Scatter(t *testing.T) {
 		scatterAxesToOperandAxes := []int{0, 1}
 		return graph.BackendScatterMin(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, true, true)
 	})
-	fmt.Printf("\ty2=%s\n", y2.GoStr())
+	// fmt.Printf("\ty2=%s\n", y2.GoStr())
 	want2 := [][][]bfloat16.BFloat16{{{bf16(1), bf16(1)}, {bf16(-4), bf16(-3)}, {bf16(-2), bf16(-1)}}, {{bf16(0), bf16(1)}, {bf16(1), bf16(1)}, {bf16(1), bf16(1)}}}
 	assert.Equal(t, want2, y2.Value())
 }
@@ -465,7 +466,7 @@ func TestExecSpecialOps_Slice(t *testing.T) {
 		// If graph.Slice takes end indices (inclusive) or sizes, adjust accordingly.
 		return rawSlice(operand, starts, limits, strides)
 	})
-	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	// fmt.Printf("\ty1=%s\n", y1.GoStr())
 	want1 := []int64{1, 2, 3}
 	require.NoError(t, y1.Shape().Check(dtypes.Int64, 3)) // Default int is int64? Assuming so. Adjust if it's int32.
 	require.Equal(t, want1, y1.Value())
@@ -480,7 +481,7 @@ func TestExecSpecialOps_Slice(t *testing.T) {
 		// Values from indices: [0,0], [0,2], [2,0], [2,2]
 		return rawSlice(operand, starts, limits, strides)
 	})
-	fmt.Printf("\ty2=%s\n", y2.GoStr())
+	// fmt.Printf("\ty2=%s\n", y2.GoStr())
 	want2 := [][]int32{{0, 2}, {6, 8}}
 	require.NoError(t, y2.Shape().Check(dtypes.Int32, 2, 2))
 	require.Equal(t, want2, y2.Value())
@@ -495,7 +496,7 @@ func TestExecSpecialOps_Slice(t *testing.T) {
 		// Value from index: [1, 1]
 		return rawSlice(operand, starts, limits, strides)
 	})
-	fmt.Printf("\ty3=%s\n", y3.GoStr())
+	// fmt.Printf("\ty3=%s\n", y3.GoStr())
 	want3 := [][]int64{{3}}                                  // Assuming int is int64
 	require.NoError(t, y3.Shape().Check(dtypes.Int64, 1, 1)) // Adjust dtype if needed
 	require.Equal(t, want3, y3.Value())
@@ -510,7 +511,7 @@ func TestExecSpecialOps_Slice(t *testing.T) {
 		// Values from indices: 1, 3
 		return rawSlice(operand, starts, limits, strides)
 	})
-	fmt.Printf("\ty4=%s\n", y4.GoStr())
+	// fmt.Printf("\ty4=%s\n", y4.GoStr())
 	want4 := []bfloat16.BFloat16{bf16(1), bf16(3)}
 	require.NoError(t, y4.Shape().Check(dtypes.BFloat16, 2))
 	require.Equal(t, want4, y4.Value())
@@ -557,7 +558,7 @@ func TestExecSpecialOps_RngBitsGenerator(t *testing.T) {
 				state, values = graph.RandomUniform(state, shape)
 				return []*graph.Node{state, values}
 			}, state)
-			fmt.Printf("\toutput.shape=%s\n", shape)
+			// fmt.Printf("\toutput.shape=%s\n", shape)
 			state = outputs[0]
 			y := outputs[1]
 
@@ -577,7 +578,7 @@ func TestExecSpecialOps_RngBitsGenerator(t *testing.T) {
 			}
 
 			hist := computeHistogram(values, numBins)
-			fmt.Printf("\tshape=%s, hist=%v\n", shape, hist)
+			// fmt.Printf("\tshape=%s, hist=%v\n", shape, hist)
 			expectedPerBin := numSamples / numBins
 			maxDeviation := float64(expectedPerBin) * tolerance
 
@@ -598,14 +599,14 @@ func TestExecSpecialOps_ArgMinMaxOp(t *testing.T) {
 	y0 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ArgMin(x, 0)
 	}, []float32{3, 1, 4, 1, 5})
-	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	// fmt.Printf("\ty0=%s\n", y0.GoStr())
 	require.Equal(t, int32(1), y0.Value())
 
 	// Test Case 2: 2D argmax along axis 1 (columns)
 	y1 := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ArgMax(x, 1)
 	}, [][]int32{{1, 2, 3}, {4, 1, 2}, {7, 8, 5}})
-	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	// fmt.Printf("\ty1=%s\n", y1.GoStr())
 	require.Equal(t, []int32{2, 0, 1}, y1.Value())
 
 	// Test Case 3: 2D argmin along axis 0 (rows) with BFloat16
@@ -615,7 +616,7 @@ func TestExecSpecialOps_ArgMinMaxOp(t *testing.T) {
 		{bf16(1), bf16(2)},
 		{bf16(-1), bf16(3)},
 		{bf16(4), bf16(-2)}})
-	fmt.Printf("\ty2=%s\n", y2.GoStr())
+	// fmt.Printf("\ty2=%s\n", y2.GoStr())
 	require.Equal(t, []int32{1, 2}, y2.Value())
 
 	// Test Case 4: 3D argmax with repeated values
@@ -624,7 +625,7 @@ func TestExecSpecialOps_ArgMinMaxOp(t *testing.T) {
 	}, [][][]float32{
 		{{1, 2}, {1, 0}, {1, -1}},
 		{{4, 3}, {4, 5}, {4, 2}}})
-	fmt.Printf("\ty3=%s\n", y3.GoStr())
+	// fmt.Printf("\ty3=%s\n", y3.GoStr())
 	require.Equal(t, [][]int32{{0, 0}, {0, 1}}, y3.Value())
 }
 

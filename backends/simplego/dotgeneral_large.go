@@ -450,7 +450,8 @@ func (r *dotGeneralRecursiveData) apply(
 	// Recursively split on the largest axis:
 	// - The opportunity to parallelize the split, if possible.
 	parallelize := depth < r.maxDepthParallelization
-	if maxLen == lhsCrossLen {
+	switch maxLen {
+	case lhsCrossLen:
 		// Split on lhs cross dimension.
 		wg.Add(1) // The current plus 1.
 		split := lhsCrossStart + lhsCrossLen/2
@@ -462,8 +463,7 @@ func (r *dotGeneralRecursiveData) apply(
 			r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd, depth+1, wg)
 		}
 		r.apply(split, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd, depth+1, wg)
-
-	} else if maxLen == rhsCrossLen {
+	case rhsCrossLen:
 		// Split on rhs cross dimension.
 		wg.Add(1) // The current plus 1.
 		split := rhsCrossStart + rhsCrossLen/2
@@ -474,8 +474,7 @@ func (r *dotGeneralRecursiveData) apply(
 			r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd, depth+1, wg)
 		}
 		r.apply(lhsCrossStart, lhsCrossEnd, split, rhsCrossEnd, contractStart, contractEnd, depth+1, wg)
-
-	} else {
+	default:
 		// No parallelization when splitting on the contracting axis because both splits will be writing
 		// to the same output blocks, so there will be memory contention.
 		// This also means we don't increase the depth of the recursion.
@@ -488,7 +487,6 @@ func (r *dotGeneralRecursiveData) apply(
 		newWg.Wait()
 		r.backend.workers.WorkerRestarted()
 		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, split, contractEnd, depth, wg)
-		return
 	}
 }
 

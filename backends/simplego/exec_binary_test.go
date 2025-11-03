@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
 func TestExecBinary_broadcastIterator(t *testing.T) {
@@ -51,7 +52,7 @@ func TestExecBinary_broadcastIterator(t *testing.T) {
 }
 
 func TestExecBinary_Add(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Add(lhs, rhs) })
+	exec := graph.MustNewExec(backend, graph.Add)
 
 	// Test with scalar (or of size 1) values.
 	y0 := exec.MustExec(bfloat16.FromFloat32(7), bfloat16.FromFloat32(11))[0]
@@ -73,7 +74,7 @@ func TestExecBinary_Add(t *testing.T) {
 }
 
 func TestExecBinary_Mul(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Mul(lhs, rhs) })
+	exec := graph.MustNewExec(backend, graph.Mul)
 
 	// Test with scalar (or of size 1) values.
 	y0 := exec.MustExec(bfloat16.FromFloat32(7), bfloat16.FromFloat32(11))[0]
@@ -95,7 +96,7 @@ func TestExecBinary_Mul(t *testing.T) {
 }
 
 func TestExecBinary_Sub(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Sub(lhs, rhs) })
+	exec := graph.MustNewExec(backend, graph.Sub)
 
 	// Test with scalar (or of size 1) values.
 	y0 := exec.MustExec(bfloat16.FromFloat32(7), bfloat16.FromFloat32(11))[0]
@@ -119,7 +120,7 @@ func TestExecBinary_Sub(t *testing.T) {
 }
 
 func TestExecBinary_Div(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Div(lhs, rhs) })
+	exec := graph.MustNewExec(backend, graph.Div)
 
 	// Test with scalar (or of size 1) values.
 	y0 := exec.MustExec(bfloat16.FromFloat32(10), bfloat16.FromFloat32(2))[0]
@@ -143,7 +144,7 @@ func TestExecBinary_Div(t *testing.T) {
 }
 
 func TestExecBinary_Rem(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Rem(lhs, rhs) })
+	exec := graph.MustNewExec(backend, graph.Rem)
 
 	// Test with scalar (or of size 1) values.
 	y0 := exec.MustExec(bfloat16.FromFloat32(7), bfloat16.FromFloat32(4))[0]
@@ -168,7 +169,7 @@ func TestExecBinary_Rem(t *testing.T) {
 }
 
 func TestExecBinary_Pow(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Pow(lhs, rhs) })
+	exec := graph.MustNewExec(backend, graph.Pow)
 
 	// Test with scalar (or of size 1) values.
 	y0 := exec.MustExec(bfloat16.FromFloat32(16), bfloat16.FromFloat32(0.5))[0]
@@ -192,7 +193,7 @@ func TestExecBinary_Pow(t *testing.T) {
 }
 
 func TestExecBinary_Max(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Max(lhs, rhs) })
+	exec := graph.MustNewExec(backend, graph.Max)
 
 	// Test with scalar (or of size 1) values.
 	y0 := exec.MustExec(bfloat16.FromFloat32(7), bfloat16.FromFloat32(11))[0]
@@ -216,7 +217,7 @@ func TestExecBinary_Max(t *testing.T) {
 }
 
 func TestExecBinary_Min(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Min(lhs, rhs) })
+	exec := graph.MustNewExec(backend, graph.Min)
 
 	// Test with scalar (or of size 1) values.
 	y0 := exec.MustExec(bfloat16.FromFloat32(7), bfloat16.FromFloat32(11))[0]
@@ -240,7 +241,7 @@ func TestExecBinary_Min(t *testing.T) {
 }
 
 func TestExecBinary_BitwiseAnd(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.BitwiseAnd(lhs, rhs) })
+	exec := graph.MustNewExec(backend, graph.BitwiseAnd)
 
 	// Test with scalar (or of size 1) values.
 	y0 := exec.MustExec(uint8(0b11110000), uint8(0b10101010))[0]
@@ -264,7 +265,7 @@ func TestExecBinary_BitwiseAnd(t *testing.T) {
 }
 
 func TestExecBinary_BitwiseOr(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.BitwiseOr(lhs, rhs) })
+	exec := graph.MustNewExec(backend, graph.BitwiseOr)
 
 	// Test with scalar (or of size 1) values.
 	y0 := exec.MustExec(uint8(0b11110000), uint8(0b10101010))[0]
@@ -288,7 +289,7 @@ func TestExecBinary_BitwiseOr(t *testing.T) {
 }
 
 func TestExecBinary_BitwiseXor(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.BitwiseXor(lhs, rhs) })
+	exec := graph.MustNewExec(backend, graph.BitwiseXor)
 
 	// Test with scalar (or of size 1) values.
 	y0 := exec.MustExec(uint8(0b11110000), uint8(0b10101010))[0]
@@ -312,7 +313,7 @@ func TestExecBinary_BitwiseXor(t *testing.T) {
 }
 
 func TestExecBinary_LogicalAnd(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.LogicalAnd(lhs, rhs) })
+	exec := graph.MustNewExec(backend, graph.LogicalAnd)
 
 	// Test with scalar (or of size 1) values.
 	y0 := exec.MustExec(true, false)[0]
@@ -336,7 +337,7 @@ func TestExecBinary_LogicalAnd(t *testing.T) {
 }
 
 func TestExecBinary_LogicalOr(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.LogicalOr(lhs, rhs) })
+	exec := graph.MustNewExec(backend, graph.LogicalOr)
 
 	// Test with scalar (or of size 1) values.
 	y0 := exec.MustExec(true, false)[0]
@@ -360,7 +361,7 @@ func TestExecBinary_LogicalOr(t *testing.T) {
 }
 
 func TestExecBinary_LogicalXor(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.LogicalXor(lhs, rhs) })
+	exec := graph.MustNewExec(backend, graph.LogicalXor)
 
 	// Test with scalar (or of size 1) values.
 	y0 := exec.MustExec(true, false)[0]
@@ -385,7 +386,7 @@ func TestExecBinary_LogicalXor(t *testing.T) {
 
 func TestExecBinary_Comparison(t *testing.T) {
 	// Test Equal
-	execEq := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Equal(lhs, rhs) })
+	execEq := graph.MustNewExec(backend, graph.Equal)
 	y0 := execEq.MustExec(float32(1.5), float32(1.5))[0]
 	assert.Equal(t, true, y0.Value())
 	y1 := execEq.MustExec(bfloat16.FromFloat32(2.0), bfloat16.FromFloat32(2.0))[0]
@@ -396,7 +397,7 @@ func TestExecBinary_Comparison(t *testing.T) {
 	assert.Equal(t, []bool{true, false}, y3.Value())
 
 	// Test GreaterOrEqual
-	execGe := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.GreaterOrEqual(lhs, rhs) })
+	execGe := graph.MustNewExec(backend, graph.GreaterOrEqual)
 	y4 := execGe.MustExec(float32(2.5), float32(1.5))[0]
 	assert.Equal(t, true, y4.Value())
 	y5 := execGe.MustExec(bfloat16.FromFloat32(1.0), bfloat16.FromFloat32(2.0))[0]
@@ -405,21 +406,21 @@ func TestExecBinary_Comparison(t *testing.T) {
 	assert.Equal(t, []bool{false, true, true}, y6.Value())
 
 	// Test GreaterThan
-	execGt := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.GreaterThan(lhs, rhs) })
+	execGt := graph.MustNewExec(backend, graph.GreaterThan)
 	y7 := execGt.MustExec(float32(2.5), float32(1.5))[0]
 	assert.Equal(t, true, y7.Value())
 	y8 := execGt.MustExec([]int32{1, 2, 3}, int32(2))[0]
 	assert.Equal(t, []bool{false, false, true}, y8.Value())
 
 	// Test LessOrEqual
-	execLe := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.LessOrEqual(lhs, rhs) })
+	execLe := graph.MustNewExec(backend, graph.LessOrEqual)
 	y9 := execLe.MustExec(bfloat16.FromFloat32(1.0), bfloat16.FromFloat32(2.0))[0]
 	assert.Equal(t, true, y9.Value())
 	y10 := execLe.MustExec([]uint16{1, 2, 3}, uint16(2))[0]
 	assert.Equal(t, []bool{true, true, false}, y10.Value())
 
 	// Test LessThan
-	execLt := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.LessThan(lhs, rhs) })
+	execLt := graph.MustNewExec(backend, graph.LessThan)
 	y11 := execLt.MustExec(float32(1.5), float32(2.5))[0]
 	assert.Equal(t, true, y11.Value())
 	y12 := execLt.MustExec([]int32{1, 2, 3}, int32(2))[0]

@@ -14,13 +14,14 @@ func binaryOperandsAndOutput(backend *Backend, inputs []*Buffer, inputsOwned []b
 	lhs, rhs, output *Buffer, lhsIsScalarOr1, rhsIsScalarOr1 bool) {
 	lhs, rhs = inputs[0], inputs[1]
 	lhsIsScalarOr1, rhsIsScalarOr1 = lhs.shape.Size() == 1, rhs.shape.Size() == 1
-	if inputsOwned[1] && rhs.shape.Equal(outputShape) {
+	switch {
+	case inputsOwned[1] && rhs.shape.Equal(outputShape):
 		output = rhs
 		inputs[1] = nil
-	} else if inputsOwned[0] && lhs.shape.Equal(outputShape) {
+	case inputsOwned[0] && lhs.shape.Equal(outputShape):
 		output = lhs
 		inputs[0] = nil
-	} else {
+	default:
 		output = backend.getBufferForShape(outputShape)
 	}
 	return

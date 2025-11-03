@@ -294,16 +294,17 @@ func (b *Builder) Dot(lhsOp, rhsOp backends.Op) (backends.Op, error) {
 	}
 	lhs, rhs := inputs[0], inputs[1]
 	var output backends.Op
-	if lhs.shape.Rank() == 1 && rhs.shape.Rank() == 1 {
+	switch {
+	case lhs.shape.Rank() == 1 && rhs.shape.Rank() == 1:
 		// Contracting both vectors.
 		output, err = b.DotGeneral(lhs, []int{0}, []int{}, rhs, []int{0}, []int{})
-	} else if lhs.shape.Rank() == 2 && rhs.shape.Rank() == 1 {
+	case lhs.shape.Rank() == 2 && rhs.shape.Rank() == 1:
 		// Contract rhs vector.
 		output, err = b.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
-	} else if lhs.shape.Rank() == 2 && rhs.shape.Rank() == 2 {
+	case lhs.shape.Rank() == 2 && rhs.shape.Rank() == 2:
 		// Traditional matrix multiplication:
 		output, err = b.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
-	} else {
+	default:
 		return nil, errors.Errorf("Dot operands have invalid ranks: lhs=%v, rhs=%v", lhs.shape, rhs.shape)
 	}
 	if err != nil {
