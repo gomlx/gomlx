@@ -87,17 +87,17 @@ func execWhere(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	// Figure out what the outputBuffer is going to be.
 	outputShape := node.shape
 	var output *Buffer
-	if onTrue.shape.Equal(outputShape) && inputsOwned[1] {
+	switch {
+	case onTrue.shape.Equal(outputShape) && inputsOwned[1]:
 		output = onTrue
 		inputs[1] = nil
-	} else if onFalse.shape.Equal(outputShape) && inputsOwned[2] {
+	case onFalse.shape.Equal(outputShape) && inputsOwned[2]:
 		output = onFalse
 		inputs[2] = nil
-	} else {
+	default:
 		output = backend.getBuffer(outputShape.DType, outputShape.Size())
 		output.shape = outputShape
 	}
-
 	fn := whereDTypeMap.Get(outputShape.DType).(func(conditionBuf, onTrueBuf, onFalseBuf, outputBuf *Buffer))
 	fn(condition, onTrue, onFalse, output)
 	return output, nil
@@ -361,7 +361,7 @@ func execReduceSumGeneric[T PODNumericConstraints](operand, output *Buffer, it *
 	operandFlat := operand.flat.([]T)
 	for _, value := range operandFlat {
 		outputIdx := it.next()
-		outputFlat[outputIdx] = outputFlat[outputIdx] + value
+		outputFlat[outputIdx] += value
 	}
 }
 
@@ -396,7 +396,7 @@ func execReduceProductGeneric[T PODNumericConstraints](operand, output *Buffer, 
 	operandFlat := operand.flat.([]T)
 	for _, value := range operandFlat {
 		outputIdx := it.next()
-		outputFlat[outputIdx] = outputFlat[outputIdx] * value
+		outputFlat[outputIdx] *= value
 	}
 }
 
@@ -435,7 +435,7 @@ func execReduceBitwiseAndGeneric[T PODIntegerConstraints](operand, output *Buffe
 	operandFlat := operand.flat.([]T)
 	for _, value := range operandFlat {
 		outputIdx := it.next()
-		outputFlat[outputIdx] = outputFlat[outputIdx] & value
+		outputFlat[outputIdx] &= value
 	}
 }
 
@@ -450,7 +450,7 @@ func execReduceBitwiseOrGeneric[T PODIntegerConstraints](operand, output *Buffer
 	operandFlat := operand.flat.([]T)
 	for _, value := range operandFlat {
 		outputIdx := it.next()
-		outputFlat[outputIdx] = outputFlat[outputIdx] | value
+		outputFlat[outputIdx] |= value
 	}
 }
 
@@ -465,7 +465,7 @@ func execReduceBitwiseXorGeneric[T PODIntegerConstraints](operand, output *Buffe
 	operandFlat := operand.flat.([]T)
 	for _, value := range operandFlat {
 		outputIdx := it.next()
-		outputFlat[outputIdx] = outputFlat[outputIdx] ^ value
+		outputFlat[outputIdx] ^= value
 	}
 }
 
@@ -1498,7 +1498,7 @@ func execRngBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsO
 		}
 		// Take one byte from the randomBits.
 		rngDataBytes[idx] = byte(randomBits & 0xFF)
-		randomBits = randomBits >> 8
+		randomBits >>= 8
 	}
 
 	// Update state output - PCG internal state after generating random bytes
@@ -1886,7 +1886,7 @@ func reduceWindowSumBuildUpdateFn[T PODNumericConstraints](operand, output *Buff
 	operandFlat := operand.flat.([]T)
 	outputFlat := output.flat.([]T)
 	return func(operandFlatIdx, outputFlatIdx int) {
-		outputFlat[outputFlatIdx] = outputFlat[outputFlatIdx] + operandFlat[operandFlatIdx]
+		outputFlat[outputFlatIdx] += operandFlat[operandFlatIdx]
 	}
 }
 
@@ -1903,7 +1903,7 @@ func reduceWindowProductBuildUpdateFn[T PODNumericConstraints](operand, output *
 	operandFlat := operand.flat.([]T)
 	outputFlat := output.flat.([]T)
 	return func(operandFlatIdx, outputFlatIdx int) {
-		outputFlat[outputFlatIdx] = outputFlat[outputFlatIdx] * operandFlat[operandFlatIdx]
+		outputFlat[outputFlatIdx] *= operandFlat[operandFlatIdx]
 	}
 }
 

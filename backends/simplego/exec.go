@@ -3,9 +3,10 @@ package simplego
 import (
 	"sync"
 
+	"github.com/pkg/errors"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/pkg/errors"
 )
 
 var _ backends.Executable = (*Executable)(nil)
@@ -13,7 +14,7 @@ var _ backends.Executable = (*Executable)(nil)
 // Executable holds a frozen Builder. It assumes the graph in Builder is valid and has been properly
 // checked that all the shapes and data types are valid.
 //
-// If any inconsistencies are found, please fix in the Builder, so Executable can be written without need
+// If any inconsistencies are found, please fix in the Builder, so Executable can be written without the need
 // of any duplicate checks.
 type Executable struct {
 	backend *Backend
@@ -478,7 +479,7 @@ func (e *Executable) executeParallel(execBuf *executionBuffers) error {
 		if e.numUses[nodeIdx] > 0 {
 			expected++
 			execBuf.remainingDeps[nodeIdx] = len(e.builder.nodes[nodeIdx].inputs)
-			//fmt.Printf("SimpleGo: Node #%d: numUses=%d, remainingDeps=%d\n",
+			// fmt.Printf("SimpleGo: Node #%d: numUses=%d, remainingDeps=%d\n",
 			//	nodeIdx, e.numUses[nodeIdx], len(e.builder.nodes[nodeIdx].inputs))
 			if execBuf.remainingDeps[nodeIdx] == 0 {
 				readyToExecute <- nodeIdx
@@ -511,13 +512,13 @@ func (e *Executable) executeParallel(execBuf *executionBuffers) error {
 				// Update dependencies and schedule ready nodes
 				completed++
 				if completed == expected {
-					//fmt.Printf("\t- node #%d: all nodes completed, closing channel\n", nodeIdx)
+					// fmt.Printf("\t- node #%d: all nodes completed, closing channel\n", nodeIdx)
 					stopExecutionFn()
 					return
 				}
-				//if completed > expected {
+				// if completed > expected {
 				//	fmt.Printf("\t- node #%d: more nodes than expected (%d > %d), stopping execution\n", nodeIdx, completed, expected)
-				//}
+				// }
 
 				// Check dependent nodes: for current node and for multi-output nodes.
 				if node.IsMultiOutputs() {
@@ -532,7 +533,7 @@ func (e *Executable) executeParallel(execBuf *executionBuffers) error {
 						// Mark this output as completed as well.
 						completed++
 						if completed == expected {
-							//fmt.Printf("\t- node #%d: all nodes completed, closing channel\n", nodeIdx)
+							// fmt.Printf("\t- node #%d: all nodes completed, closing channel\n", nodeIdx)
 							stopExecutionFn()
 							return
 						}
@@ -541,7 +542,7 @@ func (e *Executable) executeParallel(execBuf *executionBuffers) error {
 						for _, depIdx := range e.dependents[outputIdx] {
 							execBuf.remainingDeps[depIdx]--
 							if execBuf.remainingDeps[depIdx] == 0 {
-								//fmt.Printf("\t- node #%d: enqueueing #%d (%s) -- a dependency from it's multi-output node #%d\n", nodeIdx, depIdx, e.builder.nodes[depIdx].opType, outputIdx)
+								// fmt.Printf("\t- node #%d: enqueueing #%d (%s) -- a dependency from it's multi-output node #%d\n", nodeIdx, depIdx, e.builder.nodes[depIdx].opType, outputIdx)
 								readyToExecute <- depIdx
 							}
 						}
@@ -552,18 +553,18 @@ func (e *Executable) executeParallel(execBuf *executionBuffers) error {
 					for _, depIdx := range e.dependents[nodeIdx] {
 						execBuf.remainingDeps[depIdx]--
 						if execBuf.remainingDeps[depIdx] == 0 {
-							//fmt.Printf("\t- node #%d: enqueueing #%d (%s), since it has no more dependencies and %d uses\n", nodeIdx, depIdx, e.builder.nodes[depIdx].opType, e.numUses[depIdx])
+							// fmt.Printf("\t- node #%d: enqueueing #%d (%s), since it has no more dependencies and %d uses\n", nodeIdx, depIdx, e.builder.nodes[depIdx].opType, e.numUses[depIdx])
 							readyToExecute <- depIdx
 						}
 					}
 				}
 			}(nodeIdx)
 
-			//fmt.Printf("Execute: starting to process node #%d (%s): inputs=%v\n", nodeIdx, node.opType,
+			// fmt.Printf("Execute: starting to process node #%d (%s): inputs=%v\n", nodeIdx, node.opType,
 			//	xslices.Map(node.inputs, func(input *Node) int { return input.builderIdx }))
 			if execBuf.results[nodeIdx] != nil {
 				// Parameters and multi-output nodes will have their results pre-filled.
-				//fmt.Printf("\t- node #%d (%s) already calculated, skipping\n", nodeIdx, node.opType)
+				// fmt.Printf("\t- node #%d (%s) already calculated, skipping\n", nodeIdx, node.opType)
 				return
 			}
 			if e.numUses[nodeIdx] == 0 {
@@ -577,7 +578,7 @@ func (e *Executable) executeParallel(execBuf *executionBuffers) error {
 				appendErrorFn(err)
 				return
 			}
-			//fmt.Printf("\tnode #%d: executed successfully\n", nodeIdx)
+			// fmt.Printf("\tnode #%d: executed successfully\n", nodeIdx)
 		}
 
 		// Schedule this op (nodeIdx) for execution.
