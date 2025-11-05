@@ -1,0 +1,6 @@
+.gocache
+server
+server.log
+server.pid
+server.port
+main.wasm
