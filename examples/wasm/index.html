@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>GoMLX WASM Example</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #f5f5f5; }
+    h1 { margin: 0 0 30px 0; color: #333; }
+    section { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .inputs { display: flex; gap: 15px; margin-bottom: 20px; align-items: center; }
+    label { display: flex; flex-direction: column; gap: 5px; font-size: 14px; font-weight: 500; color: #555; }
+    input, select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; }
+    input:focus, select:focus { outline: none; border-color: #0066cc; }
+    button { padding: 10px 24px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: 500; }
+    button:hover { background: #0052a3; }
+    #out { margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 4px; border-left: 4px solid #0066cc; font-family: monospace; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>GoMLX WASM Example</h1>
+
+  <section>
+    <div class="inputs">
+      <label>
+        A
+        <input id="a" type="number" step="any" value="1" />
+      </label>
+      <label>
+        B
+        <input id="b" type="number" step="any" value="2" />
+      </label>
+      <label>
+        Operation
+        <select id="op">
+          <option value="add" selected>Add</option>
+          <option value="mul">Multiply</option>
+        </select>
+      </label>
+    </div>
+    <button id="run" type="button">Compute</button>
+  </section>
+
+  <pre id="out">Loading...</pre>
+
+  <script src="wasm_exec.js"></script>
+  <script>
+    if (!WebAssembly.instantiateStreaming) {
+      // Polyfill for browsers that don’t support instantiateStreaming
+      WebAssembly.instantiateStreaming = async (resp, importObject) => {
+        const source = await resp.then(r => r.arrayBuffer());
+        return await WebAssembly.instantiate(source, importObject);
+      };
+    }
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject)
+      .then(result => go.run(result.instance))
+      .catch(err => {
+        const el = document.getElementById("out");
+        el.textContent = "Failed to start WASM: " + err;
+        console.error(err);
+      });
+  </script>
+</body>
+</html>
