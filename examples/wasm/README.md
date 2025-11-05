@@ -11,7 +11,7 @@ This example shows how to:
 
 ## Building and Running
 
-### 1. Copy the WASM runtime helper
+### 1. Copy the WASM runtime helper from your Go installation
 
 ```bash
 cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" .
@@ -23,14 +23,19 @@ cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" .
 GOOS=js GOARCH=wasm go build -o main.wasm main.go
 ```
 
-### 3. Start the server
+### 3. Open in browser
 
-```bash
-go run server.go
-```
-
-### 4. Open in browser
-
-Visit <http://localhost:8080>
+Use any simple server and visit <http://localhost:8080>
 
 You should see an interactive calculator that performs tensor operations (add/multiply) using GoMLX in the browser.
+
+## Files
+
+- `main.go` - WASM application code
+- `index.html` - Web interface
+- `README.md` - This file
+
+## Notes
+
+- The `simplego` backend is portable but slower than XLA backends. This example focuses on portability and browser compatibility.
+- The WASM binary size is ~12MB due to the Go runtime and GoMLX being statically compiled.
