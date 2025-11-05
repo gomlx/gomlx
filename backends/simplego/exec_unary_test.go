@@ -4,10 +4,11 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/gomlx/gomlx/pkg/core/graph"
 )
 
 func TestBackendIsSimpleGo(t *testing.T) {
@@ -15,7 +16,7 @@ func TestBackendIsSimpleGo(t *testing.T) {
 }
 
 func TestExecUnary_Neg(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Neg(x) })
+	exec := graph.MustNewExec(backend, graph.Neg)
 	y0 := exec.MustExec(float32(7))[0]
 	assert.Equal(t, float32(-7), y0.Value())
 	y1 := exec.MustExec([]int32{-1, 2})[0]
@@ -24,7 +25,7 @@ func TestExecUnary_Neg(t *testing.T) {
 }
 
 func TestExecUnary_Abs(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Abs(x) })
+	exec := graph.MustNewExec(backend, graph.Abs)
 	y0 := exec.MustExec(float32(-7))[0]
 	assert.Equal(t, float32(7), y0.Value())
 	y1 := exec.MustExec([]int32{-1, 2})[0]
@@ -34,7 +35,7 @@ func TestExecUnary_Abs(t *testing.T) {
 }
 
 func TestExecUnary_Sign(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Sign(x) })
+	exec := graph.MustNewExec(backend, graph.Sign)
 	y0 := exec.MustExec(float32(-7))[0]
 	assert.Equal(t, float32(-1), y0.Value())
 	y1 := exec.MustExec([]int32{-1, 0, 2})[0]
@@ -44,7 +45,7 @@ func TestExecUnary_Sign(t *testing.T) {
 }
 
 func TestExecUnary_LogicalNot(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.LogicalNot(x) })
+	exec := graph.MustNewExec(backend, graph.LogicalNot)
 	y0 := exec.MustExec(true)[0]
 	assert.Equal(t, false, y0.Value())
 	y1 := exec.MustExec([]bool{true, false, true})[0]
@@ -52,7 +53,7 @@ func TestExecUnary_LogicalNot(t *testing.T) {
 }
 
 func TestExecUnary_BitwiseNot(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.BitwiseNot(x) })
+	exec := graph.MustNewExec(backend, graph.BitwiseNot)
 	y0 := exec.MustExec(int32(7))[0]
 	assert.Equal(t, int32(-8), y0.Value())
 	y1 := exec.MustExec([]int32{-1, 2, 3})[0]
@@ -62,7 +63,7 @@ func TestExecUnary_BitwiseNot(t *testing.T) {
 }
 
 func TestExecUnary_BitCount(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.BitCount(x) })
+	exec := graph.MustNewExec(backend, graph.BitCount)
 	y0 := exec.MustExec(int8(7))[0]
 	assert.Equal(t, int8(3), y0.Value())
 	y1 := exec.MustExec([]int8{-1, 2, 3})[0]
@@ -85,7 +86,7 @@ func TestExecUnary_BitCount(t *testing.T) {
 }
 
 func TestExecUnary_Clz(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Clz(x) })
+	exec := graph.MustNewExec(backend, graph.Clz)
 	y0 := exec.MustExec(int8(7))[0]
 	assert.Equal(t, int8(5), y0.Value())
 	y1 := exec.MustExec([]int8{1, 2, 3})[0]
@@ -108,7 +109,7 @@ func TestExecUnary_Clz(t *testing.T) {
 }
 
 func TestExecUnary_Exp(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Exp(x) })
+	exec := graph.MustNewExec(backend, graph.Exp)
 	y0 := exec.MustExec(float32(1.0))[0]
 	assert.InDelta(t, float32(2.718281828459045), y0.Value(), 1e-6)
 	y1 := exec.MustExec(float64(1.0))[0]
@@ -119,7 +120,7 @@ func TestExecUnary_Exp(t *testing.T) {
 }
 
 func TestExecUnary_Expm1(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Expm1(x) })
+	exec := graph.MustNewExec(backend, graph.Expm1)
 	y0 := exec.MustExec(float32(1.0))[0]
 	assert.InDelta(t, float32(1.71828), y0.Value(), 1e-4)
 	y1 := exec.MustExec(float64(1.0))[0]
@@ -130,7 +131,7 @@ func TestExecUnary_Expm1(t *testing.T) {
 }
 
 func TestExecUnary_Log(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Log(x) })
+	exec := graph.MustNewExec(backend, graph.Log)
 	y0 := exec.MustExec(float32(2.718281828459045))[0]
 	assert.InDelta(t, float32(1.0), y0.Value(), 1e-6)
 	y1 := exec.MustExec(float64(2.718281828459045))[0]
@@ -140,7 +141,7 @@ func TestExecUnary_Log(t *testing.T) {
 }
 
 func TestExecUnary_Log1p(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Log1p(x) })
+	exec := graph.MustNewExec(backend, graph.Log1p)
 	y0 := exec.MustExec(float32(1.718281828459045))[0]
 	assert.InDelta(t, float32(1.0), y0.Value(), 1e-6)
 	y1 := exec.MustExec(float64(1.718281828459045))[0]
@@ -150,7 +151,7 @@ func TestExecUnary_Log1p(t *testing.T) {
 }
 
 func TestExecUnary_Ceil(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Ceil(x) })
+	exec := graph.MustNewExec(backend, graph.Ceil)
 	y0 := exec.MustExec(float32(1.6))[0]
 	assert.Equal(t, float32(2.0), y0.Value())
 	y1 := exec.MustExec(float64(1.6))[0]
@@ -160,7 +161,7 @@ func TestExecUnary_Ceil(t *testing.T) {
 }
 
 func TestExecUnary_Floor(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Floor(x) })
+	exec := graph.MustNewExec(backend, graph.Floor)
 	y0 := exec.MustExec(float32(1.6))[0]
 	assert.Equal(t, float32(1.0), y0.Value())
 	y1 := exec.MustExec(float64(1.6))[0]
@@ -170,7 +171,7 @@ func TestExecUnary_Floor(t *testing.T) {
 }
 
 func TestExecUnary_Round(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Round(x) })
+	exec := graph.MustNewExec(backend, graph.Round)
 	y0 := exec.MustExec(float32(1.6))[0]
 	assert.Equal(t, float32(2.0), y0.Value())
 	y1 := exec.MustExec(float64(1.6))[0]
@@ -180,7 +181,7 @@ func TestExecUnary_Round(t *testing.T) {
 }
 
 func TestExecUnary_Rsqrt(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Rsqrt(x) })
+	exec := graph.MustNewExec(backend, graph.Rsqrt)
 	y0 := exec.MustExec(float32(4.0))[0]
 	assert.InDelta(t, float32(0.5), y0.Value(), 1e-6)
 	y1 := exec.MustExec(float64(4.0))[0]
@@ -190,7 +191,7 @@ func TestExecUnary_Rsqrt(t *testing.T) {
 }
 
 func TestExecUnary_Sqrt(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Sqrt(x) })
+	exec := graph.MustNewExec(backend, graph.Sqrt)
 	y0 := exec.MustExec(float32(4.0))[0]
 	assert.InDelta(t, float32(2.0), y0.Value(), 1e-6)
 	y1 := exec.MustExec(float64(4.0))[0]
@@ -200,7 +201,7 @@ func TestExecUnary_Sqrt(t *testing.T) {
 }
 
 func TestExecUnary_Cos(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Cos(x) })
+	exec := graph.MustNewExec(backend, graph.Cos)
 	y0 := exec.MustExec(float32(0.0))[0]
 	assert.InDelta(t, float32(1.0), y0.Value(), 1e-6)
 	y1 := exec.MustExec(float64(0.0))[0]
@@ -210,7 +211,7 @@ func TestExecUnary_Cos(t *testing.T) {
 }
 
 func TestExecUnary_Sin(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Sin(x) })
+	exec := graph.MustNewExec(backend, graph.Sin)
 	y0 := exec.MustExec(float32(math.Pi / 2))[0]
 	assert.InDelta(t, float32(1.0), y0.Value(), 1e-6)
 	y1 := exec.MustExec(float64(math.Pi / 2))[0]
@@ -220,7 +221,7 @@ func TestExecUnary_Sin(t *testing.T) {
 }
 
 func TestExecUnary_Tanh(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Tanh(x) })
+	exec := graph.MustNewExec(backend, graph.Tanh)
 	y0 := exec.MustExec(float32(0.0))[0]
 	assert.InDelta(t, float32(0.0), y0.Value(), 1e-6)
 	y1 := exec.MustExec(float64(0.0))[0]
@@ -230,7 +231,7 @@ func TestExecUnary_Tanh(t *testing.T) {
 }
 
 func TestExecUnary_Logistic(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Logistic(x) })
+	exec := graph.MustNewExec(backend, graph.Logistic)
 	y0 := exec.MustExec(float32(0.0))[0]
 	assert.InDelta(t, float32(0.5), y0.Value(), 1e-6)
 	y1 := exec.MustExec(float64(2.0))[0]
@@ -240,7 +241,7 @@ func TestExecUnary_Logistic(t *testing.T) {
 }
 
 func TestExecUnary_IsFinite(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.IsFinite(x) })
+	exec := graph.MustNewExec(backend, graph.IsFinite)
 
 	// Test float32
 	y0 := exec.MustExec(float32(1.0))[0]
@@ -262,7 +263,7 @@ func TestExecUnary_IsFinite(t *testing.T) {
 }
 
 func TestExecUnary_Erf(t *testing.T) {
-	exec := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node { return graph.Erf(x) })
+	exec := graph.MustNewExec(backend, graph.Erf)
 	y0 := exec.MustExec(float32(1.0))[0]
 	assert.InDelta(t, float32(0.8427), y0.Value(), 1e-4)
 	y1 := exec.MustExec(float64(1.0))[0]

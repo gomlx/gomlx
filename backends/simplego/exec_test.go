@@ -63,7 +63,7 @@ func TestBuilder_Compile(t *testing.T) {
 	require.True(t, outputShape.Equal(shapes.Make(dtypes.Int64, 3)))
 
 	// Checks correct execution without donated inputs.
-	// Notice the inputs were donated in the last interation, so we have to set them again.
+	// Notice the inputs were donated in the last iteration, so we have to set them again.
 	i0, err = backend.BufferFromFlatData(0, []float32{3, 5, 7}, shapes.Make(dtypes.Float32, 3))
 	require.NoError(t, err)
 	outputs, err = exec.Execute([]backends.Buffer{i0}, []bool{false})
@@ -82,7 +82,7 @@ func TestGomlxIntegration(t *testing.T) {
 	require.NotPanics(t, func() { _ = backend.(*Backend) })
 
 	// Checks that basic graph building and execution works.
-	y := graph.MustExecOnce(backend, func(x *graph.Node) *graph.Node { return graph.Neg(x) }, float32(7))
+	y := graph.MustExecOnce(backend, graph.Neg, float32(7))
 	fmt.Printf("\ty=-x: x=7, y=%s\n", y.GoStr())
 	require.Equal(t, float32(-7), y.Value())
 
