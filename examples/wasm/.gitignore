@@ -1,0 +1,9 @@
+# Build artifacts
+main.wasm
+server
+
+# Go toolchain files
+wasm_exec.js
+
+# Build cache
+.gocache
