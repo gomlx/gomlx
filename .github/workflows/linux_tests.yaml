@@ -27,7 +27,6 @@ on:
 jobs:
   linux-tests:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 

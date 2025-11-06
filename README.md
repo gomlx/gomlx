@@ -1,7 +1,7 @@
 # **_GoMLX_**, an Accelerated ML and Math Framework
 
 [![GoDev](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/gomlx/gomlx?tab=doc)
-[![GitHub](https://img.shields.io/github/license/gomlx/gomlx)](https://github.com/Kwynto/gosession/blob/master/LICENSE)
+[![GitHub](https://img.shields.io/github/license/gomlx/gomlx)](https://github.com/gomlx/gomlx/blob/main/LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/gomlx/gomlx)](https://goreportcard.com/report/github.com/gomlx/gomlx)
 [![Linux Tests](https://github.com/gomlx/gomlx/actions/workflows/linux_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/linux_tests.yaml)
 [![Darwin Tests](https://github.com/gomlx/gomlx/actions/workflows/darwin_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/darwin_tests.yaml)
