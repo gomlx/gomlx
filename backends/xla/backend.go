@@ -274,3 +274,10 @@ func (backend *Backend) BufferData(buffer backends.Buffer) (flat any, err error)
 func (backend *Backend) Capabilities() backends.Capabilities {
 	return backend.capabilities
 }
+
+// BufferCopyToDevice implements the backends.Backend interface. Not implemented for the old xla backend.
+func (backend *Backend) BufferCopyToDevice(source backends.Buffer, deviceNum backends.DeviceNum) (
+	bufferOnDevice backends.Buffer, err error) {
+	return nil, errors.Errorf("backend %q: BufferCopyToDevice not implemented -- maybe "+
+		"use the new XLA's stablehlo backend ?", BackendName)
+}

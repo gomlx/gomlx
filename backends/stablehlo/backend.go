@@ -263,7 +263,13 @@ func (backend *Backend) BufferData(buffer backends.Buffer) (flat any, err error)
 	if err := backend.CheckValid(); err != nil {
 		return nil, err
 	}
-	buf := buffer.(*pjrt.Buffer)
+	buf, ok := buffer.(*pjrt.Buffer)
+	if !ok {
+		return nil, errors.Errorf("buffer is not a %q backend buffer", BackendName)
+	}
+	if err = buf.Check(); err != nil {
+		return nil, err
+	}
 	flat, err = buf.Data()
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to access buffer data directly, maybe not supported by backend?")
@@ -274,4 +280,43 @@ func (backend *Backend) BufferData(buffer backends.Buffer) (flat any, err error)
 // Capabilities returns information about what is supported by this backend.
 func (backend *Backend) Capabilities() backends.Capabilities {
 	return backend.capabilities
+}
+
+// BufferCopyToDevice implements the backends.Backend interface.
+func (backend *Backend) BufferCopyToDevice(source backends.Buffer, deviceNum backends.DeviceNum) (
+	bufferOnDevice backends.Buffer, err error) {
+	if err := backend.CheckValid(); err != nil {
+		return nil, err
+	}
+	srcBuf, ok := source.(*pjrt.Buffer)
+	if !ok {
+		return nil, errors.Errorf("buffer is not a %q backend buffer", BackendName)
+	}
+	if err = srcBuf.Check(); err != nil {
+		return nil, err
+	}
+	var srcDevice *pjrt.Device
+	srcDevice, err = srcBuf.Device()
+	if err != nil {
+		return nil, errors.WithMessagef(err, "backend %q: BufferCopyToDevice failed to get device information", BackendName)
+	}
+
+	devices := backend.client.AddressableDevices()
+	if deviceNum < 0 || int(deviceNum) >= len(devices) {
+		err = errors.Errorf("deviceNum=%d not available for backend, only %d devices are available", deviceNum, len(devices))
+		return
+	}
+	device := devices[deviceNum]
+	if srcDevice == device {
+		return nil, errors.Errorf("backend %q: BufferCopyToDevice source and destination (#%d) "+
+			"are the same device", BackendName, deviceNum)
+	}
+
+	var newBuf *pjrt.Buffer
+	newBuf, err = srcBuf.CopyToDevice(device)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "backend %q: BufferCopyToDevice failed to copy "+
+			"buffer to device", BackendName)
+	}
+	return newBuf, nil
 }

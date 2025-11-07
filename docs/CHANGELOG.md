@@ -5,7 +5,7 @@
 * Added `.golangci.yml` and fixed many (still a long way to go) lint-warnings.
   - Based on https://gist.github.com/maratori/47a4d00457a92aa426dbd48a18776322
 * GitHub actions (workflows):
-  * Renamed tests to "Linux" and "Darwin".
+  * Renamed tests to "Linux" and "Darwin."
   * Updated badges in README.md.
 * Updated dependency to Gopjrt v0.8.5, fixing xlabuilder for new C compilers.
 * Removed `ui/fyneui`:
@@ -19,6 +19,9 @@
 * Package `context`:
   * Added `context.MustGetParam[T](ctx, key)` and `context.MustGetGraphParam[T](ctx, graph, key)`.
 * Added sponsorship badge and section to README.md. Also added the `FUNDING.yml` pointing to sponsorship.
+* Package `backend`:
+  * Added `CopyToDevice`
+
 
 # v0.24.1: 2025/10/23 Adding Darwin (Mac) support for CPU PJRT plugin
 

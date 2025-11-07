@@ -61,4 +61,13 @@ type DataInterface interface {
 	//
 	// The returned slice becomes invalid after the buffer is destroyed.
 	BufferData(buffer Buffer) (flat any, err error)
+
+	// BufferCopyToDevice copies the buffer to the deviceNum.
+	//
+	// Accelerators often have a much faster bus on which to transfer data, so this is expected to be potentially
+	// much faster than copying to the host and to the new device.
+	//
+	// It cannot be used to copy within the same device: it returns an error if the deviceNum is the same as the
+	// source deviceNum.
+	BufferCopyToDevice(source Buffer, deviceNum DeviceNum) (bufferOnDevice Buffer, err error)
 }
