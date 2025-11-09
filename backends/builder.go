@@ -53,8 +53,8 @@ type Builder interface {
 	// StandardOps include all other standard math (or ML) operations.
 	StandardOps
 
-	// CollectiveOps returns the set of collective ops (== cross-device ops) supported by this builder.
-	CollectiveOps() CollectiveOps
+	// CollectiveOps include all collective (distributed cross-device) operations.
+	CollectiveOps
 }
 
 // ConvolveAxesConfig defines the interpretation of the input/kernel/output tensor axes.
