@@ -223,7 +223,7 @@ In the future we plan to also export models to ONNX or StableHLO, and one could 
     - `GOMLX_BACKEND=go`: Use the `SimpleGo` backend, the pure Go implementation that is very portable but slow.
     - `GOMLX_BACKEND="xla:cpu"`: Use XLA (the faster backend, only runs on Linux now) for CPU
     - `GOMLX_BACKEND="xla:cuda"`: Use XLA for for Nvidia CUDA
-    - `GOMLX=BACKEND="xla:/path/to/my/pjrt_plugin.so"`: Use XLA with an arbitrary PJRT. PJRT is a plugin system for XLA to support different hardware.
+    - `GOMLX_BACKEND="xla:/path/to/my/pjrt_plugin.so"`: Use XLA with an arbitrary PJRT. PJRT is a plugin system for XLA to support different hardware.
       One can install PJRTs build for NVIDIA GPUs (there is an installation script for that), there is also one for ROCm (not tested by the author),
       for TPU (Google Cloud) and reports of PJRTs being built to even new accelerators (e.g.: [TensTorrent XLA](https://github.com/tenstorrent/tt-xla))
   - `PJRT_PLUGIN_LIBRARY_PATH`: the underlying XLA backend uses this variable as an extra directory to search for plugin locations.
