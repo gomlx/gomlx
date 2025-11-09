@@ -21,7 +21,9 @@
 * Added sponsorship badge and section to README.md. Also added the `FUNDING.yml` pointing to sponsorship.
 * Package `backend`:
   * Added `CopyToDevice`
-
+  * `Backend.NumDevices()` returns an int now.
+* Package `pkg/core/distributed`:
+  * Added `DeviceMesh`, `ShardSpec` and `distributed.Tensor` objects.
 
 # v0.24.1: 2025/10/23 Adding Darwin (Mac) support for CPU PJRT plugin
 
