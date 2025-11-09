@@ -67,7 +67,7 @@ func NewDeviceMesh(backend backends.Backend, shape []int, axisNames []string) (*
 		nameToAxis[name] = i
 		numDevices *= shape[i]
 	}
-	if numDevices > int(backend.NumDevices()) {
+	if numDevices > backend.NumDevices() {
 		return nil, errors.Errorf("DeviceMesh has %d devices, but the backend only has %d devices", numDevices, backend.NumDevices())
 	}
 
@@ -142,7 +142,7 @@ func (m *DeviceMesh) SetDeviceMapping(devicesInMesh ...backends.DeviceNum) error
 	if len(devicesInMesh) != m.numDevices {
 		return errors.Errorf("devicesInMesh must have %d elements, got %d", m.numDevices, len(devicesInMesh))
 	}
-	numPhysicalDevices := int(m.backend.NumDevices())
+	numPhysicalDevices := m.backend.NumDevices()
 	seen := sets.Make[backends.DeviceNum](m.numDevices)
 	for _, device := range devicesInMesh {
 		if seen.Has(device) {

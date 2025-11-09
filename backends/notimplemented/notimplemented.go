@@ -37,7 +37,7 @@ func (b *Backend) Description() string {
 }
 
 // NumDevices returns 1 as the number of devices available.
-func (b *Backend) NumDevices() backends.DeviceNum {
+func (b *Backend) NumDevices() int {
 	return 1
 }
 

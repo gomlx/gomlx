@@ -12,15 +12,15 @@ import (
 // mockBackend is a simple mock backend for testing.
 type mockBackend struct {
 	notimplemented.Backend
-	numDevices backends.DeviceNum
+	numDevices int
 }
 
-func (m *mockBackend) NumDevices() backends.DeviceNum {
+func (m *mockBackend) NumDevices() int {
 	return m.numDevices
 }
 
 func newMockBackend(numDevices int) backends.Backend {
-	return &mockBackend{numDevices: backends.DeviceNum(numDevices)}
+	return &mockBackend{numDevices: numDevices}
 }
 
 func TestNewDeviceMesh_Valid(t *testing.T) {

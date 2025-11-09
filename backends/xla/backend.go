@@ -61,11 +61,11 @@ func (backend *Backend) Description() string {
 }
 
 // NumDevices return the number of devices available for this Backend.
-func (backend *Backend) NumDevices() backends.DeviceNum {
+func (backend *Backend) NumDevices() int {
 	if backend.CheckValid() != nil {
 		return 0
 	}
-	return backends.DeviceNum(backend.numDevices)
+	return backend.numDevices
 }
 
 // DeviceDescription returns a description of the deviceNum.
