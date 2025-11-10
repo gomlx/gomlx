@@ -19,6 +19,7 @@ import (
 type Backend struct {
 	plugin           *pjrt.Plugin
 	client           *pjrt.Client
+	numDevices       int
 	pluginName       string
 	hasSharedBuffers bool
 	capabilities     backends.Capabilities
@@ -60,11 +61,27 @@ func (backend *Backend) Description() string {
 }
 
 // NumDevices return the number of devices available for this Backend.
-func (backend *Backend) NumDevices() backends.DeviceNum {
+func (backend *Backend) NumDevices() int {
 	if backend.CheckValid() != nil {
 		return 0
 	}
-	return backends.DeviceNum(len(backend.client.AddressableDevices()))
+	return backend.numDevices
+}
+
+// DeviceDescription returns a description of the deviceNum.
+func (backend *Backend) DeviceDescription(deviceNum backends.DeviceNum) string {
+	if backend.CheckValid() != nil {
+		return fmt.Sprintf("%s: in an invalid state!", BackendName)
+	}
+	if int(deviceNum) >= backend.numDevices || int(deviceNum) < 0 {
+		return fmt.Sprintf("invalid deviceNum %d", deviceNum)
+	}
+	pjrtDevice := backend.client.AddressableDevices()[int(deviceNum)]
+	pjrtDesc, err := pjrtDevice.GetDescription()
+	if err != nil {
+		return fmt.Sprintf("failed to get description for device %d: %v", deviceNum, err)
+	}
+	return fmt.Sprintf("%s [processId=%d]", pjrtDesc.DebugString(), pjrtDesc.ProcessIndex())
 }
 
 // Finalize releases all the associated resources immediately, and makes the backend invalid.
@@ -256,4 +273,11 @@ func (backend *Backend) BufferData(buffer backends.Buffer) (flat any, err error)
 // Capabilities returns information about what is supported by this backend.
 func (backend *Backend) Capabilities() backends.Capabilities {
 	return backend.capabilities
+}
+
+// BufferCopyToDevice implements the backends.Backend interface. Not implemented for the old xla backend.
+func (backend *Backend) BufferCopyToDevice(source backends.Buffer, deviceNum backends.DeviceNum) (
+	bufferOnDevice backends.Buffer, err error) {
+	return nil, errors.Errorf("backend %q: BufferCopyToDevice not implemented -- maybe "+
+		"use the new XLA's stablehlo backend ?", BackendName)
 }

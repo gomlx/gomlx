@@ -9,11 +9,110 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
 
 // NotImplementedError is returned by every method.
 var NotImplementedError = fmt.Errorf("not implemented")
+
+// Backend is a dummy backend that can be imported to create mock backends.
+type Backend struct{}
+
+var _ backends.Backend = &Backend{}
+
+// Name returns the short name of the backend.
+func (b *Backend) Name() string {
+	return "notimplemented"
+}
+
+// String returns the same as Name.
+func (b *Backend) String() string {
+	return b.Name()
+}
+
+// Description is a longer description of the Backend.
+func (b *Backend) Description() string {
+	return "Not Implemented Backend (mock backend for testing)"
+}
+
+// NumDevices returns 1 as the number of devices available.
+func (b *Backend) NumDevices() int {
+	return 1
+}
+
+// DeviceDescription returns a description of the device.
+func (b *Backend) DeviceDescription(deviceNum backends.DeviceNum) string {
+	return fmt.Sprintf("Not Implemented Device %d", deviceNum)
+}
+
+// Capabilities returns empty capabilities.
+func (b *Backend) Capabilities() backends.Capabilities {
+	return backends.Capabilities{
+		Operations: make(map[backends.OpType]bool),
+		DTypes:     make(map[dtypes.DType]bool),
+	}
+}
+
+// Builder creates a new builder.
+func (b *Backend) Builder(name string) backends.Builder {
+	return Builder{}
+}
+
+// BufferFinalize returns NotImplementedError.
+func (b *Backend) BufferFinalize(buffer backends.Buffer) error {
+	return errors.Wrapf(NotImplementedError, "in BufferFinalize()")
+}
+
+// BufferShape returns NotImplementedError.
+func (b *Backend) BufferShape(buffer backends.Buffer) (shapes.Shape, error) {
+	return shapes.Invalid(), errors.Wrapf(NotImplementedError, "in BufferShape()")
+}
+
+// BufferDeviceNum returns NotImplementedError.
+func (b *Backend) BufferDeviceNum(buffer backends.Buffer) (backends.DeviceNum, error) {
+	return 0, errors.Wrapf(NotImplementedError, "in BufferDeviceNum()")
+}
+
+// BufferToFlatData returns NotImplementedError.
+func (b *Backend) BufferToFlatData(buffer backends.Buffer, flat any) error {
+	return errors.Wrapf(NotImplementedError, "in BufferToFlatData()")
+}
+
+// BufferFromFlatData returns NotImplementedError.
+func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) (backends.Buffer, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in BufferFromFlatData()")
+}
+
+// HasSharedBuffers returns false.
+func (b *Backend) HasSharedBuffers() bool {
+	return false
+}
+
+// NewSharedBuffer panics as shared buffers are not supported.
+func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer, flat any, err error) {
+	return nil, nil, errors.Wrapf(NotImplementedError, "in NewSharedBuffer()")
+}
+
+// BufferData returns NotImplementedError.
+func (b *Backend) BufferData(buffer backends.Buffer) (flat any, err error) {
+	return nil, errors.Wrapf(NotImplementedError, "in BufferData()")
+}
+
+// BufferCopyToDevice returns NotImplementedError.
+func (b *Backend) BufferCopyToDevice(source backends.Buffer, deviceNum backends.DeviceNum) (bufferOnDevice backends.Buffer, err error) {
+	return nil, errors.Wrapf(NotImplementedError, "in BufferCopyToDevice()")
+}
+
+// Finalize does nothing for this dummy backend.
+func (b *Backend) Finalize() {
+	// No-op for dummy backend
+}
+
+// IsFinalized always returns false for this dummy backend.
+func (b *Backend) IsFinalized() bool {
+	return false
+}
 
 // Builder implements backends.Builder and returns the NotImplementedError wrapped with the stack-trace,
 // the operation name, and the custom message Builder.ErrMessage for every operation.

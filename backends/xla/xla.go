@@ -99,6 +99,7 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		client:       client,
 		pluginName:   pluginName,
 		capabilities: CPUCapabilities.Clone(),
+		numDevices:   len(client.AddressableDevices()),
 	}
 
 	// Support "shared buffers":

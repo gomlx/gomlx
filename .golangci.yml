@@ -1,34 +1,11 @@
 # This file is licensed under the terms of the MIT license https://opensource.org/license/mit
 # Copyright (c) 2021-2025 Marat Reymers
 
-## Golden config for golangci-lint v2.5.0
-#
-# This is the best config for golangci-lint based on my experience and opinion.
-# It is very strict, but not extremely strict.
-# Feel free to adapt it to suit your needs.
-# If this config helps you, please consider keeping a link to this file (see the next comment).
-
 # Based on https://gist.github.com/maratori/47a4d00457a92aa426dbd48a18776322
-
 version: "2"
 
 issues:
-  # Maximum count of issues with the same text.
-  # Set to 0 to disable.
-  # Default: 3
   max-same-issues: 20
-
-  exclude-rules:
-    - path: 'gen_.*\.go$'
-      linters:
-        - dupl
-
-    - path: '(.+)_test\.go$'
-      linters:
-        - nakedret
-        - mnd
-        - funlen
-        - dupl
 
 formatters:
   enable:
@@ -59,9 +36,9 @@ linters:
   enable:
     - asasalint # checks for pass []any as any in variadic func(...any)
     - asciicheck # checks that your code does not contain non-ASCII identifiers
-    - bidichk # checks for dangerous unicode character sequences
-    - bodyclose # checks whether HTTP response body is closed successfully
-    - canonicalheader # checks whether net/http.Header uses canonical header
+    - bidichk # checks for dangerous Unicode character sequences
+    - bodyclose # checks whether an HTTP response body is closed successfully
+    - canonicalheader # checks whether net/http.Header uses a canonical header
     - copyloopvar # detects places where loop variables are copied (Go 1.22+)
     - cyclop # checks function and package cyclomatic complexity
     - depguard # checks if package imports are in a list of acceptable packages
@@ -78,8 +55,6 @@ linters:
     - funcorder # checks the order of functions, methods, and constructors
     - funlen # tool for detection of long functions
     - gocheckcompilerdirectives # validates go compiler directive comments (//go:)
-    - gochecknoglobals # checks that no global variables exist
-    - gochecknoinits # checks that no init functions are present in Go code
     - gochecksumtype # checks exhaustiveness on Go "sum types"
     - gocognit # computes and checks the cognitive complexity of functions
     - goconst # finds repeated strings that could be replaced by a constant
@@ -140,6 +115,8 @@ linters:
     #- exhaustruct # [highly recommend to enable] checks if all structure fields are initialized
     #- ginkgolinter # [if you use ginkgo/gomega] enforces standards of using ginkgo and gomega
     #- godox # detects usage of FIXME, TODO and other keywords inside comments
+    #- gochecknoglobals # checks that no global variables exist
+    #- gochecknoinits # checks that no init functions are present in Go code
     #- goheader # checks is file header matches to pattern
     #- inamedparam # [great idea, but too strict, need to ignore a lot of cases by default] reports interfaces with unnamed method parameters
     #- interfacebloat # checks the number of methods inside an interface
@@ -347,7 +324,7 @@ linters:
         shadow:
           # Whether to be strict about shadowing; can be noisy.
           # Default: false
-          strict: true
+          strict: false
 
     inamedparam:
       # Skips check for interface methods with only a single parameter.
@@ -448,35 +425,38 @@ linters:
       os-temp-dir: true
 
   exclusions:
-    # Log a warning if an exclusion rule is unused.
-    # Default: false
     warn-unused: true
-    # Predefined exclusion rules.
-    # Default: []
     presets:
+      - comments
       - std-error-handling
       - common-false-positives
-    # Excluding configuration per-path, per-linter, per-text and per-source.
     rules:
-      - source: 'TODO'
-        linters: [ godot ]
-      - text: 'should have a package comment'
-        linters: [ revive ]
-      - text: 'exported \S+ \S+ should have comment( \(or a comment on this block\))? or be unexported'
-        linters: [ revive ]
-      - text: 'package comment should be of the form ".+"'
-        source: '// ?(nolint|TODO)'
-        linters: [ revive ]
-      - text: 'comment on exported \S+ \S+ should be of the form ".+"'
-        source: '// ?(nolint|TODO)'
-        linters: [ revive, staticcheck ]
-      - path: '_test\.go'
-        linters:
-          - bodyclose
-          - dupl
-          - errcheck
-          - funlen
-          - goconst
-          - gosec
-          - noctx
-          - wrapcheck
+    - path: _test\.go$
+      linters:
+        - bodyclose
+        - dupl
+        - errcheck
+        - forbidigo
+        - funlen
+        - goconst
+        - gosec
+        - govet
+        - mnd
+        - nakedret
+        - noctx
+        - wrapcheck
+    - path: 'gen_.*\.go$'
+      linters:
+        - dupl
+    - source: 'TODO'
+      linters: [ godot ]
+    - text: 'should have a package comment'
+      linters: [ revive ]
+    - text: 'exported \S+ \S+ should have comment( \(or a comment on this block\))? or be unexported'
+      linters: [ revive ]
+    - text: 'package comment should be of the form ".+"'
+      source: '// ?(nolint|TODO)'
+      linters: [ revive ]
+    - text: 'comment on exported \S+ \S+ should be of the form ".+"'
+      source: '// ?(nolint|TODO)'
+      linters: [ revive, staticcheck ]

@@ -2,23 +2,30 @@
 
 # Next
 
-* Added `.golangci.yml` and fixed many (still a long way to go) lint-warnings.
+- Added `.golangci.yml` and fixed many (still a long way to go) lint-warnings.
   - Based on https://gist.github.com/maratori/47a4d00457a92aa426dbd48a18776322
-* GitHub actions (workflows):
-  * Renamed tests to "Linux" and "Darwin".
-  * Updated badges in README.md.
-* Updated dependency to Gopjrt v0.8.5, fixing xlabuilder for new C compilers.
-* Removed `ui/fyneui`:
-  * It was incomplete, and it would be better offered as a separate package to avoid the dependencies.
-* Package `graph`:
-  * Fixed/improved documentation.
-  * Added `IsNegative`, `IsPositive`, `IsNonNegative`, `IsNonPositive`.
-  * Added `SubScalar` and tests for the '*Scalar' functions.
-* Package `cosineschedule`:
-  * Added `WarmUpSteps` and `NumCycles` hyperparameters -- removed overloading of `periodSteps`.
-* Package `context`:
-  * Added `context.MustGetParam[T](ctx, key)` and `context.MustGetGraphParam[T](ctx, graph, key)`.
-* Added sponsorship badge and section to README.md. Also added the `FUNDING.yml` pointing to sponsorship.
+- GitHub actions (workflows):
+  - Renamed tests to "Linux" and "Darwin."
+  - Updated badges in README.md.
+- Updated dependency to Gopjrt v0.8.5, fixing xlabuilder for new C compilers.
+- Removed `ui/fyneui`:
+  - It was incomplete, and it would be better offered as a separate package to avoid the dependencies.
+- Package `graph`:
+  - Fixed/improved documentation.
+  - Added `IsNegative`, `IsPositive`, `IsNonNegative`, `IsNonPositive`.
+  - Added `SubScalar` and tests for the '*Scalar' functions.
+- Package `cosineschedule`:
+  - Added `WarmUpSteps` and `NumCycles` hyperparameters -- removed overloading of `periodSteps`.
+- Package `context`:
+  - Added `context.MustGetParam[T](ctx, key)` and `context.MustGetGraphParam[T](ctx, graph, key)`.
+- Added sponsorship badge and section to README.md. Also added the `FUNDING.yml` pointing to sponsorship.
+- Package `backend`:
+  - Added `CopyToDevice`
+  - `Backend.NumDevices()` returns an int now.
+- Package `pkg/core/distributed`:
+  -Added `DeviceMesh`, `ShardSpec` and `distributed.Tensor` objects.
+- Package `backends/notimplemented`:
+  - Added dummy `Backend` that can be used to easily mock backends.
 
 # v0.24.1: 2025/10/23 Adding Darwin (Mac) support for CPU PJRT plugin
 

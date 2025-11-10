@@ -333,3 +333,10 @@ func (b *Backend) BufferData(buffer backends.Buffer) (flat any, err error) {
 	}
 	return buf.flat, nil
 }
+
+// BufferCopyToDevice implements the backends.Backend interface.
+func (b *Backend) BufferCopyToDevice(source backends.Buffer, deviceNum backends.DeviceNum) (
+	bufferOnDevice backends.Buffer, err error) {
+	return nil, errors.Errorf("backend %q: multi-device not supported on this backend",
+		BackendName)
+}

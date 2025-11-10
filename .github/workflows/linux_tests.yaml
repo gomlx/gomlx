@@ -27,7 +27,6 @@ on:
 jobs:
   linux-tests:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -37,11 +36,15 @@ jobs:
           go-version: "1.25.x"
 
       - name: Install gopjrt shared libraries
+        # Here we install the binaries from v0.9.0 because they are the last version to include `xlabuilder` needed
+        # by the `oldxla` backend (`backends/xla` package).
+        # Then it installs over the latest version of CPU PJRT.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           go install github.com/gomlx/gopjrt/cmd/gopjrt_installer@latest
+          sudo env GH_TOKEN=$GH_TOKEN $(go env GOPATH)/bin/gopjrt_installer -plugin linux -version v0.9.0 -path /usr/local
           sudo env GH_TOKEN=$GH_TOKEN $(go env GOPATH)/bin/gopjrt_installer -plugin linux -version latest -path /usr/local
 
       - name: PreTest
