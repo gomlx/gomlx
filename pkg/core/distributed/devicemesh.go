@@ -13,7 +13,7 @@ import (
 
 // DeviceMesh defines the logical topology of a set of devices on a backend.
 //
-// For the initial "SimpleSPMD" implementation, we only support a 1D mesh,
+// For the initial "SPMD" implementation, we only support a 1D mesh,
 // which represents data parallelism (replicas).
 type DeviceMesh struct {
 	backend backends.Backend
@@ -42,7 +42,7 @@ type DeviceMesh struct {
 // - shape: defines the number of devices along each mesh axis, one value per axis.
 // - axisNames: the names of the mesh axes. One value per axis.
 //
-// For the "SimpleSPMD" Strategy the shape should be 1D, e.g., NewDeviceMesh([]int{8}, []string{"replica"}).
+// For the "SPMD" Strategy the shape should be 1D, e.g., NewDeviceMesh([]int{8}, []string{"replica"}).
 //
 // The default mapping of concrete devices to the mesh is sequential, starting from 0.
 // For non-symmetric devices, where connection speed among the devices matter, a custom mapping can be provided
@@ -135,16 +135,16 @@ func (m *DeviceMesh) String() string {
 	return sb.String()
 }
 
-// SetDeviceMapping sets the mapping of concrete devices to the mesh.
+// SetDeviceAssignment sets the assignment of concrete devices to the mesh.
 //
-// It returns an error if devicesInMesh has invalid device numbers or len(devicesInMessh) != NumDevices().
-func (m *DeviceMesh) SetDeviceMapping(devicesInMesh ...backends.DeviceNum) error {
-	if len(devicesInMesh) != m.numDevices {
-		return errors.Errorf("devicesInMesh must have %d elements, got %d", m.numDevices, len(devicesInMesh))
+// It returns an error if devicesInMesh has invalid device numbers or len(devices) != NumDevices().
+func (m *DeviceMesh) SetDeviceAssignment(devices ...backends.DeviceNum) error {
+	if len(devices) != m.numDevices {
+		return errors.Errorf("devices must have %d elements, got %d", m.numDevices, len(devices))
 	}
 	numPhysicalDevices := m.backend.NumDevices()
 	seen := sets.Make[backends.DeviceNum](m.numDevices)
-	for _, device := range devicesInMesh {
+	for _, device := range devices {
 		if seen.Has(device) {
 			return errors.Errorf("physical device #%d is duplicated in mapping", device)
 		}
@@ -153,12 +153,17 @@ func (m *DeviceMesh) SetDeviceMapping(devicesInMesh ...backends.DeviceNum) error
 			return errors.Errorf("device %d is out of range, backend only has %d devices", device, numPhysicalDevices)
 		}
 	}
-	copy(m.devicesInMesh, devicesInMesh)
+	copy(m.devicesInMesh, devices)
 	m.buildPhysicalDeviceMapping()
 	if len(m.physicalDeviceMapping) != m.numDevices {
 		return errors.Errorf("provided devicesIn: physicalDeviceMapping has %d elements, expected %d", len(m.physicalDeviceMapping), m.numDevices)
 	}
 	return nil
+}
+
+// DeviceAssignment returns the list of devices in the mesh, in the order they appear in the mesh.
+func (m *DeviceMesh) DeviceAssignment() []backends.DeviceNum {
+	return slices.Clone(m.devicesInMesh)
 }
 
 // DeviceToMesh return the indices (flat and per-axis) assigned to the given physicalDevice.

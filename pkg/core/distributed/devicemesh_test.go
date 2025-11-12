@@ -253,7 +253,7 @@ func TestDeviceMesh_SetDeviceMapping_Valid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := mesh.SetDeviceMapping(tt.devices...)
+			err := mesh.SetDeviceAssignment(tt.devices...)
 			require.NoError(t, err)
 
 			// Verify mapping is applied correctly
@@ -301,7 +301,7 @@ func TestDeviceMesh_SetDeviceMapping_Errors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := mesh.SetDeviceMapping(tt.devices...)
+			err := mesh.SetDeviceAssignment(tt.devices...)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
@@ -387,7 +387,7 @@ func TestDeviceMesh_DeviceToMesh_WithCustomMapping(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set custom mapping: devices [7, 5, 3, 1]
-	err = mesh.SetDeviceMapping(7, 5, 3, 1)
+	err = mesh.SetDeviceAssignment(7, 5, 3, 1)
 	require.NoError(t, err)
 
 	tests := []struct {
