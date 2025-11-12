@@ -50,6 +50,19 @@ type Builder interface {
 	// even if constants, that they are passed as side inputNodes (or variables, see context package) instead.
 	Constant(flat any, dims ...int) (Op, error)
 
+	// DistributedSPMD creates a computation that will be executed on multiple devices in SPMD fashion
+	// (SPMD = single program, multiple data).
+	//
+	// Use DeviceAssignment to assign the devices to the computation -- the default assignment is incremental
+	// devices starting from 0.
+	DistributedSPMD(numDevices int) error
+
+	// DeviceAssignment assigns the devices to the computation.
+	//
+	// The number of devices must match the number of devices in the computation.
+	// Usually, that is 1. But if DistributedSPMD was used, it can be more.
+	DeviceAssignment(devices ...DeviceNum) error
+
 	// StandardOps include all other standard math (or ML) operations.
 	StandardOps
 

@@ -140,6 +140,17 @@ func (b Builder) Name() string {
 	return "Dummy \"not implemented\" backend, please override this method"
 }
 
+func (b Builder) DistributedSPMD(numDevices int) error {
+	return errors.Wrapf(NotImplementedError, "in DistributedSPMD()")
+}
+
+func (b Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
+	if len(devices) != 1 && devices[0] != backends.DeviceNum(0) {
+		return errors.Wrapf(NotImplementedError, "in DeviceAssignment()")
+	}
+	return nil
+}
+
 func (b Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 	return nil, errors.Wrapf(NotImplementedError, "in Compile()")
 }

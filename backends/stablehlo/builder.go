@@ -171,6 +171,29 @@ func (b *Builder) Constant(flat any, dimensions ...int) (backends.Op, error) {
 	return b.newNode(value), nil
 }
 
+// DistributedSPMD creates a computation that will be executed on multiple devices in SPMD fashion
+// (SPMD = single program, multiple data).
+func (b *Builder) DistributedSPMD(numDevices int) error {
+	if err := b.CheckValid(); err != nil {
+		return err
+	}
+	if b.compiled {
+		return errors.Errorf("DistributedSPMD cannot be called after the computation has been compiled")
+	}
+	return errors.Errorf("DistributedSPMD is not supported by the deprecated %q backend", BackendName)
+}
+
+// DeviceAssignment assigns the devices to the computation.
+//
+// The number of devices must match the number of devices in the computation.
+// Usually, that is 1. But if DistributedSPMD was used, it can be more.
+func (b *Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
+	if len(devices) != 1 && devices[0] != backends.DeviceNum(0) {
+		return errors.Errorf("DeviceAssignment for %q expects a single device #0, got %d", BackendName, len(devices))
+	}
+	return nil
+}
+
 func broadcastShapeForBinaryOps(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (output shapes.Shape, err error) {
 	if lhsShape.IsScalar() {
 		return rhsShape, nil

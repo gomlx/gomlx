@@ -5,7 +5,9 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/pkg/errors"
@@ -20,6 +22,9 @@ type Builder struct {
 
 	parameterNames  []string
 	parameterShapes []shapes.Shape
+
+	distributedStrategy distributed.Strategy
+	numReplicas         int
 }
 
 var _ backends.Builder = (*Builder)(nil)
@@ -40,6 +45,30 @@ func (backend *Backend) Builder(name string) backends.Builder {
 // Name of the computation being built.
 func (b *Builder) Name() string {
 	return b.name
+}
+
+// DistributedSPMD creates a computation that will be executed on multiple devices in SPMD fashion
+// (SPMD = single program, multiple data).
+func (b *Builder) DistributedSPMD(numDevices int) error {
+	if numDevices > b.backend.numDevices {
+		return errors.Errorf("DistributedSPMD for %q expects a number of devices <= %d, got %d",
+			b.backend, b.backend.numDevices, numDevices)
+	}
+	b.distributedStrategy = distributed.SPMD
+	b.numReplicas = numDevices
+	devices := xslices.Iota(backends.DeviceNum(0), numDevices)
+	return b.DeviceAssignment(devices...)
+}
+
+// DeviceAssignment assigns the devices to the computation.
+//
+// The number of devices must match the number of devices in the computation.
+// Usually, that is 1. But if DistributedSPMD was used, it can be more.
+func (b *Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
+	if len(devices) != 1 && devices[0] != backends.DeviceNum(0) {
+		return errors.Errorf("DeviceAssignment for %q expects a single device #0, got %d", BackendName, len(devices))
+	}
+	return nil
 }
 
 // castToXlaOp casts the op to xlabuilder.Op and panics if not possible.
