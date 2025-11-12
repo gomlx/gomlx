@@ -109,6 +109,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/sets"
@@ -151,6 +152,10 @@ type Graph struct {
 
 	// Compiled Graph
 	executable backends.Executable
+
+	// Distributed computation
+	distStrategy distributed.Strategy
+	deviceMesh   *distributed.DeviceMesh
 }
 
 // GraphId is globally unique.
