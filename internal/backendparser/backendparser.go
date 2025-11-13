@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
@@ -50,6 +51,10 @@ func ParseBuilder() ([]Method, error) {
 	if err != nil {
 		return nil, err
 	}
+	collectiveOpsFile, err := parser.ParseFile(fileSet, filepath.Join(root, "backends", "collectiveops.go"), nil, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
 
 	// File contents cache
 	fileCache := make(map[string][]byte)
@@ -78,11 +83,12 @@ func ParseBuilder() ([]Method, error) {
 	}
 
 	// Helper to extract methods from interface declarations
+	includeInterfaces := []string{"Builder", "StandardOps", "CollectiveOps"}
 	extractMethods := func(file *ast.File) {
 		ast.Inspect(file, func(n ast.Node) bool {
 			if typeSpec, ok := n.(*ast.TypeSpec); ok {
 				if interfaceType, ok := typeSpec.Type.(*ast.InterfaceType); ok {
-					if typeSpec.Name.Name != "Builder" && typeSpec.Name.Name != "StandardOps" {
+					if slices.Index(includeInterfaces, typeSpec.Name.Name) == -1 {
 						return true
 					}
 					for _, method := range interfaceType.Methods.List {
@@ -140,6 +146,7 @@ func ParseBuilder() ([]Method, error) {
 
 	extractMethods(builderFile)
 	extractMethods(standardOpsFile)
+	extractMethods(collectiveOpsFile)
 
 	return methods, nil
 }

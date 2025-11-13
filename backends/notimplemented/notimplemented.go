@@ -190,3 +190,7 @@ func (b Builder) BatchNormForTraining(operand, scale, offset backends.Op, epsilo
 func (b Builder) BatchNormGradient(operand, scale, mean, variance, gradOutput backends.Op, epsilon float32, axis int) (gradOperand, gradScale, gradOffset backends.Op, err error) {
 	return nil, nil, nil, b.baseErrFn(backends.OpTypeBatchNormGradient)
 }
+
+func (b Builder) AllReduce(inputs []*backends.Op, reduceOp backends.ReduceOpType, replicaGroups [][]int, channelID int) ([]*backends.Op, error) {
+	return nil, b.baseErrFn(backends.OpTypeAllReduce)
+}

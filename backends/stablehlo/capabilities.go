@@ -119,6 +119,9 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeSlice:                 true,
 		backends.OpTypeTranspose:             true,
 		backends.OpTypeWhere:                 true,
+
+		// Collective (distributed across devices) operations:
+		backends.OpTypeAllReduce: true,
 	},
 
 	DTypes: map[dtypes.DType]bool{
