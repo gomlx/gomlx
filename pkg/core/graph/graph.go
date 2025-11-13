@@ -154,8 +154,9 @@ type Graph struct {
 	executable backends.Executable
 
 	// Distributed computation
-	distStrategy distributed.Strategy
-	deviceMesh   *distributed.DeviceMesh
+	distStrategy     distributed.Strategy
+	deviceMesh       *distributed.DeviceMesh
+	currentChannelID int
 }
 
 // GraphId is globally unique.

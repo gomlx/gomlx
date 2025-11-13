@@ -36,6 +36,14 @@ func (g *Graph) DeviceMesh() *distributed.DeviceMesh {
 	return g.deviceMesh
 }
 
+// nextChannelID returns the next channel ID to use for synchronization.
+// This should be unique, and we use them incrementally.
+func (g *Graph) nextChannelID() int {
+	next := g.currentChannelID
+	g.currentChannelID++
+	return next
+}
+
 // DistributedOps provides a namespace for all distributed and collective
 // operations on a graph. It is accessed via graph.Graph.Distributed().
 //
@@ -44,11 +52,15 @@ func (g *Graph) DeviceMesh() *distributed.DeviceMesh {
 type DistributedOps struct {
 	g    *Graph
 	axes []string // Stores the mesh axes for the next op.
+
+	// channelID is used a unique id for channel synchronization.
+	// If nil, it will use the Graph's incremental channelID.
+	channelID *int
 }
 
 // Distributed returns a helper object that provides access to all distributed and collective operations.
 func (g *Graph) Distributed() DistributedOps {
-	d := &DistributedOps{g: g}
+	d := DistributedOps{g: g}
 	switch g.distStrategy {
 	case distributed.SPMD:
 		if g.deviceMesh == nil {
@@ -72,17 +84,28 @@ func (g *Graph) Distributed() DistributedOps {
 //
 // This will perform an AllReduce along the "data" axis of the mesh.
 func (d DistributedOps) Along(meshAxes ...string) DistributedOps {
-	return DistributedOps{
-		g:    d.g,
-		axes: meshAxes,
-	}
+	dOut := d
+	dOut.axes = meshAxes
+	return dOut
+}
+
+// OnChannel specifies the channel ID to use for synchronization.
+// All communicating devices must use the same channel ID, so it must be agreed upon in some fashion.
+//
+// For SPMD programs, you usually don't need to use this, since the default is to use an incremental
+// channelID. And since it's the same Graph executed in every device, it's usually fine.
+func (d DistributedOps) OnChannel(channelID int) DistributedOps {
+	dOut := d
+	dOut.channelID = &channelID
+	return dOut
 }
 
 // AllReduce performs an AllReduce operation across the devices specified
 // in the chained options.
 //
-// If no axes were specified via .Along(), it performs the operation
+// If no axes were specified via DistributedOps.Along(), it performs the operation
 // across *all* devices in the mesh.
+// If no channelID was specified via DistributedOps.OnChannel(), it uses the Graph's incremental channelID.
 func (d DistributedOps) AllReduce(op backends.ReduceOpType, input *Node) *Node {
 	return d.AllReduceMany(op, []*Node{input})[0]
 }
