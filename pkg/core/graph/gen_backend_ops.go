@@ -20,6 +20,7 @@ const (
 	NodeTypeSplitNode
 	NodeTypeAbs
 	NodeTypeAdd
+	NodeTypeAllReduce
 	NodeTypeArgMinMax
 	NodeTypeBatchNormForInference
 	NodeTypeBatchNormForTraining
@@ -189,6 +190,56 @@ func Add(lhs *Node, rhs *Node) (node *Node) {
 		rhs: rhs,
 	}
 	result, err := g.builder.Add(lhs.outputOps[0], rhs.outputOps[0])
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsAllReduce holds the inputs used for the call to backends.AllReduce.
+type nodeInputsAllReduce struct {
+	operands      []*Node
+	reduceOp      ReduceOpType
+	replicaGroups [][]int
+	channelID     int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsAllReduce) Type() NodeType {
+	return NodeTypeAllReduce
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsAllReduce) String() string {
+	return fmt.Sprintf("%s(operands=[#%s], reduceOp=%v, replicaGroups=%v, channelID=%v)",
+		ni.Type(),
+		strings.Join(xslices.Map(ni.operands, func(node *Node) string { return fmt.Sprintf("#%d", node.Id()) }), ", "),
+		ni.reduceOp,
+		ni.replicaGroups,
+		ni.channelID,
+	)
+}
+
+// backendAllReduce is a Graph wrapper for the backend.Builder.AllReduce method.
+func backendAllReduce(operands []*Node, reduceOp ReduceOpType, replicaGroups [][]int, channelID int) (node *Node) {
+	inputNodes := []*Node{}
+	inputNodes = append(inputNodes, operands...)
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsAllReduce{
+		operands:      slices.Clone(operands),
+		reduceOp:      reduceOp,
+		replicaGroups: replicaGroups,
+		channelID:     channelID,
+	}
+	result, err := g.builder.AllReduce(xslices.Map(operands, func(node *Node) backends.Op { return node.outputOps[0] }), inputs.reduceOp, inputs.replicaGroups, inputs.channelID)
 	if err != nil {
 		panic(err)
 	}

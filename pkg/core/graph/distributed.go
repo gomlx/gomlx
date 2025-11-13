@@ -4,6 +4,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
+	"github.com/pkg/errors"
 )
 
 // WithDistributedStrategy sets the distributed strategy for the graph.
@@ -127,26 +128,23 @@ func (d DistributedOps) AllReduceMany(op backends.ReduceOpType, inputs []*Node) 
 	mesh := d.g.deviceMesh
 	if mesh == nil {
 		// Single-device graph: this is a no-op.
-		return
+		return inputs
 	}
-	var replicaGroups [][]int
-	if mesh == nil {
-		replicaGroups = [][]int{{0}}
-	} else {
-		replicaGroups, err := mesh.ComputeReplicaGroups(d.axes)
-		if err != nil {
-			return Panicf(d.g, "AllReduce: %v", err)
-		}
+	replicaGroups, err := mesh.ComputeReplicaGroups(d.axes)
+	if err != nil {
+		panic(errors.WithMessagef(err, "failed compute replicaGroups for AllReduce"))
 	}
+	_ = replicaGroups
 
 	// 2. THIS IS YOUR LOGIC:
 	//    Translate the logical 'd.axes' names into the physical 'replica_groups'.
 
 	// 3. Pass the replica_groups as the argument to the backend op.
 	//    The backend op argument is now a struct/list.
-	opArgs := backends.AllReduceArgs{
-		ReduceOp:      op,
-		ReplicaGroups: replicaGroups,
-	}
-	return d.g.newNode(inputs, nil, backends.AllReduce, opArgs)
+	//opArgs := backends.AllReduceArgs{
+	//	ReduceOp:      op,
+	//	ReplicaGroups: replicaGroups,
+	//}
+	//return d.g.newNode(inputs, nil, backends.AllReduce, opArgs)
+	return nil
 }
