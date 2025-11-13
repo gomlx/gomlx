@@ -192,16 +192,23 @@ func (m *DeviceMesh) DeviceToMesh(physicalDevice backends.DeviceNum) (flatIdx in
 //
 // Example:
 //
-//	m := NewDeviceMesh([]int{2, 2}, []string{"batch", "data"})
-//	batchGroups := m.ComputeReplicaGroups([]string{"batch"})  // -> [][]int{{0, 2}, {1, 3}}
-//	dataGroups := m.ComputeReplicaGroups([]string{"data"})    // -> [][]int{{0, 1}, {2, 3}}
-//  globalGroups := m.ComputeReplicaGroups([]string{"batch", "data"})  // -> [][]int{{0, 1, 2, 3}}
-func (m *DeviceMesh) ComputeReplicaGroups(axes []string) [][]int {
+//		m := NewDeviceMesh([]int{2, 2}, []string{"batch", "data"})
+//		batchGroups, _ := m.ComputeReplicaGroups([]string{"batch"})  // -> [][]int{{0, 2}, {1, 3}}
+//		dataGroups, _ := m.ComputeReplicaGroups([]string{"data"})    // -> [][]int{{0, 1}, {2, 3}}
+//	 globalGroups, _ := m.ComputeReplicaGroups([]string{"batch", "data"})  // -> [][]int{{0, 1, 2, 3}}
+func (m *DeviceMesh) ComputeReplicaGroups(axes []string) ([][]int, error) {
 	// Find indices of the specified axes
 	axisIndices := make([]int, 0, len(axes))
+	axisSet := sets.Make[int](len(axes))
 	for _, axis := range axes {
 		if idx, found := m.nameToAxis[axis]; found {
+			if axisSet.Has(idx) {
+				return nil, errors.Errorf("axis %q is duplicated: each axis can only appear once", axis)
+			}
 			axisIndices = append(axisIndices, idx)
+			axisSet.Insert(idx)
+		} else {
+			return nil, errors.Errorf("axis %q not found in mesh", axis)
 		}
 	}
 
@@ -257,5 +264,5 @@ func (m *DeviceMesh) ComputeReplicaGroups(axes []string) [][]int {
 		groups[groupIdx][posInGroup] = flatIdx
 	}
 
-	return groups
+	return groups, nil
 }

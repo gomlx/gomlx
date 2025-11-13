@@ -435,7 +435,8 @@ func TestDeviceMesh(t *testing.T) {
 			require.NoError(t, err)
 
 			// Example from comments: m.ComputeReplicaGroups([]string{"batch"}) -> [][]int{{0, 2}, {1, 3}}
-			groups := mesh.ComputeReplicaGroups([]string{"batch"})
+			groups, err := mesh.ComputeReplicaGroups([]string{"batch"})
+			require.NoError(t, err)
 			assert.Equal(t, [][]int{{0, 2}, {1, 3}}, groups)
 		})
 
@@ -445,7 +446,8 @@ func TestDeviceMesh(t *testing.T) {
 			require.NoError(t, err)
 
 			// Example from comments: m.ComputeReplicaGroups([]string{"data"}) -> [][]int{{0, 1}, {2, 3}}
-			groups := mesh.ComputeReplicaGroups([]string{"data"})
+			groups, err := mesh.ComputeReplicaGroups([]string{"data"})
+			require.NoError(t, err)
 			assert.Equal(t, [][]int{{0, 1}, {2, 3}}, groups)
 		})
 
@@ -455,7 +457,8 @@ func TestDeviceMesh(t *testing.T) {
 			require.NoError(t, err)
 
 			// Example from comments: m.ComputeReplicaGroups([]string{"batch", "data"}) -> [][]int{{0, 1, 2, 3}}
-			groups := mesh.ComputeReplicaGroups([]string{"batch", "data"})
+			groups, err := mesh.ComputeReplicaGroups([]string{"batch", "data"})
+			require.NoError(t, err)
 			assert.Equal(t, [][]int{{0, 1, 2, 3}}, groups)
 		})
 
@@ -464,7 +467,8 @@ func TestDeviceMesh(t *testing.T) {
 			mesh, err := NewDeviceMesh(backend, []int{4}, []string{"replica"})
 			require.NoError(t, err)
 
-			groups := mesh.ComputeReplicaGroups([]string{"replica"})
+			groups, err := mesh.ComputeReplicaGroups([]string{"replica"})
+			require.NoError(t, err)
 			assert.Equal(t, [][]int{{0, 1, 2, 3}}, groups)
 		})
 
@@ -474,7 +478,8 @@ func TestDeviceMesh(t *testing.T) {
 			require.NoError(t, err)
 
 			// Groups along x axis: should split by y and z
-			groups := mesh.ComputeReplicaGroups([]string{"x"})
+			groups, err := mesh.ComputeReplicaGroups([]string{"x"})
+			require.NoError(t, err)
 			assert.Equal(t, [][]int{{0, 4}, {1, 5}, {2, 6}, {3, 7}}, groups)
 		})
 
@@ -484,7 +489,8 @@ func TestDeviceMesh(t *testing.T) {
 			require.NoError(t, err)
 
 			// Groups along x and y axes: should split by z
-			groups := mesh.ComputeReplicaGroups([]string{"x", "y"})
+			groups, err := mesh.ComputeReplicaGroups([]string{"x", "y"})
+			require.NoError(t, err)
 			assert.Equal(t, [][]int{{0, 2, 4, 6}, {1, 3, 5, 7}}, groups)
 		})
 
@@ -494,7 +500,8 @@ func TestDeviceMesh(t *testing.T) {
 			require.NoError(t, err)
 
 			// Empty axes list: each device is its own group
-			groups := mesh.ComputeReplicaGroups([]string{})
+			groups, err := mesh.ComputeReplicaGroups([]string{})
+			require.NoError(t, err)
 			assert.Equal(t, [][]int{{0}, {1}, {2}, {3}}, groups)
 		})
 
@@ -503,9 +510,9 @@ func TestDeviceMesh(t *testing.T) {
 			mesh, err := NewDeviceMesh(backend, []int{2, 2}, []string{"batch", "data"})
 			require.NoError(t, err)
 
-			// Non-existent axis should be ignored
-			groups := mesh.ComputeReplicaGroups([]string{"nonexistent"})
-			assert.Equal(t, [][]int{{0}, {1}, {2}, {3}}, groups)
+			// Non-existent axis should return an error.
+			_, err = mesh.ComputeReplicaGroups([]string{"nonexistent"})
+			require.Error(t, err)
 		})
 	})
 }
