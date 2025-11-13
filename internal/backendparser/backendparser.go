@@ -43,15 +43,18 @@ func ParseBuilder() ([]Method, error) {
 	}
 
 	// Parse both files
-	builderFile, err := parser.ParseFile(fileSet, filepath.Join(root, "backends", "builder.go"), nil, parser.ParseComments)
+	builderFile, err := parser.ParseFile(fileSet, filepath.Join(root, "backends", "builder.go"),
+		nil, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
-	standardOpsFile, err := parser.ParseFile(fileSet, filepath.Join(root, "backends", "standard_ops.go"), nil, parser.ParseComments)
+	standardOpsFile, err := parser.ParseFile(fileSet, filepath.Join(root, "backends", "standard_ops.go"),
+		nil, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
-	collectiveOpsFile, err := parser.ParseFile(fileSet, filepath.Join(root, "backends", "collectiveops.go"), nil, parser.ParseComments)
+	collectiveOpsFile, err := parser.ParseFile(fileSet, filepath.Join(root, "backends", "collectiveops.go"),
+		nil, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}

@@ -147,7 +147,10 @@ func (b *Builder) Parameter(name string, shape shapes.Shape) (backends.Op, error
 	}
 	b.parameterNames = append(b.parameterNames, normalizedName)
 	b.parameterShapes = append(b.parameterShapes, shape)
-	value := b.fn.NamedInput(name, ShapeToStableHLO(shape))
+	value, err := b.fn.NamedInput(name, ShapeToStableHLO(shape))
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building parameter %q", name)
+	}
 	return b.newNode(value), nil
 }
 

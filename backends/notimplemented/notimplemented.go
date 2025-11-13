@@ -191,6 +191,6 @@ func (b Builder) BatchNormGradient(operand, scale, mean, variance, gradOutput ba
 	return nil, nil, nil, b.baseErrFn(backends.OpTypeBatchNormGradient)
 }
 
-func (b Builder) AllReduce(inputs []*backends.Op, reduceOp backends.ReduceOpType, replicaGroups [][]int, channelID int) ([]*backends.Op, error) {
+func (b Builder) AllReduce(inputs []backends.Op, reduceOp backends.ReduceOpType, replicaGroups [][]int, channelID int) ([]backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeAllReduce)
 }

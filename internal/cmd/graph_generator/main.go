@@ -28,7 +28,7 @@ var (
 	// methodsNotExported list methods that will have a non-exported "backend<Method>" function written, that can
 	// be used by the public graphs implementation.
 	methodsNotExported = sets.MakeWith(
-		"ArgMinMax", "Broadcast", "BroadcastInDim",
+		"AllReduce", "ArgMinMax", "Broadcast", "BroadcastInDim",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
 		"Concatenate", "ConvertDType", "ConvGeneral", "DotGeneral", "FFT", "Gather", "Iota",
 		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum", "ReduceWindow",
@@ -53,13 +53,13 @@ var (
 	// methodsExcluded from generating and even from having a NodeType.
 	// These are utility methods, not part of building a graph.
 	methodsExcluded = sets.MakeWith(
-		"Name", "Compile", "OpShape")
+		"Name", "Compile", "OpShape", "DeviceAssignment", "DistributedSPMD")
 
 	// methodsNoGradient will add a stop gradient to the node.
 	methodsNoGradient = sets.MakeWith(
-		"And", "Or", "Xor", "LogicalNot",
-		"Equal", "NotEqual", "GreaterOrEqual", "GreaterThan", "LessOrEqual", "LessThan",
-		"EqualTotalOrder", "NotEqualTotalOrder", "GreaterOrEqualTotalOrder", "GreaterThanTotalOrder", "LessOrEqualTotalOrder", "LessThanTotalOrder")
+		"And", "Or", "Xor", "LogicalNot", "Equal", "NotEqual", "GreaterOrEqual", "GreaterThan",
+		"LessOrEqual", "LessThan", "EqualTotalOrder", "NotEqualTotalOrder", "GreaterOrEqualTotalOrder",
+		"GreaterThanTotalOrder", "LessOrEqualTotalOrder", "LessThanTotalOrder")
 )
 
 func buildMethodInfo() (methods []*MethodInfo) {
@@ -101,7 +101,8 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				mi.OpInputSlices = append(mi.OpInputSlices, param.Name)
 				pi.NodeInputType = "[]*Node"
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
-				pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })...", param.Name)
+				pi.ConvertStatement = fmt.Sprintf(
+					"xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })...", param.Name)
 				pi.Format = "[#%s]"
 				pi.FormatValue = fmt.Sprintf(
 					`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
@@ -112,7 +113,8 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				mi.OpInputSlices = append(mi.OpInputSlices, param.Name)
 				pi.NodeInputType = "[]*Node"
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
-				pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })", param.Name)
+				pi.ConvertStatement = fmt.Sprintf(
+					"xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })", param.Name)
 				pi.Format = "[#%s]"
 				pi.FormatValue = fmt.Sprintf(
 					`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
