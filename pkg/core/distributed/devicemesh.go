@@ -183,3 +183,79 @@ func (m *DeviceMesh) DeviceToMesh(physicalDevice backends.DeviceNum) (flatIdx in
 	}
 	return flatIdx, axisIndices, nil
 }
+
+// ComputeReplicaGroups returns the replica groups participating in some collective (distributed) operation given the
+// axes along which the operation is performed.
+//
+// Each replica group (a []int) includes the device indices (from the DeviceAssignment) for the axes specified.
+// The other axes will be split into different replica groups.
+//
+// Example:
+//
+//	m := NewDeviceMesh([]int{2, 2}, []string{"batch", "data"})
+//	batchGroups := m.ComputeReplicaGroups([]string{"batch"})  // -> [][]int{{0, 2}, {1, 3}}
+//	dataGroups := m.ComputeReplicaGroups([]string{"data"})    // -> [][]int{{0, 1}, {2, 3}}
+//  globalGroups := m.ComputeReplicaGroups([]string{"batch", "data"})  // -> [][]int{{0, 1, 2, 3}}
+func (m *DeviceMesh) ComputeReplicaGroups(axes []string) [][]int {
+	// Find indices of the specified axes
+	axisIndices := make([]int, 0, len(axes))
+	for _, axis := range axes {
+		if idx, found := m.nameToAxis[axis]; found {
+			axisIndices = append(axisIndices, idx)
+		}
+	}
+
+	// Create indices for each axis dimension
+	nonAxisIndices := make([]int, 0, len(m.shape)-len(axisIndices))
+	for i := range m.shape {
+		if !slices.Contains(axisIndices, i) {
+			nonAxisIndices = append(nonAxisIndices, i)
+		}
+	}
+
+	// Calculate the size of each group and number of groups
+	groupSize := 1
+	for _, idx := range axisIndices {
+		groupSize *= m.shape[idx]
+	}
+	numGroups := m.numDevices / groupSize
+
+	// Initialize the result
+	groups := make([][]int, numGroups)
+	for i := range groups {
+		groups[i] = make([]int, groupSize)
+	}
+
+	// Fill in the groups
+	for flatIdx := 0; flatIdx < m.numDevices; flatIdx++ {
+		// Convert flat index to per-axis indices
+		indices := make([]int, len(m.shape))
+		remaining := flatIdx
+		for i := len(m.shape) - 1; i >= 0; i-- {
+			indices[i] = remaining % m.shape[i]
+			remaining /= m.shape[i]
+		}
+
+		// Calculate group index from non-axis indices
+		groupIdx := 0
+		multiplier := 1
+		for i := len(nonAxisIndices) - 1; i >= 0; i-- {
+			axisIdx := nonAxisIndices[i]
+			groupIdx += indices[axisIdx] * multiplier
+			multiplier *= m.shape[axisIdx]
+		}
+
+		// Calculate position within group from axis indices
+		posInGroup := 0
+		multiplier = 1
+		for i := len(axisIndices) - 1; i >= 0; i-- {
+			axisIdx := axisIndices[i]
+			posInGroup += indices[axisIdx] * multiplier
+			multiplier *= m.shape[axisIdx]
+		}
+
+		groups[groupIdx][posInGroup] = flatIdx
+	}
+
+	return groups
+}

@@ -1,9 +1,11 @@
 package distributed
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -13,8 +15,23 @@ import (
 	_ "github.com/gomlx/gomlx/backends/default"
 )
 
+var (
+	backendOnce   sync.Once
+	cachedBackend backends.Backend
+)
+
+// BuildTestBackend and sets backends.DefaultConfig to "xla:cpu" -- it can be overwritten by GOMLX_BACKEND environment variable.
+func BuildTestBackend() backends.Backend {
+	backends.DefaultConfig = "xla:cpu"
+	backendOnce.Do(func() {
+		cachedBackend = backends.MustNew()
+		fmt.Printf("Backend: %s\n", cachedBackend.Description())
+	})
+	return cachedBackend
+}
+
 func TestShardTensor(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := BuildTestBackend()
 	if backend.NumDevices() < 2 {
 		t.Skipf("Skipping distributed tests: backend only has %d device.", backend.NumDevices())
 	}
@@ -46,7 +63,7 @@ func TestShardTensor(t *testing.T) {
 }
 
 func TestMergeTensor(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := BuildTestBackend()
 	if backend.NumDevices() < 2 {
 		t.Skipf("Skipping distributed tests: backend only has %d device.", backend.NumDevices())
 	}
