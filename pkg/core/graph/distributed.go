@@ -37,6 +37,17 @@ func (g *Graph) DeviceMesh() *distributed.DeviceMesh {
 	return g.deviceMesh
 }
 
+// NumDevices participating in this computation graph.
+//
+// This is 1 for non-distributed graphs. Otherwise, it's the number of devices in the mesh (see Graph.WithDeviceMesh).
+func (g *Graph) NumDevices() int {
+	if g.deviceMesh == nil {
+		return 1
+	}
+	return g.deviceMesh.NumDevices()
+
+}
+
 // nextChannelID returns the next channel ID to use for synchronization.
 // This should be unique, and we use them incrementally.
 func (g *Graph) nextChannelID() int {

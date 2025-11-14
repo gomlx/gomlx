@@ -10,14 +10,16 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Executable implements backends.Executable for XLA/PJRT github.com/gomlx/gopjrt
+// Executable implements the backends.Executable for XLA/PJRT github.com/gomlx/gopjrt.
 type Executable struct {
-	backend         *Backend
-	exec            *pjrt.LoadedExecutable
-	name            string
-	parameterNames  []string
-	parameterShapes []shapes.Shape
-	outputShapes    []shapes.Shape
+	backend          *Backend
+	exec             *pjrt.LoadedExecutable
+	name             string
+	parameterNames   []string
+	parameterShapes  []shapes.Shape
+	outputShapes     []shapes.Shape
+	numDevices       int
+	deviceAssignment []int
 }
 
 func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
@@ -25,7 +27,9 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 		return nil, err
 	}
 	if len(outputs) == 0 {
-		return nil, errors.Errorf("backend %q, computation %q: you must have at least one output to a computation", BackendName, b.name)
+		return nil, errors.Errorf(
+			"backend %q, computation %q: you must have at least one output to a computation",
+			BackendName, b.name)
 	}
 
 	outputNodes, err := b.verifyAndCastValues("Compile", outputs...)
@@ -42,26 +46,36 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 	// Finish StableHLO "main" function:
 	err = b.fn.Return(outputValues[0], outputValues[1:]...)
 	if err != nil {
-		return nil, errors.WithMessagef(err, "backend %q: failed to finish StableHLO program %q", BackendName, b.name)
+		return nil, errors.WithMessagef(err,
+			"backend %q: failed to finish StableHLO program %q", BackendName, b.name)
 	}
 	program, err := b.builder.Build()
 	if err != nil {
-		return nil, errors.WithMessagef(err, "backend %q: failed to build StableHLO from computation %q", BackendName, b.name)
+		return nil, errors.WithMessagef(err,
+			"backend %q: failed to build StableHLO from computation %q", BackendName, b.name)
 	}
 	if klog.V(2).Enabled() {
 		klog.Infof("StableHLO program:\n%s\n", program)
 	}
-	exec, err := b.backend.client.Compile().WithStableHLO(program).Done()
+
+	compileConfig := b.backend.client.Compile().WithStableHLO(program)
+	if len(b.deviceAssignment) > 0 {
+		compileConfig = compileConfig.WithDeviceAssignment(b.deviceAssignment)
+	}
+	exec, err := compileConfig.Done()
 	if err != nil {
-		return nil, errors.WithMessagef(err, "backend %q: failed to compile computation %q", BackendName, b.name)
+		return nil, errors.WithMessagef(err,
+			"backend %q: failed to compile computation %q", BackendName, b.name)
 	}
 	return &Executable{
-		backend:         b.backend,
-		exec:            exec,
-		name:            b.name,
-		parameterNames:  b.parameterNames,
-		parameterShapes: b.parameterShapes,
-		outputShapes:    outputShapes,
+		backend:          b.backend,
+		exec:             exec,
+		name:             b.name,
+		parameterNames:   b.parameterNames,
+		parameterShapes:  b.parameterShapes,
+		outputShapes:     outputShapes,
+		numDevices:       max(1, len(b.deviceAssignment)),
+		deviceAssignment: b.deviceAssignment,
 	}, nil
 }
 
@@ -105,11 +119,17 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 	if err := e.CheckValid(); err != nil {
 		return nil, err
 	}
-	if len(inputs) != len(e.parameterShapes) {
-		return nil, errors.Errorf("backend %q: wrong number of parameters to Execute %q: %d given, %d expected", BackendName, e.name, len(inputs), len(e.parameterShapes))
+	numParams := len(e.parameterShapes)
+	numDevices := e.numDevices
+	if len(inputs) != numParams*numDevices {
+		return nil, errors.Errorf(
+			"backend %q: wrong number of parameters to Execute %q: %d given, %d * %d expected",
+			BackendName, e.name, len(inputs), numParams, numDevices)
 	}
-	if len(donate) > 0 && len(donate) != len(e.parameterShapes) {
-		return nil, errors.Errorf("backend %q: wrong number of donate values to Execute %q: %d given, nil or %d expected", BackendName, e.name, len(donate), len(e.parameterShapes))
+	if len(donate) > 0 && len(donate) != numParams*numDevices {
+		return nil, errors.Errorf(
+			"backend %q: wrong number of donate values to Execute %q: %d given, nil or %d * %d expected",
+			BackendName, e.name, len(donate), numParams, numDevices)
 	}
 	pInputs := xslices.Map(inputs, castToPJRT)
 	var pOutputs []*pjrt.Buffer

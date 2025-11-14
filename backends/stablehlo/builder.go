@@ -1,6 +1,7 @@
 package stablehlo
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/gomlx/gomlx/backends"
@@ -20,6 +21,9 @@ type Builder struct {
 
 	builder *stablehlo.Builder
 	fn      *stablehlo.Function
+
+	numReplicas      int
+	deviceAssignment []int
 
 	parameterNames  []string
 	parameterShapes []shapes.Shape
@@ -185,7 +189,10 @@ func (b *Builder) DistributedSPMD(numDevices int) error {
 	if b.compiled {
 		return errors.Errorf("DistributedSPMD cannot be called after the computation has been compiled")
 	}
-	return errors.Errorf("DistributedSPMD is not supported by the deprecated %q backend", BackendName)
+	b.builder.WithNumReplicas(numDevices)
+	b.numReplicas = numDevices
+	fmt.Printf("stablehlo.DistributedSPMD(%d)\n", numDevices)
+	return nil
 }
 
 // DeviceAssignment assigns the devices to the computation.
@@ -193,8 +200,18 @@ func (b *Builder) DistributedSPMD(numDevices int) error {
 // The number of devices must match the number of devices in the computation.
 // Usually, that is 1. But if DistributedSPMD was used, it can be more.
 func (b *Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
-	if len(devices) != 1 && devices[0] != backends.DeviceNum(0) {
-		return errors.Errorf("DeviceAssignment for %q expects a single device #0, got %d", BackendName, len(devices))
+	numReplicas := max(1, b.numReplicas)
+	if len(devices) != numReplicas {
+		return errors.Errorf("DeviceAssignment expects %d devices, got %d", numReplicas, len(devices))
+	}
+	b.deviceAssignment = make([]int, 0, numReplicas)
+	for _, device := range devices {
+		deviceInt := int(device)
+		b.deviceAssignment = append(b.deviceAssignment, deviceInt)
+		if deviceInt < 0 || deviceInt >= b.backend.NumDevices() {
+			return errors.Errorf("device %d is out of range for the number of devices %d in the backend %q",
+				deviceInt, b.backend.NumDevices(), b.backend.Name())
+		}
 	}
 	return nil
 }

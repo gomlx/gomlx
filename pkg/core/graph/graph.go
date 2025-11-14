@@ -246,6 +246,24 @@ func (g *Graph) build() backends.Builder {
 	if g.builder == nil {
 		// Lazy construction of builder: this allows one to further configure the Graph object before using it.
 		g.builder = g.backend.Builder(g.name)
+		switch g.distStrategy {
+		case distributed.None:
+			// Nothing to do.
+		case distributed.SPMD:
+			err := g.builder.DistributedSPMD(g.NumDevices())
+			if err != nil {
+				panic(errors.WithMessagef(err,
+					"Graph failed to create distributed SPMD builder with backend %s",
+					g.backend.Name()))
+			}
+			err = g.builder.DeviceAssignment(g.deviceMesh.DeviceAssignment()...)
+			if err != nil {
+				panic(errors.WithMessagef(err,
+					"Graph failed to create distributed SPMD builder with backend %s", g.backend.Name()))
+			}
+		case distributed.GSPMD:
+			exceptions.Panicf("GSPMD not implemented yet")
+		}
 	}
 	return g.builder
 }
@@ -477,16 +495,20 @@ func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum .
 //
 // To donate the inputs buffers (if they are no longer used, e.g., when updating a state), consider using
 // DonateTensorBuffer.
+//
+// If there are multiple devices, the inputs are split among them.
 func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
 	deviceNum := backends.DeviceNum(0) // Hard-coded for now.
 
 	numParams := g.NumParameters()
-	if len(inputs) != numParams {
-		exceptions.Panicf("graph %q takes %d parameters, but %d were given to Run()", g.name, numParams, len(inputs))
+	numDevices := g.NumDevices()
+	if len(inputs) != numParams*numDevices {
+		exceptions.Panicf("graph %q takes %d parameters * %d devices, but %d were given to Graph.Run()",
+			g.name, numParams, numDevices, len(inputs))
 	}
-	buffers := make([]backends.Buffer, numParams)
-	donate := make([]bool, numParams)
+	buffers := make([]backends.Buffer, numParams*numDevices)
+	donate := make([]bool, numParams*numDevices)
 	for ii, input := range inputs {
 		buffers[ii], _, donate[ii] = anyToBuffer(g.backend, deviceNum, input)
 	}
@@ -541,14 +563,19 @@ func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
 //
 // Notice that for repeated output nodes in the graph (the same output node returned in more than one position), the
 // returned tensors are shared.
+//
+// If there are multiple devices, the inputs are split among them.
 func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
 	numParams := g.NumParameters()
-	if len(inputs) != numParams {
-		exceptions.Panicf("graph %q takes %d parameters, but %d were given to RunWithBuffers()", g.name, numParams, len(inputs))
+	numDevices := g.NumDevices()
+	if len(inputs) != numParams*numDevices {
+		exceptions.Panicf("graph %q takes %d parameters * %d devices, but %d were given to RunWithBuffers()",
+			g.name, numParams, numDevices, len(inputs))
 	}
-	if len(donate) != numParams {
-		exceptions.Panicf("graph %q takes %d donate values for the input parameters, but %d were given to RunWithBuffers()", g.name, numParams, len(donate))
+	if len(donate) != numParams*numDevices {
+		exceptions.Panicf("graph %q takes %d * %d donate values for the input parameters, "+
+			"but %d were given to RunWithBuffers()", g.name, numParams, numDevices, len(donate))
 	}
 	var start time.Time
 	var results []backends.Buffer
