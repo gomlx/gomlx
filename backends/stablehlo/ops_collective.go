@@ -10,9 +10,9 @@ import (
 )
 
 // AllReduce implements the collective AllReduce operation.
-func (b Builder) AllReduce(operands []backends.Op, reductionType backends.ReduceOpType,
+func (b *Builder) AllReduce(operands []backends.Op, reductionType backends.ReduceOpType,
 	replicaGroups [][]int, channelID int) ([]backends.Op, error) {
-	nodes, err := b.verifyAndCastValues("BroadcastInDim", operands...)
+	nodes, err := b.verifyAndCastValues("stablehlo.AllReduce", operands...)
 	if err != nil {
 		return nil, err
 	}

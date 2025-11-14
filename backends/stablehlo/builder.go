@@ -4,7 +4,6 @@ import (
 	"slices"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -15,8 +14,6 @@ import (
 
 // Builder keeps track of the computation graph being defined.
 type Builder struct {
-	notimplemented.Builder
-
 	name     string
 	backend  *Backend
 	compiled bool
@@ -61,11 +58,13 @@ func (backend *Backend) Builder(name string) backends.Builder {
 		cacheArgMinMax:  make(map[argMinMaxKey]*stablehlo.Function),
 		cacheSelections: make(map[reductionKey]*stablehlo.Function),
 	}
-	b.Builder.ErrFn = func(op backends.OpType) error {
-		return errors.Errorf("StableHLO hasn't implemented operation %q yet, pls open an issue in https://github.com/gomlx/gomlx", op)
-	}
 	b.fn = b.builder.Main()
 	return b
+}
+
+// Name returns the name of the builder.
+func (b *Builder) Name() string {
+	return b.name
 }
 
 // Node represents the output of an operation and implements a "backends.Op" interface.
@@ -98,12 +97,15 @@ func (b *Builder) verifyAndCastValues(name string, values ...backends.Op) ([]*No
 		}
 		node, ok := input.(*Node)
 		if !ok {
-			return nil, errors.Errorf("nil or invalid Op (%T: %v) given as an input to %q, it must be an input created by the same backend builder (%s:%s)",
-				input, input, name, b.backend.Name(), b.name)
+			return nil, errors.Errorf(
+				"nil or invalid Op (%T: %v) given as an input to %q, it must be an input created by the same "+
+					"backend builder (%s:%s)", input, input, name, b.backend.Name(), b.name)
 		}
 		if node.builder != b {
-			return nil, errors.Errorf("input given to parameter %q was created with a different builder (%s) than the builder (%s) it is being used in -- Ops cannot cross to different builders",
-				name, node.builder.Name(), b.Name())
+			return nil, errors.Errorf(
+				"input given to parameter #%d (%q) was created with a different builder (%s) than the builder"+
+					" (%s) it is being used in -- Ops cannot cross to different builders",
+				i, name, node.builder.Name(), b.Name())
 		}
 		nodes[i] = node
 	}
