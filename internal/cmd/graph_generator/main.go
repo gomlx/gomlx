@@ -11,6 +11,7 @@ import (
 	"text/template"
 
 	"github.com/gomlx/gomlx/internal/backendparser"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"k8s.io/klog/v2"
@@ -165,7 +166,15 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			mi.HasGraph = len(mi.OpInputSlices) == 0 && len(mi.OpInputs) == 0
 		}
 		for _, output := range raw.Outputs[:len(raw.Outputs)-1] { // Skip the error.
-			mi.OutputNames = append(mi.OutputNames, output.Name)
+			switch output.Type {
+			case "Op":
+				mi.OutputNames = append(mi.OutputNames, output.Name)
+			case "[]Op":
+				mi.OutputNames = append(mi.OutputNames, output.Name)
+				mi.IsOutputSlice = true
+			default:
+				exceptions.Panicf("unexpected output type: %s", output.Type)
+			}
 		}
 		if len(mi.OutputNames) > 1 {
 			mi.HasMultipleOutputs = true
@@ -185,6 +194,7 @@ type MethodInfo struct {
 	StopGradient           bool
 
 	HasMultipleOutputs bool
+	IsOutputSlice      bool
 	OutputNames        []string
 }
 
@@ -260,11 +270,16 @@ func (ni *nodeInputs{{.BackendName}}) String() string {
 {{- end}}
 func {{/*
 
-Inputs:  */}}{{.GraphName}}({{if .HasGraph}}g *Graph, {{end}}{{range .Inputs}}{{.Name}} {{.GraphType}}, {{end}}) ({{/*
-
-Outputs: */}}{{if not .HasMultipleOutputs}}node *Node{{/*
-*/}} {{else}} {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{$name}}{{end}} *Node{{/*
-*/}}{{end}}) {{/*
+Inputs:  */}}{{.GraphName}}({{if .HasGraph}}g *Graph, {{end}}{{range .Inputs}}{{.Name}} {{.GraphType}}, {{end}}) (
+{{- /* Outputs: */}}
+{{- if .HasMultipleOutputs}}
+{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{$name}}{{end}} *Node
+{{- else if .IsOutputSlice}}
+[]*Node
+{{- else}}
+node *Node
+{{- end}})
+{{- /*
 
 Body: */}}{
 {{- if .HasGraph}}
@@ -286,20 +301,8 @@ Body: */}}{
 Convert result(s) to node(s):
 
 */}}
-{{- if not .HasMultipleOutputs}}
-	result, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
-	if err != nil {
-		panic(err)
-	}
-	node = &Node{
-		outputOps: []backends.Op{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
-{{- else}}
-{{- /*
-
-Version with multiple outputs:
-
-*/}}
+{{- if .HasMultipleOutputs}}
+{{- /* Version with multiple outputs: */}}
 {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}}, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
 	if err != nil {
 		panic(err)
@@ -307,7 +310,27 @@ Version with multiple outputs:
 	node := &Node{
 		outputOps: []backends.Op{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}} },
 		outputShapes: []shapes.Shape{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}mustNoError(g.builder.OpShape(v{{$ii}})){{end}} },
+{{- else if .IsOutputSlice}}
+{{- /* Version with output slice: */}}
+	results, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	if err != nil {
+		panic(err)
+	}
+	node := &Node{
+		outputOps: results,
+		outputShapes: xslices.Map(results, 
+			func (op backends.Op) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
+{{- else}}
+{{- /* Version with single output: - node already defined. */}}
+	result, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps: []backends.Op{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 {{- end}}
+{{- /* Rest of node definition */}}
 		graph: g,
 		inputs: inputs,
 {{- if not .HasGraph}}
@@ -319,13 +342,19 @@ Version with multiple outputs:
 {{- end}}
 	}
 	g.registerNode(node)
-{{/*
+{{- /*
 
-If multiple-outputs, split node into each separate one:
-
-*/}}{{if .HasMultipleOutputs}}	splitNodes := splitNode(node)
+If multiple-outputs, split resulting node into its separate parts: 
+*/}}
+{{- if .HasMultipleOutputs}}
+	splitNodes := splitNode(node)
 	{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{$name}}{{end}} = {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}splitNodes[{{$ii}}]{{end}}
-{{end}}	return
+	return
+{{- else if .IsOutputSlice}}
+	return splitNode(node)
+{{- else}}
+	return
+{{- end}}
 }
 {{end}}{{end}}
 `))
