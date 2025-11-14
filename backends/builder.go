@@ -121,7 +121,7 @@ const (
 
 //go:generate go tool enumer -type FFTType -trimprefix=FFT -output=gen_ffttype_enumer.go builder.go
 
-// ReduceOpType select among the basic types of reduction supported, see XlaBuilder.ReduceComputation.
+// ReduceOpType select among the basic types of reduction supported.
 type ReduceOpType int
 
 const (
