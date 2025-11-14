@@ -2,6 +2,7 @@ package stablehlo
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/pjrt"
@@ -12,12 +13,14 @@ import (
 
 // Executable implements the backends.Executable for XLA/PJRT github.com/gomlx/gopjrt.
 type Executable struct {
-	backend          *Backend
-	exec             *pjrt.LoadedExecutable
-	name             string
-	parameterNames   []string
-	parameterShapes  []shapes.Shape
-	outputShapes     []shapes.Shape
+	backend         *Backend
+	exec            *pjrt.LoadedExecutable
+	name            string
+	parameterNames  []string
+	parameterShapes []shapes.Shape
+	outputShapes    []shapes.Shape
+
+	distStrategy     distributed.Strategy
 	numDevices       int
 	deviceAssignment []int
 }
@@ -59,8 +62,15 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 	}
 
 	compileConfig := b.backend.client.Compile().WithStableHLO(program)
-	if len(b.deviceAssignment) > 0 {
-		compileConfig = compileConfig.WithDeviceAssignment(b.deviceAssignment)
+	switch b.distStrategy {
+	case distributed.SPMD:
+		compileConfig = compileConfig.
+			WithSPMD(b.numReplicas).
+			WithDeviceAssignment(b.deviceAssignment)
+	case distributed.GSPMD:
+		return nil, errors.Errorf("backend %q: GSPMD not implemented", BackendName)
+	case distributed.None:
+		// Nothing to do.
 	}
 	exec, err := compileConfig.Done()
 	if err != nil {
@@ -68,12 +78,14 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 			"backend %q: failed to compile computation %q", BackendName, b.name)
 	}
 	return &Executable{
-		backend:          b.backend,
-		exec:             exec,
-		name:             b.name,
-		parameterNames:   b.parameterNames,
-		parameterShapes:  b.parameterShapes,
-		outputShapes:     outputShapes,
+		backend:         b.backend,
+		exec:            exec,
+		name:            b.name,
+		parameterNames:  b.parameterNames,
+		parameterShapes: b.parameterShapes,
+		outputShapes:    outputShapes,
+
+		distStrategy:     b.distStrategy,
 		numDevices:       max(1, len(b.deviceAssignment)),
 		deviceAssignment: b.deviceAssignment,
 	}, nil

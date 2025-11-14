@@ -499,7 +499,6 @@ func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum .
 // If there are multiple devices, the inputs are split among them.
 func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
-	deviceNum := backends.DeviceNum(0) // Hard-coded for now.
 
 	numParams := g.NumParameters()
 	numDevices := g.NumDevices()
@@ -509,8 +508,20 @@ func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 	}
 	buffers := make([]backends.Buffer, numParams*numDevices)
 	donate := make([]bool, numParams*numDevices)
-	for ii, input := range inputs {
-		buffers[ii], _, donate[ii] = anyToBuffer(g.backend, deviceNum, input)
+	if g.deviceMesh == nil {
+		// No device mesh, all inputs go to default device 0.
+		deviceNum := backends.DeviceNum(0)
+		for ii, input := range inputs {
+			buffers[ii], _, donate[ii] = anyToBuffer(g.backend, deviceNum, input)
+		}
+	} else {
+		// Inputs are split into their corresponding devices:
+		deviceAssignment := g.deviceMesh.DeviceAssignment()
+		for ii, input := range inputs {
+			deviceIndex := ii / numParams
+			deviceNum := deviceAssignment[deviceIndex]
+			buffers[ii], _, donate[ii] = anyToBuffer(g.backend, deviceNum, input)
+		}
 	}
 	return g.RunWithBuffers(buffers, donate)
 }

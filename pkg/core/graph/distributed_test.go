@@ -33,13 +33,12 @@ func TestDistributedAllReduce(t *testing.T) {
 			WithDeviceMesh(mesh)
 		g.AssertBuilding()
 		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
-		fmt.Printf("Graph:\n%s\n", g)
 		reduced := g.Distributed().AllReduce(x, backends.ReduceOpSum)
 		g.Compile(reduced)
-		fmt.Printf("Graph:\n%s\n", g)
 		outputs := g.Run(float32(1), float32(3))
 		require.Len(t, outputs, mesh.NumDevices())
 		for i, output := range outputs {
+			fmt.Printf("\t- device #%d: %s\n", i, output)
 			require.Equalf(t, float32(4), output.Value(), "device #%d got %s", i, output)
 		}
 	})

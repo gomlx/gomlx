@@ -1,10 +1,10 @@
 package stablehlo
 
 import (
-	"fmt"
 	"slices"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -24,6 +24,7 @@ type Builder struct {
 
 	numReplicas      int
 	deviceAssignment []int
+	distStrategy     distributed.Strategy
 
 	parameterNames  []string
 	parameterShapes []shapes.Shape
@@ -189,9 +190,9 @@ func (b *Builder) DistributedSPMD(numDevices int) error {
 	if b.compiled {
 		return errors.Errorf("DistributedSPMD cannot be called after the computation has been compiled")
 	}
+	b.distStrategy = distributed.SPMD
 	b.builder.WithNumReplicas(numDevices)
 	b.numReplicas = numDevices
-	fmt.Printf("stablehlo.DistributedSPMD(%d)\n", numDevices)
 	return nil
 }
 
