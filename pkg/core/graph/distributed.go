@@ -107,44 +107,35 @@ func (d DistributedOps) OnChannel(channelID int) DistributedOps {
 // If no axes were specified via DistributedOps.Along(), it performs the operation
 // across *all* devices in the mesh.
 // If no channelID was specified via DistributedOps.OnChannel(), it uses the Graph's incremental channelID.
-func (d DistributedOps) AllReduce(op backends.ReduceOpType, input *Node) *Node {
-	return d.AllReduceMany(op, []*Node{input})[0]
+func (d DistributedOps) AllReduce(input *Node, reductionType backends.ReduceOpType) *Node {
+	return d.AllReduceMany([]*Node{input}, reductionType)[0]
 }
 
 // AllReduceMany performs an AllReduce operation across the devices specified
 // in the chained options.
 //
-// It takes a slice of inputs and returns a slice of the reduced inputs across the devices as outputs.
+// It takes a collection of operands and returns them reduced operands across the devices as outputs.
+// So the output shapes are the same as the operand shapes.
 //
 // If no axes were specified via .Along(), it performs the operation
 // across *all* devices in the mesh.
-func (d DistributedOps) AllReduceMany(op backends.ReduceOpType, inputs []*Node) []*Node {
-	if len(inputs) == 0 {
+func (d DistributedOps) AllReduceMany(operands []*Node, reductionType backends.ReduceOpType) []*Node {
+	if len(operands) == 0 {
 		return nil // Or panic
 	}
+	g := operands[0].Graph()
 
 	// 1. Get the DeviceMesh from the graph.
 	// (This implies you need a new method on graph.Graph)
 	mesh := d.g.deviceMesh
 	if mesh == nil {
 		// Single-device graph: this is a no-op.
-		return inputs
+		return operands
 	}
 	replicaGroups, err := mesh.ComputeReplicaGroups(d.axes)
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed compute replicaGroups for AllReduce"))
 	}
-	_ = replicaGroups
-
-	// 2. THIS IS YOUR LOGIC:
-	//    Translate the logical 'd.axes' names into the physical 'replica_groups'.
-
-	// 3. Pass the replica_groups as the argument to the backend op.
-	//    The backend op argument is now a struct/list.
-	//opArgs := backends.AllReduceArgs{
-	//	ReduceOp:      op,
-	//	ReplicaGroups: replicaGroups,
-	//}
-	//return d.g.newNode(inputs, nil, backends.AllReduce, opArgs)
-	return nil
+	channelID := g.nextChannelID()
+	return backendAllReduce(operands, reductionType, replicaGroups, channelID)
 }
