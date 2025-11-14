@@ -6,14 +6,14 @@ type CollectiveOps interface {
 	//
 	// - operands: list of operands to be replicated -- often this operation is called over all the parameters
 	//   of a model, hence the option to pass a variable number of parameters to them.
-	// - reduceOp: how the operands should be reduced.
+	// - reductionType: how the operands should be reduced.
 	// - replicaGroups: a collection of replica groups: each replica group ([]int) is a collection of devices that
 	//   will participate in the distributed operation. The devices are given as indices (hence []int) into the
 	//   device assignments (not absolute DeviceNum).
 	// - channelID: and identification of the communication channel used for this operation -- important when,
 	//   for instance, many distributed operations are potentially happening concurrently. It must be the
 	//   same across all participating devices.
-	AllReduce(operands []Op, reduceOp ReduceOpType, replicaGroups [][]int, channelID int) ([]Op, error)
+	AllReduce(operands []Op, reductionType ReduceOpType, replicaGroups [][]int, channelID int) ([]Op, error)
 
 	//// AllGather builds the AllGather operation.
 	//AllGather(b Builder, gatherAxis int, input Op) (Op, error)
