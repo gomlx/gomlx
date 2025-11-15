@@ -86,6 +86,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			pi := &ParameterInfo{
 				Name:        param.Name,
 				BackendType: param.Type,
+				Printable:   true,
 			}
 			mi.Inputs = append(mi.Inputs, pi)
 			switch pi.BackendType {
@@ -137,12 +138,17 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.BackendType = "backends." + pi.BackendType
 				pi.Format = "%s"
 			default:
-				if strings.HasPrefix(pi.BackendType, "...") {
+				switch {
+				case strings.HasPrefix(pi.BackendType, "..."):
 					pi.NodeInputType = "[]" + pi.BackendType[3:]
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
 					pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
-				} else if strings.HasPrefix(pi.GraphType, "[]") {
+				case strings.HasPrefix(pi.BackendType, "[]"):
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
+				case strings.HasPrefix(pi.BackendType, "func"):
+					pi.Printable = false
+				default:
+					// Nothing to add.
 				}
 			}
 			if pi.GraphType == "" {
@@ -204,6 +210,7 @@ type ParameterInfo struct {
 	BackendType, GraphType, NodeInputType string
 	CopyStatement, ConvertStatement       string
 	Format, FormatValue                   string
+	Printable                             bool
 }
 
 const (
@@ -255,10 +262,20 @@ func (ni *nodeInputs{{.BackendName}}) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputs{{.BackendName}}) String() string {
-	return fmt.Sprintf("%s({{range $index, $input := .Inputs}}{{if $index}}, {{end}}{{$input.Name}}={{$input.Format}}{{end}})", 
+	return fmt.Sprintf("%s(
+{{- range $index, $input := .Inputs -}}
+	{{- if $input.Printable -}}
+		{{- if $index -}}, {{end}}{{$input.Name}}={{$input.Format}}
+	{{- end -}}
+{{- end -}}
+)",
 		ni.Type(),
-{{range .Inputs}}		{{.FormatValue}},
-{{end}}	)
+{{- range .Inputs -}}
+	{{- if .Printable }}
+		{{.FormatValue}},
+	{{- end -}}
+{{- end }}
+	)
 }
 
 {{- if not .Exported}}

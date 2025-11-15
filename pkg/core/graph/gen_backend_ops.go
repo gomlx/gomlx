@@ -208,10 +208,10 @@ func Add(lhs *Node, rhs *Node) (
 
 // nodeInputsAllReduce holds the inputs used for the call to backends.AllReduce.
 type nodeInputsAllReduce struct {
-	operands      []*Node
-	reductionType ReduceOpType
-	replicaGroups [][]int
-	channelID     int
+	operands           []*Node
+	reductionType      ReduceOpType
+	replicaGroups      [][]int
+	channelIDGenerator func() int
 }
 
 // Type implements the interface NodeInputs.
@@ -221,27 +221,26 @@ func (ni *nodeInputsAllReduce) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsAllReduce) String() string {
-	return fmt.Sprintf("%s(operands=[#%s], reductionType=%v, replicaGroups=%v, channelID=%v)",
+	return fmt.Sprintf("%s(operands=[#%s], reductionType=%v, replicaGroups=%v)",
 		ni.Type(),
 		strings.Join(xslices.Map(ni.operands, func(node *Node) string { return fmt.Sprintf("#%d", node.Id()) }), ", "),
 		ni.reductionType,
 		ni.replicaGroups,
-		ni.channelID,
 	)
 }
 
 // backendAllReduce is a Graph wrapper for the backend.Builder.AllReduce method.
-func backendAllReduce(operands []*Node, reductionType ReduceOpType, replicaGroups [][]int, channelID int) []*Node {
+func backendAllReduce(operands []*Node, reductionType ReduceOpType, replicaGroups [][]int, channelIDGenerator func() int) []*Node {
 	inputNodes := []*Node{}
 	inputNodes = append(inputNodes, operands...)
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsAllReduce{
-		operands:      slices.Clone(operands),
-		reductionType: reductionType,
-		replicaGroups: replicaGroups,
-		channelID:     channelID,
+		operands:           slices.Clone(operands),
+		reductionType:      reductionType,
+		replicaGroups:      slices.Clone(replicaGroups),
+		channelIDGenerator: channelIDGenerator,
 	}
-	results, err := g.builder.AllReduce(xslices.Map(operands, func(node *Node) backends.Op { return node.outputOps[0] }), inputs.reductionType, inputs.replicaGroups, inputs.channelID)
+	results, err := g.builder.AllReduce(xslices.Map(operands, func(node *Node) backends.Op { return node.outputOps[0] }), inputs.reductionType, inputs.replicaGroups, inputs.channelIDGenerator)
 	if err != nil {
 		panic(err)
 	}
@@ -784,7 +783,7 @@ func backendBroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []in
 	inputs := &nodeInputsBroadcastInDim{
 		x:             x,
 		outputShape:   outputShape,
-		broadcastAxes: broadcastAxes,
+		broadcastAxes: slices.Clone(broadcastAxes),
 	}
 	result, err := g.builder.BroadcastInDim(x.outputOps[0], inputs.outputShape, inputs.broadcastAxes)
 	if err != nil {
@@ -1110,10 +1109,10 @@ func backendConvGeneral(input *Node, kernel *Node, axes backends.ConvolveAxesCon
 		input:             input,
 		kernel:            kernel,
 		axes:              axes.Clone(),
-		strides:           strides,
-		paddings:          paddings,
-		inputDilations:    inputDilations,
-		kernelDilations:   kernelDilations,
+		strides:           slices.Clone(strides),
+		paddings:          slices.Clone(paddings),
+		inputDilations:    slices.Clone(inputDilations),
+		kernelDilations:   slices.Clone(kernelDilations),
 		channelGroupCount: channelGroupCount,
 		batchGroupCount:   batchGroupCount,
 	}
@@ -1352,11 +1351,11 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsDotGeneral{
 		lhs:                lhs,
-		lhsContractingAxes: lhsContractingAxes,
-		lhsBatchAxes:       lhsBatchAxes,
+		lhsContractingAxes: slices.Clone(lhsContractingAxes),
+		lhsBatchAxes:       slices.Clone(lhsBatchAxes),
 		rhs:                rhs,
-		rhsContractingAxes: rhsContractingAxes,
-		rhsBatchAxes:       rhsBatchAxes,
+		rhsContractingAxes: slices.Clone(rhsContractingAxes),
+		rhsBatchAxes:       slices.Clone(rhsBatchAxes),
 	}
 	result, err := g.builder.DotGeneral(lhs.outputOps[0], inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.outputOps[0], inputs.rhsContractingAxes, inputs.rhsBatchAxes)
 	if err != nil {
@@ -1414,7 +1413,7 @@ func DynamicSlice(operand *Node, startIndices []*Node, sliceDims []int) (
 	inputs := &nodeInputsDynamicSlice{
 		operand:      operand,
 		startIndices: slices.Clone(startIndices),
-		sliceDims:    sliceDims,
+		sliceDims:    slices.Clone(sliceDims),
 	}
 	result, err := g.builder.DynamicSlice(operand.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Op { return node.outputOps[0] }), inputs.sliceDims)
 	if err != nil {
@@ -1735,7 +1734,7 @@ func backendFFT(operand *Node, fftType backends.FFTType, fftLength []int) (
 	inputs := &nodeInputsFFT{
 		operand:   operand,
 		fftType:   fftType,
-		fftLength: fftLength,
+		fftLength: slices.Clone(fftLength),
 	}
 	result, err := g.builder.FFT(operand.outputOps[0], inputs.fftType, inputs.fftLength)
 	if err != nil {
@@ -1834,10 +1833,10 @@ func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offse
 		operand:            operand,
 		startIndices:       startIndices,
 		indexVectorAxis:    indexVectorAxis,
-		offsetOutputAxes:   offsetOutputAxes,
-		collapsedSliceAxes: collapsedSliceAxes,
-		startIndexMap:      startIndexMap,
-		sliceSizes:         sliceSizes,
+		offsetOutputAxes:   slices.Clone(offsetOutputAxes),
+		collapsedSliceAxes: slices.Clone(collapsedSliceAxes),
+		startIndexMap:      slices.Clone(startIndexMap),
+		sliceSizes:         slices.Clone(sliceSizes),
 		indicesAreSorted:   indicesAreSorted,
 	}
 	result, err := g.builder.Gather(operand.outputOps[0], startIndices.outputOps[0], inputs.indexVectorAxis, inputs.offsetOutputAxes, inputs.collapsedSliceAxes, inputs.startIndexMap, inputs.sliceSizes, inputs.indicesAreSorted)
@@ -3607,11 +3606,11 @@ func backendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions [
 	inputs := &nodeInputsReduceWindow{
 		x:                x,
 		reductionType:    reductionType,
-		windowDimensions: windowDimensions,
-		strides:          strides,
-		baseDilations:    baseDilations,
-		windowDilations:  windowDilations,
-		paddings:         paddings,
+		windowDimensions: slices.Clone(windowDimensions),
+		strides:          slices.Clone(strides),
+		baseDilations:    slices.Clone(baseDilations),
+		windowDilations:  slices.Clone(windowDilations),
+		paddings:         slices.Clone(paddings),
 	}
 	result, err := g.builder.ReduceWindow(x.outputOps[0], inputs.reductionType, inputs.windowDimensions, inputs.strides, inputs.baseDilations, inputs.windowDilations, inputs.paddings)
 	if err != nil {
@@ -3933,9 +3932,9 @@ func backendScatterMax(operand *Node, scatterIndices *Node, updates *Node, index
 		scatterIndices:           scatterIndices,
 		updates:                  updates,
 		indexVectorAxis:          indexVectorAxis,
-		updateWindowAxes:         updateWindowAxes,
-		insertedWindowAxes:       insertedWindowAxes,
-		scatterAxesToOperandAxes: scatterAxesToOperandAxes,
+		updateWindowAxes:         slices.Clone(updateWindowAxes),
+		insertedWindowAxes:       slices.Clone(insertedWindowAxes),
+		scatterAxesToOperandAxes: slices.Clone(scatterAxesToOperandAxes),
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
@@ -3998,9 +3997,9 @@ func backendScatterMin(operand *Node, scatterIndices *Node, updates *Node, index
 		scatterIndices:           scatterIndices,
 		updates:                  updates,
 		indexVectorAxis:          indexVectorAxis,
-		updateWindowAxes:         updateWindowAxes,
-		insertedWindowAxes:       insertedWindowAxes,
-		scatterAxesToOperandAxes: scatterAxesToOperandAxes,
+		updateWindowAxes:         slices.Clone(updateWindowAxes),
+		insertedWindowAxes:       slices.Clone(insertedWindowAxes),
+		scatterAxesToOperandAxes: slices.Clone(scatterAxesToOperandAxes),
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
@@ -4063,9 +4062,9 @@ func backendScatterSum(operand *Node, scatterIndices *Node, updates *Node, index
 		scatterIndices:           scatterIndices,
 		updates:                  updates,
 		indexVectorAxis:          indexVectorAxis,
-		updateWindowAxes:         updateWindowAxes,
-		insertedWindowAxes:       insertedWindowAxes,
-		scatterAxesToOperandAxes: scatterAxesToOperandAxes,
+		updateWindowAxes:         slices.Clone(updateWindowAxes),
+		insertedWindowAxes:       slices.Clone(insertedWindowAxes),
+		scatterAxesToOperandAxes: slices.Clone(scatterAxesToOperandAxes),
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
@@ -4118,9 +4117,9 @@ func backendSelectAndScatterMax(operand *Node, source *Node, windowDimensions []
 	inputs := &nodeInputsSelectAndScatterMax{
 		operand:          operand,
 		source:           source,
-		windowDimensions: windowDimensions,
-		windowStrides:    windowStrides,
-		paddings:         paddings,
+		windowDimensions: slices.Clone(windowDimensions),
+		windowStrides:    slices.Clone(windowStrides),
+		paddings:         slices.Clone(paddings),
 	}
 	result, err := g.builder.SelectAndScatterMax(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	if err != nil {
@@ -4171,9 +4170,9 @@ func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []
 	inputs := &nodeInputsSelectAndScatterMin{
 		operand:          operand,
 		source:           source,
-		windowDimensions: windowDimensions,
-		windowStrides:    windowStrides,
-		paddings:         paddings,
+		windowDimensions: slices.Clone(windowDimensions),
+		windowStrides:    slices.Clone(windowStrides),
+		paddings:         slices.Clone(paddings),
 	}
 	result, err := g.builder.SelectAndScatterMin(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	if err != nil {
@@ -4435,9 +4434,9 @@ func backendSlice(x *Node, starts []int, limits []int, strides []int) (
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsSlice{
 		x:       x,
-		starts:  starts,
-		limits:  limits,
-		strides: strides,
+		starts:  slices.Clone(starts),
+		limits:  slices.Clone(limits),
+		strides: slices.Clone(strides),
 	}
 	result, err := g.builder.Slice(x.outputOps[0], inputs.starts, inputs.limits, inputs.strides)
 	if err != nil {

@@ -11,14 +11,10 @@ import (
 
 // AllReduce implements the collective AllReduce operation.
 func (b *Builder) AllReduce(operands []backends.Op, reductionType backends.ReduceOpType,
-	replicaGroups [][]int, channelID int) ([]backends.Op, error) {
+	replicaGroups [][]int, channelIDGenerator func() int) ([]backends.Op, error) {
 	nodes, err := b.verifyAndCastValues("stablehlo.AllReduce", operands...)
 	if err != nil {
 		return nil, err
-	}
-	collectiveConfig := shlotypes.CollectiveConfig{
-		ChannelID:   &channelID,
-		ChannelType: shlotypes.CrossReplica,
 	}
 
 	// StableHLO/PJRT only allow AllReduce with operands of the same dtype.
@@ -34,6 +30,11 @@ func (b *Builder) AllReduce(operands []backends.Op, reductionType backends.Reduc
 		reduceFn, err := b.getReductionFn(dtype, opType)
 		if err != nil {
 			return nil, errors.WithMessage(err, "while building reduction function for AllReduce")
+		}
+		channelID := channelIDGenerator()
+		collectiveConfig := shlotypes.CollectiveConfig{
+			ChannelID:   &channelID,
+			ChannelType: shlotypes.CrossReplica,
 		}
 		values, err := stablehlo.AllReduce(
 			xslices.Map(operandsDType, func(node *Node) *stablehlo.Value { return node.value }),

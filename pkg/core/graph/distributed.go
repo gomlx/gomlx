@@ -65,14 +65,17 @@ type DistributedOps struct {
 	g    *Graph
 	axes []string // Stores the mesh axes for the next op.
 
-	// channelID is used a unique id for channel synchronization.
-	// If nil, it will use the Graph's incremental channelID.
-	channelID *int
+	// channelIDGenerator is used to generate unique ids for channel synchronization.
+	// The default is the Graph's incremental channelID, which works fine for SPMD graphs.
+	channelIDGenerator func() int
 }
 
 // Distributed returns a helper object that provides access to all distributed and collective operations.
-func (g *Graph) Distributed() DistributedOps {
-	d := DistributedOps{g: g}
+func (g *Graph) Distributed() *DistributedOps {
+	d := &DistributedOps{
+		g:                  g,
+		channelIDGenerator: g.nextChannelID,
+	}
 	switch g.distStrategy {
 	case distributed.SPMD:
 		if g.deviceMesh == nil {
@@ -95,21 +98,24 @@ func (g *Graph) Distributed() DistributedOps {
 //	g.Distributed().Along("data").AllReduce(x)
 //
 // This will perform an AllReduce along the "data" axis of the mesh.
-func (d DistributedOps) Along(meshAxes ...string) DistributedOps {
-	dOut := d
-	dOut.axes = meshAxes
-	return dOut
+func (d *DistributedOps) Along(meshAxes ...string) *DistributedOps {
+	d.axes = meshAxes
+	return d
 }
 
-// OnChannel specifies the channel ID to use for synchronization.
+// WithChannelIDGenerator specifies a generator of channel IDs to use for synchronization.
 // All communicating devices must use the same channel ID, so it must be agreed upon in some fashion.
 //
+// We use a channel ID generator because we don't know upfront how many IDs will be needed: different
+// backends may need different numbers of IDs. Plus, extra IDs may be needed for the gradient computation
+// (in case it is done).
+//
 // For SPMD programs, you usually don't need to use this, since the default is to use an incremental
-// channelID. And since it's the same Graph executed in every device, it's usually fine.
-func (d DistributedOps) OnChannel(channelID int) DistributedOps {
-	dOut := d
-	dOut.channelID = &channelID
-	return dOut
+// channelID generator provided by the Graph itself.
+// Since it's the same Graph executed in every device, it's usually fine.
+func (d *DistributedOps) WithChannelIDGenerator(channelIDGenerator func() int) *DistributedOps {
+	d.channelIDGenerator = channelIDGenerator
+	return d
 }
 
 // AllReduce performs an AllReduce operation across the devices specified
@@ -117,8 +123,7 @@ func (d DistributedOps) OnChannel(channelID int) DistributedOps {
 //
 // If no axes were specified via DistributedOps.Along(), it performs the operation
 // across *all* devices in the mesh.
-// If no channelID was specified via DistributedOps.OnChannel(), it uses the Graph's incremental channelID.
-func (d DistributedOps) AllReduce(input *Node, reductionType backends.ReduceOpType) *Node {
+func (d *DistributedOps) AllReduce(input *Node, reductionType backends.ReduceOpType) *Node {
 	return d.AllReduceMany([]*Node{input}, reductionType)[0]
 }
 
@@ -130,14 +135,10 @@ func (d DistributedOps) AllReduce(input *Node, reductionType backends.ReduceOpTy
 //
 // If no axes were specified via .Along(), it performs the operation
 // across *all* devices in the mesh.
-func (d DistributedOps) AllReduceMany(operands []*Node, reductionType backends.ReduceOpType) []*Node {
+func (d *DistributedOps) AllReduceMany(operands []*Node, reductionType backends.ReduceOpType) []*Node {
 	if len(operands) == 0 {
 		return nil // Or panic
 	}
-	g := operands[0].Graph()
-
-	// 1. Get the DeviceMesh from the graph.
-	// (This implies you need a new method on graph.Graph)
 	mesh := d.g.deviceMesh
 	if mesh == nil {
 		// Single-device graph: this is a no-op.
@@ -147,6 +148,5 @@ func (d DistributedOps) AllReduceMany(operands []*Node, reductionType backends.R
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed compute replicaGroups for AllReduce"))
 	}
-	channelID := g.nextChannelID()
-	return backendAllReduce(operands, reductionType, replicaGroups, channelID)
+	return backendAllReduce(operands, reductionType, replicaGroups, d.channelIDGenerator)
 }
