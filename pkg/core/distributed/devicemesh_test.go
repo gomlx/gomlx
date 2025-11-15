@@ -1,10 +1,11 @@
-package distributed
+package distributed_test
 
 import (
 	"testing"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,7 +67,7 @@ func TestDeviceMesh(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				mesh, err := NewDeviceMesh(backend, tt.shape, tt.axisNames)
+				mesh, err := distributed.NewDeviceMesh(backend, tt.shape, tt.axisNames)
 				require.NoError(t, err)
 				assert.NotNil(t, mesh)
 				assert.Equal(t, tt.wantRank, mesh.Rank())
@@ -118,7 +119,7 @@ func TestDeviceMesh(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				mesh, err := NewDeviceMesh(backend, tt.shape, tt.axisNames)
+				mesh, err := distributed.NewDeviceMesh(backend, tt.shape, tt.axisNames)
 				require.Error(t, err)
 				assert.Nil(t, mesh)
 				assert.Contains(t, err.Error(), tt.wantErr)
@@ -128,7 +129,7 @@ func TestDeviceMesh(t *testing.T) {
 
 	t.Run("AxisNames", func(t *testing.T) {
 		backend := newMockBackend(8)
-		mesh, err := NewDeviceMesh(backend, []int{2, 4}, []string{"x", "y"})
+		mesh, err := distributed.NewDeviceMesh(backend, []int{2, 4}, []string{"x", "y"})
 		require.NoError(t, err)
 
 		axisNames := mesh.AxisNames()
@@ -141,7 +142,7 @@ func TestDeviceMesh(t *testing.T) {
 
 	t.Run("Shape", func(t *testing.T) {
 		backend := newMockBackend(8)
-		mesh, err := NewDeviceMesh(backend, []int{2, 4}, []string{"x", "y"})
+		mesh, err := distributed.NewDeviceMesh(backend, []int{2, 4}, []string{"x", "y"})
 		require.NoError(t, err)
 
 		shape := mesh.Shape()
@@ -154,7 +155,7 @@ func TestDeviceMesh(t *testing.T) {
 
 	t.Run("AxisSize", func(t *testing.T) {
 		backend := newMockBackend(8)
-		mesh, err := NewDeviceMesh(backend, []int{2, 4}, []string{"x", "y"})
+		mesh, err := distributed.NewDeviceMesh(backend, []int{2, 4}, []string{"x", "y"})
 		require.NoError(t, err)
 
 		tests := []struct {
@@ -222,7 +223,7 @@ func TestDeviceMesh(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				mesh, err := NewDeviceMesh(backend, tt.shape, tt.axisNames)
+				mesh, err := distributed.NewDeviceMesh(backend, tt.shape, tt.axisNames)
 				require.NoError(t, err)
 				assert.Equal(t, tt.want, mesh.String())
 			})
@@ -231,7 +232,7 @@ func TestDeviceMesh(t *testing.T) {
 
 	t.Run("SetDeviceAssignment_Valid", func(t *testing.T) {
 		backend := newMockBackend(8)
-		mesh, err := NewDeviceMesh(backend, []int{4}, []string{"replica"})
+		mesh, err := distributed.NewDeviceMesh(backend, []int{4}, []string{"replica"})
 		require.NoError(t, err)
 
 		tests := []struct {
@@ -270,7 +271,7 @@ func TestDeviceMesh(t *testing.T) {
 
 	t.Run("SetDeviceAssignment_Errors", func(t *testing.T) {
 		backend := newMockBackend(8)
-		mesh, err := NewDeviceMesh(backend, []int{4}, []string{"replica"})
+		mesh, err := distributed.NewDeviceMesh(backend, []int{4}, []string{"replica"})
 		require.NoError(t, err)
 
 		tests := []struct {
@@ -311,7 +312,7 @@ func TestDeviceMesh(t *testing.T) {
 
 	t.Run("DeviceToMesh_1D", func(t *testing.T) {
 		backend := newMockBackend(8)
-		mesh, err := NewDeviceMesh(backend, []int{4}, []string{"replica"})
+		mesh, err := distributed.NewDeviceMesh(backend, []int{4}, []string{"replica"})
 		require.NoError(t, err)
 
 		for i := 0; i < 4; i++ {
@@ -324,7 +325,7 @@ func TestDeviceMesh(t *testing.T) {
 
 	t.Run("DeviceToMesh_2D", func(t *testing.T) {
 		backend := newMockBackend(8)
-		mesh, err := NewDeviceMesh(backend, []int{2, 4}, []string{"x", "y"})
+		mesh, err := distributed.NewDeviceMesh(backend, []int{2, 4}, []string{"x", "y"})
 		require.NoError(t, err)
 
 		tests := []struct {
@@ -354,7 +355,7 @@ func TestDeviceMesh(t *testing.T) {
 
 	t.Run("DeviceToMesh_3D", func(t *testing.T) {
 		backend := newMockBackend(8)
-		mesh, err := NewDeviceMesh(backend, []int{2, 2, 2}, []string{"x", "y", "z"})
+		mesh, err := distributed.NewDeviceMesh(backend, []int{2, 2, 2}, []string{"x", "y", "z"})
 		require.NoError(t, err)
 
 		tests := []struct {
@@ -384,7 +385,7 @@ func TestDeviceMesh(t *testing.T) {
 
 	t.Run("DeviceToMesh_WithCustomMapping", func(t *testing.T) {
 		backend := newMockBackend(8)
-		mesh, err := NewDeviceMesh(backend, []int{4}, []string{"replica"})
+		mesh, err := distributed.NewDeviceMesh(backend, []int{4}, []string{"replica"})
 		require.NoError(t, err)
 
 		// Set custom mapping: devices [7, 5, 3, 1]
@@ -419,7 +420,7 @@ func TestDeviceMesh(t *testing.T) {
 
 	t.Run("DeviceToMesh_NotInMesh", func(t *testing.T) {
 		backend := newMockBackend(8)
-		mesh, err := NewDeviceMesh(backend, []int{4}, []string{"replica"})
+		mesh, err := distributed.NewDeviceMesh(backend, []int{4}, []string{"replica"})
 		require.NoError(t, err)
 
 		// Device 5 is not in the mesh (only 0-3 are used)
@@ -431,7 +432,7 @@ func TestDeviceMesh(t *testing.T) {
 	t.Run("ComputeReplicaGroups", func(t *testing.T) {
 		t.Run("2D mesh batch groups", func(t *testing.T) {
 			backend := newMockBackend(8)
-			mesh, err := NewDeviceMesh(backend, []int{2, 2}, []string{"batch", "data"})
+			mesh, err := distributed.NewDeviceMesh(backend, []int{2, 2}, []string{"batch", "data"})
 			require.NoError(t, err)
 
 			// Example from comments: m.ComputeReplicaGroups([]string{"batch"}) -> [][]int{{0, 2}, {1, 3}}
@@ -442,7 +443,7 @@ func TestDeviceMesh(t *testing.T) {
 
 		t.Run("2D mesh data groups", func(t *testing.T) {
 			backend := newMockBackend(8)
-			mesh, err := NewDeviceMesh(backend, []int{2, 2}, []string{"batch", "data"})
+			mesh, err := distributed.NewDeviceMesh(backend, []int{2, 2}, []string{"batch", "data"})
 			require.NoError(t, err)
 
 			// Example from comments: m.ComputeReplicaGroups([]string{"data"}) -> [][]int{{0, 1}, {2, 3}}
@@ -453,7 +454,7 @@ func TestDeviceMesh(t *testing.T) {
 
 		t.Run("2D mesh global groups", func(t *testing.T) {
 			backend := newMockBackend(8)
-			mesh, err := NewDeviceMesh(backend, []int{2, 2}, []string{"batch", "data"})
+			mesh, err := distributed.NewDeviceMesh(backend, []int{2, 2}, []string{"batch", "data"})
 			require.NoError(t, err)
 
 			// Example from comments: m.ComputeReplicaGroups([]string{"batch", "data"}) -> [][]int{{0, 1, 2, 3}}
@@ -464,7 +465,7 @@ func TestDeviceMesh(t *testing.T) {
 
 		t.Run("1D mesh", func(t *testing.T) {
 			backend := newMockBackend(8)
-			mesh, err := NewDeviceMesh(backend, []int{4}, []string{"replica"})
+			mesh, err := distributed.NewDeviceMesh(backend, []int{4}, []string{"replica"})
 			require.NoError(t, err)
 
 			groups, err := mesh.ComputeReplicaGroups([]string{"replica"})
@@ -474,7 +475,7 @@ func TestDeviceMesh(t *testing.T) {
 
 		t.Run("3D mesh single axis", func(t *testing.T) {
 			backend := newMockBackend(8)
-			mesh, err := NewDeviceMesh(backend, []int{2, 2, 2}, []string{"x", "y", "z"})
+			mesh, err := distributed.NewDeviceMesh(backend, []int{2, 2, 2}, []string{"x", "y", "z"})
 			require.NoError(t, err)
 
 			// Groups along x axis: should split by y and z
@@ -485,7 +486,7 @@ func TestDeviceMesh(t *testing.T) {
 
 		t.Run("3D mesh two axes", func(t *testing.T) {
 			backend := newMockBackend(8)
-			mesh, err := NewDeviceMesh(backend, []int{2, 2, 2}, []string{"x", "y", "z"})
+			mesh, err := distributed.NewDeviceMesh(backend, []int{2, 2, 2}, []string{"x", "y", "z"})
 			require.NoError(t, err)
 
 			// Groups along x and y axes: should split by z
@@ -496,7 +497,7 @@ func TestDeviceMesh(t *testing.T) {
 
 		t.Run("empty axes list", func(t *testing.T) {
 			backend := newMockBackend(8)
-			mesh, err := NewDeviceMesh(backend, []int{2, 2}, []string{"batch", "data"})
+			mesh, err := distributed.NewDeviceMesh(backend, []int{2, 2}, []string{"batch", "data"})
 			require.NoError(t, err)
 
 			// Empty axes list: each device is its own group
@@ -507,7 +508,7 @@ func TestDeviceMesh(t *testing.T) {
 
 		t.Run("non-existent axis", func(t *testing.T) {
 			backend := newMockBackend(8)
-			mesh, err := NewDeviceMesh(backend, []int{2, 2}, []string{"batch", "data"})
+			mesh, err := distributed.NewDeviceMesh(backend, []int{2, 2}, []string{"batch", "data"})
 			require.NoError(t, err)
 
 			// Non-existent axis should return an error.

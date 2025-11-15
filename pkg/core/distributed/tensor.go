@@ -37,9 +37,9 @@ type Tensor struct {
 	logicalShape, shardShape shapes.Shape
 }
 
-// New creates a new distributed Tensor.
+// NewTensor creates a new distributed Tensor.
 // It assumes the provided shards are already on their respective devices.
-func New(mesh *DeviceMesh, spec ShardSpec, shards []*tensors.Tensor) (*Tensor, error) {
+func NewTensor(mesh *DeviceMesh, spec ShardSpec, shards []*tensors.Tensor) (*Tensor, error) {
 	if err := spec.Validate(mesh); err != nil {
 		return nil, errors.Wrap(err, "invalid ShardSpec")
 	}
@@ -236,7 +236,7 @@ func ShardTensor(t *tensors.Tensor, mesh *DeviceMesh, spec ShardSpec) (*Tensor, 
 		copySlice(tmpT, shards[i], sliceStarts, sliceEnds)
 	}
 
-	return New(mesh, spec, shards)
+	return NewTensor(mesh, spec, shards)
 }
 
 func copySlice(from, to *tensors.Tensor, starts, ends []int) {
