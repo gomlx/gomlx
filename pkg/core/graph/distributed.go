@@ -95,9 +95,9 @@ func (g *Graph) Distributed() *DistributedOps {
 //
 // For example:
 //
-//	g.Distributed().Along("data").AllReduce(x)
+//	g.Distributed().Along("data").AllReduceOne(x, backends.ReduceOpSum)
 //
-// This will perform an AllReduce along the "data" axis of the mesh.
+// This will perform an AllReduceOne along the "data" axis of the mesh.
 func (d *DistributedOps) Along(meshAxes ...string) *DistributedOps {
 	d.axes = meshAxes
 	return d
@@ -118,24 +118,14 @@ func (d *DistributedOps) WithChannelIDGenerator(channelIDGenerator func() int) *
 	return d
 }
 
-// AllReduce performs an AllReduce operation across the devices specified
-// in the chained options.
+// AllReduce performs a reduce operation across the devices specified in the chained options.
 //
-// If no axes were specified via DistributedOps.Along(), it performs the operation
-// across *all* devices in the mesh.
-func (d *DistributedOps) AllReduce(input *Node, reductionType backends.ReduceOpType) *Node {
-	return d.AllReduceMany([]*Node{input}, reductionType)[0]
-}
-
-// AllReduceMany performs an AllReduce operation across the devices specified
-// in the chained options.
-//
-// It takes a collection of operands and returns them reduced operands across the devices as outputs.
+// It takes a collection of operands and reduces each of them across the devices as outputs.
 // So the output shapes are the same as the operand shapes.
 //
-// If no axes were specified via .Along(), it performs the operation
+// If no device axes were specified via DistributedOps.Along(), it performs the operation
 // across *all* devices in the mesh.
-func (d *DistributedOps) AllReduceMany(operands []*Node, reductionType backends.ReduceOpType) []*Node {
+func (d *DistributedOps) AllReduce(operands []*Node, reductionType backends.ReduceOpType) []*Node {
 	if len(operands) == 0 {
 		return nil // Or panic
 	}
@@ -146,7 +136,17 @@ func (d *DistributedOps) AllReduceMany(operands []*Node, reductionType backends.
 	}
 	replicaGroups, err := mesh.ComputeReplicaGroups(d.axes)
 	if err != nil {
-		panic(errors.WithMessagef(err, "failed compute replicaGroups for AllReduce"))
+		panic(errors.WithMessagef(err, "failed compute replicaGroups for AllReduceOne"))
 	}
 	return backendAllReduce(operands, reductionType, replicaGroups, d.channelIDGenerator)
+}
+
+// AllReduceOne performs a reduce operation across the devices specified
+// in the chained options.
+// So the output shapes are the same as the operand shapes.
+//
+// If no device axes were specified via DistributedOps.Along(), it performs the operation
+// across *all* devices in the mesh.
+func (d *DistributedOps) AllReduceOne(input *Node, reductionType backends.ReduceOpType) *Node {
+	return d.AllReduce([]*Node{input}, reductionType)[0]
 }

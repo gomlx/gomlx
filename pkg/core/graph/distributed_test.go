@@ -33,7 +33,7 @@ func TestDistributedAllReduce(t *testing.T) {
 			WithDeviceMesh(mesh)
 		g.AssertBuilding()
 		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
-		reduced := g.Distributed().AllReduce(x, backends.ReduceOpSum)
+		reduced := g.Distributed().AllReduceOne(x, backends.ReduceOpSum)
 		g.Compile(reduced)
 		outputs := g.Run(float32(1), float32(3))
 		require.Len(t, outputs, mesh.NumDevices())
@@ -51,7 +51,7 @@ func TestDistributedAllReduce(t *testing.T) {
 		g.AssertBuilding()
 		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
 		y := graph.Parameter(g, "y", shapes.Make(dtypes.Float32, 2))
-		reduced := g.Distributed().AllReduceMany([]*graph.Node{x, y}, backends.ReduceOpSum)
+		reduced := g.Distributed().AllReduce([]*graph.Node{x, y}, backends.ReduceOpSum)
 		g.Compile(reduced...)
 		outputs := g.Run(
 			float32(1), []float32{10, 11}, // Replica 0
@@ -75,7 +75,7 @@ func TestDistributedAllReduce(t *testing.T) {
 		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
 		y := graph.Parameter(g, "y", shapes.Make(dtypes.Float32, 2))
 		z := graph.Parameter(g, "z", shapes.Make(dtypes.Float64, 3))
-		reduced := g.Distributed().AllReduceMany([]*graph.Node{x, y, z}, backends.ReduceOpSum)
+		reduced := g.Distributed().AllReduce([]*graph.Node{x, y, z}, backends.ReduceOpSum)
 		g.Compile(reduced...)
 		outputs := g.Run(
 			float32(1), []float32{10, 11}, []float64{0.1, 0.2, 0.3}, // Replica 0
