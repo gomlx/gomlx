@@ -457,8 +457,12 @@ func (t *Tensor) Backend() (backends.Backend, error) {
 	if err != nil {
 		return nil, err
 	}
-	if t.IsLocal() {
-		return nil, errors.Errorf("Tensor.Device() called on a local tensor")
+	if len(t.onDevices) == 0 {
+		return nil, errors.Errorf("Tensor.Device() called on a local only tensor")
+	}
+	if t.backend == nil {
+		return nil, errors.Errorf(
+			"Tensor(shape=%s) has and invalid backend -- please report, this should never happen", t.shape)
 	}
 	return t.backend, nil
 }
@@ -471,11 +475,12 @@ func (t *Tensor) Device() (backends.DeviceNum, error) {
 	if err != nil {
 		return 0, err
 	}
-	if t.IsLocal() {
-		return 0, errors.Errorf("Tensor.Device() called on a local tensor")
+	if len(t.onDevices) == 0 {
+		return 0, errors.Errorf("Tensor.Device() called on a local only tensor")
 	}
 	for deviceNum := range t.onDevices {
 		return deviceNum, nil
 	}
+	// This should never run:
 	return 0, errors.Errorf("Tensor is empty, not local, not on any device")
 }

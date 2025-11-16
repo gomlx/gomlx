@@ -1,6 +1,8 @@
 package tensors_test
 
 import (
+	"bytes"
+	"encoding/gob"
 	"flag"
 	"fmt"
 	"runtime"
@@ -311,13 +313,48 @@ func TestToLocal(t *testing.T) {
 		t.Run(fmt.Sprintf("Shared=%v", shared), func(t *testing.T) {
 			tensor := tensors.FromValue(refValues)
 			tensor.MaterializeOnDevices(backend, shared)
-			require.NotNil(t, tensor.backend)
+			b2, err := tensor.Backend()
+			require.NoError(t, err)
+			require.Equal(t, backend, b2)
 
 			// Move to local: there should be no on-device storage or backend associated,
 			// and the contents should still be the same.
 			tensor.ToLocal()
-			require.Nil(t, tensor.backend)
+			_, err = tensor.Backend()
+			require.Error(t, err)
 			require.Equal(t, refValues, tensors.CopyFlatData[int32](tensor))
 		})
+	}
+}
+
+func TestOnDeviceSerialization(t *testing.T) {
+	// Test reading directly to device.
+	setupTest(t)
+	if backend == nil {
+		panic("Backend not set!?")
+	}
+	{
+		values := [][]int64{{2}, {3}, {5}, {7}, {11}}
+		var tensor *tensors.Tensor
+		require.NotPanics(t, func() { tensor = tensors.FromValue(values) })
+		buf := &bytes.Buffer{}
+		enc := gob.NewEncoder(buf)
+
+		// Serialized repeats times:
+		repeats := 10
+		for range repeats {
+			require.NoError(t, tensor.GobSerialize(enc))
+		}
+		fmt.Printf("\t%#v serialized %d times to %d bytes\n", values, repeats, buf.Len())
+
+		// Deserialize repeats times:
+		dec := gob.NewDecoder(buf)
+		for range repeats {
+			var err error
+			tensor, err = tensors.GobDeserializeToDevice(dec, backend)
+			require.NoError(t, err)
+			require.Equal(t, values, tensor.Value().([][]int64))
+			tensor.FinalizeAll()
+		}
 	}
 }
