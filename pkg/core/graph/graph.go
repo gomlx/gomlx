@@ -610,15 +610,11 @@ func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool) (outputs
 // and whether the buffer can be donated.
 func anyToDeviceBuffer(backend backends.Backend, deviceNum backends.DeviceNum, value any) (backends.Buffer, shapes.Shape, bool) {
 	if t, ok := value.(*tensors.Tensor); ok {
-		if t.IsOnDevice(deviceNum) || t.IsLocal() {
-			return t.Buffer(backend, deviceNum), t.Shape(), false
+		buf, shape, err := tensorToDeviceBuffer(backend, deviceNum, t)
+		if err != nil {
+			panic(err)
 		}
-		// The tensor is on a different device: we don't handle this, likely this is a logic error on the part of
-		// the user. If they want, they have to explicilty transfer the tensor to the device they want.
-		exceptions.Panicf(
-			"tensor stored on the wrong deviceNum #%d, expected it to be on device #%d where it's going "+
-				"to be used -- this is likely a logic error, so it is not transferred automatically",
-			t.IsOnDevice())
+		return buf, shape, false // We don't donate tensors by default.
 	}
 	b, ok := value.(*donateBuffer)
 	if ok {
@@ -628,6 +624,43 @@ func anyToDeviceBuffer(backend backends.Backend, deviceNum backends.DeviceNum, v
 	t = tensors.FromAnyValue(value)
 	shape := t.Shape()
 	return t.DonateBuffer(backend, deviceNum), shape, true
+}
+
+// tensorToDeviceBuffer is used by anyToDeviceBuffer to convert a tensor to a device buffer.
+func tensorToDeviceBuffer(backend backends.Backend, deviceNum backends.DeviceNum, t *tensors.Tensor) (backends.Buffer, shapes.Shape, error) {
+	var shape shapes.Shape
+	err := t.CheckValid()
+	if err != nil {
+		return nil, shape, err
+	}
+	currentDevice, err := t.Device()
+	if err == nil {
+		if currentDevice == deviceNum {
+			// Already on the right device, no need to transfer.
+			buf, err := t.Buffer(backend, deviceNum)
+			if err != nil {
+				return nil, shape, err
+			}
+			return buf, t.Shape(), nil
+		}
+		return nil, shape, errors.Errorf(
+			"tensor stored on the wrong deviceNum #%d, expected it to be on device #%d where it's going "+
+				"to be used -- this is likely a logic error, so it is not transferred automatically",
+			currentDevice, deviceNum)
+	}
+	if t.IsLocal() {
+		// Transfer the tensor to the right device:
+		buf, err := t.Buffer(backend, deviceNum)
+		if err != nil {
+			return nil, shape, err
+		}
+		return buf, t.Shape(), nil
+	}
+	if err != nil {
+		return nil, shape, err
+	}
+	return nil, shape, errors.Errorf(
+		"tensor %q is not local and not on a device, cannot transfer to deviceNum #%d", t.Shape(), deviceNum)
 }
 
 // NumParameters returns the number of parameters created for this graph.

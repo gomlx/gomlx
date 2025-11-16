@@ -46,18 +46,24 @@ func FromBuffer(backend backends.Backend, buffer backends.Buffer) (t *Tensor) {
 //
 // Careful not to finalize the tensor while the buffer is in use -- e.g.: during the execution that uses the buffer
 // as input.
-func (t *Tensor) Buffer(backend backends.Backend, deviceNum ...backends.DeviceNum) backends.Buffer {
+func (t *Tensor) Buffer(backend backends.Backend, deviceNum ...backends.DeviceNum) (backends.Buffer, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.AssertValid()
+	err := t.CheckValid()
+	if err != nil {
+		return nil, err
+	}
 	if len(deviceNum) > 1 {
-		exceptions.Panicf("Tensor.Buffer takes at most one deviceNum, %v given", deviceNum)
+		return nil, errors.Errorf("Tensor.Buffer takes at most one deviceNum, %v given", deviceNum)
 	}
 	if len(deviceNum) == 0 {
 		deviceNum = defaultDeviceNums
 	}
-	t.lockedMaterializeOnDevices(backend, true, deviceNum...)
-	return t.onDevices[deviceNum[0]].buffer
+	err = t.lockedMaterializeOnDevices(backend, true, deviceNum...)
+	if err != nil {
+		return nil, err
+	}
+	return t.onDevices[deviceNum[0]].buffer, nil
 }
 
 // DonateBuffer returns the backend buffer for the tensor and transfers the ownership of the buffer to the caller.
@@ -84,7 +90,7 @@ func (t *Tensor) DonateBuffer(backend backends.Backend, deviceNum ...backends.De
 	if len(deviceNum) == 0 {
 		deviceNum = defaultDeviceNums
 	}
-	t.lockedMaterializeOnDevices(backend, false, deviceNum...)
+	t.mustLockedMaterializeOnDevices(backend, false, deviceNum...)
 	buf := t.onDevices[deviceNum[0]].buffer
 	delete(t.onDevices, deviceNum[0])
 	if t.local == nil && len(t.onDevices) == 0 {
@@ -135,50 +141,62 @@ func (t *Tensor) MaterializeOnDevices(backend backends.Backend, share bool, devi
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.AssertValid()
-	t.lockedMaterializeOnDevices(backend, share, deviceNums...)
+	t.mustLockedMaterializeOnDevices(backend, share, deviceNums...)
 }
 
 // defaultDeviceNums is used whenever `deviceNums` is not provided.
 var defaultDeviceNums = []backends.DeviceNum{0}
 
-// lockedMaterializeOnDevices implements Tensor.MaterializeOnDevices
+// mustLockedMaterializeOnDevices implements Tensor.MaterializeOnDevices
 //
 // If share is true, it will attempt to materialize to a shared buffer if available.
 // In this case, it frees the local tensor storage and starts using the shared data instead.
-func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, share bool, deviceNums ...backends.DeviceNum) {
+func (t *Tensor) mustLockedMaterializeOnDevices(backend backends.Backend, share bool, deviceNums ...backends.DeviceNum) {
+	err := t.lockedMaterializeOnDevices(backend, share, deviceNums...)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, share bool, deviceNums ...backends.DeviceNum) error {
 	if t.backend == nil {
 		t.backend = backend
 	} else if t.backend != backend {
-		exceptions.Panicf("while attempting to Tensor(shape=%s).MaterilizeOnDevices(backend=%s): cannot use the same Tensor across different backend instances, "+
-			"even if they are the same type of backend; see more on the Tensor documentation, but a couple of quick solutions: (a) call Tensor.ToLocal() to make sure the "+
-			"tensor is moved to local storage and detached from the backend; (b) clone the tensors "+
-			"and keep a tensor copy for each desired backend, with tensor.LocalClone() or tensor.OnDeviceClone(newBackend)",
+		return errors.Errorf(
+			"while attempting to Tensor(shape=%s).MaterilizeOnDevices(backend=%s): cannot use the same Tensor "+
+				"across different backend instances, even if they are the same type of backend; see more on the Tensor "+
+				"documentation, but a couple of quick solutions: (a) call Tensor.ToLocal() to make sure the "+
+				"tensor is moved to local storage and detached from the backend; (b) clone the tensors "+
+				"and keep a tensor copy for each desired backend, with tensor.LocalClone() or "+
+				"tensor.OnDeviceClone(newBackend)",
 			t.shape, backend.Name())
-		t.Clone()
 	}
 	if t.backend == nil || t.backend.IsFinalized() {
-		exceptions.Panicf("cannote MaterializeOnDevice with a nil or finalized backend")
+		return errors.New("cannot MaterializeOnDevice with a nil or finalized backend")
 	}
 
 	if len(deviceNums) == 0 {
 		deviceNums = defaultDeviceNums
 	}
 	if len(deviceNums) > 1 {
-		exceptions.Panicf("Tensor.MaterializeOnDevices: tensor synchronization across multiple devices not supported yet -- you can create one tensor per device though")
+		return errors.New("Tensor.MaterializeOnDevices: tensor synchronization across multiple devices not" +
+			" supported yet -- you can create one tensor per device though")
 	}
 	deviceNum := deviceNums[0]
 	d, found := t.onDevices[deviceNum]
 	if found && !d.IsFinalized() {
 		// Nothing to do.
-		return
+		return nil
 	}
 	if !found && len(t.onDevices) > 0 {
-		exceptions.Panicf("Tensor.MaterializeOnDevices: tensor synchronization across multiple devices not supported yet -- you can create one tensor per device though")
+		return errors.New(
+			"Tensor.MaterializeOnDevices: tensor synchronization across multiple devices not supported yet " +
+				"-- you can create one tensor per device though")
 	}
 
 	// We need to materialize the onDevice from local:
 	if t.local == nil {
-		exceptions.Panicf("Tensor(shape=%s) has invalid local and on-device data!?", t.shape)
+		return errors.Errorf("Tensor(shape=%s) has invalid local and on-device data!?", t.shape)
 	}
 
 	var buffer backends.Buffer
@@ -186,7 +204,7 @@ func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, share bool
 	if share && backend.HasSharedBuffers() {
 		buffer, t.sharedFlat, err = backend.NewSharedBuffer(deviceNum, t.shape)
 		if err != nil {
-			panic(errors.WithMessagef(err, "Tensor.MaterializeOnDevices: failed to create shared buffer"))
+			return errors.WithMessagef(err, "Tensor.MaterializeOnDevices: failed to create a shared buffer")
 		}
 		reflect.Copy(reflect.ValueOf(t.sharedFlat), reflect.ValueOf(t.local.flat))
 		t.local = nil // Free local storage.
@@ -194,7 +212,7 @@ func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, share bool
 	} else {
 		buffer, err = t.backend.BufferFromFlatData(deviceNum, t.local.flat, t.shape)
 		if err != nil {
-			panic(errors.WithMessagef(err, "Tensor.MaterializeOnDevices: failed to create buffer"))
+			return errors.WithMessagef(err, "Tensor.MaterializeOnDevices: failed to create a new buffer")
 		}
 	}
 	d = &onDevice{
@@ -203,6 +221,7 @@ func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, share bool
 		deviceNum: deviceNum,
 	}
 	t.onDevices[deviceNum] = d
+	return nil
 }
 
 // InvalidateOnDevice destroys all on-device copies of the Tensor, so the local copy becomes the source of truth.

@@ -43,54 +43,62 @@ func setupTest(t *testing.T) {
 }
 
 func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends.Backend) {
-	// Create trivial f(x)=x^2 program using plain XlaBuilder
 	dtype := dtypes.FromGenericsType[T]()
-	dims := []int{3, 2}
-	builder := backend.Builder(fmt.Sprintf("%s_%s", t.Name(), dtype))
-	x, err := builder.Parameter("x", shapes.Make(dtype, dims...))
-	require.NoError(t, err)
-	x2, err := builder.Mul(x, x)
-	require.NoError(t, err)
-	exec, err := builder.Compile(x2)
-	require.NoError(t, err)
+	t.Run(dtype.String(), func(t *testing.T) {
+		// Create trivial f(x)=x^2 program using plain XlaBuilder
+		if !backend.Capabilities().DTypes[dtype] {
+			t.Skipf("Backend %s does not support dtype %s", backend.Name(), dtype)
+		}
 
-	// Create local Tensor input.
-	values := []T{0, 1, 2, 3, 4, 11}
-	var tensor *tensors.Tensor
-	require.NotPanics(t, func() { tensor = tensors.FromFlatDataAndDimensions(values, dims...) })
+		dims := []int{3, 2}
+		builder := backend.Builder(fmt.Sprintf("%s_%s", t.Name(), dtype))
+		x, err := builder.Parameter("x", shapes.Make(dtype, dims...))
+		require.NoError(t, err)
+		x2, err := builder.Mul(x, x)
+		require.NoError(t, err)
+		exec, err := builder.Compile(x2)
+		require.NoError(t, err)
 
-	var buffer backends.Buffer
-	require.NotPanics(t, func() {
-		buffer = tensor.Buffer(backend)
-	})
-	if backend.HasSharedBuffers() {
-		// Input tensor must have become shared during conversion to "on-device".
-		// Check that the shared buffer got loaded with the right values:
-		require.True(t, tensor.IsShared())
-		tensors.ConstFlatData(tensor, func(flat []T) {
-			require.Equal(t, []T{0, 1, 2, 3, 4, 11}, flat)
+		// Create local Tensor input.
+		values := []T{0, 1, 2, 3, 4, 11}
+		var tensor *tensors.Tensor
+		require.NotPanics(t, func() { tensor = tensors.FromFlatDataAndDimensions(values, dims...) })
+
+		buffer, err := tensor.Buffer(backend)
+		require.NoError(t, err)
+		if backend.HasSharedBuffers() {
+			// Input tensor must have become shared during conversion to "on-device".
+			// Check that the shared buffer got loaded with the right values:
+			require.True(t, tensor.IsShared())
+			tensors.ConstFlatData(tensor, func(flat []T) {
+				require.Equal(t, []T{0, 1, 2, 3, 4, 11}, flat)
+			})
+		}
+
+		var outputs []backends.Buffer
+		outputs, err = exec.Execute([]backends.Buffer{buffer}, nil)
+		require.NoError(t, err)
+
+		// Convert the buffer to a tensor: the converted tensor should not be shared, since the buffer comes from the output
+		// of a backend execution.
+		outputTensor := tensors.FromBuffer(backend, outputs[0])
+		require.False(t, outputTensor.IsShared())
+		fmt.Printf("\tf(x) = x^2, f(%s) = %s\n", tensor.GoStr(), outputTensor.GoStr())
+		require.NoErrorf(t, outputTensor.Shape().Check(dtype, 3, 2),
+			"Output tensor for dtype %s got shape %s", dtype, outputTensor.Shape())
+		want := []T{0, 1, 4, 9, 16, 121}
+		outputTensor.ConstFlatData(func(flatAny any) {
+			flat := flatAny.([]T)
+			require.Equal(t, want, flat) //  "Output tensor value was %s", outputTensor.GoStr())
 		})
-	}
-
-	var outputs []backends.Buffer
-	outputs, err = exec.Execute([]backends.Buffer{buffer}, nil)
-	require.NoError(t, err)
-
-	// Convert the buffer to a tensor: the converted tensor should not be shared, since the buffer comes from the output
-	// of a backend execution.
-	outputTensor := tensors.FromBuffer(backend, outputs[0])
-	require.False(t, outputTensor.IsShared())
-	fmt.Printf("\tf(x) = x^2, f(%s) = %s\n", tensor.GoStr(), outputTensor.GoStr())
-	require.NoErrorf(t, outputTensor.Shape().Check(dtype, 3, 2), "Output tensor for dtype %s got shape %s", dtype, outputTensor.Shape())
-	want := []T{0, 1, 4, 9, 16, 121}
-	outputTensor.ConstFlatData(func(flatAny any) {
-		flat := flatAny.([]T)
-		require.Equal(t, want, flat) //  "Output tensor value was %s", outputTensor.GoStr())
 	})
 }
 
 func TestOnDeviceInputOutput(t *testing.T) {
 	setupTest(t)
+
+	testOnDeviceInputOutputImpl[float32](t, backend)
+
 	testOnDeviceInputOutputImpl[int8](t, backend)
 	testOnDeviceInputOutputImpl[int16](t, backend)
 	testOnDeviceInputOutputImpl[int32](t, backend)

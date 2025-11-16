@@ -412,7 +412,11 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 					Panicf("variable %q failed to initialize", v.ScopeAndName())
 				}
 			}
-			inputBuffers[handle] = v.Value().Buffer(e.backend, e.exec.DeviceNum())
+			var err error
+			inputBuffers[handle], err = v.Value().Buffer(e.backend, e.exec.DeviceNum())
+			if err != nil {
+				panic(err)
+			}
 			donate[handle] = false
 		}
 	})
