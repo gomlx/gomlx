@@ -28,6 +28,9 @@ Distributed computation improvements and refactorings:
 
 Other minor improvements:
 
+- Package `simplego`:
+  - Cleanups and improvements: thanks to @wunderbarb!
+  - Fixed the issue with not handling the default value for the donate parameter in the Execute method.
 - Package `cosineschedule`:
   - Added `WarmUpSteps` and `NumCycles` hyperparameters -- removed overloading of `periodSteps`.
 - Added sponsorship badge and section to README.md. Also added the `FUNDING.yml` pointing to sponsorship.
