@@ -102,8 +102,14 @@ func (ni *nodeInputsSplitNode) String() string {
 // Internal only: users should only need to handle nodes with one output, so any method that returns many outputs
 // must call splitNode before returning to the user.
 func splitNode(multiOutputNode *Node) (splitNodes []*Node) {
-	if multiOutputNode.NumOutputs() <= 1 {
-		exceptions.Panicf("splitNode expects as input a node with multiple-outputs, but node had only one output %d", multiOutputNode.NumOutputs())
+	if multiOutputNode.NumOutputs() == 1 {
+		// Identity: no need to split.
+		// This happens when an operation returns a slice of outputs, but the slice contains only one element.
+		return []*Node{multiOutputNode}
+	}
+	if multiOutputNode.NumOutputs() == 0 {
+		exceptions.Panicf("splitNode expects at least one node as input -- got %d outputs",
+			multiOutputNode.NumOutputs())
 	}
 	g := multiOutputNode.Graph()
 	g.AssertBuilding()

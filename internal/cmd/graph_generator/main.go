@@ -11,6 +11,7 @@ import (
 	"text/template"
 
 	"github.com/gomlx/gomlx/internal/backendparser"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"k8s.io/klog/v2"
@@ -28,7 +29,7 @@ var (
 	// methodsNotExported list methods that will have a non-exported "backend<Method>" function written, that can
 	// be used by the public graphs implementation.
 	methodsNotExported = sets.MakeWith(
-		"ArgMinMax", "Broadcast", "BroadcastInDim",
+		"AllReduce", "ArgMinMax", "Broadcast", "BroadcastInDim",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
 		"Concatenate", "ConvertDType", "ConvGeneral", "DotGeneral", "FFT", "Gather", "Iota",
 		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum", "ReduceWindow",
@@ -53,13 +54,13 @@ var (
 	// methodsExcluded from generating and even from having a NodeType.
 	// These are utility methods, not part of building a graph.
 	methodsExcluded = sets.MakeWith(
-		"Name", "Compile", "OpShape")
+		"Name", "Compile", "OpShape", "DeviceAssignment", "DistributedSPMD")
 
 	// methodsNoGradient will add a stop gradient to the node.
 	methodsNoGradient = sets.MakeWith(
-		"And", "Or", "Xor", "LogicalNot",
-		"Equal", "NotEqual", "GreaterOrEqual", "GreaterThan", "LessOrEqual", "LessThan",
-		"EqualTotalOrder", "NotEqualTotalOrder", "GreaterOrEqualTotalOrder", "GreaterThanTotalOrder", "LessOrEqualTotalOrder", "LessThanTotalOrder")
+		"And", "Or", "Xor", "LogicalNot", "Equal", "NotEqual", "GreaterOrEqual", "GreaterThan",
+		"LessOrEqual", "LessThan", "EqualTotalOrder", "NotEqualTotalOrder", "GreaterOrEqualTotalOrder",
+		"GreaterThanTotalOrder", "LessOrEqualTotalOrder", "LessThanTotalOrder")
 )
 
 func buildMethodInfo() (methods []*MethodInfo) {
@@ -85,6 +86,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			pi := &ParameterInfo{
 				Name:        param.Name,
 				BackendType: param.Type,
+				Printable:   true,
 			}
 			mi.Inputs = append(mi.Inputs, pi)
 			switch pi.BackendType {
@@ -101,7 +103,8 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				mi.OpInputSlices = append(mi.OpInputSlices, param.Name)
 				pi.NodeInputType = "[]*Node"
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
-				pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })...", param.Name)
+				pi.ConvertStatement = fmt.Sprintf(
+					"xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })...", param.Name)
 				pi.Format = "[#%s]"
 				pi.FormatValue = fmt.Sprintf(
 					`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
@@ -112,7 +115,8 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				mi.OpInputSlices = append(mi.OpInputSlices, param.Name)
 				pi.NodeInputType = "[]*Node"
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
-				pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })", param.Name)
+				pi.ConvertStatement = fmt.Sprintf(
+					"xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })", param.Name)
 				pi.Format = "[#%s]"
 				pi.FormatValue = fmt.Sprintf(
 					`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
@@ -134,12 +138,17 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.BackendType = "backends." + pi.BackendType
 				pi.Format = "%s"
 			default:
-				if strings.HasPrefix(pi.BackendType, "...") {
+				switch {
+				case strings.HasPrefix(pi.BackendType, "..."):
 					pi.NodeInputType = "[]" + pi.BackendType[3:]
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
 					pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
-				} else if strings.HasPrefix(pi.GraphType, "[]") {
+				case strings.HasPrefix(pi.BackendType, "[]"):
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
+				case strings.HasPrefix(pi.BackendType, "func"):
+					pi.Printable = false
+				default:
+					// Nothing to add.
 				}
 			}
 			if pi.GraphType == "" {
@@ -163,7 +172,15 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			mi.HasGraph = len(mi.OpInputSlices) == 0 && len(mi.OpInputs) == 0
 		}
 		for _, output := range raw.Outputs[:len(raw.Outputs)-1] { // Skip the error.
-			mi.OutputNames = append(mi.OutputNames, output.Name)
+			switch output.Type {
+			case "Op":
+				mi.OutputNames = append(mi.OutputNames, output.Name)
+			case "[]Op":
+				mi.OutputNames = append(mi.OutputNames, output.Name)
+				mi.IsOutputSlice = true
+			default:
+				exceptions.Panicf("unexpected output type: %s", output.Type)
+			}
 		}
 		if len(mi.OutputNames) > 1 {
 			mi.HasMultipleOutputs = true
@@ -183,6 +200,7 @@ type MethodInfo struct {
 	StopGradient           bool
 
 	HasMultipleOutputs bool
+	IsOutputSlice      bool
 	OutputNames        []string
 }
 
@@ -192,6 +210,7 @@ type ParameterInfo struct {
 	BackendType, GraphType, NodeInputType string
 	CopyStatement, ConvertStatement       string
 	Format, FormatValue                   string
+	Printable                             bool
 }
 
 const (
@@ -243,10 +262,20 @@ func (ni *nodeInputs{{.BackendName}}) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputs{{.BackendName}}) String() string {
-	return fmt.Sprintf("%s({{range $index, $input := .Inputs}}{{if $index}}, {{end}}{{$input.Name}}={{$input.Format}}{{end}})", 
+	return fmt.Sprintf("%s(
+{{- range $index, $input := .Inputs -}}
+	{{- if $input.Printable -}}
+		{{- if $index -}}, {{end}}{{$input.Name}}={{$input.Format}}
+	{{- end -}}
+{{- end -}}
+)",
 		ni.Type(),
-{{range .Inputs}}		{{.FormatValue}},
-{{end}}	)
+{{- range .Inputs -}}
+	{{- if .Printable }}
+		{{.FormatValue}},
+	{{- end -}}
+{{- end }}
+	)
 }
 
 {{- if not .Exported}}
@@ -258,11 +287,16 @@ func (ni *nodeInputs{{.BackendName}}) String() string {
 {{- end}}
 func {{/*
 
-Inputs:  */}}{{.GraphName}}({{if .HasGraph}}g *Graph, {{end}}{{range .Inputs}}{{.Name}} {{.GraphType}}, {{end}}) ({{/*
-
-Outputs: */}}{{if not .HasMultipleOutputs}}node *Node{{/*
-*/}} {{else}} {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{$name}}{{end}} *Node{{/*
-*/}}{{end}}) {{/*
+Inputs:  */}}{{.GraphName}}({{if .HasGraph}}g *Graph, {{end}}{{range .Inputs}}{{.Name}} {{.GraphType}}, {{end}}) (
+{{- /* Outputs: */}}
+{{- if .HasMultipleOutputs}}
+{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{$name}}{{end}} *Node
+{{- else if .IsOutputSlice}}
+[]*Node
+{{- else}}
+node *Node
+{{- end}})
+{{- /*
 
 Body: */}}{
 {{- if .HasGraph}}
@@ -284,20 +318,8 @@ Body: */}}{
 Convert result(s) to node(s):
 
 */}}
-{{- if not .HasMultipleOutputs}}
-	result, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
-	if err != nil {
-		panic(err)
-	}
-	node = &Node{
-		outputOps: []backends.Op{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
-{{- else}}
-{{- /*
-
-Version with multiple outputs:
-
-*/}}
+{{- if .HasMultipleOutputs}}
+{{- /* Version with multiple outputs: */}}
 {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}}, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
 	if err != nil {
 		panic(err)
@@ -305,7 +327,27 @@ Version with multiple outputs:
 	node := &Node{
 		outputOps: []backends.Op{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}} },
 		outputShapes: []shapes.Shape{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}mustNoError(g.builder.OpShape(v{{$ii}})){{end}} },
+{{- else if .IsOutputSlice}}
+{{- /* Version with output slice: */}}
+	results, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	if err != nil {
+		panic(err)
+	}
+	node := &Node{
+		outputOps: results,
+		outputShapes: xslices.Map(results, 
+			func (op backends.Op) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
+{{- else}}
+{{- /* Version with single output: - node already defined. */}}
+	result, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps: []backends.Op{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 {{- end}}
+{{- /* Rest of node definition */}}
 		graph: g,
 		inputs: inputs,
 {{- if not .HasGraph}}
@@ -317,13 +359,19 @@ Version with multiple outputs:
 {{- end}}
 	}
 	g.registerNode(node)
-{{/*
+{{- /*
 
-If multiple-outputs, split node into each separate one:
-
-*/}}{{if .HasMultipleOutputs}}	splitNodes := splitNode(node)
+If multiple-outputs, split resulting node into its separate parts: 
+*/}}
+{{- if .HasMultipleOutputs}}
+	splitNodes := splitNode(node)
 	{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{$name}}{{end}} = {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}splitNodes[{{$ii}}]{{end}}
-{{end}}	return
+	return
+{{- else if .IsOutputSlice}}
+	return splitNode(node)
+{{- else}}
+	return
+{{- end}}
 }
 {{end}}{{end}}
 `))

@@ -7,12 +7,12 @@ import (
 // ShardSpec (also known as PartitionSpec in JAX) defines how a logical
 // tensor (or more concretely a DistributedTensor) is sharded (partitioned) across a DeviceMesh.
 //
-// It must have the same rank as the tensor it describes.
-// Each element of the ShardSpec is a string, which can be:
+// It defines how each axis of the distributed Tensor will be sharded (or replicated).
+// If it has fewer elements than the tensor's rank, the remaining axes are considered replicated.
+// For each specified axis of the tensor, the ShardSpec element specifies:
 //  1. An axis name from the DeviceMesh: The corresponding tensor axis
-//     is sharded (split) across this mesh axis.
-//  2. An empty string (""): The corresponding tensor axis is replicated
-//     across all mesh axes.
+//     is sharded (split) across this mesh axis (and replicated over the other mesh axes).
+//  2. An empty string (""): The corresponding tensor axis is simply replicated.
 type ShardSpec []string
 
 // NewShardSpec creates a new ShardSpec.

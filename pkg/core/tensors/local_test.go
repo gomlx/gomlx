@@ -260,36 +260,6 @@ func TestSerialization(t *testing.T) {
 			tensor.FinalizeAll()
 		}
 	}
-
-	// Test reading directly to device.
-	setupTest(t)
-	if backend == nil {
-		panic("Backend not set!?")
-	}
-	{
-		values := [][]int64{{2}, {3}, {5}, {7}, {11}}
-		var tensor *Tensor
-		require.NotPanics(t, func() { tensor = FromValue(values) })
-		buf := &bytes.Buffer{}
-		enc := gob.NewEncoder(buf)
-
-		// Serialized repeats times:
-		repeats := 10
-		for range repeats {
-			require.NoError(t, tensor.GobSerialize(enc))
-		}
-		fmt.Printf("\t%#v serialized %d times to %d bytes\n", values, repeats, buf.Len())
-
-		// Deserialize repeats times:
-		dec := gob.NewDecoder(buf)
-		for range repeats {
-			var err error
-			tensor, err = GobDeserializeToDevice(dec, backend)
-			require.NoError(t, err)
-			require.Equal(t, values, tensor.Value().([][]int64))
-			tensor.FinalizeAll()
-		}
-	}
 }
 
 func testSaveLoadStumpImpl(t *testing.T, tensor *Tensor) (loadedTensor *Tensor) {

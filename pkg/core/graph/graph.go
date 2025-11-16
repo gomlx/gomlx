@@ -37,7 +37,7 @@
 //     They work very similarly to graph.Exec and should be used when building gradient descent-based machine
 //     learning (ML) on models (with variables), like Neural Networks.
 //
-// ## Backends
+// # Backends
 //
 // The default backend is XLA/PJRT (using github.com/gomlx/gopjrt) -- a just-in-time compiler that allows for very
 // efficient numerical computations.
@@ -49,7 +49,7 @@
 //
 //	import _ "github.com/gomlx/gomlx/backends/default"
 //
-// ## Error Handling
+// # Error Handling
 //
 // Graph (and its Node's) and context.Context methods "throw" errors with panic(). This prevents having to manage
 // error returning for every operation (Add, Sub, Mul, etc.) and makes the code much more readable.
@@ -63,7 +63,7 @@
 // and compiled, before it's executed and used.
 // It is similar to the compilation of regexps or templates in Go.
 //
-// ## Writing Code With Graphs
+// # Writing Code With Graphs
 //
 // When using ML frameworks, it's convenient to split the usual "compile time / runtime" into 3 phases:
 //
@@ -109,6 +109,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/sets"
@@ -151,6 +152,11 @@ type Graph struct {
 
 	// Compiled Graph
 	executable backends.Executable
+
+	// Distributed computation
+	distStrategy     distributed.Strategy
+	deviceMesh       *distributed.DeviceMesh
+	currentChannelID int
 }
 
 // GraphId is globally unique.
@@ -240,6 +246,24 @@ func (g *Graph) build() backends.Builder {
 	if g.builder == nil {
 		// Lazy construction of builder: this allows one to further configure the Graph object before using it.
 		g.builder = g.backend.Builder(g.name)
+		switch g.distStrategy {
+		case distributed.None:
+			// Nothing to do.
+		case distributed.SPMD:
+			err := g.builder.DistributedSPMD(g.NumDevices())
+			if err != nil {
+				panic(errors.WithMessagef(err,
+					"Graph failed to create distributed SPMD builder with backend %s",
+					g.backend.Name()))
+			}
+			err = g.builder.DeviceAssignment(g.deviceMesh.DeviceAssignment()...)
+			if err != nil {
+				panic(errors.WithMessagef(err,
+					"Graph failed to create distributed SPMD builder with backend %s", g.backend.Name()))
+			}
+		case distributed.GSPMD:
+			exceptions.Panicf("GSPMD not implemented yet")
+		}
 	}
 	return g.builder
 }
@@ -471,18 +495,33 @@ func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum .
 //
 // To donate the inputs buffers (if they are no longer used, e.g., when updating a state), consider using
 // DonateTensorBuffer.
+//
+// If there are multiple devices, the inputs are split among them.
 func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
-	deviceNum := backends.DeviceNum(0) // Hard-coded for now.
 
 	numParams := g.NumParameters()
-	if len(inputs) != numParams {
-		exceptions.Panicf("graph %q takes %d parameters, but %d were given to Run()", g.name, numParams, len(inputs))
+	numDevices := g.NumDevices()
+	if len(inputs) != numParams*numDevices {
+		exceptions.Panicf("graph %q takes %d parameters * %d devices, but %d were given to Graph.Run()",
+			g.name, numParams, numDevices, len(inputs))
 	}
-	buffers := make([]backends.Buffer, numParams)
-	donate := make([]bool, numParams)
-	for ii, input := range inputs {
-		buffers[ii], _, donate[ii] = anyToBuffer(g.backend, deviceNum, input)
+	buffers := make([]backends.Buffer, numParams*numDevices)
+	donate := make([]bool, numParams*numDevices)
+	if g.deviceMesh == nil {
+		// No device mesh, all inputs go to default device 0.
+		deviceNum := backends.DeviceNum(0)
+		for ii, input := range inputs {
+			buffers[ii], _, donate[ii] = anyToDeviceBuffer(g.backend, deviceNum, input)
+		}
+	} else {
+		// Inputs are split into their corresponding devices:
+		deviceAssignment := g.deviceMesh.DeviceAssignment()
+		for ii, input := range inputs {
+			deviceIndex := ii / numParams
+			deviceNum := deviceAssignment[deviceIndex]
+			buffers[ii], _, donate[ii] = anyToDeviceBuffer(g.backend, deviceNum, input)
+		}
 	}
 	return g.RunWithBuffers(buffers, donate)
 }
@@ -521,7 +560,7 @@ func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
 		if buffers[handle] != nil {
 			exceptions.Panicf("Graph %q input for node %q defined more than once", g.name, node)
 		}
-		buffers[handle], _, donate[handle] = anyToBuffer(g.backend, deviceNum, value)
+		buffers[handle], _, donate[handle] = anyToDeviceBuffer(g.backend, deviceNum, value)
 	}
 	return g.RunWithBuffers(buffers, donate)
 }
@@ -535,14 +574,19 @@ func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
 //
 // Notice that for repeated output nodes in the graph (the same output node returned in more than one position), the
 // returned tensors are shared.
+//
+// If there are multiple devices, the inputs are split among them.
 func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
 	numParams := g.NumParameters()
-	if len(inputs) != numParams {
-		exceptions.Panicf("graph %q takes %d parameters, but %d were given to RunWithBuffers()", g.name, numParams, len(inputs))
+	numDevices := g.NumDevices()
+	if len(inputs) != numParams*numDevices {
+		exceptions.Panicf("graph %q takes %d parameters * %d devices, but %d were given to RunWithBuffers()",
+			g.name, numParams, numDevices, len(inputs))
 	}
-	if len(donate) != numParams {
-		exceptions.Panicf("graph %q takes %d donate values for the input parameters, but %d were given to RunWithBuffers()", g.name, numParams, len(donate))
+	if len(donate) != numParams*numDevices {
+		exceptions.Panicf("graph %q takes %d * %d donate values for the input parameters, "+
+			"but %d were given to RunWithBuffers()", g.name, numParams, numDevices, len(donate))
 	}
 	var start time.Time
 	var results []backends.Buffer
@@ -562,23 +606,61 @@ func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool) (outputs
 	return
 }
 
-// anyToBuffer converts generic values to a tensor.Device on the requested device number, and whether the buffer can
-// be donated.
-func anyToBuffer(backend backends.Backend, deviceNum backends.DeviceNum, value any) (backends.Buffer, shapes.Shape, bool) {
-	t, ok := value.(*tensors.Tensor)
-	if ok {
-		// If a Tensor is given without Donate, it is assumed not for donation.
-		return t.Buffer(backend, deviceNum), t.Shape(), false
+// anyToDeviceBuffer converts generic values to a tensor.Device on the requested device number,
+// and whether the buffer can be donated.
+func anyToDeviceBuffer(backend backends.Backend, deviceNum backends.DeviceNum, value any) (backends.Buffer, shapes.Shape, bool) {
+	if t, ok := value.(*tensors.Tensor); ok {
+		buf, shape, err := tensorToDeviceBuffer(backend, deviceNum, t)
+		if err != nil {
+			panic(err)
+		}
+		return buf, shape, false // We don't donate tensors by default.
 	}
 	b, ok := value.(*donateBuffer)
 	if ok {
 		return b.buffer, b.shape, true
 	}
 	// A Go value by default is converted to a buffer and can be donated.
-	t = tensors.FromAnyValue(value)
+	t := tensors.FromAnyValue(value)
 	shape := t.Shape()
 	return t.DonateBuffer(backend, deviceNum), shape, true
+}
 
+// tensorToDeviceBuffer is used by anyToDeviceBuffer to convert a tensor to a device buffer.
+func tensorToDeviceBuffer(backend backends.Backend, deviceNum backends.DeviceNum, t *tensors.Tensor) (backends.Buffer, shapes.Shape, error) {
+	var shape shapes.Shape
+	err := t.CheckValid()
+	if err != nil {
+		return nil, shape, err
+	}
+	currentDevice, err := t.Device()
+	if err == nil {
+		if currentDevice == deviceNum {
+			// Already on the right device, no need to transfer.
+			buf, err := t.Buffer(backend, deviceNum)
+			if err != nil {
+				return nil, shape, err
+			}
+			return buf, t.Shape(), nil
+		}
+		return nil, shape, errors.Errorf(
+			"tensor stored on the wrong deviceNum #%d, expected it to be on device #%d where it's going "+
+				"to be used -- this is likely a logic error, so it is not transferred automatically",
+			currentDevice, deviceNum)
+	}
+	if t.IsLocal() {
+		// Transfer the tensor to the right device:
+		buf, err := t.Buffer(backend, deviceNum)
+		if err != nil {
+			return nil, shape, err
+		}
+		return buf, t.Shape(), nil
+	}
+	if err != nil {
+		return nil, shape, err
+	}
+	return nil, shape, errors.Errorf(
+		"tensor %q is not local and not on a device, cannot transfer to deviceNum #%d", t.Shape(), deviceNum)
 }
 
 // NumParameters returns the number of parameters created for this graph.

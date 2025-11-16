@@ -37,9 +37,9 @@ type Tensor struct {
 	logicalShape, shardShape shapes.Shape
 }
 
-// New creates a new distributed Tensor.
+// NewTensor creates a new distributed Tensor.
 // It assumes the provided shards are already on their respective devices.
-func New(mesh *DeviceMesh, spec ShardSpec, shards []*tensors.Tensor) (*Tensor, error) {
+func NewTensor(mesh *DeviceMesh, spec ShardSpec, shards []*tensors.Tensor) (*Tensor, error) {
 	if err := spec.Validate(mesh); err != nil {
 		return nil, errors.Wrap(err, "invalid ShardSpec")
 	}
@@ -83,14 +83,11 @@ func (dt *Tensor) Mesh() *DeviceMesh {
 	return dt.mesh
 }
 
-// ShardSpec returns the sharding specification for this tensor.
-func (dt *Tensor) ShardSpec() ShardSpec {
-	return dt.spec
-}
-
 // Shards returns the physical tensor shards.
 // They are owned by the distributed.Tensor object, and the slice shouldn't be modified -- the contents of the
 // individual shards can be modified directly, if they are stored locally.
+//
+// It returns Tensor.NumDevices() shards.
 func (dt *Tensor) Shards() []*tensors.Tensor {
 	return dt.shards
 }
@@ -98,6 +95,25 @@ func (dt *Tensor) Shards() []*tensors.Tensor {
 // Shape returns the logical, unsharded shape of the tensor.
 func (dt *Tensor) Shape() shapes.Shape {
 	return dt.logicalShape
+}
+
+// ShardSpec returns the sharding specification for this tensor.
+func (dt *Tensor) ShardSpec() ShardSpec {
+	return dt.spec
+}
+
+// UpdateShardSpec updates the sharding specification for this tensor and recalculates the logical shape.
+// It returns an error if the new spec is invalid.
+func (dt *Tensor) UpdateShardSpec(spec ShardSpec) error {
+	if err := spec.Validate(dt.mesh); err != nil {
+		return errors.Wrap(err, "invalid ShardSpec")
+	}
+	if err := validateShards(dt.mesh, spec, dt.shards); err != nil {
+		return err
+	}
+	dt.spec = spec
+	dt.calculateLogicalShape()
+	return nil
 }
 
 // validateShards that all shards have the same shape and are consistent with the `ShardSpec`.
@@ -112,16 +128,15 @@ func validateShards(mesh *DeviceMesh, spec ShardSpec, shards []*tensors.Tensor) 
 		}
 	}
 	// Check that the shard shape is divisible by the mesh axis sizes for sharded axes.
-	for tensorAxis, meshAxisName := range spec {
+	for _, meshAxisName := range spec {
 		if meshAxisName == "" {
 			continue
 		}
-		meshAxisSize, _ := mesh.AxisSize(meshAxisName)
-		if shardShape.Dimensions[tensorAxis]*meshAxisSize%meshAxisSize != 0 {
-			return errors.Errorf(
-				"shard shape %s is not consistent with sharding spec %s for mesh %s: "+
-					"tensor axis %d is sharded across mesh axis %q (size %d), but the shard dimension %d is not divisible by it",
-				shardShape, spec, mesh, tensorAxis, meshAxisName, meshAxisSize, shardShape.Dimensions[tensorAxis])
+		_, err := mesh.AxisSize(meshAxisName)
+		if err != nil {
+			return errors.WithMessagef(err,
+				"inconsistency in distributed.Tensor, sharding spec references mesh axis %q not in mesh %s",
+				meshAxisName, mesh)
 		}
 	}
 	return nil
@@ -236,7 +251,7 @@ func ShardTensor(t *tensors.Tensor, mesh *DeviceMesh, spec ShardSpec) (*Tensor, 
 		copySlice(tmpT, shards[i], sliceStarts, sliceEnds)
 	}
 
-	return New(mesh, spec, shards)
+	return NewTensor(mesh, spec, shards)
 }
 
 func copySlice(from, to *tensors.Tensor, starts, ends []int) {

@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/backends/notimplemented"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -15,14 +15,16 @@ import (
 
 // Builder keeps track of the computation graph being defined.
 type Builder struct {
-	notimplemented.Builder
-
 	name     string
 	backend  *Backend
 	compiled bool
 
 	builder *stablehlo.Builder
 	fn      *stablehlo.Function
+
+	numReplicas      int
+	deviceAssignment []int
+	distStrategy     distributed.Strategy
 
 	parameterNames  []string
 	parameterShapes []shapes.Shape
@@ -61,11 +63,13 @@ func (backend *Backend) Builder(name string) backends.Builder {
 		cacheArgMinMax:  make(map[argMinMaxKey]*stablehlo.Function),
 		cacheSelections: make(map[reductionKey]*stablehlo.Function),
 	}
-	b.Builder.ErrFn = func(op backends.OpType) error {
-		return errors.Errorf("StableHLO hasn't implemented operation %q yet, pls open an issue in https://github.com/gomlx/gomlx", op)
-	}
 	b.fn = b.builder.Main()
 	return b
+}
+
+// Name returns the name of the builder.
+func (b *Builder) Name() string {
+	return b.name
 }
 
 // Node represents the output of an operation and implements a "backends.Op" interface.
@@ -98,12 +102,15 @@ func (b *Builder) verifyAndCastValues(name string, values ...backends.Op) ([]*No
 		}
 		node, ok := input.(*Node)
 		if !ok {
-			return nil, errors.Errorf("nil or invalid Op (%T: %v) given as an input to %q, it must be an input created by the same backend builder (%s:%s)",
-				input, input, name, b.backend.Name(), b.name)
+			return nil, errors.Errorf(
+				"nil or invalid Op (%T: %v) given as an input to %q, it must be an input created by the same "+
+					"backend builder (%s:%s)", input, input, name, b.backend.Name(), b.name)
 		}
 		if node.builder != b {
-			return nil, errors.Errorf("input given to parameter %q was created with a different builder (%s) than the builder (%s) it is being used in -- Ops cannot cross to different builders",
-				name, node.builder.Name(), b.Name())
+			return nil, errors.Errorf(
+				"input given to parameter #%d (%q) was created with a different builder (%s) than the builder"+
+					" (%s) it is being used in -- Ops cannot cross to different builders",
+				i, name, node.builder.Name(), b.Name())
 		}
 		nodes[i] = node
 	}
@@ -147,7 +154,10 @@ func (b *Builder) Parameter(name string, shape shapes.Shape) (backends.Op, error
 	}
 	b.parameterNames = append(b.parameterNames, normalizedName)
 	b.parameterShapes = append(b.parameterShapes, shape)
-	value := b.fn.NamedInput(name, ShapeToStableHLO(shape))
+	value, err := b.fn.NamedInput(name, ShapeToStableHLO(shape))
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building parameter %q", name)
+	}
 	return b.newNode(value), nil
 }
 
@@ -169,6 +179,42 @@ func (b *Builder) Constant(flat any, dimensions ...int) (backends.Op, error) {
 		return nil, errors.WithMessagef(err, "while building op Constant()")
 	}
 	return b.newNode(value), nil
+}
+
+// DistributedSPMD creates a computation that will be executed on multiple devices in SPMD fashion
+// (SPMD = single program, multiple data).
+func (b *Builder) DistributedSPMD(numDevices int) error {
+	if err := b.CheckValid(); err != nil {
+		return err
+	}
+	if b.compiled {
+		return errors.Errorf("DistributedSPMD cannot be called after the computation has been compiled")
+	}
+	b.distStrategy = distributed.SPMD
+	b.builder.WithNumReplicas(numDevices)
+	b.numReplicas = numDevices
+	return nil
+}
+
+// DeviceAssignment assigns the devices to the computation.
+//
+// The number of devices must match the number of devices in the computation.
+// Usually, that is 1. But if DistributedSPMD was used, it can be more.
+func (b *Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
+	numReplicas := max(1, b.numReplicas)
+	if len(devices) != numReplicas {
+		return errors.Errorf("DeviceAssignment expects %d devices, got %d", numReplicas, len(devices))
+	}
+	b.deviceAssignment = make([]int, 0, numReplicas)
+	for _, device := range devices {
+		deviceInt := int(device)
+		b.deviceAssignment = append(b.deviceAssignment, deviceInt)
+		if deviceInt < 0 || deviceInt >= b.backend.NumDevices() {
+			return errors.Errorf("device %d is out of range for the number of devices %d in the backend %q",
+				deviceInt, b.backend.NumDevices(), b.backend.Name())
+		}
+	}
+	return nil
 }
 
 func broadcastShapeForBinaryOps(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (output shapes.Shape, err error) {

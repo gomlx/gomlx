@@ -27,6 +27,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
@@ -165,9 +166,29 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 //
 // For safety concerns, there are a maximum number of different instantiations of the graph.
 // It can be set or disabled with SetMaxCache.
+//
+// # Logging:
+//
+// The executor can log nodes marked for logging during execution, which is very handy for debugging, plotting, etc.
+// One marks a computation (any Node) for logging with Node.SetLogged (or Node.SetLoggedf).
+// And one can have specialized loggers by setting use Exec.SetNodeLogger: they can be set in cascading fashion,
+// so there can be different logger types (printing, plotting, NaN detection, etc.) being used simultaneously.
+//
+// # Distributed execution:
+//
+//   - User controlled (the default): the user can choose the device to use for execution with WithDevice.
+//     Only one device is used (see Exec.WithDevice), but the user can create multiple executors for different
+//     devices and execute code in parallel. No communication (distributed operations) available among the executors.
+//   - SPMD (Single Program Multiple Data): automatically replicates the computation across devices, see Exec.SPMD.
+//     The devices are organized in an arbitrary mesh. Usually, it's a 1D list of devices, but they can be organized
+//     in multiple axes. One uses Graph.Distributed() for the synchronization operations
+//     (like AllReduce, AllGather, etc.), which need to be organized by the user.
 type Exec struct {
-	backend   backends.Backend
-	deviceNum backends.DeviceNum
+	backend backends.Backend
+
+	distStrategy distributed.Strategy
+	deviceNum    backends.DeviceNum      // For distStrategy == distributed.None
+	mesh         *distributed.DeviceMesh // For distStrategy == distributed.SPMD
 
 	graphFn                     any
 	numInputs, numOutputs       int
@@ -298,26 +319,65 @@ func (e *Exec) parseGraphFn() error {
 	return nil
 }
 
-// InDevice sets the device num to be used by graphs constructed by Exec.
+// WithName sets the name of Exec, used to provide the name to graphs created.
 // This should be called before any invocations of MustExec().
 // It returns a reference to itself so calls can be cascaded.
-func (e *Exec) InDevice(deviceNum backends.DeviceNum) *Exec {
+func (e *Exec) WithName(name string) *Exec {
+	e.name = name
+	return e
+}
+
+// WithDevice sets the device num to be used by graphs constructed by Exec.
+// This configures the computation to use a single device -- no distribution.
+//
+// This should be called before any invocations of MustExec().
+//
+// It returns a reference to itself, so configuration calls can be cascaded.
+func (e *Exec) WithDevice(deviceNum backends.DeviceNum) *Exec {
 	e.deviceNum = deviceNum
+	e.distStrategy = distributed.None
 	return e
 }
 
 // DeviceNum returns the device being used by this Exec.
-// It defaults to 0 and can be changed with Exec.InDevice.
+// It defaults to 0 and can be changed with Exec.WithDevice.
+//
+// This is only valid if DistributionStrategy() returns distributed.None, which is the default.
 func (e *Exec) DeviceNum() backends.DeviceNum {
 	return e.deviceNum
 }
 
-// SetName sets the name of Exec, used to provide the name to graphs created.
-// This should be called before any invocations of MustExec().
-// It returns a reference to itself so calls can be cascaded.
-func (e *Exec) SetName(name string) *Exec {
-	e.name = name
+// DistributionStrategy returns the distribution strategy used by this Exec.
+//
+// The default is distributed.None, which means that graphs constructed by this Exec will not be distributed,
+// and it will be executed on the device specified by Exec.WithDevice (defaults to 0).
+func (e *Exec) DistributionStrategy() distributed.Strategy {
+	return e.distStrategy
+}
+
+// SPMD sets the distribution strategy to SPMD, which means that graphs constructed by this Exec will be replicated
+// across the devices specified in the mesh.
+//
+// A nil mesh will cause a panic.
+//
+// It returns a reference to itself, so configuration calls can be cascaded.
+func (e *Exec) SPMD(mesh *distributed.DeviceMesh) *Exec {
+	e.distStrategy = distributed.SPMD
+	if mesh == nil {
+		exceptions.Panicf("nil mesh passed to Exec.SPMD")
+	}
+	e.mesh = mesh
 	return e
+}
+
+// NumDevices returns the number of devices used by the current strategy.
+// It returns 1 for DistributionStrategy() == distributed.None (the default), or the number of devices in the mesh
+// for other distribution methods.
+func (e *Exec) NumDevices() int {
+	if e.distStrategy == distributed.None {
+		return 1
+	}
+	return e.mesh.NumDevices()
 }
 
 // Name returns the Exec name, a string used as a prefix for Graph construction.
@@ -400,6 +460,12 @@ func (e *Exec) Exec(args ...any) ([]*tensors.Tensor, error) {
 //
 // It returns the outputs in a slice, even if there is only one output. It also returns the computation graph used.
 //
+// Distributed execution: if the Exec was configured with SPMD(mesh), then it requires the input values for each
+// device used in the execution. So if there are D devices, and I inputs, it required D*I args, organized in a
+// "device-major" list (all the inputs to the first device, then the inputs for the second device, and so on).
+// Alternatively, you can provide I args of distributed.Tensor (they already include one value per device),
+// matching the DistributedMesh provided to Exec.SPMD.
+//
 // Errors (with full stack-traces) are returned on failure.
 func (e *Exec) ExecWithGraph(args ...any) ([]*tensors.Tensor, *Graph, error) {
 	var outputs []*tensors.Tensor
@@ -435,23 +501,80 @@ func (e *Exec) PreCompile(args ...any) {
 	_, _ = e.compileAndExecute(false, args...)
 }
 
+// validateAndExpandArgs splitting distributed.Tensor (if used) into its individual shards.
+//
+// It panics if the number of arguments doesn't match the number of arguments expected by the graphFn x number of
+// devices.
+func (e *Exec) validateAndExpandArgs(args []any) []any {
+	if len(args) == 0 {
+		if !e.inputAsSlice && e.numInputs != 0 {
+			exceptions.Panicf("no arguments passed to Exec for %q, but graphFn expects %d inputs",
+				e.Name(), e.numInputs)
+		}
+		// Having no arguments is valid for the graph.
+		return args
+	}
+
+	// Check that args are a multiple of the number of devices involved.
+	numDevices := e.NumDevices()
+	if numDevices > 1 && len(args)%numDevices != 0 {
+		exceptions.Panicf("number of arguments for execution (%d) doesn't match number of devices (%d) for %q",
+			len(args), numDevices, e.Name())
+	}
+
+	// Check that if using distributed.Tensors, they use the same mesh and expand them using their individual shards.
+	numArgsPerDevice := len(args) / numDevices
+	if _, ok := args[0].(distributed.Tensor); ok {
+		if e.mesh == nil {
+			exceptions.Panicf(
+				"first argument is a distributed.Tensor but no mesh was provided to Exec %q (with Exec.SPMD)",
+				e.Name())
+		}
+		numArgs := len(args)
+		expandedArgs := make([]any, e.mesh.NumDevices()*numArgs)
+		for i, arg := range args {
+			dTensor, ok := arg.(distributed.Tensor)
+			if !ok {
+				exceptions.Panicf(
+					"first argument is a distributed.Tensor but argument #%d (%T) is not a distributed.Tensor "+
+						"for executor %q: these cannot be mixed, either all arguments are distributed.Tensor or none",
+					i, arg, e.Name())
+			}
+			if dTensor.Mesh() != e.mesh {
+				exceptions.Panicf(
+					"argument #%d is a distributed.Tensor over a different mesh (%s) than the one "+
+						"used by %q (%s)", i, dTensor.Mesh(), e.Name(), e.mesh)
+			}
+			for deviceIdx, shard := range dTensor.Shards() {
+				expandedArgs[deviceIdx*numArgs+i] = shard
+			}
+		}
+		numArgsPerDevice = numArgs
+		args = expandedArgs
+	}
+
+	// Verify that numArgsPerDevice matches the number of inputs expected by the graphFn.
+	if !e.inputAsSlice && numArgsPerDevice != e.numInputs {
+		exceptions.Panicf(
+			"# of arguments to call (#args=%d, %d per device) don't match # arguments to the graph function (#args=%d) for %q",
+			len(args), numArgsPerDevice, e.numInputs, e.Name())
+	}
+	return args
+}
+
 // compileAndExecute compiles a graph for arguments and optionally executes it.
 func (e *Exec) compileAndExecute(execute bool, args ...any) ([]*tensors.Tensor, *Graph) {
 	args = unwrapListOfTensors(args)
-	if !e.inputAsSlice && len(args) != e.numInputs {
-		exceptions.Panicf(
-			"# of arguments to call (#args=%d) don't match # arguments to the graph function (#args=%d) for %q",
-			len(args), e.numInputs, e.Name())
-	}
+	args = e.validateAndExpandArgs(args)
 
-	// Convert args to tensors.
+	// Convert args to buffers.
 	// Note there may be more parameters, set with Exec.setSideParams later.
 	argsAsBuffer := make([]backends.Buffer, len(args))
 	argsShapes := make([]shapes.Shape, len(args))
 	argsDonate := make([]bool, len(args))
 	for ii, arg := range args {
 		err := exceptions.TryCatch[error](func() {
-			argsAsBuffer[ii], argsShapes[ii], argsDonate[ii] = anyToBuffer(e.backend, e.deviceNum, arg)
+			argsAsBuffer[ii], argsShapes[ii], argsDonate[ii] = anyToDeviceBuffer(e.backend, e.deviceNum, arg)
 		})
 		if err != nil {
 			panic(errors.WithMessagef(err, "Failed to convert argument #%d of %d to device(%d) -- type %T: %v",

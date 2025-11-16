@@ -1,9 +1,12 @@
-package distributed
+package distributed_test
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -13,22 +16,37 @@ import (
 	_ "github.com/gomlx/gomlx/backends/default"
 )
 
+var (
+	backendOnce   sync.Once
+	cachedBackend backends.Backend
+)
+
+// BuildTestBackend and sets backends.DefaultConfig to "xla:cpu" -- it can be overwritten by GOMLX_BACKEND environment variable.
+func BuildTestBackend() backends.Backend {
+	backends.DefaultConfig = "xla:cpu"
+	backendOnce.Do(func() {
+		cachedBackend = backends.MustNew()
+		fmt.Printf("Backend: %s\n", cachedBackend.Description())
+	})
+	return cachedBackend
+}
+
 func TestShardTensor(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := BuildTestBackend()
 	if backend.NumDevices() < 2 {
 		t.Skipf("Skipping distributed tests: backend only has %d device.", backend.NumDevices())
 	}
 
 	// Create a new device mesh.
-	mesh, err := NewDeviceMesh(backend, []int{2}, []string{"replica"})
+	mesh, err := distributed.NewDeviceMesh(backend, []int{2}, []string{"replica"})
 	require.NoError(t, err)
 
 	// Create a new tensor.
 	tensor := tensors.FromValue([][]int32{{1, 2, 3, 4}, {5, 6, 7, 8}})
 
 	// Shard the tensor.
-	spec := NewShardSpec("replica", "")
-	distTensor, err := ShardTensor(tensor, mesh, spec)
+	spec := distributed.NewShardSpec("replica", "")
+	distTensor, err := distributed.ShardTensor(tensor, mesh, spec)
 	require.NoError(t, err)
 
 	// Check the logical shape.
@@ -46,13 +64,13 @@ func TestShardTensor(t *testing.T) {
 }
 
 func TestMergeTensor(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := BuildTestBackend()
 	if backend.NumDevices() < 2 {
 		t.Skipf("Skipping distributed tests: backend only has %d device.", backend.NumDevices())
 	}
 
 	// Create a new device mesh.
-	mesh, err := NewDeviceMesh(backend, []int{2}, []string{"replica"})
+	mesh, err := distributed.NewDeviceMesh(backend, []int{2}, []string{"replica"})
 	require.NoError(t, err)
 
 	// Create a new distributed tensor.
@@ -60,8 +78,8 @@ func TestMergeTensor(t *testing.T) {
 		tensors.FromValue([][]int32{{1, 2, 3, 4}}),
 		tensors.FromValue([][]int32{{5, 6, 7, 8}}),
 	}
-	spec := NewShardSpec("replica", "")
-	distTensor, err := New(mesh, spec, shards)
+	spec := distributed.NewShardSpec("replica", "")
+	distTensor, err := distributed.NewTensor(mesh, spec, shards)
 	require.NoError(t, err)
 
 	// Merge the tensor.
