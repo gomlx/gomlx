@@ -1,4 +1,4 @@
-package tensors
+package tensors_test
 
 import (
 	"flag"
@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	_ "github.com/gomlx/gomlx/backends/default" // Use xla backend.
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
@@ -53,8 +54,8 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 
 	// Create local Tensor input.
 	values := []T{0, 1, 2, 3, 4, 11}
-	var tensor *Tensor
-	require.NotPanics(t, func() { tensor = FromFlatDataAndDimensions(values, dims...) })
+	var tensor *tensors.Tensor
+	require.NotPanics(t, func() { tensor = tensors.FromFlatDataAndDimensions(values, dims...) })
 
 	var buffer backends.Buffer
 	require.NotPanics(t, func() {
@@ -64,7 +65,7 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 		// Input tensor must have become shared during conversion to "on-device".
 		// Check that the shared buffer got loaded with the right values:
 		require.True(t, tensor.IsShared())
-		ConstFlatData(tensor, func(flat []T) {
+		tensors.ConstFlatData(tensor, func(flat []T) {
 			require.Equal(t, []T{0, 1, 2, 3, 4, 11}, flat)
 		})
 	}
@@ -75,8 +76,8 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 
 	// Convert the buffer to a tensor: the converted tensor should not be shared, since the buffer comes from the output
 	// of a backend execution.
-	outputTensor := FromBuffer(backend, outputs[0])
-	require.False(t, outputTensor.isShared)
+	outputTensor := tensors.FromBuffer(backend, outputs[0])
+	require.False(t, outputTensor.IsShared())
 	fmt.Printf("\tf(x) = x^2, f(%s) = %s\n", tensor.GoStr(), outputTensor.GoStr())
 	require.NoErrorf(t, outputTensor.Shape().Check(dtype, 3, 2), "Output tensor for dtype %s got shape %s", dtype, outputTensor.Shape())
 	want := []T{0, 1, 4, 9, 16, 121}
@@ -126,10 +127,10 @@ func BenchmarkHostToDevice(b *testing.B) {
 
 	// Pre-allocate tensors.
 	numShapes := len(testShapes)
-	inputTensors := make([]*Tensor, numShapes)
+	inputTensors := make([]*tensors.Tensor, numShapes)
 	for shapeIdx, s := range testShapes {
-		inputTensors[shapeIdx] = FromShape(s)
-		MutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
+		inputTensors[shapeIdx] = tensors.FromShape(s)
+		tensors.MutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
 			for ii := range flat {
 				flat[ii] = 0 // float32(ii)
 			}
@@ -177,16 +178,16 @@ func BenchmarkCopyFromLocal(b *testing.B) {
 
 	// Pre-allocate tensors.
 	numShapes := len(testShapes)
-	inputTensors := make([]*Tensor, numShapes)
-	outputTensors := make([]*Tensor, numShapes)
+	inputTensors := make([]*tensors.Tensor, numShapes)
+	outputTensors := make([]*tensors.Tensor, numShapes)
 	for shapeIdx, s := range testShapes {
-		inputTensors[shapeIdx] = FromShape(s)
-		MutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
+		inputTensors[shapeIdx] = tensors.FromShape(s)
+		tensors.MutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
 			for ii := range flat {
 				flat[ii] = float32(ii)
 			}
 		})
-		outputTensors[shapeIdx] = FromShape(s)
+		outputTensors[shapeIdx] = tensors.FromShape(s)
 	}
 
 	// Run test for a shape
@@ -227,18 +228,18 @@ func BenchmarkCopyFromDevice(b *testing.B) {
 
 	// Pre-allocate tensors.
 	numShapes := len(testShapes)
-	inputTensors := make([]*Tensor, numShapes)
-	outputTensors := make([]*Tensor, numShapes)
+	inputTensors := make([]*tensors.Tensor, numShapes)
+	outputTensors := make([]*tensors.Tensor, numShapes)
 	for shapeIdx, s := range testShapes {
-		inputTensors[shapeIdx] = FromShape(s)
-		MutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
+		inputTensors[shapeIdx] = tensors.FromShape(s)
+		tensors.MutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
 			for ii := range flat {
 				flat[ii] = float32(ii)
 			}
 		})
 		inputTensors[shapeIdx].MaterializeOnDevices(backend, false) // Don't use shared buffers for benchmark
 		inputTensors[shapeIdx].FinalizeLocal()
-		outputTensors[shapeIdx] = FromShape(s)
+		outputTensors[shapeIdx] = tensors.FromShape(s)
 	}
 
 	// Run test for a shape
@@ -271,7 +272,7 @@ func TestClones(t *testing.T) {
 	refValues := []int32{1, 3, 5, 7, 11}
 	for cloneType := range 3 {
 		for fromLocation := range 2 {
-			originalTensor := FromValue(refValues)
+			originalTensor := tensors.FromValue(refValues)
 			if fromLocation == 1 {
 				// originalTensor is on device.
 				originalTensor.MaterializeOnDevices(backend, false)
@@ -279,7 +280,7 @@ func TestClones(t *testing.T) {
 			}
 
 			// Create clone.
-			var cloneTensor *Tensor
+			var cloneTensor *tensors.Tensor
 			switch cloneType {
 			case 0:
 				cloneTensor = originalTensor.Clone()
@@ -297,7 +298,7 @@ func TestClones(t *testing.T) {
 
 			// Check that the cloned tensor has the shape and values we started with.
 			cloneTensor.Shape().AssertDims(5)
-			require.Equal(t, refValues, CopyFlatData[int32](cloneTensor))
+			require.Equal(t, refValues, tensors.CopyFlatData[int32](cloneTensor))
 		}
 	}
 }
@@ -308,7 +309,7 @@ func TestToLocal(t *testing.T) {
 
 	for _, shared := range []bool{false, true} {
 		t.Run(fmt.Sprintf("Shared=%v", shared), func(t *testing.T) {
-			tensor := FromValue(refValues)
+			tensor := tensors.FromValue(refValues)
 			tensor.MaterializeOnDevices(backend, shared)
 			require.NotNil(t, tensor.backend)
 
@@ -316,7 +317,7 @@ func TestToLocal(t *testing.T) {
 			// and the contents should still be the same.
 			tensor.ToLocal()
 			require.Nil(t, tensor.backend)
-			require.Equal(t, refValues, CopyFlatData[int32](tensor))
+			require.Equal(t, refValues, tensors.CopyFlatData[int32](tensor))
 		})
 	}
 }

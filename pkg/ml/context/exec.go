@@ -261,7 +261,7 @@ func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, 
 	e.buildGraphFn()
 	e.exec = graph.MustNewExecAny(backend, e.graphFn)
 	funcName := runtime.FuncForPC(reflect.ValueOf(ctxGraphFn).Pointer()).Name()
-	e.exec.SetName(fmt.Sprintf("Context.Exec:%s", funcName))
+	e.exec.WithName(fmt.Sprintf("Context.Exec:%s", funcName))
 	e.exec.SetSideParamsHook(e.setSideParams)
 	return e, nil
 }
@@ -430,12 +430,14 @@ func (e *Exec) GetNodeLogger() graph.LoggerFn {
 	return e.exec.GetNodeLogger()
 }
 
-// InDevice sets the device num to be used by graphs constructed by Exec.
+// WithDevice sets the device num to be used by graphs constructed by Exec.
+// This configures the computation to use a single device -- no distribution.
 //
 // This should be called before any invocations of the Exec methods.
-// It returns a reference to itself so calls can be cascaded.
-func (e *Exec) InDevice(deviceNum backends.DeviceNum) *Exec {
-	e.exec.InDevice(deviceNum)
+//
+// It returns a reference to itself, so configuration calls can be cascaded.
+func (e *Exec) WithDevice(deviceNum backends.DeviceNum) *Exec {
+	e.exec.WithDevice(deviceNum)
 	return e
 }
 
@@ -443,7 +445,7 @@ func (e *Exec) InDevice(deviceNum backends.DeviceNum) *Exec {
 // This should be called before any invocations of MustExec().
 // It returns a reference to itself so calls can be cascaded.
 func (e *Exec) WithName(name string) *Exec {
-	e.exec.SetName(name)
+	e.exec.WithName(name)
 	return e
 }
 

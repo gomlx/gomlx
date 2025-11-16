@@ -198,22 +198,31 @@ func (t *Tensor) IsShared() bool {
 	return t.isShared
 }
 
-// AssertValid panics if local is nil, or if its shape is invalid.
-func (t *Tensor) AssertValid() {
+// CheckValid returns an error if it's nil, has been finalized, or if its shape is invalid.'
+func (t *Tensor) CheckValid() error {
 	if t == nil {
-		panic(errors.New("Tensor is nil"))
+		return errors.New("Tensor is nil")
 	}
 	if !t.shape.Ok() {
-		panic(errors.New("Tensor shape is invalid"))
+		return errors.New("Tensor shape is invalid")
 	}
 	if t.local.IsFinalized() {
 		if len(t.onDevices) == 0 {
 			// Notice that shared buffers are stored as onDevices.
-			panic(errors.New("Tensor has no local or on-device representation"))
+			return errors.New("Tensor has no local or on-device representation")
 		}
 		if t.backend == nil || t.backend.IsFinalized() {
-			panic(errors.New("attempting to access Tensor stored with a nil or finalized backend"))
+			return errors.New("attempting to access Tensor stored with a nil or finalized backend")
 		}
+	}
+	return nil
+}
+
+// AssertValid panics if it's nil, has been finalized, or if its shape is invalid.
+func (t *Tensor) AssertValid() {
+	err := t.CheckValid()
+	if err != nil {
+		panic(err)
 	}
 }
 

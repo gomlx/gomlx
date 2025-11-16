@@ -448,3 +448,34 @@ func (t *Tensor) IsOnDevice(deviceNum backends.DeviceNum) bool {
 	_, ok := t.onDevices[deviceNum]
 	return ok
 }
+
+// Backend returns the backend of the on-device copy of the Tensor, if any.
+//
+// It returns an error is the tensor is stored locally.
+func (t *Tensor) Backend() (backends.Backend, error) {
+	err := t.CheckValid()
+	if err != nil {
+		return nil, err
+	}
+	if t.IsLocal() {
+		return nil, errors.Errorf("Tensor.Device() called on a local tensor")
+	}
+	return t.backend, nil
+}
+
+// Device returns the deviceNum of the on-device copy of the Tensor, if any.
+//
+// It returns an error is the tensor is stored locally.
+func (t *Tensor) Device() (backends.DeviceNum, error) {
+	err := t.CheckValid()
+	if err != nil {
+		return 0, err
+	}
+	if t.IsLocal() {
+		return 0, errors.Errorf("Tensor.Device() called on a local tensor")
+	}
+	for deviceNum := range t.onDevices {
+		return deviceNum, nil
+	}
+	return 0, errors.Errorf("Tensor is empty, not local, not on any device")
+}

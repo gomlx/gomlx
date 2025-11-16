@@ -263,7 +263,7 @@ func (r *Trainer) enumerateExecs(fn func(exec *context.Exec)) {
 func (r *Trainer) InDevice(deviceNum backends.DeviceNum) *Trainer {
 	r.deviceNum = deviceNum
 	r.enumerateExecs(func(exec *context.Exec) {
-		exec.InDevice(deviceNum)
+		exec.WithDevice(deviceNum)
 	})
 	return r
 }

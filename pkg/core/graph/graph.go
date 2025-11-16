@@ -37,7 +37,7 @@
 //     They work very similarly to graph.Exec and should be used when building gradient descent-based machine
 //     learning (ML) on models (with variables), like Neural Networks.
 //
-// ## Backends
+// # Backends
 //
 // The default backend is XLA/PJRT (using github.com/gomlx/gopjrt) -- a just-in-time compiler that allows for very
 // efficient numerical computations.
@@ -49,7 +49,7 @@
 //
 //	import _ "github.com/gomlx/gomlx/backends/default"
 //
-// ## Error Handling
+// # Error Handling
 //
 // Graph (and its Node's) and context.Context methods "throw" errors with panic(). This prevents having to manage
 // error returning for every operation (Add, Sub, Mul, etc.) and makes the code much more readable.
@@ -63,7 +63,7 @@
 // and compiled, before it's executed and used.
 // It is similar to the compilation of regexps or templates in Go.
 //
-// ## Writing Code With Graphs
+// # Writing Code With Graphs
 //
 // When using ML frameworks, it's convenient to split the usual "compile time / runtime" into 3 phases:
 //
@@ -512,7 +512,7 @@ func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 		// No device mesh, all inputs go to default device 0.
 		deviceNum := backends.DeviceNum(0)
 		for ii, input := range inputs {
-			buffers[ii], _, donate[ii] = anyToBuffer(g.backend, deviceNum, input)
+			buffers[ii], _, donate[ii] = anyToDeviceBuffer(g.backend, deviceNum, input)
 		}
 	} else {
 		// Inputs are split into their corresponding devices:
@@ -520,7 +520,7 @@ func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 		for ii, input := range inputs {
 			deviceIndex := ii / numParams
 			deviceNum := deviceAssignment[deviceIndex]
-			buffers[ii], _, donate[ii] = anyToBuffer(g.backend, deviceNum, input)
+			buffers[ii], _, donate[ii] = anyToDeviceBuffer(g.backend, deviceNum, input)
 		}
 	}
 	return g.RunWithBuffers(buffers, donate)
@@ -560,7 +560,7 @@ func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
 		if buffers[handle] != nil {
 			exceptions.Panicf("Graph %q input for node %q defined more than once", g.name, node)
 		}
-		buffers[handle], _, donate[handle] = anyToBuffer(g.backend, deviceNum, value)
+		buffers[handle], _, donate[handle] = anyToDeviceBuffer(g.backend, deviceNum, value)
 	}
 	return g.RunWithBuffers(buffers, donate)
 }
@@ -606,13 +606,19 @@ func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool) (outputs
 	return
 }
 
-// anyToBuffer converts generic values to a tensor.Device on the requested device number, and whether the buffer can
-// be donated.
-func anyToBuffer(backend backends.Backend, deviceNum backends.DeviceNum, value any) (backends.Buffer, shapes.Shape, bool) {
-	t, ok := value.(*tensors.Tensor)
-	if ok {
-		// If a Tensor is given without Donate, it is assumed not for donation.
-		return t.Buffer(backend, deviceNum), t.Shape(), false
+// anyToDeviceBuffer converts generic values to a tensor.Device on the requested device number,
+// and whether the buffer can be donated.
+func anyToDeviceBuffer(backend backends.Backend, deviceNum backends.DeviceNum, value any) (backends.Buffer, shapes.Shape, bool) {
+	if t, ok := value.(*tensors.Tensor); ok {
+		if t.IsOnDevice(deviceNum) || t.IsLocal() {
+			return t.Buffer(backend, deviceNum), t.Shape(), false
+		}
+		// The tensor is on a different device: we don't handle this, likely this is a logic error on the part of
+		// the user. If they want, they have to explicilty transfer the tensor to the device they want.
+		exceptions.Panicf(
+			"tensor stored on the wrong deviceNum #%d, expected it to be on device #%d where it's going "+
+				"to be used -- this is likely a logic error, so it is not transferred automatically",
+			t.IsOnDevice())
 	}
 	b, ok := value.(*donateBuffer)
 	if ok {
@@ -622,7 +628,6 @@ func anyToBuffer(backend backends.Backend, deviceNum backends.DeviceNum, value a
 	t = tensors.FromAnyValue(value)
 	shape := t.Shape()
 	return t.DonateBuffer(backend, deviceNum), shape, true
-
 }
 
 // NumParameters returns the number of parameters created for this graph.
