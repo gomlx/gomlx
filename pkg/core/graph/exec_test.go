@@ -150,7 +150,7 @@ func TestDonate(t *testing.T) {
 
 	// Donate input: make sure input is not shared.
 	input = tensors.FromValue(5.0)
-	input.MaterializeOnDevices(backend, false)
+	input.MaterializeOnDevice(backend, false)
 	fmt.Printf("TestDonate: IsShared=%v\n", input.IsShared())
 	output = g.Run(DonateTensorBuffer(input, backend, 0))[0]
 	require.Equal(t, 6.0, output.Value())
@@ -159,7 +159,7 @@ func TestDonate(t *testing.T) {
 
 	// Donate input with shared buffer:
 	input = tensors.FromValue(11.0)
-	input.MaterializeOnDevices(backend, true)
+	input.MaterializeOnDevice(backend, true)
 	fmt.Printf("TestDonate (shared requested): IsShared=%v\n", input.IsShared())
 	output = g.Run(DonateTensorBuffer(input, backend, 0))[0]
 	require.Equal(t, 12.0, output.Value())
