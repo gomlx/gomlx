@@ -83,11 +83,6 @@ func (dt *Tensor) Mesh() *DeviceMesh {
 	return dt.mesh
 }
 
-// ShardSpec returns the sharding specification for this tensor.
-func (dt *Tensor) ShardSpec() ShardSpec {
-	return dt.spec
-}
-
 // Shards returns the physical tensor shards.
 // They are owned by the distributed.Tensor object, and the slice shouldn't be modified -- the contents of the
 // individual shards can be modified directly, if they are stored locally.
@@ -100,6 +95,25 @@ func (dt *Tensor) Shards() []*tensors.Tensor {
 // Shape returns the logical, unsharded shape of the tensor.
 func (dt *Tensor) Shape() shapes.Shape {
 	return dt.logicalShape
+}
+
+// ShardSpec returns the sharding specification for this tensor.
+func (dt *Tensor) ShardSpec() ShardSpec {
+	return dt.spec
+}
+
+// UpdateShardSpec updates the sharding specification for this tensor and recalculates the logical shape.
+// It returns an error if the new spec is invalid.
+func (dt *Tensor) UpdateShardSpec(spec ShardSpec) error {
+	if err := spec.Validate(dt.mesh); err != nil {
+		return errors.Wrap(err, "invalid ShardSpec")
+	}
+	if err := validateShards(dt.mesh, spec, dt.shards); err != nil {
+		return err
+	}
+	dt.spec = spec
+	dt.calculateLogicalShape()
+	return nil
 }
 
 // validateShards that all shards have the same shape and are consistent with the `ShardSpec`.
