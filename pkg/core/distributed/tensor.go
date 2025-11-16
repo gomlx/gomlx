@@ -91,6 +91,8 @@ func (dt *Tensor) ShardSpec() ShardSpec {
 // Shards returns the physical tensor shards.
 // They are owned by the distributed.Tensor object, and the slice shouldn't be modified -- the contents of the
 // individual shards can be modified directly, if they are stored locally.
+//
+// It returns Tensor.NumDevices() shards.
 func (dt *Tensor) Shards() []*tensors.Tensor {
 	return dt.shards
 }
@@ -112,16 +114,15 @@ func validateShards(mesh *DeviceMesh, spec ShardSpec, shards []*tensors.Tensor) 
 		}
 	}
 	// Check that the shard shape is divisible by the mesh axis sizes for sharded axes.
-	for tensorAxis, meshAxisName := range spec {
+	for _, meshAxisName := range spec {
 		if meshAxisName == "" {
 			continue
 		}
-		meshAxisSize, _ := mesh.AxisSize(meshAxisName)
-		if shardShape.Dimensions[tensorAxis]*meshAxisSize%meshAxisSize != 0 {
-			return errors.Errorf(
-				"shard shape %s is not consistent with sharding spec %s for mesh %s: "+
-					"tensor axis %d is sharded across mesh axis %q (size %d), but the shard dimension %d is not divisible by it",
-				shardShape, spec, mesh, tensorAxis, meshAxisName, meshAxisSize, shardShape.Dimensions[tensorAxis])
+		_, err := mesh.AxisSize(meshAxisName)
+		if err != nil {
+			return errors.WithMessagef(err,
+				"inconsistency in distributed.Tensor, sharding spec references mesh axis %q not in mesh %s",
+				meshAxisName, mesh)
 		}
 	}
 	return nil
