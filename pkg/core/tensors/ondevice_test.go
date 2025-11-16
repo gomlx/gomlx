@@ -151,7 +151,7 @@ func BenchmarkHostToDevice(b *testing.B) {
 	benchShape := func(_ float32, shapeIdx int) {
 		// Set input to value of v.
 		x := inputTensors[shapeIdx]
-		x.MaterializeOnDevices(backend, false)
+		x.MaterializeOnDevice(backend, false)
 		x.InvalidateOnDevice()
 	}
 
@@ -247,7 +247,7 @@ func BenchmarkCopyFromDevice(b *testing.B) {
 				flat[ii] = float32(ii)
 			}
 		})
-		inputTensors[shapeIdx].MaterializeOnDevices(backend, false) // Don't use shared buffers for benchmark
+		inputTensors[shapeIdx].MaterializeOnDevice(backend, false) // Don't use shared buffers for benchmark
 		inputTensors[shapeIdx].FinalizeLocal()
 		outputTensors[shapeIdx] = tensors.FromShape(s)
 	}
@@ -285,7 +285,7 @@ func TestClones(t *testing.T) {
 			originalTensor := tensors.FromValue(refValues)
 			if fromLocation == 1 {
 				// originalTensor is on device.
-				originalTensor.MaterializeOnDevices(backend, false)
+				originalTensor.MaterializeOnDevice(backend, false)
 				originalTensor.FinalizeLocal()
 			}
 
@@ -320,7 +320,7 @@ func TestToLocal(t *testing.T) {
 	for _, shared := range []bool{false, true} {
 		t.Run(fmt.Sprintf("Shared=%v", shared), func(t *testing.T) {
 			tensor := tensors.FromValue(refValues)
-			tensor.MaterializeOnDevices(backend, shared)
+			tensor.MaterializeOnDevice(backend, shared)
 			b2, err := tensor.Backend()
 			require.NoError(t, err)
 			require.Equal(t, backend, b2)

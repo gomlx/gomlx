@@ -115,14 +115,11 @@ func (t *Tensor) lockedConstFlatData(accessFn func(flat any)) {
 	if t.local == nil && t.backend.HasSharedBuffers() {
 		// If local is nil, that means there is a on-device tensor instead,
 		// we take a view (the data) of the first one.
-		for _, tOnDevice := range t.onDevices {
-			flat, err := t.backend.BufferData(tOnDevice.buffer)
-			if err != nil {
-				panic(err)
-			}
-			accessFn(flat)
-			break
+		flat, err := t.backend.BufferData(t.onDevice.buffer)
+		if err != nil {
+			panic(err)
 		}
+		accessFn(flat)
 		return
 	}
 	t.lockedMaterializeLocal()
@@ -417,7 +414,7 @@ func GobDeserializeToDevice(decoder *gob.Decoder, backend backends.Backend, devi
 			return
 		}
 		err = exceptions.TryCatch[error](func() {
-			t.MaterializeOnDevices(backend, false, deviceNums...)
+			t.MaterializeOnDevice(backend, false, deviceNums...)
 			t.FinalizeLocal()
 		})
 		if err != nil {
@@ -470,7 +467,7 @@ func GobDeserializeToDevice(decoder *gob.Decoder, backend backends.Backend, devi
 	t.isShared = true
 	t.sharedFlat = flatAny
 	t.backend = backend
-	t.onDevices[deviceNum] = &onDevice{
+	t.onDevice = &onDevice{
 		t:         t,
 		buffer:    buffer,
 		deviceNum: deviceNum,

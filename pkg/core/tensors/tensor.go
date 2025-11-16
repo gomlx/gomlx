@@ -120,15 +120,15 @@ type Tensor struct {
 	// shape of the tensor.
 	shape shapes.Shape
 
-	// mu protects the local and OnDevices data, but not the shape, which is considered immutable (only changed
+	// mu protects the local and onDevice data, but not the shape, which is considered immutable (only changed
 	// when Tensor is finalized).
 	mu sync.Mutex
 
 	// local storage tensor. Not used for shared buffers.
 	local *local
 
-	// onDevices maps deviceNum -> on device buffer.
-	onDevices map[backends.DeviceNum]*onDevice
+	// onDevice storage for the tensor.
+	onDevice *onDevice
 
 	// isShared indicates that the tensor used a shared buffer: it is held "on-device", but it has
 	// a direct reference to the flat data in Tensor.sharedFlat.
@@ -146,8 +146,7 @@ type Tensor struct {
 // The returned tensor is invalid, and some data (local or on device) must be associated to it still.
 func newTensor(shape shapes.Shape) *Tensor {
 	return &Tensor{
-		shape:     shape,
-		onDevices: make(map[backends.DeviceNum]*onDevice),
+		shape: shape,
 	}
 }
 
@@ -180,9 +179,9 @@ func (t *Tensor) Memory() uintptr { return t.shape.Memory() }
 
 // Ok returns whether the Tensor is in a valid state: it is not nil, and it hasn't been finalized.
 func (t *Tensor) Ok() bool {
-	// Notice that shared buffers are stored as onDevices.
+	// Notice that shared buffers are stored as onDevice.
 	return t != nil && t.shape.Ok() &&
-		(!t.local.IsFinalized() || len(t.onDevices) > 0)
+		(!t.local.IsFinalized() || !t.onDevice.IsFinalized())
 }
 
 // IsShared returns whether the underlying tensor storage is shared with the backend engine.
@@ -207,8 +206,8 @@ func (t *Tensor) CheckValid() error {
 		return errors.New("Tensor shape is invalid")
 	}
 	if t.local.IsFinalized() {
-		if len(t.onDevices) == 0 {
-			// Notice that shared buffers are stored as onDevices.
+		if t.onDevice.IsFinalized() {
+			// Notice that shared buffers are stored as onDevice.
 			return errors.New("Tensor has no local or on-device representation")
 		}
 		if t.backend == nil || t.backend.IsFinalized() {
@@ -245,10 +244,10 @@ func (t *Tensor) lockedFinalizeAll() {
 		t.local.Finalize()
 		t.local = nil
 	}
-	for _, device := range t.onDevices {
-		device.Finalize()
+	if t.onDevice != nil {
+		t.onDevice.Finalize()
+		t.onDevice = nil
 	}
-	t.onDevices = nil
 	t.shape = shapes.Invalid()
 	t.isShared = false
 }
