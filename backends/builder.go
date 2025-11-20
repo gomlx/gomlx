@@ -57,6 +57,10 @@ type Builder interface {
 	// devices starting from 0.
 	DistributedSPMD(numDevices int) error
 
+	// DistributedAutoSharding creates a computation that will be executed on multiple devices according to
+	// the mesh topology described by axisNames and their sizes.
+	DistributedAutoSharding(axisSizes []int, axisNames []string) error
+
 	// DeviceAssignment assigns the devices to the computation.
 	//
 	// The number of devices must match the number of devices in the computation.

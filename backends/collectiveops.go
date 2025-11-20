@@ -1,6 +1,10 @@
 package backends
 
 // CollectiveOps is an interface for collective operations, that is, operations executed across multiple devices.
+//
+// EXPERIMENTAL: currently the best supported distribution model is "GSPMD" (Global Single Program Multiple Data),
+// which automatically distributes the computation across all devices, without having to use explicit
+// collective operations.
 type CollectiveOps interface {
 	// AllReduce is a distributed (multi-device) operation that reduces over the build the AllReduce operation
 	// across replica groups.

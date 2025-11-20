@@ -1,7 +1,7 @@
 // Package distributed defines the following objects related to cross-device execution:
 //
 // - DeviceMesh: expresses the topology of a set of devices, in terms of axis and their sizes.
-// - ShardSpec: defines how a logical tensor is sharded across a DeviceMesh.
+// - ShardingSpec: defines how a logical tensor is sharded across a DeviceMesh.
 // - Tensor: a logical tensor distributed across multiple devices organized as a DeviceMesh.
 package distributed
 
@@ -26,7 +26,7 @@ type Tensor struct {
 	mesh *DeviceMesh
 
 	// spec defines how this tensor is sharded across the mesh.
-	spec ShardSpec
+	spec ShardingSpec
 
 	// shards holds the physical tensor data for each device.
 	// The map key is the device's global ordinal index (0 to NumDevices-1).
@@ -39,9 +39,9 @@ type Tensor struct {
 
 // NewTensor creates a new distributed Tensor.
 // It assumes the provided shards are already on their respective devices.
-func NewTensor(mesh *DeviceMesh, spec ShardSpec, shards []*tensors.Tensor) (*Tensor, error) {
+func NewTensor(mesh *DeviceMesh, spec ShardingSpec, shards []*tensors.Tensor) (*Tensor, error) {
 	if err := spec.Validate(mesh); err != nil {
-		return nil, errors.Wrap(err, "invalid ShardSpec")
+		return nil, errors.Wrap(err, "invalid ShardingSpec")
 	}
 	if len(shards) != mesh.NumDevices() {
 		return nil, errors.Errorf("number of shards (%d) does not match number of devices in mesh (%d)", len(shards), mesh.NumDevices())
@@ -59,7 +59,7 @@ func NewTensor(mesh *DeviceMesh, spec ShardSpec, shards []*tensors.Tensor) (*Ten
 	return dt, nil
 }
 
-// calculateLogicalShape based on the shardShape and the ShardSpec.
+// calculateLogicalShape based on the shardShape and the ShardingSpec.
 func (dt *Tensor) calculateLogicalShape() {
 	logicalShape := dt.shardShape.Clone()
 	for tensorAxis, meshAxisName := range dt.spec {
@@ -70,7 +70,7 @@ func (dt *Tensor) calculateLogicalShape() {
 		// Sharded, multiply dimension by mesh axis size.
 		meshAxisSize, err := dt.mesh.AxisSize(meshAxisName)
 		if err != nil {
-			// This should have been caught by ShardSpec.Validate, so it's a panic situation.
+			// This should have been caught by ShardingSpec.Validate, so it's a panic situation.
 			panic(errors.Wrapf(err, "inconsistency in distributed.Tensor, sharding spec references mesh axis %q not in mesh %s", meshAxisName, dt.mesh))
 		}
 		logicalShape.Dimensions[tensorAxis] *= meshAxisSize
@@ -97,16 +97,16 @@ func (dt *Tensor) Shape() shapes.Shape {
 	return dt.logicalShape
 }
 
-// ShardSpec returns the sharding specification for this tensor.
-func (dt *Tensor) ShardSpec() ShardSpec {
+// ShardingSpec returns the sharding specification for this tensor.
+func (dt *Tensor) ShardingSpec() ShardingSpec {
 	return dt.spec
 }
 
 // UpdateShardSpec updates the sharding specification for this tensor and recalculates the logical shape.
 // It returns an error if the new spec is invalid.
-func (dt *Tensor) UpdateShardSpec(spec ShardSpec) error {
+func (dt *Tensor) UpdateShardSpec(spec ShardingSpec) error {
 	if err := spec.Validate(dt.mesh); err != nil {
-		return errors.Wrap(err, "invalid ShardSpec")
+		return errors.Wrap(err, "invalid ShardingSpec")
 	}
 	if err := validateShards(dt.mesh, spec, dt.shards); err != nil {
 		return err
@@ -116,8 +116,8 @@ func (dt *Tensor) UpdateShardSpec(spec ShardSpec) error {
 	return nil
 }
 
-// validateShards that all shards have the same shape and are consistent with the `ShardSpec`.
-func validateShards(mesh *DeviceMesh, spec ShardSpec, shards []*tensors.Tensor) error {
+// validateShards that all shards have the same shape and are consistent with the `ShardingSpec`.
+func validateShards(mesh *DeviceMesh, spec ShardingSpec, shards []*tensors.Tensor) error {
 	if len(shards) == 0 {
 		return errors.New("cannot create a distributed tensor with no shards")
 	}
@@ -204,9 +204,9 @@ func (dt *Tensor) Merge() *tensors.Tensor {
 }
 
 // ShardTensor splits a tensor into individual shards.
-func ShardTensor(t *tensors.Tensor, mesh *DeviceMesh, spec ShardSpec) (*Tensor, error) {
+func ShardTensor(t *tensors.Tensor, mesh *DeviceMesh, spec ShardingSpec) (*Tensor, error) {
 	if err := spec.Validate(mesh); err != nil {
-		return nil, errors.Wrap(err, "invalid ShardSpec")
+		return nil, errors.Wrap(err, "invalid ShardingSpec")
 	}
 	logicalShape := t.Shape()
 	shardShape := logicalShape.Clone()

@@ -18,6 +18,9 @@ import (
 type DeviceMesh struct {
 	backend backends.Backend
 
+	// name of the mesh, in case there is more than one.
+	name string
+
 	// axesNames are the names of the mesh axes.
 	axesNames []string
 
@@ -36,6 +39,11 @@ type DeviceMesh struct {
 	// physicalDeviceMapping is the mapping of concrete devices to the flat index in the mesh.
 	physicalDeviceMapping map[backends.DeviceNum]int
 }
+
+// DefaultMeshName is the default name of a newly created DeviceMesh.
+// Usually, there is only one mesh so one doesn't need to specify it explicitly.
+// Use DeviceMesh.WithName() to change it.
+const DefaultMeshName = "mesh"
 
 // NewDeviceMesh creates a new logical topology of a set of devices.
 //
@@ -75,6 +83,7 @@ func NewDeviceMesh(backend backends.Backend, axesSizes []int, axesNames []string
 
 	m := &DeviceMesh{
 		backend:       backend,
+		name:          DefaultMeshName,
 		axesNames:     axesNames,
 		axesSizes:     axesSizes,
 		nameToAxis:    nameToAxis,
@@ -83,6 +92,13 @@ func NewDeviceMesh(backend backends.Backend, axesSizes []int, axesNames []string
 	}
 	m.buildPhysicalDeviceMapping()
 	return m, nil
+}
+
+// WithName sets the name of the mesh.
+// The default name is "mesh" (DefaultMeshName).
+func (m *DeviceMesh) WithName(name string) *DeviceMesh {
+	m.name = name
+	return m
 }
 
 func (m *DeviceMesh) buildPhysicalDeviceMapping() {
