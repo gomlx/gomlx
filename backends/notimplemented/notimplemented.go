@@ -144,6 +144,10 @@ func (b Builder) DistributedSPMD(numDevices int) error {
 	return errors.Wrapf(NotImplementedError, "in DistributedSPMD()")
 }
 
+func (b Builder) DistributedAutoSharding(meshes ...backends.Mesh) error {
+	return errors.Wrapf(NotImplementedError, "in DistributedAutoSharding()")
+}
+
 func (b Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
 	if len(devices) != 1 && devices[0] != backends.DeviceNum(0) {
 		return errors.Wrapf(NotImplementedError, "in DeviceAssignment()")
