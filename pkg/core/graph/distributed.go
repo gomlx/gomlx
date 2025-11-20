@@ -82,8 +82,9 @@ func (g *Graph) Distributed() *DistributedOps {
 			exceptions.Panicf("graph.Distributed() with SPMD requires a device mesh to be set")
 		}
 		d.axes = g.deviceMesh.AxisNames()
-	case distributed.GSPMD:
-		exceptions.Panicf("graph.Distributed() with GSPMD is not supported yet")
+	case distributed.AutoSharding:
+		exceptions.Panicf("if using AutoSharding you should not use graph.Distributed() operations: the " +
+			"sharding of the operations happens automatically, without any explicit distributed calls.")
 	case distributed.None:
 		// No axes defined.
 	}

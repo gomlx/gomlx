@@ -261,8 +261,8 @@ func (g *Graph) build() backends.Builder {
 				panic(errors.WithMessagef(err,
 					"Graph failed to create distributed SPMD builder with backend %s", g.backend.Name()))
 			}
-		case distributed.GSPMD:
-			exceptions.Panicf("GSPMD not implemented yet")
+		case distributed.AutoSharding:
+			exceptions.Panicf("AutoSharding not implemented yet")
 		}
 	}
 	return g.builder

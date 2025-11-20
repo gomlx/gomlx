@@ -67,8 +67,8 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 		compileConfig = compileConfig.
 			WithSPMD(b.numReplicas).
 			WithDeviceAssignment(b.deviceAssignment)
-	case distributed.GSPMD:
-		return nil, errors.Errorf("backend %q: GSPMD not implemented", BackendName)
+	case distributed.AutoSharding:
+		return nil, errors.Errorf("backend %q: AutoSharding not implemented", BackendName)
 	case distributed.None:
 		// Nothing to do.
 	}
