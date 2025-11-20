@@ -57,6 +57,13 @@ type Builder interface {
 	// devices starting from 0.
 	DistributedSPMD(numDevices int) error
 
+	// DistributedAutoSharding creates a computation that will be executed on multiple devices with auto-sharding.
+	// This currently aims at XLA Shardy [1] framework. But other backends can implement it with the same semantics,
+	// if appropriate.
+	//
+	// [1] https://github.com/openxla/shardy
+	DistributedAutoSharding(meshes ...Mesh)
+
 	// DeviceAssignment assigns the devices to the computation.
 	//
 	// The number of devices must match the number of devices in the computation.
@@ -146,3 +153,18 @@ const (
 var RngStateShape = shapes.Make(dtypes.Uint64, 3)
 
 //go:generate go tool enumer -type ReduceOpType -trimprefix=ReduceOp -output=gen_reduceoptype_enumer.go builder.go
+
+// Mesh represents a mesh of devices, passed to the Builder.DistributedAutoSharding method.
+//
+// AxesSizes and AxesNames define the mesh topology.
+type Mesh struct {
+	AxesSizes []int
+	AxesNames []string
+
+	// LogicalDeviceAssignment is the logical assignment of devices to the mesh.
+	// The numbers here correspond to the indices on the "hard" device assignment set with
+	// Builder.DeviceAssignment() method.
+	//
+	// If left empty, the default assignment is incremental devices starting from 0.
+	LogicalDeviceAssignment []int
+}
