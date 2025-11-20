@@ -65,7 +65,7 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 	switch b.distStrategy {
 	case distributed.SPMD:
 		compileConfig = compileConfig.
-			WithSPMD(b.numReplicas).
+			WithSPMD(b.numDevices).
 			WithDeviceAssignment(b.deviceAssignment)
 	case distributed.AutoSharding:
 		return nil, errors.Errorf("backend %q: AutoSharding not implemented", BackendName)

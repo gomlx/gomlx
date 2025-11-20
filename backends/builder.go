@@ -158,6 +158,7 @@ var RngStateShape = shapes.Make(dtypes.Uint64, 3)
 //
 // AxesSizes and AxesNames define the mesh topology.
 type Mesh struct {
+	Name      string
 	AxesSizes []int
 	AxesNames []string
 

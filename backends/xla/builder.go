@@ -4,6 +4,7 @@ import (
 	"reflect"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -58,6 +59,11 @@ func (b *Builder) DistributedSPMD(numDevices int) error {
 	b.numReplicas = numDevices
 	devices := xslices.Iota(backends.DeviceNum(0), numDevices)
 	return b.DeviceAssignment(devices...)
+}
+
+// DistributedAutoSharding is not supported by the old XLA backend.
+func (b *Builder) DistributedAutoSharding(meshes ...backends.Mesh) error {
+	return errors.Wrapf(notimplemented.NotImplementedError, "in DistributedAutoSharding()")
 }
 
 // DeviceAssignment assigns the devices to the computation.
@@ -372,7 +378,7 @@ func (b *Builder) IsNaN(x backends.Op) (backends.Op, error) {
 	return result, nil
 }
 
-func (b Builder) AllReduce(inputs []backends.Op, reduceOp backends.ReduceOpType,
+func (b *Builder) AllReduce(inputs []backends.Op, reduceOp backends.ReduceOpType,
 	replicaGroups [][]int, channelIDGenerator func() int) ([]backends.Op, error) {
 	return nil, errors.Errorf("distributed operations like AllReduce are not implemented for %q, use "+
 		"`stablehlo` backend instead", BackendName)

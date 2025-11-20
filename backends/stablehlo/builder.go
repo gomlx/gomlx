@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/stablehlo"
+	"github.com/gomlx/stablehlo/types/shardy"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -22,7 +23,7 @@ type Builder struct {
 	builder *stablehlo.Builder
 	fn      *stablehlo.Function
 
-	numReplicas      int
+	numDevices       int // numDevices used by the builder <= backend.numDevices.
 	deviceAssignment []int
 	distStrategy     distributed.Strategy
 
@@ -192,7 +193,39 @@ func (b *Builder) DistributedSPMD(numDevices int) error {
 	}
 	b.distStrategy = distributed.SPMD
 	b.builder.WithNumReplicas(numDevices)
-	b.numReplicas = numDevices
+	b.numDevices = numDevices
+	return nil
+}
+
+// DistributedAutoSharding creates a computation that will be executed on multiple devices with auto-sharding.
+// This currently aims at XLA Shardy [1] framework. But other backends can implement it with the same semantics,
+// if appropriate.
+//
+// [1] https://github.com/openxla/shardy
+func (b *Builder) DistributedAutoSharding(meshes ...backends.Mesh) error {
+	if err := b.CheckValid(); err != nil {
+		return err
+	}
+	if b.compiled {
+		return errors.Errorf("DistributedAutoSharding cannot be called after the computation has been compiled")
+	}
+	b.distStrategy = distributed.AutoSharding
+	sMeshes := make([]*shardy.DeviceMesh, len(meshes))
+	var err error
+	builderNumDevices := 0
+	for i, mesh := range meshes {
+		sMeshes[i], err = shardy.NewDeviceMesh(mesh.Name, mesh.AxesSizes, mesh.AxesNames)
+		if err != nil {
+			return errors.WithMessagef(err, "while creating mesh %q", mesh.Name)
+		}
+		meshNumDevices := sMeshes[i].NumDevices()
+		if meshNumDevices > b.backend.NumDevices() {
+			return errors.Errorf("mesh %q has %d devices, but the backend only has %d devices",
+				mesh.Name, meshNumDevices, b.backend.NumDevices())
+		}
+		builderNumDevices = max(builderNumDevices, meshNumDevices)
+	}
+	b.builder.WithShardy(sMeshes...)
 	return nil
 }
 
@@ -201,7 +234,7 @@ func (b *Builder) DistributedSPMD(numDevices int) error {
 // The number of devices must match the number of devices in the computation.
 // Usually, that is 1. But if DistributedSPMD was used, it can be more.
 func (b *Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
-	numReplicas := max(1, b.numReplicas)
+	numReplicas := max(1, b.numDevices)
 	if len(devices) != numReplicas {
 		return errors.Errorf("DeviceAssignment expects %d devices, got %d", numReplicas, len(devices))
 	}
