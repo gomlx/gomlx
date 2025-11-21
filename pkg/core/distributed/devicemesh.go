@@ -54,7 +54,7 @@ const DefaultMeshName = "mesh"
 //
 // The default mapping of concrete devices to the mesh is sequential, starting from 0.
 // For non-symmetric devices, where connection speed among the devices matter, a custom mapping can be provided
-// with the DeviceMesh.WithDeviceMapping() method.
+// with the DeviceMeshes.WithDeviceMapping() method.
 func NewDeviceMesh(backend backends.Backend, axesSizes []int, axesNames []string) (*DeviceMesh, error) {
 	if len(axesSizes) != len(axesNames) {
 		return nil, errors.Errorf(
@@ -62,23 +62,23 @@ func NewDeviceMesh(backend backends.Backend, axesSizes []int, axesNames []string
 			len(axesSizes), len(axesNames))
 	}
 	if len(axesSizes) == 0 {
-		return nil, errors.New("DeviceMesh axesSizes cannot be empty")
+		return nil, errors.New("DeviceMeshes axesSizes cannot be empty")
 	}
 
 	numDevices := 1
 	nameToAxis := make(map[string]int, len(axesSizes))
 	for i, name := range axesNames {
 		if name == "" {
-			return nil, errors.Errorf("DeviceMesh axis name at index %d cannot be empty", i)
+			return nil, errors.Errorf("DeviceMeshes axis name at index %d cannot be empty", i)
 		}
 		if _, found := nameToAxis[name]; found {
-			return nil, errors.Errorf("DeviceMesh axis name %q is duplicated", name)
+			return nil, errors.Errorf("DeviceMeshes axis name %q is duplicated", name)
 		}
 		nameToAxis[name] = i
 		numDevices *= axesSizes[i]
 	}
 	if numDevices > backend.NumDevices() {
-		return nil, errors.Errorf("DeviceMesh has %d devices, but the backend only has %d devices", numDevices, backend.NumDevices())
+		return nil, errors.Errorf("DeviceMeshes has %d devices, but the backend only has %d devices", numDevices, backend.NumDevices())
 	}
 
 	m := &DeviceMesh{
@@ -142,7 +142,7 @@ func (m *DeviceMesh) AxisSize(axisName string) (int, error) {
 // String implements the fmt.Stringer interface.
 func (m *DeviceMesh) String() string {
 	var sb strings.Builder
-	sb.WriteString("DeviceMesh(axesSizes={")
+	sb.WriteString("DeviceMeshes(axesSizes={")
 	for i, name := range m.axesNames {
 		if i > 0 {
 			sb.WriteString(", ")

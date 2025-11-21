@@ -95,7 +95,7 @@ func TestDeviceMesh(t *testing.T) {
 				name:      "empty axesSizes",
 				shape:     []int{},
 				axisNames: []string{},
-				wantErr:   "DeviceMesh axesSizes cannot be empty",
+				wantErr:   "DeviceMeshes axesSizes cannot be empty",
 			},
 			{
 				name:      "empty axis name",
@@ -113,7 +113,7 @@ func TestDeviceMesh(t *testing.T) {
 				name:      "too many devices",
 				shape:     []int{16},
 				axisNames: []string{"replica"},
-				wantErr:   "DeviceMesh has 16 devices, but the backend only has 8 devices",
+				wantErr:   "DeviceMeshes has 16 devices, but the backend only has 8 devices",
 			},
 		}
 
@@ -211,13 +211,13 @@ func TestDeviceMesh(t *testing.T) {
 				name:      "1D mesh",
 				shape:     []int{8},
 				axisNames: []string{"replica"},
-				want:      "DeviceMesh(axesSizes={replica: 8})",
+				want:      "DeviceMeshes(axesSizes={replica: 8})",
 			},
 			{
 				name:      "2D mesh",
 				shape:     []int{2, 4},
 				axisNames: []string{"x", "y"},
-				want:      "DeviceMesh(axesSizes={x: 2, y: 4})",
+				want:      "DeviceMeshes(axesSizes={x: 2, y: 4})",
 			},
 		}
 
