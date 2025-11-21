@@ -449,7 +449,7 @@ func (g *Graph) Compile(outputs ...*Node) {
 
 	outputsOps := xslices.Map(outputs, func(node *Node) backends.Op { return node.outputOps[0] })
 	var err error
-	g.executable, err = g.builder.Compile(outputsOps...)
+	g.executable, err = g.builder.Compile(outputsOps, nil)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Graph failed to compile for the backend"))
 	}

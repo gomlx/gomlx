@@ -25,9 +25,12 @@ type Builder interface {
 	// Compile the computation built. This immediately invalidates the Builder and returns an Executable that
 	// can now be used to run the computation.
 	//
+	// It optionally also takes the corresponding output sharding specs: this is only needed for distributed
+	// computations with AutoSharding strategy and can be set to nil otherwise.
+	//
 	// It is given the list of outputs.
-	Compile(outputs ...Op) (Executable, error)
-
+	Compile(outputs []Op, shardings []*ShardingSpec) (Executable, error)
+	
 	// Name of the computation being built.
 	Name() string
 

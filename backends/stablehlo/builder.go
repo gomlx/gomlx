@@ -158,17 +158,10 @@ func (b *Builder) Parameter(name string, shape shapes.Shape, sharding *backends.
 	b.parameterSpecs = append(b.parameterSpecs, sharding)
 	var shardySpec *shardy.ShardingSpec
 	if sharding != nil {
-		mesh, err := b.meshByName(sharding.Mesh)
+		var err error
+		shardySpec, err = b.shardingSpecToShardy(sharding)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "in sharding spec while creating parameter %q", name)
-		}
-		shardySpec = shardy.NewShardingSpec(mesh)
-		for _, meshAxes := range sharding.Axes {
-			if len(meshAxes) == 0 {
-				shardySpec.AddReplicated()
-			} else {
-				shardySpec.AddShardedAxis(meshAxes...)
-			}
+			return nil, errors.WithMessagef(err, "while creating sharding spec for parameter %q", name)
 		}
 	}
 	value, err := b.fn.NamedInputWithSharding(name, ShapeToStableHLO(shape), shardySpec)
@@ -252,6 +245,26 @@ func (b *Builder) meshByName(meshName string) (*shardy.DeviceMesh, error) {
 		}
 	}
 	return nil, errors.Errorf("mesh %q not found", meshName)
+}
+
+func (b *Builder) shardingSpecToShardy(sharding *backends.ShardingSpec) (*shardy.ShardingSpec, error) {
+	if sharding == nil {
+		return nil, nil
+	}
+	name := sharding.Mesh
+	mesh, err := b.meshByName(sharding.Mesh)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "in sharding spec with mesh %q", name)
+	}
+	shardySpec := shardy.NewShardingSpec(mesh)
+	for _, meshAxes := range sharding.Axes {
+		if len(meshAxes) == 0 {
+			shardySpec.AddReplicated()
+		} else {
+			shardySpec.AddShardedAxis(meshAxes...)
+		}
+	}
+	return shardySpec, nil
 }
 
 // DeviceAssignment assigns the devices to the computation.

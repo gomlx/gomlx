@@ -7,6 +7,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/gomlx/stablehlo"
+	"github.com/gomlx/stablehlo/types/shardy"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -27,7 +28,7 @@ type Executable struct {
 	deviceAssignment []int
 }
 
-func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
+func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingSpec) (backends.Executable, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -43,13 +44,33 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 	}
 	outputValues := make([]*stablehlo.Value, len(outputs))
 	outputShapes := make([]shapes.Shape, len(outputs))
+
 	for ii, outputNode := range outputNodes {
 		outputValues[ii] = outputNode.value
 		outputShapes[ii] = outputNode.shape
 	}
 
+	// Verify shardings:
+	var shardySpecs []*shardy.ShardingSpec
+	if len(shardings) > 0 {
+		if b.distStrategy != distributed.AutoSharding {
+			return nil, errors.Errorf(
+				"backend %q, computation %q: sharding of the outputs are only supported with AutoSharding strategy",
+				BackendName, b.name)
+		}
+		shardySpecs = make([]*shardy.ShardingSpec, len(outputs))
+		for i, spec := range shardings {
+			shardySpecs[i], err = b.shardingSpecToShardy(spec)
+			if err != nil {
+				return nil, errors.WithMessagef(err,
+					"backend %q, computation %q: failed to convert sharding spec for output #%d",
+					BackendName, b.name, i)
+			}
+		}
+	}
+
 	// Finish StableHLO "main" function:
-	err = b.fn.Return(outputValues...)
+	err = b.fn.ReturnWithShardingAndAttributes(outputValues, shardySpecs, nil)
 	if err != nil {
 		return nil, errors.WithMessagef(err,
 			"backend %q: failed to finish StableHLO program %q", BackendName, b.name)

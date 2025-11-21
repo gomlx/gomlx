@@ -49,7 +49,7 @@ func TestRepeatedClients(t *testing.T) {
 			}
 			x2, err := builder.Mul(x, x)
 			require.NoError(t, err)
-			exec, err = builder.Compile(x, x2)
+			exec, err = builder.Compile([]backends.Op{x, x2}, nil)
 			require.NoError(t, err)
 
 			bIn, err := backend.BufferFromFlatData(0, []float64{7, 2, 1}, shapes.Make(dtypes.Float64, 3))

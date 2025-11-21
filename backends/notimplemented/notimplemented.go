@@ -165,7 +165,7 @@ func (b Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
 	return nil
 }
 
-func (b Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
+func (b Builder) Compile(_ []backends.Op, _ []*backends.ShardingSpec) (backends.Executable, error) {
 	return nil, errors.Wrapf(NotImplementedError, "in Compile()")
 }
 
