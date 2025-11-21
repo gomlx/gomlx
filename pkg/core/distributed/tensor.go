@@ -6,6 +6,9 @@
 package distributed
 
 import (
+	"slices"
+
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/pkg/errors"
@@ -22,11 +25,13 @@ import (
 // The idea is that when executing a distributed computation, each device will receive the corresponding
 // tensor shard, replicated and/or sharded, according to the specification.
 type Tensor struct {
-	// mesh is the DeviceMesh this tensor is distributed on.
-	mesh *DeviceMesh
+	backend backends.Backend
 
 	// spec defines how this tensor is sharded across the mesh.
-	spec ShardingSpec
+	spec *ShardingSpec
+
+	// mesh comes from the spec.
+	mesh *DeviceMesh
 
 	// shards holds the physical tensor data for each device.
 	// The map key is the device's global ordinal index (0 to NumDevices-1).
@@ -39,43 +44,57 @@ type Tensor struct {
 
 // NewTensor creates a new distributed Tensor.
 // It assumes the provided shards are already on their respective devices.
-func NewTensor(mesh *DeviceMesh, spec ShardingSpec, shards []*tensors.Tensor) (*Tensor, error) {
-	if err := spec.Validate(mesh); err != nil {
-		return nil, errors.Wrap(err, "invalid ShardingSpec")
+func NewTensor(backend backends.Backend, spec ShardingSpec, shards []*tensors.Tensor) (*Tensor, error) {
+	if len(shards) == 0 {
+		return nil, errors.New("distributed.NewTensor requires shards for initialization, none was provided")
 	}
+	mesh := spec.Mesh
 	if len(shards) != mesh.NumDevices() {
-		return nil, errors.Errorf("number of shards (%d) does not match number of devices in mesh (%d)", len(shards), mesh.NumDevices())
-	}
-	if err := validateShards(mesh, spec, shards); err != nil {
-		return nil, err
+		return nil, errors.Errorf(
+			"number of shards (%d) does not match number of devices in mesh (%d)",
+			len(shards),
+			mesh.NumDevices(),
+		)
 	}
 	dt := &Tensor{
-		mesh:       mesh,
-		spec:       spec,
-		shards:     shards,
-		shardShape: shards[0].Shape(),
+		backend: backend,
+		mesh:    mesh,
+		spec:    spec,
+		shards:  slices.Clone(shards),
 	}
-	dt.calculateLogicalShape()
+	if err := dt.validateShards(); err != nil {
+		return nil, err
+	}
+	dt.shardShape = shards[0].Shape()
+	err := dt.calculateLogicalShape()
+	if err != nil {
+		return nil, err
+	}
 	return dt, nil
 }
 
 // calculateLogicalShape based on the shardShape and the ShardingSpec.
-func (dt *Tensor) calculateLogicalShape() {
+func (dt *Tensor) calculateLogicalShape() error {
 	logicalShape := dt.shardShape.Clone()
-	for tensorAxis, meshAxisName := range dt.spec {
-		if meshAxisName == "" {
-			// Replicated, dimension is the same.
+	for tensorAxis, axisSpec := range dt.spec.Axes {
+		if len(axisSpec) == 0 {
+			// Replicated axis, it's always valid.
 			continue
 		}
-		// Sharded, multiply dimension by mesh axis size.
-		meshAxisSize, err := dt.mesh.AxisSize(meshAxisName)
-		if err != nil {
-			// This should have been caught by ShardingSpec.Validate, so it's a panic situation.
-			panic(errors.Wrapf(err, "inconsistency in distributed.Tensor, sharding spec references mesh axis %q not in mesh %s", meshAxisName, dt.mesh))
+		meshSize := 1
+		for _, meshAxisName := range axisSpec {
+			s, err := dt.mesh.AxisSize(meshAxisName)
+			if err != nil {
+				return errors.WithMessagef(err,
+					"inconsistency in distributed.Tensor, sharding spec references mesh tensorAxis %q not in mesh %s",
+					meshAxisName, dt.mesh)
+			}
+			meshSize *= s
 		}
-		logicalShape.Dimensions[tensorAxis] *= meshAxisSize
+		logicalShape.Dimensions[tensorAxis] *= meshSize
 	}
 	dt.logicalShape = logicalShape
+	return nil
 }
 
 // Mesh redt.logicaturns the DeviceMesh for this tensor.
@@ -98,45 +117,62 @@ func (dt *Tensor) Shape() shapes.Shape {
 }
 
 // ShardingSpec returns the sharding specification for this tensor.
-func (dt *Tensor) ShardingSpec() ShardingSpec {
+func (dt *Tensor) ShardingSpec() *ShardingSpec {
 	return dt.spec
 }
 
-// UpdateShardSpec updates the sharding specification for this tensor and recalculates the logical shape.
-// It returns an error if the new spec is invalid.
-func (dt *Tensor) UpdateShardSpec(spec ShardingSpec) error {
-	if err := spec.Validate(dt.mesh); err != nil {
-		return errors.Wrap(err, "invalid ShardingSpec")
-	}
-	if err := validateShards(dt.mesh, spec, dt.shards); err != nil {
-		return err
-	}
-	dt.spec = spec
-	dt.calculateLogicalShape()
-	return nil
-}
-
 // validateShards that all shards have the same shape and are consistent with the `ShardingSpec`.
-func validateShards(mesh *DeviceMesh, spec ShardingSpec, shards []*tensors.Tensor) error {
+func (dt *Tensor) validateShards() error {
+	shards := dt.shards
 	if len(shards) == 0 {
 		return errors.New("cannot create a distributed tensor with no shards")
 	}
+	if err := shards[0].CheckValid(); err != nil {
+		return errors.WithMessagef(err, "invalid shard 0 for distributed.Tensor")
+	}
 	shardShape := shards[0].Shape()
 	for i, shard := range shards {
+		if err := shard.CheckValid(); err != nil {
+			return errors.WithMessagef(err, "invalid shard %d for distributed.Tensor", i)
+		}
 		if !shard.Shape().Equal(shardShape) {
-			return errors.Errorf("shard %d has shape %s, but shard 0 has shape %s", i, shard.Shape(), shardShape)
+			return errors.Errorf("shard %d has shape %s, but shard 0 has shape %s",
+				i, shard.Shape(), shardShape)
+		}
+		_, err := shard.Device()
+		if err == nil {
+			// Shard is on-device: we need to check that it is on the correct backend.
+			// We can't yet check that it is the correct device because we don't yet have access here to
+			// the assignment of devices.
+			shardBackend, err := shard.Backend()
+			if err != nil {
+				return errors.WithMessagef(err, "shard %d is on-device, but has invalid backend", i)
+			}
+			if shardBackend != dt.backend {
+				return errors.Errorf("shard %d is on backend %s, but distributed.Tensor configured for backend %s",
+					i, shardBackend, dt.backend)
+			}
 		}
 	}
+
 	// Check that the shard shape is divisible by the mesh axis sizes for sharded axes.
-	for _, meshAxisName := range spec {
-		if meshAxisName == "" {
+	mesh := dt.mesh
+	spec := dt.spec
+	if spec.Rank() > shardShape.Rank() {
+		return errors.Errorf("shard shape %s is too small (rank) for sharding spec %s", shardShape, spec)
+	}
+	for _, axisSpec := range spec.Axes {
+		if len(axisSpec) == 0 {
+			// Replicated axis, it's always valid.
 			continue
 		}
-		_, err := mesh.AxisSize(meshAxisName)
-		if err != nil {
-			return errors.WithMessagef(err,
-				"inconsistency in distributed.Tensor, sharding spec references mesh axis %q not in mesh %s",
-				meshAxisName, mesh)
+		for _, meshAxisName := range axisSpec {
+			_, err := mesh.AxisSize(meshAxisName)
+			if err != nil {
+				return errors.WithMessagef(err,
+					"inconsistency in distributed.Tensor, sharding spec references mesh axis %q not in mesh %s",
+					meshAxisName, mesh)
+			}
 		}
 	}
 	return nil
@@ -161,7 +197,7 @@ func (dt *Tensor) Merge() *tensors.Tensor {
 				for j := 0; j < dt.logicalShape.Rank(); j++ {
 					sliceEnds[j] = dt.shardShape.Dimensions[j]
 				}
-				for tensorAxis, meshAxisName := range dt.spec {
+				for tensorAxis, meshAxisName := range dt.spec.Axes {
 					if meshAxisName == "" {
 						continue
 					}
@@ -195,7 +231,10 @@ func (dt *Tensor) Merge() *tensors.Tensor {
 
 					fromByteOffset := j * elementSize
 					toByteOffset := toOffset * elementSize
-					copy(tBytes[toByteOffset:toByteOffset+elementSize], shardBytes[fromByteOffset:fromByteOffset+elementSize])
+					copy(
+						tBytes[toByteOffset:toByteOffset+elementSize],
+						shardBytes[fromByteOffset:fromByteOffset+elementSize],
+					)
 				}
 			})
 		}
