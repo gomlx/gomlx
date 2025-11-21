@@ -27,10 +27,9 @@ func TestDistributedAllReduce(t *testing.T) {
 	}
 
 	t.Run("scalar", func(t *testing.T) {
-		mesh := must1(distributed.NewDeviceMesh(backend, []int{2}, []string{"replica"}))
-		g := graph.NewGraph(backend, t.Name()).
-			WithDistributedStrategy(distributed.SPMD).
-			WithDeviceMesh(mesh)
+		mesh := must1(distributed.NewDeviceMesh([]int{2}, []string{"replica"}))
+		g := graph.NewGraph(backend, t.Name())
+		require.NoError(t, g.SetSPMD(mesh))
 		g.AssertBuilding()
 		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
 		reduced := g.Distributed().AllReduceOne(x, backends.ReduceOpSum)
@@ -44,10 +43,9 @@ func TestDistributedAllReduce(t *testing.T) {
 	})
 
 	t.Run("multiple values, same dtype", func(t *testing.T) {
-		mesh := must1(distributed.NewDeviceMesh(backend, []int{2}, []string{"replica"}))
-		g := graph.NewGraph(backend, t.Name()).
-			WithDistributedStrategy(distributed.SPMD).
-			WithDeviceMesh(mesh)
+		mesh := must1(distributed.NewDeviceMesh([]int{2}, []string{"replica"}))
+		g := graph.NewGraph(backend, t.Name())
+		require.NoError(t, g.SetSPMD(mesh))
 		g.AssertBuilding()
 		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
 		y := graph.Parameter(g, "y", shapes.Make(dtypes.Float32, 2))
@@ -62,15 +60,21 @@ func TestDistributedAllReduce(t *testing.T) {
 			reducedX, reducedY := outputs[deviceIdx*numOutputs], outputs[deviceIdx*numOutputs+1]
 			fmt.Printf("\t- device #%d reduced-sum outputs: x=%s, y=%s\n", deviceIdx, reducedX, reducedY)
 			require.Equalf(t, float32(4), reducedX.Value(), "device #%d got reduced-sum x=%s", deviceIdx, reducedX)
-			require.Equalf(t, []float32{30, 32}, reducedY.Value(), "device #%d got reduced-sum x=%s", deviceIdx, reducedY)
+			require.Equalf(
+				t,
+				[]float32{30, 32},
+				reducedY.Value(),
+				"device #%d got reduced-sum x=%s",
+				deviceIdx,
+				reducedY,
+			)
 		}
 	})
 
 	t.Run("multiple values, different dtype", func(t *testing.T) {
-		mesh := must1(distributed.NewDeviceMesh(backend, []int{2}, []string{"replica"}))
-		g := graph.NewGraph(backend, t.Name()).
-			WithDistributedStrategy(distributed.SPMD).
-			WithDeviceMesh(mesh)
+		mesh := must1(distributed.NewDeviceMesh([]int{2}, []string{"replica"}))
+		g := graph.NewGraph(backend, t.Name())
+		require.NoError(t, g.SetSPMD(mesh))
 		g.AssertBuilding()
 		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
 		y := graph.Parameter(g, "y", shapes.Make(dtypes.Float32, 2))
@@ -84,10 +88,30 @@ func TestDistributedAllReduce(t *testing.T) {
 		require.Len(t, outputs, numOutputs*mesh.NumDevices())
 		for deviceIdx := range mesh.NumDevices() {
 			reducedX, reducedY, reducedZ := outputs[deviceIdx*numOutputs], outputs[deviceIdx*numOutputs+1], outputs[deviceIdx*numOutputs+2]
-			fmt.Printf("\t- device #%d reduced-sum outputs: x=%s, y=%s, z=%s\n", deviceIdx, reducedX, reducedY, reducedZ)
+			fmt.Printf(
+				"\t- device #%d reduced-sum outputs: x=%s, y=%s, z=%s\n",
+				deviceIdx,
+				reducedX,
+				reducedY,
+				reducedZ,
+			)
 			require.Equalf(t, float32(4), reducedX.Value(), "device #%d got reduced-sum x=%s", deviceIdx, reducedX)
-			require.Equalf(t, []float32{30, 32}, reducedY.Value(), "device #%d got reduced-sum y=%s", deviceIdx, reducedY)
-			require.Equalf(t, []float64{10.1, 100.2, 1000.3}, reducedZ.Value(), "device #%d got reduced-sum z=%s", deviceIdx, reducedZ)
+			require.Equalf(
+				t,
+				[]float32{30, 32},
+				reducedY.Value(),
+				"device #%d got reduced-sum y=%s",
+				deviceIdx,
+				reducedY,
+			)
+			require.Equalf(
+				t,
+				[]float64{10.1, 100.2, 1000.3},
+				reducedZ.Value(),
+				"device #%d got reduced-sum z=%s",
+				deviceIdx,
+				reducedZ,
+			)
 		}
 	})
 

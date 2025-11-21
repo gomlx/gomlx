@@ -102,8 +102,7 @@ func TestTensor(t *testing.T) {
 			tensors.FromFlatDataAndDimensions([]int32{1, 2, 3, 4, 5, 6}, 2, 3, 1),
 			tensors.FromFlatDataAndDimensions([]int32{10, 20, 30, 40, 50, 60}, 2, 3, 1),
 		}
-		spec, err := distributed.NewShardSpec(mesh,
-			distributed.AxisSpec{"shards"}, distributed.ReplicatedAxis, distributed.ReplicatedAxis)
+		spec, err := distributed.BuildSpec(mesh).S("shards").R().R().Done()
 		require.NoError(t, err)
 		distTensor, err := distributed.NewTensor(backend, spec, shards)
 		require.NoError(t, err)

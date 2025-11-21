@@ -7,6 +7,7 @@ import (
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 )
 
@@ -123,16 +124,20 @@ func (g *Graph) setupBuilderDistribution() error {
 				"Graph failed to create distributed SPMD builder with backend %s", g.backend.Name())
 		}
 	case distributed.AutoSharding:
-		err := g.builder.DistributedAutoSharding(g.deviceMeshes...)
+		bMeshes := xslices.Map(
+			g.deviceMeshes,
+			func(m *distributed.DeviceMesh) backends.Mesh { return m.ToBackendsMesh() },
+		)
+		err := g.builder.DistributedAutoSharding(bMeshes...)
 		if err != nil {
 			panic(errors.WithMessagef(err,
-				"Graph failed to create distributed SPMD builder with backend %s",
+				"Graph failed to create distributed builder with backend %s",
 				g.backend.Name()))
 		}
 		err = g.builder.DeviceAssignment(g.deviceAssignment...)
 		if err != nil {
 			panic(errors.WithMessagef(err,
-				"Graph failed to create distributed SPMD builder with backend %s", g.backend.Name()))
+				"Graph failed to create distributed builder with backend %s", g.backend.Name()))
 		}
 	}
 	return nil
@@ -171,7 +176,7 @@ func (g *Graph) nextChannelID() int {
 // to be set via chaining.
 type DistributedOps struct {
 	g    *Graph
-	axes []string // Stores the mesh axes for the next op.
+	axes []string
 
 	// channelIDGenerator is used to generate unique ids for channel synchronization.
 	// The default is the Graph's incremental channelID, which works fine for SPMD graphs.
@@ -189,7 +194,6 @@ func (g *Graph) Distributed() *DistributedOps {
 		if g.deviceMeshes == nil {
 			exceptions.Panicf("graph.Distributed() with SPMD requires a device mesh to be set")
 		}
-		d.axes = g.deviceMeshes.AxisNames()
 	case distributed.AutoSharding:
 		exceptions.Panicf("if using AutoSharding you should not use graph.Distributed() operations: the " +
 			"sharding of the operations happens automatically, without any explicit distributed calls.")
@@ -238,7 +242,7 @@ func (d *DistributedOps) AllReduce(operands []*Node, reductionType backends.Redu
 	if len(operands) == 0 {
 		return nil // Or panic
 	}
-	mesh := d.g.deviceMeshes
+	mesh := d.g.deviceMeshes[0]
 	if mesh == nil {
 		// Single-device graph: this is a no-op.
 		return operands
