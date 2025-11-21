@@ -520,7 +520,7 @@ func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 		}
 	} else {
 		// Inputs are split into their corresponding devices:
-		deviceAssignment := g.deviceMeshes.DeviceAssignment()
+		deviceAssignment := g.deviceAssignment
 		for ii, input := range inputs {
 			deviceIndex := ii / numParams
 			deviceNum := deviceAssignment[deviceIndex]
@@ -668,19 +668,16 @@ func tensorToDeviceBuffer(
 				"to be used -- this is likely a logic error, so it is not transferred automatically",
 			currentDevice, deviceNum)
 	}
-	if t.IsLocal() {
-		// Transfer the tensor to the right device:
-		buf, err := t.Buffer(backend, deviceNum)
-		if err != nil {
-			return nil, shape, err
-		}
-		return buf, t.Shape(), nil
+	if !t.IsLocal() {
+		return nil, shape, errors.Errorf(
+			"tensor %q is not local and not on a device, cannot transfer to deviceNum #%d", t.Shape(), deviceNum)
 	}
+	// Transfer the tensor to the right device:
+	buf, err := t.Buffer(backend, deviceNum)
 	if err != nil {
 		return nil, shape, err
 	}
-	return nil, shape, errors.Errorf(
-		"tensor %q is not local and not on a device, cannot transfer to deviceNum #%d", t.Shape(), deviceNum)
+	return buf, t.Shape(), nil
 }
 
 // NumParameters returns the number of parameters created for this graph.
