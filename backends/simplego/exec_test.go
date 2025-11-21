@@ -17,7 +17,7 @@ import (
 func TestBuilder_Compile(t *testing.T) {
 	// backend must be exclusive (not shared across tests) for this test to work.
 	builder := backend.Builder("test")
-	x, err := builder.Parameter("x", shapes.Make(dtypes.Float32, 3))
+	x, err := builder.Parameter("x", shapes.Make(dtypes.Float32, 3), nil)
 	require.NoError(t, err)
 	require.NotNil(t, x)
 	x, err = builder.Neg(x)

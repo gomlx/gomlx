@@ -38,11 +38,15 @@ type Builder interface {
 	OpShape(op Op) (shapes.Shape, error)
 
 	// Parameter creates an input parameter for the computation.
-	// During execution of a compiled computation (returned by Builder.Compile) this value will need to be fed
+	// During the execution of a compiled computation (returned by Builder.Compile), this value will need to be fed
 	// in the same order it is created.
-	Parameter(name string, shape shapes.Shape) (Op, error)
+	//
+	// The spec defines how the parameter will be shared for distributed operations.
+	// Set it to nil if not using distribution.
+	Parameter(name string, shape shapes.Shape, spec ShardingSpec) (Op, error)
 
-	// Constant creates a constant in the graph with the given flat values, and the shape defined by dims.
+	// Constant creates a constant in the graph with the given flat values and the shape defined by
+	// the dimensions in dim.
 	//
 	// The flat value must be a slice of a basic type supported -- that can be converted to a DType.
 	//
@@ -81,7 +85,7 @@ type Builder interface {
 // There must be the same number of spatial dimensions (axes) for each of the 3 tensors.
 // Input and output have batch and channel axes. Kernel has inputChannel and outputChannel axes.
 //
-// See Builder.ConvGeneral
+// See Builder.ConvGeneral.
 type ConvolveAxesConfig struct {
 	InputBatch, InputChannels int
 	InputSpatial              []int
@@ -119,10 +123,10 @@ const (
 	// FFTInverse - complex in, complex out.
 	FFTInverse
 
-	// FFTForwardReal - real in, fft_length / 2 + 1 complex out
+	// FFTForwardReal - real in, fft_length / 2 + 1 complex out.
 	FFTForwardReal
 
-	// FFTInverseReal - fft_length / 2 + 1 complex in
+	// FFTInverseReal - fft_length / 2 + 1 complex in.
 	FFTInverseReal
 )
 
@@ -150,7 +154,7 @@ const (
 
 // RngStateShape is the default shape for the random number generator state.
 // It dependents on the algorithm, but for now we are using Philox.
-var RngStateShape = shapes.Make(dtypes.Uint64, 3)
+var RngStateShape = shapes.Make(dtypes.Uint64, 3) //nolint:mnd // This is a constant.
 
 //go:generate go tool enumer -type ReduceOpType -trimprefix=ReduceOp -output=gen_reduceoptype_enumer.go builder.go
 
@@ -169,3 +173,8 @@ type Mesh struct {
 	// If left empty, the default assignment is incremental devices starting from 0.
 	LogicalDeviceAssignment []int
 }
+
+// ShardingSpec is a list of per tensor (or Node) axis of a list of Mesh axes names.
+// Any tensor axis that doesn't have a corresponding ShardingSpec is considered replicated.
+// And any tensor axis for which the list of Mesh axes is empty is also considered replicated.
+type ShardingSpec [][]string

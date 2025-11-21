@@ -16,6 +16,7 @@ Distributed computation improvements and refactorings:
   - Added `context.MustGetParam[T](ctx, key)` and `context.MustGetGraphParam[T](ctx, graph, key)`.
 - Package `backend`:
   - Added `Backend.CopyToDevice`
+  - `Builder.Parameter()` now takes an optional `ShardingSpec` for sharded inputs.
   - Added ops: `AllReduce`
   - `Backend.NumDevices()` returns an int now.
   - Package `backends/notimplemented`:

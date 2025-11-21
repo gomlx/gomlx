@@ -29,6 +29,7 @@ type Builder struct {
 
 	parameterNames  []string
 	parameterShapes []shapes.Shape
+	parameterSpecs  []backends.ShardingSpec
 
 	// Various caches.
 	cacheReductions map[reductionKey]*stablehlo.Function
@@ -138,10 +139,8 @@ func (b *Builder) newNode(value *stablehlo.Value) *Node {
 	}
 }
 
-// Parameter creates an input parameter for the computation.
-//
-// During the computation's execution this value will need to be fed, in the same order it is created.
-func (b *Builder) Parameter(name string, shape shapes.Shape) (backends.Op, error) {
+func (b *Builder) Parameter(name string, shape shapes.Shape, spec backends.ShardingSpec) (
+	backends.Op, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -155,6 +154,7 @@ func (b *Builder) Parameter(name string, shape shapes.Shape) (backends.Op, error
 	}
 	b.parameterNames = append(b.parameterNames, normalizedName)
 	b.parameterShapes = append(b.parameterShapes, shape)
+	b.parameterSpecs = append(b.parameterSpecs, spec)
 	value, err := b.fn.NamedInput(name, ShapeToStableHLO(shape))
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building parameter %q", name)
@@ -250,7 +250,10 @@ func (b *Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
 	return nil
 }
 
-func broadcastShapeForBinaryOps(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (output shapes.Shape, err error) {
+func broadcastShapeForBinaryOps(
+	opType backends.OpType,
+	lhsShape, rhsShape shapes.Shape,
+) (output shapes.Shape, err error) {
 	if lhsShape.IsScalar() {
 		return rhsShape, nil
 	}
@@ -260,8 +263,12 @@ func broadcastShapeForBinaryOps(opType backends.OpType, lhsShape, rhsShape shape
 
 	// Other cases, either the dimensions match or one of them is 1.
 	if lhsShape.Rank() != rhsShape.Rank() {
-		err = errors.Errorf("if operands are not scalars, their rank must match for BinaryOp (%s), got shapes %s and %s",
-			opType, lhsShape, rhsShape)
+		err = errors.Errorf(
+			"if operands are not scalars, their rank must match for BinaryOp (%s), got shapes %s and %s",
+			opType,
+			lhsShape,
+			rhsShape,
+		)
 		return
 	}
 	output = lhsShape.Clone()
@@ -269,8 +276,13 @@ func broadcastShapeForBinaryOps(opType backends.OpType, lhsShape, rhsShape shape
 		lhsDim := lhsShape.Dimensions[axis]
 		rhsDim := rhsShape.Dimensions[axis]
 		if lhsDim != 1 && rhsDim != 1 && lhsDim != rhsDim {
-			err = errors.Errorf("dimension of axis #%d doesn't match and cannot be broadcast for BinaryOp (%s), got shapes %s and %s",
-				axis, opType, lhsShape, rhsShape)
+			err = errors.Errorf(
+				"dimension of axis #%d doesn't match and cannot be broadcast for BinaryOp (%s), got shapes %s and %s",
+				axis,
+				opType,
+				lhsShape,
+				rhsShape,
+			)
 			return
 		}
 		output.Dimensions[axis] = max(lhsDim, rhsDim)
@@ -281,7 +293,10 @@ func broadcastShapeForBinaryOps(opType backends.OpType, lhsShape, rhsShape shape
 
 // broadcastForBinaryOps returns the broadcasted versions of the two ops,
 // converting them to Nodes in the process.
-func (b *Builder) broadcastForBinaryOps(opType backends.OpType, lhs, rhs backends.Op) (lhsNode, rhsNode *Node, err error) {
+func (b *Builder) broadcastForBinaryOps(
+	opType backends.OpType,
+	lhs, rhs backends.Op,
+) (lhsNode, rhsNode *Node, err error) {
 	opName := opType.String()
 	nodes, err := b.verifyAndCastValues(opName, lhs, rhs)
 	if err != nil {

@@ -41,7 +41,7 @@ func TestRepeatedClients(t *testing.T) {
 		builder := backend.Builder(fmt.Sprintf("builder_#%d", ii))
 		var exec backends.Executable
 		{
-			x, err := builder.Parameter("x", shapes.Make(dtypes.Float64, 3))
+			x, err := builder.Parameter("x", shapes.Make(dtypes.Float64, 3), nil)
 			require.NoError(t, err)
 			for range rand.Intn(10) {
 				x, err = builder.Add(x, x)

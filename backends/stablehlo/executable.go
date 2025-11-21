@@ -18,7 +18,9 @@ type Executable struct {
 	name            string
 	parameterNames  []string
 	parameterShapes []shapes.Shape
+	parameterSpecs  []*distributed.ShardingSpec
 	outputShapes    []shapes.Shape
+	outputSpecs     []*distributed.ShardingSpec
 
 	distStrategy     distributed.Strategy
 	numDevices       int
@@ -68,7 +70,9 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 			WithSPMD(b.numDevices).
 			WithDeviceAssignment(b.deviceAssignment)
 	case distributed.AutoSharding:
-		return nil, errors.Errorf("backend %q: AutoSharding not implemented", BackendName)
+		compileConfig = compileConfig.
+			WithShardy(b.numDevices).
+			WithDeviceAssignment(b.deviceAssignment)
 	case distributed.None:
 		// Nothing to do.
 	}
@@ -83,6 +87,7 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 		name:            b.name,
 		parameterNames:  b.parameterNames,
 		parameterShapes: b.parameterShapes,
+		parameterSpecs:  b.parameterSpecs,
 		outputShapes:    outputShapes,
 
 		distStrategy:     b.distStrategy,

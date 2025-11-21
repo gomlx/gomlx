@@ -163,7 +163,7 @@ func (b Builder) OpShape(op backends.Op) (shapes.Shape, error) {
 	return shapes.Invalid(), errors.Wrapf(NotImplementedError, "in OpShape()")
 }
 
-func (b Builder) Parameter(name string, shape shapes.Shape) (backends.Op, error) {
+func (b Builder) Parameter(name string, shape shapes.Shape, spec backends.ShardingSpec) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeParameter)
 }
 
