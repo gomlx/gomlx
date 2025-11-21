@@ -1,6 +1,7 @@
 package distributed
 
 import (
+	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
@@ -51,22 +52,32 @@ var ReplicatedAxis = AxisSpec(nil)
 // NewShardSpec creates a new ShardingSpec for a tensor, defined over the given mesh axes.
 //
 // It takes an axisSpec for each axis of the tensor (omitted axes are assumed to be replicated).
+//
+// There is also the BuildSpec function for a more ergonomic spec creation.
 func NewShardSpec(mesh *DeviceMesh, axisSpec ...AxisSpec) (*ShardingSpec, error) {
 	s := &ShardingSpec{mesh, axisSpec}
+	err := s.Validate()
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// Validate the spec returning an error if something is invalid.
+func (s *ShardingSpec) Validate() error {
 	meshAxesUsed := make(map[string]bool)
-	// Validate mesh axes names.
 	for axisIdx, tensorAxisSpec := range s.Axes {
 		for _, axisName := range tensorAxisSpec {
-			if _, ok := mesh.nameToAxis[axisName]; !ok {
-				return nil, errors.Errorf("ShardingSpec axis #%d refers to unknown mesh axis %q", axisIdx, axisName)
+			if _, ok := s.Mesh.nameToAxis[axisName]; !ok {
+				return errors.Errorf("ShardingSpec axis #%d refers to unknown mesh axis %q", axisIdx, axisName)
 			}
 			if meshAxesUsed[axisName] {
-				return nil, errors.Errorf("mesh axis %q used more than once in ShardingSpec", axisName)
+				return errors.Errorf("mesh axis %q used more than once in ShardingSpec", axisName)
 			}
 			meshAxesUsed[axisName] = true
 		}
 	}
-	return s, nil
+	return nil
 }
 
 // Rank returns the rank of the tensor this ShardingSpec describes.
@@ -88,6 +99,41 @@ func (s *ShardingSpec) IsReplicated() bool {
 	return true
 }
 
+// SpecBuilder is a more ergonomic way of building SharingSpec.
+type SpecBuilder struct {
+	spec *ShardingSpec
+}
+
+// BuildSpec is a more ergonomic way of building SharingSpec.
+//
+// Example:
+//
+//	spec, err := distributed.BuildSpec(mesh).R().S("model").Done()
+func BuildSpec(mesh *DeviceMesh) *SpecBuilder {
+	return &SpecBuilder{spec: &ShardingSpec{Mesh: mesh}}
+}
+
+// R adds a replicated axis to the ShardingSpec being built.
+func (b *SpecBuilder) R() *SpecBuilder {
+	b.spec.Axes = append(b.spec.Axes, ReplicatedAxis)
+	return b
+}
+
+// S adds a sharded axis along the meshAxes to the ShardingSpec being built.
+func (b *SpecBuilder) S(meshAxes ...string) *SpecBuilder {
+	b.spec.Axes = append(b.spec.Axes, meshAxes)
+	return b
+}
+
+// Done builds the ShardingSpec according to the builder specification.
+func (b *SpecBuilder) Done() (*ShardingSpec, error) {
+	err := b.spec.Validate()
+	if err != nil {
+		return nil, err
+	}
+	return b.spec, nil
+}
+
 // NumDevicesShardingAxis returns the number of devices that will be used to shard the tensor along the given
 // tensor axis. If the axis is replicated, it returns 1.
 //
@@ -105,4 +151,12 @@ func (s *ShardingSpec) NumDevicesShardingAxis(axis int) int {
 		size *= s.Mesh.axesSizes[s.Mesh.nameToAxis[meshAxis]]
 	}
 	return size
+}
+
+func (s *ShardingSpec) ToBackendsSpec() backends.ShardingSpec {
+	spec := make(backends.ShardingSpec, len(s.Axes))
+	for tensorAxis, meshAxes := range s.Axes {
+		spec[tensorAxis] = []string(meshAxes)
+	}
+	return spec
 }
