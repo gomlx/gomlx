@@ -83,7 +83,8 @@ func TestMergeTensor(t *testing.T) {
 	require.NoError(t, err)
 
 	// Merge the tensor.
-	tensor := distTensor.Merge()
+	tensor, err := distTensor.Merge()
+	require.NoError(t, err)
 
 	// Check the shape.
 	assert.Equal(t, shapes.Make(dtypes.Int32, 2, 4), tensor.Shape())
