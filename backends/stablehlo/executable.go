@@ -18,9 +18,9 @@ type Executable struct {
 	name            string
 	parameterNames  []string
 	parameterShapes []shapes.Shape
-	parameterSpecs  []*distributed.ShardingSpec
+	parameterSpecs  []*backends.ShardingSpec
 	outputShapes    []shapes.Shape
-	outputSpecs     []*distributed.ShardingSpec
+	outputSpecs     []*backends.ShardingSpec
 
 	distStrategy     distributed.Strategy
 	numDevices       int

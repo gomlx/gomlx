@@ -155,13 +155,16 @@ func (s *ShardingSpec) NumDevicesShardingAxis(axis int) int {
 
 // ToBackendsSpec converts the ShardingSpec to a backends.ShardingSpec.
 // It works if the ShardingSpec is nil as well.
-func (s *ShardingSpec) ToBackendsSpec() backends.ShardingSpec {
+func (s *ShardingSpec) ToBackendsSpec() *backends.ShardingSpec {
 	if s == nil {
 		return nil
 	}
-	spec := make(backends.ShardingSpec, len(s.Axes))
+	spec := &backends.ShardingSpec{
+		Mesh: s.Mesh.name,
+		Axes: make([][]string, len(s.Axes)),
+	}
 	for tensorAxis, meshAxes := range s.Axes {
-		spec[tensorAxis] = []string(meshAxes)
+		spec.Axes[tensorAxis] = []string(meshAxes)
 	}
 	return spec
 }

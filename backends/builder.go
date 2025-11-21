@@ -41,9 +41,9 @@ type Builder interface {
 	// During the execution of a compiled computation (returned by Builder.Compile), this value will need to be fed
 	// in the same order it is created.
 	//
-	// The spec defines how the parameter will be shared for distributed operations.
+	// The sharding defines how the parameter will be shared for distributed operations.
 	// Set it to nil if not using distribution.
-	Parameter(name string, shape shapes.Shape, spec ShardingSpec) (Op, error)
+	Parameter(name string, shape shapes.Shape, sharding *ShardingSpec) (Op, error)
 
 	// Constant creates a constant in the graph with the given flat values and the shape defined by
 	// the dimensions in dim.
@@ -174,7 +174,12 @@ type Mesh struct {
 	LogicalDeviceAssignment []int
 }
 
-// ShardingSpec is a list of per tensor (or Node) axis of a list of Mesh axes names.
+// ShardingSpec holds a list of per tensor (or Node) axis of a list of Mesh axes names.
 // Any tensor axis that doesn't have a corresponding ShardingSpec is considered replicated.
 // And any tensor axis for which the list of Mesh axes is empty is also considered replicated.
-type ShardingSpec [][]string
+//
+// The ShardingSpec also holds the Mesh name over which it is defined.
+type ShardingSpec struct {
+	Mesh string
+	Axes [][]string
+}

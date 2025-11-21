@@ -80,7 +80,11 @@ func (b *Backend) BufferToFlatData(buffer backends.Buffer, flat any) error {
 }
 
 // BufferFromFlatData returns NotImplementedError.
-func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) (backends.Buffer, error) {
+func (b *Backend) BufferFromFlatData(
+	deviceNum backends.DeviceNum,
+	flat any,
+	shape shapes.Shape,
+) (backends.Buffer, error) {
 	return nil, errors.Wrapf(NotImplementedError, "in BufferFromFlatData()")
 }
 
@@ -90,7 +94,10 @@ func (b *Backend) HasSharedBuffers() bool {
 }
 
 // NewSharedBuffer panics as shared buffers are not supported.
-func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer, flat any, err error) {
+func (b *Backend) NewSharedBuffer(
+	deviceNum backends.DeviceNum,
+	shape shapes.Shape,
+) (buffer backends.Buffer, flat any, err error) {
 	return nil, nil, errors.Wrapf(NotImplementedError, "in NewSharedBuffer()")
 }
 
@@ -100,7 +107,10 @@ func (b *Backend) BufferData(buffer backends.Buffer) (flat any, err error) {
 }
 
 // BufferCopyToDevice returns NotImplementedError.
-func (b *Backend) BufferCopyToDevice(source backends.Buffer, deviceNum backends.DeviceNum) (bufferOnDevice backends.Buffer, err error) {
+func (b *Backend) BufferCopyToDevice(
+	source backends.Buffer,
+	deviceNum backends.DeviceNum,
+) (bufferOnDevice backends.Buffer, err error) {
 	return nil, errors.Wrapf(NotImplementedError, "in BufferCopyToDevice()")
 }
 
@@ -163,7 +173,7 @@ func (b Builder) OpShape(op backends.Op) (shapes.Shape, error) {
 	return shapes.Invalid(), errors.Wrapf(NotImplementedError, "in OpShape()")
 }
 
-func (b Builder) Parameter(name string, shape shapes.Shape, spec backends.ShardingSpec) (backends.Op, error) {
+func (b Builder) Parameter(name string, shape shapes.Shape, spec *backends.ShardingSpec) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeParameter)
 }
 

@@ -198,6 +198,9 @@ func NewGraph(backend backends.Backend, name string) *Graph {
 		scalars:               make(scalarCache),
 		tensorConstants:       make(tensorConstCache),
 		aliasToNode:           make(map[string]*Node),
+
+		distStrategy: distributed.None,
+		numDevices:   1,
 	}
 	graphCount += 1
 	return g

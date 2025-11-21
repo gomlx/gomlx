@@ -26,10 +26,11 @@ type Builder struct {
 	numDevices       int // numDevices used by the builder <= backend.numDevices.
 	deviceAssignment []int
 	distStrategy     distributed.Strategy
+	meshes           []*shardy.DeviceMesh
 
 	parameterNames  []string
 	parameterShapes []shapes.Shape
-	parameterSpecs  []backends.ShardingSpec
+	parameterSpecs  []*backends.ShardingSpec
 
 	// Various caches.
 	cacheReductions map[reductionKey]*stablehlo.Function
@@ -139,7 +140,7 @@ func (b *Builder) newNode(value *stablehlo.Value) *Node {
 	}
 }
 
-func (b *Builder) Parameter(name string, shape shapes.Shape, spec backends.ShardingSpec) (
+func (b *Builder) Parameter(name string, shape shapes.Shape, sharding *backends.ShardingSpec) (
 	backends.Op, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
@@ -154,8 +155,23 @@ func (b *Builder) Parameter(name string, shape shapes.Shape, spec backends.Shard
 	}
 	b.parameterNames = append(b.parameterNames, normalizedName)
 	b.parameterShapes = append(b.parameterShapes, shape)
-	b.parameterSpecs = append(b.parameterSpecs, spec)
-	value, err := b.fn.NamedInput(name, ShapeToStableHLO(shape))
+	b.parameterSpecs = append(b.parameterSpecs, sharding)
+	var shardySpec *shardy.ShardingSpec
+	if sharding != nil {
+		mesh, err := b.meshByName(sharding.Mesh)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "in sharding spec while creating parameter %q", name)
+		}
+		shardySpec = shardy.NewShardingSpec(mesh)
+		for _, meshAxes := range sharding.Axes {
+			if len(meshAxes) == 0 {
+				shardySpec.AddReplicated()
+			} else {
+				shardySpec.AddShardedAxis(meshAxes...)
+			}
+		}
+	}
+	value, err := b.fn.NamedInputWithSharding(name, ShapeToStableHLO(shape), shardySpec)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building parameter %q", name)
 	}
@@ -210,23 +226,32 @@ func (b *Builder) DistributedAutoSharding(meshes ...backends.Mesh) error {
 		return errors.Errorf("DistributedAutoSharding cannot be called after the computation has been compiled")
 	}
 	b.distStrategy = distributed.AutoSharding
-	sMeshes := make([]*shardy.DeviceMesh, len(meshes))
+	b.meshes = make([]*shardy.DeviceMesh, len(meshes))
 	var err error
 	builderNumDevices := 0
 	for i, mesh := range meshes {
-		sMeshes[i], err = shardy.NewDeviceMesh(mesh.Name, mesh.AxesSizes, mesh.AxesNames)
+		b.meshes[i], err = shardy.NewDeviceMesh(mesh.Name, mesh.AxesSizes, mesh.AxesNames)
 		if err != nil {
 			return errors.WithMessagef(err, "while creating mesh %q", mesh.Name)
 		}
-		meshNumDevices := sMeshes[i].NumDevices()
+		meshNumDevices := b.meshes[i].NumDevices()
 		if meshNumDevices > b.backend.NumDevices() {
 			return errors.Errorf("mesh %q has %d devices, but the backend only has %d devices",
 				mesh.Name, meshNumDevices, b.backend.NumDevices())
 		}
 		builderNumDevices = max(builderNumDevices, meshNumDevices)
 	}
-	b.builder.WithShardy(sMeshes...)
+	b.builder.WithShardy(b.meshes...)
 	return nil
+}
+
+func (b *Builder) meshByName(meshName string) (*shardy.DeviceMesh, error) {
+	for _, mesh := range b.meshes {
+		if mesh.Name() == meshName {
+			return mesh, nil
+		}
+	}
+	return nil, errors.Errorf("mesh %q not found", meshName)
 }
 
 // DeviceAssignment assigns the devices to the computation.

@@ -18,7 +18,7 @@ type nodeParameter struct {
 
 // Parameter creates an input parameter for the computation.
 // During execution of the computation, this value will need to be fed in the same order it is created.
-func (b *Builder) Parameter(name string, shape shapes.Shape, spec backends.ShardingSpec) (backends.Op, error) {
+func (b *Builder) Parameter(name string, shape shapes.Shape, sharding *backends.ShardingSpec) (backends.Op, error) {
 	dtype := shape.DType
 	if dtype == dtypes.InvalidDType {
 		return nil, errors.Errorf("invalid shape %s for Parameter", shape)
@@ -27,10 +27,10 @@ func (b *Builder) Parameter(name string, shape shapes.Shape, spec backends.Shard
 		return nil, errors.Errorf("Parameter: data type (DType) %s not supported for backend %q, try using "+
 			"a different backend, or open an issue in github.com/gomlx/gomlx", dtype, b.backend.Name())
 	}
-	if len(spec) > 0 {
+	if sharding != nil {
 		return nil, errors.Wrapf(
 			notimplemented.NotImplementedError,
-			"sharding spec %v not supported for %q builder", spec, BackendName)
+			"sharding spec %+v not supported for %q builder", sharding, BackendName)
 	}
 	n := b.newNode(backends.OpTypeParameter, shape)
 	n.data = &nodeParameter{

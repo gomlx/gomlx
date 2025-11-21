@@ -157,12 +157,12 @@ func (b *Builder) OpShape(op backends.Op) (shapes.Shape, error) {
 }
 
 // Parameter creates an input parameter for the computation.
-// During execution of the computation this value will need to be fed, in the same order it is created.
-func (b *Builder) Parameter(name string, shape shapes.Shape, spec backends.ShardingSpec) (backends.Op, error) {
-	if len(spec) > 0 {
+// During execution, this value needs to be fed in the same order it is created.
+func (b *Builder) Parameter(name string, shape shapes.Shape, sharding *backends.ShardingSpec) (backends.Op, error) {
+	if sharding != nil {
 		return nil, errors.Wrapf(
 			notimplemented.NotImplementedError,
-			"sharding spec %v not supported for %q builder", spec, BackendName)
+			"sharding spec %+v not supported for %q builder", sharding, BackendName)
 	}
 	op, err := xlabuilder.Parameter(b.builder, name, len(b.parameterNames), shapeToXShape(shape))
 	if err != nil {
