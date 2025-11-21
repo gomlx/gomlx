@@ -67,15 +67,16 @@ func TestTensor(t *testing.T) {
 
 	t.Run("Merge-1", func(t *testing.T) {
 		// Create a new device mesh.
-		mesh, err := distributed.NewDeviceMesh([]int{2}, []string{"replica"})
+		mesh, err := distributed.NewDeviceMesh([]int{2}, []string{"shards"})
 		require.NoError(t, err)
 
 		// Create a new distributed tensor.
 		shards := []*tensors.Tensor{
-			tensors.FromFlatDataAndDimensions([]int32{1, 2, 3, 4, 5, 6}, 3, 2),
-			tensors.FromFlatDataAndDimensions([]int32{10, 20, 30, 40, 50, 60}, 3, 2),
+			tensors.FromFlatDataAndDimensions([]int32{1, 2, 3, 4, 5, 6}, 3, 1, 2),
+			tensors.FromFlatDataAndDimensions([]int32{10, 20, 30, 40, 50, 60}, 3, 1, 2),
 		}
-		spec, err := distributed.NewShardSpec(mesh, distributed.ReplicatedAxis, distributed.ReplicatedAxis, distributed.AxisSpec{"replica"})
+		spec, err := distributed.NewShardSpec(mesh,
+			distributed.ReplicatedAxis, distributed.ReplicatedAxis, distributed.AxisSpec{"shards"})
 		require.NoError(t, err)
 		distTensor, err := distributed.NewTensor(backend, spec, shards)
 		require.NoError(t, err)
@@ -85,9 +86,37 @@ func TestTensor(t *testing.T) {
 		require.NoError(t, err)
 
 		// Check the shape.
-		assert.Equal(t, shapes.Make(dtypes.Int32, 3, 4), tensor.Shape())
+		assert.Equal(t, shapes.Make(dtypes.Int32, 3, 1, 4), tensor.Shape())
 
 		// Check the values.
-		assert.Equal(t, [][]int32{{1, 2, 10, 20}, {3, 4, 30, 40}, {5, 6, 50, 60}}, tensor.Value())
+		assert.Equal(t, [][][]int32{{{1, 2, 10, 20}}, {{3, 4, 30, 40}}, {{5, 6, 50, 60}}}, tensor.Value())
 	})
+
+	t.Run("Merge-2", func(t *testing.T) {
+		// Create a new device mesh.
+		mesh, err := distributed.NewDeviceMesh([]int{2}, []string{"shards"})
+		require.NoError(t, err)
+
+		// Create a new distributed tensor.
+		shards := []*tensors.Tensor{
+			tensors.FromFlatDataAndDimensions([]int32{1, 2, 3, 4, 5, 6}, 2, 3, 1),
+			tensors.FromFlatDataAndDimensions([]int32{10, 20, 30, 40, 50, 60}, 2, 3, 1),
+		}
+		spec, err := distributed.NewShardSpec(mesh,
+			distributed.AxisSpec{"shards"}, distributed.ReplicatedAxis, distributed.ReplicatedAxis)
+		require.NoError(t, err)
+		distTensor, err := distributed.NewTensor(backend, spec, shards)
+		require.NoError(t, err)
+
+		// Merge the tensor.
+		merged, err := distTensor.Merge()
+		require.NoError(t, err)
+
+		// Check the shape.
+		assert.Equal(t, shapes.Make(dtypes.Int32, 4, 3, 1), merged.Shape())
+
+		// Check the values.
+		assert.Equal(t, []int32{1, 2, 3, 4, 5, 6, 10, 20, 30, 40, 50, 60}, tensors.CopyFlatData[int32](merged))
+	})
+
 }

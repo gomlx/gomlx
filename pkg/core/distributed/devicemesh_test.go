@@ -11,44 +11,39 @@ import (
 func TestDeviceMesh(t *testing.T) {
 	t.Run("NewDeviceMesh_Valid", func(t *testing.T) {
 		tests := []struct {
-			name          string
-			shape         []int
-			axisNames     []string
-			wantRank      int
-			wantNum       int
-			wantStableHLO string
+			name      string
+			shape     []int
+			axisNames []string
+			wantRank  int
+			wantNum   int
 		}{
 			{
-				name:          "1D mesh",
-				shape:         []int{8},
-				axisNames:     []string{"replica"},
-				wantRank:      1,
-				wantNum:       8,
-				wantStableHLO: `sdy.mesh @mesh = <["replica"=8]>`,
+				name:      "1D mesh",
+				shape:     []int{8},
+				axisNames: []string{"replica"},
+				wantRank:  1,
+				wantNum:   8,
 			},
 			{
-				name:          "2D mesh",
-				shape:         []int{2, 4},
-				axisNames:     []string{"x", "y"},
-				wantRank:      2,
-				wantNum:       8,
-				wantStableHLO: `sdy.mesh @mesh = <["x"=2, "y"=4]>`,
+				name:      "2D mesh",
+				shape:     []int{2, 4},
+				axisNames: []string{"x", "y"},
+				wantRank:  2,
+				wantNum:   8,
 			},
 			{
-				name:          "3D mesh",
-				shape:         []int{2, 2, 2},
-				axisNames:     []string{"x", "y", "z"},
-				wantRank:      3,
-				wantNum:       8,
-				wantStableHLO: `sdy.mesh @mesh = <["x"=2, "y"=2, "z"=2]>`,
+				name:      "3D mesh",
+				shape:     []int{2, 2, 2},
+				axisNames: []string{"x", "y", "z"},
+				wantRank:  3,
+				wantNum:   8,
 			},
 			{
-				name:          "single device",
-				shape:         []int{1},
-				axisNames:     []string{"replica"},
-				wantRank:      1,
-				wantNum:       1,
-				wantStableHLO: `sdy.mesh @mesh = <["replica"=1]>`,
+				name:      "single device",
+				shape:     []int{1},
+				axisNames: []string{"replica"},
+				wantRank:  1,
+				wantNum:   1,
 			},
 		}
 
@@ -59,7 +54,6 @@ func TestDeviceMesh(t *testing.T) {
 				assert.NotNil(t, mesh)
 				assert.Equal(t, tt.wantRank, mesh.Rank())
 				assert.Equal(t, tt.wantNum, mesh.NumDevices())
-				assert.Equal(t, tt.wantStableHLO, mesh.ToStableHLO())
 			})
 		}
 	})

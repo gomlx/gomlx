@@ -335,16 +335,19 @@ func ShardTensor(backend backends.Backend, spec *ShardingSpec, t *tensors.Tensor
 		for _, meshAxisName := range axisSpec {
 			meshAxisSize, err := mesh.AxisSize(meshAxisName)
 			if err != nil {
-				return nil, errors.WithMessagef(err,
+				return nil, errors.WithMessagef(
+					err,
 					"inconsistency in distributed.ShardTensor, sharding spec references mesh tensorAxis %q not in mesh %s",
-					meshAxisName, mesh)
+					meshAxisName,
+					mesh,
+				)
 			}
 			meshSize *= meshAxisSize
 		}
 		if axisLen%meshSize != 0 {
 			return nil, errors.Errorf(
 				"tensor shape %s is not divisible at axis %d by mesh axes %q (total size %d) for sharding",
-				tensorAxis, logicalShape, axisSpec, meshSize)
+				logicalShape, tensorAxis, axisSpec, meshSize)
 		}
 		shardShape.Dimensions[tensorAxis] /= meshSize
 	}
