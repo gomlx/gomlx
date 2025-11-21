@@ -51,7 +51,6 @@ var ReplicatedAxis = AxisSpec(nil)
 // NewShardSpec creates a new ShardingSpec for a tensor, defined over the given mesh axes.
 //
 // It takes an axisSpec for each axis of the tensor (omitted axes are assumed to be replicated).
-// The axisSpec can be created with Sharded
 func NewShardSpec(mesh *DeviceMesh, axisSpec ...AxisSpec) (*ShardingSpec, error) {
 	s := &ShardingSpec{mesh, axisSpec}
 	meshAxesUsed := make(map[string]bool)
