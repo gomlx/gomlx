@@ -7,18 +7,11 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 )
 
 // DeviceMesh defines the logical topology of a set of devices on a backend.
-//
-// For the initial "SPMD" implementation, we only support a 1D mesh,
-// which represents data parallelism (replicas).
 type DeviceMesh struct {
-	backend backends.Backend
-
-	// name of the mesh, in case there is more than one.
 	name string
 
 	// axesNames are the names of the mesh axes.
@@ -33,79 +26,94 @@ type DeviceMesh struct {
 	// numDevices is the total number of devices in the mesh.
 	numDevices int
 
-	// devicesInMesh is the list of devices in the mesh, in the order they appear in the mesh.
-	devicesInMesh []backends.DeviceNum
-
-	// physicalDeviceMapping is the mapping of concrete devices to the flat index in the mesh.
-	physicalDeviceMapping map[backends.DeviceNum]int
+	// logicalDeviceAssignment is the list of "logical" devices numbers in the mesh, in the order they appear in the
+	// mesh.
+	// These numbers are indices in the LogicalDeviceAssignment that will be used in the compilation of the program.
+	logicalDeviceAssignment []int
 }
 
-// DefaultMeshName is the default name of a newly created DeviceMesh.
-// Usually, there is only one mesh so one doesn't need to specify it explicitly.
-// Use DeviceMesh.WithName() to change it.
 const DefaultMeshName = "mesh"
+
+// IsNameValid checks whether a name is a valid identifier for a mesh name or axis name.
+func IsNameValid(name string) bool {
+	if name == "" {
+		return false
+	}
+	if name[0] >= '0' && name[0] <= '9' {
+		return false
+	}
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
+}
 
 // NewDeviceMesh creates a new logical topology of a set of devices.
 //
-// - axesSizes: defines the number of devices along each mesh axis, one value per axis.
-// - axesNames: the names of the mesh axes. One value per axis.
+//   - axesSizes: defines the number of devices along each mesh axis, one value per axis.
+//   - axesNames: the names of the mesh axes. One value per axis. They must also be valid StableHLO identifiers
+//     (see stablehlo.NormalizeName).
 //
-// For the "SPMD" Strategy the axesSizes should be 1D, e.g., NewDeviceMesh([]int{8}, []string{"replica"}).
+// Used by ShardingSpec to describe how inputs and outputs are sharded, when using AutoSharding distribution
+// strategy.
+// There can be more than one mesh organization in the same computation.
 //
-// The default mapping of concrete devices to the mesh is sequential, starting from 0.
-// For non-symmetric devices, where connection speed among the devices matter, a custom mapping can be provided
-// with the DeviceMeshes.WithDeviceMapping() method.
-func NewDeviceMesh(backend backends.Backend, axesSizes []int, axesNames []string) (*DeviceMesh, error) {
+// For the experimental "SPMD" Strategy the axesSizes should be 1D, e.g., NewDeviceMesh([]int{8}, []string{"replica"}).
+//
+// A DeviceMesh can also be assigned a name, but because there is usually only one mesh, it's set to the default
+// name "mesh" (DefaultMeshName).
+func NewDeviceMesh(axesSizes []int, axesNames []string) (*DeviceMesh, error) {
 	if len(axesSizes) != len(axesNames) {
-		return nil, errors.Errorf(
-			"axesSizes and axesNames must have the same length, got %d and %d",
+		return nil, errors.Errorf("axesSizes and axesNames must have the same length, got %d and %d",
 			len(axesSizes), len(axesNames))
 	}
 	if len(axesSizes) == 0 {
-		return nil, errors.New("DeviceMeshes axesSizes cannot be empty")
+		return nil, errors.New("DeviceMesh axesSizes cannot be empty")
+	}
+
+	axesNames = slices.Clone(axesNames)
+	for i, axisName := range axesNames {
+		if !IsNameValid(axesNames[i]) {
+			return nil, errors.Errorf(
+				"DeviceMesh axis name %q at index %d is not a valid identifier, it must start with a ASCII letter "+
+					"and be followed only by letters, numbers or underscore", axisName, i)
+		}
 	}
 
 	numDevices := 1
 	nameToAxis := make(map[string]int, len(axesSizes))
 	for i, name := range axesNames {
 		if name == "" {
-			return nil, errors.Errorf("DeviceMeshes axis name at index %d cannot be empty", i)
+			return nil, errors.Errorf("DeviceMesh axis name at index %d cannot be empty", i)
 		}
 		if _, found := nameToAxis[name]; found {
-			return nil, errors.Errorf("DeviceMeshes axis name %q is duplicated", name)
+			return nil, errors.Errorf("DeviceMesh axis name %q is duplicated", name)
 		}
 		nameToAxis[name] = i
 		numDevices *= axesSizes[i]
 	}
-	if numDevices > backend.NumDevices() {
-		return nil, errors.Errorf("DeviceMeshes has %d devices, but the backend only has %d devices", numDevices, backend.NumDevices())
-	}
 
 	m := &DeviceMesh{
-		backend:       backend,
-		name:          DefaultMeshName,
-		axesNames:     axesNames,
-		axesSizes:     axesSizes,
-		nameToAxis:    nameToAxis,
-		numDevices:    numDevices,
-		devicesInMesh: xslices.Iota(backends.DeviceNum(0), numDevices),
+		name:       DefaultMeshName,
+		axesNames:  axesNames,
+		axesSizes:  axesSizes,
+		nameToAxis: nameToAxis,
+		numDevices: numDevices,
 	}
-	m.buildPhysicalDeviceMapping()
 	return m, nil
 }
 
-// WithName sets the name of the mesh.
-// The default name is "mesh" (DefaultMeshName).
-func (m *DeviceMesh) WithName(name string) *DeviceMesh {
+// SetName of the mesh.
+func (m *DeviceMesh) SetName(name string) {
 	m.name = name
-	return m
 }
 
-func (m *DeviceMesh) buildPhysicalDeviceMapping() {
-	m.physicalDeviceMapping = make(map[backends.DeviceNum]int, m.numDevices)
-	for i, device := range m.devicesInMesh {
-		m.physicalDeviceMapping[device] = i
-	}
+// Name returns the mesh name.
+func (m *DeviceMesh) Name() string {
+	return m.name
 }
 
 // NumDevices returns the total number of devices in the mesh.
@@ -118,13 +126,13 @@ func (m *DeviceMesh) Rank() int {
 	return len(m.axesSizes)
 }
 
-// AxisNames returns a copy of the mesh's axis names.
-func (m *DeviceMesh) AxisNames() []string {
+// AxesNames returns a copy of the mesh's axis names.
+func (m *DeviceMesh) AxesNames() []string {
 	return slices.Clone(m.axesNames)
 }
 
-// Shape returns a copy of the mesh's axesSizes.
-func (m *DeviceMesh) Shape() []int {
+// AxesSizes returns a copy of the mesh's axesSizes.
+func (m *DeviceMesh) AxesSizes() []int {
 	shape := make([]int, len(m.axesSizes))
 	copy(shape, m.axesSizes)
 	return shape
@@ -142,7 +150,7 @@ func (m *DeviceMesh) AxisSize(axisName string) (int, error) {
 // String implements the fmt.Stringer interface.
 func (m *DeviceMesh) String() string {
 	var sb strings.Builder
-	sb.WriteString("DeviceMeshes(axesSizes={")
+	sb.WriteString("DeviceMesh(axesSizes={")
 	for i, name := range m.axesNames {
 		if i > 0 {
 			sb.WriteString(", ")
@@ -153,59 +161,49 @@ func (m *DeviceMesh) String() string {
 	return sb.String()
 }
 
-// SetDeviceAssignment sets the assignment of concrete devices to the mesh.
+// SetLogicalDeviceAssignment sets the assignment of logical devices to the mesh.
 //
-// It returns an error if devicesInMesh has invalid device numbers or len(devices) != NumDevices().
-func (m *DeviceMesh) SetDeviceAssignment(devices ...backends.DeviceNum) error {
+// The length of devices must be equal to NumDevices(). And it should include all numbers from 0 to NumDevices()-1.
+//
+// It returns an error if logicalDeviceAssignment has invalid device numbers or len(devices) != NumDevices().
+func (m *DeviceMesh) SetLogicalDeviceAssignment(devices ...int) error {
+	if len(devices) == 0 {
+		m.logicalDeviceAssignment = nil
+		return nil
+	}
 	if len(devices) != m.numDevices {
 		return errors.Errorf("devices must have %d elements, got %d", m.numDevices, len(devices))
 	}
-	numPhysicalDevices := m.backend.NumDevices()
-	seen := sets.Make[backends.DeviceNum](m.numDevices)
+	seen := sets.Make[int](m.numDevices)
 	for _, device := range devices {
 		if seen.Has(device) {
 			return errors.Errorf("physical device #%d is duplicated in mapping", device)
 		}
 		seen.Insert(device)
-		if device < 0 || int(device) >= numPhysicalDevices {
-			return errors.Errorf("device %d is out of range, backend only has %d devices", device, numPhysicalDevices)
+		if device < 0 || device >= m.numDevices {
+			return errors.Errorf("devices must be between 0 and %d (NumDevices()-1), got device %d",
+				m.numDevices-1, device)
 		}
 	}
-	copy(m.devicesInMesh, devices)
-	m.buildPhysicalDeviceMapping()
-	if len(m.physicalDeviceMapping) != m.numDevices {
-		return errors.Errorf("provided devicesIn: physicalDeviceMapping has %d elements, expected %d", len(m.physicalDeviceMapping), m.numDevices)
-	}
+	m.logicalDeviceAssignment = slices.Clone(devices)
 	return nil
 }
 
-// DeviceAssignment returns the list of devices in the mesh, in the order they appear in the mesh.
-func (m *DeviceMesh) DeviceAssignment() []backends.DeviceNum {
-	return slices.Clone(m.devicesInMesh)
-}
-
-// DeviceToMesh return the indices (flat and per-axis) assigned to the given physicalDevice.
-func (m *DeviceMesh) DeviceToMesh(physicalDevice backends.DeviceNum) (flatIdx int, axisIndices []int, err error) {
-	var ok bool
-	flatIdx, ok = m.physicalDeviceMapping[physicalDevice]
-	if !ok {
-		return 0, nil, errors.Errorf("physical device %d is not part of the mesh", physicalDevice)
+// LogicalDeviceAssignment returns the list of devices in the mesh, in the order they appear in the mesh.
+//
+// It can return nil if no assignment was set with SetLogicalDeviceAssignment() -- in which case it will
+// default to a sequential assignment starting from 0.
+func (m *DeviceMesh) LogicalDeviceAssignment() []int {
+	if m.logicalDeviceAssignment == nil {
+		return nil
 	}
-
-	// Convert flat index to per-axis indices
-	axisIndices = make([]int, len(m.axesSizes))
-	remaining := flatIdx
-	for i := len(m.axesSizes) - 1; i >= 0; i-- {
-		axisIndices[i] = remaining % m.axesSizes[i]
-		remaining /= m.axesSizes[i]
-	}
-	return flatIdx, axisIndices, nil
+	return slices.Clone(m.logicalDeviceAssignment)
 }
 
 // ComputeReplicaGroups returns the replica groups participating in some collective (distributed) operation given the
 // axes along which the operation is performed.
 //
-// Each replica group (a []int) includes the device indices (from the DeviceAssignment) for the axes specified.
+// Each replica group (a []int) includes the device indices (from the LogicalDeviceAssignment) for the axes specified.
 // The other axes will be split into different replica groups.
 //
 // Example:
@@ -283,4 +281,14 @@ func (m *DeviceMesh) ComputeReplicaGroups(axes []string) ([][]int, error) {
 	}
 
 	return groups, nil
+}
+
+// ToBackendsMesh converts mesh to a backends.Mesh.
+func (m *DeviceMesh) ToBackendsMesh() backends.Mesh {
+	return backends.Mesh{
+		Name:                    m.Name(),
+		AxesSizes:               m.AxesSizes(),
+		AxesNames:               m.AxesNames(),
+		LogicalDeviceAssignment: m.LogicalDeviceAssignment(),
+	}
 }
