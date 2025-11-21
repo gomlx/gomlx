@@ -317,23 +317,36 @@ func (dt *Tensor) Merge() (*tensors.Tensor, error) {
 }
 
 // ShardTensor splits a tensor into individual shards.
-func ShardTensor(t *tensors.Tensor, mesh *DeviceMesh, spec ShardingSpec) (*Tensor, error) {
-	if err := spec; err != nil {
-		return nil, errors.Wrap(err, "invalid ShardingSpec")
-	}
+func ShardTensor(backend backends.Backend, spec *ShardingSpec, t *tensors.Tensor) (*Tensor, error) {
 	logicalShape := t.Shape()
 	shardShape := logicalShape.Clone()
-	for tensorAxis, meshAxisName := range spec {
-		if meshAxisName == "" {
+	mesh := spec.Mesh
+
+	// ... [Input validation and shardShape calculation from your snippet] ...
+	for tensorAxis, axisLen := range logicalShape.Dimensions {
+		if tensorAxis >= spec.Rank() {
+			break
+		}
+		axisSpec := spec.Axes[tensorAxis]
+		if len(axisSpec) == 0 {
 			continue
 		}
-		meshAxisSize, _ := mesh.AxisSize(meshAxisName)
-		if logicalShape.Dimensions[tensorAxis]%meshAxisSize != 0 {
-			return nil, errors.Errorf(
-				"tensor shape %s is not divisible by mesh axis %q (size %d) for sharding",
-				logicalShape, meshAxisName, meshAxisSize)
+		meshSize := 1
+		for _, meshAxisName := range axisSpec {
+			meshAxisSize, err := mesh.AxisSize(meshAxisName)
+			if err != nil {
+				return nil, errors.WithMessagef(err,
+					"inconsistency in distributed.ShardTensor, sharding spec references mesh tensorAxis %q not in mesh %s",
+					meshAxisName, mesh)
+			}
+			meshSize *= meshAxisSize
 		}
-		shardShape.Dimensions[tensorAxis] /= meshAxisSize
+		if axisLen%meshSize != 0 {
+			return nil, errors.Errorf(
+				"tensor shape %s is not divisible at axis %d by mesh axes %q (total size %d) for sharding",
+				tensorAxis, logicalShape, axisSpec, meshSize)
+		}
+		shardShape.Dimensions[tensorAxis] /= meshSize
 	}
 
 	shards := make([]*tensors.Tensor, mesh.NumDevices())
@@ -341,70 +354,81 @@ func ShardTensor(t *tensors.Tensor, mesh *DeviceMesh, spec ShardingSpec) (*Tenso
 		shards[i] = tensors.FromShape(shardShape)
 	}
 
-	// Create a temporary tensor with the logical shape to read from.
-	tmpT := t.Clone()
-	for i := 0; i < mesh.NumDevices(); i++ {
-		// Calculate the slice of the logical tensor that corresponds to this shard.
-		sliceStarts := make([]int, logicalShape.Rank())
-		sliceEnds := make([]int, logicalShape.Rank())
-		for j := 0; j < logicalShape.Rank(); j++ {
-			sliceEnds[j] = shardShape.Dimensions[j]
-		}
-		for tensorAxis, meshAxisName := range spec {
-			if meshAxisName == "" {
-				continue
-			}
-			meshAxisSize, _ := mesh.AxisSize(meshAxisName)
-			shardIndex := i % meshAxisSize
-			sliceStarts[tensorAxis] = shardIndex * shardShape.Dimensions[tensorAxis]
-			sliceEnds[tensorAxis] = sliceStarts[tensorAxis] + shardShape.Dimensions[tensorAxis]
-		}
-		// Slice the logical tensor and copy the data to the shard.
-		// Slicing is not implemented in `tensors.Tensor`, so we do it manually.
-		copySlice(tmpT, shards[i], sliceStarts, sliceEnds)
+	// shapeRatio calculation
+	shapeRatio := logicalShape.Clone()
+	for axis, logicalDim := range shapeRatio.Dimensions {
+		shapeRatio.Dimensions[axis] = logicalDim / shardShape.Dimensions[axis]
+	}
+	if shapeRatio.Size() != len(shards) {
+		return nil, errors.Errorf("number of shards (%d) does not match logical shape (%s)",
+			len(shards), logicalShape)
 	}
 
-	return NewTensor(mesh, spec, shards)
-}
+	elementSize := logicalShape.DType.Size()
+	if elementSize == 0 {
+		return nil, errors.Errorf("merge of tensors with sub-byte sizes not implemented (for DType %s)",
+			logicalShape.DType)
+	}
 
-func copySlice(from, to *tensors.Tensor, starts, ends []int) {
-	from.ConstBytes(func(fromBytes []byte) {
-		to.MutableBytes(func(toBytes []byte) {
-			fromShape := from.Shape()
-			toShape := to.Shape()
+	// Pre-calculate source strides for efficiency
+	srcStrides := logicalShape.Strides()
+	rank := logicalShape.Rank()
 
-			// Calculate element size in bytes
-			elementSize := len(fromBytes) / fromShape.Size()
+	t.ConstBytes(func(tBytes []byte) {
+		for shardIdx, shardPos := range shapeRatio.Iter() {
+			shard := shards[shardIdx]
+			shard.MutableBytes(func(shardBytes []byte) {
 
-			// Copy the data from the source slice to the destination slice.
-			fromStrides := fromShape.Strides()
-			for i := 0; i < toShape.Size(); i++ {
-				// Calculate destination indices
-				toIndices := make([]int, toShape.Rank())
-				toOffset := i
-				for j := toShape.Rank() - 1; j >= 0; j-- {
-					toIndices[j] = toOffset % toShape.Dimensions[j]
-					toOffset /= toShape.Dimensions[j]
+				// 1. Calculate where this shard begins in the logical tensor (Source Base Offset)
+				srcBaseOffset := 0
+				for axis := range rank {
+					// Coordinate * Stride
+					start := shardPos[axis] * shardShape.Dimensions[axis]
+					srcBaseOffset += start * srcStrides[axis]
+				}
+				srcBaseOffset *= elementSize
+
+				// 2. Determine Contiguous Block
+				// We scan from the innermost dimension outwards. If the shard dimension matches the logical
+				// dimension, that data is contiguous in memory.
+				contiguousRank := rank
+				blockSize := elementSize
+				for i := rank - 1; i >= 0; i-- {
+					if shardShape.Dimensions[i] != logicalShape.Dimensions[i] {
+						contiguousRank = i + 1
+						break
+					}
+					contiguousRank = i
+					blockSize *= shardShape.Dimensions[i]
 				}
 
-				// Calculate source indices
-				fromIndices := make([]int, fromShape.Rank())
-				for j, toIndex := range toIndices {
-					fromIndices[j] = toIndex + starts[j]
+				// 3. Recursive Copy
+				// We fill the shard linearly (dstOffset increments by blockSize),
+				// but we jump around the source tensor (tBytes) based on strides.
+				dstOffset := 0
+
+				var copier func(axis int, srcOffset int)
+				copier = func(axis int, srcOffset int) {
+					// Base Case: Contiguous block found.
+					if axis == contiguousRank {
+						copy(shardBytes[dstOffset:dstOffset+blockSize], tBytes[srcOffset:srcOffset+blockSize])
+						dstOffset += blockSize
+						return
+					}
+
+					// Recursive Step: Iterate over the split dimension.
+					dimSize := shardShape.Dimensions[axis]
+					step := srcStrides[axis] * elementSize
+
+					for i := 0; i < dimSize; i++ {
+						copier(axis+1, srcOffset+i*step) //nolint:goimports
+					}
 				}
 
-				// Calculate source offset
-				fromOffset := 0
-				for j, fromIndex := range fromIndices {
-					fromOffset += fromIndex * fromStrides[j]
-				}
-
-				// Copy the bytes for this element
-				fromByteOffset := fromOffset * elementSize
-				toByteOffset := i * elementSize
-				copy(toBytes[toByteOffset:toByteOffset+elementSize],
-					fromBytes[fromByteOffset:fromByteOffset+elementSize])
-			}
-		})
+				copier(0, srcBaseOffset)
+			})
+		}
 	})
+
+	return NewTensor(backend, spec, shards)
 }
