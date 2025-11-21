@@ -153,10 +153,13 @@ type Graph struct {
 	// Compiled Graph
 	executable backends.Executable
 
-	// Distributed computation
+	// Distributed computation: SPMD has only one DeviceMeshes, AutoSharding can have multiple DeviceMeshes.
+	// But for the distributed case there is always at least one mesh.
 	distStrategy     distributed.Strategy
-	deviceMesh       *distributed.DeviceMesh
-	currentChannelID int
+	deviceMeshes     []*distributed.DeviceMesh
+	deviceAssignment []backends.DeviceNum
+	numDevices       int
+	currentChannelID int // The current channel ID for SPMD "collective" operations (SPMD).
 }
 
 // GraphId is globally unique.
@@ -234,13 +237,21 @@ func (g *Graph) WithName(name string) *Graph {
 	return g
 }
 
-// build creates the XlaBuilder if not yet created -- which makes the Graph parameters immutable -- and checks
-// the Graph hasn't yet been compiled -- in which case it can't be further changed.
+// IsBuilding returns whether the Graph already started building a computation, in which case
+// Graph parameters (like name, distribution strategy, etc.) can no longer be changed.
+func (g *Graph) IsBuilding() bool {
+	return g.IsValid() && !g.IsCompiled() && g.builder != nil
+}
+
+// build sets the Graph into "building" mode by creating the Backend Builder object.
+// After this Graph parameters (like name, distribution strategy, etc.) can no longer be changed.
+//
+// This sets Graph.IsBuilding() to true, until the graph is compiled.
 func (g *Graph) build() backends.Builder {
-	if g.backend == nil {
-		exceptions.Panicf("Graph has been finalized already")
+	if !g.IsValid() {
+		exceptions.Panicf("Graph is nil or has been finalized already")
 	}
-	if g.executable != nil {
+	if g.IsCompiled() {
 		exceptions.Panicf("Graph already compiled and can't be used for building")
 	}
 	if g.builder == nil {
@@ -256,13 +267,24 @@ func (g *Graph) build() backends.Builder {
 					"Graph failed to create distributed SPMD builder with backend %s",
 					g.backend.Name()))
 			}
-			err = g.builder.DeviceAssignment(g.deviceMesh.DeviceAssignment()...)
+			err = g.builder.DeviceAssignment(g.deviceAssignment...)
 			if err != nil {
 				panic(errors.WithMessagef(err,
 					"Graph failed to create distributed SPMD builder with backend %s", g.backend.Name()))
 			}
 		case distributed.AutoSharding:
-			exceptions.Panicf("AutoSharding not implemented yet")
+
+			err := g.builder.DistributedAutoSharding(g.deviceMeshes...)
+			if err != nil {
+				panic(errors.WithMessagef(err,
+					"Graph failed to create distributed SPMD builder with backend %s",
+					g.backend.Name()))
+			}
+			err = g.builder.DeviceAssignment(g.deviceAssignment...)
+			if err != nil {
+				panic(errors.WithMessagef(err,
+					"Graph failed to create distributed SPMD builder with backend %s", g.backend.Name()))
+			}
 		}
 	}
 	return g.builder
@@ -331,11 +353,16 @@ func (g *Graph) AssertConfiguring() {
 	}
 }
 
+// IsCompiled returns whether the Graph has been compiled (immutable).
+func (g *Graph) IsCompiled() bool {
+	return g.IsValid() && g.executable != nil
+}
+
 // AssertBuilding panics if the graph is nil, has been finalized, or has already been compiled and therefore immutable.
 // If the Graph was in a configuring state (just after the creation), this triggers it to enter into a "building" state.
 func (g *Graph) AssertBuilding() {
 	g.AssertValid()
-	if g.executable != nil {
+	if g.IsCompiled() {
 		exceptions.Panicf("Graph %q has already been compiled, one cannot further build computations with it",
 			g.name)
 	}
@@ -346,7 +373,7 @@ func (g *Graph) AssertBuilding() {
 // building).
 func (g *Graph) AssertCompiled() {
 	g.AssertValid()
-	if g.executable == nil {
+	if !g.IsCompiled() {
 		exceptions.Panicf("Graph %q not compiled yet, it can't be used for execution", g.name)
 	}
 }
@@ -508,7 +535,7 @@ func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 	}
 	buffers := make([]backends.Buffer, numParams*numDevices)
 	donate := make([]bool, numParams*numDevices)
-	if g.deviceMesh == nil {
+	if g.deviceMeshes == nil {
 		// No device mesh, all inputs go to default device 0.
 		deviceNum := backends.DeviceNum(0)
 		for ii, input := range inputs {
@@ -516,7 +543,7 @@ func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 		}
 	} else {
 		// Inputs are split into their corresponding devices:
-		deviceAssignment := g.deviceMesh.DeviceAssignment()
+		deviceAssignment := g.deviceMeshes.DeviceAssignment()
 		for ii, input := range inputs {
 			deviceIndex := ii / numParams
 			deviceNum := deviceAssignment[deviceIndex]

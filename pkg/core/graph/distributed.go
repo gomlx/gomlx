@@ -1,20 +1,107 @@
 package graph
 
 import (
+	"slices"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/pkg/errors"
 )
 
-// WithDistributedStrategy sets the distributed strategy for the graph.
-// This must be set before compiling the graph or adding any distributed operations.
+// SetAutoSharding sets the distributed strategy to AutoSharding and sets the device
+// meshes that will be used for this Graph computation.
 //
-// The default is distributed.NoStrategy.
-// If setting to something else, you must also call WithDeviceMesh.
-func (g *Graph) WithDistributedStrategy(s distributed.Strategy) *Graph {
-	g.distStrategy = s
-	return g
+// This is the supported and recommended strategy for distributed training.
+// It uses XLA Shardy [1] framework to automatically shard the computation across the
+// devices (both data and model), given sharded input and output shapes of the computations.
+// (and optional in between hints).
+//
+// [1] https://github.com/openxla/shardy
+func (g *Graph) SetAutoSharding(meshes ...*distributed.DeviceMesh) error {
+	if !g.IsValid() {
+		return errors.New("cannot set AutoSharding on an invalid graph")
+	}
+	if g.IsCompiled() || g.IsBuilding() {
+		return errors.New("cannot set AutoSharding on a graph that is being built or already compiled")
+	}
+	if g.distStrategy != distributed.None {
+		return errors.New("cannot set AutoSharding on a graph that already has a distributed strategy set")
+	}
+	g.distStrategy = distributed.SPMD
+	g.deviceMeshes = slices.Clone(meshes)
+	g.numDevices = 0
+	for _, mesh := range meshes {
+		g.numDevices = max(g.numDevices, mesh.NumDevices())
+	}
+	if g.numDevices > g.backend.NumDevices() {
+		return errors.Errorf("number of devices in the mesh (%d) exceeds the number of devices in the backend (%d)",
+			g.numDevices, g.backend.NumDevices())
+	}
+	return nil
+}
+
+// SetDeviceAssignment specifies which concrete devices to use for the graph.
+//
+// These must be valid numbers for the backend and must match the number of devices of the
+// largest mesh given to WithAutoSharding or WithSPMD.
+//
+// The default assignment is simply using the devices in the order they were added to the backend
+// (sequential DeviceNum values, starting from 0).
+func (g *Graph) SetDeviceAssignment(devices []backends.DeviceNum) error {
+	if !g.IsValid() {
+		return errors.New("cannot set device assignment on an invalid graph")
+	}
+	if g.IsCompiled() || g.IsBuilding() {
+		return errors.New("cannot set device assignment on a graph that is being built or already compiled")
+	}
+	if g.distStrategy == distributed.None {
+		return errors.New("cannot set device assignment on a graph that doesn't have a distribution strategy, " +
+			"please use WithAutoSharding or WithSPMD first.")
+	}
+	if len(devices) != g.numDevices {
+		return errors.Errorf("number of devices (%d) doesn't match the number of devices in the largest mesh (%d)",
+			len(devices), g.numDevices)
+	}
+	numDevicesAvailable := backends.DeviceNum(g.backend.NumDevices())
+	seen := sets.Make[backends.DeviceNum]()
+	for _, device := range devices {
+		if device >= numDevicesAvailable {
+			return errors.Errorf("device number (%d) exceeds the number of devices in the backend (%d)",
+				device, numDevicesAvailable)
+		}
+		if seen.Has(device) {
+			return errors.Errorf("device number (%d) is used more than once in the assignment", device)
+		}
+		seen.Insert(device)
+	}
+	g.deviceAssignment = devices
+	return nil
+}
+
+// SetSPMD sets the distributed strategy to SPMD.
+//
+// This is a Single Program Multiple Data (SPMD) strategy, where synchronization is done
+// by the user with the "collective" operations (see Graph.Distributed()).
+//
+// EXPERIMENTAL: For normal use WithAutoSharding instead. If you want to use this consider
+// reaching out to the GoMLX team to discuss what you will need.
+func (g *Graph) SetSPMD(mesh *distributed.DeviceMesh) error {
+	if g.IsCompiled() || g.IsBuilding() {
+		return errors.New("cannot set SPMD on a graph that is being built or already compiled")
+	}
+	if g.distStrategy != distributed.None {
+		return errors.New("cannot set SPMD on a graph that already has a distributed strategy set")
+	}
+	g.distStrategy = distributed.SPMD
+	g.deviceMeshes = []*distributed.DeviceMesh{mesh}
+	g.numDevices = mesh.NumDevices()
+	if g.numDevices > g.backend.NumDevices() {
+		return errors.Errorf("number of devices in the mesh (%d) exceeds the number of devices in the backend (%d)",
+			g.numDevices, g.backend.NumDevices())
+	}
+	return nil
 }
 
 // DistributedStrategy returns the distributed strategy set for the graph.
@@ -22,30 +109,17 @@ func (g *Graph) DistributedStrategy() distributed.Strategy {
 	return g.distStrategy
 }
 
-// WithDeviceMesh sets the device mesh for the graph.
-//
-// This is required is the WithDistributedStrategy is set to something different than
-// distributed.NoStrategy.
-// This must be set before compiling the graph or adding any distributed operations.
-func (g *Graph) WithDeviceMesh(mesh *distributed.DeviceMesh) *Graph {
-	g.deviceMesh = mesh
-	return g
-}
-
-// DeviceMesh returns the graph's DeviceMesh.
-func (g *Graph) DeviceMesh() *distributed.DeviceMesh {
-	return g.deviceMesh
+// DeviceMeshes returns the graph's DeviceMeshes.
+// These are owned by the graph and should not be modified.
+func (g *Graph) DeviceMeshes() []*distributed.DeviceMesh {
+	return g.deviceMeshes
 }
 
 // NumDevices participating in this computation graph.
 //
 // This is 1 for non-distributed graphs. Otherwise, it's the number of devices in the mesh (see Graph.WithDeviceMesh).
 func (g *Graph) NumDevices() int {
-	if g.deviceMesh == nil {
-		return 1
-	}
-	return g.deviceMesh.NumDevices()
-
+	return g.numDevices
 }
 
 // nextChannelID returns the next channel ID to use for synchronization.
@@ -78,10 +152,10 @@ func (g *Graph) Distributed() *DistributedOps {
 	}
 	switch g.distStrategy {
 	case distributed.SPMD:
-		if g.deviceMesh == nil {
+		if g.deviceMeshes == nil {
 			exceptions.Panicf("graph.Distributed() with SPMD requires a device mesh to be set")
 		}
-		d.axes = g.deviceMesh.AxisNames()
+		d.axes = g.deviceMeshes.AxisNames()
 	case distributed.AutoSharding:
 		exceptions.Panicf("if using AutoSharding you should not use graph.Distributed() operations: the " +
 			"sharding of the operations happens automatically, without any explicit distributed calls.")
@@ -91,7 +165,7 @@ func (g *Graph) Distributed() *DistributedOps {
 	return d
 }
 
-// Along specifies which DeviceMesh axes the *next* collective
+// Along specifies which DeviceMeshes axes the *next* collective
 // operation should apply to.
 //
 // For example:
@@ -130,7 +204,7 @@ func (d *DistributedOps) AllReduce(operands []*Node, reductionType backends.Redu
 	if len(operands) == 0 {
 		return nil // Or panic
 	}
-	mesh := d.g.deviceMesh
+	mesh := d.g.deviceMeshes
 	if mesh == nil {
 		// Single-device graph: this is a no-op.
 		return operands
