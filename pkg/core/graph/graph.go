@@ -257,34 +257,9 @@ func (g *Graph) build() backends.Builder {
 	if g.builder == nil {
 		// Lazy construction of builder: this allows one to further configure the Graph object before using it.
 		g.builder = g.backend.Builder(g.name)
-		switch g.distStrategy {
-		case distributed.None:
-			// Nothing to do.
-		case distributed.SPMD:
-			err := g.builder.DistributedSPMD(g.NumDevices())
-			if err != nil {
-				panic(errors.WithMessagef(err,
-					"Graph failed to create distributed SPMD builder with backend %s",
-					g.backend.Name()))
-			}
-			err = g.builder.DeviceAssignment(g.deviceAssignment...)
-			if err != nil {
-				panic(errors.WithMessagef(err,
-					"Graph failed to create distributed SPMD builder with backend %s", g.backend.Name()))
-			}
-		case distributed.AutoSharding:
-
-			err := g.builder.DistributedAutoSharding(g.deviceMeshes...)
-			if err != nil {
-				panic(errors.WithMessagef(err,
-					"Graph failed to create distributed SPMD builder with backend %s",
-					g.backend.Name()))
-			}
-			err = g.builder.DeviceAssignment(g.deviceAssignment...)
-			if err != nil {
-				panic(errors.WithMessagef(err,
-					"Graph failed to create distributed SPMD builder with backend %s", g.backend.Name()))
-			}
+		err := g.setupBuilderDistribution()
+		if err != nil {
+			panic(err)
 		}
 	}
 	return g.builder
@@ -504,7 +479,9 @@ type donateBuffer struct {
 // Notice that after this, t's value in the device becomes invalid.
 func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum ...backends.DeviceNum) any {
 	d := &donateBuffer{shape: t.Shape()}
-	d.buffer = t.DonateBuffer(backend, deviceNum...) // DonateBuffer may destroy the tensor if there is no local storage.
+	d.buffer = t.DonateBuffer(
+		backend,
+		deviceNum...) // DonateBuffer may destroy the tensor if there is no local storage.
 	return d
 }
 
@@ -573,7 +550,12 @@ func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
 
 	numParams := g.NumParameters()
 	if len(inputs) != numParams {
-		exceptions.Panicf("graph %q takes %d parameters, but %d were given to RunWithMap()", g.name, numParams, len(inputs))
+		exceptions.Panicf(
+			"graph %q takes %d parameters, but %d were given to RunWithMap()",
+			g.name,
+			numParams,
+			len(inputs),
+		)
 	}
 	for node := range inputs {
 		if node.Type() != NodeTypeParameter {
@@ -629,13 +611,20 @@ func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool) (outputs
 	if err != nil {
 		panic(errors.WithMessagef(err, "Graph failed to execute"))
 	}
-	outputs = xslices.Map(results, func(buf backends.Buffer) *tensors.Tensor { return tensors.FromBuffer(g.backend, buf) })
+	outputs = xslices.Map(
+		results,
+		func(buf backends.Buffer) *tensors.Tensor { return tensors.FromBuffer(g.backend, buf) },
+	)
 	return
 }
 
 // anyToDeviceBuffer converts generic values to a tensor.Device on the requested device number,
 // and whether the buffer can be donated.
-func anyToDeviceBuffer(backend backends.Backend, deviceNum backends.DeviceNum, value any) (backends.Buffer, shapes.Shape, bool) {
+func anyToDeviceBuffer(
+	backend backends.Backend,
+	deviceNum backends.DeviceNum,
+	value any,
+) (backends.Buffer, shapes.Shape, bool) {
 	if t, ok := value.(*tensors.Tensor); ok {
 		buf, shape, err := tensorToDeviceBuffer(backend, deviceNum, t)
 		if err != nil {
@@ -654,7 +643,11 @@ func anyToDeviceBuffer(backend backends.Backend, deviceNum backends.DeviceNum, v
 }
 
 // tensorToDeviceBuffer is used by anyToDeviceBuffer to convert a tensor to a device buffer.
-func tensorToDeviceBuffer(backend backends.Backend, deviceNum backends.DeviceNum, t *tensors.Tensor) (backends.Buffer, shapes.Shape, error) {
+func tensorToDeviceBuffer(
+	backend backends.Backend,
+	deviceNum backends.DeviceNum,
+	t *tensors.Tensor,
+) (backends.Buffer, shapes.Shape, error) {
 	var shape shapes.Shape
 	err := t.CheckValid()
 	if err != nil {
@@ -728,7 +721,9 @@ func (g *Graph) String() string {
 	if g.executable != nil {
 		compiled = " (*)"
 	}
-	parts := []string{fmt.Sprintf("Graph %q%s: %d nodes, %d parameters", g.name, compiled, len(g.nodes), g.NumParameters())}
+	parts := []string{
+		fmt.Sprintf("Graph %q%s: %d nodes, %d parameters", g.name, compiled, len(g.nodes), g.NumParameters()),
+	}
 	for ii, node := range g.nodes {
 		parts = append(parts, fmt.Sprintf("\t#%d\t%s", ii, node))
 	}

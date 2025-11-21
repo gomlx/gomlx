@@ -104,6 +104,40 @@ func (g *Graph) SetSPMD(mesh *distributed.DeviceMesh) error {
 	return nil
 }
 
+// setupBuilderDistribution should be called as soon as the backends.Builder object is created,
+// and it will set it up with the Graph configuration for distribution.
+func (g *Graph) setupBuilderDistribution() error {
+	switch g.distStrategy {
+	case distributed.None:
+		// Nothing to do.
+	case distributed.SPMD:
+		err := g.builder.DistributedSPMD(g.NumDevices())
+		if err != nil {
+			return errors.WithMessagef(err,
+				"graph failed to create distributed SPMD builder with backend %s",
+				g.backend.Name())
+		}
+		err = g.builder.DeviceAssignment(g.deviceAssignment...)
+		if err != nil {
+			return errors.WithMessagef(err,
+				"Graph failed to create distributed SPMD builder with backend %s", g.backend.Name())
+		}
+	case distributed.AutoSharding:
+		err := g.builder.DistributedAutoSharding(g.deviceMeshes...)
+		if err != nil {
+			panic(errors.WithMessagef(err,
+				"Graph failed to create distributed SPMD builder with backend %s",
+				g.backend.Name()))
+		}
+		err = g.builder.DeviceAssignment(g.deviceAssignment...)
+		if err != nil {
+			panic(errors.WithMessagef(err,
+				"Graph failed to create distributed SPMD builder with backend %s", g.backend.Name()))
+		}
+	}
+	return nil
+}
+
 // DistributedStrategy returns the distributed strategy set for the graph.
 func (g *Graph) DistributedStrategy() distributed.Strategy {
 	return g.distStrategy
