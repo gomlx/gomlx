@@ -54,7 +54,8 @@ var (
 	// methodsExcluded from generating and even from having a NodeType.
 	// These are utility methods, not part of building a graph.
 	methodsExcluded = sets.MakeWith(
-		"Name", "Compile", "OpShape", "DeviceAssignment", "DistributedSPMD")
+		"Name", "Compile", "OpShape",
+		"DeviceAssignment", "DistributedSPMD", "DistributedAutoSharding")
 
 	// methodsNoGradient will add a stop gradient to the node.
 	methodsNoGradient = sets.MakeWith(
@@ -108,7 +109,8 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.Format = "[#%s]"
 				pi.FormatValue = fmt.Sprintf(
 					`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
-					param.Name)
+					param.Name,
+				)
 			case "[]Op":
 				pi.BackendType = "[]backends.Op"
 				pi.GraphType = "[]*Node"
@@ -120,7 +122,8 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.Format = "[#%s]"
 				pi.FormatValue = fmt.Sprintf(
 					`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
-					param.Name)
+					param.Name,
+				)
 			case "ConvolveAxesConfig":
 				pi.BackendType = "backends." + pi.BackendType
 				pi.CopyStatement = fmt.Sprintf("%s.Clone()", param.Name)
@@ -394,8 +397,19 @@ func GenerateBackendOps(methods []*MethodInfo) {
 
 	// Generate enumer for NodeType:
 	enumerOutput := path.Join(curDir, "gen_nodetype_enumer.go")
-	cmd = exec.Command("go", "tool", "enumer", "-type=NodeType", "-trimprefix=NodeType", "-yaml", "-json", "-text", "-values",
-		"-output="+enumerOutput, fileName)
+	cmd = exec.Command(
+		"go",
+		"tool",
+		"enumer",
+		"-type=NodeType",
+		"-trimprefix=NodeType",
+		"-yaml",
+		"-json",
+		"-text",
+		"-values",
+		"-output="+enumerOutput,
+		fileName,
+	)
 	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())
 	fmt.Printf("✅ graph_generator:       \tsuccessfully generated %s\n", enumerOutput)
