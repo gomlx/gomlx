@@ -1,7 +1,8 @@
 # GoMLX changelog
 
-# v0.25.0: Added SPMD distributed execution; Small API changes to graph.Exec.
+# v0.25.0: Added AutoSharding, SPMD distributed execution; Added "portable" single-device execution
 
+Note: some internal and backend API changes.
 Distributed computation improvements and refactorings:
 
 - Package `graph`:

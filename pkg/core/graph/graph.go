@@ -506,7 +506,7 @@ func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum .
 // If there are multiple devices, the inputs are split among them.
 func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
-	g.RunOnDevice(0, inputs...)
+	return g.RunOnDevice(0, inputs...)
 }
 
 // RunOnDevice runs the compiled Graph (see Graph.Run), but uses the defaultDeviceNum to run if the computation
@@ -537,7 +537,7 @@ func (g *Graph) RunOnDevice(defaultDeviceNum backends.DeviceNum, inputs ...any) 
 			buffers[ii], _, donate[ii] = anyToDeviceBuffer(g.backend, deviceNum, input)
 		}
 	}
-	return g.RunWithBuffers(buffers, donate)
+	return g.RunWithBuffers(buffers, donate, defaultDeviceNum)
 }
 
 // RunWithMap runs the compiled graph with the inputs given as a map of the corresponding parameter node to tensor value to use.
@@ -583,7 +583,7 @@ func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
 		}
 		buffers[handle], _, donate[handle] = anyToDeviceBuffer(g.backend, deviceNum, value)
 	}
-	return g.RunWithBuffers(buffers, donate)
+	return g.RunWithBuffers(buffers, donate, deviceNum)
 }
 
 // RunWithBuffers executes the graph using as inputs the on-device buffers.
@@ -597,7 +597,8 @@ func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
 // returned tensors are shared.
 //
 // If there are multiple devices, the inputs are split among them.
-func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool) (outputs []*tensors.Tensor) {
+func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool, defaultDevice backends.DeviceNum) (
+	outputs []*tensors.Tensor) {
 	g.AssertCompiled()
 	numParams := g.NumParameters()
 	numDevices := g.NumDevices()
@@ -614,11 +615,11 @@ func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool) (outputs
 	var err error
 	if klog.V(1).Enabled() {
 		start = time.Now()
-		results, err = g.executable.Execute(inputs, donate)
+		results, err = g.executable.Execute(inputs, donate, defaultDevice)
 		elapsed := time.Since(start)
 		klog.V(1).Infof("Graph.RunWithBuffers: %s elapsed", elapsed)
 	} else {
-		results, err = g.executable.Execute(inputs, donate)
+		results, err = g.executable.Execute(inputs, donate, defaultDevice)
 	}
 	if err != nil {
 		panic(errors.WithMessagef(err, "Graph failed to execute"))

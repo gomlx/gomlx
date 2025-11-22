@@ -126,7 +126,7 @@ func (e *Exec) MustExec(args ...any) []*tensors.Tensor {
 //
 // It panics on errors (with full stack-traces).
 func (e *Exec) MustExecWithGraph(args ...any) (results []*tensors.Tensor, g *Graph) {
-	return e.compileAndExecute(true, args...)
+	return e.compileAndExecute(true, 0, args...)
 }
 
 // Exec1 executes the graph with the given arguments and returns one output.
@@ -140,7 +140,11 @@ func (e *Exec) Exec1(args ...any) (*tensors.Tensor, error) {
 		return nil, err
 	}
 	if len(results) != 1 {
-		return nil, errors.Errorf("graph %q returned %d results, as opposed to exactly one as expected by Exec1", e.Name(), len(results))
+		return nil, errors.Errorf(
+			"graph %q returned %d results, as opposed to exactly one as expected by Exec1",
+			e.Name(),
+			len(results),
+		)
 	}
 	return results[0], nil
 }
@@ -156,7 +160,11 @@ func (e *Exec) Exec2(args ...any) (*tensors.Tensor, *tensors.Tensor, error) {
 		return nil, nil, err
 	}
 	if len(results) != 2 {
-		return nil, nil, errors.Errorf("graph %q returned %d results, as opposed to exactly two as expected by Exec2", e.Name(), len(results))
+		return nil, nil, errors.Errorf(
+			"graph %q returned %d results, as opposed to exactly two as expected by Exec2",
+			e.Name(),
+			len(results),
+		)
 	}
 	return results[0], results[1], nil
 }
@@ -172,7 +180,11 @@ func (e *Exec) Exec3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Te
 		return nil, nil, nil, err
 	}
 	if len(results) != 3 {
-		return nil, nil, nil, errors.Errorf("graph %q returned %d results, as opposed to exactly three as expected by Exec3", e.Name(), len(results))
+		return nil, nil, nil, errors.Errorf(
+			"graph %q returned %d results, as opposed to exactly three as expected by Exec3",
+			e.Name(),
+			len(results),
+		)
 	}
 	return results[0], results[1], results[2], nil
 }
@@ -188,7 +200,11 @@ func (e *Exec) Exec4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Te
 		return nil, nil, nil, nil, err
 	}
 	if len(results) != 4 {
-		return nil, nil, nil, nil, errors.Errorf("graph %q returned %d results, as opposed to exactly four as expected by Exec4", e.Name(), len(results))
+		return nil, nil, nil, nil, errors.Errorf(
+			"graph %q returned %d results, as opposed to exactly four as expected by Exec4",
+			e.Name(),
+			len(results),
+		)
 	}
 	return results[0], results[1], results[2], results[3], nil
 }
@@ -201,7 +217,11 @@ func (e *Exec) Exec4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Te
 func (e *Exec) MustExec1(args ...any) *tensors.Tensor {
 	results := e.MustExec(args...)
 	if len(results) != 1 {
-		exceptions.Panicf("graph %q returned %d results, as opposed to exactly one as expected by MustExec1", e.Name(), len(results))
+		exceptions.Panicf(
+			"graph %q returned %d results, as opposed to exactly one as expected by MustExec1",
+			e.Name(),
+			len(results),
+		)
 	}
 	return results[0]
 }
@@ -214,7 +234,11 @@ func (e *Exec) MustExec1(args ...any) *tensors.Tensor {
 func (e *Exec) MustExec2(args ...any) (*tensors.Tensor, *tensors.Tensor) {
 	results := e.MustExec(args...)
 	if len(results) != 2 {
-		exceptions.Panicf("graph %q returned %d results, as opposed to exactly two as expected by MustExec2", e.Name(), len(results))
+		exceptions.Panicf(
+			"graph %q returned %d results, as opposed to exactly two as expected by MustExec2",
+			e.Name(),
+			len(results),
+		)
 	}
 	return results[0], results[1]
 }
@@ -227,7 +251,11 @@ func (e *Exec) MustExec2(args ...any) (*tensors.Tensor, *tensors.Tensor) {
 func (e *Exec) MustExec3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
 	results := e.MustExec(args...)
 	if len(results) != 3 {
-		exceptions.Panicf("graph %q returned %d results, as opposed to exactly three as expected by MustExec3", e.Name(), len(results))
+		exceptions.Panicf(
+			"graph %q returned %d results, as opposed to exactly three as expected by MustExec3",
+			e.Name(),
+			len(results),
+		)
 	}
 	return results[0], results[1], results[2]
 }
@@ -240,7 +268,11 @@ func (e *Exec) MustExec3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensor
 func (e *Exec) MustExec4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
 	results := e.MustExec(args...)
 	if len(results) != 4 {
-		exceptions.Panicf("graph %q returned %d results, as opposed to exactly four as expected by MustExec4", e.Name(), len(results))
+		exceptions.Panicf(
+			"graph %q returned %d results, as opposed to exactly four as expected by MustExec4",
+			e.Name(),
+			len(results),
+		)
 	}
 	return results[0], results[1], results[2], results[3]
 }

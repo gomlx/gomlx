@@ -42,37 +42,37 @@ import (
 //nolint:goimports,golines // See https://youtrack.jetbrains.com/issue/GO-19556/Goland-formatter-gofmt
 type ExecGraphFn interface {
 	func(*Graph) *Node |
-		func([]*Node) *Node |
-		func(*Node) *Node |
-		func(*Node, *Node) *Node |
-		func(*Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Graph) (*Node, *Node) |
-		func([]*Node) (*Node, *Node) |
-		func(*Node) (*Node, *Node) |
-		func(*Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Graph) (*Node, *Node, *Node) |
-		func([]*Node) (*Node, *Node, *Node) |
-		func(*Node) (*Node, *Node, *Node) |
-		func(*Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Graph) []*Node |
-		func([]*Node) []*Node |
-		func(*Node) []*Node |
-		func(*Node, *Node) []*Node |
-		func(*Node, *Node, *Node) []*Node |
-		func(*Node, *Node, *Node, *Node) []*Node |
-		func(*Node, *Node, *Node, *Node, *Node) []*Node |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
+	func([]*Node) *Node |
+	func(*Node) *Node |
+	func(*Node, *Node) *Node |
+	func(*Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Graph) (*Node, *Node) |
+	func([]*Node) (*Node, *Node) |
+	func(*Node) (*Node, *Node) |
+	func(*Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Graph) (*Node, *Node, *Node) |
+	func([]*Node) (*Node, *Node, *Node) |
+	func(*Node) (*Node, *Node, *Node) |
+	func(*Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Graph) []*Node |
+	func([]*Node) []*Node |
+	func(*Node) []*Node |
+	func(*Node, *Node) []*Node |
+	func(*Node, *Node, *Node) []*Node |
+	func(*Node, *Node, *Node, *Node) []*Node |
+	func(*Node, *Node, *Node, *Node, *Node) []*Node |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
 }
 
 // ExecGraphFnOneOutput are ExecGraphFn functions that return only one result.
@@ -81,13 +81,13 @@ type ExecGraphFn interface {
 //nolint:goimports,golines // See https://youtrack.jetbrains.com/issue/GO-19556/Goland-formatter-gofmt
 type ExecGraphFnOneOutput interface {
 	func(*Graph) *Node |
-		func([]*Node) *Node |
-		func(*Node) *Node |
-		func(*Node, *Node) *Node |
-		func(*Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
+	func([]*Node) *Node |
+	func(*Node) *Node |
+	func(*Node, *Node) *Node |
+	func(*Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
 }
 
 // SideParamsFn is a function that sets side parameters during execution
@@ -186,9 +186,10 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 type Exec struct {
 	backend backends.Backend
 
-	distStrategy distributed.Strategy
-	deviceNum    backends.DeviceNum      // For distStrategy == distributed.None
-	mesh         *distributed.DeviceMesh // For distStrategy == distributed.SPMD
+	distStrategy     distributed.Strategy
+	meshes           []*distributed.DeviceMesh // For distributed.SPMD or distributed.AutoSharding.
+	deviceAssignment []backends.DeviceNum
+	numDevices       int
 
 	graphFn                     any
 	numInputs, numOutputs       int
@@ -236,10 +237,10 @@ func NewExecAny(backend backends.Backend, graphFn any) (*Exec, error) {
 	e := &Exec{
 		backend:      backend,
 		name:         fmt.Sprintf("Exec:%s", funcName),
-		deviceNum:    0,
 		graphFn:      graphFn,
 		maxCacheSize: DefaultExecMaxCacheSize,
 		loggerFn:     DefaultNodeLogger,
+		numDevices:   1,
 	}
 	if err := e.parseGraphFn(); err != nil {
 		return nil, err
@@ -327,24 +328,26 @@ func (e *Exec) WithName(name string) *Exec {
 	return e
 }
 
-// WithDevice sets the device num to be used by graphs constructed by Exec.
-// This configures the computation to use a single device -- no distribution.
+// WithDeviceAssignment specifies which concrete devices to use when compiling computation graphs.
 //
-// This should be called before any invocations of MustExec().
+// These must be valid numbers for the backend and must match the number of devices of the
+// largest mesh given to WithAutoSharding or WithSPMD, or one fixed device for non-portable single-device
+// execution.
 //
-// It returns a reference to itself, so configuration calls can be cascaded.
-func (e *Exec) WithDevice(deviceNum backends.DeviceNum) *Exec {
-	e.deviceNum = deviceNum
-	e.distStrategy = distributed.None
+// The default assignment is simply using the devices in the order they were added to the backend
+// (sequential DeviceNum values, starting from 0).
+//
+// For single-device execution (distributed strategy "None"), the default is to make it portable.
+// If the backend supports that, it can be executed in any device with ExecOnDevice().
+func (e *Exec) WithDeviceAssignment(devices []backends.DeviceNum) *Exec {
+	e.deviceAssignment = devices
 	return e
 }
 
-// DeviceNum returns the device being used by this Exec.
-// It defaults to 0 and can be changed with Exec.WithDevice.
-//
-// This is only valid if DistributionStrategy() returns distributed.None, which is the default.
-func (e *Exec) DeviceNum() backends.DeviceNum {
-	return e.deviceNum
+// DeviceAssignment returns the current device assignment used by this Exec.
+// It returns nil if none was provided.
+func (e *Exec) DeviceAssignment() []backends.DeviceNum {
+	return e.deviceAssignment
 }
 
 // DistributionStrategy returns the distribution strategy used by this Exec.
@@ -366,18 +369,36 @@ func (e *Exec) SPMD(mesh *distributed.DeviceMesh) *Exec {
 	if mesh == nil {
 		exceptions.Panicf("nil mesh passed to Exec.SPMD")
 	}
-	e.mesh = mesh
+	e.meshes = []*distributed.DeviceMesh{mesh}
+	e.numDevices = mesh.NumDevices()
+	if len(e.deviceAssignment) != e.numDevices {
+		e.deviceAssignment = xslices.Iota(backends.DeviceNum(0), e.NumDevices())
+	}
+	return e
+}
+
+// AutoSharding sets the distribution strategy to AutoSharding and records the meshes that will be used in the
+// computation graph(s).
+//
+// A nil mesh will cause a panic.
+//
+// It returns a reference to itself, so configuration calls can be cascaded.
+func (e *Exec) AutoSharding(meshes ...*distributed.DeviceMesh) *Exec {
+	e.distStrategy = distributed.AutoSharding
+	e.meshes = slices.Clone(meshes)
+	e.numDevices = 0
+	for _, mesh := range meshes {
+		e.numDevices = max(e.numDevices, mesh.NumDevices())
+	}
+	if len(e.deviceAssignment) != e.numDevices {
+		e.deviceAssignment = xslices.Iota(backends.DeviceNum(0), e.NumDevices())
+	}
 	return e
 }
 
 // NumDevices returns the number of devices used by the current strategy.
-// It returns 1 for DistributionStrategy() == distributed.None (the default), or the number of devices in the mesh
-// for other distribution methods.
 func (e *Exec) NumDevices() int {
-	if e.distStrategy == distributed.None {
-		return 1
-	}
-	return e.mesh.NumDevices()
+	return e.numDevices
 }
 
 // Name returns the Exec name, a string used as a prefix for Graph construction.
@@ -460,18 +481,37 @@ func (e *Exec) Exec(args ...any) ([]*tensors.Tensor, error) {
 //
 // It returns the outputs in a slice, even if there is only one output. It also returns the computation graph used.
 //
-// Distributed execution: if the Exec was configured with SPMD(mesh), then it requires the input values for each
-// device used in the execution. So if there are D devices, and I inputs, it required D*I args, organized in a
+// Distributed execution: if the Exec was configured with AutoSharding(meshes..) or SPMD(mesh),
+// then it requires the input values for each device used in the execution.
+// So if there are D devices, and I inputs, it required D*I args, organized in a
 // "device-major" list (all the inputs to the first device, then the inputs for the second device, and so on).
 // Alternatively, you can provide I args of distributed.Tensor (they already include one value per device),
 // matching the DistributedMesh provided to Exec.SPMD.
 //
 // Errors (with full stack-traces) are returned on failure.
 func (e *Exec) ExecWithGraph(args ...any) ([]*tensors.Tensor, *Graph, error) {
+	return e.ExecWithGraphOnDevice(backends.DeviceNum(0), args...)
+}
+
+// ExecOnDevice behaves like Exec but for portable computations uses the given device for execution.
+//
+// deafultDevice is used for single-device computations that are portable (no fixed device assignment set
+// WithDeviceAssignment). Otherwise, it is ignored.
+func (e *Exec) ExecOnDevice(defaultDevice backends.DeviceNum, args ...any) ([]*tensors.Tensor, error) {
+	outputs, _, err := e.ExecWithGraph(args...)
+	return outputs, err
+}
+
+// ExecWithGraphOnDevice is a version of ExecGraph that runs on the given device by default.
+//
+// deafultDevice is used for single-device computations that are portable (no fixed device assignment set
+// WithDeviceAssignment). Otherwise, it is ignored.
+func (e *Exec) ExecWithGraphOnDevice(defaultDevice backends.DeviceNum, args ...any) (
+	[]*tensors.Tensor, *Graph, error) {
 	var outputs []*tensors.Tensor
 	var g *Graph
 	err := exceptions.TryCatch[error](func() {
-		outputs, g = e.compileAndExecute(true, args...)
+		outputs, g = e.compileAndExecute(true, defaultDevice, args...)
 	})
 	if err != nil {
 		return nil, nil, err
@@ -498,14 +538,17 @@ func unwrapListOfTensors(args []any) []any {
 // Notice, this will include the time to convert args to tensors. If you want to isolate that time,
 // pre-convert args to tensors first.
 func (e *Exec) PreCompile(args ...any) {
-	_, _ = e.compileAndExecute(false, args...)
+	_, _ = e.compileAndExecute(false, 0, args...)
 }
 
 // validateAndExpandArgs splitting distributed.Tensor (if used) into its individual shards.
 //
 // It panics if the number of arguments doesn't match the number of arguments expected by the graphFn x number of
 // devices.
-func (e *Exec) validateAndExpandArgs(args []any) []any {
+//
+// deafultDevice is used for single-device computations that are portable (no fixed device assignment).
+// Otherwise, it is ignored.
+func (e *Exec) validateAndExpandArgs(args []any, defaultDevice backends.DeviceNum) []any {
 	if len(args) == 0 {
 		if !e.inputAsSlice && e.numInputs != 0 {
 			exceptions.Panicf("no arguments passed to Exec for %q, but graphFn expects %d inputs",
@@ -516,7 +559,7 @@ func (e *Exec) validateAndExpandArgs(args []any) []any {
 	}
 
 	// Check that args are a multiple of the number of devices involved.
-	numDevices := e.NumDevices()
+	numDevices := e.numDevices
 	if numDevices > 1 && len(args)%numDevices != 0 {
 		exceptions.Panicf("number of arguments for execution (%d) doesn't match number of devices (%d) for %q",
 			len(args), numDevices, e.Name())
@@ -525,13 +568,13 @@ func (e *Exec) validateAndExpandArgs(args []any) []any {
 	// Check that if using distributed.Tensors, they use the same mesh and expand them using their individual shards.
 	numArgsPerDevice := len(args) / numDevices
 	if _, ok := args[0].(distributed.Tensor); ok {
-		if e.mesh == nil {
+		if len(e.meshes) == 0 {
 			exceptions.Panicf(
-				"first argument is a distributed.Tensor but no mesh was provided to Exec %q (with Exec.SPMD)",
-				e.Name())
+				"first argument is a distributed.Tensor but no mesh was provided to Exec %q "+
+					"(with Exec.AutoSharding or Exec.SPMD)", e.Name())
 		}
 		numArgs := len(args)
-		expandedArgs := make([]any, e.mesh.NumDevices()*numArgs)
+		expandedArgs := make([]any, e.numDevices*numArgs)
 		for i, arg := range args {
 			dTensor, ok := arg.(distributed.Tensor)
 			if !ok {
@@ -540,10 +583,10 @@ func (e *Exec) validateAndExpandArgs(args []any) []any {
 						"for executor %q: these cannot be mixed, either all arguments are distributed.Tensor or none",
 					i, arg, e.Name())
 			}
-			if dTensor.Mesh() != e.mesh {
+			if slices.Index(e.meshes, dTensor.Mesh()) == -1 {
 				exceptions.Panicf(
-					"argument #%d is a distributed.Tensor over a different mesh (%s) than the one "+
-						"used by %q (%s)", i, dTensor.Mesh(), e.Name(), e.mesh)
+					"argument #%d is a distributed.Tensor over a different mesh (%s) than the ones "+
+						"defined in %q (%q)", i, dTensor.Mesh(), e.Name(), e.meshes)
 			}
 			for deviceIdx, shard := range dTensor.Shards() {
 				expandedArgs[deviceIdx*numArgs+i] = shard
@@ -557,15 +600,23 @@ func (e *Exec) validateAndExpandArgs(args []any) []any {
 	if !e.inputAsSlice && numArgsPerDevice != e.numInputs {
 		exceptions.Panicf(
 			"# of arguments to call (#args=%d, %d per device) don't match # arguments to the graph function (#args=%d) for %q",
-			len(args), numArgsPerDevice, e.numInputs, e.Name())
+			len(args),
+			numArgsPerDevice,
+			e.numInputs,
+			e.Name(),
+		)
 	}
 	return args
 }
 
 // compileAndExecute compiles a graph for arguments and optionally executes it.
-func (e *Exec) compileAndExecute(execute bool, args ...any) ([]*tensors.Tensor, *Graph) {
+//
+// deafultDevice is used for single-device computations that are portable (no fixed device assignment set
+// WithDeviceAssignment). Otherwise, it is ignored.
+func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum, args ...any) (
+	[]*tensors.Tensor, *Graph) {
 	args = unwrapListOfTensors(args)
-	args = e.validateAndExpandArgs(args)
+	args = e.validateAndExpandArgs(args, defaultDevice)
 
 	// Convert args to buffers.
 	// Note there may be more parameters, set with Exec.setSideParams later.
@@ -573,12 +624,14 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) ([]*tensors.Tensor, 
 	argsShapes := make([]shapes.Shape, len(args))
 	argsDonate := make([]bool, len(args))
 	for ii, arg := range args {
+		argDeviceNum := defaultDevice
+		// TODO: set argDeviceNum according to device assignment.
 		err := exceptions.TryCatch[error](func() {
-			argsAsBuffer[ii], argsShapes[ii], argsDonate[ii] = anyToDeviceBuffer(e.backend, e.deviceNum, arg)
+			argsAsBuffer[ii], argsShapes[ii], argsDonate[ii] = anyToDeviceBuffer(e.backend, argDeviceNum, arg)
 		})
 		if err != nil {
 			panic(errors.WithMessagef(err, "Failed to convert argument #%d of %d to device(%d) -- type %T: %v",
-				ii, len(args), e.deviceNum, args[ii], args[ii]))
+				ii, len(args), argDeviceNum, args[ii], args[ii]))
 		}
 	}
 
@@ -621,7 +674,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) ([]*tensors.Tensor, 
 	if !execute {
 		return nil, g
 	}
-	outputs := g.RunWithBuffers(argsAsBuffer, argsDonate)
+	outputs := g.RunWithBuffers(argsAsBuffer, argsDonate, defaultDevice)
 
 	// Call the logger on logged nodes, even if no node is marked for logging (it serves as a hook).
 	numGraphFnOutputs := entry.numOutputs - len(entry.loggedMessages)
@@ -648,6 +701,34 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 	}
 	entry := &execGraphCacheEntry{graph: NewGraph(e.backend, fmt.Sprintf("%s#%d", e.name, len(e.cache)))}
 	g := entry.graph
+	switch g.distStrategy {
+	case distributed.AutoSharding:
+		err := g.SetAutoSharding(e.meshes...)
+		if err != nil {
+			panic(errors.WithMessagef(err, "failed to assign AutoSharding for graph %q", g.Name()))
+		}
+	case distributed.SPMD:
+		err := g.SetSPMD(e.meshes[0])
+		if err != nil {
+			panic(errors.WithMessagef(err, "failed to assign SPMD for graph %q", g.Name()))
+		}
+	case distributed.None:
+		// Nothing to do.
+	}
+	if e.deviceAssignment != nil {
+		err := g.SetDeviceAssignment(e.deviceAssignment)
+		if err != nil {
+			panic(
+				errors.WithMessagef(
+					err,
+					"failed to assign device assignment %v for graph %q",
+					e.deviceAssignment,
+					g.Name(),
+				),
+			)
+		}
+	}
+
 	var argsV []reflect.Value
 	var args []*Node
 	switch {

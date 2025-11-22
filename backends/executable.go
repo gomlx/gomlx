@@ -25,8 +25,7 @@ type Executable interface {
 	// Donated buffers are no longer valid after the call.
 	// If donate is nil, it is assumed to be false for all buffers, and no buffer is donated.
 	//
-	// For portable computations (not compiled with a fixed device assignment), the execution will
-	// choose the device matching the inputs -- or return an error if the inputs are on different
-	// devices.
-	Execute(inputs []Buffer, donate []bool) ([]Buffer, error)
+	// For portable computations (not compiled with a fixed device assignment), the execution runs on the defaultDevice.
+	// For non-portable computations (where the device assignment is fixed), the defaultDevice is ignored.
+	Execute(inputs []Buffer, donate []bool, defaultDevice DeviceNum) ([]Buffer, error)
 }

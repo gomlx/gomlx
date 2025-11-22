@@ -26,6 +26,7 @@ type Executable struct {
 	distStrategy     distributed.Strategy
 	numDevices       int
 	deviceAssignment []int
+	portable         bool
 }
 
 func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingSpec) (backends.Executable, error) {
@@ -85,6 +86,7 @@ func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingS
 	}
 
 	compileConfig := b.backend.client.Compile().WithStableHLO(program)
+	var portable bool
 	switch b.distStrategy {
 	case distributed.SPMD:
 		compileConfig = compileConfig.
@@ -100,6 +102,8 @@ func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingS
 		if b.deviceAssignment != nil {
 			compileConfig = compileConfig.
 				WithDeviceAssignment(b.deviceAssignment)
+		} else {
+			portable = true
 		}
 	}
 	exec, err := compileConfig.Done()
@@ -119,6 +123,7 @@ func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingS
 		distStrategy:     b.distStrategy,
 		numDevices:       max(1, len(b.deviceAssignment)),
 		deviceAssignment: b.deviceAssignment,
+		portable:         portable,
 	}, nil
 }
 
@@ -158,7 +163,11 @@ func (e *Executable) Outputs() (outputShapes []shapes.Shape) {
 }
 
 // Execute the executable on the default device (0). The number and shapes of the inputs must match those returned by Inputs.
-func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backends.Buffer, error) {
+func (e *Executable) Execute(
+	inputs []backends.Buffer,
+	donate []bool,
+	defaultDevice backends.DeviceNum,
+) ([]backends.Buffer, error) {
 	if err := e.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -175,13 +184,16 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 			BackendName, e.name, len(donate), numParams, numDevices)
 	}
 	pInputs := xslices.Map(inputs, castToPJRT)
-	var pOutputs []*pjrt.Buffer
-	var err error
+	execBuilder := e.exec.Execute(pInputs...)
 	if len(donate) == 0 {
-		pOutputs, err = e.exec.Execute(pInputs...).DonateNone().Done()
+		execBuilder = execBuilder.DonateNone()
 	} else {
-		pOutputs, err = e.exec.Execute(pInputs...).SetDonate(donate).Done()
+		execBuilder = execBuilder.SetDonate(donate)
 	}
+	if e.portable {
+		execBuilder = execBuilder.OnDeviceByNum(int(defaultDevice))
+	}
+	pOutputs, err := execBuilder.Done()
 	if err != nil {
 		return nil, errors.WithMessagef(err, "backend %q: failed to execute computation %q", BackendName, e.name)
 	}

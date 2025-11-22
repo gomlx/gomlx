@@ -125,7 +125,7 @@ func (e *Executable) Outputs() (outputShapes []shapes.Shape) {
 }
 
 // Execute the executable on the default device (0). The number and shapes of the inputs must match those returned by Inputs.
-func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backends.Buffer, error) {
+func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, _ backends.DeviceNum) ([]backends.Buffer, error) {
 	if err := e.CheckValid(); err != nil {
 		return nil, err
 	}

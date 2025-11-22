@@ -201,7 +201,7 @@ const (
 //
 // Donated buffers are no longer valid after the call.
 // If donate is nil, it is assumed to be false for all buffers, and no buffer is donated.
-func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backends.Buffer, error) {
+func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, _ backends.DeviceNum) ([]backends.Buffer, error) {
 	// Keep the live executions count.
 	e.backend.numLiveExecutions.Add(1)
 	defer e.backend.numLiveExecutions.Add(-1)
@@ -402,7 +402,10 @@ func (e *Executable) executeNode(node *Node, execBuf *executionBuffers) error {
 		// Multi-output node:
 		multiNodeExecutor := multiOutputsNodeExecutors[node.opType]
 		if multiNodeExecutor == nil {
-			return errors.Errorf("SimpleGo execute: multi-outputs node executor for op type %s not implemented!?", node.opType)
+			return errors.Errorf(
+				"SimpleGo execute: multi-outputs node executor for op type %s not implemented!?",
+				node.opType,
+			)
 		}
 		outputs, err := multiNodeExecutor(e.backend, node, inputBuffers, inputsOwned)
 		if err != nil {
