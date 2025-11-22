@@ -81,7 +81,7 @@ func TestDeviceMesh(t *testing.T) {
 				name:      "empty axis name",
 				shape:     []int{4},
 				axisNames: []string{""},
-				wantErr:   "axis name at index 0 cannot be empty",
+				wantErr:   "is not a valid identifier",
 			},
 			{
 				name:      "duplicate axis names",
