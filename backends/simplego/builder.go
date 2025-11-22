@@ -192,17 +192,15 @@ func (b *Builder) OpShape(op backends.Op) (shapes.Shape, error) {
 func checkFlat(flat any) (dtype dtypes.DType, flatLen int, err error) {
 	flatType := reflect.TypeOf(flat)
 	if flatType.Kind() != reflect.Slice {
-		err = errors.Errorf("flat data should be a slice, not %s", flatType.Kind())
-		return
+		return dtype, 0, errors.Errorf("flat data should be a slice, not %s", flatType.Kind())
 	}
 	dtype = dtypes.FromGoType(flatType.Elem())
 	if dtype == dtypes.InvalidDType {
-		err = errors.Errorf("flat is a slice of %T, not a valid GoMLX data type", flatType.Elem())
-		return
+		return dtype, 0, errors.Errorf("flat is a slice of %T, not a valid GoMLX data type", flatType.Elem())
 	}
 	flatValue := reflect.ValueOf(flat)
 	flatLen = flatValue.Len()
-	return
+	return dtype, flatLen, nil
 }
 
 // addUnaryOp adds a generic binary op.

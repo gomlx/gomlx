@@ -66,7 +66,7 @@ type executionBuffers struct {
 	// in different modes for different calls.
 	opsExecutionType opsExecutionType
 
-	// Sequential execution only parameters: reused for each op.
+	// Sequential execution-only parameters: reused for each op.
 	opInputBuffers []*Buffer
 	opInputsOwned  []bool
 
