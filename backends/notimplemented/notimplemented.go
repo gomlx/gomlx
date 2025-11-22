@@ -158,6 +158,8 @@ func (b Builder) DistributedAutoSharding(meshes ...backends.Mesh) error {
 	return errors.Wrapf(NotImplementedError, "in DistributedAutoSharding()")
 }
 
+// DeviceAssignment returns nil if it's an assignment to device #0.
+// Otherwise, it returns a non-implemented error.
 func (b Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
 	if len(devices) != 1 && devices[0] != backends.DeviceNum(0) {
 		return errors.Wrapf(NotImplementedError, "in DeviceAssignment()")
