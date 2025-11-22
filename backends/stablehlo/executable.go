@@ -80,7 +80,7 @@ func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingS
 		return nil, errors.WithMessagef(err,
 			"backend %q: failed to build StableHLO from computation %q", BackendName, b.name)
 	}
-	if klog.V(2).Enabled() {
+	if klog.V(2).Enabled() { //nolint:mnd // Log-level numbers are ok.
 		klog.Infof("StableHLO program:\n%s\n", program)
 	}
 
@@ -95,7 +95,12 @@ func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingS
 			WithShardy(b.numDevices).
 			WithDeviceAssignment(b.deviceAssignment)
 	case distributed.None:
-		// Nothing to do.
+		// Device Assignment is optional, only if set.
+		// Otherwise, the compilation is "portable" and can be executed on any device.
+		if b.deviceAssignment != nil {
+			compileConfig = compileConfig.
+				WithDeviceAssignment(b.deviceAssignment)
+		}
 	}
 	exec, err := compileConfig.Done()
 	if err != nil {
@@ -126,7 +131,7 @@ func (e *Executable) CheckValid() error {
 	return e.backend.CheckValid()
 }
 
-// Finalize immediately frees resources associated to the executable.
+// Finalize immediately frees resources associated with the executable.
 func (e *Executable) Finalize() {
 	if e == nil || e.exec == nil || e.backend == nil {
 		return
@@ -147,7 +152,7 @@ func (e *Executable) Inputs() (names []string, inputShapes []shapes.Shape) {
 	return e.parameterNames, e.parameterShapes
 }
 
-// Outputs returns the computation's output shapes, in the order given to the Builder.Compile call.
+// Outputs return the computation's output shapes, in the order given to the Builder.Compile call.
 func (e *Executable) Outputs() (outputShapes []shapes.Shape) {
 	return e.outputShapes
 }

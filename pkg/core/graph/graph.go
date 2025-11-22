@@ -463,7 +463,7 @@ type donateBuffer struct {
 	shape  shapes.Shape
 }
 
-// DonateTensorBuffer can be used by Graph.Run, Graph.RunWithMap, or as input to Exec.Exec or Exec.MustExec,
+// DonateTensorBuffer can be used by Graph.Run, Graph.RunOnDevice, or as input to Exec.Exec or Exec.MustExec,
 // and it marks the Tensor to donate its on-device buffer to the execution.
 //
 // This allows the accelerator (GPU) to reuse the space of the donated buffer, which saves space if the original
@@ -506,7 +506,14 @@ func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum .
 // If there are multiple devices, the inputs are split among them.
 func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
+	g.RunOnDevice(0, inputs...)
+}
 
+// RunOnDevice runs the compiled Graph (see Graph.Run), but uses the defaultDeviceNum to run if the computation
+// is not already fixed to a device.
+//
+// If the computation was compiled with a fixed device assignment, the defaultDevieNum is ignored.
+func (g *Graph) RunOnDevice(defaultDeviceNum backends.DeviceNum, inputs ...any) (outputs []*tensors.Tensor) {
 	numParams := g.NumParameters()
 	numDevices := g.NumDevices()
 	if len(inputs) != numParams*numDevices {
@@ -517,7 +524,7 @@ func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 	donate := make([]bool, numParams*numDevices)
 	if g.deviceMeshes == nil {
 		// No device mesh, all inputs go to default device 0.
-		deviceNum := backends.DeviceNum(0)
+		deviceNum := defaultDeviceNum
 		for ii, input := range inputs {
 			buffers[ii], _, donate[ii] = anyToDeviceBuffer(g.backend, deviceNum, input)
 		}
@@ -547,6 +554,8 @@ func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 //
 // To donate the inputs buffers (if they are no longer used, e.g., when updating a state), consider using
 // DonateTensorBuffer.
+//
+// Deprecated: use Run or RunOnDevice instead.
 func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
 	deviceNum := backends.DeviceNum(0) // Hard-coded for now.

@@ -20,6 +20,27 @@ func must1[T any](v T, err error) T {
 	return v
 }
 
+// TestDistributedPortable tests that a computation is properly compiled as "portable" if
+// using no distribution strategy and not assigned to any device.
+//
+// This can be used to manually distribute computation by executing the program concurrently on different devices.
+//
+// Portable compilation may not work on all PJRT types or different backends.
+// Please add a blacklist of backends to skip the test if the backend doesn't support it.
+func TestDistributedPortable(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	if backend.NumDevices() <= 1 {
+		t.Skipf("Skipping distributed test because there are only 1 device available for backend %q.", backend.Name())
+	}
+	g := graph.NewGraph(backend, "portable")
+	x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
+	negX := graph.Neg(x)
+	g.Compile(negX)
+	outputs := g.Run(float32(1))
+	require.Len(t, outputs, 1)
+	require.Equalf(t, float32(-1), outputs[0].Value(), "got %s", outputs[0])
+}
+
 func TestDistributedAllReduce(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	if backend.NumDevices() <= 1 {
@@ -30,7 +51,6 @@ func TestDistributedAllReduce(t *testing.T) {
 		mesh := must1(distributed.NewDeviceMesh([]int{2}, []string{"replica"}))
 		g := graph.NewGraph(backend, t.Name())
 		require.NoError(t, g.SetSPMD(mesh))
-		g.AssertBuilding()
 		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
 		reduced := g.Distributed().AllReduceOne(x, backends.ReduceOpSum)
 		g.Compile(reduced)
@@ -114,5 +134,4 @@ func TestDistributedAllReduce(t *testing.T) {
 			)
 		}
 	})
-
 }

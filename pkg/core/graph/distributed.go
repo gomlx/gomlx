@@ -118,11 +118,6 @@ func (g *Graph) setupBuilderDistribution() error {
 				"graph failed to create distributed SPMD builder with backend %s",
 				g.backend.Name())
 		}
-		err = g.builder.DeviceAssignment(g.deviceAssignment...)
-		if err != nil {
-			return errors.WithMessagef(err,
-				"Graph failed to create distributed SPMD builder with backend %s", g.backend.Name())
-		}
 	case distributed.AutoSharding:
 		bMeshes := xslices.Map(
 			g.deviceMeshes,
@@ -138,6 +133,18 @@ func (g *Graph) setupBuilderDistribution() error {
 		if err != nil {
 			panic(errors.WithMessagef(err,
 				"Graph failed to create distributed builder with backend %s", g.backend.Name()))
+		}
+	}
+
+	// Create a default device assignment if numDevices > 1 -- computations for one device only may be portable.
+	if g.deviceAssignment == nil && g.numDevices > 1 {
+		g.deviceAssignment = xslices.Iota(backends.DeviceNum(0), g.numDevices)
+	}
+	if g.deviceAssignment != nil {
+		err := g.builder.DeviceAssignment(g.deviceAssignment...)
+		if err != nil {
+			return errors.WithMessagef(err,
+				"Graph failed to set device assignment with backend %s", g.backend.Name())
 		}
 	}
 	return nil

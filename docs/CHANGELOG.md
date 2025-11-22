@@ -11,6 +11,7 @@ Distributed computation improvements and refactorings:
   - Added `Graph.WithDistributedStrategy`, `Graph.WithDeviceMesh`. `Graph.DeviceMesh` and `Graph.NumDevices`
   - Added `Graph.Distributed()` with "collective" (across devices) operations (like `AllReduce`).
   - Renamed: s/`Exec.InDevice`/`Exec.WithDevice`; s/`Exec.SetName`/`Exec.WithName`
+  - Added `RunOnDevice`.
   - Added `Exec.SPMD`.
 - Package `context`:
   - Added `context.MustGetParam[T](ctx, key)` and `context.MustGetGraphParam[T](ctx, graph, key)`.
