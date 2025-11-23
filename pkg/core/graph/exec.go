@@ -638,8 +638,19 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 	argsAsBuffer := make([]backends.Buffer, len(args))
 	argsShapes := make([]shapes.Shape, len(args))
 	argsDonate := make([]bool, len(args))
+	numDevices := e.numDevices
+	argsPerDevice := len(args) / numDevices
 	for ii, arg := range args {
 		argDeviceNum := defaultDevice
+		if numDevices > 1 || len(e.deviceAssignment) > 0 {
+			argDeviceIdx := ii / argsPerDevice
+			if len(e.deviceAssignment) == 0 {
+				// If deviceAssignment is not given, we assume an f(idx) = idx assignment of devices.
+				argDeviceNum = backends.DeviceNum(argDeviceIdx)
+			} else {
+				argDeviceNum = e.deviceAssignment[argDeviceIdx]
+			}
+		}
 		// TODO: set argDeviceNum according to device assignment.
 		err := exceptions.TryCatch[error](func() {
 			argsAsBuffer[ii], argsShapes[ii], argsDonate[ii] = anyToDeviceBuffer(e.backend, argDeviceNum, arg)
@@ -716,7 +727,7 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 	}
 	entry := &execGraphCacheEntry{graph: NewGraph(e.backend, fmt.Sprintf("%s#%d", e.name, len(e.cache)))}
 	g := entry.graph
-	switch g.distStrategy {
+	switch e.distStrategy {
 	case distributed.AutoSharding:
 		err := g.SetAutoSharding(e.meshes...)
 		if err != nil {
