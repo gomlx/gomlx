@@ -195,6 +195,8 @@ type Exec struct {
 	numInputs, numOutputs       int
 	inputAsSlice, outputAsSlice bool
 	inputIsGraph                bool
+	inputShardingSpecs          []*distributed.ShardingSpec
+	outputShardingSpecs         []*distributed.ShardingSpec
 	name                        string
 
 	// MaxCacheSize: if more than these different graph instantiations are
@@ -384,6 +386,28 @@ func (e *Exec) AutoSharding(meshes ...*distributed.DeviceMesh) *Exec {
 	for _, mesh := range meshes {
 		e.numDevices = max(e.numDevices, mesh.NumDevices())
 	}
+	return e
+}
+
+// WithInputShardingSpecs sets the sharding specs for the inputs.
+//
+// This is used for distributed computations with AutoSharding.
+//
+// If the function takes variable inputs (`[]*Node`), then the last spec provided is used for all remaining inputs.
+//
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithInputShardingSpecs(specs ...*distributed.ShardingSpec) *Exec {
+	e.inputShardingSpecs = specs
+	return e
+}
+
+// WithOutputShardingSpecs sets the sharding specs for the outputs.
+//
+// This is used for distributed computations with AutoSharding.
+//
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithOutputShardingSpecs(specs ...*distributed.ShardingSpec) *Exec {
+	e.outputShardingSpecs = specs
 	return e
 }
 
@@ -722,17 +746,44 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 
 	var argsV []reflect.Value
 	var args []*Node
+
+	// Calculate the actual args to use for graph creation:
+	// If distributed with AutoSharding or SPMD, the argsShapes contains the shapes for ALL devices (concatenated).
+	// We only want the shapes for the first device (or first replica).
+	//
+	// Note: AutoSharding uses a "logical" graph, so we need to adjust the shapes according to the sharding specs.
+	// But first we filter out the shapes for other devices.
+	argsShapesToUse := argsShapes
+	if e.numDevices > 1 && (e.distStrategy == distributed.AutoSharding || e.distStrategy == distributed.SPMD) {
+		// argsShapes is organized as [device0_args..., device1_args..., ...].
+		// We only need the args for one device to build the graph.
+		numArgsPerDevice := len(argsShapes) / e.numDevices
+		argsShapesToUse = argsShapes[:numArgsPerDevice]
+	}
+
 	switch {
 	case e.inputAsSlice:
-		args = make([]*Node, 0, len(argsShapes))
+		args = make([]*Node, 0, len(argsShapesToUse))
 	case e.inputIsGraph:
-		// Notice in this case len(argsShapes) == 0
+		// Notice in this case len(argsShapesToUse) == 0
 		argsV = []reflect.Value{reflect.ValueOf(g)}
 	default:
-		argsV = make([]reflect.Value, 0, len(argsShapes))
+		argsV = make([]reflect.Value, 0, len(argsShapesToUse))
 	}
-	for ii, shape := range argsShapes {
-		arg := Parameter(g, fmt.Sprintf("arg%d", ii), shape)
+	for ii, shape := range argsShapesToUse {
+		var spec *distributed.ShardingSpec
+		if ii < len(e.inputShardingSpecs) {
+			spec = e.inputShardingSpecs[ii]
+		} else if e.inputAsSlice && len(e.inputShardingSpecs) > 0 {
+			// Reuse last spec for variable length inputs.
+			spec = e.inputShardingSpecs[len(e.inputShardingSpecs)-1]
+		}
+		if spec != nil && e.distStrategy == distributed.AutoSharding {
+			// Adjust shape to logical shape.
+			shape = spec.LogicalShape(shape)
+		}
+
+		arg := ShardedParameter(g, fmt.Sprintf("arg%d", ii), shape, spec)
 		if e.inputAsSlice {
 			args = append(args, arg)
 		} else {
@@ -788,7 +839,7 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 	}
 
 	// Compile graph.
-	g.Compile(outputs...)
+	g.CompileWithSharding(outputs, e.outputShardingSpecs)
 	entry.argsShapes = make([]shapes.Shape, len(argsShapes))
 	copy(entry.argsShapes, argsShapes)
 	entry.numOutputs = len(outputs)

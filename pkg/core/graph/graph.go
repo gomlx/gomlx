@@ -406,10 +406,24 @@ func (g *Graph) Nodes() []*Node {
 //
 // At least one output must be given.
 func (g *Graph) Compile(outputs ...*Node) {
+	g.CompileWithSharding(outputs, nil)
+}
+
+// CompileWithSharding compiles the graph with the given outputs and optionally with the sharding specifications
+// for these outputs.
+//
+// At least one output must be given.
+//
+// This is an advanced version of Compile, used for distributed computation with AutoSharding.
+func (g *Graph) CompileWithSharding(outputs []*Node, outputShardings []*distributed.ShardingSpec) {
 	g.AssertValid()
 	g.AssertBuilding()
 	if len(outputs) == 0 {
 		exceptions.Panicf("no outputs selected when Graph.Compile graph %q", g.name)
+	}
+	if len(outputShardings) > 0 && len(outputShardings) != len(outputs) {
+		exceptions.Panicf("if outputShardings are given, there must be one for each output, "+
+			"but got %d outputs and %d shardings", len(outputs), len(outputShardings))
 	}
 
 	// Sanity check on the output nodes.
@@ -447,8 +461,11 @@ func (g *Graph) Compile(outputs ...*Node) {
 	}
 
 	outputsOps := xslices.Map(outputs, func(node *Node) backends.Op { return node.outputOps[0] })
+	backendShardings := xslices.Map(outputShardings, func(s *distributed.ShardingSpec) *backends.ShardingSpec {
+		return s.ToBackendsSpec()
+	})
 	var err error
-	g.executable, err = g.builder.Compile(outputsOps, nil)
+	g.executable, err = g.builder.Compile(outputsOps, backendShardings)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Graph failed to compile for the backend"))
 	}

@@ -2,6 +2,7 @@ package distributed
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 )
 
@@ -167,4 +168,23 @@ func (s *ShardingSpec) ToBackendsSpec() *backends.ShardingSpec {
 		spec.Axes[tensorAxis] = []string(meshAxes)
 	}
 	return spec
+}
+
+// LogicalShape calculates the logical shape of a tensor given its shard shape and the sharding specification.
+//
+// The shard shape is assumed to be the shape of the tensor on a single device.
+// The logical shape is the shape of the full tensor across all devices.
+//
+// If the sharding spec is nil, or if the rank of the shard shape does not match the spec,
+// it returns the shard shape as is (assuming it's replicated or fully local).
+func (s *ShardingSpec) LogicalShape(shardShape shapes.Shape) shapes.Shape {
+	if s == nil || len(s.Axes) != shardShape.Rank() {
+		return shardShape
+	}
+
+	logicalDims := make([]int, shardShape.Rank())
+	for i, dim := range shardShape.Dimensions {
+		logicalDims[i] = dim * s.NumDevicesShardingAxis(i)
+	}
+	return shapes.Make(shardShape.DType, logicalDims...)
 }

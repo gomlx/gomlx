@@ -186,4 +186,47 @@ func TestAutoSharding(t *testing.T) {
 			require.Equalf(t, float32(3.3), output.Value(), "result for device #%d got %s", i, output)
 		}
 	})
+
+	t.Run("Exec", func(t *testing.T) {
+		mesh := must1(distributed.NewDeviceMesh([]int{2}, []string{"sharded"}))
+		spec := must1(distributed.BuildSpec(mesh).S("sharded").Done())
+
+		// We want to calculate y = x * w, where w is sharded.
+		// x is [2] (scalar-like for this test), w is [4], y is [4].
+		//
+		// But let's assume a dot product or simple element-wise multiplication broadcast.
+		// Let's do: y = x + w.
+		// x is scalar 1.0.
+		// w is [4], sharded along axis 0. Logical shape [4], physical shape [2].
+		// Devices: 2.
+		// w input: dev0=[0, 1], dev1=[2, 3].
+		// x input: dev0=1, dev1=1 (replicated).
+		// expected y: [1, 2, 3, 4] (sharded).
+
+		exec := graph.MustNewExec(backend, func(x, w *graph.Node) *graph.Node {
+			// x is scalar, w is sharded [4].
+			return graph.Add(x, w)
+		}).AutoSharding(mesh).
+			WithInputShardingSpecs(nil, spec). // x is replicated (nil), w is sharded (spec).
+			WithOutputShardingSpecs(spec)      // output y is sharded (spec).
+
+		// Inputs:
+		// Device 0: x=1, w=[0, 1]
+		// Device 1: x=1, w=[2, 3]
+		// Total args = 4.
+		outputs, err := exec.Exec(
+			float32(10), []float32{0, 1}, // Device 0
+			float32(10), []float32{2, 3}, // Device 1
+		)
+		require.NoError(t, err)
+		require.Len(t, outputs, 2) // One output per device.
+
+		// Check outputs.
+		// Device 0 should have [10, 11]
+		// Device 1 should have [12, 13]
+		fmt.Printf("\t- device #0: %s\n", outputs[0])
+		fmt.Printf("\t- device #1: %s\n", outputs[1])
+		require.Equal(t, []float32{10, 11}, outputs[0].Value())
+		require.Equal(t, []float32{12, 13}, outputs[1].Value())
+	})
 }
