@@ -33,20 +33,39 @@ func TestPortable(t *testing.T) {
 	if backend.NumDevices() <= 1 {
 		t.Skipf("Skipping distributed test because there are only 1 device available for backend %q.", backend.Name())
 	}
-	g := graph.NewGraph(backend, "portable")
-	x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
-	negX := graph.Neg(x)
-	g.Compile(negX)
 
-	numDevices := backend.NumDevices()
-	for deviceNum := range numDevices {
-		outputs := g.RunOnDevice(backends.DeviceNum(deviceNum), float32(deviceNum))
-		require.Len(t, outputs, 1)
-		output := outputs[0]
-		outputDevice := must1(output.Device())
-		fmt.Printf("- device #%d: output in device #%d\n", deviceNum, outputDevice)
-		assert.Equalf(t, float32(-deviceNum), outputs[0].Value(), "got %s", outputs[0])
-	}
+	t.Run("Graph", func(t *testing.T) {
+		g := graph.NewGraph(backend, "portable")
+		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
+		negX := graph.Neg(x)
+		g.Compile(negX)
+
+		numDevices := backend.NumDevices()
+		for deviceNum := range numDevices {
+			outputs := g.RunOnDevice(backends.DeviceNum(deviceNum), float32(deviceNum))
+			require.Len(t, outputs, 1)
+			output := outputs[0]
+			outputDevice := must1(output.Device())
+			fmt.Printf("- device #%d: output in device #%d\n", deviceNum, outputDevice)
+			assert.Equalf(t, float32(-deviceNum), outputs[0].Value(), "got %s", outputs[0])
+		}
+	})
+
+	t.Run("Exec", func(t *testing.T) {
+		e := graph.MustNewExec(backend, func(x *graph.Node) *graph.Node {
+			return graph.Neg(x)
+		})
+		numDevices := backend.NumDevices()
+		for deviceNum := range numDevices {
+			outputs, err := e.ExecOnDevice(backends.DeviceNum(deviceNum), float32(deviceNum))
+			require.NoError(t, err)
+			require.Len(t, outputs, 1)
+			output := outputs[0]
+			outputDevice := must1(output.Device())
+			fmt.Printf("- device #%d: output in device #%d\n", deviceNum, outputDevice)
+			assert.Equalf(t, float32(-deviceNum), outputs[0].Value(), "got %s", outputs[0])
+		}
+	})
 }
 
 func TestCollective(t *testing.T) {
