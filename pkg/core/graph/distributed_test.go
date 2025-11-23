@@ -143,3 +143,28 @@ func TestCollective(t *testing.T) {
 		}
 	})
 }
+
+// TestAutoSharding distributed strategy.
+func TestAutoSharding(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	if backend.NumDevices() <= 1 {
+		t.Skipf("Skipping distributed test because there are only 1 device available for backend %q.", backend.Name())
+	}
+
+	// Test AutoSharding using the Graph API (no Exec).
+	t.Run("Graph", func(t *testing.T) {
+		mesh := must1(distributed.NewDeviceMesh([]int{2}, []string{"sharded"}))
+		g := graph.NewGraph(backend, t.Name())
+		require.NoError(t, g.SetAutoSharding(mesh))
+		x := graph.ShardedParameter(g, "x", shapes.Make(dtypes.Float32, 4),
+			must1(distributed.BuildSpec(mesh).S("sharded").Done()))
+		y := graph.ReduceAllSum(x)
+		g.Compile(y)
+		outputs := g.Run([]float32{1, 2}, []float32{0.1, 0.2})
+		require.Len(t, outputs, mesh.NumDevices())
+		for i, output := range outputs {
+			fmt.Printf("\t- device #%d: %s\n", i, output)
+			require.Equalf(t, float32(3.3), output.Value(), "result for device #%d got %s", i, output)
+		}
+	})
+}

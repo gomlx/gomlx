@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/gomlx/gomlx/backends"
@@ -30,7 +31,7 @@ func (g *Graph) SetAutoSharding(meshes ...*distributed.DeviceMesh) error {
 	if g.distStrategy != distributed.None {
 		return errors.New("cannot set AutoSharding on a graph that already has a distributed strategy set")
 	}
-	g.distStrategy = distributed.SPMD
+	g.distStrategy = distributed.AutoSharding
 	g.deviceMeshes = slices.Clone(meshes)
 	g.numDevices = 0
 	for _, mesh := range meshes {
@@ -129,17 +130,13 @@ func (g *Graph) setupBuilderDistribution() error {
 				"Graph failed to create distributed builder with backend %s",
 				g.backend.Name()))
 		}
-		err = g.builder.DeviceAssignment(g.deviceAssignment...)
-		if err != nil {
-			panic(errors.WithMessagef(err,
-				"Graph failed to create distributed builder with backend %s", g.backend.Name()))
-		}
 	}
 
 	// Create a default device assignment if numDevices > 1 -- computations for one device only may be portable.
 	if g.deviceAssignment == nil && g.numDevices > 1 {
 		g.deviceAssignment = xslices.Iota(backends.DeviceNum(0), g.numDevices)
 	}
+	fmt.Printf("g.numDevices=%d, g.deviceAssignment=%v\n", g.numDevices, g.deviceAssignment)
 	if g.deviceAssignment != nil {
 		err := g.builder.DeviceAssignment(g.deviceAssignment...)
 		if err != nil {

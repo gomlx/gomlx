@@ -221,7 +221,7 @@ func (b *Builder) DistributedAutoSharding(meshes ...backends.Mesh) error {
 	b.distStrategy = distributed.AutoSharding
 	b.meshes = make([]*shardy.DeviceMesh, len(meshes))
 	var err error
-	builderNumDevices := 0
+	b.numDevices = 0
 	for i, mesh := range meshes {
 		b.meshes[i], err = shardy.NewDeviceMesh(mesh.Name, mesh.AxesSizes, mesh.AxesNames)
 		if err != nil {
@@ -232,9 +232,11 @@ func (b *Builder) DistributedAutoSharding(meshes ...backends.Mesh) error {
 			return errors.Errorf("mesh %q has %d devices, but the backend only has %d devices",
 				mesh.Name, meshNumDevices, b.backend.NumDevices())
 		}
-		builderNumDevices = max(builderNumDevices, meshNumDevices)
+		b.numDevices = max(b.numDevices, meshNumDevices)
 	}
 	b.builder.WithShardy(b.meshes...)
+	b.builder.WithNumReplicas(1)
+	b.builder.WithNumPartitions(b.numDevices)
 	return nil
 }
 
