@@ -223,7 +223,6 @@ func TestAutoSharding(t *testing.T) {
 		// w input: dev0=[0, 1], dev1=[2, 3].
 		// x input: dev0=1, dev1=1 (replicated).
 		// expected y: [1, 2, 3, 4] (sharded).
-
 		exec := graph.MustNewExec(backend, func(x, w *graph.Node) *graph.Node {
 			// x is scalar, w is sharded [4].
 			return graph.Add(x, w)

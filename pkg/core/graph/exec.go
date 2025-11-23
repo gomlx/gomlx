@@ -633,17 +633,17 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 	args = unwrapListOfTensors(args)
 	args = e.validateAndExpandArgs(args, defaultDevice)
 
-	// Convert args to buffers.
+	// Convert args to buffers: care is taken so we move each value to the correct device.
 	// Note there may be more parameters, set with Exec.setSideParams later.
 	argsAsBuffer := make([]backends.Buffer, len(args))
 	argsShapes := make([]shapes.Shape, len(args))
 	argsDonate := make([]bool, len(args))
 	numDevices := e.numDevices
 	argsPerDevice := len(args) / numDevices
-	for ii, arg := range args {
-		argDeviceNum := defaultDevice
+	var argIdx int
+	argDeviceNum := defaultDevice
+	for argDeviceIdx := range numDevices {
 		if numDevices > 1 || len(e.deviceAssignment) > 0 {
-			argDeviceIdx := ii / argsPerDevice
 			if len(e.deviceAssignment) == 0 {
 				// If deviceAssignment is not given, we assume an f(idx) = idx assignment of devices.
 				argDeviceNum = backends.DeviceNum(argDeviceIdx)
@@ -651,13 +651,21 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 				argDeviceNum = e.deviceAssignment[argDeviceIdx]
 			}
 		}
-		// TODO: set argDeviceNum according to device assignment.
-		err := exceptions.TryCatch[error](func() {
-			argsAsBuffer[ii], argsShapes[ii], argsDonate[ii] = anyToDeviceBuffer(e.backend, argDeviceNum, arg)
-		})
-		if err != nil {
-			panic(errors.WithMessagef(err, "Failed to convert argument #%d of %d to device(%d) -- type %T: %v",
-				ii, len(args), argDeviceNum, args[ii], args[ii]))
+		for range argsPerDevice {
+			// TODO: set argDeviceNum according to device assignment.
+			arg := args[argIdx]
+			err := exceptions.TryCatch[error](func() {
+				argsAsBuffer[argIdx], argsShapes[argIdx], argsDonate[argIdx] = anyToDeviceBuffer(
+					e.backend,
+					argDeviceNum,
+					arg,
+				)
+			})
+			if err != nil {
+				panic(errors.WithMessagef(err, "Failed to convert argument #%d of %d to device(%d) -- type %T: %v",
+					argIdx, len(args), argDeviceNum, args[argIdx], args[argIdx]))
+			}
+			argIdx++
 		}
 	}
 
