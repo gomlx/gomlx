@@ -220,7 +220,10 @@ func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, 
 		return nil, errors.Errorf("at least *Context and one input argument required")
 	}
 	if ctxGraphFnT.In(0) != contextType {
-		return nil, errors.Errorf("the first argument for ctxGraphFn must be a *Context, got %s instead", ctxGraphFnT.In(0))
+		return nil, errors.Errorf(
+			"the first argument for ctxGraphFn must be a *Context, got %s instead",
+			ctxGraphFnT.In(0),
+		)
 	}
 
 	// Check other arguments.
@@ -228,7 +231,10 @@ func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, 
 		if ctxGraphFnT.In(ii).Kind() == reflect.Slice && ctxGraphFnT.In(ii).Elem() == nodeType {
 			// Case 1: []*Node
 			if ctxGraphFnT.NumIn() != 2 {
-				return nil, errors.Errorf("[]*Node parameters are only accepted if they are the only input besides the Context, got function type %s instead", ctxGraphFnT)
+				return nil, errors.Errorf(
+					"[]*Node parameters are only accepted if they are the only input besides the Context, got function type %s instead",
+					ctxGraphFnT,
+				)
 			}
 			e.inputAsSlice = true
 			break
@@ -236,7 +242,10 @@ func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, 
 		if ctxGraphFnT.In(ii) == graphType {
 			// Case 2: *Graph
 			if ctxGraphFnT.NumIn() != 2 {
-				return nil, errors.Errorf("*Graph argument is only accepted if it is the only input besides the Context, got function type %s instead", ctxGraphFnT)
+				return nil, errors.Errorf(
+					"*Graph argument is only accepted if it is the only input besides the Context, got function type %s instead",
+					ctxGraphFnT,
+				)
 			}
 			e.inputIsGraph = true
 			break
@@ -248,7 +257,10 @@ func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, 
 	for ii := 0; ii < ctxGraphFnT.NumOut(); ii++ {
 		if ctxGraphFnT.Out(ii).Kind() == reflect.Slice && ctxGraphFnT.Out(ii).Elem() == nodeType {
 			if ctxGraphFnT.NumOut() != 1 {
-				return nil, errors.Errorf("[]*Node parameters are only accepted as output if they are the only output, got function type %s instead", ctxGraphFnT)
+				return nil, errors.Errorf(
+					"[]*Node parameters are only accepted as output if they are the only output, got function type %s instead",
+					ctxGraphFnT,
+				)
 			}
 			e.outputAsSlice = true
 			break
@@ -261,7 +273,7 @@ func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, 
 	e.buildGraphFn()
 	e.exec = graph.MustNewExecAny(backend, e.graphFn)
 	funcName := runtime.FuncForPC(reflect.ValueOf(ctxGraphFn).Pointer()).Name()
-	e.exec.SetName(fmt.Sprintf("Context.Exec:%s", funcName))
+	e.exec.WithName(fmt.Sprintf("Context.Exec:%s", funcName))
 	e.exec.SetSideParamsHook(e.setSideParams)
 	return e, nil
 }
@@ -399,7 +411,7 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 
 		if v.ChangedInGraph(g) {
 			// We donate the buffer, since we are getting a new one on the output.
-			inputBuffers[handle] = v.Value().DonateBuffer(e.backend, e.exec.DeviceNum())
+			inputBuffers[handle] = v.Value().DonateBuffer(e.backend, e.exec.DeviceAssignment())
 			v.Value().FinalizeAll()
 			v.value = nil
 			donate[handle] = true
@@ -412,7 +424,11 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 					Panicf("variable %q failed to initialize", v.ScopeAndName())
 				}
 			}
-			inputBuffers[handle] = v.Value().Buffer(e.backend, e.exec.DeviceNum())
+			var err error
+			inputBuffers[handle], err = v.Value().Buffer(e.backend, e.exec.DeviceAssignment())
+			if err != nil {
+				panic(err)
+			}
 			donate[handle] = false
 		}
 	})
@@ -430,12 +446,14 @@ func (e *Exec) GetNodeLogger() graph.LoggerFn {
 	return e.exec.GetNodeLogger()
 }
 
-// InDevice sets the device num to be used by graphs constructed by Exec.
+// WithDevice sets the device num to be used by graphs constructed by Exec.
+// This configures the computation to use a single device -- no distribution.
 //
 // This should be called before any invocations of the Exec methods.
-// It returns a reference to itself so calls can be cascaded.
-func (e *Exec) InDevice(deviceNum backends.DeviceNum) *Exec {
-	e.exec.InDevice(deviceNum)
+//
+// It returns a reference to itself, so configuration calls can be cascaded.
+func (e *Exec) WithDevice(deviceNum backends.DeviceNum) *Exec {
+	e.exec.WithDevice(deviceNum)
 	return e
 }
 
@@ -443,7 +461,7 @@ func (e *Exec) InDevice(deviceNum backends.DeviceNum) *Exec {
 // This should be called before any invocations of MustExec().
 // It returns a reference to itself so calls can be cascaded.
 func (e *Exec) WithName(name string) *Exec {
-	e.exec.SetName(name)
+	e.exec.WithName(name)
 	return e
 }
 
@@ -511,7 +529,11 @@ func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, 
 	changedVars := e.changedVars[g.GraphId()]
 	e.muChangedVars.Unlock()
 	if len(changedVars) > len(outputs) {
-		return nil, nil, errors.Errorf("not enough outputs of the graph for updated variables: expected %d, got %d", len(changedVars), len(outputs))
+		return nil, nil, errors.Errorf(
+			"not enough outputs of the graph for updated variables: expected %d, got %d",
+			len(changedVars),
+			len(outputs),
+		)
 	}
 	for ii, v := range changedVars {
 		old := v.Value()
@@ -519,7 +541,12 @@ func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, 
 			old.FinalizeAll()
 		}
 		if !v.shape.Equal(outputs[ii].Shape()) {
-			return nil, nil, errors.Errorf("variable %q changed shape in graph execution: expected %v, got %v", v.ScopeAndName(), v.shape, outputs[ii].Shape())
+			return nil, nil, errors.Errorf(
+				"variable %q changed shape in graph execution: expected %v, got %v",
+				v.ScopeAndName(),
+				v.shape,
+				outputs[ii].Shape(),
+			)
 		}
 		v.SetValue(outputs[ii])
 	}

@@ -1,4 +1,5 @@
-// Package backends defines the interface to a computation building and execution system needs to implement to be used by GoMLX.
+// Package backends defines the interface to computation building and execution system needs to implement to be used
+// by GoMLX.
 //
 // It is based on 3 interfaces:
 //
@@ -22,8 +23,6 @@ import (
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"golang.org/x/exp/maps"
 )
-
-// No longer used: go:generate go run ../internal/cmd/backends_generator
 
 // DeviceNum represents which device holds a buffer or should execute a computation.
 // It's up to the backend to interpret it, but it should be between 0 and Backend.NumDevices.
@@ -98,10 +97,6 @@ var DefaultConfig = "xla"
 // "<backend_configuration>" is backend-specific (e.g.: for xla backend, it is the pjrt plugin name).
 const ConfigEnvVar = "GOMLX_BACKEND"
 
-// GOMLX_BACKEND is deprecated and will be removed in future versions -- it is an alias to ConfigEnvVar
-// Deprecated: use ConfigEnvVar.
-const GOMLX_BACKEND = ConfigEnvVar
-
 // MustNew returns a new default Backend or panics if it fails.
 //
 // The default is:
@@ -172,7 +167,7 @@ func splitConfig(config string) (string, string) {
 //
 // The format of config is "<backend_name>:<backend_configuration>".
 // The "<backend_name>" is the name of a registered backend (e.g.: "xla") and
-// "<backend_configuration>" is backend-specific (e.g.: for xla backend, it is the pjrt plugin name).
+// "<backend_configuration>" is backend-specific (e.g.: for xla backend, it is the PJRT plugin name).
 func NewWithConfig(config string) (Backend, error) {
 	if len(registeredConstructors) == 0 {
 		exceptions.Panicf(`no registered backends for GoMLX -- maybe import the default ones (XLA and SimpleGo) with import _ "github.com/gomlx/gomlx/backends/default"?`)

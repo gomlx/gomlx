@@ -7,11 +7,11 @@ import (
 	"strings"
 )
 
-const _StrategyName = "NoneSimpleSPMDGSPMD"
+const _StrategyName = "NoneSPMDAutoSharding"
 
-var _StrategyIndex = [...]uint8{0, 4, 14, 19}
+var _StrategyIndex = [...]uint8{0, 4, 8, 20}
 
-const _StrategyLowerName = "nonesimplespmdgspmd"
+const _StrategyLowerName = "nonespmdautosharding"
 
 func (i Strategy) String() string {
 	if i < 0 || i >= Strategy(len(_StrategyIndex)-1) {
@@ -25,25 +25,25 @@ func (i Strategy) String() string {
 func _StrategyNoOp() {
 	var x [1]struct{}
 	_ = x[None-(0)]
-	_ = x[SimpleSPMD-(1)]
-	_ = x[GSPMD-(2)]
+	_ = x[SPMD-(1)]
+	_ = x[AutoSharding-(2)]
 }
 
-var _StrategyValues = []Strategy{None, SimpleSPMD, GSPMD}
+var _StrategyValues = []Strategy{None, SPMD, AutoSharding}
 
 var _StrategyNameToValueMap = map[string]Strategy{
-	_StrategyName[0:4]:        None,
-	_StrategyLowerName[0:4]:   None,
-	_StrategyName[4:14]:       SimpleSPMD,
-	_StrategyLowerName[4:14]:  SimpleSPMD,
-	_StrategyName[14:19]:      GSPMD,
-	_StrategyLowerName[14:19]: GSPMD,
+	_StrategyName[0:4]:       None,
+	_StrategyLowerName[0:4]:  None,
+	_StrategyName[4:8]:       SPMD,
+	_StrategyLowerName[4:8]:  SPMD,
+	_StrategyName[8:20]:      AutoSharding,
+	_StrategyLowerName[8:20]: AutoSharding,
 }
 
 var _StrategyNames = []string{
 	_StrategyName[0:4],
-	_StrategyName[4:14],
-	_StrategyName[14:19],
+	_StrategyName[4:8],
+	_StrategyName[8:20],
 }
 
 // StrategyString retrieves an enum value from the enum constants string name.

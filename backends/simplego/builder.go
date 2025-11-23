@@ -41,7 +41,10 @@ func (b *Builder) Name() string {
 }
 
 // Compile implements backends.Builder.
-func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
+func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingSpec) (backends.Executable, error) {
+	if len(shardings) != 0 {
+		return nil, errors.Errorf("sharding or distributed execution are not supported by SimpleGo backend")
+	}
 	var err error
 	b.outputs, err = b.checkOps("Compile", outputs...)
 	if err != nil {
@@ -53,7 +56,11 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 	}
 	for _, node := range b.outputs {
 		if len(node.multiOutputsShapes) != 0 {
-			return nil, errors.Errorf("%s node %q is internal (with multiple-outputs) and cannot be used for output", b.Name(), node.opType)
+			return nil, errors.Errorf(
+				"%s node %q is internal (with multiple-outputs) and cannot be used for output",
+				b.Name(),
+				node.opType,
+			)
 		}
 	}
 	b.compiled = true
@@ -106,7 +113,11 @@ func (b *Builder) newNode(opType backends.OpType, shape shapes.Shape, inputs ...
 // newMultiOutputsNode create the multi-outputs node, and its "select nodes", one per output.
 // The node.multiOutputsNodes will be set with the individual outputs and can be used by the Builder to return
 // to the user.
-func (b *Builder) newMultiOutputsNode(opType backends.OpType, outputShapes []shapes.Shape, inputs ...*Node) (node *Node) {
+func (b *Builder) newMultiOutputsNode(
+	opType backends.OpType,
+	outputShapes []shapes.Shape,
+	inputs ...*Node,
+) (node *Node) {
 	node = b.newNode(opType, shapes.Invalid(), inputs...)
 	node.multiOutputsShapes = outputShapes
 	node.multiOutputsNodes = make([]*Node, len(outputShapes))
@@ -147,11 +158,21 @@ func (b *Builder) checkOps(opType string, ops ...backends.Op) ([]*Node, error) {
 		}
 		nodes[idx], ok = op.(*Node)
 		if !ok {
-			return nil, errors.Errorf("cannot use input op #%d in backend %q that was created on a different backend for %s", idx, b.backend.Name(), opType)
+			return nil, errors.Errorf(
+				"cannot use input op #%d in backend %q that was created on a different backend for %s",
+				idx,
+				b.backend.Name(),
+				opType,
+			)
 		}
 		if nodes[idx].builder != b {
-			return nil, errors.Errorf("%s: input op #%d was created with a different builder (%q), cannot use it with builder %q",
-				opType, idx, nodes[idx].builder.name, b.name)
+			return nil, errors.Errorf(
+				"%s: input op #%d was created with a different builder (%q), cannot use it with builder %q",
+				opType,
+				idx,
+				nodes[idx].builder.name,
+				b.name,
+			)
 		}
 	}
 	return nodes, nil
@@ -171,17 +192,15 @@ func (b *Builder) OpShape(op backends.Op) (shapes.Shape, error) {
 func checkFlat(flat any) (dtype dtypes.DType, flatLen int, err error) {
 	flatType := reflect.TypeOf(flat)
 	if flatType.Kind() != reflect.Slice {
-		err = errors.Errorf("flat data should be a slice, not %s", flatType.Kind())
-		return
+		return dtype, 0, errors.Errorf("flat data should be a slice, not %s", flatType.Kind())
 	}
 	dtype = dtypes.FromGoType(flatType.Elem())
 	if dtype == dtypes.InvalidDType {
-		err = errors.Errorf("flat is a slice of %T, not a valid GoMLX data type", flatType.Elem())
-		return
+		return dtype, 0, errors.Errorf("flat is a slice of %T, not a valid GoMLX data type", flatType.Elem())
 	}
 	flatValue := reflect.ValueOf(flat)
 	flatLen = flatValue.Len()
-	return
+	return dtype, flatLen, nil
 }
 
 // addUnaryOp adds a generic binary op.
