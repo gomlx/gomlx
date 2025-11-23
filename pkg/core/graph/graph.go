@@ -159,7 +159,6 @@ type Graph struct {
 	deviceMeshes     []*distributed.DeviceMesh
 	deviceAssignment []backends.DeviceNum
 	numDevices       int
-	currentChannelID int // The current channel ID for SPMD "collective" operations (SPMD).
 }
 
 // GraphId is globally unique.

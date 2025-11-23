@@ -463,7 +463,7 @@ func (b *Builder) IsNaN(x backends.Op) (backends.Op, error) {
 }
 
 func (b *Builder) AllReduce(inputs []backends.Op, reduceOp backends.ReduceOpType,
-	replicaGroups [][]int, channelIDGenerator func() int) ([]backends.Op, error) {
+	replicaGroups [][]int) ([]backends.Op, error) {
 	return nil, errors.Errorf("distributed operations like AllReduce are not implemented for %q, use "+
 		"`stablehlo` backend instead", BackendName)
 }

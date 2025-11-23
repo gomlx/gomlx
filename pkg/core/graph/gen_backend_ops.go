@@ -208,10 +208,9 @@ func Add(lhs *Node, rhs *Node) (
 
 // nodeInputsAllReduce holds the inputs used for the call to backends.AllReduce.
 type nodeInputsAllReduce struct {
-	operands           []*Node
-	reductionType      ReduceOpType
-	replicaGroups      [][]int
-	channelIDGenerator func() int
+	operands      []*Node
+	reductionType ReduceOpType
+	replicaGroups [][]int
 }
 
 // Type implements the interface NodeInputs.
@@ -230,17 +229,16 @@ func (ni *nodeInputsAllReduce) String() string {
 }
 
 // backendAllReduce is a Graph wrapper for the backend.Builder.AllReduce method.
-func backendAllReduce(operands []*Node, reductionType ReduceOpType, replicaGroups [][]int, channelIDGenerator func() int) []*Node {
+func backendAllReduce(operands []*Node, reductionType ReduceOpType, replicaGroups [][]int) []*Node {
 	inputNodes := []*Node{}
 	inputNodes = append(inputNodes, operands...)
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsAllReduce{
-		operands:           slices.Clone(operands),
-		reductionType:      reductionType,
-		replicaGroups:      slices.Clone(replicaGroups),
-		channelIDGenerator: channelIDGenerator,
+		operands:      slices.Clone(operands),
+		reductionType: reductionType,
+		replicaGroups: slices.Clone(replicaGroups),
 	}
-	results, err := g.builder.AllReduce(xslices.Map(operands, func(node *Node) backends.Op { return node.outputOps[0] }), inputs.reductionType, inputs.replicaGroups, inputs.channelIDGenerator)
+	results, err := g.builder.AllReduce(xslices.Map(operands, func(node *Node) backends.Op { return node.outputOps[0] }), inputs.reductionType, inputs.replicaGroups)
 	if err != nil {
 		panic(err)
 	}

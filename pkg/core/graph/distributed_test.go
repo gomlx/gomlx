@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,7 +59,7 @@ func TestDistributedAllReduce(t *testing.T) {
 		require.Len(t, outputs, mesh.NumDevices())
 		for i, output := range outputs {
 			fmt.Printf("\t- device #%d: %s\n", i, output)
-			require.Equalf(t, float32(4), output.Value(), "device #%d got %s", i, output)
+			assert.Equalf(t, float32(4), output.Value(), "result for device #%d got %s", i, output)
 		}
 	})
 

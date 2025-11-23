@@ -5,13 +5,12 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/stablehlo"
-	shlotypes "github.com/gomlx/stablehlo/types"
 	"github.com/pkg/errors"
 )
 
 // AllReduce implements the collective AllReduce operation.
 func (b *Builder) AllReduce(operands []backends.Op, reductionType backends.ReduceOpType,
-	replicaGroups [][]int, channelIDGenerator func() int) ([]backends.Op, error) {
+	replicaGroups [][]int) ([]backends.Op, error) {
 	nodes, err := b.verifyAndCastValues("stablehlo.AllReduce", operands...)
 	if err != nil {
 		return nil, err
@@ -31,14 +30,9 @@ func (b *Builder) AllReduce(operands []backends.Op, reductionType backends.Reduc
 		if err != nil {
 			return nil, errors.WithMessage(err, "while building reduction function for AllReduce")
 		}
-		channelID := channelIDGenerator()
-		collectiveConfig := shlotypes.CollectiveConfig{
-			ChannelID:   &channelID,
-			ChannelType: shlotypes.CrossReplica,
-		}
 		values, err := stablehlo.AllReduce(
 			xslices.Map(operandsDType, func(node *Node) *stablehlo.Value { return node.value }),
-			replicaGroups, reduceFn, &collectiveConfig)
+			replicaGroups, reduceFn)
 		if err != nil {
 			return nil, err
 		}

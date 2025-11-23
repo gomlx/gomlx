@@ -151,6 +151,7 @@ func (g *Graph) setupBuilderDistribution() error {
 }
 
 // DistributedStrategy returns the distributed strategy set for the graph.
+// This is changed by configuring the Graph with SetAutoSharding or SetSPMD.
 func (g *Graph) DistributedStrategy() distributed.Strategy {
 	return g.distStrategy
 }
@@ -168,14 +169,6 @@ func (g *Graph) NumDevices() int {
 	return g.numDevices
 }
 
-// nextChannelID returns the next channel ID to use for synchronization.
-// This should be unique, and we use them incrementally.
-func (g *Graph) nextChannelID() int {
-	next := g.currentChannelID
-	g.currentChannelID++
-	return next
-}
-
 // DistributedOps provides a namespace for all distributed and collective
 // operations on a graph. It is accessed via graph.Graph.Distributed().
 //
@@ -184,23 +177,24 @@ func (g *Graph) nextChannelID() int {
 type DistributedOps struct {
 	g    *Graph
 	axes []string
-
-	// channelIDGenerator is used to generate unique ids for channel synchronization.
-	// The default is the Graph's incremental channelID, which works fine for SPMD graphs.
-	channelIDGenerator func() int
 }
 
 // Distributed returns a helper object that provides access to all distributed and collective operations.
 func (g *Graph) Distributed() *DistributedOps {
 	d := &DistributedOps{
-		g:                  g,
-		channelIDGenerator: g.nextChannelID,
+		g: g,
 	}
 	switch g.distStrategy {
 	case distributed.SPMD:
+		// For SPMD the default is to operate over all the axes of the mesh.
 		if g.deviceMeshes == nil {
 			exceptions.Panicf("graph.Distributed() with SPMD requires a device mesh to be set")
 		}
+		mesh := g.deviceMeshes[0]
+		if mesh == nil {
+			exceptions.Panicf("graph.Distributed() with SPMD requires a non-empty device mesh")
+		}
+		d.Along(mesh.AxesNames()...)
 	case distributed.AutoSharding:
 		exceptions.Panicf("if using AutoSharding you should not use graph.Distributed() operations: the " +
 			"sharding of the operations happens automatically, without any explicit distributed calls.")
@@ -220,21 +214,6 @@ func (g *Graph) Distributed() *DistributedOps {
 // This will perform an AllReduceOne along the "data" axis of the mesh.
 func (d *DistributedOps) Along(meshAxes ...string) *DistributedOps {
 	d.axes = meshAxes
-	return d
-}
-
-// WithChannelIDGenerator specifies a generator of channel IDs to use for synchronization.
-// All communicating devices must use the same channel ID, so it must be agreed upon in some fashion.
-//
-// We use a channel ID generator because we don't know upfront how many IDs will be needed: different
-// backends may need different numbers of IDs. Plus, extra IDs may be needed for the gradient computation
-// (in case it is done).
-//
-// For SPMD programs, you usually don't need to use this, since the default is to use an incremental
-// channelID generator provided by the Graph itself.
-// Since it's the same Graph executed in every device, it's usually fine.
-func (d *DistributedOps) WithChannelIDGenerator(channelIDGenerator func() int) *DistributedOps {
-	d.channelIDGenerator = channelIDGenerator
 	return d
 }
 
@@ -258,7 +237,7 @@ func (d *DistributedOps) AllReduce(operands []*Node, reductionType backends.Redu
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed compute replicaGroups for AllReduceOne"))
 	}
-	return backendAllReduce(operands, reductionType, replicaGroups, d.channelIDGenerator)
+	return backendAllReduce(operands, reductionType, replicaGroups)
 }
 
 // AllReduceOne performs a reduce operation across the devices specified

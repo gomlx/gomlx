@@ -15,7 +15,7 @@ import (
 // MustNewExecAny constructs an Exec object that uses the given graphFn to build
 // computation graphs.
 //
-// `graphFn` can take only *Node parameters as input and returns one or more *Node.
+// `graphFn` can take only *Node parameters as input, and it returns one or more *Node.
 // Except if there are no inputs, in which case graphFn needs to take a *Graph as the first parameter.
 //
 // It panics if the inputs are invalid.

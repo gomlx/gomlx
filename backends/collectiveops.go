@@ -15,11 +15,7 @@ type CollectiveOps interface {
 	// - replicaGroups: a collection of replica groups: each replica group ([]int) is a collection of devices that
 	//   will participate in the distributed operation. The devices are given as indices (hence []int) into the
 	//   device assignments (not absolute DeviceNum).
-	// - channelIDGenerator: issues unique IDs to be used for the operation. The number of channel IDs required
-	//   may vary according to the backend (XLA requires one per dtype of the operands).
-	//   It may also be used when (if) the gradient of the operators is calculated.
-	AllReduce(operands []Op, reductionType ReduceOpType, replicaGroups [][]int, channelIDGenerator func() int) (
-		[]Op, error)
+	AllReduce(operands []Op, reductionType ReduceOpType, replicaGroups [][]int) ([]Op, error)
 
 	// CollectiveBroadcast broadcasts the value from the first replica (in each group) to all others.
 	// The returned shape is the same as the source.
@@ -28,13 +24,10 @@ type CollectiveOps interface {
 	// - replicaGroups: a collection of replica groups: each replica group ([]int) is a collection of devices that
 	//   will participate in the distributed operation. The devices are given as indices (hence []int) into the
 	//   device assignments (not absolute DeviceNum).
-	// - channelID: and identification of the communication channel used for this operation -- important when,
-	//   for instance, many distributed operations are potentially happening concurrently. It must be the
-	//   same across all participating devices.
-	//CollectiveBroadcast(operand Op, replicaGroups [][]int, channelID int) (Op, error)
+	//CollectiveBroadcast(operand Op, replicaGroups [][]int) (Op, error)
 
 	// AllGather builds the AllGather operation.
-	//AllGather(operands []Op, gatherAxis int, replicaGroups [][]int, channelID int) ([]Op, error)
+	//AllGather(operands []Op, gatherAxis int, replicaGroups [][]int) ([]Op, error)
 
 	//// ReplicaId builds the ReplicaId operation.
 	//ReplicaId(b Builder) (Op, error)
