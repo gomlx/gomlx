@@ -187,6 +187,27 @@ func TestAutoSharding(t *testing.T) {
 		}
 	})
 
+	// Test AutoSharding using the Graph API (no Exec).
+	t.Run("Graph with sharded output", func(t *testing.T) {
+		mesh := must1(distributed.NewDeviceMesh([]int{2}, []string{"sharded"}))
+		g := graph.NewGraph(backend, t.Name())
+		require.NoError(t, g.SetAutoSharding(mesh))
+		x := graph.ShardedParameter(g, "x", shapes.Make(dtypes.Float32, 2, 2),
+			must1(distributed.BuildSpec(mesh).S("sharded").R().Done()))
+		y := graph.ReduceSum(x, 0) // Force an AllReduce
+		g.CompileWithSharding([]*graph.Node{y},
+			[]*distributed.ShardingSpec{
+				must1(distributed.BuildSpec(mesh).S("sharded").Done()),
+			})
+		outputs := g.Run([][]float32{{1, 2}}, [][]float32{{0.1, 0.2}})
+		require.Len(t, outputs, mesh.NumDevices())
+		want := []any{[]float32{1.1}, []float32{2.2}} // Sharded output, reduce-summed on axis 0.
+		for shardIdx, output := range outputs {
+			fmt.Printf("\t- device #%d: %s\n", shardIdx, output)
+			require.Equalf(t, want[shardIdx], output.Value(), "result for device #%d got %s", shardIdx, output)
+		}
+	})
+
 	t.Run("Exec", func(t *testing.T) {
 		mesh := must1(distributed.NewDeviceMesh([]int{2}, []string{"sharded"}))
 		spec := must1(distributed.BuildSpec(mesh).S("sharded").Done())
