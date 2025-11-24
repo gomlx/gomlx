@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"fmt"
 	"slices"
 
 	"github.com/gomlx/gomlx/backends"
@@ -136,7 +135,6 @@ func (g *Graph) setupBuilderDistribution() error {
 	if g.deviceAssignment == nil && g.numDevices > 1 {
 		g.deviceAssignment = xslices.Iota(backends.DeviceNum(0), g.numDevices)
 	}
-	fmt.Printf("g.numDevices=%d, g.deviceAssignment=%v\n", g.numDevices, g.deviceAssignment)
 	if g.deviceAssignment != nil {
 		err := g.builder.DeviceAssignment(g.deviceAssignment...)
 		if err != nil {

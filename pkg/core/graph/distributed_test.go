@@ -209,14 +209,14 @@ func TestAutoSharding(t *testing.T) {
 	})
 
 	// Simple sharding of the input and output.
+	mesh := must1(distributed.NewDeviceMesh([]int{2}, []string{"sharded"}))
+	spec := must1(distributed.BuildSpec(mesh).S("sharded").Done())
 	t.Run("Exec", func(t *testing.T) {
-		mesh := must1(distributed.NewDeviceMesh([]int{2}, []string{"sharded"}))
-		spec := must1(distributed.BuildSpec(mesh).S("sharded").Done())
 		exec := graph.MustNewExec(backend,
 			func(x, w *graph.Node) *graph.Node {
-			// x is scalar, w is sharded [4].
-			return graph.Add(x, w)
-		}).
+				// x is scalar, w is sharded [4].
+				return graph.Add(x, w)
+			}).
 			AutoSharding(mesh).
 			WithInputShardingSpecs(nil, spec). // x is replicated (nil), w is sharded (spec).
 			WithOutputShardingSpecs(spec)      // output y is sharded (spec).
@@ -235,4 +235,29 @@ func TestAutoSharding(t *testing.T) {
 		require.Equal(t, []float32{10, 11}, outputs[0].Value())
 		require.Equal(t, []float32{12, 13}, outputs[1].Value())
 	})
+
+	// Same test, but including logged values.
+	t.Run("Exec with logging", func(t *testing.T) {
+		exec := graph.MustNewExec(backend,
+			func(x, w *graph.Node) *graph.Node {
+				// x is scalar, w is sharded [4].
+				y := graph.Add(x, w)
+				graph.ReduceAllSum(y).SetLogged("ReduceSum(y)")
+				return y
+			}).
+			AutoSharding(mesh).
+			WithInputShardingSpecs(nil, spec).
+			WithOutputShardingSpecs(spec)
+		outputs, err := exec.Exec(
+			float32(10), []float32{0, 1}, // Device 0
+			float32(10), []float32{2, 3}, // Device 1
+		)
+		require.NoError(t, err)
+		require.Len(t, outputs, 2)
+		fmt.Printf("\t- device #0: %s\n", outputs[0])
+		fmt.Printf("\t- device #1: %s\n", outputs[1])
+		require.Equal(t, []float32{10, 11}, outputs[0].Value())
+		require.Equal(t, []float32{12, 13}, outputs[1].Value())
+	})
+
 }

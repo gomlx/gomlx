@@ -42,37 +42,37 @@ import (
 //nolint:goimports,golines // See https://youtrack.jetbrains.com/issue/GO-19556/Goland-formatter-gofmt
 type ExecGraphFn interface {
 	func(*Graph) *Node |
-	func([]*Node) *Node |
-	func(*Node) *Node |
-	func(*Node, *Node) *Node |
-	func(*Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
-	func(*Graph) (*Node, *Node) |
-	func([]*Node) (*Node, *Node) |
-	func(*Node) (*Node, *Node) |
-	func(*Node, *Node) (*Node, *Node) |
-	func(*Node, *Node, *Node) (*Node, *Node) |
-	func(*Node, *Node, *Node, *Node) (*Node, *Node) |
-	func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-	func(*Graph) (*Node, *Node, *Node) |
-	func([]*Node) (*Node, *Node, *Node) |
-	func(*Node) (*Node, *Node, *Node) |
-	func(*Node, *Node) (*Node, *Node, *Node) |
-	func(*Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Graph) []*Node |
-	func([]*Node) []*Node |
-	func(*Node) []*Node |
-	func(*Node, *Node) []*Node |
-	func(*Node, *Node, *Node) []*Node |
-	func(*Node, *Node, *Node, *Node) []*Node |
-	func(*Node, *Node, *Node, *Node, *Node) []*Node |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
+		func([]*Node) *Node |
+		func(*Node) *Node |
+		func(*Node, *Node) *Node |
+		func(*Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Graph) (*Node, *Node) |
+		func([]*Node) (*Node, *Node) |
+		func(*Node) (*Node, *Node) |
+		func(*Node, *Node) (*Node, *Node) |
+		func(*Node, *Node, *Node) (*Node, *Node) |
+		func(*Node, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Graph) (*Node, *Node, *Node) |
+		func([]*Node) (*Node, *Node, *Node) |
+		func(*Node) (*Node, *Node, *Node) |
+		func(*Node, *Node) (*Node, *Node, *Node) |
+		func(*Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Graph) []*Node |
+		func([]*Node) []*Node |
+		func(*Node) []*Node |
+		func(*Node, *Node) []*Node |
+		func(*Node, *Node, *Node) []*Node |
+		func(*Node, *Node, *Node, *Node) []*Node |
+		func(*Node, *Node, *Node, *Node, *Node) []*Node |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
 }
 
 // ExecGraphFnOneOutput are ExecGraphFn functions that return only one result.
@@ -81,13 +81,13 @@ type ExecGraphFn interface {
 //nolint:goimports,golines // See https://youtrack.jetbrains.com/issue/GO-19556/Goland-formatter-gofmt
 type ExecGraphFnOneOutput interface {
 	func(*Graph) *Node |
-	func([]*Node) *Node |
-	func(*Node) *Node |
-	func(*Node, *Node) *Node |
-	func(*Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
+		func([]*Node) *Node |
+		func(*Node) *Node |
+		func(*Node, *Node) *Node |
+		func(*Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
 }
 
 // SideParamsFn is a function that sets side parameters during execution
@@ -191,8 +191,15 @@ type Exec struct {
 	deviceAssignment []backends.DeviceNum
 	numDevices       int
 
-	graphFn                     any
-	numInputs, numOutputs       int
+	// graphFn is fixed for all entries in the cache.
+	graphFn any
+
+	// numInputs, numOutputs of graphFn, not counting extra logged nodes, which may vary
+	// per instance of the graph (entry in the cache).
+	// This is relative if inputAsSlice is set to true, in which case graphFn's number of inputs/outputs vary
+	// per cache entry.
+	numInputs, numOutputs int
+
 	inputAsSlice, outputAsSlice bool
 	inputIsGraph                bool
 	inputShardingSpecs          []*distributed.ShardingSpec
@@ -217,7 +224,7 @@ type Exec struct {
 type execGraphCacheEntry struct {
 	argsShapes     []shapes.Shape
 	graph          *Graph
-	numOutputs     int      // Number of flattened outputs for this graph, including logged nodes.
+	numAllOutputs  int      // Number of flattened outputs for this graph, including logged nodes.
 	loggedMessages []string // Messages for logged nodes.
 	loggedNodeIDs  []NodeId
 }
@@ -704,24 +711,24 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 		}
 	}
 
-	// Execute graph: outputs will have (numDevice * numOutputs) outputs.
+	// Execute graph: outputs will have (numDevice * entry.numAllOutputs) outputs.
 	if !execute {
 		return nil, g
 	}
 	outputs := g.RunWithBuffers(argsAsBuffer, argsDonate, defaultDevice)
-	if len(outputs) != e.numOutputs*e.numDevices {
+	if len(outputs) != entry.numAllOutputs*e.numDevices {
 		exceptions.Panicf("expected %d * %d (numDevices) = %d outputs from graph %q, got %d",
 			e.numOutputs, e.numDevices, e.numOutputs*e.numDevices, g.Name(), len(outputs))
 	}
 
 	// Call the logger on logged nodes, even if no node is marked for logging (it serves as a hook).
-	numGraphFnOutputs := entry.numOutputs - len(entry.loggedMessages)
+	numGraphFnOutputs := entry.numAllOutputs - len(entry.loggedMessages)
 	if e.loggerFn != nil {
 		var loggerOutputs []*tensors.Tensor
 		if len(entry.loggedMessages) > 0 {
 			// If the computation is distributed, the Logged outputs are all replicated,
 			// so we only use (slice) the ones returned in the first device.
-			loggerOutputs = outputs[numGraphFnOutputs:entry.numOutputs]
+			loggerOutputs = outputs[numGraphFnOutputs:entry.numAllOutputs]
 		}
 		// The logger is also called for zero logged messages.
 		e.loggerFn(g, entry.loggedMessages, loggerOutputs, entry.loggedNodeIDs)
@@ -739,7 +746,7 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 	graphFnOutputs := make([]*tensors.Tensor, numDevices*numGraphFnOutputs)
 	for deviceIdx := range numDevices {
 		copy(graphFnOutputs[deviceIdx*numGraphFnOutputs:(deviceIdx+1)*numGraphFnOutputs],
-			outputs[deviceIdx*entry.numOutputs:deviceIdx*entry.numOutputs+numGraphFnOutputs])
+			outputs[deviceIdx*entry.numAllOutputs:deviceIdx*entry.numAllOutputs+numGraphFnOutputs])
 	}
 	return graphFnOutputs, g
 }
@@ -876,11 +883,19 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 		entry.loggedNodeIDs = append(entry.loggedNodeIDs, node.Id())
 	}
 
+	// Append ShardingSpec for logged nodes: they are always replicated.
+	outputShardingSpecs := e.outputShardingSpecs
+	if outputShardingSpecs != nil {
+		for range len(loggedNodes) {
+			outputShardingSpecs = append(outputShardingSpecs, nil)
+		}
+	}
+
 	// Compile graph.
-	g.CompileWithSharding(outputs, e.outputShardingSpecs)
+	g.CompileWithSharding(outputs, outputShardingSpecs)
 	entry.argsShapes = make([]shapes.Shape, len(argsShapes))
 	copy(entry.argsShapes, argsShapes)
-	entry.numOutputs = len(outputs)
+	entry.numAllOutputs = len(outputs)
 	e.cache = append(e.cache, entry)
 	return entry
 }
