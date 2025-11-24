@@ -219,7 +219,7 @@ func TestAutoSharding(t *testing.T) {
 			}).
 			AutoSharding(mesh).
 			WithInputShardingSpecs(nil, spec). // x is replicated (nil), w is sharded (spec).
-			WithOutputShardingSpecs(spec) // output y is sharded (spec).
+			WithOutputShardingSpecs(spec)      // output y is sharded (spec).
 		outputs, err := exec.Exec(
 			float32(10), []float32{0, 1}, // Device 0
 			float32(10), []float32{2, 3}, // Device 1
@@ -264,7 +264,7 @@ func TestAutoSharding(t *testing.T) {
 	t.Run("variable-length inputs and outputs", func(t *testing.T) {
 		exec := graph.MustNewExec(backend,
 			func(inputs []*graph.Node) []*graph.Node {
-				// x is scalar, w0 and w1 is sharded [4].
+				// x is a scalar; w0 and w1 are sharded [4].
 				x, w0, w1 := inputs[0], inputs[1], inputs[2]
 				y0 := graph.Add(x, w0)
 				y1 := graph.Add(x, w1)
@@ -274,7 +274,7 @@ func TestAutoSharding(t *testing.T) {
 			}).
 			AutoSharding(mesh).
 			WithInputShardingSpecs(nil, spec). // the last spec is repeated for tail of inputs.
-			WithOutputShardingSpecs(spec) // the last spec is repeated for tail of outputs.
+			WithOutputShardingSpecs(spec)      // the last spec is repeated for tail of outputs.
 		outputs, err := exec.Exec(
 			float32(100), []float32{0, 1}, []float32{10, 11}, // Device 0
 			float32(100), []float32{2, 3}, []float32{12, 13}, // Device 1
@@ -289,7 +289,5 @@ func TestAutoSharding(t *testing.T) {
 		// y1 = {110, 111, 112, 113}
 		require.Equal(t, []float32{110, 111}, outputs[1].Value())
 		require.Equal(t, []float32{112, 113}, outputs[3].Value())
-
 	})
-
 }
