@@ -52,11 +52,11 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 
 		dims := []int{3, 2}
 		builder := backend.Builder(fmt.Sprintf("%s_%s", t.Name(), dtype))
-		x, err := builder.Parameter("x", shapes.Make(dtype, dims...))
+		x, err := builder.Parameter("x", shapes.Make(dtype, dims...), nil)
 		require.NoError(t, err)
 		x2, err := builder.Mul(x, x)
 		require.NoError(t, err)
-		exec, err := builder.Compile(x2)
+		exec, err := builder.Compile([]backends.Op{x2}, nil)
 		require.NoError(t, err)
 
 		// Create local Tensor input.
@@ -76,7 +76,7 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 		}
 
 		var outputs []backends.Buffer
-		outputs, err = exec.Execute([]backends.Buffer{buffer}, nil)
+		outputs, err = exec.Execute([]backends.Buffer{buffer}, nil, 0)
 		require.NoError(t, err)
 
 		// Convert the buffer to a tensor: the converted tensor should not be shared, since the buffer comes from the output
