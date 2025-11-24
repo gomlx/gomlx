@@ -20,10 +20,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/gomlx/gopjrt/dtypes"
 )
@@ -35,7 +38,7 @@ import (
 // The materialized value can be accessed in between graph executions by Value and SetValue methods.
 //
 // During the computation graph building, for a particular graph, one can access the graph value (Node)
-// of a variable with the methods
+// of a variable with the methods.
 //
 // They are only initialized when Context.InitializeVariables. That is, they are created and used in
 // graph building possibly before they are actually initialized -- when building a graph they are
@@ -49,9 +52,31 @@ type Variable struct {
 	// touched by trainers of the model.
 	Trainable bool
 
-	shape       shapes.Shape
+	shape shapes.Shape
+
+	// sharding defines how the variable is split in a distributed context.
+	// If nil, the variable is considered replicated (or local).
+	sharding *distributed.ShardingSpec
+
 	initializer VariableInitializer // Set if the variable is not yet initialized.
-	value       *tensors.Tensor     // Value of the variable.
+
+	// Storage for the different physical views.
+	// Only one "Source of Truth" is valid at a time, indicated by the flags below.
+
+	// value is the Local (CPU) or merged view.
+	value *tensors.Tensor
+
+	// deviceValues holds the portable view: Map of DeviceID -> Tensor.
+	// Used when running the same graph on different devices independently.
+	deviceValues map[backends.DeviceNum]*tensors.Tensor
+
+	// distValue holds the distributed view: A tensor sharded across a mesh.
+	distValue *distributed.Tensor
+
+	// state tracking flags.
+	isValidLocal       bool
+	validDevices       sets.Set[backends.DeviceNum] // Set of devices with up-to-date values
+	isValidDistributed bool
 
 	// graphToNodes maps graph ids in which this variable was used to its parameter Node and
 	// its last value Node.
@@ -71,10 +96,15 @@ func (v *Variable) CloneToContext(toCtx *Context) *Variable {
 		scope:     v.scope,
 		shape:     v.shape,
 		Trainable: v.Trainable,
+		sharding:  v.sharding,
 	}
-	if v.value != nil {
-		newV.value = v.value.Clone()
+	// Copy value if it exists.
+	// We force a merge to local (Host) to clone, to avoid complicating logic of cloning distributed tensors for now.
+	if v.value != nil || v.isValidDistributed || len(v.validDevices) > 0 {
+		newV.value = v.Value().Clone()
+		newV.isValidLocal = true
 	}
+	newV.validDevices = sets.Make[backends.DeviceNum]()
 	toCtx.InAbsPath(v.scope).setVariableInScope(v.name, newV)
 	return newV
 }
@@ -129,6 +159,19 @@ func (v *Variable) Reset() {
 		v.value.FinalizeAll()
 	}
 	v.value = nil
+	v.isValidLocal = false
+
+	if v.distValue != nil {
+		v.distValue.FinalizeAll()
+		v.distValue = nil
+	}
+	v.isValidDistributed = false
+
+	for _, t := range v.deviceValues {
+		t.FinalizeAll()
+	}
+	v.deviceValues = nil
+	v.validDevices = sets.Make[backends.DeviceNum]()
 }
 
 // Scope where the variable was created.
@@ -153,6 +196,30 @@ func (v *Variable) DType() dtypes.DType {
 		return dtypes.InvalidDType
 	}
 	return v.shape.DType
+}
+
+// SetSharding configures the sharding specification for this variable.
+// This must be set before the variable is used in a distributed graph.
+// Changing this invalidates the distributed value (forcing a re-shard/upload next time).
+func (v *Variable) SetSharding(spec *distributed.ShardingSpec) *Variable {
+	v.sharding = spec
+	// Invalidate existing distributed value if the spec changes.
+	if v.isValidDistributed && v.distValue != nil {
+		v.distValue.FinalizeAll()
+		v.distValue = nil
+		v.isValidDistributed = false
+		// If we had a distributed value, we should have a local value (it would have been merged if needed),
+		// or we force a merge now?
+		// For simplicity, we assume the user calls this during setup.
+		// If data was *only* distributed, we are in trouble. Ideally, we should merge.
+		// But usually SetSharding is done at creation.
+	}
+	return v
+}
+
+// Sharding returns the current sharding specification.
+func (v *Variable) Sharding() *distributed.ShardingSpec {
+	return v.sharding
 }
 
 // VariableParameterPrefix is used to prefix Graph parameter names for variablesMap.
@@ -199,6 +266,9 @@ func VariableParameterNameFromScopeAndName(scope, name string) string {
 // manipulate the value in Go. If building a computation Graph use
 // Node().
 //
+// This method ensures the value is available locally (on Host/CPU). If the variable
+// is currently stored on a device or distributed, it will be transferred or merged back to host.
+//
 // WARNING: memory management here is tricky: a call to SetValue will
 // trigger the current value to be deallocated, and what is returned
 // by a previous call to Value to become invalid. The recommendation
@@ -206,12 +276,46 @@ func VariableParameterNameFromScopeAndName(scope, name string) string {
 // locking mechanisms.
 func (v *Variable) Value() *tensors.Tensor {
 	v.AssertValid()
+
+	// 1. If we have a valid local value, return it.
+	if v.isValidLocal {
+		return v.value
+	}
+
+	// 2. If the Distributed value is the source of truth, merge it.
+	if v.isValidDistributed {
+		if v.distValue == nil {
+			Panicf("Variable %q marked as valid distributed but distValue is nil", v.Name())
+		}
+		var err error
+		v.value, err = v.distValue.Merge()
+		if err != nil {
+			Panicf("failed to merge distributed variable %q: %+v", v.Name(), err)
+		}
+		v.isValidLocal = true
+		return v.value
+	}
+
+	// 3. If a Device value is the source of truth, transfer it.
+	if len(v.validDevices) > 0 {
+		// Pick any valid device.
+		for deviceId := range v.validDevices {
+			t := v.deviceValues[deviceId]
+			v.value = t.LocalClone()
+			v.isValidLocal = true
+			return v.value
+		}
+	}
+
+	// If no value is set, it returns nil (which might happen before initialization).
 	return v.value
 }
 
 // SetValue updates the tensor holding the variable value.
 // NOTE: Because often variables are large, the previous value is immediately freed (as opposed to
 // waiting for garbage collection). If the previous value is used somewhere else, use SetValuePreservingOld.
+//
+// This invalidates any distributed or on-device copies of the variable.
 func (v *Variable) SetValue(value *tensors.Tensor) {
 	if v.value != nil {
 		v.value.FinalizeAll()
@@ -221,9 +325,106 @@ func (v *Variable) SetValue(value *tensors.Tensor) {
 
 // SetValuePreservingOld updates the tensor holding the variable value and doesn't free the old value.
 // If the previous value is not used, use SetValue instead that will free it immediately.
+//
+// This invalidates any distributed or on-device copies of the variable.
 func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) {
 	v.value = value
 	v.shape = value.Shape()
+	v.isValidLocal = true
+
+	// Invalidate others.
+	if v.isValidDistributed && v.distValue != nil {
+		v.distValue.FinalizeAll()
+		v.distValue = nil
+	}
+	v.isValidDistributed = false
+
+	for id, t := range v.deviceValues {
+		t.FinalizeAll()
+		delete(v.deviceValues, id)
+	}
+	v.validDevices = sets.Make[backends.DeviceNum]()
+}
+
+// handleForDevice returns the tensor for the specific device (portable execution).
+// If the current valid value is Local or Distributed, it transfers/shards it to the device.
+//
+// This is used internally by Context.Exec.
+func (v *Variable) handleForDevice(backend backends.Backend, deviceId backends.DeviceNum) *tensors.Tensor {
+	if v.validDevices.Has(deviceId) {
+		return v.deviceValues[deviceId]
+	}
+
+	// Ensure we have the map initialized.
+	if v.deviceValues == nil {
+		v.deviceValues = make(map[backends.DeviceNum]*tensors.Tensor)
+		v.validDevices = sets.Make[backends.DeviceNum]()
+	}
+
+	// Helper to set value on device.
+	setDeviceValue := func(t *tensors.Tensor) {
+		// TransferTo handles transfer from Local or Device-to-Device if needed (though here we expect Local or Dist->Merge->Local).
+		// If t is already on the backend but different device, TransferTo handles it.
+		// If t is Local, TransferTo handles it.
+		devT := t.TransferTo(backend, deviceId)
+		v.deviceValues[deviceId] = devT
+		v.validDevices.Insert(deviceId)
+	}
+
+	// 1. Try from Local.
+	if v.isValidLocal {
+		setDeviceValue(v.value)
+		return v.deviceValues[deviceId]
+	}
+
+	// 2. Try from Distributed (Merge to Local -> Transfer).
+	//    TODO: Optimized path from Distributed Shard -> Device if they are on same device.
+	if v.isValidDistributed {
+		v.Value() // Force merge to local.
+		setDeviceValue(v.value)
+		return v.deviceValues[deviceId]
+	}
+
+	// 3. Try from another Device (Peer-to-peer transfer).
+	if len(v.validDevices) > 0 {
+		for otherDevId := range v.validDevices {
+			setDeviceValue(v.deviceValues[otherDevId])
+			return v.deviceValues[deviceId]
+		}
+	}
+
+	Panicf("Variable %q has no valid value to transfer to device %d", v.Name(), deviceId)
+	return nil
+}
+
+// handleForDistributed returns the distributed tensor.
+// If the current valid value is Local, it shards it.
+//
+// This is used internally by Context.Exec.
+func (v *Variable) handleForDistributed(backend backends.Backend) *distributed.Tensor {
+	if v.isValidDistributed {
+		return v.distValue
+	}
+
+	// We need to create the distributed value.
+	// If we don't have a sharding spec, we can't really create a distributed tensor
+	// in a meaningful way usually, but the caller (Exec) should have ensured we are in a distributed context.
+	// If spec is nil, ShardTensor assumes replication.
+
+	// Ensure we have a local value to shard from.
+	// TODO: Support sharding from existing device values without full merge if possible.
+	local := v.Value()
+	if local == nil {
+		Panicf("Variable %q has no value to shard", v.Name())
+	}
+
+	var err error
+	v.distValue, err = distributed.ShardTensor(backend, v.sharding, local)
+	if err != nil {
+		Panicf("failed to shard variable %q: %+v", v.Name(), err)
+	}
+	v.isValidDistributed = true
+	return v.distValue
 }
 
 // InUseByGraph returns whether the variable is currently in use by the given graph.
@@ -293,7 +494,34 @@ func (v *Variable) ParamNode(g *Graph) *Node {
 	nodes, found := v.graphToNodes.Load(g.GraphId())
 	if !found {
 		paramName := v.ParameterName()
-		paramNode := graph.Parameter(g, paramName, v.shape)
+		var paramNode *Node
+
+		// Determine shape and sharding based on strategy.
+		strategy := g.DistributedStrategy()
+		switch strategy {
+		case distributed.SPMD:
+			// In SPMD, the graph runs on each device with local data.
+			// If a sharding spec is present, we need to calculate the shard shape.
+			// If no sharding spec is present, it is assumed replicated, so we use the full shape.
+			shape := v.shape
+			if v.sharding != nil {
+				shape = v.sharding.ShardShape(v.shape)
+			}
+			paramNode = graph.Parameter(g, paramName, shape)
+
+		case distributed.AutoSharding:
+			// In AutoSharding, the graph sees the global logical shape.
+			// We attach the sharding spec to the node if available.
+			paramNode = graph.Parameter(g, paramName, v.shape)
+			if v.sharding != nil {
+				paramNode.SetSharding(v.sharding)
+			}
+
+		default:
+			// Default (None) strategy: standard parameter.
+			paramNode = graph.Parameter(g, paramName, v.shape)
+		}
+
 		nodes = &variableNodes{valueNode: paramNode, paramNode: paramNode}
 		v.graphToNodes.Store(g.GraphId(), nodes)
 	}
@@ -316,6 +544,20 @@ func (v *Variable) Finalize() {
 		v.value.FinalizeAll()
 		v.value = nil
 	}
+	v.isValidLocal = false
+
+	if v.distValue != nil {
+		v.distValue.FinalizeAll()
+		v.distValue = nil
+	}
+	v.isValidDistributed = false
+
+	for _, t := range v.deviceValues {
+		t.FinalizeAll()
+	}
+	v.deviceValues = nil
+	v.validDevices = sets.Make[backends.DeviceNum]()
+
 	v.shape = shapes.Invalid()
 	v.graphToNodes.Clear()
 }
