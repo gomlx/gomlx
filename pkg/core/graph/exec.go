@@ -222,11 +222,12 @@ type Exec struct {
 // execGraphCacheEntry: no hashing, just a simple list. This is faster
 // for smaller tables. TODO: add a hashtable for cases with large caches.
 type execGraphCacheEntry struct {
-	argsShapes     []shapes.Shape
-	graph          *Graph
-	numAllOutputs  int      // Number of flattened outputs for this graph, including logged nodes.
-	loggedMessages []string // Messages for logged nodes.
-	loggedNodeIDs  []NodeId
+	argsShapes        []shapes.Shape
+	graph             *Graph
+	numGraphFnOutputs int      // Number
+	numAllOutputs     int      // Number of flattened outputs for this graph, including logged nodes.
+	loggedMessages    []string // Messages for logged nodes.
+	loggedNodeIDs     []NodeId
 }
 
 // DefaultExecMaxCacheSize is the value used to initialize the max cache size of new Exec objects.
@@ -409,6 +410,8 @@ func (e *Exec) WithInputShardingSpecs(specs ...*distributed.ShardingSpec) *Exec 
 }
 
 // WithOutputShardingSpecs sets the sharding specs for the outputs.
+//
+// If the function takes variable inputs (`[]*Node`), then the last spec provided is used for all remaining inputs.
 //
 // This is used for distributed computations with AutoSharding.
 //
@@ -861,7 +864,14 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 			exceptions.Panicf("graphFn for %q did not return a []*Node, instead it returned %T!?",
 				e.Name(), outputsV[0].Interface())
 		}
+		entry.numGraphFnOutputs = len(outputs)
 	} else {
+		entry.numGraphFnOutputs = e.numOutputs // Fixed number of outputs.
+		if len(outputsV) != e.numOutputs {
+			exceptions.Panicf(
+				"graphFn for %q returned %d results, as opposed to the actual returned %d results -- []*Node",
+				e.Name(), len(outputsV), e.numOutputs)
+		}
 		outputs = make([]*Node, 0, len(outputsV))
 		for i, outV := range outputsV {
 			outputNode, ok := outV.Interface().(*Node)
@@ -885,7 +895,15 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 
 	// Append ShardingSpec for logged nodes: they are always replicated.
 	outputShardingSpecs := e.outputShardingSpecs
-	if outputShardingSpecs != nil {
+	if len(outputShardingSpecs) > 0 {
+		if len(outputShardingSpecs) < entry.numGraphFnOutputs {
+			// For variable length outputs, we repeat the last spec.
+			lastSpec := outputShardingSpecs[len(outputShardingSpecs)-1]
+			for len(outputShardingSpecs) < entry.numGraphFnOutputs {
+				outputShardingSpecs = append(outputShardingSpecs, lastSpec)
+			}
+		}
+		// Logged nodes spec is "replicated" (nil).
 		for range len(loggedNodes) {
 			outputShardingSpecs = append(outputShardingSpecs, nil)
 		}

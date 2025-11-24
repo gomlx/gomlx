@@ -219,7 +219,7 @@ func TestAutoSharding(t *testing.T) {
 			}).
 			AutoSharding(mesh).
 			WithInputShardingSpecs(nil, spec). // x is replicated (nil), w is sharded (spec).
-			WithOutputShardingSpecs(spec)      // output y is sharded (spec).
+			WithOutputShardingSpecs(spec) // output y is sharded (spec).
 		outputs, err := exec.Exec(
 			float32(10), []float32{0, 1}, // Device 0
 			float32(10), []float32{2, 3}, // Device 1
@@ -237,7 +237,7 @@ func TestAutoSharding(t *testing.T) {
 	})
 
 	// Same test, but including logged values.
-	t.Run("Exec with logging", func(t *testing.T) {
+	t.Run("With Logged Nodes", func(t *testing.T) {
 		exec := graph.MustNewExec(backend,
 			func(x, w *graph.Node) *graph.Node {
 				// x is scalar, w is sharded [4].
@@ -258,6 +258,38 @@ func TestAutoSharding(t *testing.T) {
 		fmt.Printf("\t- device #1: %s\n", outputs[1])
 		require.Equal(t, []float32{10, 11}, outputs[0].Value())
 		require.Equal(t, []float32{12, 13}, outputs[1].Value())
+	})
+
+	// Test correct handling of sharding for a variable number of inputs and outputs.
+	t.Run("variable-length inputs and outputs", func(t *testing.T) {
+		exec := graph.MustNewExec(backend,
+			func(inputs []*graph.Node) []*graph.Node {
+				// x is scalar, w0 and w1 is sharded [4].
+				x, w0, w1 := inputs[0], inputs[1], inputs[2]
+				y0 := graph.Add(x, w0)
+				y1 := graph.Add(x, w1)
+				graph.ReduceAllSum(y0).SetLogged("ReduceSum(y)")
+				graph.ReduceAllSum(y1).SetLogged("ReduceSum(y)")
+				return []*graph.Node{y0, y1}
+			}).
+			AutoSharding(mesh).
+			WithInputShardingSpecs(nil, spec). // the last spec is repeated for tail of inputs.
+			WithOutputShardingSpecs(spec) // the last spec is repeated for tail of outputs.
+		outputs, err := exec.Exec(
+			float32(100), []float32{0, 1}, []float32{10, 11}, // Device 0
+			float32(100), []float32{2, 3}, []float32{12, 13}, // Device 1
+		)
+		require.NoError(t, err)
+		require.Len(t, outputs, 4)
+		fmt.Printf("\t- device #0: y0^0=%s, y1^0%s\n", outputs[0], outputs[1])
+		fmt.Printf("\t- device #1: y0^1=%s, y1^1%s\n", outputs[2], outputs[3])
+		// y0 = {10, 11, 12, 13}
+		require.Equal(t, []float32{100, 101}, outputs[0].Value())
+		require.Equal(t, []float32{102, 103}, outputs[2].Value())
+		// y1 = {110, 111, 112, 113}
+		require.Equal(t, []float32{110, 111}, outputs[1].Value())
+		require.Equal(t, []float32{112, 113}, outputs[3].Value())
+
 	})
 
 }
