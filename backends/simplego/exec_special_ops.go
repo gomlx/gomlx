@@ -811,6 +811,7 @@ func execGather(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 		gatherIt, indirectStartIndices, startIndices.flat,
 		operandStartIndices, operandByteStrides,
 		slicesSize, sliceOutputBytesStride,
+		operandShape.Dimensions,
 	)
 	return output, nil
 }
@@ -838,6 +839,7 @@ func execGatherGeneric[T PODIntegerConstraints](params ...any) any {
 	operandByteStrides := nextParam().([]int)
 	slicesSize := nextParam().(int)
 	sliceOutputBytesStride := nextParam().([]int)
+	operandDimensions := nextParam().([]int)
 
 	sliceSizes := gatherParams.sliceSizes
 	operandRank := len(sliceSizes)
@@ -851,6 +853,10 @@ func execGatherGeneric[T PODIntegerConstraints](params ...any) any {
 		for ii, axis := range startIndexMap {
 			startIndexForAxis := startIndicesFlat[indirectStartIndices[ii]]
 			operandStartIndices[axis] = int(startIndexForAxis)
+			// Normalize negative indices (Python-style indexing from the end)
+			if operandStartIndices[axis] < 0 {
+				operandStartIndices[axis] += operandDimensions[axis]
+			}
 		}
 		operandBytesIdx = 0
 		for axis, idx := range operandStartIndices {
