@@ -78,7 +78,13 @@ type executionBuffers struct {
 // Compile time check.
 var _ backends.Executable = (*Executable)(nil)
 
-// Finalize immediately frees resources associated to the executable.
+// Finalize immediately frees resources associated with the executable.
+//
+// TODO: Race-condition where calling Finalize will make execution crash, if finalized while executing.
+//       Make Finalize wait for all the current executions to exit, before finalizing.
+//       And add a latch indicating Finalize has been called, to tell the executions to exit immediately
+//       without finishing. Finally, remove the `e.builder == nil` checks, that won't be necessary anymore,
+//       since e.builder will never be set to nil while there is an execution alive.
 func (e *Executable) Finalize() {
 	e.builder.Finalize()
 	e.builder = nil
