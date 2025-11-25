@@ -46,6 +46,8 @@ Other minor improvements:
 - Removed `ui/fyneui`:
   - It was incomplete, and it would be better offered as a separate package to avoid the dependencies.
 
+- Package `graph`:
+  - Added a negative and out-of-bounds indices test for `Gather`.
 - Package `simplego`:
   - Partially fixed a race condition where the executable is finalized during the execution, causing crashes -- 
     Thanks @ajroetker!

@@ -45,7 +45,11 @@ type StandardOps interface {
 	//
 	// Based on the paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
-	BatchNormForTraining(operand, scale, offset Op, epsilon float32, featureAxis int) (normalized Op, batchMean Op, batchVariance Op, err error)
+	BatchNormForTraining(
+		operand, scale, offset Op,
+		epsilon float32,
+		featureAxis int,
+	) (normalized Op, batchMean Op, batchVariance Op, err error)
 
 	// BatchNormGradient calculates the batch normalization gradients with respect to the input, scale, and offset.
 	//
@@ -56,7 +60,11 @@ type StandardOps interface {
 	//
 	// Based on the paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
-	BatchNormGradient(operand, scale, mean, variance, gradOutput Op, epsilon float32, featureAxis int) (gradOperand Op, gradScale Op, gradOffset Op, err error)
+	BatchNormGradient(
+		operand, scale, mean, variance, gradOutput Op,
+		epsilon float32,
+		featureAxis int,
+	) (gradOperand Op, gradScale Op, gradOffset Op, err error)
 
 	// Bitcast performs an elementwise bit-cast operation from a dtype to another dtype.
 	//
@@ -151,7 +159,14 @@ type StandardOps interface {
 	// Note:
 	//   - Another common term for "channels" is "features".
 	//   - "Kernel" is also commonly called "weights" or "filters".
-	ConvGeneral(input, kernel Op, axes ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilations, kernelDilations []int, channelGroupCount, batchGroupCount int) (Op, error)
+	ConvGeneral(
+		input, kernel Op,
+		axes ConvolveAxesConfig,
+		strides []int,
+		paddings [][2]int,
+		inputDilations, kernelDilations []int,
+		channelGroupCount, batchGroupCount int,
+	) (Op, error)
 
 	// ConvertDType of x to dtype.
 	ConvertDType(x Op, dtype dtypes.DType) (Op, error)
@@ -190,7 +205,12 @@ type StandardOps interface {
 	// It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
 	// non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 	// It provides the basic means of implementing Einsum.
-	DotGeneral(lhs Op, lhsContractingAxes, lhsBatchAxes []int, rhs Op, rhsContractingAxes, rhsBatchAxes []int) (Op, error)
+	DotGeneral(
+		lhs Op,
+		lhsContractingAxes, lhsBatchAxes []int,
+		rhs Op,
+		rhsContractingAxes, rhsBatchAxes []int,
+	) (Op, error)
 
 	// DynamicSlice extracts a slice from the operand at the startIndices position and the given sliceSizes.
 	//
@@ -302,8 +322,15 @@ type StandardOps interface {
 	//     after scattering its values according to start_index_map) by the user. This allows for some optimizations
 	//     in some platforms.
 	//
+	// Out-of-bound (and negative) indices <i> are adjusted with max(min(<i>, axisDimension-1), 0), meaning they
+	// are taken from the border of the axes.
 	// TODO: Add batch support: operandBatchingAxes and startIndicesBatchingAxes.
-	Gather(operand, startIndices Op, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) (Op, error)
+	Gather(
+		operand, startIndices Op,
+		indexVectorAxis int,
+		offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int,
+		indicesAreSorted bool,
+	) (Op, error)
 
 	// GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 	GreaterOrEqual(lhs, rhs Op) (Op, error)
@@ -487,7 +514,12 @@ type StandardOps interface {
 	// If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.
 	// If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
 	// If paddings is nil, they are assumed to be 0.
-	ReduceWindow(x Op, reductionType ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (Op, error)
+	ReduceWindow(
+		x Op,
+		reductionType ReduceOpType,
+		windowDimensions, strides, baseDilations, windowDilations []int,
+		paddings [][2]int,
+	) (Op, error)
 
 	// Rem returns the remainder operation, also known as modulo (or Mod for short).
 	// Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
@@ -517,13 +549,28 @@ type StandardOps interface {
 	Rsqrt(x Op) (Op, error)
 
 	// ScatterMax scatter values from updates pointed by scatterIndices to operand, by taking the Max.
-	ScatterMax(operand, scatterIndices, updates Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (Op, error)
+	ScatterMax(
+		operand, scatterIndices, updates Op,
+		indexVectorAxis int,
+		updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int,
+		indicesAreSorted, uniqueIndices bool,
+	) (Op, error)
 
 	// ScatterMin scatter values from updates pointed by scatterIndices to operand, by taking the Min.
-	ScatterMin(operand, scatterIndices, updates Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (Op, error)
+	ScatterMin(
+		operand, scatterIndices, updates Op,
+		indexVectorAxis int,
+		updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int,
+		indicesAreSorted, uniqueIndices bool,
+	) (Op, error)
 
 	// ScatterSum values from updates pointed by scatterIndices to operand.
-	ScatterSum(operand, scatterIndices, updates Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (Op, error)
+	ScatterSum(
+		operand, scatterIndices, updates Op,
+		indexVectorAxis int,
+		updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int,
+		indicesAreSorted, uniqueIndices bool,
+	) (Op, error)
 
 	// SelectAndScatterMax runs windows (similar to ReduceWindow) over the operand, selects values to update the output (like ScatterAdd)
 	// It selects the values in the window such that it works as reverse for a PoolMax operation.
