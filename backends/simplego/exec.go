@@ -506,12 +506,24 @@ func (e *Executable) executeParallel(execBuf *executionBuffers) error {
 	// Loop over nodes that are ready to execute:
 	for nodeIdx := range readyToExecute {
 		nodeExecFn := func() {
+			// Check if the Executable has been finalized during shutdown.
+			// This can happen during concurrent shutdowns when Finalize() is called
+			// while worker pool goroutines are still executing.
+			if e.builder == nil {
+				stopExecutionFn()
+				return
+			}
 			node := e.builder.nodes[nodeIdx]
 
 			// On return, it updates the dependencies and checks that all outputs are complete.
 			defer func(nodeIdx int) {
 				execMu.Lock()
 				defer execMu.Unlock()
+				// Check if the Executable has been finalized during shutdown.
+				if e.builder == nil {
+					stopExecutionFn()
+					return
+				}
 				if len(collectErrors) > 0 {
 					// Interrupted anyway.
 					return
