@@ -39,14 +39,22 @@ func TestIndicesForShape(t *testing.T) {
 	g.Compile(numbers)
 	got := g.Run()[0]
 	fmt.Printf("\tIndicesForShape(%s)=%v\n", shape, got)
-	want := [][]int64{{0, 0, 0}, {0, 0, 1}, {0, 0, 2}, {0, 0, 3}, {0, 1, 0}, {0, 1, 1}, {0, 1, 2}, {0, 1, 3}, {0, 2, 0}, {0, 2, 1}, {0, 2, 2}, {0, 2, 3}, {1, 0, 0}, {1, 0, 1}, {1, 0, 2}, {1, 0, 3}, {1, 1, 0}, {1, 1, 1}, {1, 1, 2}, {1, 1, 3}, {1, 2, 0}, {1, 2, 1}, {1, 2, 2}, {1, 2, 3}}
+	want := [][]int64{
+		{0, 0, 0}, {0, 0, 1}, {0, 0, 2}, {0, 0, 3},
+		{0, 1, 0}, {0, 1, 1}, {0, 1, 2}, {0, 1, 3},
+		{0, 2, 0}, {0, 2, 1}, {0, 2, 2}, {0, 2, 3},
+		{1, 0, 0}, {1, 0, 1}, {1, 0, 2}, {1, 0, 3},
+		{1, 1, 0}, {1, 1, 1}, {1, 1, 2}, {1, 1, 3},
+		{1, 2, 0}, {1, 2, 1}, {1, 2, 2}, {1, 2, 3},
+	}
 	require.Equalf(t, want, got.Value(), "IndicesForShape(%s): want %v, got %v", shape, want, got)
 }
 
 func TestGather(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	{ // Trivial scalar gather.
-		fmt.Println("\tGather(): trivial scalar gather.")
+
+	// Trivial scalar gather.
+	t.Run("scalar", func(t *testing.T) {
 		g := NewGraph(backend, t.Name())
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
@@ -57,11 +65,10 @@ func TestGather(t *testing.T) {
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := []float64{3, 4, 5}
 		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
-	}
+	})
 
-	{ // Simple leading indices dimension.
-		fmt.Println("\tGather(): simple leading indices dimension.")
-		g := NewGraph(backend, "Gather(): simple leading indices dimension.")
+	t.Run("leading indices", func(t *testing.T) {
+		g := NewGraph(backend, t.Name())
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, [][]int{{2}, {0}})
@@ -71,11 +78,10 @@ func TestGather(t *testing.T) {
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][]float64{{6, 7, 8}, {0, 1, 2}}
 		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
-	}
+	})
 
-	{ // With 2D leading indices dimension.
-		fmt.Println("\tGather(): with 2D leading indices dimension.")
-		g := NewGraph(backend, "Gather(): with 2D leading indices dimension.")
+	t.Run("2D leading indices", func(t *testing.T) {
+		g := NewGraph(backend, t.Name())
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, [][][]int{{{2}, {0}}, {{2}, {1}}})
@@ -85,11 +91,10 @@ func TestGather(t *testing.T) {
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][][]float64{{{6, 7, 8}, {0, 1, 2}}, {{6, 7, 8}, {3, 4, 5}}}
 		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
-	}
+	})
 
-	{ // With leading indices dimension, and 3D params tailing dimensions.
-		fmt.Println("\tGather(): With leading indices dimension, and 2D params tailing dimensions.")
-		g := NewGraph(backend, "Gather(): With leading indices dimension, and 2D params tailing dimensions.")
+	t.Run("2D tailing params ", func(t *testing.T) {
+		g := NewGraph(backend, t.Name())
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 2, 2))
 		indices := Const(g, [][]int{{2}, {0}, {1}, {3}})
@@ -99,7 +104,23 @@ func TestGather(t *testing.T) {
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][][]float64{{{8, 9}, {10, 11}}, {{0, 1}, {2, 3}}, {{4, 5}, {6, 7}}, {{12, 13}, {14, 15}}}
 		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
-	}
+	})
+
+	t.Run("negative and out-of-bounds indices", func(t *testing.T) {
+		g := NewGraph(backend, t.Name())
+		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
+		numbers := IotaFull(g, MakeShape(F64, 5, 3))
+		indices := Const(g, [][]int{{-2}, {10}})
+		gather := Gather(numbers, indices)
+		g.Compile(gather)
+		got := g.Run()[0]
+		fmt.Printf("\t\tGather=%v\n", got)
+		want := [][]float64{
+			{0, 1, 2},    // Negative indices should become 0
+			{12, 13, 14}, // Out-of-bounds indices should become the last valid index.
+		}
+		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
+	})
 }
 
 func TestGatherSlices(t *testing.T) {
@@ -206,7 +227,10 @@ func BenchmarkScatter(b *testing.B) {
 				indices = ExpandAxes(indices, -1)
 				parts := make([]*Node, ConsecutiveScatters)
 				for ii := range parts {
-					parts[ii] = ExpandAxes(ScatterSum(zeros, AddScalar(indices, float64(ii)), values, sorted, unique), -1)
+					parts[ii] = ExpandAxes(
+						ScatterSum(zeros, AddScalar(indices, float64(ii)), values, sorted, unique),
+						-1,
+					)
 				}
 				x := ReduceSum(Concatenate(parts, -1), -1)
 				return Add(state, x)
