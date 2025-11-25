@@ -38,10 +38,21 @@ import (
 //
 // Parameters:
 //   - data: The tensor from which gathering will be done (used to get dimension size)
-//   - indices: The indices to normalize (must be an integer tensor)
+//   - indices: The indices to normalize (must be a signed integer tensor)
 //   - axis: The axis of data along which gathering will happen (supports negative axis)
 //
 // Returns normalized indices with the same shape and dtype as input indices.
+//
+// Notes:
+//   - This function only converts negative indices to positive by adding the axis
+//     dimension. It does NOT clamp values to valid bounds. Indices that remain
+//     out-of-bounds after normalization (e.g., -6 for axis size 5 yields -1) will
+//     be handled by the underlying Gather operation according to XLA/StableHLO
+//     semantics, which clamps to valid range [0, dim-1].
+//   - For ONNX compatibility, valid input indices should be in range [-dim, dim-1].
+//   - Unsigned integer indices are technically supported but will never be modified
+//     since they cannot be negative. Use signed integer types (int32, int64) for
+//     indices that may contain negative values.
 func NormalizeIndices(data, indices *Node, axis int) *Node {
 	_ = validateBuildingGraphFromInputs(data, indices)
 	if !indices.DType().IsInt() {

@@ -164,6 +164,40 @@ func TestNormalizeIndices(t *testing.T) {
 		want := [][]float64{{12, 13, 14}, {9, 10, 11}}
 		require.Equalf(t, want, got.Value(), "Gather with NormalizeIndices: want %v, got %v", want, got)
 	})
+
+	t.Run("int64 indices", func(t *testing.T) {
+		// Test with int64 indices to ensure dtype handling works correctly
+		g := NewGraph(backend, t.Name())
+		data := IotaFull(g, MakeShape(F64, 10, 3))
+		indices := Const(g, []int64{-1, -5, 0, 9})
+		normalized := NormalizeIndices(data, indices, 0)
+		g.Compile(normalized)
+		got := g.Run()[0]
+		fmt.Printf("\tNormalizeIndices (int64)=%v\n", got)
+		// -1 -> 9, -5 -> 5, 0 -> 0, 9 -> 9
+		want := []int64{9, 5, 0, 9}
+		require.Equalf(t, want, got.Value(), "NormalizeIndices (int64): want %v, got %v", want, got)
+	})
+
+	t.Run("out-of-bounds indices pass through", func(t *testing.T) {
+		// Test that out-of-bounds negative indices are converted but not clamped
+		// (clamping happens in Gather, not in NormalizeIndices)
+		g := NewGraph(backend, t.Name())
+		data := IotaFull(g, MakeShape(F64, 5, 3)) // dim=5 on axis 0
+		// -6 is out of ONNX valid range [-5, 4], becomes 5+(-6)=-1 after normalization
+		// -10 becomes 5+(-10)=-5
+		// These will be clamped by Gather to valid range, but NormalizeIndices just converts
+		indices := Const(g, []int32{-6, -10, 10})
+		normalized := NormalizeIndices(data, indices, 0)
+		g.Compile(normalized)
+		got := g.Run()[0]
+		fmt.Printf("\tNormalizeIndices (out-of-bounds)=%v\n", got)
+		// -6 -> -1 (still negative, will be clamped by Gather)
+		// -10 -> -5 (still negative, will be clamped by Gather)
+		// 10 -> 10 (positive, unchanged, will be clamped by Gather)
+		want := []int32{-1, -5, 10}
+		require.Equalf(t, want, got.Value(), "NormalizeIndices (out-of-bounds): want %v, got %v", want, got)
+	})
 }
 
 func TestGatherSlices(t *testing.T) {
