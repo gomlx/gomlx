@@ -46,6 +46,10 @@ Other minor improvements:
 - Removed `ui/fyneui`:
   - It was incomplete, and it would be better offered as a separate package to avoid the dependencies.
 
+- Package `simplego`:
+  - Partially fixed a race condition where the executable is finalized during the execution, causing crashes -- 
+    Thanks @ajroetker!
+
 # v0.24.1: 2025/10/23 Adding Darwin (Mac) support for CPU PJRT plugin
 
 * Updated dependency to Gopjrt v0.8.4: added macOS (darwin/arm64) support and cpu PJRT plugin.
