@@ -100,6 +100,20 @@ func TestGather(t *testing.T) {
 		want := [][][]float64{{{8, 9}, {10, 11}}, {{0, 1}, {2, 3}}, {{4, 5}, {6, 7}}, {{12, 13}, {14, 15}}}
 		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
 	}
+
+	{ // Negative/Out-of-bounds indices should be clamped (XLA semantics).
+		fmt.Println("\tGather(): negative/out-of-bounds indices should be clamped.")
+		g := NewGraph(backend, "Gather(): negative/out-of-bounds indices should be clamped.")
+		// numbers=[0 1 2 3 4]
+		numbers := IotaFull(g, MakeShape(F64, 5))
+		indices := Const(g, [][]int{{-1}, {5}}) // -1 -> 0, 5 -> 4
+		gather := Gather(numbers, indices)
+		g.Compile(gather)
+		got := g.Run()[0]
+		fmt.Printf("\t\tGather=%v\n", got)
+		want := []float64{0, 4}
+		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
+	}
 }
 
 func TestNormalizeIndices(t *testing.T) {

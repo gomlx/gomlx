@@ -852,11 +852,14 @@ func execGatherGeneric[T PODIntegerConstraints](params ...any) any {
 		// Find operand indices:
 		for ii, axis := range startIndexMap {
 			startIndexForAxis := startIndicesFlat[indirectStartIndices[ii]]
-			operandStartIndices[axis] = int(startIndexForAxis)
-			// Normalize negative indices (Python-style indexing from the end)
-			if operandStartIndices[axis] < 0 {
-				operandStartIndices[axis] += operandDimensions[axis]
+			idx := int(startIndexForAxis)
+			// Clamp indices to valid range [0, dim-1] to match XLA/StableHLO semantics.
+			if idx < 0 {
+				idx = 0
+			} else if dim := operandDimensions[axis]; idx >= dim {
+				idx = dim - 1
 			}
+			operandStartIndices[axis] = idx
 		}
 		operandBytesIdx = 0
 		for axis, idx := range operandStartIndices {
