@@ -102,6 +102,70 @@ func TestGather(t *testing.T) {
 	}
 }
 
+func TestNormalizeIndices(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+
+	t.Run("basic negative indices", func(t *testing.T) {
+		// Test converting negative indices to positive
+		g := NewGraph(backend, t.Name())
+		// data shape [5, 3] - dimension 5 on axis 0
+		data := IotaFull(g, MakeShape(F64, 5, 3))
+		indices := Const(g, []int32{-1, -2, 0, 2, -5})
+		normalized := NormalizeIndices(data, indices, 0)
+		g.Compile(normalized)
+		got := g.Run()[0]
+		fmt.Printf("\tNormalizeIndices=%v\n", got)
+		// -1 -> 4, -2 -> 3, 0 -> 0, 2 -> 2, -5 -> 0
+		want := []int32{4, 3, 0, 2, 0}
+		require.Equalf(t, want, got.Value(), "NormalizeIndices: want %v, got %v", want, got)
+	})
+
+	t.Run("negative axis", func(t *testing.T) {
+		// Test using negative axis parameter
+		g := NewGraph(backend, t.Name())
+		// data shape [3, 5] - dimension 5 on axis 1 (or -1)
+		data := IotaFull(g, MakeShape(F64, 3, 5))
+		indices := Const(g, []int32{-1, -3, 2})
+		normalized := NormalizeIndices(data, indices, -1) // axis -1 = axis 1
+		g.Compile(normalized)
+		got := g.Run()[0]
+		fmt.Printf("\tNormalizeIndices (negative axis)=%v\n", got)
+		// -1 -> 4, -3 -> 2, 2 -> 2
+		want := []int32{4, 2, 2}
+		require.Equalf(t, want, got.Value(), "NormalizeIndices: want %v, got %v", want, got)
+	})
+
+	t.Run("2D indices", func(t *testing.T) {
+		// Test with 2D indices array
+		g := NewGraph(backend, t.Name())
+		data := IotaFull(g, MakeShape(F64, 5, 3))
+		indices := Const(g, [][]int32{{-1, 0}, {-2, 1}})
+		normalized := NormalizeIndices(data, indices, 0)
+		g.Compile(normalized)
+		got := g.Run()[0]
+		fmt.Printf("\tNormalizeIndices (2D)=%v\n", got)
+		// -1 -> 4, 0 -> 0, -2 -> 3, 1 -> 1
+		want := [][]int32{{4, 0}, {3, 1}}
+		require.Equalf(t, want, got.Value(), "NormalizeIndices: want %v, got %v", want, got)
+	})
+
+	t.Run("with Gather - Python-style negative indexing", func(t *testing.T) {
+		// Test that NormalizeIndices + Gather gives Python-like behavior
+		g := NewGraph(backend, t.Name())
+		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
+		numbers := IotaFull(g, MakeShape(F64, 5, 3))
+		indices := Const(g, [][]int{{-1}, {-2}}) // Python: -1 = last row, -2 = second to last
+		normalizedIndices := NormalizeIndices(numbers, indices, 0)
+		gather := Gather(numbers, normalizedIndices)
+		g.Compile(gather)
+		got := g.Run()[0]
+		fmt.Printf("\tGather with NormalizeIndices=%v\n", got)
+		// -1 -> row 4 = [12, 13, 14], -2 -> row 3 = [9, 10, 11]
+		want := [][]float64{{12, 13, 14}, {9, 10, 11}}
+		require.Equalf(t, want, got.Value(), "Gather with NormalizeIndices: want %v, got %v", want, got)
+	})
+}
+
 func TestGatherSlices(t *testing.T) {
 	testFuncOneInput(t, "GatherSlices(input, slicedAxes={1}, start={{0}, {1}, {0}}, sizes={1})",
 		func(g *Graph) (input, output *Node) {

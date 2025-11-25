@@ -26,6 +26,48 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
+// NormalizeIndices converts Python-style negative indices to positive indices
+// for gathering along a single axis of data.
+//
+// Negative indices are converted by adding the dimension size of the specified axis.
+// For example, if data has dimension 5 on the specified axis and an index is -1,
+// it becomes 4 (i.e., 5 + (-1) = 4).
+//
+// This is useful for compatibility with ONNX and Python where -1 refers to the
+// last element, -2 to the second-to-last, etc.
+//
+// Parameters:
+//   - data: The tensor from which gathering will be done (used to get dimension size)
+//   - indices: The indices to normalize (must be an integer tensor)
+//   - axis: The axis of data along which gathering will happen (supports negative axis)
+//
+// Returns normalized indices with the same shape and dtype as input indices.
+func NormalizeIndices(data, indices *Node, axis int) *Node {
+	_ = validateBuildingGraphFromInputs(data, indices)
+	if !indices.DType().IsInt() {
+		Panicf("NormalizeIndices requires indices to have an integer type, got %s", indices.DType())
+	}
+
+	// Handle negative axis
+	if axis < 0 {
+		axis = data.Rank() + axis
+	}
+	if axis < 0 || axis >= data.Rank() {
+		Panicf("NormalizeIndices: axis %d out of range for data with rank %d", axis, data.Rank())
+	}
+
+	g := data.Graph()
+	dim := data.Shape().Dimensions[axis]
+	dimNode := ConvertDType(Const(g, dim), indices.DType())
+
+	// Where indices < 0, add dim; otherwise keep original
+	// normalized = Where(indices < 0, indices + dim, indices)
+	zero := ScalarZero(g, indices.DType())
+	isNegative := LessThan(indices, zero)
+	normalizedIndices := Where(isNegative, Add(indices, dimNode), indices)
+	return normalizedIndices
+}
+
 // Gather values in params from the pointers in indices.
 // The outputs are slices of params selected by indices, stitched together.
 //
