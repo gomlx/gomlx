@@ -27,6 +27,8 @@
 - Package `backends/notimplemented`:
   - Added dummy `Backend` that can be used to easily mock backends.
 
+- Package `graph`:
+  - Added a negative and out-of-bounds indices test for `Gather`.
 - Package `simplego`:
   - Partially fixed a race condition where the executable is finalized during the execution, causing crashes -- 
     Thanks @ajroetker!
