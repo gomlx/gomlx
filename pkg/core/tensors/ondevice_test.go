@@ -31,6 +31,11 @@ func must(err error) {
 	}
 }
 
+func must1[T any](value T, err error) T {
+	must(err)
+	return value
+}
+
 var (
 	backend backends.Backend
 )
@@ -51,6 +56,8 @@ func setupTest(t *testing.T) {
 
 func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends.Backend) {
 	dtype := dtypes.FromGenericsType[T]()
+	deviceNum := backends.DeviceNum(0)
+
 	t.Run(dtype.String(), func(t *testing.T) {
 		// Create trivial f(x)=x^2 program using plain XlaBuilder
 		if !backend.Capabilities().DTypes[dtype] {
@@ -71,13 +78,13 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 		var tensor *tensors.Tensor
 		require.NotPanics(t, func() { tensor = tensors.FromFlatDataAndDimensions(values, dims...) })
 
-		buffer, err := tensor.Buffer(backend)
+		buffer, err := tensor.Buffer(backend, deviceNum)
 		require.NoError(t, err)
 		if backend.HasSharedBuffers() {
 			// Input tensor must have become shared during conversion to "on-device".
 			// Check that the shared buffer got loaded with the right values:
 			require.True(t, tensor.IsShared())
-			tensors.ConstFlatData(tensor, func(flat []T) {
+			tensors.MustConstFlatData(tensor, func(flat []T) {
 				require.Equal(t, []T{0, 1, 2, 3, 4, 11}, flat)
 			})
 		}
@@ -88,13 +95,14 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 
 		// Convert the buffer to a tensor: the converted tensor should not be shared, since the buffer comes from the output
 		// of a backend execution.
-		outputTensor := tensors.FromBuffer(backend, outputs[0])
+		outputTensor, err := tensors.FromBuffer(backend, outputs[0])
+		require.NoError(t, err)
 		require.False(t, outputTensor.IsShared())
 		fmt.Printf("\tf(x) = x^2, f(%s) = %s\n", tensor.GoStr(), outputTensor.GoStr())
 		require.NoErrorf(t, outputTensor.Shape().Check(dtype, 3, 2),
 			"Output tensor for dtype %s got shape %s", dtype, outputTensor.Shape())
 		want := []T{0, 1, 4, 9, 16, 121}
-		outputTensor.ConstFlatData(func(flatAny any) {
+		outputTensor.MustConstFlatData(func(flatAny any) {
 			flat := flatAny.([]T)
 			require.Equal(t, want, flat) //  "Output tensor value was %s", outputTensor.GoStr())
 		})
@@ -132,7 +140,7 @@ var testShapes = []shapes.Shape{
 
 // BenchmarkHostToDevice benchmarks for various sizes of transfer from host to device.
 //
-// Results on cpu:
+// Results on cpu (xla):
 //
 //	cpu: 12th Gen Intel(R) Core(TM) i9-12900K
 //	BenchmarkHostToDevice/(Float32)[1_1]-24                   827562              1486 ns/op
@@ -148,11 +156,11 @@ func BenchmarkHostToDevice(b *testing.B) {
 	inputTensors := make([]*tensors.Tensor, numShapes)
 	for shapeIdx, s := range testShapes {
 		inputTensors[shapeIdx] = tensors.FromShape(s)
-		tensors.MutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
+		must(tensors.MutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
 			for ii := range flat {
 				flat[ii] = 0 // float32(ii)
 			}
-		})
+		}))
 	}
 
 	// Run test for a shape
@@ -200,17 +208,17 @@ func BenchmarkCopyFromLocal(b *testing.B) {
 	outputTensors := make([]*tensors.Tensor, numShapes)
 	for shapeIdx, s := range testShapes {
 		inputTensors[shapeIdx] = tensors.FromShape(s)
-		tensors.MutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
+		must(tensors.MutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
 			for ii := range flat {
 				flat[ii] = float32(ii)
 			}
-		})
+		}))
 		outputTensors[shapeIdx] = tensors.FromShape(s)
 	}
 
 	// Run test for a shape
 	benchShape := func(_ float32, shapeIdx int) {
-		outputTensors[shapeIdx].CopyFrom(inputTensors[shapeIdx])
+		must(outputTensors[shapeIdx].CopyFrom(inputTensors[shapeIdx]))
 	}
 
 	// Warmup for each shape.
@@ -243,6 +251,7 @@ func BenchmarkCopyFromLocal(b *testing.B) {
 //	BenchmarkCopyFromDevice/(Float32)[1000_1000]-24             8956            133465 ns/op
 func BenchmarkCopyFromDevice(b *testing.B) {
 	setupTest(nil)
+	deviceNum := backends.DeviceNum(0)
 
 	// Pre-allocate tensors.
 	numShapes := len(testShapes)
@@ -250,19 +259,20 @@ func BenchmarkCopyFromDevice(b *testing.B) {
 	outputTensors := make([]*tensors.Tensor, numShapes)
 	for shapeIdx, s := range testShapes {
 		inputTensors[shapeIdx] = tensors.FromShape(s)
-		tensors.MutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
+		tensors.MustMutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
 			for ii := range flat {
 				flat[ii] = float32(ii)
 			}
 		})
-		inputTensors[shapeIdx].MustMaterializeOnDevice(backend, false) // Don't use shared buffers for benchmark
+		// Don't use shared buffers for benchmark:
+		must(inputTensors[shapeIdx].MaterializeOnDevice(backend, false, deviceNum))
 		inputTensors[shapeIdx].FinalizeLocal()
 		outputTensors[shapeIdx] = tensors.FromShape(s)
 	}
 
 	// Run test for a shape
 	benchShape := func(_ float32, shapeIdx int) {
-		outputTensors[shapeIdx].CopyFrom(inputTensors[shapeIdx])
+		must(outputTensors[shapeIdx].CopyFrom(inputTensors[shapeIdx]))
 	}
 
 	// Warmup for each shape.
@@ -287,65 +297,70 @@ func BenchmarkCopyFromDevice(b *testing.B) {
 
 func TestClones(t *testing.T) {
 	setupTest(t)
+	deviceNum := backends.DeviceNum(0)
 	refValues := []int32{1, 3, 5, 7, 11}
 	for cloneType := range 3 {
 		for fromLocation := range 2 {
 			originalTensor := tensors.FromValue(refValues)
 			if fromLocation == 1 {
 				// originalTensor is on device.
-				originalTensor.MustMaterializeOnDevice(backend, false)
+				must(originalTensor.MaterializeOnDevice(backend, false, deviceNum))
 				originalTensor.FinalizeLocal()
 			}
 
 			// Create clone.
 			var cloneTensor *tensors.Tensor
+			var err error
 			switch cloneType {
 			case 0:
-				cloneTensor = originalTensor.Clone()
+				cloneTensor, err = originalTensor.Clone()
 			case 1:
-				cloneTensor = originalTensor.LocalClone()
+				cloneTensor, err = originalTensor.LocalClone()
 			case 2:
-				cloneTensor = originalTensor.OnDeviceClone(backend)
+				cloneTensor, err = originalTensor.OnDeviceClone(backend, deviceNum)
 			}
+			require.NoError(t, err)
+			require.NotNil(t, cloneTensor)
 
-			// MustFinalize original tensor, and make sure it is garbage collected.
-			originalTensor.FinalizeAll()
+			// MustFinalize original tensor and make sure it is garbage collected.
+			originalTensor.MustFinalizeAll()
 			for range 3 {
 				runtime.GC()
 			}
 
 			// Check that the cloned tensor has the shape and values we started with.
 			cloneTensor.Shape().AssertDims(5)
-			require.Equal(t, refValues, tensors.CopyFlatData[int32](cloneTensor))
+			require.Equal(t, refValues, tensors.MustCopyFlatData[int32](cloneTensor))
 		}
 	}
 }
 
 func TestToLocal(t *testing.T) {
 	setupTest(t)
+	deviceNum := backends.DeviceNum(0)
 	refValues := []int32{1, 3, 5, 7, 11}
 
 	for _, shared := range []bool{false, true} {
 		t.Run(fmt.Sprintf("Shared=%v", shared), func(t *testing.T) {
 			tensor := tensors.FromValue(refValues)
-			tensor.MustMaterializeOnDevice(backend, shared)
+			require.NoError(t, tensor.MaterializeOnDevice(backend, shared, deviceNum))
 			b2, err := tensor.Backend()
 			require.NoError(t, err)
 			require.Equal(t, backend, b2)
 
 			// Move to local: there should be no on-device storage or backend associated,
 			// and the contents should still be the same.
-			tensor.ToLocal()
+			require.NoError(t, tensor.ToLocal())
 			_, err = tensor.Backend()
 			require.Error(t, err)
-			require.Equal(t, refValues, tensors.CopyFlatData[int32](tensor))
+			require.Equal(t, refValues, tensors.MustCopyFlatData[int32](tensor))
 		})
 	}
 }
 
 func TestOnDeviceSerialization(t *testing.T) {
 	deviceNum := backends.DeviceNum(0)
-	// Test reading directly to device.
+	// Test reading directly to a device.
 	setupTest(t)
 	if backend == nil {
 		panic("Backend not set!?")
@@ -371,7 +386,7 @@ func TestOnDeviceSerialization(t *testing.T) {
 			tensor, err = tensors.GobDeserializeToDevice(dec, backend, deviceNum)
 			require.NoError(t, err)
 			require.Equal(t, values, tensor.Value().([][]int64))
-			tensor.FinalizeAll()
+			tensor.MustFinalizeAll()
 		}
 	}
 }

@@ -32,7 +32,7 @@ func RngStateFromSeed(seed int64) *tensors.Tensor {
 	rngSrc := rand.NewSource(seed)
 	rng := rand.New(rngSrc)
 	state := tensors.FromShape(RngStateShape)
-	state.MutableFlatData(func(flatAny any) {
+	state.MustMutableFlatData(func(flatAny any) {
 		flat := flatAny.([]uint64)
 		for ii := range flat {
 			flat[ii] = rng.Uint64()
@@ -97,7 +97,10 @@ func validateRngState(rngState *Node) {
 func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
 	validateRngState(rngState)
 	if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
-		Panicf("RandomUniform only work with float or complex numbers, got shape %s instead -- see RandomIntN for integers", shape)
+		Panicf(
+			"RandomUniform only work with float or complex numbers, got shape %s instead -- see RandomIntN for integers",
+			shape,
+		)
 	}
 
 	switch shape.DType {
@@ -141,7 +144,10 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		newRngState, im = RandomUniform(rngState, componentShape)
 		values = Complex(re, im)
 	default:
-		Panicf("RandomUniform() only accepts Float16, Float32, Float64, Complex64 and Complex128 dtypes, shapes %s given", shape)
+		Panicf(
+			"RandomUniform() only accepts Float16, Float32, Float64, Complex64 and Complex128 dtypes, shapes %s given",
+			shape,
+		)
 	}
 	return
 }
@@ -170,7 +176,10 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 func RandomNormal(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
 	validateRngState(rngState)
 	if !shape.DType.IsFloat() {
-		Panicf("RandomNormal only work with float or complex numbers, got shape %s instead -- see RandomIntN for integers", shape)
+		Panicf(
+			"RandomNormal only work with float or complex numbers, got shape %s instead -- see RandomIntN for integers",
+			shape,
+		)
 	}
 
 	g := rngState.Graph()
@@ -202,7 +211,10 @@ func RandomIntN[IntT interface{ *Node | constraints.Integer }](
 	rngState *Node, N IntT, shape shapes.Shape) (newRngState, values *Node) {
 	validateRngState(rngState)
 	if !shape.DType.IsInt() {
-		Panicf("RandomIntN only work with integer types, got shape %s instead -- see RandomUniform or RandomNormal for float/complex values", shape)
+		Panicf(
+			"RandomIntN only work with integer types, got shape %s instead -- see RandomUniform or RandomNormal for float/complex values",
+			shape,
+		)
 	}
 
 	g := rngState.Graph()

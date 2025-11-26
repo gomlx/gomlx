@@ -24,6 +24,7 @@ require (
 	github.com/x448/float16 v0.8.4
 	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b
 	gonum.org/v1/plot v0.15.2
+	k8s.io/klog v1.0.0
 	k8s.io/klog/v2 v2.130.1
 )
 

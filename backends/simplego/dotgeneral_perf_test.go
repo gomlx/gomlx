@@ -37,9 +37,28 @@ func dimsToStr(dims []int) string {
 }
 
 var (
-	flagPerfTests  = flag.String("perf_names", "", "Comma-separated list of performance tests (part of TestDotGeneral_PerformanceTable) to run. If empty, it will run all the perf tests.")
-	flagPerfDTypes = flag.String("perf_dtypes", "", "Comma-separated list of dtypes to run performance test (part of TestDotGeneral_PerformanceTable). If empty, it will run for all supported dtypes.")
+	flagPerfTests = flag.String(
+		"perf_names",
+		"",
+		"Comma-separated list of performance tests (part of TestDotGeneral_PerformanceTable) to run. If empty, it will run all the perf tests.",
+	)
+	flagPerfDTypes = flag.String(
+		"perf_dtypes",
+		"",
+		"Comma-separated list of dtypes to run performance test (part of TestDotGeneral_PerformanceTable). If empty, it will run for all supported dtypes.",
+	)
 )
+
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func must1[T any](value T, err error) T {
+	must(err)
+	return value
+}
 
 // TestDotGeneral_PerformanceTable generates a performance table for differently
 // sized matrices.
@@ -178,7 +197,17 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 
 	// Print table header
 	fmt.Printf("\n--- execNormalizedDotGeneral Performance ---\n")
-	header := fmt.Sprintf("| %-20s | %-20s | %-20s | %-10s | %-10s | %-12s | %-15s | %-10s |", "Test Name", "LHS Dims", "RHS Dims", "DType", "BatchSize", "Time/Run", "Num Ops", "GOps/Sec")
+	header := fmt.Sprintf(
+		"| %-20s | %-20s | %-20s | %-10s | %-10s | %-12s | %-15s | %-10s |",
+		"Test Name",
+		"LHS Dims",
+		"RHS Dims",
+		"DType",
+		"BatchSize",
+		"Time/Run",
+		"Num Ops",
+		"GOps/Sec",
+	)
 	fmt.Println(header)
 	fmt.Println(strings.Repeat("-", len(header)))
 
@@ -193,7 +222,11 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			// Construct shapes from dimensions and current dtype
 			lhsShape := shapes.Make(dtype, benchCase.lhsShape...)
 			rhsShape := shapes.Make(dtype, benchCase.rhsShape...)
-			batchSize, lhsCrossSize, contractingSize, _ := dgFindSizes(lhsShape, benchCase.lhsContractingAxes, benchCase.lhsBatchAxes)
+			batchSize, lhsCrossSize, contractingSize, _ := dgFindSizes(
+				lhsShape,
+				benchCase.lhsContractingAxes,
+				benchCase.lhsBatchAxes,
+			)
 			_, rhsCrossSize, _, _ := dgFindSizes(rhsShape, benchCase.rhsContractingAxes, benchCase.rhsBatchAxes)
 			numOps := batchSize * lhsCrossSize * rhsCrossSize * contractingSize * 2 // 1 mult + 1 add = 2 ops
 
@@ -233,8 +266,8 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 					rhsFlatBF16[i] = bfloat16.FromFloat32(float32(i%10 + 1))
 				}
 			}
-			lhsTensor := tensors.FromBuffer(backend, lhsBuffer)
-			rhsTensor := tensors.FromBuffer(backend, rhsBuffer)
+			lhsTensor := must1(tensors.FromBuffer(backend, lhsBuffer))
+			rhsTensor := must1(tensors.FromBuffer(backend, rhsBuffer))
 
 			// Create the program that does the DotGeneral.
 			testExec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
@@ -245,7 +278,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			// Warm-up runs
 			for i := 0; i < numWarmupRuns; i++ {
 				output := testExec.MustExec(lhsTensor, rhsTensor)[0]
-				output.FinalizeAll()
+				output.MustFinalizeAll()
 			}
 
 			// Timed runs
@@ -253,7 +286,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			var numRuns int
 			for numRuns < minNumTimedRuns || time.Since(startTime) < minTestTime { // i := 0; i < numTimedRuns; i++ {
 				output := testExec.MustExec(lhsTensor, rhsTensor)[0]
-				output.FinalizeAll()
+				output.MustFinalizeAll()
 				numRuns++
 			}
 			duration := time.Since(startTime)

@@ -106,7 +106,7 @@ func convertBytesToTensor[T dtypes.GoFloat](image []byte, imagesT *tensors.Tenso
 	if dtypes.FromGoType(reflect.TypeOf(t)) != imagesT.DType() {
 		return errors.Errorf("trying to convert to dtype %s from go type %t", imagesT.DType(), any(t))
 	}
-	tensors.MutableFlatData[T](imagesT, func(tensorData []T) {
+	tensors.MustMutableFlatData[T](imagesT, func(tensorData []T) {
 		tensorPos := exampleNum * imageSizeBytes
 		for h := 0; h < Height; h++ {
 			for w := 0; w < Width; w++ {
@@ -126,7 +126,11 @@ func convertBytesToTensor[T dtypes.GoFloat](image []byte, imagesT *tensors.Tenso
 // [NumExamples=60000, 1] of Int64.
 // The first 50k examples are for training, and the last 10k for testing.
 // Only Float32 and Float64 dtypes are supported for now.
-func LoadCifar10(backend backends.Backend, baseDir string, dtype dtypes.DType) (partitioned PartitionedImagesAndLabels) {
+func LoadCifar10(
+	backend backends.Backend,
+	baseDir string,
+	dtype dtypes.DType,
+) (partitioned PartitionedImagesAndLabels) {
 	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 
 	// Allocate the tensor.
@@ -134,10 +138,10 @@ func LoadCifar10(backend backends.Backend, baseDir string, dtype dtypes.DType) (
 	labels := tensors.FromShape(shapes.Make(dtypes.Int64, NumExamples, 1))
 	defer func() {
 		// Free images and labels resources in accelerator (GPU) immediately (don't wait for GC).
-		images.FinalizeAll()
-		labels.FinalizeAll()
+		images.MustFinalizeAll()
+		labels.MustFinalizeAll()
 	}()
-	tensors.MutableFlatData[int64](labels, func(labelsData []int64) {
+	tensors.MustMutableFlatData[int64](labels, func(labelsData []int64) {
 		var labelImageBytes [imageSizeBytes + 1]byte
 		for fileIdx := 0; fileIdx < 6; fileIdx++ {
 			dataFile := path.Join(baseDir, C10SubDir, fmt.Sprintf("data_batch_%d.bin", fileIdx+1))
@@ -183,13 +187,17 @@ func LoadCifar10(backend backends.Backend, baseDir string, dtype dtypes.DType) (
 // [NumExamples=60000, 1] of Int64.
 // The first 50k examples are for training, and the last 10k for testing.
 // Only Float32 and Float64 dtypes are supported for now.
-func LoadCifar100(backend backends.Backend, baseDir string, dtype dtypes.DType) (partitioned PartitionedImagesAndLabels) {
+func LoadCifar100(
+	backend backends.Backend,
+	baseDir string,
+	dtype dtypes.DType,
+) (partitioned PartitionedImagesAndLabels) {
 	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 
 	// Allocate the tensor.
 	images := tensors.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))
 	labels := tensors.FromShape(shapes.Make(dtypes.Int64, NumExamples, 1))
-	tensors.MutableFlatData[int64](labels, func(labelsData []int64) {
+	tensors.MustMutableFlatData[int64](labels, func(labelsData []int64) {
 		var labelImageBytes [imageSizeBytes + 2]byte
 		dataFiles := []string{"train.bin", "test.bin"}
 		exampleIdx := 0
@@ -222,7 +230,9 @@ func LoadCifar100(backend backends.Backend, baseDir string, dtype dtypes.DType) 
 				if err != nil {
 					panic(errors.Wrapf(err, "failed converting bytes to tensor of %s", dtype))
 				}
-				labelsData[exampleIdx] = int64(labelImageBytes[1]) // Take the fine-label (and discard the coarse-label).
+				labelsData[exampleIdx] = int64(
+					labelImageBytes[1],
+				) // Take the fine-label (and discard the coarse-label).
 				exampleIdx++
 			}
 		}
@@ -232,7 +242,7 @@ func LoadCifar100(backend backends.Backend, baseDir string, dtype dtypes.DType) 
 
 func ConvertToGoImage(images *tensors.Tensor, exampleNum int) *image.NRGBA {
 	img := image.NewNRGBA(image.Rect(0, 0, Width, Height))
-	images.ConstFlatData(func(flatAny any) {
+	images.MustConstFlatData(func(flatAny any) {
 		tensorData := reflect.ValueOf(flatAny)
 		tensorPos := exampleNum * imageSizeBytes
 		floatT := reflect.TypeOf(float64(0))
@@ -252,7 +262,10 @@ func ConvertToGoImage(images *tensors.Tensor, exampleNum int) *image.NRGBA {
 }
 
 // partitionImagesAndLabels into train and test partitions.
-func partitionImagesAndLabels(backend backends.Backend, images, labels *tensors.Tensor) (partitioned PartitionedImagesAndLabels) {
+func partitionImagesAndLabels(
+	backend backends.Backend,
+	images, labels *tensors.Tensor,
+) (partitioned PartitionedImagesAndLabels) {
 	parts := MustExecOnceN(backend, func(images, labels *Node) []*Node {
 		imagesTrain := Slice(images, AxisRange(0, NumTrainExamples))
 		labelsTrain := Slice(labels, AxisRange(0, NumTrainExamples))
@@ -312,7 +325,13 @@ func init() {
 // It automatically downloads the data from the web, and then loads the data into memory if it hasn't been
 // loaded yet.
 // It caches the result, so multiple Datasets can be created without any extra costs in time/memory.
-func NewDataset(backend backends.Backend, name, baseDir string, source DataSource, dtype dtypes.DType, partition Partition) *datasets.InMemoryDataset {
+func NewDataset(
+	backend backends.Backend,
+	name, baseDir string,
+	source DataSource,
+	dtype dtypes.DType,
+	partition Partition,
+) *datasets.InMemoryDataset {
 	if source > C100 {
 		Panicf("Invalid source value %d, only C10 or C100 accepted", source)
 	}
@@ -322,7 +341,9 @@ func NewDataset(backend backends.Backend, name, baseDir string, source DataSourc
 		downloadFunctions := [2]func(baseDir string) error{
 			DownloadCifar10, DownloadCifar100}
 		loadFunctions := [2]func(backend backends.Backend, baseDir string, dType dtypes.DType) PartitionedImagesAndLabels{
-			LoadCifar10, LoadCifar100}
+			LoadCifar10,
+			LoadCifar100,
+		}
 
 		err := downloadFunctions[source](baseDir)
 		if err != nil {

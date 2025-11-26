@@ -310,7 +310,11 @@ func TestDeleteVariablesInScope(t *testing.T) {
 	ctx1.DeleteVariablesInScope()
 	assert.Equal(t, 1, ctx.NumVariables())
 	assert.NotNil(t, ctx.GetVariableByScopeAndName("/a", "x")) // Check "x" hasn't been deleted.
-	assert.Len(t, loader.Values, 3)                            // Only "/b/c/z" must have been deleted -- but notice that /b/c/w is not affected.
+	assert.Len(
+		t,
+		loader.Values,
+		3,
+	) // Only "/b/c/z" must have been deleted -- but notice that /b/c/w is not affected.
 
 	// Check that deleting an empty scope is a no-op.
 	ctx.In("foo").DeleteVariablesInScope()
@@ -410,11 +414,11 @@ func TestContext_Clone(t *testing.T) {
 
 	// Check the new variable value is independent of the old one.
 	ctx0 = nil
-	v0x.Value().FinalizeAll()
+	v0x.Value().MustFinalizeAll()
 	for range 5 {
 		runtime.GC()
 	}
-	require.Equal(t, value, tensors.CopyFlatData[float32](v1x.Value()))
+	require.Equal(t, value, tensors.MustCopyFlatData[float32](v1x.Value()))
 	// GetParam should back-search to the "initial_seed" at the root scope, and find it.
 	require.Equal(t, int64(42), GetParamOr(ctx1, "initial_seed", int64(0)))
 }

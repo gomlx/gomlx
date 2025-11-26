@@ -115,7 +115,7 @@ func TestTensor(t *testing.T) {
 		assert.Equal(t, shapes.Make(dtypes.Int32, 4, 3, 1), merged.Shape())
 
 		// Check the values.
-		assert.Equal(t, []int32{1, 2, 3, 4, 5, 6, 10, 20, 30, 40, 50, 60}, tensors.CopyFlatData[int32](merged))
+		assert.Equal(t, []int32{1, 2, 3, 4, 5, 6, 10, 20, 30, 40, 50, 60}, tensors.MustCopyFlatData[int32](merged))
 	})
 
 }

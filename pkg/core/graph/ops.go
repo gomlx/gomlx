@@ -195,11 +195,16 @@ func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 		shape: t.Shape(),
 	}
 	if t.Size() < MinConstValueSizeToKeep {
-		nodeInputs.tensor = t.LocalClone()
+		var err error
+		nodeInputs.tensor, err = t.LocalClone()
+		if err != nil {
+			panic(errors.WithMessagef(err,
+				"ConstTensor failed to create a local clone of the tensor in the graph"))
+		}
 	}
 	var result backends.Op
 	var err error
-	t.ConstFlatData(func(flat any) {
+	t.MustConstFlatData(func(flat any) {
 		result, err = g.builder.Constant(flat, nodeInputs.shape.Dimensions...)
 	})
 	if err != nil {

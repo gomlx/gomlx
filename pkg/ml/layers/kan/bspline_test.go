@@ -163,7 +163,7 @@ func TestBSplineKANRegularized(t *testing.T) {
 			require.NotNilf(t, v, "failed to inspect variable scope=%q, name=%q", scope, vName)
 			tensor := v.Value()
 			fmt.Printf("\t%s : %s -> %v\n", v.Scope(), v.Name(), tensor)
-			tensors.ConstFlatData[float64](tensor, func(flat []float64) {
+			tensors.MustConstFlatData[float64](tensor, func(flat []float64) {
 				for _, element := range flat {
 					if element == 0.0 {
 						numZeros++
@@ -174,5 +174,11 @@ func TestBSplineKANRegularized(t *testing.T) {
 	}
 	fmt.Printf("\nNumber of zeros in the magnitudes of the KAN network: %d\n", numZeros)
 	// Most of the cases we get 12 zeros.
-	require.GreaterOrEqual(t, numZeros, 9, "We expected at least 9 zeros on the magnitudes of the KAN model, with L1 regularizer, we got only %d though", numZeros)
+	require.GreaterOrEqual(
+		t,
+		numZeros,
+		9,
+		"We expected at least 9 zeros on the magnitudes of the KAN model, with L1 regularizer, we got only %d though",
+		numZeros,
+	)
 }

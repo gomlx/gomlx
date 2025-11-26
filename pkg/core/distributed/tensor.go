@@ -224,7 +224,6 @@ func (dt *Tensor) ShardShape() shapes.Shape {
 //}
 
 // Merge merges the tensors into one concrete logical tensor.
-// For the replicated axes, it takes the values from the first replica.
 func (dt *Tensor) Merge() (*tensors.Tensor, error) {
 	// Create a new tensor with the logical shape.
 	rank := dt.logicalShape.Rank()
@@ -247,10 +246,11 @@ func (dt *Tensor) Merge() (*tensors.Tensor, error) {
 			dt.logicalShape.DType)
 	}
 
-	t.MutableBytes(func(tBytes []byte) {
+	var innerErr error
+	err := t.MutableBytes(func(tBytes []byte) {
 		for shardIdx, shardPos := range shapeRatio.Iter() {
 			shard := dt.shards[shardIdx]
-			shard.ConstBytes(func(shardBytes []byte) {
+			innerErr = shard.ConstBytes(func(shardBytes []byte) {
 				// Calculate the slice of the logical tensor that corresponds to this shard.
 				sliceStarts := make([]int, rank)
 				// We don't strictly need sliceEnds for the copy logic, but keeping for context if needed.
@@ -288,7 +288,7 @@ func (dt *Tensor) Merge() (*tensors.Tensor, error) {
 				// srcOffset: tracks the linear position in the Shard (source).
 				//            Since shards are dense, this just increments by blockSize.
 				// dstOffset: tracks the position in the Logical Tensor (destination).
-				//            This jumps based on strides.
+				//            The jumps are based on strides.
 				var srcOffset int
 				var copier func(axis int, dstOffset int)
 
@@ -311,8 +311,17 @@ func (dt *Tensor) Merge() (*tensors.Tensor, error) {
 				// Start the copy process
 				copier(0, dstBaseOffset)
 			})
+			if innerErr != nil {
+				return
+			}
 		}
 	})
+	if err != nil {
+		return nil, err
+	}
+	if innerErr != nil {
+		return nil, innerErr
+	}
 	return t, nil
 }
 
@@ -377,10 +386,11 @@ func ShardTensor(backend backends.Backend, spec *ShardingSpec, t *tensors.Tensor
 	srcStrides := logicalShape.Strides()
 	rank := logicalShape.Rank()
 
-	t.ConstBytes(func(tBytes []byte) {
+	var innerErr error
+	err := t.ConstBytes(func(tBytes []byte) {
 		for shardIdx, shardPos := range shapeRatio.Iter() {
 			shard := shards[shardIdx]
-			shard.MutableBytes(func(shardBytes []byte) {
+			innerErr = shard.MutableBytes(func(shardBytes []byte) {
 
 				// 1. Calculate where this shard begins in the logical tensor (Source Base Offset)
 				srcBaseOffset := 0
@@ -430,8 +440,16 @@ func ShardTensor(backend backends.Backend, spec *ShardingSpec, t *tensors.Tensor
 
 				copier(0, srcBaseOffset)
 			})
+			if innerErr != nil {
+				return
+			}
 		}
 	})
-
+	if err != nil {
+		return nil, err
+	}
+	if innerErr != nil {
+		return nil, innerErr
+	}
 	return NewTensor(backend, spec, shards)
 }

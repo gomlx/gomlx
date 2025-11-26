@@ -157,7 +157,7 @@ func (v *Variable) Reset() {
 	v.ctx.data.needsInitialization = true
 	if v.value != nil {
 		// Don't wait for the GC to free the memory from the accelerator.
-		v.value.FinalizeAll()
+		v.value.MustFinalizeAll()
 	}
 	v.value = nil
 	v.isValidLocal = false
@@ -169,7 +169,7 @@ func (v *Variable) Reset() {
 	v.isValidDistributed = false
 
 	for _, t := range v.deviceValues {
-		t.FinalizeAll()
+		t.MustFinalizeAll()
 	}
 	v.deviceValues = nil
 	v.validDevices = sets.Make[backends.DeviceNum]()
@@ -318,7 +318,7 @@ func (v *Variable) Value() *tensors.Tensor {
 // This invalidates any distributed or on-device copies of the variable.
 func (v *Variable) SetValue(value *tensors.Tensor) {
 	if v.value != nil {
-		v.value.FinalizeAll()
+		v.value.MustFinalizeAll()
 	}
 	v.SetValuePreservingOld(value)
 }
@@ -340,7 +340,7 @@ func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) {
 	v.isValidDistributed = false
 
 	for id, t := range v.deviceValues {
-		t.FinalizeAll()
+		t.MustFinalizeAll()
 		delete(v.deviceValues, id)
 	}
 	v.validDevices = sets.Make[backends.DeviceNum]()
@@ -541,7 +541,7 @@ func (v *Variable) SetTrainable(trainable bool) *Variable {
 // Usually, one calls Context.Finalize, which in turns finalizes all variables.
 func (v *Variable) Finalize() {
 	if v.value != nil {
-		v.value.FinalizeAll()
+		v.value.MustFinalizeAll()
 		v.value = nil
 	}
 	v.isValidLocal = false
@@ -553,7 +553,7 @@ func (v *Variable) Finalize() {
 	v.isValidDistributed = false
 
 	for _, t := range v.deviceValues {
-		t.FinalizeAll()
+		t.MustFinalizeAll()
 	}
 	v.deviceValues = nil
 	v.validDevices = sets.Make[backends.DeviceNum]()

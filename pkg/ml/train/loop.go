@@ -171,10 +171,10 @@ func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*t
 	// Free inputs and labels:
 	if loop.finalizeYieldedTrainTensors {
 		for _, input := range inputs {
-			input.FinalizeAll()
+			input.MustFinalizeAll()
 		}
 		for _, label := range labels {
-			label.FinalizeAll()
+			label.MustFinalizeAll()
 		}
 	}
 
@@ -261,7 +261,9 @@ func checkYield(inputs, labels []*tensors.Tensor) error {
 						"wait for the garbage collector. If the dataset is trying to reuse tensors, they will become "+
 						"invalid and cause this error. If that is the case, consider implementing the method "+
 						"FinalizeYieldsAfterUse() in your dataset, and return false.",
-					tensorIdx, yieldInputTypeNames[inputTypeIdx])
+					tensorIdx,
+					yieldInputTypeNames[inputTypeIdx],
+				)
 			}
 		}
 	}
@@ -269,8 +271,9 @@ func checkYield(inputs, labels []*tensors.Tensor) error {
 }
 
 // RunSteps runs those many steps. StartStep and EndStep are adjusted to the current
-// LoopStep, so it can be called multiple times, and it will simply pick up
-// where it left of last time.
+// LoopStep, so it can be called multiple times, and it will simply pick up where it left of last time.
+//
+// It returns the training metrics returned by the trainer after the last step.
 //
 // Note: inputs and labels yielded by the dataset are immediately finalized (freed) after use in each step.
 func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, err error) {
@@ -309,18 +312,28 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, er
 		// Immediately free any space being used.
 		for _, metric := range metrics {
 			if metric != nil {
-				metric.FinalizeAll()
+				metric.MustFinalizeAll()
 			}
 		}
 		metrics, err = loop.step(spec, inputs, labels)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed TrainStep(LoopStep=%d)", steps, loop.LoopStep)
+			return nil, errors.WithMessagef(
+				err,
+				"Loop.RunSteps(%d): failed TrainStep(LoopStep=%d)",
+				steps,
+				loop.LoopStep,
+			)
 		}
 	}
-	for _, metric := range metrics {
+	for metricIdx, metric := range metrics {
 		// Transfer results locally and immediately free on-device storage.
 		metric.MaterializeLocal()
-		metric.InvalidateOnDevice()
+		err = metric.InvalidateOnDevice()
+		if err != nil {
+			return nil, errors.WithMessagef(err,
+				"Loop.RunSteps(%d): failed to free metric %s",
+				steps, loop.Trainer.Metrics()[metricIdx].Name())
+		}
 	}
 	err = loop.end(metrics)
 	if err != nil {
@@ -364,7 +377,12 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, 
 					loop.setLastStep(loop.LoopStep + yieldsPerEpoch*(epochs-loop.Epoch-1))
 					break
 				}
-				return nil, errors.WithMessagef(err, "Loop.RunEpochs(epoch %d of %d): failed reading from Dataset", loop.Epoch, epochs)
+				return nil, errors.WithMessagef(
+					err,
+					"Loop.RunEpochs(epoch %d of %d): failed reading from Dataset",
+					loop.Epoch,
+					epochs,
+				)
 			}
 
 			// Check inputs and labels are valid.
@@ -377,11 +395,16 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, 
 
 			// Immediately free any space being used.
 			for _, metric := range metrics {
-				metric.FinalizeAll()
+				metric.MustFinalizeAll()
 			}
 			metrics, err = loop.step(spec, inputs, labels)
 			if err != nil {
-				return nil, errors.WithMessagef(err, "Loop.RunEpochs(%d): failed reading from Dataset (LoopStep=%d)", epochs, loop.LoopStep)
+				return nil, errors.WithMessagef(
+					err,
+					"Loop.RunEpochs(%d): failed reading from Dataset (LoopStep=%d)",
+					epochs,
+					loop.LoopStep,
+				)
 			}
 			loop.LoopStep++
 		}

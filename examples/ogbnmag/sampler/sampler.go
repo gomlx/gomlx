@@ -3,15 +3,16 @@ package sampler
 import (
 	"encoding/gob"
 	"fmt"
+	"math"
+	"os"
+	"sort"
+	"strings"
+
 	humanize "github.com/dustin/go-humanize"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"math"
-	"os"
-	"sort"
-	"strings"
 )
 
 // PaddingIndex is used for all sampling not fulfilled.
@@ -108,7 +109,13 @@ func (et *EdgeType) NumEdges() int { return len(et.EdgeTargets) }
 // Don't modify the returned slice, it's in use by the Sampler -- make a copy if you need to modify.
 func (et *EdgeType) EdgeTargetsForSourceIdx(srcIdx int32) []int32 {
 	if srcIdx < 0 || int(srcIdx) >= len(et.Starts) {
-		Panicf("invalid source node (%q) index %d for edge type %q (only %d source nodes)", et.SourceNodeType, srcIdx, et.Name, len(et.Starts))
+		Panicf(
+			"invalid source node (%q) index %d for edge type %q (only %d source nodes)",
+			et.SourceNodeType,
+			srcIdx,
+			et.Name,
+			len(et.Starts),
+		)
 	}
 	var start int32
 	if srcIdx > 0 {
@@ -152,7 +159,9 @@ func New() *Sampler {
 // A sparse node type (e.g.: indices are random numbers from 0 to MAXINT-1 or strings) is not supported.
 func (s *Sampler) AddNodeType(name string, count int) {
 	if s.Frozen {
-		Panicf("Sampler is Frozen, that is, a strategy was already created with NewStrategy() and hence can no longer be modified.")
+		Panicf(
+			"Sampler is Frozen, that is, a strategy was already created with NewStrategy() and hence can no longer be modified.",
+		)
 	}
 	if count > math.MaxInt32 {
 		Panicf("Sampler uses int32, but node type %q Count of %d given is bigger than the max possible.", name, count)
@@ -179,7 +188,9 @@ func (s *Sampler) AddNodeType(name string, count int) {
 // But the edges information themselves are not lost.
 func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges *tensors.Tensor, reverse bool) {
 	if s.Frozen {
-		Panicf("Sampler is frozen, that is, a strategy was already created with NewStrategy() and hence can no longer be modified.")
+		Panicf(
+			"Sampler is frozen, that is, a strategy was already created with NewStrategy() and hence can no longer be modified.",
+		)
 	}
 	if edges.Rank() != 2 || edges.DType() != dtypes.Int32 ||
 		edges.Shape().Dimensions[1] != 2 || edges.Shape().Dimensions[0] == 0 {
@@ -195,7 +206,7 @@ func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges
 		sourceNodeType, targetNodeType = targetNodeType, sourceNodeType
 	}
 
-	tensors.MutableFlatData[int32](edges, func(edgesData []int32) {
+	tensors.MustMutableFlatData[int32](edges, func(edgesData []int32) {
 		// Sort edges according to the source column.
 		pairsToSort := pairsToSort{
 			data:       edgesData,
@@ -217,12 +228,24 @@ func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges
 		for row := 0; row < int(numEdges); row++ {
 			sourceIdx, targetIdx := edgesData[row<<1+columnSrc], pairsToSort.data[row<<1+columnTgt]
 			if sourceIdx < 0 || sourceIdx >= countSource {
-				Panicf("edge type %q has an edge whose source (node type %q) is %d, but node type %q only has a max of %d elements registered (with AddNodeType())",
-					name, sourceNodeType, sourceIdx, sourceNodeType, countSource)
+				Panicf(
+					"edge type %q has an edge whose source (node type %q) is %d, but node type %q only has a max of %d elements registered (with AddNodeType())",
+					name,
+					sourceNodeType,
+					sourceIdx,
+					sourceNodeType,
+					countSource,
+				)
 			}
 			if targetIdx < 0 || targetIdx >= countTarget {
-				Panicf("edge type %q has an edge whose target (node type %q) is %d, but node type %q only has a max of %d elements registered (with AddNodeType())",
-					name, targetNodeType, targetIdx, targetNodeType, countTarget)
+				Panicf(
+					"edge type %q has an edge whose target (node type %q) is %d, but node type %q only has a max of %d elements registered (with AddNodeType())",
+					name,
+					targetNodeType,
+					targetIdx,
+					targetNodeType,
+					countTarget,
+				)
 			}
 			samplerEdges.EdgeTargets[row] = targetIdx
 			for currentSourceIdx < sourceIdx {

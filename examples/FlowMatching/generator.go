@@ -393,7 +393,13 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 //
 // If `cacheKey` empty, cache is by-passed. Otherwise, try to load images from cache first if available,
 // or save generated images in cache for future use.
-func SliderDiffusionSteps(cfg *diffusion.Config, cacheKey string, numImages int, numDiffusionSteps int, htmlId string) *xsync.Latch {
+func SliderDiffusionSteps(
+	cfg *diffusion.Config,
+	cacheKey string,
+	numImages int,
+	numDiffusionSteps int,
+	htmlId string,
+) *xsync.Latch {
 	// Generate images.
 	type ImagesAndDiffusions struct {
 		Images    []string
@@ -423,7 +429,12 @@ func SliderDiffusionSteps(cfg *diffusion.Config, cacheKey string, numImages int,
 	// Create HTML content and containers.
 	denoiseHtmlId := "fm_transform_" + gonbui.UniqueId()
 	dom.Append(
-		htmlId, fmt.Sprintf(`Tranforming Noise to Flowers: &nbsp;<span id="%s" style="font-family: monospace; font-style: italic; font-size: small; border: 1px solid; border-style: inset; padding-right:5px;"> </span><br/>`, denoiseHtmlId))
+		htmlId,
+		fmt.Sprintf(
+			`Tranforming Noise to Flowers: &nbsp;<span id="%s" style="font-family: monospace; font-style: italic; font-size: small; border: 1px solid; border-style: inset; padding-right:5px;"> </span><br/>`,
+			denoiseHtmlId,
+		),
+	)
 	slider := widgets.Slider(0, numDiffusionSteps, 0).AppendTo(htmlId).Done()
 	plotId := "plot_" + gonbui.UniqueId()
 	dom.Append(htmlId, fmt.Sprintf(`<div id="%s"></div>`, plotId))
@@ -453,7 +464,12 @@ func SliderDiffusionSteps(cfg *diffusion.Config, cacheKey string, numImages int,
 // flower type.
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
-func GenerateImagesOfFlowerType(cfg *diffusion.Config, numImages int, flowerType int32, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
+func GenerateImagesOfFlowerType(
+	cfg *diffusion.Config,
+	numImages int,
+	flowerType int32,
+	numDiffusionSteps int,
+) (predictedImages *tensors.Tensor) {
 	ctx := cfg.Context
 	ctx.RngStateReset()
 	noise := cfg.GenerateNoise(numImages)
@@ -466,7 +482,12 @@ func GenerateImagesOfFlowerType(cfg *diffusion.Config, numImages int, flowerType
 //
 // If `cacheKey` empty, cache is by-passed. Otherwise, try to load images from cache first if available,
 // or save generated images in cache for future use.
-func DropdownFlowerTypes(cfg *diffusion.Config, cacheKey string, numImages, numDiffusionSteps int, htmlId string) *xsync.Latch {
+func DropdownFlowerTypes(
+	cfg *diffusion.Config,
+	cacheKey string,
+	numImages, numDiffusionSteps int,
+	htmlId string,
+) *xsync.Latch {
 	numFlowerTypes := flowers.NumLabels
 	generateFn := func() []string {
 		htmlImages := make([]string, numFlowerTypes)
@@ -586,7 +607,7 @@ func (kg *KidGenerator) Eval() (metric *tensors.Tensor) {
 
 		datasetImages := inputs[0]
 		if metric != nil {
-			metric.FinalizeAll()
+			metric.MustFinalizeAll()
 		}
 		metric = kg.evalExec.MustExec(generatedImages, datasetImages)[0]
 	}

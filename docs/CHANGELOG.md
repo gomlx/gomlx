@@ -2,7 +2,9 @@
 
 # v0.25.0: Added AutoSharding, SPMD distributed execution; Added "portable" single-device execution
 
-Note: some internal and backend API changes.
+Note: some internal and backend API changes, including many tensors' APIs, now return errors (as opposed to panicking
+on backend errors).
+
 Distributed computation improvements and refactorings:
 
 - Package `graph`:
@@ -27,7 +29,7 @@ Distributed computation improvements and refactorings:
   -Added `DeviceMesh`, `ShardSpec` and `distributed.Tensor` objects.
 - Package `pkg/core/tensors`:
   - Added `Tensor.CheckValid()`, `Tensor.Device()`, `Tensor.Backend()`
-  - Changing it to return an error where possible.
+  - Changing it to return an error (as opposed to panic) where possible.
 
 Other minor improvements:
 
@@ -45,7 +47,6 @@ Other minor improvements:
 - Updated dependency to Gopjrt v0.8.5, fixing xlabuilder for new C compilers.
 - Removed `ui/fyneui`:
   - It was incomplete, and it would be better offered as a separate package to avoid the dependencies.
-
 - Package `graph`:
   - Added a negative and out-of-bounds indices test for `Gather`.
 - Package `simplego`:

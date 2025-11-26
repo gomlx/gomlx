@@ -37,13 +37,6 @@ func MustNewExec[F ExecGraphFn](backend backends.Backend, graphFn F) *Exec {
 	return MustNewExecAny(backend, graphFn)
 }
 
-// NewExecOrError is an alias to NewExec.
-//
-// Deprecated: use NewExec instead.
-func NewExecOrError[F ExecGraphFn](backend backends.Backend, graphFn F) (*Exec, error) {
-	return NewExec(backend, graphFn)
-}
-
 // ExecOnce builds the graph and executes it with the given arguments and returns the one output.
 //
 // It's short for a call to MustNewExec, Exec.Exec and Exec.Finalize for functions that return only one output.

@@ -184,7 +184,7 @@ func TestFNNRegularized(t *testing.T) {
 		require.NotNilf(t, v, "failed to inspect variable scope=%q, name=%q", scope, vName)
 		tensor := v.Value()
 		fmt.Printf("\t%s : %s -> %v\n", v.Scope(), v.Name(), tensor)
-		tensors.ConstFlatData[float64](tensor, func(flat []float64) {
+		tensors.MustConstFlatData[float64](tensor, func(flat []float64) {
 			for _, element := range flat {
 				if element == 0.0 {
 					numZeros++
@@ -193,5 +193,11 @@ func TestFNNRegularized(t *testing.T) {
 		})
 	}
 	fmt.Printf("\nNumber of zeros in the weights of the FNN: %d\n", numZeros)
-	require.GreaterOrEqual(t, numZeros, 1000, "We expected at least 1000 zeros on the weights of the FNN, with L1 regularizer, we got only %d though", numZeros)
+	require.GreaterOrEqual(
+		t,
+		numZeros,
+		1000,
+		"We expected at least 1000 zeros on the weights of the FNN, with L1 regularizer, we got only %d though",
+		numZeros,
+	)
 }

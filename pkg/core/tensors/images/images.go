@@ -221,12 +221,12 @@ func toTensorGenericsImpl[T dtypes.NumberNotComplex | float16.Float16 | bfloat16
 		}
 	}
 
-	t.MutableFlatData(func(flatAny any) {
+	t.MustMutableFlatData(func(flatAny any) {
 		flat := flatAny.([]T)
 		pos := 0 // Position in the flat slice.
 		for imgIdx, img := range images {
 			if !img.Bounds().Size().Eq(imgSize) {
-				t.FinalizeAll()
+				t.MustFinalizeAll()
 				Panicf(
 					"image[%d] has size %s, but image[0] has size %s -- they must all be the same",
 					imgIdx, img.Bounds().Size(), imgSize)
@@ -255,7 +255,11 @@ func toTensorGenericsImpl[T dtypes.NumberNotComplex | float16.Float16 | bfloat16
 			}
 		}
 		if pos != t.Shape().Size() {
-			Panicf("images.ToTensor failed to set the values for all pixels (%d written out of %d)", pos, t.Shape().Size())
+			Panicf(
+				"images.ToTensor failed to set the values for all pixels (%d written out of %d)",
+				pos,
+				t.Shape().Size(),
+			)
 		}
 	})
 	return
@@ -321,10 +325,17 @@ func toImageImpl(ti *ToImageConfig, imagesTensor *tensors.Tensor) (images []imag
 		width = imagesTensor.Shape().Dimensions[2]
 		channels = imagesTensor.Shape().Dimensions[3]
 	default:
-		Panicf("invalid tensor shape %s for images.ToImage conversion, must be either rank-3 or rank-4", imagesTensor.Shape())
+		Panicf(
+			"invalid tensor shape %s for images.ToImage conversion, must be either rank-3 or rank-4",
+			imagesTensor.Shape(),
+		)
 	}
 	if channels != 3 && channels != 4 {
-		Panicf("images.ToImage invalid tensor shape %s, with %d channels: only images with 3 or 4 channels are supported", imagesTensor.Shape(), channels)
+		Panicf(
+			"images.ToImage invalid tensor shape %s, with %d channels: only images with 3 or 4 channels are supported",
+			imagesTensor.Shape(),
+			channels,
+		)
 		return
 	}
 	maxValue := ti.maxValue
@@ -374,7 +385,7 @@ func toImageGenericsImpl[T dtypes.NumberNotComplex | float16.Float16 | bfloat16.
 	tensorPos := 0
 	isFloat16 := imagesTensor.DType() == dtypes.Float16
 	isBFloat16 := imagesTensor.DType() == dtypes.BFloat16
-	imagesTensor.ConstFlatData(func(flatAny any) {
+	imagesTensor.MustConstFlatData(func(flatAny any) {
 		tensorData := flatAny.([]T)
 		for imageIdx := 0; imageIdx < numImages; imageIdx++ {
 			img := image.NewNRGBA(image.Rect(0, 0, width, height))

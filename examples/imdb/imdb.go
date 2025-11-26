@@ -489,7 +489,7 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err erro
 	// Build input tensor.
 	input := tensors.FromScalarAndDimensions(TokenId(0), batchSize, ds.MaxLen)
 	labelsData := make([]int8, batchSize)
-	tensors.MutableFlatData(input, func(inputData []TokenId) {
+	tensors.MustMutableFlatData(input, func(inputData []TokenId) {
 		for batchIdx, exampleIdx := range batchIndices {
 			ex := LoadedExamples[exampleIdx]
 			labelsData[batchIdx] = int8(ex.Label)
@@ -537,7 +537,7 @@ func InputToString(input *tensors.Tensor, batchIdx int) string {
 	}
 	maxLen := input.Shape().Dimensions[1]
 	parts := make([]string, 0, maxLen)
-	tensors.ConstFlatData(input, func(inputData []TokenId) {
+	tensors.MustConstFlatData(input, func(inputData []TokenId) {
 		start := batchIdx * maxLen
 		for _, tokenId := range inputData[start : start+maxLen] {
 			if tokenId == 0 {

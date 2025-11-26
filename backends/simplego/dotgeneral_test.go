@@ -325,8 +325,8 @@ func requireSameTensorsFloat32(t *testing.T, want, got *tensors.Tensor, delta fl
 	// Make sure shapes are the same.
 	require.True(t, got.Shape().Equal(want.Shape()))
 	flatIdx := 0
-	gotFlat := tensors.CopyFlatData[float32](got)
-	wantFlat := tensors.CopyFlatData[float32](want)
+	gotFlat := tensors.MustCopyFlatData[float32](got)
+	wantFlat := tensors.MustCopyFlatData[float32](want)
 	var mismatches int
 	for indices := range got.Shape().Iter() {
 		gotValue := gotFlat[flatIdx]
@@ -429,7 +429,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 				return graph.Gather(out, graph.Const(g, [][]int32{{0, 0, 0}}))
 			})
 			fmt.Printf("\ty3=%s\n", y3)
-			require.InDelta(t, 0.7392, tensors.CopyFlatData[float64](y3)[0], 1e-4)
+			require.InDelta(t, 0.7392, tensors.MustCopyFlatData[float64](y3)[0], 1e-4)
 
 			// BFloat16 example.
 			t.Run("BFloat16", func(t *testing.T) {
@@ -442,7 +442,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 				)
 				fmt.Printf("\ty2=%s\n", y2)
 				require.NoError(t, y2.Shape().Check(dtypes.BFloat16, 1, 1))
-				require.Equal(t, float32(10+22+36), tensors.CopyFlatData[bfloat16.BFloat16](y2)[0].Float32())
+				require.Equal(t, float32(10+22+36), tensors.MustCopyFlatData[bfloat16.BFloat16](y2)[0].Float32())
 			})
 
 			// Do not run the larger tests if running -test.short: they will break Github

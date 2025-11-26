@@ -412,7 +412,7 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 		if v.ChangedInGraph(g) {
 			// We donate the buffer, since we are getting a new one on the output.
 			inputBuffers[handle] = v.Value().DonateBuffer(e.backend, e.exec.DeviceAssignment())
-			v.Value().FinalizeAll()
+			v.Value().MustFinalizeAll()
 			v.value = nil
 			donate[handle] = true
 		} else {
@@ -538,7 +538,7 @@ func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, 
 	for ii, v := range changedVars {
 		old := v.Value()
 		if old != nil {
-			old.FinalizeAll()
+			old.MustFinalizeAll()
 		}
 		if !v.shape.Equal(outputs[ii].Shape()) {
 			return nil, nil, errors.Errorf(

@@ -14,13 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func must1[T any](v T, err error) T {
-	if err != nil {
-		panic(err)
-	}
-	return v
-}
-
 // TestPortable tests that a computation is properly compiled as "portable" if
 // using no distribution strategy and not assigned to any device.
 //
