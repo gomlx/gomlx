@@ -856,15 +856,8 @@ func execGatherGeneric[T PODIntegerConstraints](params ...any) any {
 			// Clamp indices to valid range [0, dim-sliceSize] to match XLA/StableHLO semantics.
 			dim := operandDimensions[axis]
 			maxIdx := dim - sliceSizes[axis]
-			if maxIdx < 0 {
-				// Should not happen if shape inference is correct, but safety first.
-				maxIdx = 0
-			}
-			if idx < 0 {
-				idx = 0
-			} else if idx > maxIdx {
-				idx = maxIdx
-			}
+			maxIdx = max(0, maxIdx)
+			idx = max(0, min(maxIdx, idx))
 			operandStartIndices[axis] = idx
 		}
 		operandBytesIdx = 0

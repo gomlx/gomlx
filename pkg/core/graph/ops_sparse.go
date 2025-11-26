@@ -38,7 +38,7 @@ import (
 //
 // Parameters:
 //   - data: The tensor from which gathering will be done (used to get dimension size)
-//   - indices: The indices to normalize (must be a signed integer tensor)
+//   - indices: The values to normalize according to data dimensions, must be integer
 //   - axis: The axis of data along which gathering will happen (supports negative axis)
 //
 // Returns normalized indices with the same shape and dtype as input indices.
@@ -58,18 +58,19 @@ func NormalizeIndices(data, indices *Node, axis int) *Node {
 	if !indices.DType().IsInt() {
 		Panicf("NormalizeIndices requires indices to have an integer type, got %s", indices.DType())
 	}
-
-	// Handle negative axis
-	if axis < 0 {
-		axis = data.Rank() + axis
+	if indices.DType().IsUnsigned() {
+		// Unsigned values cannot be negative, we are done.
+		return indices
 	}
+
+	axis = AdjustAxisToOperandRank(data, axis)
 	if axis < 0 || axis >= data.Rank() {
 		Panicf("NormalizeIndices: axis %d out of range for data with rank %d", axis, data.Rank())
 	}
 
 	g := data.Graph()
 	dim := data.Shape().Dimensions[axis]
-	dimNode := ConvertDType(Const(g, dim), indices.DType())
+	dimNode := Scalar(g, indices.DType(), dim)
 
 	// Where indices < 0, add dim; otherwise keep original
 	// normalized = Where(indices < 0, indices + dim, indices)
