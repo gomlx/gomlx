@@ -853,11 +853,17 @@ func execGatherGeneric[T PODIntegerConstraints](params ...any) any {
 		for ii, axis := range startIndexMap {
 			startIndexForAxis := startIndicesFlat[indirectStartIndices[ii]]
 			idx := int(startIndexForAxis)
-			// Clamp indices to valid range [0, dim-1] to match XLA/StableHLO semantics.
+			// Clamp indices to valid range [0, dim-sliceSize] to match XLA/StableHLO semantics.
+			dim := operandDimensions[axis]
+			maxIdx := dim - sliceSizes[axis]
+			if maxIdx < 0 {
+				// Should not happen if shape inference is correct, but safety first.
+				maxIdx = 0
+			}
 			if idx < 0 {
 				idx = 0
-			} else if dim := operandDimensions[axis]; idx >= dim {
-				idx = dim - 1
+			} else if idx > maxIdx {
+				idx = maxIdx
 			}
 			operandStartIndices[axis] = idx
 		}
