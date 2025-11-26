@@ -27,6 +27,12 @@
 - Package `backends/notimplemented`:
   - Added dummy `Backend` that can be used to easily mock backends.
 
+- Package `graph`:
+  - Added a negative and out-of-bounds indices test for `Gather`.
+- Package `simplego`:
+  - Partially fixed a race condition where the executable is finalized during the execution, causing crashes -- 
+    Thanks @ajroetker!
+
 # v0.24.1: 2025/10/23 Adding Darwin (Mac) support for CPU PJRT plugin
 
 * Updated dependency to Gopjrt v0.8.4: added macOS (darwin/arm64) support and cpu PJRT plugin.

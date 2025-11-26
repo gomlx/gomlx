@@ -78,7 +78,13 @@ type executionBuffers struct {
 // Compile time check.
 var _ backends.Executable = (*Executable)(nil)
 
-// Finalize immediately frees resources associated to the executable.
+// Finalize immediately frees resources associated with the executable.
+//
+// TODO: Race-condition where calling Finalize will make execution crash, if finalized while executing.
+//       Make Finalize wait for all the current executions to exit, before finalizing.
+//       And add a latch indicating Finalize has been called, to tell the executions to exit immediately
+//       without finishing. Finally, remove the `e.builder == nil` checks, that won't be necessary anymore,
+//       since e.builder will never be set to nil while there is an execution alive.
 func (e *Executable) Finalize() {
 	e.builder.Finalize()
 	e.builder = nil
@@ -211,6 +217,11 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 		return nil, errors.Errorf("Execute: expected %d inputs, got %d", len(e.builder.inputs), len(inputs))
 	}
 
+	// donate defaults to false for all buffers.
+	if len(donate) == 0 {
+		donate = make([]bool, len(inputs))
+	}
+
 	// Check input shapes
 	for ii, input := range inputs {
 		if input == nil {
@@ -221,7 +232,9 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 			return nil, errors.Errorf("Execute: input buffer #%d is not from SimpleGo backend", ii)
 		}
 		if !inputBuffer.valid {
-			return nil, errors.Errorf("Execute: input buffer (%p) #%d is not valid, likely it is being used after being isFinalized", inputBuffer, ii)
+			return nil, errors.Errorf(
+				"Execute: input buffer (%p) #%d is not valid, likely it is being used after being isFinalized",
+				inputBuffer, ii)
 		}
 		if inputBuffer.flat == nil {
 			return nil, errors.Errorf("Execute: input buffer #%d flat data is set to nil (!?)", ii)
@@ -499,12 +512,24 @@ func (e *Executable) executeParallel(execBuf *executionBuffers) error {
 	// Loop over nodes that are ready to execute:
 	for nodeIdx := range readyToExecute {
 		nodeExecFn := func() {
+			// Check if the Executable has been finalized during shutdown.
+			// This can happen during concurrent shutdowns when Finalize() is called
+			// while worker pool goroutines are still executing.
+			if e.builder == nil {
+				stopExecutionFn()
+				return
+			}
 			node := e.builder.nodes[nodeIdx]
 
 			// On return, it updates the dependencies and checks that all outputs are complete.
 			defer func(nodeIdx int) {
 				execMu.Lock()
 				defer execMu.Unlock()
+				// Check if the Executable has been finalized during shutdown.
+				if e.builder == nil {
+					stopExecutionFn()
+					return
+				}
 				if len(collectErrors) > 0 {
 					// Interrupted anyway.
 					return
