@@ -135,6 +135,7 @@ func TestExec(t *testing.T) {
 
 func TestDonate(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
+	deviceNum := backends.DeviceNum(0)
 	g := NewGraph(backend, "TestDonate")
 	x := Parameter(g, "x", shapes.Make(dtypes.Float64))
 	p1 := AddScalar(x, 1)
@@ -150,7 +151,7 @@ func TestDonate(t *testing.T) {
 
 	// Donate input: make sure input is not shared.
 	input = tensors.FromValue(5.0)
-	input.MaterializeOnDevice(backend, false)
+	input.MustMaterializeOnDevice(backend, false, deviceNum)
 	fmt.Printf("TestDonate: IsShared=%v\n", input.IsShared())
 	output = g.Run(DonateTensorBuffer(input, backend, 0))[0]
 	require.Equal(t, 6.0, output.Value())
@@ -159,9 +160,9 @@ func TestDonate(t *testing.T) {
 
 	// Donate input with shared buffer:
 	input = tensors.FromValue(11.0)
-	input.MaterializeOnDevice(backend, true)
+	input.MustMaterializeOnDevice(backend, true, deviceNum)
 	fmt.Printf("TestDonate (shared requested): IsShared=%v\n", input.IsShared())
-	output = g.Run(DonateTensorBuffer(input, backend, 0))[0]
+	output = g.Run(DonateTensorBuffer(input, backend, deviceNum))[0]
 	require.Equal(t, 12.0, output.Value())
 	require.False(t, input.Ok()) // input is no longer valid, since there are no local copies.
 }

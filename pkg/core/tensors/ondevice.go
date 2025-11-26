@@ -78,19 +78,11 @@ func (t *Tensor) Buffer(backend backends.Backend, deviceNum ...backends.DeviceNu
 // It triggers the transfer from local to the backend device if the tensor is not already stored on the device.
 //
 // It doesn't finalize(release) the local tensor value.
-//
-// The deviceNum is optional. But only one can be given. The default value is 0.
-func (t *Tensor) DonateBuffer(backend backends.Backend, deviceNum ...backends.DeviceNum) backends.Buffer {
+func (t *Tensor) DonateBuffer(backend backends.Backend, deviceNum backends.DeviceNum) backends.Buffer {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.AssertValid()
-	if len(deviceNum) > 1 {
-		exceptions.Panicf("Tensor.Buffer takes at most one deviceNum, %v given", deviceNum)
-	}
-	if len(deviceNum) == 0 {
-		deviceNum = defaultDeviceNums
-	}
-	t.mustLockedMaterializeOnDevice(backend, false, deviceNum...)
+	t.mustLockedMaterializeOnDevice(backend, false, deviceNum)
 	buf := t.onDevice.buffer
 	t.onDevice = nil
 	if t.local == nil && t.onDevice == nil {
@@ -106,57 +98,95 @@ func (d *onDevice) IsFinalized() bool {
 	return d == nil || d.buffer == nil
 }
 
-// Finalize releases the associated buffer in the PJRT client.
+// MustFinalize releases the associated buffer in the PJRT client.
 // It's the caller's responsibility to ensure this buffer is not being used elsewhere (like in the middle of an execution).
 //
 // It doesn't clear the pointer to this Device in the Tensor object.
-func (d *onDevice) Finalize() {
-	if d.IsFinalized() {
-		return
-	}
-	if !d.t.backend.IsFinalized() {
-		// We finalize only if the backend hasn't been finalized yet -- otherwise, we assume all buffers
-		// have been freed/finalized/invalidated by the backend already.
-		if err := d.t.backend.BufferFinalize(d.buffer); err != nil {
-			panic(errors.WithMessagef(err, "Tensor.OnDevice.Finalize: failed to finalize buffer on-device"))
-		}
-	}
-	d.buffer = nil
-	d.t = nil
-}
-
-// MaterializeOnDevice will transfer a Tensor from local storage to the given device, if needed.
-// Generally the user doesn't need to call this function, it's called by the libraries executing GoMLX computations
-// automatically when needed.
 //
-// If share is true, and if the backend allows for shared buffer, this will create a shared buffer,
-// which is more economic.
-//
-// - If an updated copy of the Tensor is already on the device, this is a no-op.
-// - If the Tensor has already been used with a different client, this panics: one cannot mix clients on the same Tensor.
-// - If no deviceNum is given, 0 is assumed, the default device for the client.
-func (t *Tensor) MaterializeOnDevice(backend backends.Backend, share bool, deviceNums ...backends.DeviceNum) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.AssertValid()
-	t.mustLockedMaterializeOnDevice(backend, share, deviceNums...)
-}
-
-// defaultDeviceNums is used whenever `deviceNums` is not provided.
-var defaultDeviceNums = []backends.DeviceNum{0}
-
-// mustLockedMaterializeOnDevice implements Tensor.MaterializeOnDevice
-//
-// If share is true, it will attempt to materialize to a shared buffer if available.
-// In this case, it frees the local tensor storage and starts using the shared data instead.
-func (t *Tensor) mustLockedMaterializeOnDevice(backend backends.Backend, share bool, deviceNums ...backends.DeviceNum) {
-	err := t.lockedMaterializeOnDevice(backend, share, deviceNums...)
+// It panics on a backend error.
+func (d *onDevice) MustFinalize() {
+	err := d.Finalize()
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (t *Tensor) lockedMaterializeOnDevice(backend backends.Backend, share bool, deviceNums ...backends.DeviceNum) error {
+// Finalize releases the associated buffer in the PJRT client.
+// It's the caller's responsibility to ensure this buffer is not being used elsewhere (like in the middle of an execution).
+//
+// It doesn't clear the pointer to this Device in the Tensor object.
+func (d *onDevice) Finalize() error {
+	if d.IsFinalized() {
+		return nil
+	}
+	if !d.t.backend.IsFinalized() {
+		// We finalize only if the backend hasn't been finalized yet -- otherwise, we assume all buffers
+		// have been freed/finalized/invalidated by the backend already.
+		if err := d.t.backend.BufferFinalize(d.buffer); err != nil {
+			return errors.WithMessagef(err, "Tensor.OnDevice.MustFinalize: failed to finalize buffer on-device")
+		}
+	}
+	d.buffer = nil
+	d.t = nil
+	return nil
+}
+
+// MustMaterializeOnDevice will transfer a Tensor from local storage to the given device, if needed, or transfer from
+// one device to another (freeing the source device copy).
+//
+// Generally the user doesn't need to call this function, it is called by the libraries executing GoMLX computations
+// automatically when needed (e.g.: graph.Exec or context.Exec).
+//
+// If share is true, and if the backend allows for shared buffers, this will create a shared buffer,
+// which can be more economic.
+//
+// - If an updated copy of the Tensor is already on the device, this is a no-op.
+// - If the Tensor has already been used with a different client, this panics: one cannot mix clients on the same Tensor.
+//
+// It panics on a backend error.
+func (t *Tensor) MustMaterializeOnDevice(backend backends.Backend, share bool, deviceNum backends.DeviceNum) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.AssertValid()
+	t.mustLockedMaterializeOnDevice(backend, share, deviceNum)
+}
+
+// MaterializeOnDevice will transfer a Tensor from local storage to the given device, if needed, or transfer from
+// one device to another (freeing the source device copy).
+//
+// Generally the user doesn't need to call this function, it is called by the libraries executing GoMLX computations
+// automatically when needed (e.g.: graph.Exec or context.Exec).
+//
+// If share is true, and if the backend allows for shared buffers, this will create a shared buffer,
+// which can be more economic.
+//
+// - If an updated copy of the Tensor is already on the device, this is a no-op.
+// - If the Tensor has already been used with a different client, this panics: one cannot mix clients on the same Tensor.
+func (t *Tensor) MaterializeOnDevice(backend backends.Backend, share bool, deviceNum backends.DeviceNum) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	err := t.CheckValid()
+	if err != nil {
+		return err
+	}
+	return t.lockedMaterializeOnDevice(backend, share, deviceNum)
+}
+
+// defaultDeviceNums is used whenever `deviceNums` is not provided.
+var defaultDeviceNums = []backends.DeviceNum{0}
+
+// mustLockedMaterializeOnDevice implements Tensor.MustMaterializeOnDevice
+//
+// If share is true, it will attempt to materialize to a shared buffer if available.
+// In this case, it frees the local tensor storage and starts using the shared data instead.
+func (t *Tensor) mustLockedMaterializeOnDevice(backend backends.Backend, share bool, deviceNum backends.DeviceNum) {
+	err := t.lockedMaterializeOnDevice(backend, share, deviceNum)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (t *Tensor) lockedMaterializeOnDevice(backend backends.Backend, share bool, deviceNum backends.DeviceNum) error {
 	if t.backend == nil {
 		t.backend = backend
 	} else if t.backend != backend {
@@ -170,26 +200,30 @@ func (t *Tensor) lockedMaterializeOnDevice(backend backends.Backend, share bool,
 			t.shape, backend.Name())
 	}
 	if t.backend == nil || t.backend.IsFinalized() {
-		return errors.New("cannot MaterializeOnDevice with a nil or finalized backend")
+		return errors.New("cannot MustMaterializeOnDevice with a nil or finalized backend")
 	}
-
-	if len(deviceNums) == 0 {
-		deviceNums = defaultDeviceNums
-	}
-	if len(deviceNums) > 1 {
-		return errors.New("Tensor.MaterializeOnDevice: tensor synchronization across multiple devices not" +
-			" supported yet -- you can create one tensor per device though")
-	}
-	deviceNum := deviceNums[0]
 	if !t.onDevice.IsFinalized() {
+		// Tensor already on-device:
 		if t.onDevice.deviceNum == deviceNum {
 			// Nothing to do.
 			return nil
-		} else {
-			return errors.New(
-				"Tensor.MaterializeOnDevice: tensor synchronization across multiple devices not supported yet " +
-					"-- you can create one tensor per device though")
 		}
+		// Attempt to transfer the buffer to the new device.
+		newBuffer, err := backend.BufferCopyToDevice(t.onDevice.buffer, deviceNum)
+		if err != nil {
+			return errors.WithMessagef(err, "failed to transfer Tensor's buffer from device %d to device %d",
+				t.onDevice.deviceNum, deviceNum)
+		}
+		err := t.onDevice.Finalize()
+		if err != nil {
+			return errors.WithMessagef(err, "failed to finalize Tensor's on-device buffer on device %d", t.onDevice.deviceNum)
+		}
+		t.onDevice = &onDevice{
+			t:         t,
+			buffer:    newBuffer,
+			deviceNum: deviceNum,
+		}
+		return nil
 	}
 
 	// We need to materialize the onDevice from local:
@@ -202,7 +236,7 @@ func (t *Tensor) lockedMaterializeOnDevice(backend backends.Backend, share bool,
 	if share && backend.HasSharedBuffers() {
 		buffer, t.sharedFlat, err = backend.NewSharedBuffer(deviceNum, t.shape)
 		if err != nil {
-			return errors.WithMessagef(err, "Tensor.MaterializeOnDevice: failed to create a shared buffer")
+			return errors.WithMessagef(err, "Tensor.MustMaterializeOnDevice: failed to create a shared buffer")
 		}
 		reflect.Copy(reflect.ValueOf(t.sharedFlat), reflect.ValueOf(t.local.flat))
 		t.local = nil // Free local storage.
@@ -210,7 +244,7 @@ func (t *Tensor) lockedMaterializeOnDevice(backend backends.Backend, share bool,
 	} else {
 		buffer, err = t.backend.BufferFromFlatData(deviceNum, t.local.flat, t.shape)
 		if err != nil {
-			return errors.WithMessagef(err, "Tensor.MaterializeOnDevice: failed to create a new buffer")
+			return errors.WithMessagef(err, "Tensor.MustMaterializeOnDevice: failed to create a new buffer")
 		}
 	}
 	t.onDevice = &onDevice{
@@ -232,13 +266,13 @@ func (t *Tensor) lockedMaterializeOnDevice(backend backends.Backend, share bool,
 // If there is no local copy of the Tensor, this will invalidate the whole tensor.
 //
 // Usually, this is called automatically. Mostly for internal use.
-func (t *Tensor) InvalidateOnDevice() {
+func (t *Tensor) InvalidateOnDevice() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.isShared {
-		return
+		return nil
 	}
-	t.lockedInvalidateOnDevice()
+	return t.lockedInvalidateOnDevice()
 }
 
 // lockedInvalidateOnDevice destroys all on-device copies of the Tensor.
@@ -247,16 +281,23 @@ func (t *Tensor) InvalidateOnDevice() {
 // If there is no local copy of the Tensor, this will invalidate the tensor.
 //
 // Usually, this is called automatically. Mostly for internal use.
-func (t *Tensor) lockedInvalidateOnDevice() {
+func (t *Tensor) lockedInvalidateOnDevice() error {
 	if t.isShared {
-		return
+		return nil
 	}
-	t.AssertValid()
+	err := t.CheckValid()
+	if err != nil {
+		return err
+	}
 	if t.onDevice != nil {
-		t.onDevice.Finalize()
+		err = t.onDevice.Finalize()
+		if err != nil {
+			return errors.WithMessagef(err, "Tensor.InvalidateOnDevice: failed to finalize on-device buffer")
+		}
 		t.onDevice = nil
 	}
 	t.backend = nil
+	return nil
 }
 
 // OnDeviceClone creates a clone of the tensor t that has backend storage.
@@ -445,7 +486,7 @@ func (t *Tensor) CopyFrom(tFrom *Tensor) {
 
 // IsOnDevice checks whether the Tensor has an on-device copy on the given deviceNum.
 //
-// See MaterializeOnDevice to trigger a transfer/copy to the given device.
+// See MustMaterializeOnDevice to trigger a transfer/copy to the given device.
 func (t *Tensor) IsOnDevice(deviceNum backends.DeviceNum) bool {
 	t.AssertValid()
 	return t.onDevice != nil && !t.onDevice.IsFinalized() && t.onDevice.deviceNum == deviceNum

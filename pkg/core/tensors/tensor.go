@@ -245,7 +245,7 @@ func (t *Tensor) lockedFinalizeAll() {
 		t.local = nil
 	}
 	if t.onDevice != nil {
-		t.onDevice.Finalize()
+		t.onDevice.MustFinalize()
 		t.onDevice = nil
 	}
 	t.shape = shapes.Invalid()
