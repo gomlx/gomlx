@@ -397,7 +397,8 @@ func TestContext_Clone(t *testing.T) {
 	// Uninitialized variable:
 	v0y := ctx0.In("a").In("b").VariableWithShape("y", shapes.Make(dtypes.Int8, 2, 3, 4))
 
-	ctx1 := ctx0.In("a").In("b").Reuse().Clone()
+	ctx1, err := ctx0.In("a").In("b").Reuse().Clone()
+	require.NoError(t, err)
 	require.True(t, ctx1.IsChecked())
 	require.True(t, ctx1.IsReuse())
 	require.Equal(t, "/a/b", ctx1.Scope())

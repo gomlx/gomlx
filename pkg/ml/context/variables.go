@@ -40,10 +40,10 @@ import (
 // During the computation graph building, for a particular graph, one can access the graph value (Node)
 // of a variable with the methods.
 //
-// They are only initialized when Context.InitializeVariables. That is, they are created and used in
-// graph building possibly before they are actually initialized -- when building a graph they are
-// passed as parameters (the corresponding graph node is called ParameterNode), and have their values
-// passed only during execution.
+// They are only initialized when Context.InitializeVariables.
+// That is, they are created and used in graph building possibly before they are actually initialized.
+// When building a graph they are passed as parameters (the corresponding graph node is called ParameterNode),
+// and have their values passed only during the execution of the compiled computation graph.
 type Variable struct {
 	ctx         *Context
 	name, scope string
@@ -56,27 +56,20 @@ type Variable struct {
 
 	initializer VariableInitializer // Set if the variable is not yet initialized.
 
-	// Storage for the different physical views.
-	// Only one "Source of Truth" is valid at a time, indicated by the flags below.
+	// It works in two modes:
+	//
+	// 1. Single-device: using Variable.SetValue and Variable.Value.
+	// 2. Multi-device: using Variable.SetDistributedValue and Variable.DistributedValue.
 
 	// value is a local tensor.
 	value *tensors.Tensor
 
-	// sharding defines how the variable is split in a distributed context.
-	// If nil, the variable is considered replicated (or local).
-	sharding *distributed.ShardingSpec
-
-	// deviceValues holds the portable view: Map of DeviceID -> Tensor.
-	// Used when running the same graph on different devices independently.
-	deviceValues map[backends.DeviceNum]*tensors.Tensor
-
 	// distValue holds the distributed view: A tensor sharded across a mesh.
 	distValue *distributed.Tensor
 
-	// state tracking flags.
-	isValidLocal       bool
-	validDevices       sets.Set[backends.DeviceNum] // Set of devices with up-to-date values
-	isValidDistributed bool
+	// sharding defines how the variable is split in a distributed context.
+	// If nil, the variable is considered replicated (or local).
+	sharding *distributed.ShardingSpec
 
 	// graphToNodes maps graph ids in which this variable was used to its parameter Node and
 	// its last value Node.
@@ -89,7 +82,7 @@ type Variable struct {
 // But the new clone starts with no graph node mapping -- so it's assumed it's not in use by any Graph.
 //
 // The variable is then inserted into the given context.
-func (v *Variable) CloneToContext(toCtx *Context) *Variable {
+func (v *Variable) CloneToContext(toCtx *Context) (*Variable, error) {
 	newV := &Variable{
 		ctx:       toCtx,
 		name:      v.name,
@@ -101,13 +94,17 @@ func (v *Variable) CloneToContext(toCtx *Context) *Variable {
 
 	// Copy the value if it exists.
 	// We force a merge to local (Host) to clone to avoid the logic of cloning distributed tensors for now.
-	if v.value != nil || v.isValidDistributed || len(v.validDevices) > 0 {
-		newV.value = v.Value().Clone()
-		newV.isValidLocal = true
+	var err error
+	if v.value != nil {
+		newV.value, err = v.Value().Clone()
+	} else if v.distValue != nil {
+		newV.value, err = v.distValue.Clone()
 	}
-	newV.validDevices = sets.Make[backends.DeviceNum]()
+	if err != nil {
+		return nil, err
+	}
 	toCtx.InAbsPath(v.scope).setVariableInScope(v.name, newV)
-	return newV
+	return newV, nil
 }
 
 // variableNodes is used to store the variable parameter node (fed to the graph) and current value Node for a given graph.

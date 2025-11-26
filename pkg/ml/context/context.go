@@ -196,7 +196,7 @@ func New() *Context {
 //     copied over by with newCtx.SetLoader(ctx.Loader()).
 //   - The context state is copied over: needing initialization of variables, if to be checked
 //     for new/reuse of variables, etc.
-func (ctx *Context) Clone() *Context {
+func (ctx *Context) Clone() (*Context, error) {
 	newCtx := New()
 	newCtx.scope = ctx.scope
 	newCtx.reuse = ctx.reuse
@@ -204,10 +204,15 @@ func (ctx *Context) Clone() *Context {
 	newCtx.initializer = ctx.initializer
 	newCtx.data.needsInitialization = ctx.data.needsInitialization
 	newCtx.data.params = ctx.data.params.Clone()
+	var err error
 	for v := range ctx.IterVariables() {
-		_ = v.CloneToContext(newCtx)
+		_, err = v.CloneToContext(newCtx)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "failed to clone variable %q while cloning the Context",
+				v.Name())
+		}
 	}
-	return newCtx
+	return newCtx, nil
 }
 
 const (
@@ -659,8 +664,11 @@ func (ctx *Context) InitializeVariables(backend backends.Backend) {
 	}
 	for ii, variable := range variablesToInitialize {
 		if !values[ii].Ok() {
-			Panicf("graph execution to initialize variables failed: variable %q (#%d) generated value was invalid -- maybe other variables as well",
-				variable.ScopeAndName(), ii)
+			Panicf(
+				"graph execution to initialize variables failed: variable %q (#%d) generated value was invalid -- maybe other variables as well",
+				variable.ScopeAndName(),
+				ii,
+			)
 		}
 		variable.value = values[ii]
 	}
@@ -853,13 +861,22 @@ func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable
 		Panicf("requested variable %q in scope %q with Context.Reuse set, but variable does not exist", name, ctx.scope)
 	}
 	if v != nil && ctx.checked && !ctx.reuse {
-		Panicf("variable %q for scope %q already exists -- if this was deliberate, use Context.Reuse() or Context.Check(false)", name, ctx.scope)
+		Panicf(
+			"variable %q for scope %q already exists -- if this was deliberate, use Context.Reuse() or Context.Check(false)",
+			name,
+			ctx.scope,
+		)
 	}
 
 	if v != nil {
 		if !shape.Equal(v.shape) {
-			Panicf("requested to reuse variable %q in scope %q, but with different shape from original: previous shape=%s, requested shape=%s",
-				name, ctx.scope, v.shape, shape)
+			Panicf(
+				"requested to reuse variable %q in scope %q, but with different shape from original: previous shape=%s, requested shape=%s",
+				name,
+				ctx.scope,
+				v.shape,
+				shape,
+			)
 		}
 		// We want to update/register the initializer, even if the value is already set (maybe read from a checkpoint).
 		v.initializer = ctx.initializer
@@ -931,14 +948,27 @@ func (ctx *Context) VariableWithValue(name string, defaultValue any) *Variable {
 	var valueT *tensors.Tensor
 	err := TryCatch[error](func() { valueT = valueToTensor(defaultValue) })
 	if err != nil {
-		panic(errors.WithMessagef(err, "failed to parse defaultValue %v for variable %q in scope %q", defaultValue, name, ctx.scope))
+		panic(
+			errors.WithMessagef(
+				err,
+				"failed to parse defaultValue %v for variable %q in scope %q",
+				defaultValue,
+				name,
+				ctx.scope,
+			),
+		)
 	}
 
 	if v != nil {
 		// Pre-existing variable to reuse: check that the requested and previous shapes are the same.
 		if !valueT.Shape().Equal(v.shape) {
-			Panicf("requested to reuse variable %q in scope %q, but with defaultValue with different shape from original: previous shape=%s, requested defaultValue shape=%s",
-				name, ctx.scope, v.shape, valueT.Shape())
+			Panicf(
+				"requested to reuse variable %q in scope %q, but with defaultValue with different shape from original: previous shape=%s, requested defaultValue shape=%s",
+				name,
+				ctx.scope,
+				v.shape,
+				valueT.Shape(),
+			)
 		}
 		return v
 	}
