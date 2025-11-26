@@ -178,11 +178,14 @@ func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*t
 		}
 	}
 
-	// Free metrics on-device usage: on-device memory being more at premium,
+	// Free metrics on-device usage: on-device memory is at premium,
 	// we want to immediately free things that are no longer used there.
 	for _, m := range metrics {
 		m.MaterializeLocal()
-		m.InvalidateOnDevice()
+		err := m.InvalidateOnDevice()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Call "OnStep" hooks.

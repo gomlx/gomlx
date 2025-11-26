@@ -17,7 +17,7 @@ func TestFinalizeAfterBackend(t *testing.T) {
 			backend, err := simplego.New("")
 			require.NoError(t, err)
 			x := tensors.FromAnyValue([][]float32{{1}, {2}})
-			x.MaterializeOnDevice(backend, share)
+			x.MustMaterializeOnDevice(backend, share)
 			backend.Finalize()
 			require.NotPanics(t, func() {
 				// Finalizing the tensor after the backend should not panic.
@@ -36,7 +36,7 @@ func TestInvalidAccessAfterBackendFinalized(t *testing.T) {
 			backend, err := simplego.New("")
 			require.NoError(t, err)
 			x := tensors.FromAnyValue([][]float32{{1}, {2}})
-			x.MaterializeOnDevice(backend, share)
+			x.MustMaterializeOnDevice(backend, share)
 			x.FinalizeLocal()
 			backend.Finalize()
 			require.Panics(t, func() {

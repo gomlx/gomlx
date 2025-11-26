@@ -48,23 +48,23 @@ type Variable struct {
 	ctx         *Context
 	name, scope string
 
-	// Trainable indicates whether variable is trainable. If set to false it won't be
-	// touched by trainers of the model.
+	// Trainable indicates whether the variable is trainable.
+	// If set to false, it won't be touched by trainers.
 	Trainable bool
 
 	shape shapes.Shape
-
-	// sharding defines how the variable is split in a distributed context.
-	// If nil, the variable is considered replicated (or local).
-	sharding *distributed.ShardingSpec
 
 	initializer VariableInitializer // Set if the variable is not yet initialized.
 
 	// Storage for the different physical views.
 	// Only one "Source of Truth" is valid at a time, indicated by the flags below.
 
-	// value is the Local (CPU) or merged view.
+	// value is a local tensor.
 	value *tensors.Tensor
+
+	// sharding defines how the variable is split in a distributed context.
+	// If nil, the variable is considered replicated (or local).
+	sharding *distributed.ShardingSpec
 
 	// deviceValues holds the portable view: Map of DeviceID -> Tensor.
 	// Used when running the same graph on different devices independently.
@@ -85,7 +85,7 @@ type Variable struct {
 
 // CloneToContext Variable.
 //
-// Value, name, scope, trainable state and initializer are cloned.
+// Value, name, scope, trainable state, sharding spec, and initializer are cloned.
 // But the new clone starts with no graph node mapping -- so it's assumed it's not in use by any Graph.
 //
 // The variable is then inserted into the given context.
@@ -98,8 +98,9 @@ func (v *Variable) CloneToContext(toCtx *Context) *Variable {
 		Trainable: v.Trainable,
 		sharding:  v.sharding,
 	}
-	// Copy value if it exists.
-	// We force a merge to local (Host) to clone, to avoid complicating logic of cloning distributed tensors for now.
+
+	// Copy the value if it exists.
+	// We force a merge to local (Host) to clone to avoid the logic of cloning distributed tensors for now.
 	if v.value != nil || v.isValidDistributed || len(v.validDevices) > 0 {
 		newV.value = v.Value().Clone()
 		newV.isValidLocal = true
@@ -272,8 +273,7 @@ func VariableParameterNameFromScopeAndName(scope, name string) string {
 // WARNING: memory management here is tricky: a call to SetValue will
 // trigger the current value to be deallocated, and what is returned
 // by a previous call to Value to become invalid. The recommendation
-// is not to use this is a concurrent set up -- or to create proper
-// locking mechanisms.
+// is not to use this in a concurrent setup -- or to create proper locking mechanisms.
 func (v *Variable) Value() *tensors.Tensor {
 	v.AssertValid()
 

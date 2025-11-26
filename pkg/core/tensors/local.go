@@ -397,16 +397,11 @@ func GobDeserialize(decoder *gob.Decoder) (t *Tensor, err error) {
 }
 
 // GobDeserializeToDevice deserialize a Tensor from the reader directly to on-device memory.
-// If the tensor is expected to be consumed by graph execution, this may worked faster by
+// If the tensor is expected to be consumed by graph execution, this may work faster by
 // avoiding an unnecessary copy.
 //
-// deviceNums is optional, and for now at most one deviceNum is supported.
-//
 // Returns new Tensor (with shared or onDevice storage or an error).
-func GobDeserializeToDevice(decoder *gob.Decoder, backend backends.Backend, deviceNums ...backends.DeviceNum) (t *Tensor, err error) {
-	if len(deviceNums) > 1 {
-		return nil, errors.Errorf("only one device per Tensor is supported for now, %d given", len(deviceNums))
-	}
+func GobDeserializeToDevice(decoder *gob.Decoder, backend backends.Backend, deviceNum backends.DeviceNum) (t *Tensor, err error) {
 	if !backend.HasSharedBuffers() {
 		// Load locally, and then materialize on-device.
 		t, err = GobDeserialize(decoder)
@@ -414,7 +409,7 @@ func GobDeserializeToDevice(decoder *gob.Decoder, backend backends.Backend, devi
 			return
 		}
 		err = exceptions.TryCatch[error](func() {
-			t.MaterializeOnDevice(backend, false, deviceNums...)
+			t.MustMaterializeOnDevice(backend, false, deviceNums...)
 			t.FinalizeLocal()
 		})
 		if err != nil {

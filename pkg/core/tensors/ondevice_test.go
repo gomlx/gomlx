@@ -24,6 +24,13 @@ func init() {
 	klog.InitFlags(nil)
 }
 
+func must(err error) {
+	if err != nil {
+		klog.Errorf("Failed with error: %+v", err)
+		panic(err)
+	}
+}
+
 var (
 	backend backends.Backend
 )
@@ -134,6 +141,7 @@ var testShapes = []shapes.Shape{
 //	BenchmarkHostToDevice/(Float32)[1000_1000]-24               9177            133306 ns/op
 func BenchmarkHostToDevice(b *testing.B) {
 	setupTest(nil)
+	deviceNum := backends.DeviceNum(0)
 
 	// Pre-allocate tensors.
 	numShapes := len(testShapes)
@@ -149,10 +157,10 @@ func BenchmarkHostToDevice(b *testing.B) {
 
 	// Run test for a shape
 	benchShape := func(_ float32, shapeIdx int) {
-		// Set input to value of v.
+		// Set input to the value of v.
 		x := inputTensors[shapeIdx]
-		x.MaterializeOnDevice(backend, false)
-		x.InvalidateOnDevice()
+		must(x.MaterializeOnDevice(backend, false, deviceNum))
+		must(x.InvalidateOnDevice())
 	}
 
 	// Warmup for each shape.
@@ -247,7 +255,7 @@ func BenchmarkCopyFromDevice(b *testing.B) {
 				flat[ii] = float32(ii)
 			}
 		})
-		inputTensors[shapeIdx].MaterializeOnDevice(backend, false) // Don't use shared buffers for benchmark
+		inputTensors[shapeIdx].MustMaterializeOnDevice(backend, false) // Don't use shared buffers for benchmark
 		inputTensors[shapeIdx].FinalizeLocal()
 		outputTensors[shapeIdx] = tensors.FromShape(s)
 	}
@@ -285,7 +293,7 @@ func TestClones(t *testing.T) {
 			originalTensor := tensors.FromValue(refValues)
 			if fromLocation == 1 {
 				// originalTensor is on device.
-				originalTensor.MaterializeOnDevice(backend, false)
+				originalTensor.MustMaterializeOnDevice(backend, false)
 				originalTensor.FinalizeLocal()
 			}
 
@@ -300,7 +308,7 @@ func TestClones(t *testing.T) {
 				cloneTensor = originalTensor.OnDeviceClone(backend)
 			}
 
-			// Finalize original tensor, and make sure it is garbage collected.
+			// MustFinalize original tensor, and make sure it is garbage collected.
 			originalTensor.FinalizeAll()
 			for range 3 {
 				runtime.GC()
@@ -320,7 +328,7 @@ func TestToLocal(t *testing.T) {
 	for _, shared := range []bool{false, true} {
 		t.Run(fmt.Sprintf("Shared=%v", shared), func(t *testing.T) {
 			tensor := tensors.FromValue(refValues)
-			tensor.MaterializeOnDevice(backend, shared)
+			tensor.MustMaterializeOnDevice(backend, shared)
 			b2, err := tensor.Backend()
 			require.NoError(t, err)
 			require.Equal(t, backend, b2)
@@ -336,6 +344,7 @@ func TestToLocal(t *testing.T) {
 }
 
 func TestOnDeviceSerialization(t *testing.T) {
+	deviceNum := backends.DeviceNum(0)
 	// Test reading directly to device.
 	setupTest(t)
 	if backend == nil {
@@ -359,7 +368,7 @@ func TestOnDeviceSerialization(t *testing.T) {
 		dec := gob.NewDecoder(buf)
 		for range repeats {
 			var err error
-			tensor, err = tensors.GobDeserializeToDevice(dec, backend)
+			tensor, err = tensors.GobDeserializeToDevice(dec, backend, deviceNum)
 			require.NoError(t, err)
 			require.Equal(t, values, tensor.Value().([][]int64))
 			tensor.FinalizeAll()

@@ -496,11 +496,11 @@ type donateBuffer struct {
 // It requires the backend and the deviceNum (defaults to 0) of the device buffer to donate.
 //
 // Notice that after this, t's value in the device becomes invalid.
-func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum ...backends.DeviceNum) any {
+func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum backends.DeviceNum) any {
 	d := &donateBuffer{shape: t.Shape()}
 	d.buffer = t.DonateBuffer(
 		backend,
-		deviceNum...) // DonateBuffer may destroy the tensor if there is no local storage.
+		deviceNum) // DonateBuffer may destroy the tensor if there is no local storage.
 	return d
 }
 
