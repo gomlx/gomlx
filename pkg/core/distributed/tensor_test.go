@@ -118,4 +118,47 @@ func TestTensor(t *testing.T) {
 		assert.Equal(t, []int32{1, 2, 3, 4, 5, 6, 10, 20, 30, 40, 50, 60}, tensors.MustCopyFlatData[int32](merged))
 	})
 
+	t.Run("Clone", func(t *testing.T) {
+		// Create a new device mesh.
+		mesh, err := distributed.NewDeviceMesh([]int{2}, []string{"shards"})
+		require.NoError(t, err)
+
+		// Create a new tensor.
+		tensor := tensors.FromValue([][]int32{{1, 2, 3, 4}, {5, 6, 7, 8}})
+
+		// Shard the tensor.
+		spec, err := distributed.NewShardSpec(mesh, distributed.AxisSpec{"shards"}, distributed.ReplicatedAxis)
+		require.NoError(t, err)
+		distTensor, err := distributed.ShardTensor(backend, spec, tensor)
+		require.NoError(t, err)
+
+		// Clone the distributed tensor.
+		distClone, err := distTensor.Clone()
+		require.NoError(t, err)
+
+		// Verify metadata.
+		assert.Equal(t, distTensor.Shape(), distClone.Shape())
+		assert.Equal(t, distTensor.ShardShape(), distClone.ShardShape())
+		require.Len(t, distClone.Shards(), len(distTensor.Shards()))
+
+		// Verify content.
+		for i, shard := range distTensor.Shards() {
+			cloneShard := distClone.Shards()[i]
+			assert.Equal(t, shard.Value(), cloneShard.Value())
+		}
+
+		// Verify independence.
+		// Modify the first element of the first shard of the original tensor.
+		shard0 := distTensor.Shards()[0]
+		err = tensors.MutableFlatData(shard0, func(flat []int32) {
+			flat[0] = 100
+		})
+		require.NoError(t, err)
+
+		// Check that the clone's first shard is unchanged (original value was 1).
+		cloneShard0 := distClone.Shards()[0]
+		cloneShard0Val := cloneShard0.Value().([][]int32)
+		assert.Equal(t, int32(1), cloneShard0Val[0][0])
+	})
+
 }

@@ -183,45 +183,20 @@ func (dt *Tensor) ShardShape() shapes.Shape {
 	return dt.shardShape
 }
 
-//// Merge merges the tensors into one concrete logical tensor.
-//// For the replicated axes, it takes the values from the first replica.
-//func (dt *Tensor) Merge() (*tensors.Tensor, error) {
-//	// Create a new tensor with the logical shape.
-//	rank := dt.logicalShape.Rank()
-//	t := tensors.FromShape(dt.logicalShape)
-//	toStrides := dt.logicalShape.Strides()
-//	shardStrides := dt.shardShape.Strides()
-//	shapeRatio := dt.logicalShape.Clone()
-//	for axis, logicalDim := range shapeRatio.Dimensions {
-//		shapeRatio.Dimensions[axis] = logicalDim / dt.shardShape.Dimensions[axis]
-//	}
-//	if shapeRatio.Size() != len(dt.shards) {
-//		return nil, errors.Errorf("number of shards (%d) does not match logical shape (%s)",
-//			len(dt.shards), dt.logicalShape)
-//	}
-//	elementSize := dt.logicalShape.DType.Size()
-//	if elementSize == 0 {
-//		return nil, errors.Errorf("merge of tensors with sub-byte sizes not implemented (for DType %s)",
-//			dt.logicalShape.DType)
-//	}
-//
-//	t.MutableBytes(func(tBytes []byte) {
-//		for shardIdx, shardPos := range shapeRatio.Iter() {
-//			shard := dt.shards[shardIdx]
-//			shard.ConstBytes(func(shardBytes []byte) {
-//				// Calculate the slice of the logical tensor that corresponds to this shard.
-//				sliceStarts := make([]int, rank)
-//				sliceEnds := make([]int, rank)
-//				for axis := range rank {
-//					sliceStarts[axis] = shardPos[axis] * dt.shardShape.Dimensions[axis]
-//					sliceEnds[axis] = sliceStarts[axis] + dt.shardShape.Dimensions[axis]
-//				}
-//
-//			})
-//		}
-//	})
-//	return t, nil
-//}
+// Clone creates a copy of the distributed Tensor.
+// It clones each shard on the device it currently resides.
+func (dt *Tensor) Clone() (*Tensor, error) {
+	newShards := make([]*tensors.Tensor, len(dt.shards))
+	for i, shard := range dt.shards {
+		var err error
+		newShards[i], err = shard.Clone()
+		if err != nil {
+			return nil, errors.WithMessagef(err, "distributed.Tensor.Clone: failed to clone shard %d", i)
+		}
+	}
+	// NewTensor will validate the new shards and calculate shapes.
+	return NewTensor(dt.backend, dt.spec, newShards)
+}
 
 // Merge merges the tensors into one concrete logical tensor.
 func (dt *Tensor) Merge() (*tensors.Tensor, error) {
@@ -229,8 +204,6 @@ func (dt *Tensor) Merge() (*tensors.Tensor, error) {
 	rank := dt.logicalShape.Rank()
 	t := tensors.FromShape(dt.logicalShape)
 	toStrides := dt.logicalShape.Strides()
-
-	// shapeRatio calculation (from your snippet)
 	shapeRatio := dt.logicalShape.Clone()
 	for axis, logicalDim := range shapeRatio.Dimensions {
 		shapeRatio.Dimensions[axis] = logicalDim / dt.shardShape.Dimensions[axis]
