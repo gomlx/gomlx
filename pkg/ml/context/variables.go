@@ -29,6 +29,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
 )
 
 // Variable is a value shared among computation graphs, or across multiple executions of the same graph.
@@ -206,23 +207,46 @@ func (v *Variable) DType() dtypes.DType {
 	return v.shape.DType
 }
 
-// SetSharding configures the sharding specification for this variable.
-// This must be set before the variable is used in a distributed graph.
-// Changing this invalidates the distributed value (forcing a re-shard/upload next time).
-func (v *Variable) SetSharding(spec *distributed.ShardingSpec) *Variable {
-	v.sharding = spec
-	// Invalidate existing distributed value if the spec changes.
-	if v.isValidDistributed && v.distValue != nil {
-		v.distValue.FinalizeAll()
-		v.distValue = nil
-		v.isValidDistributed = false
-		// If we had a distributed value, we should have a local value (it would have been merged if needed),
-		// or we force a merge now?
-		// For simplicity, we assume the user calls this during setup.
-		// If data was *only* distributed, we are in trouble. Ideally, we should merge.
-		// But usually SetSharding is done at creation.
+// WithSharding configures the sharding specification for this variable, used for distributed execution.
+// Don't use this is running on a single device.
+//
+// Once a variable is set with SetDistributedValue the sharding specification cannot be changed.
+// Setting a variable with SetValue, if the sharding is set, will automatically shard the value, and
+// the sharding can no longer be changed.
+//
+// WithSharding returns the variable itself to allow chaining.
+//
+// On error, it panics. It's assumed to be used within the model (graph) function, but it can also be
+// used during setup -- pre-model building. See SetSharding for a version that returns an error.
+func (v *Variable) WithSharding(spec *distributed.ShardingSpec) *Variable {
+	err := v.SetSharding(spec)
+	if err != nil {
+		panic(err)
 	}
 	return v
+}
+
+// SetSharding configures the sharding specification for this variable, used for distributed execution.
+// Don't use this is running on a single device.
+//
+// Once a variable is set with SetDistributedValue the sharding specification cannot be changed.
+// Setting a variable with SetValue, if the sharding is set, will automatically shard the value, and
+// the sharding can no longer be changed.
+//
+// See also WithSharding for a version that panics on error -- more commonly used inside a model building (graph)
+// function.
+func (v *Variable) SetSharding(spec *distributed.ShardingSpec) error {
+	if v.distValue != nil {
+		if v.distValue.ShardingSpec() != nil {
+			return errors.Errorf("variable %q cannot change sharding to %s, it already has a sharding spec set to %q",
+				v.ScopeAndName(), spec, v.distValue.ShardingSpec())
+		}
+		v.sharding = spec
+		// This is not changing anything.
+		return nil
+	}
+	v.sharding = spec
+	return nil
 }
 
 // Sharding returns the current sharding specification.

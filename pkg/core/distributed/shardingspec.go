@@ -64,6 +64,8 @@ func NewShardSpec(mesh *DeviceMesh, axisSpec ...AxisSpec) (*ShardingSpec, error)
 	return s, nil
 }
 
+
+
 // Validate the spec returning an error if something is invalid.
 func (s *ShardingSpec) Validate() error {
 	meshAxesUsed := make(map[string]bool)
@@ -98,6 +100,37 @@ func (s *ShardingSpec) IsReplicated() bool {
 		}
 	}
 	return true
+}
+
+// String returns a human-readable string representation of the ShardingSpec.
+// Returns "<nil>" if s is nil.
+func (s *ShardingSpec) String() string {
+	if s == nil {
+		return "ShardingSpec<nil>"
+	}
+	if len(s.Axes) == 0 {
+		return "ShardingSpec{mesh=" + s.Mesh.name + ", axes=[]}"
+	}
+	result := "ShardingSpec{mesh=" + s.Mesh.name + ", axes=["
+	for i, axisSpec := range s.Axes {
+		if i > 0 {
+			result += ", "
+		}
+		if len(axisSpec) == 0 {
+			result += "R"
+		} else {
+			result += "S("
+			for j, meshAxis := range axisSpec {
+				if j > 0 {
+					result += ","
+				}
+				result += meshAxis
+			}
+			result += ")"
+		}
+	}
+	result += "]}"
+	return result
 }
 
 // SpecBuilder is a more ergonomic way of building SharingSpec.
