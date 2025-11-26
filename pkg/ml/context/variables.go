@@ -52,6 +52,8 @@ type Variable struct {
 	// If set to false, it won't be touched by trainers.
 	Trainable bool
 
+	// shape holds the "logical shape" of the variable.
+	// On a distributed strategy, this may be different from the individual shards shape.
 	shape shapes.Shape
 
 	initializer VariableInitializer // Set if the variable is not yet initialized.
@@ -150,26 +152,25 @@ func (v *Variable) AssertValid() {
 // Reset sets the variable value to nil while preserving the shape, and marks the context that it needs initialization.
 //
 // This will force to be variable to be reinitialized the next time a graph using the variable is executed.
-func (v *Variable) Reset() {
+func (v *Variable) Reset() error {
 	v.ctx.data.needsInitialization = true
 	if v.value != nil {
 		// Don't wait for the GC to free the memory from the accelerator.
-		v.value.MustFinalizeAll()
+		err := v.value.FinalizeAll()
+		if err != nil {
+			return err
+		}
+		v.value = nil
 	}
-	v.value = nil
-	v.isValidLocal = false
 
 	if v.distValue != nil {
-		v.distValue.FinalizeAll()
+		err := v.distValue.FinalizeAll()
+		if err != nil {
+			return err
+		}
 		v.distValue = nil
 	}
-	v.isValidDistributed = false
-
-	for _, t := range v.deviceValues {
-		t.MustFinalizeAll()
-	}
-	v.deviceValues = nil
-	v.validDevices = sets.Make[backends.DeviceNum]()
+	return nil
 }
 
 // Scope where the variable was created.
@@ -186,6 +187,15 @@ func (v *Variable) Shape() shapes.Shape {
 		return shapes.Shape{}
 	}
 	return v.shape
+}
+
+// ShardShape returns the sharded shape of the variable.
+// It is the same as Shape() in single-device mode, but may differ in distributed mode.
+func (v *Variable) ShardShape() shapes.Shape {
+	if v.distValue != nil {
+		return v.distValue.ShardShape()
+	}
+	return v.Shape()
 }
 
 // DType returns the variable DType.
