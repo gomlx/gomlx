@@ -183,6 +183,31 @@ func (dt *Tensor) ShardShape() shapes.Shape {
 	return dt.shardShape
 }
 
+// Finalize releases the memory associated with the distributed tensor.
+// It calls FinalizeAll on each of the shards.
+// It is safe to call Finalize on an already finalized tensor.
+func (dt *Tensor) Finalize() error {
+	if dt.shards == nil {
+		return nil
+	}
+	var firstErr error
+	for _, shard := range dt.shards {
+		if err := shard.FinalizeAll(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	dt.shards = nil
+	dt.spec = nil
+	dt.mesh = nil
+	dt.backend = nil
+	return firstErr
+}
+
+// FinalizeAll is an alias to Finalize.
+func (dt *Tensor) FinalizeAll() error {
+	return dt.Finalize()
+}
+
 // Clone creates a copy of the distributed Tensor.
 // It clones each shard on the device it currently resides.
 func (dt *Tensor) Clone() (*Tensor, error) {
@@ -426,3 +451,4 @@ func ShardTensor(backend backends.Backend, spec *ShardingSpec, t *tensors.Tensor
 	}
 	return NewTensor(backend, spec, shards)
 }
+
