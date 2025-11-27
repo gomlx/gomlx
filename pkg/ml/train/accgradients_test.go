@@ -51,8 +51,8 @@ func TestTrainer_AccumulateGradients(t *testing.T) {
 		accPredictionVar := ctx.GetVariableByScopeAndName("/"+AccumulatedGradientsScope+"/model", "prediction")
 		require.NotNil(t, accPredictionVar)
 
-		prediction := predictionVar.Value().Value().(float32)
-		accPrediction := accPredictionVar.Value().Value().(float32)
+		prediction := predictionVar.MustValue().Value().(float32)
+		accPrediction := accPredictionVar.MustValue().Value().(float32)
 		fmt.Printf("\tIterator #%d: prediction=%g, accumulated gradient=%g\n", ii, prediction, accPrediction)
 
 		if ii < numSteps-1 {

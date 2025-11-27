@@ -57,7 +57,7 @@ func (ctx *Context) getRngStateVar() *Variable {
 // This overrides the seed used in ParamInitialSeed.
 func (ctx *Context) RngStateReset() {
 	v := ctx.getRngStateVar()
-	v.SetValue(graph.RngState())
+	v.MustSetValue(graph.RngState())
 }
 
 // RngStateFromSeed initializes the default context random number generator (RNG) state with a static seed.
@@ -70,7 +70,7 @@ func (ctx *Context) RngStateReset() {
 func (ctx *Context) RngStateFromSeed(seed int64) {
 	initialState := graph.RngStateFromSeed(seed)
 	v := ctx.getRngStateVar()
-	v.SetValue(initialState)
+	v.MustSetValue(initialState)
 }
 
 // RandomNormal generates random numbers from a normal distribution, with mean 0.0

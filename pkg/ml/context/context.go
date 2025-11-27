@@ -141,6 +141,9 @@ type contextData struct {
 	// needsInitialization indicates whether there are uninitialized variables in
 	// the context. It's set to false whenever one runs Context.InitializeVariables,
 	// and it's set to true whenever a new variable is created without a value.
+	//
+	// If it is set to false, it means all variables are set, and there is no need to initialize.
+	// But a true is not 100% certain: it may be that the variables are already set, it requires checking.
 	needsInitialization bool
 }
 
@@ -686,7 +689,7 @@ func (ctx *Context) ExecSetVariablesInParams(params graph.ParamsMap, g *Graph) {
 			if v.value == nil {
 				Panicf("variable %q not initialized", v.ParameterName())
 			}
-			params[v.ParamNode(g)] = v.value
+			params[v.ValueGraph(g)] = v.value
 		}
 	})
 }
@@ -1152,7 +1155,7 @@ func (ctx *Context) ExecPopulateGraphParamsMap(g *Graph, params graph.ParamsMap)
 		if !found {
 			return
 		}
-		params[nodes.paramNode] = v.Value()
+		params[nodes.paramNode] = v.MustValue()
 	})
 }
 

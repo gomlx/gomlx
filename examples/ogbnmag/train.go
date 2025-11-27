@@ -115,7 +115,13 @@ func TrainingSchedule(ctx *context.Context, fromStep, toStep int) train.OnStepFn
 }
 
 // Train GNN model based on configuration in `ctx`.
-func Train(backend backends.Backend, ctx *context.Context, dataDir, checkpointPath string, layerWiseEval, report bool, paramsSet []string) error {
+func Train(
+	backend backends.Backend,
+	ctx *context.Context,
+	dataDir, checkpointPath string,
+	layerWiseEval, report bool,
+	paramsSet []string,
+) error {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	ReuseShareableKernels = context.GetParamOr(ctx, ParamReuseKernels, true)
 	IdentitySubSeeds = context.GetParamOr(ctx, ParamIdentitySubSeeds, true)
@@ -193,7 +199,11 @@ func Train(backend backends.Backend, ctx *context.Context, dataDir, checkpointPa
 	// Set up scheduled training.
 	if context.GetParamOr(ctx, "scheduled_training", false) {
 		InitTrainingSchedule(ctx)
-		loop.OnStep("TrainingSchedule", 0, TrainingSchedule(ctx, globalStep, trainSteps)) // register custom TrainingSchedule
+		loop.OnStep(
+			"TrainingSchedule",
+			0,
+			TrainingSchedule(ctx, globalStep, trainSteps),
+		) // register custom TrainingSchedule
 	}
 
 	// Run training loop.
@@ -244,7 +254,12 @@ func newTrainer(backend backends.Backend, ctx *context.Context) *train.Trainer {
 	return trainer
 }
 
-func Eval(backend backends.Backend, ctx *context.Context, dataDir, checkpointPath string, layerWise, skipTrain bool) error {
+func Eval(
+	backend backends.Backend,
+	ctx *context.Context,
+	dataDir, checkpointPath string,
+	layerWise, skipTrain bool,
+) error {
 	_, err := checkpoints.Build(ctx).DirFromBase(checkpointPath, dataDir).Done()
 	if err != nil {
 		return errors.WithMessagef(err, "while loading checkpoint from %q", checkpointPath)
@@ -338,11 +353,11 @@ func convertPapersEmbeddings(backend backends.Backend, ctx *context.Context) {
 	}
 
 	papersVar := ctx.GetVariableByScopeAndName(OgbnMagVariablesScope, "PapersEmbeddings")
-	if papersVar == nil || papersVar.Value() == nil {
+	if papersVar == nil || papersVar.MustValue() == nil {
 		Panicf("Cannot convert papers embeddings if variable \"PapersEmbeddings\" is not set yet")
 		panic(nil) // Clear lint warning.
 	}
-	if papersVar.Value().DType() == dtypeEmbed {
+	if papersVar.MustValue().DType() == dtypeEmbed {
 		// Nothing to convert.
 		return
 	}
@@ -351,6 +366,7 @@ func convertPapersEmbeddings(backend backends.Backend, ctx *context.Context) {
 		return ConvertDType(papersVar.ValueGraph(g), dtype)
 	})
 	converted := e.MustExec()[0]
-	papersVar.SetValuePreservingOld(converted) // We don't want to destroy the unconverted values, in case we need it again (it happens in tests).
+	// We don't want to destroy the unconverted values in case we need them again (it happens in tests).
+	must.M(papersVar.SetValuePreservingOld(converted))
 	klog.V(1).Infof("Converted papers embeddings to %s: new shape is %s", dtype, papersVar.Shape())
 }

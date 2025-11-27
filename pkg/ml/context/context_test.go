@@ -84,15 +84,15 @@ func TestContextVariablesInitialization(t *testing.T) {
 	fmt.Printf("\tv0=%v\n", v0)
 	fmt.Printf("\tv1=%v\n", v1)
 	fmt.Printf("\tv2=%v\n", v2)
-	t0 := v0.Value().Value().(float32)
+	t0 := v0.MustValue().Value().(float32)
 	if t0 < 1.5 || t0 > 2.5 {
 		t.Errorf("Expected RandomUniformFn initialization > 1.5, < 2.5, instead got %f", t0)
 	}
-	t1 := v1.Value().Value().([]float64)
+	t1 := v1.MustValue().Value().([]float64)
 	if t1[0] == 0 || t1[1] == 0 {
 		t.Errorf("Expected RandomNormalFn initialization to be random, got %v instead", t1)
 	}
-	t2 := v2.Value().Value().([][]int64)
+	t2 := v2.MustValue().Value().([][]int64)
 	require.Equalf(t, [][]int64{{0}, {0}, {0}}, t2, "Expected Zeros initialization to yield zeros, got %v instead", t2)
 }
 
@@ -406,20 +406,20 @@ func TestContext_Clone(t *testing.T) {
 	require.Equal(t, 2, ctx1.NumVariables())
 	v1x := ctx1.GetVariableByScopeAndName("/a/b", "x")
 	require.NotNil(t, v1x)
-	fmt.Printf("Cloned variable %q: %s\n", v1x.ScopeAndName(), v1x.Value())
+	fmt.Printf("Cloned variable %q: %s\n", v1x.ScopeAndName(), v1x.MustValue())
 	v1y := ctx1.GetVariable("y")
 	require.NotNil(t, v1y)
-	fmt.Printf("Cloned variable %q: %s\n", v1y.ScopeAndName(), v1y.Value())
-	require.Nil(t, v1y.Value())
+	fmt.Printf("Cloned variable %q: %s\n", v1y.ScopeAndName(), v1y.MustValue())
+	require.Nil(t, v1y.MustValue())
 	require.True(t, v1y.Shape().Equal(v0y.Shape()))
 
 	// Check the new variable value is independent of the old one.
 	ctx0 = nil
-	v0x.Value().MustFinalizeAll()
+	v0x.MustValue().MustFinalizeAll()
 	for range 5 {
 		runtime.GC()
 	}
-	require.Equal(t, value, tensors.MustCopyFlatData[float32](v1x.Value()))
+	require.Equal(t, value, tensors.MustCopyFlatData[float32](v1x.MustValue()))
 	// GetParam should back-search to the "initial_seed" at the root scope, and find it.
 	require.Equal(t, int64(42), GetParamOr(ctx1, "initial_seed", int64(0)))
 }

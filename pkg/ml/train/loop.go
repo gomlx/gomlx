@@ -219,7 +219,7 @@ func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*t
 func (loop *Loop) setLastStep(lastStep int) {
 	loop.EndStep = lastStep
 	endStepVar := GetTrainLastStepVar(loop.Trainer.Context())
-	endStepVar.SetValue(tensors.FromScalar(int64(loop.EndStep)))
+	endStepVar.MustSetValue(tensors.FromScalar(int64(loop.EndStep)))
 }
 
 // end of loop, called by all looping methods.

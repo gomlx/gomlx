@@ -52,11 +52,26 @@ func TestExec(t *testing.T) {
 		// First graph build, variable should be initialized.
 		x := [][]float64{{1, 1, 1}}
 		got := oneLayer.MustExec(x)[0].Value().([][]float64)[0][0]
-		assert.NotEqual(t, 0.0, got, "Failed evaluating oneLayer(%v) returned 0, but weights should have been randomly initialized", x)
+		assert.NotEqual(
+			t,
+			0.0,
+			got,
+			"Failed evaluating oneLayer(%v) returned 0, but weights should have been randomly initialized",
+			x,
+		)
 
 		// The second call should reuse the graph and yield the same result.
 		got2 := oneLayer.MustExec(x)[0].Value().([][]float64)[0][0]
-		assert.InDeltaf(t, got, got2, 1e-3, "Second call to oneLayer(%v) returned %f, but first returned %f", x, got, got2)
+		assert.InDeltaf(
+			t,
+			got,
+			got2,
+			1e-3,
+			"Second call to oneLayer(%v) returned %f, but first returned %f",
+			x,
+			got,
+			got2,
+		)
 
 		// Different batch size: it should generate a new graph but yield the same result.
 		x = [][]float64{{1, 1, 1}, {2, 2, 2}}
@@ -120,6 +135,6 @@ func TestExec(t *testing.T) {
 		}
 		counterVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "counter")
 		require.NotNil(t, counterVar)
-		require.Equal(t, int64(2), tensors.ToScalar[int64](counterVar.Value()))
+		require.Equal(t, int64(2), tensors.ToScalar[int64](counterVar.MustValue()))
 	})
 }

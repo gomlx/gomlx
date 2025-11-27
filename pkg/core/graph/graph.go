@@ -307,13 +307,22 @@ func (g *Graph) IsValid() bool {
 	return !(g == nil || g.backend == nil)
 }
 
-// AssertValid panics if the graph is nil or if it has already been finalized.
-func (g *Graph) AssertValid() {
+// CheckValid returns an error if the graph is nil or if it has already been finalized.
+func (g *Graph) CheckValid() error {
 	if g == nil {
-		exceptions.Panicf("the Graph is nil")
+		return errors.Errorf("the Graph is nil")
 	}
 	if g.backend == nil {
-		exceptions.Panicf("Graph %q has been finalized already", g.name)
+		return errors.Errorf("Graph %q has been finalized already", g.name)
+	}
+	return nil
+}
+
+// AssertValid panics if the graph is nil or if it has already been finalized.
+func (g *Graph) AssertValid() {
+	err := g.CheckValid()
+	if err != nil {
+		panic(err)
 	}
 }
 

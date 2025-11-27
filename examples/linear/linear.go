@@ -65,7 +65,12 @@ func initCoefficients(backend backends.Backend, numVariables int) (coefficients,
 	return
 }
 
-func buildExamples(backend backends.Backend, coef, bias *tensors.Tensor, numExamples int, noise float64) (inputs, labels *tensors.Tensor) {
+func buildExamples(
+	backend backends.Backend,
+	coef, bias *tensors.Tensor,
+	numExamples int,
+	noise float64,
+) (inputs, labels *tensors.Tensor) {
 	e := MustNewExec(backend, func(coef, bias *Node) (inputs, labels *Node) {
 		g := coef.Graph()
 		numFeatures := coef.Shape().Dimensions[0]
@@ -149,8 +154,14 @@ func main() {
 
 	// Print learned coefficients and bias -- from the weights in the dense layer.
 	fmt.Println()
-	coefVar, biasVar := ctx.GetVariableByScopeAndName("/dense", "weights"), ctx.GetVariableByScopeAndName("/dense", "biases")
-	learnedCoef, learnedBias := coefVar.Value(), biasVar.Value()
+	coefVar, biasVar := ctx.GetVariableByScopeAndName(
+		"/dense",
+		"weights",
+	), ctx.GetVariableByScopeAndName(
+		"/dense",
+		"biases",
+	)
+	learnedCoef, learnedBias := coefVar.MustValue(), biasVar.MustValue()
 	fmt.Printf("Learned coefficients: %0.5v\n", learnedCoef.Value())
 	fmt.Printf("Learned bias: %0.5v\n", learnedBias.Value())
 }

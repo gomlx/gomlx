@@ -445,7 +445,7 @@ func (c *Config) Done() (*Handler, error) {
 			scope, name := context.VariableScopeAndNameFromParameterName(paramName)
 			v := ctxToSet.GetVariableByScopeAndName(scope, name)
 			if v != nil {
-				v.SetValue(value)
+				v.MustSetValue(value)
 			} else {
 				ctxToSet.InAbsPath(scope).VariableWithValue(name, value)
 			}
@@ -460,7 +460,7 @@ func (c *Config) Done() (*Handler, error) {
 			if !found {
 				continue
 			}
-			v.SetValue(value)
+			v.MustSetValue(value)
 			delete(handler.variableValues, v.ParameterName())
 		}
 	}
@@ -961,7 +961,7 @@ func (h *Handler) Save() error {
 		if h.config.varsToExclude.Has(v) {
 			return
 		}
-		err = saveVar(v.ParameterName(), v.Value())
+		err = saveVar(v.ParameterName(), v.MustValue())
 	})
 
 	// * Loop over current loaded variables.

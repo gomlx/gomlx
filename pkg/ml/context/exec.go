@@ -411,8 +411,8 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 
 		if v.ChangedInGraph(g) {
 			// We donate the buffer, since we are getting a new one on the output.
-			inputBuffers[handle] = v.Value().DonateBuffer(e.backend, e.exec.DeviceAssignment())
-			v.Value().MustFinalizeAll()
+			inputBuffers[handle] = v.MustValue().DonateBuffer(e.backend, e.exec.DeviceAssignment())
+			v.MustValue().MustFinalizeAll()
 			v.value = nil
 			donate[handle] = true
 		} else {
@@ -425,7 +425,7 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 				}
 			}
 			var err error
-			inputBuffers[handle], err = v.Value().Buffer(e.backend, e.exec.DeviceAssignment())
+			inputBuffers[handle], err = v.MustValue().Buffer(e.backend, e.exec.DeviceAssignment())
 			if err != nil {
 				panic(err)
 			}
@@ -536,7 +536,7 @@ func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, 
 		)
 	}
 	for ii, v := range changedVars {
-		old := v.Value()
+		old := v.MustValue()
 		if old != nil {
 			old.MustFinalizeAll()
 		}
@@ -548,7 +548,7 @@ func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, 
 				outputs[ii].Shape(),
 			)
 		}
-		v.SetValue(outputs[ii])
+		v.MustSetValue(outputs[ii])
 	}
 	outputs = outputs[len(changedVars):]
 	return

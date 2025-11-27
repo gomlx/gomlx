@@ -161,7 +161,7 @@ func TestBSplineKANRegularized(t *testing.T) {
 		for _, vName := range []string{"w_splines", "w_residual"} {
 			v := ctx.GetVariableByScopeAndName(scope, vName)
 			require.NotNilf(t, v, "failed to inspect variable scope=%q, name=%q", scope, vName)
-			tensor := v.Value()
+			tensor := v.MustValue()
 			fmt.Printf("\t%s : %s -> %v\n", v.Scope(), v.Name(), tensor)
 			tensors.MustConstFlatData[float64](tensor, func(flat []float64) {
 				for _, element := range flat {
