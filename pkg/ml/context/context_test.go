@@ -267,20 +267,20 @@ func TestDeleteVariable(t *testing.T) {
 	ctx.InitializeVariables(backend)
 
 	assert.Equal(t, 3, ctx.NumVariables())
-	ctx.DeleteVariable("/foo", "x")
+	require.NoError(t, ctx.DeleteVariable("/foo", "x"))
 	assert.Equal(t, 3, ctx.NumVariables())
 	assert.Len(t, loader.Values, 4)
 
-	ctx.DeleteVariable("/b", "y")
+	require.NoError(t, ctx.DeleteVariable("/b", "y"))
 	assert.Equal(t, 2, ctx.NumVariables())
 	assert.Len(t, loader.Values, 4)
 	assert.NotNil(t, ctx.GetVariableByScopeAndName("/b/c", "z")) // Check "z" hasn't been deleted.
 
-	ctx.DeleteVariable("/b/c", "z")
+	require.NoError(t, ctx.DeleteVariable("/b/c", "z"))
 	assert.Equal(t, 1, ctx.NumVariables())
 	assert.Len(t, loader.Values, 3)
 
-	ctx.DeleteVariable("/a", "x")
+	require.NoError(t, ctx.DeleteVariable("/a", "x"))
 	assert.Equal(t, 0, ctx.NumVariables())
 	assert.Len(t, loader.Values, 2)
 }
@@ -307,7 +307,7 @@ func TestDeleteVariablesInScope(t *testing.T) {
 	ctx.InitializeVariables(backend)
 
 	// Remove all under scope "/b"
-	ctx1.DeleteVariablesInScope()
+	require.NoError(t, ctx1.DeleteVariablesInScope())
 	assert.Equal(t, 1, ctx.NumVariables())
 	assert.NotNil(t, ctx.GetVariableByScopeAndName("/a", "x")) // Check "x" hasn't been deleted.
 	assert.Len(
@@ -317,12 +317,12 @@ func TestDeleteVariablesInScope(t *testing.T) {
 	) // Only "/b/c/z" must have been deleted -- but notice that /b/c/w is not affected.
 
 	// Check that deleting an empty scope is a no-op.
-	ctx.In("foo").DeleteVariablesInScope()
+	require.NoError(t, ctx.In("foo").DeleteVariablesInScope())
 	assert.Equal(t, 1, ctx.NumVariables())
 	assert.NotNil(t, ctx.GetVariableByScopeAndName("/a", "x")) // Check "x" hasn't been deleted.
 
 	// Delete everything.
-	ctx.DeleteVariablesInScope()
+	require.NoError(t, ctx.DeleteVariablesInScope())
 	assert.Equal(t, 0, ctx.NumVariables())
 }
 

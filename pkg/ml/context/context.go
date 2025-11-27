@@ -27,6 +27,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -101,6 +102,9 @@ type Context struct {
 
 	// contextData, where "data" component content is stored.
 	data *contextData
+
+	// defaultShardingSpec used for new variables, if execution is distributed.
+	defaultShardingSpec *distributed.ShardingSpec
 }
 
 // scopedVariableMap name to variable within a scope.
@@ -166,7 +170,7 @@ type Loader interface {
 	// loader, otherwise the variable will reappear after deletion.
 	//
 	// If the variable doesn't exist in the loader, it should be a no-op.
-	DeleteVariable(ctx *Context, scope, name string)
+	DeleteVariable(ctx *Context, scope, name string) error
 }
 
 // New returns an empty context, associated with freshly created data.
@@ -783,20 +787,23 @@ func (ctx *Context) setVariableInScope(name string, v *Variable) {
 // DeleteVariable if it exists.
 //
 // This should not be called from a graph building function or from within EnumerateVariables: the results are undefined if you do.
-func (ctx *Context) DeleteVariable(scope, name string) {
+func (ctx *Context) DeleteVariable(scope, name string) error {
 	// Even if variable doesn't exist in context yet, we need to remove it from the loader,
 	// since it may only exist there at first.
 	loader := ctx.data.loader
 	if loader != nil {
-		loader.DeleteVariable(ctx, scope, name)
+		err := loader.DeleteVariable(ctx, scope, name)
+		if err != nil {
+			return err
+		}
 	}
 	scopeVars, ok := ctx.data.variablesMap[scope]
 	if !ok {
-		return
+		return nil
 	}
 	v := scopeVars[name]
 	if v == nil {
-		return
+		return nil
 	}
 	v.value = nil
 	v.graphToNodes.Map.Clear()
@@ -807,13 +814,14 @@ func (ctx *Context) DeleteVariable(scope, name string) {
 	ctx.data.variables = slices.DeleteFunc(ctx.data.variables, func(vCandidate *Variable) bool {
 		return vCandidate == v
 	})
-	return
+	return nil
 }
 
 // DeleteVariablesInScope deletes all variables under the current scope (ctx.Scope()).
+// It also resets the variables, freeing its values.
 //
 // This should not be called from a graph building function or from within EnumerateVariables: the results are undefined if you do.
-func (ctx *Context) DeleteVariablesInScope() {
+func (ctx *Context) DeleteVariablesInScope() error {
 	variables := make([]*Variable, 0, len(ctx.data.variables))
 	baseScope := ctx.Scope()
 	baseScopeWithSeparator := baseScope + ScopeSeparator
@@ -822,26 +830,35 @@ func (ctx *Context) DeleteVariablesInScope() {
 	}
 	loader := ctx.data.loader
 	for _, v := range ctx.data.variables {
-		if v.Scope() == baseScope || strings.HasPrefix(v.Scope(), baseScopeWithSeparator) {
-			if loader != nil {
-				loader.DeleteVariable(ctx, v.Scope(), v.Name())
-			}
-
-			// Remove reference to variable.
-			scopeVars, ok := ctx.data.variablesMap[v.Scope()]
-			if !ok {
-				continue
-			}
-			delete(scopeVars, v.name)
-			if len(scopeVars) == 0 {
-				delete(ctx.data.variablesMap, v.Scope())
-			}
-		} else {
-			// Preserve variable.
+		if v.Scope() != baseScope && !strings.HasPrefix(v.Scope(), baseScopeWithSeparator) {
+			// Not in scope, preserve variable.
 			variables = append(variables, v)
+			continue
+		}
+
+		// Free variable space.
+		err := v.Reset()
+		if err != nil {
+			return err
+		}
+
+		// Inform the loader about the variable being deleted.
+		if loader != nil {
+			loader.DeleteVariable(ctx, v.Scope(), v.Name())
+		}
+
+		// Remove reference to variable.
+		scopeVars, ok := ctx.data.variablesMap[v.Scope()]
+		if !ok {
+			continue
+		}
+		delete(scopeVars, v.name)
+		if len(scopeVars) == 0 {
+			delete(ctx.data.variablesMap, v.Scope())
 		}
 	}
 	ctx.data.variables = variables
+	return nil
 }
 
 // VariableWithShape creates or returns an existing variable with the given shape in the current scope.
@@ -888,11 +905,12 @@ func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable
 
 	// New variable: check, create and register it in Context and return.
 	v = &Variable{
-		ctx:       ctx,
-		name:      name,
-		scope:     ctx.Scope(),
-		shape:     shape,
-		Trainable: true,
+		ctx:          ctx,
+		name:         name,
+		scope:        ctx.Scope(),
+		shape:        shape,
+		Trainable:    true,
+		shardingSpec: ctx.defaultShardingSpec,
 	}
 	ctx.setVariableInScope(name, v)
 

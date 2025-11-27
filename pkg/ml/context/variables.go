@@ -20,16 +20,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gomlx/gomlx/backends"
-	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 )
 
 // Variable is a value shared among computation graphs, or across multiple executions of the same graph.
@@ -70,9 +68,9 @@ type Variable struct {
 	// distValue holds the distributed view: A tensor sharded across a mesh.
 	distValue *distributed.Tensor
 
-	// sharding defines how the variable is split in a distributed context.
+	// shardingSpec defines how the variable is split in a distributed context.
 	// If nil, the variable is considered replicated (or local).
-	sharding *distributed.ShardingSpec
+	shardingSpec *distributed.ShardingSpec
 
 	// graphToNodes maps graph ids in which this variable was used to its parameter Node and
 	// its last value Node.
@@ -81,18 +79,18 @@ type Variable struct {
 
 // CloneToContext Variable.
 //
-// Value, name, scope, trainable state, sharding spec, and initializer are cloned.
+// Value, name, scope, trainable state, shardingSpec spec, and initializer are cloned.
 // But the new clone starts with no graph node mapping -- so it's assumed it's not in use by any Graph.
 //
 // The variable is then inserted into the given context.
 func (v *Variable) CloneToContext(toCtx *Context) (*Variable, error) {
 	newV := &Variable{
-		ctx:       toCtx,
-		name:      v.name,
-		scope:     v.scope,
-		shape:     v.shape,
-		Trainable: v.Trainable,
-		sharding:  v.sharding,
+		ctx:          toCtx,
+		name:         v.name,
+		scope:        v.scope,
+		shape:        v.shape,
+		Trainable:    v.Trainable,
+		shardingSpec: v.shardingSpec,
 	}
 
 	// Copy the value if it exists.
@@ -207,7 +205,7 @@ func (v *Variable) ShardShape() shapes.Shape {
 	if v.distValue != nil {
 		return v.distValue.ShardShape()
 	}
-	// TODO: fix ShardShape in case distValue is not set yet (nil), but v.sharding is configured.
+	// TODO: fix ShardShape in case distValue is not set yet (nil), but v.shardingSpec is configured.
 	return v.Shape()
 }
 
@@ -219,14 +217,16 @@ func (v *Variable) DType() dtypes.DType {
 	return v.shape.DType
 }
 
-// WithSharding configures the sharding specification for this variable, used for distributed execution.
+// WithSharding configures the shardingSpec specification for this variable, used for distributed execution.
 // Don't use this is running on a single device.
 //
-// Once a variable is set with SetDistributedValue the sharding specification cannot be changed.
-// Setting a variable with SetValue, if the sharding is set, will automatically shard the value, and
-// the sharding can no longer be changed.
+// Once a variable is set with SetDistributedValue the shardingSpec specification cannot be changed.
+// Setting a variable with SetValue, if the shardingSpec is set, will automatically shard the value, and
+// the shardingSpec can no longer be changed.
 //
 // WithSharding returns the variable itself to allow chaining.
+//
+// The default is to inherit from the default shardingSpec spec configured in the Context.
 //
 // On error, it panics. It's assumed to be used within the model (graph) function, but it can also be
 // used during setup -- pre-model building. See SetSharding for a version that returns an error.
@@ -238,32 +238,36 @@ func (v *Variable) WithSharding(spec *distributed.ShardingSpec) *Variable {
 	return v
 }
 
-// SetSharding configures the sharding specification for this variable, used for distributed execution.
+// SetSharding configures the shardingSpec specification for this variable, used for distributed execution.
 // Don't use this is running on a single device.
 //
-// Once a variable is set with SetDistributedValue the sharding specification cannot be changed.
-// Setting a variable with SetValue, if the sharding is set, will automatically shard the value, and
-// the sharding can no longer be changed.
+// Once a variable is set with SetDistributedValue the shardingSpec specification cannot be changed.
+// Setting a variable with SetValue, if the shardingSpec is set, will automatically shard the value, and
+// the shardingSpec can no longer be changed.
 //
 // See also WithSharding for a version that panics on error -- more commonly used inside a model building (graph)
 // function.
 func (v *Variable) SetSharding(spec *distributed.ShardingSpec) error {
 	if v.distValue != nil {
 		if v.distValue.ShardingSpec() != nil {
-			return errors.Errorf("variable %q cannot change sharding to %s, it already has a sharding spec set to %q",
-				v.ScopeAndName(), spec, v.distValue.ShardingSpec())
+			return errors.Errorf(
+				"variable %q cannot change shardingSpec to %s, it already has a shardingSpec spec set to %q",
+				v.ScopeAndName(),
+				spec,
+				v.distValue.ShardingSpec(),
+			)
 		}
-		v.sharding = spec
+		v.shardingSpec = spec
 		// This is not changing anything.
 		return nil
 	}
-	v.sharding = spec
+	v.shardingSpec = spec
 	return nil
 }
 
-// Sharding returns the current sharding specification.
+// Sharding returns the current shardingSpec specification.
 func (v *Variable) Sharding() *distributed.ShardingSpec {
-	return v.sharding
+	return v.shardingSpec
 }
 
 // VariableParameterPrefix is used to prefix Graph parameter names for variablesMap.
@@ -358,7 +362,7 @@ func (v *Variable) Value() (*tensors.Tensor, error) {
 // If you use SetValue() on a distributed variable, the current distributed value (if any) is immediately freed.
 // And later, upon request of the distributed value, the value will be sharded.
 // This is useful, for instance, when loading the variable: it is loaded and set with SetValue(), but used as
-// a distributed.Tensor later. The sharding happens automatically.
+// a distributed.Tensor later. The shardingSpec happens automatically.
 //
 // NOTE: Because often variables are large, the previous value is immediately freed (as opposed to
 // waiting for garbage collection). If the previous value is used somewhere else, use SetValuePreservingOld.
@@ -425,7 +429,7 @@ func (v *Variable) SetDistributedValue(distValue *distributed.Tensor) error {
 	v.distValue = distValue
 	if distValue != nil {
 		v.shape = distValue.Shape()
-		v.sharding = distValue.ShardingSpec()
+		v.shardingSpec = distValue.ShardingSpec()
 	} else {
 		// If setting to nil, marks the context as needing initialization.
 		v.ctx.data.needsInitialization = true
@@ -520,27 +524,27 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 	paramName := v.ParameterName()
 	var paramNode *Node
 
-	// Determine shape and sharding based on strategy.
+	// Determine shape and shardingSpec based on strategy.
 	strategy := g.DistributedStrategy()
 	switch strategy {
 	case distributed.SPMD:
 		// In SPMD, the graph runs on each device with local data.
-		// If a sharding spec is present, we need to calculate the shard shape.
-		// If no sharding spec is present, it is assumed replicated, so we use the full shape.
-		if v.sharding == nil {
-			v.sharding = v.ctx.defaultShardingSpec
+		// If a shardingSpec spec is present, we need to calculate the shard shape.
+		// If no shardingSpec spec is present, it is assumed replicated, so we use the full shape.
+		if v.shardingSpec == nil {
+			v.shardingSpec = v.ctx.defaultShardingSpec
 		}
 		// SPMD uses the shard shape.
-		paramNode = graph.ShardedParameter(g, paramName, v.ShardShape(), v.sharding)
+		paramNode = graph.ShardedParameter(g, paramName, v.ShardShape(), v.shardingSpec)
 
 	case distributed.AutoSharding:
 		// In AutoSharding, the graph sees the global logical shape.
-		// We attach the sharding spec to the node if available.
-		if v.sharding == nil {
-			v.sharding = v.ctx.defaultShardingSpec
+		// We attach the shardingSpec spec to the node if available.
+		if v.shardingSpec == nil {
+			v.shardingSpec = v.ctx.defaultShardingSpec
 		}
 		// AutoSharding uses the full logical shape as shape.
-		paramNode = graph.ShardedParameter(g, paramName, v.shape, v.sharding)
+		paramNode = graph.ShardedParameter(g, paramName, v.shape, v.shardingSpec)
 
 	default:
 		// Default (None) strategy: standard parameter.
@@ -563,24 +567,28 @@ func (v *Variable) SetTrainable(trainable bool) *Variable {
 //
 // Usually, one calls Context.Finalize, which in turns finalizes all variables.
 func (v *Variable) Finalize() error {
+	if v.CheckValid() != nil {
+		// Already finalized.
+		return nil
+	}
+	var firstErr error
 	if v.value != nil {
-		v.value.MustFinalizeAll()
+		firstErr = v.value.FinalizeAll()
 		v.value = nil
 	}
-	v.isValidLocal = false
-
 	if v.distValue != nil {
-		v.distValue.FinalizeAll()
-		v.distValue = nil
+		err := v.distValue.FinalizeAll()
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			} else {
+				// We keep firstErr, but log this error.
+				klog.Errorf("Error finalizing variable %q: %+v", v.ScopeAndName(), err)
+			}
+		}
 	}
-	v.isValidDistributed = false
-
-	for _, t := range v.deviceValues {
-		t.MustFinalizeAll()
-	}
-	v.deviceValues = nil
-	v.validDevices = sets.Make[backends.DeviceNum]()
-
 	v.shape = shapes.Invalid()
 	v.graphToNodes.Clear()
+	v.ctx = nil
+	return nil
 }
