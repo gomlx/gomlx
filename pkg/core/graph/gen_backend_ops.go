@@ -3823,6 +3823,7 @@ func (ni *nodeInputsRound) String() string {
 }
 
 // Round returns the Op that represents the output of the corresponding operation.
+// This operation rounds to the nearest even.
 func Round(x *Node) (
 	node *Node) {
 	inputNodes := []*Node{x}

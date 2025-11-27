@@ -543,6 +543,7 @@ type StandardOps interface {
 	RngBitGenerator(state Op, shape shapes.Shape) (newState Op, values Op, err error)
 
 	// Round returns the Op that represents the output of the corresponding operation.
+	// This operation rounds to the nearest even.
 	Round(x Op) (Op, error)
 
 	// Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
