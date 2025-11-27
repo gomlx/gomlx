@@ -40,8 +40,8 @@ import (
 // of a variable with the methods.
 //
 // They are only initialized when Context.InitializeVariables.
-// That is, they are created and used in graph building possibly before they are actually initialized.
-// When building a graph they are passed as parameters (the corresponding graph node is called ParameterNode),
+// That is, they are created and used in graph building, possibly before they are actually initialized.
+// When building a graph, they are passed as parameters (the corresponding graph node is called ParameterNode)
 // and have their values passed only during the execution of the compiled computation graph.
 type Variable struct {
 	ctx         *Context
@@ -94,7 +94,7 @@ func (v *Variable) CloneToContext(toCtx *Context) (*Variable, error) {
 	}
 
 	// Copy the value if it exists.
-	// If both v.value and v.distValue is set, we only clone v.distValue -- one can be created from the other if
+	// If both v.value and v.distValue are set, we only clone v.distValue -- one can be created from the other if
 	// needed later.
 	var err error
 	if v.distValue != nil {
@@ -139,7 +139,7 @@ func (v *Variable) IsValid() bool {
 	return v.shape.Ok()
 }
 
-// CheckValid returns an error if the variable is in an invalid state: if it's nil or it's shape is not yet set.
+// CheckValid returns an error if the variable is in an invalid state: if it's nil, or if its shape is not yet set.
 func (v *Variable) CheckValid() error {
 	if v == nil {
 		return errors.New("context.Variable is nil")
@@ -150,7 +150,7 @@ func (v *Variable) CheckValid() error {
 	return nil
 }
 
-// AssertValid panics if the variable is in an invalid state: if it's nil or it's shape is not yet set.
+// AssertValid panics if the variable is in an invalid state: if it's nil, or if it's shape is not yet set.
 func (v *Variable) AssertValid() {
 	err := v.CheckValid()
 	if err != nil {
@@ -201,11 +201,16 @@ func (v *Variable) Shape() shapes.Shape {
 
 // ShardShape returns the sharded shape of the variable.
 // It is the same as Shape() in single-device mode, but may differ in distributed mode.
+//
+// If the shardingSpec is not set, it returns the same as Shape().
+// If the shardingSpec is invalid for the variable shape, it returns an invalid shape.
 func (v *Variable) ShardShape() shapes.Shape {
 	if v.distValue != nil {
 		return v.distValue.ShardShape()
 	}
-	// TODO: fix ShardShape in case distValue is not set yet (nil), but v.shardingSpec is configured.
+	if v.shardingSpec != nil {
+		return v.shardingSpec.ShardShape(v.Shape())
+	}
 	return v.Shape()
 }
 
@@ -217,37 +222,37 @@ func (v *Variable) DType() dtypes.DType {
 	return v.shape.DType
 }
 
-// WithSharding configures the shardingSpec specification for this variable, used for distributed execution.
+// WithShardingSpec configures the shardingSpec specification for this variable, used for distributed execution.
 // Don't use this is running on a single device.
 //
 // Once a variable is set with SetDistributedValue the shardingSpec specification cannot be changed.
 // Setting a variable with SetValue, if the shardingSpec is set, will automatically shard the value, and
 // the shardingSpec can no longer be changed.
 //
-// WithSharding returns the variable itself to allow chaining.
+// WithShardingSpec returns the variable itself to allow chaining.
 //
 // The default is to inherit from the default shardingSpec spec configured in the Context.
 //
 // On error, it panics. It's assumed to be used within the model (graph) function, but it can also be
-// used during setup -- pre-model building. See SetSharding for a version that returns an error.
-func (v *Variable) WithSharding(spec *distributed.ShardingSpec) *Variable {
-	err := v.SetSharding(spec)
+// used during setup -- pre-model building. See SetShardingSpec for a version that returns an error.
+func (v *Variable) WithShardingSpec(spec *distributed.ShardingSpec) *Variable {
+	err := v.SetShardingSpec(spec)
 	if err != nil {
 		panic(err)
 	}
 	return v
 }
 
-// SetSharding configures the shardingSpec specification for this variable, used for distributed execution.
+// SetShardingSpec configures the shardingSpec specification for this variable, used for distributed execution.
 // Don't use this is running on a single device.
 //
 // Once a variable is set with SetDistributedValue the shardingSpec specification cannot be changed.
 // Setting a variable with SetValue, if the shardingSpec is set, will automatically shard the value, and
 // the shardingSpec can no longer be changed.
 //
-// See also WithSharding for a version that panics on error -- more commonly used inside a model building (graph)
+// See also WithShardingSpec for a version that panics on error -- more commonly used inside a model building (graph)
 // function.
-func (v *Variable) SetSharding(spec *distributed.ShardingSpec) error {
+func (v *Variable) SetShardingSpec(spec *distributed.ShardingSpec) error {
 	if v.distValue != nil {
 		if v.distValue.ShardingSpec() != nil {
 			return errors.Errorf(
@@ -265,8 +270,8 @@ func (v *Variable) SetSharding(spec *distributed.ShardingSpec) error {
 	return nil
 }
 
-// Sharding returns the current shardingSpec specification.
-func (v *Variable) Sharding() *distributed.ShardingSpec {
+// ShardingSpec returns the current shardingSpec specification.
+func (v *Variable) ShardingSpec() *distributed.ShardingSpec {
 	return v.shardingSpec
 }
 
@@ -279,7 +284,7 @@ func (v *Variable) ScopeAndName() string {
 }
 
 // ParameterName used when creating a parameter node in a Graph to access the variable, or as a key when saving.
-// It is a unique name for the variable that includes the scope and the variable name, and is reversible.
+// It is a unique name for the variable that includes the scope and the variable name and is reversible.
 func (v *Variable) ParameterName() string {
 	v.AssertValid()
 	return VariableParameterNameFromScopeAndName(v.Scope(), v.Name())
@@ -289,20 +294,20 @@ func (v *Variable) ParameterName() string {
 // It will return empty strings for an invalid parameter name.
 func VariableScopeAndNameFromParameterName(parameterName string) (scope, name string) {
 	if !strings.HasPrefix(parameterName, VariableParameterPrefix) {
-		return
+		return scope, name
 	}
 	parts := strings.Split(parameterName[len(VariableParameterPrefix):], ScopeSeparator)
 	if len(parts) == 1 {
 		// Scope was not properly set.
-		return
+		return scope, name
 	}
 	name = parts[len(parts)-1]
-	if len(parts) > 2 {
+	if len(parts) > 2 { //nolint:mnd // (scope, name) pair.
 		scope = strings.Join(parts[:len(parts)-1], ScopeSeparator)
 	} else {
 		scope = RootScope
 	}
-	return
+	return scope, name
 }
 
 // VariableParameterNameFromScopeAndName creates the [Variable.ParameterName] from its scope and name.
@@ -325,7 +330,7 @@ func (v *Variable) MustValue() *tensors.Tensor {
 // Value returns the tensor holding the variable value. Use this to manipulate the value in Go.
 // If building a computation graph, use Variable.ValueGraph().
 //
-// On a distributed setup, the Variable will be sharded (see Variable.WithSharding() or Variable.SetSharding).
+// On a distributed setup, the Variable will be sharded (see Variable.WithShardingSpec() or Variable.SetShardingSpec).
 // In these cases you can get the sharded values with Variable.DistributedValue(), or set it with
 // Variable.SetDistributedValue().
 // If you use Variable.Value() on a distributed value, it will merge the shards and return a tensor with the full value:
@@ -354,9 +359,9 @@ func (v *Variable) Value() (*tensors.Tensor, error) {
 	return v.value, nil
 }
 
-// SetValue updates the tensor holding the variable value, and marks it as no longer needing initialization.
+// SetValue updates the tensor holding the variable value and marks it as no longer needing initialization.
 //
-// On a distributed setup, the Variable will be sharded (see Variable.WithSharding() or Variable.SetSharding).
+// On a distributed setup, the Variable will be sharded (see Variable.WithShardingSpec() or Variable.SetShardingSpec).
 // In these cases you can get the sharded values with Variable.DistributedValue(), or set it with
 // Variable.SetDistributedValue().
 // If you use SetValue() on a distributed variable, the current distributed value (if any) is immediately freed.
@@ -369,7 +374,7 @@ func (v *Variable) Value() (*tensors.Tensor, error) {
 //
 // This also invalidates any distributed or on-device copies of the variable.
 //
-// The shape of the variable is set to the new value set. If value is nil, the shape is left unchanged.
+// The shape of the variable is set to the new value set. If the value is nil, the shape is left unchanged.
 func (v *Variable) SetValue(value *tensors.Tensor) error {
 	err := v.Reset()
 	if err != nil {
@@ -399,7 +404,7 @@ func (v *Variable) MustSetValue(value *tensors.Tensor) {
 //
 // If the variable is set to nil, the context is automatically marked as needing initialization, just in case.
 //
-// The shape of the variable is set to the new value set. If value is nil, the shape is left unchanged.
+// The shape of the variable is set to the new value set. If the value is nil, the shape is left unchanged.
 func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) error {
 	if err := v.CheckValid(); err != nil {
 		return err
@@ -480,7 +485,7 @@ func (v *Variable) ValueGraph(g *Graph) *Node {
 // [context.Exec] will also use the last value set with [SetValueGraph] and include it as the output of the graph
 // execution and then update the variables (with [SetValue]) accordingly after each graph execution.
 //
-// So a graph building function can update variable values, for instance to update weights during gradient
+// So a graph building function can update variable values, for instance, to update weights during gradient
 // descent.
 //
 // It's a computation graph building function, and panics on errors.
@@ -500,15 +505,9 @@ func (v *Variable) SetValueGraph(value *Node) {
 	nodes.valueNode = value
 }
 
-// paramNode creates given Graph g's Node that corresponds to the parameter that will be fed with
-// the current variable value when the graph is executed. It's the initial value of the variable
-// in the computation Graph.
-//
-// If parameter Node hasn't been created for the Graph g yet, one is created.
-//
-// Since the value of a variable can change in the middle of the graph (e.g: something that uses the
-// variable after a gradient descent is applied) consider using ValueGraph to read the current associated
-// value of a variable in a graph.
+// paramNode creates a Node in g that corresponds to the parameter that will be fed with
+// the current variable value when the graph is executed.
+// It's the initial value of the variable in the computation Graph.
 func (v *Variable) paramNode(g *Graph) (*Node, error) {
 	if err := v.CheckValid(); err != nil {
 		return nil, err
@@ -565,7 +564,7 @@ func (v *Variable) SetTrainable(trainable bool) *Variable {
 // Finalize variable and associate value(s).
 // Variable is left in an unusable state, only do this if you are sure this variable is no longer in use.
 //
-// Usually, one calls Context.Finalize, which in turns finalizes all variables.
+// Usually, one calls Context.Finalize, which in turn finalizes all variables.
 func (v *Variable) Finalize() error {
 	if v.CheckValid() != nil {
 		// Already finalized.
@@ -582,7 +581,7 @@ func (v *Variable) Finalize() error {
 			if firstErr == nil {
 				firstErr = err
 			} else {
-				// We keep firstErr, but log this error.
+				// We keep the firstErr but log this error.
 				klog.Errorf("Error finalizing variable %q: %+v", v.ScopeAndName(), err)
 			}
 		}
@@ -590,5 +589,5 @@ func (v *Variable) Finalize() error {
 	v.shape = shapes.Invalid()
 	v.graphToNodes.Clear()
 	v.ctx = nil
-	return nil
+	return firstErr
 }

@@ -64,8 +64,6 @@ func NewShardSpec(mesh *DeviceMesh, axisSpec ...AxisSpec) (*ShardingSpec, error)
 	return s, nil
 }
 
-
-
 // Validate the spec returning an error if something is invalid.
 func (s *ShardingSpec) Validate() error {
 	meshAxesUsed := make(map[string]bool)
@@ -220,4 +218,30 @@ func (s *ShardingSpec) LogicalShape(shardShape shapes.Shape) shapes.Shape {
 		logicalDims[i] = dim * s.NumDevicesShardingAxis(i)
 	}
 	return shapes.Make(shardShape.DType, logicalDims...)
+}
+
+// ShardShape calculates the shard shape of a tensor given its logical shape and the sharding specification.
+//
+// The logical shape is the shape of the full tensor across all devices.
+// The shard shape is the shape of the tensor on a single device.
+//
+// If the sharding spec is nil, or if the rank of the logical shape does not match the spec,
+// it returns the logical shape as is (assuming it's replicated or fully local).
+//
+// If the logical shape is not divisible by the sharding spec, it returns an invalid shape.
+func (s *ShardingSpec) ShardShape(logicalShape shapes.Shape) shapes.Shape {
+	if s == nil || len(s.Axes) != logicalShape.Rank() {
+		return logicalShape
+	}
+
+	var invalidShape shapes.Shape // The default shape is invalid.
+	shardDims := make([]int, logicalShape.Rank())
+	for i, dim := range logicalShape.Dimensions {
+		numShards := s.NumDevicesShardingAxis(i)
+		if dim%numShards != 0 {
+			return invalidShape
+		}
+		shardDims[i] = dim / numShards
+	}
+	return shapes.Make(logicalShape.DType, shardDims...)
 }
