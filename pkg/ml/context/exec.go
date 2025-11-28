@@ -672,10 +672,7 @@ func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, 
 		)
 	}
 	for ii, v := range changedVars {
-		old := v.MustValue()
-		if old != nil {
-			old.MustFinalizeAll()
-		}
+		// Note: the old value was already finalized in setSideParams before execution.
 		if !v.shape.Equal(outputs[ii].Shape()) {
 			return nil, nil, errors.Errorf(
 				"variable %q changed shape in graph execution: expected %v, got %v",
