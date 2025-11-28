@@ -702,22 +702,17 @@ func (mds *InMemoryDataset) GobSerialize(encoder *gob.Encoder) (err error) {
 	return
 }
 
-// GobDeserializeInMemory dataset from the decoder. It requires a `graph.Backend` and the deviceNum(s) where the data
+// GobDeserializeInMemoryToDevice dataset from the decoder. It requires a `graph.Backend` and the deviceNum where the data
 // is going to be stored -- it drops the local storage copy of the values.
-//
-// If deviceNums is nil, it defaults to []DeviceNum{0}, which is safe in most cases.
 //
 // No sampling configuration is recovered, and the InMemoryDataset created is sequential (no random sampling)
 // that reads through only one epoch. The random number generator is also newly initialized (see
 // InMemoryDataset.WithRand).
-func GobDeserializeInMemory(
+func GobDeserializeInMemoryToDevice(
 	backend backends.Backend,
-	deviceNums []backends.DeviceNum,
+	deviceNum backends.DeviceNum,
 	decoder *gob.Decoder,
 ) (mds *InMemoryDataset, err error) {
-	if len(deviceNums) == 0 {
-		deviceNums = []backends.DeviceNum{0}
-	}
 	dec := func(data any) {
 		if err != nil {
 			return
@@ -745,7 +740,7 @@ func GobDeserializeInMemory(
 
 	var tensor *tensors.Tensor
 	for range numInputsAndLabels {
-		tensor, err = tensors.GobDeserializeToDevice(decoder, backend, deviceNums...)
+		tensor, err = tensors.GobDeserializeToDevice(decoder, backend, deviceNum)
 		if err != nil {
 			return
 		}

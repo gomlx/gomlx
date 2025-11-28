@@ -26,6 +26,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -268,8 +269,9 @@ func TestInMemoryDataset(t *testing.T) {
 	require.NoError(t, mds.GobSerialize(enc))
 
 	// Deserialization:
+	deviceNum := backends.DeviceNum(0)
 	dec := gob.NewDecoder(buf)
-	mds, err = GobDeserializeInMemory(backend, nil, dec)
+	mds, err = GobDeserializeInMemoryToDevice(backend, deviceNum, dec)
 	require.NoError(t, err)
 
 	// Check that the recovered InMemoryDataset yields the same.

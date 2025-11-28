@@ -1130,12 +1130,13 @@ func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value 
 // DeleteVariable implements context.Loader.
 // It is called whenever Context.DeleteVariable is called. The deletion should cascade to the
 // loader, otherwise the variable will reappear after deletion.
-func (h *Handler) DeleteVariable(ctx *context.Context, scope, name string) {
+func (h *Handler) DeleteVariable(ctx *context.Context, scope, name string) error {
 	if h.prevContextLoader != nil {
 		h.prevContextLoader.DeleteVariable(ctx, scope, name)
 	}
 	varParamName := context.VariableParameterNameFromScopeAndName(scope, name)
 	delete(h.variableValues, varParamName)
+	return nil
 }
 
 // LoadedVariables for inspection. These are the values loaded -- but not necessarily immediately available in

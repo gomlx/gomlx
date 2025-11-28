@@ -54,7 +54,7 @@ func TestRepeatedClients(t *testing.T) {
 
 			bIn, err := backend.BufferFromFlatData(0, []float64{7, 2, 1}, shapes.Make(dtypes.Float64, 3))
 			require.NoError(t, err)
-			bOuts, err := exec.Execute([]backends.Buffer{bIn}, []bool{true})
+			bOuts, err := exec.Execute([]backends.Buffer{bIn}, []bool{true}, 0)
 			require.NoError(t, err)
 			out0, out1 := make([]float64, 3), make([]float64, 3)
 			err = backend.BufferToFlatData(bOuts[0], out0)

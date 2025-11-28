@@ -340,8 +340,9 @@ func (l *ConstantLoader) LoadVariable(_ *Context, scope, name string) (value *te
 	return
 }
 
-func (l *ConstantLoader) DeleteVariable(_ *Context, scope, name string) {
+func (l *ConstantLoader) DeleteVariable(_ *Context, scope, name string) error {
 	delete(l.Values, JoinScope(scope, name))
+	return nil
 }
 
 func TestContext_SetLoader(t *testing.T) {

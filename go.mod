@@ -24,7 +24,6 @@ require (
 	github.com/x448/float16 v0.8.4
 	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b
 	gonum.org/v1/plot v0.15.2
-	k8s.io/klog v1.0.0
 	k8s.io/klog/v2 v2.130.1
 )
 
@@ -46,6 +45,7 @@ require (
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/gomlx/exceptions v0.0.3 // indirect
+	github.com/janpfeifer/must v0.2.0
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect

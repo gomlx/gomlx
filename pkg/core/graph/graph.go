@@ -478,7 +478,6 @@ func (g *Graph) CompileWithSharding(outputs []*Node, outputShardings []*distribu
 	if err != nil {
 		panic(errors.WithMessagef(err, "Graph failed to compile for the backend"))
 	}
-	return
 }
 
 // donateBuffer holds a buffer to be donated to the execution of a graph.

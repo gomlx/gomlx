@@ -913,7 +913,7 @@ func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable
 		scope:        ctx.Scope(),
 		shape:        shape,
 		Trainable:    true,
-		shardingSpec: ctx.defaultShardingSpec,
+		shardingSpec: ctx.data.defaultShardingSpec,
 	}
 	ctx.setVariableInScope(name, v)
 

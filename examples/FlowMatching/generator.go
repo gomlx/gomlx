@@ -18,7 +18,6 @@ import (
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/internal/must"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -33,6 +32,7 @@ import (
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/janpfeifer/gonb/gonbui/dom"
 	"github.com/janpfeifer/gonb/gonbui/widgets"
+	"github.com/janpfeifer/must"
 )
 
 // GenerateNoise generates random noise that can be used to generate images.
@@ -135,7 +135,7 @@ func NewImagesGenerator(cfg *diffusion.Config, noise, flowerIds *tensors.Tensor,
 func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tensor, times []float64) {
 	// Copy tensor: this tensor will be overwritten at each interation, and we want
 	// to preserve the original g.noise.
-	imagesBatch := g.noise.LocalClone()
+	imagesBatch := must.M1(g.noise.LocalClone())
 
 	backend := g.config.Backend
 	stepSize := 1.0 / float64(g.numSteps-1)
@@ -149,7 +149,7 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tens
 				endTime = 1.0 // Avoiding numeric issues.
 			}
 			imagesBatch = g.stepExec.MustExec(
-				DonateTensorBuffer(imagesBatch, backend), g.flowerIds, startTime, endTime)[0]
+				DonateTensorBuffer(imagesBatch, backend, 0), g.flowerIds, startTime, endTime)[0]
 		}
 		if (n > 0 && step%n == 0) || step == g.numSteps-1 {
 			times = append(times, endTime)

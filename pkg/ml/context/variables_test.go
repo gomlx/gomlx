@@ -20,9 +20,11 @@ func TestVariable_CloneToContext(t *testing.T) {
 	v0y := ctx0.In("a").In("b").VariableWithShape("y", shapes.Make(dtypes.Int8, 2, 3, 4))
 
 	ctx1 := New()
-	v1x := v0x.CloneToContext(ctx1)
+	v1x, err := v0x.CloneToContext(ctx1)
+	require.NoError(t, err)
 	fmt.Printf("Cloned variable %q: %s\n", v1x.ScopeAndName(), v1x.MustValue())
-	v1y := v0y.CloneToContext(ctx1)
+	v1y, err := v0y.CloneToContext(ctx1)
+	require.NoError(t, err)
 	require.Nil(t, v1y.MustValue())
 	fmt.Printf("Cloned variable %q: %s\n", v1y.ScopeAndName(), v1y.MustValue())
 
