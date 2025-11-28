@@ -273,18 +273,6 @@ func (r *Trainer) enumerateExecs(fn func(exec *context.Exec)) {
 	}
 }
 
-// InDevice sets the device num to be used when executing graphs.
-// TODO: Add support for training across multiple devices -- maybe a different Trainer for that, in principle should be simple.
-// This should be called before any invocations of TrainStep.
-// It returns a reference to itself so calls can be cascaded.
-func (r *Trainer) InDevice(deviceNum backends.DeviceNum) *Trainer {
-	r.deviceNum = deviceNum
-	r.enumerateExecs(func(exec *context.Exec) {
-		exec.WithDevice(deviceNum)
-	})
-	return r
-}
-
 // Context returns the current Context. See SetContext to change it.
 func (r *Trainer) Context() *context.Context {
 	return r.context
