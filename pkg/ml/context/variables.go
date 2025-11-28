@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -440,6 +441,36 @@ func (v *Variable) SetDistributedValue(distValue *distributed.Tensor) error {
 		v.ctx.data.needsInitialization = true
 	}
 	return nil
+}
+
+// DistributedValue returns the distributed value of the variable.
+// It uses the backend in case the value is still local (on host) and needs to be distributed.
+//
+// It returns an error if the variable value needs to be distributed and the splitting of the
+// variable's value into shards fails.
+func (v *Variable) DistributedValue(backend backends.Backend) (*distributed.Tensor, error) {
+	if err := v.CheckValid(); err != nil {
+		return nil, err
+	}
+	if v.distValue != nil {
+		return v.distValue, nil
+	}
+	if v.value == nil {
+		return nil, errors.Errorf("variable %q has no distributed value", v.ScopeAndName())
+	}
+	shardingSpec := v.shardingSpec
+	if shardingSpec == nil {
+		shardingSpec = v.ctx.data.defaultShardingSpec
+	}
+	if shardingSpec == nil {
+		return nil, errors.Errorf("variable %q has no shardingSpec spec", v.ScopeAndName())
+	}
+	var err error
+	v.distValue, err = distributed.ShardTensor(backend, shardingSpec, v.value)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed to distribute variable %q", v.ScopeAndName())
+	}
+	return v.distValue, nil
 }
 
 // InUseByGraph returns whether the variable is currently in use by the given graph.
