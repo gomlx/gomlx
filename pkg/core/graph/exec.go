@@ -397,6 +397,12 @@ func (e *Exec) AutoSharding(meshes ...*distributed.DeviceMesh) *Exec {
 	return e
 }
 
+// Meshes returns the slice of currently configured meshes.
+// It returns nil if no meshes were provided (e.g., for non-distributed execution).
+func (e *Exec) Meshes() []*distributed.DeviceMesh {
+	return e.meshes
+}
+
 // WithInputShardingSpecs sets the sharding specs for the inputs.
 //
 // This is used for distributed computations with AutoSharding.
