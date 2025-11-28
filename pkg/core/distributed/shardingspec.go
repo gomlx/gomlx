@@ -50,18 +50,24 @@ type AxisSpec []string
 // ReplicatedAxis is a special AxisSpec that means the tensor axis is replicated.
 var ReplicatedAxis = AxisSpec(nil)
 
-// NewShardSpec creates a new ShardingSpec for a tensor, defined over the given mesh axes.
+// NewShardingSpec creates a new ShardingSpec for a tensor, defined over the given mesh axes.
 //
 // It takes an axisSpec for each axis of the tensor (omitted axes are assumed to be replicated).
 //
 // There is also the BuildSpec function for a more ergonomic spec creation.
-func NewShardSpec(mesh *DeviceMesh, axisSpec ...AxisSpec) (*ShardingSpec, error) {
+func NewShardingSpec(mesh *DeviceMesh, axisSpec ...AxisSpec) (*ShardingSpec, error) {
 	s := &ShardingSpec{mesh, axisSpec}
 	err := s.Validate()
 	if err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+// NewReplicatedShardingSpec creates a new ShardingSpec that is replicated across all mesh axes.
+// It's the simplest sharding spec.
+func NewReplicatedShardingSpec(mesh *DeviceMesh) *ShardingSpec {
+	return &ShardingSpec{mesh, nil}
 }
 
 // Validate the spec returning an error if something is invalid.

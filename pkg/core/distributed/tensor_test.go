@@ -46,7 +46,7 @@ func TestTensor(t *testing.T) {
 		tensor := tensors.FromValue([][]int32{{1, 2, 3, 4}, {5, 6, 7, 8}})
 
 		// Shard the tensor.
-		spec, err := distributed.NewShardSpec(mesh, distributed.AxisSpec{"replica"}, distributed.ReplicatedAxis)
+		spec, err := distributed.NewShardingSpec(mesh, distributed.AxisSpec{"replica"}, distributed.ReplicatedAxis)
 		require.NoError(t, err)
 		distTensor, err := distributed.ShardTensor(backend, spec, tensor)
 		require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestTensor(t *testing.T) {
 			tensors.FromFlatDataAndDimensions([]int32{1, 2, 3, 4, 5, 6}, 3, 1, 2),
 			tensors.FromFlatDataAndDimensions([]int32{10, 20, 30, 40, 50, 60}, 3, 1, 2),
 		}
-		spec, err := distributed.NewShardSpec(mesh,
+		spec, err := distributed.NewShardingSpec(mesh,
 			distributed.ReplicatedAxis, distributed.ReplicatedAxis, distributed.AxisSpec{"shards"})
 		require.NoError(t, err)
 		distTensor, err := distributed.NewTensor(backend, spec, shards)
@@ -127,7 +127,7 @@ func TestTensor(t *testing.T) {
 		tensor := tensors.FromValue([][]int32{{1, 2, 3, 4}, {5, 6, 7, 8}})
 
 		// Shard the tensor.
-		spec, err := distributed.NewShardSpec(mesh, distributed.AxisSpec{"shards"}, distributed.ReplicatedAxis)
+		spec, err := distributed.NewShardingSpec(mesh, distributed.AxisSpec{"shards"}, distributed.ReplicatedAxis)
 		require.NoError(t, err)
 		distTensor, err := distributed.ShardTensor(backend, spec, tensor)
 		require.NoError(t, err)
