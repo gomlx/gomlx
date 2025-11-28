@@ -531,7 +531,7 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		// If a shardingSpec spec is present, we need to calculate the shard shape.
 		// If no shardingSpec spec is present, it is assumed replicated, so we use the full shape.
 		if v.shardingSpec == nil {
-			v.shardingSpec = v.ctx.defaultShardingSpec
+			v.shardingSpec = v.ctx.data.defaultShardingSpec
 		}
 		// SPMD uses the shard shape.
 		paramNode = graph.ShardedParameter(g, paramName, v.ShardShape(), v.shardingSpec)
@@ -540,7 +540,7 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		// In AutoSharding, the graph sees the global logical shape.
 		// We attach the shardingSpec spec to the node if available.
 		if v.shardingSpec == nil {
-			v.shardingSpec = v.ctx.defaultShardingSpec
+			v.shardingSpec = v.ctx.data.defaultShardingSpec
 		}
 		// AutoSharding uses the full logical shape as shape.
 		paramNode = graph.ShardedParameter(g, paramName, v.shape, v.shardingSpec)

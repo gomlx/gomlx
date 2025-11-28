@@ -102,9 +102,6 @@ type Context struct {
 
 	// contextData, where "data" component content is stored.
 	data *contextData
-
-	// defaultShardingSpec used for new variables, if execution is distributed.
-	defaultShardingSpec *distributed.ShardingSpec
 }
 
 // scopedVariableMap name to variable within a scope.
@@ -149,6 +146,9 @@ type contextData struct {
 	// If it is set to false, it means all variables are set, and there is no need to initialize.
 	// But a true is not 100% certain: it may be that the variables are already set, it requires checking.
 	needsInitialization bool
+
+	// defaultShardingSpec used for new variables, if execution is distributed.
+	defaultShardingSpec *distributed.ShardingSpec
 }
 
 // Loader can be implemented by any library providing loading of variables for
@@ -203,14 +203,17 @@ func New() *Context {
 //     copied over by with newCtx.SetLoader(ctx.Loader()).
 //   - The context state is copied over: needing initialization of variables, if to be checked
 //     for new/reuse of variables, etc.
+//   - The default sharding spec is simply copied (not cloned).
 func (ctx *Context) Clone() (*Context, error) {
 	newCtx := New()
 	newCtx.scope = ctx.scope
 	newCtx.reuse = ctx.reuse
 	newCtx.checked = ctx.checked
 	newCtx.initializer = ctx.initializer
+	newCtx.data = &contextData{}
 	newCtx.data.needsInitialization = ctx.data.needsInitialization
 	newCtx.data.params = ctx.data.params.Clone()
+	newCtx.data.defaultShardingSpec = ctx.data.defaultShardingSpec
 	var err error
 	for v := range ctx.IterVariables() {
 		_, err = v.CloneToContext(newCtx)

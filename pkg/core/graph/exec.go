@@ -184,6 +184,7 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 //     in multiple axes. One uses Graph.Distributed() for the synchronization operations
 //     (like AllReduce, AllGather, etc.), which need to be organized by the user.
 type Exec struct {
+	name    string
 	backend backends.Backend
 
 	distStrategy     distributed.Strategy
@@ -204,7 +205,6 @@ type Exec struct {
 	inputIsGraph                bool
 	inputShardingSpecs          []*distributed.ShardingSpec
 	outputShardingSpecs         []*distributed.ShardingSpec
-	name                        string
 
 	// MaxCacheSize: if more than these different graph instantiations are
 	// created, Exec starts returning errors in MustExec.

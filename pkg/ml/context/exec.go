@@ -24,6 +24,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/pkg/errors"
@@ -34,61 +35,61 @@ import (
 // ExecGraphFn is a type parameter for accepted function types for MustNewExec constructor.
 type ExecGraphFn interface {
 	func(*Context, *Graph) |
-		func(*Context, []*Node) |
-		func(*Context, *Node) |
-		func(*Context, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) |
+	func(*Context, []*Node) |
+	func(*Context, *Node) |
+	func(*Context, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) |
 
-		func(*Context, *Graph) *Node |
-		func(*Context, []*Node) *Node |
-		func(*Context, *Node) *Node |
-		func(*Context, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Context, *Graph) *Node |
+	func(*Context, []*Node) *Node |
+	func(*Context, *Node) *Node |
+	func(*Context, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node |
 
-		func(*Context, *Graph) (*Node, *Node) |
-		func(*Context, []*Node) (*Node, *Node) |
-		func(*Context, *Node) (*Node, *Node) |
-		func(*Context, *Node, *Node) (*Node, *Node) |
-		func(*Context, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Context, *Graph) (*Node, *Node) |
+	func(*Context, []*Node) (*Node, *Node) |
+	func(*Context, *Node) (*Node, *Node) |
+	func(*Context, *Node, *Node) (*Node, *Node) |
+	func(*Context, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
 
-		func(*Context, *Graph) (*Node, *Node, *Node) |
-		func(*Context, []*Node) (*Node, *Node, *Node) |
-		func(*Context, *Node) (*Node, *Node, *Node) |
-		func(*Context, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Context, *Graph) (*Node, *Node, *Node) |
+	func(*Context, []*Node) (*Node, *Node, *Node) |
+	func(*Context, *Node) (*Node, *Node, *Node) |
+	func(*Context, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
 
-		func(*Context, *Graph) []*Node |
-		func(*Context, []*Node) []*Node |
-		func(*Context, *Node) []*Node |
-		func(*Context, *Node, *Node) []*Node |
-		func(*Context, *Node, *Node, *Node) []*Node |
-		func(*Context, *Node, *Node, *Node, *Node) []*Node |
-		func(*Context, *Node, *Node, *Node, *Node, *Node) []*Node |
-		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) []*Node
+	func(*Context, *Graph) []*Node |
+	func(*Context, []*Node) []*Node |
+	func(*Context, *Node) []*Node |
+	func(*Context, *Node, *Node) []*Node |
+	func(*Context, *Node, *Node, *Node) []*Node |
+	func(*Context, *Node, *Node, *Node, *Node) []*Node |
+	func(*Context, *Node, *Node, *Node, *Node, *Node) []*Node |
+	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) []*Node
 }
 
 // ExecGraphFnOneOutput is a type parameter for accepted function types for MustNewExec constructor.
 type ExecGraphFnOneOutput interface {
 	func(*Context, *Graph) *Node |
-		func(*Context, []*Node) *Node |
-		func(*Context, *Node) *Node |
-		func(*Context, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node
+	func(*Context, []*Node) *Node |
+	func(*Context, *Node) *Node |
+	func(*Context, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node
 }
 
 // Exec creates and executes computation graphs that take as input a
@@ -170,10 +171,12 @@ type Exec struct {
 	// that only takes *Node as input.
 	ctxGraphFn, graphFn                       any
 	inputIsGraph, inputAsSlice, outputAsSlice bool
+	inputShardingSpecs                        []*distributed.ShardingSpec
+	outputShardingSpecs                       []*distributed.ShardingSpec
 
-	// changedVars maps GraphId of the graphs built to their list
-	// of modified variables: we assume that building the graph for different
-	// shapes may
+	// changedVars maps each graph's GraphId to their list of modified variables.
+	// It's used to update the variables in the Context after the graph execution -- these variables are added
+	// as extra outputs.
 	changedVars   map[graph.GraphId][]*Variable
 	muChangedVars sync.Mutex
 
@@ -446,14 +449,55 @@ func (e *Exec) GetNodeLogger() graph.LoggerFn {
 	return e.exec.GetNodeLogger()
 }
 
-// WithDevice sets the device num to be used by graphs constructed by Exec.
-// This configures the computation to use a single device -- no distribution.
+// WithDeviceAssignment specifies which concrete devices to use when compiling computation graphs.
 //
-// This should be called before any invocations of the Exec methods.
+// These must be valid numbers for the backend and must match the number of devices of the
+// largest mesh given to WithAutoSharding or WithSPMD, or one fixed device for non-portable single-device
+// execution.
+//
+// The default assignment is simply using the devices in the order they were added to the backend
+// (sequential DeviceNum values, starting from 0).
+//
+// For single-device execution (distributed strategy "None"), the default is to make it portable.
+// If the backend supports that, it can be executed in any device with ExecOnDevice().
+func (e *Exec) WithDeviceAssignment(devices []backends.DeviceNum) *Exec {
+	e.exec.WithDeviceAssignment(devices)
+	return e
+}
+
+// DeviceAssignment returns the current device assignment used by this Exec.
+// It returns nil if none was provided.
+func (e *Exec) DeviceAssignment() []backends.DeviceNum {
+	return e.exec.DeviceAssignment()
+}
+
+// DistributionStrategy returns the distribution strategy used by this Exec.
+//
+// The default is distributed.None, which means that graphs constructed by this Exec will not be distributed,
+// and it will be executed on the device specified by Exec.WithDevice (defaults to 0).
+func (e *Exec) DistributionStrategy() distributed.Strategy {
+	return e.exec.DistributionStrategy()
+}
+
+// SPMD sets the distribution strategy to SPMD, which means that graphs constructed by this Exec will be replicated
+// across the devices specified in the mesh.
+//
+// A nil mesh will cause a panic.
 //
 // It returns a reference to itself, so configuration calls can be cascaded.
-func (e *Exec) WithDevice(deviceNum backends.DeviceNum) *Exec {
-	e.exec.WithDevice(deviceNum)
+func (e *Exec) SPMD(mesh *distributed.DeviceMesh) *Exec {
+	e.exec.SPMD(mesh)
+	return e
+}
+
+// AutoSharding sets the distribution strategy to AutoSharding and records the meshes that will be used in the
+// computation graph(s).
+//
+// A nil mesh will cause a panic.
+//
+// It returns a reference to itself, so configuration calls can be cascaded.
+func (e *Exec) AutoSharding(meshes ...*distributed.DeviceMesh) *Exec {
+	e.exec.AutoSharding(meshes...)
 	return e
 }
 
