@@ -92,7 +92,7 @@ type ExecGraphFnOneOutput interface {
 
 // SideParamsFn is a function that sets side parameters during execution
 // for Graphs that defines those. Typically, this is used to set the variables of a model.
-type SideParamsFn func(graph *Graph, inputBuffers []backends.Buffer, donate []bool)
+type SideParamsFn func(graph *Graph, inputBuffers []backends.Buffer, donate []bool) error
 
 // LoggerFn is the function used to log nodes marked for logging.
 // It is called after the Exec method, with the list of messages and corresponding values of the evaluated nodes.
@@ -467,6 +467,10 @@ func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 // The side parameters in this slice will be left nil, and it's expected that SideParamsFn will set
 // them to the appropriate input.
 //
+// Notice: len(inputBuffers) = len(donate) = g.NumDevices() * g.NumParameters(), organized by device first.
+// The SideParamsFn needs to set the last parameters (currently nil) for each device,
+// in the order they were added to the backend.
+//
 // It also includes the boolean map of the inputs to donate, which SideParamsFn
 // can set accordingly (for the side parameters).
 func (e *Exec) SetSideParamsHook(fn SideParamsFn) *Exec {
@@ -709,7 +713,10 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 	// The new parameters (if any) created are still nil and need to be set. This is done by a "SideParamsFn",
 	// configured by Exec.SetSideParamsHooks.
 	if e.setSideParams != nil {
-		e.setSideParams(g, argsAsBuffer, argsDonate)
+		err := e.setSideParams(g, argsAsBuffer, argsDonate)
+		if err != nil {
+			panic(errors.WithMessagef(err, "failed to set side parameters for graph %q", g.Name()))
+		}
 	}
 
 	// Check all parameters were set.

@@ -499,17 +499,22 @@ type donateBuffer struct {
 //
 // Example:
 //
-//	myState := myExec.MustExec(DonateTensorBuffer(myState, backend))[0]
+//	myBuf, err := myState.DonateBuffer(backend, deviceNum)
+//	myState, err := myExec.Exec(myBuf)[0]
 //
 // It requires the backend and the deviceNum (defaults to 0) of the device buffer to donate.
 //
 // Notice that after this, t's value in the device becomes invalid.
-func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum backends.DeviceNum) any {
+func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum backends.DeviceNum) (any, error) {
 	d := &donateBuffer{shape: t.Shape()}
-	d.buffer = t.DonateBuffer(
+	var err error
+	d.buffer, err = t.DonateBuffer(
 		backend,
 		deviceNum) // DonateBuffer may destroy the tensor if there is no local storage.
-	return d
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 // Run the compiled Graph with the inputs given in order -- the same order as the parameters were created.
