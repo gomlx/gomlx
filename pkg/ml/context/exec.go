@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"slices"
 	"sync"
 
 	"github.com/gomlx/gomlx/backends"
@@ -492,6 +493,7 @@ func (e *Exec) DistributionStrategy() distributed.Strategy {
 // It returns a reference to itself, so configuration calls can be cascaded.
 func (e *Exec) SPMD(mesh *distributed.DeviceMesh) *Exec {
 	e.exec.SPMD(mesh)
+	e.context.data.defaultShardingSpec = distributed.NewReplicatedShardingSpec(mesh)
 	return e
 }
 
@@ -503,6 +505,7 @@ func (e *Exec) SPMD(mesh *distributed.DeviceMesh) *Exec {
 // It returns a reference to itself, so configuration calls can be cascaded.
 func (e *Exec) AutoSharding(meshes ...*distributed.DeviceMesh) *Exec {
 	e.exec.AutoSharding(meshes...)
+	e.context.data.defaultShardingSpec = distributed.NewReplicatedShardingSpec(meshes[0])
 	return e
 }
 
@@ -510,6 +513,41 @@ func (e *Exec) AutoSharding(meshes ...*distributed.DeviceMesh) *Exec {
 // It returns nil if no meshes were provided (e.g., for non-distributed execution).
 func (e *Exec) Meshes() []*distributed.DeviceMesh {
 	return e.exec.Meshes()
+}
+
+// DefaultShardingSpec returns the default sharding spec configured for the associated Context object.
+// It returns nil if no default sharding spec was provided (e.g., for non-distributed execution).
+func (e *Exec) DefaultShardingSpec() *distributed.ShardingSpec {
+	return e.context.data.defaultShardingSpec
+}
+
+// SetDefaultShardingSpec sets the default sharding spec for the associated Context object.
+// It returns an error if the mesh of the sharding spec given was not configured with Exec.SPMD or Exec.AutoSharding.
+//
+// If you pass a nil spec and distributed execution is configured, it sets the default sharding spec to replicate all axes,
+// the predefined default.
+//
+// If not using distributed execution you don't need to set this.
+func (e *Exec) SetDefaultShardingSpec(spec *distributed.ShardingSpec) error {
+	if spec != nil {
+		if e.exec.DistributionStrategy() == distributed.None {
+			return errors.Errorf("cannot set non-nil default sharding spec for non-distributed execution")
+		}
+		mesh := spec.Mesh
+		execMesshes := e.exec.Meshes()
+		if slices.Index(execMesshes, mesh) == -1 {
+			return errors.Errorf("spec given uses a mesh %q that was not configured with Exec.SPMD or Exec.AutoSharding", mesh.Name())
+		}
+		if err := spec.Validate(); err != nil {
+			return err
+		}
+	} else {
+		if e.exec.DistributionStrategy() != distributed.None {
+			spec = distributed.NewReplicatedShardingSpec(e.exec.Meshes()[0])
+		}
+	}
+	e.context.data.defaultShardingSpec = spec
+	return nil
 }
 
 // WithName sets the name of Exec, used to provide the name to graphs created.
