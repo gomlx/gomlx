@@ -35,61 +35,61 @@ import (
 // ExecGraphFn is a type parameter for accepted function types for MustNewExec constructor.
 type ExecGraphFn interface {
 	func(*Context, *Graph) |
-	func(*Context, []*Node) |
-	func(*Context, *Node) |
-	func(*Context, *Node, *Node) |
-	func(*Context, *Node, *Node, *Node) |
-	func(*Context, *Node, *Node, *Node, *Node) |
-	func(*Context, *Node, *Node, *Node, *Node, *Node) |
-	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) |
+		func(*Context, []*Node) |
+		func(*Context, *Node) |
+		func(*Context, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) |
 
-	func(*Context, *Graph) *Node |
-	func(*Context, []*Node) *Node |
-	func(*Context, *Node) *Node |
-	func(*Context, *Node, *Node) *Node |
-	func(*Context, *Node, *Node, *Node) *Node |
-	func(*Context, *Node, *Node, *Node, *Node) *Node |
-	func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
-	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Context, *Graph) *Node |
+		func(*Context, []*Node) *Node |
+		func(*Context, *Node) *Node |
+		func(*Context, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node |
 
-	func(*Context, *Graph) (*Node, *Node) |
-	func(*Context, []*Node) (*Node, *Node) |
-	func(*Context, *Node) (*Node, *Node) |
-	func(*Context, *Node, *Node) (*Node, *Node) |
-	func(*Context, *Node, *Node, *Node) (*Node, *Node) |
-	func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node) |
-	func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Context, *Graph) (*Node, *Node) |
+		func(*Context, []*Node) (*Node, *Node) |
+		func(*Context, *Node) (*Node, *Node) |
+		func(*Context, *Node, *Node) (*Node, *Node) |
+		func(*Context, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
 
-	func(*Context, *Graph) (*Node, *Node, *Node) |
-	func(*Context, []*Node) (*Node, *Node, *Node) |
-	func(*Context, *Node) (*Node, *Node, *Node) |
-	func(*Context, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Context, *Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Context, *Graph) (*Node, *Node, *Node) |
+		func(*Context, []*Node) (*Node, *Node, *Node) |
+		func(*Context, *Node) (*Node, *Node, *Node) |
+		func(*Context, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
 
-	func(*Context, *Graph) []*Node |
-	func(*Context, []*Node) []*Node |
-	func(*Context, *Node) []*Node |
-	func(*Context, *Node, *Node) []*Node |
-	func(*Context, *Node, *Node, *Node) []*Node |
-	func(*Context, *Node, *Node, *Node, *Node) []*Node |
-	func(*Context, *Node, *Node, *Node, *Node, *Node) []*Node |
-	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) []*Node
+		func(*Context, *Graph) []*Node |
+		func(*Context, []*Node) []*Node |
+		func(*Context, *Node) []*Node |
+		func(*Context, *Node, *Node) []*Node |
+		func(*Context, *Node, *Node, *Node) []*Node |
+		func(*Context, *Node, *Node, *Node, *Node) []*Node |
+		func(*Context, *Node, *Node, *Node, *Node, *Node) []*Node |
+		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) []*Node
 }
 
 // ExecGraphFnOneOutput is a type parameter for accepted function types for MustNewExec constructor.
 type ExecGraphFnOneOutput interface {
 	func(*Context, *Graph) *Node |
-	func(*Context, []*Node) *Node |
-	func(*Context, *Node) *Node |
-	func(*Context, *Node, *Node) *Node |
-	func(*Context, *Node, *Node, *Node) *Node |
-	func(*Context, *Node, *Node, *Node, *Node) *Node |
-	func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
-	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node
+		func(*Context, []*Node) *Node |
+		func(*Context, *Node) *Node |
+		func(*Context, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node
 }
 
 // Exec creates and executes computation graphs that take as input a
@@ -402,6 +402,11 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 	}
 
 	graphId := g.GraphId()
+	deviceAssignement := e.exec.DeviceAssignment()
+	deviceNum := backends.DeviceNum(0)
+	if len(deviceAssignement) > 0 {
+		deviceNum = deviceAssignement[0]
+	}
 	ctx.EnumerateVariables(func(v *Variable) {
 		nodes, found := v.graphToNodes.Load(graphId)
 		if !found {
@@ -414,7 +419,7 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 
 		if v.ChangedInGraph(g) {
 			// We donate the buffer, since we are getting a new one on the output.
-			inputBuffers[handle] = v.MustValue().DonateBuffer(e.backend, e.exec.DeviceAssignment())
+			inputBuffers[handle] = v.MustValue().DonateBuffer(e.backend, deviceNum)
 			v.MustValue().MustFinalizeAll()
 			v.value = nil
 			donate[handle] = true
@@ -428,7 +433,7 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 				}
 			}
 			var err error
-			inputBuffers[handle], err = v.MustValue().Buffer(e.backend, e.exec.DeviceAssignment())
+			inputBuffers[handle], err = v.MustValue().Buffer(e.backend, deviceNum)
 			if err != nil {
 				panic(err)
 			}
@@ -499,6 +504,12 @@ func (e *Exec) SPMD(mesh *distributed.DeviceMesh) *Exec {
 func (e *Exec) AutoSharding(meshes ...*distributed.DeviceMesh) *Exec {
 	e.exec.AutoSharding(meshes...)
 	return e
+}
+
+// Meshes returns the slice of currently configured meshes.
+// It returns nil if no meshes were provided (e.g., for non-distributed execution).
+func (e *Exec) Meshes() []*distributed.DeviceMesh {
+	return e.exec.Meshes()
 }
 
 // WithName sets the name of Exec, used to provide the name to graphs created.
