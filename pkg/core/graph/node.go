@@ -69,10 +69,6 @@ type Node struct {
 	// Usually, defined for a NoOp operation.
 	customVJP VJP
 
-	// constValue is a multidimensional Go slice, kept for small values (like scalars), and only used for printing/debugging only.
-	// See MinConstValueSizeToKeep to configure.
-	constValue any
-
 	trace error // Stack-trace error of where Node was created. Stored if graph.traced is true.
 }
 
