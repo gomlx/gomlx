@@ -666,6 +666,13 @@ func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool, defaultD
 	return
 }
 
+func must1[T any](value T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return value
+}
+
 // anyToDeviceBuffer converts generic values to a tensor.Device on the requested device number,
 // and whether the buffer can be donated.
 func anyToDeviceBuffer(
@@ -687,7 +694,7 @@ func anyToDeviceBuffer(
 	// A Go value by default is converted to a buffer and can be donated.
 	t := tensors.FromAnyValue(value)
 	shape := t.Shape()
-	return t.DonateBuffer(backend, deviceNum), shape, true
+	return must1(t.DonateBuffer(backend, deviceNum)), shape, true
 }
 
 // tensorToDeviceBuffer is used by anyToDeviceBuffer to convert a tensor to a device buffer.
