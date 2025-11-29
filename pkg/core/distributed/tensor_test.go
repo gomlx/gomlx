@@ -48,7 +48,7 @@ func TestTensor(t *testing.T) {
 		// Shard the tensor.
 		spec, err := distributed.NewShardingSpec(mesh, distributed.AxisSpec{"replica"}, distributed.ReplicatedAxis)
 		require.NoError(t, err)
-		distTensor, err := distributed.ShardTensor(backend, spec, tensor)
+		distTensor, err := distributed.ShardTensor(spec, tensor)
 		require.NoError(t, err)
 
 		// Check the logical shape.
@@ -78,7 +78,7 @@ func TestTensor(t *testing.T) {
 		spec, err := distributed.NewShardingSpec(mesh,
 			distributed.ReplicatedAxis, distributed.ReplicatedAxis, distributed.AxisSpec{"shards"})
 		require.NoError(t, err)
-		distTensor, err := distributed.NewTensor(backend, spec, shards)
+		distTensor, err := distributed.NewTensor(spec, shards)
 		require.NoError(t, err)
 
 		// Merge the tensor.
@@ -104,7 +104,7 @@ func TestTensor(t *testing.T) {
 		}
 		spec, err := distributed.BuildSpec(mesh).S("shards").R().R().Done()
 		require.NoError(t, err)
-		distTensor, err := distributed.NewTensor(backend, spec, shards)
+		distTensor, err := distributed.NewTensor(spec, shards)
 		require.NoError(t, err)
 
 		// Merge the tensor.
@@ -129,7 +129,7 @@ func TestTensor(t *testing.T) {
 		// Shard the tensor.
 		spec, err := distributed.NewShardingSpec(mesh, distributed.AxisSpec{"shards"}, distributed.ReplicatedAxis)
 		require.NoError(t, err)
-		distTensor, err := distributed.ShardTensor(backend, spec, tensor)
+		distTensor, err := distributed.ShardTensor(spec, tensor)
 		require.NoError(t, err)
 
 		// Clone the distributed tensor.

@@ -540,6 +540,14 @@ func (t *Tensor) CopyFrom(tFrom *Tensor) error {
 	return nil
 }
 
+// IsOnAnyDevice checks whether the Tensor has an on-device copy on any device.
+func (t *Tensor) IsOnAnyDevice() bool {
+	if t.CheckValid() != nil {
+		return false
+	}
+	return t.onDevice != nil && !t.onDevice.IsFinalized()
+}
+
 // IsOnDevice checks whether the Tensor has an on-device copy on the given deviceNum.
 //
 // See MustMaterializeOnDevice to trigger a transfer/copy to the given device.

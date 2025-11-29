@@ -14,8 +14,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Tensor is a logical tensor distributed across multiple devices (organized as a DeviceMesh).
+// Tensor is a logical tensor meant to be distributed across multiple devices (organized as a DeviceMesh).
 // It is a container for its shards (concrete tensors.Tensor), one per device.
+// The shards may or may not be stored on a backend (or local on the host), it's up to the caller to manage
+// the shards storage.
 //
 // The logical distributed Tensor can be either replicated or sharded at each axis.
 // When an axis is sharded, it is shared over a DeviceMesh axis, and the distributed tensor is
@@ -25,8 +27,6 @@ import (
 // The idea is that when executing a distributed computation, each device will receive the corresponding
 // tensor shard, replicated and/or sharded, according to the specification.
 type Tensor struct {
-	backend backends.Backend
-
 	// spec defines how this tensor is sharded across the mesh.
 	spec *ShardingSpec
 
@@ -44,7 +44,7 @@ type Tensor struct {
 
 // NewTensor creates a new distributed Tensor.
 // It assumes the provided shards are already on their respective devices.
-func NewTensor(backend backends.Backend, spec *ShardingSpec, shards []*tensors.Tensor) (*Tensor, error) {
+func NewTensor(spec *ShardingSpec, shards []*tensors.Tensor) (*Tensor, error) {
 	if len(shards) == 0 {
 		return nil, errors.New("distributed.NewTensor requires shards for initialization, none was provided")
 	}
@@ -56,11 +56,12 @@ func NewTensor(backend backends.Backend, spec *ShardingSpec, shards []*tensors.T
 			mesh.NumDevices(),
 		)
 	}
+
+	// Create the distributed tensor.
 	dt := &Tensor{
-		backend: backend,
-		mesh:    mesh,
-		spec:    spec,
-		shards:  slices.Clone(shards),
+		mesh:   mesh,
+		spec:   spec,
+		shards: slices.Clone(shards),
 	}
 	if err := dt.validateShards(); err != nil {
 		return nil, err
@@ -139,23 +140,26 @@ func (dt *Tensor) validateShards() error {
 			return errors.Errorf("shard %d has shape %s, but shard 0 has shape %s",
 				i, shard.Shape(), shardShape)
 		}
-		_, err := shard.Device()
-		if err == nil {
-			// Shard is on-device: we need to check that it is on the correct backend.
-			// We can't yet check that it is the correct device because we don't yet have access here to
-			// the assignment of devices.
-			shardBackend, err := shard.Backend()
+	}
+
+	// Make sure all on-device shards are on the same backend, if any is on-device.
+	var refBackend backends.Backend
+	for i, shard := range shards {
+		if shard.IsOnAnyDevice() {
+			backend, err := shard.Backend()
 			if err != nil {
-				return errors.WithMessagef(err, "shard %d is on-device, but has invalid backend", i)
+				return errors.WithMessagef(err, "failed to get backend of shard %d", i)
 			}
-			if shardBackend != dt.backend {
-				return errors.Errorf("shard %d is on backend %s, but distributed.Tensor configured for backend %s",
-					i, shardBackend, dt.backend)
+			if refBackend == nil {
+				refBackend = backend
+			} else if refBackend != backend {
+				return errors.Errorf("shard #%d is on backend %s, but shard 0 is on backend %s",
+					i, backend.Name(), refBackend.Name())
 			}
 		}
 	}
 
-	// Check that the shard shape is divisible by the mesh axis sizes for sharded axes.
+	// Check that the spec is valid for the Mesh.
 	mesh := dt.mesh
 	spec := dt.spec
 	if spec.Rank() > shardShape.Rank() {
@@ -199,7 +203,6 @@ func (dt *Tensor) Finalize() error {
 	dt.shards = nil
 	dt.spec = nil
 	dt.mesh = nil
-	dt.backend = nil
 	return firstErr
 }
 
@@ -220,7 +223,7 @@ func (dt *Tensor) Clone() (*Tensor, error) {
 		}
 	}
 	// NewTensor will validate the new shards and calculate shapes.
-	return NewTensor(dt.backend, dt.spec, newShards)
+	return NewTensor(dt.spec, newShards)
 }
 
 // Merge merges the tensors into one concrete logical tensor.
@@ -324,7 +327,8 @@ func (dt *Tensor) Merge() (*tensors.Tensor, error) {
 }
 
 // ShardTensor splits a tensor into individual shards.
-func ShardTensor(backend backends.Backend, spec *ShardingSpec, t *tensors.Tensor) (*Tensor, error) {
+// This all happen on the host, and the shards of the returned distributed.Tensor are local tensors.
+func ShardTensor(spec *ShardingSpec, t *tensors.Tensor) (*Tensor, error) {
 	logicalShape := t.Shape()
 	shardShape := logicalShape.Clone()
 	mesh := spec.Mesh
@@ -449,6 +453,5 @@ func ShardTensor(backend backends.Backend, spec *ShardingSpec, t *tensors.Tensor
 	if innerErr != nil {
 		return nil, innerErr
 	}
-	return NewTensor(backend, spec, shards)
+	return NewTensor(spec, shards)
 }
-
