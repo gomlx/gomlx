@@ -162,7 +162,9 @@ func TestDistributedExec(t *testing.T) {
 
 		// With two devices, we want 2 results, one per device.
 		x := [][]float64{{1, 1, 1}, {2, 2, 2}}
-		shardedResults, err := oneLayerExec.Exec(x)
+		distributedX, err := distributed.ShardTensor(batchSpec, tensors.FromValue(x))
+		require.NoError(t, err)
+		shardedResults, err := oneLayerExec.Exec(distributedX)
 		require.NoError(t, err)
 		require.Len(t, shardedResults, 2)
 		distributedResult, err := distributed.NewTensor(batchSpec, shardedResults)
@@ -175,7 +177,7 @@ func TestDistributedExec(t *testing.T) {
 		assert.Equal(t, 2*gotValue1[0][0], gotValue1[1][0])
 
 		// The second call should reuse the graph and yield the same result.
-		shardedResults, err = oneLayerExec.Exec(x)
+		shardedResults, err = oneLayerExec.Exec(distributedX)
 		require.NoError(t, err)
 		require.Len(t, shardedResults, 2)
 		distributedResult, err = distributed.NewTensor(batchSpec, shardedResults)
@@ -186,7 +188,7 @@ func TestDistributedExec(t *testing.T) {
 			"results of second call of oneLayer(%v) should be the same as the first call", x)
 
 		// Different batch size: it should generate a new graph but yield the same result.
-		shardedResults, err = oneLayerExec.Exec(x)
+		shardedResults, err = oneLayerExec.Exec(distributedX)
 		require.NoError(t, err)
 		require.Len(t, shardedResults, 2)
 		distributedResult, err = distributed.NewTensor(batchSpec, shardedResults)

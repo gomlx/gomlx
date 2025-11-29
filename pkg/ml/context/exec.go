@@ -405,18 +405,11 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 	}
 
 	graphId := g.GraphId()
-	numDevices := e.exec.NumDevices()
-	numParams := g.NumParameters()
-	deviceAssignment := e.exec.DeviceAssignment()
-
-	// getDeviceNum returns the actual device number for the given device index.
-	getDeviceNum := func(deviceIdx int) backends.DeviceNum {
-		if len(deviceAssignment) > deviceIdx {
-			return deviceAssignment[deviceIdx]
-		}
-		return backends.DeviceNum(deviceIdx)
+	deviceAssignement := e.exec.DeviceAssignment()
+	deviceNum := backends.DeviceNum(0)
+	if len(deviceAssignement) > 0 {
+		deviceNum = deviceAssignement[0]
 	}
-
 	for v := range ctx.IterVariables() {
 		nodes, found := v.graphToNodes.Load(graphId)
 		if !found {
@@ -425,88 +418,41 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
 			return errors.Errorf("invalid paramNode for variable %q", v.ParameterName())
 		}
-		handle := int(nodes.paramNode.GetParameterHandle())
-		changedInGraph := v.ChangedInGraph(g)
+		handle := nodes.paramNode.GetParameterHandle()
 
-		if numDevices > 1 {
-			// Multi-device execution (AutoSharding or SPMD): use distributed values.
-			distValue, err := v.DistributedValue()
+		if v.ChangedInGraph(g) {
+			// We donate the buffer, since we are getting a new one on the output.
+			value, err := v.Value()
 			if err != nil {
-				return errors.WithMessagef(err, "failed to get distributed value for variable %q", v.ParameterName())
+				return err
 			}
-			shards := distValue.Shards()
-			if len(shards) != numDevices {
-				return errors.Errorf("variable %q has %d shards, but expected %d devices",
-					v.ParameterName(), len(shards), numDevices)
+			inputBuffers[handle], err = value.DonateBuffer(e.backend, deviceNum)
+			if err != nil {
+				return err
 			}
-
-			for deviceIdx := 0; deviceIdx < numDevices; deviceIdx++ {
-				deviceNum := getDeviceNum(deviceIdx)
-				bufferIdx := deviceIdx*numParams + handle
-				shard := shards[deviceIdx]
-
-				if changedInGraph {
-					// We donate the buffer, since we are getting a new one on the output.
-					inputBuffers[bufferIdx], err = shard.DonateBuffer(e.backend, deviceNum)
-					if err != nil {
-						return errors.WithMessagef(err, "failed to donate buffer for variable %q on device %d",
-							v.ParameterName(), deviceNum)
-					}
-					donate[bufferIdx] = true
-				} else {
-					inputBuffers[bufferIdx], err = shard.Buffer(e.backend, deviceNum)
-					if err != nil {
-						return errors.WithMessagef(err, "failed to get buffer for variable %q on device %d",
-							v.ParameterName(), deviceNum)
-					}
-					donate[bufferIdx] = false
-				}
+			err = v.Reset()
+			if err != nil {
+				return err
 			}
-
-			if changedInGraph {
-				err = v.Reset()
-				if err != nil {
-					return err
-				}
-			}
+			donate[handle] = true
 		} else {
-			// Single-device execution.
-			deviceNum := getDeviceNum(0)
-
-			if changedInGraph {
-				// We donate the buffer, since we are getting a new one on the output.
-				value, err := v.Value()
-				if err != nil {
-					return err
+			if v.value == nil {
+				if e.isInitializeVariablesExec {
+					Panicf("variable %q used and not initialized during variable initialization, this would lead to "+
+						"recursive initialization of variables, and is not supported", v.ScopeAndName())
+				} else {
+					Panicf("variable %q failed to initialize", v.ScopeAndName())
 				}
-				inputBuffers[handle], err = value.DonateBuffer(e.backend, deviceNum)
-				if err != nil {
-					return err
-				}
-				err = v.Reset()
-				if err != nil {
-					return err
-				}
-				donate[handle] = true
-			} else {
-				if v.value == nil && v.distValue == nil {
-					if e.isInitializeVariablesExec {
-						Panicf("variable %q used and not initialized during variable initialization, this would lead to "+
-							"recursive initialization of variables, and is not supported", v.ScopeAndName())
-					} else {
-						Panicf("variable %q failed to initialize", v.ScopeAndName())
-					}
-				}
-				value, err := v.Value()
-				if err != nil {
-					return err
-				}
-				inputBuffers[handle], err = value.Buffer(e.backend, deviceNum)
-				if err != nil {
-					return err
-				}
-				donate[handle] = false
 			}
+			value, err := v.Value()
+			if err != nil {
+				return err
+			}
+			inputBuffers[handle], err = value.Buffer(e.backend, deviceNum)
+			if err != nil {
+				return err
+			}
+			donate[handle] = false
 		}
 	}
 	return nil
@@ -726,7 +672,10 @@ func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, 
 		)
 	}
 	for ii, v := range changedVars {
-		// Note: the old value was already finalized in setSideParams before execution.
+		old := v.MustValue()
+		if old != nil {
+			old.MustFinalizeAll()
+		}
 		if !v.shape.Equal(outputs[ii].Shape()) {
 			return nil, nil, errors.Errorf(
 				"variable %q changed shape in graph execution: expected %v, got %v",
@@ -744,6 +693,6 @@ func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, 
 // PreCompile will build the computation graph, JIT-compile and cache it, but not yet execute.
 //
 // Useful when one wants to measure the time separately, from graph compilation and its execution.
-func (e *Exec) PreCompile(args ...any) {
-	e.exec.PreCompile(args...)
+func (e *Exec) PreCompile(args ...any) error {
+	return e.exec.PreCompile(args...)
 }

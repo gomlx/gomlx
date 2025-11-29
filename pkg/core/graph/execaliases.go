@@ -8,9 +8,61 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Note: This file contains various aliases for NewExec and Exec.
+//=======================================================================================================
+//
+// Note: This file contains various aliases for execution.
 // We separate them from the exec.go file to make it easier to separate the core logic (in exec.go)
 // from ergonomics (execaliases.go, this file).
+//
+//=======================================================================================================
+
+// Exec executes the computation with the given arguments.
+//
+// It the input arguments shape has never been seen before, it JIT-compiles a new computation graph for that shape,
+// which can take a while, but is cached and later executions are very fast.
+//
+// The arguments are first all converted to tensors where needed.
+//
+// Optionally, use DonateTensorBuffer(value) to mark a tensor as a value to be "donated" to the execution (and potentially save some space).
+// See details in DonateTensorBuffer.
+//
+// It returns the outputs in a slice, even if there is only one output, or an error if it fails. See Exec1-Exec4 for
+// aliases that return some exact number of outputs.
+//
+// Errors (with full stack-traces) are returned on failure.
+func (e *Exec) Exec(args ...any) ([]*tensors.Tensor, error) {
+	outputs, _, err := e.ExecWithGraph(args...)
+	return outputs, err
+}
+
+// ExecWithGraph is similar to Exec, but it also returns the computation graph used
+// in the call.
+//
+// Exec creates different computation graphs when the inputs' shapes change,
+// so different calls may return different graphs.
+//
+// It returns the outputs in a slice, even if there is only one output. It also returns the computation graph used.
+//
+// Distributed execution: if the Exec was configured with AutoSharding(meshes..) or SPMD(mesh),
+// then it requires the input values for each device used in the execution.
+// So if there are D devices, and I inputs, it required D*I args, organized in a
+// "device-major" list (all the inputs to the first device, then the inputs for the second device, and so on).
+// Alternatively, you can provide I args of distributed.Tensor (they already include one value per device),
+// matching the DistributedMesh provided to Exec.SPMD.
+//
+// Errors (with full stack-traces) are returned on failure.
+func (e *Exec) ExecWithGraph(args ...any) ([]*tensors.Tensor, *Graph, error) {
+	return e.ExecWithGraphOnDevice(backends.DeviceNum(0), args...)
+}
+
+// ExecOnDevice behaves like Exec but for portable computations uses the given device for execution.
+//
+// deafultDevice is used for single-device computations that are portable (no fixed device assignment set
+// WithDeviceAssignment). Otherwise, it is ignored.
+func (e *Exec) ExecOnDevice(defaultDevice backends.DeviceNum, args ...any) ([]*tensors.Tensor, error) {
+	outputs, _, err := e.ExecWithGraph(args...)
+	return outputs, err
+}
 
 // MustNewExecAny constructs an Exec object that uses the given graphFn to build
 // computation graphs.
@@ -118,8 +170,12 @@ func (e *Exec) MustExec(args ...any) []*tensors.Tensor {
 // It returns the outputs in a slice, even if there is only one output. It also returns the computation graph used.
 //
 // It panics on errors (with full stack-traces).
-func (e *Exec) MustExecWithGraph(args ...any) (results []*tensors.Tensor, g *Graph) {
-	return e.compileAndExecute(true, 0, args...)
+func (e *Exec) MustExecWithGraph(args ...any) ([]*tensors.Tensor, *Graph) {
+	results, g, err := e.ExecWithGraph(args...)
+	if err != nil {
+		panic(err)
+	}
+	return results, g
 }
 
 // Exec1 executes the graph with the given arguments and returns one output.

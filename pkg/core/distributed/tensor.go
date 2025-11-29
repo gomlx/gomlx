@@ -74,6 +74,11 @@ func NewTensor(spec *ShardingSpec, shards []*tensors.Tensor) (*Tensor, error) {
 	return dt, nil
 }
 
+// NumShards returns the number of shards in the distributed tensor.
+func (dt *Tensor) NumShards() int {
+	return len(dt.shards)
+}
+
 // calculateLogicalShape based on the shardShape and the ShardingSpec.
 func (dt *Tensor) calculateLogicalShape() error {
 	logicalShape := dt.shardShape.Clone()

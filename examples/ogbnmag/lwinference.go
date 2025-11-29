@@ -32,7 +32,10 @@ func LayerWiseEvaluation(
 	if klog.V(1).Enabled() {
 		// Report timings.
 		start := time.Now()
-		exec.PreCompile()
+		err := exec.PreCompile()
+		if err != nil {
+			panic(err)
+		}
 		elapsed := time.Since(start)
 		klog.Infof("Layer-wise inference elapsed time (computation graph compilation): %s\n", elapsed)
 

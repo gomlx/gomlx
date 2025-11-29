@@ -489,65 +489,13 @@ func (e *Exec) GetNodeLogger() LoggerFn {
 	return e.loggerFn
 }
 
-// Exec executes the computation with the given arguments.
-//
-// It the input arguments shape has never been seen before, it JIT-compiles a new computation graph for that shape,
-// which can take a while, but is cached and later executions are very fast.
-//
-// The arguments are first all converted to tensors where needed.
-//
-// Optionally, use DonateTensorBuffer(value) to mark a tensor as a value to be "donated" to the execution (and potentially save some space).
-// See details in DonateTensorBuffer.
-//
-// It returns the outputs in a slice, even if there is only one output, or an error if it fails. See Exec1-Exec4 for
-// aliases that return some exact number of outputs.
-//
-// Errors (with full stack-traces) are returned on failure.
-func (e *Exec) Exec(args ...any) ([]*tensors.Tensor, error) {
-	outputs, _, err := e.ExecWithGraph(args...)
-	return outputs, err
-}
-
-// ExecWithGraph is similar to Exec, but it also returns the computation graph used
-// in the call.
-//
-// Exec creates different computation graphs when the inputs' shapes change,
-// so different calls may return different graphs.
-//
-// It returns the outputs in a slice, even if there is only one output. It also returns the computation graph used.
-//
-// Distributed execution: if the Exec was configured with AutoSharding(meshes..) or SPMD(mesh),
-// then it requires the input values for each device used in the execution.
-// So if there are D devices, and I inputs, it required D*I args, organized in a
-// "device-major" list (all the inputs to the first device, then the inputs for the second device, and so on).
-// Alternatively, you can provide I args of distributed.Tensor (they already include one value per device),
-// matching the DistributedMesh provided to Exec.SPMD.
-//
-// Errors (with full stack-traces) are returned on failure.
-func (e *Exec) ExecWithGraph(args ...any) ([]*tensors.Tensor, *Graph, error) {
-	return e.ExecWithGraphOnDevice(backends.DeviceNum(0), args...)
-}
-
-// ExecOnDevice behaves like Exec but for portable computations uses the given device for execution.
-//
-// deafultDevice is used for single-device computations that are portable (no fixed device assignment set
-// WithDeviceAssignment). Otherwise, it is ignored.
-func (e *Exec) ExecOnDevice(defaultDevice backends.DeviceNum, args ...any) ([]*tensors.Tensor, error) {
-	outputs, _, err := e.ExecWithGraph(args...)
-	return outputs, err
-}
-
 // ExecWithGraphOnDevice is a version of ExecGraph that runs on the given device by default.
 //
 // deafultDevice is used for single-device computations that are portable (no fixed device assignment set
 // WithDeviceAssignment). Otherwise, it is ignored.
 func (e *Exec) ExecWithGraphOnDevice(defaultDevice backends.DeviceNum, args ...any) (
 	[]*tensors.Tensor, *Graph, error) {
-	var outputs []*tensors.Tensor
-	var g *Graph
-	err := exceptions.TryCatch[error](func() {
-		outputs, g = e.compileAndExecute(true, defaultDevice, args...)
-	})
+	outputs, g, err := e.compileAndExecute(true, defaultDevice, args...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -559,8 +507,9 @@ func (e *Exec) ExecWithGraphOnDevice(defaultDevice backends.DeviceNum, args ...a
 //
 // Notice, this will include the time to convert args to tensors. If you want to isolate that time,
 // pre-convert args to tensors first.
-func (e *Exec) PreCompile(args ...any) {
-	_, _ = e.compileAndExecute(false, 0, args...)
+func (e *Exec) PreCompile(args ...any) error {
+	_, _, err := e.compileAndExecute(false, 0, args...)
+	return err
 }
 
 // unwrapListOfTensors converts something like []any{[]*tensors.Tensor{t1, t2, ...}} to []any{t1, t2,...}.
@@ -576,80 +525,77 @@ func unwrapListOfTensors(args []any) []any {
 	return args
 }
 
-// validateAndExpandArgs splitting distributed.Tensor (if used) into its individual shards.
-//
-// It panics if the number of arguments doesn't match the number of arguments expected by the graphFn x number of
-// devices.
+// unwrapDistributedTensor converts something like []any{distributed.Tensor0, distributed.Tensor1, ...} to
+// []any{shard0_0, shard0_1, ... , shard1_0, shard1_1, ... , shardN_0, shardN_1, ...},
+// where shardI_J is the shard J of the distributed.Tensor I.
+func unwrapDistributedTensors(numDevices int, args []any) ([]any, error) {
+	if len(args) == 0 {
+		return args, nil
+	}
+	_, ok := args[0].(*distributed.Tensor)
+	if !ok {
+		// No distributed.Tensors, so no unwrapping needed.
+		return args, nil
+	}
+	unwrapped := make([]any, numDevices*len(args))
+	for argIdx, arg := range args {
+		dTensor, ok := arg.(*distributed.Tensor)
+		if !ok {
+			return nil, errors.Errorf(
+				"argument #%d is not a distributed.Tensor -- if using distributed.Tensor as input, all arguments "+
+					"must be distributed.Tensors, or none of them", argIdx)
+		}
+		shards := dTensor.Shards()
+		if len(shards) != numDevices {
+			return nil, errors.Errorf(
+				"distributed.Tensor #%d has %d shards, but graph has %d devices and those many shards  are expected",
+				argIdx, len(shards), numDevices)
+		}
+		for shardIdx, shard := range shards {
+			unwrapped[shardIdx*len(args)+argIdx] = shard
+		}
+	}
+	return unwrapped, nil
+}
+
+// validateArgs to number of expected number of inputs and devices.
 //
 // deafultDevice is used for single-device computations that are portable (no fixed device assignment).
 // Otherwise, it is ignored.
-func (e *Exec) validateAndExpandArgs(args []any, defaultDevice backends.DeviceNum) []any {
+func (e *Exec) validateArgs(args []any) error {
 	if len(args) == 0 {
 		if !e.inputAsSlice && e.numInputs != 0 {
-			exceptions.Panicf("no arguments passed to Exec for %q, but graphFn expects %d inputs",
+			return errors.Errorf("no arguments passed to Exec for %q, but graphFn expects %d inputs",
 				e.Name(), e.numInputs)
 		}
 		// Having no arguments is valid for the graph.
-		return args
+		return nil
 	}
 
 	// Check that args are a multiple of the number of devices involved.
 	numDevices := e.numDevices
 	if numDevices > 1 && len(args)%numDevices != 0 {
-		exceptions.Panicf("number of arguments for execution (%d) doesn't match number of devices (%d) for %q",
+		return errors.Errorf("number of arguments for execution (%d) doesn't match number of devices (%d) for %q",
 			len(args), numDevices, e.Name())
 	}
 
-	// Check that if using distributed.Tensors, they use the same mesh and expand them using their individual shards.
-	numArgsPerDevice := len(args) / numDevices
-	if _, ok := args[0].(distributed.Tensor); ok {
-		if len(e.meshes) == 0 {
-			exceptions.Panicf(
-				"first argument is a distributed.Tensor but no mesh was provided to Exec %q "+
-					"(with Exec.AutoSharding or Exec.SPMD)", e.Name())
-		}
-		numArgs := len(args)
-		expandedArgs := make([]any, e.numDevices*numArgs)
-		for i, arg := range args {
-			dTensor, ok := arg.(distributed.Tensor)
-			if !ok {
-				exceptions.Panicf(
-					"first argument is a distributed.Tensor but argument #%d (%T) is not a distributed.Tensor "+
-						"for executor %q: these cannot be mixed, either all arguments are distributed.Tensor or none",
-					i, arg, e.Name())
-			}
-			if slices.Index(e.meshes, dTensor.Mesh()) == -1 {
-				exceptions.Panicf(
-					"argument #%d is a distributed.Tensor over a different mesh (%s) than the ones "+
-						"defined in %q (%q)", i, dTensor.Mesh(), e.Name(), e.meshes)
-			}
-			for deviceIdx, shard := range dTensor.Shards() {
-				expandedArgs[deviceIdx*numArgs+i] = shard
-			}
-		}
-		numArgsPerDevice = numArgs
-		args = expandedArgs
-	}
-
 	// Verify that numArgsPerDevice matches the number of inputs expected by the graphFn.
+	numArgsPerDevice := len(args) / numDevices
 	if !e.inputAsSlice && numArgsPerDevice != e.numInputs {
-		exceptions.Panicf(
-			"# of arguments to call (#args=%d, %d per device) don't match # arguments to the graph function (#args=%d) for %q",
-			len(args),
-			numArgsPerDevice,
-			e.numInputs,
-			e.Name(),
-		)
+		return errors.Errorf(
+			"# of arguments to call (#args=%d, %d per device) don't match # arguments to the graph function "+
+				"(#args=%d) for %q",
+			len(args), numArgsPerDevice, e.numInputs, e.Name())
 	}
-	return args
+	return nil
 }
 
 // convertArgsToBuffers converts the arguments as any type to buffers, taking into account the device assignment.
 func (e *Exec) convertArgsToBuffers(args []any, defaultDevice backends.DeviceNum) (
-	argsAsBuffer []backends.Buffer, argsShapes []shapes.Shape, argsDonate []bool) {
+	argsAsBuffers []backends.Buffer, argsShapes []shapes.Shape, argsDonate []bool, err error) {
 	// Convert args to buffers: care is taken so we move each value to the correct device.
 	// Note there may be more parameters, set with Exec.setSideParams later.
-	argsAsBuffer = make([]backends.Buffer, len(args))
+	argsAsBuffers = make([]backends.Buffer, len(args))
 	argsShapes = make([]shapes.Shape, len(args))
 	argsDonate = make([]bool, len(args))
 	numDevices := e.numDevices
@@ -657,8 +603,8 @@ func (e *Exec) convertArgsToBuffers(args []any, defaultDevice backends.DeviceNum
 	var argIdx int
 	argDeviceNum := defaultDevice
 	for argDeviceIdx := range numDevices {
-		if numDevices > 1 || len(e.deviceAssignment) > 0 {
-			if len(e.deviceAssignment) == 0 {
+		if numDevices > 1 {
+			if len(e.deviceAssignment) <= argDeviceIdx {
 				// If deviceAssignment is not given, we assume an f(idx) = idx assignment of devices.
 				argDeviceNum = backends.DeviceNum(argDeviceIdx)
 			} else {
@@ -669,20 +615,21 @@ func (e *Exec) convertArgsToBuffers(args []any, defaultDevice backends.DeviceNum
 			// TODO: set argDeviceNum according to device assignment.
 			arg := args[argIdx]
 			err := exceptions.TryCatch[error](func() {
-				argsAsBuffer[argIdx], argsShapes[argIdx], argsDonate[argIdx] = anyToDeviceBuffer(
+				argsAsBuffers[argIdx], argsShapes[argIdx], argsDonate[argIdx] = anyToDeviceBuffer(
 					e.backend,
 					argDeviceNum,
 					arg,
 				)
 			})
 			if err != nil {
-				panic(errors.WithMessagef(err, "Failed to convert argument #%d of %d to device(%d) -- type %T: %v",
-					argIdx, len(args), argDeviceNum, args[argIdx], args[argIdx]))
+				return nil, nil, nil, errors.WithMessagef(
+					err, "Failed to convert argument #%d of %d to device(%d) -- type %T: %v",
+					argIdx, len(args), argDeviceNum, args[argIdx], args[argIdx])
 			}
 			argIdx++
 		}
 	}
-	return argsAsBuffer, argsShapes, argsDonate
+	return argsAsBuffers, argsShapes, argsDonate, nil
 }
 
 // expandArgsToTotalParams expands the arguments to the total number of parameters for the graph.
@@ -694,18 +641,18 @@ func (e *Exec) convertArgsToBuffers(args []any, defaultDevice backends.DeviceNum
 // The slices are organized in "deviceNum major" order:
 // [device0_params..., device1_params..., device2_params..., ...]
 // So after growing, we need to shuffle each device's parameters to the start of their expanded row.
-func (e *Exec) expandArgsToTotalParams(g *Graph, argsAsBuffer []backends.Buffer, argsDonate []bool) (
+func (e *Exec) expandArgsToTotalParams(g *Graph, argsAsBuffers []backends.Buffer, argsDonate []bool) (
 	[]backends.Buffer, []bool) {
 	newParamsPerDevice := g.NumParameters()
 	totalParams := newParamsPerDevice * e.numDevices
-	if totalParams <= len(argsAsBuffer) {
-		return argsAsBuffer, argsDonate
+	if totalParams <= len(argsAsBuffers) {
+		return argsAsBuffers, argsDonate
 	}
 
-	oldParamsPerDevice := len(argsAsBuffer) / e.numDevices
-	numNew := totalParams - len(argsAsBuffer)
-	argsAsBuffer = slices.Grow(argsAsBuffer, numNew)
-	argsAsBuffer = argsAsBuffer[:totalParams]
+	oldParamsPerDevice := len(argsAsBuffers) / e.numDevices
+	numNew := totalParams - len(argsAsBuffers)
+	argsAsBuffers = slices.Grow(argsAsBuffers, numNew)
+	argsAsBuffers = argsAsBuffers[:totalParams]
 	argsDonate = slices.Grow(argsDonate, numNew)
 	argsDonate = argsDonate[:totalParams]
 
@@ -717,16 +664,16 @@ func (e *Exec) expandArgsToTotalParams(g *Graph, argsAsBuffer []backends.Buffer,
 
 		// Copy existing parameters to their new position.
 		// Note: Go's copy handles overlapping slices correctly (uses memmove semantics).
-		copy(argsAsBuffer[newStart:newStart+oldParamsPerDevice], argsAsBuffer[oldStart:oldStart+oldParamsPerDevice])
+		copy(argsAsBuffers[newStart:newStart+oldParamsPerDevice], argsAsBuffers[oldStart:oldStart+oldParamsPerDevice])
 		copy(argsDonate[newStart:newStart+oldParamsPerDevice], argsDonate[oldStart:oldStart+oldParamsPerDevice])
 
 		// Clear the new slots (and old positions that are now in the "new slots" region).
 		for i := newStart + oldParamsPerDevice; i < newStart+newParamsPerDevice; i++ {
-			argsAsBuffer[i] = nil
+			argsAsBuffers[i] = nil
 			argsDonate[i] = false
 		}
 	}
-	return argsAsBuffer, argsDonate
+	return argsAsBuffers, argsDonate
 }
 
 // compileAndExecute compiles a graph for arguments and optionally executes it.
@@ -734,16 +681,27 @@ func (e *Exec) expandArgsToTotalParams(g *Graph, argsAsBuffer []backends.Buffer,
 // deafultDevice is used for single-device computations that are portable (no fixed device assignment set
 // WithDeviceAssignment). Otherwise, it is ignored.
 func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum, args ...any) (
-	[]*tensors.Tensor, *Graph) {
+	[]*tensors.Tensor, *Graph, error) {
 	args = unwrapListOfTensors(args)
-	args = e.validateAndExpandArgs(args, defaultDevice)
+	var err error
+	args, err = unwrapDistributedTensors(e.numDevices, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	err = e.validateArgs(args)
+	if err != nil {
+		return nil, nil, err
+	}
 	numDevices := e.numDevices
-	argsAsBuffer, argsShapes, argsDonate := e.convertArgsToBuffers(args, defaultDevice)
+	argsAsBuffers, argsShapes, argsDonate, err := e.convertArgsToBuffers(args, defaultDevice)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// Get or build the graph.
 	entry := e.findOrCreateGraph(argsShapes)
 	if entry == nil {
-		exceptions.Panicf(
+		return nil, nil, errors.Errorf(
 			"maximum cache size of %d reached for %q, cannot create another graph -- "+
 				"a new computation graph needs to be created+compiled for each different shape of "+
 				"the input, consider using padding, or if this is not a concern change "+
@@ -753,32 +711,40 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 
 	// Now that the graph is created, we know the exact number of parameters: if the graph building function created
 	// new graph.Parameter, we may need to include those in our argsAsBuffer and argsDonate accordingly.
-	argsAsBuffer, argsDonate = e.expandArgsToTotalParams(g, argsAsBuffer, argsDonate)
+	argsAsBuffers, argsDonate = e.expandArgsToTotalParams(g, argsAsBuffers, argsDonate)
 
 	// The new parameters (if any) created are still nil and need to be set. This is done by a "SideParamsFn",
 	// configured by Exec.SetSideParamsHooks.
 	if e.setSideParams != nil {
-		err := e.setSideParams(g, argsAsBuffer, argsDonate)
+		err := e.setSideParams(g, argsAsBuffers, argsDonate)
 		if err != nil {
-			panic(errors.WithMessagef(err, "failed to set side parameters for graph %q", g.Name()))
+			return nil, nil, errors.WithMessagef(err, "failed to set side parameters for graph %q", g.Name())
 		}
 	}
 
 	// Check all parameters were set.
-	for ii, t := range argsAsBuffer {
+	for ii, t := range argsAsBuffers {
 		if t == nil {
-			exceptions.Panicf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
+			return nil, nil, errors.Errorf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
 				"parameter, cannot execute g", ii, g.GetParameterByHandle(ParameterHandle(ii)).GetParameterName())
 		}
 	}
 
-	// Execute graph: outputs will have (numDevice * entry.numAllOutputs) outputs.
+	// To only pre-compile the graph, return early.
 	if !execute {
-		return nil, g
+		return nil, g, nil
 	}
-	outputs := g.RunWithBuffers(argsAsBuffer, argsDonate, defaultDevice)
+
+	// Execute graph: outputs will have (numDevice * entry.numAllOutputs) outputs.
+	var outputs []*tensors.Tensor
+	err = exceptions.TryCatch[error](func() {
+		outputs = g.RunWithBuffers(argsAsBuffers, argsDonate, defaultDevice)
+	})
+	if err != nil {
+		return nil, nil, errors.WithMessagef(err, "failed to execute graph %q", g.Name())
+	}
 	if len(outputs) != entry.numAllOutputs*e.numDevices {
-		exceptions.Panicf("expected %d * %d (numDevices) = %d outputs from graph %q, got %d",
+		return nil, nil, errors.Errorf("expected %d * %d (numDevices) = %d outputs from graph %q, got %d",
 			e.numOutputs, e.numDevices, e.numOutputs*e.numDevices, g.Name(), len(outputs))
 	}
 
@@ -798,18 +764,18 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 	// Remove logged messages from outputs, we need to take slices for each device:
 	if len(entry.loggedMessages) == 0 {
 		// Easiest case: no logged messages, no slice needed.
-		return outputs, g
+		return outputs, g, nil
 	}
 	if numDevices == 1 {
 		// No need to rebuild a new array:
-		return outputs[:numGraphFnOutputs], g
+		return outputs[:numGraphFnOutputs], g, nil
 	}
 	graphFnOutputs := make([]*tensors.Tensor, numDevices*numGraphFnOutputs)
 	for deviceIdx := range numDevices {
 		copy(graphFnOutputs[deviceIdx*numGraphFnOutputs:(deviceIdx+1)*numGraphFnOutputs],
 			outputs[deviceIdx*entry.numAllOutputs:deviceIdx*entry.numAllOutputs+numGraphFnOutputs])
 	}
-	return graphFnOutputs, g
+	return graphFnOutputs, g, nil
 }
 
 // createAndCacheGraph creates and compiles the graph for the arguments with the given
