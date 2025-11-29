@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -448,7 +447,7 @@ func (v *Variable) SetDistributedValue(distValue *distributed.Tensor) error {
 //
 // It returns an error if the variable value needs to be distributed and the splitting of the
 // variable's value into shards fails.
-func (v *Variable) DistributedValue(backend backends.Backend) (*distributed.Tensor, error) {
+func (v *Variable) DistributedValue() (*distributed.Tensor, error) {
 	if err := v.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -466,7 +465,7 @@ func (v *Variable) DistributedValue(backend backends.Backend) (*distributed.Tens
 		return nil, errors.Errorf("variable %q has no shardingSpec spec", v.ScopeAndName())
 	}
 	var err error
-	v.distValue, err = distributed.ShardTensor(backend, shardingSpec, v.value)
+	v.distValue, err = distributed.ShardTensor(shardingSpec, v.value)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to distribute variable %q", v.ScopeAndName())
 	}

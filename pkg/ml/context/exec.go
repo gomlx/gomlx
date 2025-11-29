@@ -405,11 +405,18 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 	}
 
 	graphId := g.GraphId()
-	deviceAssignement := e.exec.DeviceAssignment()
-	deviceNum := backends.DeviceNum(0)
-	if len(deviceAssignement) > 0 {
-		deviceNum = deviceAssignement[0]
+	numDevices := e.exec.NumDevices()
+	numParams := g.NumParameters()
+	deviceAssignment := e.exec.DeviceAssignment()
+
+	// getDeviceNum returns the actual device number for the given device index.
+	getDeviceNum := func(deviceIdx int) backends.DeviceNum {
+		if len(deviceAssignment) > deviceIdx {
+			return deviceAssignment[deviceIdx]
+		}
+		return backends.DeviceNum(deviceIdx)
 	}
+
 	for v := range ctx.IterVariables() {
 		nodes, found := v.graphToNodes.Load(graphId)
 		if !found {
@@ -418,41 +425,88 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
 			return errors.Errorf("invalid paramNode for variable %q", v.ParameterName())
 		}
-		handle := nodes.paramNode.GetParameterHandle()
+		handle := int(nodes.paramNode.GetParameterHandle())
+		changedInGraph := v.ChangedInGraph(g)
 
-		if v.ChangedInGraph(g) {
-			// We donate the buffer, since we are getting a new one on the output.
-			value, err := v.Value()
+		if numDevices > 1 {
+			// Multi-device execution (AutoSharding or SPMD): use distributed values.
+			distValue, err := v.DistributedValue()
 			if err != nil {
-				return err
+				return errors.WithMessagef(err, "failed to get distributed value for variable %q", v.ParameterName())
 			}
-			inputBuffers[handle], err = value.DonateBuffer(e.backend, deviceNum)
-			if err != nil {
-				return err
+			shards := distValue.Shards()
+			if len(shards) != numDevices {
+				return errors.Errorf("variable %q has %d shards, but expected %d devices",
+					v.ParameterName(), len(shards), numDevices)
 			}
-			err = v.Reset()
-			if err != nil {
-				return err
-			}
-			donate[handle] = true
-		} else {
-			if v.value == nil {
-				if e.isInitializeVariablesExec {
-					Panicf("variable %q used and not initialized during variable initialization, this would lead to "+
-						"recursive initialization of variables, and is not supported", v.ScopeAndName())
+
+			for deviceIdx := 0; deviceIdx < numDevices; deviceIdx++ {
+				deviceNum := getDeviceNum(deviceIdx)
+				bufferIdx := deviceIdx*numParams + handle
+				shard := shards[deviceIdx]
+
+				if changedInGraph {
+					// We donate the buffer, since we are getting a new one on the output.
+					inputBuffers[bufferIdx], err = shard.DonateBuffer(e.backend, deviceNum)
+					if err != nil {
+						return errors.WithMessagef(err, "failed to donate buffer for variable %q on device %d",
+							v.ParameterName(), deviceNum)
+					}
+					donate[bufferIdx] = true
 				} else {
-					Panicf("variable %q failed to initialize", v.ScopeAndName())
+					inputBuffers[bufferIdx], err = shard.Buffer(e.backend, deviceNum)
+					if err != nil {
+						return errors.WithMessagef(err, "failed to get buffer for variable %q on device %d",
+							v.ParameterName(), deviceNum)
+					}
+					donate[bufferIdx] = false
 				}
 			}
-			value, err := v.Value()
-			if err != nil {
-				return err
+
+			if changedInGraph {
+				err = v.Reset()
+				if err != nil {
+					return err
+				}
 			}
-			inputBuffers[handle], err = value.Buffer(e.backend, deviceNum)
-			if err != nil {
-				return err
+		} else {
+			// Single-device execution.
+			deviceNum := getDeviceNum(0)
+
+			if changedInGraph {
+				// We donate the buffer, since we are getting a new one on the output.
+				value, err := v.Value()
+				if err != nil {
+					return err
+				}
+				inputBuffers[handle], err = value.DonateBuffer(e.backend, deviceNum)
+				if err != nil {
+					return err
+				}
+				err = v.Reset()
+				if err != nil {
+					return err
+				}
+				donate[handle] = true
+			} else {
+				if v.value == nil && v.distValue == nil {
+					if e.isInitializeVariablesExec {
+						Panicf("variable %q used and not initialized during variable initialization, this would lead to "+
+							"recursive initialization of variables, and is not supported", v.ScopeAndName())
+					} else {
+						Panicf("variable %q failed to initialize", v.ScopeAndName())
+					}
+				}
+				value, err := v.Value()
+				if err != nil {
+					return err
+				}
+				inputBuffers[handle], err = value.Buffer(e.backend, deviceNum)
+				if err != nil {
+					return err
+				}
+				donate[handle] = false
 			}
-			donate[handle] = false
 		}
 	}
 	return nil
