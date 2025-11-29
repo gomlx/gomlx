@@ -20,27 +20,30 @@ var (
 	ParamInitialSeed = "initializers_seed"
 )
 
+// getRngStateVar panics if it fails to create the random state.
 func (ctx *Context) getRngStateVar() *Variable {
 	rngStateVar := ctx.GetVariableByScopeAndName(RootScope, RngStateVariableName)
-	if rngStateVar == nil {
-		var randomState *tensors.Tensor
-		seedAny, found := ctx.GetParam(ParamInitialSeed)
-		if !found {
-			randomState = graph.RngState()
-		} else {
-			seed, ok := seedAny.(int64)
-			if !ok {
-				klog.Errorf("Seed in %q not an int64, using 0 instead", ParamInitialSeed)
-			}
-			randomState = graph.RngStateFromSeed(seed)
-		}
-		rngStateVar = ctx.InAbsPath(RootScope).Checked(false).
-			VariableWithValue(RngStateVariableName, randomState).SetTrainable(false)
-		rngStateVar.SetTrainable(false)
-	} else if rngStateVar.Trainable {
-		klog.Warningf("Variable %q was trainable, marking it as non-trainable.", rngStateVar.ParameterName())
-		rngStateVar.SetTrainable(false)
+	if rngStateVar != nil {
+		return rngStateVar
 	}
+	var randomState *tensors.Tensor
+	seedAny, found := ctx.GetParam(ParamInitialSeed)
+	if !found {
+		var err error
+		randomState, err = graph.RngState()
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		seed, ok := seedAny.(int64)
+		if !ok {
+			klog.Errorf("Seed in %q not an int64, using 0 instead", ParamInitialSeed)
+		}
+		randomState = graph.RngStateFromSeed(seed)
+	}
+	rngStateVar = ctx.InAbsPath(RootScope).Checked(false).
+		VariableWithValue(RngStateVariableName, randomState).SetTrainable(false)
+	rngStateVar.SetTrainable(false)
 	return rngStateVar
 }
 

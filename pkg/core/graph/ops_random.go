@@ -52,15 +52,18 @@ func RngStateFromSeed(seed int64) *tensors.Tensor {
 // A typical use case would be to use like:
 //
 //	rngState := Const(g, RngState())
-func RngState() *tensors.Tensor {
+func RngState() (*tensors.Tensor, error) {
 	var stateGo [3]uint64
 	err := initializeRNGState(&stateGo)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	state := tensors.FromValue(stateGo[:])
-	state.Shape().Assert(RngStateShape.DType, RngStateShape.Dimensions...)
-	return state
+	state := tensors.FromFlatDataAndDimensions(stateGo[:], len(stateGo))
+	err = state.Shape().Check(RngStateShape.DType, RngStateShape.Dimensions...)
+	if err != nil {
+		return nil, err
+	}
+	return state, nil
 }
 
 // RngStateSplit splits the current state into 2 different states that can be used
