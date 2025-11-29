@@ -554,6 +554,15 @@ func (e *Exec) ExecWithGraphOnDevice(defaultDevice backends.DeviceNum, args ...a
 	return outputs, g, nil
 }
 
+// PreCompile will build the computation graph and compile it but not yet execute.
+// Useful when one wants to measure the time separately, from graph compilation and its execution.
+//
+// Notice, this will include the time to convert args to tensors. If you want to isolate that time,
+// pre-convert args to tensors first.
+func (e *Exec) PreCompile(args ...any) {
+	_, _ = e.compileAndExecute(false, 0, args...)
+}
+
 // unwrapListOfTensors converts something like []any{[]*tensors.Tensor{t1, t2, ...}} to []any{t1, t2,...}.
 // If args is something else, it remains untouched.
 func unwrapListOfTensors(args []any) []any {
@@ -565,15 +574,6 @@ func unwrapListOfTensors(args []any) []any {
 	}
 	// Otherwise, process as usual.
 	return args
-}
-
-// PreCompile will build the computation graph and compile it but not yet execute.
-// Useful when one wants to measure the time separately, from graph compilation and its execution.
-//
-// Notice, this will include the time to convert args to tensors. If you want to isolate that time,
-// pre-convert args to tensors first.
-func (e *Exec) PreCompile(args ...any) {
-	_, _ = e.compileAndExecute(false, 0, args...)
 }
 
 // validateAndExpandArgs splitting distributed.Tensor (if used) into its individual shards.
@@ -644,20 +644,14 @@ func (e *Exec) validateAndExpandArgs(args []any, defaultDevice backends.DeviceNu
 	return args
 }
 
-// compileAndExecute compiles a graph for arguments and optionally executes it.
-//
-// deafultDevice is used for single-device computations that are portable (no fixed device assignment set
-// WithDeviceAssignment). Otherwise, it is ignored.
-func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum, args ...any) (
-	[]*tensors.Tensor, *Graph) {
-	args = unwrapListOfTensors(args)
-	args = e.validateAndExpandArgs(args, defaultDevice)
-
+// convertArgsToBuffers converts the arguments as any type to buffers, taking into account the device assignment.
+func (e *Exec) convertArgsToBuffers(args []any, defaultDevice backends.DeviceNum) (
+	argsAsBuffer []backends.Buffer, argsShapes []shapes.Shape, argsDonate []bool) {
 	// Convert args to buffers: care is taken so we move each value to the correct device.
 	// Note there may be more parameters, set with Exec.setSideParams later.
-	argsAsBuffer := make([]backends.Buffer, len(args))
-	argsShapes := make([]shapes.Shape, len(args))
-	argsDonate := make([]bool, len(args))
+	argsAsBuffer = make([]backends.Buffer, len(args))
+	argsShapes = make([]shapes.Shape, len(args))
+	argsDonate = make([]bool, len(args))
 	numDevices := e.numDevices
 	argsPerDevice := len(args) / numDevices
 	var argIdx int
@@ -688,6 +682,63 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 			argIdx++
 		}
 	}
+	return argsAsBuffer, argsShapes, argsDonate
+}
+
+// expandArgsToTotalParams expands the arguments to the total number of parameters for the graph.
+// If the graph has more parameters than the arguments, it will add new parameters to the arguments.
+//
+// This happens if the graph building function created extra graph.Parameter nodes, that Exec is not aware of.
+// The package ml/context does that for variables used in during model building.
+//
+// The slices are organized in "deviceNum major" order:
+// [device0_params..., device1_params..., device2_params..., ...]
+// So after growing, we need to shuffle each device's parameters to the start of their expanded row.
+func (e *Exec) expandArgsToTotalParams(g *Graph, argsAsBuffer []backends.Buffer, argsDonate []bool) (
+	[]backends.Buffer, []bool) {
+	newParamsPerDevice := g.NumParameters()
+	totalParams := newParamsPerDevice * e.numDevices
+	if totalParams <= len(argsAsBuffer) {
+		return argsAsBuffer, argsDonate
+	}
+
+	oldParamsPerDevice := len(argsAsBuffer) / e.numDevices
+	numNew := totalParams - len(argsAsBuffer)
+	argsAsBuffer = slices.Grow(argsAsBuffer, numNew)
+	argsAsBuffer = argsAsBuffer[:totalParams]
+	argsDonate = slices.Grow(argsDonate, numNew)
+	argsDonate = argsDonate[:totalParams]
+
+	// Shuffle each device's parameters to the start of their row in the expanded slice.
+	// Work backwards to avoid overwriting data.
+	for deviceIdx := e.numDevices - 1; deviceIdx >= 0; deviceIdx-- {
+		oldStart := deviceIdx * oldParamsPerDevice
+		newStart := deviceIdx * newParamsPerDevice
+
+		// Copy existing parameters to their new position.
+		// Note: Go's copy handles overlapping slices correctly (uses memmove semantics).
+		copy(argsAsBuffer[newStart:newStart+oldParamsPerDevice], argsAsBuffer[oldStart:oldStart+oldParamsPerDevice])
+		copy(argsDonate[newStart:newStart+oldParamsPerDevice], argsDonate[oldStart:oldStart+oldParamsPerDevice])
+
+		// Clear the new slots (and old positions that are now in the "new slots" region).
+		for i := newStart + oldParamsPerDevice; i < newStart+newParamsPerDevice; i++ {
+			argsAsBuffer[i] = nil
+			argsDonate[i] = false
+		}
+	}
+	return argsAsBuffer, argsDonate
+}
+
+// compileAndExecute compiles a graph for arguments and optionally executes it.
+//
+// deafultDevice is used for single-device computations that are portable (no fixed device assignment set
+// WithDeviceAssignment). Otherwise, it is ignored.
+func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum, args ...any) (
+	[]*tensors.Tensor, *Graph) {
+	args = unwrapListOfTensors(args)
+	args = e.validateAndExpandArgs(args, defaultDevice)
+	numDevices := e.numDevices
+	argsAsBuffer, argsShapes, argsDonate := e.convertArgsToBuffers(args, defaultDevice)
 
 	// Get or build the graph.
 	entry := e.findOrCreateGraph(argsShapes)
@@ -702,13 +753,7 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 
 	// Now that the graph is created, we know the exact number of parameters: if the graph building function created
 	// new graph.Parameter, we may need to include those in our argsAsBuffer and argsDonate accordingly.
-	if g.NumParameters() > len(argsAsBuffer) {
-		numNew := g.NumParameters() - len(argsAsBuffer)
-		argsAsBuffer = slices.Grow(argsAsBuffer, numNew)
-		argsAsBuffer = argsAsBuffer[:g.NumParameters()]
-		argsDonate = slices.Grow(argsDonate, numNew)
-		argsDonate = argsDonate[:g.NumParameters()]
-	}
+	argsAsBuffer, argsDonate = e.expandArgsToTotalParams(g, argsAsBuffer, argsDonate)
 
 	// The new parameters (if any) created are still nil and need to be set. This is done by a "SideParamsFn",
 	// configured by Exec.SetSideParamsHooks.
