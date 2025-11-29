@@ -77,17 +77,26 @@ func (t *Tensor) Buffer(backend backends.Backend, deviceNum backends.DeviceNum) 
 // It triggers the transfer from local to the backend device if the tensor is not already stored on the device.
 //
 // It doesn't finalize(release) the local tensor value.
-func (t *Tensor) DonateBuffer(backend backends.Backend, deviceNum backends.DeviceNum) backends.Buffer {
+func (t *Tensor) DonateBuffer(backend backends.Backend, deviceNum backends.DeviceNum) (backends.Buffer, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.AssertValid()
-	must(t.lockedMaterializeOnDevice(backend, false, deviceNum))
+	err := t.CheckValid()
+	if err != nil {
+		return nil, err
+	}
+	err = t.lockedMaterializeOnDevice(backend, false, deviceNum)
+	if err != nil {
+		return nil, err
+	}
 	buf := t.onDevice.buffer
 	t.onDevice = nil
 	if t.local == nil && t.onDevice == nil {
-		t.lockedFinalizeAll()
+		err = t.lockedFinalizeAll()
+		if err != nil {
+			return nil, err
+		}
 	}
-	return buf
+	return buf, nil
 }
 
 // IsFinalized returns true if the tensor has already been "finalized", and its

@@ -443,49 +443,34 @@ func (v *Variable) SetDistributedValue(distValue *distributed.Tensor) error {
 	return nil
 }
 
-// DistributedValue returns the distributed tensor for this variable.
+// DistributedValue returns the distributed value of the variable.
+// It uses the backend in case the value is still local (on host) and needs to be distributed.
 //
-// If the variable has a local value but no distributed value yet, and it has a shardingSpec defined,
-// it will automatically shard the local value to create the distributed tensor.
-//
-// On a single-device setup, use Variable.Value() instead.
-//
-// WARNING: memory management here is tricky: a call to SetValue triggers the current distributed value to be deallocated,
-// and what is returned by a previous call to DistributedValue may become invalid.
-// The recommendation is not to use this in a concurrent setup -- or to create proper locking mechanisms.
+// It returns an error if the variable value needs to be distributed and the splitting of the
+// variable's value into shards fails.
 func (v *Variable) DistributedValue(backend backends.Backend) (*distributed.Tensor, error) {
 	if err := v.CheckValid(); err != nil {
 		return nil, err
 	}
-
 	if v.distValue != nil {
-		// Distributed value is already there.
 		return v.distValue, nil
 	}
 	if v.value == nil {
-		return nil, errors.Errorf("variable %q has no value (local or distributed)", v.ScopeAndName())
+		return nil, errors.Errorf("variable %q has no distributed (or local) value", v.ScopeAndName())
 	}
-	if v.shardingSpec == nil {
-		return nil, errors.Errorf(
-			"variable %q has local value but no shardingSpec defined, cannot create distributed tensor",
-			v.ScopeAndName())
+	shardingSpec := v.shardingSpec
+	if shardingSpec == nil {
+		shardingSpec = v.ctx.data.defaultShardingSpec
 	}
-	// Create distributed value from local value using the shardingSpec.
+	if shardingSpec == nil {
+		return nil, errors.Errorf("variable %q has no shardingSpec spec", v.ScopeAndName())
+	}
 	var err error
-	v.distValue, err = distributed.ShardTensor(backend, v.shardingSpec, v.value)
+	v.distValue, err = distributed.ShardTensor(backend, shardingSpec, v.value)
 	if err != nil {
-		return nil, errors.WithMessagef(err, "failed to shard variable %q", v.ScopeAndName())
+		return nil, errors.WithMessagef(err, "failed to distribute variable %q", v.ScopeAndName())
 	}
 	return v.distValue, nil
-}
-
-// MustDistributedValue is like DistributedValue but panics on error.
-func (v *Variable) MustDistributedValue(backend backends.Backend) *distributed.Tensor {
-	dt, err := v.DistributedValue(backend)
-	if err != nil {
-		panic(err)
-	}
-	return dt
 }
 
 // InUseByGraph returns whether the variable is currently in use by the given graph.

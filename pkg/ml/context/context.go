@@ -210,7 +210,10 @@ func (ctx *Context) Clone() (*Context, error) {
 	newCtx.reuse = ctx.reuse
 	newCtx.checked = ctx.checked
 	newCtx.initializer = ctx.initializer
-	newCtx.data = &contextData{}
+	newCtx.data = &contextData{
+		graphParams:  make(map[graph.GraphId]*scopedParams),
+		variablesMap: make(map[string]scopedVariableMap),
+	}
 	newCtx.data.needsInitialization = ctx.data.needsInitialization
 	newCtx.data.params = ctx.data.params.Clone()
 	newCtx.data.defaultShardingSpec = ctx.data.defaultShardingSpec

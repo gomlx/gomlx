@@ -391,11 +391,13 @@ func (e *Exec) Finalize() {
 // It fills the graph parameter values for every variable used in the given graph.
 // It keeps a cache of the variables' mapping for faster access.
 //
-// It's assumed len(inputBuffers) = len(donate) = g.NumParameters()
+// It's assumed len(inputBuffers) = len(donate) = g.NumDevices() * g.NumParameters(), organized by device first.
+// And this function needs to set the last parameters (used by the variables) for each device,
+// in the order they were added to the backend.
 //
 // `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
 // needed by end users.
-func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []bool) {
+func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []bool) error {
 	// Initialize variables if needed.
 	ctx := e.context
 	if !e.isInitializeVariablesExec && ctx.NeedsInitialization() {
@@ -408,21 +410,30 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 	if len(deviceAssignement) > 0 {
 		deviceNum = deviceAssignement[0]
 	}
-	ctx.EnumerateVariables(func(v *Variable) {
+	for v := range ctx.IterVariables() {
 		nodes, found := v.graphToNodes.Load(graphId)
 		if !found {
-			return
+			continue
 		}
 		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
-			Panicf("invalid paramNode for variable %q", v.ParameterName())
+			return errors.Errorf("invalid paramNode for variable %q", v.ParameterName())
 		}
 		handle := nodes.paramNode.GetParameterHandle()
 
 		if v.ChangedInGraph(g) {
 			// We donate the buffer, since we are getting a new one on the output.
-			inputBuffers[handle] = v.MustValue().DonateBuffer(e.backend, deviceNum)
-			v.MustValue().MustFinalizeAll()
-			v.value = nil
+			value, err := v.Value()
+			if err != nil {
+				return err
+			}
+			inputBuffers[handle], err = value.DonateBuffer(e.backend, deviceNum)
+			if err != nil {
+				return err
+			}
+			err = v.Reset()
+			if err != nil {
+				return err
+			}
 			donate[handle] = true
 		} else {
 			if v.value == nil {
@@ -433,14 +444,18 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 					Panicf("variable %q failed to initialize", v.ScopeAndName())
 				}
 			}
-			var err error
-			inputBuffers[handle], err = v.MustValue().Buffer(e.backend, deviceNum)
+			value, err := v.Value()
 			if err != nil {
-				panic(err)
+				return err
+			}
+			inputBuffers[handle], err = value.Buffer(e.backend, deviceNum)
+			if err != nil {
+				return err
 			}
 			donate[handle] = false
 		}
-	})
+	}
+	return nil
 }
 
 // SetNodeLogger with the function to be called for the nodes
@@ -513,6 +528,34 @@ func (e *Exec) AutoSharding(meshes ...*distributed.DeviceMesh) *Exec {
 // It returns nil if no meshes were provided (e.g., for non-distributed execution).
 func (e *Exec) Meshes() []*distributed.DeviceMesh {
 	return e.exec.Meshes()
+}
+
+// WithInputShardingSpecs sets the sharding specs for the inputs.
+//
+// This is used for distributed computations with AutoSharding.
+// If the function takes variable inputs (`[]*Node`), then the last spec provided is used for all remaining inputs.
+//
+// The specs are not validated here, any errors will only be surfaced during the execution.
+//
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithInputShardingSpecs(specs ...*distributed.ShardingSpec) *Exec {
+	e.inputShardingSpecs = specs
+	e.exec.WithInputShardingSpecs(specs...)
+	return e
+}
+
+// WithOutputShardingSpecs sets the sharding specs for the outputs.
+//
+// If the function takes variable inputs (`[]*Node`), then the last spec provided is used for all remaining inputs.
+// This is used for distributed computations with AutoSharding.
+//
+// The specs are not validated here, any errors will only be surfaced during the execution.
+//
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithOutputShardingSpecs(specs ...*distributed.ShardingSpec) *Exec {
+	e.outputShardingSpecs = specs
+	e.exec.WithOutputShardingSpecs(specs...)
+	return e
 }
 
 // DefaultShardingSpec returns the default sharding spec configured for the associated Context object.
@@ -629,10 +672,7 @@ func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, 
 		)
 	}
 	for ii, v := range changedVars {
-		old := v.MustValue()
-		if old != nil {
-			old.MustFinalizeAll()
-		}
+		// Note: the old value was already finalized in setSideParams before execution.
 		if !v.shape.Equal(outputs[ii].Shape()) {
 			return nil, nil, errors.Errorf(
 				"variable %q changed shape in graph execution: expected %v, got %v",

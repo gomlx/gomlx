@@ -21,6 +21,8 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -136,5 +138,62 @@ func TestExec(t *testing.T) {
 		counterVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "counter")
 		require.NotNil(t, counterVar)
 		require.Equal(t, int64(2), tensors.ToScalar[int64](counterVar.MustValue()))
+	})
+}
+
+func TestDistributedExec(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	numDevices := backend.NumDevices()
+	if numDevices < 2 {
+		t.Skipf("Skipping distributed tests: backend only has %d device.", numDevices)
+	}
+	meshFor2 := must.M1(distributed.NewDeviceMesh([]int{2}, []string{"shards"}))
+
+	t.Run("AutoSharding-Batch", func(t *testing.T) {
+		oneLayerExec, err := context.NewExec(backend, nil, oneLayerGraph)
+		require.NoError(t, err)
+		batchSpec := must.M1(distributed.BuildSpec(meshFor2).S("shards").Done())
+		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
+		oneLayerExec = oneLayerExec.AutoSharding(meshFor2).
+			WithInputShardingSpecs(batchSpec).
+			WithOutputShardingSpecs(batchSpec)
+		err = oneLayerExec.SetDefaultShardingSpec(replicatedSpec)
+		require.NoError(t, err)
+
+		// With two devices, we want 2 results, one per device.
+		x := [][]float64{{1, 1, 1}, {2, 2, 2}}
+		shardedResults, err := oneLayerExec.Exec(x)
+		require.NoError(t, err)
+		require.Len(t, shardedResults, 2)
+		distributedResult, err := distributed.NewTensor(backend, batchSpec, shardedResults)
+		require.NoError(t, err)
+		distributedResult.Shape().Equal(shapes.Make(dtypes.Float64, 2, 1))
+		gotValue1 := must.M1(distributedResult.Merge()).Value().([][]float64)
+		assert.NotEqualf(
+			t, 0.0, gotValue1[0][0],
+			"Failed evaluating oneLayer(%v) returned 0, but weights should have been randomly initialized", x)
+		assert.Equal(t, 2*gotValue1[0][0], gotValue1[1][0])
+
+		// The second call should reuse the graph and yield the same result.
+		shardedResults, err = oneLayerExec.Exec(x)
+		require.NoError(t, err)
+		require.Len(t, shardedResults, 2)
+		distributedResult, err = distributed.NewTensor(backend, batchSpec, shardedResults)
+		require.NoError(t, err)
+		distributedResult.Shape().Equal(shapes.Make(dtypes.Float64, 2, 1))
+		gotValue2 := must.M1(distributedResult.Merge()).Value().([][]float64)
+		assert.Equal(t, gotValue1, gotValue2,
+			"results of second call of oneLayer(%v) should be the same as the first call", x)
+
+		// Different batch size: it should generate a new graph but yield the same result.
+		shardedResults, err = oneLayerExec.Exec(x)
+		require.NoError(t, err)
+		require.Len(t, shardedResults, 2)
+		distributedResult, err = distributed.NewTensor(backend, batchSpec, shardedResults)
+		require.NoError(t, err)
+		distributedResult.Shape().Equal(shapes.Make(dtypes.Float64, 4, 1))
+		gotValue3 := must.M1(distributedResult.Merge()).Value().([][]float64)
+		assert.Equal(t, gotValue3[:2], gotValue1,
+			"results of third call of oneLayer(%v) should be the same as the first call", x)
 	})
 }

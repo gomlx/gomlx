@@ -25,8 +25,9 @@ func TestVariable_CloneToContext(t *testing.T) {
 	fmt.Printf("Cloned variable %q: %s\n", v1x.ScopeAndName(), v1x.MustValue())
 	v1y, err := v0y.CloneToContext(ctx1)
 	require.NoError(t, err)
-	require.Nil(t, v1y.MustValue())
-	fmt.Printf("Cloned variable %q: %s\n", v1y.ScopeAndName(), v1y.MustValue())
+	_, err = v1y.Value()
+	require.Error(t, err, "/a/b/y was created uninitialized, it should have no value")
+	fmt.Printf("Cloned variable %q, with no value, shape=%s\n", v1y.ScopeAndName(), v1y.Shape())
 
 	// Check the new variable has the right name, scope and was properly inserted in to the new context.
 	if v1x.ScopeAndName() != "/a/b/x" {

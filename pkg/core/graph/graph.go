@@ -499,17 +499,22 @@ type donateBuffer struct {
 //
 // Example:
 //
-//	myState := myExec.MustExec(DonateTensorBuffer(myState, backend))[0]
+//	myBuf, err := myState.DonateBuffer(backend, deviceNum)
+//	myState, err := myExec.Exec(myBuf)[0]
 //
 // It requires the backend and the deviceNum (defaults to 0) of the device buffer to donate.
 //
 // Notice that after this, t's value in the device becomes invalid.
-func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum backends.DeviceNum) any {
+func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum backends.DeviceNum) (any, error) {
 	d := &donateBuffer{shape: t.Shape()}
-	d.buffer = t.DonateBuffer(
+	var err error
+	d.buffer, err = t.DonateBuffer(
 		backend,
 		deviceNum) // DonateBuffer may destroy the tensor if there is no local storage.
-	return d
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 // Run the compiled Graph with the inputs given in order -- the same order as the parameters were created.
@@ -661,6 +666,13 @@ func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool, defaultD
 	return
 }
 
+func must1[T any](value T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return value
+}
+
 // anyToDeviceBuffer converts generic values to a tensor.Device on the requested device number,
 // and whether the buffer can be donated.
 func anyToDeviceBuffer(
@@ -682,7 +694,7 @@ func anyToDeviceBuffer(
 	// A Go value by default is converted to a buffer and can be donated.
 	t := tensors.FromAnyValue(value)
 	shape := t.Shape()
-	return t.DonateBuffer(backend, deviceNum), shape, true
+	return must1(t.DonateBuffer(backend, deviceNum)), shape, true
 }
 
 // tensorToDeviceBuffer is used by anyToDeviceBuffer to convert a tensor to a device buffer.

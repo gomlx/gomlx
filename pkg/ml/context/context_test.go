@@ -410,8 +410,8 @@ func TestContext_Clone(t *testing.T) {
 	fmt.Printf("Cloned variable %q: %s\n", v1x.ScopeAndName(), v1x.MustValue())
 	v1y := ctx1.GetVariable("y")
 	require.NotNil(t, v1y)
-	fmt.Printf("Cloned variable %q: %s\n", v1y.ScopeAndName(), v1y.MustValue())
-	require.Nil(t, v1y.MustValue())
+	_, err = v1y.Value()
+	require.Error(t, err, "/a/b/y was created uninitialized, it should have no value")
 	require.True(t, v1y.Shape().Equal(v0y.Shape()))
 
 	// Check the new variable value is independent of the old one.
