@@ -359,6 +359,12 @@ func (v *Variable) Value() (*tensors.Tensor, error) {
 	return v.value, nil
 }
 
+// HasValue returns true if the variable has a value set: if the variable has not yet
+// been initialized or if it has been finalized, this returns false.
+func (v *Variable) HasValue() bool {
+	return v.value != nil || v.distValue != nil
+}
+
 // SetValue updates the tensor holding the variable value and marks it as no longer needing initialization.
 //
 // On a distributed setup, the Variable will be sharded (see Variable.WithShardingSpec() or Variable.SetShardingSpec).

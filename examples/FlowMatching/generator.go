@@ -37,8 +37,9 @@ import (
 
 // GenerateNoise generates random noise that can be used to generate images.
 func GenerateNoise(cfg *diffusion.Config, numImages int) *tensors.Tensor {
+	stateT := must.M1(RngState())
 	return MustExecOnce(cfg.Backend, func(g *Graph) *Node {
-		state := Const(g, RngState())
+		state := Const(g, stateT)
 		_, noise := RandomNormal(state, shapes.Make(cfg.DType, numImages, cfg.ImageSize, cfg.ImageSize, 3))
 		return noise
 	})
@@ -309,8 +310,8 @@ func PlotModelEvolution(cfg *diffusion.Config, imagesPerSample int, animate bool
 	var jsTemplate = must.M1(template.New("PlotModelEvolution").Parse(`
 	<canvas id="canvas_{{.Id}}" height="{{.Size}}px" width="{{.Width}}px"></canvas>
 	<script>
-	var canvas_{{.Id}} = document.getElementById("canvas_{{.Id}}"); 
-	var ctx_{{.Id}} = canvas_{{.Id}}.getContext("2d"); 
+	var canvas_{{.Id}} = document.getElementById("canvas_{{.Id}}");
+	var ctx_{{.Id}} = canvas_{{.Id}}.getContext("2d");
 	var currentFrame_{{.Id}} = 0;
 	var frameRate_{{.Id}} = {{.FrameRateMs}};
 	var imagePaths_{{.Id}} = [{{range .Images}}
@@ -330,7 +331,7 @@ func PlotModelEvolution(cfg *diffusion.Config, imagesPerSample int, animate bool
 		}
 		images_{{.Id}}.push(images);
 	}
-	
+
 	function animate_{{.Id}}() {
 		var Context = ctx_{{.Id}};
 		var canvas = canvas_{{.Id}};
@@ -542,7 +543,7 @@ func GenerateImagesOfAllFlowerTypes(cfg *diffusion.Config, numDiffusionSteps int
 	ctx.RngStateReset()
 	imageSize := cfg.ImageSize
 	noise := MustNewExec(cfg.Backend, func(g *Graph) *Node {
-		state := Const(g, RngState())
+		state := Const(g, must.M1(RngState()))
 		_, noise := RandomNormal(state, shapes.Make(cfg.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise

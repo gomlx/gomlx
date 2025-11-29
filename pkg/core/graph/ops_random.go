@@ -46,12 +46,12 @@ func RngStateFromSeed(seed int64) *tensors.Tensor {
 // If the OS's cryptographically secure random number generator is not available, it will use the current time as
 // seed.
 //
-// Notice it returns a concrete tensor value that can be used to set a variable or
-// constant to be used in a graph.
+// This is not a graph building function: it returns a concrete tensor value, and it returns an error if
+// something fails. The returned value can be used as a Const or to set a variable to be used in a graph.
 //
 // A typical use case would be to use like:
 //
-//	rngState := Const(g, RngState())
+//	rngState, err := Const(g, RngState())
 func RngState() (*tensors.Tensor, error) {
 	var stateGo [3]uint64
 	err := initializeRNGState(&stateGo)

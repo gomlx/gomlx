@@ -66,8 +66,6 @@ func findSmallestDegreeSubgraph(t *testing.T) int32 {
 }
 
 func configureLayerWiseTestContext(ctx *context.Context) {
-	ctx.RngStateReset()
-
 	// Standard MAG parameters.
 	ctx.SetParams(map[string]any{
 		"checkpoint":      "",

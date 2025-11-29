@@ -645,17 +645,31 @@ func (ctx *Context) NeedsInitialization() bool {
 // among all connected context references.
 //
 // Initialization functions are executed on the given backend.
+//
+// InitializeVariables also resets the RNG state for the context, if is not yet set.
 func (ctx *Context) InitializeVariables(backend backends.Backend) {
+	// Makes sure we have a RNG state set.
+	rngStateVar := ctx.getRngStateVar()
+	if !rngStateVar.HasValue() {
+		err := ctx.RngStateReset()
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	// Collect variables that need initialization.
 	var variablesToInitialize []*Variable
-	ctx.EnumerateVariables(func(v *Variable) {
-		if v.value == nil {
+	for v := range ctx.IterVariables() {
+		if !v.HasValue() {
 			variablesToInitialize = append(variablesToInitialize, v)
 		}
-	})
+	}
 	if len(variablesToInitialize) == 0 {
 		// Nothing to do.
 		return
 	}
+
+	// Execute initialization for collected variables.
 	e := MustNewExec(backend, ctx, func(ctx *Context, g *Graph) []*Node {
 		initialValues := make([]*Node, 0, len(variablesToInitialize))
 		for _, variable := range variablesToInitialize {
@@ -668,10 +682,7 @@ func (ctx *Context) InitializeVariables(backend backends.Backend) {
 		return initialValues
 	})
 	e.isInitializeVariablesExec = true // Disallow recursive creation of variables within variable initialization.
-	var values []*tensors.Tensor
-	err := TryCatch[error](func() {
-		values = e.MustExec()
-	})
+	values, err := e.Exec()
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to compile/run variable initialization graph"))
 	}
