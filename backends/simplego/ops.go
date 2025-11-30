@@ -526,7 +526,7 @@ type sliceNode struct {
 //
 // It returns the new state of the RNG and the generated values (with random bits) with the given shape.
 func (b *Builder) RNGBitGenerator(stateOp backends.Op, shape shapes.Shape) (newState, values backends.Op, err error) {
-	opType := backends.OpTypeRngBitGenerator
+	opType := backends.OpTypeRNGBitGenerator
 	inputs, err := b.checkOps(opType.String(), stateOp)
 	if err != nil {
 		return nil, nil, err
@@ -534,7 +534,7 @@ func (b *Builder) RNGBitGenerator(stateOp backends.Op, shape shapes.Shape) (newS
 	state := inputs[0]
 	if !state.shape.Equal(backends.RNGStateShape) {
 		err := errors.Errorf(
-			"expected random state to be shaped %s, got state.shape=%s instead for RngBitGenerator",
+			"expected random state to be shaped %s, got state.shape=%s instead for RNGBitGenerator",
 			backends.RNGStateShape,
 			state.shape,
 		)

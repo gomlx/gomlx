@@ -84,6 +84,7 @@ const (
 	NodeTypePad
 	NodeTypeParameter
 	NodeTypePow
+	NodeTypeRNGBitGenerator
 	NodeTypeReal
 	NodeTypeReduceBitwiseAnd
 	NodeTypeReduceBitwiseOr
@@ -99,7 +100,6 @@ const (
 	NodeTypeRem
 	NodeTypeReshape
 	NodeTypeReverse
-	NodeTypeRngBitGenerator
 	NodeTypeRound
 	NodeTypeRsqrt
 	NodeTypeScatterMax
@@ -3085,6 +3085,52 @@ func Pow(lhs *Node, rhs *Node) (
 	return
 }
 
+// nodeInputsRNGBitGenerator holds the inputs used for the call to backends.RNGBitGenerator.
+type nodeInputsRNGBitGenerator struct {
+	state *Node
+	shape shapes.Shape
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsRNGBitGenerator) Type() NodeType {
+	return NodeTypeRNGBitGenerator
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsRNGBitGenerator) String() string {
+	return fmt.Sprintf("%s(state=[#%d], shape=%v)",
+		ni.Type(),
+		ni.state.Id(),
+		ni.shape,
+	)
+}
+
+// backendRNGBitGenerator is a Graph wrapper for the backend.Builder.RNGBitGenerator method.
+func backendRNGBitGenerator(state *Node, shape shapes.Shape) (
+	newState, values *Node) {
+	inputNodes := []*Node{state}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsRNGBitGenerator{
+		state: state,
+		shape: shape,
+	}
+	v0, v1, err := g.builder.RNGBitGenerator(state.outputOps[0], inputs.shape)
+	if err != nil {
+		panic(err)
+	}
+	node := &Node{
+		outputOps:    []backends.Op{v0, v1},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	splitNodes := splitNode(node)
+	newState, values = splitNodes[0], splitNodes[1]
+	return
+}
+
 // nodeInputsReal holds the inputs used for the call to backends.Real.
 type nodeInputsReal struct {
 	x *Node
@@ -3755,52 +3801,6 @@ func backendReverse(x *Node, axes ...int) (
 		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
-	return
-}
-
-// nodeInputsRngBitGenerator holds the inputs used for the call to backends.RngBitGenerator.
-type nodeInputsRngBitGenerator struct {
-	state *Node
-	shape shapes.Shape
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsRngBitGenerator) Type() NodeType {
-	return NodeTypeRngBitGenerator
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsRngBitGenerator) String() string {
-	return fmt.Sprintf("%s(state=[#%d], shape=%v)",
-		ni.Type(),
-		ni.state.Id(),
-		ni.shape,
-	)
-}
-
-// backendRngBitGenerator is a Graph wrapper for the backend.Builder.RngBitGenerator method.
-func backendRngBitGenerator(state *Node, shape shapes.Shape) (
-	newState, values *Node) {
-	inputNodes := []*Node{state}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsRngBitGenerator{
-		state: state,
-		shape: shape,
-	}
-	v0, v1, err := g.builder.RNGBitGenerator(state.outputOps[0], inputs.shape)
-	if err != nil {
-		panic(err)
-	}
-	node := &Node{
-		outputOps:    []backends.Op{v0, v1},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1))},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-	}
-	g.registerNode(node)
-	splitNodes := splitNode(node)
-	newState, values = splitNodes[0], splitNodes[1]
 	return
 }
 

@@ -88,7 +88,7 @@ func RNGStateForGraph(g *Graph) *Node {
 // separately and will lead to different random numbers.
 func RNGStateSplit(rngState *Node) (newRngState1, newRngState2 *Node) {
 	validateRNGState(rngState)
-	return backendRngBitGenerator(rngState, rngState.Shape())
+	return backendRNGBitGenerator(rngState, rngState.Shape())
 }
 
 func validateRNGState(rngState *Node) {
@@ -129,7 +129,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		bitsShape := shape.Clone()
 		bitsShape.DType = dtypes.Uint64
 		var randomBits *Node
-		newRngState, randomBits = backendRngBitGenerator(rngState, bitsShape)
+		newRngState, randomBits = backendRNGBitGenerator(rngState, bitsShape)
 		values = ConvertDType(randomBits, dtypes.Float64)
 		values = MulScalar(values, math.Pow(2.0, -64))
 		values = MinScalar(values, math.Nextafter(1.0, 0.0))
@@ -138,7 +138,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		bitsShape := shape.Clone()
 		bitsShape.DType = dtypes.Uint32 // XLA will only generate `uint` for random bits.
 		var randomBits *Node
-		newRngState, randomBits = backendRngBitGenerator(rngState, bitsShape)
+		newRngState, randomBits = backendRNGBitGenerator(rngState, bitsShape)
 		values = ConvertDType(randomBits, dtypes.Float32)
 		values = MulScalar(values, 1.0/(float64(1<<32)))
 		values = Abs(values)
@@ -242,7 +242,7 @@ func RandomIntN[IntT interface{ *Node | constraints.Integer }](
 	var randomBits *Node
 	randomBitsShape := shape.Clone()
 	randomBitsShape.DType = dtypes.U64
-	newRngState, randomBits = backendRngBitGenerator(rngState, randomBitsShape)
+	newRngState, randomBits = backendRNGBitGenerator(rngState, randomBitsShape)
 	var ratio, maxValue *Node
 	switch n := any(N).(type) {
 	case *Node:

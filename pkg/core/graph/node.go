@@ -144,7 +144,7 @@ func (n *Node) Inputs() []*Node { return n.inputNodes }
 
 // NumOutputs returns the number of outputs for a node.
 //
-// Almost every node will have one output only. But a few (like "RngBitGenerator") will output various outputs
+// Almost every node will have one output only. But a few (like "RNGBitGenerator") will output various outputs
 // that are split before usage. These nodes are marked with an invalid dtype.
 //
 // Used internally only, all Graph public operations will return nodes with one output only.

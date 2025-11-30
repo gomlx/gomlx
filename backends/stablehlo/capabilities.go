@@ -107,7 +107,7 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeReduceWindow:          true,
 		backends.OpTypeReshape:               true,
 		backends.OpTypeReverse:               true,
-		backends.OpTypeRngBitGenerator:       true,
+		backends.OpTypeRNGBitGenerator:       true,
 		backends.OpTypeScatterSum:            true,
 		backends.OpTypeScatterMax:            true,
 		backends.OpTypeScatterMin:            true,

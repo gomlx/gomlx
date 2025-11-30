@@ -505,13 +505,13 @@ func (b *Builder) Transpose(x backends.Op, permutation ...int) (backends.Op, err
 //
 // Currently, the backend only supports the Philox algorithm. See https://dl.acm.org/doi/10.1145/2063384.2063405
 func (b *Builder) RNGBitGenerator(state backends.Op, shape shapes.Shape) (newState backends.Op, values backends.Op, err error) {
-	nodes, err := b.verifyAndCastValues("RngBitGenerator", state)
+	nodes, err := b.verifyAndCastValues("RNGBitGenerator", state)
 	if err != nil {
 		return nil, nil, err
 	}
 	shloShape := ShapeToStableHLO(shape)
 	if !shloShape.Ok() {
-		return nil, nil, errors.Errorf("RngBitGenerator: invalid shape: %s", shape)
+		return nil, nil, errors.Errorf("RNGBitGenerator: invalid shape: %s", shape)
 	}
 	newStateV, valueV, err := stablehlo.RngBitGenerator(nodes[0].value, shloShape, stablehlotypes.RngPhilox)
 	if err != nil {

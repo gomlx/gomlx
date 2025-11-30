@@ -193,7 +193,7 @@ func (b Builder) ReduceWindow(x backends.Op, reductionType backends.ReduceOpType
 }
 
 func (b Builder) RNGBitGenerator(state backends.Op, shape shapes.Shape) (newState, values backends.Op, err error) {
-	return nil, nil, b.baseErrFn(backends.OpTypeRngBitGenerator)
+	return nil, nil, b.baseErrFn(backends.OpTypeRNGBitGenerator)
 }
 
 func (b Builder) BatchNormForInference(operand, scale, offset, mean, variance backends.Op, epsilon float32, axis int) (

@@ -38,7 +38,7 @@ var (
 		"ReduceLogicalAnd", "ReduceLogicalOr", "ReduceLogicalXor",
 		"ReduceBitwiseAnd", "ReduceBitwiseOr", "ReduceBitwiseXor",
 
-		"Reshape", "Reverse", "RngBitGenerator",
+		"Reshape", "Reverse", "RNGBitGenerator",
 		"ScatterSum", "ScatterMax", "ScatterMin",
 		"ScatterAdd", // Deprecated
 		"SelectAndScatterSum", "SelectAndScatterMax", "SelectAndScatterMin",
@@ -313,7 +313,7 @@ Body: */}}{
 {{- end}}
 	inputs := &nodeInputs{{.BackendName}}{
 {{- range .Inputs}}
-		{{.Name}}: {{.CopyStatement}},		
+		{{.Name}}: {{.CopyStatement}},
 {{- end}}
 	}
 {{- /*
@@ -338,7 +338,7 @@ Convert result(s) to node(s):
 	}
 	node := &Node{
 		outputOps: results,
-		outputShapes: xslices.Map(results, 
+		outputShapes: xslices.Map(results,
 			func (op backends.Op) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
 {{- else}}
 {{- /* Version with single output: - node already defined. */}}
@@ -364,7 +364,7 @@ Convert result(s) to node(s):
 	g.registerNode(node)
 {{- /*
 
-If multiple-outputs, split resulting node into its separate parts: 
+If multiple-outputs, split resulting node into its separate parts:
 */}}
 {{- if .HasMultipleOutputs}}
 	splitNodes := splitNode(node)

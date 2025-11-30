@@ -15,7 +15,7 @@ const (
 	OpTypeConstant
 	OpTypeIdentity
 	OpTypeReduceWindow
-	OpTypeRngBitGenerator
+	OpTypeRNGBitGenerator
 	OpTypeBatchNormForInference
 	OpTypeBatchNormForTraining
 	OpTypeBatchNormGradient
