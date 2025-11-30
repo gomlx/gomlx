@@ -81,7 +81,7 @@ func TestBSplineKAN(t *testing.T) {
 	}
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	ctx.RngStateFromSeed(42)
+	ctx.SetRNGStateFromSeed(42)
 	ds := &kanTestDataset{batchSize: 128}
 
 	opt := optimizers.Adam().LearningRate(0.001).Done()
@@ -128,7 +128,7 @@ func TestBSplineKANRegularized(t *testing.T) {
 	}
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	ctx.RngStateFromSeed(42)
+	ctx.SetRNGStateFromSeed(42)
 	ctx.SetParam(kan.ParamBSplineMagnitudeL1, 0.01)
 	ds := &kanTestDataset{batchSize: 128}
 

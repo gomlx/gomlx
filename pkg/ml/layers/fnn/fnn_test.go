@@ -110,7 +110,7 @@ func TestFNN(t *testing.T) {
 	for ii, coreFn := range fnnVariations {
 		fmt.Printf("Variation #%d %q:\n", ii, fnnVariationsNames[ii])
 		ctx := context.New()
-		ctx.RngStateFromSeed(42)
+		ctx.SetRNGStateFromSeed(42)
 		opt := optimizers.Adam().LearningRate(0.001).Done()
 		trainer := train.NewTrainer(backend, ctx, fnnGraphModelBuilder(coreFn),
 			lossGraphFn, // a simple wrapper around losses.MeanSquaredError,
@@ -138,7 +138,7 @@ func TestFNNRegularized(t *testing.T) {
 	}
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	ctx.RngStateFromSeed(42)
+	ctx.SetRNGStateFromSeed(42)
 	ds := &fnnTestDataset{batchSize: 128}
 
 	regularizedFn := func(ctx *context.Context, input *Node) *Node {

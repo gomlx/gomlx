@@ -37,9 +37,8 @@ import (
 
 // GenerateNoise generates random noise that can be used to generate images.
 func GenerateNoise(cfg *diffusion.Config, numImages int) *tensors.Tensor {
-	stateT := must.M1(RngState())
 	return MustExecOnce(cfg.Backend, func(g *Graph) *Node {
-		state := Const(g, stateT)
+		state := RNGStateForGraph(g)
 		_, noise := RandomNormal(state, shapes.Make(cfg.DType, numImages, cfg.ImageSize, cfg.ImageSize, 3))
 		return noise
 	})
@@ -371,7 +370,7 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 			"Config.AttachCheckpoint.")
 	}
 	ctx := cfg.Context.Checked(false)
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	noise := cfg.GenerateNoise(numImages)
 	flowerIds := cfg.GenerateFlowerIds(numImages)
 
@@ -472,7 +471,7 @@ func GenerateImagesOfFlowerType(
 	numDiffusionSteps int,
 ) (predictedImages *tensors.Tensor) {
 	ctx := cfg.Context
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	noise := cfg.GenerateNoise(numImages)
 	flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 	generator := NewImagesGenerator(cfg, noise, flowerIds, numDiffusionSteps)
@@ -540,10 +539,10 @@ func DropdownFlowerTypes(
 func GenerateImagesOfAllFlowerTypes(cfg *diffusion.Config, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	ctx := cfg.Context
 	numImages := flowers.NumLabels
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	imageSize := cfg.ImageSize
 	noise := MustNewExec(cfg.Backend, func(g *Graph) *Node {
-		state := Const(g, must.M1(RngState()))
+		state := RNGStateForGraph(g)
 		_, noise := RandomNormal(state, shapes.Make(cfg.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise

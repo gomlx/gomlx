@@ -30,7 +30,7 @@ type Builder interface {
 	//
 	// It is given the list of outputs.
 	Compile(outputs []Op, shardings []*ShardingSpec) (Executable, error)
-	
+
 	// Name of the computation being built.
 	Name() string
 
@@ -155,9 +155,9 @@ const (
 	ReduceOpMin
 )
 
-// RngStateShape is the default shape for the random number generator state.
+// RNGStateShape is the default shape for the random number generator state.
 // It dependents on the algorithm, but for now we are using Philox.
-var RngStateShape = shapes.Make(dtypes.Uint64, 3) //nolint:mnd // This is a constant.
+var RNGStateShape = shapes.Make(dtypes.Uint64, 3) //nolint:mnd // This is a constant.
 
 //go:generate go tool enumer -type ReduceOpType -trimprefix=ReduceOp -output=gen_reduceoptype_enumer.go builder.go
 

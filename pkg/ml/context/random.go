@@ -1,7 +1,6 @@
 package context
 
 import (
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -21,31 +20,34 @@ var (
 	ParamInitialSeed = "initializers_seed"
 )
 
-// getRngStateVar panics if it fails to create the random state.
-func (ctx *Context) getRngStateVar() *Variable {
+// getRNGStateVar panics if it fails to create the random state.
+func (ctx *Context) getRNGStateVar() *Variable {
 	rngStateVar := ctx.GetVariableByScopeAndName(RootScope, RngStateVariableName)
 	if rngStateVar != nil {
 		return rngStateVar
 	}
 	rngStateVar = ctx.InAbsPath(RootScope).Checked(false).
-		VariableWithShape(RngStateVariableName, graph.RngStateShape).SetTrainable(false)
+		VariableWithShape(RngStateVariableName, graph.RNGStateShape).SetTrainable(false)
 	return rngStateVar
 }
 
-// mustGetRngStateVarWithValue panics if it fails to create the random state.
-func (ctx *Context) mustGetRngStateVarWithValue() *Variable {
-	v := ctx.getRngStateVar()
-	if v == nil {
-		exceptions.Panicf("random state variable not initialized for context -- see Context.RngStateReset()")
+// mustGetRNGStateVarWithValue panics if it fails to create the random state.
+func (ctx *Context) mustGetRNGStateVarWithValue() *Variable {
+	v := ctx.getRNGStateVar()
+	if v.HasValue() {
+		return v
+	}
+	err := ctx.ResetRNGState()
+	if err != nil {
+		panic(err)
 	}
 	return v
 }
 
-// RngStateReset resets the default context random number generator (RNG) to a random seed based on
-// the nanosecond clock.
+// ResetRNGState resets the default context random number generator (RNG) to a cryptographically secure
+// random seed, if the OS supports it.
 //
-// This is required if using the context RNG state variable.
-// Variable initialization will call RngStateReset automatically, if it hasn't yet been called.
+// The Context random methods will call this automatically, if the Context state is not set.
 //
 // If ParamInitialSeed is set, it will be used instead of cryptographically secure random seed.
 //
@@ -54,13 +56,13 @@ func (ctx *Context) mustGetRngStateVarWithValue() *Variable {
 //
 // The random number generator (RNG) state is stored in a variable on the root scope
 // of the context, called "#rngState" (RngStateVariableName).
-func (ctx *Context) RngStateReset() error {
-	v := ctx.getRngStateVar()
+func (ctx *Context) ResetRNGState() error {
+	v := ctx.getRNGStateVar()
 	var randomState *tensors.Tensor
 	seedAny, found := ctx.GetParam(ParamInitialSeed)
 	if !found {
 		var err error
-		randomState, err = graph.RngState()
+		randomState, err = graph.RNGState()
 		if err != nil {
 			return err
 		}
@@ -69,22 +71,33 @@ func (ctx *Context) RngStateReset() error {
 		if !ok {
 			klog.Errorf("Seed in %q not an int64, using 0 instead", ParamInitialSeed)
 		}
-		randomState = graph.RngStateFromSeed(seed)
+		var err error
+		randomState, err = graph.RNGStateFromSeed(seed)
+		if err != nil {
+			return err
+		}
 	}
-	return v.SetValue(randomState)
+	err := v.SetValue(randomState)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-// RngStateFromSeed initializes the default context random number generator (RNG) state with a static seed.
+// SetRNGStateFromSeed initializes the default context random number generator (RNG) state with a static seed.
 // If the state has already been created, it is reset to a value based on the seed.
 //
 // The random number generator (RNG) state is stored in a variable on the root scope
 // of the context, called "#rngState" (RngStateVariableName).
 //
 // This overrides the seed used in ParamInitialSeed.
-func (ctx *Context) RngStateFromSeed(seed int64) {
-	initialState := graph.RngStateFromSeed(seed)
-	v := ctx.getRngStateVar()
-	v.MustSetValue(initialState)
+func (ctx *Context) SetRNGStateFromSeed(seed int64) error {
+	initialState, err := graph.RNGStateFromSeed(seed)
+	if err != nil {
+		return err
+	}
+	v := ctx.getRNGStateVar()
+	return v.SetValue(initialState)
 }
 
 // RandomNormal generates random numbers from a normal distribution, with mean 0.0
@@ -104,7 +117,7 @@ func (ctx *Context) RngStateFromSeed(seed int64) {
 //
 // See details in graph.RandomNormal.
 func (ctx *Context) RandomNormal(g *graph.Graph, shape shapes.Shape) (values *Node) {
-	rngStateVar := ctx.mustGetRngStateVarWithValue()
+	rngStateVar := ctx.mustGetRNGStateVarWithValue()
 	rngState := rngStateVar.ValueGraph(g)
 	rngState, values = graph.RandomNormal(rngState, shape)
 	rngStateVar.SetValueGraph(rngState)
@@ -121,7 +134,7 @@ func (ctx *Context) RandomNormal(g *graph.Graph, shape shapes.Shape) (values *No
 //
 // See details in graph.RandomNormal.
 func (ctx *Context) RandomUniform(g *graph.Graph, shape shapes.Shape) (values *Node) {
-	rngStateVar := ctx.mustGetRngStateVarWithValue()
+	rngStateVar := ctx.mustGetRNGStateVarWithValue()
 	rngState := rngStateVar.ValueGraph(g)
 	rngState, values = graph.RandomUniform(rngState, shape)
 	rngStateVar.SetValueGraph(rngState)
@@ -157,7 +170,7 @@ func (ctx *Context) RandomBernoulli(prob *Node, shape shapes.Shape) *Node {
 //
 // See details in graph.RandomIntN.
 func (ctx *Context) RandomIntN(g *graph.Graph, N any, shape shapes.Shape) (values *Node) {
-	rngStateVar := ctx.mustGetRngStateVarWithValue()
+	rngStateVar := ctx.mustGetRNGStateVarWithValue()
 	rngState := rngStateVar.ValueGraph(g)
 	switch n := N.(type) {
 	case *Node:

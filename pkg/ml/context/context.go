@@ -648,15 +648,6 @@ func (ctx *Context) NeedsInitialization() bool {
 //
 // InitializeVariables also resets the RNG state for the context, if is not yet set.
 func (ctx *Context) InitializeVariables(backend backends.Backend) {
-	// Makes sure we have a RNG state set.
-	rngStateVar := ctx.getRngStateVar()
-	if !rngStateVar.HasValue() {
-		err := ctx.RngStateReset()
-		if err != nil {
-			panic(err)
-		}
-	}
-
 	// Collect variables that need initialization.
 	var variablesToInitialize []*Variable
 	for v := range ctx.IterVariables() {

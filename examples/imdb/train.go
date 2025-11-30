@@ -52,7 +52,7 @@ var DType = dtypes.Float32
 // CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
 func CreateDefaultContext() *context.Context {
 	ctx := context.New()
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		// Model type to use
 		"model":           "bow", // One of the listed in ValidModels: the user can also inject (in ValidModels) new custom models.
@@ -212,7 +212,7 @@ func TrainModel(
 		loss,
 		optimizers.FromContext(ctx),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric}) // evalMetrics
+		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)

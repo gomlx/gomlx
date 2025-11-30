@@ -51,7 +51,7 @@ const (
 // attempt to learn.
 func initCoefficients(backend backends.Backend, numVariables int) (coefficients, bias *tensors.Tensor) {
 	e := MustNewExec(backend, func(g *Graph) (coefficients, bias *Node) {
-		rngState := Const(g, RngState())
+		rngState := RNGStateForGraph(g)
 		rngState, coefficients = RandomNormal(rngState, shapes.Make(dtypes.Float64, numVariables))
 		coefficients = AddScalar(
 			MulScalar(coefficients, CoefficientSigma),
@@ -76,7 +76,7 @@ func buildExamples(
 		numFeatures := coef.Shape().Dimensions[0]
 
 		// Random inputs (observations).
-		rngState := Const(g, RngState())
+		rngState := RNGStateForGraph(g)
 		rngState, inputs = RandomNormal(rngState, shapes.Make(dtypes.Float64, numExamples, numFeatures))
 		coef = InsertAxes(coef, 0)
 

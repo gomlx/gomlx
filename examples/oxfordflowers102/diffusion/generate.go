@@ -141,8 +141,8 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 	var jsTemplate = must.M1(template.New("PlotModelEvolution").Parse(`
 	<canvas id="canvas_{{.Id}}" height="{{.Size}}px" width="{{.Width}}px"></canvas>
 	<script>
-	var canvas_{{.Id}} = document.getElementById("canvas_{{.Id}}"); 
-	var ctx_{{.Id}} = canvas_{{.Id}}.getContext("2d"); 
+	var canvas_{{.Id}} = document.getElementById("canvas_{{.Id}}");
+	var ctx_{{.Id}} = canvas_{{.Id}}.getContext("2d");
 	var currentFrame_{{.Id}} = 0;
 	var frameRate_{{.Id}} = {{.FrameRateMs}};
 	var imagePaths_{{.Id}} = [{{range .Images}}
@@ -162,7 +162,7 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 		}
 		images_{{.Id}}.push(images);
 	}
-	
+
 	function animate_{{.Id}}() {
 		var Context = ctx_{{.Id}};
 		var canvas = canvas_{{.Id}};
@@ -215,7 +215,7 @@ func (c *Config) DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSt
 		)
 	}
 	ctx := c.Context.Checked(false)
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	noise := c.GenerateNoise(numImages)
 	flowerIds := c.GenerateFlowerIds(numImages)
 
@@ -323,7 +323,7 @@ func (c *Config) GenerateImagesOfFlowerType(
 	numDiffusionSteps int,
 ) (predictedImages *tensors.Tensor) {
 	ctx := c.Context
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	noise := c.GenerateNoise(numImages)
 	flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 	generator := c.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
@@ -386,10 +386,10 @@ func (c *Config) DropdownFlowerTypes(cacheKey string, numImages, numDiffusionSte
 func (c *Config) GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	ctx := c.Context
 	numImages := flowers.NumLabels
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	imageSize := c.ImageSize
 	noise := MustNewExec(c.Backend, func(g *Graph) *Node {
-		state := Const(g, RngState())
+		state := RNGStateForGraph(g)
 		_, noise := RandomNormal(state, shapes.Make(c.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise
@@ -486,7 +486,7 @@ func (g *ImagesGenerator) Generate() (batchedImages *tensors.Tensor) {
 // GenerateNoise generates random noise that can be used to generate images.
 func (c *Config) GenerateNoise(numImages int) *tensors.Tensor {
 	return MustNewExec(c.Backend, func(g *Graph) *Node {
-		state := Const(g, RngState())
+		state := RNGStateForGraph(g)
 		_, noise := RandomNormal(state, shapes.Make(c.DType, numImages, c.ImageSize, c.ImageSize, 3))
 		return noise
 	}).MustExec1()

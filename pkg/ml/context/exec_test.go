@@ -45,6 +45,44 @@ func oneLayerManyInputsGraph(ctx *context.Context, inputs []*Node) *Node {
 
 func TestExec(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
+
+	// Checks that Context.RNGState is auto-initialized correctly.
+	t.Run("Context.RNGState initialization", func(t *testing.T) {
+		ctx := context.New()
+		result, err := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+			return Add(ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 10)), Const(g, float32(0.0001)))
+		})
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		fmt.Printf("- Random uniform: %s\n", result)
+		values := result.Value().([]float32)
+		for _, v := range values {
+			if v == 0 {
+				fmt.Printf("Expected non-zero value, got %v", values)
+				t.FailNow()
+			}
+		}
+	})
+
+	// Checks that Context.RNGState is auto-initialized correctly.
+	t.Run("variable initialization", func(t *testing.T) {
+		ctx := context.New()
+		result, err := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+			v := ctx.WithInitializer(initializers.RandomUniformFn(ctx, 0.0001, 1.0)).VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
+			return v.ValueGraph(g)
+		})
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		fmt.Printf("- Uniformly initialized variable: %s\n", result)
+		values := result.Value().([]float32)
+		for _, v := range values {
+			if v == 0 {
+				fmt.Printf("Expected non-zero value, got %v", values)
+				t.FailNow()
+			}
+		}
+	})
+
 	t.Run("DenseLayer", func(t *testing.T) {
 		oneLayer, err := context.NewExecAny(backend, nil, oneLayerGraph)
 		if err != nil {

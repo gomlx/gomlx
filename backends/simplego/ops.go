@@ -532,10 +532,10 @@ func (b *Builder) RngBitGenerator(stateOp backends.Op, shape shapes.Shape) (newS
 		return nil, nil, err
 	}
 	state := inputs[0]
-	if !state.shape.Equal(backends.RngStateShape) {
+	if !state.shape.Equal(backends.RNGStateShape) {
 		err := errors.Errorf(
 			"expected random state to be shaped %s, got state.shape=%s instead for RngBitGenerator",
-			backends.RngStateShape,
+			backends.RNGStateShape,
 			state.shape,
 		)
 		return nil, nil, err

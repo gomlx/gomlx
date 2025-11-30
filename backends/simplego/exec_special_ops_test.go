@@ -549,7 +549,7 @@ func TestExecSpecialOps_RngBitsGenerator(t *testing.T) {
 		{dtypes.BFloat16, "bfloat16"},
 	}
 
-	state, err := graph.RngState()
+	state, err := graph.RNGState()
 	require.NoError(t, err)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
