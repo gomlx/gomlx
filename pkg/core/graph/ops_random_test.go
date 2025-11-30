@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/gomlx/gomlx/internal/must"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -21,7 +20,7 @@ func testRandomUniform[T interface {
 	dtype := dtypes.FromGenericsType[T]()
 	graphtest.RunTestGraphFn(t, fmt.Sprintf("TestRandomUniform(%s)", dtype),
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
-			state := Const(g, must.M1(RNGStateFromSeed(42)))
+			state := Const(g, must1(RNGStateFromSeed(42)))
 			shape := shapes.Make(dtype, 100, 5000) // 500k / 1 million numbers (for complex numbers).
 			var r, sample *Node
 			state, r = RandomUniform(state, shape)
@@ -76,7 +75,7 @@ func testRandomNormal[T interface {
 	dtype := dtypes.FromGenericsType[T]()
 	graphtest.RunTestGraphFn(t, fmt.Sprintf("TestRandomNormal(%s)", dtype),
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
-			state := Const(g, must.M1(RNGStateFromSeed(42)))
+			state := Const(g, must1(RNGStateFromSeed(42)))
 			shape := shapes.Make(dtype, 100, 10000) // 1 million numbers.
 			_, r := RandomNormal(state, shape)
 			if dtype == dtypes.Float16 {
@@ -110,7 +109,7 @@ func testRandomIntN[T interface {
 	dtype := dtypes.FromGenericsType[T]()
 	graphtest.RunTestGraphFn(t, fmt.Sprintf("TestRandomIntN(%s, useStatic=%v)", dtype, useStatic),
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
-			state := Const(g, must.M1(RNGStateFromSeed(42)))
+			state := Const(g, must1(RNGStateFromSeed(42)))
 			shape := shapes.Make(dtype, 100, 10000) // 1 million numbers.
 			var r *Node
 			if useStatic {
@@ -170,7 +169,7 @@ func TestMultiOutputs(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	_, err := MustNewExec(backend, func(x *Node) *Node {
 		g := x.Graph()
-		rngState := Const(g, must.M1(RNGStateFromSeed(42)))
+		rngState := Const(g, must1(RNGStateFromSeed(42)))
 		rngState, ws := RandomNormal(rngState, x.Shape())
 		fmt.Printf("Graph:\n%s\n", g)
 		return ws // Add(x, ws)

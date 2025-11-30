@@ -699,7 +699,13 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 	}
 
 	// Get or build the graph.
-	entry := e.findOrCreateGraph(argsShapes)
+	var entry *execGraphCacheEntry
+	err = exceptions.TryCatch[error](func() {
+		entry = e.findOrCreateGraph(argsShapes)
+	})
+	if err != nil {
+		return nil, nil, err
+	}
 	if entry == nil {
 		return nil, nil, errors.Errorf(
 			"maximum cache size of %d reached for %q, cannot create another graph -- "+

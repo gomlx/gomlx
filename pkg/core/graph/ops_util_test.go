@@ -4,7 +4,6 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gomlx/gomlx/internal/must"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -556,7 +555,7 @@ func TestReduceVariance(t *testing.T) {
 
 	graphtest.RunTestGraphFn(t, "ReduceVariance",
 		func(g *Graph) (inputs, outputs []*Node) {
-			rngState := Const(g, must.M1(RNGStateFromSeed(42)))
+			rngState := Const(g, must1(RNGStateFromSeed(42)))
 			_, values := RandomNormal(rngState, shapes.Make(dtypes.Float32, 4, 100_000))
 			multiplier := OnePlus(Iota(g, shapes.Make(dtypes.Float32, 4, 1), 0))
 			shift := AddScalar(Iota(g, shapes.Make(dtypes.Float32, 4, 1), 0), -2)

@@ -22,7 +22,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/gomlx/gomlx/internal/must"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -314,7 +313,7 @@ func BenchmarkScatter(b *testing.B) {
 	}
 	slices.Sort(indices)
 	indicesT := tensors.FromValue(indices)
-	rngStateT := must.M1(RNGStateFromSeed(42))
+	rngStateT := must1(RNGStateFromSeed(42))
 
 	for _, sorted := range []bool{true, false} {
 		for _, unique := range []bool{true, false} {

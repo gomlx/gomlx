@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	// RngStateVariableName is the name of a Context internal variable the holds the current
+	// RNGStateVariableName is the name of a Context internal variable the holds the current
 	// random number generator state.
-	RngStateVariableName = "#rngState"
+	RNGStateVariableName = "#rngState"
 )
 
 var (
@@ -22,12 +22,12 @@ var (
 
 // getRNGStateVar panics if it fails to create the random state.
 func (ctx *Context) getRNGStateVar() *Variable {
-	rngStateVar := ctx.GetVariableByScopeAndName(RootScope, RngStateVariableName)
+	rngStateVar := ctx.GetVariableByScopeAndName(RootScope, RNGStateVariableName)
 	if rngStateVar != nil {
 		return rngStateVar
 	}
 	rngStateVar = ctx.InAbsPath(RootScope).Checked(false).
-		VariableWithShape(RngStateVariableName, graph.RNGStateShape).SetTrainable(false)
+		VariableWithShape(RNGStateVariableName, graph.RNGStateShape).SetTrainable(false)
 	return rngStateVar
 }
 
@@ -55,7 +55,7 @@ func (ctx *Context) mustGetRNGStateVarWithValue() *Variable {
 // with the previous state), one can call this.
 //
 // The random number generator (RNG) state is stored in a variable on the root scope
-// of the context, called "#rngState" (RngStateVariableName).
+// of the context, called "#rngState" (RNGStateVariableName).
 func (ctx *Context) ResetRNGState() error {
 	v := ctx.getRNGStateVar()
 	var randomState *tensors.Tensor
@@ -88,7 +88,7 @@ func (ctx *Context) ResetRNGState() error {
 // If the state has already been created, it is reset to a value based on the seed.
 //
 // The random number generator (RNG) state is stored in a variable on the root scope
-// of the context, called "#rngState" (RngStateVariableName).
+// of the context, called "#rngState" (RNGStateVariableName).
 //
 // This overrides the seed used in ParamInitialSeed.
 func (ctx *Context) SetRNGStateFromSeed(seed int64) error {
@@ -111,7 +111,7 @@ func (ctx *Context) SetRNGStateFromSeed(seed int64) error {
 //	numbers = AddScalar(MulScalar(numbers, stddev), mean)
 //
 // The random number generator (RNG) state is stored in a variable on the root scope
-// of the context, called "#rngState" (RngStateVariableName).
+// of the context, called "#rngState" (RNGStateVariableName).
 // The state is initialized with the nanosecond clock, the first time it is used -- so pretty random.
 // But you can initialize it with a fixed seed before using any of the Random* methods.
 //
@@ -128,7 +128,7 @@ func (ctx *Context) RandomNormal(g *graph.Graph, shape shapes.Shape) (values *No
 // for float numbers in the given shape.
 //
 // The random number generator (RNG) state is stored in a variable on the root scope
-// of the context, called "#rngState" (RngStateVariableName).
+// of the context, called "#rngState" (RNGStateVariableName).
 // The state is initialized with the nanosecond clock, the first time it is used -- so pretty random.
 // But you can initialize it with a fixed seed before using any of the Random* methods.
 //
@@ -164,7 +164,7 @@ func (ctx *Context) RandomBernoulli(prob *Node, shape shapes.Shape) *Node {
 //	D10 := ctx.RandomIntN(10, shapes.Make(dtypes.Int32))
 //
 // The random number generator (RNG) state is stored in a variable on the root scope
-// of the context, called "#rngState" (RngStateVariableName).
+// of the context, called "#rngState" (RNGStateVariableName).
 // The state is initialized with the nanosecond clock, the first time it is used -- so pretty random.
 // But you can initialize it with a fixed seed before using any of the Random* methods.
 //

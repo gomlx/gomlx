@@ -1,9 +1,16 @@
 # GoMLX changelog
 
-# v0.25.0: Added AutoSharding, SPMD distributed execution; Added "portable" single-device execution
+# v0.25.0: Distributed execution; API cleanup (more Go idiomatic)
 
-Note: some internal and backend API changes, including many tensors' APIs, now return errors (as opposed to panicking
-on backend errors).
+Hightlights:
+
+- Distributed (cross-devices) execution: with AutoSharding and SPMD strategies; 
+  Also added support for "portable device" execution.
+
+- API changes: (will require simple fixes)
+  - Most not graph building APIs now return errors (as opposed to panicking). Graph building functions
+    still use panic to return error -- otherwise it's too painful to express math.
+  - All "Rng" renamed to "RNG" -- acronyms in Go are usually capitalized.
 
 Distributed computation improvements and refactorings:
 
@@ -15,9 +22,10 @@ Distributed computation improvements and refactorings:
   - Added `Graph.Distributed()` with "collective" (across devices) operations (like `AllReduce`).
   - Renamed: s/`Exec.InDevice`/`Exec.WithDevice`; s/`Exec.SetName`/`Exec.WithName`
   - Added `RunOnDevice`.
-  - Added `Exec.SPMD`.
+  - Added `Exec.AutoSharding` and `Exec.SPMD`.
 - Package `context`:
   - Added `context.MustGetParam[T](ctx, key)` and `context.MustGetGraphParam[T](ctx, graph, key)`.
+  - Added `Exec.AutoSharding` and `Exec.SPMD`.
 - Package `backend`:
   - Added `Backend.CopyToDevice`
   - `Builder.Parameter()` now takes an optional `ShardingSpec` for sharded inputs.
