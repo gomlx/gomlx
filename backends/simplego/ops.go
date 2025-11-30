@@ -520,12 +520,12 @@ type sliceNode struct {
 	starts, limits, strides []int
 }
 
-// RngBitGenerator generates the given shape filled with random bits.
+// RNGBitGenerator generates the given shape filled with random bits.
 // It takes as input the current random number generator (RNG) state, see RngState or RngStateFromSeed.
 // The algorithm is hard-coded to use Philox algorithm for now.
 //
 // It returns the new state of the RNG and the generated values (with random bits) with the given shape.
-func (b *Builder) RngBitGenerator(stateOp backends.Op, shape shapes.Shape) (newState, values backends.Op, err error) {
+func (b *Builder) RNGBitGenerator(stateOp backends.Op, shape shapes.Shape) (newState, values backends.Op, err error) {
 	opType := backends.OpTypeRngBitGenerator
 	inputs, err := b.checkOps(opType.String(), stateOp)
 	if err != nil {

@@ -270,12 +270,12 @@ func (b *Builder) ReduceWindow(
 	return op, nil
 }
 
-// RngBitGenerator generates the given shape filled with random bits.
+// RNGBitGenerator generates the given shape filled with random bits.
 // It takes as input the current random number generator (RNG) state, see RngState or RngStateFromSeed.
 // The algorithm is hard-coded to use Philox algorithm for now.
 //
 // It returns the new state of the RNG and the generated values (with random bits) with the given shape.
-func (b *Builder) RngBitGenerator(state backends.Op, shape shapes.Shape) (newState, values backends.Op, err error) {
+func (b *Builder) RNGBitGenerator(state backends.Op, shape shapes.Shape) (newState, values backends.Op, err error) {
 	xlaState, err := b.verifyAndCastOp(state, "x")
 	if err != nil {
 		return nil, nil, err

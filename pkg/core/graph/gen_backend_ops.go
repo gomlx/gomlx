@@ -3787,7 +3787,7 @@ func backendRngBitGenerator(state *Node, shape shapes.Shape) (
 		state: state,
 		shape: shape,
 	}
-	v0, v1, err := g.builder.RngBitGenerator(state.outputOps[0], inputs.shape)
+	v0, v1, err := g.builder.RNGBitGenerator(state.outputOps[0], inputs.shape)
 	if err != nil {
 		panic(err)
 	}
