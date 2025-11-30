@@ -731,8 +731,14 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 	// Check all parameters were set.
 	for ii, t := range argsAsBuffers {
 		if t == nil {
-			return nil, nil, errors.Errorf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
-				"parameter, cannot execute g", ii, g.GetParameterByHandle(ParameterHandle(ii)).GetParameterName())
+			if numDevices == 1 {
+				return nil, nil, errors.Errorf("parameter #%d (%q) is nil or invalid, maybe a variable value not set as a "+
+					"parameter, cannot execute g", ii, g.GetParameterByHandle(ParameterHandle(ii)).GetParameterName())
+			}
+			paramIdx := ii % numDevices
+			deviceIdx := ii / g.NumParameters()
+			return nil, nil, errors.Errorf("parameter #%d (%q) for device #%d is nil or invalid, maybe a variable value not set as a "+
+				"parameter, cannot execute g", paramIdx, g.GetParameterByHandle(ParameterHandle(paramIdx)).GetParameterName(), deviceIdx)
 		}
 	}
 
