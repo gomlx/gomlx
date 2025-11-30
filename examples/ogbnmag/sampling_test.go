@@ -44,7 +44,7 @@ func TestDatasets(t *testing.T) {
 		{"train", trainDS, TrainSplit},
 		{"shuffled_train", shuffledTrainDS, TrainSplit},
 	} {
-		seedsInSplit := tensors.CopyFlatData[int32](testCase.Seeds)
+		seedsInSplit := tensors.MustCopyFlatData[int32](testCase.Seeds)
 		wanted := sets.Make[int32](len(seedsInSplit))
 		seen := sets.Make[int32](len(seedsInSplit))
 		for _, idx := range seedsInSplit {
@@ -65,19 +65,31 @@ func TestDatasets(t *testing.T) {
 			strategy := spec.(*sampler.Strategy)
 			graphSample, remaining := sampler.MapInputsToStates[*tensors.Tensor](strategy, inputs)
 			require.Empty(t, remaining)
-			seeds := tensors.CopyFlatData[int32](graphSample["seeds"].Value)
-			mask := tensors.CopyFlatData[bool](graphSample["seeds"].Mask)
+			seeds := tensors.MustCopyFlatData[int32](graphSample["seeds"].Value)
+			mask := tensors.MustCopyFlatData[bool](graphSample["seeds"].Mask)
 			for ii, idx := range seeds {
 				if !mask[ii] {
 					continue
 				}
 				if !wanted.Has(idx) {
-					require.Truef(t, wanted.Has(idx), "Dataset %q yielded seed %d not originally provided as seed for this dataset, batchNum=%d",
-						testCase.Name, idx, batchNum)
+					require.Truef(
+						t,
+						wanted.Has(idx),
+						"Dataset %q yielded seed %d not originally provided as seed for this dataset, batchNum=%d",
+						testCase.Name,
+						idx,
+						batchNum,
+					)
 				}
 				if seen.Has(idx) {
-					require.Falsef(t, seen.Has(idx), "Dataset %q yielded seed %d more than once in the same epoch, batchNum=%d",
-						testCase.Name, idx, batchNum)
+					require.Falsef(
+						t,
+						seen.Has(idx),
+						"Dataset %q yielded seed %d more than once in the same epoch, batchNum=%d",
+						testCase.Name,
+						idx,
+						batchNum,
+					)
 				}
 				seen.Insert(idx)
 			}

@@ -2,6 +2,7 @@ package simplego
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
@@ -17,7 +18,7 @@ type nodeParameter struct {
 
 // Parameter creates an input parameter for the computation.
 // During execution of the computation, this value will need to be fed in the same order it is created.
-func (b *Builder) Parameter(name string, shape shapes.Shape) (backends.Op, error) {
+func (b *Builder) Parameter(name string, shape shapes.Shape, sharding *backends.ShardingSpec) (backends.Op, error) {
 	dtype := shape.DType
 	if dtype == dtypes.InvalidDType {
 		return nil, errors.Errorf("invalid shape %s for Parameter", shape)
@@ -25,6 +26,11 @@ func (b *Builder) Parameter(name string, shape shapes.Shape) (backends.Op, error
 	if supported, ok := Capabilities.DTypes[dtype]; !ok || !supported {
 		return nil, errors.Errorf("Parameter: data type (DType) %s not supported for backend %q, try using "+
 			"a different backend, or open an issue in github.com/gomlx/gomlx", dtype, b.backend.Name())
+	}
+	if sharding != nil {
+		return nil, errors.Wrapf(
+			notimplemented.NotImplementedError,
+			"sharding spec %+v not supported for %q builder", sharding, BackendName)
 	}
 	n := b.newNode(backends.OpTypeParameter, shape)
 	n.data = &nodeParameter{
@@ -191,7 +197,11 @@ func (b *Builder) Broadcast(operandOp backends.Op, prefixDims ...int) (backends.
 //     will generate output
 //     {{1 , 1},
 //     {2 , 2}}
-func (b *Builder) BroadcastInDim(operandOp backends.Op, outputShape shapes.Shape, broadcastAxes []int) (backends.Op, error) {
+func (b *Builder) BroadcastInDim(
+	operandOp backends.Op,
+	outputShape shapes.Shape,
+	broadcastAxes []int,
+) (backends.Op, error) {
 	opType := backends.OpTypeBroadcastInDim
 	inputs, err := b.checkOps(opType.String(), operandOp)
 	if err != nil {
@@ -279,14 +289,28 @@ func (b *Builder) reduceImpls(reduceOpType backends.OpType, operandOp backends.O
 
 // Gather implements the backends.Builder.
 // It's a complex operation, fully described in the backends.Builder.Gather documentation.
-func (b *Builder) Gather(operandOp, startIndicesOp backends.Op, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) (backends.Op, error) {
+func (b *Builder) Gather(
+	operandOp, startIndicesOp backends.Op,
+	indexVectorAxis int,
+	offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int,
+	indicesAreSorted bool,
+) (backends.Op, error) {
 	opType := backends.OpTypeGather
 	inputs, err := b.checkOps(opType.String(), operandOp, startIndicesOp)
 	if err != nil {
 		return nil, err
 	}
 	operand, startIndices := inputs[0], inputs[1]
-	shape, err := shapeinference.Gather(operand.shape, startIndices.shape, indexVectorAxis, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, indicesAreSorted)
+	shape, err := shapeinference.Gather(
+		operand.shape,
+		startIndices.shape,
+		indexVectorAxis,
+		offsetOutputAxes,
+		collapsedSliceAxes,
+		startIndexMap,
+		sliceSizes,
+		indicesAreSorted,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -353,28 +377,75 @@ func (b *Builder) ConvertDType(operandOp backends.Op, dtype dtypes.DType) (backe
 }
 
 // ScatterMax implements the backends.Builder interface.
-func (b *Builder) ScatterMax(operandOp, scatterIndicesOp, updatesOp backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Op, error) {
+func (b *Builder) ScatterMax(
+	operandOp, scatterIndicesOp, updatesOp backends.Op,
+	indexVectorAxis int,
+	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int,
+	indicesAreSorted, uniqueIndices bool,
+) (backends.Op, error) {
 	return b.scatterImpls(
 		backends.OpTypeScatterMax,
-		operandOp, scatterIndicesOp, updatesOp, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
+		operandOp,
+		scatterIndicesOp,
+		updatesOp,
+		indexVectorAxis,
+		updateWindowAxes,
+		insertedWindowAxes,
+		scatterAxesToOperandAxes,
+		indicesAreSorted,
+		uniqueIndices,
+	)
 }
 
 // ScatterMin implements the backends.Builder interface.
-func (b *Builder) ScatterMin(operandOp, scatterIndicesOp, updatesOp backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Op, error) {
+func (b *Builder) ScatterMin(
+	operandOp, scatterIndicesOp, updatesOp backends.Op,
+	indexVectorAxis int,
+	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int,
+	indicesAreSorted, uniqueIndices bool,
+) (backends.Op, error) {
 	return b.scatterImpls(
 		backends.OpTypeScatterMin,
-		operandOp, scatterIndicesOp, updatesOp, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
+		operandOp,
+		scatterIndicesOp,
+		updatesOp,
+		indexVectorAxis,
+		updateWindowAxes,
+		insertedWindowAxes,
+		scatterAxesToOperandAxes,
+		indicesAreSorted,
+		uniqueIndices,
+	)
 }
 
 // ScatterSum implements the backends.Builder interface.
-func (b *Builder) ScatterSum(operandOp, scatterIndicesOp, updatesOp backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Op, error) {
+func (b *Builder) ScatterSum(
+	operandOp, scatterIndicesOp, updatesOp backends.Op,
+	indexVectorAxis int,
+	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int,
+	indicesAreSorted, uniqueIndices bool,
+) (backends.Op, error) {
 	return b.scatterImpls(
 		backends.OpTypeScatterSum,
-		operandOp, scatterIndicesOp, updatesOp, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
+		operandOp,
+		scatterIndicesOp,
+		updatesOp,
+		indexVectorAxis,
+		updateWindowAxes,
+		insertedWindowAxes,
+		scatterAxesToOperandAxes,
+		indicesAreSorted,
+		uniqueIndices,
+	)
 }
 
-func (b *Builder) scatterImpls(scatterOpType backends.OpType,
-	operandOp, scatterIndicesOp, updatesOp backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (
+func (b *Builder) scatterImpls(
+	scatterOpType backends.OpType,
+	operandOp, scatterIndicesOp, updatesOp backends.Op,
+	indexVectorAxis int,
+	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int,
+	indicesAreSorted, uniqueIndices bool,
+) (
 	backends.Op, error) {
 	inputs, err := b.checkOps(scatterOpType.String(), operandOp, scatterIndicesOp, updatesOp)
 	if err != nil {
@@ -382,7 +453,15 @@ func (b *Builder) scatterImpls(scatterOpType backends.OpType,
 	}
 	operand, indices, updates := inputs[0], inputs[1], inputs[2]
 	// Check that parameters are valid.
-	outputShape, err := shapeinference.ScatterOp(operand.shape, indices.shape, updates.shape, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes)
+	outputShape, err := shapeinference.ScatterOp(
+		operand.shape,
+		indices.shape,
+		updates.shape,
+		indexVectorAxis,
+		updateWindowAxes,
+		insertedWindowAxes,
+		scatterAxesToOperandAxes,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -441,20 +520,24 @@ type sliceNode struct {
 	starts, limits, strides []int
 }
 
-// RngBitGenerator generates the given shape filled with random bits.
+// RNGBitGenerator generates the given shape filled with random bits.
 // It takes as input the current random number generator (RNG) state, see RngState or RngStateFromSeed.
 // The algorithm is hard-coded to use Philox algorithm for now.
 //
 // It returns the new state of the RNG and the generated values (with random bits) with the given shape.
-func (b *Builder) RngBitGenerator(stateOp backends.Op, shape shapes.Shape) (newState, values backends.Op, err error) {
-	opType := backends.OpTypeRngBitGenerator
+func (b *Builder) RNGBitGenerator(stateOp backends.Op, shape shapes.Shape) (newState, values backends.Op, err error) {
+	opType := backends.OpTypeRNGBitGenerator
 	inputs, err := b.checkOps(opType.String(), stateOp)
 	if err != nil {
 		return nil, nil, err
 	}
 	state := inputs[0]
-	if !state.shape.Equal(backends.RngStateShape) {
-		err := errors.Errorf("expected random state to be shaped %s, got state.shape=%s instead for RngBitGenerator", backends.RngStateShape, state.shape)
+	if !state.shape.Equal(backends.RNGStateShape) {
+		err := errors.Errorf(
+			"expected random state to be shaped %s, got state.shape=%s instead for RNGBitGenerator",
+			backends.RNGStateShape,
+			state.shape,
+		)
 		return nil, nil, err
 	}
 	outputShapes := []shapes.Shape{
@@ -480,7 +563,12 @@ type argMinMaxNode struct {
 //
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
-func (b *Builder) ArgMinMax(operandOp backends.Op, axis int, outputDType dtypes.DType, isMin bool) (backends.Op, error) {
+func (b *Builder) ArgMinMax(
+	operandOp backends.Op,
+	axis int,
+	outputDType dtypes.DType,
+	isMin bool,
+) (backends.Op, error) {
 	opType := backends.OpTypeArgMinMax
 	inputs, err := b.checkOps(opType.String(), operandOp)
 	if err != nil {
@@ -511,14 +599,26 @@ type reduceWindowNode struct {
 // If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.
 // If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
 // If paddings is nil, they are assumed to be 0.
-func (b *Builder) ReduceWindow(operandOp backends.Op, reductionType backends.ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Op, error) {
+func (b *Builder) ReduceWindow(
+	operandOp backends.Op,
+	reductionType backends.ReduceOpType,
+	windowDimensions, strides, baseDilations, windowDilations []int,
+	paddings [][2]int,
+) (backends.Op, error) {
 	opType := backends.OpTypeReduceWindow
 	inputs, err := b.checkOps(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
 	}
 	operand := inputs[0]
-	outputShape, err := shapeinference.ReduceWindowOp(operand.shape, windowDimensions, strides, baseDilations, windowDilations, paddings)
+	outputShape, err := shapeinference.ReduceWindowOp(
+		operand.shape,
+		windowDimensions,
+		strides,
+		baseDilations,
+		windowDilations,
+		paddings,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -653,7 +753,10 @@ func (b *Builder) IsFinite(operandOp backends.Op) (backends.Op, error) {
 	operand := inputs[0]
 	dtype := operand.shape.DType
 	if !dtype.IsFloat() && !dtype.IsComplex() {
-		return nil, errors.Errorf("the operation IsFinite is only defined for float types (%s), cannot use it", operand.shape.DType)
+		return nil, errors.Errorf(
+			"the operation IsFinite is only defined for float types (%s), cannot use it",
+			operand.shape.DType,
+		)
 	}
 
 	// Output will have the same shape but for the dtype that is bool.

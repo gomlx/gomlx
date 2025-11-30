@@ -24,7 +24,7 @@ var (
 // CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
 func CreateDefaultContext() *context.Context {
 	ctx := context.New()
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		// Model type to use
 		"train_steps":          300_000,

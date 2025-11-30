@@ -59,11 +59,18 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 			require.NoErrorf(t, err, "failed for step %d", ii)
 
 			// Checks the correct step number is set.
-			stepVar := ctx.GetVariableByScopeAndName(fmt.Sprintf("/%s/%s", optimizers.Scope, cosineschedule.Scope), optimizers.GlobalStepVariableName)
+			stepVar := ctx.GetVariableByScopeAndName(
+				fmt.Sprintf("/%s/%s", optimizers.Scope, cosineschedule.Scope),
+				optimizers.GlobalStepVariableName,
+			)
 			if stepVar == nil {
-				t.Fatalf("Learning rate variable not created in scope %q, name %q", "/optimizers/cosine", optimizers.GlobalStepVariableName)
+				t.Fatalf(
+					"Learning rate variable not created in scope %q, name %q",
+					"/optimizers/cosine",
+					optimizers.GlobalStepVariableName,
+				)
 			}
-			step := stepVar.Value().Value().(int64)
+			step := stepVar.MustValue().Value().(int64)
 			assert.Equal(t, int64(ii+1), step)
 
 			// Check learning rate is following cosine formulation.
@@ -118,7 +125,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		ctx.SetParam(cosineschedule.ParamWarmUpSteps, warmUpSteps)
 		ctx.SetParam(cosineschedule.ParamMinLearningRate, minLearningRate)
 		lastStepVar := train.GetTrainLastStepVar(ctx)
-		lastStepVar.SetValue(tensors.FromScalar(int64(numSteps)))
+		lastStepVar.MustSetValue(tensors.FromScalar(int64(numSteps)))
 		cosineExec, err := context.NewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
 			ctx.SetTraining(graph, true)
 			cosineschedule.New(ctx, graph, dtypes.Float32).FromContext().Done()

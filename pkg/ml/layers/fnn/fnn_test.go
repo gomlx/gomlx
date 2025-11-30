@@ -110,7 +110,7 @@ func TestFNN(t *testing.T) {
 	for ii, coreFn := range fnnVariations {
 		fmt.Printf("Variation #%d %q:\n", ii, fnnVariationsNames[ii])
 		ctx := context.New()
-		ctx.RngStateFromSeed(42)
+		ctx.SetRNGStateFromSeed(42)
 		opt := optimizers.Adam().LearningRate(0.001).Done()
 		trainer := train.NewTrainer(backend, ctx, fnnGraphModelBuilder(coreFn),
 			lossGraphFn, // a simple wrapper around losses.MeanSquaredError,
@@ -138,7 +138,7 @@ func TestFNNRegularized(t *testing.T) {
 	}
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	ctx.RngStateFromSeed(42)
+	ctx.SetRNGStateFromSeed(42)
 	ds := &fnnTestDataset{batchSize: 128}
 
 	regularizedFn := func(ctx *context.Context, input *Node) *Node {
@@ -182,9 +182,9 @@ func TestFNNRegularized(t *testing.T) {
 		vName := "weights"
 		v := ctx.GetVariableByScopeAndName(scope, vName)
 		require.NotNilf(t, v, "failed to inspect variable scope=%q, name=%q", scope, vName)
-		tensor := v.Value()
+		tensor := v.MustValue()
 		fmt.Printf("\t%s : %s -> %v\n", v.Scope(), v.Name(), tensor)
-		tensors.ConstFlatData[float64](tensor, func(flat []float64) {
+		tensors.MustConstFlatData[float64](tensor, func(flat []float64) {
 			for _, element := range flat {
 				if element == 0.0 {
 					numZeros++
@@ -193,5 +193,11 @@ func TestFNNRegularized(t *testing.T) {
 		})
 	}
 	fmt.Printf("\nNumber of zeros in the weights of the FNN: %d\n", numZeros)
-	require.GreaterOrEqual(t, numZeros, 1000, "We expected at least 1000 zeros on the weights of the FNN, with L1 regularizer, we got only %d though", numZeros)
+	require.GreaterOrEqual(
+		t,
+		numZeros,
+		1000,
+		"We expected at least 1000 zeros on the weights of the FNN, with L1 regularizer, we got only %d though",
+		numZeros,
+	)
 }

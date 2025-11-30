@@ -52,7 +52,7 @@ type ContextFn func(ctx *context.Context) *context.Context
 
 func CreateDefaultContext() *context.Context {
 	ctx := context.New()
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		// Model type to use
 		"model":           "linear",

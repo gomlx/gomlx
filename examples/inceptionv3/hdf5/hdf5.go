@@ -233,24 +233,28 @@ func (ds *Hdf5Dataset) Load() (rawContent []byte, err error) {
 // ToTensor reads the HDF5 dataset into GoMLX's tensors.Tensor.
 func (ds *Hdf5Dataset) ToTensor() (tensor *tensors.Tensor, err error) {
 	if !ds.Shape.Ok() {
-		err = errors.Errorf("no shape information from HDF5 dataset, can't convert to tenosr")
-		return
+		return nil, errors.Errorf("no shape information from HDF5 dataset, can't convert to tensor")
 	}
 	loadedData, err := ds.Load()
 	if err != nil {
 		return
 	}
 	tensor = tensors.FromShape(ds.Shape)
-	tensor.MutableBytes(func(localData []byte) {
+	accessErr := tensor.MutableBytes(func(localData []byte) {
 		if len(loadedData) != len(localData) {
 			err = errors.Errorf("for shape %s: loaded %d bytes, but tensor uses %d bytes -- not sure how to load it!?",
 				ds.Shape, len(loadedData), len(localData))
-			tensor = nil
 			return
 		}
 		copy(localData, loadedData)
 	})
-	return
+	if accessErr != nil {
+		return nil, err
+	}
+	if err != nil {
+		return nil, err
+	}
+	return tensor, nil
 }
 
 // UnpackToTensorsConfig holds the configuration created by UnpackToTensors, to unpack HDF5 files into a directory
@@ -369,7 +373,13 @@ func (c *UnpackToTensorsConfig) Done() (err error) {
 		if tmpDir != "" {
 			newErr := os.RemoveAll(tmpDir)
 			if newErr != nil {
-				klog.Errorf("UnpackToTensors(%q, %q): error while cleaning up temporary directory %q: %v", c.targetDir, c.h5Path, tmpDir, newErr)
+				klog.Errorf(
+					"UnpackToTensors(%q, %q): error while cleaning up temporary directory %q: %v",
+					c.targetDir,
+					c.h5Path,
+					tmpDir,
+					newErr,
+				)
 			}
 		}
 	}()
@@ -391,7 +401,13 @@ func (c *UnpackToTensorsConfig) Done() (err error) {
 		dsDir := path.Dir(dsPath)
 		err = os.MkdirAll(dsDir, c.dirPermissions)
 		if err != nil {
-			err = errors.Wrapf(err, "UnpackToTensors(%q, %q): can't create sub-directory %q for UnpackToTensors", c.targetDir, c.h5Path, dsDir)
+			err = errors.Wrapf(
+				err,
+				"UnpackToTensors(%q, %q): can't create sub-directory %q for UnpackToTensors",
+				c.targetDir,
+				c.h5Path,
+				dsDir,
+			)
 			return
 		}
 		err = local.Save(dsPath)
@@ -413,7 +429,14 @@ func (c *UnpackToTensorsConfig) Done() (err error) {
 	// Move temporary directory to target dir
 	err = os.Rename(tmpDir, c.targetDir)
 	if err != nil {
-		err = errors.Wrapf(err, "UnpackToTensors(%q, %q): failed to rename temporary dir %q with unpacked tensors to target %q", c.targetDir, c.h5Path, c.tmpDir, c.targetDir)
+		err = errors.Wrapf(
+			err,
+			"UnpackToTensors(%q, %q): failed to rename temporary dir %q with unpacked tensors to target %q",
+			c.targetDir,
+			c.h5Path,
+			c.tmpDir,
+			c.targetDir,
+		)
 		return
 	}
 	tmpDir = "" // Indicates to deferred function above there is no need for clean up.

@@ -38,7 +38,7 @@ func createDenseTestSampler(withCitation bool) *samplerPkg.Sampler {
 	authorWritesPapers := tensors.FromShape(shapes.Make(dtypes.Int32, lwNumAuthors, 2))
 	{
 		// Each paper is written by 5 authors.
-		tensors.MutableFlatData[int32](authorWritesPapers, func(authorData []int32) {
+		tensors.MustMutableFlatData[int32](authorWritesPapers, func(authorData []int32) {
 			for authorIdx := range int32(lwNumAuthors) {
 				paperIdx := authorIdx / 5
 				authorData[authorIdx*2] = authorIdx
@@ -53,7 +53,7 @@ func createDenseTestSampler(withCitation bool) *samplerPkg.Sampler {
 		paperCitesPaper := tensors.FromShape(shapes.Make(dtypes.Int32, lwNumPapers*lwFactor, 2))
 		{
 			// Each paper is written by 5 authors.
-			tensors.MutableFlatData[int32](paperCitesPaper, func(citesData []int32) {
+			tensors.MustMutableFlatData[int32](paperCitesPaper, func(citesData []int32) {
 				for citing := range int32(lwNumPapers) {
 					for ii := range int32(lwFactor) {
 						cited := (citing + ii + 1) % lwNumPapers
@@ -74,7 +74,11 @@ func createDenseTestStrategy(withCitation bool) (*samplerPkg.Sampler, *samplerPk
 	strategy := s.NewStrategy()
 	strategy = s.NewStrategy()
 	seeds := strategy.NodesFromSet("seeds", "papers", lwNumPapers, nil)
-	_ = seeds.FromEdges("authors", "writtenBy", lwFactor+1) // There are only lwFactor edges, but we sample +1 which means a mask entry set to false.
+	_ = seeds.FromEdges(
+		"authors",
+		"writtenBy",
+		lwFactor+1,
+	) // There are only lwFactor edges, but we sample +1 which means a mask entry set to false.
 	if withCitation {
 		seedsBase := seeds.IdentitySubRule("seedsBase")
 		citations := seeds.FromEdges("citations", "cites", lwFactor)
@@ -83,7 +87,12 @@ func createDenseTestStrategy(withCitation bool) (*samplerPkg.Sampler, *samplerPk
 	return s, strategy
 }
 
-func createDenseTestStateGraphWithMask(strategy *samplerPkg.Strategy, g *Graph, dtype dtypes.DType, withCitation bool) map[string]*samplerPkg.ValueMask[*Node] {
+func createDenseTestStateGraphWithMask(
+	strategy *samplerPkg.Strategy,
+	g *Graph,
+	dtype dtypes.DType,
+	withCitation bool,
+) map[string]*samplerPkg.ValueMask[*Node] {
 	graphStates := make(map[string]*samplerPkg.ValueMask[*Node])
 	graphStates["seeds"] = &samplerPkg.ValueMask[*Node]{
 		Value: IotaFull(g, shapes.Make(dtype, lwNumPapers, 1)),
@@ -129,7 +138,12 @@ func createDenseTestStateGraphWithMask(strategy *samplerPkg.Strategy, g *Graph, 
 	return graphStates
 }
 
-func createDenseTestStateGraphLayerWise(strategy *samplerPkg.Strategy, g *Graph, dtype dtypes.DType, withCitation bool) (
+func createDenseTestStateGraphLayerWise(
+	strategy *samplerPkg.Strategy,
+	g *Graph,
+	dtype dtypes.DType,
+	withCitation bool,
+) (
 	graphStates map[string]*Node, edges map[string]samplerPkg.EdgePair[*Node]) {
 	graphStates = make(map[string]*Node)
 	graphStates["seeds"] = IotaFull(g, shapes.Make(dtype, lwNumPapers, 1))

@@ -86,7 +86,7 @@ func (bds *BalancedDataset) Name() string {
 func (bds *BalancedDataset) buildPerFlowerIndices() {
 	// We also build the labels of the batch, which will always be the same.
 	bds.Labels = tensors.FromValue(xslices.Iota(int32(0), NumLabels))
-	tensors.ConstFlatData[int32](bds.AllLabels, func(flatAllLabels []int32) {
+	tensors.MustConstFlatData[int32](bds.AllLabels, func(flatAllLabels []int32) {
 		for exampleIdx, label := range flatAllLabels {
 			bds.PerFlowerIndices[label] = append(bds.PerFlowerIndices[label], int32(exampleIdx))
 		}
@@ -107,8 +107,8 @@ func (bds *BalancedDataset) readAllImages() error {
 	bds.AllImages = tensors.FromShape(shapes.Make(dtype, NumExamples, bds.Size, bds.Size, 3))
 	imageSize := bds.Size * bds.Size * 3
 	bds.AllLabels = tensors.FromShape(shapes.Make(dtypes.Int32, NumExamples))
-	tensors.MutableFlatData[uint8](bds.AllImages, func(flatAllImages []uint8) {
-		tensors.MutableFlatData[int32](bds.AllLabels, func(flatAllLabels []int32) {
+	tensors.MustMutableFlatData[uint8](bds.AllImages, func(flatAllImages []uint8) {
+		tensors.MustMutableFlatData[int32](bds.AllLabels, func(flatAllLabels []int32) {
 			ds := datasets.Parallel(NewDataset(dtypes.Uint8, bds.Size))
 			pbar := progressbar.Default(int64(NumExamples), "Processing images")
 			for exampleIdx := range NumExamples {
@@ -120,13 +120,21 @@ func (bds *BalancedDataset) readAllImages() error {
 				image := inputs[0]
 				label := labels[0]
 				if err = image.Shape().Check(dtype, bds.Size, bds.Size, 3); err != nil {
-					err = errors.WithMessagef(err, "unexpected image shape %s yielded by normal dataset, while building cache", image.Shape())
+					err = errors.WithMessagef(
+						err,
+						"unexpected image shape %s yielded by normal dataset, while building cache",
+						image.Shape(),
+					)
 					return
 				}
 				if err = label.Shape().Check(dtypes.Int32); err != nil {
-					err = errors.WithMessagef(err, "unexpected label shape %s yielded by normal dataset, while building cache", label.Shape())
+					err = errors.WithMessagef(
+						err,
+						"unexpected label shape %s yielded by normal dataset, while building cache",
+						label.Shape(),
+					)
 				}
-				tensors.ConstFlatData[uint8](image, func(flatImage []uint8) {
+				tensors.MustConstFlatData[uint8](image, func(flatImage []uint8) {
 					copy(flatAllImages[exampleIdx*imageSize:], flatImage)
 				})
 				flatAllLabels[exampleIdx] = tensors.ToScalar[int32](label)

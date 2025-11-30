@@ -9,3 +9,15 @@ import (
 func init() {
 	klog.InitFlags(nil)
 }
+
+func must(err error) {
+	if err != nil {
+		klog.Errorf("Failed with error: %+v", err)
+		panic(err)
+	}
+}
+
+func must1[T any](value T, err error) T {
+	must(err)
+	return value
+}

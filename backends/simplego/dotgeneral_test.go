@@ -51,12 +51,31 @@ func TestDotGeneral_LargeShapesAndCopy(t *testing.T) {
 		outShape := dgCreateBlockedShape(dtype, batchSize, crossSize, contractingSize, blockLog2Dim)
 		// outShape = [6 1 1 2 2]
 		fmt.Printf("\toutShape=%s, size=%d\n", outShape, outShape.Size())
-		require.Equal(t, []int{batchSize, (crossSize + blockDim - 1) / blockDim, (contractingSize + blockDim - 1) / blockDim, blockDim, blockDim}, outShape.Dimensions)
+		require.Equal(
+			t,
+			[]int{
+				batchSize,
+				(crossSize + blockDim - 1) / blockDim,
+				(contractingSize + blockDim - 1) / blockDim,
+				blockDim,
+				blockDim,
+			},
+			outShape.Dimensions,
+		)
 		outBlocks := be.getBuffer(dtype, outShape.Size())
 		outBlocks.shape = outShape
 		outBlocks.Zeros()
 		copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
-		copyFlatToBlock(source, outBlocks, contractingAxes, batchAxes, batchSize, crossSize, contractingSize, blockLog2Dim)
+		copyFlatToBlock(
+			source,
+			outBlocks,
+			contractingAxes,
+			batchAxes,
+			batchSize,
+			crossSize,
+			contractingSize,
+			blockLog2Dim,
+		)
 
 		outFlat := outBlocks.flat.([]float64)
 		// Notice the reversal (transposition) of the batch axes:
@@ -100,12 +119,31 @@ func TestDotGeneral_LargeShapesAndCopy(t *testing.T) {
 		outShape := dgCreateBlockedShape(dtype, batchSize, crossSize, contractingSize, blockLog2Dim)
 		// outShape = [2 2 3 4 4]
 		fmt.Printf("\toutShape=%s, size=%d\n", outShape, outShape.Size())
-		require.Equal(t, []int{batchSize, (crossSize + blockDim - 1) / blockDim, (contractingSize + blockDim - 1) / blockDim, blockDim, blockDim}, outShape.Dimensions)
+		require.Equal(
+			t,
+			[]int{
+				batchSize,
+				(crossSize + blockDim - 1) / blockDim,
+				(contractingSize + blockDim - 1) / blockDim,
+				blockDim,
+				blockDim,
+			},
+			outShape.Dimensions,
+		)
 		outBlocks := be.getBuffer(dtype, outShape.Size())
 		outBlocks.shape = outShape
 		outBlocks.Zeros()
 		copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
-		copyFlatToBlock(source, outBlocks, contractingAxes, batchAxes, batchSize, crossSize, contractingSize, blockLog2Dim)
+		copyFlatToBlock(
+			source,
+			outBlocks,
+			contractingAxes,
+			batchAxes,
+			batchSize,
+			crossSize,
+			contractingSize,
+			blockLog2Dim,
+		)
 
 		outFlat := outBlocks.flat.([]float32)
 		want := []float32{
@@ -158,7 +196,15 @@ func TestDotGeneral_SmallNormalize(t *testing.T) {
 			sourceFlat[i] = float64(i + 1)
 		}
 		normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize int) *Buffer)
-		output := normalizeFn(backend.(*Backend), source, contractingAxes, batchAxes, batchSize, crossSize, contractingSize)
+		output := normalizeFn(
+			backend.(*Backend),
+			source,
+			contractingAxes,
+			batchAxes,
+			batchSize,
+			crossSize,
+			contractingSize,
+		)
 		require.NotNil(t, output)
 		require.NoError(t, output.shape.Check(dtype, batchSize, crossSize, contractingSize))
 		require.Equal(t, []float64{1, 4, 2, 5, 3, 6}, output.flat.([]float64))
@@ -184,7 +230,15 @@ func TestDotGeneral_SmallNormalize(t *testing.T) {
 			sourceFlat[i] = float32(i + 1)
 		}
 		normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize int) *Buffer)
-		output := normalizeFn(backend.(*Backend), source, contractingAxes, batchAxes, batchSize, crossSize, contractingSize)
+		output := normalizeFn(
+			backend.(*Backend),
+			source,
+			contractingAxes,
+			batchAxes,
+			batchSize,
+			crossSize,
+			contractingSize,
+		)
 		require.NotNil(t, output)
 		require.NoError(t, output.shape.Check(dtype, batchSize, crossSize, contractingSize))
 
@@ -219,12 +273,28 @@ func TestDotGeneral_SmallNormalize(t *testing.T) {
 		require.NoError(t, err)
 		source := sourceIf.(*Buffer)
 		normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize int) *Buffer)
-		output := normalizeFn(backend.(*Backend), source, contractingAxes, batchAxes, batchSize, crossSize, contractingSize)
+		output := normalizeFn(
+			backend.(*Backend),
+			source,
+			contractingAxes,
+			batchAxes,
+			batchSize,
+			crossSize,
+			contractingSize,
+		)
 		require.Nil(t, output)
 
 		// If we invert the contracting axes, we need the transposition, and normalizeFn must handle it.
 		contractingAxes = []int{3, 2}
-		output = normalizeFn(backend.(*Backend), source, contractingAxes, batchAxes, batchSize, crossSize, contractingSize)
+		output = normalizeFn(
+			backend.(*Backend),
+			source,
+			contractingAxes,
+			batchAxes,
+			batchSize,
+			crossSize,
+			contractingSize,
+		)
 		require.NotNil(t, output)
 		require.NoError(t, output.shape.Check(dtype, batchSize, crossSize, contractingSize))
 	}
@@ -234,9 +304,9 @@ func TestDotGeneral_Shape(t *testing.T) {
 	S := shapes.Make
 	F32 := dtypes.Float32
 	builder := backend.Builder("DotGeneral Test").(*Builder)
-	lhs, err := builder.Parameter("lhs", S(F32, 2, 3, 4, 5))
+	lhs, err := builder.Parameter("lhs", S(F32, 2, 3, 4, 5), nil)
 	require.NoError(t, err)
-	rhs, err := builder.Parameter("rhs", S(F32, 5, 1, 2, 3))
+	rhs, err := builder.Parameter("rhs", S(F32, 5, 1, 2, 3), nil)
 	require.NoError(t, err)
 	gotOp, err := builder.DotGeneral(
 		lhs, []int{1}, []int{3, 0},
@@ -255,15 +325,21 @@ func requireSameTensorsFloat32(t *testing.T, want, got *tensors.Tensor, delta fl
 	// Make sure shapes are the same.
 	require.True(t, got.Shape().Equal(want.Shape()))
 	flatIdx := 0
-	gotFlat := tensors.CopyFlatData[float32](got)
-	wantFlat := tensors.CopyFlatData[float32](want)
+	gotFlat := tensors.MustCopyFlatData[float32](got)
+	wantFlat := tensors.MustCopyFlatData[float32](want)
 	var mismatches int
 	for indices := range got.Shape().Iter() {
 		gotValue := gotFlat[flatIdx]
 		wantValue := wantFlat[flatIdx]
 		if math.Abs(float64(gotValue)-float64(wantValue)) > delta {
 			if mismatches < 3 {
-				fmt.Printf("\tIndex %v (flatIdx=%d) has a mismatch: got %f, want %f\n", indices, flatIdx, gotValue, wantValue)
+				fmt.Printf(
+					"\tIndex %v (flatIdx=%d) has a mismatch: got %f, want %f\n",
+					indices,
+					flatIdx,
+					gotValue,
+					wantValue,
+				)
 			} else if mismatches == 4 {
 				fmt.Printf("\t...\n")
 			}
@@ -353,7 +429,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 				return graph.Gather(out, graph.Const(g, [][]int32{{0, 0, 0}}))
 			})
 			fmt.Printf("\ty3=%s\n", y3)
-			require.InDelta(t, 0.7392, tensors.CopyFlatData[float64](y3)[0], 1e-4)
+			require.InDelta(t, 0.7392, tensors.MustCopyFlatData[float64](y3)[0], 1e-4)
 
 			// BFloat16 example.
 			t.Run("BFloat16", func(t *testing.T) {
@@ -366,7 +442,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 				)
 				fmt.Printf("\ty2=%s\n", y2)
 				require.NoError(t, y2.Shape().Check(dtypes.BFloat16, 1, 1))
-				require.Equal(t, float32(10+22+36), tensors.CopyFlatData[bfloat16.BFloat16](y2)[0].Float32())
+				require.Equal(t, float32(10+22+36), tensors.MustCopyFlatData[bfloat16.BFloat16](y2)[0].Float32())
 			})
 
 			// Do not run the larger tests if running -test.short: they will break Github

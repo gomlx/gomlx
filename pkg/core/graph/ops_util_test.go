@@ -555,7 +555,7 @@ func TestReduceVariance(t *testing.T) {
 
 	graphtest.RunTestGraphFn(t, "ReduceVariance",
 		func(g *Graph) (inputs, outputs []*Node) {
-			rngState := Const(g, RngStateFromSeed(42))
+			rngState := Const(g, must1(RNGStateFromSeed(42)))
 			_, values := RandomNormal(rngState, shapes.Make(dtypes.Float32, 4, 100_000))
 			multiplier := OnePlus(Iota(g, shapes.Make(dtypes.Float32, 4, 1), 0))
 			shift := AddScalar(Iota(g, shapes.Make(dtypes.Float32, 4, 1), 0), -2)

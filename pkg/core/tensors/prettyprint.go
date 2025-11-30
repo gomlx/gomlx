@@ -53,7 +53,7 @@ func (t *Tensor) Summary(precision int) string {
 
 	// Access the contents of the tensor without copy:
 	dims := t.Shape().Dimensions
-	t.ConstFlatData(func(flat any) {
+	t.MustConstFlatData(func(flat any) {
 		values := reflect.ValueOf(flat)
 
 		// Print Go type equivalent

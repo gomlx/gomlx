@@ -18,7 +18,6 @@ import (
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/internal/must"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -33,12 +32,13 @@ import (
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/janpfeifer/gonb/gonbui/dom"
 	"github.com/janpfeifer/gonb/gonbui/widgets"
+	"github.com/janpfeifer/must"
 )
 
 // GenerateNoise generates random noise that can be used to generate images.
 func GenerateNoise(cfg *diffusion.Config, numImages int) *tensors.Tensor {
 	return MustExecOnce(cfg.Backend, func(g *Graph) *Node {
-		state := Const(g, RngState())
+		state := RNGStateForGraph(g)
 		_, noise := RandomNormal(state, shapes.Make(cfg.DType, numImages, cfg.ImageSize, cfg.ImageSize, 3))
 		return noise
 	})
@@ -135,7 +135,7 @@ func NewImagesGenerator(cfg *diffusion.Config, noise, flowerIds *tensors.Tensor,
 func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tensor, times []float64) {
 	// Copy tensor: this tensor will be overwritten at each interation, and we want
 	// to preserve the original g.noise.
-	imagesBatch := g.noise.LocalClone()
+	imagesBatch := must.M1(g.noise.LocalClone())
 
 	backend := g.config.Backend
 	stepSize := 1.0 / float64(g.numSteps-1)
@@ -148,8 +148,8 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tens
 			if step == g.numSteps-1 {
 				endTime = 1.0 // Avoiding numeric issues.
 			}
-			imagesBatch = g.stepExec.MustExec(
-				DonateTensorBuffer(imagesBatch, backend), g.flowerIds, startTime, endTime)[0]
+			buf := must.M1(DonateTensorBuffer(imagesBatch, backend, 0))
+			imagesBatch = must.M1(g.stepExec.Exec1(buf, g.flowerIds, startTime, endTime))
 		}
 		if (n > 0 && step%n == 0) || step == g.numSteps-1 {
 			times = append(times, endTime)
@@ -309,8 +309,8 @@ func PlotModelEvolution(cfg *diffusion.Config, imagesPerSample int, animate bool
 	var jsTemplate = must.M1(template.New("PlotModelEvolution").Parse(`
 	<canvas id="canvas_{{.Id}}" height="{{.Size}}px" width="{{.Width}}px"></canvas>
 	<script>
-	var canvas_{{.Id}} = document.getElementById("canvas_{{.Id}}"); 
-	var ctx_{{.Id}} = canvas_{{.Id}}.getContext("2d"); 
+	var canvas_{{.Id}} = document.getElementById("canvas_{{.Id}}");
+	var ctx_{{.Id}} = canvas_{{.Id}}.getContext("2d");
 	var currentFrame_{{.Id}} = 0;
 	var frameRate_{{.Id}} = {{.FrameRateMs}};
 	var imagePaths_{{.Id}} = [{{range .Images}}
@@ -330,7 +330,7 @@ func PlotModelEvolution(cfg *diffusion.Config, imagesPerSample int, animate bool
 		}
 		images_{{.Id}}.push(images);
 	}
-	
+
 	function animate_{{.Id}}() {
 		var Context = ctx_{{.Id}};
 		var canvas = canvas_{{.Id}};
@@ -370,7 +370,7 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 			"Config.AttachCheckpoint.")
 	}
 	ctx := cfg.Context.Checked(false)
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	noise := cfg.GenerateNoise(numImages)
 	flowerIds := cfg.GenerateFlowerIds(numImages)
 
@@ -393,7 +393,13 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 //
 // If `cacheKey` empty, cache is by-passed. Otherwise, try to load images from cache first if available,
 // or save generated images in cache for future use.
-func SliderDiffusionSteps(cfg *diffusion.Config, cacheKey string, numImages int, numDiffusionSteps int, htmlId string) *xsync.Latch {
+func SliderDiffusionSteps(
+	cfg *diffusion.Config,
+	cacheKey string,
+	numImages int,
+	numDiffusionSteps int,
+	htmlId string,
+) *xsync.Latch {
 	// Generate images.
 	type ImagesAndDiffusions struct {
 		Images    []string
@@ -423,7 +429,12 @@ func SliderDiffusionSteps(cfg *diffusion.Config, cacheKey string, numImages int,
 	// Create HTML content and containers.
 	denoiseHtmlId := "fm_transform_" + gonbui.UniqueId()
 	dom.Append(
-		htmlId, fmt.Sprintf(`Tranforming Noise to Flowers: &nbsp;<span id="%s" style="font-family: monospace; font-style: italic; font-size: small; border: 1px solid; border-style: inset; padding-right:5px;"> </span><br/>`, denoiseHtmlId))
+		htmlId,
+		fmt.Sprintf(
+			`Tranforming Noise to Flowers: &nbsp;<span id="%s" style="font-family: monospace; font-style: italic; font-size: small; border: 1px solid; border-style: inset; padding-right:5px;"> </span><br/>`,
+			denoiseHtmlId,
+		),
+	)
 	slider := widgets.Slider(0, numDiffusionSteps, 0).AppendTo(htmlId).Done()
 	plotId := "plot_" + gonbui.UniqueId()
 	dom.Append(htmlId, fmt.Sprintf(`<div id="%s"></div>`, plotId))
@@ -453,9 +464,14 @@ func SliderDiffusionSteps(cfg *diffusion.Config, cacheKey string, numImages int,
 // flower type.
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
-func GenerateImagesOfFlowerType(cfg *diffusion.Config, numImages int, flowerType int32, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
+func GenerateImagesOfFlowerType(
+	cfg *diffusion.Config,
+	numImages int,
+	flowerType int32,
+	numDiffusionSteps int,
+) (predictedImages *tensors.Tensor) {
 	ctx := cfg.Context
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	noise := cfg.GenerateNoise(numImages)
 	flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 	generator := NewImagesGenerator(cfg, noise, flowerIds, numDiffusionSteps)
@@ -466,7 +482,12 @@ func GenerateImagesOfFlowerType(cfg *diffusion.Config, numImages int, flowerType
 //
 // If `cacheKey` empty, cache is by-passed. Otherwise, try to load images from cache first if available,
 // or save generated images in cache for future use.
-func DropdownFlowerTypes(cfg *diffusion.Config, cacheKey string, numImages, numDiffusionSteps int, htmlId string) *xsync.Latch {
+func DropdownFlowerTypes(
+	cfg *diffusion.Config,
+	cacheKey string,
+	numImages, numDiffusionSteps int,
+	htmlId string,
+) *xsync.Latch {
 	numFlowerTypes := flowers.NumLabels
 	generateFn := func() []string {
 		htmlImages := make([]string, numFlowerTypes)
@@ -518,10 +539,10 @@ func DropdownFlowerTypes(cfg *diffusion.Config, cacheKey string, numImages, numD
 func GenerateImagesOfAllFlowerTypes(cfg *diffusion.Config, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	ctx := cfg.Context
 	numImages := flowers.NumLabels
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	imageSize := cfg.ImageSize
 	noise := MustNewExec(cfg.Backend, func(g *Graph) *Node {
-		state := Const(g, RngState())
+		state := RNGStateForGraph(g)
 		_, noise := RandomNormal(state, shapes.Make(cfg.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise
@@ -586,7 +607,7 @@ func (kg *KidGenerator) Eval() (metric *tensors.Tensor) {
 
 		datasetImages := inputs[0]
 		if metric != nil {
-			metric.FinalizeAll()
+			metric.MustFinalizeAll()
 		}
 		metric = kg.evalExec.MustExec(generatedImages, datasetImages)[0]
 	}

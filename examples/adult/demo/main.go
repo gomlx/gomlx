@@ -60,7 +60,6 @@ var (
 
 func createDefaultContext() *context.Context {
 	ctx := context.New()
-	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
 		// Number of steps to take during training.
 		"train_steps": 5000,

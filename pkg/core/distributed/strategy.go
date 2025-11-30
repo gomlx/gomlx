@@ -12,19 +12,22 @@ const (
 	// If the user is doing distributed execution with this strategy, they are handling all the details themselves.
 	None Strategy = iota
 
-	// SimpleSPMD is a simple strategy for single-program, multiple-data (SPMD) execution.
+	// SPMD is a simple strategy for single-program, multiple-data (SPMD) execution.
 	// There will be a DeviceMesh with one axis with the participating devices, and the inputs to the
 	// execution are expected to either be distributed.Tensor or slices of values (of the Go any type), one per device.
 	//
 	// The abstraction "leaks", meaning the user needs to be aware of what is going on, and axes that are sharded.
 	// For instance, a BatchNormalization implementation should check if this is the strategy it is running in,
 	// and if so, do a CrossReplicaReduceSum on the batch axis when computing the mean and variance.
-	SimpleSPMD
+	SPMD
 
-	// GSPMD is a general strategy for SPMD execution to automatically partition the computation, described in the
-	// paper "GSPMD: General and Scalable Parallelization for ML Computation Graphs" [1].
+	// AutoSharding is a strategy where one provides sharding specs for the inputs and outputs (and optionally
+	// hints in the middle of the computation), and the backend will automatically shard the computation as it
+	// sees fit.
 	//
-	// Deprecated: NOT IMPLEMENTED YET.
+	// The underlying auto-sharding algorithm is described in the paper "AutoSharding: General and Scalable
+	// Parallelization for ML Computation Graphs" [1]. And this strategy relies on XLA Shardy [2], so it's only
+	// available with the `xla` (`stablehlo`) backend. It's the same technology used by Jax and Pytorch XLA.
 	//
 	// This strategy works as follows:
 	//
@@ -32,8 +35,7 @@ const (
 	//   automatically partitioned into multiple programs by the underlying backend (XLA Shardy).
 	// - The inputs are distributed.Tensor, and their sharding helps guide the sharding of the computation.
 	//
-	// It's implemented "XLA Shardy" (part of the `stablehlo`/`xla` backend).
-	//
 	// [1] https://arxiv.org/abs/2105.04663
-	GSPMD
+	// [2] https://openxla.org/shardy/
+	AutoSharding
 )

@@ -499,19 +499,19 @@ func (b *Builder) Transpose(x backends.Op, permutation ...int) (backends.Op, err
 	return b.newNode(value), nil
 }
 
-// RngBitGenerator generates the given shape filled with random bits.
+// RNGBitGenerator generates the given shape filled with random bits.
 //
 // It takes as input a state (usually [3]uint64) and returns the updated state and the generated values (with random bits).
 //
 // Currently, the backend only supports the Philox algorithm. See https://dl.acm.org/doi/10.1145/2063384.2063405
-func (b *Builder) RngBitGenerator(state backends.Op, shape shapes.Shape) (newState backends.Op, values backends.Op, err error) {
-	nodes, err := b.verifyAndCastValues("RngBitGenerator", state)
+func (b *Builder) RNGBitGenerator(state backends.Op, shape shapes.Shape) (newState backends.Op, values backends.Op, err error) {
+	nodes, err := b.verifyAndCastValues("RNGBitGenerator", state)
 	if err != nil {
 		return nil, nil, err
 	}
 	shloShape := ShapeToStableHLO(shape)
 	if !shloShape.Ok() {
-		return nil, nil, errors.Errorf("RngBitGenerator: invalid shape: %s", shape)
+		return nil, nil, errors.Errorf("RNGBitGenerator: invalid shape: %s", shape)
 	}
 	newStateV, valueV, err := stablehlo.RngBitGenerator(nodes[0].value, shloShape, stablehlotypes.RngPhilox)
 	if err != nil {

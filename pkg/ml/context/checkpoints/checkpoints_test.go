@@ -167,10 +167,10 @@ func TestCheckpoints(t *testing.T) {
 		// Check that the only variable ("global_step") is present.
 		count := 0
 		for v := range ctx.IterVariables() {
-			fmt.Printf("\tFromEmbed: variable %q: %s -> %s\n", v.ScopeAndName(), v.Shape(), v.Value())
+			fmt.Printf("\tFromEmbed: variable %q: %s -> %s\n", v.ScopeAndName(), v.Shape(), v.MustValue())
 			require.NoError(t, v.Shape().Check(dtypes.Int64))
 			require.Equal(t, "/global_step", v.ScopeAndName(), "Variable name")
-			require.Equal(t, int64(11), tensors.ToScalar[int64](v.Value()), "Variable value")
+			require.Equal(t, int64(11), tensors.ToScalar[int64](v.MustValue()), "Variable value")
 			count++
 		}
 		require.Equal(t, 1, count, "Number of variables should have been one: global_step")
@@ -192,14 +192,14 @@ func TestMergedCheckpoints(t *testing.T) {
 		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").Keep(2).MustDone()
 		dir = checkpoint.Dir()
 		globalStepV := optimizers.GetGlobalStepVar(ctx)
-		globalStepV.SetValue(tensors.FromValue(1))
+		globalStepV.MustSetValue(tensors.FromValue(1))
 		xV := ctx.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
 		yV := ctx.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
 		require.NoError(t, checkpoint.Save())
 
-		globalStepV.SetValue(tensors.FromValue(10))
-		xV.SetValue(tensors.FromValue([]float64{3.0, 3.0, 3.0}))
-		yV.SetValue(tensors.FromValue([][]float32{{6.0}, {6.0}}))
+		globalStepV.MustSetValue(tensors.FromValue(10))
+		xV.MustSetValue(tensors.FromValue([]float64{3.0, 3.0, 3.0}))
+		yV.MustSetValue(tensors.FromValue([][]float32{{6.0}, {6.0}}))
 		require.NoError(t, checkpoint.Save())
 	}
 	{
@@ -210,9 +210,9 @@ func TestMergedCheckpoints(t *testing.T) {
 		assert.Equal(t, int64(10), globalStep, "GlobalStep")
 		xV := ctx.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
 		// Assume X will be loaded with the mean of the previous 2 checkpoints:
-		assert.Equal(t, []float64{2.0, 2.0, 2.0}, xV.Value().Value(), "X")
+		assert.Equal(t, []float64{2.0, 2.0, 2.0}, xV.MustValue().Value(), "X")
 		yV := ctx.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
-		assert.Equal(t, [][]float32{{5.0}, {5.0}}, yV.Value().Value(), "Y")
+		assert.Equal(t, [][]float32{{5.0}, {5.0}}, yV.MustValue().Value(), "Y")
 	}
 
 	if t.Failed() {

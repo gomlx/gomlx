@@ -48,7 +48,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	}
 	if context.GetParamOr(ctx, "rng_reset", true) {
 		// Reset RNG with some pseudo-random value.
-		ctx.RngStateReset()
+		ctx.ResetRNGState()
 	}
 	if verbosity >= 1 {
 		// Enumerate parameters that were set.

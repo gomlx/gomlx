@@ -101,9 +101,9 @@ func TestDense(t *testing.T) {
 	g.Compile(outputs...)
 
 	// Before running the graph initialize the variables.
-	ctx.InitializeVariables(backend)
+	ctx.InitializeVariables(backend, nil)
 	ctx.EnumerateVariables(func(v *context.Variable) {
-		fmt.Printf("\t%s=%v\n", v.ParameterName(), v.Value())
+		fmt.Printf("\t%s=%v\n", v.ParameterName(), v.MustValue())
 	})
 
 	params := make(ParamsMap)

@@ -224,6 +224,7 @@ func (ds *Dataset) Reset() {
 func InMemoryDataset(backend backends.Backend, baseDir string, imageSize int, name string,
 	partitionSeed int64, partitionFrom, partitionTo float64) (
 	inMemoryDataset *datasets.InMemoryDataset, err error) {
+	deviceNum := backends.DeviceNum(0)
 	var f *os.File
 	if baseDir != "" {
 		baseDir = fsutil.MustReplaceTildeInDir(baseDir) // If dir starts with "~", it is replaced.
@@ -239,7 +240,7 @@ func InMemoryDataset(backend backends.Backend, baseDir string, imageSize int, na
 		if err == nil {
 			// Reads from cached file.
 			dec := gob.NewDecoder(f)
-			inMemoryDataset, err = datasets.GobDeserializeInMemory(backend, nil, dec)
+			inMemoryDataset, err = datasets.GobDeserializeInMemoryToDevice(backend, deviceNum, dec)
 			_ = f.Close()
 			return
 		}

@@ -148,7 +148,13 @@ func downloadZip(downloadDir string) error {
 	}
 
 	zipPath := path.Join(downloadDir, ZipFile)
-	err := downloader.DownloadAndUnzipIfMissing(ZipURL, zipPath, downloadDir, path.Join(downloadDir, "mag"), ZipChecksum)
+	err := downloader.DownloadAndUnzipIfMissing(
+		ZipURL,
+		zipPath,
+		downloadDir,
+		path.Join(downloadDir, "mag"),
+		ZipChecksum,
+	)
 	if err != nil {
 		return err
 	}
@@ -173,7 +179,13 @@ const (
 func parsePapersFromCSV(downloadDir string) error {
 	papersFeaturesCSVPath := path.Join(downloadDir, papersEmbeddingsCSVFile)
 	papersFeaturesPath := path.Join(downloadDir, papersEmbeddingsFile)
-	t, err := parseNumbersFromCSV(papersFeaturesCSVPath, papersFeaturesPath, NumPapers, PaperEmbeddingsSize, parseFloat32)
+	t, err := parseNumbersFromCSV(
+		papersFeaturesCSVPath,
+		papersFeaturesPath,
+		NumPapers,
+		PaperEmbeddingsSize,
+		parseFloat32,
+	)
 	if err != nil {
 		return err
 	}
@@ -265,7 +277,11 @@ func parseInt32(str string) (int32, error) {
 }
 
 // parseNumbersFromCSV returns the numbers in a CSV file as a tensor.
-func parseNumbersFromCSV[E dtypes.NumberNotComplex](inputFilePath, outputFilePath string, numRows, numCols int, parseNumberFn func(string) (E, error)) (*tensors.Tensor, error) {
+func parseNumbersFromCSV[E dtypes.NumberNotComplex](
+	inputFilePath, outputFilePath string,
+	numRows, numCols int,
+	parseNumberFn func(string) (E, error),
+) (*tensors.Tensor, error) {
 	var tensorOut *tensors.Tensor
 	var err error
 	if outputFilePath != "" && fsutil.MustFileExists(outputFilePath) {
@@ -274,17 +290,27 @@ func parseNumbersFromCSV[E dtypes.NumberNotComplex](inputFilePath, outputFilePat
 			// Read from pre-saved tensor.
 			return tensorOut, nil
 		}
-		return nil, errors.WithMessagef(err, "failed to load output file %q, you many need to remove so it can be regenerated", outputFilePath)
+		return nil, errors.WithMessagef(
+			err,
+			"failed to load output file %q, you many need to remove so it can be regenerated",
+			outputFilePath,
+		)
 	}
 	fmt.Printf("Parsing %d rows from %q\n", numRows, inputFilePath)
 
 	tensorOut = tensors.FromShape(shapes.Make(dtypes.FromGenericsType[E](), numRows, numCols))
 	rowNum, rawDataPos := 0, 0
-	tensorOut.MutableFlatData(func(flatAny any) {
+	tensorOut.MustMutableFlatData(func(flatAny any) {
 		rawData := flatAny.([]E)
 		err = downloader.ParseGzipCSVFile(inputFilePath, func(row []string) error {
 			if len(row) != numCols {
-				return errors.Errorf("line %d has %d columns, we expected %q rows to have %d columns", rowNum+1, len(row), inputFilePath, numCols)
+				return errors.Errorf(
+					"line %d has %d columns, we expected %q rows to have %d columns",
+					rowNum+1,
+					len(row),
+					inputFilePath,
+					numCols,
+				)
 			}
 			if rowNum >= numRows {
 				// Keep counting rows, but drop result.
@@ -307,13 +333,23 @@ func parseNumbersFromCSV[E dtypes.NumberNotComplex](inputFilePath, outputFilePat
 		return nil, err
 	}
 	if rowNum != numRows {
-		return nil, errors.Errorf("found %d rows in %1q, was expecting %d -- did file change ?", rowNum, inputFilePath, numRows)
+		return nil, errors.Errorf(
+			"found %d rows in %1q, was expecting %d -- did file change ?",
+			rowNum,
+			inputFilePath,
+			numRows,
+		)
 	}
 	if outputFilePath != "" {
 		fmt.Printf("> saving results to %q for faster access\n", outputFilePath)
 		err = tensorOut.Save(outputFilePath)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "parsed %q, but failed to save it to %q", inputFilePath, outputFilePath)
+			return nil, errors.WithMessagef(
+				err,
+				"parsed %q, but failed to save it to %q",
+				inputFilePath,
+				outputFilePath,
+			)
 		}
 	}
 	return tensorOut, nil
@@ -357,7 +393,12 @@ func allEdgesCount(downloadDir string) error {
 				}
 			}
 			if err != nil {
-				return errors.WithMessagef(err, "while counting elements for edges %s[column %d]", edgesFiles[idxInput], column)
+				return errors.WithMessagef(
+					err,
+					"while counting elements for edges %s[column %d]",
+					edgesFiles[idxInput],
+					column,
+				)
 			}
 			*(store[idxTensor]) = counts
 			idxTensor++
@@ -377,16 +418,22 @@ func edgesCount(input *tensors.Tensor, column, numElements int) (output *tensors
 		return nil, errors.Errorf("invalid number of elements %d", numElements)
 	}
 
-	input.ConstFlatData(func(flatAny any) {
+	input.MustConstFlatData(func(flatAny any) {
 		inputData := flatAny.([]int32)
 		output = tensors.FromScalarAndDimensions(int32(0), numElements, 1)
-		output.MutableFlatData(func(flatAny any) {
+		output.MustMutableFlatData(func(flatAny any) {
 			outputData := flatAny.([]int32)
 			numRows := input.Shape().Dimensions[0]
 			for row := 0; row < numRows; row++ {
 				idx := inputData[2*row+column]
 				if idx < 0 || int(idx) > numElements {
-					err = errors.Errorf("In row=%d, col=%d, got index %d > numElements %d", row, column, idx, numElements)
+					err = errors.Errorf(
+						"In row=%d, col=%d, got index %d > numElements %d",
+						row,
+						column,
+						idx,
+						numElements,
+					)
 					return
 				}
 				outputData[idx]++

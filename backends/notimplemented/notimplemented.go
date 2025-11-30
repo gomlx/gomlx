@@ -80,7 +80,11 @@ func (b *Backend) BufferToFlatData(buffer backends.Buffer, flat any) error {
 }
 
 // BufferFromFlatData returns NotImplementedError.
-func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) (backends.Buffer, error) {
+func (b *Backend) BufferFromFlatData(
+	deviceNum backends.DeviceNum,
+	flat any,
+	shape shapes.Shape,
+) (backends.Buffer, error) {
 	return nil, errors.Wrapf(NotImplementedError, "in BufferFromFlatData()")
 }
 
@@ -90,7 +94,10 @@ func (b *Backend) HasSharedBuffers() bool {
 }
 
 // NewSharedBuffer panics as shared buffers are not supported.
-func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer, flat any, err error) {
+func (b *Backend) NewSharedBuffer(
+	deviceNum backends.DeviceNum,
+	shape shapes.Shape,
+) (buffer backends.Buffer, flat any, err error) {
 	return nil, nil, errors.Wrapf(NotImplementedError, "in NewSharedBuffer()")
 }
 
@@ -100,7 +107,10 @@ func (b *Backend) BufferData(buffer backends.Buffer) (flat any, err error) {
 }
 
 // BufferCopyToDevice returns NotImplementedError.
-func (b *Backend) BufferCopyToDevice(source backends.Buffer, deviceNum backends.DeviceNum) (bufferOnDevice backends.Buffer, err error) {
+func (b *Backend) BufferCopyToDevice(
+	source backends.Buffer,
+	deviceNum backends.DeviceNum,
+) (bufferOnDevice backends.Buffer, err error) {
 	return nil, errors.Wrapf(NotImplementedError, "in BufferCopyToDevice()")
 }
 
@@ -140,7 +150,24 @@ func (b Builder) Name() string {
 	return "Dummy \"not implemented\" backend, please override this method"
 }
 
-func (b Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
+func (b Builder) DistributedSPMD(numDevices int) error {
+	return errors.Wrapf(NotImplementedError, "in DistributedSPMD()")
+}
+
+func (b Builder) DistributedAutoSharding(meshes ...backends.Mesh) error {
+	return errors.Wrapf(NotImplementedError, "in DistributedAutoSharding()")
+}
+
+// DeviceAssignment returns nil if it's an assignment to device #0.
+// Otherwise, it returns a non-implemented error.
+func (b Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
+	if len(devices) != 1 && devices[0] != backends.DeviceNum(0) {
+		return errors.Wrapf(NotImplementedError, "in DeviceAssignment()")
+	}
+	return nil
+}
+
+func (b Builder) Compile(_ []backends.Op, _ []*backends.ShardingSpec) (backends.Executable, error) {
 	return nil, errors.Wrapf(NotImplementedError, "in Compile()")
 }
 
@@ -148,7 +175,7 @@ func (b Builder) OpShape(op backends.Op) (shapes.Shape, error) {
 	return shapes.Invalid(), errors.Wrapf(NotImplementedError, "in OpShape()")
 }
 
-func (b Builder) Parameter(name string, shape shapes.Shape) (backends.Op, error) {
+func (b Builder) Parameter(name string, shape shapes.Shape, spec *backends.ShardingSpec) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeParameter)
 }
 
@@ -160,22 +187,31 @@ func (b Builder) Identity(x backends.Op) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeIdentity)
 }
 
-func (b Builder) ReduceWindow(x backends.Op, reductionType backends.ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Op, error) {
+func (b Builder) ReduceWindow(x backends.Op, reductionType backends.ReduceOpType,
+	windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeReduceWindow)
 }
 
-func (b Builder) RngBitGenerator(state backends.Op, shape shapes.Shape) (newState, values backends.Op, err error) {
-	return nil, nil, b.baseErrFn(backends.OpTypeRngBitGenerator)
+func (b Builder) RNGBitGenerator(state backends.Op, shape shapes.Shape) (newState, values backends.Op, err error) {
+	return nil, nil, b.baseErrFn(backends.OpTypeRNGBitGenerator)
 }
 
-func (b Builder) BatchNormForInference(operand, scale, offset, mean, variance backends.Op, epsilon float32, axis int) (backends.Op, error) {
+func (b Builder) BatchNormForInference(operand, scale, offset, mean, variance backends.Op, epsilon float32, axis int) (
+	backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeBatchNormForInference)
 }
 
-func (b Builder) BatchNormForTraining(operand, scale, offset backends.Op, epsilon float32, axis int) (normalized, batchMean, batchVariance backends.Op, err error) {
+func (b Builder) BatchNormForTraining(operand, scale, offset backends.Op, epsilon float32, axis int) (
+	normalized, batchMean, batchVariance backends.Op, err error) {
 	return nil, nil, nil, b.baseErrFn(backends.OpTypeBatchNormForTraining)
 }
 
-func (b Builder) BatchNormGradient(operand, scale, mean, variance, gradOutput backends.Op, epsilon float32, axis int) (gradOperand, gradScale, gradOffset backends.Op, err error) {
+func (b Builder) BatchNormGradient(operand, scale, mean, variance, gradOutput backends.Op, epsilon float32, axis int) (
+	gradOperand, gradScale, gradOffset backends.Op, err error) {
 	return nil, nil, nil, b.baseErrFn(backends.OpTypeBatchNormGradient)
+}
+
+func (b Builder) AllReduce(inputs []backends.Op, reduceOp backends.ReduceOpType, replicaGroups [][]int) (
+	[]backends.Op, error) {
+	return nil, b.baseErrFn(backends.OpTypeAllReduce)
 }

@@ -252,7 +252,9 @@ func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 
 func (o *adam) UpdateGraphWithGradients(ctx *context.Context, grads []*Node, lossDType dtypes.DType) {
 	if len(grads) == 0 {
-		Panicf("Context.BuildTrainableVariablesGradientsGraph returned 0 gradients, are there any trainable variables ?")
+		Panicf(
+			"Context.BuildTrainableVariablesGradientsGraph returned 0 gradients, are there any trainable variables ?",
+		)
 	}
 	g := grads[0].Graph()
 
@@ -297,7 +299,19 @@ func (o *adam) UpdateGraphWithGradients(ctx *context.Context, grads []*Node, los
 	for v := range ctx.IterVariables() {
 		if v.Trainable && v.InUseByGraph(g) {
 			if varIdx < numTrainable {
-				o.applyAdamGraph(ctx, g, v, dtype, grads[varIdx], learningRate, beta1, debiasTermBeta1, beta2, debiasTermBeta2, epsilon)
+				o.applyAdamGraph(
+					ctx,
+					g,
+					v,
+					dtype,
+					grads[varIdx],
+					learningRate,
+					beta1,
+					debiasTermBeta1,
+					beta2,
+					debiasTermBeta2,
+					epsilon,
+				)
 			}
 			varIdx++
 		}
@@ -394,7 +408,11 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 //
 // If g is not nil, it creates the moments variables if they don't exist. Otherwise, it just tries to
 // fetch the presumably existing variables.
-func (o *adam) getMomentVariables(ctx *context.Context, trainable *context.Variable, dtype dtypes.DType) (m1, m2 *context.Variable) {
+func (o *adam) getMomentVariables(
+	ctx *context.Context,
+	trainable *context.Variable,
+	dtype dtypes.DType,
+) (m1, m2 *context.Variable) {
 	originalScope := trainable.Scope()
 	originalName := trainable.Name()
 	scopePath := fmt.Sprintf("%s%s%s", context.ScopeSeparator, o.config.scopeName, originalScope)
@@ -404,15 +422,21 @@ func (o *adam) getMomentVariables(ctx *context.Context, trainable *context.Varia
 	shape.DType = dtype
 	ctx = ctx.Checked(false) // It shouldn't matter if it's the first time or not creating the variable.
 	if !o.config.rmsProp {
-		m1 = ctx.InAbsPath(scopePath).WithInitializer(initializers.Zero).VariableWithShape(m1Name, shape).SetTrainable(false)
+		m1 = ctx.InAbsPath(scopePath).
+			WithInitializer(initializers.Zero).
+			VariableWithShape(m1Name, shape).
+			SetTrainable(false)
 	}
-	m2 = ctx.InAbsPath(scopePath).WithInitializer(initializers.Zero).VariableWithShape(m2Name, shape).SetTrainable(false)
+	m2 = ctx.InAbsPath(scopePath).
+		WithInitializer(initializers.Zero).
+		VariableWithShape(m2Name, shape).
+		SetTrainable(false)
 	return
 }
 
 // Clear all optimizer variables.
 // It implements optimizers.Interface.
-func (o *adam) Clear(ctx *context.Context) {
+func (o *adam) Clear(ctx *context.Context) error {
 	ctxAdam := ctx.In(o.config.scopeName)
-	ctxAdam.DeleteVariablesInScope()
+	return ctxAdam.DeleteVariablesInScope()
 }

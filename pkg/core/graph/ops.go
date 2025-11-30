@@ -7,6 +7,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/sets"
@@ -23,9 +24,10 @@ type PadAxis = backends.PadAxis
 
 // nodeInputsParameter holds the inputs used for the call to backends.Parameter.
 type nodeInputsParameter struct {
-	name   string
-	shape  shapes.Shape
-	handle ParameterHandle
+	name     string
+	shape    shapes.Shape
+	sharding *distributed.ShardingSpec
+	handle   ParameterHandle
 }
 
 // Type implements the interface NodeInputs.
@@ -53,7 +55,28 @@ func mustNoError[T any](v T, err error) T {
 // function that uses the parameter, or as the key in the map of the inputNodes when executing
 // the computation Graph (see Backend.RunWithMap).
 func Parameter(g *Graph, name string, shape shapes.Shape) (node *Node) {
+	return ShardedParameter(g, name, shape, nil)
+}
+
+// ShardedParameter works like Parameter but takes as an optional (it can be nil) argument the sharding
+// specification of how this input is going to be fed across devices.
+// This is used for distributed computations -- see Graph.SetAutoSharding.
+func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distributed.ShardingSpec) (node *Node) {
 	g.AssertBuilding()
+	if sharding != nil && g.distStrategy == distributed.None {
+		exceptions.Panicf(
+			"cannot set sharding spec for parameter %q in graph %q when distributed strategy is %q",
+			name, g.name, g.distStrategy,
+		)
+	}
+	if sharding != nil && slices.Index(g.deviceMeshes, sharding.Mesh) == -1 {
+		exceptions.Panicf(
+			"sharding spec for parameter %q in graph %q specifies mesh %q that was not registered with the "+
+				"Graph -- all meshes used in sharding specifications must be declared in the Graph upfront when "+
+				"configuring AutoSharding",
+			name, g.name, sharding.Mesh,
+		)
+	}
 	handle := ParameterHandle(len(g.parameters))
 	if name == "" {
 		name = fmt.Sprintf("parameter_#%d", handle)
@@ -62,11 +85,12 @@ func Parameter(g *Graph, name string, shape shapes.Shape) (node *Node) {
 		exceptions.Panicf("requested parameter with name %q for graph %q already exists", name, g.name)
 	}
 	nodeInputs := &nodeInputsParameter{
-		name:   name,
-		shape:  shape,
-		handle: handle,
+		name:     name,
+		shape:    shape,
+		sharding: sharding, // it can be nil.
+		handle:   handle,
 	}
-	result, err := g.builder.Parameter(nodeInputs.name, nodeInputs.shape)
+	result, err := g.builder.Parameter(nodeInputs.name, nodeInputs.shape, sharding.ToBackendsSpec())
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to create parameter %q", name))
 	}
@@ -102,8 +126,14 @@ func (ni *nodeInputsSplitNode) String() string {
 // Internal only: users should only need to handle nodes with one output, so any method that returns many outputs
 // must call splitNode before returning to the user.
 func splitNode(multiOutputNode *Node) (splitNodes []*Node) {
-	if multiOutputNode.NumOutputs() <= 1 {
-		exceptions.Panicf("splitNode expects as input a node with multiple-outputs, but node had only one output %d", multiOutputNode.NumOutputs())
+	if multiOutputNode.NumOutputs() == 1 {
+		// Identity: no need to split.
+		// This happens when an operation returns a slice of outputs, but the slice contains only one element.
+		return []*Node{multiOutputNode}
+	}
+	if multiOutputNode.NumOutputs() == 0 {
+		exceptions.Panicf("splitNode expects at least one node as input -- got %d outputs",
+			multiOutputNode.NumOutputs())
 	}
 	g := multiOutputNode.Graph()
 	g.AssertBuilding()
@@ -165,11 +195,16 @@ func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 		shape: t.Shape(),
 	}
 	if t.Size() < MinConstValueSizeToKeep {
-		nodeInputs.tensor = t.LocalClone()
+		var err error
+		nodeInputs.tensor, err = t.LocalClone()
+		if err != nil {
+			panic(errors.WithMessagef(err,
+				"ConstTensor failed to create a local clone of the tensor in the graph"))
+		}
 	}
 	var result backends.Op
 	var err error
-	t.ConstFlatData(func(flat any) {
+	t.MustConstFlatData(func(flat any) {
 		result, err = g.builder.Constant(flat, nodeInputs.shape.Dimensions...)
 	})
 	if err != nil {
@@ -323,7 +358,11 @@ func validateBuildingGraphFromInputs(inputs ...*Node) (g *Graph) {
 			panic(errors.WithMessagef(err, "invalid input[%d]", ii))
 		}
 		if n.NumOutputs() != 1 {
-			exceptions.Panicf("input[%d](%s) has multiple-outputs, it has to be split with selectOutput calls first", ii, n)
+			exceptions.Panicf(
+				"input[%d](%s) has multiple-outputs, it has to be split with selectOutput calls first",
+				ii,
+				n,
+			)
 		}
 		if g == nil {
 			g = n.Graph()
@@ -402,8 +441,12 @@ func BroadcastPrefix(x *Node, prefixDims ...int) *Node {
 func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (output *Node) {
 	_ = validateBuildingGraphFromInputs(x)
 	if x.Rank()+len(expandedAxes) != len(newDimensions) {
-		exceptions.Panicf("there must be exactly one expandedAxes (%v) for each new axis in newDimensions (%v) -- x.shape=%s",
-			expandedAxes, newDimensions, x.Shape())
+		exceptions.Panicf(
+			"there must be exactly one expandedAxes (%v) for each new axis in newDimensions (%v) -- x.shape=%s",
+			expandedAxes,
+			newDimensions,
+			x.Shape(),
+		)
 	}
 
 	// Verify that the values of expandedAxis and create a map of the expanded axis.
@@ -411,12 +454,22 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 	for ii, axis := range expandedAxes {
 		axis = adjustAxisToRank(axis, len(newDimensions))
 		if axis < 0 || axis >= len(newDimensions) {
-			exceptions.Panicf("expandedAxes (%v) defines a value out-of-range (%d-th value -> %d), they must be between 0 and len(newDimensions)=%d",
-				expandedAxes, ii, axis, len(newDimensions))
+			exceptions.Panicf(
+				"expandedAxes (%v) defines a value out-of-range (%d-th value -> %d), they must be between 0 and len(newDimensions)=%d",
+				expandedAxes,
+				ii,
+				axis,
+				len(newDimensions),
+			)
 		}
 		if expandedSet.Has(axis) {
-			exceptions.Panicf("expandedAxes (%v) repeats axis %d (expandedAxes[%d]), they must be all unique and between 0 and len(newDimensions)=%d",
-				expandedAxes, axis, ii, len(newDimensions))
+			exceptions.Panicf(
+				"expandedAxes (%v) repeats axis %d (expandedAxes[%d]), they must be all unique and between 0 and len(newDimensions)=%d",
+				expandedAxes,
+				axis,
+				ii,
+				len(newDimensions),
+			)
 		}
 		expandedSet.Insert(axis)
 	}
@@ -525,13 +578,21 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 	// Broadcasting of condition when it's a prefix to one of the operands:
 	if !condition.IsScalar() {
 		if condition.Rank() > outputShape.Rank() {
-			exceptions.Panicf("Where() requires the condition shape (%s) to be a prefix (or equal) to the output shape (%s), onTrue is %s and onFalse is %s",
-				condition.Shape(), outputShape, onTrue.Shape(), onFalse.Shape())
+			exceptions.Panicf(
+				"Where() requires the condition shape (%s) to be a prefix (or equal) to the output shape (%s), onTrue is %s and onFalse is %s",
+				condition.Shape(),
+				outputShape,
+				onTrue.Shape(),
+				onFalse.Shape(),
+			)
 		}
 		for axis, dim := range condition.Shape().Dimensions {
 			if outputShape.Dimensions[axis] != dim {
-				exceptions.Panicf("Where() requires the condition shape to be a prefix (or equal) to the output shape, but condition is %s and output shape is %s",
-					condition.Shape(), outputShape)
+				exceptions.Panicf(
+					"Where() requires the condition shape to be a prefix (or equal) to the output shape, but condition is %s and output shape is %s",
+					condition.Shape(),
+					outputShape,
+				)
 			}
 		}
 		if condition.Rank() != outputShape.Rank() {
@@ -569,8 +630,13 @@ func Reshape(x *Node, dimensions ...int) *Node {
 		tmpDim[missingIdx] = totalSize / newSize
 		newSize *= tmpDim[missingIdx]
 		if newSize != totalSize {
-			exceptions.Panicf("cannot find new dimension for axis %d that will make new dimensions %v match original the input size %d (dimensions %v)",
-				missingIdx, dimensions, totalSize, x.Shape().Dimensions)
+			exceptions.Panicf(
+				"cannot find new dimension for axis %d that will make new dimensions %v match original the input size %d (dimensions %v)",
+				missingIdx,
+				dimensions,
+				totalSize,
+				x.Shape().Dimensions,
+			)
 		}
 		dimensions = tmpDim
 	} else {
@@ -592,8 +658,13 @@ func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 			x.DType(), shape.DType)
 	}
 	if shape.Size() != x.Shape().Size() {
-		exceptions.Panicf("shapes (x.shape=%s, shape=%s) have different total sizes (from %d to %d), reshape not possible",
-			x.Shape(), shape, x.Shape().Size(), shape.Size())
+		exceptions.Panicf(
+			"shapes (x.shape=%s, shape=%s) have different total sizes (from %d to %d), reshape not possible",
+			x.Shape(),
+			shape,
+			x.Shape().Size(),
+			shape.Size(),
+		)
 	}
 	return backendReshape(x, shape.Dimensions...)
 }
@@ -681,7 +752,11 @@ func ExpandAxes(x *Node, newAxes ...int) *Node {
 	slices.Sort(adjustedNewAxes)
 	for ii := range adjustedNewAxes {
 		if ii > 0 && adjustedNewAxes[ii] == adjustedNewAxes[ii-1] {
-			exceptions.Panicf("ExpandedAxes(x, newAxes=%v...) got repeated new axis %d which doesn't make sense -- likely an error", newAxes, adjustedNewAxes[ii])
+			exceptions.Panicf(
+				"ExpandedAxes(x, newAxes=%v...) got repeated new axis %d which doesn't make sense -- likely an error",
+				newAxes,
+				adjustedNewAxes[ii],
+			)
 		}
 	}
 
@@ -1169,14 +1244,22 @@ func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 		}
 	}
 	if numSpacers > 1 {
-		exceptions.Panicf("Only one \"spacer\" range is allowed in Slice, but %d were given: axesSpec=%+v", numSpacers, axesSpec)
+		exceptions.Panicf(
+			"Only one \"spacer\" range is allowed in Slice, but %d were given: axesSpec=%+v",
+			numSpacers,
+			axesSpec,
+		)
 	}
 	if numSpacers == 1 {
 		// Replace spacer spec with as many copies as needed to fill the axesSpec to match the rank.
 		newAxesSpec := make([]SliceAxisSpec, 0, rank)
 		copies := rank - len(axesSpec) + numSpacers
 		if copies < 0 {
-			exceptions.Panicf("Slice was given %d ranges (not counting spacer), but x only has (rank) %d axes", len(axesSpec)-1, rank)
+			exceptions.Panicf(
+				"Slice was given %d ranges (not counting spacer), but x only has (rank) %d axes",
+				len(axesSpec)-1,
+				rank,
+			)
 		}
 		for _, spec := range axesSpec {
 			if !spec.IsSpacer {
@@ -1246,7 +1329,12 @@ func Split(x *Node, axis int, numSplits int) []*Node {
 	axis = AdjustAxisToOperandRank(x, axis)
 	dim := x.Shape().Dimensions[axis]
 	if dim%numSplits != 0 {
-		exceptions.Panicf("Split: x.Shape().Dimensions[%d] (=%d) must be divisible by numSplits (=%d)", axis, dim, numSplits)
+		exceptions.Panicf(
+			"Split: x.Shape().Dimensions[%d] (=%d) must be divisible by numSplits (=%d)",
+			axis,
+			dim,
+			numSplits,
+		)
 	}
 
 	// Trivial case of one split:
@@ -1303,9 +1391,15 @@ func Concatenate(operands []*Node, axis int) *Node {
 				continue
 			}
 			if baseShape.Dimensions[ii] != nodeDim {
-				exceptions.Panicf("Concatenate(axis=%d) operand #%d has incompatible shape (%s) with operand 0's shape (%s) "+
-					"-- except for axis %d, the dimensions on all other axes must match",
-					axis, ii+1, node.Shape(), baseShape, axis)
+				exceptions.Panicf(
+					"Concatenate(axis=%d) operand #%d has incompatible shape (%s) with operand 0's shape (%s) "+
+						"-- except for axis %d, the dimensions on all other axes must match",
+					axis,
+					ii+1,
+					node.Shape(),
+					baseShape,
+					axis,
+				)
 			}
 		}
 	}
@@ -1406,8 +1500,11 @@ func TransposeAllAxes(x *Node, permutations ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	rank := x.Rank()
 	if len(permutations) != rank {
-		exceptions.Panicf("in TransposeAllAxes(x, %v), there must be one permutations per dimension in x, but x rank %d",
-			permutations, rank)
+		exceptions.Panicf(
+			"in TransposeAllAxes(x, %v), there must be one permutations per dimension in x, but x rank %d",
+			permutations,
+			rank,
+		)
 	}
 	used := make([]bool, rank)
 	for ii, idx := range permutations {
@@ -1416,7 +1513,13 @@ func TransposeAllAxes(x *Node, permutations ...int) *Node {
 			permutations[ii] = idx
 		}
 		if idx >= rank || idx < 0 {
-			exceptions.Panicf("in TransposeAllAxes(x, %v), element %d id is %d which is out-of-limits for x rank %d", permutations, ii, idx, rank)
+			exceptions.Panicf(
+				"in TransposeAllAxes(x, %v), element %d id is %d which is out-of-limits for x rank %d",
+				permutations,
+				ii,
+				idx,
+				rank,
+			)
 		}
 		if used[idx] {
 			exceptions.Panicf("in TransposeAllAxes(x, %v), id %d appears more than once", permutations, idx)
@@ -1470,8 +1573,10 @@ func Einsum(equation string, lhs, rhs *Node) *Node {
 	// Parse equation.
 	inOutParts := strings.Split(equation, "->")
 	if len(inOutParts) != 2 {
-		exceptions.Panicf("Einsum(%q) missing or too many \"->\" separating inputNodes from outputs, there must be only one",
-			equation)
+		exceptions.Panicf(
+			"Einsum(%q) missing or too many \"->\" separating inputNodes from outputs, there must be only one",
+			equation,
+		)
 	}
 	outputDesc, err := newEinsumOperandDesc(inOutParts[1])
 	if err != nil {
@@ -1479,8 +1584,11 @@ func Einsum(equation string, lhs, rhs *Node) *Node {
 	}
 	equationInputs := strings.Split(inOutParts[0], ",")
 	if len(equationInputs) != 2 {
-		exceptions.Panicf("Einsum(%q) equation describes %d operands (separated by \",\"), but 2 operands (lhs and rhs) required",
-			equation, len(equationInputs))
+		exceptions.Panicf(
+			"Einsum(%q) equation describes %d operands (separated by \",\"), but 2 operands (lhs and rhs) required",
+			equation,
+			len(equationInputs),
+		)
 	}
 	operandsDesc := make([]einsumOperandDesc, 2)
 	for ii, str := range equationInputs {
@@ -1660,7 +1768,9 @@ func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *No
 			if lhsSeen.Has(lhsAxis) {
 				exceptions.Panicf(
 					"EinsumAxes %s axis for left-hand-side operand is duplicate -- each axis can only be contracted or batch once: %v",
-					name, pairs)
+					name,
+					pairs,
+				)
 			}
 			lhsSeen.Insert(lhsAxis)
 
@@ -1670,7 +1780,9 @@ func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *No
 			if rhsSeen.Has(rhsAxis) {
 				exceptions.Panicf(
 					"EinsumAxes %s axis for right-hand-side operand is duplicate -- each axis can only be contracted or batch once: %v",
-					name, pairs)
+					name,
+					pairs,
+				)
 			}
 			rhsSeen.Insert(rhsAxis)
 
@@ -1699,7 +1811,12 @@ func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *No
 // It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
-func DotGeneral(lhs *Node, lhsContractingAxes, lhsBatchAxes []int, rhs *Node, rhsContractingAxes, rhsBatchAxes []int) *Node {
+func DotGeneral(
+	lhs *Node,
+	lhsContractingAxes, lhsBatchAxes []int,
+	rhs *Node,
+	rhsContractingAxes, rhsBatchAxes []int,
+) *Node {
 	_ = validateBuildingGraphFromInputs(lhs, rhs)
 	lhsContractingAxes = adjustAxesToRank(lhs.Rank(), lhsContractingAxes, "lhsContractingAxes")
 	lhsBatchAxes = adjustAxesToRank(lhs.Rank(), lhsBatchAxes, "lhsBatchAxes")
@@ -1710,11 +1827,22 @@ func DotGeneral(lhs *Node, lhsContractingAxes, lhsBatchAxes []int, rhs *Node, rh
 
 // InternalBatchNormForTraining is a wrapper to the backend function.
 // Don't use this directly, instead use layers.BatchNormalization.
-func InternalBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsilon float32, axis int) (normalized, batchMean, batchVariance *Node) {
+func InternalBatchNormForTraining(
+	operand *Node,
+	scale *Node,
+	offset *Node,
+	epsilon float32,
+	axis int,
+) (normalized, batchMean, batchVariance *Node) {
 	_ = validateBuildingGraphFromInputs(operand, scale, offset)
 	dtype := operand.DType()
 	if scale.DType() != dtype || offset.DType() != dtype {
-		exceptions.Panicf("InternalBatchNormForTraining: operand (%s), scale (%s) and offset (%s) must all have the same DType", operand.Shape(), scale.Shape(), offset.Shape())
+		exceptions.Panicf(
+			"InternalBatchNormForTraining: operand (%s), scale (%s) and offset (%s) must all have the same DType",
+			operand.Shape(),
+			scale.Shape(),
+			offset.Shape(),
+		)
 	}
 	axis = adjustAxisToRank(axis, operand.Rank())
 	return backendBatchNormForTraining(operand, scale, offset, epsilon, axis)
@@ -1722,11 +1850,24 @@ func InternalBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsi
 
 // InternalBatchNormForInference is a wrapper to the backend function.
 // Don't use this directly, instead use layers.BatchNormalization.
-func InternalBatchNormForInference(operand *Node, scale *Node, offset *Node, mean *Node, variance *Node, epsilon float32, axis int) (node *Node) {
+func InternalBatchNormForInference(
+	operand *Node,
+	scale *Node,
+	offset *Node,
+	mean *Node,
+	variance *Node,
+	epsilon float32,
+	axis int,
+) (node *Node) {
 	_ = validateBuildingGraphFromInputs(operand, scale, offset, mean, variance)
 	dtype := operand.DType()
 	if scale.DType() != dtype || offset.DType() != dtype {
-		exceptions.Panicf("InternalBatchNormForInference: operand (%s), scale (%s) and offset (%s) must all have the same DType", operand.Shape(), scale.Shape(), offset.Shape())
+		exceptions.Panicf(
+			"InternalBatchNormForInference: operand (%s), scale (%s) and offset (%s) must all have the same DType",
+			operand.Shape(),
+			scale.Shape(),
+			offset.Shape(),
+		)
 	}
 	axis = adjustAxisToRank(axis, operand.Rank())
 	return backendBatchNormForInference(operand, scale, offset, mean, variance, epsilon, axis)
@@ -1734,12 +1875,25 @@ func InternalBatchNormForInference(operand *Node, scale *Node, offset *Node, mea
 
 // InternalBatchNormGradient is a wrapper to the backend function.
 // Don't use this directly, instead use layers.BatchNormalization.
-func InternalBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *Node, gradOutput *Node, epsilon float32, axis int) (gradOperand, gradScale, gradOffset *Node) {
+func InternalBatchNormGradient(
+	operand *Node,
+	scale *Node,
+	mean *Node,
+	variance *Node,
+	gradOutput *Node,
+	epsilon float32,
+	axis int,
+) (gradOperand, gradScale, gradOffset *Node) {
 	_ = validateBuildingGraphFromInputs(operand, scale, mean, variance)
 	dtype := operand.DType()
 	if scale.DType() != dtype || mean.DType() != dtype || variance.DType() != dtype {
-		exceptions.Panicf("InternalBatchNormForInference: operand (%s), scale (%s), mean (%s) and variance (%s) must all have the same DType",
-			operand.Shape(), scale.Shape(), mean.Shape(), variance.DType())
+		exceptions.Panicf(
+			"InternalBatchNormForInference: operand (%s), scale (%s), mean (%s) and variance (%s) must all have the same DType",
+			operand.Shape(),
+			scale.Shape(),
+			mean.Shape(),
+			variance.DType(),
+		)
 	}
 	axis = adjustAxisToRank(axis, operand.Rank())
 	return backendBatchNormGradient(operand, scale, mean, variance, gradOutput, epsilon, axis)

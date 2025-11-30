@@ -38,7 +38,7 @@ const paramWithReplacement = "mag_with_replacement"
 
 func createDefaultContext() *context.Context {
 	ctx := context.New()
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		"checkpoint":         "",
 		"num_checkpoints":    3,

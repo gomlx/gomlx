@@ -335,6 +335,8 @@ func (b Builder) Floor(x backends.Op) (backends.Op, error) {
 //     after scattering its values according to start_index_map) by the user. This allows for some optimizations
 //     in some platforms.
 //
+// Out-of-bound (and negative) indices <i> are adjusted with max(min(<i>, axisDimension-1), 0), meaning they
+// are taken from the border of the axes.
 // TODO: Add batch support: operandBatchingAxes and startIndicesBatchingAxes.
 func (b Builder) Gather(operand backends.Op, startIndices backends.Op, indexVectorAxis int, offsetOutputAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeGather)
@@ -608,6 +610,7 @@ func (b Builder) Reverse(x backends.Op, axes ...int) (backends.Op, error) {
 }
 
 // Round returns the Op that represents the output of the corresponding operation.
+// This operation rounds to the nearest even.
 func (b Builder) Round(x backends.Op) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeRound)
 }

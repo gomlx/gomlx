@@ -19,6 +19,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 )
 
 // FromNpyFile reads a .npy file and returns a tensors.Tensor.
@@ -96,7 +97,7 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 
 	// Create the tensor and read data into it.
 	tensor := tensors.FromShape(shape)
-	tensor.MutableBytes(func(data []byte) {
+	accessErr := tensor.MutableBytes(func(data []byte) {
 		if !fortranOrder || shape.Rank() <= 1 {
 			// Row-major (C-Order) order used by GoMLX: we just copy over the data.
 			_, err = io.ReadFull(r, data)
@@ -138,8 +139,14 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 			}
 		}
 	})
+	if accessErr != nil {
+		return nil, accessErr
+	}
 	if err != nil {
-		tensor.FinalizeAll()
+		err2 := tensor.FinalizeAll()
+		if err2 != nil {
+			klog.Errorf("Failed to finalize tensor while handling error: %+v", err2)
+		}
 		return nil, err
 	}
 
@@ -149,7 +156,10 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 		// Need to byte swap for big-endian data if the target is little-endian.
 		// This is a complex topic and depends on the specific dtype.
 		// Not supported yet.
-		return nil, errors.Errorf("big-endian .npy files ('%s') are not fully supported for all dtypes yet -- open a GoMLX issue if you need support for this", dtypeStr)
+		return nil, errors.Errorf(
+			"big-endian .npy files ('%s') are not fully supported for all dtypes yet -- open a GoMLX issue if you need support for this",
+			dtypeStr,
+		)
 	}
 	return tensor, nil
 }
@@ -348,7 +358,11 @@ func FromNpzReader(r io.ReaderAt, size int64) (map[string]*tensors.Tensor, error
 		// For extra safety.
 		cleanPath := path.Clean(f.Name)
 		if path.IsAbs(cleanPath) || strings.HasPrefix(cleanPath, "..") {
-			return nil, errors.Errorf("invalid (malicious?) path in .npz archive: %q (normalized to %q)", f.Name, cleanPath)
+			return nil, errors.Errorf(
+				"invalid (malicious?) path in .npz archive: %q (normalized to %q)",
+				f.Name,
+				cleanPath,
+			)
 		}
 
 		if !strings.HasSuffix(f.Name, ".npy") {
@@ -442,13 +456,17 @@ func ToNpyWriter(tensor *tensors.Tensor, w io.Writer) error {
 	}
 
 	// Write tensor data.
-	tensor.ConstBytes(func(data []byte) {
-		_, err = w.Write(data)
-		if err != nil {
-			err = errors.Wrapf(err, "failed to write tensor data")
+	var writeErr error
+	err = tensor.ConstBytes(func(data []byte) {
+		_, writeErr = w.Write(data)
+		if writeErr != nil {
+			writeErr = errors.Wrapf(err, "failed to write tensor data")
 		}
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	return writeErr
 }
 
 // gomlxDTypeToNpy converts a dtypes.DType to a NumPy dtype string.

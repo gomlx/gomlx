@@ -41,7 +41,7 @@ func TestRepeatedClients(t *testing.T) {
 		builder := backend.Builder(fmt.Sprintf("builder_#%d", ii))
 		var exec backends.Executable
 		{
-			x, err := builder.Parameter("x", shapes.Make(dtypes.Float64, 3))
+			x, err := builder.Parameter("x", shapes.Make(dtypes.Float64, 3), nil)
 			require.NoError(t, err)
 			for range rand.Intn(10) {
 				x, err = builder.Add(x, x)
@@ -49,12 +49,12 @@ func TestRepeatedClients(t *testing.T) {
 			}
 			x2, err := builder.Mul(x, x)
 			require.NoError(t, err)
-			exec, err = builder.Compile(x, x2)
+			exec, err = builder.Compile([]backends.Op{x, x2}, nil)
 			require.NoError(t, err)
 
 			bIn, err := backend.BufferFromFlatData(0, []float64{7, 2, 1}, shapes.Make(dtypes.Float64, 3))
 			require.NoError(t, err)
-			bOuts, err := exec.Execute([]backends.Buffer{bIn}, []bool{true})
+			bOuts, err := exec.Execute([]backends.Buffer{bIn}, []bool{true}, 0)
 			require.NoError(t, err)
 			out0, out1 := make([]float64, 3), make([]float64, 3)
 			err = backend.BufferToFlatData(bOuts[0], out0)

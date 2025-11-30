@@ -67,6 +67,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Gradient with respect to lhs:
 	gradFn := func(thisInput *Node, thisBatchAxes, thisContractingAxes, thisCrossAxes []int, thisCrossesFirst bool,
 		otherInput *Node, otherBatchAxes, otherContractingAxes, otherCrossAxes []int) *Node {
+		_ = thisInput
 		// Axes counts:
 		numBatchAxes := len(thisBatchAxes)             // == len(otherBatchAxes)
 		numContractionAxes := len(thisContractingAxes) // == len(otherContractingAxes)
@@ -87,15 +88,9 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 		otherRank := otherProjected.Rank()
 		{
 			permutations := make([]int, 0, otherRank)
-			for _, axis := range otherBatchAxes {
-				permutations = append(permutations, axis)
-			}
-			for _, axis := range otherCrossAxes {
-				permutations = append(permutations, axis)
-			}
-			for _, axis := range otherContractingAxes {
-				permutations = append(permutations, axis)
-			}
+			permutations = append(permutations, otherBatchAxes...)
+			permutations = append(permutations, otherCrossAxes...)
+			permutations = append(permutations, otherContractingAxes...)
 			changed := false
 			for ii, axis := range permutations {
 				if ii != axis {

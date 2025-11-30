@@ -142,8 +142,10 @@ func TestDataset(t *testing.T) {
 		graphSample, remaining := MapInputsToStates[*tensors.Tensor](strategy, inputs)
 		require.Empty(t, remaining)
 		if strategy.KeepDegrees == true {
-			seeds := tensors.CopyFlatData[int32](graphSample["Seeds"].Value)
-			degrees := tensors.CopyFlatData[int32](graphSample[NameForNodeDependentDegree("Seeds", "authors")].Value)
+			seeds := tensors.MustCopyFlatData[int32](graphSample["Seeds"].Value)
+			degrees := tensors.MustCopyFlatData[int32](
+				graphSample[NameForNodeDependentDegree("Seeds", "authors")].Value,
+			)
 			for ii, paper := range seeds {
 				var want int32
 				switch paper {
@@ -163,20 +165,36 @@ func TestDataset(t *testing.T) {
 			}
 
 			// Test degrees of identity.
-			degrees = tensors.CopyFlatData[int32](graphSample[NameForNodeDependentDegree("Seeds", "SubSeeds")].Value)
-			seedsMask := tensors.CopyFlatData[bool](graphSample["Seeds"].Mask)
+			degrees = tensors.MustCopyFlatData[int32](
+				graphSample[NameForNodeDependentDegree("Seeds", "SubSeeds")].Value,
+			)
+			seedsMask := tensors.MustCopyFlatData[bool](graphSample["Seeds"].Mask)
 			for ii, paperMask := range seedsMask {
 				if !paperMask {
 					continue
 				}
-				require.Equal(t, int32(1), degrees[ii], "Got degree %d for paper %d, wanted %d", degrees[ii], seeds[ii], 1)
+				require.Equal(
+					t,
+					int32(1),
+					degrees[ii],
+					"Got degree %d for paper %d, wanted %d",
+					degrees[ii],
+					seeds[ii],
+					1,
+				)
 			}
 		}
 		for name, rule := range strategy.Rules {
 			require.Containsf(t, graphSample, name, "Missing input for rule %q", name)
 			value, mask := graphSample[name].Value, graphSample[name].Mask
-			require.True(t, value.Shape().Equal(rule.Shape), "Mismatch of shapes for value of rule %q: value.Shape=%s, rule.Shape=%s", name,
-				value.Shape(), rule.Shape)
+			require.True(
+				t,
+				value.Shape().Equal(rule.Shape),
+				"Mismatch of shapes for value of rule %q: value.Shape=%s, rule.Shape=%s",
+				name,
+				value.Shape(),
+				rule.Shape,
+			)
 			require.NoErrorf(t, mask.Shape().Check(dtypes.Bool, rule.Shape.Dimensions...),
 				"Mismatch of shapes for mask of rule %q", name)
 			if rule.SourceRule != nil && strategy.KeepDegrees {
@@ -184,8 +202,14 @@ func TestDataset(t *testing.T) {
 				degrees := graphSample[degreeName].Value
 				wantShape := value.Shape().Clone()
 				wantShape.Dimensions[wantShape.Rank()-1] = 1
-				require.Truef(t, degrees.Shape().Equal(wantShape), "Mismatch degree shapes for %q: degree shape is %s, wanted %s",
-					degreeName, degrees.Shape(), wantShape)
+				require.Truef(
+					t,
+					degrees.Shape().Equal(wantShape),
+					"Mismatch degree shapes for %q: degree shape is %s, wanted %s",
+					degreeName,
+					degrees.Shape(),
+					wantShape,
+				)
 			}
 		}
 		return graphSample
@@ -260,14 +284,29 @@ func TestSamplingRandomness(t *testing.T) {
 			graphSample, remaining := MapInputsToStates[*tensors.Tensor](strategy, inputs)
 			require.Empty(t, remaining)
 
-			require.NoErrorf(t, graphSample["seeds"].Value.Shape().CheckDims(1), "while testing dataset %q", dsNames[dsIdx])
-			sampledPaper := tensors.CopyFlatData[int32](graphSample["seeds"].Value)[0]
+			require.NoErrorf(
+				t,
+				graphSample["seeds"].Value.Shape().CheckDims(1),
+				"while testing dataset %q",
+				dsNames[dsIdx],
+			)
+			sampledPaper := tensors.MustCopyFlatData[int32](graphSample["seeds"].Value)[0]
 			papersCounts[sampledPaper]++
 
-			require.NoErrorf(t, graphSample["authors"].Value.Shape().CheckDims(1, 2), "while testing dataset %q", dsNames[dsIdx])
-			require.NoErrorf(t, graphSample["authors"].Mask.Shape().CheckDims(1, 2), "while testing dataset %q", dsNames[dsIdx])
-			authors := tensors.CopyFlatData[int32](graphSample["authors"].Value)
-			authorsMask := tensors.CopyFlatData[bool](graphSample["authors"].Mask)
+			require.NoErrorf(
+				t,
+				graphSample["authors"].Value.Shape().CheckDims(1, 2),
+				"while testing dataset %q",
+				dsNames[dsIdx],
+			)
+			require.NoErrorf(
+				t,
+				graphSample["authors"].Mask.Shape().CheckDims(1, 2),
+				"while testing dataset %q",
+				dsNames[dsIdx],
+			)
+			authors := tensors.MustCopyFlatData[int32](graphSample["authors"].Value)
+			authorsMask := tensors.MustCopyFlatData[bool](graphSample["authors"].Mask)
 			for ii, author := range authors {
 				require.True(t, authorsMask[ii])
 				authorsPerPapersCounts[sampledPaper][author]++
@@ -277,7 +316,13 @@ func TestSamplingRandomness(t *testing.T) {
 		fmt.Printf("ds=%s, papersCounts=%v\n", dsNames[dsIdx], papersCounts)
 		assert.Equalf(t, numSamples, papersCounts[1]+papersCounts[2], "while testing dataset %q", dsNames[dsIdx])
 		if dsIdx == 0 {
-			require.Lessf(t, diff(papersCounts[1], papersCounts[2]) /* 2% */, 10, "while testing dataset %q", dsNames[dsIdx])
+			require.Lessf(
+				t,
+				diff(papersCounts[1], papersCounts[2]), /* 2% */
+				10,
+				"while testing dataset %q",
+				dsNames[dsIdx],
+			)
 		} else {
 			require.Lessf(t, diff(papersCounts[1], papersCounts[2]) /* 10% */, 500, "while testing dataset %q", dsNames[dsIdx])
 		}
@@ -287,7 +332,13 @@ func TestSamplingRandomness(t *testing.T) {
 			for author := paper + 1; author < (paper+1)*2; author++ {
 				// author loop starts one after the first author for the paper, so we can compare
 				// the count of the author with the previous one. They should be similar.
-				require.Lessf(t, diff(authorsCounts[author], authorsCounts[author-1]), 200, "while testing dataset %q", dsNames[dsIdx])
+				require.Lessf(
+					t,
+					diff(authorsCounts[author], authorsCounts[author-1]),
+					200,
+					"while testing dataset %q",
+					dsNames[dsIdx],
+				)
 			}
 		}
 	}

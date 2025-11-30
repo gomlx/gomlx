@@ -188,7 +188,10 @@ func NewTrainer(backend backends.Backend, ctx *context.Context,
 
 	// Delete variables that should forcefully be reinitialized every time the model is retrained.
 	optScope := ctx.In(optimizers.Scope).Scope()
-	ctx.DeleteVariable(optScope, optimizers.ParamLearningRate)
+	err := ctx.DeleteVariable(optScope, optimizers.ParamLearningRate)
+	if err != nil {
+		panic(err)
+	}
 
 	// Create a context executor for TrainStep. Automatically include batch loss and moving average loss metrics.
 	numMetrics := len(trainMetrics) + 3
@@ -211,10 +214,21 @@ func NewTrainer(backend backends.Backend, ctx *context.Context,
 		}
 		return loss
 	}
-	lossAndMetrics = append(lossAndMetrics, metrics.NewBaseMetric("Batch Loss+Regularization", "loss+", metrics.LossMetricType, batchLossFn, nil))
-	lossAndMetrics = append(lossAndMetrics,
-		metrics.NewExponentialMovingAverageMetric("Moving Average Loss+Regularization", "~loss+", metrics.LossMetricType,
-			batchLossFn, nil, 0.01))
+	lossAndMetrics = append(
+		lossAndMetrics,
+		metrics.NewBaseMetric("Batch Loss+Regularization", "loss+", metrics.LossMetricType, batchLossFn, nil),
+	)
+	lossAndMetrics = append(
+		lossAndMetrics,
+		metrics.NewExponentialMovingAverageMetric(
+			"Moving Average Loss+Regularization",
+			"~loss+",
+			metrics.LossMetricType,
+			batchLossFn,
+			nil,
+			0.01,
+		),
+	)
 	if r.lossFn != nil {
 		lossAndMetrics = append(lossAndMetrics,
 			metrics.NewExponentialMovingAverageMetric("Moving Average Loss", "~loss", metrics.LossMetricType,
@@ -227,7 +241,10 @@ func NewTrainer(backend backends.Backend, ctx *context.Context,
 	// Create a context executor for EvalStep. Automatically include the mean loss metric as the first eval metric.
 	numMetrics = len(evalMetrics) + 2
 	lossAndMetrics = make([]metrics.Interface, 0, numMetrics)
-	lossAndMetrics = append(lossAndMetrics, metrics.NewMeanMetric("Mean Loss+Regularization", "#loss+", metrics.LossMetricType, batchLossFn, nil))
+	lossAndMetrics = append(
+		lossAndMetrics,
+		metrics.NewMeanMetric("Mean Loss+Regularization", "#loss+", metrics.LossMetricType, batchLossFn, nil),
+	)
 	if r.lossFn != nil {
 		lossAndMetrics = append(lossAndMetrics, metrics.NewMeanMetric("Mean Loss", "#loss", metrics.LossMetricType,
 			lossNoRegularizationFn, nil))
@@ -254,18 +271,6 @@ func (r *Trainer) enumerateExecs(fn func(exec *context.Exec)) {
 	for _, exec := range r.accumulateGradientsAndApplyExecMap {
 		fn(exec)
 	}
-}
-
-// InDevice sets the device num to be used when executing graphs.
-// TODO: Add support for training across multiple devices -- maybe a different Trainer for that, in principle should be simple.
-// This should be called before any invocations of TrainStep.
-// It returns a reference to itself so calls can be cascaded.
-func (r *Trainer) InDevice(deviceNum backends.DeviceNum) *Trainer {
-	r.deviceNum = deviceNum
-	r.enumerateExecs(func(exec *context.Exec) {
-		exec.InDevice(deviceNum)
-	})
-	return r
 }
 
 // Context returns the current Context. See SetContext to change it.
@@ -364,7 +369,9 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 	// Store total loss as a variable, so it can be used by metrics.
 	loss := GetLosses(ctx, g)
 	if loss == nil {
-		Panicf("no loss function defined (or it returned nil), and no loss set with AddLoss(), there is nothing to optimize!?")
+		Panicf(
+			"no loss function defined (or it returned nil), and no loss set with AddLoss(), there is nothing to optimize!?",
+		)
 		panic(nil) // Disable linter error.
 	}
 
@@ -387,7 +394,11 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 // plus do standard checks on inputs and labels.
 func (r *Trainer) callGraphFn(
 	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node),
-	graphType GraphType, execMap map[any]*context.Exec, spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
+	graphType GraphType,
+	execMap map[any]*context.Exec,
+	spec any,
+	inputs, labels []*tensors.Tensor,
+) (metrics []*tensors.Tensor) {
 	if len(inputs) == 0 {
 		Panicf("there are no inputs, at least one is required")
 	}
@@ -544,6 +555,8 @@ func (r *Trainer) resetEvalMetrics() {
 // has to be finite (yield io.EOF at the end). The function will reset the dataset
 // at the start.
 //
+// It panics on errors.
+//
 // Note: inputs and labels yielded by the dataset are immediately finalized (freed) after use.
 func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 	ds.Reset()
@@ -571,7 +584,7 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 		count++
 		// Early free (not wait for the GC) of the results of previous batch.
 		for _, t := range lossAndMetrics {
-			t.FinalizeAll()
+			t.MustFinalizeAll()
 		}
 
 		lossAndMetrics = r.EvalStep(spec, inputs, labels)
@@ -584,10 +597,10 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 		// Free inputs and labels after usage.
 		if finalizeInputs {
 			for _, input := range inputs {
-				input.FinalizeAll()
+				input.MustFinalizeAll()
 			}
 			for _, label := range labels {
-				label.FinalizeAll()
+				label.MustFinalizeAll()
 			}
 		}
 	}
@@ -605,7 +618,10 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 	// Free lossAndMetrics on the device, it will be consumed presumably only locally.
 	for _, metric := range lossAndMetrics {
 		metric.MaterializeLocal()
-		metric.InvalidateOnDevice()
+		err := metric.InvalidateOnDevice()
+		if err != nil {
+			panic(err)
+		}
 	}
 	return lossAndMetrics
 }

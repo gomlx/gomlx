@@ -107,7 +107,7 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeReduceWindow:          true,
 		backends.OpTypeReshape:               true,
 		backends.OpTypeReverse:               true,
-		backends.OpTypeRngBitGenerator:       true,
+		backends.OpTypeRNGBitGenerator:       true,
 		backends.OpTypeScatterSum:            true,
 		backends.OpTypeScatterMax:            true,
 		backends.OpTypeScatterMin:            true,
@@ -119,6 +119,9 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeSlice:                 true,
 		backends.OpTypeTranspose:             true,
 		backends.OpTypeWhere:                 true,
+
+		// Collective (distributed across devices) operations:
+		backends.OpTypeAllReduce: true,
 	},
 
 	DTypes: map[dtypes.DType]bool{

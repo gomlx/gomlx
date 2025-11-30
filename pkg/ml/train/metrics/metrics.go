@@ -177,9 +177,19 @@ type MeanMetric struct {
 // If you want all batches to count the same, sed WithDynamicBatch(false).
 //
 // `prettyPrintFn` can be left as nil, and a default will be used.
-func NewMeanMetric(name, shortName, metricType string, metricFn BaseMetricGraph, prettyPrintFn PrettyPrintFn) *MeanMetric {
+func NewMeanMetric(
+	name, shortName, metricType string,
+	metricFn BaseMetricGraph,
+	prettyPrintFn PrettyPrintFn,
+) *MeanMetric {
 	return &MeanMetric{
-		baseMetric:   baseMetric{name: name, shortName: shortName, metricType: metricType, metricFn: metricFn, pPrintFn: prettyPrintFn},
+		baseMetric: baseMetric{
+			name:       name,
+			shortName:  shortName,
+			metricType: metricType,
+			metricFn:   metricFn,
+			pPrintFn:   prettyPrintFn,
+		},
 		dynamicBatch: true,
 	}
 }
@@ -271,10 +281,10 @@ func (m *MeanMetric) Reset(ctx *context.Context) {
 		// Assume this was called before the graph was first built, so there is nothing to reset yet.
 		return
 	}
-	totalVar.SetValue(tensors.FromAnyValue(shapes.CastAsDType(0, totalVar.Value().DType())))
+	totalVar.MustSetValue(tensors.FromAnyValue(shapes.CastAsDType(0, totalVar.MustValue().DType())))
 	weightVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "weight")
 	if weightVar != nil {
-		weightVar.SetValue(tensors.FromAnyValue(shapes.CastAsDType(0, weightVar.Value().DType())))
+		weightVar.MustSetValue(tensors.FromAnyValue(shapes.CastAsDType(0, weightVar.MustValue().DType())))
 	} else {
 		Panicf("can't find variable \"weight\" in scope %q", ctx.Scope())
 	}
@@ -297,7 +307,12 @@ type movingAverageMetric struct {
 //
 // This doesn't have a set prior, it will start being a normal average until there are enough terms, and it becomes
 // an exponential moving average.
-func NewExponentialMovingAverageMetric(name, shortName, metricType string, metricFn BaseMetricGraph, pPrintFn PrettyPrintFn, newExampleWeight float64) Interface {
+func NewExponentialMovingAverageMetric(
+	name, shortName, metricType string,
+	metricFn BaseMetricGraph,
+	pPrintFn PrettyPrintFn,
+	newExampleWeight float64,
+) Interface {
 	return &movingAverageMetric{MeanMetric: MeanMetric{baseMetric: baseMetric{
 		name: name, shortName: shortName, metricType: metricType,
 		metricFn: metricFn, pPrintFn: pPrintFn}}, newExampleWeight: newExampleWeight}
@@ -334,7 +349,10 @@ func (m *movingAverageMetric) UpdateGraph(ctx *context.Context, labels, predicti
 	countVar.SetValueGraph(count)
 
 	weight := Max(Const(g, shapes.CastAsDType(m.newExampleWeight, dtype)), Reciprocal(count))
-	mean = Add(Mul(mean, OneMinus(weight)), Mul(result, weight)) // total are the values multiplied by weights, and then summed.
+	mean = Add(
+		Mul(mean, OneMinus(weight)),
+		Mul(result, weight),
+	) // total are the values multiplied by weights, and then summed.
 	meanVar.SetValueGraph(mean)
 
 	return mean
@@ -375,7 +393,14 @@ func NewMeanBinaryAccuracy(name, shortName string) *MeanMetric {
 // NewMovingAverageBinaryAccuracy returns a new binary accuracy metric with the given names.
 // A typical value of newExampleWeight is 0.01, the smaller the value, the slower the moving average moves.
 func NewMovingAverageBinaryAccuracy(name, shortName string, newExampleWeight float64) Interface {
-	return NewExponentialMovingAverageMetric(name, shortName, AccuracyMetricType, BinaryAccuracyGraph, accuracyPPrint, newExampleWeight)
+	return NewExponentialMovingAverageMetric(
+		name,
+		shortName,
+		AccuracyMetricType,
+		BinaryAccuracyGraph,
+		accuracyPPrint,
+		newExampleWeight,
+	)
 }
 
 // BinaryLogitsAccuracyGraph can be used in combination with New*Metric functions to build metrics for binary accuracy for logit.
@@ -399,8 +424,11 @@ func BinaryLogitsAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node
 
 	}
 	if logits0.Shape().Size() != labels0.Shape().Size() {
-		Panicf("logits0 (%s) and labels0 (%s) have different shapes (different total sizes), can't calculate binary accuracy",
-			logits0.Shape(), labels0.Shape())
+		Panicf(
+			"logits0 (%s) and labels0 (%s) have different shapes (different total sizes), can't calculate binary accuracy",
+			logits0.Shape(),
+			labels0.Shape(),
+		)
 	}
 	if !logits0.Shape().Equal(labels0.Shape()) {
 		// They are the same size, so we assume the labels0 can simply be re-shaped.
@@ -425,7 +453,14 @@ func NewMeanBinaryLogitsAccuracy(name, shortName string) *MeanMetric {
 // NewMovingAverageBinaryLogitsAccuracy returns a new binary accuracy metric with the given names.
 // A typical value of newExampleWeight is 0.01, the smaller the value, the slower the moving average moves.
 func NewMovingAverageBinaryLogitsAccuracy(name, shortName string, newExampleWeight float64) Interface {
-	return NewExponentialMovingAverageMetric(name, shortName, AccuracyMetricType, BinaryLogitsAccuracyGraph, accuracyPPrint, newExampleWeight)
+	return NewExponentialMovingAverageMetric(
+		name,
+		shortName,
+		AccuracyMetricType,
+		BinaryLogitsAccuracyGraph,
+		accuracyPPrint,
+		newExampleWeight,
+	)
 }
 
 // SparseCategoricalAccuracyGraph returns the accuracy -- fraction of times argmax(logits)
@@ -458,7 +493,10 @@ func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) 
 	weightsShape := shapes.Make(logitsDType, logits0.Shape().Dimensions[:logits0.Rank()-1]...)
 	weights, mask := losses.CheckExtraLabelsForWeightsAndMask(weightsShape, labels[1:])
 	modelChoices := ArgMax(logits0, -1, labelsDType)
-	correctExamples := ConvertDType(Equal(modelChoices, Squeeze(labels0, -1)), logitsDType) // correctExamples -> 0/1 per example.
+	correctExamples := ConvertDType(
+		Equal(modelChoices, Squeeze(labels0, -1)),
+		logitsDType,
+	) // correctExamples -> 0/1 per example.
 
 	// Apply mask.
 	if mask != nil {
@@ -497,5 +535,12 @@ func NewSparseCategoricalAccuracy(name, shortName string) *MeanMetric {
 // Labels is expected to be some integer type. And the returned dtype is the same as logits.
 // A typical value of newExampleWeight is 0.01, the smaller the value, the slower the moving average moves.
 func NewMovingAverageSparseCategoricalAccuracy(name, shortName string, newExampleWeight float64) Interface {
-	return NewExponentialMovingAverageMetric(name, shortName, AccuracyMetricType, SparseCategoricalAccuracyGraph, accuracyPPrint, newExampleWeight)
+	return NewExponentialMovingAverageMetric(
+		name,
+		shortName,
+		AccuracyMetricType,
+		SparseCategoricalAccuracyGraph,
+		accuracyPPrint,
+		newExampleWeight,
+	)
 }

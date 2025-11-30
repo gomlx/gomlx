@@ -232,6 +232,7 @@ func (b *Builder) Real(operand backends.Op) (backends.Op, error) {
 }
 
 // Round returns the Op that represents the output of the corresponding operation.
+// This operation rounds to the nearest even.
 func (b *Builder) Round(operand backends.Op) (backends.Op, error) {
 	nodes, err := b.verifyAndCastValues("Round", operand)
 	if err != nil {

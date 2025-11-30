@@ -21,14 +21,21 @@ import (
 )
 
 // LayerWiseEvaluation returns the train, validation and test accuracy of the model, using layer-wise inference.
-func LayerWiseEvaluation(backend backends.Backend, ctx *context.Context, strategy *sampler.Strategy) (train, validation, test float64) {
+func LayerWiseEvaluation(
+	backend backends.Backend,
+	ctx *context.Context,
+	strategy *sampler.Strategy,
+) (train, validation, test float64) {
 	var predictionsT *tensors.Tensor
 	exec := context.MustNewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 
 	if klog.V(1).Enabled() {
 		// Report timings.
 		start := time.Now()
-		exec.PreCompile()
+		err := exec.PreCompile()
+		if err != nil {
+			panic(err)
+		}
 		elapsed := time.Since(start)
 		klog.Infof("Layer-wise inference elapsed time (computation graph compilation): %s\n", elapsed)
 
@@ -42,14 +49,14 @@ func LayerWiseEvaluation(backend backends.Backend, ctx *context.Context, strateg
 	}
 
 	predictions := predictionsT.Value().([]int16)
-	labels := tensors.CopyFlatData[int32](PapersLabels)
+	labels := tensors.MustCopyFlatData[int32](PapersLabels)
 	return layerWiseCalculateAccuracies(predictions, labels)
 }
 
 func layerWiseCalculateAccuracies(predictions []int16, labels []int32) (train, validation, test float64) {
 	splitVars := []*float64{&train, &validation, &test}
 	for splitIdx, splitT := range []*tensors.Tensor{TrainSplit, ValidSplit, TestSplit} {
-		split := tensors.CopyFlatData[int32](splitT)
+		split := tensors.MustCopyFlatData[int32](splitT)
 		numCorrect := 0
 		for _, paperIdx := range split {
 			if int(predictions[paperIdx]) == int(labels[paperIdx]) {
@@ -61,10 +68,14 @@ func layerWiseCalculateAccuracies(predictions []int16, labels []int32) (train, v
 	return
 }
 
-func BuildLayerWiseCustomMetricFn(backend backends.Backend, ctx *context.Context, strategy *sampler.Strategy) plots.CustomMetricFn {
+func BuildLayerWiseCustomMetricFn(
+	backend backends.Backend,
+	ctx *context.Context,
+	strategy *sampler.Strategy,
+) plots.CustomMetricFn {
 	exec := context.MustNewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 	ctx = ctx.Reuse()
-	labels := tensors.CopyFlatData[int32](PapersLabels)
+	labels := tensors.MustCopyFlatData[int32](PapersLabels)
 	return func(plotter plots.Plotter, step float64) error {
 		predictions := exec.MustExec()[0].Value().([]int16)
 		train, validation, test := layerWiseCalculateAccuracies(predictions, labels)
@@ -90,7 +101,10 @@ func BuildLayerWiseCustomMetricFn(backend backends.Backend, ctx *context.Context
 //
 // The returned function returns the predictions for all seeds shaped `Int16[NumSeedNodes]` if `predictions == true`,
 // or the readout layer shaped `Float32[NumSeedNodes, mag.NumLabels]` (or Float16) if `predictions == false`.
-func BuildLayerWiseInferenceModel(strategy *sampler.Strategy, predictions bool) func(ctx *context.Context, g *Graph) *Node {
+func BuildLayerWiseInferenceModel(
+	strategy *sampler.Strategy,
+	predictions bool,
+) func(ctx *context.Context, g *Graph) *Node {
 	return func(ctx *context.Context, g *Graph) *Node {
 		ctx = ctx.WithInitializer(initializers.GlorotUniformFn(ctx))
 		ctx = ctx.In("model")
@@ -170,7 +184,12 @@ func createEdgesIndices(ctx *context.Context, g *Graph) map[string]sampler.EdgeP
 	return edges
 }
 
-func recursivelyCreateEdgesInputs(g *Graph, rule *sampler.Rule, edges map[string]sampler.EdgePair[*Node], inputs []*Node) []*Node {
+func recursivelyCreateEdgesInputs(
+	g *Graph,
+	rule *sampler.Rule,
+	edges map[string]sampler.EdgePair[*Node],
+	inputs []*Node,
+) []*Node {
 	for _, subRule := range rule.Dependents {
 		var (
 			edgeName string

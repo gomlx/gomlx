@@ -412,6 +412,9 @@ linters:
         # Incorrect or missing package comment.
         # https://staticcheck.dev/docs/checks/#ST1000
         - -ST1000
+        # Dot imports are discouraged.
+        # https://staticcheck.dev/docs/checks/#ST1001
+        - -ST1001
         # Use consistent method receiver names.
         # https://staticcheck.dev/docs/checks/#ST1016
         - -ST1016
