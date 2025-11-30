@@ -402,7 +402,10 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 	// Initialize variables if needed.
 	ctx := e.context
 	if !e.isInitializeVariablesExec && ctx.NeedsInitialization() {
-		ctx.InitializeVariables(e.backend)
+		fmt.Printf("Calling initializing variables: numDevices=%d, strategy=%s\n", e.NumDevices(), e.DistributionStrategy())
+		ctx.InitializeVariables(e.backend, func(initExec *Exec) error {
+			return initExec.ConfigureDistributionFrom(e)
+		})
 	}
 
 	graphId := g.GraphId()
@@ -459,6 +462,22 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 	return nil
 }
 
+// ConfigureDistributionFrom configures the distribution of the executor from another executor.
+// At the end e will have been configure exactly like e2.
+func (e *Exec) ConfigureDistributionFrom(e2 *Exec) error {
+	switch e2.exec.DistributionStrategy() {
+	case distributed.None:
+		return nil
+	case distributed.AutoSharding:
+		e.AutoSharding(e2.Meshes()...)
+	case distributed.SPMD:
+		e.SPMD(e2.Meshes()[0])
+	}
+	deviceAssignment := e2.DeviceAssignment()
+	e.WithDeviceAssignment(deviceAssignment)
+	return nil
+}
+
 // SetNodeLogger with the function to be called for the nodes
 // marked for logging during execution. If set to nil,
 // nothing will be logged.
@@ -499,6 +518,13 @@ func (e *Exec) DeviceAssignment() []backends.DeviceNum {
 // and it will be executed on the device specified by Exec.WithDevice (defaults to 0).
 func (e *Exec) DistributionStrategy() distributed.Strategy {
 	return e.exec.DistributionStrategy()
+}
+
+// NumDevices returns the number of devices used by this Exec.
+// It depends on the strategy and meshes used.
+// The default is 1 (no distribution strategy)
+func (e *Exec) NumDevices() int {
+	return e.exec.NumDevices()
 }
 
 // SPMD sets the distribution strategy to SPMD, which means that graphs constructed by this Exec will be replicated
@@ -665,18 +691,39 @@ func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, 
 	e.muChangedVars.Lock()
 	changedVars := e.changedVars[g.GraphId()]
 	e.muChangedVars.Unlock()
-	if len(changedVars) > len(outputs) {
+	numDevices := e.exec.NumDevices()
+
+	// For distributed execution, outputs are organized as:
+	// [device0_output0, device0_output1, ..., device1_output0, device1_output1, ...]
+	// where the first len(changedVars) outputs per device are the changed variables.
+	numOutputsPerDevice := len(outputs) / numDevices
+
+	if len(changedVars) > numOutputsPerDevice {
 		return nil, nil, errors.Errorf(
-			"not enough outputs of the graph for updated variables: expected %d, got %d",
+			"not enough outputs of the graph for updated variables: expected at least %d per device, got %d",
 			len(changedVars),
-			len(outputs),
+			numOutputsPerDevice,
 		)
 	}
 
+	if numDevices > 1 {
+		outputs, err = e.collectOutputsForDistributed(outputs, changedVars, numDevices, numOutputsPerDevice)
+	} else {
+		outputs, err = e.collectOutputs(outputs, changedVars)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return
+}
+
+// collectOutputs processes outputs for single-device execution.
+// It updates changed variables with their new values and returns the remaining outputs.
+func (e *Exec) collectOutputs(outputs []*tensors.Tensor, changedVars []*Variable) ([]*tensors.Tensor, error) {
 	var firstErr error
 	for ii, v := range changedVars {
 		if !v.shape.Equal(outputs[ii].Shape()) {
-			return nil, nil, errors.Errorf(
+			return nil, errors.Errorf(
 				"variable %q changed shape in graph execution: expected %v, got %v",
 				v.ScopeAndName(),
 				v.shape,
@@ -694,10 +741,83 @@ func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, 
 		}
 	}
 	if firstErr != nil {
-		return nil, nil, firstErr
+		return nil, firstErr
 	}
-	outputs = outputs[len(changedVars):]
-	return
+	return outputs[len(changedVars):], nil
+}
+
+// collectOutputsForDistributed processes outputs for distributed execution.
+// It collects shards for each changed variable from all devices, creates distributed.Tensor objects,
+// and returns the rearranged outputs (excluding variables).
+func (e *Exec) collectOutputsForDistributed(
+	outputs []*tensors.Tensor, changedVars []*Variable, numDevices, numOutputsPerDevice int) (
+	[]*tensors.Tensor, error) {
+	var firstErr error
+
+	// Collect shards for each changed variable and create distributed.Tensor.
+	for varIdx, v := range changedVars {
+		// Collect shards for this variable from all devices.
+		shards := make([]*tensors.Tensor, numDevices)
+		for deviceIdx := range numDevices {
+			shards[deviceIdx] = outputs[deviceIdx*numOutputsPerDevice+varIdx]
+		}
+
+		// Get the sharding spec for this variable.
+		shardingSpec := v.shardingSpec
+		if shardingSpec == nil {
+			shardingSpec = e.context.data.defaultShardingSpec
+		}
+		if shardingSpec == nil {
+			err := errors.Errorf("variable %q has no sharding spec for distributed execution", v.ScopeAndName())
+			if firstErr == nil {
+				firstErr = err
+			} else {
+				klog.Errorf("Exec error: %v", err)
+			}
+			continue
+		}
+
+		// Create distributed.Tensor from the shards.
+		distValue, err := distributed.NewTensor(shardingSpec, shards)
+		if err != nil {
+			err = errors.WithMessagef(err, "failed to create distributed tensor for variable %q", v.ScopeAndName())
+			if firstErr == nil {
+				firstErr = err
+			} else {
+				klog.Errorf("Exec error: %v", err)
+			}
+			continue
+		}
+
+		// Set the variable's distributed value.
+		err = v.SetDistributedValue(distValue)
+		if err != nil {
+			err = errors.WithMessagef(err, "failed updating distributed value for %q", v.ScopeAndName())
+			if firstErr == nil {
+				firstErr = err
+			} else {
+				klog.Errorf("Exec error: %v", err)
+			}
+		}
+	}
+
+	if firstErr != nil {
+		return nil, firstErr
+	}
+
+	// Rearrange outputs to exclude changed variables:
+	// Result should be [device0_param0, device0_param1, ..., device1_param0, device1_param1, ...]
+	// where params start after the changed variables.
+	numParamsPerDevice := numOutputsPerDevice - len(changedVars)
+	newOutputs := make([]*tensors.Tensor, numDevices*numParamsPerDevice)
+	for deviceIdx := range numDevices {
+		for paramIdx := range numParamsPerDevice {
+			srcIdx := deviceIdx*numOutputsPerDevice + len(changedVars) + paramIdx
+			dstIdx := deviceIdx*numParamsPerDevice + paramIdx
+			newOutputs[dstIdx] = outputs[srcIdx]
+		}
+	}
+	return newOutputs, nil
 }
 
 // PreCompile will build the computation graph, JIT-compile and cache it, but not yet execute.

@@ -198,6 +198,8 @@ func TestDistributedExec(t *testing.T) {
 		err = oneLayerExec.SetDefaultShardingSpec(replicatedSpec)
 		require.NoError(t, err)
 
+		fmt.Println("HERE 1")
+
 		// With two devices, we want 2 results, one per device.
 		x := [][]float64{{1, 1, 1}, {2, 2, 2}}
 		distributedX, err := distributed.ShardTensor(batchSpec, tensors.FromValue(x))
@@ -205,6 +207,9 @@ func TestDistributedExec(t *testing.T) {
 		shardedResults, err := oneLayerExec.Exec(distributedX)
 		require.NoError(t, err)
 		require.Len(t, shardedResults, 2)
+
+		fmt.Println("HERE 2")
+
 		distributedResult, err := distributed.NewTensor(batchSpec, shardedResults)
 		require.NoError(t, err)
 		distributedResult.Shape().Equal(shapes.Make(dtypes.Float64, 2, 1))

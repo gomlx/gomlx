@@ -79,7 +79,7 @@ func TestContextVariablesInitialization(t *testing.T) {
 	v2 := ctx2.VariableWithShape("z", shapes.Make(dtypes.Int64, 3, 1))
 
 	backend := graphtest.BuildTestBackend()
-	ctx.InitializeVariables(backend)
+	ctx.InitializeVariables(backend, nil)
 
 	fmt.Printf("\tv0=%v\n", v0)
 	fmt.Printf("\tv1=%v\n", v1)
@@ -168,7 +168,7 @@ func TestEnumerateVariables(t *testing.T) {
 	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 3, 1))
 
 	backend := graphtest.BuildTestBackend()
-	ctx.InitializeVariables(backend)
+	ctx.InitializeVariables(backend, nil)
 
 	// Checks EnumerateVariables lists all variables:
 	got := sets.Make[string]()
@@ -206,7 +206,7 @@ func TestIterVariables(t *testing.T) {
 	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 3, 1))
 
 	backend := graphtest.BuildTestBackend()
-	ctx.InitializeVariables(backend)
+	ctx.InitializeVariables(backend, nil)
 
 	// Checks IterVariables lists all variables:
 	got := sets.Make[string]()
@@ -264,7 +264,7 @@ func TestDeleteVariable(t *testing.T) {
 	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 1, 1))
 
 	backend := graphtest.BuildTestBackend()
-	ctx.InitializeVariables(backend)
+	ctx.InitializeVariables(backend, nil)
 
 	assert.Equal(t, 3, ctx.NumVariables())
 	require.NoError(t, ctx.DeleteVariable("/foo", "x"))
@@ -304,7 +304,7 @@ func TestDeleteVariablesInScope(t *testing.T) {
 	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 1, 1))
 
 	backend := graphtest.BuildTestBackend()
-	ctx.InitializeVariables(backend)
+	ctx.InitializeVariables(backend, nil)
 
 	// Remove all under scope "/b"
 	require.NoError(t, ctx1.DeleteVariablesInScope())
