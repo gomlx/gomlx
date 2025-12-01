@@ -205,8 +205,8 @@ func TestAutoSharding(t *testing.T) {
 		require.Len(t, shardedResults, 2)
 		fmt.Println("x:")
 		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", shardedResults[0], shardedResults[1])
-		require.NotEqualf(t, shardedResults[0].Value(), shardedResults[1].Value(),
-			"Expected replicated RNGState to be the different in every device.")
+		require.Equalf(t, shardedResults[0].Value(), shardedResults[1].Value(),
+			"Expected replicated variable to be the same in every device.")
 		for shardIdx, shardT := range shardedResults {
 			shard := shardT.Value().([]float32)
 			var hasNonZero bool
@@ -260,7 +260,7 @@ func TestAutoSharding(t *testing.T) {
 		}
 	})
 
-	t.Run("AutoSharding-initialization", func(t *testing.T) {
+	t.Run("variable initialization", func(t *testing.T) {
 		ctx := context.New()
 		ctx.SetParam(context.ParamInitialSeed, int64(42))
 		e, err := context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
@@ -285,7 +285,7 @@ func TestAutoSharding(t *testing.T) {
 			"Expected replicated initialization to be the same in every device.")
 	})
 
-	t.Run("AutoSharding-Batch", func(t *testing.T) {
+	t.Run("batch sharding", func(t *testing.T) {
 		ctx := context.New()
 		ctx.SetParam(context.ParamInitialSeed, int64(42))
 		oneLayerExec, err := context.NewExec(backend, ctx, func(ctx *context.Context, x *Node) (*Node, *Node) {

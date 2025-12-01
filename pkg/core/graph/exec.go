@@ -739,8 +739,6 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 					"parameter, cannot execute the graph %q",
 					paramIdx, g.GetParameterByHandle(ParameterHandle(paramIdx)).GetParameterName(), g.Name())
 			}
-			fmt.Printf("numDevices=%d, len(argsAsBuffers)=%d, i=%d, paramIdx=%d, deviceIdx=%d\n",
-				numDevices, len(argsAsBuffers), ii, paramIdx, deviceIdx)
 			return nil, nil, errors.Errorf("parameter #%d (%q) for device #%d is nil or invalid, maybe a variable value not set as a "+
 				"parameter, cannot execute the graph %q",
 				paramIdx, g.GetParameterByHandle(ParameterHandle(paramIdx)).GetParameterName(), deviceIdx, g.Name())
