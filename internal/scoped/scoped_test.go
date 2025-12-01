@@ -14,16 +14,23 @@
  *	limitations under the License.
  */
 
-package context
+package scoped_test
 
 import (
+	"testing"
+
+	"github.com/gomlx/gomlx/internal/scoped"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
+	"k8s.io/klog/v2"
 )
 
+func init() {
+	klog.InitFlags(nil)
+}
+
 func TestScopedParams(t *testing.T) {
-	p := newScopedParams()
+	p := scoped.New("/")
 
 	//	Scope: "/": { "x":10, "y": 20, "z": 40 }
 	//	Scope: "/a": { "y": 30 }

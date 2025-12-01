@@ -31,9 +31,14 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
+
+func init() {
+	klog.InitFlags(nil)
+}
 
 func TestContextVariables(t *testing.T) {
 	ctx := New()

@@ -27,6 +27,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/scoped"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -119,7 +120,7 @@ type contextData struct {
 	//
 	// Usually the root values are set just after context creation. But layers of a model
 	// may set values within scopes for its sub-layers.
-	params *scopedParams
+	params *scoped.Params
 
 	// graphParams hold models parameters for a particular graph. It's scoped like params,
 	// and these values are interpreted by the various model components independently. E.g:
@@ -128,7 +129,7 @@ type contextData struct {
 	//   indicate whether the graph is being used for training or for inference. This is
 	//   used by layers that behave differently when training and inference (e.g: Dropout,
 	//   BatchNorm, etc.).
-	graphParams map[graph.GraphId]*scopedParams
+	graphParams map[graph.GraphId]*scoped.Params
 
 	// variablesMap for this context organized per scope.
 	variablesMap map[string]scopedVariableMap
@@ -183,8 +184,8 @@ func New() *Context {
 		scope:   RootScope,
 		checked: true,
 		data: &contextData{
-			params:       newScopedParams(),
-			graphParams:  make(map[graph.GraphId]*scopedParams),
+			params:       scoped.New(ScopeSeparator),
+			graphParams:  make(map[graph.GraphId]*scoped.Params),
 			variablesMap: make(map[string]scopedVariableMap),
 		},
 	}
@@ -211,7 +212,7 @@ func (ctx *Context) Clone() (*Context, error) {
 	newCtx.checked = ctx.checked
 	newCtx.initializer = ctx.initializer
 	newCtx.data = &contextData{
-		graphParams:  make(map[graph.GraphId]*scopedParams),
+		graphParams:  make(map[graph.GraphId]*scoped.Params),
 		variablesMap: make(map[string]scopedVariableMap),
 	}
 	newCtx.data.needsInitialization = ctx.data.needsInitialization
@@ -285,7 +286,7 @@ func (ctx *Context) Scope() string {
 
 // EscapeScopeName replaces ScopeSeparator in the string and replaces them by "_".
 func EscapeScopeName(scopeName string) string {
-	return strings.Replace(scopeName, ScopeSeparator, "_", -1)
+	return strings.ReplaceAll(scopeName, ScopeSeparator, "_")
 }
 
 // In returns a new reference to the Context with the extra given scope. No ScopeSeparator ("/") is
@@ -517,7 +518,7 @@ func (ctx *Context) EnumerateParams(fn func(scope, key string, value any)) {
 // set this state, as the same Context is used for evaluation/inference graphs and
 // training graphs, and they will have different values.
 func (ctx *Context) GetGraphParam(g *Graph, key string) (value any, found bool) {
-	var graphParams *scopedParams
+	var graphParams *scoped.Params
 	graphParams, found = ctx.data.graphParams[g.GraphId()]
 	if !found {
 		return
@@ -613,7 +614,7 @@ func GetGraphParamOr[T any](ctx *Context, g *Graph, key string, defaultValue T) 
 func (ctx *Context) SetGraphParam(g *Graph, key string, value any) {
 	graphParams, found := ctx.data.graphParams[g.GraphId()]
 	if !found {
-		graphParams = newScopedParams()
+		graphParams = scoped.New(ScopeSeparator)
 		ctx.data.graphParams[g.GraphId()] = graphParams
 	}
 	graphParams.Set(ctx.scope, key, value)
@@ -839,9 +840,10 @@ func (ctx *Context) DeleteVariable(scope, name string) error {
 	if len(scopeVars) == 0 {
 		delete(ctx.data.variablesMap, scope)
 	}
-	ctx.data.variables = slices.DeleteFunc(ctx.data.variables, func(vCandidate *Variable) bool {
-		return vCandidate == v
-	})
+	ctx.data.variables = slices.DeleteFunc(
+		ctx.data.variables, func(vCandidate *Variable) bool {
+			return vCandidate == v
+		})
 	return nil
 }
 
