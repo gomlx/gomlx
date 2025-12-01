@@ -338,7 +338,7 @@ func ShardTensor(spec *ShardingSpec, t *tensors.Tensor) (*Tensor, error) {
 	shardShape := logicalShape.Clone()
 	mesh := spec.Mesh
 
-	// ... [Input validation and shardShape calculation from your snippet] ...
+	// Calculate shard shape by dividing tensor dimensions by the product of mesh axes that shard them.
 	for tensorAxis, axisLen := range logicalShape.Dimensions {
 		if tensorAxis >= spec.Rank() {
 			break
@@ -374,36 +374,64 @@ func ShardTensor(spec *ShardingSpec, t *tensors.Tensor) (*Tensor, error) {
 		shards[i] = tensors.FromShape(shardShape)
 	}
 
-	// shapeRatio calculation
-	shapeRatio := logicalShape.Clone()
-	for axis, logicalDim := range shapeRatio.Dimensions {
-		shapeRatio.Dimensions[axis] = logicalDim / shardShape.Dimensions[axis]
-	}
-	if shapeRatio.Size()*shardShape.Size() != logicalShape.Size() {
-		return nil, errors.Errorf("shard shape %s and logical shape %s doesn't match spec %v for %d devices",
-			shardShape, logicalShape, spec, numDevices)
-	}
-
 	elementSize := logicalShape.DType.Size()
 	if elementSize == 0 {
-		return nil, errors.Errorf("merge of tensors with sub-byte sizes not implemented (for DType %s)",
+		return nil, errors.Errorf("sharding of tensors with sub-byte sizes not implemented (for DType %s)",
 			logicalShape.DType)
 	}
 
-	// Pre-calculate source strides for efficiency
+	// Pre-calculate source strides and mesh info for efficiency
 	srcStrides := logicalShape.Strides()
 	rank := logicalShape.Rank()
+	meshRank := mesh.Rank()
+	meshSizes := mesh.AxesSizes()
+	meshAxesNames := mesh.AxesNames()
+
+	// Build a mapping from mesh axis name to its index for efficient lookup
+	meshNameToIdx := make(map[string]int, meshRank)
+	for i, name := range meshAxesNames {
+		meshNameToIdx[name] = i
+	}
 
 	var innerErr error
 	err := t.ConstBytes(func(tBytes []byte) {
-		for shardIdx, shardPos := range shapeRatio.Iter() {
-			shard := shards[shardIdx]
-			innerErr = shard.MutableBytes(func(shardBytes []byte) {
+		// Iterate over all devices, including replicated ones.
+		for deviceIdx := range numDevices {
+			// Calculate mesh coordinates for this device.
+			// Device indices are laid out in row-major order across mesh dimensions.
+			meshCoords := make([]int, meshRank)
+			remaining := deviceIdx
+			for i := meshRank - 1; i >= 0; i-- {
+				meshCoords[i] = remaining % meshSizes[i]
+				remaining /= meshSizes[i]
+			}
 
+			// Calculate the shard position for each tensor axis based on which mesh axes shard it.
+			shardPos := make([]int, rank)
+			for tensorAxis := 0; tensorAxis < rank; tensorAxis++ {
+				if tensorAxis >= spec.Rank() || len(spec.Axes[tensorAxis]) == 0 {
+					// Replicated tensor axis: shard position is 0.
+					shardPos[tensorAxis] = 0
+				} else {
+					// Sharded tensor axis: combine mesh coordinates for all mesh axes that shard this axis.
+					axisSpec := spec.Axes[tensorAxis]
+					pos := 0
+					multiplier := 1
+					for i := len(axisSpec) - 1; i >= 0; i-- {
+						meshAxisName := axisSpec[i]
+						meshAxisIdx := meshNameToIdx[meshAxisName]
+						pos += meshCoords[meshAxisIdx] * multiplier
+						multiplier *= meshSizes[meshAxisIdx]
+					}
+					shardPos[tensorAxis] = pos
+				}
+			}
+
+			shard := shards[deviceIdx]
+			innerErr = shard.MutableBytes(func(shardBytes []byte) {
 				// 1. Calculate where this shard begins in the logical tensor (Source Base Offset)
 				srcBaseOffset := 0
 				for axis := range rank {
-					// Coordinate * Stride
 					start := shardPos[axis] * shardShape.Dimensions[axis]
 					srcBaseOffset += start * srcStrides[axis]
 				}
@@ -441,7 +469,7 @@ func ShardTensor(spec *ShardingSpec, t *tensors.Tensor) (*Tensor, error) {
 					dimSize := shardShape.Dimensions[axis]
 					step := srcStrides[axis] * elementSize
 
-					for i := 0; i < dimSize; i++ {
+					for i := range dimSize {
 						copier(axis+1, srcOffset+i*step) //nolint:goimports
 					}
 				}

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -37,32 +38,88 @@ func TestTensor(t *testing.T) {
 		t.Skipf("Skipping distributed tests: backend only has %d device.", backend.NumDevices())
 	}
 
-	t.Run("Shard", func(t *testing.T) {
-		// Create a new device mesh.
-		mesh, err := distributed.NewDeviceMesh([]int{2}, []string{"replica"})
-		require.NoError(t, err)
+	// ShardTensor() tests.
+	t.Run("ShardTensor()", func(t *testing.T) {
+		t.Run("sharded", func(t *testing.T) {
+			// Create a new device mesh.
+			mesh, err := distributed.NewDeviceMesh([]int{2}, []string{"shards"})
+			require.NoError(t, err)
 
-		// Create a new tensor.
-		tensor := tensors.FromValue([][]int32{{1, 2, 3, 4}, {5, 6, 7, 8}})
+			// Create a new tensor.
+			tensor := tensors.FromValue([][]int32{{1, 2, 3, 4}, {5, 6, 7, 8}})
 
-		// Shard the tensor.
-		spec, err := distributed.NewShardingSpec(mesh, distributed.AxisSpec{"replica"}, distributed.ReplicatedAxis)
-		require.NoError(t, err)
-		distTensor, err := distributed.ShardTensor(spec, tensor)
-		require.NoError(t, err)
+			// Shard the tensor.
+			spec, err := distributed.NewShardingSpec(mesh, distributed.AxisSpec{"shards"}, distributed.ReplicatedAxis)
+			require.NoError(t, err)
+			distTensor, err := distributed.ShardTensor(spec, tensor)
+			require.NoError(t, err)
 
-		// Check the logical shape.
-		assert.Equal(t, shapes.Make(dtypes.Int32, 2, 4), distTensor.Shape())
+			// Check the logical shape.
+			assert.Equal(t, shapes.Make(dtypes.Int32, 2, 4), distTensor.Shape())
 
-		// Check the shard shape.
-		assert.Equal(t, shapes.Make(dtypes.Int32, 1, 4), distTensor.ShardShape())
+			// Check the shard shape.
+			assert.Equal(t, shapes.Make(dtypes.Int32, 1, 4), distTensor.ShardShape())
 
-		// Check the number of shards.
-		assert.Len(t, distTensor.Shards(), 2)
+			// Check the number of shards.
+			assert.Len(t, distTensor.Shards(), 2)
 
-		// Check the values of the shards.
-		assert.Equal(t, [][]int32{{1, 2, 3, 4}}, distTensor.Shards()[0].Value())
-		assert.Equal(t, [][]int32{{5, 6, 7, 8}}, distTensor.Shards()[1].Value())
+			// Check the values of the shards.
+			assert.Equal(t, [][]int32{{1, 2, 3, 4}}, distTensor.Shards()[0].Value())
+			assert.Equal(t, [][]int32{{5, 6, 7, 8}}, distTensor.Shards()[1].Value())
+		})
+
+		// Replicate is the same as sharding, with no sharding axes.
+		t.Run("replicated", func(t *testing.T) {
+			mesh, err := distributed.NewDeviceMesh([]int{2}, []string{"replicas"})
+			require.NoError(t, err)
+			tensor := tensors.FromValue([][]float32{{1, 2, 3, 4}})
+			spec := distributed.NewReplicatedShardingSpec(mesh)
+			distTensor := must.M1(distributed.ShardTensor(spec, tensor))
+
+			// For replicated values, logical shape = shard shape.
+			assert.Equal(t, shapes.Make(dtypes.Float32, 1, 4), distTensor.Shape())
+			assert.Equal(t, shapes.Make(dtypes.Float32, 1, 4), distTensor.ShardShape())
+
+			// Check the number of shards.
+			assert.Len(t, distTensor.Shards(), 2)
+
+			// Check the values of the shards.
+			assert.Equal(t, [][]float32{{1, 2, 3, 4}}, distTensor.Shards()[0].Value())
+			assert.Equal(t, [][]float32{{1, 2, 3, 4}}, distTensor.Shards()[1].Value())
+		})
+
+		// Sharded and replicated: tensor axis 0 is sharded by "shards", and mesh axis "replicas" causes replication.
+		t.Run("sharded and replicated", func(t *testing.T) {
+			if backend.NumDevices() < 4 {
+				t.Skipf("Skipping %s: backend only has %d device, this test requires 4.",
+					t.Name(), backend.NumDevices())
+			}
+			mesh, err := distributed.NewDeviceMesh([]int{2, 2}, []string{"replicas", "shards"})
+			require.NoError(t, err)
+			tensor := tensors.FromValue([][]float32{{1, 2, 3, 4}, {5, 6, 7, 8}})
+			// Spec: tensor axis 0 is sharded by mesh axis "shards" (size 2), tensor axis 1 is replicated.
+			// Mesh axis "replicas" is not used for any tensor axis, so it causes replication.
+			spec := must.M1(distributed.BuildSpec(mesh).S("shards").R().Done())
+			distTensor := must.M1(distributed.ShardTensor(spec, tensor))
+
+			// Logical shape is the original tensor shape.
+			assert.Equal(t, shapes.Make(dtypes.Float32, 2, 4), distTensor.Shape())
+			// Shard shape: tensor axis 0 (size 2) divided by mesh "shards" (size 2) = 1.
+			assert.Equal(t, shapes.Make(dtypes.Float32, 1, 4), distTensor.ShardShape())
+
+			// Check the number of shards.
+			assert.Len(t, distTensor.Shards(), 4)
+
+			// Mesh layout for [2, 2] with axes ["replicas", "shards"]:
+			// Device 0: (replicas=0, shards=0) -> gets row 0
+			// Device 1: (replicas=0, shards=1) -> gets row 1
+			// Device 2: (replicas=1, shards=0) -> gets row 0 (replica)
+			// Device 3: (replicas=1, shards=1) -> gets row 1 (replica)
+			assert.Equal(t, [][]float32{{1, 2, 3, 4}}, distTensor.Shards()[0].Value())
+			assert.Equal(t, [][]float32{{5, 6, 7, 8}}, distTensor.Shards()[1].Value())
+			assert.Equal(t, [][]float32{{1, 2, 3, 4}}, distTensor.Shards()[2].Value())
+			assert.Equal(t, [][]float32{{5, 6, 7, 8}}, distTensor.Shards()[3].Value())
+		})
 	})
 
 	t.Run("Merge-1", func(t *testing.T) {
