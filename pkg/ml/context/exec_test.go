@@ -179,7 +179,7 @@ func TestExec(t *testing.T) {
 	})
 }
 
-func TestDistributedExec(t *testing.T) {
+func TestAutoSharding(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	numDevices := backend.NumDevices()
 	if numDevices < 2 {
@@ -187,28 +187,140 @@ func TestDistributedExec(t *testing.T) {
 	}
 	meshFor2 := must.M1(distributed.NewDeviceMesh([]int{2}, []string{"shards"}))
 
+	// Replicating variable: initializing it's value non-sharde should trigger automatic replication.
+	// for each device.
+	t.Run("replicated variable", func(t *testing.T) {
+		ctx := context.New()
+		xVar := ctx.VariableWithValue("x", []float32{1.0, 2.0, 3.0})
+		e := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+			return xVar.ValueGraph(g)
+		})
+		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
+		e = e.AutoSharding(meshFor2).
+			WithOutputShardingSpecs(replicatedSpec)
+		require.NoError(t, e.SetDefaultShardingSpec(replicatedSpec))
+		require.NoError(t, ctx.ResetRNGState())
+		shardedResults, err := e.Exec()
+		require.NoError(t, err)
+		require.Len(t, shardedResults, 2)
+		fmt.Println("x:")
+		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", shardedResults[0], shardedResults[1])
+		require.NotEqualf(t, shardedResults[0].Value(), shardedResults[1].Value(),
+			"Expected replicated RNGState to be the different in every device.")
+		for shardIdx, shardT := range shardedResults {
+			shard := shardT.Value().([]float32)
+			var hasNonZero bool
+			for _, v := range shard {
+				if v != 0 {
+					hasNonZero = true
+					break
+				}
+			}
+			if !hasNonZero {
+				t.Errorf("Shard #%d is all zeroes", shardIdx)
+			}
+		}
+	})
+
+	// RNGState is special: it must be initialized as "replicated", but the values are different
+	// for each device.
+	t.Run("RNGState", func(t *testing.T) {
+		ctx := context.New()
+		ctx.SetParam(context.ParamInitialSeed, int64(42))
+		e := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+			// v := ctx.WithInitializer(initializers.RandomUniformFn(ctx, 0.0001, 1.0)).VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
+			// return v.ValueGraph(g)
+			// return ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 10))
+			return ctx.GetVariable(context.RNGStateVariableName).ValueGraph(g)
+		})
+		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
+		e = e.AutoSharding(meshFor2).
+			WithOutputShardingSpecs(replicatedSpec)
+		require.NoError(t, e.SetDefaultShardingSpec(replicatedSpec))
+		require.NoError(t, ctx.ResetRNGState())
+		shardedResults, err := e.Exec()
+		require.NoError(t, err)
+		require.Len(t, shardedResults, 2)
+		fmt.Println("RNGState:")
+		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", shardedResults[0], shardedResults[1])
+		require.NotEqualf(t, shardedResults[0].Value(), shardedResults[1].Value(),
+			"Expected replicated RNGState to be the different in every device.")
+		for shardIdx, shardT := range shardedResults {
+			shard := shardT.Value().([]uint64)
+			var hasNonZero bool
+			for _, v := range shard {
+				if v != 0 {
+					hasNonZero = true
+					break
+				}
+			}
+			if !hasNonZero {
+				t.Errorf("Shard #%d is all zeroes", shardIdx)
+			}
+		}
+	})
+
+	t.Run("AutoSharding-initialization", func(t *testing.T) {
+		ctx := context.New()
+		ctx.SetParam(context.ParamInitialSeed, int64(42))
+		e, err := context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+			// v := ctx.WithInitializer(initializers.RandomUniformFn(ctx, 0.0001, 1.0)).VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
+			// return v.ValueGraph(g)
+			// return ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 10))
+			return ctx.GetVariable(context.RNGStateVariableName).ValueGraph(g)
+		})
+		require.NoError(t, err)
+		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
+		e = e.AutoSharding(meshFor2).
+			WithOutputShardingSpecs(replicatedSpec)
+		require.NoError(t, e.SetDefaultShardingSpec(replicatedSpec))
+		require.NoError(t, ctx.ResetRNGState())
+
+		shardedResults, err := e.Exec()
+		require.NoError(t, err)
+		require.Len(t, shardedResults, 2)
+		fmt.Println("\tVariable:")
+		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", shardedResults[0], shardedResults[1])
+		require.Equalf(t, shardedResults[0].Value(), shardedResults[1].Value(),
+			"Expected replicated initialization to be the same in every device.")
+	})
+
 	t.Run("AutoSharding-Batch", func(t *testing.T) {
 		ctx := context.New()
 		ctx.SetParam(context.ParamInitialSeed, int64(42))
-		oneLayerExec, err := context.NewExec(backend, ctx, oneLayerGraph)
+		oneLayerExec, err := context.NewExec(backend, ctx, func(ctx *context.Context, x *Node) (*Node, *Node) {
+			g := x.Graph()
+			wVar := ctx.VariableWithShape("w", shapes.Make(dtypes.F64, 3, 1))
+			w := wVar.ValueGraph(g)
+			bVar := ctx.VariableWithShape("b", shapes.Make(dtypes.F64, 1))
+			b := bVar.ValueGraph(g)
+			y := MatMul(x, w)
+			y = Add(y, ExpandLeftToRank(b, y.Rank()))
+			return y, w
+		})
 		require.NoError(t, err)
 		batchSpec := must.M1(distributed.BuildSpec(meshFor2).S("shards").Done())
 		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
 		oneLayerExec = oneLayerExec.AutoSharding(meshFor2).
 			WithInputShardingSpecs(batchSpec).
-			WithOutputShardingSpecs(batchSpec)
+			WithOutputShardingSpecs(batchSpec, replicatedSpec)
 		err = oneLayerExec.SetDefaultShardingSpec(replicatedSpec)
 		require.NoError(t, err)
 
 		// With two devices, we want 2 results, one per device.
-		x := [][]float64{{1, 1, 1}, {2, 2, 2}}
+		// x := [][]float64{{1, 1, 1}, {10, 10, 10}, {1, 1, 1}, {10, 10, 10}}
+		x := [][]float64{{1, 1, 1}, {10, 10, 10}}
 		distributedX, err := distributed.ShardTensor(batchSpec, tensors.FromValue(x))
+		fmt.Printf("\tInput x: shape=%s, shardShape=%s\n", distributedX.Shape(), distributedX.ShardShape())
+		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", distributedX.Shards()[0], distributedX.Shards()[1])
 		require.NoError(t, err)
 		shardedResults, err := oneLayerExec.Exec(distributedX)
 		require.NoError(t, err)
-		require.Len(t, shardedResults, 2)
-		fmt.Println("\tFirst execution:")
-		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", shardedResults[0], shardedResults[1])
+		require.Len(t, shardedResults, 4)
+		fmt.Println("\tResults first execution:")
+		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", shardedResults[0], shardedResults[2])
+		fmt.Println("\tReplicated value for w:")
+		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", shardedResults[1], shardedResults[3])
 
 		distributedResult, err := distributed.NewTensor(batchSpec, shardedResults)
 		require.NoError(t, err)

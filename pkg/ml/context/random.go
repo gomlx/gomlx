@@ -1,6 +1,8 @@
 package context
 
 import (
+	"fmt"
+
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -76,6 +78,10 @@ func (ctx *Context) ResetRNGState() error {
 		if err != nil {
 			return err
 		}
+	}
+	if ctx.data.defaultShardingSpec != nil {
+		fmt.Printf("RNGState initialization for distributed execution not implemented yet, " +
+			"all shards will used the same state and generate the same sequence of random numbers.\n")
 	}
 	err := v.SetValue(randomState)
 	if err != nil {

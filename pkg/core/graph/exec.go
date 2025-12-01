@@ -869,7 +869,7 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 		}
 		if spec != nil && e.distStrategy == distributed.AutoSharding {
 			// Adjust shape to logical shape.
-			shape = spec.LogicalShape(shape)
+			shape = spec.LogicalShapeForShard(shape)
 		}
 
 		arg := ShardedParameter(g, fmt.Sprintf("arg%d", ii), shape, spec)
