@@ -207,23 +207,26 @@ func (s *ShardingSpec) ToBackendsSpec() *backends.ShardingSpec {
 	return spec
 }
 
-// LogicalShape calculates the logical shape of a tensor given its shard shape and the sharding specification.
+// LogicalShapeForShard calculates the logical shape of a tensor given its shard shape and the sharding specification.
 //
 // The shard shape is assumed to be the shape of the tensor on a single device.
 // The logical shape is the shape of the full tensor across all devices.
 //
 // If the sharding spec is nil, or if the rank of the shard shape does not match the spec,
 // it returns the shard shape as is (assuming it's replicated or fully local).
-func (s *ShardingSpec) LogicalShape(shardShape shapes.Shape) shapes.Shape {
-	if s == nil || len(s.Axes) != shardShape.Rank() {
+func (s *ShardingSpec) LogicalShapeForShard(shardShape shapes.Shape) shapes.Shape {
+	if s == nil || len(s.Axes) == 0 {
 		return shardShape
 	}
-
-	logicalDims := make([]int, shardShape.Rank())
-	for i, dim := range shardShape.Dimensions {
-		logicalDims[i] = dim * s.NumDevicesShardingAxis(i)
+	logicalShape := shardShape.Clone()
+	// We iterate over the axes of the spec: it may have fewer axes than the shardShape,
+	// the remaining axes are assumed to be replicated so it doesn't affect the logical shape.
+	for axis, axisSpec := range s.Axes {
+		if len(axisSpec) > 0 {
+			logicalShape.Dimensions[axis] *= s.NumDevicesShardingAxis(axis)
+		}
 	}
-	return shapes.Make(shardShape.DType, logicalDims...)
+	return logicalShape
 }
 
 // ShardShape calculates the shard shape of a tensor given its logical shape and the sharding specification.
