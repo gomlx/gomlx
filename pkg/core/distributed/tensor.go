@@ -368,8 +368,9 @@ func ShardTensor(spec *ShardingSpec, t *tensors.Tensor) (*Tensor, error) {
 		shardShape.Dimensions[tensorAxis] /= meshSize
 	}
 
-	shards := make([]*tensors.Tensor, mesh.NumDevices())
-	for i := 0; i < mesh.NumDevices(); i++ {
+	numDevices := mesh.NumDevices()
+	shards := make([]*tensors.Tensor, numDevices)
+	for i := range shards {
 		shards[i] = tensors.FromShape(shardShape)
 	}
 
@@ -378,9 +379,9 @@ func ShardTensor(spec *ShardingSpec, t *tensors.Tensor) (*Tensor, error) {
 	for axis, logicalDim := range shapeRatio.Dimensions {
 		shapeRatio.Dimensions[axis] = logicalDim / shardShape.Dimensions[axis]
 	}
-	if shapeRatio.Size() != len(shards) {
-		return nil, errors.Errorf("number of shards (%d) does not match logical shape (%s)",
-			len(shards), logicalShape)
+	if shapeRatio.Size()*shardShape.Size() != logicalShape.Size() {
+		return nil, errors.Errorf("shard shape %s and logical shape %s doesn't match spec %v for %d devices",
+			shardShape, logicalShape, spec, numDevices)
 	}
 
 	elementSize := logicalShape.DType.Size()

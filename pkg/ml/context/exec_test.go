@@ -188,7 +188,9 @@ func TestDistributedExec(t *testing.T) {
 	meshFor2 := must.M1(distributed.NewDeviceMesh([]int{2}, []string{"shards"}))
 
 	t.Run("AutoSharding-Batch", func(t *testing.T) {
-		oneLayerExec, err := context.NewExec(backend, nil, oneLayerGraph)
+		ctx := context.New()
+		ctx.SetParam(context.ParamInitialSeed, int64(42))
+		oneLayerExec, err := context.NewExec(backend, ctx, oneLayerGraph)
 		require.NoError(t, err)
 		batchSpec := must.M1(distributed.BuildSpec(meshFor2).S("shards").Done())
 		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
@@ -198,8 +200,6 @@ func TestDistributedExec(t *testing.T) {
 		err = oneLayerExec.SetDefaultShardingSpec(replicatedSpec)
 		require.NoError(t, err)
 
-		fmt.Println("HERE 1")
-
 		// With two devices, we want 2 results, one per device.
 		x := [][]float64{{1, 1, 1}, {2, 2, 2}}
 		distributedX, err := distributed.ShardTensor(batchSpec, tensors.FromValue(x))
@@ -207,8 +207,8 @@ func TestDistributedExec(t *testing.T) {
 		shardedResults, err := oneLayerExec.Exec(distributedX)
 		require.NoError(t, err)
 		require.Len(t, shardedResults, 2)
-
-		fmt.Println("HERE 2")
+		fmt.Println("\tFirst execution:")
+		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", shardedResults[0], shardedResults[1])
 
 		distributedResult, err := distributed.NewTensor(batchSpec, shardedResults)
 		require.NoError(t, err)

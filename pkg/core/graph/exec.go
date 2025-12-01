@@ -682,7 +682,6 @@ func (e *Exec) expandArgsToTotalParams(g *Graph, argsAsBuffers []backends.Buffer
 // WithDeviceAssignment). Otherwise, it is ignored.
 func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum, args ...any) (
 	[]*tensors.Tensor, *Graph, error) {
-	fmt.Printf("- compileAndExecute: numDevices=%d, len(args)=%d\n", e.numDevices, len(args))
 	args = unwrapListOfTensors(args)
 	var err error
 	args, err = unwrapDistributedTensors(e.numDevices, args)
@@ -730,15 +729,18 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 	}
 
 	// Check all parameters were set.
+	numParams := g.NumParameters()
 	for ii, t := range argsAsBuffers {
 		if t == nil {
-			paramIdx := ii % numDevices
+			paramIdx := ii % numParams
 			deviceIdx := ii / g.NumParameters()
 			if numDevices == 1 {
 				return nil, nil, errors.Errorf("parameter #%d (%q) is nil or invalid, maybe a variable value not set as a "+
 					"parameter, cannot execute the graph %q",
 					paramIdx, g.GetParameterByHandle(ParameterHandle(paramIdx)).GetParameterName(), g.Name())
 			}
+			fmt.Printf("numDevices=%d, len(argsAsBuffers)=%d, i=%d, paramIdx=%d, deviceIdx=%d\n",
+				numDevices, len(argsAsBuffers), ii, paramIdx, deviceIdx)
 			return nil, nil, errors.Errorf("parameter #%d (%q) for device #%d is nil or invalid, maybe a variable value not set as a "+
 				"parameter, cannot execute the graph %q",
 				paramIdx, g.GetParameterByHandle(ParameterHandle(paramIdx)).GetParameterName(), deviceIdx, g.Name())

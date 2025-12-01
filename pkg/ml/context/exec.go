@@ -402,18 +402,31 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 	// Initialize variables if needed.
 	ctx := e.context
 	if !e.isInitializeVariablesExec && ctx.NeedsInitialization() {
-		fmt.Printf("Calling initializing variables: numDevices=%d, strategy=%s\n", e.NumDevices(), e.DistributionStrategy())
-		ctx.InitializeVariables(e.backend, func(initExec *Exec) error {
+		err := ctx.InitializeVariables(e.backend, func(initExec *Exec) error {
 			return initExec.ConfigureDistributionFrom(e)
 		})
+		if err != nil {
+			return errors.WithMessagef(err, "failed to initialize variables")
+		}
 	}
 
-	graphId := g.GraphId()
-	deviceAssignement := e.exec.DeviceAssignment()
-	deviceNum := backends.DeviceNum(0)
-	if len(deviceAssignement) > 0 {
-		deviceNum = deviceAssignement[0]
+	numDevices := e.exec.NumDevices()
+	if numDevices > 1 {
+		return e.setSideParamsDistributed(g, inputBuffers, donate)
 	}
+	return e.setSideParamsSingleDevice(g, inputBuffers, donate)
+}
+
+// setSideParamsSingleDevice sets the side parameters for single-device execution.
+func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []backends.Buffer, donate []bool) error {
+	ctx := e.context
+	graphId := g.GraphId()
+	deviceAssignment := e.exec.DeviceAssignment()
+	deviceNum := backends.DeviceNum(0)
+	if len(deviceAssignment) > 0 {
+		deviceNum = deviceAssignment[0]
+	}
+
 	for v := range ctx.IterVariables() {
 		nodes, found := v.graphToNodes.Load(graphId)
 		if !found {
@@ -440,7 +453,7 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 			}
 			donate[handle] = true
 		} else {
-			if v.value == nil {
+			if !v.HasValue() {
 				if e.isInitializeVariablesExec {
 					Panicf("variable %q used and not initialized during variable initialization, this would lead to "+
 						"recursive initialization of variables, and is not supported", v.ScopeAndName())
@@ -457,6 +470,83 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 				return err
 			}
 			donate[handle] = false
+		}
+	}
+	return nil
+}
+
+// setSideParamsDistributed sets the side parameters for distributed execution (AutoSharding or SPMD).
+// In distributed mode, inputBuffers and donate are organized as:
+// [device0_param0, device0_param1, ..., device1_param0, device1_param1, ...]
+// For each variable parameter, we need to set numDevices buffers from its distributed shards.
+func (e *Exec) setSideParamsDistributed(g *Graph, inputBuffers []backends.Buffer, donate []bool) error {
+	ctx := e.context
+	graphId := g.GraphId()
+	numDevices := e.exec.NumDevices()
+	numParams := g.NumParameters()
+	deviceAssignment := e.exec.DeviceAssignment()
+
+	for v := range ctx.IterVariables() {
+		nodes, found := v.graphToNodes.Load(graphId)
+		if !found {
+			continue
+		}
+		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
+			return errors.Errorf("invalid paramNode for variable %q", v.ParameterName())
+		}
+		handle := int(nodes.paramNode.GetParameterHandle())
+
+		if !v.HasValue() {
+			if e.isInitializeVariablesExec {
+				return errors.Errorf(
+					"variable %q used and not initialized during variable initialization, this would lead to "+
+						"recursive initialization of variables, and is not supported", v.ScopeAndName())
+			} else {
+				return errors.Errorf("variable %q failed to initialize", v.ScopeAndName())
+			}
+		}
+
+		// Get shards for this variable: either from distValue or by replicating value.
+		dTensor, err := v.DistributedValue()
+		if err != nil {
+			return errors.WithMessagef(err, "failed to get distributed value for variable %q", v.ScopeAndName())
+		}
+		shards := dTensor.Shards()
+		changedInGraph := v.ChangedInGraph(g)
+		if changedInGraph {
+			// Donate buffers since we'll get new ones on output.
+			for deviceIdx := range numDevices {
+				bufIdx := deviceIdx*numParams + handle
+				deviceNum := backends.DeviceNum(deviceIdx)
+				if len(deviceAssignment) > deviceIdx {
+					deviceNum = deviceAssignment[deviceIdx]
+				}
+				inputBuffers[bufIdx], err = shards[deviceIdx].DonateBuffer(e.backend, deviceNum)
+				if err != nil {
+					return errors.WithMessagef(err, "failed to donate buffer for variable %q on device %d",
+						v.ScopeAndName(), deviceIdx)
+				}
+				donate[bufIdx] = true
+			}
+			// Reset the variable since we donated all shards.
+			err = v.Reset()
+			if err != nil {
+				return err
+			}
+		} else {
+			for deviceIdx := range numDevices {
+				bufIdx := deviceIdx*numParams + handle
+				deviceNum := backends.DeviceNum(deviceIdx)
+				if len(deviceAssignment) > deviceIdx {
+					deviceNum = deviceAssignment[deviceIdx]
+				}
+				inputBuffers[bufIdx], err = shards[deviceIdx].Buffer(e.backend, deviceNum)
+				if err != nil {
+					return errors.WithMessagef(err, "failed to get buffer for variable %q on device %d",
+						v.ScopeAndName(), deviceIdx)
+				}
+				donate[bufIdx] = false
+			}
 		}
 	}
 	return nil

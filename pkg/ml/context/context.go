@@ -651,7 +651,8 @@ func (ctx *Context) NeedsInitialization() bool {
 // Initialization functions are executed on the given backend.
 //
 // InitializeVariables also resets the RNG state for the context, if is not yet set.
-func (ctx *Context) InitializeVariables(backend backends.Backend, configExec func(initializerExec *Exec) error) {
+func (ctx *Context) InitializeVariables(
+	backend backends.Backend, configExec func(initializerExec *Exec) error) error {
 	// Collect variables that need initialization.
 	var variablesToInitialize []*Variable
 	for v := range ctx.IterVariables() {
@@ -661,12 +662,11 @@ func (ctx *Context) InitializeVariables(backend backends.Backend, configExec fun
 	}
 	if len(variablesToInitialize) == 0 {
 		// Nothing to do.
-		return
+		return nil
 	}
 
 	// Execute initialization for collected variables.
-	fmt.Println("Initializing variables...")
-	e := MustNewExec(backend, ctx, func(ctx *Context, g *Graph) []*Node {
+	e, err := NewExec(backend, ctx, func(ctx *Context, g *Graph) []*Node {
 		g = g.WithName("VariableInitialization")
 		initialValues := make([]*Node, 0, len(variablesToInitialize))
 		for _, variable := range variablesToInitialize {
@@ -678,34 +678,36 @@ func (ctx *Context) InitializeVariables(backend backends.Backend, configExec fun
 		}
 		return initialValues
 	})
+	if err != nil {
+		return errors.WithMessagef(err, "failed to create executor for variable initialization")
+	}
 	if configExec != nil {
 		// Caller configuration of the executor.
 		err := configExec(e)
 		if err != nil {
-			panic(errors.WithMessagef(err, "failed to configure executor for variable initialization"))
+			return errors.WithMessagef(err, "failed to configure executor for variable initialization")
 		}
 	}
 	e.isInitializeVariablesExec = true // Disallow recursive creation of variables within variable initialization.
 	values, err := e.Exec()
 	if err != nil {
-		panic(errors.WithMessagef(err, "failed to compile/run variable initialization graph"))
+		return errors.WithMessagef(err, "failed to compile/run variable initialization graph")
 	}
 	numDevices := e.NumDevices()
 	if len(values) != numDevices*len(variablesToInitialize) {
-		Panicf("failed to initialize variables: expected numDevices(%d) * %d values, got %d", numDevices, len(variablesToInitialize), len(values))
+		return errors.Errorf("failed to initialize variables: expected numDevices(%d) * %d values, got %d",
+			numDevices, len(variablesToInitialize), len(values))
 	}
-	fmt.Printf("\t- numDevices=%d, numValues=%d, numVariables=%d\n", numDevices, len(values), len(variablesToInitialize))
 	for ii, variable := range variablesToInitialize {
 		if !values[ii].Ok() {
-			Panicf(
-				"graph execution to initialize variables failed: variable %q (#%d) generated value was invalid -- maybe other variables as well",
-				variable.ScopeAndName(),
-				ii,
-			)
+			return errors.Errorf(
+				"graph execution to initialize variables failed: variable %q (#%d) generated value was invalid -- "+
+					"maybe other variables as well", variable.ScopeAndName(), ii)
 		}
 		variable.value = values[ii]
 	}
 	ctx.data.needsInitialization = false
+	return nil
 }
 
 // ExecSetVariablesInParams adds all variables (all scopes) used by the graph to the ParamsMap objects.
