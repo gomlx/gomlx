@@ -513,7 +513,7 @@ func (b *Builder) RNGBitGenerator(state backends.Op, shape shapes.Shape) (newSta
 	if !shloShape.Ok() {
 		return nil, nil, errors.Errorf("RNGBitGenerator: invalid shape: %s", shape)
 	}
-	newStateV, valueV, err := stablehlo.RngBitGenerator(nodes[0].value, shloShape, stablehlotypes.RngPhilox)
+	newStateV, valueV, err := stablehlo.RNGBitGenerator(nodes[0].value, shloShape, stablehlotypes.RngPhilox)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -620,7 +620,7 @@ func (b *Builder) extractStartIndexValues(startIndexNodes []*Node, rank int) ([]
 	var startIndexValues []*stablehlo.Value
 	if len(startIndexNodes) == 1 && !startIndexNodes[0].shape.IsScalar() && startIndexNodes[0].shape.Rank() == 1 {
 		// Special case: single 1D start indices tensor
-		for i := 0; i < rank; i++ {
+		for i := range rank {
 			sliced, err := stablehlo.Slice(startIndexNodes[0].value, []int{i}, []int{i + 1}, []int{1})
 			if err != nil {
 				return nil, err
