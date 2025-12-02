@@ -513,7 +513,7 @@ func (b *Builder) RNGBitGenerator(state backends.Op, shape shapes.Shape) (newSta
 	if !shloShape.Ok() {
 		return nil, nil, errors.Errorf("RNGBitGenerator: invalid shape: %s", shape)
 	}
-	newStateV, valueV, err := stablehlo.RNGBitGenerator(nodes[0].value, shloShape, stablehlotypes.RngPhilox)
+	newStateV, valueV, err := stablehlo.RNGBitGenerator(nodes[0].value, shloShape, stablehlotypes.RNGPhilox)
 	if err != nil {
 		return nil, nil, err
 	}
