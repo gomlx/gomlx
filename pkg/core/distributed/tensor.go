@@ -6,6 +6,7 @@
 package distributed
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/gomlx/gomlx/backends"
@@ -237,14 +238,6 @@ func (dt *Tensor) Merge() (*tensors.Tensor, error) {
 	rank := dt.logicalShape.Rank()
 	t := tensors.FromShape(dt.logicalShape)
 	toStrides := dt.logicalShape.Strides()
-	shapeRatio := dt.logicalShape.Clone()
-	for axis, logicalDim := range shapeRatio.Dimensions {
-		shapeRatio.Dimensions[axis] = logicalDim / dt.shardShape.Dimensions[axis]
-	}
-	if shapeRatio.Size() != len(dt.shards) {
-		return nil, errors.Errorf("number of shards (%d) does not match logical shape (%s)",
-			len(dt.shards), dt.logicalShape)
-	}
 
 	elementSize := dt.logicalShape.DType.Size()
 	if elementSize == 0 {
@@ -252,21 +245,75 @@ func (dt *Tensor) Merge() (*tensors.Tensor, error) {
 			dt.logicalShape.DType)
 	}
 
+	// Pre-calculate mesh info for efficiency
+	mesh := dt.mesh
+	spec := dt.spec
+	meshRank := mesh.Rank()
+	meshSizes := mesh.AxesSizes()
+	meshAxesNames := mesh.AxesNames()
+
+	// Build a mapping from mesh axis name to its index for efficient lookup
+	meshNameToIdx := make(map[string]int, meshRank)
+	for i, name := range meshAxesNames {
+		meshNameToIdx[name] = i
+	}
+
+	// Track which shard positions have already been processed to skip replicated shards.
+	processedShardPositions := make(map[string]bool)
+
 	var innerErr error
 	err := t.MutableBytes(func(tBytes []byte) {
-		for shardIdx, shardPos := range shapeRatio.Iter() {
-			shard := dt.shards[shardIdx]
+		// Iterate over all devices, including replicated ones.
+		for deviceIdx := range len(dt.shards) {
+			// Calculate mesh coordinates for this device.
+			// Device indices are laid out in row-major order across mesh dimensions.
+			meshCoords := make([]int, meshRank)
+			remaining := deviceIdx
+			for i := meshRank - 1; i >= 0; i-- {
+				meshCoords[i] = remaining % meshSizes[i]
+				remaining /= meshSizes[i]
+			}
+
+			// Calculate the shard position for each tensor axis based on which mesh axes shard it.
+			shardPos := make([]int, rank)
+			for tensorAxis := 0; tensorAxis < rank; tensorAxis++ {
+				if tensorAxis >= spec.Rank() || len(spec.Axes[tensorAxis]) == 0 {
+					// Replicated tensor axis: shard position is 0.
+					shardPos[tensorAxis] = 0
+				} else {
+					// Sharded tensor axis: combine mesh coordinates for all mesh axes that shard this axis.
+					axisSpec := spec.Axes[tensorAxis]
+					pos := 0
+					multiplier := 1
+					for i := len(axisSpec) - 1; i >= 0; i-- {
+						meshAxisName := axisSpec[i]
+						meshAxisIdx := meshNameToIdx[meshAxisName]
+						pos += meshCoords[meshAxisIdx] * multiplier
+						multiplier *= meshSizes[meshAxisIdx]
+					}
+					shardPos[tensorAxis] = pos
+				}
+			}
+
+			// Create a unique key for this shard position to detect duplicates.
+			// Convert shard position to a string representation for use as a map key.
+			shardPosKey := fmt.Sprintf("%v", shardPos)
+
+			// Skip if we've already processed this shard position (replicated shard).
+			if processedShardPositions[shardPosKey] {
+				continue
+			}
+			processedShardPositions[shardPosKey] = true
+
+			shard := dt.shards[deviceIdx]
 			innerErr = shard.ConstBytes(func(shardBytes []byte) {
 				// Calculate the slice of the logical tensor that corresponds to this shard.
 				sliceStarts := make([]int, rank)
-				// We don't strictly need sliceEnds for the copy logic, but keeping for context if needed.
-				sliceEnds := make([]int, rank)
 
 				// Calculate the base offset in the destination (logical) tensor buffer.
 				dstBaseOffset := 0
 				for axis := range rank {
 					sliceStarts[axis] = shardPos[axis] * dt.shardShape.Dimensions[axis]
-					sliceEnds[axis] = sliceStarts[axis] + dt.shardShape.Dimensions[axis]
 
 					// Add stride offset: coordinate * stride * bytes_per_element
 					dstBaseOffset += sliceStarts[axis] * toStrides[axis]

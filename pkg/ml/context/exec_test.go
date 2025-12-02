@@ -324,5 +324,7 @@ func TestAutoSharding(t *testing.T) {
 		require.Len(t, results, 2)
 		y1 := results[0]
 		fmt.Printf("\ty_{t=1} = %s\n", must.M1(y1.Merge()))
+
+		assert.Equal(t, must.M1(y0.Merge()).Value(), must.M1(y1.Merge()).Value())
 	})
 }
