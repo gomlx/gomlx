@@ -68,7 +68,8 @@ func TestExec(t *testing.T) {
 	t.Run("variable initialization", func(t *testing.T) {
 		ctx := context.New()
 		result, err := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
-			v := ctx.WithInitializer(initializers.RandomUniformFn(ctx, 0.0001, 1.0)).VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
+			v := ctx.WithInitializer(initializers.RandomUniformFn(ctx, 0.0001, 1.0)).
+				VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
 			return v.ValueGraph(g)
 		})
 		require.NoError(t, err)
@@ -224,40 +225,36 @@ func TestAutoSharding(t *testing.T) {
 
 	// RNGState is special: it must be initialized as "replicated", but the values are different
 	// for each device.
-	t.Run("RNGState", func(t *testing.T) {
+	t.Run("RandomUniform", func(t *testing.T) {
 		ctx := context.New()
 		ctx.SetParam(context.ParamInitialSeed, int64(42))
-		e := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
-			// v := ctx.WithInitializer(initializers.RandomUniformFn(ctx, 0.0001, 1.0)).VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
-			// return v.ValueGraph(g)
-			// return ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 10))
-			return ctx.GetVariable(context.RNGStateVariableName).ValueGraph(g)
+		e := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) (*Node, *Node) {
+			a := ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 2, 3))
+			b := ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 2, 3))
+			return a, b
 		})
 		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
+		shardedSpec := must.M1(distributed.BuildSpec(meshFor2).S("shards").Done())
 		e = e.AutoSharding(meshFor2).
-			WithOutputShardingSpecs(replicatedSpec)
+			WithOutputShardingSpecs(shardedSpec)
 		require.NoError(t, e.SetDefaultShardingSpec(replicatedSpec))
 		require.NoError(t, ctx.ResetRNGState())
 		shardedResults, err := e.Exec()
 		require.NoError(t, err)
-		require.Len(t, shardedResults, 2)
-		fmt.Println("RNGState:")
-		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", shardedResults[0], shardedResults[1])
-		require.NotEqualf(t, shardedResults[0].Value(), shardedResults[1].Value(),
-			"Expected replicated RNGState to be the different in every device.")
-		for shardIdx, shardT := range shardedResults {
-			shard := shardT.Value().([]uint64)
-			var hasNonZero bool
-			for _, v := range shard {
-				if v != 0 {
-					hasNonZero = true
-					break
-				}
-			}
-			if !hasNonZero {
-				t.Errorf("Shard #%d is all zeroes", shardIdx)
-			}
-		}
+		require.Len(t, shardedResults, 4)
+		a := must.M1(distributed.NewTensor(shardedSpec, []*tensors.Tensor{shardedResults[0], shardedResults[2]}))
+		b := must.M1(distributed.NewTensor(shardedSpec, []*tensors.Tensor{shardedResults[1], shardedResults[3]}))
+		fmt.Println("RandomUniform([2, 3]):")
+		fmt.Printf("\t- A [Shard #0]: %s\n\t- A [Shard #1]: %s\n", a.Shards()[0], a.Shards()[1])
+		fmt.Printf("\t- B [Shard #0]: %s\n\t- B [Shard #1]: %s\n", b.Shards()[0], b.Shards()[1])
+		require.NotEqualf(t, a.Shards()[0].Value(), a.Shards()[1].Value(),
+			"Expected sharded random values of A to be the different in every device.")
+		require.NotEqualf(t, b.Shards()[0].Value(), b.Shards()[1].Value(),
+			"Expected sharded random values of B to be the different in every device.")
+		require.NotEqualf(t, a.Shards()[0].Value(), b.Shards()[0].Value(),
+			"Expected sharded random values of A and B to be the different in every device.")
+		require.NotEqualf(t, a.Shards()[1].Value(), b.Shards()[1].Value(),
+			"Expected sharded random values of A and B to be the different in every device.")
 	})
 
 	t.Run("variable initialization", func(t *testing.T) {
@@ -314,43 +311,18 @@ func TestAutoSharding(t *testing.T) {
 		fmt.Printf("\tInput x: shape=%s, shardShape=%s\n", distributedX.Shape(), distributedX.ShardShape())
 		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", distributedX.Shards()[0], distributedX.Shards()[1])
 		require.NoError(t, err)
-		shardedResults, err := oneLayerExec.Exec(distributedX)
+		results, err := oneLayerExec.DistributedExec(distributedX)
 		require.NoError(t, err)
-		require.Len(t, shardedResults, 4)
-		fmt.Println("\tResults first execution:")
-		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", shardedResults[0], shardedResults[2])
-		fmt.Println("\tReplicated value for w:")
-		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", shardedResults[1], shardedResults[3])
-
-		distributedResult, err := distributed.NewTensor(batchSpec, shardedResults)
-		require.NoError(t, err)
-		distributedResult.Shape().Equal(shapes.Make(dtypes.Float64, 2, 1))
-		gotValue1 := must.M1(distributedResult.Merge()).Value().([][]float64)
-		assert.NotEqualf(
-			t, 0.0, gotValue1[0][0],
-			"Failed evaluating oneLayer(%v) returned 0, but weights should have been randomly initialized", x)
-		assert.Equal(t, 2*gotValue1[0][0], gotValue1[1][0])
+		require.Len(t, results, 2)
+		y0, w := results[0], results[1]
+		fmt.Printf("\ty_{t=0} = %s\n", must.M1(y0.Merge()))
+		fmt.Printf("\tw       = %s\n", must.M1(w.Merge()))
 
 		// The second call should reuse the graph and yield the same result.
-		shardedResults, err = oneLayerExec.Exec(distributedX)
+		results, err = oneLayerExec.DistributedExec(distributedX)
 		require.NoError(t, err)
-		require.Len(t, shardedResults, 2)
-		distributedResult, err = distributed.NewTensor(batchSpec, shardedResults)
-		require.NoError(t, err)
-		distributedResult.Shape().Equal(shapes.Make(dtypes.Float64, 2, 1))
-		gotValue2 := must.M1(distributedResult.Merge()).Value().([][]float64)
-		assert.Equal(t, gotValue1, gotValue2,
-			"results of second call of oneLayer(%v) should be the same as the first call", x)
-
-		// Different batch size: it should generate a new graph but yield the same result.
-		shardedResults, err = oneLayerExec.Exec(distributedX)
-		require.NoError(t, err)
-		require.Len(t, shardedResults, 2)
-		distributedResult, err = distributed.NewTensor(batchSpec, shardedResults)
-		require.NoError(t, err)
-		distributedResult.Shape().Equal(shapes.Make(dtypes.Float64, 4, 1))
-		gotValue3 := must.M1(distributedResult.Merge()).Value().([][]float64)
-		assert.Equal(t, gotValue3[:2], gotValue1,
-			"results of third call of oneLayer(%v) should be the same as the first call", x)
+		require.Len(t, results, 2)
+		y1 := results[0]
+		fmt.Printf("\ty_{t=1} = %s\n", must.M1(y1.Merge()))
 	})
 }

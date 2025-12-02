@@ -4,6 +4,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/pkg/errors"
 )
@@ -33,6 +34,55 @@ import (
 func (e *Exec) Exec(args ...any) ([]*tensors.Tensor, error) {
 	outputs, _, err := e.ExecWithGraph(args...)
 	return outputs, err
+}
+
+// DistributedExec is just like Exec, but aggregates the outputs into *distributed.Tensor.
+// Usually, Exec will return alice of numDevices * nnumOutputs individual shards (*tensors.Tensor).
+//
+// Notice that to actually trigger distributed execution, you must set Exec.AutoSharding (or Exec.SPMD) and
+// set the proper sharding specs of the inputs and outputs.
+//
+// See also Exec.AggregateShards.
+func (e *Exec) DistributedExec(args ...any) ([]*distributed.Tensor, error) {
+	shards, _, err := e.ExecWithGraph(args...)
+	if err != nil {
+		return nil, err
+	}
+	return e.AggregateShards(shards)
+}
+
+// AggregateShards returned by Exec into *distributedTensor outputs.
+// Usually, Exec will return alice of numDevices * nnumOutputs individual shards (*tensors.Tensor).
+//
+// See also DistributedExec, which calls Exec and then calls this.
+func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*distributed.Tensor, error) {
+	numDevices := e.NumDevices()
+	if numDevices == 1 {
+		return nil, errors.New("distributed execution requires more than one device")
+	}
+	if len(e.meshes) == 0 {
+		return nil, errors.New("meshes are not set for distributed execution")
+	}
+	defaultMesh := e.meshes[0]
+	replicatedSpec := distributed.NewReplicatedShardingSpec(defaultMesh)
+	numOutputs := len(shards) / numDevices
+	distributedOutputs := make([]*distributed.Tensor, numOutputs)
+	var err error
+	for outputIdx := range numOutputs {
+		outputShards := make([]*tensors.Tensor, numDevices)
+		for deviceIdx := range numDevices {
+			outputShards[deviceIdx] = shards[deviceIdx*numOutputs+outputIdx]
+		}
+		var shardingSpec = replicatedSpec
+		if outputIdx < len(e.outputShardingSpecs) {
+			shardingSpec = e.outputShardingSpecs[outputIdx]
+		}
+		distributedOutputs[outputIdx], err = distributed.NewTensor(shardingSpec, outputShards)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return distributedOutputs, nil
 }
 
 // ExecWithGraph is similar to Exec, but it also returns the computation graph used

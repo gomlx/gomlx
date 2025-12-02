@@ -1,6 +1,11 @@
 package graph_test
 
 import (
+	"flag"
+	"fmt"
+	"os"
+	"testing"
+
 	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -20,4 +25,12 @@ func must(err error) {
 func must1[T any](value T, err error) T {
 	must(err)
 	return value
+}
+
+func TestMain(m *testing.M) {
+	fmt.Println(">> TestMain():")
+	flag.Parse()
+	exitCode := m.Run()
+	fmt.Println(">> TestMain(): finished")
+	os.Exit(exitCode)
 }
