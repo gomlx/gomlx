@@ -26,6 +26,12 @@ Distributed computation improvements and refactorings:
 - Package `context`:
   - Added `context.MustGetParam[T](ctx, key)` and `context.MustGetGraphParam[T](ctx, graph, key)`.
   - Added `Exec.AutoSharding` and `Exec.SPMD`.
+  - Added `Variable.DistributedValue` and `Variable.SetDistributedValue`.
+- Package `train`:
+  - Added `train.DistributedDataset` and `train.BaseDataset`.
+  - `Trainer.TrainStep`, `Trainer.EvalStep` and `Trainer.Eval` now return errors as opposed to panicking.
+  - Added `Trainer.WithDeviceAssignment`.
+  - Added `Trainer.DistributedTrainStep`, `Trainer.DistributedEvalStep` and `Trainer.DistributedEval`.
 - Package `backend`:
   - Added `Backend.CopyToDevice`
   - `Builder.Parameter()` now takes an optional `ShardingSpec` for sharded inputs.
@@ -39,7 +45,7 @@ Distributed computation improvements and refactorings:
   - Added `Tensor.CheckValid()`, `Tensor.Device()`, `Tensor.Backend()`
   - Changing it to return an error (as opposed to panic) where possible.
 
-Other minor improvements:
+Other improvements:
 
 - Package `simplego`:
   - Cleanups and improvements: thanks to @wunderbarb!

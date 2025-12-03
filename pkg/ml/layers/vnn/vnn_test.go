@@ -271,7 +271,8 @@ func TestVNNTrain(t *testing.T) {
 	//commandline.AttachProgressBar(loop)
 	_, err = loop.RunSteps(ds, numSteps)
 	require.NoError(t, err)
-	lossAndMetrics := trainer.Eval(dsEval)
+	lossAndMetrics, err := trainer.Eval(dsEval)
+	require.NoError(t, err)
 	for metricIdx, metricSpec := range trainer.EvalMetrics() {
 		fmt.Printf("\t%q=%s\n", metricSpec.ShortName(), lossAndMetrics[metricIdx])
 	}

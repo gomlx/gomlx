@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"iter"
 
-	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -96,8 +96,8 @@ func (r *Trainer) accumulateStepGraphImpl(spec any, ctx *context.Context, inputs
 	// Store total loss as a variable, so it can be used by metrics.
 	loss := GetLosses(ctx, g)
 	if loss == nil {
-		Panicf("no loss function defined (or it returned nil), and no loss set with AddLoss(), there is nothing to optimize!?")
-		panic(nil) // Disable linter error.
+		exceptions.Panicf("no loss function defined (or it returned nil), and no loss set with AddLoss(), " +
+			"there is nothing to optimize!?")
 	}
 
 	// Metrics updates. They include: batch loss, exponential moving average of the batch loss.
@@ -114,12 +114,13 @@ func (r *Trainer) accumulateStepGraphImpl(spec any, ctx *context.Context, inputs
 	varIdx := 0
 	for v, accVar := range iterTrainableAndAccumulatorVariables(ctx, g) {
 		if varIdx > numTrainable {
-			Panicf("more gradients (%d) than trainable variables, this should not happen!", len(grads))
-			panic(nil)
+			exceptions.Panicf("more gradients (%d) than trainable variables, this should not happen!", len(grads))
 		}
 		shape := v.Shape()
 		if !shape.Equal(grads[varIdx].Shape()) {
-			Panicf("shape mismatch between variable %q (shape=%s) and the correspoding gradient #%d (shape=%s)", v.ScopeAndName(), v.Shape(), varIdx, grads[varIdx].Shape())
+			exceptions.Panicf(
+				"shape mismatch between variable %q (shape=%s) and the correspoding gradient #%d (shape=%s)",
+				v.ScopeAndName(), v.Shape(), varIdx, grads[varIdx].Shape())
 		}
 		// Store updated variable, and update gradient to accumulated value.
 		grads[varIdx] = graph.Add(accVar.ValueGraph(g), grads[varIdx])
@@ -160,7 +161,7 @@ func (r *Trainer) accumulateStepAndApplyGraph(spec any, ctx *context.Context, in
 	return r.accumulateStepGraphImpl(spec, ctx, inputs, labels, true)
 }
 
-func (r *Trainer) trainStepWithAccumulateGradients(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
+func (r *Trainer) trainStepWithAccumulateGradients(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor, err error) {
 	r.accumulateGradientsCurrentStep++
 	if r.accumulateGradientsCurrentStep < r.accumulateGradientsSteps {
 		return r.callGraphFn(r.accumulateStepNoApplyGraph, TrainType, r.accumulateGradientsExecMap, spec, inputs, labels)

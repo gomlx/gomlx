@@ -23,7 +23,6 @@ import (
 	"sort"
 	"time"
 
-	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -163,7 +162,7 @@ func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*t
 		loop.TrainStepDurations = append(loop.TrainStepDurations, elapsed)
 	}()
 
-	err = TryCatch[error](func() { metrics = loop.Trainer.TrainStep(spec, inputs, labels) })
+	metrics, err = loop.Trainer.TrainStep(spec, inputs, labels)
 	if err != nil {
 		return nil, err
 	}

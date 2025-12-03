@@ -45,7 +45,10 @@ func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) {
 				)
 			}
 			count++
-			r.batchNormAveragesStep(phase, spec, inputs, labels)
+			err = r.batchNormAveragesStep(phase, spec, inputs, labels)
+			if err != nil {
+				panic(errors.WithMessagef(err, "BatchNormalizationAveragesUpdate(phase=%d) failed", phase))
+			}
 
 			// Free inputs and labels after usage.
 			for _, input := range inputs {
@@ -65,8 +68,8 @@ func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) {
 
 // batchNormAveragesStep runs one forward step on the model, with the model frozen, except
 // for non-gradient updated variables, like batch normalization moving averages.
-func (r *Trainer) batchNormAveragesStep(phase int, spec any, inputs, labels []*tensors.Tensor) {
-	lossAndMetrics := r.callGraphFn(
+func (r *Trainer) batchNormAveragesStep(phase int, spec any, inputs, labels []*tensors.Tensor) error {
+	lossAndMetrics, err := r.callGraphFn(
 		r.batchNormsAverageStepGraphFn(phase),
 		BatchNormAveragesType,
 		r.batchNormStepExecMap,
@@ -74,10 +77,13 @@ func (r *Trainer) batchNormAveragesStep(phase int, spec any, inputs, labels []*t
 		inputs,
 		labels,
 	)
+	if err != nil {
+		return err
+	}
 	for _, t := range lossAndMetrics {
 		t.MustFinalizeAll()
 	}
-
+	return nil
 }
 
 // batchNormsAverageStepGraph builds the graph to eval one step, in training mode, so variables are allowed to be updates.

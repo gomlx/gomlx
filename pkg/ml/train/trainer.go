@@ -26,9 +26,10 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"slices"
 
 	"github.com/gomlx/gomlx/backends"
-	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -73,7 +74,7 @@ type Trainer struct {
 
 	// Distribute execution:
 	distributedStrategy distributed.Strategy
-	deviceAssignments   []backends.DeviceNum // Optional.
+	deviceAssignment    []backends.DeviceNum // Optional.
 
 	// maxExecutors to cache. It will fail after that. One executor is created
 	// per `spec` value, so this is the same as the max number of different `spec`
@@ -260,14 +261,6 @@ func NewTrainer(backend backends.Backend, ctx *context.Context,
 	return r
 }
 
-// WithDistribution sets the distribution strategy for the Trainer.
-//
-// This impacts how DistributedTrainStep works, used by Loop when a DistributedDataset is used.
-func (r *Trainer) WithDistribution(strategy distributed.Strategy) *Trainer {
-	r.distributedStrategy = strategy
-	return r
-}
-
 // WithDeviceAssignemnt sets the backend device assignment to use.
 //
 // This works for both distributed and normal (single device) training. The later uses only one device where to
@@ -275,8 +268,12 @@ func (r *Trainer) WithDistribution(strategy distributed.Strategy) *Trainer {
 //
 // A nil value (the default) is valid, in which case it uses the backend's default, which is usually simply the
 // sequential devices starting from 0.
-func (r *Trainer) WithDeviceAssignment(strategy distributed.Strategy) *Trainer {
-	r.distributedStrategy = strategy
+func (r *Trainer) WithDeviceAssignment(deviceAssignment ...backends.DeviceNum) *Trainer {
+	if deviceAssignment == nil {
+		r.deviceAssignment = nil
+		return r
+	}
+	r.deviceAssignment = slices.Clone(deviceAssignment)
 	return r
 }
 
@@ -353,12 +350,13 @@ func (r *Trainer) EvalMetrics() []metrics.Interface { return r.evalMetrics }
 // createExecutor (train or eval) for the given spec. Returns an error if it failed for
 // any reason, including exceeding maxExecutors.
 func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
-	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node)) *context.Exec {
+	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node)) (
+	*context.Exec, error) {
 	numExecs := len(r.trainStepExecMap) + len(r.evalStepExecMap) +
 		len(r.accumulateGradientsExecMap) + len(r.accumulateGradientsAndApplyExecMap) +
 		len(r.batchNormStepExecMap)
 	if numExecs > r.maxExecutors {
-		Panicf("Max number of executors reached: one is created for each "+
+		return nil, errors.Errorf("Max number of executors reached: one is created for each "+
 			"different value of `spec` returned by Dataset, triggering a different JIT-compiled "+
 			"computation graph. Probably you want to limit the number of different datasets configuration "+
 			"(spec) or shapes supported, or increase the allowed number of executors (see Train.WithMaxExecutors) "+
@@ -372,12 +370,16 @@ func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
 	if _, found := spec.(fmt.Stringer); found {
 		trainerName = fmt.Sprintf("Trainer: spec=%s", spec)
 	}
-	return context.MustNewExec(r.backend, r.context,
+	exec, err := context.NewExec(r.backend, r.context,
 		func(ctx *context.Context, inputsAndLabels []*graph.Node) (metrics []*graph.Node) {
 			inputs := inputsAndLabels[:inputsLen]
 			labels := inputsAndLabels[inputsLen:]
 			return graphFn(spec, ctx, inputs, labels)
-		}).WithName(trainerName)
+		})
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed to create executor for spec %+v", spec)
+	}
+	return exec.WithName(trainerName), nil
 }
 
 // lossFnScalarLoss calls `r.lossFn` and [ReduceAllMean] to a scalar.
@@ -407,10 +409,9 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 	// Store total loss as a variable, so it can be used by metrics.
 	loss := GetLosses(ctx, g)
 	if loss == nil {
-		Panicf(
+		exceptions.Panicf(
 			"no loss function defined (or it returned nil), and no loss set with AddLoss(), there is nothing to optimize!?",
 		)
-		panic(nil) // Disable linter error.
 	}
 
 	// Optimizer: it will create graph for gradient.
@@ -436,20 +437,20 @@ func (r *Trainer) callGraphFn(
 	execMap map[any]*context.Exec,
 	spec any,
 	inputs, labels []*tensors.Tensor,
-) (metrics []*tensors.Tensor) {
+) (metrics []*tensors.Tensor, err error) {
 	if len(inputs) == 0 {
-		Panicf("there are no inputs, at least one is required")
+		return nil, errors.New("there are no inputs, at least one is required")
 	}
 	if lengths, found := r.inputsAndLabelsLenPerSpec[spec]; found {
 		if len(inputs) != lengths[0] || len(labels) != lengths[1] {
-			Panicf("dataset yields inputs (%d) and labels (%d) with lengths different "+
+			return nil, errors.Errorf("dataset yields inputs (%d) and labels (%d) with lengths different "+
 				"than with previous call (%d and %d) for the given spec %+v", len(inputs), len(labels),
 				lengths[0], lengths[1], spec)
 		}
 	}
 	for ii, input := range inputs {
 		if input == nil {
-			Panicf("inputs[%d] is nil!?", ii)
+			return nil, errors.Errorf("inputs[%d] is nil!?", ii)
 		}
 	}
 
@@ -466,7 +467,10 @@ func (r *Trainer) callGraphFn(
 	// Get the executor for the graphType and input spec.
 	exec, found := execMap[spec]
 	if !found {
-		exec = r.createExecutor(spec, len(inputs), len(labels), graphFn)
+		exec, err = r.createExecutor(spec, len(inputs), len(labels), graphFn)
+		if err != nil {
+			return nil, err
+		}
 		execMap[spec] = exec
 		for _, handler := range r.onExecCreationHandlers {
 			handler(exec, graphType) // Call the handler for training.
@@ -474,15 +478,14 @@ func (r *Trainer) callGraphFn(
 	}
 
 	// Collect metrics:
-	var err error
 	metrics, err = exec.Exec(inputsAndLabels...)
 	if err != nil {
-		panic(errors.WithMessage(err, "failed to execute train/eval step"))
+		return nil, errors.WithMessage(err, "failed to execute train/eval step")
 	}
 	if len(metrics) == 0 {
-		Panicf("no metrics calculate metric in step")
+		return nil, errors.New("no metrics calculate metric in step")
 	}
-	return
+	return metrics, nil
 }
 
 // ResetComputationGraphs can be used during training in between steps to force the recreation of the computation graphs.
@@ -528,9 +531,7 @@ func (r *Trainer) metricsUpdatesGraph(ctx *context.Context, labels, predictions 
 //
 // It returns a slice of metrics, that includes (the first two) the batch loss, and the moving exponential average
 // of the batch loss, plus the other `trainMetrics` configured during the creation of the Trainer.
-//
-// Errors are thrown using `panic` -- they are usually informative and include a stack-trace.
-func (r *Trainer) TrainStep(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
+func (r *Trainer) TrainStep(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor, err error) {
 	if r.accumulateGradients {
 		// Version that accumulate gradients.
 		return r.trainStepWithAccumulateGradients(spec, inputs, labels)
@@ -560,7 +561,7 @@ func (r *Trainer) evalStepGraph(spec any, ctx *context.Context, inputs, labels [
 // ResetTrainMetrics call Metrics.Reset on all train metrics. Usually called before a training session.
 func (r *Trainer) ResetTrainMetrics() error {
 	for _, metric := range r.trainMetrics {
-		err := TryCatch[error](func() { metric.Reset(r.context.Checked(false)) })
+		err := exceptions.TryCatch[error](func() { metric.Reset(r.context.Checked(false)) })
 		if err != nil {
 			panic(errors.WithMessagef(err, "Eval() failed to reset metric %q", metric.Name()))
 		}
@@ -573,32 +574,32 @@ func (r *Trainer) ResetTrainMetrics() error {
 // The parameters are the output of a Dataset.Yield call. The same as TrainStep.
 //
 // It returns the current value for the registered eval metrics.
-//
-// Errors are thrown using `panic` -- they are usually informative and include a stack-trace.
-func (r *Trainer) EvalStep(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
+func (r *Trainer) EvalStep(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor, err error) {
 	return r.callGraphFn(r.evalStepGraph, EvalType, r.evalStepExecMap, spec, inputs, labels)
 }
 
 // resetEvalMetrics call Metrics.Reset on all eval metrics.
-func (r *Trainer) resetEvalMetrics() {
+func (r *Trainer) resetEvalMetrics() error {
 	for _, metric := range r.evalMetrics {
-		err := TryCatch[error](func() { metric.Reset(r.context) })
+		err := exceptions.TryCatch[error](func() { metric.Reset(r.context) })
 		if err != nil {
-			panic(errors.WithMessagef(err, "Eval() failed to reset metric %q", metric.Name()))
+			return errors.WithMessagef(err, "Eval() failed to reset metric %q", metric.Name())
 		}
 	}
+	return nil
 }
 
 // Eval returns the computation of loss and metrics over the given dataset. The dataset
 // has to be finite (yield io.EOF at the end). The function will reset the dataset
 // at the start.
 //
-// It panics on errors.
-//
 // Note: inputs and labels yielded by the dataset are immediately finalized (freed) after use.
-func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
+func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor, err error) {
 	ds.Reset()
-	r.resetEvalMetrics()
+	err = r.resetEvalMetrics()
+	if err != nil {
+		return nil, err
+	}
 	count := 0
 	finalizeInputs := finalizeYieldedTensors(ds)
 
@@ -617,7 +618,7 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 			break
 		}
 		if err != nil {
-			panic(errors.Wrap(err, "dataset returned an error during Eval"))
+			return nil, errors.Wrap(err, "dataset returned an error during Eval")
 		}
 		count++
 		// Early free (not wait for the GC) of the results of previous batch.
@@ -625,7 +626,10 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 			t.MustFinalizeAll()
 		}
 
-		lossAndMetrics = r.EvalStep(spec, inputs, labels)
+		lossAndMetrics, err = r.EvalStep(spec, inputs, labels)
+		if err != nil {
+			return nil, errors.WithMessage(err, "EvalStep failed")
+		}
 		for i, goUpdateFn := range goUpdateFns {
 			if goUpdateFn != nil {
 				goUpdateFn.UpdateGo(lossAndMetrics[i])
@@ -643,7 +647,7 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 		}
 	}
 	if count == 0 {
-		Panicf("evaluation dataset yielded no batches, no data to evaluate")
+		return nil, errors.New("evaluation dataset yielded no batches, no data to evaluate")
 	}
 
 	// Read out the go-generate metrics:
@@ -658,10 +662,10 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 		metric.MaterializeLocal()
 		err := metric.InvalidateOnDevice()
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
-	return lossAndMetrics
+	return lossAndMetrics, nil
 }
 
 // Metrics return list of registered eval metrics, including the loss metric that is added automatically.
