@@ -17,6 +17,7 @@
 package train
 
 import (
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 )
@@ -104,6 +105,10 @@ type DistributedDataset interface {
 	// Strategy returns the distributed.Strategy to use for this dataset.
 	// Usually, distributed.AutoSharding. But distributed.SPMD (experimental) can also be used.
 	Strategy() distributed.Strategy
+
+	// DeviceAssignment returns the device assignment for the distributed dataset.
+	// The Yield() method will return distributed.Tensor already on the corresponding device.
+	DeviceAssignment() []backends.DeviceNum
 
 	// Yield one "batch" (or whatever is the unit for a training step) or an error.
 	// Very similar to Dataset.Yield, all the notes there apply here.
