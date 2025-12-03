@@ -196,6 +196,70 @@ func TestDistributedAccumulator(t *testing.T) {
 		assert.Equal(t, 50, batchCount, "After reset, should still yield 50 distributed batches")
 	})
 
+	t.Run("Mesh({2}, {\"replicas\"})", func(t *testing.T) {
+		// Simple replication with 2 devices, every input is replicated
+		mesh, err := distributed.NewDeviceMesh([]int{2}, []string{"replicas"})
+		require.NoError(t, err)
+
+		// Both input and label are replicated
+		inputSpec, err := distributed.BuildSpec(mesh).R().Done()
+		require.NoError(t, err)
+		labelSpec, err := distributed.BuildSpec(mesh).R().Done()
+		require.NoError(t, err)
+
+		// Create mock source dataset that yields 100 batches
+		sourceShape := shapes.Make(dtypes.Float32, 10, 5)
+		labelShape := shapes.Make(dtypes.Float32, 10)
+		source := &mockDataset{
+			name:       "mockSource",
+			numBatches: 100,
+			inputShape: sourceShape,
+			labelShape: labelShape,
+		}
+
+		// Create distributed dataset
+		distDS, err := NewDistributedAccumulator(
+			backend,
+			source,
+			distributed.AutoSharding,
+			[]*distributed.ShardingSpec{inputSpec},
+			[]*distributed.ShardingSpec{labelSpec},
+			nil, // deviceAssignment - use default
+		)
+		require.NoError(t, err)
+
+		// Check that Distributed yields 100 batches (same as source, since numInputShards = 1)
+		batchCount := 0
+		for {
+			_, inputs, labels, err := distDS.Yield()
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err)
+			require.Len(t, inputs, 1)
+			require.Len(t, labels, 1)
+
+			// Check that the distributed tensors have 2 shards (replicated across 2 devices)
+			require.Len(t, inputs[0].Shards(), 2, "Input should have 2 shards (replicated)")
+			require.Len(t, labels[0].Shards(), 2, "Label should have 2 shards (replicated)")
+
+			// Check that shards are on correct devices (0 and 1)
+			for i, shard := range inputs[0].Shards() {
+				deviceNum, err := shard.Device()
+				require.NoError(t, err)
+				assert.Equal(t, backends.DeviceNum(i), deviceNum, "Input shard %d should be on device %d", i, i)
+			}
+			for i, shard := range labels[0].Shards() {
+				deviceNum, err := shard.Device()
+				require.NoError(t, err)
+				assert.Equal(t, backends.DeviceNum(i), deviceNum, "Label shard %d should be on device %d", i, i)
+			}
+
+			batchCount++
+		}
+		assert.Equal(t, 100, batchCount, "Should yield 100 distributed batches from 100 source batches (numInputShards = 1)")
+	})
+
 	t.Run("Mesh({2, 2}, {\"shards\", \"replicas\"})", func(t *testing.T) {
 		// Mesh with 2x2 = 4 devices, with shards and replicas
 		// Input is sharded on "shards" axis (size 2), so we need 2 input shards
