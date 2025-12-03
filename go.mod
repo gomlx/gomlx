@@ -14,7 +14,7 @@ require (
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/bsplines v0.2.0
 	github.com/gomlx/gopjrt v0.10.0-rc1
-	github.com/gomlx/stablehlo v0.2.0-rc0
+	github.com/gomlx/stablehlo v0.2.0-rc1
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.1
 	github.com/muesli/termenv v0.16.0
