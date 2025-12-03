@@ -98,7 +98,13 @@ type Dataset interface {
 //
 // An important aspect of the dataset is the distributed.ShardingSpec of each input and label.
 // They are fed into the trainer to guide the distributed execution, and must remain the same for the same spec.
+//
+// Note: if you need to control the device assignment, that is done in the Trainer.
 type DistributedDataset interface {
+	// Strategy returns the distributed.Strategy to use for this dataset.
+	// Usually, distributed.AutoSharding. But distributed.SPMD (experimental) can also be used.
+	Strategy() distributed.Strategy
+
 	// Yield one "batch" (or whatever is the unit for a training step) or an error.
 	// Very similar to Dataset.Yield, all the notes there apply here.
 	//
