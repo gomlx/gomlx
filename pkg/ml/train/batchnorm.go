@@ -4,7 +4,7 @@ import (
 	"io"
 	"slices"
 
-	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -59,9 +59,8 @@ func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) {
 			}
 		}
 		if count == 0 {
-			Panicf(
-				"BatchNormalizationAveragesUpdate: dataset yielded no batches, no data to calculate running mean/average",
-			)
+			exceptions.Panicf("BatchNormalizationAveragesUpdate: dataset yielded no batches, no data to calculate " +
+				"running mean/average")
 		}
 	}
 }

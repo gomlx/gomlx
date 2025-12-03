@@ -30,7 +30,6 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -73,8 +72,7 @@ type Trainer struct {
 	optimizer optimizers.Interface
 
 	// Distribute execution:
-	distributedStrategy distributed.Strategy
-	deviceAssignment    []backends.DeviceNum // Optional.
+	deviceAssignment []backends.DeviceNum // Optional.
 
 	// maxExecutors to cache. It will fail after that. One executor is created
 	// per `spec` value, so this is the same as the max number of different `spec`
@@ -376,6 +374,9 @@ func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
 			labels := inputsAndLabels[inputsLen:]
 			return graphFn(spec, ctx, inputs, labels)
 		})
+	if r.deviceAssignment != nil {
+		exec = exec.WithDeviceAssignment(r.deviceAssignment)
+	}
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to create executor for spec %+v", spec)
 	}

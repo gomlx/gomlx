@@ -29,6 +29,7 @@ Distributed computation improvements and refactorings:
   - Added `Variable.DistributedValue` and `Variable.SetDistributedValue`.
 - Package `train`:
   - Added `train.DistributedDataset` and `train.BaseDataset`.
+  - `Dataset.Reset` now returns an error.
   - `Trainer.TrainStep`, `Trainer.EvalStep` and `Trainer.Eval` now return errors as opposed to panicking.
   - Added `Trainer.WithDeviceAssignment`.
   - Added `Trainer.DistributedTrainStep`, `Trainer.DistributedEvalStep` and `Trainer.DistributedEval`.
