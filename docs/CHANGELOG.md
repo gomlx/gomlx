@@ -33,6 +33,8 @@ Distributed computation improvements and refactorings:
   - `Trainer.TrainStep`, `Trainer.EvalStep` and `Trainer.Eval` now return errors as opposed to panicking.
   - Added `Trainer.WithDeviceAssignment`.
   - Added `Trainer.DistributedTrainStep`, `Trainer.DistributedEvalStep` and `Trainer.DistributedEval`.
+- Package `datasets`:
+  - Added `datasets.DistributedAccumulator`: converts a normal `Dataset` into a `DistributedDataset`.
 - Package `backend`:
   - Added `Backend.CopyToDevice`
   - `Builder.Parameter()` now takes an optional `ShardingSpec` for sharded inputs.

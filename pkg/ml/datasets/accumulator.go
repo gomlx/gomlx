@@ -71,6 +71,9 @@ type DistributedAccumulator struct {
 	nextBatch chan *distributedBatch
 }
 
+// Compile time check that DistributedAccumulator implements train.DistributedDataset.
+var _ train.DistributedDataset = (*DistributedAccumulator)(nil)
+
 // NewDistributedAccumulator creates a distributed dataset from the given source dataset, by accumulating the shards
 // and yielding them as a single distributed.Tensor.
 //
