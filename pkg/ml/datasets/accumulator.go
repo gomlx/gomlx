@@ -3,7 +3,6 @@ package datasets
 import (
 	"fmt"
 	"io"
-	"maps"
 	"strings"
 	"sync"
 
@@ -65,8 +64,8 @@ type DistributedAccumulator struct {
 	// Bucketing system - no mutex needed, only one goroutine modifies buckets
 	buckets map[string]*bucket
 
-	// Statistics - no mutex needed, only one goroutine modifies stats
-	stats map[string]int // key -> count of source inputs seen
+	// Statistics - protected by sync.Map for concurrent access
+	stats sync.Map // key (string) -> count (int) of source inputs seen
 
 	// Channel for next prepared batch (size 1)
 	nextBatch chan *distributedBatch
@@ -79,6 +78,9 @@ type DistributedAccumulator struct {
 // The input and label sharding specs are used to specify how the data should be distributed.
 //
 // deviceAssignment can be nil, in which case a default sequential assignment (starting from 0) is used.
+//
+// The last element of inputShardingSpec is used if there are more inputs than specs defined.
+// The same for labels.
 func NewDistributedAccumulator(backend backends.Backend, source train.Dataset, strategy distributed.Strategy,
 	inputShardingSpecs, labelShardingSpecs []*distributed.ShardingSpec,
 	deviceAssignment []backends.DeviceNum) (
@@ -88,6 +90,9 @@ func NewDistributedAccumulator(backend backends.Backend, source train.Dataset, s
 	}
 	if source == nil {
 		return nil, errors.New("source dataset cannot be nil")
+	}
+	if len(inputShardingSpecs) == 0 {
+		return nil, errors.New("input sharding specs cannot be empty")
 	}
 
 	// Infer numDevices from meshes in sharding specs
@@ -164,7 +169,7 @@ func NewDistributedAccumulator(backend backends.Backend, source train.Dataset, s
 		labelShardingSpecs: labelShardingSpecs,
 		deviceAssignment:   deviceAssignment,
 		buckets:            make(map[string]*bucket),
-		stats:              make(map[string]int),
+		stats:              sync.Map{},
 		nextBatch:          make(chan *distributedBatch, 1),
 	}
 
@@ -212,7 +217,7 @@ func (ds *DistributedAccumulator) Reset() {
 	ds.buckets = make(map[string]*bucket)
 
 	// Clear statistics
-	ds.stats = make(map[string]int)
+	ds.stats = sync.Map{}
 
 	// Reset source dataset
 	ds.source.Reset()
@@ -313,12 +318,14 @@ func (ds *DistributedAccumulator) aggregateShards(shardsToUse []shardBatch, spec
 	// Aggregate inputs
 	distributedInputs := make([]*distributed.Tensor, numInputs)
 	for inputIdx := range numInputs {
-		if inputIdx >= len(ds.inputShardingSpecs) {
-			return nil, errors.Errorf("input sharding spec #%d not provided", inputIdx)
+		// Use the last spec if inputIdx is beyond the number of specs provided
+		specIdx := inputIdx
+		if specIdx >= len(ds.inputShardingSpecs) {
+			specIdx = len(ds.inputShardingSpecs) - 1
 		}
-		spec := ds.inputShardingSpecs[inputIdx]
+		spec := ds.inputShardingSpecs[specIdx]
 		if spec == nil {
-			return nil, errors.Errorf("input sharding spec #%d is nil", inputIdx)
+			return nil, errors.Errorf("input sharding spec #%d is nil", specIdx)
 		}
 
 		// Collect shards for this input from source
@@ -403,14 +410,19 @@ func (ds *DistributedAccumulator) aggregateShards(shardsToUse []shardBatch, spec
 	}
 
 	// Aggregate labels
+	if numLabels > 0 && len(ds.labelShardingSpecs) == 0 {
+		return nil, errors.New("label sharding specs cannot be empty when there are labels")
+	}
 	distributedLabels := make([]*distributed.Tensor, numLabels)
 	for labelIdx := range numLabels {
-		if labelIdx >= len(ds.labelShardingSpecs) {
-			return nil, errors.Errorf("label sharding spec #%d not provided", labelIdx)
+		// Use the last spec if labelIdx is beyond the number of specs provided
+		specIdx := labelIdx
+		if specIdx >= len(ds.labelShardingSpecs) {
+			specIdx = len(ds.labelShardingSpecs) - 1
 		}
-		spec := ds.labelShardingSpecs[labelIdx]
+		spec := ds.labelShardingSpecs[specIdx]
 		if spec == nil {
-			return nil, errors.Errorf("label sharding spec #%d is nil", labelIdx)
+			return nil, errors.Errorf("label sharding spec #%d is nil", specIdx)
 		}
 
 		// Collect shards for this label from source
@@ -591,7 +603,12 @@ func (ds *DistributedAccumulator) reader() {
 
 		// Update statistics
 		keyStr := bucketKeyString(key)
-		ds.stats[keyStr]++
+		// Load current value, increment, and store back (thread-safe)
+		if val, ok := ds.stats.Load(keyStr); ok {
+			ds.stats.Store(keyStr, val.(int)+1)
+		} else {
+			ds.stats.Store(keyStr, 1)
+		}
 
 		// Get or create bucket
 		b := ds.getOrCreateBucket(key)
@@ -668,7 +685,12 @@ func (ds *DistributedAccumulator) Yield() (spec any, inputs, labels []*distribut
 
 // Stats returns information on the number of source inputs of each shape/number seen so far.
 func (ds *DistributedAccumulator) Stats() map[string]int {
-	return maps.Clone(ds.stats)
+	result := make(map[string]int)
+	ds.stats.Range(func(key, value any) bool {
+		result[key.(string)] = value.(int)
+		return true
+	})
+	return result
 }
 
 // StatsString returns a pretty-print version of the statistics for debugging.
