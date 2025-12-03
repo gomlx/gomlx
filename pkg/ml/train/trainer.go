@@ -25,9 +25,11 @@ package train
 import (
 	"fmt"
 	"io"
+	"iter"
 
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -68,6 +70,10 @@ type Trainer struct {
 	modelFn   ModelFn
 	lossFn    LossFn
 	optimizer optimizers.Interface
+
+	// Distribute execution:
+	distributedStrategy distributed.Strategy
+	deviceAssignments   []backends.DeviceNum // Optional.
 
 	// maxExecutors to cache. It will fail after that. One executor is created
 	// per `spec` value, so this is the same as the max number of different `spec`
@@ -254,22 +260,54 @@ func NewTrainer(backend backends.Backend, ctx *context.Context,
 	return r
 }
 
-// enumerateExecs enumerates all executors maintained by the Trainer and call fn on them.
-func (r *Trainer) enumerateExecs(fn func(exec *context.Exec)) {
-	for _, exec := range r.trainStepExecMap {
-		fn(exec)
-	}
-	for _, exec := range r.evalStepExecMap {
-		fn(exec)
-	}
-	for _, exec := range r.batchNormStepExecMap {
-		fn(exec)
-	}
-	for _, exec := range r.accumulateGradientsExecMap {
-		fn(exec)
-	}
-	for _, exec := range r.accumulateGradientsAndApplyExecMap {
-		fn(exec)
+// WithDistribution sets the distribution strategy for the Trainer.
+//
+// This impacts how DistributedTrainStep works, used by Loop when a DistributedDataset is used.
+func (r *Trainer) WithDistribution(strategy distributed.Strategy) *Trainer {
+	r.distributedStrategy = strategy
+	return r
+}
+
+// WithDeviceAssignemnt sets the backend device assignment to use.
+//
+// This works for both distributed and normal (single device) training. The later uses only one device where to
+// execute the training/evaluation steps.
+//
+// A nil value (the default) is valid, in which case it uses the backend's default, which is usually simply the
+// sequential devices starting from 0.
+func (r *Trainer) WithDeviceAssignment(strategy distributed.Strategy) *Trainer {
+	r.distributedStrategy = strategy
+	return r
+}
+
+// iterateExecs returns an iterator over all executors maintained by the Trainer.
+func (r *Trainer) iterateExecs() iter.Seq[*context.Exec] {
+	return func(yield func(*context.Exec) bool) {
+		for _, exec := range r.trainStepExecMap {
+			if !yield(exec) {
+				return
+			}
+		}
+		for _, exec := range r.evalStepExecMap {
+			if !yield(exec) {
+				return
+			}
+		}
+		for _, exec := range r.batchNormStepExecMap {
+			if !yield(exec) {
+				return
+			}
+		}
+		for _, exec := range r.accumulateGradientsExecMap {
+			if !yield(exec) {
+				return
+			}
+		}
+		for _, exec := range r.accumulateGradientsAndApplyExecMap {
+			if !yield(exec) {
+				return
+			}
+		}
 	}
 }
 
@@ -286,9 +324,9 @@ func (r *Trainer) Context() *context.Context {
 // It returns a reference to itself so calls can be cascaded.
 func (r *Trainer) SetContext(ctx *context.Context) *Trainer {
 	r.context = ctx
-	r.enumerateExecs(func(exec *context.Exec) {
+	for exec := range r.iterateExecs() {
 		exec.SetContext(ctx)
-	})
+	}
 	return r
 }
 
@@ -353,7 +391,7 @@ func (r *Trainer) lossFnScalarLoss(_ *context.Context, labels, predictions []*gr
 }
 
 // trainStepGraph builds the graph to train one step. It is called by the context executor (`r.trainStepExecMap`)
-// everytime a graph needs to be built (typically for new batch sizes).
+// every time a graph needs to be built (typically for new batch sizes).
 func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 	g := inputs[0].Graph()
 	ctx.SetTraining(g, true) // Some layers behave differently if in training.
@@ -501,7 +539,7 @@ func (r *Trainer) TrainStep(spec any, inputs, labels []*tensors.Tensor) (metrics
 }
 
 // evalStepGraph builds the graph to eval one step. It is called by the context executor (`r.evalStepExecMap`)
-// everytime a graph needs to be built (typically for new batch sizes).
+// every time a graph needs to be built (typically for new batch sizes).
 // inputsAndLabel[:-1] are the inputs, and inputsAndLabel[-1] is the labels batch.
 func (r *Trainer) evalStepGraph(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 	g := inputs[0].Graph()

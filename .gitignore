@@ -26,3 +26,4 @@ gomlx_xla.tar.gz
 gomlx.code-workspace
 .vscode/launch.json
 .vscode/settings.json
+codebook.toml

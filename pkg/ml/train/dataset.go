@@ -1,5 +1,5 @@
 /*
- *	Copyright 2023 Jan Pfeifer
+ *	Copyright 2025 Jan Pfeifer
  *
  *	Licensed under the Apache License, Version 2.0 (the "License");
  *	you may not use this file except in compliance with the License.
@@ -16,7 +16,26 @@
 
 package train
 
-import "github.com/gomlx/gomlx/pkg/core/tensors"
+import (
+	"github.com/gomlx/gomlx/pkg/core/distributed"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+)
+
+// BaseDataset is the base interface for all datasets.
+// There are currently two types of datasets:
+//
+// - Dataset: the common, single-device dataset, that yields *tensors.Tensor.
+// - DistributedDataset: the distributed dataset, that yields *distributed.Tensor.
+//
+// The Loop trainer will accept either.
+type BaseDataset interface {
+	// Name identifies the dataset. Used for debugging, pretty-printing and plots.
+	Name() string
+
+	// Reset restarts the dataset from the beginning. Can be called after io.EOF is reached,
+	// for instance when running another evaluation on a test dataset.
+	Reset()
+}
 
 // Dataset for a train.Trainer provides the data, one batch at a time. Flat consists of a slice of *tensors.Tensor
 // for `inputs` and for `labels`.
@@ -32,12 +51,11 @@ import "github.com/gomlx/gomlx/pkg/core/tensors"
 // a Dataset optionally can implement.
 // See DatasetCustomOwnership.
 type Dataset interface {
-	// Name identifies the dataset. Used for debugging, pretty-printing and plots.
-	Name() string
+	BaseDataset
 
-	// Yield one "batch" (or whatever is the unit for a training step) or an error. It should return a
-	// `spec` for the dataset, a slice of `inputs` and a slice of `labels` tensors (even when there is only
-	// one tensor for each of them).
+	// Yield one "batch" (or whatever is the unit for a training step) or an error.
+	// It should return a `spec` for the dataset, a slice of `inputs` and a slice of `labels` tensors
+	// (even when there is only one tensor for each of them).
 	//
 	// In the simplest case `inputs` and `labels` should always have the same number of elements and the
 	// same shape (including `dtype`).
@@ -68,15 +86,26 @@ type Dataset interface {
 	// If using Loop.RunSteps for training having an infinite dataset stream is ok. But careful
 	// not to use Loop.RunEpochs on a dataset configured to loop indefinitely.
 	//
-	// Optionally it can return an error. If the error is `io.EOF` the training/evaluation terminates
+	// Optionally, it can return an error. If the error is `io.EOF` the training/evaluation terminates
 	// normally, as it indicates end of data for finite datasets -- maybe the end of the epoch.
 	//
 	// Any other errors should interrupt the training/evaluation and be returned to the user.
-	Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error)
+	Yield() (spec any, inputs, labels []*tensors.Tensor, err error)
+}
 
-	// Reset restarts the dataset from the beginning. Can be called after io.EOF is reached,
-	// for instance when running another evaluation on a test dataset.
-	Reset()
+// DistributedDataset is similar to Dataset but yields distributed.Tensors, ready for distributed
+// execution.
+//
+// An important aspect of the dataset is the distributed.ShardingSpec of each input and label.
+// They are fed into the trainer to guide the distributed execution, and must remain the same for the same spec.
+type DistributedDataset interface {
+	// Yield one "batch" (or whatever is the unit for a training step) or an error.
+	// Very similar to Dataset.Yield, all the notes there apply here.
+	//
+	// The returned data (inputs and labels) are given as distributed.Tensor instances, hence already sharded.
+	// The ShardingSpec of each input and label must be the same for the same spec.
+	// If your training is heterogeneous, it's ok to have different ShardingSpecs for different specs.
+	Yield() (spec any, inputs, labels []*distributed.Tensor, err error)
 }
 
 // HasShortName allows a dataset to specify a short name (used when displaying a short version of metric names).
@@ -91,6 +120,8 @@ type HasShortName interface {
 // DatasetCustomOwnership allows a dataset to specify whether the ownership of the yielded tensors are transferred
 // to the caller (the training loop). The training loops can finalize the yielded values after use.
 // It defaults to yes.
+//
+// It applies to all types of datasets.
 type DatasetCustomOwnership interface {
 	// IsOwnershipTransferred specifies whether caller owns the yielded transfers -- and can finalize (free) them after use.
 	// It defaults to true.
