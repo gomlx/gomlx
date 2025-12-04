@@ -135,6 +135,8 @@ var (
 		"Number of devices to use for distributed training. The default is to use all devices available in the "+
 			"backend. Setting this to > 1 automatically enables -distributed. If 0, it will use all "+
 			"devices available in the backend.")
+	flagPrefetchOnDevice = flag.Int("prefetch_on_device", 0,
+		"Number of batches to prefetch and upload to the device in parallel to training.")
 	flagCPUProfile = flag.String("cpu_profile", "", "write cpu profile to file")
 )
 
@@ -247,6 +249,18 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 			backend, trainDS, strategy, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
 		if err != nil {
 			return err
+		}
+	}
+
+	// Prefetch batches and upload to device in parallel to training.
+	if *flagPrefetchOnDevice > 0 {
+		// Distributed datasets already prefetch on device, so we don't need to do it here.
+		if !*flagDistributed {
+			var err error
+			trainDS, err = datasets.NewOnDevice(backend, trainDS, false, *flagPrefetchOnDevice, backends.DeviceNum(0))
+			if err != nil {
+				return err
+			}
 		}
 	}
 
