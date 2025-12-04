@@ -30,6 +30,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -489,6 +490,108 @@ func (r *Trainer) callGraphFn(
 	return metrics, nil
 }
 
+// distributedCallGraphFn for DistributedTrainStep or DistributedEvalStep makes sure the builds the arguments for execution,
+// plus do standard checks on inputs and labels.
+func (r *Trainer) distributedCallGraphFn(
+	strategy distributed.Strategy,
+	deviceAssignment []backends.DeviceNum,
+	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node),
+	graphType GraphType,
+	execMap map[any]*context.Exec,
+	spec any,
+	inputs, labels []*distributed.Tensor,
+) (metrics []*tensors.Tensor, err error) {
+	if len(inputs) == 0 {
+		return nil, errors.New("there are no inputs, at least one is required")
+	}
+	if lengths, found := r.inputsAndLabelsLenPerSpec[spec]; found {
+		if len(inputs) != lengths[0] || len(labels) != lengths[1] {
+			return nil, errors.Errorf("dataset yields inputs (%d) and labels (%d) with lengths different "+
+				"than with previous call (%d and %d) for the given spec %+v", len(inputs), len(labels),
+				lengths[0], lengths[1], spec)
+		}
+	}
+	for ii, input := range inputs {
+		if input == nil {
+			return nil, errors.Errorf("inputs[%d] is nil!?", ii)
+		}
+	}
+
+	// Create arguments as []any and run trainStepExecMap.Exec().
+	numParams := len(inputs) + len(labels)
+	inputsAndLabels := make([]any, 0, numParams)
+	for _, t := range inputs {
+		inputsAndLabels = append(inputsAndLabels, t)
+	}
+	for _, t := range labels {
+		inputsAndLabels = append(inputsAndLabels, t)
+	}
+
+	// Get the executor for the graphType and input spec.
+	exec, found := execMap[spec]
+	if !found {
+		// Set up of the executor and compilation of the computation graph: this happens only
+		// once for each inputs/labels shape combination.
+		exec, err = r.createExecutor(spec, len(inputs), len(labels), graphFn)
+		if err != nil {
+			return nil, err
+		}
+
+		// Find meshes and aggregate all input ShardingSpec.
+		var meshes []*distributed.DeviceMesh
+		inputShardingSpecs := make([]*distributed.ShardingSpec, 0, numParams)
+		for _, inputAny := range inputsAndLabels {
+			input := inputAny.(distributed.Tensor)
+			shardingSpec := input.ShardingSpec()
+			mesh := shardingSpec.Mesh
+			if slices.Index(meshes, mesh) == -1 {
+				meshes = append(meshes, mesh)
+			}
+			inputShardingSpecs = append(inputShardingSpecs, shardingSpec)
+		}
+		if len(meshes) == 0 {
+			return nil, errors.New("missing a mesh definition from the inputs/labels (likely from a DistributedDataset)")
+		}
+		replicatedSpec := distributed.NewReplicatedShardingSpec(meshes[0])
+
+		// Setup exec for distributed execution:
+		switch strategy {
+		case distributed.AutoSharding:
+			exec = exec.AutoSharding(meshes...).
+				WithInputShardingSpecs(inputShardingSpecs...).
+				WithOutputShardingSpecs(replicatedSpec).
+				WithDeviceAssignment(deviceAssignment)
+		case distributed.SPMD:
+			if len(meshes) > 1 {
+				return nil, errors.Errorf("the distributed strategy SPMD only accepts one mesh for sharding the inputs, got %d",
+					len(meshes))
+			}
+			exec = exec.SPMD(meshes[0]).
+				WithInputShardingSpecs(inputShardingSpecs...).
+				WithOutputShardingSpecs(replicatedSpec).
+				WithDeviceAssignment(deviceAssignment)
+		case distributed.None:
+			return nil, errors.New("cannot do a distributed train/eval step if the strategy is None -- try distributed.AutoSharding?")
+		}
+
+		// Register new executor.
+		execMap[spec] = exec
+		for _, handler := range r.onExecCreationHandlers {
+			handler(exec, graphType) // Call the handler for training.
+		}
+	}
+
+	// Collect metrics:
+	metrics, err = exec.Exec(inputsAndLabels...)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to execute train/eval step")
+	}
+	if len(metrics) == 0 {
+		return nil, errors.New("no metrics calculate metric in step")
+	}
+	return metrics, nil
+}
+
 // ResetComputationGraphs can be used during training in between steps to force the recreation of the computation graphs.
 //
 // This is used if, for instance, the training has schedules where hyperparameters change (some variables are frozen)
@@ -538,6 +641,21 @@ func (r *Trainer) TrainStep(spec any, inputs, labels []*tensors.Tensor) (metrics
 		return r.trainStepWithAccumulateGradients(spec, inputs, labels)
 	}
 	return r.callGraphFn(r.trainStepGraph, TrainType, r.trainStepExecMap, spec, inputs, labels)
+}
+
+// DistributedTrainStep runs one step and returns the metrics, in a distributed fashion.
+//
+// The strategy and device assignment is only used when a new executor is built, that is,
+// only when the dataset spec changes.
+//
+// Otherwise, it behaves just like TrainStep.
+func (r *Trainer) DistributedTrainStep(strategy distributed.Strategy, deviceAssignment []backends.DeviceNum,
+	spec any, inputs, labels []*distributed.Tensor) (metrics []*tensors.Tensor, err error) {
+	if r.accumulateGradients {
+		// Version that accumulate gradients.
+		return nil, errors.New("distributed training with gradient accumulation not implemented yet")
+	}
+	return r.distributedCallGraphFn(strategy, deviceAssignment, r.trainStepGraph, TrainType, r.trainStepExecMap, spec, inputs, labels)
 }
 
 // evalStepGraph builds the graph to eval one step. It is called by the context executor (`r.evalStepExecMap`)
