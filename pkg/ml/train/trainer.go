@@ -490,8 +490,10 @@ func (r *Trainer) callGraphFn(
 	return metrics, nil
 }
 
-// distributedCallGraphFn for DistributedTrainStep or DistributedEvalStep makes sure the builds the arguments for execution,
-// plus do standard checks on inputs and labels.
+// distributedCallGraphFn for DistributedTrainStep or DistributedEvalStep makes sure the builds the arguments for
+// execution, plus do standard checks on inputs and labels.
+//
+// Notice that the returned metrics are not distributed.
 func (r *Trainer) distributedCallGraphFn(
 	strategy distributed.Strategy,
 	deviceAssignment []backends.DeviceNum,
@@ -581,13 +583,26 @@ func (r *Trainer) distributedCallGraphFn(
 		}
 	}
 
-	// Collect metrics:
-	metrics, err = exec.Exec(inputsAndLabels...)
+	// Execute, it returns the distributed metrics:
+	distributedMetrics, err := exec.DistributedExec(inputsAndLabels...)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to execute train/eval step")
 	}
-	if len(metrics) == 0 {
+	if len(distributedMetrics) == 0 {
 		return nil, errors.New("no metrics calculate metric in step")
+	}
+
+	// Collect the metrics from the first device:
+	metrics = make([]*tensors.Tensor, len(distributedMetrics))
+	for i, distributedMetric := range distributedMetrics {
+		metrics[i], err = distributedMetric.Shards()[0].LocalClone()
+		if err != nil {
+			return nil, errors.WithMessagef(err, "failed to clone metric %d from distributed metric", i)
+		}
+		err = distributedMetric.Finalize()
+		if err != nil {
+			return nil, errors.WithMessagef(err, "failed to finalize distributed metric %d", i)
+		}
 	}
 	return metrics, nil
 }

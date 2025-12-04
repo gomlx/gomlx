@@ -985,12 +985,15 @@ func valueToTensor(value any) *tensors.Tensor {
 // - Context.Reuse() and variable didn't exist (or was not loaded);
 //
 // See Variable.SetValue if you want to overwrite the value of an existing variable.
+//
+// This is a graph building function and so it may panic if the variable cannot be created.
 func (ctx *Context) VariableWithValue(name string, defaultValue any) *Variable {
 	v := ctx.GetVariableByScopeAndName(ctx.scope, name)
 
 	// Check against reuse of variables.
 	if ctx.checked && ctx.reuse && v == nil {
-		Panicf("requested variable %q in scope %q with Context.Reuse set, but variable does not exist", name, ctx.scope)
+		Panicf("requested variable %q in scope %q with Context.Reuse set, but variable does not exist",
+			name, ctx.scope)
 	}
 	if ctx.checked && !ctx.reuse && v != nil {
 		Panicf("variable %q for scope %q already exists", name, ctx.scope)
@@ -1054,6 +1057,8 @@ func (ctx *Context) VariableWithValue(name string, defaultValue any) *Variable {
 //
 // - Context.Unique() and variable already exists (or was loaded);
 // - Context.Reuse() and variable didn't exist (or was not loaded);
+//
+// This is a graph building function and so it may panic if the variable cannot be created.
 func (ctx *Context) VariableWithValueGraph(name string, value *Node) *Variable {
 	// Create a zero-initialized context.
 	zeroCtx := ctx.WithInitializer(func(g *Graph, shape shapes.Shape) *Node {
@@ -1076,6 +1081,8 @@ func (ctx *Context) VariableWithValueGraph(name string, value *Node) *Variable {
 //	ctx.EnumerateVariables(func(v *context.Variable) {
 //		fmt.Printf("\t%s::%s: shape=%s\n", v.Scope(), v.Name(), v.Shape())
 //	})
+//
+// Deprecated: use IterVariables instead.
 func (ctx *Context) EnumerateVariables(fn func(v *Variable)) {
 	for _, v := range ctx.data.variables {
 		fn(v)
