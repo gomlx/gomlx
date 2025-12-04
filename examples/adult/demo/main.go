@@ -22,8 +22,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
-	"runtime/pprof"
 	"time"
 
 	"github.com/gomlx/gomlx/backends"
@@ -137,7 +135,6 @@ var (
 			"devices available in the backend.")
 	flagPrefetchOnDevice = flag.Int("prefetch_on_device", 0,
 		"Number of batches to prefetch and upload to the device in parallel to training.")
-	flagCPUProfile = flag.String("cpu_profile", "", "write cpu profile to file")
 )
 
 func main() {
@@ -146,15 +143,6 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-
-	if *flagCPUProfile != "" {
-		f, err := os.Create(*flagCPUProfile)
-		if err != nil {
-			klog.Fatalf("Failed to create CPU profile file: %+v", err)
-		}
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
-	}
 	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
 	err := mainWithContext(ctx, *flagDataDir, *flagCheckpoint, paramsSet)
 	if err != nil {
@@ -315,15 +303,15 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	trainSteps := context.GetParamOr(ctx, "train_steps", 0)
 	globalStep := int(optimizers.GetGlobalStep(ctx))
 	if globalStep != 0 {
-		fmt.Printf("\t- restarting training from global step %d\n", globalStep)
+		fmt.Printf("- Restarting training from global step %d\n", globalStep)
 	}
 	metrics, err := loop.RunToGlobalStep(trainDS, trainSteps)
 	if err != nil {
 		return err
 	}
 	if metrics == nil {
-		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number larger than "+
-			"current global step %d.\n", trainSteps, globalStep)
+		fmt.Printf("- Target train_steps=%d already reached. To train further, set a number larger than "+
+			"current global step %d (e.g.: -set=train_steps=1_000_000).\n", trainSteps, globalStep)
 	}
 
 	// Finally, print an evaluation on train and test datasets.
