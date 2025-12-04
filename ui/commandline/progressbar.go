@@ -113,7 +113,7 @@ func (pBar *progressBar) onStep(loop *train.Loop, metrics []*tensors.Tensor) err
 
 	} else {
 		// Suffix to erase spurious characters from previous prints.
-		pBar.suffix = "      " // Using "\033[J" to erase to the end of the line causes flickering on terminals (gnome-terminal and alacritty).
+		pBar.suffix = "\033[J" // Using "\033[J" to erase to the end of the line causes flickering on terminals (gnome-terminal and alacritty).
 
 		// For the command-line instead we create and enqueue an update to be asynchronously printed.
 		update := progressBarUpdate{
