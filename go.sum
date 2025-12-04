@@ -79,8 +79,12 @@ github.com/gomlx/exceptions v0.0.3 h1:HKnTgEjj4jlmhr8zVFkTP9qmV1ey7ypYYosQ8GzXWu
 github.com/gomlx/exceptions v0.0.3/go.mod h1:uHL0TQwJ0xaV2/snJOJV6hSE4yRmhhfymuYgNredGxU=
 github.com/gomlx/gopjrt v0.10.0-rc1 h1:t4KQ6CWzupSFMmAtI5v9mn7L/7YviNInLPKdMJWq6Uc=
 github.com/gomlx/gopjrt v0.10.0-rc1/go.mod h1:C3/EIdKZV/776Iqji2NOVcanxo/TSYFSzRjH5yIqSeo=
+github.com/gomlx/gopjrt v0.10.0 h1:mb/LeIk9xkaW5hh9oB5hEGuCbnqr81D0WmJsl+o1gY0=
+github.com/gomlx/gopjrt v0.10.0/go.mod h1:cUcwwDra6Uf9RTysQyv51YidUOk12dcz2HbjVi2J0S0=
 github.com/gomlx/stablehlo v0.2.0-rc1 h1:rzfgz2+hNAES9kzMGXra7T4eDgogfab3LBc1XqzWTUc=
 github.com/gomlx/stablehlo v0.2.0-rc1/go.mod h1:OAWBbjjuS4c53wPsw2L+wtDVS/5RQY2OZLA3FYFPeJk=
+github.com/gomlx/stablehlo v0.2.0 h1:OOKA7APi9BFh7f0u33aGPeMfZpDXzJiCIYzs0sRd+HM=
+github.com/gomlx/stablehlo v0.2.0/go.mod h1:OAWBbjjuS4c53wPsw2L+wtDVS/5RQY2OZLA3FYFPeJk=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
