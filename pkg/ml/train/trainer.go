@@ -768,7 +768,12 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor, err error)
 		count++
 		// Early free (not wait for the GC) of the results of previous batch.
 		for _, t := range lossAndMetrics {
-			t.MustFinalizeAll()
+			err := t.FinalizeAll()
+			if err != nil {
+				return nil, errors.WithMessagef(err,
+					"finalizing loss and metrics tensor of dataset %q after use in a distributed eval step",
+					ds.Name())
+			}
 		}
 
 		lossAndMetrics, err = r.EvalStep(spec, inputs, labels)
@@ -783,11 +788,15 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor, err error)
 
 		// Free inputs and labels after usage.
 		if finalizeInputs {
-			for _, input := range inputs {
-				input.MustFinalizeAll()
-			}
-			for _, label := range labels {
-				label.MustFinalizeAll()
+			for sliceIdx, slice := range [][]*tensors.Tensor{inputs, labels} {
+				for i, t := range slice {
+					err := t.FinalizeAll()
+					if err != nil {
+						return nil, errors.WithMessagef(
+							err, "finalizing %s tensor #%d of dataset %q after use in a distributed eval step",
+							yieldInputTypeNames[sliceIdx], i, ds.Name)
+					}
+				}
 			}
 		}
 	}
@@ -799,15 +808,6 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor, err error)
 	for i, goUpdateFn := range goUpdateFns {
 		if goUpdateFn != nil {
 			lossAndMetrics[i] = goUpdateFn.ReadGo()
-		}
-	}
-
-	// Free lossAndMetrics on the device, it will be consumed presumably only locally.
-	for _, metric := range lossAndMetrics {
-		metric.MaterializeLocal()
-		err := metric.InvalidateOnDevice()
-		if err != nil {
-			return nil, err
 		}
 	}
 	return lossAndMetrics, nil
