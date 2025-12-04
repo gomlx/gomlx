@@ -244,7 +244,7 @@ func (t *Tensor) FinalizeAll() error {
 	// Get the list of local and device tensors to finalize.
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if err := t.CheckValid(); err != nil {
+	if !t.Ok() {
 		// Likely already finalized, no-op.
 		return nil
 	}
