@@ -22,22 +22,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 )
 
-// BaseDataset is the base interface for all datasets.
-// There are currently two types of datasets:
-//
-// - Dataset: the common, single-device dataset, that yields *tensors.Tensor.
-// - DistributedDataset: the distributed dataset, that yields *distributed.Tensor.
-//
-// The Loop trainer will accept either.
-type BaseDataset interface {
-	// Name identifies the dataset. Used for debugging, pretty-printing and plots.
-	Name() string
-
-	// Reset restarts the dataset from the beginning. Can be called after io.EOF is reached,
-	// for instance when running another evaluation on a test dataset.
-	Reset()
-}
-
 // Dataset for a train.Trainer provides the data, one batch at a time. Flat consists of a slice of *tensors.Tensor
 // for `inputs` and for `labels`.
 //
@@ -50,9 +34,14 @@ type BaseDataset interface {
 //
 // The Dataset interface allows for extensions/customizations by defining extra optional interfaces that
 // a Dataset optionally can implement.
-// See DatasetCustomOwnership.
+// See DistributedDataset and DatasetCustomOwnership.
 type Dataset interface {
-	BaseDataset
+	// Name identifies the dataset. Used for debugging, pretty-printing and plots.
+	Name() string
+
+	// Reset restarts the dataset from the beginning. Can be called after io.EOF is reached,
+	// for instance when running another evaluation on a test dataset.
+	Reset()
 
 	// Yield one "batch" (or whatever is the unit for a training step) or an error.
 	// It should return a `spec` for the dataset, a slice of `inputs` and a slice of `labels` tensors
@@ -94,13 +83,16 @@ type Dataset interface {
 	Yield() (spec any, inputs, labels []*tensors.Tensor, err error)
 }
 
-// DistributedDataset is similar to Dataset but yields distributed.Tensors, ready for distributed
+// DistributedDataset is different API to a Dataset but yields distributed.Tensors, ready for distributed
 // execution.
 //
 // An important aspect of the dataset is the distributed.ShardingSpec of each input and label.
 // They are fed into the trainer to guide the distributed execution, and must remain the same for the same spec.
 //
 // Note: if you need to control the device assignment, that is done in the Trainer.
+//
+// A DistributedDataset implementation will usually also implement a Dataset interface, so it can be used with
+// the Loop trainer, even if its Yield() method always returns an error.
 type DistributedDataset interface {
 	// Strategy returns the distributed.Strategy to use for this dataset.
 	// Usually, distributed.AutoSharding. But distributed.SPMD (experimental) can also be used.
@@ -110,13 +102,13 @@ type DistributedDataset interface {
 	// The Yield() method will return distributed.Tensor already on the corresponding device.
 	DeviceAssignment() []backends.DeviceNum
 
-	// Yield one "batch" (or whatever is the unit for a training step) or an error.
+	// DistributedYield one "batch" (or whatever is the unit for a training step) or an error.
 	// Very similar to Dataset.Yield, all the notes there apply here.
 	//
 	// The returned data (inputs and labels) are given as distributed.Tensor instances, hence already sharded.
 	// The ShardingSpec of each input and label must be the same for the same spec.
 	// If your training is heterogeneous, it's ok to have different ShardingSpecs for different specs.
-	Yield() (spec any, inputs, labels []*distributed.Tensor, err error)
+	DistributedYield() (spec any, inputs, labels []*distributed.Tensor, err error)
 }
 
 // HasShortName allows a dataset to specify a short name (used when displaying a short version of metric names).

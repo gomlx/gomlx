@@ -71,8 +71,9 @@ type DistributedAccumulator struct {
 	nextBatch chan *distributedBatch
 }
 
-// Compile time check that DistributedAccumulator implements train.DistributedDataset.
+// Compile time check that DistributedAccumulator implements both train.Dataset and train.DistributedDataset.
 var _ train.DistributedDataset = (*DistributedAccumulator)(nil)
+var _ train.Dataset = (*DistributedAccumulator)(nil)
 
 // NewDistributedAccumulator creates a distributed dataset from the given source dataset, by accumulating the shards
 // and yielding them as a single distributed.Tensor.
@@ -639,7 +640,7 @@ func (ds *DistributedAccumulator) reader() {
 
 			// Send to channel (blocking if channel is full)
 			ds.nextBatch <- batch
-			return // Reader done, will be restarted by Yield()
+			return // Reader done, will be restarted by DistributedYield()
 		}
 	}
 }
@@ -668,8 +669,14 @@ func (ds *DistributedAccumulator) sendReadyBatch() {
 	}
 }
 
-// Yield implements train.DistributedDataset.
-func (ds *DistributedAccumulator) Yield() (spec any, inputs, labels []*distributed.Tensor, err error) {
+// Yield implements train.Dataset, by simply returning an error to indicate one should use DistributedYield instead.
+func (ds *DistributedAccumulator) Yield() (spec any, inputs, labels []*tensors.Tensor, err error) {
+	return nil, nil, nil, errors.New("the DistributedAccumulator dataset was meant to be used in a distributed manner; " +
+		"either add support for DistributedDatasets or use a normal Dataset instead")
+}
+
+// DistributedYield implements train.DistributedDataset.
+func (ds *DistributedAccumulator) DistributedYield() (spec any, inputs, labels []*distributed.Tensor, err error) {
 	// Read the next prepared batch from channel
 	batch := <-ds.nextBatch
 

@@ -150,7 +150,7 @@ func TestDistributedAccumulator(t *testing.T) {
 		// Check that Distributed yields only 50 batches before EOF
 		batchCount := 0
 		for {
-			_, inputs, labels, err := distDS.Yield()
+			_, inputs, labels, err := distDS.DistributedYield()
 			if err == io.EOF {
 				break
 			}
@@ -182,7 +182,7 @@ func TestDistributedAccumulator(t *testing.T) {
 		distDS.Reset()
 		batchCount = 0
 		for {
-			_, inputs, labels, err := distDS.Yield()
+			_, inputs, labels, err := distDS.DistributedYield()
 			if err == io.EOF {
 				break
 			}
@@ -231,7 +231,7 @@ func TestDistributedAccumulator(t *testing.T) {
 		// Check that Distributed yields 100 batches (same as source, since numInputShards = 1)
 		batchCount := 0
 		for {
-			_, inputs, labels, err := distDS.Yield()
+			_, inputs, labels, err := distDS.DistributedYield()
 			if err == io.EOF {
 				break
 			}
@@ -299,7 +299,7 @@ func TestDistributedAccumulator(t *testing.T) {
 		// This suggests numInputShards should be 2 (size of "shards" axis), not 4 (total devices)
 		batchCount := 0
 		for {
-			_, inputs, labels, err := distDS.Yield()
+			_, inputs, labels, err := distDS.DistributedYield()
 			if err == io.EOF {
 				break
 			}
@@ -371,7 +371,7 @@ func TestDistributedAccumulator(t *testing.T) {
 		batchCountShape2 := 0
 
 		for {
-			_, inputs, labels, err := distDS.Yield()
+			_, inputs, labels, err := distDS.DistributedYield()
 			if err == io.EOF {
 				break
 			}
