@@ -94,6 +94,9 @@ type Dataset interface {
 // A DistributedDataset implementation will usually also implement a Dataset interface, so it can be used with
 // the Loop trainer, even if its Yield() method always returns an error.
 type DistributedDataset interface {
+	// Dataset must also be implemented.
+	Dataset
+
 	// Strategy returns the distributed.Strategy to use for this dataset.
 	// Usually, distributed.AutoSharding. But distributed.SPMD (experimental) can also be used.
 	Strategy() distributed.Strategy

@@ -69,6 +69,9 @@ type DistributedAccumulator struct {
 
 	// Channel for next prepared batch (size 1)
 	nextBatch chan *distributedBatch
+
+	// Inherited from source dataset.
+	isOwnershipTransferred bool
 }
 
 // Compile time check that DistributedAccumulator implements both train.Dataset and train.DistributedDataset.
@@ -164,17 +167,23 @@ func NewDistributedAccumulator(backend backends.Backend, source train.Dataset, s
 	}
 
 	ds := &DistributedAccumulator{
-		backend:            backend,
-		source:             source,
-		strategy:           strategy,
-		numDevices:         numDevices,
-		numInputShards:     numInputShards,
-		inputShardingSpecs: inputShardingSpecs,
-		labelShardingSpecs: labelShardingSpecs,
-		deviceAssignment:   deviceAssignment,
-		buckets:            make(map[string]*bucket),
-		stats:              sync.Map{},
-		nextBatch:          make(chan *distributedBatch, 1),
+		backend:                backend,
+		source:                 source,
+		strategy:               strategy,
+		numDevices:             numDevices,
+		numInputShards:         numInputShards,
+		inputShardingSpecs:     inputShardingSpecs,
+		labelShardingSpecs:     labelShardingSpecs,
+		deviceAssignment:       deviceAssignment,
+		buckets:                make(map[string]*bucket),
+		stats:                  sync.Map{},
+		nextBatch:              make(chan *distributedBatch, 1),
+		isOwnershipTransferred: true,
+	}
+
+	// Inherit ownership transfer from source dataset.
+	if isOwnershipTransferred, ok := source.(train.DatasetCustomOwnership); ok {
+		ds.isOwnershipTransferred = isOwnershipTransferred.IsOwnershipTransferred()
 	}
 
 	// Start the first reader
