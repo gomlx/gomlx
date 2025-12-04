@@ -2,10 +2,11 @@ package graph
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"iter"
 	"slices"
 	"strings"
+
+	"github.com/gomlx/gomlx/internal/exceptions"
 )
 
 // PushAliasScope pushes another scope to the current alias scope for new aliases.
@@ -121,6 +122,5 @@ func (g *Graph) IterAliasedNodes() iter.Seq2[string, *Node] {
 				return
 			}
 		}
-		return
 	}
 }

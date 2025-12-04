@@ -27,7 +27,7 @@ import (
 func TestLinearLayer(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	ctx.RngStateFromSeed(42)
+	ctx.SetRNGStateFromSeed(42)
 	y0 := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 		pi2 := math.Pi * 2.0
 
@@ -63,7 +63,7 @@ func TestLinearLayer(t *testing.T) {
 func TestRelu(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	baseCtx := context.New()
-	baseCtx.RngStateFromSeed(42)
+	baseCtx.SetRNGStateFromSeed(42)
 	testShape := shapes.Make(dtypes.Float64, 20, 2, 3)
 	//testShape := shapes.Make(dtypes.Float64, 1, 2, 3)
 	for _, negativeSlope := range []float64{0, 0.2} {
@@ -117,7 +117,7 @@ func TestRelu(t *testing.T) {
 func TestLayerNormalization(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	ctx.RngStateFromSeed(42)
+	ctx.SetRNGStateFromSeed(42)
 	outputs := context.MustExecOnceN(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
 		pi2 := math.Pi * 2.0
 
@@ -153,7 +153,7 @@ func TestLayerNormalization(t *testing.T) {
 func TestVNN_Equivariant(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	ctx.RngStateFromSeed(42)
+	ctx.SetRNGStateFromSeed(42)
 	rotDiff := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 		pi2 := math.Pi * 2.0
 
@@ -192,7 +192,7 @@ func TestVNN_Equivariant(t *testing.T) {
 func TestVNNTrain(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	ctx.RngStateFromSeed(42)
+	ctx.SetRNGStateFromSeed(42)
 
 	// Model function
 	numFeatures := 4
@@ -271,7 +271,8 @@ func TestVNNTrain(t *testing.T) {
 	//commandline.AttachProgressBar(loop)
 	_, err = loop.RunSteps(ds, numSteps)
 	require.NoError(t, err)
-	lossAndMetrics := trainer.Eval(dsEval)
+	lossAndMetrics, err := trainer.Eval(dsEval)
+	require.NoError(t, err)
 	for metricIdx, metricSpec := range trainer.EvalMetrics() {
 		fmt.Printf("\t%q=%s\n", metricSpec.ShortName(), lossAndMetrics[metricIdx])
 	}

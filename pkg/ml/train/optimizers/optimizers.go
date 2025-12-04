@@ -48,12 +48,14 @@ type Interface interface {
 	// some complex training schedule may have more than one optimizer on the same Context object.
 	//
 	// loss must be a scalar value.
+	//
+	// This is a graph building function and panics on error.
 	UpdateGraph(ctx *context.Context, g *Graph, loss *Node)
 
 	// Clear deletes all temporary variables used by the optimizer.
 	// This may be used for a model to be used by inference to save space, or if the training should be reset
 	// for some other reason.
-	Clear(ctx *context.Context)
+	Clear(ctx *context.Context) error
 }
 
 var (
@@ -167,7 +169,7 @@ func GetGlobalStepVar(ctx *context.Context) *context.Variable {
 // GetGlobalStep returns the current global step value.
 // It creates the global step variable if it does not yet exist.
 func GetGlobalStep(ctx *context.Context) int64 {
-	vAny := GetGlobalStepVar(ctx).Value().Value()
+	vAny := GetGlobalStepVar(ctx).MustValue().Value()
 	v, ok := vAny.(int64)
 	if !ok {
 		Panicf("Context(scope=%q)[%q]=%#v, and cannot be converted to int64", ctx.Scope(), GlobalStepVariableName, vAny)
@@ -176,8 +178,8 @@ func GetGlobalStep(ctx *context.Context) int64 {
 }
 
 // DeleteGlobalStep in case one wants to reset the model state, or hide how many steps were taken.
-func DeleteGlobalStep(ctx *context.Context) {
-	ctx.DeleteVariable(ctx.Scope(), GlobalStepVariableName)
+func DeleteGlobalStep(ctx *context.Context) error {
+	return ctx.DeleteVariable(ctx.Scope(), GlobalStepVariableName)
 }
 
 // IncrementGlobalStepGraph creates (if not there yet) a global step counter, and
@@ -349,7 +351,9 @@ func (sgd *SGDConfig) UpdateGraphWithGradients(ctx *context.Context, grads []*No
 // Clear all optimizer variables.
 // There are none for sgd, so this is a non-op.
 // It implements optimizers.Interface.
-func (sgd *SGDConfig) Clear(_ *context.Context) {}
+func (sgd *SGDConfig) Clear(_ *context.Context) error {
+	return nil
+}
 
 // addGradientsToVariablesGraph takes the output of Context.BuildTrainableVariablesGradientsGraph,
 // multiply by (-learningRate) and add to the current value of the variablesMap.
@@ -386,9 +390,13 @@ func addGradientsToVariablesGraph(ctx *context.Context, grads []*Node, learningR
 		ii++
 	}
 	if ii != numTrainable {
-		Panicf("number of trainable variables for BuildTrainableVariablesGradientsGraph (%d) and addGradientsToVariablesGraph (%d) "+
-			"are different -- did new trainable variables were created or variables `.Trainable` property "+
-			"changed in between?", numTrainable, ii)
+		Panicf(
+			"number of trainable variables for BuildTrainableVariablesGradientsGraph (%d) and addGradientsToVariablesGraph (%d) "+
+				"are different -- did new trainable variables were created or variables `.Trainable` property "+
+				"changed in between?",
+			numTrainable,
+			ii,
+		)
 	}
 	return
 }
@@ -414,8 +422,11 @@ func MonotonicProjection(input *Node, margin *Node, axis int) *Node {
 	adjustedAxis := AdjustAxisToOperandRank(input, axis)
 	axisDim := input.Shape().Dim(axis)
 	if axisDim < 2 {
-		Panicf("MonotonicProjection of input shaped %s at axis %d is not valid: it requires axis to have dimension >= 2",
-			input.Shape(), axis)
+		Panicf(
+			"MonotonicProjection of input shaped %s at axis %d is not valid: it requires axis to have dimension >= 2",
+			input.Shape(),
+			axis,
+		)
 	}
 
 	const numIter = 3

@@ -135,6 +135,7 @@ func TestExec(t *testing.T) {
 
 func TestDonate(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
+	deviceNum := backends.DeviceNum(0)
 	g := NewGraph(backend, "TestDonate")
 	x := Parameter(g, "x", shapes.Make(dtypes.Float64))
 	p1 := AddScalar(x, 1)
@@ -150,18 +151,22 @@ func TestDonate(t *testing.T) {
 
 	// Donate input: make sure input is not shared.
 	input = tensors.FromValue(5.0)
-	input.MaterializeOnDevices(backend, false)
+	input.MustMaterializeOnDevice(backend, false, deviceNum)
 	fmt.Printf("TestDonate: IsShared=%v\n", input.IsShared())
-	output = g.Run(DonateTensorBuffer(input, backend, 0))[0]
+	buf, err := DonateTensorBuffer(input, backend, 0)
+	require.NoError(t, err)
+	output = g.Run(buf)[0]
 	require.Equal(t, 6.0, output.Value())
 	require.True(t, input.Ok()) // input should still be valid, since local copy stays alive.
 	require.False(t, input.IsOnDevice(0))
 
 	// Donate input with shared buffer:
 	input = tensors.FromValue(11.0)
-	input.MaterializeOnDevices(backend, true)
+	input.MustMaterializeOnDevice(backend, true, deviceNum)
 	fmt.Printf("TestDonate (shared requested): IsShared=%v\n", input.IsShared())
-	output = g.Run(DonateTensorBuffer(input, backend, 0))[0]
+	buf, err = DonateTensorBuffer(input, backend, deviceNum)
+	require.NoError(t, err)
+	output = g.Run(buf)[0]
 	require.Equal(t, 12.0, output.Value())
 	require.False(t, input.Ok()) // input is no longer valid, since there are no local copies.
 }
@@ -176,12 +181,14 @@ func addScalarTest(x *Node) *Node {
 func TestExecWithSideParams(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 
-	scalarBuffer := tensors.FromValue(3.0).DonateBuffer(backend, 0)
-	setSideParams := func(g *Graph, inputBuffers []backends.Buffer, donate []bool) {
+	scalarBuffer, err := tensors.FromValue(3.0).DonateBuffer(backend, 0)
+	require.NoError(t, err)
+	setSideParams := func(g *Graph, inputBuffers []backends.Buffer, donate []bool) error {
 		node := g.GetParameterByName(scalarParamName)
 		handle := node.GetParameterHandle()
 		inputBuffers[handle] = scalarBuffer
 		donate[handle] = false
+		return nil
 	}
 
 	addScalar := MustNewExec(backend, addScalarTest).SetSideParamsHook(setSideParams)
@@ -190,14 +197,17 @@ func TestExecWithSideParams(t *testing.T) {
 	got := addScalar.MustExec(x)[0]
 	require.Equal(t, want, got.Value(), "addScalar(%v, 3): got %v, wanted %v", x, got, want)
 
-	scalarBuffer = tensors.FromValue(10.0).DonateBuffer(backend, 0)
+	scalarBuffer, err = tensors.FromValue(10.0).DonateBuffer(backend, 0)
+	require.NoError(t, err)
 	want = []float64{11, 12}
-	got = addScalar.MustExec(x)[0]
+	got, err = addScalar.Exec1(x)
+	require.NoError(t, err)
 	require.Equal(t, want, got.Value(), "addScalar(%v, 10): got %v, wanted %v", x, got, want)
 
 	x = []float64{0, 1, 2}
 	want = []float64{10, 11, 12}
-	got = addScalar.MustExec(x)[0]
+	got, err = addScalar.Exec1(x)
+	require.NoError(t, err)
 	require.Equal(t, want, got.Value(), "addScalar(%v, 10): got %v, wanted %v", x, got, want)
 }
 

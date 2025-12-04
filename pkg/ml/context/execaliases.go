@@ -3,6 +3,7 @@ package context
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/pkg/errors"
 )
@@ -46,6 +47,29 @@ func MustNewExec[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraph
 		panic(err)
 	}
 	return e
+}
+
+// DistributedExec is just like Exec, but aggregates the outputs into *distributed.Tensor.
+// Usually, Exec will return alice of numDevices * nnumOutputs individual shards (*tensors.Tensor).
+//
+// Notice that to actually trigger distributed execution, you must set Exec.AutoSharding (or Exec.SPMD) and
+// set the proper sharding specs of the inputs and outputs.
+//
+// See also Exec.AggregateShards.
+func (e *Exec) DistributedExec(args ...any) ([]*distributed.Tensor, error) {
+	shards, _, err := e.ExecWithGraph(args...)
+	if err != nil {
+		return nil, err
+	}
+	return e.exec.AggregateShards(shards)
+}
+
+// AggregateShards returned by Exec into *distributedTensor outputs.
+// Usually, Exec will return alice of numDevices * nnumOutputs individual shards (*tensors.Tensor).
+//
+// See also DistributedExec, which calls Exec and then calls this.
+func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*distributed.Tensor, error) {
+	return e.exec.AggregateShards(shards)
 }
 
 // MustExec parses the arguments into tensors (if they are not yet) and executes

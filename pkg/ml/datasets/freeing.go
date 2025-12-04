@@ -36,11 +36,11 @@ func Freeing(ds train.Dataset) *freeingDataset {
 // freePreviousYield finalize the tensors returned by the previous [Yield] call.
 func (ds *freeingDataset) freePreviousYield() {
 	for _, t := range ds.prevInputs {
-		t.FinalizeAll()
+		t.MustFinalizeAll()
 	}
 	ds.prevInputs = nil
 	for _, t := range ds.prevLabels {
-		t.FinalizeAll()
+		t.MustFinalizeAll()
 	}
 	ds.prevLabels = nil
 }

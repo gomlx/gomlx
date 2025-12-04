@@ -37,7 +37,7 @@
 //     They work very similarly to graph.Exec and should be used when building gradient descent-based machine
 //     learning (ML) on models (with variables), like Neural Networks.
 //
-// ## Backends
+// # Backends
 //
 // The default backend is XLA/PJRT (using github.com/gomlx/gopjrt) -- a just-in-time compiler that allows for very
 // efficient numerical computations.
@@ -49,7 +49,7 @@
 //
 //	import _ "github.com/gomlx/gomlx/backends/default"
 //
-// ## Error Handling
+// # Error Handling
 //
 // Graph (and its Node's) and context.Context methods "throw" errors with panic(). This prevents having to manage
 // error returning for every operation (Add, Sub, Mul, etc.) and makes the code much more readable.
@@ -63,7 +63,7 @@
 // and compiled, before it's executed and used.
 // It is similar to the compilation of regexps or templates in Go.
 //
-// ## Writing Code With Graphs
+// # Writing Code With Graphs
 //
 // When using ML frameworks, it's convenient to split the usual "compile time / runtime" into 3 phases:
 //
@@ -109,6 +109,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/sets"
@@ -151,6 +152,13 @@ type Graph struct {
 
 	// Compiled Graph
 	executable backends.Executable
+
+	// Distributed computation: SPMD has only one DeviceMeshes, AutoSharding can have multiple DeviceMeshes.
+	// But for the distributed case there is always at least one mesh.
+	distStrategy     distributed.Strategy
+	deviceMeshes     []*distributed.DeviceMesh
+	deviceAssignment []backends.DeviceNum
+	numDevices       int
 }
 
 // GraphId is globally unique.
@@ -189,6 +197,9 @@ func NewGraph(backend backends.Backend, name string) *Graph {
 		scalars:               make(scalarCache),
 		tensorConstants:       make(tensorConstCache),
 		aliasToNode:           make(map[string]*Node),
+
+		distStrategy: distributed.None,
+		numDevices:   1,
 	}
 	graphCount += 1
 	return g
@@ -228,18 +239,30 @@ func (g *Graph) WithName(name string) *Graph {
 	return g
 }
 
-// build creates the XlaBuilder if not yet created -- which makes the Graph parameters immutable -- and checks
-// the Graph hasn't yet been compiled -- in which case it can't be further changed.
+// IsBuilding returns whether the Graph already started building a computation, in which case
+// Graph parameters (like name, distribution strategy, etc.) can no longer be changed.
+func (g *Graph) IsBuilding() bool {
+	return g.IsValid() && !g.IsCompiled() && g.builder != nil
+}
+
+// build sets the Graph into "building" mode by creating the Backend Builder object.
+// After this Graph parameters (like name, distribution strategy, etc.) can no longer be changed.
+//
+// This sets Graph.IsBuilding() to true, until the graph is compiled.
 func (g *Graph) build() backends.Builder {
-	if g.backend == nil {
-		exceptions.Panicf("Graph has been finalized already")
+	if !g.IsValid() {
+		exceptions.Panicf("Graph is nil or has been finalized already")
 	}
-	if g.executable != nil {
+	if g.IsCompiled() {
 		exceptions.Panicf("Graph already compiled and can't be used for building")
 	}
 	if g.builder == nil {
 		// Lazy construction of builder: this allows one to further configure the Graph object before using it.
 		g.builder = g.backend.Builder(g.name)
+		err := g.setupBuilderDistribution()
+		if err != nil {
+			panic(err)
+		}
 	}
 	return g.builder
 }
@@ -284,13 +307,22 @@ func (g *Graph) IsValid() bool {
 	return !(g == nil || g.backend == nil)
 }
 
-// AssertValid panics if the graph is nil or if it has already been finalized.
-func (g *Graph) AssertValid() {
+// CheckValid returns an error if the graph is nil or if it has already been finalized.
+func (g *Graph) CheckValid() error {
 	if g == nil {
-		exceptions.Panicf("the Graph is nil")
+		return errors.Errorf("the Graph is nil")
 	}
 	if g.backend == nil {
-		exceptions.Panicf("Graph %q has been finalized already", g.name)
+		return errors.Errorf("Graph %q has been finalized already", g.name)
+	}
+	return nil
+}
+
+// AssertValid panics if the graph is nil or if it has already been finalized.
+func (g *Graph) AssertValid() {
+	err := g.CheckValid()
+	if err != nil {
+		panic(err)
 	}
 }
 
@@ -307,11 +339,16 @@ func (g *Graph) AssertConfiguring() {
 	}
 }
 
+// IsCompiled returns whether the Graph has been compiled (immutable).
+func (g *Graph) IsCompiled() bool {
+	return g.IsValid() && g.executable != nil
+}
+
 // AssertBuilding panics if the graph is nil, has been finalized, or has already been compiled and therefore immutable.
 // If the Graph was in a configuring state (just after the creation), this triggers it to enter into a "building" state.
 func (g *Graph) AssertBuilding() {
 	g.AssertValid()
-	if g.executable != nil {
+	if g.IsCompiled() {
 		exceptions.Panicf("Graph %q has already been compiled, one cannot further build computations with it",
 			g.name)
 	}
@@ -322,7 +359,7 @@ func (g *Graph) AssertBuilding() {
 // building).
 func (g *Graph) AssertCompiled() {
 	g.AssertValid()
-	if g.executable == nil {
+	if !g.IsCompiled() {
 		exceptions.Panicf("Graph %q not compiled yet, it can't be used for execution", g.name)
 	}
 }
@@ -378,10 +415,24 @@ func (g *Graph) Nodes() []*Node {
 //
 // At least one output must be given.
 func (g *Graph) Compile(outputs ...*Node) {
+	g.CompileWithSharding(outputs, nil)
+}
+
+// CompileWithSharding compiles the graph with the given outputs and optionally with the sharding specifications
+// for these outputs.
+//
+// At least one output must be given.
+//
+// This is an advanced version of Compile, used for distributed computation with AutoSharding.
+func (g *Graph) CompileWithSharding(outputs []*Node, outputShardings []*distributed.ShardingSpec) {
 	g.AssertValid()
 	g.AssertBuilding()
 	if len(outputs) == 0 {
 		exceptions.Panicf("no outputs selected when Graph.Compile graph %q", g.name)
+	}
+	if len(outputShardings) > 0 && len(outputShardings) != len(outputs) {
+		exceptions.Panicf("if outputShardings are given, there must be one for each output, "+
+			"but got %d outputs and %d shardings", len(outputs), len(outputShardings))
 	}
 
 	// Sanity check on the output nodes.
@@ -419,12 +470,14 @@ func (g *Graph) Compile(outputs ...*Node) {
 	}
 
 	outputsOps := xslices.Map(outputs, func(node *Node) backends.Op { return node.outputOps[0] })
+	backendShardings := xslices.Map(outputShardings, func(s *distributed.ShardingSpec) *backends.ShardingSpec {
+		return s.ToBackendsSpec()
+	})
 	var err error
-	g.executable, err = g.builder.Compile(outputsOps...)
+	g.executable, err = g.builder.Compile(outputsOps, backendShardings)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Graph failed to compile for the backend"))
 	}
-	return
 }
 
 // donateBuffer holds a buffer to be donated to the execution of a graph.
@@ -434,7 +487,7 @@ type donateBuffer struct {
 	shape  shapes.Shape
 }
 
-// DonateTensorBuffer can be used by Graph.Run, Graph.RunWithMap, or as input to Exec.Exec or Exec.MustExec,
+// DonateTensorBuffer can be used by Graph.Run, Graph.RunOnDevice, or as input to Exec.Exec or Exec.MustExec,
 // and it marks the Tensor to donate its on-device buffer to the execution.
 //
 // This allows the accelerator (GPU) to reuse the space of the donated buffer, which saves space if the original
@@ -446,15 +499,22 @@ type donateBuffer struct {
 //
 // Example:
 //
-//	myState := myExec.MustExec(DonateTensorBuffer(myState, backend))[0]
+//	myBuf, err := myState.DonateBuffer(backend, deviceNum)
+//	myState, err := myExec.Exec(myBuf)[0]
 //
 // It requires the backend and the deviceNum (defaults to 0) of the device buffer to donate.
 //
 // Notice that after this, t's value in the device becomes invalid.
-func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum ...backends.DeviceNum) any {
+func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum backends.DeviceNum) (any, error) {
 	d := &donateBuffer{shape: t.Shape()}
-	d.buffer = t.DonateBuffer(backend, deviceNum...) // DonateBuffer may destroy the tensor if there is no local storage.
-	return d
+	var err error
+	d.buffer, err = t.DonateBuffer(
+		backend,
+		deviceNum) // DonateBuffer may destroy the tensor if there is no local storage.
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 // Run the compiled Graph with the inputs given in order -- the same order as the parameters were created.
@@ -471,20 +531,42 @@ func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum .
 //
 // To donate the inputs buffers (if they are no longer used, e.g., when updating a state), consider using
 // DonateTensorBuffer.
+//
+// If there are multiple devices, the inputs are split among them.
 func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
-	deviceNum := backends.DeviceNum(0) // Hard-coded for now.
+	return g.RunOnDevice(0, inputs...)
+}
 
+// RunOnDevice runs the compiled Graph (see Graph.Run), but uses the defaultDeviceNum to run if the computation
+// is not already fixed to a device.
+//
+// If the computation was compiled with a fixed device assignment, the defaultDevieNum is ignored.
+func (g *Graph) RunOnDevice(defaultDeviceNum backends.DeviceNum, inputs ...any) (outputs []*tensors.Tensor) {
 	numParams := g.NumParameters()
-	if len(inputs) != numParams {
-		exceptions.Panicf("graph %q takes %d parameters, but %d were given to Run()", g.name, numParams, len(inputs))
+	numDevices := g.NumDevices()
+	if len(inputs) != numParams*numDevices {
+		exceptions.Panicf("graph %q takes %d parameters * %d devices, but %d were given to Graph.Run()",
+			g.name, numParams, numDevices, len(inputs))
 	}
-	buffers := make([]backends.Buffer, numParams)
-	donate := make([]bool, numParams)
-	for ii, input := range inputs {
-		buffers[ii], _, donate[ii] = anyToBuffer(g.backend, deviceNum, input)
+	buffers := make([]backends.Buffer, numParams*numDevices)
+	donate := make([]bool, numParams*numDevices)
+	if g.deviceMeshes == nil {
+		// No device mesh, all inputs go to default device 0.
+		deviceNum := defaultDeviceNum
+		for ii, input := range inputs {
+			buffers[ii], _, donate[ii] = anyToDeviceBuffer(g.backend, deviceNum, input)
+		}
+	} else {
+		// Inputs are split into their corresponding devices:
+		deviceAssignment := g.deviceAssignment
+		for ii, input := range inputs {
+			deviceIndex := ii / numParams
+			deviceNum := deviceAssignment[deviceIndex]
+			buffers[ii], _, donate[ii] = anyToDeviceBuffer(g.backend, deviceNum, input)
+		}
 	}
-	return g.RunWithBuffers(buffers, donate)
+	return g.RunWithBuffers(buffers, donate, defaultDeviceNum)
 }
 
 // RunWithMap runs the compiled graph with the inputs given as a map of the corresponding parameter node to tensor value to use.
@@ -501,13 +583,20 @@ func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 //
 // To donate the inputs buffers (if they are no longer used, e.g., when updating a state), consider using
 // DonateTensorBuffer.
+//
+// Deprecated: use Run or RunOnDevice instead.
 func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
 	deviceNum := backends.DeviceNum(0) // Hard-coded for now.
 
 	numParams := g.NumParameters()
 	if len(inputs) != numParams {
-		exceptions.Panicf("graph %q takes %d parameters, but %d were given to RunWithMap()", g.name, numParams, len(inputs))
+		exceptions.Panicf(
+			"graph %q takes %d parameters, but %d were given to RunWithMap()",
+			g.name,
+			numParams,
+			len(inputs),
+		)
 	}
 	for node := range inputs {
 		if node.Type() != NodeTypeParameter {
@@ -521,9 +610,9 @@ func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
 		if buffers[handle] != nil {
 			exceptions.Panicf("Graph %q input for node %q defined more than once", g.name, node)
 		}
-		buffers[handle], _, donate[handle] = anyToBuffer(g.backend, deviceNum, value)
+		buffers[handle], _, donate[handle] = anyToDeviceBuffer(g.backend, deviceNum, value)
 	}
-	return g.RunWithBuffers(buffers, donate)
+	return g.RunWithBuffers(buffers, donate, deviceNum)
 }
 
 // RunWithBuffers executes the graph using as inputs the on-device buffers.
@@ -535,50 +624,115 @@ func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
 //
 // Notice that for repeated output nodes in the graph (the same output node returned in more than one position), the
 // returned tensors are shared.
-func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool) (outputs []*tensors.Tensor) {
+//
+// If there are multiple devices, the inputs are split among them.
+func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool, defaultDevice backends.DeviceNum) (
+	outputs []*tensors.Tensor) {
 	g.AssertCompiled()
 	numParams := g.NumParameters()
-	if len(inputs) != numParams {
-		exceptions.Panicf("graph %q takes %d parameters, but %d were given to RunWithBuffers()", g.name, numParams, len(inputs))
+	numDevices := g.NumDevices()
+	if len(inputs) != numParams*numDevices {
+		exceptions.Panicf("graph %q takes %d parameters * %d devices, but %d were given to RunWithBuffers()",
+			g.name, numParams, numDevices, len(inputs))
 	}
-	if len(donate) != numParams {
-		exceptions.Panicf("graph %q takes %d donate values for the input parameters, but %d were given to RunWithBuffers()", g.name, numParams, len(donate))
+	if len(donate) != numParams*numDevices {
+		exceptions.Panicf("graph %q takes %d * %d donate values for the input parameters, "+
+			"but %d were given to RunWithBuffers()", g.name, numParams, numDevices, len(donate))
 	}
 	var start time.Time
 	var results []backends.Buffer
 	var err error
 	if klog.V(1).Enabled() {
 		start = time.Now()
-		results, err = g.executable.Execute(inputs, donate)
+		results, err = g.executable.Execute(inputs, donate, defaultDevice)
 		elapsed := time.Since(start)
 		klog.V(1).Infof("Graph.RunWithBuffers: %s elapsed", elapsed)
 	} else {
-		results, err = g.executable.Execute(inputs, donate)
+		results, err = g.executable.Execute(inputs, donate, defaultDevice)
 	}
 	if err != nil {
 		panic(errors.WithMessagef(err, "Graph failed to execute"))
 	}
-	outputs = xslices.Map(results, func(buf backends.Buffer) *tensors.Tensor { return tensors.FromBuffer(g.backend, buf) })
+	outputs = xslices.Map(
+		results,
+		func(buf backends.Buffer) *tensors.Tensor {
+			t, err := tensors.FromBuffer(g.backend, buf)
+			if err != nil {
+				panic(err)
+			}
+			return t
+		},
+	)
 	return
 }
 
-// anyToBuffer converts generic values to a tensor.Device on the requested device number, and whether the buffer can
-// be donated.
-func anyToBuffer(backend backends.Backend, deviceNum backends.DeviceNum, value any) (backends.Buffer, shapes.Shape, bool) {
-	t, ok := value.(*tensors.Tensor)
-	if ok {
-		// If a Tensor is given without Donate, it is assumed not for donation.
-		return t.Buffer(backend, deviceNum), t.Shape(), false
+func must1[T any](value T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return value
+}
+
+// anyToDeviceBuffer converts generic values to a tensor.Device on the requested device number,
+// and whether the buffer can be donated.
+func anyToDeviceBuffer(
+	backend backends.Backend,
+	deviceNum backends.DeviceNum,
+	value any,
+) (backends.Buffer, shapes.Shape, bool) {
+	if t, ok := value.(*tensors.Tensor); ok {
+		buf, shape, err := tensorToDeviceBuffer(backend, deviceNum, t)
+		if err != nil {
+			panic(err)
+		}
+		return buf, shape, false // We don't donate tensors by default.
 	}
 	b, ok := value.(*donateBuffer)
 	if ok {
 		return b.buffer, b.shape, true
 	}
 	// A Go value by default is converted to a buffer and can be donated.
-	t = tensors.FromAnyValue(value)
+	t := tensors.FromAnyValue(value)
 	shape := t.Shape()
-	return t.DonateBuffer(backend, deviceNum), shape, true
+	return must1(t.DonateBuffer(backend, deviceNum)), shape, true
+}
 
+// tensorToDeviceBuffer is used by anyToDeviceBuffer to convert a tensor to a device buffer.
+func tensorToDeviceBuffer(
+	backend backends.Backend,
+	deviceNum backends.DeviceNum,
+	t *tensors.Tensor,
+) (backends.Buffer, shapes.Shape, error) {
+	var shape shapes.Shape
+	err := t.CheckValid()
+	if err != nil {
+		return nil, shape, err
+	}
+	currentDevice, err := t.Device()
+	if err == nil {
+		if currentDevice == deviceNum {
+			// Already on the right device, no need to transfer.
+			buf, err := t.Buffer(backend, deviceNum)
+			if err != nil {
+				return nil, shape, err
+			}
+			return buf, t.Shape(), nil
+		}
+		return nil, shape, errors.Errorf(
+			"tensor stored on the wrong deviceNum #%d, expected it to be on device #%d where it's going "+
+				"to be used -- this is likely a logic error, so it is not transferred automatically",
+			currentDevice, deviceNum)
+	}
+	if !t.IsLocal() {
+		return nil, shape, errors.Errorf(
+			"tensor %q is not local and not on a device, cannot transfer to deviceNum #%d", t.Shape(), deviceNum)
+	}
+	// Transfer the tensor to the right device:
+	buf, err := t.Buffer(backend, deviceNum)
+	if err != nil {
+		return nil, shape, err
+	}
+	return buf, t.Shape(), nil
 }
 
 // NumParameters returns the number of parameters created for this graph.
@@ -619,7 +773,9 @@ func (g *Graph) String() string {
 	if g.executable != nil {
 		compiled = " (*)"
 	}
-	parts := []string{fmt.Sprintf("Graph %q%s: %d nodes, %d parameters", g.name, compiled, len(g.nodes), g.NumParameters())}
+	parts := []string{
+		fmt.Sprintf("Graph %q%s: %d nodes, %d parameters", g.name, compiled, len(g.nodes), g.NumParameters()),
+	}
 	for ii, node := range g.nodes {
 		parts = append(parts, fmt.Sprintf("\t#%d\t%s", ii, node))
 	}

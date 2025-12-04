@@ -27,6 +27,8 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/scoped"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -118,7 +120,7 @@ type contextData struct {
 	//
 	// Usually the root values are set just after context creation. But layers of a model
 	// may set values within scopes for its sub-layers.
-	params *scopedParams
+	params *scoped.Params
 
 	// graphParams hold models parameters for a particular graph. It's scoped like params,
 	// and these values are interpreted by the various model components independently. E.g:
@@ -127,7 +129,7 @@ type contextData struct {
 	//   indicate whether the graph is being used for training or for inference. This is
 	//   used by layers that behave differently when training and inference (e.g: Dropout,
 	//   BatchNorm, etc.).
-	graphParams map[graph.GraphId]*scopedParams
+	graphParams map[graph.GraphId]*scoped.Params
 
 	// variablesMap for this context organized per scope.
 	variablesMap map[string]scopedVariableMap
@@ -141,7 +143,13 @@ type contextData struct {
 	// needsInitialization indicates whether there are uninitialized variables in
 	// the context. It's set to false whenever one runs Context.InitializeVariables,
 	// and it's set to true whenever a new variable is created without a value.
+	//
+	// If it is set to false, it means all variables are set, and there is no need to initialize.
+	// But a true is not 100% certain: it may be that the variables are already set, it requires checking.
 	needsInitialization bool
+
+	// defaultShardingSpec used for new variables, if execution is distributed.
+	defaultShardingSpec *distributed.ShardingSpec
 }
 
 // Loader can be implemented by any library providing loading of variables for
@@ -163,7 +171,7 @@ type Loader interface {
 	// loader, otherwise the variable will reappear after deletion.
 	//
 	// If the variable doesn't exist in the loader, it should be a no-op.
-	DeleteVariable(ctx *Context, scope, name string)
+	DeleteVariable(ctx *Context, scope, name string) error
 }
 
 // New returns an empty context, associated with freshly created data.
@@ -176,8 +184,8 @@ func New() *Context {
 		scope:   RootScope,
 		checked: true,
 		data: &contextData{
-			params:       newScopedParams(),
-			graphParams:  make(map[graph.GraphId]*scopedParams),
+			params:       scoped.New(ScopeSeparator),
+			graphParams:  make(map[graph.GraphId]*scoped.Params),
 			variablesMap: make(map[string]scopedVariableMap),
 		},
 	}
@@ -196,18 +204,29 @@ func New() *Context {
 //     copied over by with newCtx.SetLoader(ctx.Loader()).
 //   - The context state is copied over: needing initialization of variables, if to be checked
 //     for new/reuse of variables, etc.
-func (ctx *Context) Clone() *Context {
+//   - The default sharding spec is simply copied (not cloned).
+func (ctx *Context) Clone() (*Context, error) {
 	newCtx := New()
 	newCtx.scope = ctx.scope
 	newCtx.reuse = ctx.reuse
 	newCtx.checked = ctx.checked
 	newCtx.initializer = ctx.initializer
+	newCtx.data = &contextData{
+		graphParams:  make(map[graph.GraphId]*scoped.Params),
+		variablesMap: make(map[string]scopedVariableMap),
+	}
 	newCtx.data.needsInitialization = ctx.data.needsInitialization
 	newCtx.data.params = ctx.data.params.Clone()
+	newCtx.data.defaultShardingSpec = ctx.data.defaultShardingSpec
+	var err error
 	for v := range ctx.IterVariables() {
-		_ = v.CloneToContext(newCtx)
+		_, err = v.CloneToContext(newCtx)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "failed to clone variable %q while cloning the Context",
+				v.Name())
+		}
 	}
-	return newCtx
+	return newCtx, nil
 }
 
 const (
@@ -267,7 +286,7 @@ func (ctx *Context) Scope() string {
 
 // EscapeScopeName replaces ScopeSeparator in the string and replaces them by "_".
 func EscapeScopeName(scopeName string) string {
-	return strings.Replace(scopeName, ScopeSeparator, "_", -1)
+	return strings.ReplaceAll(scopeName, ScopeSeparator, "_")
 }
 
 // In returns a new reference to the Context with the extra given scope. No ScopeSeparator ("/") is
@@ -499,7 +518,7 @@ func (ctx *Context) EnumerateParams(fn func(scope, key string, value any)) {
 // set this state, as the same Context is used for evaluation/inference graphs and
 // training graphs, and they will have different values.
 func (ctx *Context) GetGraphParam(g *Graph, key string) (value any, found bool) {
-	var graphParams *scopedParams
+	var graphParams *scoped.Params
 	graphParams, found = ctx.data.graphParams[g.GraphId()]
 	if !found {
 		return
@@ -595,7 +614,7 @@ func GetGraphParamOr[T any](ctx *Context, g *Graph, key string, defaultValue T) 
 func (ctx *Context) SetGraphParam(g *Graph, key string, value any) {
 	graphParams, found := ctx.data.graphParams[g.GraphId()]
 	if !found {
-		graphParams = newScopedParams()
+		graphParams = scoped.New(ScopeSeparator)
 		ctx.data.graphParams[g.GraphId()] = graphParams
 	}
 	graphParams.Set(ctx.scope, key, value)
@@ -623,22 +642,33 @@ func (ctx *Context) NeedsInitialization() bool {
 // Variables create with VariableWithValue or for which values were preloaded are not initialized.
 // Errors are returned in Context.Error().
 //
+//   - configExec: closure to configure the initialization of the variables executor.
+//     This is a hook that allows one to set distributed execution (and having the variables already pre-sharded
+//     and stored on the correct devices). If can be nil, then nothing is configured.
+//
 // Notice that variables information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
 //
 // Initialization functions are executed on the given backend.
-func (ctx *Context) InitializeVariables(backend backends.Backend) {
+//
+// InitializeVariables also resets the RNG state for the context, if is not yet set.
+func (ctx *Context) InitializeVariables(
+	backend backends.Backend, configExec func(initializerExec *Exec) error) error {
+	// Collect variables that need initialization.
 	var variablesToInitialize []*Variable
-	ctx.EnumerateVariables(func(v *Variable) {
-		if v.value == nil {
+	for v := range ctx.IterVariables() {
+		if !v.HasValue() {
 			variablesToInitialize = append(variablesToInitialize, v)
 		}
-	})
+	}
 	if len(variablesToInitialize) == 0 {
 		// Nothing to do.
-		return
+		return nil
 	}
-	e := MustNewExec(backend, ctx, func(ctx *Context, g *Graph) []*Node {
+
+	// Execute initialization for collected variables.
+	e, err := NewExec(backend, ctx, func(ctx *Context, g *Graph) []*Node {
+		g = g.WithName("VariableInitialization")
 		initialValues := make([]*Node, 0, len(variablesToInitialize))
 		for _, variable := range variablesToInitialize {
 			if variable.initializer == nil {
@@ -649,22 +679,36 @@ func (ctx *Context) InitializeVariables(backend backends.Backend) {
 		}
 		return initialValues
 	})
-	e.isInitializeVariablesExec = true // Disallow recursive creation of variables within variable initialization.
-	var values []*tensors.Tensor
-	err := TryCatch[error](func() {
-		values = e.MustExec()
-	})
 	if err != nil {
-		panic(errors.WithMessagef(err, "failed to compile/run variable initialization graph"))
+		return errors.WithMessagef(err, "failed to create executor for variable initialization")
+	}
+	if configExec != nil {
+		// Caller configuration of the executor.
+		err := configExec(e)
+		if err != nil {
+			return errors.WithMessagef(err, "failed to configure executor for variable initialization")
+		}
+	}
+	e.isInitializeVariablesExec = true // Disallow recursive creation of variables within variable initialization.
+	values, err := e.Exec()
+	if err != nil {
+		return errors.WithMessagef(err, "failed to compile/run variable initialization graph")
+	}
+	numDevices := e.NumDevices()
+	if len(values) != numDevices*len(variablesToInitialize) {
+		return errors.Errorf("failed to initialize variables: expected numDevices(%d) * %d values, got %d",
+			numDevices, len(variablesToInitialize), len(values))
 	}
 	for ii, variable := range variablesToInitialize {
 		if !values[ii].Ok() {
-			Panicf("graph execution to initialize variables failed: variable %q (#%d) generated value was invalid -- maybe other variables as well",
-				variable.ScopeAndName(), ii)
+			return errors.Errorf(
+				"graph execution to initialize variables failed: variable %q (#%d) generated value was invalid -- "+
+					"maybe other variables as well", variable.ScopeAndName(), ii)
 		}
 		variable.value = values[ii]
 	}
 	ctx.data.needsInitialization = false
+	return nil
 }
 
 // ExecSetVariablesInParams adds all variables (all scopes) used by the graph to the ParamsMap objects.
@@ -678,7 +722,7 @@ func (ctx *Context) ExecSetVariablesInParams(params graph.ParamsMap, g *Graph) {
 			if v.value == nil {
 				Panicf("variable %q not initialized", v.ParameterName())
 			}
-			params[v.ParamNode(g)] = v.value
+			params[v.ValueGraph(g)] = v.value
 		}
 	})
 }
@@ -772,20 +816,23 @@ func (ctx *Context) setVariableInScope(name string, v *Variable) {
 // DeleteVariable if it exists.
 //
 // This should not be called from a graph building function or from within EnumerateVariables: the results are undefined if you do.
-func (ctx *Context) DeleteVariable(scope, name string) {
+func (ctx *Context) DeleteVariable(scope, name string) error {
 	// Even if variable doesn't exist in context yet, we need to remove it from the loader,
 	// since it may only exist there at first.
 	loader := ctx.data.loader
 	if loader != nil {
-		loader.DeleteVariable(ctx, scope, name)
+		err := loader.DeleteVariable(ctx, scope, name)
+		if err != nil {
+			return err
+		}
 	}
 	scopeVars, ok := ctx.data.variablesMap[scope]
 	if !ok {
-		return
+		return nil
 	}
 	v := scopeVars[name]
 	if v == nil {
-		return
+		return nil
 	}
 	v.value = nil
 	v.graphToNodes.Map.Clear()
@@ -793,16 +840,18 @@ func (ctx *Context) DeleteVariable(scope, name string) {
 	if len(scopeVars) == 0 {
 		delete(ctx.data.variablesMap, scope)
 	}
-	ctx.data.variables = slices.DeleteFunc(ctx.data.variables, func(vCandidate *Variable) bool {
-		return vCandidate == v
-	})
-	return
+	ctx.data.variables = slices.DeleteFunc(
+		ctx.data.variables, func(vCandidate *Variable) bool {
+			return vCandidate == v
+		})
+	return nil
 }
 
 // DeleteVariablesInScope deletes all variables under the current scope (ctx.Scope()).
+// It also resets the variables, freeing its values.
 //
 // This should not be called from a graph building function or from within EnumerateVariables: the results are undefined if you do.
-func (ctx *Context) DeleteVariablesInScope() {
+func (ctx *Context) DeleteVariablesInScope() error {
 	variables := make([]*Variable, 0, len(ctx.data.variables))
 	baseScope := ctx.Scope()
 	baseScopeWithSeparator := baseScope + ScopeSeparator
@@ -811,26 +860,35 @@ func (ctx *Context) DeleteVariablesInScope() {
 	}
 	loader := ctx.data.loader
 	for _, v := range ctx.data.variables {
-		if v.Scope() == baseScope || strings.HasPrefix(v.Scope(), baseScopeWithSeparator) {
-			if loader != nil {
-				loader.DeleteVariable(ctx, v.Scope(), v.Name())
-			}
-
-			// Remove reference to variable.
-			scopeVars, ok := ctx.data.variablesMap[v.Scope()]
-			if !ok {
-				continue
-			}
-			delete(scopeVars, v.name)
-			if len(scopeVars) == 0 {
-				delete(ctx.data.variablesMap, v.Scope())
-			}
-		} else {
-			// Preserve variable.
+		if v.Scope() != baseScope && !strings.HasPrefix(v.Scope(), baseScopeWithSeparator) {
+			// Not in scope, preserve variable.
 			variables = append(variables, v)
+			continue
+		}
+
+		// Free variable space.
+		err := v.Reset()
+		if err != nil {
+			return err
+		}
+
+		// Inform the loader about the variable being deleted.
+		if loader != nil {
+			loader.DeleteVariable(ctx, v.Scope(), v.Name())
+		}
+
+		// Remove reference to variable.
+		scopeVars, ok := ctx.data.variablesMap[v.Scope()]
+		if !ok {
+			continue
+		}
+		delete(scopeVars, v.name)
+		if len(scopeVars) == 0 {
+			delete(ctx.data.variablesMap, v.Scope())
 		}
 	}
 	ctx.data.variables = variables
+	return nil
 }
 
 // VariableWithShape creates or returns an existing variable with the given shape in the current scope.
@@ -853,13 +911,22 @@ func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable
 		Panicf("requested variable %q in scope %q with Context.Reuse set, but variable does not exist", name, ctx.scope)
 	}
 	if v != nil && ctx.checked && !ctx.reuse {
-		Panicf("variable %q for scope %q already exists -- if this was deliberate, use Context.Reuse() or Context.Check(false)", name, ctx.scope)
+		Panicf(
+			"variable %q for scope %q already exists -- if this was deliberate, use Context.Reuse() or Context.Check(false)",
+			name,
+			ctx.scope,
+		)
 	}
 
 	if v != nil {
 		if !shape.Equal(v.shape) {
-			Panicf("requested to reuse variable %q in scope %q, but with different shape from original: previous shape=%s, requested shape=%s",
-				name, ctx.scope, v.shape, shape)
+			Panicf(
+				"requested to reuse variable %q in scope %q, but with different shape from original: previous shape=%s, requested shape=%s",
+				name,
+				ctx.scope,
+				v.shape,
+				shape,
+			)
 		}
 		// We want to update/register the initializer, even if the value is already set (maybe read from a checkpoint).
 		v.initializer = ctx.initializer
@@ -868,11 +935,12 @@ func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable
 
 	// New variable: check, create and register it in Context and return.
 	v = &Variable{
-		ctx:       ctx,
-		name:      name,
-		scope:     ctx.Scope(),
-		shape:     shape,
-		Trainable: true,
+		ctx:          ctx,
+		name:         name,
+		scope:        ctx.Scope(),
+		shape:        shape,
+		Trainable:    true,
+		shardingSpec: ctx.data.defaultShardingSpec,
 	}
 	ctx.setVariableInScope(name, v)
 
@@ -917,12 +985,15 @@ func valueToTensor(value any) *tensors.Tensor {
 // - Context.Reuse() and variable didn't exist (or was not loaded);
 //
 // See Variable.SetValue if you want to overwrite the value of an existing variable.
+//
+// This is a graph building function and so it may panic if the variable cannot be created.
 func (ctx *Context) VariableWithValue(name string, defaultValue any) *Variable {
 	v := ctx.GetVariableByScopeAndName(ctx.scope, name)
 
 	// Check against reuse of variables.
 	if ctx.checked && ctx.reuse && v == nil {
-		Panicf("requested variable %q in scope %q with Context.Reuse set, but variable does not exist", name, ctx.scope)
+		Panicf("requested variable %q in scope %q with Context.Reuse set, but variable does not exist",
+			name, ctx.scope)
 	}
 	if ctx.checked && !ctx.reuse && v != nil {
 		Panicf("variable %q for scope %q already exists", name, ctx.scope)
@@ -931,14 +1002,27 @@ func (ctx *Context) VariableWithValue(name string, defaultValue any) *Variable {
 	var valueT *tensors.Tensor
 	err := TryCatch[error](func() { valueT = valueToTensor(defaultValue) })
 	if err != nil {
-		panic(errors.WithMessagef(err, "failed to parse defaultValue %v for variable %q in scope %q", defaultValue, name, ctx.scope))
+		panic(
+			errors.WithMessagef(
+				err,
+				"failed to parse defaultValue %v for variable %q in scope %q",
+				defaultValue,
+				name,
+				ctx.scope,
+			),
+		)
 	}
 
 	if v != nil {
 		// Pre-existing variable to reuse: check that the requested and previous shapes are the same.
 		if !valueT.Shape().Equal(v.shape) {
-			Panicf("requested to reuse variable %q in scope %q, but with defaultValue with different shape from original: previous shape=%s, requested defaultValue shape=%s",
-				name, ctx.scope, v.shape, valueT.Shape())
+			Panicf(
+				"requested to reuse variable %q in scope %q, but with defaultValue with different shape from original: previous shape=%s, requested defaultValue shape=%s",
+				name,
+				ctx.scope,
+				v.shape,
+				valueT.Shape(),
+			)
 		}
 		return v
 	}
@@ -973,6 +1057,8 @@ func (ctx *Context) VariableWithValue(name string, defaultValue any) *Variable {
 //
 // - Context.Unique() and variable already exists (or was loaded);
 // - Context.Reuse() and variable didn't exist (or was not loaded);
+//
+// This is a graph building function and so it may panic if the variable cannot be created.
 func (ctx *Context) VariableWithValueGraph(name string, value *Node) *Variable {
 	// Create a zero-initialized context.
 	zeroCtx := ctx.WithInitializer(func(g *Graph, shape shapes.Shape) *Node {
@@ -995,6 +1081,8 @@ func (ctx *Context) VariableWithValueGraph(name string, value *Node) *Variable {
 //	ctx.EnumerateVariables(func(v *context.Variable) {
 //		fmt.Printf("\t%s::%s: shape=%s\n", v.Scope(), v.Name(), v.Shape())
 //	})
+//
+// Deprecated: use IterVariables instead.
 func (ctx *Context) EnumerateVariables(fn func(v *Variable)) {
 	for _, v := range ctx.data.variables {
 		fn(v)
@@ -1122,7 +1210,7 @@ func (ctx *Context) ExecPopulateGraphParamsMap(g *Graph, params graph.ParamsMap)
 		if !found {
 			return
 		}
-		params[nodes.paramNode] = v.Value()
+		params[nodes.paramNode] = v.MustValue()
 	})
 }
 

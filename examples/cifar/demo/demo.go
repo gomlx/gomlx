@@ -20,6 +20,7 @@ package main
 
 import (
 	"flag"
+
 	"github.com/gomlx/gomlx/examples/cifar"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -47,7 +48,7 @@ var (
 // createDefaultContext sets the context with default hyperparameters
 func createDefaultContext() *context.Context {
 	ctx := context.New()
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		// Model type to use
 		"model":           cifar.C10ValidModels[0],

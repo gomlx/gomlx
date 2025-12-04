@@ -28,9 +28,19 @@ type StreamingMedianMetric struct {
 // batch means. This may be a reasonable approximation, but something to be mindful.
 //
 // `prettyPrintFn` can be left as nil, and a default will be used.
-func NewMedianMetric(name, shortName, metricType string, metricFn BaseMetricGraph, prettyPrintFn PrettyPrintFn) *StreamingMedianMetric {
+func NewMedianMetric(
+	name, shortName, metricType string,
+	metricFn BaseMetricGraph,
+	prettyPrintFn PrettyPrintFn,
+) *StreamingMedianMetric {
 	return &StreamingMedianMetric{
-		baseMetric:    baseMetric{name: name, shortName: shortName, metricType: metricType, metricFn: metricFn, pPrintFn: prettyPrintFn},
+		baseMetric: baseMetric{
+			name:       name,
+			shortName:  shortName,
+			metricType: metricType,
+			metricFn:   metricFn,
+			pPrintFn:   prettyPrintFn,
+		},
 		maxNumSamples: 10_001,
 	}
 }
@@ -60,7 +70,7 @@ func (m *StreamingMedianMetric) UpdateGo(results *tensors.Tensor) {
 			m.rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 		}
 	}
-	tensors.ConstFlatData(results, func(resultsFlat []float64) {
+	tensors.MustConstFlatData(results, func(resultsFlat []float64) {
 		for _, x := range resultsFlat {
 			m.samplesSeen++
 

@@ -109,8 +109,8 @@ func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []*t
 
 	// Eval metrics, if given
 	for _, ds := range evalDatasets {
-		var evalMetrics []*tensors.Tensor
-		if err := exceptions.TryCatch[error](func() { evalMetrics = loop.Trainer.Eval(ds) }); err != nil {
+		evalMetrics, err := loop.Trainer.Eval(ds)
+		if err != nil {
 			return err
 		}
 		for ii, desc := range loop.Trainer.EvalMetrics() {

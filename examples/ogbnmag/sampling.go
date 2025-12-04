@@ -85,14 +85,18 @@ func NewSampler(baseDir string) (*sampler.Sampler, error) {
 // . [seedIdsCandidates] is the seed of seed nodes to sample from, typically [ogbnmag.TrainSplit], [ogbnmag.ValidSplit] or [ogbnmag.TestSplit]. If empty it will sample from all possible papers.
 //
 // It returns a [sampler.Strategy] for OGBN-MAG.
-func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates *tensors.Tensor) (strategy *sampler.Strategy) {
+func NewSamplerStrategy(
+	magSampler *sampler.Sampler,
+	batchSize int,
+	seedIdsCandidates *tensors.Tensor,
+) (strategy *sampler.Strategy) {
 	strategy = magSampler.NewStrategy()
 	strategy.KeepDegrees = KeepDegrees
 	var seeds *sampler.Rule
 	if seedIdsCandidates == nil {
 		seeds = strategy.Nodes("seeds", "papers", batchSize)
 	} else {
-		seedIdsData := tensors.CopyFlatData[int32](seedIdsCandidates)
+		seedIdsData := tensors.MustCopyFlatData[int32](seedIdsCandidates)
 		seeds = strategy.NodesFromSet("seeds", "papers", batchSize, seedIdsData)
 	}
 	citations := seeds.FromEdges("citations", "cites", 8)
@@ -126,7 +130,11 @@ func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandi
 
 	// Affiliations
 	authorsInstitutions := seedsAuthors.FromEdges("authorsInstitutions", "affiliatedWith", defaultSamplingCount)
-	citationAuthorsInstitutions := citationsAuthors.FromEdges("citationAuthorsInstitutions", "affiliatedWith", defaultSamplingCount)
+	citationAuthorsInstitutions := citationsAuthors.FromEdges(
+		"citationAuthorsInstitutions",
+		"affiliatedWith",
+		defaultSamplingCount,
+	)
 	if ReuseShareableKernels {
 		citationAuthorsInstitutions.WithKernelScopeName(authorsInstitutions.ConvKernelScopeName)
 	}
@@ -136,7 +144,11 @@ func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandi
 	seedsTopics := seedsBase.FromEdges("seedsTopics", "hasTopic", topicsCount)
 	papersByAuthorsTopics := papersByAuthors.FromEdges("papersByAuthorsTopics", "hasTopic", topicsCount)
 	citationsTopics := citations.FromEdges("citationsTopics", "hasTopic", topicsCount)
-	papersByCitationAuthorsTopics := papersByCitationAuthors.FromEdges("papersByCitationAuthorsTopics", "hasTopic", topicsCount)
+	papersByCitationAuthorsTopics := papersByCitationAuthors.FromEdges(
+		"papersByCitationAuthorsTopics",
+		"hasTopic",
+		topicsCount,
+	)
 	if ReuseShareableKernels {
 		papersByAuthorsTopics.WithKernelScopeName(seedsTopics.ConvKernelScopeName)
 		citationsTopics.WithKernelScopeName(seedsTopics.ConvKernelScopeName)
@@ -151,9 +163,9 @@ func ExtractLabelsFromInput(inputs, labels []*tensors.Tensor) ([]*tensors.Tensor
 	seeds := inputs[0]
 	seedsMask := inputs[1]
 	seedsLabels := tensors.FromShape(shapes.Make(seeds.DType(), seeds.Shape().Size(), 1))
-	tensors.ConstFlatData[int32](seeds, func(seedsData []int32) {
-		tensors.ConstFlatData[int32](PapersLabels, func(papersLabelsData []int32) {
-			tensors.MutableFlatData[int32](seedsLabels, func(labelsData []int32) {
+	tensors.MustConstFlatData[int32](seeds, func(seedsData []int32) {
+		tensors.MustConstFlatData[int32](PapersLabels, func(papersLabelsData []int32) {
+			tensors.MustMutableFlatData[int32](seedsLabels, func(labelsData []int32) {
 				for ii, paperIdx := range seedsData {
 					labelsData[ii] = papersLabelsData[paperIdx]
 				}

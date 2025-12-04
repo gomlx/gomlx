@@ -20,11 +20,14 @@ func TestVariable_CloneToContext(t *testing.T) {
 	v0y := ctx0.In("a").In("b").VariableWithShape("y", shapes.Make(dtypes.Int8, 2, 3, 4))
 
 	ctx1 := New()
-	v1x := v0x.CloneToContext(ctx1)
-	fmt.Printf("Cloned variable %q: %s\n", v1x.ScopeAndName(), v1x.Value())
-	v1y := v0y.CloneToContext(ctx1)
-	require.Nil(t, v1y.Value())
-	fmt.Printf("Cloned variable %q: %s\n", v1y.ScopeAndName(), v1y.Value())
+	v1x, err := v0x.CloneToContext(ctx1)
+	require.NoError(t, err)
+	fmt.Printf("Cloned variable %q: %s\n", v1x.ScopeAndName(), v1x.MustValue())
+	v1y, err := v0y.CloneToContext(ctx1)
+	require.NoError(t, err)
+	_, err = v1y.Value()
+	require.Error(t, err, "/a/b/y was created uninitialized, it should have no value")
+	fmt.Printf("Cloned variable %q, with no value, shape=%s\n", v1y.ScopeAndName(), v1y.Shape())
 
 	// Check the new variable has the right name, scope and was properly inserted in to the new context.
 	if v1x.ScopeAndName() != "/a/b/x" {
@@ -37,9 +40,9 @@ func TestVariable_CloneToContext(t *testing.T) {
 
 	// Check the new variable value is independent of the old one.
 	ctx0 = nil
-	v0x.Value().FinalizeAll()
+	v0x.MustValue().MustFinalizeAll()
 	for range 5 {
 		runtime.GC()
 	}
-	require.Equal(t, value, tensors.CopyFlatData[float32](v1x.Value()))
+	require.Equal(t, value, tensors.MustCopyFlatData[float32](v1x.MustValue()))
 }

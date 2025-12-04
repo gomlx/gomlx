@@ -14,7 +14,8 @@
  *	limitations under the License.
  */
 
-package context
+// Package scoped provides a mapping from a string to any data type that is "scoped".
+package scoped
 
 import (
 	"strings"
@@ -22,45 +23,47 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
-// scopedParams provides a mapping from string to any data type that is "scoped":
+// Params provides a mapping from string to any data type that is "scoped":
 //
 //   - For every scope there is a map of string to data.
 //   - Accessing a key triggers a search from the current scope up to the root scope, the
 //     first result found is returned.
 //
-// Example: let's say the current scopedParams hold:
+// Example: let's say the current Params hold:
 //
 //	Scope: "/": { "x":10, "y": 20, "z": 40 }
 //	Scope: "/a": { "y": 30 }
 //	Scope: "/a/b": { "x": 100 }
 //
-//	scopedParams.Get("/a/b", "x") -> 100
-//	scopedParams.Get("/a/b", "y") -> 30
-//	scopedParams.Get("/a/b", "z") -> 40
-//	scopedParams.Get("/a/b", "w") -> Not found.
+//	Params.Get("/a/b", "x") -> 100
+//	Params.Get("/a/b", "y") -> 30
+//	Params.Get("/a/b", "z") -> 40
+//	Params.Get("/a/b", "w") -> Not found.
 //
 // Notice that "/" (== ScopeSeparator constant) separates parts of the scope path, and the root
 // scope is referred to as "/". There is no "empty" scope, and every scope name must start with
 // a ScopeSeparator.
 //
-// The Context object uses scopedParams to store the normal hyperparameters (see `Context.GetParam` and `Context.SetParam`)
+// The Context object uses Params to store the normal hyperparameters (see `Context.GetParam` and `Context.SetParam`)
 // and to store the graph hyperparameters (see `Context.GetGraphParam` and `Context.SetGraphParam`).
 //
 // Usually there will be no need for the end user to use this.
-type scopedParams struct {
+type Params struct {
+	Separator  string
 	scopeToMap map[string]map[string]any
 }
 
-// newScopedParams create an empy scopedParams.
-func newScopedParams() *scopedParams {
-	return &scopedParams{
+// New create an empy scopedParams.
+func New(scopeSeparator string) *Params {
+	return &Params{
+		Separator:  scopeSeparator,
 		scopeToMap: make(map[string]map[string]any),
 	}
 }
 
 // Clone returns a deep copy of the scopedParams.
-func (p *scopedParams) Clone() *scopedParams {
-	newScopedParams := newScopedParams()
+func (p *Params) Clone() *Params {
+	newScopedParams := New(p.Separator)
 	for scope, dataMap := range p.scopeToMap {
 		newScopedParams.scopeToMap[scope] = make(map[string]any)
 		for key, value := range dataMap {
@@ -71,7 +74,7 @@ func (p *scopedParams) Clone() *scopedParams {
 }
 
 // Set sets the value for the given key, in the given scope.
-func (p *scopedParams) Set(scope, key string, value any) {
+func (p *Params) Set(scope, key string, value any) {
 	dataMap, found := p.scopeToMap[scope]
 	if found && dataMap != nil {
 		dataMap[key] = value
@@ -87,8 +90,8 @@ func (p *scopedParams) Set(scope, key string, value any) {
 // consecutively until "myKey" is found.
 //
 // It returns the first value found if any, and whether some value was found.
-func (p *scopedParams) Get(scope, key string) (value any, found bool) {
-	scopeParts := strings.Split(scope, ScopeSeparator)
+func (p *Params) Get(scope, key string) (value any, found bool) {
+	scopeParts := strings.Split(scope, p.Separator)
 	for ii := len(scopeParts) - 1; ii >= 0; ii-- {
 		var dataMap map[string]any
 		dataMap, found = p.scopeToMap[scope]
@@ -101,7 +104,7 @@ func (p *scopedParams) Get(scope, key string) (value any, found bool) {
 		scope = scope[:len(scope)-len(scopeParts[ii])]
 		if ii > 1 {
 			// Remove tailing separator, except for the root scope ("/").
-			scope = scope[:len(scope)-len(ScopeSeparator)]
+			scope = scope[:len(scope)-len(p.Separator)]
 		}
 	}
 	return nil, false
@@ -109,7 +112,7 @@ func (p *scopedParams) Get(scope, key string) (value any, found bool) {
 
 // Enumerate enumerates all parameters stored in the scopedParams structure and calls the given closure with
 // them.
-func (p *scopedParams) Enumerate(fn func(scope, key string, value any)) {
+func (p *Params) Enumerate(fn func(scope, key string, value any)) {
 	scopes := xslices.SortedKeys(p.scopeToMap)
 	for _, scope := range scopes {
 		keyValues := p.scopeToMap[scope]

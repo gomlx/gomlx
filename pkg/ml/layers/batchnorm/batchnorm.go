@@ -220,7 +220,9 @@ func (builder *Config) Done() *Node {
 
 	// Normalization moving average of the mean and variance.
 	meanAverageVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("mean", varShape).SetTrainable(false)
-	varianceAverageVar := ctx.WithInitializer(initializers.One).VariableWithShape("variance", varShape).SetTrainable(false)
+	varianceAverageVar := ctx.WithInitializer(initializers.One).
+		VariableWithShape("variance", varShape).
+		SetTrainable(false)
 	weightVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("avg_weight", varShape).SetTrainable(false)
 
 	var normalized *Node
@@ -334,7 +336,12 @@ type batchNormUpdater struct {
 
 // updateMeanAndVariance values that will be used in inference later. It's a moving average, where weight is how many
 // examples have been seen so far -- it's incremented at every step.
-func (builder *Config) updateMeanAndVariance(ctx *context.Context, graph *Graph, batchMean, batchVariance *Node, meanAverageVar, varianceAverageVar, weightVar *context.Variable) {
+func (builder *Config) updateMeanAndVariance(
+	ctx *context.Context,
+	graph *Graph,
+	batchMean, batchVariance *Node,
+	meanAverageVar, varianceAverageVar, weightVar *context.Variable,
+) {
 	_ = ctx
 	if builder.frozenAverages {
 		// We are not changing the averages.
@@ -369,7 +376,10 @@ func ResetWeights(ctx *context.Context) {
 	suffix := "/" + BatchNormalizationScopeName
 	ctx.EnumerateVariablesInScope(func(v *context.Variable) {
 		if strings.HasSuffix(v.Scope(), suffix) && v.Name() == "avg_weight" {
-			v.Reset()
+			err := v.Reset()
+			if err != nil {
+				panic(err)
+			}
 		}
 	})
 }
@@ -391,6 +401,8 @@ const (
 // If oneEpochDS is nil, it disabled the updating of the averages.
 //
 // It returns whether batch normalization was used and averages were updated.
+//
+// It pancis in case of errors.
 //
 // See discussions:
 // - https://www.mindee.com/blog/batch-normalization

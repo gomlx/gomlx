@@ -313,7 +313,7 @@ func BenchmarkScatter(b *testing.B) {
 	}
 	slices.Sort(indices)
 	indicesT := tensors.FromValue(indices)
-	rngStateT := RngStateFromSeed(42)
+	rngStateT := must1(RNGStateFromSeed(42))
 
 	for _, sorted := range []bool{true, false} {
 		for _, unique := range []bool{true, false} {
@@ -342,11 +342,11 @@ func BenchmarkScatter(b *testing.B) {
 				stateT, valuesT := results[0], results[1]
 
 				// Precompile graph for given inputNodes. It also makes sure the inputNodes are transferred to the accelerator.
-				scatterExec.MustExec(stateT, indicesT, valuesT)[0].FinalizeAll()
+				scatterExec.MustExec(stateT, indicesT, valuesT)[0].MustFinalizeAll()
 				b.Run(fmt.Sprintf("sorted-%v_unique-%v_dtype-%s", sorted, unique, dtype), func(b *testing.B) {
 					for range b.N {
 						results := scatterExec.MustExec(stateT, indicesT, valuesT)
-						stateT.FinalizeAll()
+						must(stateT.FinalizeAll())
 						stateT = results[0]
 					}
 				})

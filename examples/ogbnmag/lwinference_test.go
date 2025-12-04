@@ -2,6 +2,12 @@ package ogbnmag
 
 import (
 	"fmt"
+	"io"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
@@ -18,11 +24,6 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
-	"io"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"testing"
 )
 
 func findSmallestDegreeSubgraph(t *testing.T) int32 {
@@ -48,7 +49,7 @@ func findSmallestDegreeSubgraph(t *testing.T) int32 {
 			if !strings.HasSuffix(name, ".degree") {
 				continue
 			}
-			values := tensors.CopyFlatData[int32](state.Value)
+			values := tensors.MustCopyFlatData[int32](state.Value)
 			for _, v := range values {
 				if v > maxDegree {
 					maxDegree = v
@@ -65,8 +66,6 @@ func findSmallestDegreeSubgraph(t *testing.T) int32 {
 }
 
 func configureLayerWiseTestContext(ctx *context.Context) {
-	ctx.RngStateReset()
-
 	// Standard MAG parameters.
 	ctx.SetParams(map[string]any{
 		"checkpoint":      "",
@@ -268,7 +267,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	require.NotPanics(t, func() { results = executor.MustExec() })
 	predictionsLW := results[0].Value().([]int32)
 	correct = 0
-	labels := tensors.CopyFlatData[int32](PapersLabels)
+	labels := tensors.MustCopyFlatData[int32](PapersLabels)
 	for ii, value := range predictionsLW {
 		if value == labels[ii] {
 			correct++
@@ -290,5 +289,10 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	fmt.Printf("\n%d matches out of %d (%.2f%%)\n",
 		matches, len(predictionsGNN),
 		100.0*matchRatio)
-	require.Greater(t, matchRatio, 0.60, "Expect LayerWise inference to match at least 60% of times with sampled graph GNN inference")
+	require.Greater(
+		t,
+		matchRatio,
+		0.60,
+		"Expect LayerWise inference to match at least 60% of times with sampled graph GNN inference",
+	)
 }

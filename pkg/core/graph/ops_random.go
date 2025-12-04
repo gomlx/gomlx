@@ -14,64 +14,85 @@ import (
 )
 
 var (
-	// RngStateShape is the default shape for random number generators state, used
+	// RNGStateShape is the default shape for random number generators state, used
 	// in all Random* functions.
 	// It dependents on the algorithm, but for now we use the Philox algorithm only.
-	RngStateShape = backends.RngStateShape
+	RNGStateShape = backends.RNGStateShape
 )
 
-// RngStateFromSeed creates a random number generator (RNG) state based on the static seed.
+// RNGStateFromSeed creates a random number generator (RNG) state based on the static seed.
 //
 // Notice it returns a concrete tensor value that can be used to set a variable or
 // constant to be used in a graph.
 //
 // Typical use case would be to use like:
 //
-//	rngState := Const(g, RngStateFromSeed(42))
-func RngStateFromSeed(seed int64) *tensors.Tensor {
+//	rngState := Const(g, must.M1(RNGStateFromSeed(42)))
+func RNGStateFromSeed(seed int64) (*tensors.Tensor, error) {
 	rngSrc := rand.NewSource(seed)
 	rng := rand.New(rngSrc)
-	state := tensors.FromShape(RngStateShape)
-	state.MutableFlatData(func(flatAny any) {
+	state := tensors.FromShape(RNGStateShape)
+	err := state.MutableFlatData(func(flatAny any) {
 		flat := flatAny.([]uint64)
 		for ii := range flat {
 			flat[ii] = rng.Uint64()
 		}
 	})
-	return state
+	if err != nil {
+		return nil, err
+	}
+	return state, nil
 }
 
-// RngState creates a random number generator (RNG) state initialized using the OS's cryptographically secure
+// RNGState creates a random number generator (RNG) state initialized using the OS's cryptographically secure
 // random number generator, if available.
 // If the OS's cryptographically secure random number generator is not available, it will use the current time as
 // seed.
 //
-// Notice it returns a concrete tensor value that can be used to set a variable or
-// constant to be used in a graph.
+// This is not a graph building function: it returns a concrete tensor value, and it returns an error if
+// something fails. The returned value can be used as a Const or to set a variable to be used in a graph.
 //
 // A typical use case would be to use like:
 //
-//	rngState := Const(g, RngState())
-func RngState() *tensors.Tensor {
+//	rngState, err := Const(g, RNGState())
+func RNGState() (*tensors.Tensor, error) {
 	var stateGo [3]uint64
 	err := initializeRNGState(&stateGo)
 	if err != nil {
+		return nil, err
+	}
+	state := tensors.FromFlatDataAndDimensions(stateGo[:], len(stateGo))
+	err = state.Shape().Check(RNGStateShape.DType, RNGStateShape.Dimensions...)
+	if err != nil {
+		return nil, err
+	}
+	return state, nil
+}
+
+// RNGStateForGraph creates a random number generator (RNG) state initialized using the OS's cryptographically secure
+// random number generator, if available.
+// It returns a constant in the graph with the value, that can be used for random operations.
+//
+// A typical use case would be to use like:
+//
+//	rngState := RNGStateForGraph(g)
+func RNGStateForGraph(g *Graph) *Node {
+	state, err := RNGState()
+	if err != nil {
 		panic(err)
 	}
-	state := tensors.FromValue(stateGo[:])
-	state.Shape().Assert(RngStateShape.DType, RngStateShape.Dimensions...)
-	return state
+	return Const(g, state)
 }
 
-// RngStateSplit splits the current state into 2 different states that can be used
+// RNGStateSplit splits the current state into 2 different states that can be used
 // separately and will lead to different random numbers.
-func RngStateSplit(rngState *Node) (newRngState1, newRngState2 *Node) {
-	validateRngState(rngState)
-	return backendRngBitGenerator(rngState, rngState.Shape())
+func RNGStateSplit(rngState *Node) (newRngState1, newRngState2 *Node) {
+	validateRNGState(rngState)
+	return backendRNGBitGenerator(rngState, rngState.Shape())
 }
 
-func validateRngState(rngState *Node) {
-	if !rngState.Shape().Equal(RngStateShape) {
+func validateRNGState(rngState *Node) {
+	if !rngState.Shape().Equal(RNGStateShape) {
 		Panicf("rngState is of the wrong shape (see graph.RngStateShape) -- pls create it with " +
 			"something like `Const(g, graph.RngState())` or `Const(g, graph.RngStateFromSeed())`")
 	}
@@ -95,9 +116,12 @@ func validateRngState(rngState *Node) {
 //	rngState := Const(g, RngStateFromSeed(42))
 //	rngState, values := RandomUniform(rngState, shapes.Make(dtypes.Float32, 3, 2))
 func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
-	validateRngState(rngState)
+	validateRNGState(rngState)
 	if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
-		Panicf("RandomUniform only work with float or complex numbers, got shape %s instead -- see RandomIntN for integers", shape)
+		Panicf(
+			"RandomUniform only work with float or complex numbers, got shape %s instead -- see RandomIntN for integers",
+			shape,
+		)
 	}
 
 	switch shape.DType {
@@ -105,7 +129,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		bitsShape := shape.Clone()
 		bitsShape.DType = dtypes.Uint64
 		var randomBits *Node
-		newRngState, randomBits = backendRngBitGenerator(rngState, bitsShape)
+		newRngState, randomBits = backendRNGBitGenerator(rngState, bitsShape)
 		values = ConvertDType(randomBits, dtypes.Float64)
 		values = MulScalar(values, math.Pow(2.0, -64))
 		values = MinScalar(values, math.Nextafter(1.0, 0.0))
@@ -114,7 +138,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		bitsShape := shape.Clone()
 		bitsShape.DType = dtypes.Uint32 // XLA will only generate `uint` for random bits.
 		var randomBits *Node
-		newRngState, randomBits = backendRngBitGenerator(rngState, bitsShape)
+		newRngState, randomBits = backendRNGBitGenerator(rngState, bitsShape)
 		values = ConvertDType(randomBits, dtypes.Float32)
 		values = MulScalar(values, 1.0/(float64(1<<32)))
 		values = Abs(values)
@@ -141,7 +165,10 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		newRngState, im = RandomUniform(rngState, componentShape)
 		values = Complex(re, im)
 	default:
-		Panicf("RandomUniform() only accepts Float16, Float32, Float64, Complex64 and Complex128 dtypes, shapes %s given", shape)
+		Panicf(
+			"RandomUniform() only accepts Float16, Float32, Float64, Complex64 and Complex128 dtypes, shapes %s given",
+			shape,
+		)
 	}
 	return
 }
@@ -163,14 +190,17 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 // See also RandomIntN for random integers.
 //
 // It uses and updates the random number generator (RNG) state in `rngState`.
-// See [RngStateFromSeed] or [RngState] to generate a random state tensor (that can be fed to the computation graph).
+// See [RNGStateFromSeed] or [RNGState] to generate a random state tensor (that can be fed to the computation graph).
 //
 // Alternatively, if you don't want to worry about carrying around the rngState, use the context.Context.RandomNormal
 // version, which stores the rngState as a variable.
 func RandomNormal(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
-	validateRngState(rngState)
+	validateRNGState(rngState)
 	if !shape.DType.IsFloat() {
-		Panicf("RandomNormal only work with float or complex numbers, got shape %s instead -- see RandomIntN for integers", shape)
+		Panicf(
+			"RandomNormal only work with float or complex numbers, got shape %s instead -- see RandomIntN for integers",
+			shape,
+		)
 	}
 
 	g := rngState.Graph()
@@ -194,22 +224,25 @@ func RandomNormal(rngState *Node, shape shapes.Shape) (newRngState, values *Node
 //	rngState, D10 := RandomIntN(rngState, 10, shapes.Make(dtypes.Int32))
 //
 // It uses and updates the random number generator (RNG) state in `rngState`.
-// See [RngStateFromSeed] or [RngState] to generate a random state tensor (that can be fed to the computation graph).
+// See [RNGStateFromSeed] or [RNGState] to generate a random state tensor (that can be fed to the computation graph).
 //
 // Alternatively, if you don't want to worry about carrying around the rngState, use the context.Context.RandomIntN
 // version, which stores the rngState as a variable.
 func RandomIntN[IntT interface{ *Node | constraints.Integer }](
 	rngState *Node, N IntT, shape shapes.Shape) (newRngState, values *Node) {
-	validateRngState(rngState)
+	validateRNGState(rngState)
 	if !shape.DType.IsInt() {
-		Panicf("RandomIntN only work with integer types, got shape %s instead -- see RandomUniform or RandomNormal for float/complex values", shape)
+		Panicf(
+			"RandomIntN only work with integer types, got shape %s instead -- see RandomUniform or RandomNormal for float/complex values",
+			shape,
+		)
 	}
 
 	g := rngState.Graph()
 	var randomBits *Node
 	randomBitsShape := shape.Clone()
 	randomBitsShape.DType = dtypes.U64
-	newRngState, randomBits = backendRngBitGenerator(rngState, randomBitsShape)
+	newRngState, randomBits = backendRNGBitGenerator(rngState, randomBitsShape)
 	var ratio, maxValue *Node
 	switch n := any(N).(type) {
 	case *Node:

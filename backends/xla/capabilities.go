@@ -15,7 +15,7 @@ var CPUCapabilities = backends.Capabilities{
 		backends.OpTypeConstant:              true,
 		backends.OpTypeIdentity:              true,
 		backends.OpTypeReduceWindow:          true,
-		backends.OpTypeRngBitGenerator:       true,
+		backends.OpTypeRNGBitGenerator:       true,
 		backends.OpTypeBatchNormForInference: true,
 		backends.OpTypeBatchNormForTraining:  true,
 		backends.OpTypeBatchNormGradient:     true,

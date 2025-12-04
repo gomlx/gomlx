@@ -39,7 +39,8 @@ func TestTrainer_AccumulateGradients(t *testing.T) {
 	numTrainerMetrics := len(trainer.TrainMetrics())
 	require.NoError(t, err)
 	for ii := range numSteps {
-		metrics := trainer.TrainStep(nil, []*tensors.Tensor{input}, []*tensors.Tensor{label})
+		metrics, err := trainer.TrainStep(nil, []*tensors.Tensor{input}, []*tensors.Tensor{label})
+		require.NoError(t, err)
 		require.Len(t, metrics, numTrainerMetrics)
 
 		// Since the gradient hasn't been applied yet, the loss should be 10.0.
@@ -51,8 +52,8 @@ func TestTrainer_AccumulateGradients(t *testing.T) {
 		accPredictionVar := ctx.GetVariableByScopeAndName("/"+AccumulatedGradientsScope+"/model", "prediction")
 		require.NotNil(t, accPredictionVar)
 
-		prediction := predictionVar.Value().Value().(float32)
-		accPrediction := accPredictionVar.Value().Value().(float32)
+		prediction := predictionVar.MustValue().Value().(float32)
+		accPrediction := accPredictionVar.MustValue().Value().(float32)
 		fmt.Printf("\tIterator #%d: prediction=%g, accumulated gradient=%g\n", ii, prediction, accPrediction)
 
 		if ii < numSteps-1 {

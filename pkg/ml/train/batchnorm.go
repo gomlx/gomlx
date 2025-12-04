@@ -4,7 +4,7 @@ import (
 	"io"
 	"slices"
 
-	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -36,39 +36,61 @@ func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) {
 				break
 			}
 			if err != nil {
-				panic(errors.Wrapf(err, "dataset returned an error during BatchNormalizationAveragesUpdate(phase=%d)", phase))
+				panic(
+					errors.Wrapf(
+						err,
+						"dataset returned an error during BatchNormalizationAveragesUpdate(phase=%d)",
+						phase,
+					),
+				)
 			}
 			count++
-			r.batchNormAveragesStep(phase, spec, inputs, labels)
+			err = r.batchNormAveragesStep(phase, spec, inputs, labels)
+			if err != nil {
+				panic(errors.WithMessagef(err, "BatchNormalizationAveragesUpdate(phase=%d) failed", phase))
+			}
 
 			// Free inputs and labels after usage.
 			for _, input := range inputs {
-				input.FinalizeAll()
+				input.MustFinalizeAll()
 			}
 			for _, label := range labels {
-				label.FinalizeAll()
+				label.MustFinalizeAll()
 			}
 		}
 		if count == 0 {
-			Panicf("BatchNormalizationAveragesUpdate: dataset yielded no batches, no data to calculate running mean/average")
+			exceptions.Panicf("BatchNormalizationAveragesUpdate: dataset yielded no batches, no data to calculate " +
+				"running mean/average")
 		}
 	}
 }
 
 // batchNormAveragesStep runs one forward step on the model, with the model frozen, except
 // for non-gradient updated variables, like batch normalization moving averages.
-func (r *Trainer) batchNormAveragesStep(phase int, spec any, inputs, labels []*tensors.Tensor) {
-	lossAndMetrics := r.callGraphFn(r.batchNormsAverageStepGraphFn(phase), BatchNormAveragesType, r.batchNormStepExecMap, spec, inputs, labels)
-	for _, t := range lossAndMetrics {
-		t.FinalizeAll()
+func (r *Trainer) batchNormAveragesStep(phase int, spec any, inputs, labels []*tensors.Tensor) error {
+	lossAndMetrics, err := r.callGraphFn(
+		r.batchNormsAverageStepGraphFn(phase),
+		BatchNormAveragesType,
+		r.batchNormStepExecMap,
+		spec,
+		inputs,
+		labels,
+	)
+	if err != nil {
+		return err
 	}
-
+	for _, t := range lossAndMetrics {
+		t.MustFinalizeAll()
+	}
+	return nil
 }
 
 // batchNormsAverageStepGraph builds the graph to eval one step, in training mode, so variables are allowed to be updates.
 // It is called by the context executor (Trainer.batchNormStepExecMap)
 // inputsAndLabel[:-1] are the inputs, and inputsAndLabel[-1] is the labels batch.
-func (r *Trainer) batchNormsAverageStepGraphFn(phase int) func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
+func (r *Trainer) batchNormsAverageStepGraphFn(
+	phase int,
+) func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 	return func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 		g := inputs[0].Graph()
 		ctx.SetTraining(g, false)

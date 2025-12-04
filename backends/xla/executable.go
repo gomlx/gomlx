@@ -20,12 +20,19 @@ type Executable struct {
 	outputShapes    []shapes.Shape
 }
 
-func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
+func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingSpec) (backends.Executable, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
 	if len(outputs) == 0 {
-		return nil, errors.Errorf("backend %q, computation %q: you must have at least one output to a computation", BackendName, b.name)
+		return nil, errors.Errorf(
+			"backend %q, computation %q: you must have at least one output to a computation",
+			BackendName,
+			b.name,
+		)
+	}
+	if len(shardings) != 0 {
+		return nil, errors.Errorf("sharding or distributed execution are not supported by SimpleGo backend")
 	}
 	xOutputs := make([]*xlabuilder.Op, len(outputs))
 	outputShapes := make([]shapes.Shape, len(outputs))
@@ -40,7 +47,12 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 		var err error
 		tupleOutput, err = xlabuilder.Tuple(xOutputs...)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "backend %q: failed to tuple the outputs to compile computation %q", BackendName, b.name)
+			return nil, errors.WithMessagef(
+				err,
+				"backend %q: failed to tuple the outputs to compile computation %q",
+				BackendName,
+				b.name,
+			)
 		}
 	}
 	comp, err := b.builder.Build(tupleOutput)
@@ -51,7 +63,12 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 		if comp.HasStableHLO() {
 			stableHLO, err := comp.TextStableHLO()
 			if err != nil {
-				return nil, errors.WithMessagef(err, "backend %q: failed to print out StableHLO from computation %q", BackendName, b.name)
+				return nil, errors.WithMessagef(
+					err,
+					"backend %q: failed to print out StableHLO from computation %q",
+					BackendName,
+					b.name,
+				)
 			}
 			klog.Infof("StableHLO program:\n%s\n", stableHLO)
 		} else {
@@ -108,15 +125,27 @@ func (e *Executable) Outputs() (outputShapes []shapes.Shape) {
 }
 
 // Execute the executable on the default device (0). The number and shapes of the inputs must match those returned by Inputs.
-func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backends.Buffer, error) {
+func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, _ backends.DeviceNum) ([]backends.Buffer, error) {
 	if err := e.CheckValid(); err != nil {
 		return nil, err
 	}
 	if len(inputs) != len(e.parameterShapes) {
-		return nil, errors.Errorf("backend %q: wrong number of parameters to Execute %q: %d given, %d expected", BackendName, e.name, len(inputs), len(e.parameterShapes))
+		return nil, errors.Errorf(
+			"backend %q: wrong number of parameters to Execute %q: %d given, %d expected",
+			BackendName,
+			e.name,
+			len(inputs),
+			len(e.parameterShapes),
+		)
 	}
 	if len(donate) > 0 && len(donate) != len(e.parameterShapes) {
-		return nil, errors.Errorf("backend %q: wrong number of donate values to Execute %q: %d given, nil or %d expected", BackendName, e.name, len(donate), len(e.parameterShapes))
+		return nil, errors.Errorf(
+			"backend %q: wrong number of donate values to Execute %q: %d given, nil or %d expected",
+			BackendName,
+			e.name,
+			len(donate),
+			len(e.parameterShapes),
+		)
 	}
 	pInputs := xslices.Map(inputs, castToPJRT)
 	var pOutputs []*pjrt.Buffer

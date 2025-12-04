@@ -13,8 +13,8 @@ require (
 	github.com/erkkah/margaid v0.3.0
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/bsplines v0.2.0
-	github.com/gomlx/gopjrt v0.9.1
-	github.com/gomlx/stablehlo v0.1.0
+	github.com/gomlx/gopjrt v0.10.0
+	github.com/gomlx/stablehlo v0.2.0
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.1
 	github.com/muesli/termenv v0.16.0
@@ -45,6 +45,7 @@ require (
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/gomlx/exceptions v0.0.3 // indirect
+	github.com/janpfeifer/must v0.2.0
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect

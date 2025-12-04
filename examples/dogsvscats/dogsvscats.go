@@ -289,7 +289,12 @@ func (ds *Dataset) checkFolds() error {
 	}
 	for _, foldNum := range ds.folds {
 		if foldNum < 0 || foldNum >= ds.numFolds {
-			return errors.Errorf("fold %d invalid for dataset with %d folds (folds selection is %v)", foldNum, ds.numFolds, ds.folds)
+			return errors.Errorf(
+				"fold %d invalid for dataset with %d folds (folds selection is %v)",
+				foldNum,
+				ds.numFolds,
+				ds.folds,
+			)
 		}
 	}
 	return nil
@@ -563,13 +568,24 @@ func (ds *Dataset) Save(numEpochs int, verbose bool, writers ...io.Writer) error
 		return errors.Errorf("cannot Dataset.Save %d epochs if dataset it configure to loop infinitely", numEpochs)
 	}
 	if ds.batchSize%2 != 0 {
-		return errors.Errorf("batch size %d is not even, and will lead to more dogs than cats, please choose something divided by 2", ds.batchSize)
+		return errors.Errorf(
+			"batch size %d is not even, and will lead to more dogs than cats, please choose something divided by 2",
+			ds.batchSize,
+		)
 	}
 	if ds.yieldPairs && len(writers) != 2 {
-		return errors.Errorf("dataset %q configured to yield pairs, 2 writers required but %d writers given", ds.Name(), len(writers))
+		return errors.Errorf(
+			"dataset %q configured to yield pairs, 2 writers required but %d writers given",
+			ds.Name(),
+			len(writers),
+		)
 	}
 	if !ds.yieldPairs && len(writers) != 1 {
-		return errors.Errorf("dataset %q configured to single images, only 1 writer required but %d writers given", ds.Name(), len(writers))
+		return errors.Errorf(
+			"dataset %q configured to single images, only 1 writer required but %d writers given",
+			ds.Name(),
+			len(writers),
+		)
 	}
 
 	numSteps := numEpochs * (NumDogs + NumCats)
@@ -705,7 +721,13 @@ type PreGeneratedDataset struct {
 var _ train.Dataset = &PreGeneratedDataset{}
 
 // NewPreGeneratedDataset creates a PreGeneratedDataset that yields dogsvscats images and labels.
-func NewPreGeneratedDataset(name, filePath string, batchSize int, infinite bool, width, height int, dtype dtypes.DType) *PreGeneratedDataset {
+func NewPreGeneratedDataset(
+	name, filePath string,
+	batchSize int,
+	infinite bool,
+	width, height int,
+	dtype dtypes.DType,
+) *PreGeneratedDataset {
 	pds := &PreGeneratedDataset{
 		name:      name,
 		filePath:  filePath,
@@ -781,7 +803,11 @@ func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []*tensors.Ten
 				return nil, nil, nil, io.EOF
 			}
 			if retries != 0 {
-				pds.err = errors.Errorf("not enough data for %d batches in PreGeneratedDataset for file %q, maybe it failed during generation of the file?", pds.batchSize, pds.filePath)
+				pds.err = errors.Errorf(
+					"not enough data for %d batches in PreGeneratedDataset for file %q, maybe it failed during generation of the file?",
+					pds.batchSize,
+					pds.filePath,
+				)
 			}
 			retries++
 			pds.Reset()
@@ -861,7 +887,7 @@ func BytesToTensor[T interface {
 	buffer []byte, numImages, width, height int) (t *tensors.Tensor) {
 	var zero T
 	t = tensors.FromShape(shapes.Make(dtypes.FromGoType(reflect.TypeOf(zero)), numImages, height, width, 4))
-	t.MutableFlatData(func(flatAny any) {
+	t.MustMutableFlatData(func(flatAny any) {
 		tensorData := flatAny.([]T)
 		dataPos := 0
 		bufferPos := 0

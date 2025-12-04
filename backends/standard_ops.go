@@ -535,14 +535,15 @@ type StandardOps interface {
 	// The shape remains the same.
 	Reverse(x Op, axes ...int) (Op, error)
 
-	// RngBitGenerator generates the given shape filled with random bits.
+	// RNGBitGenerator generates the given shape filled with random bits.
 	//
 	// It takes as input a state (usually [3]uint64) and returns the updated state and the generated values (with random bits).
 	//
 	// Currently, the backend only supports the Philox algorithm. See https://dl.acm.org/doi/10.1145/2063384.2063405
-	RngBitGenerator(state Op, shape shapes.Shape) (newState Op, values Op, err error)
+	RNGBitGenerator(state Op, shape shapes.Shape) (newState Op, values Op, err error)
 
 	// Round returns the Op that represents the output of the corresponding operation.
+	// This operation rounds to the nearest even.
 	Round(x Op) (Op, error)
 
 	// Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).

@@ -31,9 +31,14 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
+
+func init() {
+	klog.InitFlags(nil)
+}
 
 func TestContextVariables(t *testing.T) {
 	ctx := New()
@@ -79,20 +84,20 @@ func TestContextVariablesInitialization(t *testing.T) {
 	v2 := ctx2.VariableWithShape("z", shapes.Make(dtypes.Int64, 3, 1))
 
 	backend := graphtest.BuildTestBackend()
-	ctx.InitializeVariables(backend)
+	ctx.InitializeVariables(backend, nil)
 
 	fmt.Printf("\tv0=%v\n", v0)
 	fmt.Printf("\tv1=%v\n", v1)
 	fmt.Printf("\tv2=%v\n", v2)
-	t0 := v0.Value().Value().(float32)
+	t0 := v0.MustValue().Value().(float32)
 	if t0 < 1.5 || t0 > 2.5 {
 		t.Errorf("Expected RandomUniformFn initialization > 1.5, < 2.5, instead got %f", t0)
 	}
-	t1 := v1.Value().Value().([]float64)
+	t1 := v1.MustValue().Value().([]float64)
 	if t1[0] == 0 || t1[1] == 0 {
 		t.Errorf("Expected RandomNormalFn initialization to be random, got %v instead", t1)
 	}
-	t2 := v2.Value().Value().([][]int64)
+	t2 := v2.MustValue().Value().([][]int64)
 	require.Equalf(t, [][]int64{{0}, {0}, {0}}, t2, "Expected Zeros initialization to yield zeros, got %v instead", t2)
 }
 
@@ -168,7 +173,7 @@ func TestEnumerateVariables(t *testing.T) {
 	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 3, 1))
 
 	backend := graphtest.BuildTestBackend()
-	ctx.InitializeVariables(backend)
+	ctx.InitializeVariables(backend, nil)
 
 	// Checks EnumerateVariables lists all variables:
 	got := sets.Make[string]()
@@ -206,7 +211,7 @@ func TestIterVariables(t *testing.T) {
 	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 3, 1))
 
 	backend := graphtest.BuildTestBackend()
-	ctx.InitializeVariables(backend)
+	ctx.InitializeVariables(backend, nil)
 
 	// Checks IterVariables lists all variables:
 	got := sets.Make[string]()
@@ -264,23 +269,23 @@ func TestDeleteVariable(t *testing.T) {
 	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 1, 1))
 
 	backend := graphtest.BuildTestBackend()
-	ctx.InitializeVariables(backend)
+	ctx.InitializeVariables(backend, nil)
 
 	assert.Equal(t, 3, ctx.NumVariables())
-	ctx.DeleteVariable("/foo", "x")
+	require.NoError(t, ctx.DeleteVariable("/foo", "x"))
 	assert.Equal(t, 3, ctx.NumVariables())
 	assert.Len(t, loader.Values, 4)
 
-	ctx.DeleteVariable("/b", "y")
+	require.NoError(t, ctx.DeleteVariable("/b", "y"))
 	assert.Equal(t, 2, ctx.NumVariables())
 	assert.Len(t, loader.Values, 4)
 	assert.NotNil(t, ctx.GetVariableByScopeAndName("/b/c", "z")) // Check "z" hasn't been deleted.
 
-	ctx.DeleteVariable("/b/c", "z")
+	require.NoError(t, ctx.DeleteVariable("/b/c", "z"))
 	assert.Equal(t, 1, ctx.NumVariables())
 	assert.Len(t, loader.Values, 3)
 
-	ctx.DeleteVariable("/a", "x")
+	require.NoError(t, ctx.DeleteVariable("/a", "x"))
 	assert.Equal(t, 0, ctx.NumVariables())
 	assert.Len(t, loader.Values, 2)
 }
@@ -304,21 +309,25 @@ func TestDeleteVariablesInScope(t *testing.T) {
 	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 1, 1))
 
 	backend := graphtest.BuildTestBackend()
-	ctx.InitializeVariables(backend)
+	ctx.InitializeVariables(backend, nil)
 
 	// Remove all under scope "/b"
-	ctx1.DeleteVariablesInScope()
+	require.NoError(t, ctx1.DeleteVariablesInScope())
 	assert.Equal(t, 1, ctx.NumVariables())
 	assert.NotNil(t, ctx.GetVariableByScopeAndName("/a", "x")) // Check "x" hasn't been deleted.
-	assert.Len(t, loader.Values, 3)                            // Only "/b/c/z" must have been deleted -- but notice that /b/c/w is not affected.
+	assert.Len(
+		t,
+		loader.Values,
+		3,
+	) // Only "/b/c/z" must have been deleted -- but notice that /b/c/w is not affected.
 
 	// Check that deleting an empty scope is a no-op.
-	ctx.In("foo").DeleteVariablesInScope()
+	require.NoError(t, ctx.In("foo").DeleteVariablesInScope())
 	assert.Equal(t, 1, ctx.NumVariables())
 	assert.NotNil(t, ctx.GetVariableByScopeAndName("/a", "x")) // Check "x" hasn't been deleted.
 
 	// Delete everything.
-	ctx.DeleteVariablesInScope()
+	require.NoError(t, ctx.DeleteVariablesInScope())
 	assert.Equal(t, 0, ctx.NumVariables())
 }
 
@@ -336,8 +345,9 @@ func (l *ConstantLoader) LoadVariable(_ *Context, scope, name string) (value *te
 	return
 }
 
-func (l *ConstantLoader) DeleteVariable(_ *Context, scope, name string) {
+func (l *ConstantLoader) DeleteVariable(_ *Context, scope, name string) error {
 	delete(l.Values, JoinScope(scope, name))
+	return nil
 }
 
 func TestContext_SetLoader(t *testing.T) {
@@ -393,7 +403,8 @@ func TestContext_Clone(t *testing.T) {
 	// Uninitialized variable:
 	v0y := ctx0.In("a").In("b").VariableWithShape("y", shapes.Make(dtypes.Int8, 2, 3, 4))
 
-	ctx1 := ctx0.In("a").In("b").Reuse().Clone()
+	ctx1, err := ctx0.In("a").In("b").Reuse().Clone()
+	require.NoError(t, err)
 	require.True(t, ctx1.IsChecked())
 	require.True(t, ctx1.IsReuse())
 	require.Equal(t, "/a/b", ctx1.Scope())
@@ -401,20 +412,20 @@ func TestContext_Clone(t *testing.T) {
 	require.Equal(t, 2, ctx1.NumVariables())
 	v1x := ctx1.GetVariableByScopeAndName("/a/b", "x")
 	require.NotNil(t, v1x)
-	fmt.Printf("Cloned variable %q: %s\n", v1x.ScopeAndName(), v1x.Value())
+	fmt.Printf("Cloned variable %q: %s\n", v1x.ScopeAndName(), v1x.MustValue())
 	v1y := ctx1.GetVariable("y")
 	require.NotNil(t, v1y)
-	fmt.Printf("Cloned variable %q: %s\n", v1y.ScopeAndName(), v1y.Value())
-	require.Nil(t, v1y.Value())
+	_, err = v1y.Value()
+	require.Error(t, err, "/a/b/y was created uninitialized, it should have no value")
 	require.True(t, v1y.Shape().Equal(v0y.Shape()))
 
 	// Check the new variable value is independent of the old one.
 	ctx0 = nil
-	v0x.Value().FinalizeAll()
+	v0x.MustValue().MustFinalizeAll()
 	for range 5 {
 		runtime.GC()
 	}
-	require.Equal(t, value, tensors.CopyFlatData[float32](v1x.Value()))
+	require.Equal(t, value, tensors.MustCopyFlatData[float32](v1x.MustValue()))
 	// GetParam should back-search to the "initial_seed" at the root scope, and find it.
 	require.Equal(t, int64(42), GetParamOr(ctx1, "initial_seed", int64(0)))
 }

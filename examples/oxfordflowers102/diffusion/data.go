@@ -85,7 +85,16 @@ func (c *Config) CreateInMemoryDatasets() (trainDS, validationDS *datasets.InMem
 	trainDS = must.M1(
 		flowers.InMemoryDataset(c.Backend, c.DataDir, c.ImageSize, "train", PartitionSeed, ValidationFraction, 1.0))
 	validationDS = must.M1(
-		flowers.InMemoryDataset(c.Backend, c.DataDir, c.ImageSize, "validation", PartitionSeed, 0.0, ValidationFraction))
+		flowers.InMemoryDataset(
+			c.Backend,
+			c.DataDir,
+			c.ImageSize,
+			"validation",
+			PartitionSeed,
+			0.0,
+			ValidationFraction,
+		),
+	)
 	return
 }
 
@@ -125,10 +134,15 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 
 	trainDS, _ := c.CreateInMemoryDatasets()
 	trainDS.BatchSize(128, false)
-	ds := datasets.MapWithGraphFn(c.Backend, nil, trainDS, func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
-		images := c.PreprocessImages(inputs[0], false)
-		return []*Node{images}, labels
-	})
+	ds := datasets.MapWithGraphFn(
+		c.Backend,
+		nil,
+		trainDS,
+		func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
+			images := c.PreprocessImages(inputs[0], false)
+			return []*Node{images}, labels
+		},
+	)
 	normalizationMean, normalizationStdDev = must.M2(
 		datasets.Normalization(c.Backend, ds, 0, -1)) // mean/stddev for each channel (axis=-1) separately.
 	mean, stddev = normalizationMean, normalizationStdDev
@@ -192,6 +206,6 @@ func (c *Config) DenormalizeImages(images *Node) *Node {
 
 func finalize(tensors []*tensors.Tensor) {
 	for _, t := range tensors {
-		t.FinalizeAll()
+		t.MustFinalizeAll()
 	}
 }

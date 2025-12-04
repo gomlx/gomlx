@@ -113,7 +113,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	}
 	if context.GetParamOr(ctx, "rng_reset", true) {
 		// Reset RNG.
-		ctx.RngStateReset()
+		ctx.ResetRNGState()
 	}
 	if verbosity >= 1 {
 		for _, paramsPath := range paramsSet {

@@ -688,11 +688,7 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 
 	// (2) we need to pad the reverse convolution to match get the original input.
 	reversePaddings := make([][2]int, numSpatialDims)
-	if paddings != nil {
-		for ii, padding := range paddings {
-			reversePaddings[ii] = padding
-		}
-	}
+	copy(reversePaddings, paddings) // Safe even if paddings is nil (in which case nothing is copied)
 
 	// Get output and input spatial dimensions.
 	inputSpatialDims := gatherSlice(axes.InputSpatial, x.Shape().Dimensions)

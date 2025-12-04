@@ -499,21 +499,21 @@ func (b *Builder) Transpose(x backends.Op, permutation ...int) (backends.Op, err
 	return b.newNode(value), nil
 }
 
-// RngBitGenerator generates the given shape filled with random bits.
+// RNGBitGenerator generates the given shape filled with random bits.
 //
 // It takes as input a state (usually [3]uint64) and returns the updated state and the generated values (with random bits).
 //
 // Currently, the backend only supports the Philox algorithm. See https://dl.acm.org/doi/10.1145/2063384.2063405
-func (b *Builder) RngBitGenerator(state backends.Op, shape shapes.Shape) (newState backends.Op, values backends.Op, err error) {
-	nodes, err := b.verifyAndCastValues("RngBitGenerator", state)
+func (b *Builder) RNGBitGenerator(state backends.Op, shape shapes.Shape) (newState backends.Op, values backends.Op, err error) {
+	nodes, err := b.verifyAndCastValues("RNGBitGenerator", state)
 	if err != nil {
 		return nil, nil, err
 	}
 	shloShape := ShapeToStableHLO(shape)
 	if !shloShape.Ok() {
-		return nil, nil, errors.Errorf("RngBitGenerator: invalid shape: %s", shape)
+		return nil, nil, errors.Errorf("RNGBitGenerator: invalid shape: %s", shape)
 	}
-	newStateV, valueV, err := stablehlo.RngBitGenerator(nodes[0].value, shloShape, stablehlotypes.RngPhilox)
+	newStateV, valueV, err := stablehlo.RNGBitGenerator(nodes[0].value, shloShape, stablehlotypes.RNGPhilox)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -620,7 +620,7 @@ func (b *Builder) extractStartIndexValues(startIndexNodes []*Node, rank int) ([]
 	var startIndexValues []*stablehlo.Value
 	if len(startIndexNodes) == 1 && !startIndexNodes[0].shape.IsScalar() && startIndexNodes[0].shape.Rank() == 1 {
 		// Special case: single 1D start indices tensor
-		for i := 0; i < rank; i++ {
+		for i := range rank {
 			sliced, err := stablehlo.Slice(startIndexNodes[0].value, []int{i}, []int{i + 1}, []int{1})
 			if err != nil {
 				return nil, err

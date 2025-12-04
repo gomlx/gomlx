@@ -22,20 +22,18 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
-	"runtime/pprof"
 	"time"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/adult"
 	"github.com/gomlx/gomlx/internal/must"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
 	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
@@ -49,6 +47,7 @@ import (
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 	"k8s.io/klog/v2"
 
@@ -62,7 +61,6 @@ var (
 
 func createDefaultContext() *context.Context {
 	ctx := context.New()
-	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
 		// Number of steps to take during training.
 		"train_steps": 5000,
@@ -129,8 +127,14 @@ var (
 	flagUseContinuous        = flag.Bool("use_continuous", true, "Use continuous features.")
 	flagTrainableCalibration = flag.Bool("trainable_calibration", true,
 		"Allow piece-wise linear calibration to adjust outputs.")
-
-	flagCPUProfile = flag.String("cpu_profile", "", "write cpu profile to file")
+	flagDistributed = flag.Bool("distributed", false, "Use distributed training: it will use as many devices as "+
+		"available in the backend.")
+	flagNumDevices = flag.Int("num_devices", 0,
+		"Number of devices to use for distributed training. The default is to use all devices available in the "+
+			"backend. Setting this to > 1 automatically enables -distributed. If 0, it will use all "+
+			"devices available in the backend.")
+	flagPrefetchOnDevice = flag.Int("prefetch_on_device", 0,
+		"Number of batches to prefetch and upload to the device in parallel to training.")
 )
 
 func main() {
@@ -139,15 +143,6 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-
-	if *flagCPUProfile != "" {
-		f, err := os.Create(*flagCPUProfile)
-		if err != nil {
-			klog.Fatalf("Failed to create CPU profile file: %+v", err)
-		}
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
-	}
 	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
 	err := mainWithContext(ctx, *flagDataDir, *flagCheckpoint, paramsSet)
 	if err != nil {
@@ -157,6 +152,16 @@ func main() {
 
 func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) error {
 	backend := backends.MustNew()
+	numDevices := backend.NumDevices()
+	if *flagNumDevices > 0 {
+		if *flagNumDevices > numDevices {
+			return errors.Errorf("-num_devices: %d is greater than the number of devices in the backend (%d)", *flagNumDevices, numDevices)
+		}
+		numDevices = *flagNumDevices
+		if numDevices > 1 {
+			*flagDistributed = true
+		}
+	}
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if *flagVerbosity >= 1 {
 		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
@@ -186,14 +191,76 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 		adult.PrintBatchSamples(backend, adult.Data.Train)
 	}
 
-	// Create datasets for training and evaluation.
+	// Batch size: it is affected by the distributed execution..
 	batchSize := context.GetParamOr(ctx, "batch_size", 128)
-	trainDS := adult.NewDataset(backend, adult.Data.Train, "batched train")
-	trainEvalDS := trainDS.Copy().BatchSize(batchSize, false)
-	testEvalDS := adult.NewDataset(backend, adult.Data.Test, "test").
-		BatchSize(batchSize, false)
-	// For training, we shuffle and loop indefinitely.
-	trainDS.BatchSize(batchSize, true).Shuffle().Infinite(true)
+	shardedBatchSize := batchSize
+	if *flagDistributed {
+		if numDevices < 2 {
+			klog.Fatalf("-distributed: distributed training requires at least 2 devices")
+		}
+		fmt.Printf("- Using distributed execution across %d devices.\n", numDevices)
+		shardedBatchSize = batchSize / numDevices
+		newBatchSize := shardedBatchSize * numDevices
+		if newBatchSize != batchSize {
+			klog.Warningf(
+				"-distributed: batch_size reduced from %d to %d to make it divisible by the number of devices=%d",
+				batchSize, newBatchSize, numDevices)
+			batchSize = newBatchSize
+		}
+	}
+
+	// Create datasets for training and evaluation.
+	inMemoryDS := adult.NewDataset(backend, adult.Data.Train, "batched train")
+	var (
+		trainEvalDS train.Dataset = inMemoryDS.Copy().BatchSize(batchSize, false)
+		testEvalDS  train.Dataset = adult.NewDataset(backend, adult.Data.Test, "test").BatchSize(batchSize, false)
+		// For training, we shuffle and loop indefinitely.
+		trainDS train.Dataset = inMemoryDS.BatchSize(batchSize, true).Shuffle().Infinite(true)
+	)
+
+	// Convert to a distributed dataset, if -distributed is set.
+	if *flagDistributed {
+		// Specify how to distributed: AutoSharding, and shard the data along the batch axis.
+		strategy := distributed.AutoSharding
+		mesh, err := distributed.NewDeviceMesh([]int{numDevices}, []string{"shards"})
+		if err != nil {
+			return err
+		}
+		shardingSpec, err := distributed.NewShardingSpec(mesh, distributed.AxisSpec{"shards"})
+		if err != nil {
+			return err
+		}
+		inputShardingSpecs := []*distributed.ShardingSpec{shardingSpec}
+		labelsShardingSpecs := []*distributed.ShardingSpec{shardingSpec}
+		var deviceAssignment []backends.DeviceNum // nil, the default assignment will be used.
+		trainDS, err = datasets.NewDistributedAccumulator(
+			backend, trainDS, strategy, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
+		if err != nil {
+			return err
+		}
+		trainEvalDS, err = datasets.NewDistributedAccumulator(
+			backend, trainEvalDS, strategy, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
+		if err != nil {
+			return err
+		}
+		testEvalDS, err = datasets.NewDistributedAccumulator(
+			backend, testEvalDS, strategy, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Prefetch batches and upload to device in parallel to training.
+	if *flagPrefetchOnDevice > 0 {
+		// Distributed datasets already prefetch on device, so we don't need to do it here.
+		if !*flagDistributed {
+			var err error
+			trainDS, err = datasets.NewOnDevice(backend, trainDS, false, *flagPrefetchOnDevice, backends.DeviceNum(0))
+			if err != nil {
+				return err
+			}
+		}
+	}
 
 	// Metrics we are interested.
 	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
@@ -207,12 +274,12 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
-	// Use a standard training loop.
+	// Use a standard training loop, with a progress bar.
 	loop := train.NewLoop(trainer)
 	commandline.ProgressbarStyle = progressbar.ThemeUnicode
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
-	// Attach a checkpoint saver.
+	// Attach a checkpoint saver at every minute of training.
 	if checkpoint != nil {
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
@@ -233,106 +300,20 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	}
 
 	// Train up to "train_steps".
-	globalStep := int(optimizers.GetGlobalStep(ctx))
 	trainSteps := context.GetParamOr(ctx, "train_steps", 0)
-	if globalStep < trainSteps {
-		if globalStep != 0 {
-			fmt.Printf("\t- restarting training from global_step=%d\n", globalStep)
-			trainer.SetContext(ctx.Reuse())
-		}
-		_, err := loop.RunSteps(trainDS, trainSteps-globalStep)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep,
-			loop.MedianTrainStepDuration().Microseconds())
-		fmt.Println()
-		// Update batch normalization averages, if they are used.
-		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
-			fmt.Println("\tUpdated batch normalization mean/variances averages.")
-			must.M(checkpoint.Save())
-		}
-	} else {
-		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number larger than "+
-			"current global step.\n", trainSteps)
+	globalStep := int(optimizers.GetGlobalStep(ctx))
+	if globalStep != 0 {
+		fmt.Printf("- Restarting training from global step %d\n", globalStep)
 	}
-
-	if *flagVerbosity >= 2 {
-		fmt.Println("\nVariables:")
-		ctx.EnumerateVariables(func(v *context.Variable) {
-			if !v.Trainable {
-				return
-			}
-			fmt.Printf("\t%s : %s -> %s\n", v.Scope(), v.Name(), v.Shape())
-		})
+	metrics, err := loop.RunToGlobalStep(trainDS, trainSteps)
+	if err != nil {
+		return err
+	}
+	if metrics == nil {
+		fmt.Printf("- Target train_steps=%d already reached. To train further, set a number larger than "+
+			"current global step %d (e.g.: -set=train_steps=1_000_000).\n", trainSteps, globalStep)
 	}
 
 	// Finally, print an evaluation on train and test datasets.
 	return commandline.ReportEval(trainer, trainEvalDS, testEvalDS)
-}
-
-// Model outputs the logits (not the probabilities). The parameter inputs should contain 3 tensors:
-//
-// - categorical inputs, shaped  `(int64)[batch_size, len(VocabulariesFeatures)]`
-// - continuous inputs, shaped `(float32)[batch_size, len(Quantiles)]`
-// - weights: not currently used, but shaped `(float32)[batch_size, 1]`.
-func Model(ctx *context.Context, spec any, inputs []*Node) []*Node {
-	_ = spec // Not used, since the dataset is always the same.
-	g := inputs[0].Graph()
-	dtype := inputs[1].DType() // From continuous features.
-	ctx = ctx.In("model")
-
-	// Use Cosine schedule of the learning rate, if hyperparameter is set to a value > 0.
-	cosineschedule.New(ctx, g, dtype).FromContext().Done()
-
-	categorical, continuous := inputs[0], inputs[1]
-	batchSize := categorical.Shape().Dimensions[0]
-
-	// Feature preprocessing:
-	var allEmbeddings []*Node
-	if *flagUseCategorical {
-		// Embedding of categorical values, each with its own vocabulary.
-		numCategorical := categorical.Shape().Dimensions[1]
-		for catIdx := 0; catIdx < numCategorical; catIdx++ {
-			// Take one column at a time of the categorical values.
-			split := Slice(categorical, AxisRange(), AxisRange(catIdx, catIdx+1))
-			// Embed it accordingly.
-			embedCtx := ctx.In(fmt.Sprintf("categorical_%d_%s", catIdx, adult.Data.VocabulariesFeatures[catIdx]))
-			vocab := adult.Data.Vocabularies[catIdx]
-			vocabSize := len(vocab)
-			embedding := layers.Embedding(embedCtx, split, ModelDType, vocabSize, *flagEmbeddingDim, false)
-			embedding.AssertDims(batchSize, *flagEmbeddingDim)
-			allEmbeddings = append(allEmbeddings, embedding)
-		}
-	}
-
-	if *flagUseContinuous {
-		// Piecewise-linear calibration of the continuous values. Each feature has its own number of quantiles.
-		numContinuous := continuous.Shape().Dimensions[1]
-		for contIdx := 0; contIdx < numContinuous; contIdx++ {
-			// Take one column at a time of the continuous values.
-			split := Slice(continuous, AxisRange(), AxisRange(contIdx, contIdx+1))
-			featureName := adult.Data.QuantilesFeatures[contIdx]
-			calibrationCtx := ctx.In(fmt.Sprintf("continuous_%d_%s", contIdx, featureName))
-			quantiles := adult.Data.Quantiles[contIdx]
-			layers.AssertQuantilesForPWLCalibrationValid(quantiles)
-			calibrated := layers.PieceWiseLinearCalibration(calibrationCtx, split, Const(g, quantiles),
-				*flagTrainableCalibration)
-			calibrated.AssertDims(batchSize, 1) // 2-dim tensor, with batch size as the leading dimension.
-			allEmbeddings = append(allEmbeddings, calibrated)
-		}
-	}
-	logits := Concatenate(allEmbeddings, -1)
-	logits.AssertDims(batchSize, -1)
-
-	// Model itself is an FNN or a KAN.
-	if context.GetParamOr(ctx, "kan", false) {
-		// Use KAN, all configured by context hyperparameters. See createDefaultContext for defaults.
-		logits = kan.New(ctx.In("kan"), logits, 1).Done()
-	} else {
-		// Normal FNN, all configured by context hyperparameters. See createDefaultContext for defaults.
-		logits = fnn.New(ctx.In("fnn"), logits, 1).Done()
-	}
-	logits.AssertDims(batchSize, 1) // 2-dim tensor, with batch size as the leading dimension.
-	return []*Node{logits}
 }

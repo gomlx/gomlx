@@ -81,7 +81,7 @@ func TestBSplineKAN(t *testing.T) {
 	}
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	ctx.RngStateFromSeed(42)
+	ctx.SetRNGStateFromSeed(42)
 	ds := &kanTestDataset{batchSize: 128}
 
 	opt := optimizers.Adam().LearningRate(0.001).Done()
@@ -128,7 +128,7 @@ func TestBSplineKANRegularized(t *testing.T) {
 	}
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	ctx.RngStateFromSeed(42)
+	ctx.SetRNGStateFromSeed(42)
 	ctx.SetParam(kan.ParamBSplineMagnitudeL1, 0.01)
 	ds := &kanTestDataset{batchSize: 128}
 
@@ -161,9 +161,9 @@ func TestBSplineKANRegularized(t *testing.T) {
 		for _, vName := range []string{"w_splines", "w_residual"} {
 			v := ctx.GetVariableByScopeAndName(scope, vName)
 			require.NotNilf(t, v, "failed to inspect variable scope=%q, name=%q", scope, vName)
-			tensor := v.Value()
+			tensor := v.MustValue()
 			fmt.Printf("\t%s : %s -> %v\n", v.Scope(), v.Name(), tensor)
-			tensors.ConstFlatData[float64](tensor, func(flat []float64) {
+			tensors.MustConstFlatData[float64](tensor, func(flat []float64) {
 				for _, element := range flat {
 					if element == 0.0 {
 						numZeros++
@@ -174,5 +174,11 @@ func TestBSplineKANRegularized(t *testing.T) {
 	}
 	fmt.Printf("\nNumber of zeros in the magnitudes of the KAN network: %d\n", numZeros)
 	// Most of the cases we get 12 zeros.
-	require.GreaterOrEqual(t, numZeros, 9, "We expected at least 9 zeros on the magnitudes of the KAN model, with L1 regularizer, we got only %d though", numZeros)
+	require.GreaterOrEqual(
+		t,
+		numZeros,
+		9,
+		"We expected at least 9 zeros on the magnitudes of the KAN model, with L1 regularizer, we got only %d though",
+		numZeros,
+	)
 }

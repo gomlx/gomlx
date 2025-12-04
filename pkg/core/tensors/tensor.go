@@ -14,7 +14,7 @@
  *	limitations under the License.
  */
 
-// Package tensors implements a `Tensor`, a representation of a multi-dimensional array.
+// Package tensors implement a `Tensor`, a representation of a multidimensional array.
 //
 // Tensors are multidimensional arrays (from scalar with 0 dimensions, to arbitrarily large dimensions), defined
 // by their shape (a data type and its axes' dimensions) and their actual content. As a special case, a Tensor can
@@ -30,12 +30,12 @@
 //     given dimensions, filled with the scalar value given. `T` must be one of the supported types.
 //
 //   - FromFlatDataAndDimensions[T shapes.Supported](data []T, dimensions ...int): creates a Tensor with the
-//     given dimensions, and set the flattened values with the given data. `T` must be one of the supported types.
+//     given dimensions and set the flattened values with the given data. `T` must be one of the supported types.
 //     Example:
 //
 //     t := FromFlatDataAndDimensions([]int8{1, 2, 3, 4}, 2, 2}) // Tensor with [[1,2], [3,4]]
 //
-//   - FromValue[S MultiDimensionSlice](value S): Generic conversion, works with the scalar supported `DType`s
+//   - FromValue[S MultiDimensionSlice](value S): Generic conversion works with the scalar supported `DType`s
 //     as well as with any arbitrary multidimensional slice of them. Slices of rank > 1 must be regular, that is
 //     all the sub-slices must have the same shape. Example:
 //
@@ -51,7 +51,7 @@
 //   - `onDevices`: a copy of the values stored in the accelerator device(s) (CPU, GPU, TPU, etc.),
 //     a wrapper for whatever the backend uses as buffer managed by the lower levels (see github.com/gomlx/gopjrt
 //     for the XLA backend).
-//     There can be multiple `Device` backing of a tensor if there are multiple devices (like a multi-GPU set up).
+//     There can be multiple `Device` backings of a tensor if there are multiple devices (like a multi-GPU setup).
 //   - And "on-device" Tensor can also be "shared" if the backend allows it, in which case the local
 //     and "on-device" share the same memory allocation.
 //
@@ -74,7 +74,7 @@
 // Or you can use `Tensor.OnDeviceClone()` to copy a tensor from one backend directly into another backend.
 //
 // Alternatively, after using a tensor as input to a Backend computation, or a tensor returned from the Backend,
-// call Tensor.ToLocal(): it will remove any links to the backend (by copying all the data locally) and
+// call Tensor.ToLocal(): it will remove any links to the backend (by copying all the data locally), and
 // it can then be used by other backends.
 package tensors
 
@@ -112,7 +112,7 @@ import (
 // Or you can use `Tensor.OnDeviceClone()` to copy a tensor from one backend directly into another backend.
 //
 // Alternatively, after using a tensor as input to a Backend computation, or a tensor returned from the Backend,
-// call Tensor.ToLocal(): it will remove any links to the backend (by copying all the data locally) and
+// call Tensor.ToLocal(): it will remove any links to the backend (by copying all the data locally), and
 // it can then be used by other backends.
 //
 // More details in the `tensor` package documentation.
@@ -120,34 +120,34 @@ type Tensor struct {
 	// shape of the tensor.
 	shape shapes.Shape
 
-	// mu protects the local and OnDevices data, but not the shape, which is considered immutable (only changed
+	// mu protects the local and onDevice data, but not the shape, which is considered immutable (only changed
 	// when Tensor is finalized).
 	mu sync.Mutex
 
 	// local storage tensor. Not used for shared buffers.
 	local *local
 
-	// onDevices maps deviceNum -> on device buffer.
-	onDevices map[backends.DeviceNum]*onDevice
+	// onDevice storage for the tensor.
+	onDevice *onDevice
 
 	// isShared indicates that the tensor used a shared buffer: it is held "on-device", but it has
 	// a direct reference to the flat data in Tensor.sharedFlat.
 	//
-	// This is allocated, freed and mutated in ondevice.go, by the corresponding onDevice structure that owns
+	// This is allocated, freed, and mutated in ondevice.go, by the corresponding onDevice structure that owns
 	// the shared buffer.
-	isShared   bool
-	sharedFlat any // Flat slice, []dtype of the shared memory area.
+	isShared     bool
+	sharedFlat   any // Flat slice, []dtype of the shared memory area.
+	sharedDevice backends.DeviceNum
 
 	// backend to use for on-device tensors.
 	backend backends.Backend
 }
 
-// newTensor returns a Tensor object initialized only with the shape, but no actual storage (local or on any device)
-// The returned tensor is invalid, and some data (local or on device) must be associated to it still.
-func newTensor(shape shapes.Shape) *Tensor {
+// newEmptyTensor returns a Tensor object initialized only with the shape, but no actual storage (local or on any device)
+// The returned tensor is invalid, and some data (local or on device) must be associated with it still.
+func newEmptyTensor(shape shapes.Shape) *Tensor {
 	return &Tensor{
-		shape:     shape,
-		onDevices: make(map[backends.DeviceNum]*onDevice),
+		shape: shape,
 	}
 }
 
@@ -180,9 +180,9 @@ func (t *Tensor) Memory() uintptr { return t.shape.Memory() }
 
 // Ok returns whether the Tensor is in a valid state: it is not nil, and it hasn't been finalized.
 func (t *Tensor) Ok() bool {
-	// Notice that shared buffers are stored as onDevices.
+	// Notice that shared buffers are stored as onDevice.
 	return t != nil && t.shape.Ok() &&
-		(!t.local.IsFinalized() || len(t.onDevices) > 0)
+		(!t.local.IsFinalized() || !t.onDevice.IsFinalized())
 }
 
 // IsShared returns whether the underlying tensor storage is shared with the backend engine.
@@ -198,48 +198,74 @@ func (t *Tensor) IsShared() bool {
 	return t.isShared
 }
 
-// AssertValid panics if local is nil, or if its shape is invalid.
-func (t *Tensor) AssertValid() {
+// CheckValid returns an error if it's nil, has been finalized, or if its shape is invalid.
+func (t *Tensor) CheckValid() error {
 	if t == nil {
-		panic(errors.New("Tensor is nil"))
+		return errors.New("Tensor is nil")
 	}
 	if !t.shape.Ok() {
-		panic(errors.New("Tensor shape is invalid"))
+		return errors.New("Tensor shape is invalid")
 	}
 	if t.local.IsFinalized() {
-		if len(t.onDevices) == 0 {
-			// Notice that shared buffers are stored as onDevices.
-			panic(errors.New("Tensor has no local or on-device representation"))
+		if t.onDevice.IsFinalized() {
+			// Notice that shared buffers are stored as onDevice.
+			return errors.New("Tensor has no local or on-device representation")
 		}
 		if t.backend == nil || t.backend.IsFinalized() {
-			panic(errors.New("attempting to access Tensor stored with a nil or finalized backend"))
+			return errors.New("attempting to access Tensor stored with a nil or finalized backend")
 		}
+	}
+	return nil
+}
+
+// AssertValid panics if it's nil, has been finalized, or if its shape is invalid.
+func (t *Tensor) AssertValid() {
+	err := t.CheckValid()
+	if err != nil {
+		panic(err)
 	}
 }
 
-// FinalizeAll immediately frees all associated data and leave Tensor in an invalid state. Shape is cleared also.
+// MustFinalizeAll immediately frees all associated data and leave Tensor in an invalid state.
 //
-// It's the caller responsibility to ensure the tensor buffers are not being used elsewhere (like in the middle of an execution).
-func (t *Tensor) FinalizeAll() {
+// It's the caller's responsibility to ensure the tensor buffers are not being used elsewhere
+// (like in the middle of an execution).
+//
+// Panics on error.
+func (t *Tensor) MustFinalizeAll() {
+	must(t.FinalizeAll())
+}
+
+// FinalizeAll immediately frees all associated data and leave Tensor in an invalid state.
+//
+// It's the caller's responsibility to ensure the tensor buffers are not being used elsewhere
+// (like in the middle of an execution).
+func (t *Tensor) FinalizeAll() error {
 	// Get the list of local and device tensors to finalize.
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.lockedFinalizeAll()
+	if !t.Ok() {
+		// Likely already finalized, no-op.
+		return nil
+	}
+	return t.lockedFinalizeAll()
 }
 
-// lockedFinalizeAll is FinalizeAll but must be called with the tensor already locked.
-func (t *Tensor) lockedFinalizeAll() {
+// lockedFinalizeAll is MustFinalizeAll but must be called with the tensor already locked.
+func (t *Tensor) lockedFinalizeAll() error {
 	if t == nil {
-		return
+		return nil
 	}
 	if t.local != nil {
 		t.local.Finalize()
 		t.local = nil
 	}
-	for _, device := range t.onDevices {
-		device.Finalize()
+	var err error
+	if t.onDevice != nil {
+		err = t.onDevice.Finalize()
+		t.onDevice = nil
 	}
-	t.onDevices = nil
 	t.shape = shapes.Invalid()
 	t.isShared = false
+	return err
 }

@@ -18,26 +18,31 @@ package metrics
 
 import (
 	"fmt"
+	"testing"
+
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 // takeFirstFn wraps the given `metricFn` with a function that takes a single node for labels and predictions as
 // opposed to slices of nodes.
-func takeFirstFn(metricFn func(ctx *context.Context, labels, predictions []*Node) *Node) func(*context.Context, *Node, *Node) *Node {
+func takeFirstFn(
+	metricFn func(ctx *context.Context, labels, predictions []*Node) *Node,
+) func(*context.Context, *Node, *Node) *Node {
 	return func(ctx *context.Context, labels, predictions *Node) *Node {
 		return metricFn(ctx, []*Node{labels}, []*Node{predictions})
 	}
 }
 
 // takeLabelsMaskWeightPredictionsFn wraps the given `metricFn` with a function that takes labels, mask, weights and predictions.
-func takeLabelsMaskWeightPredictionsFn(metricFn func(ctx *context.Context, labels, predictions []*Node) *Node) func(ctx *context.Context, labels, mask, weights, predictions *Node) *Node {
+func takeLabelsMaskWeightPredictionsFn(
+	metricFn func(ctx *context.Context, labels, predictions []*Node) *Node,
+) func(ctx *context.Context, labels, mask, weights, predictions *Node) *Node {
 	return func(ctx *context.Context, labels, mask, weights, predictions *Node) *Node {
 		return metricFn(ctx, []*Node{labels, mask, weights}, []*Node{predictions})
 	}
@@ -73,18 +78,18 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 	// List and check variables.
 	fmt.Println("Variables:")
 	ctx.EnumerateVariables(func(v *context.Variable) {
-		fmt.Printf("\t%s / %s=%s\n", v.Scope(), v.Name(), v.Value())
+		fmt.Printf("\t%s / %s=%s\n", v.Scope(), v.Name(), v.MustValue())
 	})
 
 	metricScope := ctx.In(Scope).In(accMetric.ScopeName()).Scope()
 	totalVar := ctx.GetVariableByScopeAndName(metricScope, "total")
 	require.NotNilf(t, totalVar, "Variable \"total\" was not created in %s / total", metricScope)
-	total := totalVar.Value().Value().(float32)
+	total := totalVar.MustValue().Value().(float32)
 	assert.Equal(t, float32(2), total, "MeanBinaryAccuracy total value")
 
 	weightVar := ctx.GetVariableByScopeAndName(metricScope, "weight")
 	require.NotNilf(t, weightVar, "Variable \"weight\" was not created in %s / total", metricScope)
-	weight := weightVar.Value().Value().(float32)
+	weight := weightVar.MustValue().Value().(float32)
 	assert.Equal(t, float32(6), weight, "MeanBinaryAccuracy weight value")
 
 	// Second batch:
@@ -96,8 +101,8 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 	// Zeros the state.
 	accMetric.Reset(ctx)
-	total = totalVar.Value().Value().(float32)
-	weight = weightVar.Value().Value().(float32)
+	total = totalVar.MustValue().Value().(float32)
+	weight = weightVar.MustValue().Value().(float32)
 	assert.Zero(t, total, "Expected total variable to be 0 after Reset()")
 	assert.Zero(t, weight, "Expected weight variable to be 0 after Reset()")
 }
@@ -127,7 +132,11 @@ func TestSparseCategoricalAccuracyGraph(t *testing.T) {
 		assert.Equal(t, float32(1.0/3.0), got, "TestSparseCategoricalAccuracyGraph")
 	}
 	{
-		accuracyExec := context.MustNewExec(manager, ctx, takeLabelsMaskWeightPredictionsFn(SparseCategoricalAccuracyGraph))
+		accuracyExec := context.MustNewExec(
+			manager,
+			ctx,
+			takeLabelsMaskWeightPredictionsFn(SparseCategoricalAccuracyGraph),
+		)
 		labels := [][]int{{0}, {1}, {0}, {2}}
 		mask := []bool{true, true, false, true}
 		weights := []float32{1.0, 2.0, 100.0, 0.5}
