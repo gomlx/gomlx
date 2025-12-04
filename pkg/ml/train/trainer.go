@@ -712,6 +712,17 @@ func (r *Trainer) EvalStep(spec any, inputs, labels []*tensors.Tensor) (metrics 
 	return r.callGraphFn(r.evalStepGraph, EvalType, r.evalStepExecMap, spec, inputs, labels)
 }
 
+// DistributedEvalStep runs one eval step and returns the metrics, in a distributed fashion.
+//
+// The strategy and device assignment is only used when a new executor is built, that is,
+// only when the dataset spec changes.
+//
+// Otherwise, it behaves just like EvalStep.
+func (r *Trainer) DistributedEvalStep(strategy distributed.Strategy, deviceAssignment []backends.DeviceNum,
+	spec any, inputs, labels []*distributed.Tensor) (metrics []*tensors.Tensor, err error) {
+	return r.distributedCallGraphFn(strategy, deviceAssignment, r.evalStepGraph, EvalType, r.evalStepExecMap, spec, inputs, labels)
+}
+
 // resetEvalMetrics call Metrics.Reset on all eval metrics.
 func (r *Trainer) resetEvalMetrics() error {
 	for _, metric := range r.evalMetrics {
