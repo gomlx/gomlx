@@ -250,6 +250,16 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 		if err != nil {
 			return err
 		}
+		trainEvalDS, err = datasets.NewDistributedAccumulator(
+			backend, trainEvalDS, strategy, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
+		if err != nil {
+			return err
+		}
+		testEvalDS, err = datasets.NewDistributedAccumulator(
+			backend, testEvalDS, strategy, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Prefetch batches and upload to device in parallel to training.

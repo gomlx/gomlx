@@ -738,8 +738,13 @@ func (r *Trainer) resetEvalMetrics() error {
 // has to be finite (yield io.EOF at the end). The function will reset the dataset
 // at the start.
 //
+// If the dataset is a DistributedDataset, it will be evaluated in a distribute fashion, see DistributedEval.
+//
 // Note: inputs and labels yielded by the dataset are immediately finalized (freed) after use.
 func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor, err error) {
+	if distributedDS, ok := ds.(DistributedDataset); ok {
+		return r.DistributedEval(distributedDS)
+	}
 	ds.Reset()
 	err = r.resetEvalMetrics()
 	if err != nil {
@@ -805,6 +810,89 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor, err error)
 	}
 
 	// Read out the go-generate metrics:
+	for i, goUpdateFn := range goUpdateFns {
+		if goUpdateFn != nil {
+			lossAndMetrics[i] = goUpdateFn.ReadGo()
+		}
+	}
+	return lossAndMetrics, nil
+}
+
+// DistributedEval returns the computation of loss and metrics over the given distributed dataset.
+// The dataset has to be finite (yield io.EOF at the end). The function will reset the dataset at the start.
+//
+// It reads the strategy and device assignment from the DistributedDataset and uses DistributedEvalStep
+// for each batch.
+//
+// Note: inputs and labels yielded by the dataset are immediately finalized (freed) after use.
+func (r *Trainer) DistributedEval(ds DistributedDataset) (lossAndMetrics []*tensors.Tensor, err error) {
+	ds.Reset()
+	err = r.resetEvalMetrics()
+	if err != nil {
+		return nil, err
+	}
+	count := 0
+	finalizeInputs := finalizeYieldedTensors(ds)
+	strategy := ds.Strategy()
+	deviceAssignment := ds.DeviceAssignment()
+
+	// Check for metrics with Go updates: these are update functions not written as a computation graph.
+	goUpdateFns := make([]metrics.UpdateGo, len(r.evalMetrics))
+	for ii, metric := range r.evalMetrics {
+		if fn, ok := metric.(metrics.UpdateGo); ok {
+			goUpdateFns[ii] = fn
+		}
+	}
+
+	// Loop over dataset:
+	for {
+		spec, inputs, labels, err := ds.DistributedYield()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, errors.Wrap(err, "dataset returned an error during DistributedEval")
+		}
+		count++
+		// Early free (not wait for the GC) of the results of previous batch.
+		for _, t := range lossAndMetrics {
+			err := t.FinalizeAll()
+			if err != nil {
+				return nil, errors.WithMessagef(err,
+					"finalizing loss and metrics tensor of dataset %q after use in a distributed eval step",
+					ds.Name())
+			}
+		}
+
+		lossAndMetrics, err = r.DistributedEvalStep(strategy, deviceAssignment, spec, inputs, labels)
+		if err != nil {
+			return nil, errors.WithMessage(err, "DistributedEvalStep failed")
+		}
+		for i, goUpdateFn := range goUpdateFns {
+			if goUpdateFn != nil {
+				goUpdateFn.UpdateGo(lossAndMetrics[i])
+			}
+		}
+
+		// Free inputs and labels after usage.
+		if finalizeInputs {
+			for sliceIdx, slice := range [][]*distributed.Tensor{inputs, labels} {
+				for i, t := range slice {
+					err := t.FinalizeAll()
+					if err != nil {
+						return nil, errors.WithMessagef(
+							err, "finalizing %s distributed tensor #%d of dataset %q after use in a distributed eval step",
+							yieldInputTypeNames[sliceIdx], i, ds.Name())
+					}
+				}
+			}
+		}
+	}
+	if count == 0 {
+		return nil, errors.New("evaluation dataset yielded no batches, no data to evaluate")
+	}
+
+	// Read out the go-generated metrics:
 	for i, goUpdateFn := range goUpdateFns {
 		if goUpdateFn != nil {
 			lossAndMetrics[i] = goUpdateFn.ReadGo()
