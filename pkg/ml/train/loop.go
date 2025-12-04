@@ -30,7 +30,8 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
+	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/pkg/errors"
 )
 
@@ -171,13 +172,13 @@ func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*t
 
 	// Free inputs and labels:
 	if loop.finalizeYieldedTrainTensors {
-		var sliceNames = []string{"input", "label"}
 		for sliceIdx, slice := range [][]*tensors.Tensor{inputs, labels} {
 			for i, t := range slice {
 				err := t.FinalizeAll()
 				if err != nil {
-					return nil, errors.WithMessagef(err, "finalizing %s #%d after use in a train step",
-						sliceNames[sliceIdx], i)
+					return nil, errors.WithMessagef(
+						err, "finalizing tensor #%d of %s after use in a distributed train step",
+						i, yieldInputTypeNames[sliceIdx])
 				}
 			}
 		}
@@ -209,13 +210,13 @@ func (loop *Loop) distributedStep(
 
 	// Free inputs and labels:
 	if loop.finalizeYieldedTrainTensors {
-		var sliceNames = []string{"input", "label"}
 		for sliceIdx, slice := range [][]*distributed.Tensor{inputs, labels} {
 			for i, dt := range slice {
 				err := dt.Finalize()
 				if err != nil {
-					return nil, errors.WithMessagef(err, "finalizing %s #%d after use in a distributed train step",
-						sliceNames[sliceIdx], i)
+					return nil, errors.WithMessagef(
+						err, "finalizing tensor #%d of %s after use in a distributed train step",
+						i, yieldInputTypeNames[sliceIdx])
 				}
 			}
 		}
@@ -300,20 +301,74 @@ func checkYield(inputs, labels []*tensors.Tensor) error {
 	// Check inputs and labels are valid.
 	for inputTypeIdx, slice := range [][]*tensors.Tensor{inputs, labels} {
 		for tensorIdx, t := range slice {
-			if t.DType() == dtypes.InvalidDType {
+			if !t.Ok() {
 				return errors.Errorf(
-					"dataset yielded an invalid tensor (tensor #%d of %s), -- likely it has already been finalized (freed). "+
-						"The training loop by default immediately frees the yielded tensor after use, so it doesn't "+
-						"wait for the garbage collector. If the dataset is trying to reuse tensors, they will become "+
-						"invalid and cause this error. If that is the case, consider implementing the method "+
-						"FinalizeYieldsAfterUse() in your dataset, and return false.",
-					tensorIdx,
-					yieldInputTypeNames[inputTypeIdx],
+					"dataset yielded an invalid tensor (tensor #%d of %s), -- likely it has already been finalized "+
+						"(freed). The training loop by default immediately frees the yielded tensor after use, so "+
+						"it doesn't wait for the garbage collector. If the dataset is trying to reuse tensors, "+
+						"they will become invalid and cause this error. If that is the case, consider implementing "+
+						"the method FinalizeYieldsAfterUse() in your dataset, and return false.",
+					tensorIdx, yieldInputTypeNames[inputTypeIdx],
 				)
 			}
 		}
 	}
 	return nil
+}
+
+func checkDistributedYield(inputs, labels []*distributed.Tensor) error {
+	// Check inputs and labels are valid.
+	for inputTypeIdx, slice := range [][]*distributed.Tensor{inputs, labels} {
+		for tensorIdx, dt := range slice {
+			if !dt.Ok() {
+				return errors.Errorf(
+					"dataset yielded an invalid tensor (tensor #%d of %s), -- likely it has already been finalized "+
+						"(freed). The training loop by default immediately frees the yielded tensor after use, so "+
+						"it doesn't wait for the garbage collector. If the dataset is trying to reuse tensors, "+
+						"they will become invalid and cause this error. If that is the case, consider implementing "+
+						"the method FinalizeYieldsAfterUse() in your dataset, and return false.",
+					tensorIdx, yieldInputTypeNames[inputTypeIdx],
+				)
+			}
+		}
+	}
+	return nil
+}
+
+// freeMetrics finalizes the metrics and returns an error if any of them cannot be finalized.
+func freeMetrics(metricsInterfaces []metrics.Interface, metrics []*tensors.Tensor) error {
+	var err error
+	for metricIdx, metric := range metrics {
+		if metric != nil {
+			err = metric.FinalizeAll()
+			if err != nil {
+				return errors.WithMessagef(err, "failed to finalize metric %q (#%d)",
+					metricsInterfaces[metricIdx].Name(), metricIdx)
+			}
+		}
+	}
+	return nil
+}
+
+// RunToGlobalStep runs the loop until the target global step is reached.
+// If targetGlobalStep is smaller than the current global step, it does nothing and returns nil metrics.
+func (loop *Loop) RunToGlobalStep(ds Dataset, targetGlobalStep int) (metrics []*tensors.Tensor, err error) {
+	ctx := loop.Trainer.Context()
+	var globalStep int
+	err = exceptions.TryCatch[error](func() {
+		globalStep = int(optimizers.GetGlobalStep(ctx))
+	})
+	if err != nil {
+		return nil, err
+	}
+	if targetGlobalStep <= globalStep {
+		return nil, nil
+	}
+	if globalStep != 0 {
+		loop.Trainer.SetContext(ctx.Reuse())
+	}
+	steps := targetGlobalStep - globalStep
+	return loop.RunSteps(ds, steps)
 }
 
 // RunSteps runs those many steps. StartStep and EndStep are adjusted to the current
@@ -327,7 +382,7 @@ func checkYield(inputs, labels []*tensors.Tensor) error {
 //
 // Note: inputs and labels yielded by the dataset are immediately finalized (freed) after use in each step.
 func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, err error) {
-	if steps == 0 {
+	if steps <= 0 {
 		return nil, nil
 	}
 	if err = loop.Trainer.ResetTrainMetrics(); err != nil {
@@ -340,6 +395,26 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, er
 	if err != nil {
 		return nil, err
 	}
+
+	if distributedDS, ok := ds.(DistributedDataset); ok {
+		// Run steps in a distributed manner.
+		metrics, err = loop.runStepsDistributed(distributedDS, steps)
+	} else {
+		// Run steps on a single device.
+		metrics, err = loop.runStepsSingleDevice(ds, steps)
+
+	}
+	if err != nil {
+		return nil, err
+	}
+	err = loop.end(metrics)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed end (GlobaStep=%d)", steps, loop.LoopStep)
+	}
+	return metrics, nil
+}
+
+func (loop *Loop) runStepsSingleDevice(ds Dataset, steps int) (metrics []*tensors.Tensor, err error) {
 	loop.TrainStepDurations = make([]time.Duration, 0, steps)
 	metricsInterfaces := loop.Trainer.Metrics()
 	for loop.LoopStep = loop.StartStep; loop.LoopStep < loop.EndStep; loop.LoopStep++ {
@@ -360,37 +435,57 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, er
 			return nil, err
 		}
 
-		// Immediately free any space being used.
-		for metricIdx, metric := range metrics {
-			if metric != nil {
-				err = metric.FinalizeAll()
-				if err != nil {
-					return nil, errors.WithMessagef(err, "failed to finalize metric %q (#%d)",
-						metricsInterfaces[metricIdx].Name(), metricIdx)
-				}
-			}
+		// Immediately free previous metrics values.
+		if err := freeMetrics(metricsInterfaces, metrics); err != nil {
+			return nil, err
 		}
+
+		// Execute the step.
 		metrics, err = loop.step(spec, inputs, labels)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed TrainStep(LoopStep=%d)",
 				steps, loop.LoopStep)
 		}
 	}
-	for metricIdx, metric := range metrics {
-		// Transfer results locally and immediately free on-device storage.
-		metric.MaterializeLocal()
-		err = metric.InvalidateOnDevice()
+	return metrics, nil
+}
+
+func (loop *Loop) runStepsDistributed(ds DistributedDataset, steps int) (metrics []*tensors.Tensor, err error) {
+	loop.TrainStepDurations = make([]time.Duration, 0, steps)
+	metricsInterfaces := loop.Trainer.Metrics()
+	strategy := ds.Strategy()
+	deviceAssignment := ds.DeviceAssignment()
+	for loop.LoopStep = loop.StartStep; loop.LoopStep < loop.EndStep; loop.LoopStep++ {
+		spec, inputs, labels, err := ds.DistributedYield()
 		if err != nil {
-			return nil, errors.WithMessagef(err,
-				"Loop.RunSteps(%d): failed to free metric %s",
-				steps, metricsInterfaces[metricIdx].Name())
+			if err == io.EOF {
+				return nil, errors.Errorf(
+					"reached Dataset end after %d steps (requested %d steps) -- did you mean to use "+
+						"a different (looping) Dataset, or use Loop.RunEpochs() instead of Loop.RunSteps() ?",
+					loop.LoopStep-loop.StartStep, steps)
+			}
+			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed reading from Dataset", steps)
+		}
+
+		// Check inputs and labels are valid.
+		err = checkDistributedYield(inputs, labels)
+		if err != nil {
+			return nil, err
+		}
+
+		// Immediately free previous metrics values.
+		if err := freeMetrics(metricsInterfaces, metrics); err != nil {
+			return nil, err
+		}
+
+		// Execute the step.
+		metrics, err = loop.distributedStep(strategy, deviceAssignment, spec, inputs, labels)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed TrainStep(LoopStep=%d)",
+				steps, loop.LoopStep)
 		}
 	}
-	err = loop.end(metrics)
-	if err != nil {
-		return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed end (GlobaStep=%d)", steps, loop.LoopStep)
-	}
-	return
+	return metrics, nil
 }
 
 // RunEpochs runs those many steps. StartStep is adjusted to the current

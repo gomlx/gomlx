@@ -543,7 +543,7 @@ func (r *Trainer) distributedCallGraphFn(
 		var meshes []*distributed.DeviceMesh
 		inputShardingSpecs := make([]*distributed.ShardingSpec, 0, numParams)
 		for _, inputAny := range inputsAndLabels {
-			input := inputAny.(distributed.Tensor)
+			input := inputAny.(*distributed.Tensor)
 			shardingSpec := input.ShardingSpec()
 			mesh := shardingSpec.Mesh
 			if slices.Index(meshes, mesh) == -1 {

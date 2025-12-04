@@ -12,6 +12,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
 
@@ -123,6 +124,11 @@ func (dt *Tensor) Shape() shapes.Shape {
 	return dt.logicalShape
 }
 
+// DType returns the logical, unsharded shape of the tensor.
+func (dt *Tensor) DType() dtypes.DType {
+	return dt.logicalShape.DType
+}
+
 // ShardingSpec returns the sharding specification for this tensor.
 func (dt *Tensor) ShardingSpec() *ShardingSpec {
 	return dt.spec
@@ -191,6 +197,11 @@ func (dt *Tensor) validateShards() error {
 // ShardShape returns the shape of the individual shards.
 func (dt *Tensor) ShardShape() shapes.Shape {
 	return dt.shardShape
+}
+
+// Ok returns whether the distributed tensor is in a valid state -- and hasn't been finalized.
+func (dt *Tensor) Ok() bool {
+	return dt != nil && len(dt.shards) > 0 && dt.spec != nil && dt.mesh != nil
 }
 
 // Finalize releases the memory associated with the distributed tensor.

@@ -27,10 +27,12 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/adult"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
@@ -126,6 +128,8 @@ var (
 	flagUseContinuous        = flag.Bool("use_continuous", true, "Use continuous features.")
 	flagTrainableCalibration = flag.Bool("trainable_calibration", true,
 		"Allow piece-wise linear calibration to adjust outputs.")
+	flagDistributed = flag.Bool("distributed", false, "Use distributed training: it will use as many devices as "+
+		"available in the backend.")
 )
 
 func main() {
@@ -143,6 +147,7 @@ func main() {
 
 func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) error {
 	backend := backends.MustNew()
+	numDevices := backend.NumDevices()
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if *flagVerbosity >= 1 {
 		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
@@ -172,14 +177,53 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 		adult.PrintBatchSamples(backend, adult.Data.Train)
 	}
 
-	// Create datasets for training and evaluation.
+	// Batch size: it is affected by the distributed execution..
 	batchSize := context.GetParamOr(ctx, "batch_size", 128)
-	trainDS := adult.NewDataset(backend, adult.Data.Train, "batched train")
-	trainEvalDS := trainDS.Copy().BatchSize(batchSize, false)
-	testEvalDS := adult.NewDataset(backend, adult.Data.Test, "test").
-		BatchSize(batchSize, false)
-	// For training, we shuffle and loop indefinitely.
-	trainDS.BatchSize(batchSize, true).Shuffle().Infinite(true)
+	shardedBatchSize := batchSize
+	if *flagDistributed {
+		if numDevices < 2 {
+			klog.Fatalf("-distributed: distributed training requires at least 2 devices")
+		}
+		fmt.Printf("- Using distributed execution across %d devices.\n", numDevices)
+		shardedBatchSize = batchSize / numDevices
+		newBatchSize := shardedBatchSize * numDevices
+		if newBatchSize != batchSize {
+			klog.Warningf(
+				"-distributed: batch_size reduced from %d to %d to make it divisible by the number of devices=%d",
+				batchSize, newBatchSize, numDevices)
+			batchSize = newBatchSize
+		}
+	}
+
+	// Create datasets for training and evaluation.
+	inMemoryDS := adult.NewDataset(backend, adult.Data.Train, "batched train")
+	var (
+		trainEvalDS train.Dataset = inMemoryDS.Copy().BatchSize(batchSize, false)
+		testEvalDS  train.Dataset = adult.NewDataset(backend, adult.Data.Test, "test").BatchSize(batchSize, false)
+		// For training, we shuffle and loop indefinitely.
+		trainDS train.Dataset = inMemoryDS.BatchSize(batchSize, true).Shuffle().Infinite(true)
+	)
+
+	// Convert to a distributed dataset, if -distributed is set.
+	if *flagDistributed {
+		mesh, err := distributed.NewDeviceMesh([]int{numDevices}, []string{"shards"})
+		if err != nil {
+			return err
+		}
+		shardingSpec, err := distributed.NewShardingSpec(mesh, distributed.AxisSpec{"shards"})
+		if err != nil {
+			return err
+		}
+		inputShardingSpecs := []*distributed.ShardingSpec{shardingSpec}
+		labelsShardingSpecs := []*distributed.ShardingSpec{shardingSpec}
+		var deviceAssignment []backends.DeviceNum // nil, the default assignment will be used.
+		trainDS, err = datasets.NewDistributedAccumulator(
+			backend, trainDS,
+			distributed.AutoSharding, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
+		if err != nil {
+			return err
+		}
+	}
 
 	// Metrics we are interested.
 	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
@@ -219,17 +263,16 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	}
 
 	// Train up to "train_steps".
-	globalStep := int(optimizers.GetGlobalStep(ctx))
 	trainSteps := context.GetParamOr(ctx, "train_steps", 0)
-	if globalStep < trainSteps {
-		if globalStep != 0 {
-			fmt.Printf("\t- restarting training from global_step=%d\n", globalStep)
-			trainer.SetContext(ctx.Reuse())
-		}
-		_, err := loop.RunSteps(trainDS, trainSteps-globalStep)
-		if err != nil {
-			return err
-		}
+	globalStep := int(optimizers.GetGlobalStep(ctx))
+	if globalStep != 0 {
+		fmt.Printf("\t- restarting training from global step %d\n", globalStep)
+	}
+	metrics, err := loop.RunToGlobalStep(trainDS, trainSteps)
+	if err != nil {
+		return err
+	}
+	if metrics != nil {
 		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep,
 			loop.MedianTrainStepDuration().Microseconds())
 		fmt.Println()
@@ -240,7 +283,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 		}
 	} else {
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number larger than "+
-			"current global step.\n", trainSteps)
+			"current global step %d.\n", trainSteps, globalStep)
 	}
 
 	if *flagVerbosity >= 2 {
