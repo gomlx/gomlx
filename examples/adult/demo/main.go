@@ -35,7 +35,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
 	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
@@ -49,6 +48,7 @@ import (
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 	"k8s.io/klog/v2"
 
@@ -130,6 +130,10 @@ var (
 		"Allow piece-wise linear calibration to adjust outputs.")
 	flagDistributed = flag.Bool("distributed", false, "Use distributed training: it will use as many devices as "+
 		"available in the backend.")
+	flagNumDevices = flag.Int("num_devices", 0,
+		"Number of devices to use for distributed training. The default is to use all devices available in the "+
+			"backend. Setting this to > 1 automatically enables -distributed. If 0, it will use all "+
+			"devices available in the backend.")
 )
 
 func main() {
@@ -148,6 +152,15 @@ func main() {
 func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) error {
 	backend := backends.MustNew()
 	numDevices := backend.NumDevices()
+	if *flagNumDevices > 0 {
+		if *flagNumDevices > numDevices {
+			return errors.Errorf("-num_devices: %d is greater than the number of devices in the backend (%d)", *flagNumDevices, numDevices)
+		}
+		numDevices = *flagNumDevices
+		if numDevices > 1 {
+			*flagDistributed = true
+		}
+	}
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if *flagVerbosity >= 1 {
 		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
@@ -206,6 +219,8 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 
 	// Convert to a distributed dataset, if -distributed is set.
 	if *flagDistributed {
+		// Specify how to distributed: AutoSharding, and shard the data along the batch axis.
+		strategy := distributed.AutoSharding
 		mesh, err := distributed.NewDeviceMesh([]int{numDevices}, []string{"shards"})
 		if err != nil {
 			return err
@@ -218,8 +233,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 		labelsShardingSpecs := []*distributed.ShardingSpec{shardingSpec}
 		var deviceAssignment []backends.DeviceNum // nil, the default assignment will be used.
 		trainDS, err = datasets.NewDistributedAccumulator(
-			backend, trainDS,
-			distributed.AutoSharding, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
+			backend, trainDS, strategy, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
 		if err != nil {
 			return err
 		}
@@ -237,12 +251,12 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
-	// Use a standard training loop.
+	// Use a standard training loop, with a progress bar.
 	loop := train.NewLoop(trainer)
 	commandline.ProgressbarStyle = progressbar.ThemeUnicode
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
-	// Attach a checkpoint saver.
+	// Attach a checkpoint saver at every minute of training.
 	if checkpoint != nil {
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
@@ -272,28 +286,9 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	if err != nil {
 		return err
 	}
-	if metrics != nil {
-		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep,
-			loop.MedianTrainStepDuration().Microseconds())
-		fmt.Println()
-		// Update batch normalization averages, if they are used.
-		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
-			fmt.Println("\tUpdated batch normalization mean/variances averages.")
-			must.M(checkpoint.Save())
-		}
-	} else {
+	if metrics == nil {
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number larger than "+
 			"current global step %d.\n", trainSteps, globalStep)
-	}
-
-	if *flagVerbosity >= 2 {
-		fmt.Println("\nVariables:")
-		ctx.EnumerateVariables(func(v *context.Variable) {
-			if !v.Trainable {
-				return
-			}
-			fmt.Printf("\t%s : %s -> %s\n", v.Scope(), v.Name(), v.Shape())
-		})
 	}
 
 	// Finally, print an evaluation on train and test datasets.
@@ -322,7 +317,7 @@ func Model(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	if *flagUseCategorical {
 		// Embedding of categorical values, each with its own vocabulary.
 		numCategorical := categorical.Shape().Dimensions[1]
-		for catIdx := 0; catIdx < numCategorical; catIdx++ {
+		for catIdx := range numCategorical {
 			// Take one column at a time of the categorical values.
 			split := Slice(categorical, AxisRange(), AxisRange(catIdx, catIdx+1))
 			// Embed it accordingly.
@@ -338,7 +333,7 @@ func Model(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	if *flagUseContinuous {
 		// Piecewise-linear calibration of the continuous values. Each feature has its own number of quantiles.
 		numContinuous := continuous.Shape().Dimensions[1]
-		for contIdx := 0; contIdx < numContinuous; contIdx++ {
+		for contIdx := range numContinuous {
 			// Take one column at a time of the continuous values.
 			split := Slice(continuous, AxisRange(), AxisRange(contIdx, contIdx+1))
 			featureName := adult.Data.QuantilesFeatures[contIdx]

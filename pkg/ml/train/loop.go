@@ -361,11 +361,11 @@ func (loop *Loop) RunToGlobalStep(ds Dataset, targetGlobalStep int) (metrics []*
 	if err != nil {
 		return nil, err
 	}
-	if targetGlobalStep <= globalStep {
-		return nil, nil
-	}
 	if globalStep != 0 {
 		loop.Trainer.SetContext(ctx.Reuse())
+	}
+	if targetGlobalStep <= globalStep {
+		return nil, nil
 	}
 	steps := targetGlobalStep - globalStep
 	return loop.RunSteps(ds, steps)
