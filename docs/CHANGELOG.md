@@ -35,6 +35,7 @@ Distributed computation improvements and refactorings:
   - Added `Trainer.DistributedTrainStep`, `Trainer.DistributedEvalStep` and `Trainer.DistributedEval`.
 - Package `datasets`:
   - Added `datasets.DistributedAccumulator`: converts a normal `Dataset` into a `DistributedDataset`.
+  - Added `datasets.OnDevice`: pre-uploads data to devices.
 - Package `backend`:
   - Added `Backend.CopyToDevice`
   - `Builder.Parameter()` now takes an optional `ShardingSpec` for sharded inputs.
