@@ -22,6 +22,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+	"runtime/pprof"
 	"time"
 
 	"github.com/gomlx/gomlx/backends"
@@ -127,6 +129,8 @@ var (
 	flagUseContinuous        = flag.Bool("use_continuous", true, "Use continuous features.")
 	flagTrainableCalibration = flag.Bool("trainable_calibration", true,
 		"Allow piece-wise linear calibration to adjust outputs.")
+
+	flagCPUProfile = flag.String("cpu_profile", "", "write cpu profile to file")
 )
 
 func main() {
@@ -135,6 +139,15 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
+
+	if *flagCPUProfile != "" {
+		f, err := os.Create(*flagCPUProfile)
+		if err != nil {
+			klog.Fatalf("Failed to create CPU profile file: %+v", err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
 	err := mainWithContext(ctx, *flagDataDir, *flagCheckpoint, paramsSet)
 	if err != nil {
