@@ -799,7 +799,7 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor, err error)
 					if err != nil {
 						return nil, errors.WithMessagef(
 							err, "finalizing %s tensor #%d of dataset %q after use in a distributed eval step",
-							yieldInputTypeNames[sliceIdx], i, ds.Name)
+							yieldInputTypeNames[sliceIdx], i, ds.Name())
 					}
 				}
 			}
