@@ -16,30 +16,34 @@
 **GoMLX** is an easy-to-use set of Machine Learning and generic math libraries and tools. 
 It can be seen as a **PyTorch/Jax/TensorFlow for Go**.
 
-It can be used to train, fine-tune, modify, and combine machine learning models. It provides all
-the tools to make that work easy: from a complete set of differentiable operators, all the way to UI
-tools to plot metrics while training in a notebook.
+It can be used to train, fine-tune, modify, and combine machine learning models. 
+It provides all the tools to make that work easy: from a complete set of differentiable operators, 
+all the way to UItools to plot metrics while training in a notebook.
 
 It runs almost everywhere Go runs, using a pure Go backend. 
 It runs even in the browser with WASM ([see demo created with GoMLX](https://janpfeifer.github.io/hiveGo/www/hive/)). 
 Likely, it will work in embedded devices as well (see [Tamago](https://github.com/usbarmory/tamago)).
 
-It also supports a very optimized backend engine based on [OpenXLA/PJRT](https://github.com/openxla/xla) that uses just-in-time
-compilation to CPU, GPUs (Nvidia, but soon AMD ROCm, Intel, Macs, and Google's TPUs also).
-It's the same engine that powers Google's [Jax](https://github.com/google/jax) and 
-[TensorFlow](https://tensorflow.org/), and it has the same speed in many cases. 
+It also supports a very optimized backend engine based on [OpenXLA](https://github.com/openxla/xla) 
+that uses just-in-time compilation to CPU, GPUs (Nvidia, and likely AMD ROCm, Intel, Macs) and Google's TPUs.
+It also supports modern distributed execution (**new, still being actively improved**) for multi-TPU or multi-GPU
+using XLA Shardy, an evolution of the [GSPMD distribution](https://arxiv.org/abs/2105.04663)).
+
+It's the same engine that powers Google's [Jax](https://github.com/google/jax), 
+[TensorFlow](https://tensorflow.org/) and [Pytorch/XLA](https://docs.pytorch.org/xla/master/learn/xla-overview.html),
+and it has the same speed in many cases. 
 Use this backend to train large models or with large datasets.
-This only compiles for Linux/amd-64 for now (but with the integration of the [StableHLO](https://github.com/gomlx/stablehlo)
-it should soon work in macOS as well).
 
 > [!Tip]
 > * See our 🎓 [**tutorial**](https://gomlx.github.io/gomlx/notebooks/tutorial.html) 🎓
-> * See _Eli Bendersky_'s blog post ["GoMLX: ML in Go without Python"](https://eli.thegreenplace.net/2024/gomlx-ml-in-go-without-python/)
+> * See _Eli Bendersky_'s blog post ["GoMLX: ML in Go without Python"](https://eli.thegreenplace.net/2024/gomlx-ml-in-go-without-python/), 
+>   (a bit outdated, but still useful)
 > * A [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
 > * [Installation here](#installation).
 
 <div>
-<p>It was developed to be a full-featured ML platform for Go and to easily experiment with ML ideas—see Long-Term Goals below.</p>
+<p>It was developed to be a full-featured ML platform for Go, productionizable and easily to experiment with ML ideas
+—see Long-Term Goals below.</p>
 
 It strives to be **simple to read and reason about**, leading the user to a correct and transparent mental model 
 of what is going on (no surprises)—aligned with Go philosophy.
@@ -79,6 +83,10 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
     positions on the board. It includes a [WASM demo (runs GoMLX in the browser!)](https://janpfeifer.github.io/hiveGo/www/hive/) and a command-line UI to test your skills!
 
 **Highlights:**
+
+> **🚀 NEW 🚀**: **Distributed Execution** (across multiple GPUs or TPUs) with little hints from the user.
+> One only needs to configure a distributed dataset, and the trainer picks up from there.
+> See code change in [UCI-Adult demo](https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/main.go#L222)
 
 > **🚀 NEW 🚀**: Fixed Mac support for the XLA backend, including installer. Only CPU for now, 
 > see [jax/issues/32800](https://github.com/jax-ml/jax/issues/32800) for the request to Apple developers 
@@ -141,7 +149,8 @@ go run github.com/gomlx/gopjrt/cmd/gopjrt_installer@latest
 ```
 
 > [!NOTE]
-> For now it works for (1) CPU PJRT on linux/amd64 (or Windows+WSL); (2) Nvidia CUDA PJRT on Linux/amd64; (3) CPU PJRT on Darwin (macOS).
+> For now it works for (1) CPU PJRT on linux/amd64 (or Windows+WSL); (2) Nvidia CUDA PJRT on Linux/amd64; (3) CPU PJRT on Darwin (macOS);
+> (4) TPUs in Google Cloud.
 > I would love to support for AMD ROCm, Apple Metal (GPU), Intel, and others, but I don't have easy access to hardwre to test/maintain them.
 > If you feel like contributing or donating hardware/cloud credits, please contact me.
 
