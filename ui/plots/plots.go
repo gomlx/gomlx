@@ -13,7 +13,6 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	lgtable "github.com/charmbracelet/lipgloss/table"
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
@@ -77,9 +76,7 @@ type CustomMetricFn func(plotter Plotter, step float64) error
 func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []*tensors.Tensor,
 	evalDatasets []train.Dataset, batchNormAveragesDS train.Dataset) error {
 	if batchNormAveragesDS != nil {
-		err := exceptions.TryCatch[error](func() {
-			batchnorm.UpdateAverages(loop.Trainer, batchNormAveragesDS)
-		})
+		_, err := batchnorm.UpdateAverages(loop.Trainer, batchNormAveragesDS)
 		if err != nil {
 			return errors.WithMessagef(err, "Updating batch normalization averages before evaluation: ")
 		}

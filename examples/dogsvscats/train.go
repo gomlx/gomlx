@@ -263,7 +263,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 			loop.LoopStep,
 			loop.MedianTrainStepDuration().Microseconds(),
 		)
-		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
+		if must.M1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			must.M(checkpoint.Save())
 		}

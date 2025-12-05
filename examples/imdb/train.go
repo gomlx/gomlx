@@ -254,7 +254,7 @@ func TrainModel(
 		}
 
 		// Update batch normalization averages, if they are used.
-		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
+		if must.M1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpoint != nil {
 				must.M(checkpoint.Save())

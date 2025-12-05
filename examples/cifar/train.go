@@ -68,7 +68,7 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 	if evalBatchSize <= 0 {
 		evalBatchSize = batchSize
 	}
-	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(Backend, dataDir, batchSize, evalBatchSize)
+	trainDS, trainEvalDS, testEvalDS := CreateDatasets(Backend, dataDir, batchSize, evalBatchSize)
 
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
@@ -125,9 +125,9 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
-			WithDatasets(evalOnTrainDS, evalOnTestDS).
+			WithDatasets(trainEvalDS, testEvalDS).
 			ScheduleExponential(loop, 200, 1.2).
-			WithBatchNormalizationAveragesUpdate(evalOnTrainDS)
+			WithBatchNormalizationAveragesUpdate(trainEvalDS)
 	}
 
 	// Loop for given number of steps.
@@ -144,7 +144,7 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 		}
 
 		// Update batch normalization averages, if they are used.
-		if batchnorm.UpdateAverages(trainer, evalOnTrainDS) {
+		if must.M1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			if verbosity >= 1 {
 				fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			}
@@ -163,7 +163,7 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 		if verbosity >= 1 {
 			fmt.Println()
 		}
-		must.M(commandline.ReportEval(trainer, evalOnTestDS, evalOnTrainDS))
+		must.M(commandline.ReportEval(trainer, testEvalDS, trainEvalDS))
 	}
 }
 
