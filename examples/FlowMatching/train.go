@@ -170,7 +170,11 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		}
 
 		// Update batch normalization averages, if they are used.
-		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
+		bnUpdated, err := batchnorm.UpdateAverages(trainer, trainEvalDS)
+		if err != nil {
+			klog.Exitf("Error while updating batch normalization averages: %+v", err)
+		}
+		if bnUpdated {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpoint != nil {
 				must.M(checkpoint.Save())

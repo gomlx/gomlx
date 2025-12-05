@@ -22,6 +22,8 @@ const (
 // calling this function.
 //
 // Usually this method is not used directly, instead use batchnorm.UpdateAverages.
+//
+// DistributedDatasets are not accepted yet -- open an issue if you need it.
 func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) error {
 	var err error
 	for phase := range 2 {
@@ -65,6 +67,7 @@ func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) error {
 				"running mean/average")
 		}
 	}
+	return nil
 }
 
 // batchNormAveragesStep runs one forward step on the model, with the model frozen, except

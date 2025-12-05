@@ -403,6 +403,8 @@ const (
 //
 // It returns whether batch normalization was used and averages were updated.
 //
+// An error is only returned if it attempts to update the averages.
+//
 // See discussions:
 // - https://www.mindee.com/blog/batch-normalization
 // - https://discuss.pytorch.org/t/batch-norm-instability/32159/14
