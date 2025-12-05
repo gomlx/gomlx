@@ -372,16 +372,17 @@ func (builder *Config) updateMeanAndVariance(
 // It is a no-op if no batch-normalization was used.
 //
 // Usually this method is not used directly, instead use UpdateAverages.
-func ResetWeights(ctx *context.Context) {
+func ResetWeights(ctx *context.Context) error {
 	suffix := "/" + BatchNormalizationScopeName
-	ctx.EnumerateVariablesInScope(func(v *context.Variable) {
+	for v := range ctx.IterVariablesInScope() {
 		if strings.HasSuffix(v.Scope(), suffix) && v.Name() == "avg_weight" {
 			err := v.Reset()
 			if err != nil {
-				panic(err)
+				return err
 			}
 		}
-	})
+	}
+	return nil
 }
 
 const (
@@ -402,19 +403,19 @@ const (
 //
 // It returns whether batch normalization was used and averages were updated.
 //
-// It pancis in case of errors.
-//
 // See discussions:
 // - https://www.mindee.com/blog/batch-normalization
 // - https://discuss.pytorch.org/t/batch-norm-instability/32159/14
-func UpdateAverages(trainer *train.Trainer, oneEpochDS train.Dataset) bool {
+func UpdateAverages(trainer *train.Trainer, oneEpochDS train.Dataset) (bool, error) {
 	ctx := trainer.Context()
 	if !context.GetParamOr(ctx, AveragesUpdatesTriggerParam, false) {
 		// No-op.
-		return false
+		return false, nil
 	}
 
-	ResetWeights(ctx)
-	trainer.BatchNormalizationAveragesUpdate(oneEpochDS)
-	return true
+	err := ResetWeights(ctx)
+	if err != nil {
+		return true, err
+	}
+	return true, trainer.BatchNormalizationAveragesUpdate(oneEpochDS)
 }

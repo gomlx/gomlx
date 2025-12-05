@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"testing"
+
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
 	"github.com/stretchr/testify/require"
-	"os"
-	"testing"
 )
 
 func TestPerturbVars(t *testing.T) {
@@ -30,7 +31,8 @@ func TestPerturbVars(t *testing.T) {
 	newCtx := context.New()
 	_, err = checkpoints.Build(newCtx).Dir(tmpDir).Immediate().Done()
 	require.NoError(t, err)
-	perturbedT := newCtx.GetVariable("test_var").Value()
+	perturbedT, err := newCtx.GetVariable("test_var").Value()
+	require.NoError(t, err)
 	var lowerCount, higherCount int
 	tensors.ConstFlatData(perturbedT, func(flat []float64) {
 		for _, v := range flat {
