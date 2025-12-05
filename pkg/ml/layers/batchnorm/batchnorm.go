@@ -28,6 +28,7 @@ import (
 
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
@@ -376,7 +377,8 @@ func ResetWeights(ctx *context.Context) error {
 	suffix := "/" + BatchNormalizationScopeName
 	for v := range ctx.IterVariablesInScope() {
 		if strings.HasSuffix(v.Scope(), suffix) && v.Name() == "avg_weight" {
-			err := v.Reset()
+			zeros := tensors.FromShape(v.Shape())
+			err := v.SetValue(zeros)
 			if err != nil {
 				return err
 			}
