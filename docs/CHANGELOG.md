@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+# Next:
+
+- Package `tensors`:
+  - Added `CopyFlatData()` that returns an error (it was previously renamed to `MustCopyFlatData`)
+
 # v0.25.0: Distributed execution; API cleanup (more Go idiomatic)
 
 Hightlights:

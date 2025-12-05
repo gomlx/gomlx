@@ -408,16 +408,32 @@ func ToScalar[T dtypes.Supported](t *Tensor) T {
 	return t.local.flat.([]T)[0]
 }
 
+// CopyFlatData returns a copy of the flat data of the Tensor.
+//
+// It triggers a synchronous transfer from device to local if the tensor is only on-device.
+//
+// It returns an error if the given generic type doesn't match the DType of the tensor.
+func CopyFlatData[T dtypes.Supported](t *Tensor) ([]T, error) {
+	var flatCopy []T
+	err := ConstFlatData(t, func(flat []T) {
+		flatCopy = xslices.Copy(flat)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return flatCopy, nil
+}
+
 // MustCopyFlatData returns a copy of the flat data of the Tensor.
 //
 // It triggers a synchronous transfer from device to local if the tensor is only on-device.
 //
 // It will panic if the given generic type doesn't match the DType of the tensor.
 func MustCopyFlatData[T dtypes.Supported](t *Tensor) []T {
-	var flatCopy []T
-	MustConstFlatData(t, func(flat []T) {
-		flatCopy = xslices.Copy(flat)
-	})
+	flatCopy, err := CopyFlatData[T](t)
+	if err != nil {
+		panic(err)
+	}
 	return flatCopy
 }
 
