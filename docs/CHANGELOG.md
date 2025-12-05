@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# v0.25.0: (Release Candidate 1) Distributed execution; API cleanup (more Go idiomatic)
+# v0.25.0: Distributed execution; API cleanup (more Go idiomatic)
 
 Hightlights:
 
