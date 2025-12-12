@@ -6,7 +6,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 )
 
 // EmbedTokensGraph creates embeddings for tokens and returns them along with the mask of used tokens --

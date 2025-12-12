@@ -6,11 +6,11 @@ import (
 	"runtime"
 	"unsafe"
 
+	"github.com/gomlx/go-xla/pkg/pjrt"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -19,10 +19,11 @@ import (
 type Backend struct {
 	plugin           *pjrt.Plugin
 	client           *pjrt.Client
-	numDevices       int
 	pluginName       string
 	hasSharedBuffers bool
 	capabilities     backends.Capabilities
+	numDevices       int
+	DotGeneralConfig
 }
 
 // Compile-time check:
@@ -42,7 +43,7 @@ func (backend *Backend) CheckValid() error {
 	return nil
 }
 
-// Name returns the short name of the backend. E.g.: "xla" for the Xla/PJRT plugin.
+// Name returns the short name of the backend. E.g.: "stablehlo" for the StableHLO/PJRT plugin.
 func (backend *Backend) Name() string {
 	return BackendName
 }
@@ -57,7 +58,7 @@ func (backend *Backend) Description() string {
 	if backend.CheckValid() != nil {
 		return fmt.Sprintf("%s: in an invalid state!", BackendName)
 	}
-	return fmt.Sprintf("%s:%s - %s", BackendName, backend.pluginName, backend.plugin)
+	return fmt.Sprintf("%s:%s - %s [%d device(s)]", BackendName, backend.pluginName, backend.plugin, backend.numDevices)
 }
 
 // NumDevices return the number of devices available for this Backend.
@@ -84,7 +85,7 @@ func (backend *Backend) DeviceDescription(deviceNum backends.DeviceNum) string {
 	return fmt.Sprintf("%s [processId=%d]", pjrtDesc.DebugString(), pjrtDesc.ProcessIndex())
 }
 
-// Finalize releases all the associated resources immediately, and makes the backend invalid.
+// Finalize releases all the associated resources immediately and makes the backend invalid.
 func (backend *Backend) Finalize() {
 	if backend.plugin == nil {
 		return
@@ -262,7 +263,13 @@ func (backend *Backend) BufferData(buffer backends.Buffer) (flat any, err error)
 	if err := backend.CheckValid(); err != nil {
 		return nil, err
 	}
-	buf := buffer.(*pjrt.Buffer)
+	buf, ok := buffer.(*pjrt.Buffer)
+	if !ok {
+		return nil, errors.Errorf("buffer is not a %q backend buffer", BackendName)
+	}
+	if err = buf.Check(); err != nil {
+		return nil, err
+	}
 	flat, err = buf.Data()
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to access buffer data directly, maybe not supported by backend?")
@@ -275,9 +282,41 @@ func (backend *Backend) Capabilities() backends.Capabilities {
 	return backend.capabilities
 }
 
-// BufferCopyToDevice implements the backends.Backend interface. Not implemented for the old xla backend.
+// BufferCopyToDevice implements the backends.Backend interface.
 func (backend *Backend) BufferCopyToDevice(source backends.Buffer, deviceNum backends.DeviceNum) (
 	bufferOnDevice backends.Buffer, err error) {
-	return nil, errors.Errorf("backend %q: BufferCopyToDevice not implemented -- maybe "+
-		"use the new XLA's stablehlo backend ?", BackendName)
+	if err := backend.CheckValid(); err != nil {
+		return nil, err
+	}
+	srcBuf, ok := source.(*pjrt.Buffer)
+	if !ok {
+		return nil, errors.Errorf("buffer is not a %q backend buffer", BackendName)
+	}
+	if err = srcBuf.Check(); err != nil {
+		return nil, err
+	}
+	var srcDevice *pjrt.Device
+	srcDevice, err = srcBuf.Device()
+	if err != nil {
+		return nil, errors.WithMessagef(err, "backend %q: BufferCopyToDevice failed to get device information", BackendName)
+	}
+
+	devices := backend.client.AddressableDevices()
+	if deviceNum < 0 || int(deviceNum) >= len(devices) {
+		err = errors.Errorf("deviceNum=%d not available for backend, only %d devices are available", deviceNum, len(devices))
+		return
+	}
+	device := devices[deviceNum]
+	if srcDevice == device {
+		return nil, errors.Errorf("backend %q: BufferCopyToDevice source and destination (#%d) "+
+			"are the same device", BackendName, deviceNum)
+	}
+
+	var newBuf *pjrt.Buffer
+	newBuf, err = srcBuf.CopyToDevice(device)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "backend %q: BufferCopyToDevice failed to copy "+
+			"buffer to device", BackendName)
+	}
+	return newBuf, nil
 }

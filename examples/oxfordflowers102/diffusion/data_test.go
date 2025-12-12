@@ -6,7 +6,7 @@ import (
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/stretchr/testify/require"
 	"io"
 	"testing"

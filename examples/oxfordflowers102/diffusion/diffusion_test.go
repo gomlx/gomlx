@@ -11,7 +11,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/stretchr/testify/assert"
 
 	_ "github.com/gomlx/gomlx/backends/default"

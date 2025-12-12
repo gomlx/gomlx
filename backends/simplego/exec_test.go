@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/stretchr/testify/require"
 
 	"github.com/gomlx/gomlx/backends"

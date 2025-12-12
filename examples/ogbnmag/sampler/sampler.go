@@ -11,7 +11,7 @@ import (
 	humanize "github.com/dustin/go-humanize"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/pkg/errors"
 )
 

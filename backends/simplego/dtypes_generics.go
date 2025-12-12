@@ -2,8 +2,8 @@ package simplego
 
 import (
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 )
 
 const MaxDTypes = 32

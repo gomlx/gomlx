@@ -5,7 +5,7 @@ import (
 
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 )
 
 // File with image manipulation tools

@@ -1,81 +1,53 @@
-package xla
+package xla_test
 
 import (
-	"flag"
 	"fmt"
-	"math/rand"
-	"runtime"
+	"os"
 	"testing"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/stretchr/testify/require"
+	"github.com/gomlx/gomlx/backends/xla"
+	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/stretchr/testify/assert"
+	"k8s.io/klog/v2"
 )
 
-var flagPlugin = flag.String("plugin", "cpu", "Plugin to use for testing for xla backend")
+var backend backends.Backend
 
-func TestRepeatedClients(t *testing.T) {
-	fmt.Println("Creating and destroying 10 backend clients: one at a time")
-	for range 10 {
-		backend, err := New(*flagPlugin)
-		require.NoError(t, err)
-		backend.Finalize()
-	}
+func init() {
+	klog.InitFlags(nil)
+}
 
-	fmt.Println("Creating and destroying 10 backend clients: all at once")
-	testBackends := make([]backends.Backend, 0, 10)
-	for range 10 {
-		backend, err := New(*flagPlugin)
-		require.NoError(t, err)
-		testBackends = append(testBackends, backend)
+func setup() {
+	fmt.Printf("Available backends: %q\n", backends.List())
+	if os.Getenv(backends.ConfigEnvVar) == "" {
+		must.M(os.Setenv(backends.ConfigEnvVar, xla.BackendName))
+	} else {
+		fmt.Printf("\t$%s=%q\n", backends.ConfigEnvVar, os.Getenv(backends.ConfigEnvVar))
 	}
-	for _, backend := range testBackends {
-		backend.Finalize()
+	backend = backends.MustNew()
+	fmt.Printf("Backend: %s, %s\n", backend.Name(), backend.Description())
+	fmt.Printf("\t- Add flag -vmodule=executable=2 to log the StableHLO program being executed.\n")
+	for deviceNum := range backends.DeviceNum(backend.NumDevices()) {
+		fmt.Printf("\t- Device #%d: %s\n", deviceNum, backend.DeviceDescription(deviceNum))
 	}
+}
 
-	fmt.Println("Creating and destroying 10 backend and graphs: one at a time")
-	for ii := range 100 {
-		backend, err := New(*flagPlugin)
-		require.NoError(t, err)
-		builder := backend.Builder(fmt.Sprintf("builder_#%d", ii))
-		var exec backends.Executable
-		{
-			x, err := builder.Parameter("x", shapes.Make(dtypes.Float64, 3), nil)
-			require.NoError(t, err)
-			for range rand.Intn(10) {
-				x, err = builder.Add(x, x)
-				require.NoError(t, err)
-			}
-			x2, err := builder.Mul(x, x)
-			require.NoError(t, err)
-			exec, err = builder.Compile([]backends.Op{x, x2}, nil)
-			require.NoError(t, err)
+func teardown() {
+	backend.Finalize()
+}
 
-			bIn, err := backend.BufferFromFlatData(0, []float64{7, 2, 1}, shapes.Make(dtypes.Float64, 3))
-			require.NoError(t, err)
-			bOuts, err := exec.Execute([]backends.Buffer{bIn}, []bool{true}, 0)
-			require.NoError(t, err)
-			out0, out1 := make([]float64, 3), make([]float64, 3)
-			err = backend.BufferToFlatData(bOuts[0], out0)
-			require.NoError(t, err)
-			err = backend.BufferToFlatData(bOuts[1], out1)
-			require.NoError(t, err)
-			fmt.Printf("output=%v, %v\n", out0, out1)
-			for range 10 {
-				runtime.GC()
-			}
-			err = backend.BufferFinalize(bIn)
-			require.NoError(t, err)
-			err = backend.BufferFinalize(bOuts[0])
-			require.NoError(t, err)
-			err = backend.BufferFinalize(bOuts[1])
-			require.NoError(t, err)
-		}
-		_ = exec
-		backend.Finalize()
-	}
-	for _, backend := range testBackends {
-		backend.Finalize()
-	}
+func TestMain(m *testing.M) {
+	setup()
+	code := m.Run() // Run all tests in the file
+	teardown()
+	os.Exit(code)
+}
+
+func TestCompileAndRun(t *testing.T) {
+	// Just return a constant.
+	exec := graph.MustNewExec(backend, func(g *graph.Graph) *graph.Node { return graph.Const(g, float32(-7)) })
+	y0 := exec.MustExec()[0]
+	assert.Equal(t, float32(-7), y0.Value())
 }

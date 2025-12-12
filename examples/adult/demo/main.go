@@ -46,7 +46,7 @@ import (
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 	"k8s.io/klog/v2"

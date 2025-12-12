@@ -19,7 +19,7 @@ package shapes
 import (
 	"testing"
 
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/stretchr/testify/require"
 )
 

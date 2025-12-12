@@ -2,7 +2,7 @@ package graph_test
 
 import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"testing"
 )
 

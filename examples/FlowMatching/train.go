@@ -22,7 +22,7 @@ import (
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	stdplots "github.com/gomlx/gomlx/ui/plots"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"k8s.io/klog/v2"
 )
 

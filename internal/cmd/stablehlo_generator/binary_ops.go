@@ -65,7 +65,7 @@ package stablehlo
 
 import (
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/stablehlo"
+	"github.com/gomlx/go-xla/pkg/stablehlo"
 )
 
 {{- range .}}

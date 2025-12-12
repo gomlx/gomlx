@@ -1,55 +1,75 @@
-// Package xla implements the XLA/PJRT (https://openxla.org/) based backend for GoMLX.
+// Package xla implements a GoMLX backend using Google's XLA (see github.com/gomlx/go-xla).
 //
-// Deprecated: use the new `stablehlo` backend, a new "intermediate representation" to execute computation graphs
-// on the same XLA's PJRT executors -- it's much better supported.
+// The backend is registered with the aliases "xla", "stablehlo", "shlo" or "hlo" (all aliases to the same backend).
 //
-// To make it available in your program, import it with:
+// By default, the XLA/PJRT backend loads the requested plugins after the program starts and specifies the desired
+// plugin name (default to "cpu") using `dlopen`.
 //
-//	import _ "github.com/gomlx/gomlx/backends/xla"
+// If the plugins are not available, the backend will download them automatically:
 //
-// It will register itself as an available backend during initialization.
+// - From github.com/gomlx/pjrt-cpu-binaries for CPU PJRT plugins.
+// - From pypi.org, using the Jax pacakges for the CUDA and TPU PJRT plugins.
 //
-// By default, XLA/PJRT backend loads requested plugins after the program starts and specifies the desired
-// plugin name (default to "cpu") using `dlopen`. Now there are cases that one may simply want to pre-link
-// a plugin with the program. There are two options here (at most one can be selected):
+// If they are already installed (like when building a self-contained docker), this doesn't happened.
+// Set GOMLX_NO_AUTO_INSTALL to prevent any attempts at auto-installation.
+//
+// Experimentally, one can get this backend to work with pre-linked PJRT plugins, but it will require the user to
+// add the `.so` files in a library in LD_LIBRARY_PATH, or precompile a `.a` static library.
 //
 //   - Pre-link the CPU PJRT plugin statically: this will generate a bigger binary (+ ~200Mb, so slower to build),
 //     but allows one to build a static binary that can be deployed without extra dependencies (except the standard C and C++ libraries,
 //     usually available in most machines).
 //     To enable, build using the tag `pjrt_cpu_static` (e.g.: `go build --tags pjrt_cpu_static ...`),
-//     or import `github.com/gomlx/gomlx/backends/xla/cpu/static`. Both methods have the same effect.
+//     or import `github.com/gomlx/gomlx/backends/stablehlo/cpu/static`. Both methods have the same effect.
 //   - Pre-link the CPU PJRT plugin dynamically: build with the build tag `pjrt_cpu_dynamic` (e.g.: `go test --tags pjrt_cpu_dynamic ...`),
-//     or import `github.com/gomlx/gomlx/backends/xla/cpu/dynamic`. Not much difference from linking the PJRT plugin
+//     or import `github.com/gomlx/gomlx/backends/stablehlo/cpu/dynamic`. Not much difference from linking the PJRT plugin
 //     after the program starts, as default.
-//
-// Darwin (MacOS): currently dynamic linking XLA/PJRT is not working, so it links the CPU PJRT plugin by default,
-// no need to manually link `github.com/gomlx/gomlx/backends/xla/cpu/static`.
 //
 // # Shared Buffers Support:
 //
 // XLA/PJRT for CPU allows the "device buffer" (where device=CPU) to be addressed directly, which
 // saves the copy from "host/local tensor" to the "on-device tensor" when executing a computation.
 // This is enabled by default if the plugin is called "cpu". To force advertising support for this
-// for other PJRTs provide the "shared_buffers" option, e.g.: GOMLX_BACKEND="oldxla:my_pjrt,shared_buffers".
+// for other PJRTs provide the "shared_buffers" option, e.g.: GOMLX_BACKEND="xla:my_pjrt,shared_buffers".
 // Or to force disabling the support, provide the "noshared_buffers" option.
 package xla
 
-//go:generate go run ../../internal/cmd/xla_generator
-
 import (
+	"os"
 	"path"
 	"slices"
 	"strings"
 
+	"github.com/gomlx/go-xla/pkg/installer"
+	"github.com/gomlx/go-xla/pkg/pjrt"
+	xlashapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
 
-const BackendName = "oldxla"
+//go:generate go run ../../internal/cmd/stablehlo_generator
+
+// BackendName is the name of the backend.
+//
+// The stablehlo backend also accepts the "xla", "hlo" and "pjrt" aliases.
+const BackendName = "xla"
+
+// Disable XLA logging by default by setting TF_CPP_MIN_LOG_LEVEL to 2 (errors level), if it is not already set.
+// This won't work if the PJRT is linked statically or dynamically before the go program start (without `dlopen` that is).
+func init() {
+	const TensorflowCPPMinLogLevelEnv = "TF_CPP_MIN_LOG_LEVEL"
+	tfLogLevel := os.Getenv(TensorflowCPPMinLogLevelEnv)
+	if tfLogLevel == "" {
+		err := os.Setenv(TensorflowCPPMinLogLevelEnv, "2")
+		if err != nil {
+			klog.Errorf("Failed to set $%s to 2: %v", TensorflowCPPMinLogLevelEnv, err)
+		}
+	}
+}
 
 // New returns a new Backend using the config as a configuration.
 // The config string should be the name of the PJRT plugin to use.
@@ -57,7 +77,7 @@ func New(config string) (backends.Backend, error) {
 	return NewWithOptions(config, nil)
 }
 
-// NewWithOptions creates a XlaBackend with the given client options.
+// NewWithOptions creates a StableHLO backend with the given client options.
 // It allows more control, not available with the default New constructor.
 func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error) {
 	pluginName := config
@@ -70,6 +90,10 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 	}
 
 	if !path.IsAbs(pluginName) {
+		err := AutoInstall()
+		if err != nil {
+			return nil, errors.WithMessagef(err, "backend %q failed to auto-install default plugins", BackendName)
+		}
 		// Verify the pluginName is available.
 		plugins := GetAvailablePlugins()
 		if len(plugins) == 0 {
@@ -98,7 +122,7 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		plugin:       plugin,
 		client:       client,
 		pluginName:   pluginName,
-		capabilities: CPUCapabilities.Clone(),
+		capabilities: Capabilities.Clone(),
 		numDevices:   len(client.AddressableDevices()),
 	}
 
@@ -111,29 +135,53 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		backend.hasSharedBuffers = false
 		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
 	}
+
+	// Support for tf32 DotGeneral.
+	if idx := slices.Index(pluginOptions, "tf32"); idx != -1 {
+		backend.DotGeneralConfig.UseTF32 = true
+		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
+	}
+
+	// Any leftover plugin options are unknown.
 	if len(pluginOptions) != 0 {
 		klog.Errorf("backend %q: unknown plugin options %q", BackendName, pluginOptions)
 	}
 	return backend, nil
 }
 
-// Registers New() as the default constructor for "oldxla" backend.
+// Registers New() as the default constructor for "xla" backend.
 func init() {
 	backends.Register(BackendName, New)
+
+	// Other aliases for this backend.
+	backends.Register("stablehlo", New)
+	backends.Register("hlo", New)
+	backends.Register("shlo", New)
 }
 
 var (
 	// DefaultPlugins is the list of plugins to use in preference order, if not otherwise specified.
 	DefaultPlugins = []string{"cuda", "cpu"}
 
-	// availablePluginsList are the keys to availablePluginsMap sorted by DefaultPlugins.
+	// availablePluginsList are the keys to the available plugins sorted by DefaultPlugins.
 	availablePluginsList []string
 )
 
+const NoAutoInstallEnv = "GOMLX_NO_AUTO_INSTALL"
+
+func AutoInstall() error {
+	_, found := os.LookupEnv(NoAutoInstallEnv)
+	if found {
+		// No auto-installation requested.
+		return nil
+	}
+	return installer.AutoInstall("", true, installer.Normal)
+}
+
 // GetAvailablePlugins lists the available platforms -- it caches and reuses the result in future calls.
 //
-// Plugins are searched in the PJRT_PLUGIN_LIBRARY_PATH directory -- or directories, if it is a ":" separated list.
-// If it is not set it will search in "/usr/local/lib/gomlx/pjrt" and the standard libraries directories of the
+// Plugins are searched in the PJRT_PLUGIN_LIBRARY_PATH directory -- or directories if it is a ":" separated list.
+// If it is not set, it will search in "/usr/local/lib/gomlx/pjrt" and the standard libraries directories of the
 // system (in linux in LD_LIBRARY_PATH and /etc/ld.so.conf file) in that order.
 //
 // If there are plugins with the same name but different versions in different directories, it respects the order of the directories given by
@@ -141,6 +189,11 @@ var (
 //
 // See details in pjrt.AvailablePlugins.
 func GetAvailablePlugins() []string {
+	err := AutoInstall()
+	if err != nil {
+		klog.Errorf("Error auto-installing plugins: %+v", err)
+	}
+
 	if len(availablePluginsList) > 0 {
 		// Use cache results.
 		return availablePluginsList
@@ -164,4 +217,20 @@ func GetAvailablePlugins() []string {
 		availablePluginsList = append(availablePluginsList, pluginName)
 	}
 	return availablePluginsList
+}
+
+// ShapeToXLA converts a GomlX shape to a go-xla shape.
+func ShapeToXLA(shape shapes.Shape) xlashapes.Shape {
+	if !shape.Ok() || shape.IsTuple() {
+		return xlashapes.Invalid()
+	}
+	return xlashapes.Make(shape.DType, slices.Clone(shape.Dimensions)...)
+}
+
+// ShapeFromXLA converts a go-xla shape to a GomlX shape.
+func ShapeFromXLA(shape xlashapes.Shape) shapes.Shape {
+	if !shape.Ok() || shape.IsTuple() {
+		return shapes.Invalid()
+	}
+	return shapes.Make(shape.DType, slices.Clone(shape.Dimensions)...)
 }

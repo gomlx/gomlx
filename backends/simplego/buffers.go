@@ -6,7 +6,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/pkg/errors"
 
 	"github.com/gomlx/gomlx/backends"

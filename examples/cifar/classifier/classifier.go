@@ -16,7 +16,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/tensors/images"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/pkg/errors"
 	"image"
 )

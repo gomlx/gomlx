@@ -1,4 +1,4 @@
-package stablehlo_test
+package xla_test
 
 import (
 	"testing"

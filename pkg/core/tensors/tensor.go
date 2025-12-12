@@ -83,7 +83,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/pkg/errors"
 )
 

@@ -6,5 +6,5 @@ package xla
 
 import (
 	// Link CPU PJRT statically.
-	_ "github.com/gomlx/gopjrt/pjrt/cpu/static"
+	_ "github.com/gomlx/go-xla/pkg/pjrt/cpu/static"
 )

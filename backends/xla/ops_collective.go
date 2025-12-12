@@ -1,10 +1,10 @@
-package stablehlo
+package xla
 
 import (
+	"github.com/gomlx/go-xla/pkg/stablehlo"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/stablehlo"
 	"github.com/pkg/errors"
 )
 

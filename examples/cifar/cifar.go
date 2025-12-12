@@ -34,7 +34,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/pkg/errors"
 )
 

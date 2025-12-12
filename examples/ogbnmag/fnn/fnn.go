@@ -22,7 +22,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
