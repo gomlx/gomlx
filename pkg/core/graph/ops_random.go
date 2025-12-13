@@ -22,12 +22,9 @@ var (
 
 // RNGStateFromSeed creates a random number generator (RNG) state based on the static seed.
 //
-// Notice it returns a concrete tensor value that can be used to set a variable or
-// constant to be used in a graph.
+// Notice it returns a concrete tensor value and an error.
 //
-// Typical use case would be to use like:
-//
-//	rngState := Const(g, must.M1(RNGStateFromSeed(42)))
+// If you want it as a constant in the graph, use RNGStateFromSeedForGraph.
 func RNGStateFromSeed(seed int64) (*tensors.Tensor, error) {
 	rngSrc := rand.NewSource(seed)
 	rng := rand.New(rngSrc)
@@ -78,6 +75,20 @@ func RNGState() (*tensors.Tensor, error) {
 //	rngState := RNGStateForGraph(g)
 func RNGStateForGraph(g *Graph) *Node {
 	state, err := RNGState()
+	if err != nil {
+		panic(err)
+	}
+	return Const(g, state)
+}
+
+// RNGStateFromSeedForGraph creates a random number generator (RNG) state initialized using the given seed.
+// It returns a constant in the graph with the value, that can be used for random operations.
+//
+// A typical use case would be to use like:
+//
+//	rngState := RNGStateFromSeedForGraph(g, 12345)
+func RNGStateFromSeedForGraph(g *Graph, seed int64) *Node {
+	state, err := RNGStateFromSeed(seed)
 	if err != nil {
 		panic(err)
 	}
