@@ -20,7 +20,18 @@ Other updates:
 - Package `tensors`:
   - Added `CopyFlatData()` that returns an error (it was previously renamed to `MustCopyFlatData`)
 - Package `graph`:
-  - Added `RNGStateFromSeedForGraph(g *Graph, seed uint64)` to create a RNG state for a graph.
+  - Added 'RNGStateFromSeedForGraph' function to create a RNG state from a seed for a graph.
+
+# v0.25.0: Distributed execution; API cleanup (more Go idiomatic)
+
+Hightlights:
+
+- Distributed (cross-devices) execution: with AutoSharding and SPMD strategies; 
+  Also added support for "portable device" execution.
+
+- API changes: (will require simple fixes)
+  - Most not graph building APIs now return errors (as opposed to panicking). Graph building functions
+    still use panic to return error -- otherwise it's too painful to express math.
   - All "Rng" renamed to "RNG" -- acronyms in Go are usually capitalized.
 
 Distributed computation improvements and refactorings:
