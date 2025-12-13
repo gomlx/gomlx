@@ -5,13 +5,17 @@
 // By default, the XLA/PJRT backend loads the requested plugins after the program starts and specifies the desired
 // plugin name (default to "cpu") using `dlopen`.
 //
-// If the plugins are not available, the backend will download them automatically:
+// If the plugins are not available, the backend will download them automatically ("auto-install):
 //
 // - From github.com/gomlx/pjrt-cpu-binaries for CPU PJRT plugins.
 // - From pypi.org, using the Jax pacakges for the CUDA and TPU PJRT plugins.
 //
-// If they are already installed (like when building a self-contained docker), this doesn't happened.
-// Set GOMLX_NO_AUTO_INSTALL to prevent any attempts at auto-installation.
+// Auto-install has no effect if default plugins are already installed. But to control it you can:
+//
+//   - Call xla.AutoInstall() directly if you want to call it immediately.
+//   - Configure it with xla.EnableAutoInstall() if you want to enable/disable it globally (default is enabled).
+//   - Set GOMLX_NO_AUTO_INSTALL, which sets the global auto-install flag to false -- but it can be overridden by
+//     calling xla.EnableAutoInstall().
 //
 // Experimentally, one can get this backend to work with pre-linked PJRT plugins, but it will require the user to
 // add the `.so` files in a library in LD_LIBRARY_PATH, or precompile a `.a` static library.
@@ -73,12 +77,16 @@ func init() {
 
 // New returns a new Backend using the config as a configuration.
 // The config string should be the name of the PJRT plugin to use.
+//
+// This function triggers AutoInstall if it is enabled (the default). See EnableAutoInstall to disable it.
 func New(config string) (backends.Backend, error) {
 	return NewWithOptions(config, nil)
 }
 
 // NewWithOptions creates a StableHLO backend with the given client options.
 // It allows more control, not available with the default New constructor.
+//
+// This function triggers AutoInstall if it is enabled (the default). See EnableAutoInstall to disable it.
 func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error) {
 	pluginName := config
 	var pluginOptions []string
@@ -90,10 +98,13 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 	}
 
 	if !path.IsAbs(pluginName) {
-		err := AutoInstall()
-		if err != nil {
-			return nil, errors.WithMessagef(err, "backend %q failed to auto-install default plugins", BackendName)
+		if autoInstall {
+			err := AutoInstall()
+			if err != nil {
+				return nil, errors.WithMessagef(err, "backend %q failed to auto-install default plugins", BackendName)
+			}
 		}
+
 		// Verify the pluginName is available.
 		plugins := GetAvailablePlugins()
 		if len(plugins) == 0 {
@@ -167,31 +178,53 @@ var (
 	availablePluginsList []string
 )
 
-const NoAutoInstallEnv = "GOMLX_NO_AUTO_INSTALL"
+var autoInstall bool = true // Whether it should always auto-install at every call to New()
 
-func AutoInstall() error {
+func init() {
 	_, found := os.LookupEnv(NoAutoInstallEnv)
 	if found {
-		// No auto-installation requested.
-		return nil
+		autoInstall = false
 	}
+}
+
+const NoAutoInstallEnv = "GOMLX_NO_AUTO_INSTALL"
+
+// AutoInstall the standard plugin version tested for the current go-xla version.
+// If GPU or TPU are detected, it will also install the corresponding plugins.
+//
+// This simply calls github.com/gomlx/go-xla/pkg/installer.AutoInstall().
+// If you want more control over the installation path, cache usage, or verbosity,
+// you can use the AutoInstall function from go-xla's installer package directly.
+func AutoInstall() error {
 	return installer.AutoInstall("", true, installer.Normal)
+}
+
+// EnableAutoInstall sets whether AutoInstall should be triggered automatically for GetAvailablePlugins or New.
+//
+// If enabled, the default, the AutoInstall function will be called automatically when GetAvailablePlugins or New is called.
+func EnableAutoInstall(enable bool) {
+	autoInstall = enable
 }
 
 // GetAvailablePlugins lists the available platforms -- it caches and reuses the result in future calls.
 //
+// This function triggers AutoInstall if it is enabled (the default). See EnableAutoInstall to disable it.
+//
 // Plugins are searched in the PJRT_PLUGIN_LIBRARY_PATH directory -- or directories if it is a ":" separated list.
-// If it is not set, it will search in "/usr/local/lib/gomlx/pjrt" and the standard libraries directories of the
+// If it is not set, it will search the system "/usr/local/lib/go-xla", the users $HOME/.local/lib/go-xla (or
+// "$HOME/Library/Application Support/go-xla" in MacOS) and the standard libraries directories of the
 // system (in linux in LD_LIBRARY_PATH and /etc/ld.so.conf file) in that order.
 //
-// If there are plugins with the same name but different versions in different directories, it respects the order of the directories given by
-// PJRT_PLUGIN_LIBRARY_PATH or by the system.
+// If there are plugins with the same name but different versions in different directories, it respects the order
+// of the directories given by PJRT_PLUGIN_LIBRARY_PATH or by the system.
 //
 // See details in pjrt.AvailablePlugins.
 func GetAvailablePlugins() []string {
-	err := AutoInstall()
-	if err != nil {
-		klog.Errorf("Error auto-installing plugins: %+v", err)
+	if autoInstall {
+		err := AutoInstall()
+		if err != nil {
+			klog.Errorf("Error auto-installing plugins: %+v", err)
+		}
 	}
 
 	if len(availablePluginsList) > 0 {
