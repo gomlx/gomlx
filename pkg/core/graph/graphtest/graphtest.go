@@ -23,11 +23,13 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/backends/xla"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/stretchr/testify/require"
+	"k8s.io/klog/v2"
 )
 
 // TestGraphFn should build its own inputs, and return both inputs and outputs
@@ -42,6 +44,10 @@ var (
 func BuildTestBackend() backends.Backend {
 	backends.DefaultConfig = "xla:cpu"
 	backendOnce.Do(func() {
+		err := xla.AutoInstall()
+		if err != nil {
+			klog.Fatalf("Failed to auto-install XLA PJRT: %+v", err)
+		}
 		cachedBackend = backends.MustNew()
 		fmt.Printf("Backend: %s\n", cachedBackend.Description())
 	})
