@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	"github.com/x448/float16"
 )
 

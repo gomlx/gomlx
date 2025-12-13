@@ -1,9 +1,26 @@
 # GoMLX changelog
 
-# Next:
+# v0.26.0: Using the new github.com/gomlx/go-xla library.
 
+API Change: `dtypes` package moved from `github.com/gomlx/gopjrt/dtypes` to `github.com/gomlx/go-xla/pkg/types/dtypes`.
+It should be a simple change in import.
+
+XLA:
+- go-xla (replacing the now deprecated stablehlo and gopjrt libraries)
+  - Added auto-installation of standard (CPU and GPU/TPU when available) plugins.
+    (Can be disabled by setting the environment variable `GOMLX_NO_AUTO_INSTALL` to anything)
+  - Fixed some memory leaks on plugin destruction; 
+  - Improved performance in some low-latency scenarios (using GenPool as opposed to sync.Pool):
+- Removed old `gomlx/backends/xla` (the one that used the retired `xlabuilder` API for XLA).
+- Renamed `gomlx/backends/stablehlo` --> `gomlx/backends/xla`, using the new `go-xla` library.
+- Added `xla.EnableAutoInstall(enabled bool)` to enable/disable auto-installation of standard plugins.
+  And added `xla.AutoInstall()` to immediately auto-install standard plugins.
+
+Other updates:
 - Package `tensors`:
   - Added `CopyFlatData()` that returns an error (it was previously renamed to `MustCopyFlatData`)
+- Package `graph`:
+  - Added 'RNGStateFromSeedForGraph' function to create a RNG state from a seed for a graph.
 
 # v0.25.0: Distributed execution; API cleanup (more Go idiomatic)
 
@@ -144,7 +161,7 @@ Other improvements:
   * Progressbar now shows the median step duration.
 * Updated and refreshed all notebooks, including the tutorial.
 
-# v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
+# v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/go-xla/pkg/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
 
 - Updated dependency to new Gopjrt v0.8.2 because of CUDA PJRT (lack of) backward compatibility issues.
 - Package `stablehlo`:
@@ -164,7 +181,7 @@ Other improvements:
 
 * Package `shapes`:
   * Added `FromAnyValue`: extract shape from a Go type.
-* New backend: `stablehlo` (or simply _"hlo"_ for short) using https://github.com/gomlx/stablehlo.
+* New backend: `stablehlo` (or simply _"hlo"_ for short) using https://github.com/gomlx/go-xla/pkg/stablehlo.
   * All standard binary and unary ops implemented.
   * A handful of the standard ops also implemented.
   * If `backends/default` is compiled with `-tags=stablehlo` it will include the `stablehlo` backend.

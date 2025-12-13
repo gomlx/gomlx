@@ -81,10 +81,11 @@ var _ backends.Executable = (*Executable)(nil)
 // Finalize immediately frees resources associated with the executable.
 //
 // TODO: Race-condition where calling Finalize will make execution crash, if finalized while executing.
-//       Make Finalize wait for all the current executions to exit, before finalizing.
-//       And add a latch indicating Finalize has been called, to tell the executions to exit immediately
-//       without finishing. Finally, remove the `e.builder == nil` checks, that won't be necessary anymore,
-//       since e.builder will never be set to nil while there is an execution alive.
+//
+//	Make Finalize wait for all the current executions to exit, before finalizing.
+//	And add a latch indicating Finalize has been called, to tell the executions to exit immediately
+//	without finishing. Finally, remove the `e.builder == nil` checks, that won't be necessary anymore,
+//	since e.builder will never be set to nil while there is an execution alive.
 func (e *Executable) Finalize() {
 	e.builder.Finalize()
 	e.builder = nil
@@ -186,7 +187,7 @@ var (
 	nodeExecutors [backends.OpTypeLast]nodeExecutor
 
 	// multiOutputsNodeExecutors should be populated during initialization for the multi-output ops
-	// implemented. E.g.: RngBitGenerator.
+	// implemented. E.g.: RNGBitGenerator.
 	multiOutputsNodeExecutors [backends.OpTypeLast]nodeMultiOutputExecutor
 )
 

@@ -1,14 +1,14 @@
-package stablehlo
+package xla
 
 // This file contains manually implemented operations.
 
 import (
+	"github.com/gomlx/go-xla/pkg/stablehlo"
+	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	stablehloshapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/stablehlo"
-	stablehlotypes "github.com/gomlx/stablehlo/types"
-	stablehloshapes "github.com/gomlx/stablehlo/types/shapes"
 	"github.com/pkg/errors"
 )
 
@@ -56,7 +56,7 @@ func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadc
 	if err != nil {
 		return nil, err
 	}
-	value, err := stablehlo.BroadcastInDim(nodes[0].value, ShapeToStableHLO(outputShape), broadcastAxes)
+	value, err := stablehlo.BroadcastInDim(nodes[0].value, ShapeToXLA(outputShape), broadcastAxes)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadc
 
 // Iota implements backends.Builder interface.
 func (b *Builder) Iota(shape shapes.Shape, iotaAxis int) (backends.Op, error) {
-	value, err := b.fn.Iota(ShapeToStableHLO(shape), iotaAxis)
+	value, err := b.fn.Iota(ShapeToXLA(shape), iotaAxis)
 	if err != nil {
 		return nil, err
 	}
@@ -509,7 +509,7 @@ func (b *Builder) RNGBitGenerator(state backends.Op, shape shapes.Shape) (newSta
 	if err != nil {
 		return nil, nil, err
 	}
-	shloShape := ShapeToStableHLO(shape)
+	shloShape := ShapeToXLA(shape)
 	if !shloShape.Ok() {
 		return nil, nil, errors.Errorf("RNGBitGenerator: invalid shape: %s", shape)
 	}

@@ -2,7 +2,7 @@ package simplego
 
 import (
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 )
 
 // TODO:

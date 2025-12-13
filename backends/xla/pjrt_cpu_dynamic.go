@@ -6,5 +6,5 @@ package xla
 
 import (
 	// Link CPU PJRT statically: slower but works on Mac.
-	_ "github.com/gomlx/gopjrt/pjrt/cpu/dynamic"
+	_ "github.com/gomlx/go-xla/pkg/pjrt/cpu/dynamic"
 )

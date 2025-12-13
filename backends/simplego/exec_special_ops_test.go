@@ -8,8 +8,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -535,7 +535,7 @@ func computeHistogram(values []float64, numBins int) []int {
 	return histogram
 }
 
-func TestExecSpecialOps_RngBitsGenerator(t *testing.T) {
+func TestExecSpecialOps_RNGBitsGenerator(t *testing.T) {
 	const numSamples = 1000
 	const numBins = 10
 	const tolerance = 0.6 // Allow 60% deviation from the expected frequency

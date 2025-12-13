@@ -1,14 +1,14 @@
-package stablehlo
+package xla
 
 import (
+	"github.com/gomlx/go-xla/pkg/stablehlo"
+	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/stablehlo"
-	stablehlotypes "github.com/gomlx/stablehlo/types"
 )
 
 // DotGeneralConfig represents the configuration to use for DotGeneral.
-// StableHLO has lots of options (see github.com/gomlx/stablehlo.DotGeneral),
+// StableHLO has lots of options (see github.com/gomlx/go-xla/pkg/stablehlo.DotGeneral),
 // and here is what we expose for now.
 type DotGeneralConfig struct {
 	// UseTF32 specifies whether to use tf32 (a truncated float32 that NVidia CUDA PJRT is able to use)

@@ -26,8 +26,8 @@ import (
 	"unsafe"
 
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/x448/float16"

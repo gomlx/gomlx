@@ -5,7 +5,7 @@ package notimplemented
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 )
 
 // Abs returns the Op that represents the output of the corresponding operation.

@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 )
 
 // Op represents the output of an operation, during the computation graph building time.

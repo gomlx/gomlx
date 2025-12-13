@@ -1,8 +1,8 @@
 package simplego
 
 import (
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xsync"

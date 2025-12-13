@@ -41,7 +41,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 )
 
 var ModelList = []string{"linear", "cnn"}

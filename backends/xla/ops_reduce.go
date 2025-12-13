@@ -1,15 +1,15 @@
-package stablehlo
+package xla
 
 import (
 	"reflect"
 
+	"github.com/gomlx/go-xla/pkg/stablehlo"
+	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
+	stablehloshapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
-	"github.com/gomlx/stablehlo"
-	stablehlotypes "github.com/gomlx/stablehlo/types"
-	stablehloshapes "github.com/gomlx/stablehlo/types/shapes"
 	"github.com/pkg/errors"
 	"github.com/x448/float16"
 )
@@ -460,7 +460,7 @@ func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, i
 	// Create indices and its initial value.
 	indicesShape := xNode.shape.Clone()
 	indicesShape.DType = outputDType
-	indices, err := b.fn.Iota(ShapeToStableHLO(indicesShape), adjustedAxis)
+	indices, err := b.fn.Iota(ShapeToXLA(indicesShape), adjustedAxis)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 	}

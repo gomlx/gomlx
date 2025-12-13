@@ -102,8 +102,7 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
 * [Docker "gomlx_jupyterlab"](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab) with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
 * Two backends:
-   1. **`xla`**: [OpenXLA](https://github.com/openxla/xla) backend for CPUs, GPUs, and TPUs. State-of-the-art as these things go. Only linux/amd64 for now.
-      1.a: To be replaced by the new `stablehlo` backend, currently in beta. See the note above.
+   1. **`xla`**: [OpenXLA](https://github.com/openxla/xla) backend for CPUs, GPUs, and TPUs. State-of-the-art as these things go. Only linux/amd64 for now. Using the [go-xla](https://github.com/gomlx/go-xla) Go version of the APIs.
    2. **`go`**: a pure Go backend (no C/C++ dependencies): slower but very portable (compiles to WASM/Windows/etc.): 
       SIMD support is planned [when it becomes available](https://github.com/golang/go/issues/73787); See also [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
 * Autograd: automatic differentiation—only gradients for now, no jacobian.
@@ -122,8 +121,8 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 * Pre-Trained models to use: InceptionV3 (image model), many more from HuggingFace using [onnx-gomlx](https://github.com/gomlx/onnx-gomlx).
   See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace. 
 * Read Numpy arrays into GoMLX tensors -- see package `github.com/gomlx/gomlx/pkg/core/tensors/numpy`.
-* Support static linking of PJRT: slower to build the Go program, but deploying it doesn't require installing a PJRT plugin in the machine you are deploying it.
-  Use `go build --tags=pjrt_cpu_static` or include `import _ "github.com/gomlx/gomlx/backends/stablehlo/cpu/static"`.
+* (**Experimental**) Support static linking of PJRT: slower to build the Go program, but deploying it doesn't require installing a PJRT plugin in the machine you are deploying it. It requires you to compile your own static PJRT plugin from XLA sources.
+  Use `go build --tags=pjrt_cpu_static` or include `import _ "github.com/gomlx/gomlx/backends/xla/cpu/static"`.
 
 ## 👥 Support
 
@@ -190,7 +189,7 @@ _Godoc_ is available in [pkg.go.dev](https://pkg.go.dev/github.com/gomlx/gomlx).
 Finally, feel free to ask questions: time allowing (when not at work), I'm always happy to help—I created 
 [groups.google.com/g/gomlx-discuss](https://groups.google.com/g/gomlx-discuss), or use the [Slack channel #gomlx](https://app.slack.com/client/T029RQSE6/C08TX33BX6U).
 
-### Inference
+### Inference & Productionization
 
 Inference or serving a model is done currently by using the Go code used to create the model along with the checkpoint
 with the trained weights and hyperparameters used to train the model. In other words, it uses the same tools used
@@ -200,7 +199,8 @@ For a simple example of how to do this and export a model inference as a library
 [`.../examples/cifar/classifer`](https://github.com/gomlx/gomlx/blob/main/examples/cifar/classifier/classifier.go), 
 and its use in the last cells of the [Cifar-10 demo](https://gomlx.github.io/gomlx/notebooks/cifar.html).
 
-In the future we plan to also export models to ONNX or StableHLO, and one could use tools that serve those.
+In the future we plan to also export models to ONNX or XLA's StableHLO, and one could use tools that serve those directly,
+without linking GoMLX -- it will save a little executable size.
 
 ## 🎯 Long-term Goals
 
@@ -241,13 +241,10 @@ In the future we plan to also export models to ONNX or StableHLO, and one could 
   - `XLA_FLAGS`: optional controls for XLA backend. It should be set to a semicolon (";") separated list of options. If you set to `--help` 
     the backend will print out some help for all options. There is also a description on the page [XLA Flags Guidance](https://openxla.org/xla/flags_guidance).
 - **What backends to include when using GoMLX?**
-  - The recommendation is to use `import _ "github.com/gomlx/gomlx/backends/default"` which will import `xla` (alias to `stablehlo`) and
-    `go` (_SimpleGo_) backends. If you add `-tags=noxla` to the compiler it won't include XLA/stablehlo backend.
+  - The recommendation is to use `import _ "github.com/gomlx/gomlx/backends/default"` which will import `xla` (or the alias `stablehlo`) and
+    `go` (_SimpleGo_) backends. If you add `-tags=noxla` to the compiler it won't include the XLA backend.
   - `import _ "github.com/gomlx/gomlx/backends/simplego"` to include only `go` (no C++ dependencies)
-  - `import _ "github.com/gomlx/gomlx/backends/stablehlo"` to import only XLA (stablehlo).
-  - A deprecated version of *XLA* backend (named `oldxla`) is available if you `import _ "github.com/gomlx/gomlx/backends/xla"`.
-    This is temporary only and will be removed in future releases. It is also included if you 
-    `import _ "github.com/gomlx/gomlx/backends/default"` and use `-tags=oldxla` when building.
+  - `import _ "github.com/gomlx/gomlx/backends/xla"` to import only XLA.
 
 ## 🤝 Collaborating
 

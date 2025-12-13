@@ -8,7 +8,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/ctxtest"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )

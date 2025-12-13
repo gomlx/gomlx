@@ -1,6 +1,6 @@
 package backends
 
-import "github.com/gomlx/gopjrt/dtypes"
+import "github.com/gomlx/go-xla/pkg/types/dtypes"
 
 // Capabilities holds mappings of what is supported by a backend.
 type Capabilities struct {

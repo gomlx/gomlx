@@ -1,12 +1,12 @@
 package simplego
 
 import (
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
 
@@ -521,7 +521,7 @@ type sliceNode struct {
 }
 
 // RNGBitGenerator generates the given shape filled with random bits.
-// It takes as input the current random number generator (RNG) state, see RngState or RngStateFromSeed.
+// It takes as input the current random number generator (RNG) state, see RNGState or RNGStateFromSeed.
 // The algorithm is hard-coded to use Philox algorithm for now.
 //
 // It returns the new state of the RNG and the generated values (with random bits) with the given shape.

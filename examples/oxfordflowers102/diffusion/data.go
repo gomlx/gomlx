@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
@@ -14,7 +15,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -51,6 +51,10 @@ type Config struct {
 
 	// NanLogger is enabled by setting the hyperparameter "nan_logger=true".
 	NanLogger *nanlogger.NanLogger
+
+	// NoNormalization prevents default normalization of the images.
+	// Should be set only for tests.
+	NoNormalization bool
 }
 
 // NewConfig creates a configuration for most of the diffusion methods.
@@ -105,6 +109,10 @@ var (
 
 // NormalizationValues for the flowers dataset -- only look at the training data.
 func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
+	if c.NoNormalization {
+		// Return identity normalization.
+		return tensors.FromScalar(float32(0)), tensors.FromScalar(float32(1))
+	}
 	// Check if values have already been retrieved.
 	if normalizationMean != nil && normalizationStdDev != nil {
 		mean, stddev = normalizationMean, normalizationStdDev
