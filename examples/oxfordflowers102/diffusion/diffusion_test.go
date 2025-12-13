@@ -99,7 +99,7 @@ func TestImagesGenerator(t *testing.T) {
 	config.NoNormalization = true
 	g := NewGraph(config.Backend, "test")
 
-	// Context.RngStateReset() --> to truly randomize each run uncomment this.
+	// Context.RNGStateReset() --> to truly randomize each run uncomment this.
 	_ = getZeroPredictions(config, g, 2) // Batch size won't matter, we only call this to create the model weights.
 	noise := config.GenerateNoise(numImages)
 	flowerIds := config.GenerateFlowerIds(numImages)

@@ -5,12 +5,12 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 )
 
 func TestFFT(t *testing.T) {
@@ -148,7 +148,7 @@ func TestGradientRealFFT(t *testing.T) {
 	trueX, trueY := realFftExample(backend, dtypes.Float32, 100, 2)
 	ctx := context.NewContext(backend)
 	ctx.SetParam(optimizers.ParamLearningRate, 0.01)
-	ctx.RngStateFromSeed(42) // Make it deterministic.
+	ctx.RNGStateFromSeed(42) // Make it deterministic.
 	ctx = ctx.WithInitializer(initializers.Zero)
 	modelFn := func(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		g := inputs[0].Graph()
@@ -189,7 +189,7 @@ func TestGradientInverseRealFFT(t *testing.T) {
 	trueY, trueX := realFftExample(backend, dtypes.Float64, 10, 2)
 	ctx := context.NewContext(backend)
 	ctx.SetParam(optimizers.ParamLearningRate, 10.0)
-	ctx.RngStateFromSeed(42) // Make it deterministic.
+	ctx.RNGStateFromSeed(42) // Make it deterministic.
 	ctx = ctx.WithInitializer(initializers.Zero)
 	modelFn := func(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		g := inputs[0].Graph()

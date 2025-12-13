@@ -535,7 +535,7 @@ func computeHistogram(values []float64, numBins int) []int {
 	return histogram
 }
 
-func TestExecSpecialOps_RngBitsGenerator(t *testing.T) {
+func TestExecSpecialOps_RNGBitsGenerator(t *testing.T) {
 	const numSamples = 1000
 	const numBins = 10
 	const tolerance = 0.6 // Allow 60% deviation from the expected frequency
