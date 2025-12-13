@@ -9,7 +9,6 @@
 [![Slack](https://img.shields.io/badge/Slack-GoMLX-purple.svg?logo=slack)](https://app.slack.com/client/T029RQSE6/C08TX33BX6U)
 [![Sponsor gomlx](https://img.shields.io/badge/Sponsor-gomlx-white?logo=github&style=flat-square)](https://github.com/sponsors/gomlx)
 
-
 ## 📖 About **_GoMLX_**
 <img align="right" src="docs/gomlx_gopher2.png" alt="GoMLX Gopher" width="220px"/>
 
@@ -84,6 +83,11 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 
 **Highlights:**
 
+> **🚀 NEW 🚀**: **Auto-installation of XLA PJRT plugins** (for CPU, GPU and TPUs; Linux and Macs)
+> in the user'slocal lib directory (`$HOME/.local/lib` in Linux and `$HOME/Library/Application Support/XLA` in Mac).
+> It can be disabled by setting `GOMLX_NO_AUTO_INSTALL` or programmatically by 
+> calling `xla.EnableAutoInstall(false)`).
+
 > **🚀 NEW 🚀**: **Distributed Execution** (across multiple GPUs or TPUs) with little hints from the user.
 > One only needs to configure a distributed dataset, and the trainer picks up from there.
 > See code change in [UCI-Adult demo](https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/main.go#L222)
@@ -132,26 +136,20 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 * Random brainstorming on projects: just start a Q&A, and I'm happy to meet in discord somewhere or VC.
 * [Google Groups: groups.google.com/g/gomlx-discuss](https://groups.google.com/g/gomlx-discuss)
 
-## <a id="installation"></a>🛠️ + ⚙️ Installation (Only needed for the XLA backend)
+## <a id="installation"></a>🛠️ + ⚙️ Installation 
 
-If you want to use only a pure Go backend, simply do `import _ "github.com/gomlx/gomlx/backends/simplego"` and 
+**For most users, no installation is needed.**
+
+**For XLA**, it will by default auto-install the required XLA PJRT plugins (for CPU, GPU and TPUs; Linux and Macs)
+in the user's local lib directory (`$HOME/.local/lib` in Linux and `$HOME/Library/Application Support/XLA` in Mac).
+It can be disabled by setting `GOMLX_NO_AUTO_INSTALL` or programmatically by calling `xla.EnableAutoInstall(false)`).
+
+If you want to manually pre-install for building production dockers, a specific version, or such custom setups,
+see [github.com/gomlx/go-xla](https://github.com/gomlx/go-xla) for details, 
+there is a self-explanatory simple installer program.
+
+If you want to use only a pure **Go backend**, simply do `import _ "github.com/gomlx/gomlx/backends/simplego"` and 
 there is no need to install anything.
-
-For XLA there are two simple options:
-
-(1) [Use the Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab);
-
-(2) Install the pre-built XLA/PJRT binaries (C/C++ libraries) for Linux (including CUDA) or macOS with the interactive self-explanatory installer:
-
-```bash
-go run github.com/gomlx/gopjrt/cmd/gopjrt_installer@latest
-```
-
-> [!NOTE]
-> For now it works for (1) CPU PJRT on linux/amd64 (or Windows+WSL); (2) Nvidia CUDA PJRT on Linux/amd64; (3) CPU PJRT on Darwin (macOS);
-> (4) TPUs in Google Cloud.
-> I would love to support for AMD ROCm, Apple Metal (GPU), Intel, and others, but I don't have easy access to hardwre to test/maintain them.
-> If you feel like contributing or donating hardware/cloud credits, please contact me.
 
 ## 🐳  [Pre-built Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
 
@@ -186,14 +184,18 @@ The library itself is well-documented (pls open issues if something is missing),
 not too hard to read. 
 _Godoc_ is available in [pkg.go.dev](https://pkg.go.dev/github.com/gomlx/gomlx).
 
-Finally, feel free to ask questions: time allowing (when not at work), I'm always happy to help—I created 
-[groups.google.com/g/gomlx-discuss](https://groups.google.com/g/gomlx-discuss), or use the [Slack channel #gomlx](https://app.slack.com/client/T029RQSE6/C08TX33BX6U).
+Finally, feel free to ask questions: time allowing (when not at work), I'm always happy to help: 
+I'm offten connected to [Slack channel #gomlx](https://app.slack.com/client/T029RQSE6/C08TX33BX6U);
+alternatively the [groups.google.com/g/gomlx-discuss](https://groups.google.com/g/gomlx-discuss).
 
 ### Inference & Productionization
 
 Inference or serving a model is done currently by using the Go code used to create the model along with the checkpoint
-with the trained weights and hyperparameters used to train the model. In other words, it uses the same tools used
-for training.
+with the trained weights and hyperparameters used to train the model. 
+In other words, it uses the same tools used for training.
+
+It's straight forward for instance, to create a Docker with a pretrained model and serve it from there.
+Or include it in you own application.
 
 For a simple example of how to do this and export a model inference as a library, see 
 [`.../examples/cifar/classifer`](https://github.com/gomlx/gomlx/blob/main/examples/cifar/classifier/classifier.go), 
@@ -236,8 +238,8 @@ without linking GoMLX -- it will save a little executable size.
       One can install PJRTs build for NVIDIA GPUs (there is an installation script for that), there is also one for ROCm (not tested by the author),
       for TPU (Google Cloud) and reports of PJRTs being built to even new accelerators (e.g.: [TensTorrent XLA](https://github.com/tenstorrent/tt-xla))
   - `PJRT_PLUGIN_LIBRARY_PATH`: the underlying XLA backend uses this variable as an extra directory to search for plugin locations.
-    It searches for the systems library paths (`$LD_LIBRARY_PATH`, `/etc/ld.so.conf`), the default `/usr/local/lib/gomlx/pjrt` and
-    `$PJRT_PLUGIN_LIBRARY_PATH` if set.
+    It searches for the systems library paths (`$LD_LIBRARY_PATH`, `/etc/ld.so.conf`), the default `/usr/local/lib/gomlx/pjrt` and `$PJRT_PLUGIN_LIBRARY_PATH` if set.
+  - `GOMLX_NO_AUTO_INSTALL`: if set to `1`, GoMLX will not automatically install PJRTs when running on a system without them.
   - `XLA_FLAGS`: optional controls for XLA backend. It should be set to a semicolon (";") separated list of options. If you set to `--help` 
     the backend will print out some help for all options. There is also a description on the page [XLA Flags Guidance](https://openxla.org/xla/flags_guidance).
 - **What backends to include when using GoMLX?**
