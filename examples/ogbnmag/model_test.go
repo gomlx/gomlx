@@ -24,14 +24,18 @@ var (
 	flagDataDir = flag.String("data", "~/work/ogbnmag", "Directory to cache downloaded and generated dataset files.")
 )
 
-func TestModel(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping long-running test.")
-	}
+func checkMemory(t *testing.T) {
 	fmt.Printf("Total memory: %s\n", humanize.Bytes(memory.TotalMemory()))
 	if memory.TotalMemory() < 32*1024*1024*1024 {
 		t.Skipf("Test requires at least 32GB RAM, found %s", humanize.Bytes(memory.TotalMemory()))
 	}
+}
+
+func TestModel(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping long-running test.")
+	}
+	checkMemory(t)
 
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
