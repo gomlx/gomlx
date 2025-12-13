@@ -38,7 +38,7 @@ Use this backend to train large models or with large datasets.
 > * See _Eli Bendersky_'s blog post ["GoMLX: ML in Go without Python"](https://eli.thegreenplace.net/2024/gomlx-ml-in-go-without-python/), 
 >   (a bit outdated, but still useful)
 > * A [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
-> * [Installation here](#installation).
+> * A simple [GoMLX slide deck](https://docs.google.com/presentation/d/1QWp_N9_7_n7gQKePHfmb5AFFBXnN6DTqjpWxNC0Ecpk/edit?usp=sharing) with small sample code.  
 
 <div>
 <p>It was developed to be a full-featured ML platform for Go, productionizable and easily to experiment with ML ideas
