@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/gomlx/internal/must"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/stretchr/testify/assert"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -70,6 +70,7 @@ func TestTrainingModelGraph(t *testing.T) {
 	}
 
 	config := getTestConfig()
+	config.NoNormalization = true
 	ctx := config.Context
 	g := NewGraph(config.Backend, "test")
 
@@ -95,6 +96,7 @@ func TestImagesGenerator(t *testing.T) {
 	numDiffusionSteps := 3
 
 	config := getTestConfig()
+	config.NoNormalization = true
 	g := NewGraph(config.Backend, "test")
 
 	// Context.RngStateReset() --> to truly randomize each run uncomment this.
