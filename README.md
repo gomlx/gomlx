@@ -96,12 +96,6 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 > see [jax/issues/32800](https://github.com/jax-ml/jax/issues/32800) for the request to Apple developers 
 > to update their support for GPU XLA.
 
-> **🚀 NEW 🚀**: `gomlx_checkpoints`, the command line tool to inspect checkpoints of train(-ing) models,
-> now also **generate plots** with loss and arbitrary evaluation metrics using Plotly.
-> See [example of training session](https://gomlx.github.io/gomlx/notebooks/gomlx_checkpoints_plot_example.html),
-> with the effects of a learning rate change during the training.
-> It also allows plotting different models together, to compare their evolution.
-
 * Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
 * [Docker "gomlx_jupyterlab"](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab) with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
@@ -109,7 +103,7 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
    1. **`xla`**: [OpenXLA](https://github.com/openxla/xla) backend for CPUs, GPUs, and TPUs. State-of-the-art as these things go. Only linux/amd64 for now. Using the [go-xla](https://github.com/gomlx/go-xla) Go version of the APIs.
    2. **`go`**: a pure Go backend (no C/C++ dependencies): slower but very portable (compiles to WASM/Windows/etc.): 
       SIMD support is planned [when it becomes available](https://github.com/golang/go/issues/73787); See also [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
-* Autograd: automatic differentiation—only gradients for now, no jacobian.
+* Autodiff: automatic differentiation—only gradients for now, no jacobian.
 * Context: automatic variable management for ML models.
 * ML layers library with some of the most popular machine learning "layers": FFN layers,  
   various activation functions, layer and batch normalization, convolutions, pooling, dropout, Multi-Head-Attention
@@ -120,6 +114,11 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 * Training library, with some pretty-printing. Including plots for Jupyter notebook, using [GoNB, a Go Kernel](https://github.com/janpfeifer/gonb).
   * Also, various debugging tools: collecting values for particular nodes for plotting, simply logging  the value
     of nodes during training, stack-trace of the code where nodes are created.
+* `gomlx_checkpoints`, the command line tool to inspect checkpoints of train(-ing) models, **generate plots**
+  with loss and arbitrary evaluation metrics using Plotly.
+  See [example of training session](https://gomlx.github.io/gomlx/notebooks/gomlx_checkpoints_plot_example.html),
+  with the effects of a learning rate change during the training.
+  It also allows plotting different models together, to compare their evolution.
 * SGD and Adam (AdamW and Adamax) optimizers.
 * Various losses and metrics.
 * Pre-Trained models to use: InceptionV3 (image model), many more from HuggingFace using [onnx-gomlx](https://github.com/gomlx/onnx-gomlx).
@@ -141,7 +140,7 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 **For most users, no installation is needed.**
 
 **For XLA**, it will by default auto-install the required XLA PJRT plugins (for CPU, GPU and TPUs; Linux and Macs)
-in the user's local lib directory (`$HOME/.local/lib` in Linux and `$HOME/Library/Application Support/XLA` in Mac).
+in the user's local lib directory (`$HOME/.local/lib/go-xla` in Linux and `$HOME/Library/Application Support/go-xla` in Mac).
 It can be disabled by setting `GOMLX_NO_AUTO_INSTALL` or programmatically by calling `xla.EnableAutoInstall(false)`).
 
 If you want to manually pre-install for building production dockers, a specific version, or such custom setups,
