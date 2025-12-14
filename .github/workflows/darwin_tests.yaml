@@ -23,10 +23,14 @@ jobs:
           go-version: "1.25.x"
 
       - name: PreTest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           go test ./pkg/core/graph
 
       - name: Test
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # Tests only run with --short, since the full tests involve downloading datasets and would be too costly for a GitHub action.
         # The non-short tests work well locally (in the development box) because the datasets are cached.
         # Also excludes tests that have large dependencies (e.g.: X11):
