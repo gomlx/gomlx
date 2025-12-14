@@ -13,10 +13,11 @@ require (
 	github.com/erkkah/margaid v0.3.0
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/bsplines v0.2.0
-	github.com/gomlx/go-xla v0.1.1
+	github.com/gomlx/go-xla v0.1.2
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.1
 	github.com/muesli/termenv v0.16.0
+	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/pkg/errors v0.9.1
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/stretchr/testify v1.11.1
@@ -28,14 +29,8 @@ require (
 
 require (
 	github.com/AlexsanderHamir/GenPool v1.6.6 // indirect
-	github.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7 // indirect
-	github.com/charmbracelet/bubbletea v1.3.10 // indirect
-	github.com/charmbracelet/huh/spinner v0.0.0-20250929091620-889bfce58d1e // indirect
-	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
-	github.com/mattn/go-localereader v0.0.1 // indirect
-	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
-	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
+	github.com/aymanbagabas/go-udiff v0.3.1 // indirect
+	github.com/charmbracelet/x/exp/golden v0.0.0-20241011142426-46044092ad91 // indirect
 )
 
 require (
@@ -70,8 +65,8 @@ require (
 	golang.org/x/mod v0.27.0 // indirect
 	golang.org/x/net v0.43.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.36.0 // indirect
-	golang.org/x/term v0.34.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/term v0.38.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 	gonum.org/v1/gonum v0.16.0 // indirect
