@@ -7668,7 +7668,7 @@ drwxr-x--- 2 janpf janpf 4.0K Nov 12  2024 r001
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
     <span class="s2">"strings"</span>
-    <span class="s2">"github.com/gomlx/go-xla/pkg/types/dtypes"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/core/dtypes"</span>
     <span class="s2">"github.com/gomlx/gomlx/backends"</span>
     <span class="s2">"github.com/gomlx/gomlx/examples/cifar"</span>
     <span class="s2">"github.com/gomlx/gomlx/pkg/core/shapes"</span>
@@ -7696,7 +7696,7 @@ drwxr-x--- 2 janpf janpf 4.0K Nov 12  2024 r001
 <span class="o">//</span> <span class="n">sampleTable</span> <span class="n">generates</span> <span class="ow">and</span> <span class="n">outputs</span> <span class="n">one</span> <span class="n">html</span> <span class="n">table</span> <span class="n">of</span> <span class="n">samples</span><span class="p">,</span> <span class="n">sampling</span> <span class="n">rows</span> <span class="n">x</span> <span class="n">cols</span> <span class="kn">from</span><span class="w"> </span><span class="nn">the</span> <span class="n">images</span><span class="o">/</span><span class="n">labels</span> <span class="n">provided</span><span class="o">.</span>
 <span class="n">func</span> <span class="n">sampleImages</span><span class="p">(</span><span class="n">ds</span> <span class="n">train</span><span class="o">.</span><span class="n">Dataset</span><span class="p">,</span> <span class="n">numImages</span> <span class="nb">int</span><span class="p">,</span> <span class="n">labelNames</span> <span class="p">[]</span><span class="n">string</span><span class="p">)</span> <span class="p">{</span>
     <span class="n">gonbui</span><span class="o">.</span><span class="n">DisplayHTML</span><span class="p">(</span><span class="n">fmt</span><span class="o">.</span><span class="n">Sprintf</span><span class="p">(</span><span class="s2">"&lt;p&gt;</span><span class="si">%s</span><span class="s2">&lt;/p&gt;</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">ds</span><span class="o">.</span><span class="n">Name</span><span class="p">()))</span>
-    
+
     <span class="n">parts</span> <span class="o">:=</span> <span class="n">make</span><span class="p">([]</span><span class="n">string</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">numImages</span><span class="o">+</span><span class="mi">5</span><span class="p">)</span> <span class="o">//</span> <span class="n">Leave</span> <span class="n">last</span> <span class="n">part</span> <span class="n">empty</span><span class="o">.</span>
     <span class="n">parts</span> <span class="o">=</span> <span class="n">append</span><span class="p">(</span><span class="n">parts</span><span class="p">,</span> <span class="s2">"&lt;table&gt;&lt;tr&gt;"</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">ii</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">ii</span> <span class="o">&lt;</span> <span class="n">numImages</span><span class="p">;</span> <span class="n">ii</span><span class="o">++</span> <span class="p">{</span>
@@ -7705,13 +7705,13 @@ drwxr-x--- 2 janpf janpf 4.0K Nov 12  2024 r001
         <span class="n">img</span> <span class="o">:=</span> <span class="n">images</span><span class="o">.</span><span class="n">ToImage</span><span class="p">()</span><span class="o">.</span><span class="n">Single</span><span class="p">(</span><span class="n">imgTensor</span><span class="p">)</span>
         <span class="n">label</span> <span class="o">:=</span> <span class="n">labels</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span><span class="o">.</span><span class="p">([]</span><span class="n">int64</span><span class="p">)</span>
         <span class="n">labelStr</span> <span class="o">:=</span> <span class="n">labelNames</span><span class="p">[</span><span class="n">label</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
-    
+
         <span class="n">imgSrc</span> <span class="o">:=</span> <span class="n">must</span><span class="o">.</span><span class="n">M1</span><span class="p">(</span><span class="n">gonbui</span><span class="o">.</span><span class="n">EmbedImageAsPNGSrc</span><span class="p">(</span><span class="n">img</span><span class="p">))</span>
         <span class="n">size</span> <span class="o">:=</span> <span class="n">imgTensor</span><span class="o">.</span><span class="n">Shape</span><span class="p">()</span><span class="o">.</span><span class="n">Dimensions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">parts</span> <span class="o">=</span> <span class="n">append</span><span class="p">(</span>
-            <span class="n">parts</span><span class="p">,</span> 
-            <span class="n">fmt</span><span class="o">.</span><span class="n">Sprintf</span><span class="p">(</span><span class="err">`</span><span class="o">&lt;</span><span class="n">td</span><span class="o">&gt;&lt;</span><span class="n">figure</span> <span class="n">style</span><span class="o">=</span><span class="s2">"padding:4px;text-align: center;"</span><span class="o">&gt;&lt;</span><span class="n">img</span> <span class="n">width</span><span class="o">=</span><span class="s2">"</span><span class="si">%d</span><span class="s2">"</span> <span class="n">height</span><span class="o">=</span><span class="s2">"</span><span class="si">%d</span><span class="s2">"</span> <span class="n">src</span><span class="o">=</span><span class="s2">"</span><span class="si">%s</span><span class="s2">"</span><span class="o">&gt;</span><span class="err">`</span> <span class="o">+</span> 
-                        <span class="err">`</span><span class="o">&lt;</span><span class="n">figcaption</span> <span class="n">style</span><span class="o">=</span><span class="s2">"text-align: center;"</span><span class="o">&gt;%</span><span class="k">s</span> (%d)&lt;/figcaption&gt;&lt;/figure&gt;&lt;/td&gt;`, 
+            <span class="n">parts</span><span class="p">,</span>
+            <span class="n">fmt</span><span class="o">.</span><span class="n">Sprintf</span><span class="p">(</span><span class="err">`</span><span class="o">&lt;</span><span class="n">td</span><span class="o">&gt;&lt;</span><span class="n">figure</span> <span class="n">style</span><span class="o">=</span><span class="s2">"padding:4px;text-align: center;"</span><span class="o">&gt;&lt;</span><span class="n">img</span> <span class="n">width</span><span class="o">=</span><span class="s2">"</span><span class="si">%d</span><span class="s2">"</span> <span class="n">height</span><span class="o">=</span><span class="s2">"</span><span class="si">%d</span><span class="s2">"</span> <span class="n">src</span><span class="o">=</span><span class="s2">"</span><span class="si">%s</span><span class="s2">"</span><span class="o">&gt;</span><span class="err">`</span> <span class="o">+</span>
+                        <span class="err">`</span><span class="o">&lt;</span><span class="n">figcaption</span> <span class="n">style</span><span class="o">=</span><span class="s2">"text-align: center;"</span><span class="o">&gt;%</span><span class="k">s</span> (%d)&lt;/figcaption&gt;&lt;/figure&gt;&lt;/td&gt;`,
                         <span class="n">size</span><span class="o">*</span><span class="mi">2</span><span class="p">,</span> <span class="n">size</span><span class="o">*</span><span class="mi">2</span><span class="p">,</span> <span class="n">imgSrc</span><span class="p">,</span> <span class="n">labelStr</span><span class="p">,</span> <span class="n">label</span><span class="p">),</span>
         <span class="p">)</span>
     <span class="p">}</span>
@@ -7800,7 +7800,7 @@ drwxr-x--- 2 janpf janpf 4.0K Nov 12  2024 r001
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
     <span class="s2">"flags"</span>
-    
+
     <span class="s2">"github.com/gomlx/gomlx/pkg/ml/layers"</span>
     <span class="s2">"github.com/gomlx/gomlx/pkg/ml/layers/fnn"</span>
     <span class="s2">"github.com/gomlx/gomlx/pkg/ml/layers/kan"</span>
@@ -7902,14 +7902,14 @@ drwxr-x--- 2 janpf janpf 4.0K Nov 12  2024 r001
 <pre>Model types: ["fnn" "kan" "cnn"]
 Parameters set (-set): ["batch_size" "fnn_num_hidden_layers"]
 	"/activation": (string) swish
-	"/adam_dtype": (string) 
+	"/adam_dtype": (string)
 	"/adam_epsilon": (float64) 1e-07
 	"/batch_size": (int) 17
-	"/checkpoint": (string) 
+	"/checkpoint": (string)
 	"/dropout_rate": (float64) 0
 	"/eval_batch_size": (int) 200
 	"/fnn_dropout_rate": (float64) -1
-	"/fnn_normalization": (string) 
+	"/fnn_normalization": (string)
 	"/fnn_num_hidden_layers": (int) 12
 	"/fnn_num_hidden_nodes": (int) 128
 	"/fnn_residual": (bool) true
@@ -7963,7 +7963,7 @@ Parameters set (-set): ["batch_size" "fnn_num_hidden_layers"]
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
-    <span class="s2">"flags"</span>    
+    <span class="s2">"flags"</span>
     <span class="o">.</span> <span class="s2">"github.com/gomlx/gomlx/pkg/core/graph"</span>
     <span class="s2">"github.com/gomlx/gomlx/examples/cifar"</span>
     <span class="s2">"github.com/gomlx/gomlx/pkg/ml/context"</span>
@@ -8072,7 +8072,7 @@ Parameters set (-set): ["batch_size" "fnn_num_hidden_layers"]
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>Backend "xla":	xla:cuda - PJRT "cuda" plugin (/home/janpf/.local/lib/go-xla/nvidia/pjrt_c_api_cuda_plugin.so) v0.81 [StableHLO] [1 device(s)]
-      <span class="ansi-bold"> 100% [========================================] (2199 steps/s)</span> [step=49] [loss+=2.52] [~loss+=3.12] [~loss=2.9] [~acc=16.03%]        ]         
+      <span class="ansi-bold"> 100% [========================================] (2199 steps/s)</span> [step=49] [loss+=2.52] [~loss+=3.12] [~loss=2.9] [~acc=16.03%]        ]
 	[Step 50] median train step: 388 microseconds
 
 Results on Validation:
@@ -8163,7 +8163,7 @@ Checkpointing model to "/home/janpf/work/cifar/base_fnn_model"
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold"> 100% [========================================] (2292 steps/s)</span> [step=49999] [loss+=0.645] [~loss+=0.659] [~loss=0.432] [~acc=84.77%]        ]        
+<pre>      <span class="ansi-bold"> 100% [========================================] (2292 steps/s)</span> [step=49999] [loss+=0.645] [~loss+=0.659] [~loss=0.432] [~acc=84.77%]        ]
 </pre>
 </div>
 </div>
@@ -8186,7 +8186,7 @@ Checkpointing model to "/home/janpf/work/cifar/base_fnn_model"
 (() => {
 	const src="https://cdn.plot.ly/plotly-2.34.0.min.js";
 	var runJSFn = function(module) {
-		
+
 	if (!module) {
 		module = window.Plotly;
 	}
@@ -8194,7 +8194,7 @@ Checkpointing model to "/home/janpf/work/cifar/base_fnn_model"
 	module.newPlot('6a8e7cb6', data);
 
 	}
-	
+
     if (typeof requirejs === "function") {
         // Use RequireJS to load module.
 		let srcWithoutExtension = src.substring(0, src.lastIndexOf(".js"));
@@ -8221,10 +8221,10 @@ Checkpointing model to "/home/janpf/work/cifar/base_fnn_model"
 	var script = document.createElement("script");
 
 	script.charset = "utf-8";
-	
+
 	script.src = src;
 	script.onload = script.onreadystatechange = function () { runJSFn(null); };
-	document.head.appendChild(script);	
+	document.head.appendChild(script);
 })();
 </script>
 </div>
@@ -8248,7 +8248,7 @@ Checkpointing model to "/home/janpf/work/cifar/base_fnn_model"
 (() => {
 	const src="https://cdn.plot.ly/plotly-2.34.0.min.js";
 	var runJSFn = function(module) {
-		
+
 	if (!module) {
 		module = window.Plotly;
 	}
@@ -8256,7 +8256,7 @@ Checkpointing model to "/home/janpf/work/cifar/base_fnn_model"
 	module.newPlot('b5faa831', data);
 
 	}
-	
+
     if (typeof requirejs === "function") {
         // Use RequireJS to load module.
 		let srcWithoutExtension = src.substring(0, src.lastIndexOf(".js"));
@@ -8283,10 +8283,10 @@ Checkpointing model to "/home/janpf/work/cifar/base_fnn_model"
 	var script = document.createElement("script");
 
 	script.charset = "utf-8";
-	
+
 	script.src = src;
 	script.onload = script.onreadystatechange = function () { runJSFn(null); };
-	document.head.appendChild(script);	
+	document.head.appendChild(script);
 })();
 </script>
 </div>
@@ -8496,7 +8496,7 @@ Checkpointing model to "/home/janpf/work/cifar/base_cnn_model"
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold"> 100% [========================================] (959 steps/s)</span> [step=79999] [loss+=0.532] [~loss+=0.61] [~loss=0.61] [~acc=79.37%]        .45%]          
+<pre>      <span class="ansi-bold"> 100% [========================================] (959 steps/s)</span> [step=79999] [loss+=0.532] [~loss+=0.61] [~loss=0.61] [~acc=79.37%]        .45%]
 </pre>
 </div>
 </div>
@@ -8519,7 +8519,7 @@ Checkpointing model to "/home/janpf/work/cifar/base_cnn_model"
 (() => {
 	const src="https://cdn.plot.ly/plotly-2.34.0.min.js";
 	var runJSFn = function(module) {
-		
+
 	if (!module) {
 		module = window.Plotly;
 	}
@@ -8527,7 +8527,7 @@ Checkpointing model to "/home/janpf/work/cifar/base_cnn_model"
 	module.newPlot('0f0dfeb5', data);
 
 	}
-	
+
     if (typeof requirejs === "function") {
         // Use RequireJS to load module.
 		let srcWithoutExtension = src.substring(0, src.lastIndexOf(".js"));
@@ -8554,10 +8554,10 @@ Checkpointing model to "/home/janpf/work/cifar/base_cnn_model"
 	var script = document.createElement("script");
 
 	script.charset = "utf-8";
-	
+
 	script.src = src;
 	script.onload = script.onreadystatechange = function () { runJSFn(null); };
-	document.head.appendChild(script);	
+	document.head.appendChild(script);
 })();
 </script>
 </div>
@@ -8581,7 +8581,7 @@ Checkpointing model to "/home/janpf/work/cifar/base_cnn_model"
 (() => {
 	const src="https://cdn.plot.ly/plotly-2.34.0.min.js";
 	var runJSFn = function(module) {
-		
+
 	if (!module) {
 		module = window.Plotly;
 	}
@@ -8589,7 +8589,7 @@ Checkpointing model to "/home/janpf/work/cifar/base_cnn_model"
 	module.newPlot('49d1f2f0', data);
 
 	}
-	
+
     if (typeof requirejs === "function") {
         // Use RequireJS to load module.
 		let srcWithoutExtension = src.substring(0, src.lastIndexOf(".js"));
@@ -8616,10 +8616,10 @@ Checkpointing model to "/home/janpf/work/cifar/base_cnn_model"
 	var script = document.createElement("script");
 
 	script.charset = "utf-8";
-	
+
 	script.src = src;
 	script.onload = script.onreadystatechange = function () { runJSFn(null); };
-	document.head.appendChild(script);	
+	document.head.appendChild(script);
 })();
 </script>
 </div>
@@ -8666,7 +8666,7 @@ That is, currently the way to save the model is to export the Go model creation 
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
     <span class="s2">"encoding/base64"</span>
     <span class="s2">"image/png"</span>
-    
+
     <span class="s2">"github.com/gomlx/gomlx/examples/cifar/classifier"</span>
     <span class="o">//</span> <span class="n">We</span> <span class="n">also</span> <span class="n">must</span> <span class="kn">import</span><span class="w"> </span><span class="nn">then</span> <span class="n">engine</span> <span class="n">that</span> <span class="n">will</span> <span class="n">execute</span> <span class="n">the</span> <span class="n">model</span><span class="o">.</span>
     <span class="o">//</span> <span class="n">Currently</span> <span class="n">only</span> <span class="n">XLA</span> <span class="ow">is</span> <span class="n">supported</span><span class="o">.</span>
@@ -8736,7 +8736,7 @@ That is, currently the way to save the model is to export the Go model creation 
 <div class="jp-InputPrompt jp-InputArea-prompt">In [14]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="o">//</span> 
+<div class="highlight hl-ipython3"><pre><span></span><span class="o">//</span>
 <span class="o">%%</span>
 <span class="n">backend</span> <span class="o">:=</span> <span class="n">backends</span><span class="o">.</span><span class="n">MustNew</span><span class="p">()</span>
 <span class="n">ds</span> <span class="o">:=</span> <span class="n">cifar</span><span class="o">.</span><span class="n">NewDataset</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="s2">"Samples Cifar-10"</span><span class="p">,</span> <span class="o">*</span><span class="n">flagDataDir</span><span class="p">,</span> <span class="n">cifar</span><span class="o">.</span><span class="n">C10</span><span class="p">,</span> <span class="n">DType</span><span class="p">,</span> <span class="n">cifar</span><span class="o">.</span><span class="n">Train</span><span class="p">)</span><span class="o">.</span><span class="n">Shuffle</span><span class="p">()</span>

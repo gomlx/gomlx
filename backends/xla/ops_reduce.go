@@ -5,10 +5,10 @@ import (
 
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
-	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	stablehloshapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 	"github.com/x448/float16"
@@ -44,11 +44,11 @@ func (b *Builder) getReductionFn(dtype dtypes.DType, opType backends.OpType) (*s
 	reductionFn = b.fn.Closure()
 	var lhs, rhs *stablehlo.Value
 	var err error
-	lhs, err = reductionFn.NamedInput("lhs", stablehloshapes.Make(dtype))
+	lhs, err = reductionFn.NamedInput("lhs", stablehloshapes.Make(DTypeToXLA(dtype)))
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 	}
-	rhs, err = reductionFn.NamedInput("rhs", stablehloshapes.Make(dtype))
+	rhs, err = reductionFn.NamedInput("rhs", stablehloshapes.Make(DTypeToXLA(dtype)))
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 	}
@@ -377,19 +377,19 @@ func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, i
 		// Create a new reduction function for this valuesDType/op.
 		reduceFn = b.fn.Closure()
 		var lhsIndex, lhsValue, rhsIndex, rhsValue *stablehlo.Value
-		lhsIndex, err = reduceFn.NamedInput("lhs_idx", stablehloshapes.Make(outputDType))
+		lhsIndex, err = reduceFn.NamedInput("lhs_idx", stablehloshapes.Make(DTypeToXLA(outputDType)))
 		if err != nil {
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
-		lhsValue, err = reduceFn.NamedInput("lhs_v", stablehloshapes.Make(valuesDType))
+		lhsValue, err = reduceFn.NamedInput("lhs_v", stablehloshapes.Make(DTypeToXLA(valuesDType)))
 		if err != nil {
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
-		rhsIndex, err = reduceFn.NamedInput("rhs_idx", stablehloshapes.Make(outputDType))
+		rhsIndex, err = reduceFn.NamedInput("rhs_idx", stablehloshapes.Make(DTypeToXLA(outputDType)))
 		if err != nil {
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
-		rhsValue, err = reduceFn.NamedInput("rhs_v", stablehloshapes.Make(valuesDType))
+		rhsValue, err = reduceFn.NamedInput("rhs_v", stablehloshapes.Make(DTypeToXLA(valuesDType)))
 		if err != nil {
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
@@ -552,11 +552,11 @@ func (b *Builder) getSelectFn(dtype dtypes.DType, opType backends.OpType) (*stab
 	selectionFn = b.fn.Closure()
 	var lhs, rhs *stablehlo.Value
 	var err error
-	lhs, err = selectionFn.NamedInput("lhs", stablehloshapes.Make(dtype))
+	lhs, err = selectionFn.NamedInput("lhs", stablehloshapes.Make(DTypeToXLA(dtype)))
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 	}
-	rhs, err = selectionFn.NamedInput("rhs", stablehloshapes.Make(dtype))
+	rhs, err = selectionFn.NamedInput("rhs", stablehloshapes.Make(DTypeToXLA(dtype)))
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 	}

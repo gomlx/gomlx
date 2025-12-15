@@ -1,8 +1,8 @@
 package xla
 
 import (
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 // Capabilities of the SimpleGo backends: the set of supported operations and data types.

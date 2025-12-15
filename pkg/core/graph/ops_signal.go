@@ -5,7 +5,7 @@ import (
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 // FFT computes a forward 1D fast-fourier transformation of the operand, which is expected

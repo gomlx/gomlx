@@ -2,16 +2,17 @@ package ogbnmag
 
 import (
 	"fmt"
+
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"k8s.io/klog/v2"
 )
 

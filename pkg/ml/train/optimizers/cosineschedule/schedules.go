@@ -28,7 +28,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 var (

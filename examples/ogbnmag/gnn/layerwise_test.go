@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/gomlx/gomlx/backends/default"

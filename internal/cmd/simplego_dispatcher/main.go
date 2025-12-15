@@ -168,12 +168,12 @@ func main() {
 package simplego
 
 import (
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
-	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 )
 
 
-func init() { 
+func init() {
 {{- range .Dispatchers}}
 
 	// DTypeDispatcher: {{.Dispatcher}}
@@ -209,7 +209,7 @@ func init() {
 {{- end }}
 {{- end }}
 
-}	
+}
 `))
 	fullPath := path.Join(must.M1(os.Getwd()), fileName)
 	f := must.M1(os.Create(fullPath))

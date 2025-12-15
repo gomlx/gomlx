@@ -73,7 +73,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 )
 
