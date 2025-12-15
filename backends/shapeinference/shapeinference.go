@@ -766,11 +766,11 @@ func SliceOp(operand shapes.Shape, starts, limits, strides []int) (output shapes
 			return shapes.Invalid(), errors.Errorf("%s: stride must be positive, but got stride[%d]=%d for operand shape %s",
 				opName, axis, stride, operand)
 		}
-		if start < 0 || start >= dimSize {
+		if start < 0 || start > dimSize {
 			return shapes.Invalid(), errors.Errorf("%s: start index %d is out of bounds for axis %d with size %d (operand shape %s)",
 				opName, start, axis, dimSize, operand)
 		}
-		// Limit can be equal to dimSize.
+		// Limit can be equal to dimSize. Also allow start == dimSize for empty slices.
 		if limit < start || limit > dimSize {
 			return shapes.Invalid(), errors.Errorf("%s: limit index %d is out of bounds for axis %d (start=%d, size=%d, operand shape %s)",
 				opName, limit, axis, start, dimSize, operand)

@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
+	"github.com/x448/float16"
 )
 
 func init() {
@@ -592,6 +593,8 @@ func execSqrt(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 		execSqrtGeneric[float64](input.flat.([]float64), output.flat.([]float64))
 	case dtypes.BFloat16:
 		execSqrtBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	case dtypes.Float16:
+		execSqrtF16(input.flat.([]float16.Float16), output.flat.([]float16.Float16))
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
@@ -607,6 +610,12 @@ func execSqrtGeneric[T float32 | float64](inputs, outputs []T) {
 func execSqrtBF16(inputs, outputs []bfloat16.BFloat16) {
 	for ii, input := range inputs {
 		outputs[ii] = bfloat16.FromFloat32(float32(math.Sqrt(float64(input.Float32()))))
+	}
+}
+
+func execSqrtF16(inputs, outputs []float16.Float16) {
+	for ii, input := range inputs {
+		outputs[ii] = float16.Fromfloat32(float32(math.Sqrt(float64(input.Float32()))))
 	}
 }
 

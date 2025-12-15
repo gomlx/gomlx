@@ -63,9 +63,21 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 		return nil, err
 	}
 	lhs, rhs := inputs[0], inputs[1]
-	dtype := lhs.shape.DType
-	if dtype != rhs.shape.DType {
-		return nil, errors.Errorf("DotGeneral lhs (left-hand-side) and rhs operands don't match data types: %s and %s", dtype, rhs.shape.DType)
+	lhsDType := lhs.shape.DType
+	rhsDType := rhs.shape.DType
+
+	if lhsDType != rhsDType {
+		return nil, errors.Errorf("DotGeneral lhs (left-hand-side) and rhs operands don't match data types: %s and %s", lhsDType, rhsDType)
+	}
+
+	dtype := lhsDType
+
+	// Determine the final output dtype for the node.
+	// For int8/uint8: output is int32 (widened accumulation type that's also the final output).
+	// For bfloat16/float16: output remains the input dtype (internal accumulation uses float32 but converts back).
+	nodeOutputDType := dtype
+	if dtype == dtypes.Int8 || dtype == dtypes.Uint8 {
+		nodeOutputDType = dtypes.Int32
 	}
 	if len(lhsContractingAxes) != len(rhsContractingAxes) {
 		return nil, errors.Errorf("DotGeneral number of contracting axes for lhs (%d) doesn't match rhs (%d)",
@@ -146,16 +158,20 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
 	params.lhsBlockedShape = dgCreateBlockedShape(dtype, params.batchSize, params.lhsCrossSize, params.contractingSize, blockLog2Dim)
 	params.rhsBlockedShape = dgCreateBlockedShape(dtype, params.batchSize, params.rhsCrossSize, params.contractingSize, blockLog2Dim)
-	outputDType := dtype
+	// Determine the internal accumulator dtype for numerical precision.
+	// This is separate from the node output dtype - for float16/bfloat16, we accumulate in float32
+	// internally but convert back to the original dtype.
+	accumulatorDType := nodeOutputDType
 	if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
 		// For 16 bits, store the intermediary results as float32 to minimize numerical errors during accumulation.
 		// Notice the blockLog2Dim must be the same, because the block dimensions much match the inputs.
-		outputDType = dtypes.Float32
+		accumulatorDType = dtypes.Float32
 	}
-	params.outputBlockedShape = dgCreateBlockedShape(outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
+	params.outputBlockedShape = dgCreateBlockedShape(accumulatorDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
 
 	// Create dot-general node: it will generate a normalized output [batchSize, lhsCrossSize, rhsCrossSize].
-	dotGeneral := b.newNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), lhs, rhs)
+	// Use nodeOutputDType for output shape (same as input dtype for float types, int32 for int8/uint8).
+	dotGeneral := b.newNode(backends.OpTypeDotGeneral, shapes.Make(nodeOutputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), lhs, rhs)
 	dotGeneral.data = &params
 
 	// Reshape result to recover batch and cross dimensions.
@@ -222,6 +238,18 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	dtype := lhs.shape.DType
 	output := backend.getBufferForShape(outputShape)
 	output.Zeros()
+
+	// Try the fast path first for standard matrix multiplication patterns.
+	// This avoids the normalization overhead for the most common cases.
+	if execDotGeneralFastPath(backend, lhs, rhs, params, output) {
+		return output, nil
+	}
+
+	// Try using pre-blocked weights for large matrix multiplications.
+	// This avoids blocking the RHS (weights) on every matmul call.
+	if TryExecDotGeneralWithPreBlockedWeights(backend, lhs, rhs, params, output) {
+		return output, nil
+	}
 
 	// Problem size (per example of the batch):
 	crossesSize := params.rhsCrossSize * params.lhsCrossSize

@@ -162,14 +162,53 @@ func execDotGeneralSmall(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 	}
 
 	tmpOutput := output
-	castToFloat32 := dtype == dtypes.BFloat16 || dtype == dtypes.Float16
-	if castToFloat32 {
-		outputShape := shapes.Make(dtypes.Float32, params.batchSize, params.lhsCrossSize, params.rhsCrossSize)
-		tmpOutput = backend.getBufferForShape(outputShape)
+	outputDType := output.shape.DType
+
+	// Check if we need a temporary output buffer with a different accumulator dtype.
+	// This is needed for:
+	// - int8/uint8: input is int8 but accumulator is int32
+	// - float16/bfloat16: input is fp16 but accumulator is float32 for precision
+	needsTempOutput := false
+	var accumulatorDType dtypes.DType
+	if dtype == dtypes.Int8 || dtype == dtypes.Uint8 {
+		accumulatorDType = dtypes.Int32
+		needsTempOutput = dtype != outputDType // int8→int32 case
+	} else if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
+		accumulatorDType = dtypes.Float32
+		needsTempOutput = true // Always need float32 temp for float16/bfloat16
+	}
+
+	if needsTempOutput {
+		// Create temporary output with intermediate dtype (float32 for fp16, int32 for int8)
+		tmpShape := shapes.Make(accumulatorDType, output.shape.Dimensions...)
+		tmpOutput = backend.getBufferForShape(tmpShape)
 		tmpOutput.Zeros()
 	}
 
-	normalizeDotGeneral := dotGeneralNormalizedDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int))
+	// Select kernel based on input dtype and output dtype
+	var normalizeDotGeneral func(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int)
+
+	lhsDType := lhs.shape.DType
+	rhsDType := rhs.shape.DType
+
+	// Use specialized int8→int32 kernels if available
+	isQuantizedOp := (lhsDType == dtypes.Int8 || lhsDType == dtypes.Uint8) &&
+		(rhsDType == dtypes.Int8 || rhsDType == dtypes.Uint8) &&
+		outputDType == dtypes.Int32
+
+	if isQuantizedOp {
+		// For int8×int8, use signed kernel (SMMLA)
+		if lhsDType == dtypes.Int8 && rhsDType == dtypes.Int8 {
+			normalizeDotGeneral = execNormalizedDotGeneralInt8ToInt32
+		} else {
+			// For uint8×uint8 or mixed int8/uint8, use unsigned kernel (UMMLA)
+			// Mixed types are treated as unsigned to avoid sign extension issues
+			normalizeDotGeneral = execNormalizedDotGeneralUint8ToInt32
+		}
+	} else {
+		// Fallback to generic kernel
+		normalizeDotGeneral = dotGeneralNormalizedDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int))
+	}
 
 	// Decide on using parallelism across the batch -- each example is started on a separate worker.
 	useBatchParallelism := backend.workers.IsEnabled()
@@ -196,11 +235,18 @@ func execDotGeneralSmall(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 		wg.Wait()
 	}
 
-	// If we created a temporary float32 output, convert it back to the original dtype.
-	if castToFloat32 {
-		convertFn := convertDTypePairMap.Get(dtypes.Float32, output.shape.DType).(convertFnType)
-		convertFn(tmpOutput, output)
-		backend.putBuffer(tmpOutput) // Return the temporary buffer to the pool.
+	// If we created a temporary output with different dtype, handle conversion or copy
+	if needsTempOutput {
+		if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
+			// For float16→float32, convert back to float16
+			convertFn := convertDTypePairMap.Get(tmpOutput.shape.DType, output.shape.DType).(convertFnType)
+			convertFn(tmpOutput, output)
+			backend.putBuffer(tmpOutput)
+		} else if isQuantizedOp {
+			// For int8→int32, tmpOutput already has the correct int32 values, just copy
+			copy(output.flat.([]int32), tmpOutput.flat.([]int32))
+			backend.putBuffer(tmpOutput)
+		}
 	}
 	return nil
 }
@@ -284,7 +330,8 @@ func execNormalizedDotGeneralGeneric[T PODNumericConstraints](lhs, rhs, output *
 }
 
 func init() {
-	dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, execNormalizedDotGeneralBfloat16)
+	// Use RegisterIfNotSet so NEON-optimized version from dotgeneral_fp16_neon_arm64.go takes precedence
+	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.BFloat16, execNormalizedDotGeneralBfloat16)
 }
 func execNormalizedDotGeneralBfloat16(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
 	lhsFlat := lhs.flat.([]bfloat16.BFloat16)

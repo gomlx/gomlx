@@ -97,6 +97,7 @@ func New(config string) (backends.Backend, error) {
 func newDefaultBackend() *Backend {
 	b := &Backend{}
 	b.workers.Initialize()
+	b.preBlockedWeightCache = NewPreBlockedWeightCache()
 	return b
 }
 
@@ -114,6 +115,10 @@ type Backend struct {
 
 	// opsExecutionType defines how to execute the ops of a computation.
 	opsExecutionType opsExecutionType
+
+	// preBlockedWeightCache caches pre-blocked weight tensors for efficient matmul.
+	// This allows skipping the blocking step for constant weights (model parameters).
+	preBlockedWeightCache *PreBlockedWeightCache
 
 	// isFinalized is true if the backend has been isFinalized.
 	isFinalized bool

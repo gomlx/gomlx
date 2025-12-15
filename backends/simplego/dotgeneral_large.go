@@ -3,6 +3,7 @@ package simplego
 import (
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
+	"github.com/x448/float16"
 
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
@@ -30,7 +31,14 @@ var (
 )
 
 func init() {
-	for _, dtype := range []dtypes.DType{dtypes.F32, dtypes.F64, dtypes.BFloat16} {
+	// Initialize block dimensions for all numeric types that support DotGeneral.
+	// This includes float types and integer types (used by quantized models).
+	allNumericTypes := []dtypes.DType{
+		dtypes.F32, dtypes.F64, dtypes.BFloat16, dtypes.Float16,
+		dtypes.Int8, dtypes.Int16, dtypes.Int32, dtypes.Int64,
+		dtypes.Uint8, dtypes.Uint16, dtypes.Uint32, dtypes.Uint64,
+	}
+	for _, dtype := range allNumericTypes {
 		sizePerElem := dtype.Size()
 		if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
 			// Because for BFloat16/Float16 we store the results in float32 and only later convert to
@@ -45,6 +53,10 @@ func init() {
 			log2Dim++
 		}
 		log2Dim--
+		// Ensure minimum block dimension of 8 (log2Dim >= 3) for the kernel's loop unrolling.
+		if log2Dim < 3 {
+			log2Dim = 3
+		}
 		DotGeneralTargetBlockLog2Dim[dtype] = log2Dim
 	}
 }
@@ -250,6 +262,7 @@ func dgCopyOutputBlockToFlat[T interface {
 
 func init() {
 	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.BFloat16, dgCopyOutputBlockToFlatBFloat16)
+	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.Float16, dgCopyOutputBlockToFlatFloat16)
 }
 
 // dgCopyOutputBlockToFlatBFloat16 copies the blocked output to a flat output, removing the padding.
@@ -310,6 +323,68 @@ func dgCopyOutputBlockToFlatBFloat16(blockSource, output *Buffer) {
 	}
 }
 
+// dgCopyOutputBlockToFlatFloat16 copies the blocked output to a flat output, removing the padding.
+// The blockSource is assumed to be float32 -- matrix multiplication uses float32 to avoid
+// numeric errors when accumulating results.
+//
+// blockedSource shape: float32[batchSize, lhsCrossBlocks, rhsCrossBlocks, blockDim, blockDim]
+// output shape: float16[batchSize, lhsCrossSize, rhsCrossSize]
+func dgCopyOutputBlockToFlatFloat16(blockSource, output *Buffer) {
+	sourceDims := blockSource.shape.Dimensions
+	outputDims := output.shape.Dimensions
+
+	batchSize := sourceDims[0]
+	lhsBlockCross := sourceDims[1]
+	rhsBlockCross := sourceDims[2]
+	blockDim := sourceDims[3] // Same as sourceDims[4]
+	lhsCrossSize := outputDims[1]
+	rhsCrossSize := outputDims[2]
+
+	// Pre-calculate strides
+	outputRhsStride := 1
+	outputLhsStride := rhsCrossSize
+	outputBatchStride := lhsCrossSize * rhsCrossSize
+
+	sourceBlockSize := blockDim * blockDim
+	sourceRhsBlockStride := sourceBlockSize
+	sourceLhsBlockStride := rhsBlockCross * sourceBlockSize
+	sourceBatchStride := lhsBlockCross * rhsBlockCross * sourceBlockSize
+
+	sourceData := blockSource.flat.([]float32)
+	outputData := output.flat.([]float16.Float16)
+
+	for batch := 0; batch < batchSize; batch++ {
+		sourceBatchOffset := batch * sourceBatchStride
+		outputBatchOffset := batch * outputBatchStride
+
+		for lhsBlock := 0; lhsBlock < lhsBlockCross && lhsBlock*blockDim < lhsCrossSize; lhsBlock++ {
+			lhsStart := lhsBlock * blockDim
+			lhsEnd := min(lhsStart+blockDim, lhsCrossSize)
+			sourceLhsOffset := sourceBatchOffset + lhsBlock*sourceLhsBlockStride
+			outputLhsOffset := outputBatchOffset + lhsStart*outputLhsStride
+
+			for rhsBlock := 0; rhsBlock < rhsBlockCross && rhsBlock*blockDim < rhsCrossSize; rhsBlock++ {
+				rhsStart := rhsBlock * blockDim
+				rhsEnd := min(rhsStart+blockDim, rhsCrossSize)
+				sourceBlockOffset := sourceLhsOffset + rhsBlock*sourceRhsBlockStride
+				outputBlockOffset := outputLhsOffset + rhsStart*outputRhsStride
+
+				// Copy valid elements from the block
+				rowLen := rhsEnd - rhsStart
+				for blockRow := 0; blockRow < lhsEnd-lhsStart; blockRow++ {
+					sourceRowOffset := sourceBlockOffset + blockRow*blockDim
+					outputRowOffset := outputBlockOffset + blockRow*outputLhsStride
+					// Use the NEON-accelerated bulk converter when available
+					convertFloat32SliceToFloat16(
+						sourceData[sourceRowOffset:sourceRowOffset+rowLen],
+						outputData[outputRowOffset:outputRowOffset+rowLen],
+					)
+				}
+			}
+		}
+	}
+}
+
 func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
 	dtype := lhs.shape.DType
 
@@ -352,8 +427,9 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 		if backend.workers.IsUnlimited() {
 			recursive.maxDepthParallelization = 8 // At most 2^8 = 256 goroutines are spawned.
 		} else {
+			// Use log2 of parallelism without the +1 to reduce goroutine overhead.
+			// Combined with increased base case threshold, this reduces synchronization costs.
 			recursive.maxDepthParallelization = log2int(maxParallelism)
-			recursive.maxDepthParallelization += 1 // We want to allow slightly more fine-grained parallelization.
 		}
 	}
 
@@ -393,7 +469,9 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 	backend.putBuffer(rhsBlocks)
 
 	// Copy over outputBlocks to the normal output.
-	copyOutputFn := dotGeneralOutputBlockToFlatDTypeMap.Get(dtype).(func(blockedSource, output *Buffer))
+	// Use the output dtype (not input dtype) to get the correct copy function
+	outputDType := output.shape.DType
+	copyOutputFn := dotGeneralOutputBlockToFlatDTypeMap.Get(outputDType).(func(blockedSource, output *Buffer))
 	copyOutputFn(outputBlocks, output)
 	backend.putBuffer(outputBlocks)
 	return nil
@@ -429,8 +507,8 @@ func (r *dotGeneralRecursiveData) apply(
 	maxLen := max(max(lhsCrossLen, rhsCrossLen), contractingLen)
 
 	// Base case: no splitting, simple go over all the crosses and calculate the matrix multiplication for this
-	// slice.
-	if maxLen <= 2 {
+	// slice. Threshold of 4 reduces recursion/threading overhead while maintaining parallelism.
+	if maxLen <= 4 {
 		for lhsCross := lhsCrossStart; lhsCross < lhsCrossEnd; lhsCross++ {
 			for rhsCross := rhsCrossStart; rhsCross < rhsCrossEnd; rhsCross++ {
 				outputBlockIdx := r.outputBatchOffset + lhsCross*r.rhsCrossBlocks + rhsCross
@@ -514,63 +592,95 @@ func buildDotGeneralKernel[T PODNumericConstraints](lhs, rhs, output *Buffer, bl
 			// Loop 4 rows at a time.
 			for rhsRow := 0; rhsRow < blockDim; rhsRow += 4 { // range blockDim { // loop over rhs rows:
 				lhsIdx := baseLhsIdx
-				contractingIdx := 0
-				sum0 := outputFlat[outputIdx]
-				sum1 := outputFlat[outputIdx+1]
-				sum2 := outputFlat[outputIdx+2]
-				sum3 := outputFlat[outputIdx+3]
-				// Loop unrolled 8 at a time.
-				for ; contractingIdx+7 < blockDim; contractingIdx += 8 {
-					rhsIdx1 := rhsIdx + blockDim
-					rhsIdx2 := rhsIdx + 2*blockDim
-					rhsIdx3 := rhsIdx + 3*blockDim
-					sum0 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx] +
-						lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx+1] +
-						lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx+2] +
-						lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx+3] +
-						lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx+4] +
-						lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx+5] +
-						lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx+6] +
-						lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx+7]
-					sum1 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx1] +
-						lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx1+1] +
-						lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx1+2] +
-						lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx1+3] +
-						lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx1+4] +
-						lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx1+5] +
-						lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx1+6] +
-						lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx1+7]
-					sum2 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx2] +
-						lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx2+1] +
-						lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx2+2] +
-						lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx2+3] +
-						lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx2+4] +
-						lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx2+5] +
-						lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx2+6] +
-						lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx2+7]
-					sum3 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx3] +
-						lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx3+1] +
-						lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx3+2] +
-						lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx3+3] +
-						lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx3+4] +
-						lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx3+5] +
-						lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx3+6] +
-						lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx3+7]
-					lhsIdx += 8
-					rhsIdx += 8
+				var sum0, sum1, sum2, sum3 T
+
+				// SIMD acceleration for float32 on ARM64 using NEON Group4.
+				// For other types or platforms, fall back to pure Go.
+				//
+				// Threshold of blockDim >= 16 enables NEON for most practical matrix sizes.
+				// At blockDim=32 (default for float32), NEON processes 8 vector iterations per row.
+				// Even at blockDim=16, we get 4 vector iterations which provides meaningful speedup.
+				if lhsFloat32, ok := any(lhsFlat).([]float32); ok {
+					if hasNEON && blockDim >= 16 {
+						// NEON Group4 path - fastest for all ARM64 including Apple M4
+						rhsFloat32 := any(rhsFlat).([]float32)
+						outputFloat32 := any(outputFlat).([]float32)
+
+						s0, s1, s2, s3 := dotProductInnerLoopNEON(
+							lhsFloat32, rhsFloat32, outputFloat32,
+							lhsIdx, rhsIdx, outputIdx, blockDim)
+
+						sum0 = T(s0)
+						sum1 = T(s1)
+						sum2 = T(s2)
+						sum3 = T(s3)
+						rhsIdx += blockDim // Compensate for skipping scalar loop
+						goto done
+					}
 				}
-				// Tail loop.
-				for ; contractingIdx < blockDim; contractingIdx++ {
-					rhsIdx1 := rhsIdx + blockDim
-					rhsIdx2 := rhsIdx + 2*blockDim
-					rhsIdx3 := rhsIdx + 3*blockDim
-					sum0 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx]
-					sum1 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx1]
-					sum2 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx2]
-					sum3 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx3]
-					lhsIdx++
-					rhsIdx++
+
+				// Pure Go implementation fallback
+				{
+					contractingIdx := 0
+					sum0 = outputFlat[outputIdx]
+					sum1 = outputFlat[outputIdx+1]
+					sum2 = outputFlat[outputIdx+2]
+					sum3 = outputFlat[outputIdx+3]
+					// Loop unrolled 8 at a time.
+					for ; contractingIdx+7 < blockDim; contractingIdx += 8 {
+						rhsIdx1 := rhsIdx + blockDim
+						rhsIdx2 := rhsIdx + 2*blockDim
+						rhsIdx3 := rhsIdx + 3*blockDim
+						sum0 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx] +
+							lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx+1] +
+							lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx+2] +
+							lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx+3] +
+							lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx+4] +
+							lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx+5] +
+							lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx+6] +
+							lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx+7]
+						sum1 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx1] +
+							lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx1+1] +
+							lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx1+2] +
+							lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx1+3] +
+							lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx1+4] +
+							lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx1+5] +
+							lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx1+6] +
+							lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx1+7]
+						sum2 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx2] +
+							lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx2+1] +
+							lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx2+2] +
+							lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx2+3] +
+							lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx2+4] +
+							lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx2+5] +
+							lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx2+6] +
+							lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx2+7]
+						sum3 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx3] +
+							lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx3+1] +
+							lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx3+2] +
+							lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx3+3] +
+							lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx3+4] +
+							lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx3+5] +
+							lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx3+6] +
+							lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx3+7]
+						lhsIdx += 8
+						rhsIdx += 8
+					}
+					// Tail loop.
+					for ; contractingIdx < blockDim; contractingIdx++ {
+						rhsIdx1 := rhsIdx + blockDim
+						rhsIdx2 := rhsIdx + 2*blockDim
+						rhsIdx3 := rhsIdx + 3*blockDim
+						sum0 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx]
+						sum1 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx1]
+						sum2 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx2]
+						sum3 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx3]
+						lhsIdx++
+						rhsIdx++
+					}
 				}
+
+			done:
 				outputFlat[outputIdx] = sum0
 				outputFlat[outputIdx+1] = sum1
 				outputFlat[outputIdx+2] = sum2
@@ -613,6 +723,25 @@ func buildDotGeneralKernelBFloat16(lhs, rhs, output *Buffer, blockDim int) kerne
 			// Loop 4 rows at a time.
 			for rhsRow := 0; rhsRow < blockDim; rhsRow += 4 { // range blockDim { // loop over rhs rows:
 				lhsIdx := baseLhsIdx
+
+				// Try NEON BF16 path using BFMLAL instructions (ARMv8.6+)
+				// This avoids explicit BF16→FP32 conversion by using native instructions
+				if hasBF16NEON && blockDim >= 16 {
+					sum0 := outputFlat[outputIdx] + dotProductBF16InnerLoop(lhsFlat, rhsFlat, lhsIdx, rhsIdx, blockDim)
+					sum1 := outputFlat[outputIdx+1] + dotProductBF16InnerLoop(lhsFlat, rhsFlat, lhsIdx, rhsIdx+blockDim, blockDim)
+					sum2 := outputFlat[outputIdx+2] + dotProductBF16InnerLoop(lhsFlat, rhsFlat, lhsIdx, rhsIdx+2*blockDim, blockDim)
+					sum3 := outputFlat[outputIdx+3] + dotProductBF16InnerLoop(lhsFlat, rhsFlat, lhsIdx, rhsIdx+3*blockDim, blockDim)
+
+					outputFlat[outputIdx] = sum0
+					outputFlat[outputIdx+1] = sum1
+					outputFlat[outputIdx+2] = sum2
+					outputFlat[outputIdx+3] = sum3
+					outputIdx += 4
+					rhsIdx += 4 * blockDim
+					continue
+				}
+
+				// Scalar fallback
 				contractingIdx := 0
 				sum0 := outputFlat[outputIdx]
 				sum1 := outputFlat[outputIdx+1]

@@ -115,6 +115,9 @@ var mutableBytesDTypeMap = NewDTypeMap("MutableBytes")
 // mutableBytesGeneric is the generic implementation of mutableBytes.
 func mutableBytesGeneric[T SupportedTypesConstraints](b *Buffer) []byte {
 	flat := b.flat.([]T)
+	if len(flat) == 0 {
+		return nil // Handle empty tensors
+	}
 	bytePointer := (*byte)(unsafe.Pointer(&flat[0]))
 	var t T
 	return unsafe.Slice(bytePointer, len(flat)*int(unsafe.Sizeof(t)))
@@ -232,6 +235,13 @@ func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) error {
 	}
 	// fmt.Printf("> BufferFinalize(%p): shape=%s\n", buffer, buffer.shape)
 	// fmt.Printf("\tStack trace:\n%s\n", debug.Stack())
+
+	// Invalidate any pre-blocked weight cache entry for this buffer.
+	// This prevents stale cache entries when the buffer's memory is reused.
+	if b.preBlockedWeightCache != nil {
+		b.preBlockedWeightCache.Invalidate(buffer)
+	}
+
 	b.putBuffer(buffer)
 	return nil
 }

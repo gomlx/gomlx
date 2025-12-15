@@ -541,3 +541,164 @@ func TestDotGeneral_Dot(t *testing.T) {
 	fmt.Printf("\ty2=%s\n", y2.GoStr())
 	assert.Equal(t, [][]float32{{10 + 22 + 36}, {20 + 44 + 72}}, y2.Value())
 }
+
+// TestDotGeneral_NonSquareMatrices tests matrix multiplication with non-square matrices.
+// This is a regression test for the fast path which must correctly handle row-major layout.
+// The fast path computes [M, K] × [K, N] → [M, N] for float32 tensors.
+func TestDotGeneral_NonSquareMatrices(t *testing.T) {
+	be, ok := backend.(*Backend)
+	if !ok {
+		t.Skip("Skipping test because backend is not a SimpleGo Backend")
+	}
+
+	// Test case: [2, 3] × [3, 5] → [2, 5]
+	// This exercises the fast path with K=3, N=5 (non-square RHS)
+	M, K, N := 2, 3, 5
+
+	lhsShape := shapes.Make(dtypes.Float32, M, K)
+	rhsShape := shapes.Make(dtypes.Float32, K, N)
+	outputShape := shapes.Make(dtypes.Float32, M, N)
+
+	lhs := be.NewBuffer(lhsShape)
+	rhs := be.NewBuffer(rhsShape)
+
+	// Fill with simple test data
+	// LHS = [[1, 2, 3],
+	//        [4, 5, 6]]
+	lhsFlat := lhs.flat.([]float32)
+	for i := range lhsFlat {
+		lhsFlat[i] = float32(i + 1)
+	}
+
+	// RHS = [[1, 2, 3, 4, 5],
+	//        [6, 7, 8, 9, 10],
+	//        [11, 12, 13, 14, 15]]
+	rhsFlat := rhs.flat.([]float32)
+	for i := range rhsFlat {
+		rhsFlat[i] = float32(i + 1)
+	}
+
+	// Compute expected result using naive matmul
+	expected := make([]float32, M*N)
+	for m := 0; m < M; m++ {
+		for n := 0; n < N; n++ {
+			var sum float32
+			for k := 0; k < K; k++ {
+				sum += lhsFlat[m*K+k] * rhsFlat[k*N+n]
+			}
+			expected[m*N+n] = sum
+		}
+	}
+
+	// Set up params for standard 2D matmul
+	params := &dotGeneralNodeData{
+		lhsContractingAxes: []int{1},
+		rhsContractingAxes: []int{0},
+		lhsBatchAxes:       []int{},
+		rhsBatchAxes:       []int{},
+		batchSize:          1,
+		lhsCrossSize:       M,
+		rhsCrossSize:       N,
+		contractingSize:    K,
+	}
+	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtypes.Float32]
+	params.lhsBlockedShape = dgCreateBlockedShape(dtypes.Float32, 1, M, K, blockLog2Dim)
+	params.rhsBlockedShape = dgCreateBlockedShape(dtypes.Float32, 1, N, K, blockLog2Dim)
+	params.outputBlockedShape = dgCreateBlockedShape(dtypes.Float32, 1, M, N, blockLog2Dim)
+
+	// Create output buffer
+	output := be.NewBuffer(outputShape)
+	output.Zeros()
+
+	// Execute via fast path (if applicable) or standard path
+	if canUseFastPath(lhs, rhs, params) {
+		execDotGeneralFastPathFloat32(be, lhs, rhs, params, output)
+	} else {
+		// Use standard path
+		execDotGeneralLarge(be, lhs, rhs, params, output)
+	}
+
+	// Verify results
+	outputFlat := output.flat.([]float32)
+	for i := range expected {
+		require.InDelta(t, expected[i], outputFlat[i], 1e-4,
+			"Mismatch at index %d: expected %f, got %f", i, expected[i], outputFlat[i])
+	}
+}
+
+// TestDotGeneral_NonSquareLarger tests larger non-square matrices to ensure
+// the NEON vectorized path is exercised.
+func TestDotGeneral_NonSquareLarger(t *testing.T) {
+	be, ok := backend.(*Backend)
+	if !ok {
+		t.Skip("Skipping test because backend is not a SimpleGo Backend")
+	}
+
+	// Larger test case: [16, 32] × [32, 48] → [16, 48]
+	// This should exercise the NEON Group4 path
+	M, K, N := 16, 32, 48
+
+	lhsShape := shapes.Make(dtypes.Float32, M, K)
+	rhsShape := shapes.Make(dtypes.Float32, K, N)
+	outputShape := shapes.Make(dtypes.Float32, M, N)
+
+	lhs := be.NewBuffer(lhsShape)
+	rhs := be.NewBuffer(rhsShape)
+
+	// Fill with test data
+	lhsFlat := lhs.flat.([]float32)
+	for i := range lhsFlat {
+		lhsFlat[i] = float32(i%10) * 0.1
+	}
+
+	rhsFlat := rhs.flat.([]float32)
+	for i := range rhsFlat {
+		rhsFlat[i] = float32(i%10) * 0.1
+	}
+
+	// Compute expected result using naive matmul
+	expected := make([]float32, M*N)
+	for m := 0; m < M; m++ {
+		for n := 0; n < N; n++ {
+			var sum float32
+			for k := 0; k < K; k++ {
+				sum += lhsFlat[m*K+k] * rhsFlat[k*N+n]
+			}
+			expected[m*N+n] = sum
+		}
+	}
+
+	// Set up params for standard 2D matmul
+	params := &dotGeneralNodeData{
+		lhsContractingAxes: []int{1},
+		rhsContractingAxes: []int{0},
+		lhsBatchAxes:       []int{},
+		rhsBatchAxes:       []int{},
+		batchSize:          1,
+		lhsCrossSize:       M,
+		rhsCrossSize:       N,
+		contractingSize:    K,
+	}
+	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtypes.Float32]
+	params.lhsBlockedShape = dgCreateBlockedShape(dtypes.Float32, 1, M, K, blockLog2Dim)
+	params.rhsBlockedShape = dgCreateBlockedShape(dtypes.Float32, 1, N, K, blockLog2Dim)
+	params.outputBlockedShape = dgCreateBlockedShape(dtypes.Float32, 1, M, N, blockLog2Dim)
+
+	// Create output buffer
+	output := be.NewBuffer(outputShape)
+	output.Zeros()
+
+	// Execute via fast path (if applicable) or standard path
+	if canUseFastPath(lhs, rhs, params) {
+		execDotGeneralFastPathFloat32(be, lhs, rhs, params, output)
+	} else {
+		execDotGeneralLarge(be, lhs, rhs, params, output)
+	}
+
+	// Verify results
+	outputFlat := output.flat.([]float32)
+	for i := range expected {
+		require.InDelta(t, expected[i], outputFlat[i], 1e-4,
+			"Mismatch at index %d: expected %f, got %f", i, expected[i], outputFlat[i])
+	}
+}
