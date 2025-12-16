@@ -236,12 +236,6 @@ func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) error {
 	// fmt.Printf("> BufferFinalize(%p): shape=%s\n", buffer, buffer.shape)
 	// fmt.Printf("\tStack trace:\n%s\n", debug.Stack())
 
-	// Invalidate any pre-blocked weight cache entry for this buffer.
-	// This prevents stale cache entries when the buffer's memory is reused.
-	if b.preBlockedWeightCache != nil {
-		b.preBlockedWeightCache.Invalidate(buffer)
-	}
-
 	b.putBuffer(buffer)
 	return nil
 }

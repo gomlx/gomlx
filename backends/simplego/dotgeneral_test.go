@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
@@ -701,4 +702,115 @@ func TestDotGeneral_NonSquareLarger(t *testing.T) {
 		require.InDelta(t, expected[i], outputFlat[i], 1e-4,
 			"Mismatch at index %d: expected %f, got %f", i, expected[i], outputFlat[i])
 	}
+}
+
+// TestDotGeneral_PreBlockDeduplication verifies that when the same RHS (weights) tensor
+// is used in multiple DotGeneral operations, only one BlockForDotGeneral node is created.
+// This tests the de-duplication logic in the Builder.
+func TestDotGeneral_PreBlockDeduplication(t *testing.T) {
+	_, ok := backend.(*Backend)
+	if !ok {
+		t.Skip("Skipping test because backend is not a SimpleGo Backend")
+	}
+
+	// Create a builder and define inputs
+	builder := backend.Builder("DeDuplication Test").(*Builder)
+
+	// Create LHS inputs (activations) - different tensors
+	// Use shapes large enough to trigger pre-blocking (at least blockDim in each dimension)
+	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtypes.Float32] // typically 32
+	K := blockDim                                                 // contracting dimension
+	N := blockDim * 2                                             // output features
+
+	lhs1, err := builder.Parameter("lhs1", shapes.Make(dtypes.Float32, 4, K), nil)
+	require.NoError(t, err)
+	lhs2, err := builder.Parameter("lhs2", shapes.Make(dtypes.Float32, 8, K), nil)
+	require.NoError(t, err)
+	lhs3, err := builder.Parameter("lhs3", shapes.Make(dtypes.Float32, 16, K), nil)
+	require.NoError(t, err)
+
+	// Create a single RHS (weights) tensor that will be shared
+	rhs, err := builder.Parameter("rhs", shapes.Make(dtypes.Float32, K, N), nil)
+	require.NoError(t, err)
+
+	// Create multiple DotGeneral operations all using the same RHS
+	dot1, err := builder.DotGeneral(lhs1, []int{1}, []int{}, rhs, []int{0}, []int{})
+	require.NoError(t, err)
+	dot2, err := builder.DotGeneral(lhs2, []int{1}, []int{}, rhs, []int{0}, []int{})
+	require.NoError(t, err)
+	dot3, err := builder.DotGeneral(lhs3, []int{1}, []int{}, rhs, []int{0}, []int{})
+	require.NoError(t, err)
+
+	// Verify outputs were created
+	require.NotNil(t, dot1)
+	require.NotNil(t, dot2)
+	require.NotNil(t, dot3)
+
+	// Count the number of BlockForDotGeneral nodes in the graph
+	blockNodeCount := 0
+	for _, node := range builder.nodes {
+		if node.opType == backends.OpTypeBlockForDotGeneral {
+			blockNodeCount++
+		}
+	}
+
+	// There should be exactly one BlockForDotGeneral node due to de-duplication
+	require.Equal(t, 1, blockNodeCount,
+		"Expected exactly 1 BlockForDotGeneral node due to de-duplication, but found %d", blockNodeCount)
+
+	// Also verify via the builder's map
+	require.Len(t, builder.blockedForDotGeneral, 1,
+		"Expected exactly 1 entry in blockedForDotGeneral map")
+
+	// Verify that the rhs node is the key in the map
+	rhsNode := rhs.(*Node)
+	blockedNode, exists := builder.blockedForDotGeneral[rhsNode]
+	require.True(t, exists, "RHS node should be a key in blockedForDotGeneral map")
+	require.Equal(t, backends.OpTypeBlockForDotGeneral, blockedNode.opType,
+		"Blocked node should be of type BlockForDotGeneral")
+
+	fmt.Printf("\tDe-duplication test passed: 3 DotGenerals share 1 BlockForDotGeneral node\n")
+}
+
+// TestDotGeneral_PreBlockSmallMatrixSkipped verifies that small matrices below the
+// minimum size threshold do NOT get pre-blocked.
+func TestDotGeneral_PreBlockSmallMatrixSkipped(t *testing.T) {
+	_, ok := backend.(*Backend)
+	if !ok {
+		t.Skip("Skipping test because backend is not a SimpleGo Backend")
+	}
+
+	// Create a builder and define inputs
+	builder := backend.Builder("Small Matrix Test").(*Builder)
+
+	// Use shapes smaller than blockDim - these should NOT trigger pre-blocking
+	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtypes.Float32]
+	smallK := blockDim / 2 // Half the block dim
+	smallN := blockDim / 2
+
+	lhs, err := builder.Parameter("lhs", shapes.Make(dtypes.Float32, 4, smallK), nil)
+	require.NoError(t, err)
+	rhs, err := builder.Parameter("rhs", shapes.Make(dtypes.Float32, smallK, smallN), nil)
+	require.NoError(t, err)
+
+	// Create DotGeneral with small matrix
+	dot, err := builder.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+	require.NoError(t, err)
+	require.NotNil(t, dot)
+
+	// Count BlockForDotGeneral nodes - should be zero for small matrices
+	blockNodeCount := 0
+	for _, node := range builder.nodes {
+		if node.opType == backends.OpTypeBlockForDotGeneral {
+			blockNodeCount++
+		}
+	}
+
+	require.Equal(t, 0, blockNodeCount,
+		"Expected 0 BlockForDotGeneral nodes for small matrix, but found %d", blockNodeCount)
+	require.Len(t, builder.blockedForDotGeneral, 0,
+		"Expected empty blockedForDotGeneral map for small matrix")
+
+	fmt.Printf("\tSmall matrix test passed: matrix [%d, %d] was not pre-blocked (blockDim=%d)\n",
+		smallK, smallN, blockDim)
 }

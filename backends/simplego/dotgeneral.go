@@ -169,9 +169,17 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	}
 	params.outputBlockedShape = dgCreateBlockedShape(accumulatorDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
 
+	// Check if RHS should be pre-blocked for efficient execution.
+	// Pre-blocking is beneficial for 2D weights [K, N] that are reused across batches.
+	// The blocking node will be de-duplicated if the same RHS is used in multiple DotGenerals.
+	rhsInput := rhs
+	if shouldPreBlockRHS(rhs, params.lhsContractingAxes, params.rhsContractingAxes, params.rhsBatchAxes) {
+		rhsInput = b.getOrCreateBlockedInput(rhs)
+	}
+
 	// Create dot-general node: it will generate a normalized output [batchSize, lhsCrossSize, rhsCrossSize].
 	// Use nodeOutputDType for output shape (same as input dtype for float types, int32 for int8/uint8).
-	dotGeneral := b.newNode(backends.OpTypeDotGeneral, shapes.Make(nodeOutputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), lhs, rhs)
+	dotGeneral := b.newNode(backends.OpTypeDotGeneral, shapes.Make(nodeOutputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), lhs, rhsInput)
 	dotGeneral.data = &params
 
 	// Reshape result to recover batch and cross dimensions.
@@ -239,15 +247,21 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	output := backend.getBufferForShape(outputShape)
 	output.Zeros()
 
-	// Try the fast path first for standard matrix multiplication patterns.
-	// This avoids the normalization overhead for the most common cases.
-	if execDotGeneralFastPath(backend, lhs, rhs, params, output) {
+	// Check if RHS was pre-blocked at graph build time (via BlockForDotGeneral node).
+	// If so, the rhs buffer already contains blocked data and we can skip the blocking step.
+	rhsNode := node.inputs[1]
+	if rhsNode.opType == backends.OpTypeBlockForDotGeneral {
+		blockData := rhsNode.data.(*blockForDotGeneralData)
+		if err := execDotGeneralWithGraphBlockedRHS(backend, lhs, rhs, blockData, params, output); err != nil {
+			backend.putBuffer(output)
+			return nil, err
+		}
 		return output, nil
 	}
 
-	// Try using pre-blocked weights for large matrix multiplications.
-	// This avoids blocking the RHS (weights) on every matmul call.
-	if TryExecDotGeneralWithPreBlockedWeights(backend, lhs, rhs, params, output) {
+	// Try the fast path first for standard matrix multiplication patterns.
+	// This avoids the normalization overhead for the most common cases.
+	if execDotGeneralFastPath(backend, lhs, rhs, params, output) {
 		return output, nil
 	}
 

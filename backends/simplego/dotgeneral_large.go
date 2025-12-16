@@ -415,54 +415,13 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 	kernelBuilder := dotGeneralKernelDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, blockDim int) kernelFuncType)
 	recursive.kernelFn = kernelBuilder(lhsBlocks, rhsBlocks, outputBlocks, blockDim)
 
-	// Straight block multiplying (as opposed to recursive)
+	// Set block counts
 	recursive.lhsCrossBlocks = lhsBlocks.shape.Dimensions[1]
 	recursive.rhsCrossBlocks = rhsBlocks.shape.Dimensions[1]
 	recursive.contractBlocks = lhsBlocks.shape.Dimensions[2]
 
-	// Decide on intra-example parallelism: up to which depth we should use a new worker.
-	maxParallelism := backend.workers.MaxParallelism()
-	recursive.maxDepthParallelization = -1 // Disable sub-batch parallelization.
-	if backend.workers.IsEnabled() {
-		if backend.workers.IsUnlimited() {
-			recursive.maxDepthParallelization = 8 // At most 2^8 = 256 goroutines are spawned.
-		} else {
-			// Use log2 of parallelism without the +1 to reduce goroutine overhead.
-			// Combined with increased base case threshold, this reduces synchronization costs.
-			recursive.maxDepthParallelization = log2int(maxParallelism)
-		}
-	}
-
-	// Decide on using parallelism across the batch -- each example is started on a separate worker.
-	useBatchParallelism := backend.workers.IsEnabled()
-	batchSplitSize := 1
-	if useBatchParallelism && !backend.workers.IsUnlimited() {
-		batchSplitSize = (params.batchSize + maxParallelism - 1) / maxParallelism
-	}
-
-	// Loop over examples in the batch:
-	wg := xsync.NewDynamicWaitGroup() // Control workers started.
-	for outerBatchIdx := 0; outerBatchIdx < params.batchSize; outerBatchIdx += batchSplitSize {
-		wg.Add(1)
-		batchSplitFn := func() {
-			for innerBatchIdx := outerBatchIdx; innerBatchIdx < min(outerBatchIdx+batchSplitSize, params.batchSize); innerBatchIdx++ {
-				var batchRecursive dotGeneralRecursiveData
-				batchRecursive = recursive
-				batchRecursive.lhsBatchOffset = innerBatchIdx * recursive.lhsCrossBlocks * recursive.contractBlocks
-				batchRecursive.rhsBatchOffset = innerBatchIdx * recursive.rhsCrossBlocks * recursive.contractBlocks
-				batchRecursive.outputBatchOffset = innerBatchIdx * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
-				wg.Add(1)
-				batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, wg)
-			}
-			wg.Done()
-		}
-		if useBatchParallelism {
-			backend.workers.WaitToStart(batchSplitFn)
-		} else {
-			batchSplitFn()
-		}
-	}
-	wg.Wait()
+	// Execute the batch loop with parallelism (RHS has batch dimension)
+	runDotGeneralBatchLoop(backend, &recursive, params.batchSize, true)
 
 	// Free the block buffers.
 	backend.putBuffer(lhsBlocks)
@@ -484,6 +443,63 @@ type dotGeneralRecursiveData struct {
 	lhsCrossBlocks, rhsCrossBlocks, contractBlocks    int
 	lhsBatchOffset, rhsBatchOffset, outputBatchOffset int
 	maxDepthParallelization                           int
+}
+
+// runDotGeneralBatchLoop executes the blocked dot-general computation across the batch dimension.
+// It handles parallelism setup and the batch loop, calling recursive.apply for each batch element.
+//
+// Parameters:
+//   - backend: the SimpleGo backend
+//   - recursive: the pre-configured recursive data with kernelFn and block counts already set
+//   - batchSize: number of batch elements
+//   - rhsHasBatch: if true, RHS has batch dimension (use batch-specific offset); if false, RHS is shared (offset=0)
+func runDotGeneralBatchLoop(backend *Backend, recursive *dotGeneralRecursiveData, batchSize int, rhsHasBatch bool) {
+	// Decide on intra-example parallelism: up to which depth we should use a new worker.
+	maxParallelism := backend.workers.MaxParallelism()
+	recursive.maxDepthParallelization = -1 // Disable sub-batch parallelization.
+	if backend.workers.IsEnabled() {
+		if backend.workers.IsUnlimited() {
+			recursive.maxDepthParallelization = 8 // At most 2^8 = 256 goroutines are spawned.
+		} else {
+			// Use log2 of parallelism to reduce goroutine overhead.
+			recursive.maxDepthParallelization = log2int(maxParallelism)
+		}
+	}
+
+	// Decide on using parallelism across the batch -- each example is started on a separate worker.
+	useBatchParallelism := backend.workers.IsEnabled()
+	batchSplitSize := 1
+	if useBatchParallelism && !backend.workers.IsUnlimited() {
+		batchSplitSize = (batchSize + maxParallelism - 1) / maxParallelism
+	}
+
+	// Loop over examples in the batch:
+	wg := xsync.NewDynamicWaitGroup() // Control workers started.
+	for outerBatchIdx := 0; outerBatchIdx < batchSize; outerBatchIdx += batchSplitSize {
+		wg.Add(1)
+		batchSplitFn := func() {
+			for innerBatchIdx := outerBatchIdx; innerBatchIdx < min(outerBatchIdx+batchSplitSize, batchSize); innerBatchIdx++ {
+				var batchRecursive dotGeneralRecursiveData
+				batchRecursive = *recursive
+				batchRecursive.lhsBatchOffset = innerBatchIdx * recursive.lhsCrossBlocks * recursive.contractBlocks
+				if rhsHasBatch {
+					batchRecursive.rhsBatchOffset = innerBatchIdx * recursive.rhsCrossBlocks * recursive.contractBlocks
+				} else {
+					batchRecursive.rhsBatchOffset = 0 // RHS is shared across all batches
+				}
+				batchRecursive.outputBatchOffset = innerBatchIdx * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
+				wg.Add(1)
+				batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, wg)
+			}
+			wg.Done()
+		}
+		if useBatchParallelism {
+			backend.workers.WaitToStart(batchSplitFn)
+		} else {
+			batchSplitFn()
+		}
+	}
+	wg.Wait()
 }
 
 // apply recursively splits the dot-general into smaller blocks and applies the kernel to each block.
