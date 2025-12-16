@@ -4,10 +4,11 @@ import (
 	"slices"
 
 	"github.com/gomlx/go-xla/pkg/stablehlo"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/go-xla/pkg/types/shardy"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
@@ -183,6 +184,9 @@ func (b *Builder) Constant(flat any, dimensions ...int) (backends.Op, error) {
 	}
 	if flat == nil {
 		return nil, errors.Errorf("nil value given to Constant")
+	}
+	if bf16Slice, ok := flat.([]bfloat16.BFloat16); ok {
+		flat = any(BFloat16SliceToXLA(bf16Slice))
 	}
 	value, err := b.fn.ConstantFromFlatAndDimensions(flat, dimensions...)
 	if err != nil {

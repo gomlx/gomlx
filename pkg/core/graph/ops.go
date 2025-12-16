@@ -8,11 +8,11 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/pkg/errors"
 )
 
@@ -258,8 +258,8 @@ func Const(g *Graph, x any) *Node {
 			"Const(g, x) can only take actual values, not another computation graph `*Node` -- " +
 				"for that you don't need Const(), just use it directly.")
 	}
-	tensor := tensors.FromAnyValue(x)
-	return ConstTensor(g, tensor)
+	t := tensors.FromAnyValue(x)
+	return ConstTensor(g, t)
 }
 
 // ConstAsDType creates a constant of the given DType. It adds the convenience

@@ -3,11 +3,11 @@ package initializers
 import (
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )

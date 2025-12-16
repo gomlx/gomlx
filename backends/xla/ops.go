@@ -5,9 +5,9 @@ package xla
 import (
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	stablehloshapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 )
@@ -81,7 +81,7 @@ func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error)
 	}
 	xNode := nodes[0]
 	dtype := xNode.shape.DType
-	shape := stablehloshapes.Make(dtype, dimensions...)
+	shape := stablehloshapes.Make(DTypeToXLA(dtype), dimensions...)
 	value, err := stablehlo.Reshape(xNode.value, shape)
 	if err != nil {
 		return nil, err
@@ -478,7 +478,7 @@ func (b *Builder) Bitcast(x backends.Op, targetDType dtypes.DType) (backends.Op,
 	if err != nil {
 		return nil, err
 	}
-	value, err := stablehlo.BitcastConvert(nodes[0].value, targetDType)
+	value, err := stablehlo.BitcastConvert(nodes[0].value, DTypeToXLA(targetDType))
 	if err != nil {
 		return nil, err
 	}
@@ -526,7 +526,7 @@ func (b *Builder) ConvertDType(x backends.Op, dtype dtypes.DType) (backends.Op, 
 	if err != nil {
 		return nil, err
 	}
-	output, err := stablehlo.Convert(nodes[0].value, dtype)
+	output, err := stablehlo.Convert(nodes[0].value, DTypeToXLA(dtype))
 	if err != nil {
 		return nil, err
 	}
@@ -625,7 +625,7 @@ func (b *Builder) extractStartIndexValues(startIndexNodes []*Node, rank int) ([]
 			if err != nil {
 				return nil, err
 			}
-			reshaped, err := stablehlo.Reshape(sliced, stablehloshapes.Make(startIndexNodes[0].shape.DType))
+			reshaped, err := stablehlo.Reshape(sliced, stablehloshapes.Make(DTypeToXLA(startIndexNodes[0].shape.DType)))
 			if err != nil {
 				return nil, err
 			}

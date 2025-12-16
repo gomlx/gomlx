@@ -43,11 +43,16 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"unsafe"
 
 	"github.com/gomlx/go-xla/pkg/installer"
 	"github.com/gomlx/go-xla/pkg/pjrt"
+	xladtypes "github.com/gomlx/go-xla/pkg/types/dtypes"
+	xlabfloat16 "github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	xlashapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
@@ -252,18 +257,44 @@ func GetAvailablePlugins() []string {
 	return availablePluginsList
 }
 
-// ShapeToXLA converts a GomlX shape to a go-xla shape.
+// DTypeToXLA converts a GoMLX dtypes.DType to a go-xla xladtypes.DType.
+// Currently, they are identical types, but this function centralizes the conversion
+// in case they diverge in the future.
+func DTypeToXLA(dtype dtypes.DType) xladtypes.DType {
+	return xladtypes.DType(dtype)
+}
+
+// DTypeFromXLA converts a go-xla xladtypes.DType to a GoMLX dtypes.DType.
+// Currently, they are identical types, but this function centralizes the conversion
+// in case they diverge in the future.
+func DTypeFromXLA(xlaDType xladtypes.DType) dtypes.DType {
+	return dtypes.DType(xlaDType)
+}
+
+// BFloat16SliceToXLA converts a GoMLX []bfloat16.BFloat16 slice to a go-xla []xlabfloat16.BFloat16 slice.
+// Both types are defined as `type BFloat16 uint16`, so this is a zero-copy conversion using unsafe.
+func BFloat16SliceToXLA(slice []bfloat16.BFloat16) []xlabfloat16.BFloat16 {
+	return unsafe.Slice((*xlabfloat16.BFloat16)(unsafe.Pointer(unsafe.SliceData(slice))), len(slice))
+}
+
+// BFloat16SliceFromXLA converts a go-xla []xlabfloat16.BFloat16 slice to a GoMLX []bfloat16.BFloat16 slice.
+// Both types are defined as `type BFloat16 uint16`, so this is a zero-copy conversion using unsafe.
+func BFloat16SliceFromXLA(slice []xlabfloat16.BFloat16) []bfloat16.BFloat16 {
+	return unsafe.Slice((*bfloat16.BFloat16)(unsafe.Pointer(unsafe.SliceData(slice))), len(slice))
+}
+
+// ShapeToXLA converts a GoMLX shape to a go-xla shape.
 func ShapeToXLA(shape shapes.Shape) xlashapes.Shape {
 	if !shape.Ok() || shape.IsTuple() {
 		return xlashapes.Invalid()
 	}
-	return xlashapes.Make(shape.DType, slices.Clone(shape.Dimensions)...)
+	return xlashapes.Make(DTypeToXLA(shape.DType), slices.Clone(shape.Dimensions)...)
 }
 
-// ShapeFromXLA converts a go-xla shape to a GomlX shape.
+// ShapeFromXLA converts a go-xla shape to a GoMLX shape.
 func ShapeFromXLA(shape xlashapes.Shape) shapes.Shape {
 	if !shape.Ok() || shape.IsTuple() {
 		return shapes.Invalid()
 	}
-	return shapes.Make(shape.DType, slices.Clone(shape.Dimensions)...)
+	return shapes.Make(DTypeFromXLA(shape.DType), slices.Clone(shape.Dimensions)...)
 }

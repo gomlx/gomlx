@@ -83,7 +83,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 

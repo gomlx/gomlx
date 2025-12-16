@@ -3,8 +3,8 @@ package xla
 import (
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 // DotGeneralConfig represents the configuration to use for DotGeneral.
@@ -45,7 +45,7 @@ func (b *Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes [
 		dotGeneralBuilder.Algorithm(&stablehlotypes.DotGeneralAlgorithm{
 			LhsPrecisionType:           stablehlotypes.FloatPrecisionType{TF32: true},
 			RhsPrecisionType:           stablehlotypes.FloatPrecisionType{TF32: true},
-			AccumulationType:           stablehlotypes.FloatPrecisionType{DType: dtype},
+			AccumulationType:           stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)},
 			LhsComponentCount:          1,
 			RhsComponentCount:          1,
 			NumPrimitiveOperations:     1,

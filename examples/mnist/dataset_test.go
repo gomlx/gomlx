@@ -19,9 +19,9 @@ package mnist
 import (
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )

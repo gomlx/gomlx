@@ -2,7 +2,7 @@
 
 # v0.26.0: Using the new github.com/gomlx/go-xla library.
 
-API Change: `dtypes` package moved from `github.com/gomlx/gopjrt/dtypes` to `github.com/gomlx/go-xla/pkg/types/dtypes`.
+API Change: `dtypes` package moved from `github.com/gomlx/gopjrt/dtypes` to `github.com/gomlx/gomlx/pkg/core/dtypes`.
 It should be a simple change in import.
 
 XLA:
@@ -15,12 +15,15 @@ XLA:
 - Renamed `gomlx/backends/stablehlo` --> `gomlx/backends/xla`, using the new `go-xla` library.
 - Added `xla.EnableAutoInstall(enabled bool)` to enable/disable auto-installation of standard plugins.
   And added `xla.AutoInstall()` to immediately auto-install standard plugins.
+- Conversion from/to new `gomlx/gomlx/pkg/core/dtypes` (and `bfloat16`) to/from `gomlx/gomlx/pkg/core/dtypes` (and corresponding `bfloat16`)
 
 Other updates:
 - Package `tensors`:
   - Added `CopyFlatData()` that returns an error (it was previously renamed to `MustCopyFlatData`)
 - Package `graph`:
   - Added 'RNGStateFromSeedForGraph' function to create a RNG state from a seed for a graph.
+- Package `pkg/core/dtypes`
+  - New, copied from now deprecated Gopjrt. 
 
 # v0.25.0: Distributed execution; API cleanup (more Go idiomatic)
 
