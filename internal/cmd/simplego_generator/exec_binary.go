@@ -45,7 +45,7 @@ import (
 
 func init() {
 {{- range .BinaryOps}}
-	nodeExecutors[backends.OpType{{.Name}}] = exec{{.Name}}
+	setNodeExecutor(backends.OpType{{.Name}}, priorityGeneric, exec{{.Name}})
 {{- end}}
 }
 

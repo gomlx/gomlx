@@ -24,6 +24,8 @@ Other updates:
   - Added 'RNGStateFromSeedForGraph' function to create a RNG state from a seed for a graph.
 - Package `pkg/core/dtypes`
   - New, copied from now deprecated Gopjrt. 
+- Package `simplego`:
+  - Registration of executors with priority.
 
 # v0.25.0: Distributed execution; API cleanup (more Go idiomatic)
 
