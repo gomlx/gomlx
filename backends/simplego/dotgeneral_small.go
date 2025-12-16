@@ -284,7 +284,7 @@ func execNormalizedDotGeneralGeneric[T PODNumericConstraints](lhs, rhs, output *
 }
 
 func init() {
-	dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, execNormalizedDotGeneralBfloat16)
+	dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, priorityTyped, execNormalizedDotGeneralBfloat16)
 }
 func execNormalizedDotGeneralBfloat16(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
 	lhsFlat := lhs.flat.([]bfloat16.BFloat16)

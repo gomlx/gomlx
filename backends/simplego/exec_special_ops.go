@@ -293,7 +293,7 @@ func execReduceMaxGeneric[T PODNumericConstraints](operand, output *Buffer, it *
 	}
 }
 
-func init() { reduceMaxDTypeMap.Register(dtypes.BFloat16, execReduceMaxBFloat16) }
+func init() { reduceMaxDTypeMap.Register(dtypes.BFloat16, priorityTyped, execReduceMaxBFloat16) }
 
 // execReduceMaxBFloat16: use reduceMaxDTypeMa to call it.
 func execReduceMaxBFloat16(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
@@ -330,7 +330,7 @@ func execReduceMinGeneric[T PODNumericConstraints](operand, output *Buffer, it *
 	}
 }
 
-func init() { reduceMinDTypeMap.Register(dtypes.BFloat16, execReduceMinBFloat16) }
+func init() { reduceMinDTypeMap.Register(dtypes.BFloat16, priorityTyped, execReduceMinBFloat16) }
 
 func execReduceMinBFloat16(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
 	// Initialize with the highest value.
@@ -365,7 +365,7 @@ func execReduceSumGeneric[T PODNumericConstraints](operand, output *Buffer, it *
 	}
 }
 
-func init() { reduceSumDTypeMap.Register(dtypes.BFloat16, execReduceSumBFloat16) }
+func init() { reduceSumDTypeMap.Register(dtypes.BFloat16, priorityTyped, execReduceSumBFloat16) }
 
 func execReduceSumBFloat16(operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 0.
@@ -400,7 +400,9 @@ func execReduceProductGeneric[T PODNumericConstraints](operand, output *Buffer, 
 	}
 }
 
-func init() { reduceProductDTypeMap.Register(dtypes.BFloat16, execReduceProductBFloat16) }
+func init() {
+	reduceProductDTypeMap.Register(dtypes.BFloat16, priorityTyped, execReduceProductBFloat16)
+}
 
 func execReduceProductBFloat16(operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 1.
@@ -719,7 +721,7 @@ func execIotaGeneric[T PODNumericConstraints](params ...any) any {
 	return nil
 }
 
-func init() { dispatchIota.Register(dtypes.BFloat16, execIotaBFloat16) }
+func init() { dispatchIota.Register(dtypes.BFloat16, priorityTyped, execIotaBFloat16) }
 
 func execIotaBFloat16(params ...any) any {
 	output, batchSize, iotaSize, repeatsSize := params[0].(*Buffer), params[1].(int), params[2].(int), params[3].(int)
@@ -1145,8 +1147,8 @@ func execConvertDTypeToBool[FromT PODNumericConstraints, _ bool](operand, output
 
 func init() {
 	// Manually register bool x bfloat16 conversion functions.
-	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Bool, execConvertDTypeBFloat16ToBool)
-	convertDTypePairMap.Register(dtypes.Bool, dtypes.BFloat16, execConvertDTypeBoolToBFloat16)
+	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Bool, priorityTyped, execConvertDTypeBFloat16ToBool)
+	convertDTypePairMap.Register(dtypes.Bool, dtypes.BFloat16, priorityTyped, execConvertDTypeBoolToBFloat16)
 }
 
 func execConvertDTypeBFloat16ToBool(operand, output *Buffer) {
@@ -1385,9 +1387,9 @@ var (
 )
 
 func init() {
-	combineMaxDTypeMap.Register(dtypes.BFloat16, combineForScatterMaxBFloat16)
-	combineMinDTypeMap.Register(dtypes.BFloat16, combineForScatterMinBFloat16)
-	combineSumDTypeMap.Register(dtypes.BFloat16, combineForScatterSumBFloat16)
+	combineMaxDTypeMap.Register(dtypes.BFloat16, priorityTyped, combineForScatterMaxBFloat16)
+	combineMinDTypeMap.Register(dtypes.BFloat16, priorityTyped, combineForScatterMinBFloat16)
+	combineSumDTypeMap.Register(dtypes.BFloat16, priorityTyped, combineForScatterSumBFloat16)
 }
 
 func combineForScatterMaxGeneric[T PODNumericConstraints](a, b T) T {
@@ -1647,7 +1649,7 @@ func execArgMinMaxGeneric[T PODNumericConstraints](
 }
 
 func init() {
-	argMinMaxDTypeMap.Register(dtypes.BFloat16, execArgMinMaxGenericBFloat16)
+	argMinMaxDTypeMap.Register(dtypes.BFloat16, priorityTyped, execArgMinMaxGenericBFloat16)
 }
 
 func execArgMinMaxGenericBFloat16(
@@ -1848,10 +1850,10 @@ var (
 )
 
 func init() {
-	reduceWindowMaxDTypeMap.Register(dtypes.BFloat16, reduceWindowMaxBuildUpdateFnBFloat16)
-	reduceWindowMinDTypeMap.Register(dtypes.BFloat16, reduceWindowMinBuildUpdateFnBFloat16)
-	reduceWindowSumDTypeMap.Register(dtypes.BFloat16, reduceWindowSumBuildUpdateFnBFloat16)
-	reduceWindowProductDTypeMap.Register(dtypes.BFloat16, reduceWindowProductBuildUpdateFnBFloat16)
+	reduceWindowMaxDTypeMap.Register(dtypes.BFloat16, priorityTyped, reduceWindowMaxBuildUpdateFnBFloat16)
+	reduceWindowMinDTypeMap.Register(dtypes.BFloat16, priorityTyped, reduceWindowMinBuildUpdateFnBFloat16)
+	reduceWindowSumDTypeMap.Register(dtypes.BFloat16, priorityTyped, reduceWindowSumBuildUpdateFnBFloat16)
+	reduceWindowProductDTypeMap.Register(dtypes.BFloat16, priorityTyped, reduceWindowProductBuildUpdateFnBFloat16)
 }
 
 // Generic functions that build a function that will update the output at outputFlatIdx from the operand at operandFlatIdx.

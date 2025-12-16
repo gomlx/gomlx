@@ -200,6 +200,7 @@ type registerPriority int
 
 const (
 	priorityGeneric registerPriority = 0
+	priorityTyped   registerPriority = 1   // Specialized typed implementation.
 	priorityArch    registerPriority = 10  // Specialized architecture implementation.
 	priorityUser    registerPriority = 100 // Custom user overrides.
 )

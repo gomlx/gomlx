@@ -204,6 +204,6 @@ var (
 )
 
 func init() {
-	convNoDilationDTypeMap.Register(dtypes.BFloat16, execConvNoDilationBFloat16)
-	convDTypeMap.Register(dtypes.BFloat16, execConvBFloat16)
+	convNoDilationDTypeMap.Register(dtypes.BFloat16, priorityTyped, execConvNoDilationBFloat16)
+	convDTypeMap.Register(dtypes.BFloat16, priorityTyped, execConvBFloat16)
 }
