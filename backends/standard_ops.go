@@ -1,8 +1,8 @@
 package backends
 
 import (
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 )
 
 // StandardOps lists the bulk of the operations that a backends.Builder must support.

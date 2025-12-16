@@ -5,7 +5,7 @@ package simplego
 import (
 	"unsafe"
 
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 // Assembly functions for int8/uint8 dot products (defined in dotgeneral_int8_neon_arm64.s)
@@ -389,11 +389,12 @@ func init() {
 	// We need to register these in the dtype map that handles mixed-type operations
 
 	// Register for the normalized dotgeneral operations (small path)
-	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.Int8, execNormalizedDotGeneralInt8ToInt32)
-	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.Uint8, execNormalizedDotGeneralUint8ToInt32)
+	// priorityTyped overrides priorityGeneric from gen_register_dtypes.go
+	dotGeneralNormalizedDTypeMap.Register(dtypes.Int8, priorityTyped, execNormalizedDotGeneralInt8ToInt32)
+	dotGeneralNormalizedDTypeMap.Register(dtypes.Uint8, priorityTyped, execNormalizedDotGeneralUint8ToInt32)
 
 	// Register for the kernel builders (large path)
-	// Use Register() to override the generic int8/uint8 kernels with our NEON-optimized versions
-	dotGeneralKernelDTypeMap.Register(dtypes.Int8, buildDotGeneralKernelInt8ToInt32)
-	dotGeneralKernelDTypeMap.Register(dtypes.Uint8, buildDotGeneralKernelUint8ToInt32)
+	// Use priorityTyped to override the generic int8/uint8 kernels with our NEON-optimized versions
+	dotGeneralKernelDTypeMap.Register(dtypes.Int8, priorityTyped, buildDotGeneralKernelInt8ToInt32)
+	dotGeneralKernelDTypeMap.Register(dtypes.Uint8, priorityTyped, buildDotGeneralKernelUint8ToInt32)
 }

@@ -110,11 +110,11 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -809,9 +809,9 @@ func (g *Graph) getScalarConst(dtype dtypes.DType, value float64) (output *Node)
 	}
 	output, found = dtypeMap[value]
 	if found {
-		return
+		return output
 	}
 	output = Const(g, shapes.CastAsDType(value, dtype))
 	dtypeMap[value] = output
-	return
+	return output
 }

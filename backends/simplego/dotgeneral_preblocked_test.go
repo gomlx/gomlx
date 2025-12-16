@@ -3,7 +3,7 @@ package simplego
 import (
 	"testing"
 
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/stretchr/testify/require"
 
 	"github.com/gomlx/gomlx/pkg/core/shapes"

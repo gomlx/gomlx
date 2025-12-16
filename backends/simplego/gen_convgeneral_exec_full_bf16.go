@@ -1,6 +1,6 @@
 package simplego
 
-import "github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
+import "github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 
 type _ = bfloat16.BFloat16
 

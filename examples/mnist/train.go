@@ -27,6 +27,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
@@ -41,7 +42,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 )
 
 var ModelList = []string{"linear", "cnn"}

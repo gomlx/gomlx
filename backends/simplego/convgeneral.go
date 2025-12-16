@@ -6,14 +6,14 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/pkg/errors"
 )
 
 func init() {
-	nodeExecutors[backends.OpTypeConvGeneral] = execConvGeneral
+	setNodeExecutor(backends.OpTypeConvGeneral, priorityGeneric, execConvGeneral)
 }
 
 // ConvGeneral is a generic Convolution operation with support for:
@@ -204,6 +204,6 @@ var (
 )
 
 func init() {
-	convNoDilationDTypeMap.Register(dtypes.BFloat16, execConvNoDilationBFloat16)
-	convDTypeMap.Register(dtypes.BFloat16, execConvBFloat16)
+	convNoDilationDTypeMap.Register(dtypes.BFloat16, priorityTyped, execConvNoDilationBFloat16)
+	convDTypeMap.Register(dtypes.BFloat16, priorityTyped, execConvBFloat16)
 }

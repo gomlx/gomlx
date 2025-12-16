@@ -5,8 +5,8 @@ package simplego
 import (
 	"unsafe"
 
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
-	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/x448/float16"
 )
 
@@ -232,16 +232,17 @@ func buildDotGeneralKernelFloat16ToFloat32(lhs, rhs, output *Buffer, blockDim in
 
 func init() {
 	// Register FP16 optimized kernels (uses NEON FMLAL/FMLAL2)
-	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.Float16, execNormalizedDotGeneralFloat16ToFloat32)
+	// priorityTyped overrides priorityGeneric from gen_register_dtypes.go
+	dotGeneralNormalizedDTypeMap.Register(dtypes.Float16, priorityTyped, execNormalizedDotGeneralFloat16ToFloat32)
 
 	// Register BF16 optimized kernels (uses NEON BFMLALB)
 	// This overrides the scalar version in dotgeneral_small.go when NEON is available
 	if hasBF16NEON {
-		dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, execNormalizedDotGeneralBFloat16ToFloat32)
+		dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, priorityTyped, execNormalizedDotGeneralBFloat16ToFloat32)
 	}
 
 	// Register kernel builders for large matrix path
-	dotGeneralKernelDTypeMap.RegisterIfNotSet(dtypes.Float16, buildDotGeneralKernelFloat16ToFloat32)
+	dotGeneralKernelDTypeMap.Register(dtypes.Float16, priorityTyped, buildDotGeneralKernelFloat16ToFloat32)
 }
 
 // dotProductBF16InnerLoop computes the dot product of lhs[lhsIdx:lhsIdx+size] and rhs[rhsIdx:rhsIdx+size]

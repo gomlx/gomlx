@@ -25,11 +25,11 @@ import (
 	"time"
 
 	"github.com/gomlx/gomlx/examples/inceptionv3"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 )
 
 // This file implements high level tasks: pre-generating augment dataset.

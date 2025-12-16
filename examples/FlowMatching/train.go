@@ -8,6 +8,7 @@ import (
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -22,7 +23,6 @@ import (
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	stdplots "github.com/gomlx/gomlx/ui/plots"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"k8s.io/klog/v2"
 )
 

@@ -1,8 +1,8 @@
 package simplego
 
 import (
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
-	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/x448/float16"
 
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -261,8 +261,8 @@ func dgCopyOutputBlockToFlat[T interface {
 }
 
 func init() {
-	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.BFloat16, dgCopyOutputBlockToFlatBFloat16)
-	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.Float16, dgCopyOutputBlockToFlatFloat16)
+	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.BFloat16, priorityTyped, dgCopyOutputBlockToFlatBFloat16)
+	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.Float16, priorityTyped, dgCopyOutputBlockToFlatFloat16)
 }
 
 // dgCopyOutputBlockToFlatBFloat16 copies the blocked output to a flat output, removing the padding.
@@ -698,7 +698,7 @@ func buildDotGeneralKernel[T PODNumericConstraints](lhs, rhs, output *Buffer, bl
 }
 
 func init() {
-	dotGeneralKernelDTypeMap.Register(dtypes.BFloat16, buildDotGeneralKernelBFloat16)
+	dotGeneralKernelDTypeMap.Register(dtypes.BFloat16, priorityTyped, buildDotGeneralKernelBFloat16)
 }
 
 // buildDotGeneralKernelBFloat16 returns a kernel function that does a DotGeneral (matrix multiplication) of the lhs/rhs block

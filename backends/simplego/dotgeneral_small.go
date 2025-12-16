@@ -3,8 +3,8 @@ package simplego
 import (
 	"sync"
 
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
-	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/pkg/errors"
 
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -330,8 +330,8 @@ func execNormalizedDotGeneralGeneric[T PODNumericConstraints](lhs, rhs, output *
 }
 
 func init() {
-	// Use RegisterIfNotSet so NEON-optimized version from dotgeneral_fp16_neon_arm64.go takes precedence
-	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.BFloat16, execNormalizedDotGeneralBfloat16)
+	// Use priorityTyped so NEON-optimized version from dotgeneral_fp16_neon_arm64.go can take precedence
+	dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, priorityTyped, execNormalizedDotGeneralBfloat16)
 }
 func execNormalizedDotGeneralBfloat16(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
 	lhsFlat := lhs.flat.([]bfloat16.BFloat16)

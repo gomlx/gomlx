@@ -6,8 +6,8 @@ import (
 	"slices"
 	"unsafe"
 
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
-	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/pkg/errors"
 	"github.com/x448/float16"
 
@@ -18,32 +18,32 @@ import (
 )
 
 func init() {
-	nodeExecutors[backends.OpTypeIdentity] = execIdentity
-	nodeExecutors[backends.OpTypeWhere] = execWhere
-	nodeExecutors[backends.OpTypeReshape] = execReshape
-	nodeExecutors[backends.OpTypeTranspose] = execTranspose
-	nodeExecutors[backends.OpTypeBroadcast] = execBroadcast
-	nodeExecutors[backends.OpTypeBroadcastInDim] = execBroadcastInDim
-	nodeExecutors[backends.OpTypeReduceMax] = execReduce
-	nodeExecutors[backends.OpTypeReduceMin] = execReduce
-	nodeExecutors[backends.OpTypeReduceSum] = execReduce
-	nodeExecutors[backends.OpTypeReduceProduct] = execReduce
-	nodeExecutors[backends.OpTypeReduceBitwiseAnd] = execReduce
-	nodeExecutors[backends.OpTypeReduceBitwiseOr] = execReduce
-	nodeExecutors[backends.OpTypeReduceBitwiseXor] = execReduce
-	nodeExecutors[backends.OpTypeReduceLogicalAnd] = execReduce
-	nodeExecutors[backends.OpTypeReduceLogicalOr] = execReduce
-	nodeExecutors[backends.OpTypeReduceLogicalXor] = execReduce
-	nodeExecutors[backends.OpTypeIota] = execIota
-	nodeExecutors[backends.OpTypeGather] = execGather
-	nodeExecutors[backends.OpTypeConcatenate] = execConcatenate
-	nodeExecutors[backends.OpTypeConvertDType] = execConvertDType
-	nodeExecutors[backends.OpTypeScatterMax] = execScatter
-	nodeExecutors[backends.OpTypeScatterMin] = execScatter
-	nodeExecutors[backends.OpTypeScatterSum] = execScatter
-	nodeExecutors[backends.OpTypeSlice] = execSlice
-	nodeExecutors[backends.OpTypeArgMinMax] = execArgMinMax
-	nodeExecutors[backends.OpTypeReduceWindow] = execReduceWindow
+	setNodeExecutor(backends.OpTypeIdentity, priorityGeneric, execIdentity)
+	setNodeExecutor(backends.OpTypeWhere, priorityGeneric, execWhere)
+	setNodeExecutor(backends.OpTypeReshape, priorityGeneric, execReshape)
+	setNodeExecutor(backends.OpTypeTranspose, priorityGeneric, execTranspose)
+	setNodeExecutor(backends.OpTypeBroadcast, priorityGeneric, execBroadcast)
+	setNodeExecutor(backends.OpTypeBroadcastInDim, priorityGeneric, execBroadcastInDim)
+	setNodeExecutor(backends.OpTypeReduceMax, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceMin, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceSum, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceProduct, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceBitwiseAnd, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceBitwiseOr, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceBitwiseXor, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceLogicalAnd, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceLogicalOr, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceLogicalXor, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeIota, priorityGeneric, execIota)
+	setNodeExecutor(backends.OpTypeGather, priorityGeneric, execGather)
+	setNodeExecutor(backends.OpTypeConcatenate, priorityGeneric, execConcatenate)
+	setNodeExecutor(backends.OpTypeConvertDType, priorityGeneric, execConvertDType)
+	setNodeExecutor(backends.OpTypeScatterMax, priorityGeneric, execScatter)
+	setNodeExecutor(backends.OpTypeScatterMin, priorityGeneric, execScatter)
+	setNodeExecutor(backends.OpTypeScatterSum, priorityGeneric, execScatter)
+	setNodeExecutor(backends.OpTypeSlice, priorityGeneric, execSlice)
+	setNodeExecutor(backends.OpTypeArgMinMax, priorityGeneric, execArgMinMax)
+	setNodeExecutor(backends.OpTypeReduceWindow, priorityGeneric, execReduceWindow)
 
 	// For nodes with multiple outputs:
 	multiOutputsNodeExecutors[backends.OpTypeRNGBitGenerator] = execRNGBitGenerator
@@ -324,7 +324,7 @@ func execReduceMaxGeneric[T PODNumericConstraints](operand, output *Buffer, it *
 	}
 }
 
-func init() { reduceMaxDTypeMap.Register(dtypes.BFloat16, execReduceMaxBFloat16) }
+func init() { reduceMaxDTypeMap.Register(dtypes.BFloat16, priorityTyped, execReduceMaxBFloat16) }
 
 // execReduceMaxBFloat16: use reduceMaxDTypeMa to call it.
 func execReduceMaxBFloat16(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
@@ -361,7 +361,7 @@ func execReduceMinGeneric[T PODNumericConstraints](operand, output *Buffer, it *
 	}
 }
 
-func init() { reduceMinDTypeMap.Register(dtypes.BFloat16, execReduceMinBFloat16) }
+func init() { reduceMinDTypeMap.Register(dtypes.BFloat16, priorityTyped, execReduceMinBFloat16) }
 
 func execReduceMinBFloat16(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
 	// Initialize with the highest value.
@@ -396,7 +396,7 @@ func execReduceSumGeneric[T PODNumericConstraints](operand, output *Buffer, it *
 	}
 }
 
-func init() { reduceSumDTypeMap.Register(dtypes.BFloat16, execReduceSumBFloat16) }
+func init() { reduceSumDTypeMap.Register(dtypes.BFloat16, priorityTyped, execReduceSumBFloat16) }
 
 func execReduceSumBFloat16(operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 0.
@@ -431,7 +431,9 @@ func execReduceProductGeneric[T PODNumericConstraints](operand, output *Buffer, 
 	}
 }
 
-func init() { reduceProductDTypeMap.Register(dtypes.BFloat16, execReduceProductBFloat16) }
+func init() {
+	reduceProductDTypeMap.Register(dtypes.BFloat16, priorityTyped, execReduceProductBFloat16)
+}
 
 func execReduceProductBFloat16(operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 1.
@@ -452,10 +454,10 @@ func execReduceProductBFloat16(operand, output *Buffer, it *reduceOutputIterator
 // Float16 reduce operations
 
 func init() {
-	reduceMaxDTypeMap.Register(dtypes.Float16, execReduceMaxFloat16)
-	reduceMinDTypeMap.Register(dtypes.Float16, execReduceMinFloat16)
-	reduceSumDTypeMap.Register(dtypes.Float16, execReduceSumFloat16)
-	reduceProductDTypeMap.Register(dtypes.Float16, execReduceProductFloat16)
+	reduceMaxDTypeMap.Register(dtypes.Float16, priorityTyped, execReduceMaxFloat16)
+	reduceMinDTypeMap.Register(dtypes.Float16, priorityTyped, execReduceMinFloat16)
+	reduceSumDTypeMap.Register(dtypes.Float16, priorityTyped, execReduceSumFloat16)
+	reduceProductDTypeMap.Register(dtypes.Float16, priorityTyped, execReduceProductFloat16)
 }
 
 func execReduceMaxFloat16(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
@@ -824,7 +826,7 @@ func execIotaGeneric[T PODNumericConstraints](params ...any) any {
 	return nil
 }
 
-func init() { dispatchIota.Register(dtypes.BFloat16, execIotaBFloat16) }
+func init() { dispatchIota.Register(dtypes.BFloat16, priorityTyped, execIotaBFloat16) }
 
 func execIotaBFloat16(params ...any) any {
 	output, batchSize, iotaSize, repeatsSize := params[0].(*Buffer), params[1].(int), params[2].(int), params[3].(int)
@@ -1250,8 +1252,8 @@ func execConvertDTypeToBool[FromT PODNumericConstraints, _ bool](operand, output
 
 func init() {
 	// Manually register bool x bfloat16 conversion functions.
-	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Bool, execConvertDTypeBFloat16ToBool)
-	convertDTypePairMap.Register(dtypes.Bool, dtypes.BFloat16, execConvertDTypeBoolToBFloat16)
+	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Bool, priorityTyped, execConvertDTypeBFloat16ToBool)
+	convertDTypePairMap.Register(dtypes.Bool, dtypes.BFloat16, priorityTyped, execConvertDTypeBoolToBFloat16)
 }
 
 func execConvertDTypeBFloat16ToBool(operand, output *Buffer) {
@@ -1332,37 +1334,37 @@ func execConvertDTypeBFloat16ToFloat16(operand, output *Buffer) {
 
 func init() {
 	// Register Float16 conversion functions
-	convertDTypePairMap.Register(dtypes.Float16, dtypes.Int8, execConvertDTypeFromFloat16[float16.Float16, int8])
-	convertDTypePairMap.Register(dtypes.Float16, dtypes.Int16, execConvertDTypeFromFloat16[float16.Float16, int16])
-	convertDTypePairMap.Register(dtypes.Float16, dtypes.Int32, execConvertDTypeFromFloat16[float16.Float16, int32])
-	convertDTypePairMap.Register(dtypes.Float16, dtypes.Int64, execConvertDTypeFromFloat16[float16.Float16, int64])
-	convertDTypePairMap.Register(dtypes.Float16, dtypes.Uint8, execConvertDTypeFromFloat16[float16.Float16, uint8])
-	convertDTypePairMap.Register(dtypes.Float16, dtypes.Uint16, execConvertDTypeFromFloat16[float16.Float16, uint16])
-	convertDTypePairMap.Register(dtypes.Float16, dtypes.Uint32, execConvertDTypeFromFloat16[float16.Float16, uint32])
-	convertDTypePairMap.Register(dtypes.Float16, dtypes.Uint64, execConvertDTypeFromFloat16[float16.Float16, uint64])
-	convertDTypePairMap.Register(dtypes.Float16, dtypes.Float32, execConvertDTypeFromFloat16[float16.Float16, float32])
-	convertDTypePairMap.Register(dtypes.Float16, dtypes.Float64, execConvertDTypeFromFloat16[float16.Float16, float64])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Int8, priorityTyped, execConvertDTypeFromFloat16[float16.Float16, int8])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Int16, priorityTyped, execConvertDTypeFromFloat16[float16.Float16, int16])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Int32, priorityTyped, execConvertDTypeFromFloat16[float16.Float16, int32])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Int64, priorityTyped, execConvertDTypeFromFloat16[float16.Float16, int64])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Uint8, priorityTyped, execConvertDTypeFromFloat16[float16.Float16, uint8])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Uint16, priorityTyped, execConvertDTypeFromFloat16[float16.Float16, uint16])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Uint32, priorityTyped, execConvertDTypeFromFloat16[float16.Float16, uint32])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Uint64, priorityTyped, execConvertDTypeFromFloat16[float16.Float16, uint64])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Float32, priorityTyped, execConvertDTypeFromFloat16[float16.Float16, float32])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Float64, priorityTyped, execConvertDTypeFromFloat16[float16.Float16, float64])
 
-	convertDTypePairMap.Register(dtypes.Int8, dtypes.Float16, execConvertDTypeToFloat16[int8, float16.Float16])
-	convertDTypePairMap.Register(dtypes.Int16, dtypes.Float16, execConvertDTypeToFloat16[int16, float16.Float16])
-	convertDTypePairMap.Register(dtypes.Int32, dtypes.Float16, execConvertDTypeToFloat16[int32, float16.Float16])
-	convertDTypePairMap.Register(dtypes.Int64, dtypes.Float16, execConvertDTypeToFloat16[int64, float16.Float16])
-	convertDTypePairMap.Register(dtypes.Uint8, dtypes.Float16, execConvertDTypeToFloat16[uint8, float16.Float16])
-	convertDTypePairMap.Register(dtypes.Uint16, dtypes.Float16, execConvertDTypeToFloat16[uint16, float16.Float16])
-	convertDTypePairMap.Register(dtypes.Uint32, dtypes.Float16, execConvertDTypeToFloat16[uint32, float16.Float16])
-	convertDTypePairMap.Register(dtypes.Uint64, dtypes.Float16, execConvertDTypeToFloat16[uint64, float16.Float16])
-	convertDTypePairMap.Register(dtypes.Float32, dtypes.Float16, execConvertDTypeToFloat16[float32, float16.Float16])
-	convertDTypePairMap.Register(dtypes.Float64, dtypes.Float16, execConvertDTypeToFloat16[float64, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Int8, dtypes.Float16, priorityTyped, execConvertDTypeToFloat16[int8, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Int16, dtypes.Float16, priorityTyped, execConvertDTypeToFloat16[int16, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Int32, dtypes.Float16, priorityTyped, execConvertDTypeToFloat16[int32, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Int64, dtypes.Float16, priorityTyped, execConvertDTypeToFloat16[int64, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Uint8, dtypes.Float16, priorityTyped, execConvertDTypeToFloat16[uint8, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Uint16, dtypes.Float16, priorityTyped, execConvertDTypeToFloat16[uint16, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Uint32, dtypes.Float16, priorityTyped, execConvertDTypeToFloat16[uint32, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Uint64, dtypes.Float16, priorityTyped, execConvertDTypeToFloat16[uint64, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Float32, dtypes.Float16, priorityTyped, execConvertDTypeToFloat16[float32, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Float64, dtypes.Float16, priorityTyped, execConvertDTypeToFloat16[float64, float16.Float16])
 
-	convertDTypePairMap.Register(dtypes.Float16, dtypes.Bool, execConvertDTypeFloat16ToBool)
-	convertDTypePairMap.Register(dtypes.Bool, dtypes.Float16, execConvertDTypeBoolToFloat16)
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Bool, priorityTyped, execConvertDTypeFloat16ToBool)
+	convertDTypePairMap.Register(dtypes.Bool, dtypes.Float16, priorityTyped, execConvertDTypeBoolToFloat16)
 
 	// Float16 <-> BFloat16 conversion
-	convertDTypePairMap.Register(dtypes.Float16, dtypes.BFloat16, execConvertDTypeFloat16ToBFloat16)
-	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Float16, execConvertDTypeBFloat16ToFloat16)
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.BFloat16, priorityTyped, execConvertDTypeFloat16ToBFloat16)
+	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Float16, priorityTyped, execConvertDTypeBFloat16ToFloat16)
 
 	// Float16 <-> Float16 identity
-	convertDTypePairMap.Register(dtypes.Float16, dtypes.Float16, func(operand, output *Buffer) {
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Float16, priorityTyped, func(operand, output *Buffer) {
 		copy(output.flat.([]float16.Float16), operand.flat.([]float16.Float16))
 	})
 }
@@ -1511,13 +1513,13 @@ func execSliceFloat16(operand, output *Buffer, params *sliceNode) {
 
 func init() {
 	// Register Float16 buffer and misc operations
-	mutableBytesDTypeMap.Register(dtypes.Float16, mutableBytesFloat16)
-	fillBufferDTypeMap.Register(dtypes.Float16, fillBufferFloat16)
-	whereDTypeMap.Register(dtypes.Float16, execWhereFloat16)
-	transposeDTypeMap.Register(dtypes.Float16, execTransposeFloat16)
-	dispatchBroadcast.Register(dtypes.Float16, execBroadcastFloat16)
-	dispatchBroadcastInDim.Register(dtypes.Float16, execBroadcastInDimFloat16)
-	sliceDTypeMap.Register(dtypes.Float16, execSliceFloat16)
+	mutableBytesDTypeMap.Register(dtypes.Float16, priorityTyped, mutableBytesFloat16)
+	fillBufferDTypeMap.Register(dtypes.Float16, priorityTyped, fillBufferFloat16)
+	whereDTypeMap.Register(dtypes.Float16, priorityTyped, execWhereFloat16)
+	transposeDTypeMap.Register(dtypes.Float16, priorityTyped, execTransposeFloat16)
+	dispatchBroadcast.Register(dtypes.Float16, priorityTyped, execBroadcastFloat16)
+	dispatchBroadcastInDim.Register(dtypes.Float16, priorityTyped, execBroadcastInDimFloat16)
+	sliceDTypeMap.Register(dtypes.Float16, priorityTyped, execSliceFloat16)
 }
 
 // Scatter{Max,Min,Sum}Op ==========================================================================================
@@ -1735,9 +1737,9 @@ var (
 )
 
 func init() {
-	combineMaxDTypeMap.Register(dtypes.BFloat16, combineForScatterMaxBFloat16)
-	combineMinDTypeMap.Register(dtypes.BFloat16, combineForScatterMinBFloat16)
-	combineSumDTypeMap.Register(dtypes.BFloat16, combineForScatterSumBFloat16)
+	combineMaxDTypeMap.Register(dtypes.BFloat16, priorityTyped, combineForScatterMaxBFloat16)
+	combineMinDTypeMap.Register(dtypes.BFloat16, priorityTyped, combineForScatterMinBFloat16)
+	combineSumDTypeMap.Register(dtypes.BFloat16, priorityTyped, combineForScatterSumBFloat16)
 }
 
 func combineForScatterMaxGeneric[T PODNumericConstraints](a, b T) T {
@@ -1997,7 +1999,7 @@ func execArgMinMaxGeneric[T PODNumericConstraints](
 }
 
 func init() {
-	argMinMaxDTypeMap.Register(dtypes.BFloat16, execArgMinMaxGenericBFloat16)
+	argMinMaxDTypeMap.Register(dtypes.BFloat16, priorityTyped, execArgMinMaxGenericBFloat16)
 }
 
 func execArgMinMaxGenericBFloat16(
@@ -2198,10 +2200,10 @@ var (
 )
 
 func init() {
-	reduceWindowMaxDTypeMap.Register(dtypes.BFloat16, reduceWindowMaxBuildUpdateFnBFloat16)
-	reduceWindowMinDTypeMap.Register(dtypes.BFloat16, reduceWindowMinBuildUpdateFnBFloat16)
-	reduceWindowSumDTypeMap.Register(dtypes.BFloat16, reduceWindowSumBuildUpdateFnBFloat16)
-	reduceWindowProductDTypeMap.Register(dtypes.BFloat16, reduceWindowProductBuildUpdateFnBFloat16)
+	reduceWindowMaxDTypeMap.Register(dtypes.BFloat16, priorityTyped, reduceWindowMaxBuildUpdateFnBFloat16)
+	reduceWindowMinDTypeMap.Register(dtypes.BFloat16, priorityTyped, reduceWindowMinBuildUpdateFnBFloat16)
+	reduceWindowSumDTypeMap.Register(dtypes.BFloat16, priorityTyped, reduceWindowSumBuildUpdateFnBFloat16)
+	reduceWindowProductDTypeMap.Register(dtypes.BFloat16, priorityTyped, reduceWindowProductBuildUpdateFnBFloat16)
 }
 
 // Generic functions that build a function that will update the output at outputFlatIdx from the operand at operandFlatIdx.

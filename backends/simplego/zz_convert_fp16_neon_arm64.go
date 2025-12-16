@@ -5,7 +5,7 @@ package simplego
 import (
 	"unsafe"
 
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/x448/float16"
 )
 
@@ -122,6 +122,6 @@ func convertFloat16SliceToFloat32(input []float16.Float16, output []float32) {
 
 func init() {
 	// Override Float16↔Float32 conversions with NEON-accelerated versions
-	convertDTypePairMap.Register(dtypes.Float16, dtypes.Float32, execConvertDTypeFloat16ToFloat32NEON)
-	convertDTypePairMap.Register(dtypes.Float32, dtypes.Float16, execConvertDTypeFloat32ToFloat16NEON)
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Float32, priorityTyped, execConvertDTypeFloat16ToFloat32NEON)
+	convertDTypePairMap.Register(dtypes.Float32, dtypes.Float16, priorityTyped, execConvertDTypeFloat32ToFloat16NEON)
 }

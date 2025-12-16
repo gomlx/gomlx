@@ -14,7 +14,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 )
 
@@ -795,7 +795,7 @@ func copySlicesRecursively(data reflect.Value, mdSlice reflect.Value, strides []
 
 	numElements := mdSlice.Len()
 	subStrides := strides[1:]
-	for ii := 0; ii < numElements; ii++ {
+	for ii := range numElements {
 		start := ii * strides[0]
 		end := (ii + 1) * strides[0]
 		subData := data.Slice(start, end)
@@ -836,7 +836,7 @@ func createSlicesRecursively(resultT reflect.Type, data reflect.Value, dimension
 	subStrides := strides[1:]
 	subDimensions := dimensions[1:]
 	subResultT := resultT.Elem()
-	for ii := 0; ii < numElements; ii++ {
+	for ii := range numElements {
 		start := ii * strides[0]
 		end := (ii + 1) * strides[0]
 		subData := data.Slice(start, end)

@@ -7,9 +7,11 @@ import (
 	"unsafe"
 
 	"github.com/gomlx/go-xla/pkg/pjrt"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	xlabfloat16 "github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -98,7 +100,6 @@ func (backend *Backend) Finalize() {
 		backend.client = nil
 	}
 	backend.plugin = nil
-	return
 }
 
 // IsFinalized returns true if the backend is in an invalid state.
@@ -135,7 +136,7 @@ func (backend *Backend) BufferShape(buffer backends.Buffer) (shapes.Shape, error
 		return noShape, err
 	}
 	pBuffer := castToPJRT(buffer)
-	dtype, err := pBuffer.DType()
+	xlaDType, err := pBuffer.DType()
 	if err != nil {
 		return noShape, errors.WithMessagef(err, "backend %q", BackendName)
 	}
@@ -143,7 +144,7 @@ func (backend *Backend) BufferShape(buffer backends.Buffer) (shapes.Shape, error
 	if err != nil {
 		return noShape, errors.WithMessagef(err, "backend %q", BackendName)
 	}
-	return shapes.Make(dtype, dims...), nil
+	return shapes.Make(DTypeFromXLA(xlaDType), dims...), nil
 }
 
 // BufferDeviceNum returns the deviceNum for the buffer.
@@ -218,6 +219,11 @@ func (backend *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat an
 		return nil, errors.Errorf("backend %q: BuffferFromFlatData with shape %s, but flat with incompatible dtype, it is %T", BackendName, shape, flat)
 	}
 
+	// Convert bfloat16 slices from gomlx to go-xla type.
+	if bf16Slice, ok := flat.([]bfloat16.BFloat16); ok {
+		flat = any(BFloat16SliceToXLA(bf16Slice))
+	}
+
 	buffer, err := backend.client.BufferFromHost().
 		FromFlatDataWithDimensions(flat, shape.Dimensions).
 		ToDeviceNum(int(deviceNum)).
@@ -248,9 +254,14 @@ func (backend *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shap
 		return
 	}
 	device := devices[deviceNum]
-	buffer, flat, err = backend.client.NewSharedBuffer(shape.DType, shape.Dimensions, device)
+	buffer, flat, err = backend.client.NewSharedBuffer(DTypeToXLA(shape.DType), shape.Dimensions, device)
 	if err != nil {
 		err = errors.WithMessagef(err, "backend %q NewSharedBuffer", BackendName)
+		return
+	}
+	// Convert bfloat16 slices from go-xla to gomlx type.
+	if xlaBF16Slice, ok := flat.([]xlabfloat16.BFloat16); ok {
+		flat = any(BFloat16SliceFromXLA(xlaBF16Slice))
 	}
 	return
 }
@@ -273,6 +284,10 @@ func (backend *Backend) BufferData(buffer backends.Buffer) (flat any, err error)
 	flat, err = buf.Data()
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to access buffer data directly, maybe not supported by backend?")
+	}
+	// Convert bfloat16 slices from go-xla to gomlx type.
+	if xlaBF16Slice, ok := flat.([]xlabfloat16.BFloat16); ok {
+		flat = any(BFloat16SliceFromXLA(xlaBF16Slice))
 	}
 	return
 }

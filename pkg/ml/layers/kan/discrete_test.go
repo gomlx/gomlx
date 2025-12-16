@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 )
 
 func TestPiecewiseConstantFunctions(t *testing.T) {

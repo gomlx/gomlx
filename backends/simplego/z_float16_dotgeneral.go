@@ -4,7 +4,7 @@ package simplego
 
 import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/x448/float16"
 )
 
@@ -200,6 +200,6 @@ func dgNormalizeShapeFloat16(backend *Backend, source *Buffer, contractingAxes, 
 }
 
 func init() {
-	dotGeneralFlatToBlockDTypeMap.Register(dtypes.Float16, dgCopyFlatToBlockShapeFloat16)
-	dotGeneralNormalizeShapeDTypeMap.Register(dtypes.Float16, dgNormalizeShapeFloat16)
+	dotGeneralFlatToBlockDTypeMap.Register(dtypes.Float16, priorityTyped, dgCopyFlatToBlockShapeFloat16)
+	dotGeneralNormalizeShapeDTypeMap.Register(dtypes.Float16, priorityTyped, dgNormalizeShapeFloat16)
 }

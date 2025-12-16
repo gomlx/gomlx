@@ -6,7 +6,7 @@ import (
 
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 // PreBlockedWeightCache caches pre-blocked weight buffers for reuse.

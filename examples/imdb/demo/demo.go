@@ -23,8 +23,8 @@ import (
 	_ "github.com/gomlx/gomlx/backends/default"
 	"github.com/gomlx/gomlx/examples/imdb"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/ui/commandline"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 
 	"github.com/gomlx/gomlx/internal/must"
 	"k8s.io/klog/v2"
