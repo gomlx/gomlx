@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	nodeExecutors[backends.OpTypeDotGeneral] = execDotGeneral
+	setNodeExecutor(backends.OpTypeDotGeneral, priorityGeneric, execDotGeneral)
 }
 
 type dotGeneralNodeData struct {

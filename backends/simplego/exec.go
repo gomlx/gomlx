@@ -89,7 +89,6 @@ var _ backends.Executable = (*Executable)(nil)
 func (e *Executable) Finalize() {
 	e.builder.Finalize()
 	e.builder = nil
-	return
 }
 
 // Inputs returns the list of parameters names and shapes, in order created by the Builder.Parameter calls.
@@ -184,12 +183,37 @@ type nodeMultiOutputExecutor func(backend *Backend, node *Node, inputs []*Buffer
 var (
 	// nodeExecutors should be populated during initialization (`init` functions) for the ops implemented.
 	// For the nodes not implemented, leave it as nil, and it will return an error.
-	nodeExecutors [backends.OpTypeLast]nodeExecutor
+	//
+	// nodeExecutors should be populated with a priority (see setNodeExecutor), which can conctorl whether
+	// to overwrite a nodeExecutors configuration independent of the order of settting.
+	nodeExecutors         [backends.OpTypeLast]nodeExecutor
+	nodeExecutorsPriority [backends.OpTypeLast]registerPriority
 
 	// multiOutputsNodeExecutors should be populated during initialization for the multi-output ops
 	// implemented. E.g.: RNGBitGenerator.
 	multiOutputsNodeExecutors [backends.OpTypeLast]nodeMultiOutputExecutor
 )
+
+// registerPriority defines the priority of a node executor. Highest priority takes precedence.
+// Anything with priority < 0 is ignored.
+type registerPriority int
+
+const (
+	priorityGeneric registerPriority = 0
+	priorityArch    registerPriority = 10  // Specialized architecture implementation.
+	priorityUser    registerPriority = 100 // Custom user overrides.
+)
+
+// setNodeExecutor sets the node executor for the given operation type with the specified priority.
+// If the priority is lower than the current priority for the operation type, the executor is ignored.
+func setNodeExecutor(opType backends.OpType, priority registerPriority, executor nodeExecutor) {
+	if priority < nodeExecutorsPriority[opType] {
+		// We have soemthing registered with higher priority, ignore.
+		return
+	}
+	nodeExecutorsPriority[opType] = priority
+	nodeExecutors[opType] = executor
+}
 
 type opsExecutionType int
 

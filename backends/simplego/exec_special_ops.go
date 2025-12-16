@@ -16,32 +16,32 @@ import (
 )
 
 func init() {
-	nodeExecutors[backends.OpTypeIdentity] = execIdentity
-	nodeExecutors[backends.OpTypeWhere] = execWhere
-	nodeExecutors[backends.OpTypeReshape] = execReshape
-	nodeExecutors[backends.OpTypeTranspose] = execTranspose
-	nodeExecutors[backends.OpTypeBroadcast] = execBroadcast
-	nodeExecutors[backends.OpTypeBroadcastInDim] = execBroadcastInDim
-	nodeExecutors[backends.OpTypeReduceMax] = execReduce
-	nodeExecutors[backends.OpTypeReduceMin] = execReduce
-	nodeExecutors[backends.OpTypeReduceSum] = execReduce
-	nodeExecutors[backends.OpTypeReduceProduct] = execReduce
-	nodeExecutors[backends.OpTypeReduceBitwiseAnd] = execReduce
-	nodeExecutors[backends.OpTypeReduceBitwiseOr] = execReduce
-	nodeExecutors[backends.OpTypeReduceBitwiseXor] = execReduce
-	nodeExecutors[backends.OpTypeReduceLogicalAnd] = execReduce
-	nodeExecutors[backends.OpTypeReduceLogicalOr] = execReduce
-	nodeExecutors[backends.OpTypeReduceLogicalXor] = execReduce
-	nodeExecutors[backends.OpTypeIota] = execIota
-	nodeExecutors[backends.OpTypeGather] = execGather
-	nodeExecutors[backends.OpTypeConcatenate] = execConcatenate
-	nodeExecutors[backends.OpTypeConvertDType] = execConvertDType
-	nodeExecutors[backends.OpTypeScatterMax] = execScatter
-	nodeExecutors[backends.OpTypeScatterMin] = execScatter
-	nodeExecutors[backends.OpTypeScatterSum] = execScatter
-	nodeExecutors[backends.OpTypeSlice] = execSlice
-	nodeExecutors[backends.OpTypeArgMinMax] = execArgMinMax
-	nodeExecutors[backends.OpTypeReduceWindow] = execReduceWindow
+	setNodeExecutor(backends.OpTypeIdentity, priorityGeneric, execIdentity)
+	setNodeExecutor(backends.OpTypeWhere, priorityGeneric, execWhere)
+	setNodeExecutor(backends.OpTypeReshape, priorityGeneric, execReshape)
+	setNodeExecutor(backends.OpTypeTranspose, priorityGeneric, execTranspose)
+	setNodeExecutor(backends.OpTypeBroadcast, priorityGeneric, execBroadcast)
+	setNodeExecutor(backends.OpTypeBroadcastInDim, priorityGeneric, execBroadcastInDim)
+	setNodeExecutor(backends.OpTypeReduceMax, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceMin, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceSum, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceProduct, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceBitwiseAnd, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceBitwiseOr, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceBitwiseXor, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceLogicalAnd, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceLogicalOr, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceLogicalXor, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeIota, priorityGeneric, execIota)
+	setNodeExecutor(backends.OpTypeGather, priorityGeneric, execGather)
+	setNodeExecutor(backends.OpTypeConcatenate, priorityGeneric, execConcatenate)
+	setNodeExecutor(backends.OpTypeConvertDType, priorityGeneric, execConvertDType)
+	setNodeExecutor(backends.OpTypeScatterMax, priorityGeneric, execScatter)
+	setNodeExecutor(backends.OpTypeScatterMin, priorityGeneric, execScatter)
+	setNodeExecutor(backends.OpTypeScatterSum, priorityGeneric, execScatter)
+	setNodeExecutor(backends.OpTypeSlice, priorityGeneric, execSlice)
+	setNodeExecutor(backends.OpTypeArgMinMax, priorityGeneric, execArgMinMax)
+	setNodeExecutor(backends.OpTypeReduceWindow, priorityGeneric, execReduceWindow)
 
 	// For nodes with multiple outputs:
 	multiOutputsNodeExecutors[backends.OpTypeRNGBitGenerator] = execRNGBitGenerator

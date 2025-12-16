@@ -6,14 +6,14 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 )
 
 func init() {
-	nodeExecutors[backends.OpTypeConvGeneral] = execConvGeneral
+	setNodeExecutor(backends.OpTypeConvGeneral, priorityGeneric, execConvGeneral)
 }
 
 // ConvGeneral is a generic Convolution operation with support for:

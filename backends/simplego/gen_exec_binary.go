@@ -6,33 +6,33 @@ import (
 	"math"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 )
 
 func init() {
-	nodeExecutors[backends.OpTypeAdd] = execAdd
-	nodeExecutors[backends.OpTypeMul] = execMul
-	nodeExecutors[backends.OpTypeSub] = execSub
-	nodeExecutors[backends.OpTypeDiv] = execDiv
-	nodeExecutors[backends.OpTypeRem] = execRem
-	nodeExecutors[backends.OpTypePow] = execPow
-	nodeExecutors[backends.OpTypeMax] = execMax
-	nodeExecutors[backends.OpTypeMin] = execMin
-	nodeExecutors[backends.OpTypeBitwiseAnd] = execBitwiseAnd
-	nodeExecutors[backends.OpTypeBitwiseOr] = execBitwiseOr
-	nodeExecutors[backends.OpTypeBitwiseXor] = execBitwiseXor
-	nodeExecutors[backends.OpTypeLogicalAnd] = execLogicalAnd
-	nodeExecutors[backends.OpTypeLogicalOr] = execLogicalOr
-	nodeExecutors[backends.OpTypeLogicalXor] = execLogicalXor
-	nodeExecutors[backends.OpTypeEqual] = execEqual
-	nodeExecutors[backends.OpTypeNotEqual] = execNotEqual
-	nodeExecutors[backends.OpTypeGreaterOrEqual] = execGreaterOrEqual
-	nodeExecutors[backends.OpTypeGreaterThan] = execGreaterThan
-	nodeExecutors[backends.OpTypeLessOrEqual] = execLessOrEqual
-	nodeExecutors[backends.OpTypeLessThan] = execLessThan
+	setNodeExecutor(backends.OpTypeAdd, priorityGeneric, execAdd)
+	setNodeExecutor(backends.OpTypeMul, priorityGeneric, execMul)
+	setNodeExecutor(backends.OpTypeSub, priorityGeneric, execSub)
+	setNodeExecutor(backends.OpTypeDiv, priorityGeneric, execDiv)
+	setNodeExecutor(backends.OpTypeRem, priorityGeneric, execRem)
+	setNodeExecutor(backends.OpTypePow, priorityGeneric, execPow)
+	setNodeExecutor(backends.OpTypeMax, priorityGeneric, execMax)
+	setNodeExecutor(backends.OpTypeMin, priorityGeneric, execMin)
+	setNodeExecutor(backends.OpTypeBitwiseAnd, priorityGeneric, execBitwiseAnd)
+	setNodeExecutor(backends.OpTypeBitwiseOr, priorityGeneric, execBitwiseOr)
+	setNodeExecutor(backends.OpTypeBitwiseXor, priorityGeneric, execBitwiseXor)
+	setNodeExecutor(backends.OpTypeLogicalAnd, priorityGeneric, execLogicalAnd)
+	setNodeExecutor(backends.OpTypeLogicalOr, priorityGeneric, execLogicalOr)
+	setNodeExecutor(backends.OpTypeLogicalXor, priorityGeneric, execLogicalXor)
+	setNodeExecutor(backends.OpTypeEqual, priorityGeneric, execEqual)
+	setNodeExecutor(backends.OpTypeNotEqual, priorityGeneric, execNotEqual)
+	setNodeExecutor(backends.OpTypeGreaterOrEqual, priorityGeneric, execGreaterOrEqual)
+	setNodeExecutor(backends.OpTypeGreaterThan, priorityGeneric, execGreaterThan)
+	setNodeExecutor(backends.OpTypeLessOrEqual, priorityGeneric, execLessOrEqual)
+	setNodeExecutor(backends.OpTypeLessThan, priorityGeneric, execLessThan)
 }
 
 // execAdd executes the binary op Add.
