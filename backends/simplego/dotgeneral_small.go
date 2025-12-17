@@ -208,30 +208,10 @@ func execDotGeneralNormalized(backend *Backend, lhs, rhs *Buffer, params *dotGen
 		tmpOutput.Zeros()
 	}
 
-	// Select kernel based on input dtype and output dtype
-	var normalizeDotGeneral func(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int)
-
-	lhsDType := lhs.shape.DType
-	rhsDType := rhs.shape.DType
-
-	// Use specialized int8→int32 kernels if available
-	isQuantizedOp := (lhsDType == dtypes.Int8 || lhsDType == dtypes.Uint8) &&
-		(rhsDType == dtypes.Int8 || rhsDType == dtypes.Uint8) &&
-		outputDType == dtypes.Int32
-
-	if isQuantizedOp {
-		// For int8×int8, use signed kernel (SMMLA)
-		if lhsDType == dtypes.Int8 && rhsDType == dtypes.Int8 {
-			normalizeDotGeneral = execNormalizedDotGeneralInt8ToInt32
-		} else {
-			// For uint8×uint8 or mixed int8/uint8, use unsigned kernel (UMMLA)
-			// Mixed types are treated as unsigned to avoid sign extension issues
-			normalizeDotGeneral = execNormalizedDotGeneralUint8ToInt32
-		}
-	} else {
-		// Fallback to generic kernel
-		normalizeDotGeneral = dotGeneralNormalizedDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int))
-	}
+	// Select kernel based on input dtype.
+	// Specialized kernels for int8/uint8 are registered in the dtype map and handle
+	// accumulation in int32 internally with saturation to output dtype.
+	normalizeDotGeneral := dotGeneralNormalizedDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int))
 
 	// Decide on using parallelism across the batch -- each example is started on a separate worker.
 	useBatchParallelism := backend.workers.IsEnabled()
@@ -258,18 +238,14 @@ func execDotGeneralNormalized(backend *Backend, lhs, rhs *Buffer, params *dotGen
 		wg.Wait()
 	}
 
-	// If we created a temporary output with different dtype, handle conversion or copy
+	// If we created a temporary output with different dtype, handle conversion.
+	// This is only needed for float16/bfloat16 where we accumulated in float32.
+	// For int8/uint8, the specialized kernels handle int32 accumulation and saturation internally.
 	if needsTempOutput {
-		if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
-			// For float16→float32, convert back to float16
-			convertFn := convertDTypePairMap.Get(tmpOutput.shape.DType, output.shape.DType).(convertFnType)
-			convertFn(tmpOutput, output)
-			backend.putBuffer(tmpOutput)
-		} else if isQuantizedOp {
-			// For int8→int32, tmpOutput already has the correct int32 values, just copy
-			copy(output.flat.([]int32), tmpOutput.flat.([]int32))
-			backend.putBuffer(tmpOutput)
-		}
+		// For float16→float32, convert back to float16
+		convertFn := convertDTypePairMap.Get(tmpOutput.shape.DType, output.shape.DType).(convertFnType)
+		convertFn(tmpOutput, output)
+		backend.putBuffer(tmpOutput)
 	}
 	return nil
 }

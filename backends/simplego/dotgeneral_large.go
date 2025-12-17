@@ -263,6 +263,8 @@ func dgCopyOutputBlockToFlat[T interface {
 func init() {
 	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.BFloat16, priorityTyped, dgCopyOutputBlockToFlatBFloat16)
 	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.Float16, priorityTyped, dgCopyOutputBlockToFlatFloat16)
+	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.Int8, priorityTyped, dgCopyOutputBlockToFlatInt8)
+	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.Uint8, priorityTyped, dgCopyOutputBlockToFlatUint8)
 }
 
 // dgCopyOutputBlockToFlatBFloat16 copies the blocked output to a flat output, removing the padding.
@@ -379,6 +381,148 @@ func dgCopyOutputBlockToFlatFloat16(blockSource, output *Buffer) {
 						sourceData[sourceRowOffset:sourceRowOffset+rowLen],
 						outputData[outputRowOffset:outputRowOffset+rowLen],
 					)
+				}
+			}
+		}
+	}
+}
+
+// saturateInt32ToInt8 converts an int32 value to int8 with saturation.
+// Values below -128 become -128, values above 127 become 127.
+func saturateInt32ToInt8(v int32) int8 {
+	if v < -128 {
+		return -128
+	}
+	if v > 127 {
+		return 127
+	}
+	return int8(v)
+}
+
+// saturateInt32ToUint8 converts an int32 value to uint8 with saturation.
+// Values below 0 become 0, values above 255 become 255.
+func saturateInt32ToUint8(v int32) uint8 {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return uint8(v)
+}
+
+// dgCopyOutputBlockToFlatInt8 copies the blocked output to a flat output, removing the padding.
+// The blockSource is assumed to be int32 -- matrix multiplication uses int32 to avoid
+// overflow when accumulating results. Values are saturated to int8 range [-128, 127].
+//
+// blockedSource shape: int32[batchSize, lhsCrossBlocks, rhsCrossBlocks, blockDim, blockDim]
+// output shape: int8[batchSize, lhsCrossSize, rhsCrossSize]
+func dgCopyOutputBlockToFlatInt8(blockSource, output *Buffer) {
+	sourceDims := blockSource.shape.Dimensions
+	outputDims := output.shape.Dimensions
+
+	batchSize := sourceDims[0]
+	lhsBlockCross := sourceDims[1]
+	rhsBlockCross := sourceDims[2]
+	blockDim := sourceDims[3] // Same as sourceDims[4]
+	lhsCrossSize := outputDims[1]
+	rhsCrossSize := outputDims[2]
+
+	// Pre-calculate strides
+	outputRhsStride := 1
+	outputLhsStride := rhsCrossSize
+	outputBatchStride := lhsCrossSize * rhsCrossSize
+
+	sourceBlockSize := blockDim * blockDim
+	sourceRhsBlockStride := sourceBlockSize
+	sourceLhsBlockStride := rhsBlockCross * sourceBlockSize
+	sourceBatchStride := lhsBlockCross * rhsBlockCross * sourceBlockSize
+
+	sourceData := blockSource.flat.([]int32)
+	outputData := output.flat.([]int8)
+
+	for batch := 0; batch < batchSize; batch++ {
+		sourceBatchOffset := batch * sourceBatchStride
+		outputBatchOffset := batch * outputBatchStride
+
+		for lhsBlock := 0; lhsBlock < lhsBlockCross && lhsBlock*blockDim < lhsCrossSize; lhsBlock++ {
+			lhsStart := lhsBlock * blockDim
+			lhsEnd := min(lhsStart+blockDim, lhsCrossSize)
+			sourceLhsOffset := sourceBatchOffset + lhsBlock*sourceLhsBlockStride
+			outputLhsOffset := outputBatchOffset + lhsStart*outputLhsStride
+
+			for rhsBlock := 0; rhsBlock < rhsBlockCross && rhsBlock*blockDim < rhsCrossSize; rhsBlock++ {
+				rhsStart := rhsBlock * blockDim
+				rhsEnd := min(rhsStart+blockDim, rhsCrossSize)
+				sourceBlockOffset := sourceLhsOffset + rhsBlock*sourceRhsBlockStride
+				outputBlockOffset := outputLhsOffset + rhsStart*outputRhsStride
+
+				// Copy valid elements from the block with saturation
+				for blockRow := 0; blockRow < lhsEnd-lhsStart; blockRow++ {
+					sourceRowOffset := sourceBlockOffset + blockRow*blockDim
+					outputRowOffset := outputBlockOffset + blockRow*outputLhsStride
+					for blockCol := 0; blockCol < rhsEnd-rhsStart; blockCol++ {
+						outputData[outputRowOffset+blockCol] = saturateInt32ToInt8(sourceData[sourceRowOffset+blockCol])
+					}
+				}
+			}
+		}
+	}
+}
+
+// dgCopyOutputBlockToFlatUint8 copies the blocked output to a flat output, removing the padding.
+// The blockSource is assumed to be int32 -- matrix multiplication uses int32 to avoid
+// overflow when accumulating results. Values are saturated to uint8 range [0, 255].
+//
+// blockedSource shape: int32[batchSize, lhsCrossBlocks, rhsCrossBlocks, blockDim, blockDim]
+// output shape: uint8[batchSize, lhsCrossSize, rhsCrossSize]
+func dgCopyOutputBlockToFlatUint8(blockSource, output *Buffer) {
+	sourceDims := blockSource.shape.Dimensions
+	outputDims := output.shape.Dimensions
+
+	batchSize := sourceDims[0]
+	lhsBlockCross := sourceDims[1]
+	rhsBlockCross := sourceDims[2]
+	blockDim := sourceDims[3] // Same as sourceDims[4]
+	lhsCrossSize := outputDims[1]
+	rhsCrossSize := outputDims[2]
+
+	// Pre-calculate strides
+	outputRhsStride := 1
+	outputLhsStride := rhsCrossSize
+	outputBatchStride := lhsCrossSize * rhsCrossSize
+
+	sourceBlockSize := blockDim * blockDim
+	sourceRhsBlockStride := sourceBlockSize
+	sourceLhsBlockStride := rhsBlockCross * sourceBlockSize
+	sourceBatchStride := lhsBlockCross * rhsBlockCross * sourceBlockSize
+
+	sourceData := blockSource.flat.([]int32)
+	outputData := output.flat.([]uint8)
+
+	for batch := 0; batch < batchSize; batch++ {
+		sourceBatchOffset := batch * sourceBatchStride
+		outputBatchOffset := batch * outputBatchStride
+
+		for lhsBlock := 0; lhsBlock < lhsBlockCross && lhsBlock*blockDim < lhsCrossSize; lhsBlock++ {
+			lhsStart := lhsBlock * blockDim
+			lhsEnd := min(lhsStart+blockDim, lhsCrossSize)
+			sourceLhsOffset := sourceBatchOffset + lhsBlock*sourceLhsBlockStride
+			outputLhsOffset := outputBatchOffset + lhsStart*outputLhsStride
+
+			for rhsBlock := 0; rhsBlock < rhsBlockCross && rhsBlock*blockDim < rhsCrossSize; rhsBlock++ {
+				rhsStart := rhsBlock * blockDim
+				rhsEnd := min(rhsStart+blockDim, rhsCrossSize)
+				sourceBlockOffset := sourceLhsOffset + rhsBlock*sourceRhsBlockStride
+				outputBlockOffset := outputLhsOffset + rhsStart*outputRhsStride
+
+				// Copy valid elements from the block with saturation
+				for blockRow := 0; blockRow < lhsEnd-lhsStart; blockRow++ {
+					sourceRowOffset := sourceBlockOffset + blockRow*blockDim
+					outputRowOffset := outputBlockOffset + blockRow*outputLhsStride
+					for blockCol := 0; blockCol < rhsEnd-rhsStart; blockCol++ {
+						outputData[outputRowOffset+blockCol] = saturateInt32ToUint8(sourceData[sourceRowOffset+blockCol])
+					}
 				}
 			}
 		}

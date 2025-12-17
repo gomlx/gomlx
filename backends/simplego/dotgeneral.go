@@ -72,13 +72,10 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 
 	dtype := lhsDType
 
-	// Determine the final output dtype for the node.
-	// For int8/uint8: output is int32 (widened accumulation type that's also the final output).
-	// For bfloat16/float16: output remains the input dtype (internal accumulation uses float32 but converts back).
+	// Output dtype matches input dtype (StableHLO-compliant behavior).
+	// Internal accumulation uses wider types (int32 for int8/uint8, float32 for bf16/f16)
+	// to prevent overflow, but the final output is converted back to the input dtype.
 	nodeOutputDType := dtype
-	if dtype == dtypes.Int8 || dtype == dtypes.Uint8 {
-		nodeOutputDType = dtypes.Int32
-	}
 	if len(lhsContractingAxes) != len(rhsContractingAxes) {
 		return nil, errors.Errorf("DotGeneral number of contracting axes for lhs (%d) doesn't match rhs (%d)",
 			len(lhsContractingAxes), len(rhsContractingAxes))
@@ -159,13 +156,18 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	params.lhsBlockedShape = dgCreateBlockedShape(dtype, params.batchSize, params.lhsCrossSize, params.contractingSize, blockLog2Dim)
 	params.rhsBlockedShape = dgCreateBlockedShape(dtype, params.batchSize, params.rhsCrossSize, params.contractingSize, blockLog2Dim)
 	// Determine the internal accumulator dtype for numerical precision.
-	// This is separate from the node output dtype - for float16/bfloat16, we accumulate in float32
-	// internally but convert back to the original dtype.
+	// This is separate from the node output dtype - we accumulate in wider types internally
+	// to prevent overflow/precision loss, then convert back to the original dtype.
 	accumulatorDType := nodeOutputDType
-	if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
-		// For 16 bits, store the intermediary results as float32 to minimize numerical errors during accumulation.
-		// Notice the blockLog2Dim must be the same, because the block dimensions much match the inputs.
+	switch dtype {
+	case dtypes.BFloat16, dtypes.Float16:
+		// For 16-bit floats, accumulate in float32 to minimize numerical errors.
+		// Notice the blockLog2Dim must be the same, because the block dimensions must match the inputs.
 		accumulatorDType = dtypes.Float32
+	case dtypes.Int8, dtypes.Uint8:
+		// For 8-bit integers, accumulate in int32 to prevent overflow.
+		// The final output will be saturated back to int8/uint8.
+		accumulatorDType = dtypes.Int32
 	}
 	params.outputBlockedShape = dgCreateBlockedShape(accumulatorDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
 

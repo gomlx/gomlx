@@ -11,12 +11,13 @@ import (
 	"unsafe"
 )
 
-// execNormalizedDotGeneralInt8ToInt32 is a fallback implementation for int8×int8→int32
+// execNormalizedDotGeneralInt8ToInt8 is a fallback implementation for int8×int8→int8
 // matrix multiplication on non-ARM64 platforms. Uses scalar operations.
-func execNormalizedDotGeneralInt8ToInt32(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
+// It accumulates in int32 internally to avoid overflow, then saturates to int8.
+func execNormalizedDotGeneralInt8ToInt8(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
 	lhsFlat := lhs.flat.([]int8)
 	rhsFlat := rhs.flat.([]int8)
-	outputFlat := output.flat.([]int32)
+	outputFlat := output.flat.([]int8)
 
 	contractingSize := params.contractingSize
 	lhsCrossSize := params.lhsCrossSize
@@ -39,22 +40,24 @@ func execNormalizedDotGeneralInt8ToInt32(lhs, rhs, output *Buffer, params *dotGe
 				rhsColStartIdx := rhsBaseIdx + idxRhsCross*contractingSize
 				var sum int32
 
-				// Scalar implementation
+				// Scalar implementation - accumulate in int32
 				for idxContracting := 0; idxContracting < contractingSize; idxContracting++ {
 					lhsVal := int32(lhsFlat[lhsRowStartIdx+idxContracting])
 					rhsVal := int32(rhsFlat[rhsColStartIdx+idxContracting])
 					sum += lhsVal * rhsVal
 				}
 
-				outputFlat[outputRowStartIdx+idxRhsCross] += sum
+				// Saturate to int8 range [-128, 127]
+				outputFlat[outputRowStartIdx+idxRhsCross] = saturateInt32ToInt8(sum)
 			}
 		}
 	}
 }
 
-// execNormalizedDotGeneralUint8ToInt32 is a fallback implementation for uint8×uint8→int32
-// Also handles mixed int8/uint8 cases by treating everything as unsigned
-func execNormalizedDotGeneralUint8ToInt32(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
+// execNormalizedDotGeneralUint8ToUint8 is a fallback implementation for uint8×uint8→uint8
+// Also handles mixed int8/uint8 cases by treating everything as unsigned.
+// It accumulates in int32 internally to avoid overflow, then saturates to uint8.
+func execNormalizedDotGeneralUint8ToUint8(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
 	// Handle both uint8 and int8 inputs by converting to uint8 view
 	var lhsFlat, rhsFlat []uint8
 
@@ -77,7 +80,7 @@ func execNormalizedDotGeneralUint8ToInt32(lhs, rhs, output *Buffer, params *dotG
 		rhsFlat = unsafe.Slice((*uint8)(unsafe.Pointer(&int8Flat[0])), len(int8Flat))
 	}
 
-	outputFlat := output.flat.([]int32)
+	outputFlat := output.flat.([]uint8)
 
 	contractingSize := params.contractingSize
 	lhsCrossSize := params.lhsCrossSize
@@ -100,14 +103,15 @@ func execNormalizedDotGeneralUint8ToInt32(lhs, rhs, output *Buffer, params *dotG
 				rhsColStartIdx := rhsBaseIdx + idxRhsCross*contractingSize
 				var sum int32
 
-				// Scalar implementation
+				// Scalar implementation - accumulate in int32
 				for idxContracting := 0; idxContracting < contractingSize; idxContracting++ {
 					lhsVal := int32(lhsFlat[lhsRowStartIdx+idxContracting])
 					rhsVal := int32(rhsFlat[rhsColStartIdx+idxContracting])
 					sum += lhsVal * rhsVal
 				}
 
-				outputFlat[outputRowStartIdx+idxRhsCross] += sum
+				// Saturate to uint8 range [0, 255]
+				outputFlat[outputRowStartIdx+idxRhsCross] = saturateInt32ToUint8(sum)
 			}
 		}
 	}

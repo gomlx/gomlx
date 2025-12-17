@@ -15,12 +15,13 @@ func dotProductInt8_neon_asm(a, b unsafe.Pointer, n int64) int32
 //go:noescape
 func dotProductUint8_neon_asm(a, b unsafe.Pointer, n int64) int32
 
-// execNormalizedDotGeneralInt8ToInt32 is a specialized implementation for int8×int8→int32
-// matrix multiplication. It accumulates in int32 to avoid overflow.
-func execNormalizedDotGeneralInt8ToInt32(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
+// execNormalizedDotGeneralInt8ToInt8 is a specialized implementation for int8×int8→int8
+// matrix multiplication. It accumulates in int32 internally to avoid overflow,
+// then saturates the result to int8 range [-128, 127].
+func execNormalizedDotGeneralInt8ToInt8(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
 	lhsFlat := lhs.flat.([]int8)
 	rhsFlat := rhs.flat.([]int8)
-	outputFlat := output.flat.([]int32)
+	outputFlat := output.flat.([]int8)
 
 	contractingSize := params.contractingSize
 	lhsCrossSize := params.lhsCrossSize
@@ -35,10 +36,19 @@ func execNormalizedDotGeneralInt8ToInt32(lhs, rhs, output *Buffer, params *dotGe
 	// Each tile is 64*64*1 = 4KB for int8, leaving room for LHS, RHS, and output tiles.
 	const blockSize = 64
 
+	// Create a temporary int32 accumulator for each output element in the current batch slice
+	// to avoid repeated saturation during partial accumulation.
+	accumulator := make([]int32, outputBatchStride)
+
 	for batchIdx := batchStartIdx; batchIdx < batchEndIdx; batchIdx++ {
 		lhsBaseIdx := batchIdx * lhsBatchStride
 		rhsBaseIdx := batchIdx * rhsBatchStride
 		outputBaseIdx := batchIdx * outputBatchStride
+
+		// Reset accumulator for this batch
+		for i := range accumulator {
+			accumulator[i] = 0
+		}
 
 		for outerIdxLhsCross := 0; outerIdxLhsCross < lhsCrossSize; outerIdxLhsCross += blockSize {
 			lhsCrossBlockEnd := min(outerIdxLhsCross+blockSize, lhsCrossSize)
@@ -51,11 +61,11 @@ func execNormalizedDotGeneralInt8ToInt32(lhs, rhs, output *Buffer, params *dotGe
 
 					for idxLhsCross := outerIdxLhsCross; idxLhsCross < lhsCrossBlockEnd; idxLhsCross++ {
 						lhsRowStartIdx := lhsBaseIdx + idxLhsCross*contractingSize
-						outputRowStartIdx := outputBaseIdx + idxLhsCross*rhsCrossSize
+						accRowStartIdx := idxLhsCross * rhsCrossSize
 
 						for idxRhsCross := outerIdxRhsCross; idxRhsCross < rhsCrossBlockEnd; idxRhsCross++ {
 							rhsColStartIdx := rhsBaseIdx + idxRhsCross*contractingSize
-							sum := outputFlat[outputRowStartIdx+idxRhsCross]
+							sum := accumulator[accRowStartIdx+idxRhsCross]
 
 							// Call NEON assembly for int8 dot product if available.
 							// Threshold of 16 elements matches SDOT's native 16-byte (128-bit) vector width.
@@ -76,17 +86,23 @@ func execNormalizedDotGeneralInt8ToInt32(lhs, rhs, output *Buffer, params *dotGe
 								}
 							}
 
-							outputFlat[outputRowStartIdx+idxRhsCross] = sum
+							accumulator[accRowStartIdx+idxRhsCross] = sum
 						}
 					}
 				}
 			}
 		}
+
+		// Saturate and copy to output
+		for i := 0; i < outputBatchStride; i++ {
+			outputFlat[outputBaseIdx+i] = saturateInt32ToInt8(accumulator[i])
+		}
 	}
 }
 
-// execNormalizedDotGeneralUint8ToInt32 is a specialized implementation for uint8×uint8→int32
-// matrix multiplication. It accumulates in int32 to avoid overflow.
+// execNormalizedDotGeneralUint8ToUint8 is a specialized implementation for uint8×uint8→uint8
+// matrix multiplication. It accumulates in int32 internally to avoid overflow,
+// then saturates the result to uint8 range [0, 255].
 //
 // Note: This function is also called for mixed int8/uint8 operations. In that case,
 // the int8 values are reinterpreted as uint8 (same bit pattern), which means:
@@ -96,7 +112,7 @@ func execNormalizedDotGeneralInt8ToInt32(lhs, rhs, output *Buffer, params *dotGe
 // This behavior matches common quantization schemes where activations and weights
 // use the same signedness. If you need proper signed × unsigned multiplication,
 // you should convert both operands to a wider signed type first.
-func execNormalizedDotGeneralUint8ToInt32(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
+func execNormalizedDotGeneralUint8ToUint8(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
 	// Handle both uint8 and int8 inputs by converting to uint8 view
 	var lhsFlat, rhsFlat []uint8
 
@@ -119,7 +135,7 @@ func execNormalizedDotGeneralUint8ToInt32(lhs, rhs, output *Buffer, params *dotG
 		int8Flat := rhs.flat.([]int8)
 		rhsFlat = unsafe.Slice((*uint8)(unsafe.Pointer(&int8Flat[0])), len(int8Flat))
 	}
-	outputFlat := output.flat.([]int32)
+	outputFlat := output.flat.([]uint8)
 
 	contractingSize := params.contractingSize
 	lhsCrossSize := params.lhsCrossSize
@@ -131,10 +147,18 @@ func execNormalizedDotGeneralUint8ToInt32(lhs, rhs, output *Buffer, params *dotG
 
 	const blockSize = 64
 
+	// Create a temporary int32 accumulator for each output element in the current batch slice
+	accumulator := make([]int32, outputBatchStride)
+
 	for batchIdx := batchStartIdx; batchIdx < batchEndIdx; batchIdx++ {
 		lhsBaseIdx := batchIdx * lhsBatchStride
 		rhsBaseIdx := batchIdx * rhsBatchStride
 		outputBaseIdx := batchIdx * outputBatchStride
+
+		// Reset accumulator for this batch
+		for i := range accumulator {
+			accumulator[i] = 0
+		}
 
 		for outerIdxLhsCross := 0; outerIdxLhsCross < lhsCrossSize; outerIdxLhsCross += blockSize {
 			lhsCrossBlockEnd := min(outerIdxLhsCross+blockSize, lhsCrossSize)
@@ -147,11 +171,11 @@ func execNormalizedDotGeneralUint8ToInt32(lhs, rhs, output *Buffer, params *dotG
 
 					for idxLhsCross := outerIdxLhsCross; idxLhsCross < lhsCrossBlockEnd; idxLhsCross++ {
 						lhsRowStartIdx := lhsBaseIdx + idxLhsCross*contractingSize
-						outputRowStartIdx := outputBaseIdx + idxLhsCross*rhsCrossSize
+						accRowStartIdx := idxLhsCross * rhsCrossSize
 
 						for idxRhsCross := outerIdxRhsCross; idxRhsCross < rhsCrossBlockEnd; idxRhsCross++ {
 							rhsColStartIdx := rhsBaseIdx + idxRhsCross*contractingSize
-							sum := outputFlat[outputRowStartIdx+idxRhsCross]
+							sum := accumulator[accRowStartIdx+idxRhsCross]
 
 							// Call NEON assembly for uint8 dot product if available
 							dotSize := contractingBlockEnd - outerIdxContracting
@@ -169,11 +193,16 @@ func execNormalizedDotGeneralUint8ToInt32(lhs, rhs, output *Buffer, params *dotG
 								}
 							}
 
-							outputFlat[outputRowStartIdx+idxRhsCross] = sum
+							accumulator[accRowStartIdx+idxRhsCross] = sum
 						}
 					}
 				}
 			}
+		}
+
+		// Saturate and copy to output
+		for i := 0; i < outputBatchStride; i++ {
+			outputFlat[outputBaseIdx+i] = saturateInt32ToUint8(accumulator[i])
 		}
 	}
 }
@@ -384,17 +413,18 @@ func buildDotGeneralKernelUint8ToInt32(lhs, rhs, output *Buffer, blockDim int) k
 }
 
 func init() {
-	// Register specialized int8×int8→int32 and uint8×uint8→int32 kernels
-	// These will be used when output dtype is Int32 and inputs are Int8/Uint8
-	// We need to register these in the dtype map that handles mixed-type operations
+	// Register specialized int8×int8→int8 and uint8×uint8→uint8 kernels
+	// These accumulate in int32 internally, then saturate to the output dtype.
+	// This follows StableHLO semantics where output dtype matches input dtype.
 
 	// Register for the normalized dotgeneral operations (small path)
 	// priorityTyped overrides priorityGeneric from gen_register_dtypes.go
-	dotGeneralNormalizedDTypeMap.Register(dtypes.Int8, priorityTyped, execNormalizedDotGeneralInt8ToInt32)
-	dotGeneralNormalizedDTypeMap.Register(dtypes.Uint8, priorityTyped, execNormalizedDotGeneralUint8ToInt32)
+	dotGeneralNormalizedDTypeMap.Register(dtypes.Int8, priorityTyped, execNormalizedDotGeneralInt8ToInt8)
+	dotGeneralNormalizedDTypeMap.Register(dtypes.Uint8, priorityTyped, execNormalizedDotGeneralUint8ToUint8)
 
 	// Register for the kernel builders (large path)
-	// Use priorityTyped to override the generic int8/uint8 kernels with our NEON-optimized versions
+	// The kernel builders still use int32 for the blocked output buffer (accumulatorDType),
+	// and the dgCopyOutputBlockToFlatInt8/Uint8 functions handle the saturation.
 	dotGeneralKernelDTypeMap.Register(dtypes.Int8, priorityTyped, buildDotGeneralKernelInt8ToInt32)
 	dotGeneralKernelDTypeMap.Register(dtypes.Uint8, priorityTyped, buildDotGeneralKernelUint8ToInt32)
 }
