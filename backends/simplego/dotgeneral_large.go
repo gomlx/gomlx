@@ -385,7 +385,19 @@ func dgCopyOutputBlockToFlatFloat16(blockSource, output *Buffer) {
 	}
 }
 
-func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
+// execDotGeneralBlocked executes DotGeneral using a cache-tiled (blocked) algorithm.
+//
+// This implementation is optimized for large matrices where cache locality is critical.
+// It works by:
+//  1. Copying both operands into blocked format with zero-padding for alignment
+//  2. Processing blocks that fit in L1 cache
+//  3. Copying results back to the output tensor
+//
+// The blocking ensures that the working set for each inner computation fits in cache,
+// avoiding the cache thrashing that occurs with naive large matrix multiplication.
+//
+// See: https://en.wikipedia.org/wiki/Matrix_multiplication_algorithm#Non-square_matrices
+func execDotGeneralBlocked(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
 	dtype := lhs.shape.DType
 
 	// Get block buffers.

@@ -140,7 +140,30 @@ func dgNormalizeShape[T interface {
 	return
 }
 
-func execDotGeneralSmall(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
+// execDotGeneralNormalized executes DotGeneral by first transposing operands to normalized form.
+//
+// The normalized form is [Batch, Cross, Contract] where:
+//   - Batch dimensions come first
+//   - Cross dimensions (output dimensions) come next
+//   - Contracting dimensions come LAST
+//
+// This ordering ensures that the contracting dimension is contiguous in memory for BOTH
+// operands, enabling efficient sequential access and vectorization.
+//
+// Memory access pattern after normalization:
+//
+//   LHS normalized to [B, M, K]: row (m) has K elements contiguous ✓
+//   RHS normalized to [B, N, K]: row (n) has K elements contiguous ✓
+//
+// Compare to the direct path (no transpose) where RHS column access is strided.
+// The transpose overhead is worthwhile for large matrices where cache locality matters.
+//
+// This function handles:
+//   - Arbitrary axis orderings (transposes as needed)
+//   - int8/uint8 quantized operations with int32 accumulation
+//   - float16/bfloat16 with float32 accumulation for precision
+//   - Batch parallelism across workers
+func execDotGeneralNormalized(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
 	dtype := lhs.shape.DType
 	normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize int) *Buffer)
 

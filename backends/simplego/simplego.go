@@ -66,16 +66,15 @@ func New(config string) (backends.Backend, error) {
 			}
 			b.workers.SetMaxParallelism(vInt)
 			fmt.Printf("SimpleGo backend: parallelism set to %d\n", vInt)
-		case "dotgeneral_small":
-			// This will force DotGeneral operation to use the version designed for smaller matrices.
-			b.dotGeneralForceProblemSize = smallProblemSize
-		case "dotgeneral_large":
-			// This will force DotGeneral operation to use the version designed for large matrices.
-			b.dotGeneralForceProblemSize = largeProblemSize
+		case "dotgeneral_normalized":
+			// Force DotGeneral to use the normalized path (transpose to [B,Cross,Contract] form).
+			b.dotGeneralForceExecutionPath = normalizedPath
+		case "dotgeneral_blocked":
+			// Force DotGeneral to use the blocked/tiled path (cache-efficient for large matrices).
+			b.dotGeneralForceExecutionPath = blockedPath
 		case "dotgeneral_check":
-			// This will force every DotGeneral operation to be executed with both versions and the outputs compared.
-			// This is used exclusively for debugging purposes.
-			b.dotGeneralForceProblemSize = checkProblemSize
+			// Run both normalized and blocked paths and compare outputs (for debugging).
+			b.dotGeneralForceExecutionPath = checkPath
 		case "ops_sequential":
 			// This will force the ops to be executed sequentially.
 			// The default is running parallel if it's the only thing executing, otherwise sequentially.
@@ -88,7 +87,7 @@ func New(config string) (backends.Backend, error) {
 			// No-op, just skip.
 		default:
 			return nil, errors.Errorf("unknown configuration option %q for SimpleGo (go) backend -- valid configuration options are: "+
-				"parallelism=#workers, dotgeneral_small, dotgeneral_large, dotgeneral_check, ops_sequential, ops_parallel; see code for documentation", key)
+				"parallelism=#workers, dotgeneral_normalized, dotgeneral_blocked, dotgeneral_check, ops_sequential, ops_parallel; see code for documentation", key)
 		}
 	}
 	return b, nil
@@ -109,8 +108,9 @@ type Backend struct {
 
 	numLiveExecutions atomic.Int32
 
-	// dotGeneralForceProblemSize allows a DotGeneral algorithm to always be used.
-	dotGeneralForceProblemSize dotGeneralProblemSizeType
+	// dotGeneralForceExecutionPath forces a specific DotGeneral execution strategy.
+	// Default (autoSelectPath) selects based on matrix size.
+	dotGeneralForceExecutionPath dotGeneralExecutionPath
 
 	// opsExecutionType defines how to execute the ops of a computation.
 	opsExecutionType opsExecutionType

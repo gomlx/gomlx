@@ -5,16 +5,32 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
-// isStandardMatmul checks if the DotGeneral operation is a standard matrix multiplication
-// that doesn't require any transposition or complex axis manipulation.
+// isContractLastOrder checks if the DotGeneral operands have axes ordered such that
+// the contracting dimension is last for LHS and first for RHS - the standard matmul layout.
 //
-// Standard patterns that can skip normalization:
-// 1. Matrix × Matrix: [M, K] × [K, N] → [M, N] (contracting on last axis of lhs, first of rhs)
-// 2. Matrix × Vector: [M, K] × [K] → [M] (contracting on last axis of lhs, only axis of rhs)
-// 3. Batched MatMul: [B, M, K] × [B, K, N] → [B, M, N] (batch on first axis)
+// This is the "BatchCrossContract" ordering for LHS: [Batch..., Cross, Contract]
+// And "ContractCross" ordering for RHS: [Batch..., Contract, Cross]
 //
-// Returns true if we can use the fast path (no transpose needed).
-func isStandardMatmul(lhsShape, rhsShape shapes.Shape, lhsContractingAxes, rhsContractingAxes, lhsBatchAxes, rhsBatchAxes []int) bool {
+// Memory access pattern analysis for row-major storage:
+//
+//   For [M, K] × [K, N] → [M, N]:
+//   - LHS row m: elements at [m*K, m*K+1, ..., m*K+K-1] → SEQUENTIAL (good cache locality)
+//   - RHS col n: elements at [n, N+n, 2N+n, ...] → STRIDED with stride N (poor cache locality)
+//
+// This function returns true when inputs are already in this standard order, meaning we can
+// skip the transpose/normalization step. However, note that for LARGE matrices, the strided
+// RHS access causes cache thrashing, so the normalized path (which transposes RHS to make
+// both operands have sequential access) may be faster despite the transpose overhead.
+//
+// Standard patterns detected:
+//   1. Matrix × Matrix: [M, K] × [K, N] → [M, N] (contract on lhs axis 1, rhs axis 0)
+//   2. Matrix × Vector: [M, K] × [K] → [M] (contract on lhs axis 1, rhs axis 0)
+//   3. Batched MatMul: [B, M, K] × [B, K, N] → [B, M, N] (contract on lhs axis 2, rhs axis 1)
+//   4. Multi-batch: [B1, B2, M, K] × [B1, B2, K, N] → [B1, B2, M, N]
+//
+// See also: execDotGeneralNormalized which transposes to [Batch, Cross, Contract] form
+// where BOTH operands have the contracting dimension last (sequential access for both).
+func isContractLastOrder(lhsShape, rhsShape shapes.Shape, lhsContractingAxes, rhsContractingAxes, lhsBatchAxes, rhsBatchAxes []int) bool {
 	lhsRank := lhsShape.Rank()
 	rhsRank := rhsShape.Rank()
 
@@ -68,9 +84,17 @@ func isStandardMatmul(lhsShape, rhsShape shapes.Shape, lhsContractingAxes, rhsCo
 	return false
 }
 
-// isMemoryContiguous checks if the tensor layout is already contiguous in memory
-// for the given contracting pattern.
-func isMemoryContiguous(shape shapes.Shape, contractingAxes, batchAxes []int) bool {
+// isBatchCrossContractOrder checks if the tensor axes are ordered as:
+// [Batch..., Cross..., Contract...]
+//
+// This ordering means:
+//   - Batch axes come first (axis 0, 1, ...)
+//   - Cross axes come next (the "output" dimensions)
+//   - Contracting axes come last (enabling sequential memory access for dot products)
+//
+// When axes are in this order, no transpose is needed before the normalized
+// DotGeneral computation.
+func isBatchCrossContractOrder(shape shapes.Shape, contractingAxes, batchAxes []int) bool {
 	rank := shape.Rank()
 	if rank == 0 {
 		return true
@@ -106,51 +130,83 @@ func isMemoryContiguous(shape shapes.Shape, contractingAxes, batchAxes []int) bo
 	return true
 }
 
-// canUseFastPath determines if we can use the optimized fast path for this DotGeneral operation.
-func canUseFastPath(lhs, rhs *Buffer, params *dotGeneralNodeData) bool {
-	// Only support float32 fast path for now (most common)
+// DirectPathMaxContractingSize is the maximum contracting dimension size for which
+// the direct (no-transpose) path is beneficial. Beyond this size, the strided RHS
+// access pattern causes too many cache misses, and the normalized path (which
+// transposes RHS for sequential access) becomes faster despite the transpose overhead.
+//
+// This threshold was chosen based on typical L1 cache sizes (32-64KB) and cache line
+// sizes (64 bytes). For float32, this allows ~4K elements which fits comfortably in L1.
+const DirectPathMaxContractingSize = 4096
+
+// canUseDirectPath determines if we can use the direct (no-transpose) execution path.
+//
+// The direct path skips normalization/transpose but has strided RHS access.
+// It's only beneficial when:
+//  1. The dtype is float32 (currently the only optimized implementation)
+//  2. The axes are already in contract-last order for LHS
+//  3. The matrix is small enough that strided access doesn't cause excessive cache misses
+//
+// For larger matrices, use execDotGeneralNormalized or execDotGeneralBlocked instead.
+func canUseDirectPath(lhs, rhs *Buffer, params *dotGeneralNodeData) bool {
+	// Only support float32 direct path for now (most common)
 	if lhs.shape.DType != dtypes.Float32 {
 		return false
 	}
 
-	// Check if it's a standard matmul pattern
-	if !isStandardMatmul(lhs.shape, rhs.shape,
+	// Check if axes are in contract-last order (standard matmul layout)
+	if !isContractLastOrder(lhs.shape, rhs.shape,
 		params.lhsContractingAxes, params.rhsContractingAxes,
 		params.lhsBatchAxes, params.rhsBatchAxes) {
 		return false
 	}
 
+	// Only use direct path for small matrices where strided RHS access
+	// doesn't cause excessive cache misses. For larger matrices, the
+	// normalized path (with transpose) is faster despite the transpose cost.
+	if params.contractingSize > DirectPathMaxContractingSize {
+		return false
+	}
+
 	return true
 }
 
-// execDotGeneralFastPath executes a standard matrix multiplication without normalization.
-// This is a significant optimization for the common case of A × B matrix multiplication.
-// Returns true if fast path was used, false if caller should use standard path.
-func execDotGeneralFastPath(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) bool {
-	if !canUseFastPath(lhs, rhs, params) {
+// execDotGeneralDirect executes matrix multiplication directly without transpose/normalization.
+//
+// This path is optimal for SMALL matrices where the transpose overhead exceeds the
+// cache miss penalty from strided RHS access. For large matrices, use execDotGeneralNormalized
+// or execDotGeneralBlocked instead.
+//
+// Returns true if direct path was used, false if caller should use another path.
+func execDotGeneralDirect(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) bool {
+	if !canUseDirectPath(lhs, rhs, params) {
 		return false
 	}
 
 	// Execute the optimized float32 path
-	execDotGeneralFastPathFloat32(backend, lhs, rhs, params, output)
+	execDotGeneralDirectFloat32(backend, lhs, rhs, params, output)
 	return true
 }
 
-// execDotGeneralFastPathFloat32 is the fast path for float32 matrix multiplication.
-// It directly operates on the input data without transposing to normalized form.
+// execDotGeneralDirectFloat32 executes float32 matrix multiplication without transpose.
 //
-// Memory layout for row-major tensors:
-// - LHS [M, K]: element [m, k] is at index m*K + k (rows are contiguous)
-// - RHS [K, N]: element [k, n] is at index k*N + n (rows are contiguous)
-// - Output [M, N]: element [m, n] is at index m*N + n
+// Memory layout for row-major tensors [M, K] × [K, N] → [M, N]:
 //
-// For the dot product of row m with column n:
-//   sum over k: LHS[m,k] * RHS[k,n] = sum over k: lhs[m*K+k] * rhs[k*N+n]
+//   LHS [M, K]: element [m, k] at index m*K + k
+//     → Row m is CONTIGUOUS: [m*K, m*K+1, ..., m*K+K-1] ✓ Good cache locality
 //
-// Note: Column n in RHS has stride N between elements (not contiguous),
-// so we cannot use the Group4 NEON path which requires contiguous columns.
-// We use the standard scalar loop with explicit strided access.
-func execDotGeneralFastPathFloat32(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) {
+//   RHS [K, N]: element [k, n] at index k*N + n
+//     → Column n is STRIDED: [n, N+n, 2N+n, ...] with stride N ✗ Poor cache locality
+//
+//   Output [M, N]: element [m, n] at index m*N + n
+//
+// The strided RHS access is the key limitation of this path. For large K or N,
+// each RHS element access may cause a cache miss. This is why we limit this path
+// to small matrices (see DirectPathMaxContractingSize).
+//
+// For large matrices, execDotGeneralNormalized transposes RHS to [N, K] form where
+// "row" n (the original column) becomes contiguous, enabling efficient vectorization.
+func execDotGeneralDirectFloat32(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) {
 	lhsFlat := lhs.flat.([]float32)
 	rhsFlat := rhs.flat.([]float32)
 	outputFlat := output.flat.([]float32)

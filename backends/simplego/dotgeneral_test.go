@@ -361,25 +361,25 @@ func TestDotGeneral_Exec(t *testing.T) {
 		return
 	}
 
-	// Reset dotGeneralForceProblemSize at exit.
+	// Reset dotGeneralForceExecutionPath at exit.
 	defer func() {
-		goBackend.dotGeneralForceProblemSize = unknownProblemSize
+		goBackend.dotGeneralForceExecutionPath = autoSelectPath
 	}()
 
-	for _, problemSize := range []dotGeneralProblemSizeType{smallProblemSize, largeProblemSize, checkProblemSize} {
-		// Force a specific problem size: so we exercise the corresponding algorithm irrespective of the actual size:
+	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, checkPath} {
+		// Force a specific execution path: so we exercise the corresponding algorithm irrespective of the actual size:
 		// it may not be efficient for the size, but it should be correct in all sizes.
-		goBackend.dotGeneralForceProblemSize = problemSize
+		goBackend.dotGeneralForceExecutionPath = execPath
 		var testName string
-		switch problemSize {
-		case smallProblemSize:
-			testName = "DotGeneral_small_version"
-		case largeProblemSize:
-			testName = "DotGeneral_large_version"
-		case checkProblemSize:
+		switch execPath {
+		case normalizedPath:
+			testName = "DotGeneral_normalized_version"
+		case blockedPath:
+			testName = "DotGeneral_blocked_version"
+		case checkPath:
 			testName = "DotGeneral_check_version"
 		default:
-			t.Fatalf("Unknown version for problem size: %d", problemSize)
+			t.Fatalf("Unknown execution path: %d", execPath)
 		}
 		t.Run(testName, func(t *testing.T) {
 			// Larger example, with multiple axes.
@@ -611,12 +611,12 @@ func TestDotGeneral_NonSquareMatrices(t *testing.T) {
 	output := be.NewBuffer(outputShape)
 	output.Zeros()
 
-	// Execute via fast path (if applicable) or standard path
-	if canUseFastPath(lhs, rhs, params) {
-		execDotGeneralFastPathFloat32(be, lhs, rhs, params, output)
+	// Execute via direct path (if applicable) or blocked path
+	if canUseDirectPath(lhs, rhs, params) {
+		execDotGeneralDirectFloat32(be, lhs, rhs, params, output)
 	} else {
-		// Use standard path
-		execDotGeneralLarge(be, lhs, rhs, params, output)
+		// Use blocked path
+		execDotGeneralBlocked(be, lhs, rhs, params, output)
 	}
 
 	// Verify results
@@ -628,7 +628,7 @@ func TestDotGeneral_NonSquareMatrices(t *testing.T) {
 }
 
 // TestDotGeneral_NonSquareLarger tests larger non-square matrices to ensure
-// the NEON vectorized path is exercised.
+// the blocked path is exercised.
 func TestDotGeneral_NonSquareLarger(t *testing.T) {
 	be, ok := backend.(*Backend)
 	if !ok {
@@ -636,7 +636,6 @@ func TestDotGeneral_NonSquareLarger(t *testing.T) {
 	}
 
 	// Larger test case: [16, 32] × [32, 48] → [16, 48]
-	// This should exercise the NEON Group4 path
 	M, K, N := 16, 32, 48
 
 	lhsShape := shapes.Make(dtypes.Float32, M, K)
@@ -689,11 +688,11 @@ func TestDotGeneral_NonSquareLarger(t *testing.T) {
 	output := be.NewBuffer(outputShape)
 	output.Zeros()
 
-	// Execute via fast path (if applicable) or standard path
-	if canUseFastPath(lhs, rhs, params) {
-		execDotGeneralFastPathFloat32(be, lhs, rhs, params, output)
+	// Execute via direct path (if applicable) or blocked path
+	if canUseDirectPath(lhs, rhs, params) {
+		execDotGeneralDirectFloat32(be, lhs, rhs, params, output)
 	} else {
-		execDotGeneralLarge(be, lhs, rhs, params, output)
+		execDotGeneralBlocked(be, lhs, rhs, params, output)
 	}
 
 	// Verify results

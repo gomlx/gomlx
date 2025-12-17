@@ -611,7 +611,7 @@ func BenchmarkPreBlockedWeights(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(size.name, func(b *testing.B) {
 			// Create weight matrix [K, N] and activation [M, K]
-			// Note: For direct execDotGeneralLarge calls, we need rank 3 shapes [batch, cross, contract/cross]
+			// Note: For direct execDotGeneralBlocked calls, we need rank 3 shapes [batch, cross, contract/cross]
 			lhsShape := shapes.Make(dtypes.Float32, 1, size.M, size.K)
 			rhsShape := shapes.Make(dtypes.Float32, 1, size.K, size.N)
 			outputShape := shapes.Make(dtypes.Float32, 1, size.M, size.N)
@@ -651,7 +651,7 @@ func BenchmarkPreBlockedWeights(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					output.Zeros()
-					_ = execDotGeneralLarge(backend, lhs, rhs, params, output)
+					_ = execDotGeneralBlocked(backend, lhs, rhs, params, output)
 				}
 
 				flops := 2 * int64(size.M) * int64(size.K) * int64(size.N)
