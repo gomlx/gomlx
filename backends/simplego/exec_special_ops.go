@@ -83,39 +83,13 @@ func execIdentity(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []
 // WhereOp ====================================================================================================
 
 // execWhere implements the Where op.
+// Per StableHLO select specification, onTrue and onFalse must have the same dtype.
+// Dtype validation is enforced at graph build time in shapeinference.WhereOp.
 func execWhere(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	condition, onTrue, onFalse := inputs[0], inputs[1], inputs[2]
 
 	// Figure out what the outputBuffer is going to be.
 	outputShape := node.shape
-	outputDType := outputShape.DType
-
-	// Handle dtype conversion if inputs don't match output dtype
-	// This can happen with mixed precision operations (e.g., Float16 + Float32 -> Float32)
-	if onTrue.shape.DType != outputDType {
-		convertFn := convertDTypePairMap.Get(onTrue.shape.DType, outputDType).(func(operand, output *Buffer))
-		convertedBuf := backend.getBuffer(outputDType, onTrue.shape.Size())
-		convertedBuf.shape = shapes.Make(outputDType, onTrue.shape.Dimensions...)
-		convertFn(onTrue, convertedBuf)
-		if inputsOwned[1] {
-			backend.putBuffer(onTrue)
-		}
-		onTrue = convertedBuf
-		inputs[1] = nil // Mark as consumed
-		inputsOwned[1] = true
-	}
-	if onFalse.shape.DType != outputDType {
-		convertFn := convertDTypePairMap.Get(onFalse.shape.DType, outputDType).(func(operand, output *Buffer))
-		convertedBuf := backend.getBuffer(outputDType, onFalse.shape.Size())
-		convertedBuf.shape = shapes.Make(outputDType, onFalse.shape.Dimensions...)
-		convertFn(onFalse, convertedBuf)
-		if inputsOwned[2] {
-			backend.putBuffer(onFalse)
-		}
-		onFalse = convertedBuf
-		inputs[2] = nil // Mark as consumed
-		inputsOwned[2] = true
-	}
 
 	var output *Buffer
 	switch {
