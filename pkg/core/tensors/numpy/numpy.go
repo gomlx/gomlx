@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -357,7 +358,7 @@ func FromNpzReader(r io.ReaderAt, size int64) (map[string]*tensors.Tensor, error
 	for _, f := range zipReader.File {
 		// For extra safety.
 		cleanPath := path.Clean(f.Name)
-		if path.IsAbs(cleanPath) || strings.HasPrefix(cleanPath, "..") {
+		if filepath.IsAbs(cleanPath) || strings.HasPrefix(cleanPath, "..") {
 			return nil, errors.Errorf(
 				"invalid (malicious?) path in .npz archive: %q (normalized to %q)",
 				f.Name,

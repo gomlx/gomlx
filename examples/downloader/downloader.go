@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
@@ -161,10 +162,10 @@ func Untar(baseDir, tarFile string) error {
 // If checkHash is provided, it checks that the file has the hash or fail.
 func DownloadAndUntarIfMissing(url, baseDir, tarFile, targetUntarDir, checkHash string) error {
 	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
-	if !path.IsAbs(tarFile) {
+	if !filepath.IsAbs(tarFile) {
 		tarFile = path.Join(baseDir, tarFile)
 	}
-	if !path.IsAbs(targetUntarDir) {
+	if !filepath.IsAbs(targetUntarDir) {
 		targetUntarDir = path.Join(baseDir, targetUntarDir)
 	}
 	if fsutil.MustFileExists(targetUntarDir) {
