@@ -30,6 +30,11 @@ type Builder struct {
 
 	// outputs can be any type of node.
 	outputs []*Node
+
+	// blockedForDotGeneral maps original input nodes to their pre-blocked versions for DotGeneral.
+	// This enables de-duplication: if the same input is used in multiple DotGenerals, we only block it once.
+	// Key: original RHS node, Value: BlockForDotGeneral node
+	blockedForDotGeneral map[*Node]*Node
 }
 
 // Compile-time check.
@@ -72,6 +77,7 @@ func (b *Builder) Finalize() {
 	b.inputs = nil
 	b.outputs = nil
 	b.nodes = nil
+	b.blockedForDotGeneral = nil
 }
 
 // Node in the SimpleGo computation graph.
