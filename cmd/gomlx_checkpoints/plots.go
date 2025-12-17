@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -206,7 +207,7 @@ func BuildPlots(checkpointPaths []string, modelNames []string, metricsOrder map[
 	outputFilePath := *flagPlotOutput
 	if outputFilePath != "" {
 		outputFilePath = fsutil.MustReplaceTildeInDir(outputFilePath)
-		if !path.IsAbs(outputFilePath) {
+		if !filepath.IsAbs(outputFilePath) {
 			outputFilePath = path.Join(checkpointPaths[0], outputFilePath)
 		}
 	} else {
@@ -313,7 +314,7 @@ const {{.LegendsVar}} = [
 					// Make it visible
 					tooltip.style.display = 'block';
 				});
-		
+
 				// When the mouse moves over the legend item...
 				item.addEventListener('mousemove', (event) => {
 					// Update the tooltip's position to follow the cursor
@@ -322,7 +323,7 @@ const {{.LegendsVar}} = [
 					//tooltip.style.left = (event.pageX + 10) + 'px';
 					tooltip.style.top = (event.pageY + 10) + 'px';
 				});
-		
+
 				// When the mouse leaves the legend item...
 				item.addEventListener('mouseout', () => {
 					// Hide the tooltip

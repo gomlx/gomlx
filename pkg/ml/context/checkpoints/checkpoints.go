@@ -228,7 +228,7 @@ func (c *Config) Dir(dir string) *Config {
 // One must be set either Dir, DirFromBase, or TempDir before building the checkpoints.Handler.
 func (c *Config) DirFromBase(dir, baseDir string) *Config {
 	dir = fsutil.MustReplaceTildeInDir(dir)
-	if !path.IsAbs(dir) {
+	if !filepath.IsAbs(dir) {
 		baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 		dir = path.Join(baseDir, dir)
 	}

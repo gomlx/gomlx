@@ -88,6 +88,10 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 > It can be disabled by setting `GOMLX_NO_AUTO_INSTALL` or programmatically by 
 > calling `xla.EnableAutoInstall(false)`).
 
+> **🚀 NEW 🚀**: **Windows/amd64 (EXPERIMENTAL) and Linux/arm64 XLA PJRT CPU plugins**.
+> Linux/arm64 should work, and windows passes some tests, and in many cases should be functional.
+> Please report any issues you may find.
+
 > **🚀 NEW 🚀**: **Distributed Execution** (across multiple GPUs or TPUs) with little hints from the user.
 > One only needs to configure a distributed dataset, and the trainer picks up from there.
 > See code change in [UCI-Adult demo](https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/main.go#L222)
@@ -140,7 +144,8 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 **For most users, no installation is needed.**
 
 **For XLA**, it will by default auto-install the required XLA PJRT plugins (for CPU, GPU and TPUs; Linux and Macs)
-in the user's local lib directory (`$HOME/.local/lib/go-xla` in Linux and `$HOME/Library/Application Support/go-xla` in Mac).
+in the user's local lib directory (`$HOME/.local/lib/go-xla` in Linux; `$HOME/Library/Application Support/go-xla` in Mac;
+`$HOME\AppData\Local\go-xla` in Windows).
 It can be disabled by setting `GOMLX_NO_AUTO_INSTALL` or programmatically by calling `xla.EnableAutoInstall(false)`).
 
 If you want to manually pre-install for building production dockers, a specific version, or such custom setups,

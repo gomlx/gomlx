@@ -40,7 +40,7 @@ package xla
 
 import (
 	"os"
-	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"unsafe"
@@ -102,7 +102,7 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		pluginName = parts[0]
 	}
 
-	if !path.IsAbs(pluginName) {
+	if !filepath.IsAbs(pluginName) {
 		if autoInstall {
 			err := AutoInstall()
 			if err != nil {

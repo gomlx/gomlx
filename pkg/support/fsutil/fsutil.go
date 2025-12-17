@@ -9,7 +9,8 @@ import (
 	"log"
 	"os"
 	"os/user"
-	"path"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -53,20 +54,45 @@ func MustReplaceTildeInDir(dir string) string {
 // It returns an error if `dir` has an unknown user or some other filesystem error (e.g: `~unknown/...`)
 func ReplaceTildeInDir(dir string) (string, error) {
 	if len(dir) == 0 {
-		return dir, nil
+		return "", nil
 	}
 	if dir[0] != '~' {
 		return dir, nil
 	}
+
+	// Accept either '/' or '\' as separator following the user name.
+	sepIdx := -1
+	if runtime.GOOS != "windows" {
+		sepIdx = strings.IndexRune(dir, filepath.Separator)
+	} else {
+		// In windows we accept both: "/" and "\\".
+		sepIdxUnix := strings.IndexRune(dir, '/')
+		sepIdxWin := strings.IndexRune(dir, '\\')
+
+		// Find the earliest separator (if any)
+		if sepIdxUnix == -1 {
+			sepIdx = sepIdxWin
+		} else if sepIdxWin == -1 {
+			sepIdx = sepIdxUnix
+		} else if sepIdxUnix < sepIdxWin {
+			sepIdx = sepIdxUnix
+		} else {
+			sepIdx = sepIdxWin
+		}
+	}
+
+	// Find user name after the tilde, if one is given.
 	var userName string
-	if dir != "~" && !strings.HasPrefix(dir, "~/") {
-		sepIdx := strings.IndexRune(dir, '/')
+	if dir != "~" && sepIdx != 1 { // "~/" or "~\\"
+		// Extract the username, whatever the first separator is
 		if sepIdx == -1 {
 			userName = dir[1:]
 		} else {
 			userName = dir[1:sepIdx]
 		}
 	}
+
+	// Retrive user and their home directory.
 	var usr *user.User
 	var err error
 	if userName == "" {
@@ -78,7 +104,17 @@ func ReplaceTildeInDir(dir string) (string, error) {
 		return "", errors.Wrapf(err, "failed to lookup home directory for user in path %q", dir)
 	}
 	homeDir := usr.HomeDir
-	return path.Join(homeDir, dir[1+len(userName):]), nil
+	// Replace ~ or ~user with user home, preserve any following path, no matter the separator
+	remaining := ""
+	if userName == "" {
+		remaining = dir[1:]
+	} else {
+		remaining = dir[1+len(userName):]
+	}
+	// If remaining starts with '/' or '\', remove it so Join works as expected.
+	remaining = strings.TrimLeft(remaining, `/\`)
+
+	return filepath.Join(homeDir, remaining), nil
 }
 
 // ReportedClose closes the closer object (a file?) and reports in case of error.
