@@ -319,14 +319,23 @@ func UnaryOp(opType backends.OpType, operand shapes.Shape) (output shapes.Shape,
 
 // WhereOp returns the shape resulting from the Where operation.
 //
-// Shape constraints for the operation:
+// Shape constraints for the operation (following StableHLO select specification):
 //
-//  1. The onTrue and onFalse must have the exact same shape, or one can be a scalar.
-//  2. The condition must either be a scalar or match the shape of onTrue or onFalse, except for the DType that
+//  1. The onTrue and onFalse must have the exact same dtype.
+//  2. The onTrue and onFalse must have the exact same shape, or one can be a scalar.
+//  3. The condition must either be a scalar or match the shape of onTrue or onFalse, except for the DType that
 //     must be Bool.
+//
+// Note: If you need to select between values of different dtypes, use ConvertDType to convert them
+// to a common dtype before calling Where.
 func WhereOp(condition, onTrue, onFalse shapes.Shape) (output shapes.Shape, err error) {
 	if condition.DType != dtypes.Bool {
 		err = errors.Errorf("condition for Where() must be a boolean, got %s instead", condition)
+		return
+	}
+	if onTrue.DType != onFalse.DType {
+		err = errors.Errorf("Where() requires onTrue and onFalse to have matching dtypes (per StableHLO spec): got onTrue=%s, onFalse=%s. Use ConvertDType to convert to a common dtype first",
+			onTrue.DType, onFalse.DType)
 		return
 	}
 	if !onTrue.IsScalar() && !onFalse.IsScalar() && !onTrue.Equal(onFalse) {
@@ -766,11 +775,11 @@ func SliceOp(operand shapes.Shape, starts, limits, strides []int) (output shapes
 			return shapes.Invalid(), errors.Errorf("%s: stride must be positive, but got stride[%d]=%d for operand shape %s",
 				opName, axis, stride, operand)
 		}
-		if start < 0 || start >= dimSize {
+		if start < 0 || start > dimSize {
 			return shapes.Invalid(), errors.Errorf("%s: start index %d is out of bounds for axis %d with size %d (operand shape %s)",
 				opName, start, axis, dimSize, operand)
 		}
-		// Limit can be equal to dimSize.
+		// Limit can be equal to dimSize. Also allow start == dimSize for empty slices.
 		if limit < start || limit > dimSize {
 			return shapes.Invalid(), errors.Errorf("%s: limit index %d is out of bounds for axis %d (start=%d, size=%d, operand shape %s)",
 				opName, limit, axis, start, dimSize, operand)
