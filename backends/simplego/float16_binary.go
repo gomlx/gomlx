@@ -17,11 +17,20 @@ import (
 func execBinaryFloat16[OpFn func(a, b float32) float32](opFn OpFn, lhs, rhs []float16.Float16, output []float16.Float16,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
-		// One side (rhs) is a scalar: only iterate over the lhs.
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
 		c := rhs[0].Float32()
 		for ii, input := range lhs {
 			a := input.Float32()
 			output[ii] = float16.Fromfloat32(opFn(a, c))
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		// This is needed for non-commutative operations like Sub and Div.
+		c := lhs[0].Float32()
+		for ii, input := range rhs {
+			b := input.Float32()
+			output[ii] = float16.Fromfloat32(opFn(c, b))
 		}
 		return
 	} else if lhsShape.Equal(rhsShape) {
@@ -49,13 +58,23 @@ func execBinaryFloat16[OpFn func(a, b float32) float32](opFn OpFn, lhs, rhs []fl
 func execCompareFloat16[OpFn func(a, b float32) bool](opFn OpFn, lhs, rhs []float16.Float16, output []bool,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar.
 		c := rhs[0].Float32()
 		for ii, input := range lhs {
 			a := input.Float32()
 			output[ii] = opFn(a, c)
 		}
 		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar.
+		c := lhs[0].Float32()
+		for ii, input := range rhs {
+			b := input.Float32()
+			output[ii] = opFn(c, b)
+		}
+		return
 	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes.
 		for outputIdx := range output {
 			a := lhs[outputIdx].Float32()
 			b := rhs[outputIdx].Float32()
@@ -63,6 +82,7 @@ func execCompareFloat16[OpFn func(a, b float32) bool](opFn OpFn, lhs, rhs []floa
 		}
 		return
 	} else {
+		// Case 3: Broadcasting.
 		lhsIter := newBroadcastIterator(lhsShape, outputShape)
 		rhsIter := newBroadcastIterator(rhsShape, outputShape)
 		for outputIdx := range output {
@@ -84,10 +104,7 @@ func makeFloat16BinaryWrapper(
 		if inputs[0].shape.DType != dtypes.Float16 {
 			return origExec(backend, node, inputs, inputsOwned)
 		}
-		lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
-		if lhsIsScalarOr1 && !rhsIsScalarOr1 {
-			lhs, rhs = rhs, lhs
-		}
+		lhs, rhs, output, _, _ := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 		execBinaryFloat16(opFn, lhs.flat.([]float16.Float16), rhs.flat.([]float16.Float16),
 			output.flat.([]float16.Float16), lhs.shape, rhs.shape, output.shape)
 		return output, nil
@@ -103,12 +120,8 @@ func makeFloat16CompareWrapper(
 			return origExec(backend, node, inputs, inputsOwned)
 		}
 		lhs, rhs := inputs[0], inputs[1]
-		lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
 		output := backend.getBuffer(node.shape.DType, node.shape.Size())
 		output.shape = node.shape
-		if lhsIsScalarOr1 && !rhsIsScalarOr1 {
-			lhs, rhs = rhs, lhs
-		}
 		execCompareFloat16(opFn, lhs.flat.([]float16.Float16), rhs.flat.([]float16.Float16),
 			output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
 		return output, nil
