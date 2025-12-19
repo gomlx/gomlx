@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
@@ -360,25 +361,25 @@ func TestDotGeneral_Exec(t *testing.T) {
 		return
 	}
 
-	// Reset dotGeneralForceProblemSize at exit.
+	// Reset dotGeneralForceExecutionPath at exit.
 	defer func() {
-		goBackend.dotGeneralForceProblemSize = unknownProblemSize
+		goBackend.dotGeneralForceExecutionPath = autoSelectPath
 	}()
 
-	for _, problemSize := range []dotGeneralProblemSizeType{smallProblemSize, largeProblemSize, checkProblemSize} {
-		// Force a specific problem size: so we exercise the corresponding algorithm irrespective of the actual size:
+	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, checkPath} {
+		// Force a specific execution path: so we exercise the corresponding algorithm irrespective of the actual size:
 		// it may not be efficient for the size, but it should be correct in all sizes.
-		goBackend.dotGeneralForceProblemSize = problemSize
+		goBackend.dotGeneralForceExecutionPath = execPath
 		var testName string
-		switch problemSize {
-		case smallProblemSize:
-			testName = "DotGeneral_small_version"
-		case largeProblemSize:
-			testName = "DotGeneral_large_version"
-		case checkProblemSize:
+		switch execPath {
+		case normalizedPath:
+			testName = "DotGeneral_normalized_version"
+		case blockedPath:
+			testName = "DotGeneral_blocked_version"
+		case checkPath:
 			testName = "DotGeneral_check_version"
 		default:
-			t.Fatalf("Unknown version for problem size: %d", problemSize)
+			t.Fatalf("Unknown execution path: %d", execPath)
 		}
 		t.Run(testName, func(t *testing.T) {
 			// Larger example, with multiple axes.
@@ -540,4 +541,265 @@ func TestDotGeneral_Dot(t *testing.T) {
 	y2 := exec.MustExec([][]float32{{1, 2, 3}, {2, 4, 6}}, [][]float32{{10}, {11}, {12}})[0]
 	fmt.Printf("\ty2=%s\n", y2.GoStr())
 	assert.Equal(t, [][]float32{{10 + 22 + 36}, {20 + 44 + 72}}, y2.Value())
+}
+
+// TestDotGeneral_NonSquareMatrices tests matrix multiplication with non-square matrices.
+// This is a regression test for the fast path which must correctly handle row-major layout.
+// The fast path computes [M, K] × [K, N] → [M, N] for float32 tensors.
+func TestDotGeneral_NonSquareMatrices(t *testing.T) {
+	be, ok := backend.(*Backend)
+	if !ok {
+		t.Skip("Skipping test because backend is not a SimpleGo Backend")
+	}
+
+	// Test case: [2, 3] × [3, 5] → [2, 5]
+	// This exercises the fast path with K=3, N=5 (non-square RHS)
+	M, K, N := 2, 3, 5
+
+	lhsShape := shapes.Make(dtypes.Float32, M, K)
+	rhsShape := shapes.Make(dtypes.Float32, K, N)
+	outputShape := shapes.Make(dtypes.Float32, M, N)
+
+	lhs := be.NewBuffer(lhsShape)
+	rhs := be.NewBuffer(rhsShape)
+
+	// Fill with simple test data
+	// LHS = [[1, 2, 3],
+	//        [4, 5, 6]]
+	lhsFlat := lhs.flat.([]float32)
+	for i := range lhsFlat {
+		lhsFlat[i] = float32(i + 1)
+	}
+
+	// RHS = [[1, 2, 3, 4, 5],
+	//        [6, 7, 8, 9, 10],
+	//        [11, 12, 13, 14, 15]]
+	rhsFlat := rhs.flat.([]float32)
+	for i := range rhsFlat {
+		rhsFlat[i] = float32(i + 1)
+	}
+
+	// Compute expected result using naive matmul
+	expected := make([]float32, M*N)
+	for m := 0; m < M; m++ {
+		for n := 0; n < N; n++ {
+			var sum float32
+			for k := 0; k < K; k++ {
+				sum += lhsFlat[m*K+k] * rhsFlat[k*N+n]
+			}
+			expected[m*N+n] = sum
+		}
+	}
+
+	// Set up params for standard 2D matmul
+	params := &dotGeneralNodeData{
+		lhsContractingAxes: []int{1},
+		rhsContractingAxes: []int{0},
+		lhsBatchAxes:       []int{},
+		rhsBatchAxes:       []int{},
+		batchSize:          1,
+		lhsCrossSize:       M,
+		rhsCrossSize:       N,
+		contractingSize:    K,
+	}
+	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtypes.Float32]
+	params.lhsBlockedShape = dgCreateBlockedShape(dtypes.Float32, 1, M, K, blockLog2Dim)
+	params.rhsBlockedShape = dgCreateBlockedShape(dtypes.Float32, 1, N, K, blockLog2Dim)
+	params.outputBlockedShape = dgCreateBlockedShape(dtypes.Float32, 1, M, N, blockLog2Dim)
+
+	// Create output buffer
+	output := be.NewBuffer(outputShape)
+	output.Zeros()
+
+	// Execute via direct path (if applicable) or blocked path
+	if canUseDirectPath(lhs, rhs, params) {
+		execDotGeneralSmallMatMulFloat32(be, lhs, rhs, params, output)
+	} else {
+		// Use blocked path
+		execDotGeneralBlocked(be, lhs, rhs, params, output)
+	}
+
+	// Verify results
+	outputFlat := output.flat.([]float32)
+	for i := range expected {
+		require.InDelta(t, expected[i], outputFlat[i], 1e-4,
+			"Mismatch at index %d: expected %f, got %f", i, expected[i], outputFlat[i])
+	}
+}
+
+// TestDotGeneral_NonSquareLarger tests larger non-square matrices to ensure
+// the blocked path is exercised.
+func TestDotGeneral_NonSquareLarger(t *testing.T) {
+	be, ok := backend.(*Backend)
+	if !ok {
+		t.Skip("Skipping test because backend is not a SimpleGo Backend")
+	}
+
+	// Larger test case: [16, 32] × [32, 48] → [16, 48]
+	M, K, N := 16, 32, 48
+
+	lhsShape := shapes.Make(dtypes.Float32, M, K)
+	rhsShape := shapes.Make(dtypes.Float32, K, N)
+	outputShape := shapes.Make(dtypes.Float32, M, N)
+
+	lhs := be.NewBuffer(lhsShape)
+	rhs := be.NewBuffer(rhsShape)
+
+	// Fill with test data
+	lhsFlat := lhs.flat.([]float32)
+	for i := range lhsFlat {
+		lhsFlat[i] = float32(i%10) * 0.1
+	}
+
+	rhsFlat := rhs.flat.([]float32)
+	for i := range rhsFlat {
+		rhsFlat[i] = float32(i%10) * 0.1
+	}
+
+	// Compute expected result using naive matmul
+	expected := make([]float32, M*N)
+	for m := 0; m < M; m++ {
+		for n := 0; n < N; n++ {
+			var sum float32
+			for k := 0; k < K; k++ {
+				sum += lhsFlat[m*K+k] * rhsFlat[k*N+n]
+			}
+			expected[m*N+n] = sum
+		}
+	}
+
+	// Set up params for standard 2D matmul
+	params := &dotGeneralNodeData{
+		lhsContractingAxes: []int{1},
+		rhsContractingAxes: []int{0},
+		lhsBatchAxes:       []int{},
+		rhsBatchAxes:       []int{},
+		batchSize:          1,
+		lhsCrossSize:       M,
+		rhsCrossSize:       N,
+		contractingSize:    K,
+	}
+	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtypes.Float32]
+	params.lhsBlockedShape = dgCreateBlockedShape(dtypes.Float32, 1, M, K, blockLog2Dim)
+	params.rhsBlockedShape = dgCreateBlockedShape(dtypes.Float32, 1, N, K, blockLog2Dim)
+	params.outputBlockedShape = dgCreateBlockedShape(dtypes.Float32, 1, M, N, blockLog2Dim)
+
+	// Create output buffer
+	output := be.NewBuffer(outputShape)
+	output.Zeros()
+
+	// Execute via direct path (if applicable) or blocked path
+	if canUseDirectPath(lhs, rhs, params) {
+		execDotGeneralSmallMatMulFloat32(be, lhs, rhs, params, output)
+	} else {
+		execDotGeneralBlocked(be, lhs, rhs, params, output)
+	}
+
+	// Verify results
+	outputFlat := output.flat.([]float32)
+	for i := range expected {
+		require.InDelta(t, expected[i], outputFlat[i], 1e-4,
+			"Mismatch at index %d: expected %f, got %f", i, expected[i], outputFlat[i])
+	}
+}
+
+// TestDotGeneral_PreBlockDeduplication verifies that when the same RHS (weights) tensor
+// is used in multiple DotGeneral operations, only one BlockForDotGeneral node is created.
+// This tests the de-duplication logic in the Builder.
+func TestDotGeneral_PreBlockDeduplication(t *testing.T) {
+	_, ok := backend.(*Backend)
+	if !ok {
+		t.Skip("Skipping test because backend is not a SimpleGo Backend")
+	}
+
+	// Create a builder and define inputs
+	builder := backend.Builder("DeDuplication Test").(*Builder)
+
+	// Create LHS inputs (activations) - different tensors
+	// Use shapes large enough to trigger pre-blocking:
+	// 1. At least blockDim in each dimension
+	// 2. For Float32, contracting dimension must be > DirectPathMaxContractingSize (128)
+	//    to avoid the direct path which doesn't use blocking
+	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtypes.Float32] // typically 32
+	K := DirectPathMaxContractingSize + blockDim                  // contracting dimension (must be > threshold for Float32)
+	N := blockDim * 2                                             // output features
+
+	lhs1, err := builder.Parameter("lhs1", shapes.Make(dtypes.Float32, 4, K), nil)
+	require.NoError(t, err)
+	lhs2, err := builder.Parameter("lhs2", shapes.Make(dtypes.Float32, 8, K), nil)
+	require.NoError(t, err)
+	lhs3, err := builder.Parameter("lhs3", shapes.Make(dtypes.Float32, 16, K), nil)
+	require.NoError(t, err)
+
+	// Create a single RHS (weights) tensor that will be shared
+	rhs, err := builder.Parameter("rhs", shapes.Make(dtypes.Float32, K, N), nil)
+	require.NoError(t, err)
+
+	// Create multiple DotGeneral operations all using the same RHS
+	dot1, err := builder.DotGeneral(lhs1, []int{1}, []int{}, rhs, []int{0}, []int{})
+	require.NoError(t, err)
+	dot2, err := builder.DotGeneral(lhs2, []int{1}, []int{}, rhs, []int{0}, []int{})
+	require.NoError(t, err)
+	dot3, err := builder.DotGeneral(lhs3, []int{1}, []int{}, rhs, []int{0}, []int{})
+	require.NoError(t, err)
+
+	// Verify outputs were created
+	require.NotNil(t, dot1)
+	require.NotNil(t, dot2)
+	require.NotNil(t, dot3)
+
+	// Count the number of BlockForDotGeneral nodes in the graph
+	blockNodeCount := 0
+	for _, node := range builder.nodes {
+		if node.opType == backends.OpTypeBlockForDotGeneral {
+			blockNodeCount++
+		}
+	}
+
+	// There should be exactly one BlockForDotGeneral node due to de-duplication
+	require.Equal(t, 1, blockNodeCount,
+		"Expected exactly 1 BlockForDotGeneral node due to de-duplication, but found %d", blockNodeCount)
+
+	fmt.Printf("\tDe-duplication test passed: 3 DotGenerals share 1 BlockForDotGeneral node\n")
+}
+
+// TestDotGeneral_PreBlockSmallMatrixSkipped verifies that small matrices below the
+// minimum size threshold do NOT get pre-blocked.
+func TestDotGeneral_PreBlockSmallMatrixSkipped(t *testing.T) {
+	_, ok := backend.(*Backend)
+	if !ok {
+		t.Skip("Skipping test because backend is not a SimpleGo Backend")
+	}
+
+	// Create a builder and define inputs
+	builder := backend.Builder("Small Matrix Test").(*Builder)
+
+	// Use shapes smaller than blockDim - these should NOT trigger pre-blocking
+	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtypes.Float32]
+	smallK := blockDim / 2 // Half the block dim
+	smallN := blockDim / 2
+
+	lhs, err := builder.Parameter("lhs", shapes.Make(dtypes.Float32, 4, smallK), nil)
+	require.NoError(t, err)
+	rhs, err := builder.Parameter("rhs", shapes.Make(dtypes.Float32, smallK, smallN), nil)
+	require.NoError(t, err)
+
+	// Create DotGeneral with small matrix
+	dot, err := builder.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+	require.NoError(t, err)
+	require.NotNil(t, dot)
+
+	// Count BlockForDotGeneral nodes - should be zero for small matrices
+	blockNodeCount := 0
+	for _, node := range builder.nodes {
+		if node.opType == backends.OpTypeBlockForDotGeneral {
+			blockNodeCount++
+		}
+	}
+
+	require.Equal(t, 0, blockNodeCount,
+		"Expected 0 BlockForDotGeneral nodes for small matrix, but found %d", blockNodeCount)
+
+	fmt.Printf("\tSmall matrix test passed: matrix [%d, %d] was not pre-blocked (blockDim=%d)\n",
+		smallK, smallN, blockDim)
 }

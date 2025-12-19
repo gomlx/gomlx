@@ -49,14 +49,14 @@ var (
 	)
 )
 
-func must(err error) {
+func must2(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
 
 func must1[T any](value T, err error) T {
-	must(err)
+	must2(err)
 	return value
 }
 
