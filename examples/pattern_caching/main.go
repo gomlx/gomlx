@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Pattern Caching Example ===\n")
+	fmt.Println("=== Pattern Caching Example ===")
 
 	// Initialize backend (would need proper setup in real usage)
 	// For this example, we'll show the API usage
@@ -31,7 +31,7 @@ func showUsageExamples() {
 	fmt.Println("   - Batch 3 → Graph 3")
 	fmt.Println("   - Batch 4 → Graph 4")
 	fmt.Println("   - Batch 5 → Graph 5")
-	fmt.Println("   Total: 5 graphs\n")
+	fmt.Println("   Total: 5 graphs")
 
 	fmt.Println("2. With Pow2 Bucketing")
 	fmt.Println("   Batch sizes bucket to powers of 2:")
@@ -40,19 +40,19 @@ func showUsageExamples() {
 	fmt.Println("   - Batch 3 → Graph[4]   (new, bucketed)")
 	fmt.Println("   - Batch 4 → Graph[4]   (reused)")
 	fmt.Println("   - Batch 5 → Graph[8]   (new, bucketed)")
-	fmt.Println("   Total: 4 graphs (20% reduction)\n")
+	fmt.Println("   Total: 4 graphs (20% reduction)")
 
 	fmt.Println("3. With Linear Bucketing (step=8)")
 	fmt.Println("   All batch sizes 1-8 use the same graph:")
 	fmt.Println("   - Batch 1-8 → Graph[8]   (reused)")
 	fmt.Println("   - Batch 9-16 → Graph[16] (new)")
-	fmt.Println("   Total: Only 2 graphs for 16 batch sizes (87.5% reduction)\n")
+	fmt.Println("   Total: Only 2 graphs for 16 batch sizes (87.5% reduction)")
 
 	showAPIExamples()
 }
 
 func showAPIExamples() {
-	fmt.Println("=== API Examples ===\n")
+	fmt.Println("=== API Examples ===")
 
 	// Example 1: Default behavior
 	fmt.Println("// Example 1: Default behavior (no pattern caching)")
@@ -81,14 +81,14 @@ func showAPIExamples() {
 	fmt.Println("exec := MustNewExec(backend, graphFn).WithPow2Bucketing()")
 	fmt.Println("exec.MustExec(batch1)")
 	fmt.Println("exec.MustExec(batch2)")
-	fmt.Println("fmt.Printf(\"Cached graphs: %d\\n\", exec.CacheSize())")
+	fmt.Println("fmt.Println(\"Cached graphs:\", exec.CacheSize())")
 	fmt.Println()
 
 	showBucketingExamples()
 }
 
 func showBucketingExamples() {
-	fmt.Println("=== Bucketing Strategy Examples ===\n")
+	fmt.Println("=== Bucketing Strategy Examples ===")
 
 	fmt.Println("Pow2Bucketing:")
 	pow2 := Pow2Bucketing{}
@@ -155,7 +155,7 @@ func ConcreteExample() {
 	// This would require proper backend setup
 	// Shown for documentation purposes
 
-	fmt.Println("\n=== Concrete Usage Scenario ===\n")
+	fmt.Println("\n=== Concrete Usage Scenario ===")
 	fmt.Println("// Training loop with variable batch sizes")
 	fmt.Println("backend := backends.MustNew()")
 	fmt.Println("exec := MustNewExec(backend, modelFn).WithPow2Bucketing()")
@@ -179,7 +179,7 @@ func createBatch(size int) []float32 {
 
 // demonstrateWithBackend shows actual usage (requires backend)
 func demonstrateWithBackend(backend backends.Backend) {
-	fmt.Println("\n=== Live Demonstration ===\n")
+	fmt.Println("\n=== Live Demonstration ===")
 
 	// Create executor with Pow2 bucketing
 	exec := MustNewExec(backend, SimpleSumFn).WithPow2Bucketing()
