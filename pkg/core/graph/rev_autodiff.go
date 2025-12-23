@@ -440,7 +440,15 @@ func zeroVJP(node, v *Node, outputShape shapes.Shape) []*Node {
 // It is a reduce-sum of the broadcast dimensions.
 func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 	_ = validateBuildingGraphFromInputs(node, input, v)
-	if input.Shape().Equal(node.Shape()) {
+
+	// Get the input shape, concretizing symbolic dimensions using v's concrete shape
+	inputShape := input.Shape()
+	if inputShape.HasSymbolicDim() {
+		// When input has symbolic dimensions, use concrete dimensions from v
+		inputShape = inputShape.Concretize(v.Shape())
+	}
+
+	if inputShape.Equal(node.Shape()) || inputShape.Equal(v.Shape()) {
 		// If there was no broadcast involved, VJP is the identity.
 		return v
 	} else if input.IsScalar() {
@@ -449,22 +457,22 @@ func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 	}
 
 	// Reduce-sum on the dimensions it was broadcast during the sum. Search for all dimensions that
-	// are 1 in the input, and > 1 in the output.
+	// are 1 in the input, and > 1 in the adjoint v (which has concrete dimensions).
 	var reduceDims []int
-	for ii, dim := range input.Shape().Dimensions {
+	for ii, dim := range inputShape.Dimensions {
 		if dim == 1 && v.Shape().Dimensions[ii] > 1 {
 			reduceDims = append(reduceDims, ii)
 		}
 	}
 	reduced := ReduceSum(v, reduceDims...)
 	// Since ReduceSum collapsed those reduced dimensions of now size 1, we need to reshape it back to the
-	// original input format.
+	// original input format. Use the concretized shape for the reshape.
 	var vjp *Node
 	err := TryCatch[error](func() {
-		vjp = ReshapeWithShape(reduced, input.Shape())
+		vjp = ReshapeWithShape(reduced, inputShape)
 	})
 	if err != nil {
-		err = errors.WithMessagef(err, "AutoGrad: calculating the AccumulatedVJP of a broadcast: v.Shape()=%s, input.Shape()=%s", v.Shape(), input.Shape())
+		err = errors.WithMessagef(err, "AutoGrad: calculating the AccumulatedVJP of a broadcast: v.Shape()=%s, input.Shape()=%s (concretized=%s)", v.Shape(), input.Shape(), inputShape)
 		panic(err)
 	}
 	return vjp
@@ -697,8 +705,8 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 		reducedDims = xslices.Iota(0, x.Rank())
 	}
 
-	// Use captured input shape instead of current shape to handle symbolic dimensions.
-	// This is important when the input has symbolic dimensions that have been concretized.
+	// Use captured input shape to preserve symbolic dimensions.
+	// This is important when the input has symbolic dimensions that should be preserved in gradients.
 	inputShape := node.GetCapturedInputShape(0)
 	if !inputShape.Ok() {
 		// Fallback to current shape if not captured (backward compatibility)
@@ -714,6 +722,7 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 	expandedV := ReshapeWithShape(v, newShape)
 
 	// Now all we need it to broadcast the v on the reduced dimensions.
+	// BroadcastToShape now supports symbolic dimensions via BroadcastToDims.
 	vjp := BroadcastToShape(expandedV, inputShape)
 	return []*Node{vjp}
 }
@@ -728,7 +737,15 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 		// Reduced all dims, reconstruct those.
 		reducedDims = xslices.Iota(0, x.Rank())
 	}
-	newShape := x.Shape().Clone()
+
+	// Use captured input shape to preserve symbolic dimensions
+	inputShape := node.GetCapturedInputShape(0)
+	if !inputShape.Ok() {
+		// Fallback to current shape if not captured
+		inputShape = x.Shape()
+	}
+
+	newShape := inputShape.Clone()
 	for _, dim := range reducedDims {
 		newShape.Dimensions[dim] = 1
 	}
@@ -741,7 +758,7 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1 and then broadcasting.
 	expandedV := ReshapeWithShape(v, newShape)
-	expandedV = BroadcastToShape(expandedV, x.Shape())
+	expandedV = BroadcastToShape(expandedV, inputShape)
 
 	// vjp is only propagated to the elements at the max value.
 	vjp := Mul(expandedV, maxIndicatorAtInput)
@@ -758,7 +775,15 @@ func reduceMinVJP(node, v *Node, _ shapes.Shape) []*Node {
 		// Reduced all dims, reconstruct those.
 		reducedDims = xslices.Iota(0, x.Rank())
 	}
-	newShape := x.Shape().Clone()
+
+	// Use captured input shape to preserve symbolic dimensions
+	inputShape := node.GetCapturedInputShape(0)
+	if !inputShape.Ok() {
+		// Fallback to current shape if not captured
+		inputShape = x.Shape()
+	}
+
+	newShape := inputShape.Clone()
 	for _, dim := range reducedDims {
 		newShape.Dimensions[dim] = 1
 	}
@@ -771,7 +796,7 @@ func reduceMinVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1 and then broadcasting.
 	expandedV := ReshapeWithShape(v, newShape)
-	expandedV = BroadcastToShape(expandedV, x.Shape())
+	expandedV = BroadcastToShape(expandedV, inputShape)
 
 	// vjp is only propagated to the elements at the min value.
 	vjp := Mul(expandedV, minIndicatorAtInput)

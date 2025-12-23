@@ -81,7 +81,17 @@ func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error)
 	}
 	xNode := nodes[0]
 	dtype := xNode.shape.DType
-	shape := stablehloshapes.Make(DTypeToXLA(dtype), dimensions...)
+	// Convert symbolic dimensions (negative values) to placeholder values (1)
+	// since StableHLO doesn't support symbolic dimensions directly.
+	concreteDims := make([]int, len(dimensions))
+	for i, d := range dimensions {
+		if d < 0 {
+			concreteDims[i] = 1
+		} else {
+			concreteDims[i] = d
+		}
+	}
+	shape := stablehloshapes.Make(DTypeToXLA(dtype), concreteDims...)
 	value, err := stablehlo.Reshape(xNode.value, shape)
 	if err != nil {
 		return nil, err

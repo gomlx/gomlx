@@ -36,10 +36,11 @@ func TestPadToBucketSize(t *testing.T) {
 		defer exec.Finalize()
 
 		// Input [7, 512] -> Output [8, 512]
-		input := tensors.FromValue(make([][]float32, 7))
-		for i := range input.Value().([][]float32) {
-			input.Value().([][]float32)[i] = make([]float32, 512)
+		data := make([][]float32, 7)
+		for i := range data {
+			data[i] = make([]float32, 512)
 		}
+		input := tensors.FromValue(data)
 		output := exec.MustExec(input)[0]
 		require.Equal(t, []int{8, 512}, output.Shape().Dimensions)
 
@@ -54,18 +55,20 @@ func TestPadToBucketSize(t *testing.T) {
 		defer exec.Finalize()
 
 		// Input [7, 512] -> Output [8, 512]
-		input := tensors.FromValue(make([][]float32, 7))
-		for i := range input.Value().([][]float32) {
-			input.Value().([][]float32)[i] = make([]float32, 512)
+		data := make([][]float32, 7)
+		for i := range data {
+			data[i] = make([]float32, 512)
 		}
+		input := tensors.FromValue(data)
 		output := exec.MustExec(input)[0]
 		require.Equal(t, []int{8, 512}, output.Shape().Dimensions)
 
 		// Input [9, 512] -> Output [16, 512]
-		input2 := tensors.FromValue(make([][]float32, 9))
-		for i := range input2.Value().([][]float32) {
-			input2.Value().([][]float32)[i] = make([]float32, 512)
+		data2 := make([][]float32, 9)
+		for i := range data2 {
+			data2[i] = make([]float32, 512)
 		}
+		input2 := tensors.FromValue(data2)
 		output2 := exec.MustExec(input2)[0]
 		require.Equal(t, []int{16, 512}, output2.Shape().Dimensions)
 	})
@@ -77,10 +80,11 @@ func TestPadToBucketSize(t *testing.T) {
 		defer exec.Finalize()
 
 		// Input [7, 100] -> Output [8, 128]
-		input := tensors.FromValue(make([][]float32, 7))
-		for i := range input.Value().([][]float32) {
-			input.Value().([][]float32)[i] = make([]float32, 100)
+		data := make([][]float32, 7)
+		for i := range data {
+			data[i] = make([]float32, 100)
 		}
+		input := tensors.FromValue(data)
 		output := exec.MustExec(input)[0]
 		require.Equal(t, []int{8, 128}, output.Shape().Dimensions)
 	})
@@ -92,10 +96,11 @@ func TestPadToBucketSize(t *testing.T) {
 		defer exec.Finalize()
 
 		// Input [8, 512] -> Output [8, 512] (already power of 2)
-		input := tensors.FromValue(make([][]float32, 8))
-		for i := range input.Value().([][]float32) {
-			input.Value().([][]float32)[i] = make([]float32, 512)
+		data := make([][]float32, 8)
+		for i := range data {
+			data[i] = make([]float32, 512)
 		}
+		input := tensors.FromValue(data)
 		output := exec.MustExec(input)[0]
 		require.Equal(t, []int{8, 512}, output.Shape().Dimensions)
 	})
@@ -108,10 +113,11 @@ func TestPadToBucketSize(t *testing.T) {
 		defer exec.Finalize()
 
 		// Input [7, 100] -> Output [7, 128] (padding last axis only)
-		input := tensors.FromValue(make([][]float32, 7))
-		for i := range input.Value().([][]float32) {
-			input.Value().([][]float32)[i] = make([]float32, 100)
+		data := make([][]float32, 7)
+		for i := range data {
+			data[i] = make([]float32, 100)
 		}
+		input := tensors.FromValue(data)
 		output := exec.MustExec(input)[0]
 		require.Equal(t, []int{7, 128}, output.Shape().Dimensions)
 	})
@@ -124,10 +130,11 @@ func TestPadToBucketSize(t *testing.T) {
 		defer exec.Finalize()
 
 		// Input [7, 100] -> Output [8, 128] (padding both axes)
-		input := tensors.FromValue(make([][]float32, 7))
-		for i := range input.Value().([][]float32) {
-			input.Value().([][]float32)[i] = make([]float32, 100)
+		data := make([][]float32, 7)
+		for i := range data {
+			data[i] = make([]float32, 100)
 		}
+		input := tensors.FromValue(data)
 		output := exec.MustExec(input)[0]
 		require.Equal(t, []int{8, 128}, output.Shape().Dimensions)
 	})
@@ -139,10 +146,11 @@ func TestPadToBucketSize(t *testing.T) {
 		defer exec.Finalize()
 
 		// Input [7, 512] -> Output [8, 512]
-		input := tensors.FromValue(make([][]int32, 7))
-		for i := range input.Value().([][]int32) {
-			input.Value().([][]int32)[i] = make([]int32, 512)
+		data := make([][]int32, 7)
+		for i := range data {
+			data[i] = make([]int32, 512)
 		}
+		input := tensors.FromValue(data)
 		output := exec.MustExec(input)[0]
 		require.Equal(t, []int{8, 512}, output.Shape().Dimensions)
 		require.Equal(t, dtypes.Int32, output.DType())

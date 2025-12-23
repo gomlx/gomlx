@@ -94,10 +94,13 @@ func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distr
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to create parameter %q", name))
 	}
+	// Use the original shape (which may have symbolic dimensions) for the node,
+	// not the XLA op's shape (which has concrete dimensions).
+	// This preserves symbolic dimensions for pattern matching and gradient computation.
 	node = &Node{
 		graph:        g,
 		outputOps:    []backends.Op{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		outputShapes: []shapes.Shape{shape},
 		inputs:       nodeInputs,
 	}
 	g.registerNode(node)
@@ -520,7 +523,25 @@ func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 // See also the equivalent BroadcastToShape.
 func BroadcastToDims(x *Node, dimensions ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
-	shape := shapes.Make(x.DType(), dimensions...)
+
+	// Check if any dimensions are symbolic (negative values)
+	hasSymbolic := false
+	for _, dim := range dimensions {
+		if dim < 0 {
+			hasSymbolic = true
+			break
+		}
+	}
+
+	var shape shapes.Shape
+	if hasSymbolic {
+		// Use MakeDynamic to allow symbolic dimensions
+		shape = shapes.MakeDynamic(x.DType(), dimensions...)
+	} else {
+		// Use Make for static dimensions (validates no negative values)
+		shape = shapes.Make(x.DType(), dimensions...)
+	}
+
 	if x.Shape().IsScalar() && shape.IsScalar() {
 		// Assume nothing to do.
 		return x
@@ -657,16 +678,28 @@ func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 		exceptions.Panicf("cannot change dtype (from %s to %s) with ReshapeWithShape",
 			x.DType(), shape.DType)
 	}
-	if shape.Size() != x.Shape().Size() {
-		exceptions.Panicf(
-			"shapes (x.shape=%s, shape=%s) have different total sizes (from %d to %d), reshape not possible",
-			x.Shape(),
-			shape,
-			x.Shape().Size(),
-			shape.Size(),
-		)
+
+	// Concretize symbolic dimensions in the target shape using x's concrete shape
+	targetShape := shape
+	if shape.HasSymbolicDim() {
+		targetShape = shape.Concretize(x.Shape())
 	}
-	return backendReshape(x, shape.Dimensions...)
+
+	// Skip size check if either shape has symbolic dimensions.
+	// Symbolic dimensions are used for dynamic shapes and their sizes
+	// can only be validated at runtime.
+	if !targetShape.HasSymbolicDim() && !x.Shape().HasSymbolicDim() {
+		if targetShape.Size() != x.Shape().Size() {
+			exceptions.Panicf(
+				"shapes (x.shape=%s, shape=%s) have different total sizes (from %d to %d), reshape not possible",
+				x.Shape(),
+				targetShape,
+				x.Shape().Size(),
+				targetShape.Size(),
+			)
+		}
+	}
+	return backendReshape(x, targetShape.Dimensions...)
 }
 
 // InsertAxes expands x creating new axes just before the axes given -- beforeAxes points to positions on the original

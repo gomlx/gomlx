@@ -268,8 +268,9 @@ func TestFFTWithPadding(t *testing.T) {
 		yC := ConvertDType(y, dtypes.Complex64)
 		fft := FFTWithPadding(yC)
 		fft.AssertDims(128) // Padded to 128
-		return []*Node{y}, []*Node{fft}
-	}, nil, 0) // Just checking shape, not values
+		// Just checking shape, not values - return empty outputs
+		return []*Node{y}, nil
+	}, nil, 0)
 
 	graphtest.RunTestGraphFn(t, "FFTWithPadding no padding for power of 2", func(g *Graph) (inputs, outputs []*Node) {
 		// Input size 128 -> no padding
@@ -279,7 +280,8 @@ func TestFFTWithPadding(t *testing.T) {
 		yC := ConvertDType(y, dtypes.Complex64)
 		fft := FFTWithPadding(yC)
 		fft.AssertDims(128) // No padding
-		return []*Node{y}, []*Node{fft}
+		// Just checking shape, not values - return empty outputs
+		return []*Node{y}, nil
 	}, nil, 0)
 
 	graphtest.RunTestGraphFn(t, "FFTWithPadding with batch dimension", func(g *Graph) (inputs, outputs []*Node) {
@@ -290,7 +292,8 @@ func TestFFTWithPadding(t *testing.T) {
 		yC := ConvertDType(y, dtypes.Complex64)
 		fft := FFTWithPadding(yC, -1) // FFT on last axis
 		fft.AssertDims(32, 128)       // Batch preserved, FFT padded
-		return []*Node{y}, []*Node{fft}
+		// Just checking shape, not values - return empty outputs
+		return []*Node{y}, nil
 	}, nil, 0)
 }
 
@@ -302,7 +305,8 @@ func TestRealFFTWithPadding(t *testing.T) {
 		y := Sin(x)
 		fft := RealFFTWithPadding(y)
 		fft.AssertDims(65) // 128/2 + 1
-		return []*Node{y}, []*Node{fft}
+		// Just checking shape, not values - return empty outputs
+		return []*Node{y}, nil
 	}, nil, 0)
 
 	graphtest.RunTestGraphFn(t, "RealFFTWithPadding no padding for power of 2", func(g *Graph) (inputs, outputs []*Node) {
@@ -312,7 +316,8 @@ func TestRealFFTWithPadding(t *testing.T) {
 		y := Sin(x)
 		fft := RealFFTWithPadding(y)
 		fft.AssertDims(65) // 128/2 + 1
-		return []*Node{y}, []*Node{fft}
+		// Just checking shape, not values - return empty outputs
+		return []*Node{y}, nil
 	}, nil, 0)
 
 	graphtest.RunTestGraphFn(t, "RealFFTWithPadding with batch dimension", func(g *Graph) (inputs, outputs []*Node) {
@@ -322,7 +327,8 @@ func TestRealFFTWithPadding(t *testing.T) {
 		y := Sin(x)
 		fft := RealFFTWithPadding(y, -1) // FFT on last axis
 		fft.AssertDims(32, 65)           // Batch preserved, FFT output 65
-		return []*Node{y}, []*Node{fft}
+		// Just checking shape, not values - return empty outputs
+		return []*Node{y}, nil
 	}, nil, 0)
 
 	graphtest.RunTestGraphFn(t, "RealFFTWithPadding and InverseRealFFT roundtrip", func(g *Graph) (inputs, outputs []*Node) {

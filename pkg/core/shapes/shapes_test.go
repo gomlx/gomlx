@@ -248,3 +248,45 @@ func TestCastDType(t *testing.T) {
 		}
 	})
 }
+
+func TestConcretize(t *testing.T) {
+	// Test basic concretization with symbolic batch dimension
+	symbolic := MakeDynamic(dtypes.Float32, -1, 3, 4)
+	concrete := Make(dtypes.Float32, 10, 3, 4)
+	result := symbolic.Concretize(concrete)
+
+	require.Equal(t, 10, result.Dimensions[0], "First dimension should be concretized to 10")
+	require.Equal(t, 3, result.Dimensions[1], "Second dimension should remain 3")
+	require.Equal(t, 4, result.Dimensions[2], "Third dimension should remain 4")
+	require.Equal(t, dtypes.Float32, result.DType)
+
+	// Test with multiple symbolic dimensions
+	symbolic2 := MakeDynamic(dtypes.Float64, -1, -2, 5)
+	concrete2 := Make(dtypes.Float64, 8, 16, 5)
+	result2 := symbolic2.Concretize(concrete2)
+
+	require.Equal(t, 8, result2.Dimensions[0], "First dimension should be concretized to 8")
+	require.Equal(t, 16, result2.Dimensions[1], "Second dimension should be concretized to 16")
+	require.Equal(t, 5, result2.Dimensions[2], "Third dimension should remain 5")
+
+	// Test with no symbolic dimensions (should return same shape)
+	noSymbolic := Make(dtypes.Int32, 2, 3, 4)
+	concrete3 := Make(dtypes.Int32, 2, 3, 4)
+	result3 := noSymbolic.Concretize(concrete3)
+
+	require.True(t, noSymbolic.Equal(result3), "Shape without symbolic dims should remain unchanged")
+
+	// Test with mismatched dtypes (should return original)
+	symbolic4 := MakeDynamic(dtypes.Float32, -1, 3)
+	concrete4 := Make(dtypes.Float64, 10, 3)
+	result4 := symbolic4.Concretize(concrete4)
+
+	require.True(t, symbolic4.Equal(result4), "Mismatched dtypes should return original shape")
+
+	// Test with mismatched ranks (should return original)
+	symbolic5 := MakeDynamic(dtypes.Float32, -1, 3)
+	concrete5 := Make(dtypes.Float32, 10, 3, 4)
+	result5 := symbolic5.Concretize(concrete5)
+
+	require.True(t, symbolic5.Equal(result5), "Mismatched ranks should return original shape")
+}

@@ -232,6 +232,17 @@ func (s Shape) IsZeroSize() bool {
 		}
 	}
 	return false
+}
+
+// HasSymbolicDim returns whether any of the dimensions is symbolic (negative).
+// Symbolic dimensions are used for dynamic shapes and pattern matching.
+func (s Shape) HasSymbolicDim() bool {
+	for _, d := range s.Dimensions {
+		if d < 0 {
+			return true
+		}
+	}
+	return false
 
 }
 
@@ -455,6 +466,44 @@ func ConcatenateDimensions(s1, s2 Shape) (shape Shape) {
 	copy(shape.Dimensions, s1.Dimensions)
 	copy(shape.Dimensions[s1.Rank():], s2.Dimensions)
 	return
+}
+
+// Concretize replaces symbolic dimensions in this shape with concrete values from another shape.
+// This is useful for gradient computation where we need concrete shapes but want to preserve
+// the pattern of the original shape.
+//
+// Example:
+//
+//	symbolic := MakeDynamic(Float32, -1, 3, 4)  // symbolic shape with dynamic batch
+//	concrete := Make(Float32, 10, 3, 4)         // concrete shape
+//	result := symbolic.Concretize(concrete)     // result: (Float32)[10, 3, 4]
+func (s Shape) Concretize(concrete Shape) Shape {
+	if s.DType != concrete.DType {
+		return s // Can't concretize if dtypes don't match
+	}
+	if s.IsTuple() {
+		if !concrete.IsTuple() || s.TupleSize() != concrete.TupleSize() {
+			return s
+		}
+		clone := s.Clone()
+		for ii := range clone.TupleShapes {
+			clone.TupleShapes[ii] = clone.TupleShapes[ii].Concretize(concrete.TupleShapes[ii])
+		}
+		return clone
+	}
+	if s.Rank() != concrete.Rank() {
+		return s // Can't concretize if ranks don't match
+	}
+
+	// Clone the shape and replace symbolic dimensions with concrete ones
+	result := s.Clone()
+	for i := range result.Dimensions {
+		if result.Dimensions[i] < 0 {
+			// This is a symbolic dimension, replace with concrete value
+			result.Dimensions[i] = concrete.Dimensions[i]
+		}
+	}
+	return result
 }
 
 // FromAnyValue attempts to convert a Go "any" value to its expected shape.
