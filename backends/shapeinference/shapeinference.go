@@ -21,6 +21,73 @@ import (
 	"github.com/pkg/errors"
 )
 
+// hasSymbolicDim returns true if any dimension is symbolic (negative).
+func hasSymbolicDim(dims []int) bool {
+	for _, d := range dims {
+		if d < 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// canBroadcast checks if operandDim can broadcast to outputDim.
+// Handles symbolic dimensions appropriately according to broadcasting rules.
+func canBroadcast(operandDim, outputDim int) bool {
+	switch {
+	case operandDim == 1:
+		// 1 broadcasts to anything
+		return true
+	case operandDim < 0 && outputDim < 0:
+		// Both symbolic: same symbol matches, DimUnknown matches anything, otherwise assume compatible
+		if operandDim == outputDim {
+			return true // Same symbolic dimension
+		}
+		// If either is DimUnknown, they're compatible (runtime will validate)
+		if operandDim == int(shapes.DimUnknown) || outputDim == int(shapes.DimUnknown) {
+			return true
+		}
+		// Different specific symbolic dimensions - assume compatible (runtime will validate)
+		return true
+	case operandDim < 0:
+		// Symbolic operand to concrete output: assume compatible (runtime check)
+		return true
+	case outputDim < 0:
+		// Concrete operand to symbolic output: assume compatible (runtime check)
+		return true
+	default:
+		// Both concrete: must match exactly
+		return operandDim == outputDim
+	}
+}
+
+// symbolicMax returns the appropriate dimension for broadcasting two dimensions.
+// Handles both static and symbolic dimensions according to broadcasting rules.
+func symbolicMax(a, b int) int {
+	// Both symbolic
+	if a < 0 && b < 0 {
+		if a == b {
+			return a // Same symbolic dimension
+		}
+		return int(shapes.DimUnknown) // Different symbols
+	}
+	// One or both are static
+	if a < 0 {
+		if b > 1 {
+			return b // Concrete > 1 wins over symbolic
+		}
+		return a // Symbolic wins over 1
+	}
+	if b < 0 {
+		if a > 1 {
+			return a // Concrete > 1 wins over symbolic
+		}
+		return b // Symbolic wins over 1
+	}
+	// Both static
+	return max(a, b)
+}
+
 var (
 	// BooleanOperations take booleans as input, aka. logical operations.
 	BooleanOperations = sets.MakeWith(
@@ -234,14 +301,44 @@ func binaryOpImpl(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (outp
 	}
 	output = lhsShape.Clone()
 	for axis := range output.Rank() {
-		lhsDim := lhsShape.Dimensions[axis]
-		rhsDim := rhsShape.Dimensions[axis]
-		if lhsDim != 1 && rhsDim != 1 && lhsDim != rhsDim {
-			err = errors.Errorf("dimension of axis #%d doesn't match and cannot be broadcast for BinaryOp (%s), got shapes %s and %s",
-				axis, opType, lhsShape, rhsShape)
+		ld, rd := lhsShape.Dimensions[axis], rhsShape.Dimensions[axis]
+
+		// Handle symbolic dimensions
+		switch {
+		case ld < 0 && rd < 0:
+			// Both symbolic
+			if ld == rd {
+				// Same symbol - preserve it
+				output.Dimensions[axis] = ld
+			} else {
+				// Different symbols - unknown
+				output.Dimensions[axis] = int(shapes.DimUnknown)
+			}
+		case ld < 0 && rd == 1:
+			// Left is symbolic, right broadcasts
+			output.Dimensions[axis] = ld
+		case rd < 0 && ld == 1:
+			// Right is symbolic, left broadcasts
+			output.Dimensions[axis] = rd
+		case ld > 0 && rd > 0:
+			// Both static - use existing max logic for broadcasting
+			if ld != rd && ld != 1 && rd != 1 {
+				err = errors.Errorf("dimension of axis #%d doesn't match and cannot be broadcast for BinaryOp (%s), got shapes %s and %s",
+					axis, opType, lhsShape, rhsShape)
+				return
+			}
+			output.Dimensions[axis] = max(ld, rd)
+		case ld < 0 && rd > 1:
+			// Symbolic vs concrete > 1: use concrete (symbolic must be compatible)
+			output.Dimensions[axis] = rd
+		case rd < 0 && ld > 1:
+			// Concrete > 1 vs symbolic: use concrete
+			output.Dimensions[axis] = ld
+		default:
+			err = errors.Errorf("incompatible symbolic dimensions at axis %d: %d vs %d for BinaryOp (%s)",
+				axis, ld, rd, opType)
 			return
 		}
-		output.Dimensions[axis] = max(lhsDim, rhsDim)
 	}
 	return
 }
@@ -358,13 +455,66 @@ func WhereOp(condition, onTrue, onFalse shapes.Shape) (output shapes.Shape, err 
 //
 // Notice the backends.Reshape doesn't support auto-scaling dimensions (set to -1), as graph.Reshape does.
 func ReshapeOp(operand shapes.Shape, dims []int) (output shapes.Shape, err error) {
-	output = shapes.Make(operand.DType, dims...)
-	if operand.Size() != output.Size() {
-		err = errors.Errorf("Reshape() cannot reshape %s to dimensions %v, their size don't match",
-			operand, dims)
-		return shapes.Invalid(), err
+	output = shapes.Shape{DType: operand.DType, Dimensions: slices.Clone(dims)}
+
+	// Handle scalar to scalar case
+	if operand.Rank() == 0 && output.Rank() == 0 {
+		return output, nil
 	}
-	return
+
+	// Calculate static portions of both shapes
+	operandStaticSize := 1
+	operandHasSymbolic := false
+	for _, d := range operand.Dimensions {
+		if d < 0 {
+			operandHasSymbolic = true
+		} else {
+			operandStaticSize *= d
+		}
+	}
+
+	outputStaticSize := 1
+	outputHasSymbolic := false
+	for _, d := range dims {
+		if d < 0 {
+			outputHasSymbolic = true
+		} else {
+			outputStaticSize *= d
+		}
+	}
+
+	// If both fully static, do full validation
+	if !operandHasSymbolic && !outputHasSymbolic {
+		if operandStaticSize != outputStaticSize {
+			return shapes.Invalid(), errors.Errorf("Reshape() cannot reshape %s to dimensions %v, their size don't match (%d vs %d)",
+				operand, dims, operandStaticSize, outputStaticSize)
+		}
+		return output, nil
+	}
+
+	// If one or both have symbolic dimensions, check if static portions are compatible
+	// E.g., [DimBatch, 512] -> [DimBatch, 256, 2] is valid because 512 == 256*2
+	if operandHasSymbolic && outputHasSymbolic {
+		// Both have symbolic - check static portions match if both non-trivial
+		if operandStaticSize != outputStaticSize && operandStaticSize > 1 && outputStaticSize > 1 {
+			return shapes.Invalid(), errors.Errorf("Reshape() static size mismatch: operand has static size %d, target has static size %d",
+				operandStaticSize, outputStaticSize)
+		}
+	} else if !operandHasSymbolic && outputHasSymbolic {
+		// Operand is fully static, output has symbolic - check if operand size is divisible by output static size
+		if outputStaticSize > 1 && operandStaticSize%outputStaticSize != 0 {
+			return shapes.Invalid(), errors.Errorf("Reshape() cannot reshape %s to dimensions %v: operand size %d not divisible by target static size %d",
+				operand, dims, operandStaticSize, outputStaticSize)
+		}
+	} else if operandHasSymbolic && !outputHasSymbolic {
+		// Operand has symbolic, output is fully static - check if output size is divisible by operand static size
+		if operandStaticSize > 1 && outputStaticSize%operandStaticSize != 0 {
+			return shapes.Invalid(), errors.Errorf("Reshape() cannot reshape %s to dimensions %v: target size %d not divisible by operand static size %d",
+				operand, dims, outputStaticSize, operandStaticSize)
+		}
+	}
+
+	return output, nil
 }
 
 // TransposeOp all axes of the operand.
@@ -446,11 +596,14 @@ func BroadcastInDimOp(operand, outputShape shapes.Shape, broadcastAxes []int) er
 				broadcastAxes, axisInOutput, axisInOperand, outputShape.Rank()-1)
 		}
 		preservedSet.Insert(axisInOutput)
-		if operand.Dimensions[axisInOperand] != 1 && operand.Dimensions[axisInOperand] != outputShape.Dimensions[axisInOutput] {
-			return errors.Errorf("the values of outputShape (%v) that are being broadcast (listed in broadcastAxes) "+
-				"must match the corresponding value in the operand shape (%s) or be 1 (if broadcasting), "+
-				"but the value of outputShape.Dimensions[%d]=%d does not match the value in operand.Shape().Dimensions[%d]=%d",
-				outputShape, operand, axisInOutput, outputShape.Dimensions[axisInOutput], axisInOperand, operand.Dimensions[axisInOperand])
+
+		// Use canBroadcast helper to handle symbolic dimensions
+		if !canBroadcast(operand.Dimensions[axisInOperand], outputShape.Dimensions[axisInOutput]) {
+			return errors.Errorf("cannot broadcast dimension %d to %d at axis %d->%d: "+
+				"the values of outputShape (%v) that are being broadcast (listed in broadcastAxes) "+
+				"must match the corresponding value in the operand shape (%s) or be 1 (if broadcasting)",
+				operand.Dimensions[axisInOperand], outputShape.Dimensions[axisInOutput],
+				axisInOperand, axisInOutput, outputShape, operand)
 		}
 	}
 	return nil
@@ -520,9 +673,12 @@ func Gather(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOutpu
 		if sliceSize < 0 {
 			return output, errors.Errorf("sliceSize %d for axis %d is negative, it must be non-negative", sliceSize, axis)
 		}
-		if operand.Dimensions[axis] < sliceSize {
-			return output, errors.Errorf("sliceSize %d for axis %d is larger than the corresponding operand dimension %d", sliceSize, axis, operand.Dimensions[axis])
+		// Only validate size comparison when operand dimension is concrete (positive)
+		operandDim := operand.Dimensions[axis]
+		if operandDim > 0 && operandDim < sliceSize {
+			return output, errors.Errorf("sliceSize %d for axis %d is larger than the corresponding operand dimension %d", sliceSize, axis, operandDim)
 		}
+		// If operandDim < 0 (symbolic), skip this validation - will be checked at runtime
 	}
 	for collapseAxis := range setCollapsedAxes {
 		if sliceSizes[collapseAxis] != 1 {
@@ -540,10 +696,13 @@ func Gather(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOutpu
 	}
 
 	// Check startIndexMap is set for the dimensions of indexVectorAxis in startIndices.
-	if len(startIndexMap) != startIndices.Dimensions[indexVectorAxis] {
+	// Only validate when indexVectorAxis dimension is concrete (positive)
+	indexVectorDim := startIndices.Dimensions[indexVectorAxis]
+	if indexVectorDim > 0 && len(startIndexMap) != indexVectorDim {
 		return output, errors.Errorf("startIndexMap must have one value per dimension of indexVectorAxis, so it length (%d) must match startIndices.Dimensions[%d] (%d)",
-			len(startIndexMap), indexVectorAxis, startIndices.Dimensions[indexVectorAxis])
+			len(startIndexMap), indexVectorAxis, indexVectorDim)
 	}
+	// If indexVectorDim < 0 (symbolic), skip this exact length validation - will be checked at runtime
 	for idx, operandAxis := range startIndexMap {
 		if operandAxis < 0 || operandAxis >= operand.Rank() {
 			return output, errors.Errorf("startIndexMap[%d]=%d is out of range for operand %s", idx, operandAxis, operand)
@@ -641,11 +800,27 @@ func ConcatenateOp(inputs []shapes.Shape, axis int) (output shapes.Shape, err er
 
 		for d := 0; d < rank; d++ {
 			if d == axis {
-				output.Dimensions[d] += currentShape.Dimensions[d]
+				// Concatenation axis: handle symbolic dimensions
+				concatDim := currentShape.Dimensions[d]
+				if concatDim < 0 || output.Dimensions[d] < 0 {
+					// If either is symbolic, result is unknown
+					output.Dimensions[d] = int(shapes.DimUnknown)
+				} else {
+					output.Dimensions[d] += concatDim
+				}
 			} else {
-				if currentShape.Dimensions[d] != output.Dimensions[d] {
+				// Non-concatenation axes must match (including symbolic matching)
+				d1 := output.Dimensions[d]
+				d2 := currentShape.Dimensions[d]
+				if d1 < 0 || d2 < 0 {
+					// Symbolic dimensions match anything, prefer concrete
+					if d1 < 0 && d2 > 0 {
+						output.Dimensions[d] = d2
+					}
+					// Otherwise keep the symbolic dimension (d1)
+				} else if d1 != d2 {
 					return shapes.Invalid(), errors.Errorf("mismatched dimensions for ConcatenateOp at axis %d (non-concatenation axis): input #0 has %d, input #%d has %d",
-						d, output.Dimensions[d], i, currentShape.Dimensions[d])
+						d, d1, i, d2)
 				}
 			}
 		}

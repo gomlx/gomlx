@@ -97,6 +97,57 @@ type SideParamsFn func(graph *Graph, inputBuffers []backends.Buffer, donate []bo
 // It is called after the Exec method, with the list of messages and corresponding values of the evaluated nodes.
 type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, nodes []NodeId)
 
+// BucketingStrategy defines how to bucket dimensions for cache efficiency.
+// This reduces the number of unique compiled graphs for variable-sized inputs.
+type BucketingStrategy interface {
+	// Bucket returns the bucketed value for a dimension.
+	// Symbolic dimensions (negative) are returned unchanged.
+	Bucket(dim int) int
+}
+
+// Pow2Bucketing rounds dimensions up to the nearest power of 2.
+// This is useful for reducing cache misses when batch sizes vary.
+// Example: dims 1,2,3,4,5 → 1,2,4,4,8
+type Pow2Bucketing struct{}
+
+// Bucket implements BucketingStrategy for Pow2Bucketing.
+func (Pow2Bucketing) Bucket(dim int) int {
+	if dim <= 0 {
+		return dim // Preserve symbolic or zero
+	}
+	// Round up to next power of 2
+	v := uint(dim - 1)
+	v |= v >> 1
+	v |= v >> 2
+	v |= v >> 4
+	v |= v >> 8
+	v |= v >> 16
+	return int(v + 1)
+}
+
+// LinearBucketing rounds dimensions to multiples of a step size.
+// Example with step=8: dims 1-8 → 8, dims 9-16 → 16
+type LinearBucketing struct {
+	Step int
+}
+
+// Bucket implements BucketingStrategy for LinearBucketing.
+func (b LinearBucketing) Bucket(dim int) int {
+	if dim <= 0 {
+		return dim
+	}
+	return ((dim + b.Step - 1) / b.Step) * b.Step
+}
+
+// NoBucketing returns dimensions unchanged.
+// This is the default behavior when pattern caching is disabled.
+type NoBucketing struct{}
+
+// Bucket implements BucketingStrategy for NoBucketing.
+func (NoBucketing) Bucket(dim int) int {
+	return dim
+}
+
 // Exec creates and executes computation graphs as needed based on the inputs shapes.
 //
 // It simplifies the process of executing a graph building
@@ -163,6 +214,9 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 // The usual solution is to use shapes with dimensions in a power scale (for instance, powers of 2) and
 // use padding and masking of tensors for unused slices of the input.
 //
+// Alternatively, you can use pattern caching with bucketing strategies to reduce the number of
+// unique compiled graphs. See SetPatternCaching, WithPow2Bucketing, and WithLinearBucketing.
+//
 // For safety concerns, there are a maximum number of different instantiations of the graph.
 // It can be set or disabled with SetMaxCache.
 type Exec struct {
@@ -186,6 +240,11 @@ type Exec struct {
 	// Protects cache structure.
 	cacheMu sync.Mutex
 	cache   []*execGraphCacheEntry
+
+	// Pattern caching options
+	enablePatternCaching bool
+	bucketingStrategy    BucketingStrategy
+	patternAxes          []int // Which axes to treat as dynamic (default: first axis only)
 }
 
 // execGraphCacheEntry: no hashing, just a simple list. This is faster
@@ -333,6 +392,47 @@ func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 	defer e.cacheMu.Unlock()
 	e.maxCacheSize = maxCacheSize
 	return e
+}
+
+// SetPatternCaching enables pattern-based caching with the given bucketing strategy.
+// When enabled, shapes are bucketed before cache lookup, reducing the number of
+// unique compiled graphs for variable batch/sequence sizes.
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) SetPatternCaching(strategy BucketingStrategy) *Exec {
+	e.enablePatternCaching = true
+	e.bucketingStrategy = strategy
+	return e
+}
+
+// SetDynamicAxes specifies which axes should be treated as dynamic for pattern caching.
+// Default is []int{0} (first axis only, typically batch dimension).
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) SetDynamicAxes(axes []int) *Exec {
+	e.patternAxes = axes
+	return e
+}
+
+// WithPow2Bucketing returns an Exec configured for power-of-2 bucketing on the batch axis.
+// This is useful for models with variable batch sizes.
+// Example: batch sizes 1,2,3,4,5 → compiled for sizes 1,2,4,4,8
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithPow2Bucketing() *Exec {
+	return e.SetPatternCaching(Pow2Bucketing{}).SetDynamicAxes([]int{0})
+}
+
+// WithLinearBucketing returns an Exec configured for linear bucketing with the given step.
+// Example with step=8: batch sizes 1-8 → compiled for size 8
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithLinearBucketing(step int) *Exec {
+	return e.SetPatternCaching(LinearBucketing{Step: step}).SetDynamicAxes([]int{0})
+}
+
+// CacheSize returns the current number of cached graphs.
+// This is useful for testing and debugging.
+func (e *Exec) CacheSize() int {
+	e.cacheMu.Lock()
+	defer e.cacheMu.Unlock()
+	return len(e.cache)
 }
 
 // SetSideParamsHook configures a function to be called just before executing a graph, so it can set extra parameters.
@@ -601,26 +701,77 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 	return entry
 }
 
+// applyBucketing applies the bucketing strategy to dynamic axes.
+func (e *Exec) applyBucketing(argsShapes []shapes.Shape) []shapes.Shape {
+	result := make([]shapes.Shape, len(argsShapes))
+	dynamicAxes := e.patternAxes
+	if len(dynamicAxes) == 0 {
+		dynamicAxes = []int{0} // Default: first axis
+	}
+
+	for i, shape := range argsShapes {
+		result[i] = shape.Clone()
+		for _, axis := range dynamicAxes {
+			adjustedAxis := axis
+			if adjustedAxis < 0 {
+				adjustedAxis = shape.Rank() + adjustedAxis
+			}
+			if adjustedAxis >= 0 && adjustedAxis < shape.Rank() {
+				result[i].Dimensions[adjustedAxis] = e.bucketingStrategy.Bucket(shape.Dimensions[adjustedAxis])
+			}
+		}
+	}
+	return result
+}
+
 // findOrCreateGraph returns the graph for the given arguments shapes: either from cache or by creating a new one.
 // if no cache entry exists.
 func (e *Exec) findOrCreateGraph(argsShapes []shapes.Shape) *execGraphCacheEntry {
 	e.cacheMu.Lock()
 	defer e.cacheMu.Unlock()
 
-LoopCache:
+	// Fast path: exact match (existing logic)
 	for _, entry := range e.cache {
 		if len(argsShapes) != len(entry.argsShapes) {
 			continue
 		}
+		exactMatch := true
 		for ii, shape := range argsShapes {
 			if !shape.Equal(entry.argsShapes[ii]) {
-				continue LoopCache
+				exactMatch = false
+				break
 			}
 		}
-		return entry
+		if exactMatch {
+			return entry
+		}
 	}
 
-	// No graph in cache, create a new one.
+	// Pattern caching path: bucket shapes and try pattern match
+	if e.enablePatternCaching && e.bucketingStrategy != nil {
+		bucketedShapes := e.applyBucketing(argsShapes)
+
+		for _, entry := range e.cache {
+			if len(bucketedShapes) != len(entry.argsShapes) {
+				continue
+			}
+			patternMatch := true
+			for ii, shape := range bucketedShapes {
+				if !shape.Equal(entry.argsShapes[ii]) {
+					patternMatch = false
+					break
+				}
+			}
+			if patternMatch {
+				return entry
+			}
+		}
+
+		// No match found, create graph for bucketed shapes
+		return e.createAndCacheGraph(bucketedShapes)
+	}
+
+	// No pattern caching, create graph for exact shapes
 	return e.createAndCacheGraph(argsShapes)
 }
 

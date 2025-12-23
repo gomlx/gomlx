@@ -350,6 +350,18 @@ func (g *Graph) registerNode(node *Node) (id NodeId) {
 	if g.traced {
 		node.trace = errors.New("Stack-trace")
 	}
+
+	// Capture input shapes for gradient computation with symbolic dimensions.
+	// This stores a snapshot of the input shapes at node creation time.
+	if len(node.inputNodes) > 0 {
+		node.capturedInputShapes = make([]shapes.Shape, len(node.inputNodes))
+		for i, input := range node.inputNodes {
+			if input != nil {
+				node.capturedInputShapes[i] = input.Shape()
+			}
+		}
+	}
+
 	return
 }
 

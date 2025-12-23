@@ -217,3 +217,139 @@ func TestGradientInverseRealFFT(t *testing.T) {
 			"an mean absolute error < 0.1, got %f instead", loss)
 }
 */
+
+// TestNextPowerOf2 indirectly tests nextPowerOf2 by testing RealFFTWithPadding output dimensions.
+func TestNextPowerOf2(t *testing.T) {
+	tests := []struct {
+		inputSize    int
+		expectedSize int
+	}{
+		{1, 1},
+		{2, 2},
+		{3, 4},
+		{4, 4},
+		{5, 8},
+		{7, 8},
+		{8, 8},
+		{9, 16},
+		{15, 16},
+		{16, 16},
+		{17, 32},
+		{100, 128},
+		{128, 128},
+		{129, 256},
+	}
+
+	backend := graphtest.BuildTestBackend()
+	for _, tt := range tests {
+		t.Run(string(rune(tt.inputSize)), func(t *testing.T) {
+			// Test indirectly through RealFFTWithPadding
+			exec := MustNewExec(backend, func(g *Graph) *Node {
+				x := Iota(g, shapes.Make(dtypes.Float32, tt.inputSize), -1)
+				return RealFFTWithPadding(x)
+			})
+			outputs := exec.MustExec()
+			output := outputs[0]
+			expectedFFTSize := tt.expectedSize/2 + 1
+			if output.Shape().Dimensions[0] != expectedFFTSize {
+				t.Errorf("RealFFTWithPadding(%d) output size = %d, want %d (from padded size %d)",
+					tt.inputSize, output.Shape().Dimensions[0], expectedFFTSize, tt.expectedSize)
+			}
+		})
+	}
+}
+
+func TestFFTWithPadding(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "FFTWithPadding pads to power of 2", func(g *Graph) (inputs, outputs []*Node) {
+		// Input size 100 -> padded to 128
+		x := Iota(g, shapes.Make(dtypes.Float32, 100), -1)
+		x = MulScalar(x, 2*math.Pi*10/100)
+		y := Sin(x)
+		yC := ConvertDType(y, dtypes.Complex64)
+		fft := FFTWithPadding(yC)
+		fft.AssertDims(128) // Padded to 128
+		return []*Node{y}, []*Node{fft}
+	}, nil, 0) // Just checking shape, not values
+
+	graphtest.RunTestGraphFn(t, "FFTWithPadding no padding for power of 2", func(g *Graph) (inputs, outputs []*Node) {
+		// Input size 128 -> no padding
+		x := Iota(g, shapes.Make(dtypes.Float32, 128), -1)
+		x = MulScalar(x, 2*math.Pi*10/128)
+		y := Sin(x)
+		yC := ConvertDType(y, dtypes.Complex64)
+		fft := FFTWithPadding(yC)
+		fft.AssertDims(128) // No padding
+		return []*Node{y}, []*Node{fft}
+	}, nil, 0)
+
+	graphtest.RunTestGraphFn(t, "FFTWithPadding with batch dimension", func(g *Graph) (inputs, outputs []*Node) {
+		// Input [32, 100] -> [32, 128]
+		x := Iota(g, shapes.Make(dtypes.Float32, 32, 100), -1)
+		x = MulScalar(x, 2*math.Pi*10/100)
+		y := Sin(x)
+		yC := ConvertDType(y, dtypes.Complex64)
+		fft := FFTWithPadding(yC, -1) // FFT on last axis
+		fft.AssertDims(32, 128)       // Batch preserved, FFT padded
+		return []*Node{y}, []*Node{fft}
+	}, nil, 0)
+}
+
+func TestRealFFTWithPadding(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "RealFFTWithPadding pads to power of 2", func(g *Graph) (inputs, outputs []*Node) {
+		// Input size 100 -> padded to 128 -> RealFFT -> 65 (128/2 + 1)
+		x := Iota(g, shapes.Make(dtypes.Float32, 100), -1)
+		x = MulScalar(x, 2*math.Pi*10/100)
+		y := Sin(x)
+		fft := RealFFTWithPadding(y)
+		fft.AssertDims(65) // 128/2 + 1
+		return []*Node{y}, []*Node{fft}
+	}, nil, 0)
+
+	graphtest.RunTestGraphFn(t, "RealFFTWithPadding no padding for power of 2", func(g *Graph) (inputs, outputs []*Node) {
+		// Input size 128 -> no padding -> 65
+		x := Iota(g, shapes.Make(dtypes.Float32, 128), -1)
+		x = MulScalar(x, 2*math.Pi*10/128)
+		y := Sin(x)
+		fft := RealFFTWithPadding(y)
+		fft.AssertDims(65) // 128/2 + 1
+		return []*Node{y}, []*Node{fft}
+	}, nil, 0)
+
+	graphtest.RunTestGraphFn(t, "RealFFTWithPadding with batch dimension", func(g *Graph) (inputs, outputs []*Node) {
+		// Input [32, 100] -> [32, 65] (batch preserved, FFT on last dim)
+		x := Iota(g, shapes.Make(dtypes.Float32, 32, 100), -1)
+		x = MulScalar(x, 2*math.Pi*10/100)
+		y := Sin(x)
+		fft := RealFFTWithPadding(y, -1) // FFT on last axis
+		fft.AssertDims(32, 65)           // Batch preserved, FFT output 65
+		return []*Node{y}, []*Node{fft}
+	}, nil, 0)
+
+	graphtest.RunTestGraphFn(t, "RealFFTWithPadding and InverseRealFFT roundtrip", func(g *Graph) (inputs, outputs []*Node) {
+		// Test that we can roundtrip with appropriate handling of padding
+		const originalSize = 100
+		x := Iota(g, shapes.Make(dtypes.Float32, originalSize), -1)
+		x = MulScalar(x, 2*math.Pi*10/originalSize)
+		y := Sin(x)
+		inputs = []*Node{y}
+
+		// Forward: 100 -> pad to 128 -> RealFFT -> 65
+		fft := RealFFTWithPadding(y)
+		fft.AssertDims(65)
+
+		// Inverse: 65 -> InverseRealFFT -> 128 (not original size!)
+		yHat := InverseRealFFT(fft)
+		yHat.AssertDims(128)
+
+		// Trim back to original size
+		yHat = Slice(yHat, AxisRangeFromStart(originalSize))
+		yHat.AssertDims(originalSize)
+
+		// Check roundtrip error
+		diff := ReduceAllSum(Abs(Sub(y, yHat)))
+		outputs = []*Node{diff}
+		return
+	}, []any{
+		float32(0.0),
+	}, 1.0)
+}

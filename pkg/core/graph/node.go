@@ -53,6 +53,11 @@ type Node struct {
 	// Notice that other static inputs to the node are registered in inputs
 	inputNodes []*Node
 
+	// capturedInputShapes stores the shapes of input nodes at the time this node
+	// was created. This is needed for gradient computation with symbolic dimensions,
+	// where we need the original input shapes to reconstruct gradients.
+	capturedInputShapes []shapes.Shape
+
 	// inputs need to be
 	inputs NodeInputs
 
@@ -239,4 +244,18 @@ func (n *Node) StopGradient() bool {
 // CustomGradient returns a registered custom gradient for the Node. See IdentityWithCustomGradient.
 func (n *Node) CustomGradient() VJP {
 	return n.customVJP
+}
+
+// GetCapturedInputShape returns the captured shape of the i-th input.
+// Returns an invalid shape if index is out of bounds or shapes weren't captured.
+func (n *Node) GetCapturedInputShape(i int) shapes.Shape {
+	if n.capturedInputShapes == nil || i < 0 || i >= len(n.capturedInputShapes) {
+		return shapes.Invalid()
+	}
+	return n.capturedInputShapes[i]
+}
+
+// NumCapturedInputs returns the number of captured input shapes.
+func (n *Node) NumCapturedInputs() int {
+	return len(n.capturedInputShapes)
 }

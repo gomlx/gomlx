@@ -305,3 +305,189 @@ func TestExecUnusedInput(t *testing.T) {
 	_, err = unusedInputFn.Exec(0)
 	require.NoError(t, err)
 }
+
+// TestBucketingStrategies tests the different bucketing strategies.
+func TestBucketingStrategies(t *testing.T) {
+	t.Run("Pow2Bucketing", func(t *testing.T) {
+		strategy := Pow2Bucketing{}
+		tests := []struct {
+			input int
+			want  int
+		}{
+			{0, 0},   // Preserve zero
+			{-1, -1}, // Preserve symbolic
+			{1, 1},
+			{2, 2},
+			{3, 4},
+			{4, 4},
+			{5, 8},
+			{8, 8},
+			{9, 16},
+			{16, 16},
+			{17, 32},
+		}
+		for _, tt := range tests {
+			got := strategy.Bucket(tt.input)
+			assert.Equal(t, tt.want, got, "Pow2Bucketing(%d)", tt.input)
+		}
+	})
+
+	t.Run("LinearBucketing", func(t *testing.T) {
+		strategy := LinearBucketing{Step: 8}
+		tests := []struct {
+			input int
+			want  int
+		}{
+			{0, 0},   // Preserve zero
+			{-1, -1}, // Preserve symbolic
+			{1, 8},
+			{7, 8},
+			{8, 8},
+			{9, 16},
+			{15, 16},
+			{16, 16},
+			{17, 24},
+		}
+		for _, tt := range tests {
+			got := strategy.Bucket(tt.input)
+			assert.Equal(t, tt.want, got, "LinearBucketing(%d)", tt.input)
+		}
+	})
+
+	t.Run("NoBucketing", func(t *testing.T) {
+		strategy := NoBucketing{}
+		tests := []int{0, -1, 1, 3, 5, 8, 16, 17}
+		for _, input := range tests {
+			got := strategy.Bucket(input)
+			assert.Equal(t, input, got, "NoBucketing(%d)", input)
+		}
+	})
+}
+
+// TestPatternCaching tests the pattern-based caching functionality.
+func TestPatternCaching(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+
+	sum := func(x *Node) *Node {
+		return ReduceAllSum(x)
+	}
+
+	t.Run("WithoutPatternCaching", func(t *testing.T) {
+		exec := MustNewExec(backend, sum).SetMaxCache(10)
+
+		// Each different batch size creates a new graph
+		for batchSize := 1; batchSize <= 5; batchSize++ {
+			input := xslices.SliceWithValue(batchSize, float32(1))
+			result := exec.MustExec(input)[0]
+			want := float32(batchSize)
+			got := tensors.ToScalar[float32](result)
+			assert.Equal(t, want, got, "sum with batch size %d", batchSize)
+		}
+
+		// Should have 5 cached graphs
+		assert.Equal(t, 5, exec.CacheSize(), "cache size without pattern caching")
+	})
+
+	t.Run("WithPow2Bucketing", func(t *testing.T) {
+		exec := MustNewExec(backend, sum).WithPow2Bucketing().SetMaxCache(10)
+
+		// Test batch sizes that should share graphs:
+		// 1 -> 1, 2 -> 2, 3-4 -> 4, 5-8 -> 8
+		for batchSize := 1; batchSize <= 8; batchSize++ {
+			input := xslices.SliceWithValue(batchSize, float32(1))
+			result := exec.MustExec(input)[0]
+			want := float32(batchSize)
+			got := tensors.ToScalar[float32](result)
+			assert.Equal(t, want, got, "sum with batch size %d", batchSize)
+		}
+
+		// Should have only 4 cached graphs: 1, 2, 4, 8
+		assert.Equal(t, 4, exec.CacheSize(), "cache size with Pow2 bucketing")
+	})
+
+	t.Run("WithLinearBucketing", func(t *testing.T) {
+		exec := MustNewExec(backend, sum).WithLinearBucketing(8).SetMaxCache(10)
+
+		// Test batch sizes 1-8 should all use the same graph (bucketed to 8)
+		for batchSize := 1; batchSize <= 8; batchSize++ {
+			input := xslices.SliceWithValue(batchSize, float32(1))
+			result := exec.MustExec(input)[0]
+			want := float32(batchSize)
+			got := tensors.ToScalar[float32](result)
+			assert.Equal(t, want, got, "sum with batch size %d", batchSize)
+		}
+
+		// Should have only 1 cached graph (all bucket to 8)
+		assert.Equal(t, 1, exec.CacheSize(), "cache size with Linear bucketing step=8")
+
+		// Test batch size 9 creates a new graph (bucketed to 16)
+		input := xslices.SliceWithValue(9, float32(1))
+		result := exec.MustExec(input)[0]
+		want := float32(9)
+		got := tensors.ToScalar[float32](result)
+		assert.Equal(t, want, got, "sum with batch size 9")
+
+		assert.Equal(t, 2, exec.CacheSize(), "cache size after batch size 9")
+	})
+
+	t.Run("ExactMatchStillWorks", func(t *testing.T) {
+		exec := MustNewExec(backend, sum).WithPow2Bucketing()
+
+		// First call with batch size 3
+		input1 := xslices.SliceWithValue(3, float32(1))
+		result1 := exec.MustExec(input1)[0]
+		assert.Equal(t, float32(3), tensors.ToScalar[float32](result1))
+
+		// Second call with same batch size should use exact match
+		input2 := xslices.SliceWithValue(3, float32(2))
+		result2 := exec.MustExec(input2)[0]
+		assert.Equal(t, float32(6), tensors.ToScalar[float32](result2))
+
+		// Should still have only 1 cached graph
+		assert.Equal(t, 1, exec.CacheSize(), "cache size with exact match")
+	})
+}
+
+// TestPatternCachingMultiDimensional tests pattern caching with multi-dimensional inputs.
+func TestPatternCachingMultiDimensional(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+
+	matrixSum := func(x *Node) *Node {
+		return ReduceAllSum(x)
+	}
+
+	t.Run("DynamicFirstAxis", func(t *testing.T) {
+		exec := MustNewExec(backend, matrixSum).WithPow2Bucketing()
+
+		// Test with different batch sizes but same feature dimension
+		for batchSize := 1; batchSize <= 5; batchSize++ {
+			input := make([][]float32, batchSize)
+			for i := range input {
+				input[i] = []float32{1, 2, 3}
+			}
+			result := exec.MustExec(input)[0]
+			want := float32(batchSize * 6) // sum of [1,2,3] = 6 per row
+			got := tensors.ToScalar[float32](result)
+			assert.Equal(t, want, got, "matrixSum with batch size %d", batchSize)
+		}
+
+		// Should have 3 cached graphs: 1, 2, 4
+		assert.Equal(t, 3, exec.CacheSize(), "cache size with variable batch sizes")
+	})
+
+	t.Run("DifferentSecondDimensionCreatesNewGraph", func(t *testing.T) {
+		exec := MustNewExec(backend, matrixSum).WithPow2Bucketing()
+
+		// Same batch size, different feature dimension
+		input1 := [][]float32{{1, 2}, {3, 4}}
+		result1 := exec.MustExec(input1)[0]
+		assert.Equal(t, float32(10), tensors.ToScalar[float32](result1))
+
+		input2 := [][]float32{{1, 2, 3}, {4, 5, 6}}
+		result2 := exec.MustExec(input2)[0]
+		assert.Equal(t, float32(21), tensors.ToScalar[float32](result2))
+
+		// Should have 2 cached graphs (different second dimension)
+		assert.Equal(t, 2, exec.CacheSize(), "cache size with different feature dimensions")
+	})
+}

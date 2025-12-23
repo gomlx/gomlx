@@ -408,6 +408,162 @@ func TestArgMinMaxOp(t *testing.T) {
 	}, "Error Case 3 Failed: Negative axis")
 }
 
+func TestBinaryOpSymbolic(t *testing.T) {
+	// Test symbolic dimension handling in binary operations
+
+	// Same symbolic dimension - should be preserved
+	shape1 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 3, 4)
+	shape2 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 3, 4)
+	output, err := BinaryOp(OpTypeAdd, shape1, shape2)
+	require.NoError(t, err)
+	require.Equal(t, int(shapes.DimBatch), output.Dimensions[0])
+	require.Equal(t, 3, output.Dimensions[1])
+	require.Equal(t, 4, output.Dimensions[2])
+
+	// Symbolic vs static broadcasting (with 1)
+	shape3 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 1, 4)
+	shape4 := shapes.Make(F32, 1, 3, 4)
+	output, err = BinaryOp(OpTypeMul, shape3, shape4)
+	require.NoError(t, err)
+	require.Equal(t, int(shapes.DimBatch), output.Dimensions[0]) // Symbolic preserved when other is 1
+	require.Equal(t, 3, output.Dimensions[1])
+	require.Equal(t, 4, output.Dimensions[2])
+
+	// Symbolic vs concrete > 1
+	shape5 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 3, 4)
+	shape6 := shapes.Make(F32, 8, 3, 4)
+	output, err = BinaryOp(OpTypeAdd, shape5, shape6)
+	require.NoError(t, err)
+	require.Equal(t, 8, output.Dimensions[0]) // Concrete > 1 wins
+	require.Equal(t, 3, output.Dimensions[1])
+
+	// Two different symbolic dimensions
+	shape7 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 3)
+	shape8 := shapes.MakeDynamic(F32, int(shapes.DimSeqLen), 3)
+	output, err = BinaryOp(OpTypeAdd, shape7, shape8)
+	require.NoError(t, err)
+	require.Equal(t, int(shapes.DimUnknown), output.Dimensions[0]) // Different symbols -> unknown
+
+	// Broadcasting with symbolic dimensions
+	shape9 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 1, 4)
+	shape10 := shapes.MakeDynamic(F32, 1, 3, 4)
+	output, err = BinaryOp(OpTypeMul, shape9, shape10)
+	require.NoError(t, err)
+	require.Equal(t, int(shapes.DimBatch), output.Dimensions[0]) // Symbolic wins over 1
+	require.Equal(t, 3, output.Dimensions[1])
+	require.Equal(t, 4, output.Dimensions[2])
+}
+
+func TestComparisonOpSymbolic(t *testing.T) {
+	// Comparison operations should handle symbolic dimensions and return Bool dtype
+	shape1 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 3, 4)
+	shape2 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 3, 4)
+	output, err := ComparisonOp(OpTypeGreaterThan, shape1, shape2)
+	require.NoError(t, err)
+	require.Equal(t, Bool, output.DType)
+	require.Equal(t, int(shapes.DimBatch), output.Dimensions[0])
+	require.Equal(t, 3, output.Dimensions[1])
+	require.Equal(t, 4, output.Dimensions[2])
+}
+
+func TestReshapeOpSymbolic(t *testing.T) {
+	// Reshape with symbolic dimensions should skip size validation
+	shape1 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 10)
+	newDims := []int{int(shapes.DimBatch), 5, 2}
+	output, err := ReshapeOp(shape1, newDims)
+	require.NoError(t, err)
+	require.Equal(t, int(shapes.DimBatch), output.Dimensions[0])
+	require.Equal(t, 5, output.Dimensions[1])
+	require.Equal(t, 2, output.Dimensions[2])
+
+	// Reshape from static to symbolic
+	shape2 := shapes.Make(F32, 8, 10)
+	newDims2 := []int{int(shapes.DimBatch), 10}
+	output, err = ReshapeOp(shape2, newDims2)
+	require.NoError(t, err)
+	require.Equal(t, int(shapes.DimBatch), output.Dimensions[0])
+	require.Equal(t, 10, output.Dimensions[1])
+
+	// Static reshape should still validate sizes
+	shape3 := shapes.Make(F32, 4, 5)
+	newDims3 := []int{10, 3}
+	_, err = ReshapeOp(shape3, newDims3)
+	require.Error(t, err) // Size mismatch: 20 != 30
+}
+
+func TestTransposeOpSymbolic(t *testing.T) {
+	// Transpose should preserve symbolic dimensions in permuted positions
+	shape := shapes.MakeDynamic(F32, int(shapes.DimBatch), 3, 4)
+	permutations := []int{2, 0, 1}
+	output, err := TransposeOp(shape, permutations)
+	require.NoError(t, err)
+	require.Equal(t, 4, output.Dimensions[0])
+	require.Equal(t, int(shapes.DimBatch), output.Dimensions[1])
+	require.Equal(t, 3, output.Dimensions[2])
+}
+
+func TestReduceOpSymbolic(t *testing.T) {
+	// Reduce operations should remove axes, including symbolic ones
+	shape := shapes.MakeDynamic(F32, int(shapes.DimBatch), 10, 20)
+
+	// Reduce along batch axis
+	output, err := ReduceOp(shape, []int{0})
+	require.NoError(t, err)
+	require.Equal(t, 2, output.Rank())
+	require.Equal(t, 10, output.Dimensions[0])
+	require.Equal(t, 20, output.Dimensions[1])
+
+	// Reduce along static axis
+	output, err = ReduceOp(shape, []int{1})
+	require.NoError(t, err)
+	require.Equal(t, 2, output.Rank())
+	require.Equal(t, int(shapes.DimBatch), output.Dimensions[0])
+	require.Equal(t, 20, output.Dimensions[1])
+}
+
+func TestConcatenateOpSymbolic(t *testing.T) {
+	// Concatenate symbolic dimensions results in unknown
+	shape1 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 3, 4)
+	shape2 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 3, 4)
+	output, err := ConcatenateOp([]shapes.Shape{shape1, shape2}, 0)
+	require.NoError(t, err)
+	require.Equal(t, int(shapes.DimUnknown), output.Dimensions[0]) // Unknown batch after concat
+	require.Equal(t, 3, output.Dimensions[1])
+	require.Equal(t, 4, output.Dimensions[2])
+
+	// Concatenate static with symbolic
+	shape3 := shapes.Make(F32, 5, 3, 4)
+	shape4 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 3, 4)
+	output, err = ConcatenateOp([]shapes.Shape{shape3, shape4}, 0)
+	require.NoError(t, err)
+	require.Equal(t, int(shapes.DimUnknown), output.Dimensions[0]) // One symbolic -> unknown
+
+	// Concatenate along non-symbolic axis
+	shape5 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 3, 4)
+	shape6 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 5, 4)
+	output, err = ConcatenateOp([]shapes.Shape{shape5, shape6}, 1)
+	require.NoError(t, err)
+	require.Equal(t, int(shapes.DimBatch), output.Dimensions[0]) // Batch preserved
+	require.Equal(t, 8, output.Dimensions[1])                     // 3 + 5
+	require.Equal(t, 4, output.Dimensions[2])
+
+	// Non-concatenation axes must match
+	shape7 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 3)
+	shape8 := shapes.MakeDynamic(F32, int(shapes.DimSeqLen), 3)
+	output, err = ConcatenateOp([]shapes.Shape{shape7, shape8}, 1)
+	require.NoError(t, err)
+	// Different symbolic dims on non-concat axis should be allowed (they match)
+	require.Equal(t, 6, output.Dimensions[1]) // 3 + 3
+
+	// Prefer concrete over symbolic on non-concat axes
+	shape9 := shapes.MakeDynamic(F32, int(shapes.DimBatch), 3)
+	shape10 := shapes.Make(F32, 8, 3)
+	output, err = ConcatenateOp([]shapes.Shape{shape9, shape10}, 1)
+	require.NoError(t, err)
+	require.Equal(t, 8, output.Dimensions[0]) // Concrete preferred
+	require.Equal(t, 6, output.Dimensions[1]) // 3 + 3
+}
+
 func TestReduceWindowOp(t *testing.T) {
 	type testCase struct {
 		name                 string
