@@ -319,7 +319,7 @@ func UnaryOp(opType backends.OpType, operand shapes.Shape) (output shapes.Shape,
 
 // WhereOp returns the shape resulting from the Where operation.
 //
-// Shape constraints for the operation (following StableHLO select specification):
+// Shape constraints for the operation:
 //
 //  1. The onTrue and onFalse must have the exact same dtype.
 //  2. The onTrue and onFalse must have the exact same shape, or one can be a scalar.
@@ -334,7 +334,7 @@ func WhereOp(condition, onTrue, onFalse shapes.Shape) (output shapes.Shape, err 
 		return
 	}
 	if onTrue.DType != onFalse.DType {
-		err = errors.Errorf("Where() requires onTrue and onFalse to have matching dtypes (per StableHLO spec): got onTrue=%s, onFalse=%s. Use ConvertDType to convert to a common dtype first",
+		err = errors.Errorf("Where() requires onTrue and onFalse to have matching dtypes: got onTrue=%s, onFalse=%s. Use ConvertDType to convert to a common dtype first",
 			onTrue.DType, onFalse.DType)
 		return
 	}
