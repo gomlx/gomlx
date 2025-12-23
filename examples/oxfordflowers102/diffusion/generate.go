@@ -141,8 +141,8 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 	var jsTemplate = must.M1(template.New("PlotModelEvolution").Parse(`
 	<canvas id="canvas_{{.Id}}" height="{{.Size}}px" width="{{.Width}}px"></canvas>
 	<script>
-	var canvas_{{.Id}} = document.getElementById("canvas_{{.Id}}"); 
-	var ctx_{{.Id}} = canvas_{{.Id}}.getContext("2d"); 
+	var canvas_{{.Id}} = document.getElementById("canvas_{{.Id}}");
+	var ctx_{{.Id}} = canvas_{{.Id}}.getContext("2d");
 	var currentFrame_{{.Id}} = 0;
 	var frameRate_{{.Id}} = {{.FrameRateMs}};
 	var imagePaths_{{.Id}} = [{{range .Images}}
@@ -162,7 +162,7 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 		}
 		images_{{.Id}}.push(images);
 	}
-	
+
 	function animate_{{.Id}}() {
 		var Context = ctx_{{.Id}};
 		var canvas = canvas_{{.Id}};
@@ -210,17 +210,24 @@ func DenoiseStepGraph(ctx *context.Context, noisyImages, diffusionTime, nextDiff
 // Plotting results only work if in a Jupyter (with GoNB kernel) notebook.
 func (c *Config) DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSteps int, displayEveryNSteps int) {
 	if c.Checkpoint == nil {
-		exceptions.Panicf("DisplayImagesAcrossDiffusionSteps requires a model loaded from a checkpoint, see Config.AttachCheckpoint.")
+		exceptions.Panicf(
+			"DisplayImagesAcrossDiffusionSteps requires a model loaded from a checkpoint, see Config.AttachCheckpoint.",
+		)
 	}
 	ctx := c.Context.Checked(false)
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	noise := c.GenerateNoise(numImages)
 	flowerIds := c.GenerateFlowerIds(numImages)
 
 	generator := c.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
 	denoisedImages, diffusionSteps, diffusionTimes := generator.GenerateEveryN(displayEveryNSteps)
 
-	fmt.Printf("DisplayImagesAcrossDiffusionSteps(%d images, %d steps): noise.shape=%s\n", numImages, numDiffusionSteps, noise.Shape())
+	fmt.Printf(
+		"DisplayImagesAcrossDiffusionSteps(%d images, %d steps): noise.shape=%s\n",
+		numImages,
+		numDiffusionSteps,
+		noise.Shape(),
+	)
 	fmt.Printf("\tModel #params:\t%d\n", ctx.NumParameters())
 	fmt.Printf("\t Model memory:\t%s\n", fsutil.ByteCountIEC(ctx.Memory()))
 	gonbui.DisplayHtml("<p><b>Noise</b></p>")
@@ -239,7 +246,13 @@ func (c *Config) DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSt
 //
 // If `cacheKey` empty, cache is by-passed. Otherwise, try to load images from cache first if available,
 // or save generated images in cache for future use.
-func (c *Config) SliderDiffusionSteps(cacheKey string, ctx *context.Context, numImages int, numDiffusionSteps int, htmlId string) *xsync.Latch {
+func (c *Config) SliderDiffusionSteps(
+	cacheKey string,
+	ctx *context.Context,
+	numImages int,
+	numDiffusionSteps int,
+	htmlId string,
+) *xsync.Latch {
 	// Generate images.
 	type ImagesAndDiffusions struct {
 		Images    []string
@@ -269,7 +282,12 @@ func (c *Config) SliderDiffusionSteps(cacheKey string, ctx *context.Context, num
 	// Create HTML content and containers.
 	denoiseHtmlId := "denoise_" + gonbui.UniqueId()
 	dom.Append(
-		htmlId, fmt.Sprintf(`Denoising to flowers: &nbsp;<span id="%s" style="font-family: monospace; font-style: italic; font-size: small; border: 1px solid; border-style: inset; padding-right:5px;"> </span><br/>`, denoiseHtmlId))
+		htmlId,
+		fmt.Sprintf(
+			`Denoising to flowers: &nbsp;<span id="%s" style="font-family: monospace; font-style: italic; font-size: small; border: 1px solid; border-style: inset; padding-right:5px;"> </span><br/>`,
+			denoiseHtmlId,
+		),
+	)
 	slider := widgets.Slider(0, numDiffusionSteps, 0).AppendTo(htmlId).Done()
 	plotId := "plot_" + gonbui.UniqueId()
 	dom.Append(htmlId, fmt.Sprintf(`<div id="%s"></div>`, plotId))
@@ -299,9 +317,13 @@ func (c *Config) SliderDiffusionSteps(cacheKey string, ctx *context.Context, num
 // flower type.
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
-func (c *Config) GenerateImagesOfFlowerType(numImages int, flowerType int32, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
+func (c *Config) GenerateImagesOfFlowerType(
+	numImages int,
+	flowerType int32,
+	numDiffusionSteps int,
+) (predictedImages *tensors.Tensor) {
 	ctx := c.Context
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	noise := c.GenerateNoise(numImages)
 	flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 	generator := c.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
@@ -364,10 +386,10 @@ func (c *Config) DropdownFlowerTypes(cacheKey string, numImages, numDiffusionSte
 func (c *Config) GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	ctx := c.Context
 	numImages := flowers.NumLabels
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	imageSize := c.ImageSize
 	noise := MustNewExec(c.Backend, func(g *Graph) *Node {
-		state := Const(g, RngState())
+		state := RNGStateForGraph(g)
 		_, noise := RandomNormal(state, shapes.Make(c.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise
@@ -437,10 +459,10 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tens
 		nextDiffusionTime := math.Max(diffusionTime-stepSize, 0)
 		parts := g.diffusionStepExec.MustExec(noisyImages, diffusionTime, nextDiffusionTime, g.flowerIds)
 		if imagesBatch != nil {
-			imagesBatch.FinalizeAll() // Immediate release of (GPU) memory for intermediary results.
+			imagesBatch.MustFinalizeAll() // Immediate release of (GPU) memory for intermediary results.
 		}
 		if noisyImages != nil && step > 0 {
-			noisyImages.FinalizeAll() // Immediate release of (GPU) memory for intermediary results.
+			noisyImages.MustFinalizeAll() // Immediate release of (GPU) memory for intermediary results.
 		}
 		imagesBatch, noisyImages = parts[0], parts[1]
 		if (n > 0 && step%n == 0) || step == g.numDiffusionSteps-1 {
@@ -464,7 +486,7 @@ func (g *ImagesGenerator) Generate() (batchedImages *tensors.Tensor) {
 // GenerateNoise generates random noise that can be used to generate images.
 func (c *Config) GenerateNoise(numImages int) *tensors.Tensor {
 	return MustNewExec(c.Backend, func(g *Graph) *Node {
-		state := Const(g, RngState())
+		state := RNGStateForGraph(g)
 		_, noise := RandomNormal(state, shapes.Make(c.DType, numImages, c.ImageSize, c.ImageSize, 3))
 		return noise
 	}).MustExec1()
@@ -534,7 +556,7 @@ func (kg *KidGenerator) Eval() (metric *tensors.Tensor) {
 
 		datasetImages := inputs[0]
 		if metric != nil {
-			metric.FinalizeAll()
+			metric.MustFinalizeAll()
 		}
 		metric = kg.evalExec.MustExec(generatedImages, datasetImages)[0]
 	}

@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -70,6 +70,7 @@ func TestTrainingModelGraph(t *testing.T) {
 	}
 
 	config := getTestConfig()
+	config.NoNormalization = true
 	ctx := config.Context
 	g := NewGraph(config.Backend, "test")
 
@@ -95,9 +96,10 @@ func TestImagesGenerator(t *testing.T) {
 	numDiffusionSteps := 3
 
 	config := getTestConfig()
+	config.NoNormalization = true
 	g := NewGraph(config.Backend, "test")
 
-	// Context.RngStateReset() --> to truly randomize each run uncomment this.
+	// Context.RNGStateReset() --> to truly randomize each run uncomment this.
 	_ = getZeroPredictions(config, g, 2) // Batch size won't matter, we only call this to create the model weights.
 	noise := config.GenerateNoise(numImages)
 	flowerIds := config.GenerateFlowerIds(numImages)

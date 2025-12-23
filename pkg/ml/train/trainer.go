@@ -25,9 +25,12 @@ package train
 import (
 	"fmt"
 	"io"
+	"iter"
+	"slices"
 
 	"github.com/gomlx/gomlx/backends"
-	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -68,6 +71,9 @@ type Trainer struct {
 	modelFn   ModelFn
 	lossFn    LossFn
 	optimizer optimizers.Interface
+
+	// Distribute execution:
+	deviceAssignment []backends.DeviceNum // Optional.
 
 	// maxExecutors to cache. It will fail after that. One executor is created
 	// per `spec` value, so this is the same as the max number of different `spec`
@@ -188,7 +194,10 @@ func NewTrainer(backend backends.Backend, ctx *context.Context,
 
 	// Delete variables that should forcefully be reinitialized every time the model is retrained.
 	optScope := ctx.In(optimizers.Scope).Scope()
-	ctx.DeleteVariable(optScope, optimizers.ParamLearningRate)
+	err := ctx.DeleteVariable(optScope, optimizers.ParamLearningRate)
+	if err != nil {
+		panic(err)
+	}
 
 	// Create a context executor for TrainStep. Automatically include batch loss and moving average loss metrics.
 	numMetrics := len(trainMetrics) + 3
@@ -211,10 +220,21 @@ func NewTrainer(backend backends.Backend, ctx *context.Context,
 		}
 		return loss
 	}
-	lossAndMetrics = append(lossAndMetrics, metrics.NewBaseMetric("Batch Loss+Regularization", "loss+", metrics.LossMetricType, batchLossFn, nil))
-	lossAndMetrics = append(lossAndMetrics,
-		metrics.NewExponentialMovingAverageMetric("Moving Average Loss+Regularization", "~loss+", metrics.LossMetricType,
-			batchLossFn, nil, 0.01))
+	lossAndMetrics = append(
+		lossAndMetrics,
+		metrics.NewBaseMetric("Batch Loss+Regularization", "loss+", metrics.LossMetricType, batchLossFn, nil),
+	)
+	lossAndMetrics = append(
+		lossAndMetrics,
+		metrics.NewExponentialMovingAverageMetric(
+			"Moving Average Loss+Regularization",
+			"~loss+",
+			metrics.LossMetricType,
+			batchLossFn,
+			nil,
+			0.01,
+		),
+	)
 	if r.lossFn != nil {
 		lossAndMetrics = append(lossAndMetrics,
 			metrics.NewExponentialMovingAverageMetric("Moving Average Loss", "~loss", metrics.LossMetricType,
@@ -227,7 +247,10 @@ func NewTrainer(backend backends.Backend, ctx *context.Context,
 	// Create a context executor for EvalStep. Automatically include the mean loss metric as the first eval metric.
 	numMetrics = len(evalMetrics) + 2
 	lossAndMetrics = make([]metrics.Interface, 0, numMetrics)
-	lossAndMetrics = append(lossAndMetrics, metrics.NewMeanMetric("Mean Loss+Regularization", "#loss+", metrics.LossMetricType, batchLossFn, nil))
+	lossAndMetrics = append(
+		lossAndMetrics,
+		metrics.NewMeanMetric("Mean Loss+Regularization", "#loss+", metrics.LossMetricType, batchLossFn, nil),
+	)
 	if r.lossFn != nil {
 		lossAndMetrics = append(lossAndMetrics, metrics.NewMeanMetric("Mean Loss", "#loss", metrics.LossMetricType,
 			lossNoRegularizationFn, nil))
@@ -237,35 +260,51 @@ func NewTrainer(backend backends.Backend, ctx *context.Context,
 	return r
 }
 
-// enumerateExecs enumerates all executors maintained by the Trainer and call fn on them.
-func (r *Trainer) enumerateExecs(fn func(exec *context.Exec)) {
-	for _, exec := range r.trainStepExecMap {
-		fn(exec)
+// WithDeviceAssignemnt sets the backend device assignment to use.
+//
+// This works for both distributed and normal (single device) training. The later uses only one device where to
+// execute the training/evaluation steps.
+//
+// A nil value (the default) is valid, in which case it uses the backend's default, which is usually simply the
+// sequential devices starting from 0.
+func (r *Trainer) WithDeviceAssignment(deviceAssignment ...backends.DeviceNum) *Trainer {
+	if deviceAssignment == nil {
+		r.deviceAssignment = nil
+		return r
 	}
-	for _, exec := range r.evalStepExecMap {
-		fn(exec)
-	}
-	for _, exec := range r.batchNormStepExecMap {
-		fn(exec)
-	}
-	for _, exec := range r.accumulateGradientsExecMap {
-		fn(exec)
-	}
-	for _, exec := range r.accumulateGradientsAndApplyExecMap {
-		fn(exec)
-	}
+	r.deviceAssignment = slices.Clone(deviceAssignment)
+	return r
 }
 
-// InDevice sets the device num to be used when executing graphs.
-// TODO: Add support for training across multiple devices -- maybe a different Trainer for that, in principle should be simple.
-// This should be called before any invocations of TrainStep.
-// It returns a reference to itself so calls can be cascaded.
-func (r *Trainer) InDevice(deviceNum backends.DeviceNum) *Trainer {
-	r.deviceNum = deviceNum
-	r.enumerateExecs(func(exec *context.Exec) {
-		exec.InDevice(deviceNum)
-	})
-	return r
+// iterateExecs returns an iterator over all executors maintained by the Trainer.
+func (r *Trainer) iterateExecs() iter.Seq[*context.Exec] {
+	return func(yield func(*context.Exec) bool) {
+		for _, exec := range r.trainStepExecMap {
+			if !yield(exec) {
+				return
+			}
+		}
+		for _, exec := range r.evalStepExecMap {
+			if !yield(exec) {
+				return
+			}
+		}
+		for _, exec := range r.batchNormStepExecMap {
+			if !yield(exec) {
+				return
+			}
+		}
+		for _, exec := range r.accumulateGradientsExecMap {
+			if !yield(exec) {
+				return
+			}
+		}
+		for _, exec := range r.accumulateGradientsAndApplyExecMap {
+			if !yield(exec) {
+				return
+			}
+		}
+	}
 }
 
 // Context returns the current Context. See SetContext to change it.
@@ -281,9 +320,9 @@ func (r *Trainer) Context() *context.Context {
 // It returns a reference to itself so calls can be cascaded.
 func (r *Trainer) SetContext(ctx *context.Context) *Trainer {
 	r.context = ctx
-	r.enumerateExecs(func(exec *context.Exec) {
+	for exec := range r.iterateExecs() {
 		exec.SetContext(ctx)
-	})
+	}
 	return r
 }
 
@@ -310,12 +349,13 @@ func (r *Trainer) EvalMetrics() []metrics.Interface { return r.evalMetrics }
 // createExecutor (train or eval) for the given spec. Returns an error if it failed for
 // any reason, including exceeding maxExecutors.
 func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
-	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node)) *context.Exec {
+	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node)) (
+	*context.Exec, error) {
 	numExecs := len(r.trainStepExecMap) + len(r.evalStepExecMap) +
 		len(r.accumulateGradientsExecMap) + len(r.accumulateGradientsAndApplyExecMap) +
 		len(r.batchNormStepExecMap)
 	if numExecs > r.maxExecutors {
-		Panicf("Max number of executors reached: one is created for each "+
+		return nil, errors.Errorf("Max number of executors reached: one is created for each "+
 			"different value of `spec` returned by Dataset, triggering a different JIT-compiled "+
 			"computation graph. Probably you want to limit the number of different datasets configuration "+
 			"(spec) or shapes supported, or increase the allowed number of executors (see Train.WithMaxExecutors) "+
@@ -329,12 +369,19 @@ func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
 	if _, found := spec.(fmt.Stringer); found {
 		trainerName = fmt.Sprintf("Trainer: spec=%s", spec)
 	}
-	return context.MustNewExec(r.backend, r.context,
+	exec, err := context.NewExec(r.backend, r.context,
 		func(ctx *context.Context, inputsAndLabels []*graph.Node) (metrics []*graph.Node) {
 			inputs := inputsAndLabels[:inputsLen]
 			labels := inputsAndLabels[inputsLen:]
 			return graphFn(spec, ctx, inputs, labels)
-		}).WithName(trainerName)
+		})
+	if r.deviceAssignment != nil {
+		exec = exec.WithDeviceAssignment(r.deviceAssignment)
+	}
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed to create executor for spec %+v", spec)
+	}
+	return exec.WithName(trainerName), nil
 }
 
 // lossFnScalarLoss calls `r.lossFn` and [ReduceAllMean] to a scalar.
@@ -348,7 +395,7 @@ func (r *Trainer) lossFnScalarLoss(_ *context.Context, labels, predictions []*gr
 }
 
 // trainStepGraph builds the graph to train one step. It is called by the context executor (`r.trainStepExecMap`)
-// everytime a graph needs to be built (typically for new batch sizes).
+// every time a graph needs to be built (typically for new batch sizes).
 func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 	g := inputs[0].Graph()
 	ctx.SetTraining(g, true) // Some layers behave differently if in training.
@@ -364,8 +411,9 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 	// Store total loss as a variable, so it can be used by metrics.
 	loss := GetLosses(ctx, g)
 	if loss == nil {
-		Panicf("no loss function defined (or it returned nil), and no loss set with AddLoss(), there is nothing to optimize!?")
-		panic(nil) // Disable linter error.
+		exceptions.Panicf(
+			"no loss function defined (or it returned nil), and no loss set with AddLoss(), there is nothing to optimize!?",
+		)
 	}
 
 	// Optimizer: it will create graph for gradient.
@@ -387,20 +435,24 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 // plus do standard checks on inputs and labels.
 func (r *Trainer) callGraphFn(
 	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node),
-	graphType GraphType, execMap map[any]*context.Exec, spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
+	graphType GraphType,
+	execMap map[any]*context.Exec,
+	spec any,
+	inputs, labels []*tensors.Tensor,
+) (metrics []*tensors.Tensor, err error) {
 	if len(inputs) == 0 {
-		Panicf("there are no inputs, at least one is required")
+		return nil, errors.New("there are no inputs, at least one is required")
 	}
 	if lengths, found := r.inputsAndLabelsLenPerSpec[spec]; found {
 		if len(inputs) != lengths[0] || len(labels) != lengths[1] {
-			Panicf("dataset yields inputs (%d) and labels (%d) with lengths different "+
+			return nil, errors.Errorf("dataset yields inputs (%d) and labels (%d) with lengths different "+
 				"than with previous call (%d and %d) for the given spec %+v", len(inputs), len(labels),
 				lengths[0], lengths[1], spec)
 		}
 	}
 	for ii, input := range inputs {
 		if input == nil {
-			Panicf("inputs[%d] is nil!?", ii)
+			return nil, errors.Errorf("inputs[%d] is nil!?", ii)
 		}
 	}
 
@@ -417,7 +469,10 @@ func (r *Trainer) callGraphFn(
 	// Get the executor for the graphType and input spec.
 	exec, found := execMap[spec]
 	if !found {
-		exec = r.createExecutor(spec, len(inputs), len(labels), graphFn)
+		exec, err = r.createExecutor(spec, len(inputs), len(labels), graphFn)
+		if err != nil {
+			return nil, err
+		}
 		execMap[spec] = exec
 		for _, handler := range r.onExecCreationHandlers {
 			handler(exec, graphType) // Call the handler for training.
@@ -425,15 +480,131 @@ func (r *Trainer) callGraphFn(
 	}
 
 	// Collect metrics:
-	var err error
 	metrics, err = exec.Exec(inputsAndLabels...)
 	if err != nil {
-		panic(errors.WithMessage(err, "failed to execute train/eval step"))
+		return nil, errors.WithMessage(err, "failed to execute train/eval step")
 	}
 	if len(metrics) == 0 {
-		Panicf("no metrics calculate metric in step")
+		return nil, errors.New("no metrics calculate metric in step")
 	}
-	return
+	return metrics, nil
+}
+
+// distributedCallGraphFn for DistributedTrainStep or DistributedEvalStep makes sure the builds the arguments for
+// execution, plus do standard checks on inputs and labels.
+//
+// Notice that the returned metrics are not distributed.
+func (r *Trainer) distributedCallGraphFn(
+	strategy distributed.Strategy,
+	deviceAssignment []backends.DeviceNum,
+	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node),
+	graphType GraphType,
+	execMap map[any]*context.Exec,
+	spec any,
+	inputs, labels []*distributed.Tensor,
+) (metrics []*tensors.Tensor, err error) {
+	if len(inputs) == 0 {
+		return nil, errors.New("there are no inputs, at least one is required")
+	}
+	if lengths, found := r.inputsAndLabelsLenPerSpec[spec]; found {
+		if len(inputs) != lengths[0] || len(labels) != lengths[1] {
+			return nil, errors.Errorf("dataset yields inputs (%d) and labels (%d) with lengths different "+
+				"than with previous call (%d and %d) for the given spec %+v", len(inputs), len(labels),
+				lengths[0], lengths[1], spec)
+		}
+	}
+	for ii, input := range inputs {
+		if input == nil {
+			return nil, errors.Errorf("inputs[%d] is nil!?", ii)
+		}
+	}
+
+	// Create arguments as []any and run trainStepExecMap.Exec().
+	numParams := len(inputs) + len(labels)
+	inputsAndLabels := make([]any, 0, numParams)
+	for _, t := range inputs {
+		inputsAndLabels = append(inputsAndLabels, t)
+	}
+	for _, t := range labels {
+		inputsAndLabels = append(inputsAndLabels, t)
+	}
+
+	// Get the executor for the graphType and input spec.
+	exec, found := execMap[spec]
+	if !found {
+		// Set up of the executor and compilation of the computation graph: this happens only
+		// once for each inputs/labels shape combination.
+		exec, err = r.createExecutor(spec, len(inputs), len(labels), graphFn)
+		if err != nil {
+			return nil, err
+		}
+
+		// Find meshes and aggregate all input ShardingSpec.
+		var meshes []*distributed.DeviceMesh
+		inputShardingSpecs := make([]*distributed.ShardingSpec, 0, numParams)
+		for _, inputAny := range inputsAndLabels {
+			input := inputAny.(*distributed.Tensor)
+			shardingSpec := input.ShardingSpec()
+			mesh := shardingSpec.Mesh
+			if slices.Index(meshes, mesh) == -1 {
+				meshes = append(meshes, mesh)
+			}
+			inputShardingSpecs = append(inputShardingSpecs, shardingSpec)
+		}
+		if len(meshes) == 0 {
+			return nil, errors.New("missing a mesh definition from the inputs/labels (likely from a DistributedDataset)")
+		}
+		replicatedSpec := distributed.NewReplicatedShardingSpec(meshes[0])
+
+		// Setup exec for distributed execution:
+		switch strategy {
+		case distributed.AutoSharding:
+			exec = exec.AutoSharding(meshes...).
+				WithInputShardingSpecs(inputShardingSpecs...).
+				WithOutputShardingSpecs(replicatedSpec).
+				WithDeviceAssignment(deviceAssignment)
+		case distributed.SPMD:
+			if len(meshes) > 1 {
+				return nil, errors.Errorf("the distributed strategy SPMD only accepts one mesh for sharding the inputs, got %d",
+					len(meshes))
+			}
+			exec = exec.SPMD(meshes[0]).
+				WithInputShardingSpecs(inputShardingSpecs...).
+				WithOutputShardingSpecs(replicatedSpec).
+				WithDeviceAssignment(deviceAssignment)
+		case distributed.None:
+			return nil, errors.New("cannot do a distributed train/eval step if the strategy is None -- try distributed.AutoSharding?")
+		}
+
+		// Register new executor.
+		execMap[spec] = exec
+		for _, handler := range r.onExecCreationHandlers {
+			handler(exec, graphType) // Call the handler for training.
+		}
+	}
+
+	// Execute, it returns the distributed metrics:
+	distributedMetrics, err := exec.DistributedExec(inputsAndLabels...)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to execute train/eval step")
+	}
+	if len(distributedMetrics) == 0 {
+		return nil, errors.New("no metrics calculate metric in step")
+	}
+
+	// Collect the metrics from the first device:
+	metrics = make([]*tensors.Tensor, len(distributedMetrics))
+	for i, distributedMetric := range distributedMetrics {
+		metrics[i], err = distributedMetric.Shards()[0].LocalClone()
+		if err != nil {
+			return nil, errors.WithMessagef(err, "failed to clone metric %d from distributed metric", i)
+		}
+		err = distributedMetric.Finalize()
+		if err != nil {
+			return nil, errors.WithMessagef(err, "failed to finalize distributed metric %d", i)
+		}
+	}
+	return metrics, nil
 }
 
 // ResetComputationGraphs can be used during training in between steps to force the recreation of the computation graphs.
@@ -479,9 +650,7 @@ func (r *Trainer) metricsUpdatesGraph(ctx *context.Context, labels, predictions 
 //
 // It returns a slice of metrics, that includes (the first two) the batch loss, and the moving exponential average
 // of the batch loss, plus the other `trainMetrics` configured during the creation of the Trainer.
-//
-// Errors are thrown using `panic` -- they are usually informative and include a stack-trace.
-func (r *Trainer) TrainStep(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
+func (r *Trainer) TrainStep(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor, err error) {
 	if r.accumulateGradients {
 		// Version that accumulate gradients.
 		return r.trainStepWithAccumulateGradients(spec, inputs, labels)
@@ -489,8 +658,23 @@ func (r *Trainer) TrainStep(spec any, inputs, labels []*tensors.Tensor) (metrics
 	return r.callGraphFn(r.trainStepGraph, TrainType, r.trainStepExecMap, spec, inputs, labels)
 }
 
+// DistributedTrainStep runs one step and returns the metrics, in a distributed fashion.
+//
+// The strategy and device assignment is only used when a new executor is built, that is,
+// only when the dataset spec changes.
+//
+// Otherwise, it behaves just like TrainStep.
+func (r *Trainer) DistributedTrainStep(strategy distributed.Strategy, deviceAssignment []backends.DeviceNum,
+	spec any, inputs, labels []*distributed.Tensor) (metrics []*tensors.Tensor, err error) {
+	if r.accumulateGradients {
+		// Version that accumulate gradients.
+		return nil, errors.New("distributed training with gradient accumulation not implemented yet")
+	}
+	return r.distributedCallGraphFn(strategy, deviceAssignment, r.trainStepGraph, TrainType, r.trainStepExecMap, spec, inputs, labels)
+}
+
 // evalStepGraph builds the graph to eval one step. It is called by the context executor (`r.evalStepExecMap`)
-// everytime a graph needs to be built (typically for new batch sizes).
+// every time a graph needs to be built (typically for new batch sizes).
 // inputsAndLabel[:-1] are the inputs, and inputsAndLabel[-1] is the labels batch.
 func (r *Trainer) evalStepGraph(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 	g := inputs[0].Graph()
@@ -511,7 +695,7 @@ func (r *Trainer) evalStepGraph(spec any, ctx *context.Context, inputs, labels [
 // ResetTrainMetrics call Metrics.Reset on all train metrics. Usually called before a training session.
 func (r *Trainer) ResetTrainMetrics() error {
 	for _, metric := range r.trainMetrics {
-		err := TryCatch[error](func() { metric.Reset(r.context.Checked(false)) })
+		err := exceptions.TryCatch[error](func() { metric.Reset(r.context.Checked(false)) })
 		if err != nil {
 			panic(errors.WithMessagef(err, "Eval() failed to reset metric %q", metric.Name()))
 		}
@@ -524,30 +708,48 @@ func (r *Trainer) ResetTrainMetrics() error {
 // The parameters are the output of a Dataset.Yield call. The same as TrainStep.
 //
 // It returns the current value for the registered eval metrics.
-//
-// Errors are thrown using `panic` -- they are usually informative and include a stack-trace.
-func (r *Trainer) EvalStep(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
+func (r *Trainer) EvalStep(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor, err error) {
 	return r.callGraphFn(r.evalStepGraph, EvalType, r.evalStepExecMap, spec, inputs, labels)
 }
 
+// DistributedEvalStep runs one eval step and returns the metrics, in a distributed fashion.
+//
+// The strategy and device assignment is only used when a new executor is built, that is,
+// only when the dataset spec changes.
+//
+// Otherwise, it behaves just like EvalStep.
+func (r *Trainer) DistributedEvalStep(strategy distributed.Strategy, deviceAssignment []backends.DeviceNum,
+	spec any, inputs, labels []*distributed.Tensor) (metrics []*tensors.Tensor, err error) {
+	return r.distributedCallGraphFn(strategy, deviceAssignment, r.evalStepGraph, EvalType, r.evalStepExecMap, spec, inputs, labels)
+}
+
 // resetEvalMetrics call Metrics.Reset on all eval metrics.
-func (r *Trainer) resetEvalMetrics() {
+func (r *Trainer) resetEvalMetrics() error {
 	for _, metric := range r.evalMetrics {
-		err := TryCatch[error](func() { metric.Reset(r.context) })
+		err := exceptions.TryCatch[error](func() { metric.Reset(r.context) })
 		if err != nil {
-			panic(errors.WithMessagef(err, "Eval() failed to reset metric %q", metric.Name()))
+			return errors.WithMessagef(err, "Eval() failed to reset metric %q", metric.Name())
 		}
 	}
+	return nil
 }
 
 // Eval returns the computation of loss and metrics over the given dataset. The dataset
 // has to be finite (yield io.EOF at the end). The function will reset the dataset
 // at the start.
 //
+// If the dataset is a DistributedDataset, it will be evaluated in a distribute fashion, see DistributedEval.
+//
 // Note: inputs and labels yielded by the dataset are immediately finalized (freed) after use.
-func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
+func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor, err error) {
+	if distributedDS, ok := ds.(DistributedDataset); ok {
+		return r.DistributedEval(distributedDS)
+	}
 	ds.Reset()
-	r.resetEvalMetrics()
+	err = r.resetEvalMetrics()
+	if err != nil {
+		return nil, err
+	}
 	count := 0
 	finalizeInputs := finalizeYieldedTensors(ds)
 
@@ -566,15 +768,23 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 			break
 		}
 		if err != nil {
-			panic(errors.Wrap(err, "dataset returned an error during Eval"))
+			return nil, errors.Wrap(err, "dataset returned an error during Eval")
 		}
 		count++
 		// Early free (not wait for the GC) of the results of previous batch.
 		for _, t := range lossAndMetrics {
-			t.FinalizeAll()
+			err := t.FinalizeAll()
+			if err != nil {
+				return nil, errors.WithMessagef(err,
+					"finalizing loss and metrics tensor of dataset %q after use in a distributed eval step",
+					ds.Name())
+			}
 		}
 
-		lossAndMetrics = r.EvalStep(spec, inputs, labels)
+		lossAndMetrics, err = r.EvalStep(spec, inputs, labels)
+		if err != nil {
+			return nil, errors.WithMessage(err, "EvalStep failed")
+		}
 		for i, goUpdateFn := range goUpdateFns {
 			if goUpdateFn != nil {
 				goUpdateFn.UpdateGo(lossAndMetrics[i])
@@ -583,16 +793,20 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 
 		// Free inputs and labels after usage.
 		if finalizeInputs {
-			for _, input := range inputs {
-				input.FinalizeAll()
-			}
-			for _, label := range labels {
-				label.FinalizeAll()
+			for sliceIdx, slice := range [][]*tensors.Tensor{inputs, labels} {
+				for i, t := range slice {
+					err := t.FinalizeAll()
+					if err != nil {
+						return nil, errors.WithMessagef(
+							err, "finalizing %s tensor #%d of dataset %q after use in a distributed eval step",
+							yieldInputTypeNames[sliceIdx], i, ds.Name())
+					}
+				}
 			}
 		}
 	}
 	if count == 0 {
-		Panicf("evaluation dataset yielded no batches, no data to evaluate")
+		return nil, errors.New("evaluation dataset yielded no batches, no data to evaluate")
 	}
 
 	// Read out the go-generate metrics:
@@ -601,13 +815,90 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 			lossAndMetrics[i] = goUpdateFn.ReadGo()
 		}
 	}
+	return lossAndMetrics, nil
+}
 
-	// Free lossAndMetrics on the device, it will be consumed presumably only locally.
-	for _, metric := range lossAndMetrics {
-		metric.MaterializeLocal()
-		metric.InvalidateOnDevice()
+// DistributedEval returns the computation of loss and metrics over the given distributed dataset.
+// The dataset has to be finite (yield io.EOF at the end). The function will reset the dataset at the start.
+//
+// It reads the strategy and device assignment from the DistributedDataset and uses DistributedEvalStep
+// for each batch.
+//
+// Note: inputs and labels yielded by the dataset are immediately finalized (freed) after use.
+func (r *Trainer) DistributedEval(ds DistributedDataset) (lossAndMetrics []*tensors.Tensor, err error) {
+	ds.Reset()
+	err = r.resetEvalMetrics()
+	if err != nil {
+		return nil, err
 	}
-	return lossAndMetrics
+	count := 0
+	finalizeInputs := finalizeYieldedTensors(ds)
+	strategy := ds.Strategy()
+	deviceAssignment := ds.DeviceAssignment()
+
+	// Check for metrics with Go updates: these are update functions not written as a computation graph.
+	goUpdateFns := make([]metrics.UpdateGo, len(r.evalMetrics))
+	for ii, metric := range r.evalMetrics {
+		if fn, ok := metric.(metrics.UpdateGo); ok {
+			goUpdateFns[ii] = fn
+		}
+	}
+
+	// Loop over dataset:
+	for {
+		spec, inputs, labels, err := ds.DistributedYield()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, errors.Wrap(err, "dataset returned an error during DistributedEval")
+		}
+		count++
+		// Early free (not wait for the GC) of the results of previous batch.
+		for _, t := range lossAndMetrics {
+			err := t.FinalizeAll()
+			if err != nil {
+				return nil, errors.WithMessagef(err,
+					"finalizing loss and metrics tensor of dataset %q after use in a distributed eval step",
+					ds.Name())
+			}
+		}
+
+		lossAndMetrics, err = r.DistributedEvalStep(strategy, deviceAssignment, spec, inputs, labels)
+		if err != nil {
+			return nil, errors.WithMessage(err, "DistributedEvalStep failed")
+		}
+		for i, goUpdateFn := range goUpdateFns {
+			if goUpdateFn != nil {
+				goUpdateFn.UpdateGo(lossAndMetrics[i])
+			}
+		}
+
+		// Free inputs and labels after usage.
+		if finalizeInputs {
+			for sliceIdx, slice := range [][]*distributed.Tensor{inputs, labels} {
+				for i, t := range slice {
+					err := t.FinalizeAll()
+					if err != nil {
+						return nil, errors.WithMessagef(
+							err, "finalizing %s distributed tensor #%d of dataset %q after use in a distributed eval step",
+							yieldInputTypeNames[sliceIdx], i, ds.Name())
+					}
+				}
+			}
+		}
+	}
+	if count == 0 {
+		return nil, errors.New("evaluation dataset yielded no batches, no data to evaluate")
+	}
+
+	// Read out the go-generated metrics:
+	for i, goUpdateFn := range goUpdateFns {
+		if goUpdateFn != nil {
+			lossAndMetrics[i] = goUpdateFn.ReadGo()
+		}
+	}
+	return lossAndMetrics, nil
 }
 
 // Metrics return list of registered eval metrics, including the loss metric that is added automatically.

@@ -1,7 +1,90 @@
 # GoMLX changelog
 
-# Next
+# v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 
+API Change: `dtypes` package moved from `github.com/gomlx/gopjrt/dtypes` to `github.com/gomlx/gomlx/pkg/core/dtypes`.
+It should be a simple change in import.
+
+XLA:
+- go-xla (replacing the now deprecated stablehlo and gopjrt libraries)
+  - Added auto-installation of standard (CPU and GPU/TPU when available) plugins.
+    (Can be disabled by setting the environment variable `GOMLX_NO_AUTO_INSTALL` to anything)
+  - Fixed some memory leaks on plugin destruction; 
+  - Improved performance in some low-latency scenarios (using GenPool as opposed to sync.Pool):
+- Removed old `gomlx/backends/xla` (the one that used the retired `xlabuilder` API for XLA).
+- Renamed `gomlx/backends/stablehlo` --> `gomlx/backends/xla`, using the new `go-xla` library.
+- Added `xla.EnableAutoInstall(enabled bool)` to enable/disable auto-installation of standard plugins.
+  And added `xla.AutoInstall()` to immediately auto-install standard plugins.
+- Conversion from/to new `gomlx/gomlx/pkg/core/dtypes` (and `bfloat16`) to/from `gomlx/gomlx/pkg/core/dtypes` (and corresponding `bfloat16`)
+- Added linux/arm64 and windows/amd64 support for XLA CPU.
+
+Other updates:
+- Package `tensors`:
+  - Added `CopyFlatData()` that returns an error (it was previously renamed to `MustCopyFlatData`)
+- Package `graph`:
+  - Added 'RNGStateFromSeedForGraph' function to create a RNG state from a seed for a graph.
+- Package `pkg/core/dtypes`
+  - New, copied from now deprecated Gopjrt. 
+- Package `simplego`:
+  - Registration of executors with priority.
+
+# v0.25.0: Distributed execution; API cleanup (more Go idiomatic)
+
+Hightlights:
+
+- Distributed (cross-devices) execution: with AutoSharding and SPMD strategies; 
+  Also added support for "portable device" execution.
+
+- API changes: (will require simple fixes)
+  - Most not graph building APIs now return errors (as opposed to panicking). Graph building functions
+    still use panic to return error -- otherwise it's too painful to express math.
+  - All "Rng" renamed to "RNG" -- acronyms in Go are usually capitalized.
+
+Distributed computation improvements and refactorings:
+
+- Package `graph`:
+  - Fixed/improved documentation.
+  - Added `IsNegative`, `IsPositive`, `IsNonNegative`, `IsNonPositive`.
+  - Added `SubScalar` and tests for the '*Scalar' functions.
+  - Added `Graph.WithDistributedStrategy`, `Graph.WithDeviceMesh`. `Graph.DeviceMesh` and `Graph.NumDevices`
+  - Added `Graph.Distributed()` with "collective" (across devices) operations (like `AllReduce`).
+  - Renamed: s/`Exec.InDevice`/`Exec.WithDevice`; s/`Exec.SetName`/`Exec.WithName`
+  - Added `RunOnDevice`.
+  - Added `Exec.AutoSharding` and `Exec.SPMD`.
+- Package `context`:
+  - Added `context.MustGetParam[T](ctx, key)` and `context.MustGetGraphParam[T](ctx, graph, key)`.
+  - Added `Exec.AutoSharding` and `Exec.SPMD`.
+  - Added `Variable.DistributedValue` and `Variable.SetDistributedValue`.
+- Package `train`:
+  - Added `train.DistributedDataset` and `train.BaseDataset`.
+  - `Dataset.Reset` now returns an error.
+  - `Trainer.TrainStep`, `Trainer.EvalStep` and `Trainer.Eval` now return errors as opposed to panicking.
+  - Added `Trainer.WithDeviceAssignment`.
+  - Added `Trainer.DistributedTrainStep`, `Trainer.DistributedEvalStep` and `Trainer.DistributedEval`.
+- Package `datasets`:
+  - Added `datasets.DistributedAccumulator`: converts a normal `Dataset` into a `DistributedDataset`.
+  - Added `datasets.OnDevice`: pre-uploads data to devices.
+- Package `backend`:
+  - Added `Backend.CopyToDevice`
+  - `Builder.Parameter()` now takes an optional `ShardingSpec` for sharded inputs.
+  - Added ops: `AllReduce`
+  - `Backend.NumDevices()` returns an int now.
+  - Package `backends/notimplemented`:
+    - Added dummy `Backend` that can be used to easily mock backends.
+- Package `pkg/core/distributed`:
+  -Added `DeviceMesh`, `ShardSpec` and `distributed.Tensor` objects.
+- Package `pkg/core/tensors`:
+  - Added `Tensor.CheckValid()`, `Tensor.Device()`, `Tensor.Backend()`
+  - Changing it to return an error (as opposed to panic) where possible.
+
+Other improvements:
+
+- Package `simplego`:
+  - Cleanups and improvements: thanks to @wunderbarb!
+  - Fixed the issue with not handling the default value for the donate parameter in the Execute method.
+- Package `cosineschedule`:
+  - Added `WarmUpSteps` and `NumCycles` hyperparameters -- removed overloading of `periodSteps`.
+- Added sponsorship badge and section to README.md. Also added the `FUNDING.yml` pointing to sponsorship.
 - Added `.golangci.yml` and fixed many (still a long way to go) lint-warnings.
   - Based on https://gist.github.com/maratori/47a4d00457a92aa426dbd48a18776322
 - GitHub actions (workflows):
@@ -10,23 +93,6 @@
 - Updated dependency to Gopjrt v0.8.5, fixing xlabuilder for new C compilers.
 - Removed `ui/fyneui`:
   - It was incomplete, and it would be better offered as a separate package to avoid the dependencies.
-- Package `graph`:
-  - Fixed/improved documentation.
-  - Added `IsNegative`, `IsPositive`, `IsNonNegative`, `IsNonPositive`.
-  - Added `SubScalar` and tests for the '*Scalar' functions.
-- Package `cosineschedule`:
-  - Added `WarmUpSteps` and `NumCycles` hyperparameters -- removed overloading of `periodSteps`.
-- Package `context`:
-  - Added `context.MustGetParam[T](ctx, key)` and `context.MustGetGraphParam[T](ctx, graph, key)`.
-- Added sponsorship badge and section to README.md. Also added the `FUNDING.yml` pointing to sponsorship.
-- Package `backend`:
-  - Added `CopyToDevice`
-  - `Backend.NumDevices()` returns an int now.
-- Package `pkg/core/distributed`:
-  -Added `DeviceMesh`, `ShardSpec` and `distributed.Tensor` objects.
-- Package `backends/notimplemented`:
-  - Added dummy `Backend` that can be used to easily mock backends.
-
 - Package `graph`:
   - Added a negative and out-of-bounds indices test for `Gather`.
 - Package `simplego`:
@@ -101,7 +167,7 @@
   * Progressbar now shows the median step duration.
 * Updated and refreshed all notebooks, including the tutorial.
 
-# v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
+# v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/go-xla/pkg/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
 
 - Updated dependency to new Gopjrt v0.8.2 because of CUDA PJRT (lack of) backward compatibility issues.
 - Package `stablehlo`:
@@ -121,7 +187,7 @@
 
 * Package `shapes`:
   * Added `FromAnyValue`: extract shape from a Go type.
-* New backend: `stablehlo` (or simply _"hlo"_ for short) using https://github.com/gomlx/stablehlo.
+* New backend: `stablehlo` (or simply _"hlo"_ for short) using https://github.com/gomlx/go-xla/pkg/stablehlo.
   * All standard binary and unary ops implemented.
   * A handful of the standard ops also implemented.
   * If `backends/default` is compiled with `-tags=stablehlo` it will include the `stablehlo` backend.

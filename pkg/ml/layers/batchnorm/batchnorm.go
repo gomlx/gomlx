@@ -28,6 +28,7 @@ import (
 
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
@@ -220,7 +221,9 @@ func (builder *Config) Done() *Node {
 
 	// Normalization moving average of the mean and variance.
 	meanAverageVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("mean", varShape).SetTrainable(false)
-	varianceAverageVar := ctx.WithInitializer(initializers.One).VariableWithShape("variance", varShape).SetTrainable(false)
+	varianceAverageVar := ctx.WithInitializer(initializers.One).
+		VariableWithShape("variance", varShape).
+		SetTrainable(false)
 	weightVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("avg_weight", varShape).SetTrainable(false)
 
 	var normalized *Node
@@ -334,7 +337,12 @@ type batchNormUpdater struct {
 
 // updateMeanAndVariance values that will be used in inference later. It's a moving average, where weight is how many
 // examples have been seen so far -- it's incremented at every step.
-func (builder *Config) updateMeanAndVariance(ctx *context.Context, graph *Graph, batchMean, batchVariance *Node, meanAverageVar, varianceAverageVar, weightVar *context.Variable) {
+func (builder *Config) updateMeanAndVariance(
+	ctx *context.Context,
+	graph *Graph,
+	batchMean, batchVariance *Node,
+	meanAverageVar, varianceAverageVar, weightVar *context.Variable,
+) {
 	_ = ctx
 	if builder.frozenAverages {
 		// We are not changing the averages.
@@ -365,13 +373,18 @@ func (builder *Config) updateMeanAndVariance(ctx *context.Context, graph *Graph,
 // It is a no-op if no batch-normalization was used.
 //
 // Usually this method is not used directly, instead use UpdateAverages.
-func ResetWeights(ctx *context.Context) {
+func ResetWeights(ctx *context.Context) error {
 	suffix := "/" + BatchNormalizationScopeName
-	ctx.EnumerateVariablesInScope(func(v *context.Variable) {
+	for v := range ctx.IterVariablesInScope() {
 		if strings.HasSuffix(v.Scope(), suffix) && v.Name() == "avg_weight" {
-			v.Reset()
+			zeros := tensors.FromShape(v.Shape())
+			err := v.SetValue(zeros)
+			if err != nil {
+				return err
+			}
 		}
-	})
+	}
+	return nil
 }
 
 const (
@@ -392,17 +405,21 @@ const (
 //
 // It returns whether batch normalization was used and averages were updated.
 //
+// An error is only returned if it attempts to update the averages.
+//
 // See discussions:
 // - https://www.mindee.com/blog/batch-normalization
 // - https://discuss.pytorch.org/t/batch-norm-instability/32159/14
-func UpdateAverages(trainer *train.Trainer, oneEpochDS train.Dataset) bool {
+func UpdateAverages(trainer *train.Trainer, oneEpochDS train.Dataset) (bool, error) {
 	ctx := trainer.Context()
 	if !context.GetParamOr(ctx, AveragesUpdatesTriggerParam, false) {
 		// No-op.
-		return false
+		return false, nil
 	}
 
-	ResetWeights(ctx)
-	trainer.BatchNormalizationAveragesUpdate(oneEpochDS)
-	return true
+	err := ResetWeights(ctx)
+	if err != nil {
+		return true, err
+	}
+	return true, trainer.BatchNormalizationAveragesUpdate(oneEpochDS)
 }

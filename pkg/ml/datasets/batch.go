@@ -22,10 +22,10 @@ type batchElement struct {
 // FinalizeAll calls FinalizeAll on all inputs and labels tensors.
 func (e *batchElement) FinalizeAll() {
 	for _, t := range e.inputs {
-		t.FinalizeAll()
+		t.MustFinalizeAll()
 	}
 	for _, t := range e.labels {
-		t.FinalizeAll()
+		t.MustFinalizeAll()
 	}
 }
 
@@ -70,7 +70,12 @@ type batchedDataset struct {
 //     Usually desirable for evaluation, but not desirable for training.
 //
 // Returns a `train.Dataset` that yields batched examples.
-func Batch(backend backends.Backend, ds train.Dataset, batchSize int, createLeadingAxis, dropIncompleteBatch bool) train.Dataset {
+func Batch(
+	backend backends.Backend,
+	ds train.Dataset,
+	batchSize int,
+	createLeadingAxis, dropIncompleteBatch bool,
+) train.Dataset {
 	batched := &batchedDataset{
 		backend:             backend,
 		ds:                  ds,
@@ -220,7 +225,9 @@ func (ds *batchedDataset) lockedBatchBuffer() (batched batchElement, err error) 
 // into a batch. Returns the list of the concatenated tensors.
 //
 // The batching happens on the tensors on the first axis of the `inputs` slice.
-func (ds *batchedDataset) lockedBatchTensorsList(inputs [][]*tensors.Tensor) (batchedTensors []*tensors.Tensor, err error) {
+func (ds *batchedDataset) lockedBatchTensorsList(
+	inputs [][]*tensors.Tensor,
+) (batchedTensors []*tensors.Tensor, err error) {
 	numBatchedTensors := len(inputs[0])
 	numParts := len(inputs)
 	batchedTensors = make([]*tensors.Tensor, 0, numBatchedTensors)

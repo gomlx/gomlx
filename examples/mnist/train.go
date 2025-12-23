@@ -27,6 +27,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
@@ -41,7 +42,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
-	"github.com/gomlx/gopjrt/dtypes"
 )
 
 var ModelList = []string{"linear", "cnn"}
@@ -52,7 +52,7 @@ type ContextFn func(ctx *context.Context) *context.Context
 
 func CreateDefaultContext() *context.Context {
 	ctx := context.New()
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		// Model type to use
 		"model":           "linear",
@@ -222,7 +222,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 			loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 
 		// Update batch normalization averages, if they are used.
-		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
+		if must.M1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpoint != nil {
 				must.M(checkpoint.Save())

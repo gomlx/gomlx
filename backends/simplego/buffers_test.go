@@ -4,8 +4,8 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 )
 

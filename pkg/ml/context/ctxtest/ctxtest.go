@@ -68,7 +68,7 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, w
 		if v.Shape().Size() > 16 {
 			fmt.Printf("%s\n", v.Shape())
 		} else {
-			fmt.Printf("%s\n", v.Value().GoStr())
+			fmt.Printf("%s\n", v.MustValue().GoStr())
 		}
 	})
 	fmt.Printf("\t======\n")

@@ -20,14 +20,15 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"testing"
 	"unsafe"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/x448/float16"
@@ -43,153 +44,166 @@ func cmpShapes(t *testing.T, shape, wantShape shapes.Shape, err error) {
 }
 
 func TestFromValue(t *testing.T) {
-	wantShape := shapes.Shape{DType: dtypes.Float32, Dimensions: []int{3, 2}}
-	shape, err := shapeForValue([][]float32{{0, 0}, {1, 1}, {2, 2}})
-	cmpShapes(t, shape, wantShape, err)
+	t.Run("shapeForValue", func(t *testing.T) {
+		wantShape := shapes.Shape{DType: dtypes.Float32, Dimensions: []int{3, 2}}
+		shape, err := shapeForValue([][]float32{{0, 0}, {1, 1}, {2, 2}})
+		cmpShapes(t, shape, wantShape, err)
 
-	wantShape = shapes.Shape{DType: dtypes.Float64, Dimensions: []int{1, 1, 1}}
-	shape, err = shapeForValue([][][]float64{{{1}}})
-	cmpShapes(t, shape, wantShape, err)
+		wantShape = shapes.Shape{DType: dtypes.Float64, Dimensions: []int{1, 1, 1}}
+		shape, err = shapeForValue([][][]float64{{{1}}})
+		cmpShapes(t, shape, wantShape, err)
 
-	if strconv.IntSize == 64 {
+		if strconv.IntSize == 64 {
+			wantShape = shapes.Shape{DType: dtypes.Int64, Dimensions: nil}
+			shape, err = shapeForValue(5)
+			cmpShapes(t, shape, wantShape, err)
+		} else if strconv.IntSize == 32 {
+			wantShape = shapes.Shape{DType: dtypes.Int32, Dimensions: nil}
+			shape, err = shapeForValue(5)
+			cmpShapes(t, shape, wantShape, err)
+		} else {
+			// For any other int size, it should panic.
+			require.Panics(t, func() {
+				shape, err = shapeForValue(5)
+			})
+		}
+
 		wantShape = shapes.Shape{DType: dtypes.Int64, Dimensions: nil}
 		shape, err = shapeForValue(5)
 		cmpShapes(t, shape, wantShape, err)
-	} else if strconv.IntSize == 32 {
-		wantShape = shapes.Shape{DType: dtypes.Int32, Dimensions: nil}
-		shape, err = shapeForValue(5)
+
+		wantShape = shapes.Shape{DType: dtypes.Bool, Dimensions: []int{3, 2}}
+		shape, err = shapeForValue([][]bool{{true, false}, {false, false}, {false, true}})
 		cmpShapes(t, shape, wantShape, err)
-	} else {
-		// For any other int size, it should panic.
-		wantShape = shapes.Shape{DType: dtypes.Int32, Dimensions: nil}
-		require.Panics(t, func() {
-			shape, err = shapeForValue(5)
-		})
-	}
 
-	wantShape = shapes.Shape{DType: dtypes.Int64, Dimensions: nil}
-	shape, err = shapeForValue(5)
-	cmpShapes(t, shape, wantShape, err)
+		wantShape = shapes.Shape{DType: dtypes.Complex64, Dimensions: []int{2}}
+		shape, err = shapeForValue([]complex64{1.0i, 1.0})
+		cmpShapes(t, shape, wantShape, err)
 
-	wantShape = shapes.Shape{DType: dtypes.Bool, Dimensions: []int{3, 2}}
-	shape, err = shapeForValue([][]bool{{true, false}, {false, false}, {false, true}})
-	cmpShapes(t, shape, wantShape, err)
+		wantShape = shapes.Shape{DType: dtypes.Complex128, Dimensions: []int{2}}
+		shape, err = shapeForValue([]complex128{1.0i, 1.0})
+		cmpShapes(t, shape, wantShape, err)
 
-	wantShape = shapes.Shape{DType: dtypes.Complex64, Dimensions: []int{2}}
-	shape, err = shapeForValue([]complex64{1.0i, 1.0})
-	cmpShapes(t, shape, wantShape, err)
+		wantShape = shapes.Shape{DType: dtypes.Uint16, Dimensions: []int{1, 1}}
+		shape, err = shapeForValue([][]uint16{{3}})
+		cmpShapes(t, shape, wantShape, err)
 
-	wantShape = shapes.Shape{DType: dtypes.Complex128, Dimensions: []int{2}}
-	shape, err = shapeForValue([]complex128{1.0i, 1.0})
-	cmpShapes(t, shape, wantShape, err)
+		// Test for invalid `DType`.
+		shape, err = shapeForValue([][]string{{"blah"}})
+		if shape.DType != dtypes.InvalidDType {
+			t.Fatalf("Wanted InvalidDType for string, instead got %q", shape.DType)
+		}
+		if err == nil {
+			t.Fatalf("Should have returned error for unsupported DType")
+		}
 
-	wantShape = shapes.Shape{DType: dtypes.Uint16, Dimensions: []int{1, 1}}
-	shape, err = shapeForValue([][]uint16{{3}})
-	cmpShapes(t, shape, wantShape, err)
+		// Test for irregularly shaped slices.
+		shape, err = shapeForValue([][][]int32{{{1}}, {{1, 2}}})
+		if err == nil {
+			t.Fatalf("Should have returned error for irregularly shaped slices")
+		}
+		fmt.Printf("\tExpected error: %v\n", err)
+	})
 
-	// Test for invalid `DType`.
-	shape, err = shapeForValue([][]string{{"blah"}})
-	if shape.DType != dtypes.InvalidDType {
-		t.Fatalf("Wanted InvalidDType for string, instead got %q", shape.DType)
-	}
-	if err == nil {
-		t.Fatalf("Should have returned error for unsupported DType")
-	}
-
-	// Test for irregularly shaped slices.
-	shape, err = shapeForValue([][][]int32{{{1}}, {{1, 2}}})
-	if err == nil {
-		t.Fatalf("Should have returned error for irregularly shaped slices")
-	}
-	fmt.Printf("\tExpected error: %v\n", err)
-
-	// Test correct setting of scalar value, dtype=Int64.
-	{
+	// Test the correct setting of scalar value, dtype=Int64.
+	t.Run("int64", func(t *testing.T) {
 		want := int64(5)
 		var tensor *Tensor
 		require.NotPanics(t, func() { tensor = FromValue(want) })
 		assert.Equal(t, want, tensor.Value())
-	}
+	})
 
-	// Test correct setting of scalar value for Go type `int` (maybe dtype=Int64 or Int32).
-	if strconv.IntSize == 64 {
-		want := int64(5)
-		var tensor *Tensor
-		require.NotPanics(t, func() { tensor = FromValue(5) })
-		assert.Equal(t, want, tensor.Value())
-	} else if strconv.IntSize == 32 {
-		want := int32(5)
-		var tensor *Tensor
-		require.NotPanics(t, func() { tensor = FromValue(5) })
-		assert.Equal(t, want, tensor.Value())
-	} else {
-		// For any other int size, it should panic.
-		require.Panics(t, func() {
-			_ = FromValue(5)
-		})
-	}
+	// Test the correct setting of scalar value for Go type `int` (maybe dtype=Int64 or Int32).
+	t.Run("int", func(t *testing.T) {
+		if strconv.IntSize == 64 {
+			want := int64(5)
+			var tensor *Tensor
+			require.NotPanics(t, func() { tensor = FromValue(5) })
+			assert.Equal(t, want, tensor.Value())
+		} else if strconv.IntSize == 32 {
+			want := int32(5)
+			var tensor *Tensor
+			require.NotPanics(t, func() { tensor = FromValue(5) })
+			assert.Equal(t, want, tensor.Value())
+		} else {
+			// For any other int size, it should panic.
+			require.Panics(t, func() {
+				_ = FromValue(5)
+			})
+		}
+	})
 
-	// Test correct setting of 1D slice, dtype=float64
-	{
+	// Test the correct setting of 1D slice, dtype=float64
+	t.Run("float64", func(t *testing.T) {
 		want := []float64{2, 5}
 		var tensor *Tensor
 		require.NotPanics(t, func() { tensor = FromValue(want) })
 		assert.Equal(t, want, tensor.Value())
-	}
+	})
 
-	// Test correct setting of 1D slice, dtype=float64
-	{
+	// Test the correct setting of 1D slice, dtype=float64
+	t.Run("float32", func(t *testing.T) {
 		want := []float32{1, 2, 3, 10, 11, 12}
 		var tensor *Tensor
 		require.NotPanics(t, func() { tensor = FromValue([][]float32{{1, 2, 3}, {10, 11, 12}}) })
-		tensor.ConstFlatData(func(flat any) {
+		tensor.MustConstFlatData(func(flat any) {
 			got, _ := flat.([]float32)
 			require.Equal(t, want, got)
 		})
-		tensor.MutableFlatData(func(flat any) {
+		tensor.MustMutableFlatData(func(flat any) {
 			got, _ := flat.([]float32)
 			require.Equal(t, want, got)
 		})
-	}
+	})
 
-	// Test correct 2D slice, dtype=Bool
-	{
+	// Test 2D slice, dtype=Bool
+	t.Run("bool", func(t *testing.T) {
 		want := []bool{true, false, false, false, false, true}
 		var tensor *Tensor
 		require.NotPanics(t, func() {
 			tensor = FromFlatDataAndDimensions(want, 3, 2)
 		})
 		require.NoError(t, tensor.Shape().Check(dtypes.Bool, 3, 2))
-		tensor.ConstFlatData(func(flat any) {
+		tensor.MustConstFlatData(func(flat any) {
 			got, _ := flat.([]bool)
 			require.Equal(t, want, got)
 		})
-		tensor.MutableFlatData(func(flat any) {
+		tensor.MustMutableFlatData(func(flat any) {
 			got, _ := flat.([]bool)
 			require.Equal(t, want, got)
 		})
-	}
+	})
 
-	// Test correct 2D slice, Go type=int, dtype=Int32 or Int64
-	{
+	// Test 2D slice, Go type=int, dtype=Int32 or Int64
+	t.Run("2D-int", func(t *testing.T) {
 		var tensor *Tensor
 		require.NotPanics(t, func() {
 			tensor = FromValue([][]int{{1, 3}, {5, 7}})
 		})
 		if strconv.IntSize == 64 {
 			want := []int64{1, 3, 5, 7}
-			tensor.ConstFlatData(func(flat any) {
+			tensor.MustConstFlatData(func(flat any) {
 				got, _ := flat.([]int64)
 				require.Equal(t, want, got)
 			})
 		} else if strconv.IntSize == 32 {
 			want := []int32{1, 3, 5, 7}
-			tensor.ConstFlatData(func(flat any) {
+			tensor.MustConstFlatData(func(flat any) {
 				got, _ := flat.([]int32)
 				require.Equal(t, want, got)
 			})
 		} // Other int sizes will panic on `FromValue`.
-	}
+	})
+
+	t.Run("BFloat16", func(t *testing.T) {
+		var tensor *Tensor
+		require.NotPanics(t, func() {
+			// Test with infinite numbers, it should work as well.
+			tensor = FromAnyValue(bfloat16.FromFloat32(float32(math.Inf(-1))))
+		})
+		require.Equal(t, tensor.Shape().DType, dtypes.BFloat16)
+		require.True(t, tensor.IsScalar())
+	})
 }
 
 // We test using FromAnyValue and AnyValueOf, due to Go generics limitations. See discussion in:
@@ -201,7 +215,13 @@ func testValueOf[T dtypes.Number | complex64 | complex128](t *testing.T) {
 	var tensor *Tensor
 	require.NotPanics(t, func() { tensor = FromAnyValue(want) })
 	got, ok := tensor.Value().([][]T)
-	require.Truef(t, ok, "Failed to convert converted tensor to 2-dimensional slice -- want=%v, value=%v", want, tensor.Value())
+	require.Truef(
+		t,
+		ok,
+		"Failed to convert converted tensor to 2-dimensional slice -- want=%v, value=%v",
+		want,
+		tensor.Value(),
+	)
 
 	// assert.Equal is not deep, so we have to assert the sub-slices.
 	assert.Equal(t, want, got)
@@ -257,37 +277,7 @@ func TestSerialization(t *testing.T) {
 			tensor, err = GobDeserialize(dec)
 			require.NoError(t, err)
 			require.Equal(t, values, tensor.Value().([][]complex128))
-			tensor.FinalizeAll()
-		}
-	}
-
-	// Test reading directly to device.
-	setupTest(t)
-	if backend == nil {
-		panic("Backend not set!?")
-	}
-	{
-		values := [][]int64{{2}, {3}, {5}, {7}, {11}}
-		var tensor *Tensor
-		require.NotPanics(t, func() { tensor = FromValue(values) })
-		buf := &bytes.Buffer{}
-		enc := gob.NewEncoder(buf)
-
-		// Serialized repeats times:
-		repeats := 10
-		for range repeats {
-			require.NoError(t, tensor.GobSerialize(enc))
-		}
-		fmt.Printf("\t%#v serialized %d times to %d bytes\n", values, repeats, buf.Len())
-
-		// Deserialize repeats times:
-		dec := gob.NewDecoder(buf)
-		for range repeats {
-			var err error
-			tensor, err = GobDeserializeToDevice(dec, backend)
-			require.NoError(t, err)
-			require.Equal(t, values, tensor.Value().([][]int64))
-			tensor.FinalizeAll()
+			tensor.MustFinalizeAll()
 		}
 	}
 }
@@ -296,7 +286,7 @@ func testSaveLoadStumpImpl(t *testing.T, tensor *Tensor) (loadedTensor *Tensor) 
 	dtype := tensor.DType()
 	fmt.Printf("\ttesting Save&Load for dtype %s\n", dtype)
 
-	// Create a temporary file, and get its name.
+	// Create a temporary file and get its name.
 	tempFile, err := os.CreateTemp("", fmt.Sprintf(
 		"gomlx_tensor_test_%s_*.txt", dtype))
 	if err != nil {
@@ -325,8 +315,14 @@ func testSaveLoadGenericsImpl[T dtypes.Number](t *testing.T) {
 	loadedTensor := testSaveLoadStumpImpl(t, tensor)
 
 	// Check loadedTensor contents.
-	require.NoErrorf(t, loadedTensor.Shape().Check(dtype, 3, 2), "Loaded tensor for dtype %s got shape %s", dtype, loadedTensor.Shape())
-	loadedTensor.ConstFlatData(func(flatAny any) {
+	require.NoErrorf(
+		t,
+		loadedTensor.Shape().Check(dtype, 3, 2),
+		"Loaded tensor for dtype %s got shape %s",
+		dtype,
+		loadedTensor.Shape(),
+	)
+	loadedTensor.MustConstFlatData(func(flatAny any) {
 		flat := flatAny.([]T)
 		require.Equal(t, values, flat)
 	})
@@ -342,8 +338,14 @@ func testSaveLoadBool(t *testing.T) {
 	loadedTensor := testSaveLoadStumpImpl(t, tensor)
 
 	// Check loadedTensor contents.
-	require.NoErrorf(t, loadedTensor.Shape().Check(dtype, 3, 2), "Loaded tensor for dtype %s got shape %s", dtype, loadedTensor.Shape())
-	loadedTensor.ConstFlatData(func(flatAny any) {
+	require.NoErrorf(
+		t,
+		loadedTensor.Shape().Check(dtype, 3, 2),
+		"Loaded tensor for dtype %s got shape %s",
+		dtype,
+		loadedTensor.Shape(),
+	)
+	loadedTensor.MustConstFlatData(func(flatAny any) {
 		flat := flatAny.([]bool)
 		require.Equal(t, values, flat)
 	})
@@ -362,8 +364,14 @@ func testSaveLoadFloat16(t *testing.T) {
 	loadedTensor := testSaveLoadStumpImpl(t, tensor)
 
 	// Check loadedTensor contents.
-	require.NoErrorf(t, loadedTensor.Shape().Check(dtype, 3, 2), "Loaded tensor for dtype %s got shape %s", dtype, loadedTensor.Shape())
-	loadedTensor.ConstFlatData(func(flatAny any) {
+	require.NoErrorf(
+		t,
+		loadedTensor.Shape().Check(dtype, 3, 2),
+		"Loaded tensor for dtype %s got shape %s",
+		dtype,
+		loadedTensor.Shape(),
+	)
+	loadedTensor.MustConstFlatData(func(flatAny any) {
 		flat := flatAny.([]float16.Float16)
 		require.Equal(t, values, flat)
 	})
@@ -382,8 +390,14 @@ func testSaveLoadBFloat16(t *testing.T) {
 	loadedTensor := testSaveLoadStumpImpl(t, tensor)
 
 	// Check loadedTensor contents.
-	require.NoErrorf(t, loadedTensor.Shape().Check(dtype, 3, 2), "Loaded tensor for dtype %s got shape %s", dtype, loadedTensor.Shape())
-	loadedTensor.ConstFlatData(func(flatAny any) {
+	require.NoErrorf(
+		t,
+		loadedTensor.Shape().Check(dtype, 3, 2),
+		"Loaded tensor for dtype %s got shape %s",
+		dtype,
+		loadedTensor.Shape(),
+	)
+	loadedTensor.MustConstFlatData(func(flatAny any) {
 		flat := flatAny.([]bfloat16.BFloat16)
 		require.Equal(t, values, flat)
 	})
@@ -413,30 +427,31 @@ func TestSaveLoad(t *testing.T) {
 
 func TestClone(t *testing.T) {
 	tensor := FromValue([][]int32{{0, 1}, {3, 5}, {7, 11}})
-	clone := tensor.LocalClone()
+	clone, err := tensor.LocalClone()
+	require.NoError(t, err)
 
-	// Change original tensor and check that cloned version is unchanged
-	tensor.MutableFlatData(func(flatAny any) {
+	// Change the original tensor and check that the cloned version is unchanged
+	tensor.MustMutableFlatData(func(flatAny any) {
 		flat := flatAny.([]int32)
 		flat[0] = 100
 	})
 	require.NoError(t, clone.Shape().Check(dtypes.Int32, 3, 2))
-	require.Equal(t, []int32{0, 1, 3, 5, 7, 11}, CopyFlatData[int32](clone))
+	require.Equal(t, []int32{0, 1, 3, 5, 7, 11}, MustCopyFlatData[int32](clone))
 }
 
 func TestBytes(t *testing.T) {
 	tensor := FromValue([][]int32{{0, 1}, {3, 5}, {7, 11}})
-	tensor.ConstBytes(func(data []byte) {
+	require.NoError(t, tensor.ConstBytes(func(data []byte) {
 		require.Equal(t, 6*4 /* sizeof(int32) */, len(data))
 		flat := unsafe.Slice((*int32)(unsafe.Pointer(&data[0])), 6)
 		require.Equal(t, []int32{0, 1, 3, 5, 7, 11}, flat)
-	})
-	tensor.MutableBytes(func(data []byte) {
+	}))
+	require.NoError(t, tensor.MutableBytes(func(data []byte) {
 		require.Equal(t, 6*4 /* sizeof(int32) */, len(data))
 		flat := unsafe.Slice((*int32)(unsafe.Pointer(&data[0])), 6)
 		flat[0] = 13
 		flat[5] = 17
-	})
+	}))
 	require.Equal(t, [][]int32{{13, 1}, {3, 5}, {7, 17}}, tensor.Value())
 }
 
@@ -444,13 +459,13 @@ func TestAssign(t *testing.T) {
 	tensor := FromShape(shapes.Make(dtypes.Float64, 2, 3))
 
 	// Wrong dtype:
-	require.Panics(t, func() { AssignFlatData(tensor, []float32{0, 1, 2, 3, 4, 5}) })
+	require.Error(t, AssignFlatData(tensor, []float32{0, 1, 2, 3, 4, 5}))
 
 	// Wrong flat size:
-	require.Panics(t, func() { AssignFlatData(tensor, []float64{0, 1, 2, 3, 4, 5, 6}) })
+	require.Error(t, AssignFlatData(tensor, []float64{0, 1, 2, 3, 4, 5, 6}))
 
 	// Check assignment happened:
 	values := []float64{0, 1, 2, 3, 4, 5}
-	AssignFlatData(tensor, values)
-	require.Equal(t, values, CopyFlatData[float64](tensor))
+	require.NoError(t, AssignFlatData(tensor, values))
+	require.Equal(t, values, MustCopyFlatData[float64](tensor))
 }

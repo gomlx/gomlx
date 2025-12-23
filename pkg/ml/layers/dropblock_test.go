@@ -5,19 +5,19 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors/images"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDropBlock(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	ctx.RngStateFromSeed(42) // Always the same result.
+	ctx.SetRNGStateFromSeed(42) // Always the same result.
 	batchSize := 10
 	width, height := 100, 100
 	numChannels := 3
@@ -50,7 +50,7 @@ func TestDropBlock(t *testing.T) {
 func TestDropPath(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	ctx.RngStateFromSeed(42) // Always the same result.
+	ctx.SetRNGStateFromSeed(42) // Always the same result.
 	gotT := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 		ctx.SetTraining(g, true)
 		ones := Ones(g, shapes.Make(dtypes.Float32, 10_000, 10, 10))

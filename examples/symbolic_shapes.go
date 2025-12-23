@@ -6,8 +6,8 @@ package examples
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // ExampleTransformerShapes demonstrates shape inference for a transformer-style model

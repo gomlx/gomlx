@@ -1,14 +1,14 @@
-package stablehlo
+package xla
 
 import (
+	"github.com/gomlx/go-xla/pkg/stablehlo"
+	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/stablehlo"
-	stablehlotypes "github.com/gomlx/stablehlo/types"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 // DotGeneralConfig represents the configuration to use for DotGeneral.
-// StableHLO has lots of options (see github.com/gomlx/stablehlo.DotGeneral),
+// StableHLO has lots of options (see github.com/gomlx/go-xla/pkg/stablehlo.DotGeneral),
 // and here is what we expose for now.
 type DotGeneralConfig struct {
 	// UseTF32 specifies whether to use tf32 (a truncated float32 that NVidia CUDA PJRT is able to use)
@@ -45,7 +45,7 @@ func (b *Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes [
 		dotGeneralBuilder.Algorithm(&stablehlotypes.DotGeneralAlgorithm{
 			LhsPrecisionType:           stablehlotypes.FloatPrecisionType{TF32: true},
 			RhsPrecisionType:           stablehlotypes.FloatPrecisionType{TF32: true},
-			AccumulationType:           stablehlotypes.FloatPrecisionType{DType: dtype},
+			AccumulationType:           stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)},
 			LhsComponentCount:          1,
 			RhsComponentCount:          1,
 			NumPrimitiveOperations:     1,

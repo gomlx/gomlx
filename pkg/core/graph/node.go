@@ -23,9 +23,9 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
 )
 
 const (
@@ -73,10 +73,6 @@ type Node struct {
 	// customVJP can be set for a custom reverse gradient definition for the function.
 	// Usually, defined for a NoOp operation.
 	customVJP VJP
-
-	// constValue is a multidimensional Go slice, kept for small values (like scalars), and only used for printing/debugging only.
-	// See MinConstValueSizeToKeep to configure.
-	constValue any
 
 	trace error // Stack-trace error of where Node was created. Stored if graph.traced is true.
 }
@@ -153,7 +149,7 @@ func (n *Node) Inputs() []*Node { return n.inputNodes }
 
 // NumOutputs returns the number of outputs for a node.
 //
-// Almost every node will have one output only. But a few (like "RngBitGenerator") will output various outputs
+// Almost every node will have one output only. But a few (like "RNGBitGenerator") will output various outputs
 // that are split before usage. These nodes are marked with an invalid dtype.
 //
 // Used internally only, all Graph public operations will return nodes with one output only.

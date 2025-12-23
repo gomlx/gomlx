@@ -1,25 +1,54 @@
 package xla
 
 import (
-	"reflect"
+	"slices"
 
+	"github.com/gomlx/go-xla/pkg/stablehlo"
+	"github.com/gomlx/go-xla/pkg/types/shardy"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/xlabuilder"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
 
-// Builder implements the backends.Builder interface using github.com/gomlx/gopjrt/xlabuilder
+// Builder keeps track of the computation graph being defined.
 type Builder struct {
-	name    string
-	backend *Backend
-	builder *xlabuilder.XlaBuilder
+	name     string
+	backend  *Backend
+	compiled bool
+
+	builder *stablehlo.Builder
+	fn      *stablehlo.Function
+
+	numDevices       int // numDevices used by the builder <= backend.numDevices.
+	deviceAssignment []int
+	distStrategy     distributed.Strategy
+	meshes           []*shardy.DeviceMesh
 
 	parameterNames  []string
 	parameterShapes []shapes.Shape
+	parameterSpecs  []*backends.ShardingSpec
+
+	// Various caches.
+	cacheReductions map[reductionKey]*stablehlo.Function
+	cacheArgMinMax  map[argMinMaxKey]*stablehlo.Function
+	cacheSelections map[reductionKey]*stablehlo.Function
+}
+
+// reductionKey for the cache of inlined functions for reductions.
+type reductionKey struct {
+	dtype  dtypes.DType
+	opType backends.OpType
+}
+
+// argMinMaxKey for the cache of inlined functions for ArgMinMax.
+type argMinMaxKey struct {
+	valuesDType, outputDType dtypes.DType
+	isMin                    bool
 }
 
 var _ backends.Builder = (*Builder)(nil)
@@ -30,25 +59,28 @@ func (backend *Backend) Builder(name string) backends.Builder {
 		klog.Error(err)
 		return nil
 	}
-	return &Builder{
-		backend: backend,
-		builder: xlabuilder.New(name),
-		name:    name,
+	b := &Builder{
+		backend:         backend,
+		builder:         stablehlo.New(name),
+		name:            name,
+		cacheReductions: make(map[reductionKey]*stablehlo.Function),
+		cacheArgMinMax:  make(map[argMinMaxKey]*stablehlo.Function),
+		cacheSelections: make(map[reductionKey]*stablehlo.Function),
 	}
+	b.fn = b.builder.Main()
+	return b
 }
 
-// Name of the computation being built.
+// Name returns the name of the builder.
 func (b *Builder) Name() string {
 	return b.name
 }
 
-// castToXlaOp casts the op to xlabuilder.Op and panics if not possible.
-func castToXlaOp(op backends.Op) *xlabuilder.Op {
-	xop, ok := op.(*xlabuilder.Op)
-	if !ok {
-		exceptions.Panicf("buffer given is not a %q backend (pjrt) buffer", BackendName)
-	}
-	return xop
+// Node represents the output of an operation and implements a "backends.Op" interface.
+type Node struct {
+	value   *stablehlo.Value
+	shape   shapes.Shape
+	builder *Builder
 }
 
 // CheckValid returns an error if the backend or the builder are not ok.
@@ -61,45 +93,32 @@ func (b *Builder) CheckValid() error {
 	return b.backend.CheckValid()
 }
 
-func xshapeToShape(xshape xlabuilder.Shape) shapes.Shape {
-	return shapes.Make(xshape.DType, xshape.Dimensions...)
-}
-
-func shapeToXShape(shape shapes.Shape) xlabuilder.Shape {
-	return xlabuilder.MakeShape(shape.DType, shape.Dimensions...)
-}
-
-// verifyAndCastOp sanity checks that the op is valid and created with this builder.
-func (b *Builder) verifyAndCastOp(op backends.Op, paramName string) (*xlabuilder.Op, error) {
+// verifyAndCastValues sanity checks that the values (backends.Op) are valid and created with this builder.
+// It returns the underlying *Node of the values.
+func (b *Builder) verifyAndCastValues(name string, values ...backends.Op) ([]*Node, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
-	xlaOp, ok := op.(*xlabuilder.Op)
-	if !ok {
-		return nil, errors.Errorf("nil or invalid Op (%T: %v) given as an input %s, it must be an Op created by the same backend builder (%s:%s)",
-			op, op, paramName, b.backend.Name(), b.name)
-	}
-	if xlaOp.Builder() != b.builder {
-		return nil, errors.Errorf("op given to parameter %s was created with a different builder (%s) than the builder (%s) it is being used in -- Ops cannot cross to different builders",
-			paramName, xlaOp.Builder().Name(), b.Name())
-	}
-	return xlaOp, nil
-}
-
-// verifyAndCastOps verify each of the ops are valid and created with this builder.
-func (b *Builder) verifyAndCastOps(ops []backends.Op, paramName string) ([]*xlabuilder.Op, error) {
-	if err := b.CheckValid(); err != nil {
-		return nil, err
-	}
-	xlaOps := make([]*xlabuilder.Op, len(ops))
-	var err error
-	for ii, op := range ops {
-		xlaOps[ii], err = b.verifyAndCastOp(op, paramName)
-		if err != nil {
-			return nil, err
+	nodes := make([]*Node, len(values))
+	for i, input := range values {
+		if input == nil {
+			return nil, errors.Errorf("nil Op given as an input to %q", name)
 		}
+		node, ok := input.(*Node)
+		if !ok {
+			return nil, errors.Errorf(
+				"nil or invalid Op (%T: %v) given as an input to %q, it must be an input created by the same "+
+					"backend builder (%s:%s)", input, input, name, b.backend.Name(), b.name)
+		}
+		if node.builder != b {
+			return nil, errors.Errorf(
+				"input given to parameter #%d (%q) was created with a different builder (%s) than the builder"+
+					" (%s) it is being used in -- Ops cannot cross to different builders",
+				i, name, node.builder.Name(), b.Name())
+		}
+		nodes[i] = node
 	}
-	return xlaOps, nil
+	return nodes, nil
 }
 
 // OpShape returns the shape of a computation Op.
@@ -107,238 +126,275 @@ func (b *Builder) OpShape(op backends.Op) (shapes.Shape, error) {
 	if err := b.CheckValid(); err != nil {
 		return shapes.Invalid(), err
 	}
-	xOp := castToXlaOp(op)
-	return xshapeToShape(xOp.Shape), nil
-}
-
-// Parameter creates an input parameter for the computation.
-// During execution of the computation this value will need to be fed, in the same order it is created.
-func (b *Builder) Parameter(name string, shape shapes.Shape) (backends.Op, error) {
-	op, err := xlabuilder.Parameter(b.builder, name, len(b.parameterNames), shapeToXShape(shape))
+	nodes, err := b.verifyAndCastValues("OpShape", op)
 	if err != nil {
-		return nil, errors.WithMessagef(err, "backend %q: Parameter(%q, %s)", BackendName, name, shape)
+		return shapes.Invalid(), err
 	}
-	b.parameterNames = append(b.parameterNames, name)
-	b.parameterShapes = append(b.parameterShapes, shape)
-	return op, nil
+	return nodes[0].shape, nil
 }
 
-// Constant creates a constant in the graph with the given flat values, and the shape defined by dims.
-//
-// flat must be a slice of a basic type supported -- that can be converted to a DType.
-//
-// The value is copied into the graph. It's recommended that for very large tensors,
-// even if constants, that they are passed as side inputNodes (or variables, see context package) instead.
-func (b *Builder) Constant(flat any, dims ...int) (backends.Op, error) {
+func (b *Builder) newNode(value *stablehlo.Value) *Node {
+	return &Node{
+		value:   value,
+		shape:   ShapeFromXLA(value.Shape()),
+		builder: b,
+	}
+}
+
+func (b *Builder) Parameter(name string, shape shapes.Shape, sharding *backends.ShardingSpec) (
+	backends.Op, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
-	flatV := reflect.ValueOf(flat)
-	if flatV.Kind() != reflect.Slice {
-		return nil, errors.Errorf("Constant expects a slice, got %T instead", flat)
+	normalizedName := stablehlo.NormalizeIdentifier(name)
+	if slices.Index(b.parameterNames, normalizedName) != -1 {
+		if name == normalizedName {
+			return nil, errors.Errorf("parameter named %q already exists", name)
+		}
+		return nil, errors.Errorf("parameter named %q (normalized to %q) already exists",
+			name, normalizedName)
 	}
-	dtype := dtypes.FromGoType(flatV.Type().Elem())
-	if dtype == dtypes.InvalidDType {
-		return nil, errors.Errorf("Constant expects a slice of valid DTypes, got %T instead", flat)
+	b.parameterNames = append(b.parameterNames, normalizedName)
+	b.parameterShapes = append(b.parameterShapes, shape)
+	b.parameterSpecs = append(b.parameterSpecs, sharding)
+	var shardySpec *shardy.ShardingSpec
+	if sharding != nil {
+		var err error
+		shardySpec, err = b.shardingSpecToShardy(sharding)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while creating sharding spec for parameter %q", name)
+		}
 	}
-	literal, err := xlabuilder.NewArrayLiteralFromAny(flat, dims...)
+	value, err := b.fn.NamedInputWithSharding(name, ShapeToXLA(shape), shardySpec)
 	if err != nil {
-		return nil, errors.WithMessagef(err, "backend %q builder %q: Constant(%T, dims=%v)", b.backend.Name(), b.name, flat, dims)
+		return nil, errors.WithMessagef(err, "while building parameter %q", name)
 	}
-	op, err := xlabuilder.Constant(b.builder, literal)
-	if err != nil {
-		return nil, errors.WithMessagef(err, "backend %q builder %q: Constant(%T, dims=%v)", b.backend.Name(), b.name, flat, dims)
-	}
-	return op, nil
+	return b.newNode(value), nil
 }
 
-// Identity returns an Op whose output is the same as its input.
-// It's a no-op that can serve as a place-holder.
-func (b *Builder) Identity(x backends.Op) (backends.Op, error) {
-	xlaX, err := b.verifyAndCastOp(x, "x")
-	if err != nil {
-		return nil, err
-	}
-	return xlabuilder.Identity(xlaX), nil
-}
-
-func (b *Builder) ReduceWindow(x backends.Op, reductionType backends.ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Op, error) {
-	xlaX, err := b.verifyAndCastOp(x, "x")
-	if err != nil {
-		return nil, err
-	}
-	cfg := xlabuilder.ReduceWindow(xlaX, windowDimensions).
-		WithStrides(strides).
-		WithBaseDilations(baseDilations).
-		WithWindowDilations(windowDilations).
-		WithPadding(paddings)
-	switch reductionType {
-	case backends.ReduceOpSum:
-		cfg = cfg.Sum()
-	case backends.ReduceOpMax:
-		cfg = cfg.Max()
-	case backends.ReduceOpMin:
-		cfg = cfg.Min()
-	case backends.ReduceOpProduct:
-		cfg = cfg.Product()
-	default:
-		return nil, errors.Errorf("unknown reduction type %s given to ReduceWindow (building %q)", reductionType, b.name)
-	}
-	op, err := cfg.Done()
-	if err != nil {
-		return nil, errors.WithMessagef(err, "backend %q builder %q: ReduceWindow(reductionType=%s)", b.backend.Name(), b.name, reductionType)
-	}
-	return op, nil
-}
-
-// RngBitGenerator generates the given shape filled with random bits.
-// It takes as input the current random number generator (RNG) state, see RngState or RngStateFromSeed.
-// The algorithm is hard-coded to use Philox algorithm for now.
+// Constant creates a constant in the graph with the given flat values and the shape defined by the dimensions.
 //
-// It returns the new state of the RNG and the generated values (with random bits) with the given shape.
-func (b *Builder) RngBitGenerator(state backends.Op, shape shapes.Shape) (newState, values backends.Op, err error) {
-	xlaState, err := b.verifyAndCastOp(state, "x")
+// The flat value must be a slice of a basic type supported -- that can be converted to a DType.
+//
+// The value is copied into the graph. It's recommended that for very large tensors,
+// even if constants, that they are passed as side inputNodes (or variables, see context package) instead.
+func (b *Builder) Constant(flat any, dimensions ...int) (backends.Op, error) {
+	if err := b.CheckValid(); err != nil {
+		return nil, err
+	}
+	if flat == nil {
+		return nil, errors.Errorf("nil value given to Constant")
+	}
+	if bf16Slice, ok := flat.([]bfloat16.BFloat16); ok {
+		flat = any(BFloat16SliceToXLA(bf16Slice))
+	}
+	value, err := b.fn.ConstantFromFlatAndDimensions(flat, dimensions...)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building op Constant()")
+	}
+	return b.newNode(value), nil
+}
+
+// DistributedSPMD creates a computation that will be executed on multiple devices in SPMD fashion
+// (SPMD = single program, multiple data).
+func (b *Builder) DistributedSPMD(numDevices int) error {
+	if err := b.CheckValid(); err != nil {
+		return err
+	}
+	if b.compiled {
+		return errors.Errorf("DistributedSPMD cannot be called after the computation has been compiled")
+	}
+	b.distStrategy = distributed.SPMD
+	b.builder.WithNumReplicas(numDevices)
+	b.numDevices = numDevices
+	return nil
+}
+
+// DistributedAutoSharding creates a computation that will be executed on multiple devices with auto-sharding.
+// This currently aims at XLA Shardy [1] framework. But other backends can implement it with the same semantics,
+// if appropriate.
+//
+// [1] https://github.com/openxla/shardy
+func (b *Builder) DistributedAutoSharding(meshes ...backends.Mesh) error {
+	if err := b.CheckValid(); err != nil {
+		return err
+	}
+	if b.compiled {
+		return errors.Errorf("DistributedAutoSharding cannot be called after the computation has been compiled")
+	}
+	b.distStrategy = distributed.AutoSharding
+	b.meshes = make([]*shardy.DeviceMesh, len(meshes))
+	var err error
+	b.numDevices = 0
+	for i, mesh := range meshes {
+		b.meshes[i], err = shardy.NewDeviceMesh(mesh.Name, mesh.AxesSizes, mesh.AxesNames)
+		if err != nil {
+			return errors.WithMessagef(err, "while creating mesh %q", mesh.Name)
+		}
+		meshNumDevices := b.meshes[i].NumDevices()
+		if meshNumDevices > b.backend.NumDevices() {
+			return errors.Errorf("mesh %q has %d devices, but the backend only has %d devices",
+				mesh.Name, meshNumDevices, b.backend.NumDevices())
+		}
+		b.numDevices = max(b.numDevices, meshNumDevices)
+	}
+	b.builder.WithShardy(b.meshes...)
+	b.builder.WithNumReplicas(1)
+	b.builder.WithNumPartitions(b.numDevices)
+	return nil
+}
+
+func (b *Builder) meshByName(meshName string) (*shardy.DeviceMesh, error) {
+	for _, mesh := range b.meshes {
+		if mesh.Name() == meshName {
+			return mesh, nil
+		}
+	}
+	return nil, errors.Errorf("mesh %q not found", meshName)
+}
+
+func (b *Builder) shardingSpecToShardy(sharding *backends.ShardingSpec) (*shardy.ShardingSpec, error) {
+	if sharding == nil {
+		return nil, nil
+	}
+	name := sharding.Mesh
+	mesh, err := b.meshByName(sharding.Mesh)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "in sharding spec with mesh %q", name)
+	}
+	shardySpec := shardy.NewShardingSpec(mesh)
+	for _, meshAxes := range sharding.Axes {
+		if len(meshAxes) == 0 {
+			shardySpec.AddReplicated()
+		} else {
+			shardySpec.AddShardedAxis(meshAxes...)
+		}
+	}
+	return shardySpec, nil
+}
+
+// DeviceAssignment assigns the devices to the computation.
+//
+// The number of devices must match the number of devices in the computation.
+// Usually, that is 1. But if DistributedSPMD was used, it can be more.
+func (b *Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
+	numReplicas := max(1, b.numDevices)
+	if len(devices) != numReplicas {
+		return errors.Errorf("DeviceAssignment expects %d devices, got %d", numReplicas, len(devices))
+	}
+	b.deviceAssignment = make([]int, 0, numReplicas)
+	for _, device := range devices {
+		deviceInt := int(device)
+		b.deviceAssignment = append(b.deviceAssignment, deviceInt)
+		if deviceInt < 0 || deviceInt >= b.backend.NumDevices() {
+			return errors.Errorf("device %d is out of range for the number of devices %d in the backend %q",
+				deviceInt, b.backend.NumDevices(), b.backend.Name())
+		}
+	}
+	return nil
+}
+
+func broadcastShapeForBinaryOps(
+	opType backends.OpType,
+	lhsShape, rhsShape shapes.Shape,
+) (output shapes.Shape, err error) {
+	if lhsShape.IsScalar() {
+		return rhsShape, nil
+	}
+	if rhsShape.IsScalar() {
+		return lhsShape, nil
+	}
+
+	// Other cases, either the dimensions match or one of them is 1.
+	if lhsShape.Rank() != rhsShape.Rank() {
+		err = errors.Errorf(
+			"if operands are not scalars, their rank must match for BinaryOp (%s), got shapes %s and %s",
+			opType,
+			lhsShape,
+			rhsShape,
+		)
+		return
+	}
+	output = lhsShape.Clone()
+	for axis := range output.Rank() {
+		lhsDim := lhsShape.Dimensions[axis]
+		rhsDim := rhsShape.Dimensions[axis]
+		if lhsDim != 1 && rhsDim != 1 && lhsDim != rhsDim {
+			err = errors.Errorf(
+				"dimension of axis #%d doesn't match and cannot be broadcast for BinaryOp (%s), got shapes %s and %s",
+				axis,
+				opType,
+				lhsShape,
+				rhsShape,
+			)
+			return
+		}
+		output.Dimensions[axis] = max(lhsDim, rhsDim)
+	}
+	return
+
+}
+
+// broadcastForBinaryOps returns the broadcasted versions of the two ops,
+// converting them to Nodes in the process.
+func (b *Builder) broadcastForBinaryOps(
+	opType backends.OpType,
+	lhs, rhs backends.Op,
+) (lhsNode, rhsNode *Node, err error) {
+	opName := opType.String()
+	nodes, err := b.verifyAndCastValues(opName, lhs, rhs)
+	if err != nil {
+		return
+	}
+	lhsNode, rhsNode = nodes[0], nodes[1]
+	if lhsNode.shape.DType != rhsNode.shape.DType {
+		return nil, nil, errors.Errorf("cannot broadcast %s and %s for %q: they have different dtypes",
+			lhsNode.shape.DType, rhsNode.shape.DType, opType)
+	}
+	if rhsNode.shape.Equal(lhsNode.shape) {
+		// No casting needed.
+		return
+	}
+
+	// If any is a scalar, just broadcast it to the other one.
+	if lhsNode.shape.IsScalar() {
+		var value *stablehlo.Value
+		value, err = stablehlo.BroadcastInDim(lhsNode.value, rhsNode.value.Shape(), nil)
+		if err != nil {
+			return nil, nil, errors.WithMessagef(err, "while building op %q", opType)
+		}
+		lhsNode = b.newNode(value)
+		return
+	} else if rhsNode.shape.IsScalar() {
+		var value *stablehlo.Value
+		value, err = stablehlo.BroadcastInDim(rhsNode.value, lhsNode.value.Shape(), nil)
+		if err != nil {
+			return nil, nil, errors.WithMessagef(err, "while building op %s", opName)
+		}
+		rhsNode = b.newNode(value)
+		return
+	}
+
+	// Find the larger shape that fits both operands.
+	broadcastShape, err := broadcastShapeForBinaryOps(opType, lhsNode.shape, rhsNode.shape)
 	if err != nil {
 		return nil, nil, err
 	}
-	xlaShape := shapeToXShape(shape)
-	newState, values, err = xlabuilder.RngBitGenerator(xlaState, xlaShape)
-	if err != nil {
-		return nil, nil, errors.WithMessagef(err, "backend %q builder %q: RngBitGenerator(shape=%s)", b.backend.Name(), b.name, shape)
+	newShapeStableHLO := ShapeToXLA(broadcastShape)
+	broadcastAxes := xslices.Iota(0, broadcastShape.Rank())
+	if !broadcastShape.Equal(lhsNode.shape) {
+		value, err := stablehlo.BroadcastInDim(lhsNode.value, newShapeStableHLO, broadcastAxes)
+		if err != nil {
+			return nil, nil, errors.WithMessagef(err, "while broadcasting lhs for op %q", opType)
+		}
+		lhsNode = b.newNode(value)
+	}
+	if !broadcastShape.Equal(rhsNode.shape) {
+		value, err := stablehlo.BroadcastInDim(rhsNode.value, newShapeStableHLO, broadcastAxes)
+		if err != nil {
+			return nil, nil, errors.WithMessagef(err, "while broadcasting rhs for op %q", opType)
+		}
+		rhsNode = b.newNode(value)
 	}
 	return
-}
-
-// BatchNormForTraining implements Batch Norm for training. See details in
-// https://www.tensorflow.org/xla/operation_semantics#batchnormtraining.
-//
-// It returns the normalized tensor, the batchMean and the batchVariance.
-//
-// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
-// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
-func (b *Builder) BatchNormForTraining(operand, scale, offset backends.Op, epsilon float32, axis int) (normalized, batchMean, batchVariance backends.Op, err error) {
-	xlaOperand, err := b.verifyAndCastOp(operand, "operand")
-	if err != nil {
-		return
-	}
-	xlaScale, err := b.verifyAndCastOp(scale, "scale")
-	if err != nil {
-		return
-	}
-	xlaOffset, err := b.verifyAndCastOp(offset, "offset")
-	if err != nil {
-		return
-	}
-	normalized, batchMean, batchVariance, err = xlabuilder.BatchNormForTraining(xlaOperand, xlaScale, xlaOffset, epsilon, axis)
-	if err != nil {
-		err = errors.WithMessagef(err, "backend %q builder %q: BatchNormForTraining(operand=%s)", b.backend.Name(), b.name, xlaOperand.Shape)
-		return
-	}
-	return
-}
-
-// BatchNormGradient calculates the BatchNorm gradient. See details in
-// https://openxla.org/xla/operation_semantics#batchnormgrad
-//
-// The gradOutput is the adjoint gradient, that is, the gradient with respect to the output of the
-// batch normalization.
-//
-// It returns  as a tuple with the 3 elements.
-//
-// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
-// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
-func (b *Builder) BatchNormGradient(operand, scale, mean, variance, gradOutput backends.Op, epsilon float32, axis int) (gradOperand, gradScale, gradOffset backends.Op, err error) {
-	xlaOperand, err := b.verifyAndCastOp(operand, "operand")
-	if err != nil {
-		err = errors.WithMessagef(err, "calling BatchNormGradient()")
-		return
-	}
-	xlaScale, err := b.verifyAndCastOp(scale, "scale")
-	if err != nil {
-		err = errors.WithMessagef(err, "calling BatchNormGradient()")
-		return
-	}
-	xlaMean, err := b.verifyAndCastOp(mean, "mean")
-	if err != nil {
-		err = errors.WithMessagef(err, "calling BatchNormGradient()")
-		return
-	}
-	xlaVariance, err := b.verifyAndCastOp(variance, "variance")
-	if err != nil {
-		err = errors.WithMessagef(err, "calling BatchNormGradient()")
-		return
-	}
-	xlaGradOutput, err := b.verifyAndCastOp(gradOutput, "gradOutput")
-	if err != nil {
-		err = errors.WithMessagef(err, "calling BatchNormGradient()")
-		return
-	}
-	gradOperand, gradScale, gradOffset, err = xlabuilder.BatchNormGradient(xlaOperand, xlaScale, xlaMean, xlaVariance, xlaGradOutput, epsilon, axis)
-	if err != nil {
-		err = errors.WithMessagef(err, "backend %q builder %q: BatchNormGradient(operand=%s)", b.backend.Name(), b.name, xlaOperand.Shape)
-		return
-	}
-	return
-}
-
-func convertConvolveAxesConfig(c backends.ConvolveAxesConfig) (xlaConfig xlabuilder.ConvolveAxesConfig) {
-	xlaConfig = xlabuilder.ConvolveAxesConfig{
-		InputBatch:           c.InputBatch,
-		InputChannels:        c.InputChannels,
-		InputSpatial:         c.InputSpatial,
-		KernelInputChannels:  c.KernelInputChannels,
-		KernelOutputChannels: c.KernelOutputChannels,
-		KernelSpatial:        c.KernelSpatial,
-		OutputBatch:          c.OutputBatch,
-		OutputChannels:       c.OutputChannels,
-		OutputSpatial:        c.OutputSpatial,
-	}
-	return
-}
-
-func convertPadAxis(pad backends.PadAxis) (xlaPad xlabuilder.PadAxis) {
-	xlaPad = xlabuilder.PadAxis{
-		Start:    pad.Start,
-		End:      pad.End,
-		Interior: pad.Interior,
-	}
-	return
-}
-
-func convertFFTType(fftType backends.FFTType) xlabuilder.FFTType {
-	switch fftType {
-	case backends.FFTForward:
-		return xlabuilder.FFTType_FFT
-	case backends.FFTInverse:
-		return xlabuilder.FFTType_IFFT
-	case backends.FFTForwardReal:
-		return xlabuilder.FFTType_RFFT
-	case backends.FFTInverseReal:
-		return xlabuilder.FFTType_IRFFT
-	default:
-		exceptions.Panicf("fft type %s is not supported", fftType)
-		panic(nil) // To quiet IDE warning.
-	}
-}
-
-// BitCount returns the number of bits that are set to one.
-func (b *Builder) BitCount(x backends.Op) (backends.Op, error) {
-	xlaX, err := b.verifyAndCastOp(x, "x")
-	if err != nil {
-		return nil, errors.WithMessagef(err, "Backend %q: failed BitCount", BackendName)
-	}
-	xlaResult, err := xlabuilder.PopulationCount(xlaX)
-	if err != nil {
-		return nil, errors.WithMessagef(err, "Backend %q: failed BitCount", BackendName)
-	}
-	return xlaResult, nil
-}
-
-// IsNaN implements backends.Builder interface.
-func (b *Builder) IsNaN(x backends.Op) (backends.Op, error) {
-	result, err := b.NotEqual(x, x)
-	if err != nil {
-		return nil, errors.WithMessage(err, "while building op IsNaN")
-	}
-	return result, nil
 }

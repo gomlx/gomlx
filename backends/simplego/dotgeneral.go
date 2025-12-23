@@ -6,8 +6,8 @@ import (
 	"math/bits"
 	"strings"
 
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 
@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	nodeExecutors[backends.OpTypeDotGeneral] = execDotGeneral
+	setNodeExecutor(backends.OpTypeDotGeneral, priorityGeneric, execDotGeneral)
 }
 
 type dotGeneralNodeData struct {

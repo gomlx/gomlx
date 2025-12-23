@@ -7517,7 +7517,7 @@ a.anchor-link {
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p><img alt="[GoMLX Mascot]" src="gomlx_gopher2.png" style="height:10em; float:left; margin:1em;"/></p>
+<p><img alt="[GoMLX Mascot]" src="gomlx_gopher2.jpg" style="height:10em; float:left; margin:1em;"/></p>
 <h1 id="GoMLX-Tutorial">GoMLX Tutorial<a class="anchor-link" href="#GoMLX-Tutorial">¶</a></h1><p>If you want just to quickly look at an working example, checkout <a href="https://github.com/gomlx/gomlx/blob/main/examples/cifar/cifar.ipynb">examples/cifar/demo/adult.ipynb</a>, for model trained on the UCI Adult Income dataset. More examples in <a href="https://github.com/gomlx/gomlx/tree/main/examples">examples/</a> subdirectory.</p>
 <p>The tutorial won't detail the whole API, but should present all important concepts. Everything else is
 well documented in godoc (in the code), also available in <a href="https://pkg.go.dev/github.com/gomlx/gomlx#section-readme">pkg.go.dev</a>.</p>
@@ -7550,7 +7550,7 @@ There is an <a href="https://github.com/jupyterlab/jupyterlab/issues/15467">issu
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	- Added replace rule for module "github.com/gomlx/gomlx" to local directory "/home/janpf/Projects/gomlx".
+<pre>	- Replace rule for module "github.com/gomlx/gomlx" to local directory "/home/janpf/Projects/gomlx" already exists.
 </pre>
 </div>
 </div>
@@ -7658,21 +7658,26 @@ But you can build your binary only with xla with <code>import _ "github.com/goml
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">_</span> <span class="s2">"github.com/gomlx/gomlx/backends/default"</span>
 
-<span class="n">var</span> <span class="n">backend</span> <span class="o">=</span> <span class="n">backends</span><span class="o">.</span><span class="n">MustNew</span><span class="p">()</span>
+<span class="o">//</span> <span class="n">must</span> <span class="n">exits</span> <span class="k">with</span> <span class="n">an</span> <span class="n">error</span><span class="p">,</span> <span class="n">logging</span> <span class="n">it</span><span class="o">.</span>
+<span class="n">func</span> <span class="n">must</span><span class="p">[</span><span class="n">T</span> <span class="nb">any</span><span class="p">](</span><span class="n">value</span> <span class="n">T</span><span class="p">,</span> <span class="n">err</span> <span class="n">error</span><span class="p">)</span> <span class="n">T</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">Fatalf</span><span class="p">(</span><span class="s2">"Fatal error: %+v"</span><span class="p">,</span> <span class="n">err</span><span class="p">)</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">value</span>
+<span class="p">}</span>
+
+<span class="n">var</span> <span class="n">backend</span> <span class="o">=</span> <span class="n">must</span><span class="p">(</span><span class="n">backends</span><span class="o">.</span><span class="n">New</span><span class="p">())</span>
 
 <span class="o">%%</span>
 
 <span class="o">//</span> <span class="n">Short</span> <span class="n">version</span><span class="p">:</span> <span class="err">`</span><span class="n">ExecOnce</span><span class="err">`</span> <span class="n">will</span> <span class="nb">compile</span> <span class="n">the</span> <span class="n">function</span> <span class="ow">and</span> <span class="n">execute</span> <span class="n">only</span> <span class="n">once</span><span class="o">.</span>
-<span class="n">two</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">ExecOnce</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="o">/*</span> <span class="n">GoMLX</span> <span class="n">function</span> <span class="o">*/</span> <span class="n">Sum</span><span class="p">,</span> <span class="o">/*</span> <span class="n">Arguments</span> <span class="o">*/</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
-<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">}</span>
+<span class="n">two</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">ExecOnce</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="o">/*</span> <span class="n">GoMLX</span> <span class="n">function</span> <span class="o">*/</span> <span class="n">Sum</span><span class="p">,</span> <span class="o">/*</span> <span class="n">Arguments</span> <span class="o">*/</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Short version:</span><span class="se">\t</span><span class="s2">1+1=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">two</span><span class="p">)</span>
 
 <span class="o">//</span> <span class="n">Exec</span> <span class="n">version</span><span class="p">:</span> <span class="err">`</span><span class="n">NewExec</span><span class="err">`</span> <span class="n">will</span> <span class="nb">compile</span> <span class="n">the</span> <span class="n">Sum</span> <span class="n">function</span> <span class="n">so</span> <span class="n">it</span> <span class="n">can</span> <span class="n">be</span> <span class="n">executed</span> <span class="n">efficiently</span>
 <span class="o">//</span> <span class="n">many</span> <span class="n">times</span><span class="o">.</span>
-<span class="n">exec</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">NewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">Sum</span><span class="p">)</span>
-<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">}</span>
-<span class="n">results</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">exec</span><span class="o">.</span><span class="n">Exec</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">}</span>
+<span class="n">exec</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">NewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">Sum</span><span class="p">))</span>
+<span class="n">results</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">exec</span><span class="o">.</span><span class="n">Exec</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
 <span class="n">two</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Exec version:</span><span class="se">\t</span><span class="s2">1+1=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">two</span><span class="p">)</span>
 </pre></div>
@@ -7706,6 +7711,7 @@ Exec version:	1+1=int64(2)
 <p><strong>Note</strong></p>
 <ul>
 <li><code>%%</code> is a shortcut for <code>func main()</code>: everything after it is put inside a <code>main</code> function by <strong>GoNB</strong>, the Go Notebook kernel.</li>
+<li>We define the <code>must</code> function: a convenient way to handle errors for notebooks, by immediately logging the error and exiting.</li>
 <li><code>backends.New()</code> creates a <code>backends.Backend</code> object, which connects to an accelerator if present. <code>backends.MustNew</code> is the version that panics on error.
 Usually one creates one at the beginning of the program and passes it around.
 Here <strong>GoNB</strong> will keep the global variable <code>manager</code> available to all cells, so we don't need
@@ -7742,6 +7748,7 @@ see <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/shapes">package 
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
     <span class="s2">"fmt"</span>
     <span class="o">.</span> <span class="s2">"github.com/gomlx/gomlx/pkg/core/graph"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/core/dtypes"</span>
 <span class="p">)</span>
 
 <span class="o">//</span> <span class="n">Sum</span> <span class="ow">is</span> <span class="n">the</span> <span class="n">symbolic</span> <span class="n">funciton</span> <span class="p">(</span><span class="n">creates</span> <span class="n">a</span> <span class="n">graph</span><span class="p">)</span> <span class="n">of</span> <span class="n">summing</span> <span class="n">two</span> <span class="n">numbers</span><span class="o">.</span>
@@ -7753,7 +7760,7 @@ see <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/shapes">package 
 
 
 <span class="n">func</span> <span class="n">main</span><span class="p">()</span> <span class="p">{</span>
-    <span class="n">sumExec</span> <span class="o">:=</span> <span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">Sum</span><span class="p">)</span>
+    <span class="n">sumExec</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">NewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">Sum</span><span class="p">))</span>
     <span class="n">two</span> <span class="o">:=</span> <span class="n">sumExec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">1+1=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">two</span><span class="p">)</span>
 
@@ -7816,7 +7823,7 @@ We'll see later <code>Node.SetLogged</code> on how to print intermediary results
 <li>Every <code>Node</code> has an associated shape (<code>shapes.Shape</code> type). A shape is defined by its underlying data type
 <code>shapes.DType</code> and its axes dimensions. For scalars, the shape has zero axes (dimensions). E.g.: <code>(Int64)[]</code> represents
 a scalar <code>int</code> value, and <code>(Float32)[3]</code> represents a vector with 3 <code>float32</code> values. More details
-and the list of data types (aka. <em>dtype</em>) supported in the package <a href="https://pkg.go.dev/github.com/gomlx/gopjrt/dtypes">github.com/gomlx/gopjrt/dtypes</a>.</li>
+and the list of data types (aka. <em>dtype</em>) supported in the package <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/core/dtypes">github.com/gomlx/gomlx/pkg/core/dtypes</a>.</li>
 <li><code>Exec.MustExec1</code> is an alias to the previous <code>Exec.Exec1</code> that conveniently: (a) panics on error; (b) returns the first result.</li>
 </ul>
 </blockquote>
@@ -7887,8 +7894,7 @@ JIT-compiled code later on.</li>
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span>
 <span class="n">sumExec</span> <span class="o">:=</span> <span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">Sum</span><span class="p">)</span>
-<span class="n">_</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">sumExec</span><span class="o">.</span><span class="n">Exec</span><span class="p">(</span><span class="mf">1.1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="o">//</span> <span class="n">Error</span><span class="p">:</span> <span class="n">arguments</span> <span class="n">have</span> <span class="n">different</span> <span class="n">dtypes</span> <span class="n">Float64</span> <span class="ow">and</span> <span class="n">Int64</span><span class="o">.</span>
-<span class="n">klog</span><span class="o">.</span><span class="n">Errorf</span><span class="p">(</span><span class="s2">"%+v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">err</span><span class="p">)</span>
+<span class="n">_</span> <span class="o">=</span> <span class="n">must</span><span class="p">(</span><span class="n">sumExec</span><span class="o">.</span><span class="n">Exec</span><span class="p">(</span><span class="mf">1.1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span> <span class="o">//</span> <span class="n">Error</span><span class="p">:</span> <span class="n">arguments</span> <span class="n">have</span> <span class="n">different</span> <span class="n">dtypes</span> <span class="n">Float64</span> <span class="ow">and</span> <span class="n">Int64</span><span class="o">.</span>
 </pre></div>
 </div>
 </div>
@@ -7909,39 +7915,42 @@ JIT-compiled code later on.</li>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
-<pre>E1011 09:48:27.498153  999407 main.go:28] cannot broadcast Float64 and Int64 for "Add": they have different dtypes
-github.com/gomlx/gomlx/backends/stablehlo.(*Builder).broadcastForBinaryOps
-	/home/janpf/Projects/gomlx/backends/stablehlo/builder.go:213
-github.com/gomlx/gomlx/backends/stablehlo.(*Builder).Add
-	/home/janpf/Projects/gomlx/backends/stablehlo/gen_binary_ops.go:13
+<pre>2025/12/13 08:45:32 Fatal error: cannot broadcast Float64 and Int64 for "Add": they have different dtypes
+github.com/gomlx/gomlx/backends/xla.(*Builder).broadcastForBinaryOps
+	/home/janpf/Projects/gomlx/backends/xla/builder.go:347
+github.com/gomlx/gomlx/backends/xla.(*Builder).Add
+	/home/janpf/Projects/gomlx/backends/xla/gen_binary_ops.go:13
 github.com/gomlx/gomlx/pkg/core/graph.Add
-	/home/janpf/Projects/gomlx/pkg/core/graph/gen_backend_ops.go:191
+	/home/janpf/Projects/gomlx/pkg/core/graph/gen_backend_ops.go:194
 main.Sum
-	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell Line 0 ]]</span> /tmp/gonb_099774e5/main.go:20
+	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell Line 0 ]]</span> /tmp/gonb_4708623b/main.go:20
 reflect.Value.call
 	/snap/go/current/src/reflect/value.go:581
 reflect.Value.Call
 	/snap/go/current/src/reflect/value.go:365
 github.com/gomlx/gomlx/pkg/core/graph.(*Exec).createAndCacheGraph
-	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:539
+	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:888
 github.com/gomlx/gomlx/pkg/core/graph.(*Exec).findOrCreateGraph
-	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:598
-github.com/gomlx/gomlx/pkg/core/graph.(*Exec).compileAndExecute
-	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:447
-github.com/gomlx/gomlx/pkg/core/graph.(*Exec).ExecWithGraph.func1
-	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:392
+	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:980
+github.com/gomlx/gomlx/pkg/core/graph.(*Exec).compileAndExecute.func1
+	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:704
 github.com/gomlx/gomlx/internal/exceptions.TryCatch[...]
-	/home/janpf/Projects/gomlx/internal/exceptions/exceptions.go:90
+	/home/janpf/Projects/gomlx/internal/exceptions/exceptions.go:89
+github.com/gomlx/gomlx/pkg/core/graph.(*Exec).compileAndExecute
+	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:703
+github.com/gomlx/gomlx/pkg/core/graph.(*Exec).ExecWithGraphOnDevice
+	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:498
 github.com/gomlx/gomlx/pkg/core/graph.(*Exec).ExecWithGraph
-	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:391
+	/home/janpf/Projects/gomlx/pkg/core/graph/execaliases.go:105
 github.com/gomlx/gomlx/pkg/core/graph.(*Exec).Exec
-	/home/janpf/Projects/gomlx/pkg/core/graph/exec.go:377
+	/home/janpf/Projects/gomlx/pkg/core/graph/execaliases.go:35
 main.main
-	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [5] Line 3 ]]</span> /tmp/gonb_099774e5/main.go:27
+	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [5] Line 3 ]]</span> /tmp/gonb_4708623b/main.go:35
 runtime.main
 	/snap/go/current/src/runtime/proc.go:285
 runtime.goexit
 	/snap/go/current/src/runtime/asm_amd64.s:1693
+exit status 1
 </pre>
 </div>
 </div>
@@ -8251,7 +8260,7 @@ inputs" and returning them as "side outputs" if they were updated in the computa
 <span class="k">for</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="p">{</span>
     <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">count=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">exec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">())</span>
 <span class="p">}</span>
-<span class="n">counterVar</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"count"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span>
+<span class="n">counterVar</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"count"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"- State of counter=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">counterVar</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
 </pre></div>
 </div>
@@ -8318,7 +8327,10 @@ of the computation graph.</li>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [10]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">"flag"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
+    <span class="s2">"flag"</span>
+    <span class="s2">"github.com/gomlx/gomlx/pkg/core/shapes"</span>
+<span class="p">)</span>
 
 <span class="n">var</span> <span class="p">(</span>
     <span class="n">flagA</span> <span class="o">=</span> <span class="n">flag</span><span class="o">.</span><span class="n">Float64</span><span class="p">(</span><span class="s2">"a"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s2">"Value of a in the equation ax^2+bx+c"</span><span class="p">)</span>
@@ -8372,8 +8384,8 @@ of the computation graph.</li>
         <span class="n">_</span> <span class="o">=</span> <span class="n">exec</span><span class="o">.</span><span class="n">MustExec</span><span class="p">()</span>
     <span class="p">}</span>
     <span class="n">y</span> <span class="o">:=</span> <span class="n">exec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">()</span>
-    <span class="n">x</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"x"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span>
-    <span class="n">stepNum</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"stepNum"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span>
+    <span class="n">x</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"x"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+    <span class="n">stepNum</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"stepNum"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
     <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Minimum found at x=</span><span class="si">%g</span><span class="s2">, f(x)=</span><span class="si">%g</span><span class="s2"> after </span><span class="si">%f</span><span class="s2"> steps.</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">x</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">y</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">stepNum</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
 <span class="p">}</span>
 </pre></div>
@@ -8565,7 +8577,7 @@ have been selected in Go directly using <code>math/random</code>, but just for f
 <span class="o">//</span> <span class="n">attempt</span> <span class="n">to</span> <span class="n">learn</span><span class="o">.</span>
 <span class="n">func</span> <span class="n">initCoefficients</span><span class="p">(</span><span class="n">backend</span> <span class="n">backends</span><span class="o">.</span><span class="n">Backend</span><span class="p">,</span> <span class="n">numVariables</span> <span class="nb">int</span><span class="p">)</span> <span class="p">(</span><span class="n">coefficients</span><span class="p">,</span> <span class="n">bias</span> <span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="p">{</span>
     <span class="n">e</span> <span class="o">:=</span> <span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">func</span><span class="p">(</span><span class="n">g</span> <span class="o">*</span><span class="n">Graph</span><span class="p">)</span> <span class="p">(</span><span class="n">coefficients</span><span class="p">,</span> <span class="n">bias</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">{</span>
-        <span class="n">rngState</span> <span class="o">:=</span> <span class="n">Const</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">RngState</span><span class="p">())</span>
+        <span class="n">rngState</span> <span class="o">:=</span> <span class="n">Const</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">must</span><span class="p">(</span><span class="n">RNGState</span><span class="p">()))</span>
         <span class="n">rngState</span><span class="p">,</span> <span class="n">coefficients</span> <span class="o">=</span> <span class="n">RandomNormal</span><span class="p">(</span><span class="n">rngState</span><span class="p">,</span> <span class="n">shapes</span><span class="o">.</span><span class="n">Make</span><span class="p">(</span><span class="n">dtypes</span><span class="o">.</span><span class="n">Float64</span><span class="p">,</span> <span class="n">numVariables</span><span class="p">))</span>
         <span class="n">coefficients</span> <span class="o">=</span> <span class="n">AddScalar</span><span class="p">(</span><span class="n">MulScalar</span><span class="p">(</span><span class="n">coefficients</span><span class="p">,</span> <span class="n">CoefficientSigma</span><span class="p">),</span> <span class="n">CoefficientMu</span><span class="p">)</span>
         <span class="n">rngState</span><span class="p">,</span> <span class="n">bias</span> <span class="o">=</span> <span class="n">RandomNormal</span><span class="p">(</span><span class="n">rngState</span><span class="p">,</span> <span class="n">shapes</span><span class="o">.</span><span class="n">Make</span><span class="p">(</span><span class="n">dtypes</span><span class="o">.</span><span class="n">Float64</span><span class="p">))</span>
@@ -8591,7 +8603,7 @@ have been selected in Go directly using <code>math/random</code>, but just for f
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Example of target: coefficients=[-1.03 6.14 3.05], bias=-18.1
+<pre>Example of target: coefficients=[-7.92 4.63 2.46], bias=-10.9
 </pre>
 </div>
 </div>
@@ -8636,7 +8648,7 @@ selected coefficients plus some normal noise.</p>
         <span class="n">numFeatures</span> <span class="o">:=</span> <span class="n">coef</span><span class="o">.</span><span class="n">Shape</span><span class="p">()</span><span class="o">.</span><span class="n">Dimensions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
         <span class="o">//</span> <span class="n">Random</span> <span class="n">inputs</span> <span class="p">(</span><span class="n">observations</span><span class="p">)</span><span class="o">.</span>
-        <span class="n">rngState</span> <span class="o">:=</span> <span class="n">Const</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">RngState</span><span class="p">())</span>
+        <span class="n">rngState</span> <span class="o">:=</span> <span class="n">Const</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">must</span><span class="p">(</span><span class="n">RNGState</span><span class="p">()))</span>
         <span class="n">rngState</span><span class="p">,</span> <span class="n">inputs</span> <span class="o">=</span> <span class="n">RandomNormal</span><span class="p">(</span><span class="n">rngState</span><span class="p">,</span> <span class="n">shapes</span><span class="o">.</span><span class="n">Make</span><span class="p">(</span><span class="n">coef</span><span class="o">.</span><span class="n">DType</span><span class="p">(),</span> <span class="n">numExamples</span><span class="p">,</span> <span class="n">numFeatures</span><span class="p">))</span>
         <span class="n">coef</span> <span class="o">=</span> <span class="n">ExpandDims</span><span class="p">(</span><span class="n">coef</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
 
@@ -8680,13 +8692,13 @@ selected coefficients plus some normal noise.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[0.728 -6.22 8.15], bias=-24.2
+<pre>Target: coefficients=[5.6 -8.99 8.38], bias=-13.7
 5 dataset examples:
-	x=[1.73 0.207 0.162]; label=[-22.8]
-	x=[-1.17 0.725 0.0552]; label=[-29]
-	x=[0.617 1.31 0.898]; label=[-24.5]
-	x=[-0.214 -0.102 1.3]; label=[-13.1]
-	x=[1.16 0.758 0.545]; label=[-23.8]
+	x=[-0.331 -0.232 2.23]; label=[4.92]
+	x=[-1.87 -3.08 0.503]; label=[7.91]
+	x=[-1.27 -0.746 -1.48]; label=[-26.1]
+	x=[-0.381 -0.708 -0.599]; label=[-14.7]
+	x=[-1.64 0.762 -1.71]; label=[-44]
 </pre>
 </div>
 </div>
@@ -8898,13 +8910,13 @@ or plotting of a graph.</p>
     <span class="n">AttachToLoop</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span>
 
     <span class="o">//</span> <span class="n">Loop</span> <span class="k">for</span> <span class="n">given</span> <span class="n">number</span> <span class="n">of</span> <span class="n">steps</span><span class="o">.</span> <span class="n">must</span><span class="o">.</span><span class="n">M1</span><span class="p">()</span> <span class="n">panics</span><span class="p">,</span> <span class="k">if</span> <span class="n">loop</span><span class="o">.</span><span class="n">RunSteps</span> <span class="n">returns</span> <span class="n">an</span> <span class="n">error</span><span class="o">.</span>
-    <span class="n">metrics</span> <span class="o">:=</span> <span class="n">must</span><span class="o">.</span><span class="n">M1</span><span class="p">(</span><span class="n">loop</span><span class="o">.</span><span class="n">RunSteps</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNumSteps</span><span class="p">))</span>
+    <span class="n">metrics</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">loop</span><span class="o">.</span><span class="n">RunSteps</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNumSteps</span><span class="p">))</span>
     <span class="n">_</span> <span class="o">=</span> <span class="n">metrics</span>  <span class="o">//</span> <span class="n">We</span> <span class="n">are</span> <span class="ow">not</span> <span class="n">interested</span> <span class="ow">in</span> <span class="n">them</span> <span class="ow">in</span> <span class="n">this</span> <span class="n">example</span><span class="o">.</span>
 
     <span class="o">//</span> <span class="n">Print</span> <span class="n">learned</span> <span class="n">coefficients</span> <span class="ow">and</span> <span class="n">bias</span> <span class="o">--</span> <span class="kn">from</span><span class="w"> </span><span class="nn">the</span> <span class="n">weights</span> <span class="ow">in</span> <span class="n">the</span> <span class="n">dense</span> <span class="n">layer</span><span class="o">.</span>
     <span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">()</span>
     <span class="n">coefVar</span><span class="p">,</span> <span class="n">biasVar</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">GetVariableByScopeAndName</span><span class="p">(</span><span class="s2">"/dense"</span><span class="p">,</span> <span class="s2">"weights"</span><span class="p">),</span> <span class="n">ctx</span><span class="o">.</span><span class="n">GetVariableByScopeAndName</span><span class="p">(</span><span class="s2">"/dense"</span><span class="p">,</span> <span class="s2">"biases"</span><span class="p">)</span>
-    <span class="n">learnedCoef</span><span class="p">,</span> <span class="n">learnedBias</span> <span class="o">:=</span> <span class="n">coefVar</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">biasVar</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span>
+    <span class="n">learnedCoef</span><span class="p">,</span> <span class="n">learnedBias</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">coefVar</span><span class="o">.</span><span class="n">Value</span><span class="p">()),</span> <span class="n">must</span><span class="p">(</span><span class="n">biasVar</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
     <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Learned: coefficients=%0.3v, bias=%0.3v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">learnedCoef</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">learnedBias</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
 <span class="p">}</span>
 
@@ -8922,12 +8934,12 @@ or plotting of a graph.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[-5.96 5.39 0.652], bias=13.7
+<pre>Target: coefficients=[-5.57 0.424 4.67], bias=-1.4
 Training data (inputs, labels): ((Float64)[10000 3], (Float64)[10000 1])
 
-      <span class="ansi-bold"> 100% [========================================] (12516 steps/s)</span> [step=99] [loss+=0.225] [~loss+=13] [~loss=12.9]        ]
+      <span class="ansi-bold"> 100% [========================================] (10886 steps/s)</span> [step=99] [loss+=0.115] [~loss+=2.52] [~loss=2.48]                
 
-Learned: coefficients=[[-5.83] [5.26] [0.649]], bias=[13.4]
+Learned: coefficients=[[-5.46] [0.395] [4.56]], bias=[-1.38]
 </pre>
 </div>
 </div>
@@ -8995,7 +9007,7 @@ the only metrics are the default ones, the batch and mean of the loss -- the mea
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[-10.3 3.62 3.39], bias=10.3
+<pre>Target: coefficients=[-2.89 1.15 -5.2], bias=9.04
 Training data (inputs, labels): ((Float64)[10000 3], (Float64)[10000 1])
 
 </pre>
@@ -9009,7 +9021,7 @@ Training data (inputs, labels): ((Float64)[10000 3], (Float64)[10000 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold">   3% [&gt;.......................................] (16238 steps/s) [0s:0s]</span> [step=164] [loss+=0.182] [~loss+=6.15] [~loss=6.04]        </pre>
+<pre>      <span class="ansi-bold">   3% [&gt;.......................................] (17944 steps/s) [0s:0s]</span> [step=164] [loss+=0.0838] [~loss+=3.29] [~loss=3.26]        </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -9020,7 +9032,7 @@ Training data (inputs, labels): ((Float64)[10000 3], (Float64)[10000 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold"> 100% [========================================] (14194 steps/s)</span> [step=4999] [loss+=0.172] [~loss+=0.172] [~loss=0.0414]
+<pre>      <span class="ansi-bold"> 100% [========================================] (14495 steps/s)</span> [step=4999] [loss+=0.0769] [~loss+=0.0769] [~loss=0.0402]                
 </pre>
 </div>
 </div>
@@ -9033,15 +9045,7 @@ Training data (inputs, labels): ((Float64)[10000 3], (Float64)[10000 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="0613c8a6"></div>
-</div>
-</div>
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>
-Learned: coefficients=[[-10.3] [3.62] [3.38]], bias=[10.3]
-</pre>
+<div id="50c29a7d"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -9051,15 +9055,15 @@ Learned: coefficients=[[-10.3] [3.62] [3.38]], bias=[10.3]
 (() => {
 	const src="https://cdn.plot.ly/plotly-2.34.0.min.js";
 	var runJSFn = function(module) {
-
+		
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[1.2742347340350595,0.25540553083712525,0.18161262041346496,0.17315265653092768,0.17193625371864366,0.17174128673619304,0.17170756497179746,0.17170152029789532,0.17170042592519627,0.1717002292322393,0.17170019455351956,0.17170018860579295,0.17170018761932215,0.17170018746146307,0.17170018743747315,0.1717001874340053,0.171700187433533,0.17170018743347276,0.17170018743346563,0.17170018743346485,0.17170018743346474,0.17170018743346474,0.17170018743346477,0.17170018743346477,0.17170018743346477,0.17170018743346477]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[22.270259530545527,10.967771993655955,6.033250945824556,3.1628735385064317,1.5938292022590366,0.8018253817045112,0.4293180723139131,0.2679131521509437,0.20419689400562316,0.18152740086260807,0.17433435137614628,0.1723197886005523,0.17182679921127864,0.17172221664679183,0.1717034183235775,0.1717005789176608,0.17170022584359193,0.17170019042426612,0.17170018761460298,0.17170018744174517,0.17170018743374255,0.17170018743347204,0.17170018743346682,0.17170018743346682,0.17170018743346682,0.17170018743346682]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[22.18833742330724,10.865563788492464,5.919458710115562,3.041502793715651,1.4679933490319985,0.6736030610502256,0.29991610911280686,0.1379746354254266,0.07403514072491024,0.05128109360262994,0.044058935807736455,0.0420352240037681,0.04153956872488948,0.04143424107315943,0.04141523550775433,0.041412335721307404,0.04141196397998514,0.04141192256411565,0.04141191781597074,0.04141191702586067,0.041411916827349134,0.041411916770560636,0.04141191675451212,0.04141191675016344,0.041411916749043376,0.04141191674899381]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('0613c8a6', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[0.7291537178423155,0.12932141635572678,0.08336787764665964,0.07786508372614699,0.07704423037182495,0.07690833296555846,0.07688413965252967,0.07687968860901702,0.07687886357987692,0.07687871212832163,0.07687868492036279,0.07687868017721182,0.07687867937964683,0.07687867925060167,0.0768786792308294,0.07687867922795652,0.07687867922756447,0.07687867922751458,0.07687867922750868,0.07687867922750803,0.07687867922750796,0.07687867922750796,0.07687867922750796,0.07687867922750796,0.07687867922750796,0.07687867922750795]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[11.930810177237348,5.880471323902646,3.229197635166359,1.6857573103149075,0.841852871716381,0.415837166840192,0.21545904154876402,0.12863490585121765,0.09435984346866531,0.08216511168609418,0.07829569932986069,0.0772119875320574,0.07694678886940053,0.07689052965501053,0.07688041725951565,0.07687888982367279,0.07687869989000537,0.07687868083639633,0.0768786793249511,0.0768786792319626,0.07687867922765766,0.0768786792275121,0.07687867922750925,0.07687867922750925,0.07687867922750925,0.07687867922750925]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[11.908685903833048,5.852364771151683,3.1976055209538594,1.6518610602139958,0.8065885833009507,0.37983682063045027,0.17909251630063103,0.09210068794417821,0.05775530537442971,0.04553367724974392,0.04165488494135193,0.04056817149806546,0.04030207585817294,0.04024555729054556,0.04023536978218996,0.04023381959338971,0.04023362241597213,0.040233600992456396,0.04023359870661343,0.04023359836540459,0.04023359828417168,0.04023359826115467,0.04023359825465769,0.04023359825290056,0.040233598252449675,0.0402335982524298]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('50c29a7d', data);
 
 	}
-
+	
     if (typeof requirejs === "function") {
         // Use RequireJS to load module.
 		let srcWithoutExtension = src.substring(0, src.lastIndexOf(".js"));
@@ -9086,12 +9090,20 @@ Learned: coefficients=[[-10.3] [3.62] [3.38]], bias=[10.3]
 	var script = document.createElement("script");
 
 	script.charset = "utf-8";
-
+	
 	script.src = src;
 	script.onload = script.onreadystatechange = function () { runJSFn(null); };
-	document.head.appendChild(script);
+	document.head.appendChild(script);	
 })();
 </script>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>
+Learned: coefficients=[[-2.89] [1.15] [-5.2]], bias=[9.04]
+</pre>
 </div>
 </div>
 </div>

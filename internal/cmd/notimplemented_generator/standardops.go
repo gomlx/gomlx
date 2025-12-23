@@ -25,7 +25,9 @@ var (
 	methodsNotGenerated = sets.MakeWith(
 		"Constant", "Parameter", "Identity", "ReduceWindow",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
-		"And", "Or", "Xor", "Not", "ReduceAnd", "ReduceOr", "ReduceXor", "ScatterAdd")
+		"And", "Or", "Xor", "Not", "ReduceAnd", "ReduceOr", "ReduceXor", "ScatterAdd",
+		"AllReduce", // Output is not standard
+	)
 
 	// methodsExcluded from generating and even from having a NodeType.
 	// These are utility methods, not part of building a graph.
@@ -40,7 +42,7 @@ package notimplemented
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 {{- range .}}

@@ -23,7 +23,7 @@
 // working on the symbolic computation graph (see pkg/core/graph package).
 //
 // Go float16 support (commonly used by Nvidia GPUs) uses github.com/x448/float16 implementation,
-// and bfloat16 uses a simple implementation in github.com/gomlx/gopjrt/dtypes/bfloat16.
+// and bfloat16 uses a simple implementation in github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16.
 //
 // ## Glossary
 //
@@ -32,7 +32,7 @@
 //     interchangeably with Dimension, but here we try to refer to a dimension index as "axis"
 //     (plural axes), and its size as its dimension.
 //   - Dimension: the size of a multi-dimension Tensor in one of its axes. See the example below.
-//   - DType: the data type of the unit element in a tensor. Enumeration defined in github.com/gomlx/gopjrt/dtypes
+//   - DType: the data type of the unit element in a tensor. Enumeration defined in github.com/gomlx/gomlx/pkg/core/dtypes
 //   - Scalar: is a shape where there are no axes (or dimensions), only a single value
 //     of the associated DType.
 //
@@ -74,7 +74,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 )
 

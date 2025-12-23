@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"time"
 
 	"github.com/gomlx/gomlx/backends"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -24,7 +26,6 @@ import (
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	stdplots "github.com/gomlx/gomlx/ui/plots"
-	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
 )
 
@@ -113,7 +114,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	}
 	if context.GetParamOr(ctx, "rng_reset", true) {
 		// Reset RNG.
-		ctx.RngStateReset()
+		ctx.ResetRNGState()
 	}
 	if verbosity >= 1 {
 		for _, paramsPath := range paramsSet {
@@ -251,7 +252,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 		}
 
 		// Update batch normalization averages, if they are used.
-		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
+		if must.M1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpoint != nil {
 				must.M(checkpoint.Save())
@@ -332,7 +333,7 @@ func CompareModelPlots(dataDir string, modelNames ...string) {
 	plots := margaid.New(1024, 400).LogScaleX().LogScaleY()
 	for _, modelName := range modelNames {
 		modelPath := modelName
-		if !path.IsAbs(modelPath) {
+		if !filepath.IsAbs(modelPath) {
 			modelPath = path.Join(dataDir, modelPath)
 		}
 		modelPath = path.Join(modelPath, stdplots.TrainingPlotFileName)

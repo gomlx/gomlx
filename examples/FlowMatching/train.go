@@ -8,6 +8,7 @@ import (
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -22,7 +23,6 @@ import (
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	stdplots "github.com/gomlx/gomlx/ui/plots"
-	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
 )
 
@@ -48,7 +48,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	}
 	if context.GetParamOr(ctx, "rng_reset", true) {
 		// Reset RNG with some pseudo-random value.
-		ctx.RngStateReset()
+		ctx.ResetRNGState()
 	}
 	if verbosity >= 1 {
 		// Enumerate parameters that were set.
@@ -170,7 +170,11 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		}
 
 		// Update batch normalization averages, if they are used.
-		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
+		bnUpdated, err := batchnorm.UpdateAverages(trainer, trainEvalDS)
+		if err != nil {
+			klog.Exitf("Error while updating batch normalization averages: %+v", err)
+		}
+		if bnUpdated {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpoint != nil {
 				must.M(checkpoint.Save())

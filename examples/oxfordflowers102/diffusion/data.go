@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
@@ -14,7 +15,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -51,6 +51,10 @@ type Config struct {
 
 	// NanLogger is enabled by setting the hyperparameter "nan_logger=true".
 	NanLogger *nanlogger.NanLogger
+
+	// NoNormalization prevents default normalization of the images.
+	// Should be set only for tests.
+	NoNormalization bool
 }
 
 // NewConfig creates a configuration for most of the diffusion methods.
@@ -85,7 +89,16 @@ func (c *Config) CreateInMemoryDatasets() (trainDS, validationDS *datasets.InMem
 	trainDS = must.M1(
 		flowers.InMemoryDataset(c.Backend, c.DataDir, c.ImageSize, "train", PartitionSeed, ValidationFraction, 1.0))
 	validationDS = must.M1(
-		flowers.InMemoryDataset(c.Backend, c.DataDir, c.ImageSize, "validation", PartitionSeed, 0.0, ValidationFraction))
+		flowers.InMemoryDataset(
+			c.Backend,
+			c.DataDir,
+			c.ImageSize,
+			"validation",
+			PartitionSeed,
+			0.0,
+			ValidationFraction,
+		),
+	)
 	return
 }
 
@@ -96,6 +109,10 @@ var (
 
 // NormalizationValues for the flowers dataset -- only look at the training data.
 func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
+	if c.NoNormalization {
+		// Return identity normalization.
+		return tensors.FromScalar(float32(0)), tensors.FromScalar(float32(1))
+	}
 	// Check if values have already been retrieved.
 	if normalizationMean != nil && normalizationStdDev != nil {
 		mean, stddev = normalizationMean, normalizationStdDev
@@ -125,10 +142,15 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 
 	trainDS, _ := c.CreateInMemoryDatasets()
 	trainDS.BatchSize(128, false)
-	ds := datasets.MapWithGraphFn(c.Backend, nil, trainDS, func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
-		images := c.PreprocessImages(inputs[0], false)
-		return []*Node{images}, labels
-	})
+	ds := datasets.MapWithGraphFn(
+		c.Backend,
+		nil,
+		trainDS,
+		func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
+			images := c.PreprocessImages(inputs[0], false)
+			return []*Node{images}, labels
+		},
+	)
 	normalizationMean, normalizationStdDev = must.M2(
 		datasets.Normalization(c.Backend, ds, 0, -1)) // mean/stddev for each channel (axis=-1) separately.
 	mean, stddev = normalizationMean, normalizationStdDev
@@ -192,6 +214,6 @@ func (c *Config) DenormalizeImages(images *Node) *Node {
 
 func finalize(tensors []*tensors.Tensor) {
 	for _, t := range tensors {
-		t.FinalizeAll()
+		t.MustFinalizeAll()
 	}
 }

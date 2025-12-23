@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dustin/go-humanize"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
@@ -34,7 +35,8 @@ func Summary(ctxs, scopedCtxs []*context.Context, names []string) {
 		globalStepVar := ctx.GetVariable(optimizers.GlobalStepVariableName)
 		if globalStepVar != nil {
 			haveGlobalStep = true
-			globalStepRow[ii+1] = humanize.Comma(tensors.ToScalar[int64](globalStepVar.Value()))
+			globalStepT := must.M1(globalStepVar.Value())
+			globalStepRow[ii+1] = humanize.Comma(tensors.ToScalar[int64](globalStepT))
 		}
 	}
 	if haveGlobalStep {

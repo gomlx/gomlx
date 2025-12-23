@@ -5,8 +5,8 @@ import (
 	"math/rand/v2"
 	"slices"
 
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/pkg/errors"
 
 	"github.com/gomlx/gomlx/backends"
@@ -16,35 +16,35 @@ import (
 )
 
 func init() {
-	nodeExecutors[backends.OpTypeIdentity] = execIdentity
-	nodeExecutors[backends.OpTypeWhere] = execWhere
-	nodeExecutors[backends.OpTypeReshape] = execReshape
-	nodeExecutors[backends.OpTypeTranspose] = execTranspose
-	nodeExecutors[backends.OpTypeBroadcast] = execBroadcast
-	nodeExecutors[backends.OpTypeBroadcastInDim] = execBroadcastInDim
-	nodeExecutors[backends.OpTypeReduceMax] = execReduce
-	nodeExecutors[backends.OpTypeReduceMin] = execReduce
-	nodeExecutors[backends.OpTypeReduceSum] = execReduce
-	nodeExecutors[backends.OpTypeReduceProduct] = execReduce
-	nodeExecutors[backends.OpTypeReduceBitwiseAnd] = execReduce
-	nodeExecutors[backends.OpTypeReduceBitwiseOr] = execReduce
-	nodeExecutors[backends.OpTypeReduceBitwiseXor] = execReduce
-	nodeExecutors[backends.OpTypeReduceLogicalAnd] = execReduce
-	nodeExecutors[backends.OpTypeReduceLogicalOr] = execReduce
-	nodeExecutors[backends.OpTypeReduceLogicalXor] = execReduce
-	nodeExecutors[backends.OpTypeIota] = execIota
-	nodeExecutors[backends.OpTypeGather] = execGather
-	nodeExecutors[backends.OpTypeConcatenate] = execConcatenate
-	nodeExecutors[backends.OpTypeConvertDType] = execConvertDType
-	nodeExecutors[backends.OpTypeScatterMax] = execScatter
-	nodeExecutors[backends.OpTypeScatterMin] = execScatter
-	nodeExecutors[backends.OpTypeScatterSum] = execScatter
-	nodeExecutors[backends.OpTypeSlice] = execSlice
-	nodeExecutors[backends.OpTypeArgMinMax] = execArgMinMax
-	nodeExecutors[backends.OpTypeReduceWindow] = execReduceWindow
+	setNodeExecutor(backends.OpTypeIdentity, priorityGeneric, execIdentity)
+	setNodeExecutor(backends.OpTypeWhere, priorityGeneric, execWhere)
+	setNodeExecutor(backends.OpTypeReshape, priorityGeneric, execReshape)
+	setNodeExecutor(backends.OpTypeTranspose, priorityGeneric, execTranspose)
+	setNodeExecutor(backends.OpTypeBroadcast, priorityGeneric, execBroadcast)
+	setNodeExecutor(backends.OpTypeBroadcastInDim, priorityGeneric, execBroadcastInDim)
+	setNodeExecutor(backends.OpTypeReduceMax, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceMin, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceSum, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceProduct, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceBitwiseAnd, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceBitwiseOr, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceBitwiseXor, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceLogicalAnd, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceLogicalOr, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeReduceLogicalXor, priorityGeneric, execReduce)
+	setNodeExecutor(backends.OpTypeIota, priorityGeneric, execIota)
+	setNodeExecutor(backends.OpTypeGather, priorityGeneric, execGather)
+	setNodeExecutor(backends.OpTypeConcatenate, priorityGeneric, execConcatenate)
+	setNodeExecutor(backends.OpTypeConvertDType, priorityGeneric, execConvertDType)
+	setNodeExecutor(backends.OpTypeScatterMax, priorityGeneric, execScatter)
+	setNodeExecutor(backends.OpTypeScatterMin, priorityGeneric, execScatter)
+	setNodeExecutor(backends.OpTypeScatterSum, priorityGeneric, execScatter)
+	setNodeExecutor(backends.OpTypeSlice, priorityGeneric, execSlice)
+	setNodeExecutor(backends.OpTypeArgMinMax, priorityGeneric, execArgMinMax)
+	setNodeExecutor(backends.OpTypeReduceWindow, priorityGeneric, execReduceWindow)
 
 	// For nodes with multiple outputs:
-	multiOutputsNodeExecutors[backends.OpTypeRngBitGenerator] = execRngBitGenerator
+	multiOutputsNodeExecutors[backends.OpTypeRNGBitGenerator] = execRNGBitGenerator
 }
 
 // calculateStrides of a tensor assuming row-major order of the flat data.
@@ -293,7 +293,7 @@ func execReduceMaxGeneric[T PODNumericConstraints](operand, output *Buffer, it *
 	}
 }
 
-func init() { reduceMaxDTypeMap.Register(dtypes.BFloat16, execReduceMaxBFloat16) }
+func init() { reduceMaxDTypeMap.Register(dtypes.BFloat16, priorityTyped, execReduceMaxBFloat16) }
 
 // execReduceMaxBFloat16: use reduceMaxDTypeMa to call it.
 func execReduceMaxBFloat16(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
@@ -330,7 +330,7 @@ func execReduceMinGeneric[T PODNumericConstraints](operand, output *Buffer, it *
 	}
 }
 
-func init() { reduceMinDTypeMap.Register(dtypes.BFloat16, execReduceMinBFloat16) }
+func init() { reduceMinDTypeMap.Register(dtypes.BFloat16, priorityTyped, execReduceMinBFloat16) }
 
 func execReduceMinBFloat16(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
 	// Initialize with the highest value.
@@ -365,7 +365,7 @@ func execReduceSumGeneric[T PODNumericConstraints](operand, output *Buffer, it *
 	}
 }
 
-func init() { reduceSumDTypeMap.Register(dtypes.BFloat16, execReduceSumBFloat16) }
+func init() { reduceSumDTypeMap.Register(dtypes.BFloat16, priorityTyped, execReduceSumBFloat16) }
 
 func execReduceSumBFloat16(operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 0.
@@ -400,7 +400,9 @@ func execReduceProductGeneric[T PODNumericConstraints](operand, output *Buffer, 
 	}
 }
 
-func init() { reduceProductDTypeMap.Register(dtypes.BFloat16, execReduceProductBFloat16) }
+func init() {
+	reduceProductDTypeMap.Register(dtypes.BFloat16, priorityTyped, execReduceProductBFloat16)
+}
 
 func execReduceProductBFloat16(operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 1.
@@ -719,7 +721,7 @@ func execIotaGeneric[T PODNumericConstraints](params ...any) any {
 	return nil
 }
 
-func init() { dispatchIota.Register(dtypes.BFloat16, execIotaBFloat16) }
+func init() { dispatchIota.Register(dtypes.BFloat16, priorityTyped, execIotaBFloat16) }
 
 func execIotaBFloat16(params ...any) any {
 	output, batchSize, iotaSize, repeatsSize := params[0].(*Buffer), params[1].(int), params[2].(int), params[3].(int)
@@ -811,6 +813,7 @@ func execGather(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 		gatherIt, indirectStartIndices, startIndices.flat,
 		operandStartIndices, operandByteStrides,
 		slicesSize, sliceOutputBytesStride,
+		operandShape.Dimensions,
 	)
 	return output, nil
 }
@@ -838,6 +841,7 @@ func execGatherGeneric[T PODIntegerConstraints](params ...any) any {
 	operandByteStrides := nextParam().([]int)
 	slicesSize := nextParam().(int)
 	sliceOutputBytesStride := nextParam().([]int)
+	operandDimensions := nextParam().([]int)
 
 	sliceSizes := gatherParams.sliceSizes
 	operandRank := len(sliceSizes)
@@ -850,7 +854,13 @@ func execGatherGeneric[T PODIntegerConstraints](params ...any) any {
 		// Find operand indices:
 		for ii, axis := range startIndexMap {
 			startIndexForAxis := startIndicesFlat[indirectStartIndices[ii]]
-			operandStartIndices[axis] = int(startIndexForAxis)
+			idx := int(startIndexForAxis)
+			// Clamp indices to valid range [0, dim-sliceSize] to match XLA/StableHLO semantics.
+			dim := operandDimensions[axis]
+			maxIdx := dim - sliceSizes[axis]
+			maxIdx = max(0, maxIdx)
+			idx = max(0, min(maxIdx, idx))
+			operandStartIndices[axis] = idx
 		}
 		operandBytesIdx = 0
 		for axis, idx := range operandStartIndices {
@@ -1137,8 +1147,8 @@ func execConvertDTypeToBool[FromT PODNumericConstraints, _ bool](operand, output
 
 func init() {
 	// Manually register bool x bfloat16 conversion functions.
-	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Bool, execConvertDTypeBFloat16ToBool)
-	convertDTypePairMap.Register(dtypes.Bool, dtypes.BFloat16, execConvertDTypeBoolToBFloat16)
+	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Bool, priorityTyped, execConvertDTypeBFloat16ToBool)
+	convertDTypePairMap.Register(dtypes.Bool, dtypes.BFloat16, priorityTyped, execConvertDTypeBoolToBFloat16)
 }
 
 func execConvertDTypeBFloat16ToBool(operand, output *Buffer) {
@@ -1377,9 +1387,9 @@ var (
 )
 
 func init() {
-	combineMaxDTypeMap.Register(dtypes.BFloat16, combineForScatterMaxBFloat16)
-	combineMinDTypeMap.Register(dtypes.BFloat16, combineForScatterMinBFloat16)
-	combineSumDTypeMap.Register(dtypes.BFloat16, combineForScatterSumBFloat16)
+	combineMaxDTypeMap.Register(dtypes.BFloat16, priorityTyped, combineForScatterMaxBFloat16)
+	combineMinDTypeMap.Register(dtypes.BFloat16, priorityTyped, combineForScatterMinBFloat16)
+	combineSumDTypeMap.Register(dtypes.BFloat16, priorityTyped, combineForScatterSumBFloat16)
 }
 
 func combineForScatterMaxGeneric[T PODNumericConstraints](a, b T) T {
@@ -1477,10 +1487,10 @@ func execSliceGeneric[T SupportedTypesConstraints](operand, output *Buffer, para
 	}
 }
 
-// RngBitGenerator ====================================================================================================
+// RNGBitGenerator ====================================================================================================
 
-// execRngBitGenerator is the executor function registered for backends.OpTypeRngBitGenerator.
-func execRngBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
+// execRNGBitGenerator is the executor function registered for backends.OpTypeRngBitGenerator.
+func execRNGBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
 	state := inputs[0]
 	stateFlat := state.flat.([]uint64)
 
@@ -1514,7 +1524,7 @@ func execRngBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsO
 	// See details on Go source code src/math/rand/v2/pcg.go:
 	rngState, err := rng.MarshalBinary()
 	if err != nil {
-		panic(errors.Wrapf(err, "cannot update RngBitGenerator state"))
+		panic(errors.Wrapf(err, "cannot update RNGBitGenerator state"))
 	}
 	if len(rngState) != 20 && string(rngState[:4]) != "pcg:" {
 		return nil, errors.Errorf("format of PCG random number generator changed (we got %d bytes starting with %q, we wanted 20 and starting with the string 'pcg:'), pls open an issue in GoMLX", rngState[:4], len(rngState))
@@ -1639,7 +1649,7 @@ func execArgMinMaxGeneric[T PODNumericConstraints](
 }
 
 func init() {
-	argMinMaxDTypeMap.Register(dtypes.BFloat16, execArgMinMaxGenericBFloat16)
+	argMinMaxDTypeMap.Register(dtypes.BFloat16, priorityTyped, execArgMinMaxGenericBFloat16)
 }
 
 func execArgMinMaxGenericBFloat16(
@@ -1840,10 +1850,10 @@ var (
 )
 
 func init() {
-	reduceWindowMaxDTypeMap.Register(dtypes.BFloat16, reduceWindowMaxBuildUpdateFnBFloat16)
-	reduceWindowMinDTypeMap.Register(dtypes.BFloat16, reduceWindowMinBuildUpdateFnBFloat16)
-	reduceWindowSumDTypeMap.Register(dtypes.BFloat16, reduceWindowSumBuildUpdateFnBFloat16)
-	reduceWindowProductDTypeMap.Register(dtypes.BFloat16, reduceWindowProductBuildUpdateFnBFloat16)
+	reduceWindowMaxDTypeMap.Register(dtypes.BFloat16, priorityTyped, reduceWindowMaxBuildUpdateFnBFloat16)
+	reduceWindowMinDTypeMap.Register(dtypes.BFloat16, priorityTyped, reduceWindowMinBuildUpdateFnBFloat16)
+	reduceWindowSumDTypeMap.Register(dtypes.BFloat16, priorityTyped, reduceWindowSumBuildUpdateFnBFloat16)
+	reduceWindowProductDTypeMap.Register(dtypes.BFloat16, priorityTyped, reduceWindowProductBuildUpdateFnBFloat16)
 }
 
 // Generic functions that build a function that will update the output at outputFlatIdx from the operand at operandFlatIdx.

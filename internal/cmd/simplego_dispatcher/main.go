@@ -168,19 +168,19 @@ func main() {
 package simplego
 
 import (
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 )
 
 
-func init() { 
+func init() {
 {{- range .Dispatchers}}
 
 	// DTypeDispatcher: {{.Dispatcher}}
 {{- $dispatcher := .Dispatcher }}
 {{- $generic := .Generic }}
 {{- range .DTypes }}
-	{{$dispatcher}}.RegisterIfNotSet(dtypes.{{.DType}}, {{$generic}}[{{.GoType}}])
+	{{$dispatcher}}.Register(dtypes.{{.DType}}, priorityGeneric, {{$generic}}[{{.GoType}}])
 {{- end }}
 {{- end }}
 
@@ -190,7 +190,7 @@ func init() {
 {{- $mapName := .MapName }}
 {{- $generic := .Generic }}
 {{- range .DTypes }}
-	{{$mapName}}.RegisterIfNotSet(dtypes.{{.DType}}, {{$generic}}[{{.GoType}}])
+	{{$mapName}}.Register(dtypes.{{.DType}}, priorityGeneric, {{$generic}}[{{.GoType}}])
 {{- end }}
 {{- end }}
 
@@ -204,12 +204,12 @@ func init() {
 {{- $dtype1 := .DType }}
 {{- $goType1 := .GoType }}
 {{- range $dtypes2 }}
-	{{$mapName}}.RegisterIfNotSet(dtypes.{{$dtype1}}, dtypes.{{.DType}}, {{$generic}}[{{$goType1}}, {{.GoType}}])
+	{{$mapName}}.Register(dtypes.{{$dtype1}}, dtypes.{{.DType}}, priorityGeneric, {{$generic}}[{{$goType1}}, {{.GoType}}])
 {{- end }}
 {{- end }}
 {{- end }}
 
-}	
+}
 `))
 	fullPath := path.Join(must.M1(os.Getwd()), fileName)
 	f := must.M1(os.Create(fullPath))

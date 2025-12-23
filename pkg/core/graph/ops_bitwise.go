@@ -1,6 +1,6 @@
 package graph
 
-import "github.com/gomlx/gopjrt/dtypes"
+import "github.com/gomlx/gomlx/pkg/core/dtypes"
 
 // ReduceLogicalAnd returns true if all values of x evaluate to true
 // across the given axes.

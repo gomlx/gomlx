@@ -47,7 +47,9 @@ type Dataset struct {
 // the [Strategy] is considered frozen and can no longer be modified.
 func (strategy *Strategy) NewDataset(name string) *Dataset {
 	if len(strategy.Seeds) == 0 {
-		Panicf("cannot create a new Dataset from a strategy with no Seeds defined -- see Strategy.Nodes and Strategy.NodesFromSets")
+		Panicf(
+			"cannot create a new Dataset from a strategy with no Seeds defined -- see Strategy.Nodes and Strategy.NodesFromSets",
+		)
 	}
 	strategy.frozen = true
 	return &Dataset{
@@ -189,8 +191,8 @@ func (ds *Dataset) sampleSeeds(seedIdx int, rule *Rule) (seeds, mask *tensors.Te
 	seeds = tensors.FromScalarAndDimensions(int32(0), rule.Count)
 	mask = tensors.FromScalarAndDimensions(false, rule.Count)
 
-	tensors.MutableFlatData[int32](seeds, func(seedsData []int32) {
-		tensors.MutableFlatData[bool](mask, func(maskData []bool) {
+	tensors.MustMutableFlatData[int32](seeds, func(seedsData []int32) {
+		tensors.MustMutableFlatData[bool](mask, func(maskData []bool) {
 			if ds.withReplacement {
 				for ii := range rule.Count {
 					maskData[ii] = true
@@ -271,7 +273,11 @@ func recursivelySampleEdges(rule *Rule, nodes, mask *tensors.Tensor, store []*te
 // The values in mutable defines if it calls Tensor.ConstFlatData or Tensor.MutableFlatData on the corresponding tensor.
 func accessTensorsData(tensorsList []*tensors.Tensor, mutableList []bool, accessFn func(flatData []any)) {
 	if len(tensorsList) != len(mutableList) {
-		Panicf("accessTensorsData got %d tensorsList and %d mutableList, they must be the same", len(tensorsList), len(mutableList))
+		Panicf(
+			"accessTensorsData got %d tensorsList and %d mutableList, they must be the same",
+			len(tensorsList),
+			len(mutableList),
+		)
 	}
 	tensorsIdx := 0
 	var allFlat []any
@@ -288,9 +294,9 @@ func accessTensorsData(tensorsList []*tensors.Tensor, mutableList []bool, access
 		}
 		tensor := tensorsList[tensorsIdx]
 		if mutableList[tensorsIdx] {
-			tensor.MutableFlatData(recursion)
+			tensor.MustMutableFlatData(recursion)
 		} else {
-			tensor.ConstFlatData(recursion)
+			tensor.MustConstFlatData(recursion)
 		}
 	}
 	recursion(nil)

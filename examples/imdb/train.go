@@ -7,6 +7,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
@@ -24,7 +25,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
-	"github.com/gomlx/gopjrt/dtypes"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/gomlx/gomlx/internal/must"
@@ -52,7 +52,7 @@ var DType = dtypes.Float32
 // CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
 func CreateDefaultContext() *context.Context {
 	ctx := context.New()
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		// Model type to use
 		"model":           "bow", // One of the listed in ValidModels: the user can also inject (in ValidModels) new custom models.
@@ -119,7 +119,13 @@ func CreateDefaultContext() *context.Context {
 }
 
 // TrainModel with hyperparameters given in ctx.
-func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
+func TrainModel(
+	ctx *context.Context,
+	dataDir, checkpointPath string,
+	paramsSet []string,
+	evaluateOnEnd bool,
+	verbosity int,
+) {
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
@@ -132,7 +138,10 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	imdbUseUnsupervised := context.GetParamOr(ctx, "imdb_use_unsupervised", false)
 	imdbMaskWordTaskWeight := context.GetParamOr(ctx, "imdb_mask_word_task_weight", 0.0)
 	if imdbUseUnsupervised && imdbMaskWordTaskWeight <= 0 {
-		exceptions.Panicf(`Parameter "imdb_use_unsupervised" is only useful together with parameter "imdb_mask_word_task" (=%g) > 0.0`, imdbMaskWordTaskWeight)
+		exceptions.Panicf(
+			`Parameter "imdb_use_unsupervised" is only useful together with parameter "imdb_mask_word_task" (=%g) > 0.0`,
+			imdbMaskWordTaskWeight,
+		)
 	}
 
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
@@ -245,7 +254,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 		}
 
 		// Update batch normalization averages, if they are used.
-		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
+		if must.M1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpoint != nil {
 				must.M(checkpoint.Save())
@@ -276,7 +285,7 @@ func PrintSample(n int) {
 	const maxLen = 200
 	ds := NewDataset("TypeTest", TypeTest, maxLen, n, true).Shuffle()
 	_, inputs, labels := must.M3(ds.Yield())
-	tensors.ConstFlatData[int8](labels[0], func(labelsData []int8) {
+	tensors.MustConstFlatData[int8](labels[0], func(labelsData []int8) {
 		for ii := range n {
 			fmt.Println(sampleStyle.Render(
 				fmt.Sprintf("[Sample %d - label %v]\n%s\n", ii, labelsData[ii], InputToString(inputs[0], ii))))

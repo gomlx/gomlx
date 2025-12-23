@@ -1,8 +1,8 @@
-package stablehlo
+package xla
 
 import (
+	"github.com/gomlx/go-xla/pkg/stablehlo"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/stablehlo"
 )
 
 func scatterOpToReduceOp(opType backends.OpType) backends.OpType {

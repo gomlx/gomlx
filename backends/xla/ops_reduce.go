@@ -1,18 +1,35 @@
-package stablehlo
+package xla
 
 import (
 	"reflect"
 
+	"github.com/gomlx/go-xla/pkg/stablehlo"
+	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
+	stablehloshapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
-	"github.com/gomlx/stablehlo"
-	stablehlotypes "github.com/gomlx/stablehlo/types"
-	stablehloshapes "github.com/gomlx/stablehlo/types/shapes"
 	"github.com/pkg/errors"
 	"github.com/x448/float16"
 )
+
+func (b *Builder) getReductionOp(reductionType backends.ReduceOpType) (backends.OpType, error) {
+	var opType backends.OpType
+	switch reductionType {
+	case backends.ReduceOpMax:
+		opType = backends.OpTypeReduceMax
+	case backends.ReduceOpMin:
+		opType = backends.OpTypeReduceMin
+	case backends.ReduceOpSum:
+		opType = backends.OpTypeReduceSum
+	case backends.ReduceOpProduct:
+		opType = backends.OpTypeReduceProduct
+	default:
+		return backends.OpTypeInvalid, errors.Errorf("unsupported reduction type %s", reductionType)
+	}
+	return opType, nil
+}
 
 func (b *Builder) getReductionFn(dtype dtypes.DType, opType backends.OpType) (*stablehlo.Function, error) {
 	// Create the reduction function for this dtype/op, use cache if possible.
@@ -25,10 +42,17 @@ func (b *Builder) getReductionFn(dtype dtypes.DType, opType backends.OpType) (*s
 		return reductionFn, nil
 	}
 	reductionFn = b.fn.Closure()
-	lhs := reductionFn.NamedInput("lhs", stablehloshapes.Make(dtype))
-	rhs := reductionFn.NamedInput("rhs", stablehloshapes.Make(dtype))
-	var result *stablehlo.Value
+	var lhs, rhs *stablehlo.Value
 	var err error
+	lhs, err = reductionFn.NamedInput("lhs", stablehloshapes.Make(DTypeToXLA(dtype)))
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+	}
+	rhs, err = reductionFn.NamedInput("rhs", stablehloshapes.Make(DTypeToXLA(dtype)))
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+	}
+	var result *stablehlo.Value
 	switch opType {
 	case backends.OpTypeReduceSum:
 		result, err = stablehlo.Add(lhs, rhs)
@@ -352,10 +376,23 @@ func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, i
 
 		// Create a new reduction function for this valuesDType/op.
 		reduceFn = b.fn.Closure()
-		lhsIndex := reduceFn.NamedInput("lhs_idx", stablehloshapes.Make(outputDType))
-		lhsValue := reduceFn.NamedInput("lhs_v", stablehloshapes.Make(valuesDType))
-		rhsIndex := reduceFn.NamedInput("rhs_idx", stablehloshapes.Make(outputDType))
-		rhsValue := reduceFn.NamedInput("rhs_v", stablehloshapes.Make(valuesDType))
+		var lhsIndex, lhsValue, rhsIndex, rhsValue *stablehlo.Value
+		lhsIndex, err = reduceFn.NamedInput("lhs_idx", stablehloshapes.Make(DTypeToXLA(outputDType)))
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+		}
+		lhsValue, err = reduceFn.NamedInput("lhs_v", stablehloshapes.Make(DTypeToXLA(valuesDType)))
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+		}
+		rhsIndex, err = reduceFn.NamedInput("rhs_idx", stablehloshapes.Make(DTypeToXLA(outputDType)))
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+		}
+		rhsValue, err = reduceFn.NamedInput("rhs_v", stablehloshapes.Make(DTypeToXLA(valuesDType)))
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+		}
 		var isLeft *stablehlo.Value
 		if isMin {
 			isLeft, err = stablehlo.Compare(lhsValue, rhsValue, stablehlotypes.CompareLT, compareType)
@@ -423,7 +460,7 @@ func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, i
 	// Create indices and its initial value.
 	indicesShape := xNode.shape.Clone()
 	indicesShape.DType = outputDType
-	indices, err := b.fn.Iota(ShapeToStableHLO(indicesShape), adjustedAxis)
+	indices, err := b.fn.Iota(ShapeToXLA(indicesShape), adjustedAxis)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 	}
@@ -465,8 +502,8 @@ func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, i
 	return b.newNode(results[0]), nil
 }
 
-// ReduceWindow runs a reduction function of the type given by reductionType,
-// it can be either ReduceMaxNode, ReduceSumNode or ReduceMultiplyNode.
+// ReduceWindow runs a reduction function of the type given by reduceType.
+// It can be either ReduceMaxNode, ReduceSumNode or ReduceMultiplyNode.
 //
 // The parameter windowDimensions must be set and have a value for each axis.
 // If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.
@@ -481,18 +518,9 @@ func (b *Builder) ReduceWindow(x backends.Op, reductionType backends.ReduceOpTyp
 	xNode := nodes[0]
 	dtype := xNode.shape.DType
 
-	var reduceOpType backends.OpType
-	switch reductionType {
-	case backends.ReduceOpMax:
-		reduceOpType = backends.OpTypeReduceMax
-	case backends.ReduceOpMin:
-		reduceOpType = backends.OpTypeReduceMin
-	case backends.ReduceOpSum:
-		reduceOpType = backends.OpTypeReduceSum
-	case backends.ReduceOpProduct:
-		reduceOpType = backends.OpTypeReduceProduct
-	default:
-		return nil, errors.Errorf("unsupported reduction type %s", reductionType)
+	reduceOpType, err := b.getReductionOp(reductionType)
+	if err != nil {
+		return nil, err
 	}
 	reductionFn, err := b.getReductionFn(dtype, reduceOpType)
 	if err != nil {
@@ -522,10 +550,17 @@ func (b *Builder) getSelectFn(dtype dtypes.DType, opType backends.OpType) (*stab
 		return selectionFn, nil
 	}
 	selectionFn = b.fn.Closure()
-	lhs := selectionFn.NamedInput("lhs", stablehloshapes.Make(dtype))
-	rhs := selectionFn.NamedInput("rhs", stablehloshapes.Make(dtype))
-	var result *stablehlo.Value
+	var lhs, rhs *stablehlo.Value
 	var err error
+	lhs, err = selectionFn.NamedInput("lhs", stablehloshapes.Make(DTypeToXLA(dtype)))
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+	}
+	rhs, err = selectionFn.NamedInput("rhs", stablehloshapes.Make(DTypeToXLA(dtype)))
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+	}
+	var result *stablehlo.Value
 	compareType := compareTypeForDType(dtype)
 	switch opType {
 	case backends.OpTypeSelectAndScatterMax:

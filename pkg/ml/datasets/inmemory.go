@@ -142,7 +142,12 @@ func InMemory(backend backends.Backend, ds train.Dataset, dsIsBatched bool) (mds
 //	mds, err := InMemoryFromData(backend, "test",
 //		[]any{[][]float32{{1, 2}, {3, 4}}},
 //		[]any{[][]float32{{3}, {7}}})
-func InMemoryFromData(backend backends.Backend, name string, inputs []any, labels []any) (mds *InMemoryDataset, err error) {
+func InMemoryFromData(
+	backend backends.Backend,
+	name string,
+	inputs []any,
+	labels []any,
+) (mds *InMemoryDataset, err error) {
 	mds = &InMemoryDataset{
 		backend:               backend,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -328,7 +333,11 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 				examplesAsAny := xslices.Map(examplesSlice, convertToAny)
 				err = TryCatch[error](func() { newAllExamples[jj] = concatenateExec.MustExec(examplesAsAny...)[0] })
 				if err != nil {
-					err = errors.WithMessagef(err, "while concatenating %s examples into large tensor", getElementDesc(inputsAndLabelsIdx))
+					err = errors.WithMessagef(
+						err,
+						"while concatenating %s examples into large tensor",
+						getElementDesc(inputsAndLabelsIdx),
+					)
 					return
 				}
 			}
@@ -340,7 +349,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 				// loop. This means for the original read tensors, in CPU memory, we have to wait for the
 				// garbage collection to collect them.
 				for _, t := range allExamples {
-					t.FinalizeAll()
+					t.MustFinalizeAll()
 				}
 			}
 			newAllData[inputsAndLabelsIdx] = newAllExamples
@@ -510,7 +519,7 @@ func (mds *InMemoryDataset) Yield() (spec any, inputs []*tensors.Tensor, labels 
 	} else {
 		// Indices are shaped [batch_size, 1].
 		indicesT = tensors.FromFlatDataAndDimensions(indices, len(indices), 1)
-		defer indicesT.FinalizeAll() // Free immediately after use.
+		defer indicesT.MustFinalizeAll() // Free immediately after use.
 		indicesAndData = append(indicesAndData, indicesT)
 	}
 	for _, data := range mds.inputsAndLabelsData {
@@ -651,7 +660,7 @@ func (mds *InMemoryDataset) TakeN(n int) *InMemoryDataset {
 // state or errors.
 func (mds *InMemoryDataset) FinalizeAll() {
 	for _, data := range mds.inputsAndLabelsData {
-		data.FinalizeAll()
+		data.MustFinalizeAll()
 	}
 	mds.inputsAndLabelsData = nil
 }
@@ -693,18 +702,17 @@ func (mds *InMemoryDataset) GobSerialize(encoder *gob.Encoder) (err error) {
 	return
 }
 
-// GobDeserializeInMemory dataset from the decoder. It requires a `graph.Backend` and the deviceNum(s) where the data
+// GobDeserializeInMemoryToDevice dataset from the decoder. It requires a `graph.Backend` and the deviceNum where the data
 // is going to be stored -- it drops the local storage copy of the values.
-//
-// If deviceNums is nil, it defaults to []DeviceNum{0}, which is safe in most cases.
 //
 // No sampling configuration is recovered, and the InMemoryDataset created is sequential (no random sampling)
 // that reads through only one epoch. The random number generator is also newly initialized (see
 // InMemoryDataset.WithRand).
-func GobDeserializeInMemory(backend backends.Backend, deviceNums []backends.DeviceNum, decoder *gob.Decoder) (mds *InMemoryDataset, err error) {
-	if len(deviceNums) == 0 {
-		deviceNums = []backends.DeviceNum{0}
-	}
+func GobDeserializeInMemoryToDevice(
+	backend backends.Backend,
+	deviceNum backends.DeviceNum,
+	decoder *gob.Decoder,
+) (mds *InMemoryDataset, err error) {
 	dec := func(data any) {
 		if err != nil {
 			return
@@ -732,7 +740,7 @@ func GobDeserializeInMemory(backend backends.Backend, deviceNums []backends.Devi
 
 	var tensor *tensors.Tensor
 	for range numInputsAndLabels {
-		tensor, err = tensors.GobDeserializeToDevice(decoder, backend, deviceNums...)
+		tensor, err = tensors.GobDeserializeToDevice(decoder, backend, deviceNum)
 		if err != nil {
 			return
 		}

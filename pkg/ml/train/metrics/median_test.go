@@ -42,7 +42,7 @@ func TestStreamingMedian(t *testing.T) {
 			values = append(values, r)
 			sample := tensors.FromScalar(r)
 			metric.UpdateGo(sample)
-			sample.FinalizeAll()
+			sample.MustFinalizeAll()
 		}
 		median := tensors.ToScalar[float64](metric.ReadGo())
 		slices.Sort(values)
@@ -68,7 +68,7 @@ func TestStreamingMedian(t *testing.T) {
 		for _, sample := range samples {
 			sampleT := tensors.FromScalar(sample)
 			metric.UpdateGo(sampleT)
-			sampleT.FinalizeAll()
+			sampleT.MustFinalizeAll()
 		}
 		median := tensors.ToScalar[float64](metric.ReadGo())
 		slices.Sort(samples)
@@ -89,7 +89,7 @@ func TestStreamingMedian(t *testing.T) {
 			values = append(values, r)
 			sample := tensors.FromScalar(r)
 			metric.UpdateGo(sample)
-			sample.FinalizeAll()
+			sample.MustFinalizeAll()
 		}
 		median := tensors.ToScalar[float64](metric.ReadGo())
 		slices.Sort(values)

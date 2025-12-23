@@ -22,11 +22,11 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
 )
@@ -123,6 +123,104 @@ func TestGather(t *testing.T) {
 	})
 }
 
+func TestNormalizeIndices(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+
+	t.Run("basic negative indices", func(t *testing.T) {
+		// Test converting negative indices to positive
+		g := NewGraph(backend, t.Name())
+		// data shape [5, 3] - dimension 5 on axis 0
+		data := IotaFull(g, MakeShape(F64, 5, 3))
+		indices := Const(g, []int32{-1, -2, 0, 2, -5})
+		normalized := NormalizeIndices(data, indices, 0)
+		g.Compile(normalized)
+		got := g.Run()[0]
+		fmt.Printf("\tNormalizeIndices=%v\n", got)
+		// -1 -> 4, -2 -> 3, 0 -> 0, 2 -> 2, -5 -> 0
+		want := []int32{4, 3, 0, 2, 0}
+		require.Equalf(t, want, got.Value(), "NormalizeIndices: want %v, got %v", want, got)
+	})
+
+	t.Run("negative axis", func(t *testing.T) {
+		// Test using negative axis parameter
+		g := NewGraph(backend, t.Name())
+		// data shape [3, 5] - dimension 5 on axis 1 (or -1)
+		data := IotaFull(g, MakeShape(F64, 3, 5))
+		indices := Const(g, []int32{-1, -3, 2})
+		normalized := NormalizeIndices(data, indices, -1) // axis -1 = axis 1
+		g.Compile(normalized)
+		got := g.Run()[0]
+		fmt.Printf("\tNormalizeIndices (negative axis)=%v\n", got)
+		// -1 -> 4, -3 -> 2, 2 -> 2
+		want := []int32{4, 2, 2}
+		require.Equalf(t, want, got.Value(), "NormalizeIndices: want %v, got %v", want, got)
+	})
+
+	t.Run("2D indices", func(t *testing.T) {
+		// Test with 2D indices array
+		g := NewGraph(backend, t.Name())
+		data := IotaFull(g, MakeShape(F64, 5, 3))
+		indices := Const(g, [][]int32{{-1, 0}, {-2, 1}})
+		normalized := NormalizeIndices(data, indices, 0)
+		g.Compile(normalized)
+		got := g.Run()[0]
+		fmt.Printf("\tNormalizeIndices (2D)=%v\n", got)
+		// -1 -> 4, 0 -> 0, -2 -> 3, 1 -> 1
+		want := [][]int32{{4, 0}, {3, 1}}
+		require.Equalf(t, want, got.Value(), "NormalizeIndices: want %v, got %v", want, got)
+	})
+
+	t.Run("with Gather - Python-style negative indexing", func(t *testing.T) {
+		// Test that NormalizeIndices + Gather gives Python-like behavior
+		g := NewGraph(backend, t.Name())
+		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
+		numbers := IotaFull(g, MakeShape(F64, 5, 3))
+		indices := Const(g, [][]int{{-1}, {-2}}) // Python: -1 = last row, -2 = second to last
+		normalizedIndices := NormalizeIndices(numbers, indices, 0)
+		gather := Gather(numbers, normalizedIndices)
+		g.Compile(gather)
+		got := g.Run()[0]
+		fmt.Printf("\tGather with NormalizeIndices=%v\n", got)
+		// -1 -> row 4 = [12, 13, 14], -2 -> row 3 = [9, 10, 11]
+		want := [][]float64{{12, 13, 14}, {9, 10, 11}}
+		require.Equalf(t, want, got.Value(), "Gather with NormalizeIndices: want %v, got %v", want, got)
+	})
+
+	t.Run("int64 indices", func(t *testing.T) {
+		// Test with int64 indices to ensure dtype handling works correctly
+		g := NewGraph(backend, t.Name())
+		data := IotaFull(g, MakeShape(F64, 10, 3))
+		indices := Const(g, []int64{-1, -5, 0, 9})
+		normalized := NormalizeIndices(data, indices, 0)
+		g.Compile(normalized)
+		got := g.Run()[0]
+		fmt.Printf("\tNormalizeIndices (int64)=%v\n", got)
+		// -1 -> 9, -5 -> 5, 0 -> 0, 9 -> 9
+		want := []int64{9, 5, 0, 9}
+		require.Equalf(t, want, got.Value(), "NormalizeIndices (int64): want %v, got %v", want, got)
+	})
+
+	t.Run("out-of-bounds indices pass through", func(t *testing.T) {
+		// Test that out-of-bounds negative indices are converted but not clamped
+		// (clamping happens in Gather, not in NormalizeIndices)
+		g := NewGraph(backend, t.Name())
+		data := IotaFull(g, MakeShape(F64, 5, 3)) // dim=5 on axis 0
+		// -6 is out of ONNX valid range [-5, 4], becomes 5+(-6)=-1 after normalization
+		// -10 becomes 5+(-10)=-5
+		// These will be clamped by Gather to valid range, but NormalizeIndices just converts
+		indices := Const(g, []int32{-6, -10, 10})
+		normalized := NormalizeIndices(data, indices, 0)
+		g.Compile(normalized)
+		got := g.Run()[0]
+		fmt.Printf("\tNormalizeIndices (out-of-bounds)=%v\n", got)
+		// -6 -> -1 (still negative, will be clamped by Gather)
+		// -10 -> -5 (still negative, will be clamped by Gather)
+		// 10 -> 10 (positive, unchanged, will be clamped by Gather)
+		want := []int32{-1, -5, 10}
+		require.Equalf(t, want, got.Value(), "NormalizeIndices (out-of-bounds): want %v, got %v", want, got)
+	})
+}
+
 func TestGatherSlices(t *testing.T) {
 	testFuncOneInput(t, "GatherSlices(input, slicedAxes={1}, start={{0}, {1}, {0}}, sizes={1})",
 		func(g *Graph) (input, output *Node) {
@@ -139,7 +237,6 @@ func TestGatherSlices(t *testing.T) {
 			start := Const(g, [][]int32{{0}, {1}}) // Slice from rows 0 and 1.
 			sizes := []int{2}                      // Take two rows per start.
 			output = GatherSlices(input, []int{0}, start, sizes, true)
-			return
 			return
 		}, [][][]float32{{{0, 1, 2}, {3, 4, 5}}, {{3, 4, 5}, {6, 7, 8}}})
 
@@ -216,7 +313,7 @@ func BenchmarkScatter(b *testing.B) {
 	}
 	slices.Sort(indices)
 	indicesT := tensors.FromValue(indices)
-	rngStateT := RngStateFromSeed(42)
+	rngStateT := must1(RNGStateFromSeed(42))
 
 	for _, sorted := range []bool{true, false} {
 		for _, unique := range []bool{true, false} {
@@ -245,11 +342,11 @@ func BenchmarkScatter(b *testing.B) {
 				stateT, valuesT := results[0], results[1]
 
 				// Precompile graph for given inputNodes. It also makes sure the inputNodes are transferred to the accelerator.
-				scatterExec.MustExec(stateT, indicesT, valuesT)[0].FinalizeAll()
+				scatterExec.MustExec(stateT, indicesT, valuesT)[0].MustFinalizeAll()
 				b.Run(fmt.Sprintf("sorted-%v_unique-%v_dtype-%s", sorted, unique, dtype), func(b *testing.B) {
 					for range b.N {
 						results := scatterExec.MustExec(stateT, indicesT, valuesT)
-						stateT.FinalizeAll()
+						must(stateT.FinalizeAll())
 						stateT = results[0]
 					}
 				})

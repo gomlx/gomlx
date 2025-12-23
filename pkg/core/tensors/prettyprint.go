@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/x448/float16"
 )
 
@@ -53,7 +53,7 @@ func (t *Tensor) Summary(precision int) string {
 
 	// Access the contents of the tensor without copy:
 	dims := t.Shape().Dimensions
-	t.ConstFlatData(func(flat any) {
+	t.MustConstFlatData(func(flat any) {
 		values := reflect.ValueOf(flat)
 
 		// Print Go type equivalent

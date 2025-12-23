@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -29,7 +30,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
@@ -101,9 +101,9 @@ func TestDense(t *testing.T) {
 	g.Compile(outputs...)
 
 	// Before running the graph initialize the variables.
-	ctx.InitializeVariables(backend)
+	ctx.InitializeVariables(backend, nil)
 	ctx.EnumerateVariables(func(v *context.Variable) {
-		fmt.Printf("\t%s=%v\n", v.ParameterName(), v.Value())
+		fmt.Printf("\t%s=%v\n", v.ParameterName(), v.MustValue())
 	})
 
 	params := make(ParamsMap)

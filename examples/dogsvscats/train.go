@@ -57,7 +57,7 @@ var nanLogger *nanlogger.NanLogger
 // CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
 func CreateDefaultContext() *context.Context {
 	ctx := context.New()
-	ctx.RngStateReset()
+	ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		// Model type to use
 		"model":           "cnn",
@@ -152,8 +152,16 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 		numCheckpoints := context.GetParamOr(ctx, "num_checkpoints", 3)
 		checkpoint = must.M1(checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
-			ExcludeParams(append(paramsSet,
-				"data_dir", "train_steps", "plots", "nan_logger", "num_checkpoints", "byol_pretrain", "byol_finetune")...).
+			ExcludeParams(append(
+				paramsSet,
+				"data_dir",
+				"train_steps",
+				"plots",
+				"nan_logger",
+				"num_checkpoints",
+				"byol_pretrain",
+				"byol_finetune",
+			)...).
 			Keep(numCheckpoints).Done())
 	}
 
@@ -180,7 +188,9 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 	// BYOL may require pretraining.
 	preTraining := modelType == "byol" && context.GetParamOr(ctx, "byol_pretrain", false)
 	if preTraining && checkpoint == nil {
-		klog.Warning("*** pre-training model but not saving (--checkpoint) the pretrained weights -- is only useful for debugging ***")
+		klog.Warning(
+			"*** pre-training model but not saving (--checkpoint) the pretrained weights -- is only useful for debugging ***",
+		)
 	}
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
@@ -248,8 +258,12 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 	}
 	if globalStep < numTrainSteps {
 		_ = must.M1(loop.RunSteps(trainDS, int(numTrainSteps-globalStep)))
-		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
-		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
+		fmt.Printf(
+			"\t[Step %d] median train step: %d microseconds\n",
+			loop.LoopStep,
+			loop.MedianTrainStepDuration().Microseconds(),
+		)
+		if must.M1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			must.M(checkpoint.Save())
 		}
@@ -262,8 +276,8 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 	if preTraining {
 		// If pre-training (unsupervised), skip evaluation, and clear optimizer variables and global step.
 		fmt.Println("Pre-training only, no evaluation.")
-		optimizer.Clear(ctx)
-		optimizers.DeleteGlobalStep(ctx)
+		must.M(optimizer.Clear(ctx))
+		must.M(optimizers.DeleteGlobalStep(ctx))
 		must.M(checkpoint.Save())
 		return
 	}

@@ -4,11 +4,11 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
 )
 
 func TestScalar(t *testing.T) {
@@ -555,7 +555,7 @@ func TestReduceVariance(t *testing.T) {
 
 	graphtest.RunTestGraphFn(t, "ReduceVariance",
 		func(g *Graph) (inputs, outputs []*Node) {
-			rngState := Const(g, RngStateFromSeed(42))
+			rngState := Const(g, must1(RNGStateFromSeed(42)))
 			_, values := RandomNormal(rngState, shapes.Make(dtypes.Float32, 4, 100_000))
 			multiplier := OnePlus(Iota(g, shapes.Make(dtypes.Float32, 4, 1), 0))
 			shift := AddScalar(Iota(g, shapes.Make(dtypes.Float32, 4, 1), 0), -2)

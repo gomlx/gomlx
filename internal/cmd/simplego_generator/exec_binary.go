@@ -38,14 +38,14 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/pkg/errors"
 )
 
-func init() { 
+func init() {
 {{- range .BinaryOps}}
-	nodeExecutors[backends.OpType{{.Name}}] = exec{{.Name}}
+	setNodeExecutor(backends.OpType{{.Name}}, priorityGeneric, exec{{.Name}})
 {{- end}}
 }
 
@@ -81,7 +81,7 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 
 {{- if or .Numeric .Integer }}
 
-{{- range $.IntegerTypes}}	
+{{- range $.IntegerTypes}}
 
 	case dtypes.{{.DType}}:
 		exec{{$name}}{{$version}}Generic[{{.GoType}}](lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]
@@ -89,7 +89,7 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 {{- end}}
 {{- end}}
 
-{{- if or .Numeric .Float }} 
+{{- if or .Numeric .Float }}
 
 {{- range $.FloatTypes}}
 
@@ -152,7 +152,7 @@ func exec{{$name}}{{$version}}Generic[T POD{{$version}}Constraints](lhs, rhs []T
 	} else if lhsShape.Equal(rhsShape) {
 		// Case 2: Exact same shapes, no broadcasting.
 		for ii, input := range lhs {
-			output[ii] = {{ CallOp .Format "input" "rhs[ii]" }} 
+			output[ii] = {{ CallOp .Format "input" "rhs[ii]" }}
 		}
 		return
 
@@ -191,7 +191,7 @@ func exec{{$name}}{{$version}}BFloat16(lhs, rhs []bfloat16.BFloat16, output []{{
 		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
 		c := lhs[0].Float32()
 		for ii, input := range rhs {
-			a := input.Float32()	
+			a := input.Float32()
 		{{- if $is_comparison }}
 			output[ii] = {{CallOp .Format "c" "a"}}
 		{{- else }}
