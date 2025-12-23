@@ -5,14 +5,13 @@ import (
 	"math/rand/v2"
 	"slices"
 
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-	"github.com/pkg/errors"
-
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -81,11 +80,13 @@ func execIdentity(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []
 // WhereOp ====================================================================================================
 
 // execWhere implements the Where op.
+// onTrue and onFalse must have the same dtype (validated at graph build time in shapeinference.WhereOp).
 func execWhere(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	condition, onTrue, onFalse := inputs[0], inputs[1], inputs[2]
 
 	// Figure out what the outputBuffer is going to be.
 	outputShape := node.shape
+
 	var output *Buffer
 	switch {
 	case onTrue.shape.Equal(outputShape) && inputsOwned[1]:
