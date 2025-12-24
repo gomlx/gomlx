@@ -177,8 +177,8 @@ func BenchmarkNEONDotProduct(b *testing.B) {
 	}
 }
 
-// BenchmarkBufferPoolSizeClasses benchmarks size-class pooling vs exact pooling
-func BenchmarkBufferPoolSizeClasses(b *testing.B) {
+// BenchmarkBufferPool benchmarks exact-size buffer pooling
+func BenchmarkBufferPool(b *testing.B) {
 	backendIface, _ := New("")
 	defer backendIface.Finalize()
 	backend := backendIface.(*Backend)
@@ -199,16 +199,6 @@ func BenchmarkBufferPoolSizeClasses(b *testing.B) {
 			shape := shapes.Make(dtypes.Float32, size)
 			buf := backend.getBufferForShape(shape)
 			backend.putBuffer(buf)
-		}
-	})
-
-	b.Run("SizeClass", func(b *testing.B) {
-		pool := NewOptimizedBufferPool()
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			size := allocationSizes[i%len(allocationSizes)]
-			buf := pool.Get(dtypes.Float32, size)
-			pool.Put(buf)
 		}
 	})
 }
@@ -491,12 +481,6 @@ func TestDotGeneralOptimizationReport(t *testing.T) {
 	fmt.Printf("FP16 NEON available: %v\n", hasFP16NEON)
 	fmt.Printf("BF16 NEON available: %v\n", hasBF16NEON)
 
-
-	fmt.Println("\nSize class boundaries for buffer pooling:")
-	for i, size := range sizeClasses {
-		fmt.Printf("  Class %d: %d elements (%d KB for float32)\n", i, size, size*4/1024)
-	}
-
 	// Quick sanity check for NEON
 	if hasNEON {
 		a := []float32{1, 2, 3, 4, 5, 6, 7, 8}
@@ -522,12 +506,6 @@ func BenchmarkOptimizationOverhead(b *testing.B) {
 	b.Run("isContractLastOrder", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			_ = isContractLastOrder(lhsShape, rhsShape, []int{1}, []int{0}, []int{}, []int{})
-		}
-	})
-
-	b.Run("getSizeClass", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			_ = getSizeClass(65536)
 		}
 	})
 }
