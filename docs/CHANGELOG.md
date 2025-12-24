@@ -1,6 +1,11 @@
 # GoMLX changelog
 
-# v0.26.0: Using the new github.com/gomlx/go-xla library.
+# Next
+
+* Package `simplego`:
+  * Added `Float16` support (thx @timkaye11) 
+
+# v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 
 API Change: `dtypes` package moved from `github.com/gomlx/gopjrt/dtypes` to `github.com/gomlx/gomlx/pkg/core/dtypes`.
 It should be a simple change in import.
@@ -16,6 +21,7 @@ XLA:
 - Added `xla.EnableAutoInstall(enabled bool)` to enable/disable auto-installation of standard plugins.
   And added `xla.AutoInstall()` to immediately auto-install standard plugins.
 - Conversion from/to new `gomlx/gomlx/pkg/core/dtypes` (and `bfloat16`) to/from `gomlx/gomlx/pkg/core/dtypes` (and corresponding `bfloat16`)
+- Added linux/arm64 and windows/amd64 support for XLA CPU.
 
 Other updates:
 - Package `tensors`:

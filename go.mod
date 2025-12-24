@@ -13,7 +13,7 @@ require (
 	github.com/erkkah/margaid v0.3.0
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/bsplines v0.2.0
-	github.com/gomlx/go-xla v0.1.2
+	github.com/gomlx/go-xla v0.1.4
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.1
 	github.com/muesli/termenv v0.16.0
@@ -28,7 +28,6 @@ require (
 )
 
 require (
-	github.com/AlexsanderHamir/GenPool v1.6.6 // indirect
 	github.com/aymanbagabas/go-udiff v0.3.1 // indirect
 	github.com/charmbracelet/x/exp/golden v0.0.0-20241011142426-46044092ad91 // indirect
 )

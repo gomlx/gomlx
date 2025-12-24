@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -50,7 +51,7 @@ func GetGopjrt() string {
 
 	// Create/find a temporary repository directory.
 	basePath := DefaultGopjrtSource
-	if !path.IsAbs(basePath) {
+	if !filepath.IsAbs(basePath) {
 		basePath = path.Join(os.TempDir(), basePath)
 	}
 	GopjrtSourcePath = path.Join(basePath, "gopjrt")

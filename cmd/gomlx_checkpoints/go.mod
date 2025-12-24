@@ -6,8 +6,7 @@ require (
 	github.com/MetalBlueberry/go-plotly v0.7.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/dustin/go-humanize v1.0.1
-	github.com/gomlx/go-xla v0.1.2
-	github.com/gomlx/gomlx v0.26.0-rc1
+	github.com/gomlx/gomlx v0.26.0-rc2.0.20251217193600-c98ffd9d5e96
 	github.com/janpfeifer/gonb v0.11.1
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.11.1
@@ -16,7 +15,6 @@ require (
 )
 
 require (
-	github.com/AlexsanderHamir/GenPool v1.6.6 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.3.2 // indirect
 	github.com/charmbracelet/x/ansi v0.10.2 // indirect
@@ -26,6 +24,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
+	github.com/gomlx/go-xla v0.1.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect

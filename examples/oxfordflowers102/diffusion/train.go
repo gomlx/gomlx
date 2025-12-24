@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"time"
 
 	"github.com/gomlx/gomlx/backends"
@@ -332,7 +333,7 @@ func CompareModelPlots(dataDir string, modelNames ...string) {
 	plots := margaid.New(1024, 400).LogScaleX().LogScaleY()
 	for _, modelName := range modelNames {
 		modelPath := modelName
-		if !path.IsAbs(modelPath) {
+		if !filepath.IsAbs(modelPath) {
 			modelPath = path.Join(dataDir, modelPath)
 		}
 		modelPath = path.Join(modelPath, stdplots.TrainingPlotFileName)
