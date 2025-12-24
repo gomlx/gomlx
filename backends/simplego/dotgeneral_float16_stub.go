@@ -188,6 +188,9 @@ func init() {
 	// Uses priorityTyped so NEON implementations (priorityArch) can override.
 	dotGeneralNormalizedDTypeMap.Register(dtypes.Float16, priorityTyped, execNormalizedDotGeneralFloat16ToFloat32)
 	dotGeneralKernelDTypeMap.Register(dtypes.Float16, priorityTyped, buildDotGeneralKernelFloat16ToFloat32)
+
+	// Register BF16 fallback kernels for non-NEON platforms.
+	dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, priorityTyped, execNormalizedDotGeneralBFloat16ToFloat32)
 }
 
 // dotProductBF16InnerLoop is the scalar fallback for BF16 dot product.

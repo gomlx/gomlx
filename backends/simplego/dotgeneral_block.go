@@ -310,8 +310,9 @@ func execDotGeneralWithGraphBlockedLHS(backend *Backend, lhsBlocked, rhs *Buffer
 	recursive.rhsCrossBlocks = rhsBlocks.shape.Dimensions[1]
 	recursive.contractBlocks = lhsBlocked.shape.Dimensions[2]
 
-	// Determine if RHS has batch dimension
-	rhsHasBatch := len(params.rhsBatchAxes) > 0
+	// Determine if RHS has batch dimension (must have batch axes AND batchSize > 1)
+	// This is consistent with execDotGeneralWithBothBlocked which checks batchSize > 1
+	rhsHasBatch := len(params.rhsBatchAxes) > 0 && params.batchSize > 1
 
 	// Execute the batch loop with parallelism
 	runDotGeneralBatchLoop(backend, &recursive, params.batchSize, rhsHasBatch)
