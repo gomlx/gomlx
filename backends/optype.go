@@ -120,6 +120,14 @@ const (
 	OpTypeCollectiveBroadcast
 	OpTypeAllGather
 
+	// Dynamic shape operations
+	OpTypeGetDimensionSize
+	OpTypeDynamicBroadcastInDim
+	OpTypeDynamicReshape
+
+	// Control flow operations
+	OpTypeWhile
+
 	// OpTypeLast should always be kept the last, it is used as a counter/marker for OpType.
 	OpTypeLast
 )

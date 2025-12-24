@@ -311,13 +311,53 @@ func ReduceAndKeep(x *Node, reduceFn func(x *Node, reduceAxes ...int) *Node, red
 	rank := x.Rank()
 	reduceAxes = adjustAxesToRankAndSort(rank, reduceAxes, "x")
 	reduced := reduceFn(x, reduceAxes...)
+
+	// Build a map of which axes are being reduced
+	reducedAxesMap := make(map[int]bool)
+	if len(reduceAxes) == 0 {
+		// Reduce all axes
+		for i := 0; i < rank; i++ {
+			reducedAxesMap[i] = true
+		}
+	} else {
+		for _, axis := range reduceAxes {
+			reducedAxesMap[axis] = true
+		}
+	}
+
+	// Check if we have symbolic dimensions
+	if x.Shape().HasSymbolicDim() {
+		// Use DynamicReshape for tensors with symbolic dimensions
+		g := x.Graph()
+		shapeParts := make([]*Node, rank)
+
+		for i := 0; i < rank; i++ {
+			if reducedAxesMap[i] {
+				// Reduced axis: always 1
+				shapeParts[i] = Const(g, int32(1))
+			} else if x.Shape().Dimensions[i] < 0 {
+				// Symbolic dimension: get runtime size
+				dimSize := GetDimensionSize(x, i)
+				// GetDimensionSize returns Int32, which is what we need
+				shapeParts[i] = dimSize
+			} else {
+				// Static dimension: use constant
+				shapeParts[i] = Const(g, int32(x.Shape().Dimensions[i]))
+			}
+		}
+
+		// Stack scalars into a 1D shape tensor
+		shapeTensor := Stack(shapeParts, 0)
+		return DynamicReshape(reduced, shapeTensor)
+	}
+
+	// Static path: use regular Reshape for better performance
 	shapeWithRecoveredDims := x.Shape().Clone()
 	if len(reduceAxes) == 0 {
 		// Reduce all axes, so all dimensions are set to 1.
 		for axis := range shapeWithRecoveredDims.Dimensions {
 			shapeWithRecoveredDims.Dimensions[axis] = 1
 		}
-
 	} else {
 		// Reduced axes dimensions are set to 1
 		for ii := 0; ii < rank && len(reduceAxes) > 0; ii++ {
@@ -337,6 +377,47 @@ func MaskedReduceAndKeep(x, mask *Node, reduceFn func(x, mask *Node, reduceAxes 
 	rank := x.Rank()
 	reduceAxes = adjustAxesToRankAndSort(rank, reduceAxes, "x")
 	reduced := reduceFn(x, mask, reduceAxes...)
+
+	// Build a map of which axes are being reduced
+	reducedAxesMap := make(map[int]bool)
+	if len(reduceAxes) == 0 {
+		// Reduce all axes
+		for i := 0; i < rank; i++ {
+			reducedAxesMap[i] = true
+		}
+	} else {
+		for _, axis := range reduceAxes {
+			reducedAxesMap[axis] = true
+		}
+	}
+
+	// Check if we have symbolic dimensions
+	if x.Shape().HasSymbolicDim() {
+		// Use DynamicReshape for tensors with symbolic dimensions
+		g := x.Graph()
+		shapeParts := make([]*Node, rank)
+
+		for i := 0; i < rank; i++ {
+			if reducedAxesMap[i] {
+				// Reduced axis: always 1
+				shapeParts[i] = Const(g, int32(1))
+			} else if x.Shape().Dimensions[i] < 0 {
+				// Symbolic dimension: get runtime size
+				dimSize := GetDimensionSize(x, i)
+				// GetDimensionSize returns Int32, which is what we need
+				shapeParts[i] = dimSize
+			} else {
+				// Static dimension: use constant
+				shapeParts[i] = Const(g, int32(x.Shape().Dimensions[i]))
+			}
+		}
+
+		// Stack scalars into a 1D shape tensor
+		shapeTensor := Stack(shapeParts, 0)
+		return DynamicReshape(reduced, shapeTensor)
+	}
+
+	// Static path: use regular Reshape for better performance
 	shapeWithRecoveredDims := x.Shape().Clone()
 	for ii := 0; ii < rank && len(reduceAxes) > 0; ii++ {
 		if ii == reduceAxes[0] {

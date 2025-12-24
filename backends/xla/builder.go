@@ -4,7 +4,9 @@ import (
 	"slices"
 
 	"github.com/gomlx/go-xla/pkg/stablehlo"
+	xla_dtypes "github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/go-xla/pkg/types/shardy"
+	xla_shapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
@@ -253,6 +255,12 @@ func (b *Builder) meshByName(meshName string) (*shardy.DeviceMesh, error) {
 	return nil, errors.Errorf("mesh %q not found", meshName)
 }
 
+// StableHLOFunction returns the underlying stablehlo.Function for advanced use cases.
+// This allows direct access to StableHLO features like While loops.
+func (b *Builder) StableHLOFunction() *stablehlo.Function {
+	return b.fn
+}
+
 func (b *Builder) shardingSpecToShardy(sharding *backends.ShardingSpec) (*shardy.ShardingSpec, error) {
 	if sharding == nil {
 		return nil, nil
@@ -319,17 +327,48 @@ func broadcastShapeForBinaryOps(
 	for axis := range output.Rank() {
 		lhsDim := lhsShape.Dimensions[axis]
 		rhsDim := rhsShape.Dimensions[axis]
-		if lhsDim != 1 && rhsDim != 1 && lhsDim != rhsDim {
-			err = errors.Errorf(
-				"dimension of axis #%d doesn't match and cannot be broadcast for BinaryOp (%s), got shapes %s and %s",
-				axis,
-				opType,
-				lhsShape,
-				rhsShape,
-			)
+
+		// Handle symbolic dimensions
+		switch {
+		case lhsDim < 0 && rhsDim < 0:
+			// Both symbolic
+			if lhsDim == rhsDim {
+				// Same symbol - preserve it
+				output.Dimensions[axis] = lhsDim
+			} else {
+				// Different symbols - unknown
+				output.Dimensions[axis] = int(shapes.DimUnknown)
+			}
+		case lhsDim < 0 && rhsDim == 1:
+			// Left is symbolic, right broadcasts
+			output.Dimensions[axis] = lhsDim
+		case rhsDim < 0 && lhsDim == 1:
+			// Right is symbolic, left broadcasts
+			output.Dimensions[axis] = rhsDim
+		case lhsDim > 0 && rhsDim > 0:
+			// Both static - use existing max logic for broadcasting
+			if lhsDim != 1 && rhsDim != 1 && lhsDim != rhsDim {
+				err = errors.Errorf(
+					"dimension of axis #%d doesn't match and cannot be broadcast for BinaryOp (%s), got shapes %s and %s",
+					axis,
+					opType,
+					lhsShape,
+					rhsShape,
+				)
+				return
+			}
+			output.Dimensions[axis] = max(lhsDim, rhsDim)
+		case lhsDim < 0 && rhsDim > 1:
+			// Symbolic vs concrete > 1: use concrete (symbolic must be compatible)
+			output.Dimensions[axis] = rhsDim
+		case rhsDim < 0 && lhsDim > 1:
+			// Concrete > 1 vs symbolic: use concrete
+			output.Dimensions[axis] = lhsDim
+		default:
+			err = errors.Errorf("incompatible symbolic dimensions at axis %d: %d vs %d for BinaryOp (%s)",
+				axis, lhsDim, rhsDim, opType)
 			return
 		}
-		output.Dimensions[axis] = max(lhsDim, rhsDim)
 	}
 	return
 
@@ -359,7 +398,20 @@ func (b *Builder) broadcastForBinaryOps(
 	// If any is a scalar, just broadcast it to the other one.
 	if lhsNode.shape.IsScalar() {
 		var value *stablehlo.Value
-		value, err = stablehlo.BroadcastInDim(lhsNode.value, rhsNode.value.Shape(), nil)
+		// Check if the GoMLX shape has symbolic dimensions
+		// (not the StableHLO shape, which may have symbolic dims even when GoMLX shape is concrete)
+		if rhsNode.shape.HasSymbolicDim() {
+			// Use DynamicBroadcastInDim for shapes with symbolic dimensions
+			shapeTensor, shapeErr := b.shapeToTensor(rhsNode.value)
+			if shapeErr != nil {
+				return nil, nil, errors.WithMessagef(shapeErr, "while creating shape tensor for broadcasting in op %q", opType)
+			}
+			value, err = stablehlo.DynamicBroadcastInDim(lhsNode.value, shapeTensor, nil)
+		} else {
+			// Use static BroadcastInDim with the concrete GoMLX shape
+			targetShape := ShapeToXLA(rhsNode.shape)
+			value, err = stablehlo.BroadcastInDim(lhsNode.value, targetShape, nil)
+		}
 		if err != nil {
 			return nil, nil, errors.WithMessagef(err, "while building op %q", opType)
 		}
@@ -367,7 +419,20 @@ func (b *Builder) broadcastForBinaryOps(
 		return
 	} else if rhsNode.shape.IsScalar() {
 		var value *stablehlo.Value
-		value, err = stablehlo.BroadcastInDim(rhsNode.value, lhsNode.value.Shape(), nil)
+		// Check if the GoMLX shape has symbolic dimensions
+		// (not the StableHLO shape, which may have symbolic dims even when GoMLX shape is concrete)
+		if lhsNode.shape.HasSymbolicDim() {
+			// Use DynamicBroadcastInDim for shapes with symbolic dimensions
+			shapeTensor, shapeErr := b.shapeToTensor(lhsNode.value)
+			if shapeErr != nil {
+				return nil, nil, errors.WithMessagef(shapeErr, "while creating shape tensor for broadcasting in op %s", opName)
+			}
+			value, err = stablehlo.DynamicBroadcastInDim(rhsNode.value, shapeTensor, nil)
+		} else {
+			// Use static BroadcastInDim with the concrete GoMLX shape
+			targetShape := ShapeToXLA(lhsNode.shape)
+			value, err = stablehlo.BroadcastInDim(rhsNode.value, targetShape, nil)
+		}
 		if err != nil {
 			return nil, nil, errors.WithMessagef(err, "while building op %s", opName)
 		}
@@ -382,19 +447,211 @@ func (b *Builder) broadcastForBinaryOps(
 	}
 	newShapeStableHLO := ShapeToXLA(broadcastShape)
 	broadcastAxes := xslices.Iota(0, broadcastShape.Rank())
+
+	// Check if the broadcast shape has symbolic dimensions
+	useDynamicBroadcast := broadcastShape.HasSymbolicDim()
+
 	if !broadcastShape.Equal(lhsNode.shape) {
-		value, err := stablehlo.BroadcastInDim(lhsNode.value, newShapeStableHLO, broadcastAxes)
+		var value *stablehlo.Value
+		if useDynamicBroadcast {
+			// Use DynamicBroadcastInDim for shapes with symbolic dimensions
+			// Try to get shape from the concrete operand if available
+			var shapeTensor *stablehlo.Value
+			if !rhsNode.shape.HasSymbolicDim() {
+				shapeTensor, err = b.shapeToTensor(rhsNode.value)
+			} else if !lhsNode.shape.HasSymbolicDim() {
+				shapeTensor, err = b.shapeToTensor(lhsNode.value)
+			} else {
+				// Both have symbolic dims, create shape tensor from broadcast shape
+				shapeTensor, err = b.createShapeTensorForBroadcast(broadcastShape, lhsNode.value, rhsNode.value)
+			}
+			if err != nil {
+				return nil, nil, errors.WithMessagef(err, "while creating shape tensor for broadcasting lhs in op %q", opType)
+			}
+			value, err = stablehlo.DynamicBroadcastInDim(lhsNode.value, shapeTensor, broadcastAxes)
+		} else {
+			value, err = stablehlo.BroadcastInDim(lhsNode.value, newShapeStableHLO, broadcastAxes)
+		}
 		if err != nil {
 			return nil, nil, errors.WithMessagef(err, "while broadcasting lhs for op %q", opType)
 		}
 		lhsNode = b.newNode(value)
 	}
 	if !broadcastShape.Equal(rhsNode.shape) {
-		value, err := stablehlo.BroadcastInDim(rhsNode.value, newShapeStableHLO, broadcastAxes)
+		var value *stablehlo.Value
+		if useDynamicBroadcast {
+			// Use DynamicBroadcastInDim for shapes with symbolic dimensions
+			// Try to get shape from the concrete operand if available
+			var shapeTensor *stablehlo.Value
+			if !lhsNode.shape.HasSymbolicDim() {
+				shapeTensor, err = b.shapeToTensor(lhsNode.value)
+			} else if !rhsNode.shape.HasSymbolicDim() {
+				shapeTensor, err = b.shapeToTensor(rhsNode.value)
+			} else {
+				// Both have symbolic dims, create shape tensor from broadcast shape
+				shapeTensor, err = b.createShapeTensorForBroadcast(broadcastShape, lhsNode.value, rhsNode.value)
+			}
+			if err != nil {
+				return nil, nil, errors.WithMessagef(err, "while creating shape tensor for broadcasting rhs in op %q", opType)
+			}
+			value, err = stablehlo.DynamicBroadcastInDim(rhsNode.value, shapeTensor, broadcastAxes)
+		} else {
+			value, err = stablehlo.BroadcastInDim(rhsNode.value, newShapeStableHLO, broadcastAxes)
+		}
 		if err != nil {
 			return nil, nil, errors.WithMessagef(err, "while broadcasting rhs for op %q", opType)
 		}
 		rhsNode = b.newNode(value)
 	}
 	return
+}
+
+// shapeToTensor creates a 1D tensor containing the runtime dimensions of the given value.
+// This is used for dynamic broadcast operations when the target shape has symbolic dimensions.
+func (b *Builder) shapeToTensor(value *stablehlo.Value) (*stablehlo.Value, error) {
+	shape := value.Shape()
+	rank := shape.Rank()
+	fn := b.fn
+
+	// Create a slice to hold individual dimension sizes
+	dimValues := make([]*stablehlo.Value, rank)
+
+	for i := 0; i < rank; i++ {
+		var dimValue *stablehlo.Value
+		var err error
+
+		if shape.Dimensions[i] >= 0 {
+			// Concrete dimension - use constant (as 1D tensor with single element)
+			dimValue, err = fn.ConstantFromFlatAndDimensions([]int64{int64(shape.Dimensions[i])}, 1)
+			if err != nil {
+				return nil, errors.WithMessagef(err, "creating constant for dimension %d", i)
+			}
+		} else {
+			// Symbolic dimension - use get_dimension_size
+			dimSize, err := stablehlo.GetDimensionSize(value, i)
+			if err != nil {
+				return nil, errors.WithMessagef(err, "getting dimension size for axis %d", i)
+			}
+			// Convert to int64 as required by DynamicBroadcastInDim
+			// Note: GetDimensionSize returns i32, we need i64
+			if dimSize.Shape().DType != xla_dtypes.Int64 {
+				dimSize, err = stablehlo.Convert(dimSize, xla_dtypes.Int64)
+				if err != nil {
+					return nil, errors.WithMessagef(err, "converting dimension size to int64")
+				}
+			}
+			// Reshape scalar to 1D tensor
+			targetShape := xla_shapes.Make(dimSize.Shape().DType, 1)
+			dimValue, err = stablehlo.Reshape(dimSize, targetShape)
+			if err != nil {
+				return nil, errors.WithMessagef(err, "reshaping dimension size to 1D")
+			}
+		}
+
+		dimValues[i] = dimValue
+	}
+
+	// Concatenate all dimensions into a single 1D tensor
+	if len(dimValues) == 0 {
+		// Scalar case - return empty shape
+		return fn.ConstantFromFlatAndDimensions([]int64{}, 0)
+	} else if len(dimValues) == 1 {
+		// Single dimension - already 1D
+		return dimValues[0], nil
+	} else {
+		// Multiple dimensions - concatenate along axis 0
+		return stablehlo.Concatenate(0, dimValues...)
+	}
+}
+
+// createShapeTensorForBroadcast creates a shape tensor for broadcast operations when
+// the broadcast shape has symbolic dimensions. It tries to resolve dimensions from
+// the concrete operands when possible.
+func (b *Builder) createShapeTensorForBroadcast(broadcastShape shapes.Shape, lhsValue, rhsValue *stablehlo.Value) (*stablehlo.Value, error) {
+	fn := b.fn
+	rank := broadcastShape.Rank()
+
+	// Create a slice to hold individual dimension sizes
+	dimValues := make([]*stablehlo.Value, rank)
+
+	for i := 0; i < rank; i++ {
+		var dimValue *stablehlo.Value
+		var err error
+
+		if broadcastShape.Dimensions[i] >= 0 {
+			// Concrete dimension in broadcast shape - use constant
+			dimValue, err = fn.ConstantFromFlatAndDimensions([]int64{int64(broadcastShape.Dimensions[i])}, 1)
+			if err != nil {
+				return nil, errors.WithMessagef(err, "creating constant for dimension %d", i)
+			}
+		} else {
+			// Symbolic dimension - try to get from operands
+			// First try lhs
+			if i < lhsValue.Shape().Rank() {
+				lhsDim := lhsValue.Shape().Dimensions[i]
+				if lhsDim >= 0 {
+					dimValue, err = fn.ConstantFromFlatAndDimensions([]int64{int64(lhsDim)}, 1)
+					if err != nil {
+						return nil, errors.WithMessagef(err, "creating constant from lhs dimension %d", i)
+					}
+				} else {
+					// Get runtime dimension from lhs
+					dimSize, err := stablehlo.GetDimensionSize(lhsValue, i)
+					if err != nil {
+						return nil, errors.WithMessagef(err, "getting lhs dimension size for axis %d", i)
+					}
+					if dimSize.Shape().DType != xla_dtypes.Int64 {
+						dimSize, err = stablehlo.Convert(dimSize, xla_dtypes.Int64)
+						if err != nil {
+							return nil, errors.WithMessagef(err, "converting dimension size to int64")
+						}
+					}
+					targetShape := xla_shapes.Make(dimSize.Shape().DType, 1)
+					dimValue, err = stablehlo.Reshape(dimSize, targetShape)
+					if err != nil {
+						return nil, errors.WithMessagef(err, "reshaping dimension size to 1D")
+					}
+				}
+			} else if i < rhsValue.Shape().Rank() {
+				// Try rhs if lhs doesn't have this dimension
+				rhsDim := rhsValue.Shape().Dimensions[i]
+				if rhsDim >= 0 {
+					dimValue, err = fn.ConstantFromFlatAndDimensions([]int64{int64(rhsDim)}, 1)
+					if err != nil {
+						return nil, errors.WithMessagef(err, "creating constant from rhs dimension %d", i)
+					}
+				} else {
+					// Get runtime dimension from rhs
+					dimSize, err := stablehlo.GetDimensionSize(rhsValue, i)
+					if err != nil {
+						return nil, errors.WithMessagef(err, "getting rhs dimension size for axis %d", i)
+					}
+					if dimSize.Shape().DType != xla_dtypes.Int64 {
+						dimSize, err = stablehlo.Convert(dimSize, xla_dtypes.Int64)
+						if err != nil {
+							return nil, errors.WithMessagef(err, "converting dimension size to int64")
+						}
+					}
+					targetShape := xla_shapes.Make(dimSize.Shape().DType, 1)
+					dimValue, err = stablehlo.Reshape(dimSize, targetShape)
+					if err != nil {
+						return nil, errors.WithMessagef(err, "reshaping dimension size to 1D")
+					}
+				}
+			} else {
+				return nil, errors.Errorf("cannot resolve symbolic dimension %d in broadcast shape", i)
+			}
+		}
+
+		dimValues[i] = dimValue
+	}
+
+	// Concatenate all dimensions into a single 1D tensor
+	if len(dimValues) == 0 {
+		return fn.ConstantFromFlatAndDimensions([]int64{}, 0)
+	} else if len(dimValues) == 1 {
+		return dimValues[0], nil
+	} else {
+		return stablehlo.Concatenate(0, dimValues...)
+	}
 }

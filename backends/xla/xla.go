@@ -306,5 +306,17 @@ func ShapeFromXLA(shape xlashapes.Shape) shapes.Shape {
 	if !shape.Ok() || shape.IsTuple() {
 		return shapes.Invalid()
 	}
-	return shapes.Make(DTypeFromXLA(shape.DType), slices.Clone(shape.Dimensions)...)
+	dims := slices.Clone(shape.Dimensions)
+	// Check if any dimension is symbolic (negative)
+	hasSymbolic := false
+	for _, d := range dims {
+		if d < 0 {
+			hasSymbolic = true
+			break
+		}
+	}
+	if hasSymbolic {
+		return shapes.MakeDynamic(DTypeFromXLA(shape.DType), dims...)
+	}
+	return shapes.Make(DTypeFromXLA(shape.DType), dims...)
 }

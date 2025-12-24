@@ -46,8 +46,15 @@ func (s Shape) CheckDims(dimensions ...int) error {
 		return errors.Errorf("shape (%s) has incompatible rank %d (wanted %d)", s, s.Rank(), len(dimensions))
 	}
 	for ii, wantDim := range dimensions {
-		if wantDim != -1 && s.Dimensions[ii] != wantDim {
-			return errors.Errorf("shape (%s) axis %d has dimension %d, wanted %d (shape wanted=%v)", s, ii, s.Dimensions[ii], wantDim, dimensions)
+		actualDim := s.Dimensions[ii]
+		// Skip check if either dimension is symbolic/dynamic (negative)
+		// Note: -1 is the traditional wildcard, but we also handle other negative values (symbolic dims like -3)
+		if wantDim < 0 || actualDim < 0 {
+			continue
+		}
+		// Both dimensions are concrete, check they match
+		if actualDim != wantDim {
+			return errors.Errorf("shape (%s) axis %d has dimension %d, wanted %d (shape wanted=%v)", s, ii, actualDim, wantDim, dimensions)
 		}
 	}
 	return nil

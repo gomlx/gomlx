@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 type NodeType int
@@ -45,6 +45,8 @@ const (
 	NodeTypeDiv
 	NodeTypeDot
 	NodeTypeDotGeneral
+	NodeTypeDynamicBroadcastInDim
+	NodeTypeDynamicReshape
 	NodeTypeDynamicSlice
 	NodeTypeDynamicUpdateSlice
 	NodeTypeEqual
@@ -55,6 +57,7 @@ const (
 	NodeTypeFFT
 	NodeTypeFloor
 	NodeTypeGather
+	NodeTypeGetDimensionSize
 	NodeTypeGreaterOrEqual
 	NodeTypeGreaterOrEqualTotalOrder
 	NodeTypeGreaterThan
@@ -118,6 +121,7 @@ const (
 	NodeTypeTanh
 	NodeTypeTranspose
 	NodeTypeWhere
+	NodeTypeWhile
 )
 
 // nodeInputsAbs holds the inputs used for the call to backends.Abs.
@@ -1370,6 +1374,97 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 	return
 }
 
+// nodeInputsDynamicBroadcastInDim holds the inputs used for the call to backends.DynamicBroadcastInDim.
+type nodeInputsDynamicBroadcastInDim struct {
+	operand             *Node
+	outputDimensions    *Node
+	broadcastDimensions []int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsDynamicBroadcastInDim) Type() NodeType {
+	return NodeTypeDynamicBroadcastInDim
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsDynamicBroadcastInDim) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], outputDimensions=[#%d], broadcastDimensions=%v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.outputDimensions.Id(),
+		ni.broadcastDimensions,
+	)
+}
+
+// backendDynamicBroadcastInDim is a Graph wrapper for the backend.Builder.DynamicBroadcastInDim method.
+func backendDynamicBroadcastInDim(operand *Node, outputDimensions *Node, broadcastDimensions []int) (
+	node *Node) {
+	inputNodes := []*Node{operand, outputDimensions}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsDynamicBroadcastInDim{
+		operand:             operand,
+		outputDimensions:    outputDimensions,
+		broadcastDimensions: slices.Clone(broadcastDimensions),
+	}
+	result, err := g.builder.DynamicBroadcastInDim(operand.outputOps[0], outputDimensions.outputOps[0], inputs.broadcastDimensions)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsDynamicReshape holds the inputs used for the call to backends.DynamicReshape.
+type nodeInputsDynamicReshape struct {
+	operand     *Node
+	outputShape *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsDynamicReshape) Type() NodeType {
+	return NodeTypeDynamicReshape
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsDynamicReshape) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], outputShape=[#%d])",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.outputShape.Id(),
+	)
+}
+
+// backendDynamicReshape is a Graph wrapper for the backend.Builder.DynamicReshape method.
+func backendDynamicReshape(operand *Node, outputShape *Node) (
+	node *Node) {
+	inputNodes := []*Node{operand, outputShape}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsDynamicReshape{
+		operand:     operand,
+		outputShape: outputShape,
+	}
+	result, err := g.builder.DynamicReshape(operand.outputOps[0], outputShape.outputOps[0])
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
 // nodeInputsDynamicSlice holds the inputs used for the call to backends.DynamicSlice.
 type nodeInputsDynamicSlice struct {
 	operand      *Node
@@ -1838,6 +1933,50 @@ func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offse
 		indicesAreSorted:   indicesAreSorted,
 	}
 	result, err := g.builder.Gather(operand.outputOps[0], startIndices.outputOps[0], inputs.indexVectorAxis, inputs.offsetOutputAxes, inputs.collapsedSliceAxes, inputs.startIndexMap, inputs.sliceSizes, inputs.indicesAreSorted)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsGetDimensionSize holds the inputs used for the call to backends.GetDimensionSize.
+type nodeInputsGetDimensionSize struct {
+	operand   *Node
+	dimension int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsGetDimensionSize) Type() NodeType {
+	return NodeTypeGetDimensionSize
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsGetDimensionSize) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], dimension=%v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.dimension,
+	)
+}
+
+// backendGetDimensionSize is a Graph wrapper for the backend.Builder.GetDimensionSize method.
+func backendGetDimensionSize(operand *Node, dimension int) (
+	node *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsGetDimensionSize{
+		operand:   operand,
+		dimension: dimension,
+	}
+	result, err := g.builder.GetDimensionSize(operand.outputOps[0], inputs.dimension)
 	if err != nil {
 		panic(err)
 	}
@@ -4668,4 +4807,60 @@ func backendWhere(condition *Node, onTrue *Node, onFalse *Node) (
 	}
 	g.registerNode(node)
 	return
+}
+
+// nodeInputsWhile holds the inputs used for the call to backends.While.
+type nodeInputsWhile struct {
+	condFn        any
+	bodyFn        any
+	initialStates []*Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsWhile) Type() NodeType {
+	return NodeTypeWhile
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsWhile) String() string {
+	return fmt.Sprintf("%s(condFn=%v, bodyFn=%v, initialStates=[#%s])",
+		ni.Type(),
+		ni.condFn,
+		ni.bodyFn,
+		strings.Join(xslices.Map(ni.initialStates, func(node *Node) string { return fmt.Sprintf("#%d", node.Id()) }), ", "),
+	)
+}
+
+// While executes bodyFn repeatedly while condFn returns true.
+// Both condFn and bodyFn must be closure functions that are child functions of the current graph.
+// condFn: takes state nodes as inputs, returns a scalar bool output
+// bodyFn: takes state nodes as inputs, returns updated state nodes as outputs
+// initialStates: initial values for the loop state
+// Returns: final state values after the loop terminates
+//
+// The closures are NOT Go function types, but rather references to sub-computations.
+// They should be created using the backend-specific closure mechanism.
+func While(condFn any, bodyFn any, initialStates ...*Node) []*Node {
+	inputNodes := []*Node{}
+	inputNodes = append(inputNodes, initialStates...)
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsWhile{
+		condFn:        condFn,
+		bodyFn:        bodyFn,
+		initialStates: slices.Clone(initialStates),
+	}
+	results, err := g.builder.While(inputs.condFn, inputs.bodyFn, xslices.Map(initialStates, func(node *Node) backends.Op { return node.outputOps[0] })...)
+	if err != nil {
+		panic(err)
+	}
+	node := &Node{
+		outputOps: results,
+		outputShapes: xslices.Map(results,
+			func(op backends.Op) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
+		graph:      g,
+		inputs:     inputs,
+		inputNodes: inputNodes,
+	}
+	g.registerNode(node)
+	return splitNode(node)
 }

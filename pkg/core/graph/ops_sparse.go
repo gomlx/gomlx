@@ -23,7 +23,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 // NormalizeIndices converts Python-style negative indices to positive indices
@@ -151,12 +150,19 @@ func Gather(params, indices *Node, indicesAreSorted ...bool) *Node {
 	// * collapsedSliceDims sets to collapse all the indexed params dimensions (the first indexedSubRank).
 	sliceSizes := make([]int, paramsRank)
 	collapsedSliceDims := make([]int, indexedSubRank)
+	const maxDimSize = 1 << 30 // Sentinel value for symbolic/dynamic dimensions
 	for ii := 0; ii < paramsRank; ii++ {
 		if ii < indexedSubRank {
 			sliceSizes[ii] = 1
 			collapsedSliceDims[ii] = ii
 		} else {
-			sliceSizes[ii] = params.Shape().Dimensions[ii]
+			dim := params.Shape().Dimensions[ii]
+			if dim < 0 {
+				// Symbolic dimension - use large sentinel value that will be clamped at runtime
+				sliceSizes[ii] = maxDimSize
+			} else {
+				sliceSizes[ii] = dim
+			}
 		}
 	}
 	// * offsetOutputAxes are set for all params axes not collapsed, and they point to where those axes go in the output shape.
@@ -436,12 +442,78 @@ func ScatterUpdate(operand, indices, updates *Node, sorted, unique bool) *Node {
 	dtype := operand.DType()
 	shape := operand.Shape()
 
-	zero := ScalarZero(g, dtype)
-	maskUpdates := OnesLike(updates)
-	updateMask := Scatter(indices, maskUpdates, shape, sorted, unique)
-	updateMaskBool := ConvertDType(updateMask, dtypes.Bool)
-	operand = Where(updateMaskBool, zero, operand)
-	return ScatterSum(operand, indices, updates, sorted, unique)
+	// Check if shape has symbolic dimensions
+	hasSymbolic := false
+	for _, d := range shape.Dimensions {
+		if d < 0 {
+			hasSymbolic = true
+			break
+		}
+	}
+
+	// Check if updates has symbolic dimensions
+	updatesHasSymbolic := false
+	for _, d := range updates.Shape().Dimensions {
+		if d < 0 {
+			updatesHasSymbolic = true
+			break
+		}
+	}
+
+	var operandZeroed *Node
+	if hasSymbolic || updatesHasSymbolic {
+		// For symbolic dimensions, create zeros using dynamic broadcast from operand's runtime shape
+		zero := ScalarZero(g, dtype)
+
+		// Extract runtime shape from operand
+		shapeTensor := make([]*Node, shape.Rank())
+		for i := range shape.Rank() {
+			shapeTensor[i] = GetDimensionSize(operand, i)
+		}
+		shapeNode := Stack(shapeTensor, 0)
+		if shapeNode.DType() != dtypes.Int64 {
+			shapeNode = ConvertDType(shapeNode, dtypes.Int64)
+		}
+
+		// Create zeros with the runtime shape
+		zeros := DynamicBroadcastInDim(zero, shapeNode, []int{})
+
+		// Create mask using dynamic approach - must also use DynamicBroadcastInDim for updates
+		// when updates has symbolic dimensions
+		var maskUpdates *Node
+		if updatesHasSymbolic {
+			// Extract runtime shape from updates
+			updatesShape := updates.Shape()
+			updatesShapeTensor := make([]*Node, updatesShape.Rank())
+			for i := range updatesShape.Rank() {
+				updatesShapeTensor[i] = GetDimensionSize(updates, i)
+			}
+			updatesShapeNode := Stack(updatesShapeTensor, 0)
+			if updatesShapeNode.DType() != dtypes.Int64 {
+				updatesShapeNode = ConvertDType(updatesShapeNode, dtypes.Int64)
+			}
+			// Create ones with the runtime shape of updates
+			one := Scalar(g, dtype, 1.0)
+			maskUpdates = DynamicBroadcastInDim(one, updatesShapeNode, []int{})
+		} else {
+			maskUpdates = OnesLike(updates)
+		}
+
+		// For the mask, we also need to use dynamic broadcast
+		// Create the scatter mask by scattering ones at the update positions
+		updateMask := ScatterSum(zeros, indices, maskUpdates, sorted, unique)
+		updateMaskBool := ConvertDType(updateMask, dtypes.Bool)
+		operandZeroed = Where(updateMaskBool, zero, operand)
+	} else {
+		// Original static path for non-symbolic shapes
+		zero := ScalarZero(g, dtype)
+		maskUpdates := OnesLike(updates)
+		updateMask := Scatter(indices, maskUpdates, shape, sorted, unique)
+		updateMaskBool := ConvertDType(updateMask, dtypes.Bool)
+		operandZeroed = Where(updateMaskBool, zero, operand)
+	}
+
+	return ScatterSum(operandZeroed, indices, updates, sorted, unique)
 }
 
 // ScatterSum adds up the slices in updates into the given operand tensor, at the locations pointed by indices.
@@ -520,17 +592,71 @@ func genericScatter(operand, indices, updates *Node, sorted, unique bool, fn sca
 	indicesRank := indices.Rank()
 	indexedRank := indices.Shape().Dimensions[indicesRank-1]
 	updatesRank := updates.Rank()
-	if updatesRank < indicesRank-1 || !xslices.DeepSliceCmp(updates.Shape().Dimensions[:indicesRank-1], indices.Shape().Dimensions[:indicesRank-1], xslices.EqualAny[int]) {
+	if updatesRank < indicesRank-1 {
 		Panicf("updates rank prefix (shapes=%s) must match the first n-1 dimensions of the indices (shapes=%s)",
 			updates.Shape(), indices.Shape())
+	}
+
+	// Check that the first indicesRank-1 dimensions match between updates and indices.
+	// For dynamic dimensions (negative values), we allow any match as long as they could
+	// be broadcast compatible at runtime.
+	for i := 0; i < indicesRank-1; i++ {
+		updatesDim := updates.Shape().Dimensions[i]
+		indicesDim := indices.Shape().Dimensions[i]
+
+		// Allow if both are the same
+		if updatesDim == indicesDim {
+			continue
+		}
+
+		// Allow if either is dynamic (negative) - runtime will validate
+		if updatesDim < 0 || indicesDim < 0 {
+			continue
+		}
+
+		// Allow if updates dimension is 1 (broadcastable)
+		if updatesDim == 1 {
+			continue
+		}
+
+		// Otherwise, dimensions must match
+		Panicf("updates rank prefix (shapes=%s) must match the first n-1 dimensions of the indices (shapes=%s): dimension %d has updatesDim=%d but indicesDim=%d",
+			updates.Shape(), indices.Shape(), i, updatesDim, indicesDim)
 	}
 	slicesRank := updatesRank - (indicesRank - 1)
 	slicesDims := updates.Shape().Dimensions[indicesRank-1:]
 	operandRank := operand.Shape().Rank()
-	if operandRank != indexedRank+slicesRank || !xslices.DeepSliceCmp(operand.Shape().Dimensions[indexedRank:], slicesDims, xslices.EqualAny[int]) {
+
+	// Check operand rank
+	// For dynamic indexed rank (negative indexedRank), we can't validate this at graph build time
+	if indexedRank >= 0 && operandRank != indexedRank+slicesRank {
 		Panicf("operand shapes (%s) has to be a combination of the indexed rank (%d, the last dimension of indices shapes %s) and "+
 			"the slices coming from updates (the last %d dimensions %v of the updates, shaped %s)",
 			operand.Shape(), indexedRank, indices.Shape(), slicesRank, slicesDims, updates.Shape())
+	}
+
+	// Check that the slice dimensions match between operand and updates
+	// For dynamic dimensions, we allow the mismatch as runtime will validate
+	if indexedRank >= 0 {
+		for i := 0; i < slicesRank; i++ {
+			operandDim := operand.Shape().Dimensions[indexedRank+i]
+			sliceDim := slicesDims[i]
+
+			// Allow if both are the same
+			if operandDim == sliceDim {
+				continue
+			}
+
+			// Allow if either is dynamic (negative)
+			if operandDim < 0 || sliceDim < 0 {
+				continue
+			}
+
+			// Otherwise, dimensions must match
+			Panicf("operand shapes (%s) has to be a combination of the indexed rank (%d, the last dimension of indices shapes %s) and "+
+				"the slices coming from updates (the last %d dimensions %v of the updates, shaped %s): dimension %d mismatch: operandDim=%d, sliceDim=%d",
+				operand.Shape(), indexedRank, indices.Shape(), slicesRank, slicesDims, updates.Shape(), i, operandDim, sliceDim)
+		}
 	}
 
 	// Set scatterXLA parameters:

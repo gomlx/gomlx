@@ -423,7 +423,20 @@ func BroadcastPrefix(x *Node, prefixDims ...int) *Node {
 	for i := range shape.Rank() {
 		broadcastAxes[i] = i + len(prefixDims)
 	}
-	outputShape := shapes.Make(x.DType(), newDims...)
+	// Check if any dimension in newDims is symbolic (negative)
+	var outputShape shapes.Shape
+	hasSymbolic := false
+	for _, d := range newDims {
+		if d < 0 {
+			hasSymbolic = true
+			break
+		}
+	}
+	if hasSymbolic {
+		outputShape = shapes.MakeDynamic(x.DType(), newDims...)
+	} else {
+		outputShape = shapes.Make(x.DType(), newDims...)
+	}
 	return backendBroadcastInDim(x, outputShape, broadcastAxes)
 }
 
@@ -522,7 +535,7 @@ func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 //
 // See also the equivalent BroadcastToShape.
 func BroadcastToDims(x *Node, dimensions ...int) *Node {
-	_ = validateBuildingGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 
 	// Check if any dimensions are symbolic (negative values)
 	hasSymbolic := false
@@ -533,14 +546,75 @@ func BroadcastToDims(x *Node, dimensions ...int) *Node {
 		}
 	}
 
-	var shape shapes.Shape
+	// If we have symbolic dimensions, we need to use DynamicBroadcastInDim
 	if hasSymbolic {
-		// Use MakeDynamic to allow symbolic dimensions
-		shape = shapes.MakeDynamic(x.DType(), dimensions...)
-	} else {
-		// Use Make for static dimensions (validates no negative values)
-		shape = shapes.Make(x.DType(), dimensions...)
+		// Build a shape tensor from the dimensions
+		// For symbolic dimensions, we extract them from the input shape
+		shapeParts := make([]*Node, len(dimensions))
+		for i, dim := range dimensions {
+			if dim >= 0 {
+				// Concrete dimension - use constant (Int32 to match GetDimensionSize)
+				shapeParts[i] = Const(g, int32(dim))
+			} else {
+				// Symbolic dimension - need to extract from input
+				// For now, we'll find a matching dimension in the input
+				// This is a simplified approach - a more complete solution would track
+				// where each symbolic dimension comes from
+
+				// Try to find a matching symbolic dimension in the input
+				inputDims := x.Shape().Dimensions
+				found := false
+				for j, inputDim := range inputDims {
+					if inputDim == dim {
+						// Found matching symbolic dimension in input
+						// GetDimensionSize returns Int32, so no need to wrap in ExpandDims - it's already scalar
+						dimSize := GetDimensionSize(x, j)
+						shapeParts[i] = dimSize
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					// Fallback: use dimension size from the last axis of input
+					// This is a heuristic that works for many broadcasting cases
+					if len(inputDims) > 0 {
+						lastAxis := len(inputDims) - 1
+						shapeParts[i] = GetDimensionSize(x, lastAxis)
+					} else {
+						// No input dimensions available, use a default size of 1
+						shapeParts[i] = Const(g, int32(1))
+					}
+				}
+			}
+		}
+
+		// Stack all shape parts into a single 1D tensor
+		shapeTensor := Stack(shapeParts, 0)
+
+		// Convert to Int64 as required by DynamicBroadcastInDim (StableHLO requirement)
+		if shapeTensor.DType() != dtypes.Int64 {
+			shapeTensor = ConvertDType(shapeTensor, dtypes.Int64)
+		}
+
+		// Determine broadcast dimensions
+		var broadcastDims []int
+		if x.Shape().IsScalar() {
+			broadcastDims = []int{} // Empty for scalar broadcast
+		} else {
+			broadcastDims = make([]int, x.Rank())
+			for ii := range x.Rank() {
+				broadcastDims[ii] = ii
+			}
+		}
+
+		return DynamicBroadcastInDim(x, shapeTensor, broadcastDims)
 	}
+
+	// Static case - use the original implementation
+	var shape shapes.Shape
+	// Use Make for static dimensions (validates no negative values)
+	shape = shapes.Make(x.DType(), dimensions...)
 
 	if x.Shape().IsScalar() && shape.IsScalar() {
 		// Assume nothing to do.
@@ -607,13 +681,16 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 				onFalse.Shape(),
 			)
 		}
-		for axis, dim := range condition.Shape().Dimensions {
-			if outputShape.Dimensions[axis] != dim {
-				exceptions.Panicf(
-					"Where() requires the condition shape to be a prefix (or equal) to the output shape, but condition is %s and output shape is %s",
-					condition.Shape(),
-					outputShape,
-				)
+		// Only validate dimension compatibility if both shapes have static dimensions
+		if !condition.Shape().HasSymbolicDim() && !outputShape.HasSymbolicDim() {
+			for axis, dim := range condition.Shape().Dimensions {
+				if outputShape.Dimensions[axis] != dim {
+					exceptions.Panicf(
+						"Where() requires the condition shape to be a prefix (or equal) to the output shape, but condition is %s and output shape is %s",
+						condition.Shape(),
+						outputShape,
+					)
+				}
 			}
 		}
 		if condition.Rank() != outputShape.Rank() {
@@ -632,6 +709,30 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 // in which case it will be set to match the size, if possible.
 func Reshape(x *Node, dimensions ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
+
+	// Check if input or output has symbolic dimensions
+	hasSymbolicInput := false
+	for _, dim := range x.Shape().Dimensions {
+		if dim < 0 {
+			hasSymbolicInput = true
+			break
+		}
+	}
+	hasSymbolicOutput := false
+	for _, dim := range dimensions {
+		if dim < 0 && dim != -1 { // -1 is the "infer this dimension" marker
+			hasSymbolicOutput = true
+			break
+		}
+	}
+
+	// Skip size validation if any dimension is symbolic (will be validated at runtime)
+	if hasSymbolicInput || hasSymbolicOutput {
+		// For symbolic shapes, we can't validate sizes at compile time
+		// Just pass through the dimensions as-is
+		return backendReshape(x, dimensions...)
+	}
+
 	totalSize := x.Shape().Size()
 	newSize := 1
 	missingIdx := -1
@@ -680,8 +781,9 @@ func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 	}
 
 	// Concretize symbolic dimensions in the target shape using x's concrete shape
+	// Only concretize if the input has concrete dimensions to use
 	targetShape := shape
-	if shape.HasSymbolicDim() {
+	if shape.HasSymbolicDim() && !x.Shape().HasSymbolicDim() {
 		targetShape = shape.Concretize(x.Shape())
 	}
 
@@ -699,7 +801,17 @@ func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 			)
 		}
 	}
-	return backendReshape(x, targetShape.Dimensions...)
+
+	result := backendReshape(x, targetShape.Dimensions...)
+
+	// If the target shape has symbolic dimensions, the backend may have concretized them
+	// incorrectly (e.g., XLA treats negative dimensions as "infer from size").
+	// Manually override the output shape to preserve symbolic dimensions.
+	if targetShape.HasSymbolicDim() {
+		result.outputShapes[0] = targetShape
+	}
+
+	return result
 }
 
 // InsertAxes expands x creating new axes just before the axes given -- beforeAxes points to positions on the original
@@ -855,7 +967,9 @@ func Squeeze(x *Node, axes ...int) *Node {
 			if newDims[axis] == 0 {
 				exceptions.Panicf("Squeeze() for x.shape=%s, axis %d was selected twice!?", x.Shape(), axes[axisIdx])
 			}
-			if newDims[axis] != 1 {
+			// Allow symbolic dimensions (negative values) to be squeezed
+			// At runtime, the actual dimension will be validated
+			if newDims[axis] >= 0 && newDims[axis] != 1 {
 				exceptions.Panicf("Squeeze() for x.shape=%s, axis %d does not have dimension 1", x.Shape(), axes[axisIdx])
 			}
 			newDims[axis] = 0
@@ -864,7 +978,9 @@ func Squeeze(x *Node, axes ...int) *Node {
 
 	tgtAxisIdx := 0
 	for _, dim := range newDims {
-		if dim > 0 {
+		// Keep dimensions that are > 0 (concrete) or < 0 (symbolic)
+		// dim == 0 means the dimension was marked for removal (squeezed)
+		if dim != 0 {
 			newDims[tgtAxisIdx] = dim
 			tgtAxisIdx++
 		}
@@ -1423,7 +1539,9 @@ func Concatenate(operands []*Node, axis int) *Node {
 				// Dimension being concatenated can be different.
 				continue
 			}
-			if baseShape.Dimensions[ii] != nodeDim {
+			baseDim := baseShape.Dimensions[ii]
+			// Allow symbolic dimensions to match any dimension (they will be resolved at runtime)
+			if baseDim != nodeDim && baseDim >= 0 && nodeDim >= 0 {
 				exceptions.Panicf(
 					"Concatenate(axis=%d) operand #%d has incompatible shape (%s) with operand 0's shape (%s) "+
 						"-- except for axis %d, the dimensions on all other axes must match",
