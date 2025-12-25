@@ -18,6 +18,7 @@ package graph
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/bucketing"
 )
 
 // PadToBucketSize pads the tensor along specified axes to match the bucketed size.
@@ -43,9 +44,9 @@ import (
 // Simple example:
 //
 //	// Pad batch dimension to next power of 2
-//	padded := PadToBucketSize(input, Const(g, float32(0)), Pow2Bucketing{}, 0)
+//	padded := PadToBucketSize(input, Const(g, float32(0)), bucketing.Pow2(), 0)
 //	// input [7, 512] -> padded [8, 512]
-func PadToBucketSize(x *Node, fillValue *Node, strategy BucketingStrategy, axes ...int) *Node {
+func PadToBucketSize(x *Node, fillValue *Node, strategy bucketing.Strategy, axes ...int) *Node {
 	shape := x.Shape()
 
 	if len(axes) == 0 {
@@ -102,7 +103,7 @@ func PadToBucketSize(x *Node, fillValue *Node, strategy BucketingStrategy, axes 
 //	padded := PadToPow2(input, Const(g, float32(0)), 0)
 //	// input [7, 512] -> padded [8, 512]
 func PadToPow2(x *Node, fillValue *Node, axes ...int) *Node {
-	return PadToBucketSize(x, fillValue, Pow2Bucketing{}, axes...)
+	return PadToBucketSize(x, fillValue, bucketing.Pow2(), axes...)
 }
 
 // PadToMultiple pads specified axes to be multiples of the given step size.
@@ -114,5 +115,17 @@ func PadToPow2(x *Node, fillValue *Node, axes ...int) *Node {
 //	// input [7, 512] -> padded [8, 512]
 //	// input [9, 512] -> padded [16, 512]
 func PadToMultiple(x *Node, fillValue *Node, step int, axes ...int) *Node {
-	return PadToBucketSize(x, fillValue, LinearBucketing{Step: step}, axes...)
+	return PadToBucketSize(x, fillValue, bucketing.Linear(step), axes...)
+}
+
+// PadToExponential pads specified axes to the next power of the given base.
+// This provides finer granularity than PadToPow2 for smaller dimensions.
+//
+// Example with base 1.4:
+//
+//	// Pad first axis using exponential bucketing
+//	padded := PadToExponential(input, Const(g, float32(0)), 1.4, 0)
+//	// Sequence: 1, 2, 3, 4, 6, 8, 11, 15, 21, 29, ...
+func PadToExponential(x *Node, fillValue *Node, base float64, axes ...int) *Node {
+	return PadToBucketSize(x, fillValue, bucketing.Exponential(base), axes...)
 }

@@ -27,6 +27,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/bucketing"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -98,56 +99,6 @@ type SideParamsFn func(graph *Graph, inputBuffers []backends.Buffer, donate []bo
 // It is called after the Exec method, with the list of messages and corresponding values of the evaluated nodes.
 type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, nodes []NodeId)
 
-// BucketingStrategy defines how to bucket dimensions for cache efficiency.
-// This reduces the number of unique compiled graphs for variable-sized inputs.
-type BucketingStrategy interface {
-	// Bucket returns the bucketed value for a dimension.
-	// Symbolic dimensions (negative) are returned unchanged.
-	Bucket(dim int) int
-}
-
-// Pow2Bucketing rounds dimensions up to the nearest power of 2.
-// This is useful for reducing cache misses when batch sizes vary.
-// Example: dims 1,2,3,4,5 → 1,2,4,4,8
-type Pow2Bucketing struct{}
-
-// Bucket implements BucketingStrategy for Pow2Bucketing.
-func (Pow2Bucketing) Bucket(dim int) int {
-	if dim <= 0 {
-		return dim // Preserve symbolic or zero
-	}
-	// Round up to next power of 2
-	v := uint(dim - 1)
-	v |= v >> 1
-	v |= v >> 2
-	v |= v >> 4
-	v |= v >> 8
-	v |= v >> 16
-	return int(v + 1)
-}
-
-// LinearBucketing rounds dimensions to multiples of a step size.
-// Example with step=8: dims 1-8 → 8, dims 9-16 → 16
-type LinearBucketing struct {
-	Step int
-}
-
-// Bucket implements BucketingStrategy for LinearBucketing.
-func (b LinearBucketing) Bucket(dim int) int {
-	if dim <= 0 {
-		return dim
-	}
-	return ((dim + b.Step - 1) / b.Step) * b.Step
-}
-
-// NoBucketing returns dimensions unchanged.
-// This is the default behavior when pattern caching is disabled.
-type NoBucketing struct{}
-
-// Bucket implements BucketingStrategy for NoBucketing.
-func (NoBucketing) Bucket(dim int) int {
-	return dim
-}
 
 // Exec creates and executes computation graphs as needed based on the inputs shapes.
 //
@@ -274,7 +225,7 @@ type Exec struct {
 
 	// Pattern caching options
 	enablePatternCaching bool
-	bucketingStrategy    BucketingStrategy
+	bucketingStrategy    bucketing.Strategy
 	patternAxes          []int // Which axes to treat as dynamic (default: first axis only)
 }
 
@@ -510,7 +461,7 @@ func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 // When enabled, shapes are bucketed before cache lookup, reducing the number of
 // unique compiled graphs for variable batch/sequence sizes.
 // It returns a reference to itself so calls can be cascaded.
-func (e *Exec) SetPatternCaching(strategy BucketingStrategy) *Exec {
+func (e *Exec) SetPatternCaching(strategy bucketing.Strategy) *Exec {
 	e.enablePatternCaching = true
 	e.bucketingStrategy = strategy
 	return e
@@ -529,14 +480,22 @@ func (e *Exec) SetDynamicAxes(axes []int) *Exec {
 // Example: batch sizes 1,2,3,4,5 → compiled for sizes 1,2,4,4,8
 // It returns a reference to itself so calls can be cascaded.
 func (e *Exec) WithPow2Bucketing() *Exec {
-	return e.SetPatternCaching(Pow2Bucketing{}).SetDynamicAxes([]int{0})
+	return e.SetPatternCaching(bucketing.Pow2()).SetDynamicAxes([]int{0})
 }
 
 // WithLinearBucketing returns an Exec configured for linear bucketing with the given step.
 // Example with step=8: batch sizes 1-8 → compiled for size 8
 // It returns a reference to itself so calls can be cascaded.
 func (e *Exec) WithLinearBucketing(step int) *Exec {
-	return e.SetPatternCaching(LinearBucketing{Step: step}).SetDynamicAxes([]int{0})
+	return e.SetPatternCaching(bucketing.Linear(step)).SetDynamicAxes([]int{0})
+}
+
+// WithExponentialBucketing returns an Exec configured for exponential bucketing with the given base.
+// This provides finer granularity than Pow2 for smaller dimensions.
+// Example with base=1.4: batch sizes follow powers of 1.4 (1,2,3,4,6,8,11,15,21,29,...)
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithExponentialBucketing(base float64) *Exec {
+	return e.SetPatternCaching(bucketing.Exponential(base)).SetDynamicAxes([]int{0})
 }
 
 // CacheSize returns the current number of cached graphs.

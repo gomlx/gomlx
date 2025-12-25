@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/bucketing"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
@@ -72,7 +73,7 @@ func showAPIExamples() {
 	// Example 4: Custom axes
 	fmt.Println("// Example 4: Make batch and sequence length dynamic")
 	fmt.Println("exec := MustNewExec(backend, encoderFn).")
-	fmt.Println("    SetPatternCaching(Pow2Bucketing{}).")
+	fmt.Println("    SetPatternCaching(bucketing.Pow2()).")
 	fmt.Println("    SetDynamicAxes([]int{0, 1})")
 	fmt.Println()
 
@@ -90,24 +91,32 @@ func showAPIExamples() {
 func showBucketingExamples() {
 	fmt.Println("=== Bucketing Strategy Examples ===")
 
-	fmt.Println("Pow2Bucketing:")
-	pow2 := Pow2Bucketing{}
+	fmt.Println("Pow2 Bucketing:")
+	pow2 := bucketing.Pow2()
 	for _, size := range []int{1, 2, 3, 5, 9, 17, 33} {
 		bucketed := pow2.Bucket(size)
 		fmt.Printf("  %2d → %2d\n", size, bucketed)
 	}
 	fmt.Println()
 
-	fmt.Println("LinearBucketing(step=8):")
-	linear := LinearBucketing{Step: 8}
+	fmt.Println("Linear Bucketing (step=8):")
+	linear := bucketing.Linear(8)
 	for _, size := range []int{1, 5, 8, 9, 15, 16, 17} {
 		bucketed := linear.Bucket(size)
 		fmt.Printf("  %2d → %2d\n", size, bucketed)
 	}
 	fmt.Println()
 
-	fmt.Println("NoBucketing:")
-	none := NoBucketing{}
+	fmt.Println("Exponential Bucketing (base=1.4):")
+	exponential := bucketing.Exponential(1.4)
+	for _, size := range []int{1, 2, 3, 5, 9, 17, 33} {
+		bucketed := exponential.Bucket(size)
+		fmt.Printf("  %2d → %2d\n", size, bucketed)
+	}
+	fmt.Println()
+
+	fmt.Println("None (no bucketing):")
+	none := bucketing.None()
 	for _, size := range []int{1, 3, 5, 9, 17} {
 		bucketed := none.Bucket(size)
 		fmt.Printf("  %2d → %2d\n", size, bucketed)
