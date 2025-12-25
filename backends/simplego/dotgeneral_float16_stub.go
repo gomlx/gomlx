@@ -6,10 +6,29 @@ package simplego
 // These are used on non-ARM64 platforms or when noasm build tag is set.
 
 import (
+	"unsafe"
+
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/x448/float16"
 )
+
+// ASM stub functions - panic on non-ARM64 platforms
+
+func dotProductFP16_neon_asm(a, b unsafe.Pointer, n int64) float32 {
+	panic("dotProductFP16_neon_asm not available on this platform")
+}
+
+func dotProductFP16Group4_neon_asm(a, b unsafe.Pointer, b_stride, n int64) (r0, r1, r2, r3 float32) {
+	panic("dotProductFP16Group4_neon_asm not available on this platform")
+}
+
+func dotProductBF16_neon_asm(a, b unsafe.Pointer, n int64) float32 {
+	panic("dotProductBF16_neon_asm not available on this platform")
+}
+
+var hasFP16NEON = false
+var hasBF16NEON = false
 
 // execNormalizedDotGeneralFloat16ToFloat32 is the scalar fallback for FP16×FP16→FP32.
 func execNormalizedDotGeneralFloat16ToFloat32(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
@@ -156,6 +175,9 @@ func init() {
 	// Uses priorityTyped so NEON implementations (priorityArch) can override.
 	dotGeneralNormalizedDTypeMap.Register(dtypes.Float16, priorityTyped, execNormalizedDotGeneralFloat16ToFloat32)
 	dotGeneralKernelDTypeMap.Register(dtypes.Float16, priorityTyped, buildDotGeneralKernelFloat16ToFloat32)
+
+	// Register BF16 fallback kernels for non-NEON platforms.
+	dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, priorityTyped, execNormalizedDotGeneralBFloat16ToFloat32)
 }
 
 // dotProductBF16InnerLoop is the scalar fallback for BF16 dot product.
