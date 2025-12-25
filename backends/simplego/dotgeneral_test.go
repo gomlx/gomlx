@@ -611,8 +611,8 @@ func TestDotGeneral_NonSquareMatrices(t *testing.T) {
 	output := be.NewBuffer(outputShape)
 	output.Zeros()
 
-	// Execute via direct path (if applicable) or blocked path
-	if canUseDirectPath(lhs, rhs, params) {
+	// Execute via small matmul path (if applicable) or blocked path
+	if canUseSmallMatMul(lhs, rhs, params) {
 		execDotGeneralSmallMatMulFloat32(be, lhs, rhs, params, output)
 	} else {
 		// Use blocked path
@@ -688,8 +688,8 @@ func TestDotGeneral_NonSquareLarger(t *testing.T) {
 	output := be.NewBuffer(outputShape)
 	output.Zeros()
 
-	// Execute via direct path (if applicable) or blocked path
-	if canUseDirectPath(lhs, rhs, params) {
+	// Execute via small matmul path (if applicable) or blocked path
+	if canUseSmallMatMul(lhs, rhs, params) {
 		execDotGeneralSmallMatMulFloat32(be, lhs, rhs, params, output)
 	} else {
 		execDotGeneralBlocked(be, lhs, rhs, params, output)
@@ -718,10 +718,10 @@ func TestDotGeneral_PreBlockDeduplication(t *testing.T) {
 	// Create LHS inputs (activations) - different tensors
 	// Use shapes large enough to trigger pre-blocking:
 	// 1. At least blockDim in each dimension
-	// 2. For Float32, contracting dimension must be > DirectPathMaxContractingSize (128)
-	//    to avoid the direct path which doesn't use blocking
+	// 2. For Float32, contracting dimension must be > smallMatMulMaxContractingSize (128)
+	//    to avoid the small matmul path which doesn't use blocking
 	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtypes.Float32] // typically 32
-	K := DirectPathMaxContractingSize + blockDim                  // contracting dimension (must be > threshold for Float32)
+	K := smallMatMulMaxContractingSize + blockDim                 // contracting dimension (must be > threshold for Float32)
 	N := blockDim * 2                                             // output features
 
 	lhs1, err := builder.Parameter("lhs1", shapes.Make(dtypes.Float32, 4, K), nil)

@@ -33,12 +33,7 @@ var (
 func init() {
 	// Initialize block dimensions for all numeric types that support DotGeneral.
 	// This includes float types and integer types (used by quantized models).
-	allNumericTypes := []dtypes.DType{
-		dtypes.F32, dtypes.F64, dtypes.BFloat16, dtypes.Float16,
-		dtypes.Int8, dtypes.Int16, dtypes.Int32, dtypes.Int64,
-		dtypes.Uint8, dtypes.Uint16, dtypes.Uint32, dtypes.Uint64,
-	}
-	for _, dtype := range allNumericTypes {
+	for _, dtype := range NumericDTypes {
 		sizePerElem := dtype.Size()
 		if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
 			// Because for BFloat16/Float16 we store the results in float32 and only later convert to
@@ -531,6 +526,9 @@ func dgCopyOutputBlockToFlatUint8(blockSource, output *Buffer) {
 
 // execDotGeneralBlocked executes DotGeneral using a cache-tiled (blocked) algorithm.
 //
+// This is a convenience wrapper around execDotGeneralBlockedUnified for the case where
+// neither operand is pre-blocked. For pre-blocked cases, use execDotGeneralBlockedUnified directly.
+//
 // This implementation is optimized for large matrices where cache locality is critical.
 // It works by:
 //  1. Copying both operands into blocked format with zero-padding for alignment
@@ -542,54 +540,7 @@ func dgCopyOutputBlockToFlatUint8(blockSource, output *Buffer) {
 //
 // See: https://en.wikipedia.org/wiki/Matrix_multiplication_algorithm#Non-square_matrices
 func execDotGeneralBlocked(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
-	dtype := lhs.shape.DType
-
-	// Get block buffers.
-	blkLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
-	blockDim := 1 << blkLog2Dim
-	lhsBlocks := backend.getBuffer(dtype, params.lhsBlockedShape.Size())
-	lhsBlocks.shape = params.lhsBlockedShape
-	lhsBlocks.Zeros()
-	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
-	copyFlatToBlock(lhs, lhsBlocks, params.lhsContractingAxes, params.lhsBatchAxes,
-		params.batchSize, params.lhsCrossSize, params.contractingSize, blkLog2Dim)
-
-	rhsBlocks := backend.getBuffer(dtype, params.rhsBlockedShape.Size())
-	rhsBlocks.shape = params.rhsBlockedShape
-	rhsBlocks.Zeros()
-	copyFlatToBlock(rhs, rhsBlocks, params.rhsContractingAxes, params.rhsBatchAxes,
-		params.batchSize, params.rhsCrossSize, params.contractingSize, blkLog2Dim)
-
-	outputBlocks := backend.getBuffer(params.outputBlockedShape.DType, params.outputBlockedShape.Size())
-	outputBlocks.shape = params.outputBlockedShape
-	outputBlocks.Zeros()
-
-	var recursive dotGeneralRecursiveData
-	recursive.backend = backend
-
-	// Get the matrix multiplication kernel for a block.
-	kernelBuilder := dotGeneralKernelDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, blockDim int) kernelFuncType)
-	recursive.kernelFn = kernelBuilder(lhsBlocks, rhsBlocks, outputBlocks, blockDim)
-
-	// Set block counts
-	recursive.lhsCrossBlocks = lhsBlocks.shape.Dimensions[1]
-	recursive.rhsCrossBlocks = rhsBlocks.shape.Dimensions[1]
-	recursive.contractBlocks = lhsBlocks.shape.Dimensions[2]
-
-	// Execute the batch loop with parallelism (RHS has batch dimension)
-	runDotGeneralBatchLoop(backend, &recursive, params.batchSize, true)
-
-	// Free the block buffers.
-	backend.putBuffer(lhsBlocks)
-	backend.putBuffer(rhsBlocks)
-
-	// Copy over outputBlocks to the normal output.
-	// Use the output dtype (not input dtype) to get the correct copy function
-	outputDType := output.shape.DType
-	copyOutputFn := dotGeneralOutputBlockToFlatDTypeMap.Get(outputDType).(func(blockedSource, output *Buffer))
-	copyOutputFn(outputBlocks, output)
-	backend.putBuffer(outputBlocks)
-	return nil
+	return execDotGeneralBlockedUnified(backend, lhs, rhs, nil, nil, params, output)
 }
 
 // Information passed along the recursive splitting of the dot-general.
@@ -762,97 +713,69 @@ func buildDotGeneralKernel[T PODNumericConstraints](lhs, rhs, output *Buffer, bl
 		for range blockDim { // Loop over lhs rows:
 			rhsIdx := baseRhsIdx
 			// Loop 4 rows at a time.
-			for rhsRow := 0; rhsRow < blockDim; rhsRow += 4 { // range blockDim { // loop over rhs rows:
+			for rhsRow := 0; rhsRow < blockDim; rhsRow += 4 {
 				lhsIdx := baseLhsIdx
-				var sum0, sum1, sum2, sum3 T
 
-				// SIMD acceleration for float32 on ARM64 using NEON Group4.
-				// For other types or platforms, fall back to pure Go.
-				//
-				// Threshold of blockDim >= 16 enables NEON for most practical matrix sizes.
-				// At blockDim=32 (default for float32), NEON processes 8 vector iterations per row.
-				// Even at blockDim=16, we get 4 vector iterations which provides meaningful speedup.
-				if lhsFloat32, ok := any(lhsFlat).([]float32); ok {
-					if hasNEON && blockDim >= 16 {
-						// NEON Group4 path - fastest for all ARM64 including Apple M4
-						rhsFloat32 := any(rhsFlat).([]float32)
-						outputFloat32 := any(outputFlat).([]float32)
-
-						s0, s1, s2, s3 := dotProductInnerLoopNEON(
-							lhsFloat32, rhsFloat32, outputFloat32,
-							lhsIdx, rhsIdx, outputIdx, blockDim)
-
-						sum0 = T(s0)
-						sum1 = T(s1)
-						sum2 = T(s2)
-						sum3 = T(s3)
-						rhsIdx += blockDim // Compensate for skipping scalar loop
-						goto done
-					}
+				// Pure Go implementation (NEON-optimized float32 kernel is registered separately
+				// in dotgeneral_neon_arm64.go with priorityArch, eliminating branch overhead)
+				contractingIdx := 0
+				sum0 := outputFlat[outputIdx]
+				sum1 := outputFlat[outputIdx+1]
+				sum2 := outputFlat[outputIdx+2]
+				sum3 := outputFlat[outputIdx+3]
+				// Loop unrolled 8 at a time.
+				for ; contractingIdx+7 < blockDim; contractingIdx += 8 {
+					rhsIdx1 := rhsIdx + blockDim
+					rhsIdx2 := rhsIdx + 2*blockDim
+					rhsIdx3 := rhsIdx + 3*blockDim
+					sum0 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx] +
+						lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx+1] +
+						lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx+2] +
+						lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx+3] +
+						lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx+4] +
+						lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx+5] +
+						lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx+6] +
+						lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx+7]
+					sum1 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx1] +
+						lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx1+1] +
+						lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx1+2] +
+						lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx1+3] +
+						lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx1+4] +
+						lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx1+5] +
+						lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx1+6] +
+						lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx1+7]
+					sum2 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx2] +
+						lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx2+1] +
+						lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx2+2] +
+						lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx2+3] +
+						lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx2+4] +
+						lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx2+5] +
+						lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx2+6] +
+						lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx2+7]
+					sum3 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx3] +
+						lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx3+1] +
+						lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx3+2] +
+						lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx3+3] +
+						lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx3+4] +
+						lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx3+5] +
+						lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx3+6] +
+						lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx3+7]
+					lhsIdx += 8
+					rhsIdx += 8
+				}
+				// Tail loop.
+				for ; contractingIdx < blockDim; contractingIdx++ {
+					rhsIdx1 := rhsIdx + blockDim
+					rhsIdx2 := rhsIdx + 2*blockDim
+					rhsIdx3 := rhsIdx + 3*blockDim
+					sum0 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx]
+					sum1 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx1]
+					sum2 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx2]
+					sum3 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx3]
+					lhsIdx++
+					rhsIdx++
 				}
 
-				// Pure Go implementation fallback
-				{
-					contractingIdx := 0
-					sum0 = outputFlat[outputIdx]
-					sum1 = outputFlat[outputIdx+1]
-					sum2 = outputFlat[outputIdx+2]
-					sum3 = outputFlat[outputIdx+3]
-					// Loop unrolled 8 at a time.
-					for ; contractingIdx+7 < blockDim; contractingIdx += 8 {
-						rhsIdx1 := rhsIdx + blockDim
-						rhsIdx2 := rhsIdx + 2*blockDim
-						rhsIdx3 := rhsIdx + 3*blockDim
-						sum0 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx] +
-							lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx+1] +
-							lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx+2] +
-							lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx+3] +
-							lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx+4] +
-							lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx+5] +
-							lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx+6] +
-							lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx+7]
-						sum1 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx1] +
-							lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx1+1] +
-							lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx1+2] +
-							lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx1+3] +
-							lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx1+4] +
-							lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx1+5] +
-							lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx1+6] +
-							lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx1+7]
-						sum2 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx2] +
-							lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx2+1] +
-							lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx2+2] +
-							lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx2+3] +
-							lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx2+4] +
-							lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx2+5] +
-							lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx2+6] +
-							lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx2+7]
-						sum3 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx3] +
-							lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx3+1] +
-							lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx3+2] +
-							lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx3+3] +
-							lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx3+4] +
-							lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx3+5] +
-							lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx3+6] +
-							lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx3+7]
-						lhsIdx += 8
-						rhsIdx += 8
-					}
-					// Tail loop.
-					for ; contractingIdx < blockDim; contractingIdx++ {
-						rhsIdx1 := rhsIdx + blockDim
-						rhsIdx2 := rhsIdx + 2*blockDim
-						rhsIdx3 := rhsIdx + 3*blockDim
-						sum0 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx]
-						sum1 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx1]
-						sum2 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx2]
-						sum3 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx3]
-						lhsIdx++
-						rhsIdx++
-					}
-				}
-
-			done:
 				outputFlat[outputIdx] = sum0
 				outputFlat[outputIdx+1] = sum1
 				outputFlat[outputIdx+2] = sum2
@@ -861,7 +784,7 @@ func buildDotGeneralKernel[T PODNumericConstraints](lhs, rhs, output *Buffer, bl
 
 				// We unrolled 4 rows of RHS, so we need to skip the remaining 3 rows:
 				rhsIdx += 3 * blockDim
-			} // loop over rhs rows
+			}
 
 			// Start next lhs row.
 			baseLhsIdx += blockDim

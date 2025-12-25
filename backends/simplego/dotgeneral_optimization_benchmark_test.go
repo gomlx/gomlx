@@ -503,9 +503,9 @@ func BenchmarkOptimizationOverhead(b *testing.B) {
 	lhsShape := shapes.Make(dtypes.Float32, 256, 256)
 	rhsShape := shapes.Make(dtypes.Float32, 256, 256)
 
-	b.Run("isContractLastOrder", func(b *testing.B) {
+	b.Run("isMatMulOrder", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_ = isContractLastOrder(lhsShape, rhsShape, []int{1}, []int{0}, []int{}, []int{})
+			_ = isMatMulOrder(lhsShape, rhsShape, []int{1}, []int{0}, []int{}, []int{})
 		}
 	})
 }
@@ -646,7 +646,7 @@ func BenchmarkPreBlockedWeights(b *testing.B) {
 					rhsRank2Flat[i] = float32(i%100) / 100.0
 				}
 
-				pbw := PreBlockWeightForMatMul(rhsRank2)
+				pbw := PreBlockTensorForMatMul(rhsRank2)
 				if pbw == nil {
 					b.Skip("Pre-blocking not supported for this shape")
 				}
@@ -667,7 +667,8 @@ func BenchmarkPreBlockedWeights(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					output.Zeros()
-					_ = execDotGeneralWithGraphBlockedRHS(backend, lhs, preBlockedBuf, blockData, params, output)
+					// Use unified blocked path with RHS pre-blocked (lhsBlockData=nil, rhsBlockData=blockData)
+					_ = execDotGeneralBlockedUnified(backend, lhs, preBlockedBuf, nil, blockData, params, output)
 				}
 
 				flops := 2 * int64(size.M) * int64(size.K) * int64(size.N)
@@ -707,11 +708,11 @@ func BenchmarkPreBlockingOverhead(b *testing.B) {
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = PreBlockWeightForMatMul(rhs)
+				_ = PreBlockTensorForMatMul(rhs)
 			}
 
 			// Report memory overhead
-			pbw := PreBlockWeightForMatMul(rhs)
+			pbw := PreBlockTensorForMatMul(rhs)
 			if pbw != nil {
 				origBytes := int64(pbw.OriginalShape.Size()) * 4
 				blockedBytes := int64(pbw.BlockedShape.Size()) * 4
@@ -723,8 +724,8 @@ func BenchmarkPreBlockingOverhead(b *testing.B) {
 }
 
 // BenchmarkDirectPathThreshold tests different contracting sizes to find the optimal
-// DirectPathMaxContractingSize threshold. It compares execDotGeneralSmallMatMulFloat32
-// (direct/no-transpose path with strided RHS access) vs execDotGeneralSmallNormalized
+// smallMatMulMaxContractingSize threshold. It compares execDotGeneralSmallMatMulFloat32
+// (small matmul/no-transpose path with strided RHS access) vs execDotGeneralSmallNormalized
 // (transposes RHS for sequential access).
 //
 // Run with: go test -tags=benchmark -bench=BenchmarkDirectPathThreshold -benchtime=1s
@@ -734,7 +735,7 @@ func BenchmarkDirectPathThreshold(b *testing.B) {
 	backend := backendIface.(*Backend)
 
 	// Test various contracting sizes around and beyond the current threshold
-	// (DirectPathMaxContractingSize = 128) to find the optimal crossover point
+	// (smallMatMulMaxContractingSize = 128) to find the optimal crossover point
 	contractingSizes := []int{64, 128, 256, 512, 1024, 2048, 4096, 6144, 8192, 12288, 16384}
 
 	// Fixed M and N to isolate the effect of contracting size
@@ -967,7 +968,7 @@ func BenchmarkPreBlockingThreshold(b *testing.B) {
 				rhsRank2Flat[i] = float32(i%100) / 100.0
 			}
 
-			pbw := PreBlockWeightForMatMul(rhsRank2)
+			pbw := PreBlockTensorForMatMul(rhsRank2)
 			if pbw != nil {
 				b.Run("PreBlocked", func(b *testing.B) {
 					// Create block data for the pre-blocked RHS
@@ -986,7 +987,8 @@ func BenchmarkPreBlockingThreshold(b *testing.B) {
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						output.Zeros()
-						_ = execDotGeneralWithGraphBlockedRHS(backend, lhs, preBlockedBuf, blockData, params, output)
+						// Use unified blocked path with RHS pre-blocked
+						_ = execDotGeneralBlockedUnified(backend, lhs, preBlockedBuf, nil, blockData, params, output)
 					}
 					flops := 2 * int64(M) * int64(shape.K) * int64(shape.N)
 					gflops := float64(flops) * float64(b.N) / b.Elapsed().Seconds() / 1e9

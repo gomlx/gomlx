@@ -256,7 +256,9 @@ const (
 	normalizedPath
 	// blockedPath forces use of execDotGeneralBlocked (cache-tiled algorithm)
 	blockedPath
-	// checkPath runs both normalized and blocked, comparing results for debugging
+	// smallMatMulPath forces use of execDotGeneralSmallMatMul (no transpose, strided RHS access)
+	smallMatMulPath
+	// checkPath runs all applicable paths and compares results for debugging
 	checkPath
 )
 
@@ -280,34 +282,22 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	// Check if inputs were pre-blocked at graph build time (via BlockForDotGeneral node).
 	lhsNode := node.inputs[0]
 	rhsNode := node.inputs[1]
-	lhsBlocked := lhsNode.opType == backends.OpTypeBlockForDotGeneral
-	rhsBlocked := rhsNode.opType == backends.OpTypeBlockForDotGeneral
+	lhsPreBlocked := lhsNode.opType == backends.OpTypeBlockForDotGeneral
+	rhsPreBlocked := rhsNode.opType == backends.OpTypeBlockForDotGeneral
 
 	// Handle pre-blocked cases
-	switch {
-	case lhsBlocked && rhsBlocked:
-		// Both inputs are pre-blocked - most efficient path
-		lhsBlockData := lhsNode.data.(*blockForDotGeneralData)
-		rhsBlockData := rhsNode.data.(*blockForDotGeneralData)
-		if err := execDotGeneralWithBothBlocked(backend, lhs, rhs, lhsBlockData, rhsBlockData, params, output); err != nil {
-			backend.putBuffer(output)
-			return nil, err
+	// When one or both operands are pre-blocked, we MUST use the blocked path because
+	// pre-blocked buffers are in blocked format, not flat format. SmallMatMul and
+	// Normalized paths expect flat format and would produce incorrect results.
+	if lhsPreBlocked || rhsPreBlocked {
+		var lhsBlockData, rhsBlockData *blockForDotGeneralData
+		if lhsPreBlocked {
+			lhsBlockData = lhsNode.data.(*blockForDotGeneralData)
 		}
-		return output, nil
-
-	case lhsBlocked:
-		// Only LHS is pre-blocked
-		lhsBlockData := lhsNode.data.(*blockForDotGeneralData)
-		if err := execDotGeneralWithGraphBlockedLHS(backend, lhs, rhs, lhsBlockData, params, output); err != nil {
-			backend.putBuffer(output)
-			return nil, err
+		if rhsPreBlocked {
+			rhsBlockData = rhsNode.data.(*blockForDotGeneralData)
 		}
-		return output, nil
-
-	case rhsBlocked:
-		// Only RHS is pre-blocked
-		blockData := rhsNode.data.(*blockForDotGeneralData)
-		if err := execDotGeneralWithGraphBlockedRHS(backend, lhs, rhs, blockData, params, output); err != nil {
+		if err := execDotGeneralBlockedUnified(backend, lhs, rhs, lhsBlockData, rhsBlockData, params, output); err != nil {
 			backend.putBuffer(output)
 			return nil, err
 		}
@@ -338,21 +328,45 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	}
 	switch execPath {
 	case blockedPath:
-		err = execDotGeneralBlocked(backend, lhs, rhs, params, output)
+		// Use unified blocked path with no pre-blocking
+		err = execDotGeneralBlockedUnified(backend, lhs, rhs, nil, nil, params, output)
 	case normalizedPath:
 		err = execDotGeneralSmallNormalized(backend, lhs, rhs, params, output)
+	case smallMatMulPath:
+		// Force small matmul path - only works if inputs are in matmul order
+		if canUseSmallMatMul(lhs, rhs, params) {
+			execDotGeneralSmallMatMulFloat32(backend, lhs, rhs, params, output)
+		} else {
+			err = errors.Errorf("smallMatMulPath requested but inputs are not in matmul order or wrong dtype")
+		}
 	case checkPath:
+		// Run all applicable paths and compare results
 		output2 := backend.getBufferForShape(outputShape)
 		output2.Zeros()
 		err = execDotGeneralSmallNormalized(backend, lhs, rhs, params, output2)
 		if err != nil {
+			backend.putBuffer(output2)
 			return nil, err
 		}
-		err = execDotGeneralBlocked(backend, lhs, rhs, params, output)
+		err = execDotGeneralBlockedUnified(backend, lhs, rhs, nil, nil, params, output)
 		if err != nil {
+			backend.putBuffer(output2)
 			return nil, err
 		}
 		err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+		if err != nil {
+			backend.putBuffer(output2)
+			return nil, err
+		}
+
+		// Also check smallMatMul path if applicable (inputs in matmul order and float32)
+		if canUseSmallMatMul(lhs, rhs, params) {
+			output3 := backend.getBufferForShape(outputShape)
+			output3.Zeros()
+			execDotGeneralSmallMatMulFloat32(backend, lhs, rhs, params, output3)
+			err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output3)
+			backend.putBuffer(output3)
+		}
 		backend.putBuffer(output2)
 	default:
 		err = errors.Errorf("unknown execution path %d for DotGeneral", execPath)

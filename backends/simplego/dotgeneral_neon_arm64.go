@@ -9,6 +9,8 @@ package simplego
 import (
 	"runtime"
 	"unsafe"
+
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 // dotProduct_neon_asm is implemented in dotgeneral_neon_arm64.s
@@ -70,4 +72,57 @@ func dotProductInnerLoopNEON(lhsFlat, rhsFlat, outputFlat []float32,
 	sum3 += r3
 
 	return
+}
+
+// buildDotGeneralKernelFloat32NEON returns a NEON-optimized kernel function for float32 blocked
+// matrix multiplication. This is registered with priorityArch to override the generic kernel
+// when NEON is available.
+//
+// By having a separate kernel builder, we eliminate the type check and hasNEON branch from the
+// hot inner loop, improving performance through better branch prediction and inlining.
+func buildDotGeneralKernelFloat32NEON(lhs, rhs, output *Buffer, blockDim int) kernelFuncType {
+	lhsFlat := lhs.flat.([]float32)
+	rhsFlat := rhs.flat.([]float32)
+	outputFlat := output.flat.([]float32)
+	blockSize := blockDim * blockDim
+
+	return func(lhsBlockIdx, rhsBlockIdx, outputBlockIdx int) {
+		baseLhsIdx := lhsBlockIdx * blockSize
+		baseRhsIdx := rhsBlockIdx * blockSize
+		outputIdx := outputBlockIdx * blockSize
+
+		for range blockDim { // Loop over lhs rows
+			rhsIdx := baseRhsIdx
+
+			// Loop 4 rows at a time using NEON Group4
+			for rhsRow := 0; rhsRow < blockDim; rhsRow += 4 {
+				lhsIdx := baseLhsIdx
+
+				// NEON Group4 path - computes 4 dot products simultaneously
+				sum0, sum1, sum2, sum3 := dotProductInnerLoopNEON(
+					lhsFlat, rhsFlat, outputFlat,
+					lhsIdx, rhsIdx, outputIdx, blockDim)
+
+				outputFlat[outputIdx] = sum0
+				outputFlat[outputIdx+1] = sum1
+				outputFlat[outputIdx+2] = sum2
+				outputFlat[outputIdx+3] = sum3
+				outputIdx += 4
+
+				// Skip to next group of 4 RHS rows
+				rhsIdx += 4 * blockDim
+			}
+
+			baseLhsIdx += blockDim
+		}
+	}
+}
+
+func init() {
+	// Register NEON-optimized float32 kernel for large matrix path.
+	// priorityArch overrides the generic buildDotGeneralKernel[float32] in gen_register_dtypes.go.
+	// This eliminates the type check and hasNEON branch from the hot inner loop.
+	if hasNEON {
+		dotGeneralKernelDTypeMap.Register(dtypes.Float32, priorityArch, buildDotGeneralKernelFloat32NEON)
+	}
 }

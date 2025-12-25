@@ -5,11 +5,11 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
-// isContractLastOrder checks if the DotGeneral operands have axes ordered such that
-// the contracting dimension is last for LHS and first for RHS - the standard matmul layout.
+// isMatMulOrder checks if the DotGeneral operands are in standard matrix multiplication order:
+// LHS: [Batch..., M, K] (contracting dimension last)
+// RHS: [Batch..., K, N] (contracting dimension first after batch)
 //
-// This is the "BatchCrossContract" ordering for LHS: [Batch..., Cross, Contract]
-// And "ContractCross" ordering for RHS: [Batch..., Contract, Cross]
+// This is the familiar [M, K] × [K, N] → [M, N] layout.
 //
 // Memory access pattern analysis for row-major storage:
 //
@@ -30,7 +30,7 @@ import (
 //
 // See also: execDotGeneralSmallNormalized which transposes to [Batch, Cross, Contract] form
 // where BOTH operands have the contracting dimension last (sequential access for both).
-func isContractLastOrder(lhsShape, rhsShape shapes.Shape, lhsContractingAxes, rhsContractingAxes, lhsBatchAxes, rhsBatchAxes []int) bool {
+func isMatMulOrder(lhsShape, rhsShape shapes.Shape, lhsContractingAxes, rhsContractingAxes, lhsBatchAxes, rhsBatchAxes []int) bool {
 	lhsRank := lhsShape.Rank()
 	rhsRank := rhsShape.Rank()
 
@@ -100,97 +100,102 @@ func isBatchCrossContractOrder(shape shapes.Shape, contractingAxes, batchAxes []
 		return true
 	}
 
-	// Build expected order: batch axes first, then cross, then contracting
-	expectedOrder := make([]int, 0, rank)
-	expectedOrder = append(expectedOrder, batchAxes...)
-
-	// Add cross axes (non-batch, non-contracting)
-	isContracting := make(map[int]bool)
-	isBatch := make(map[int]bool)
-	for _, a := range contractingAxes {
-		isContracting[a] = true
-	}
-	for _, a := range batchAxes {
-		isBatch[a] = true
-	}
-
-	for i := 0; i < rank; i++ {
-		if !isContracting[i] && !isBatch[i] {
-			expectedOrder = append(expectedOrder, i)
-		}
-	}
-	expectedOrder = append(expectedOrder, contractingAxes...)
-
-	// Check if expected order is 0, 1, 2, ... (natural order)
-	for i, axis := range expectedOrder {
+	// Batch axes must come first: axis 0, 1, 2, ...
+	for i, axis := range batchAxes {
 		if axis != i {
 			return false
 		}
 	}
+
+	// Contracting axes must come last: axis rank-len(contractingAxes), rank-len(contractingAxes)+1, ...
+	contractingStart := rank - len(contractingAxes)
+	for i, axis := range contractingAxes {
+		if axis != contractingStart+i {
+			return false
+		}
+	}
+
 	return true
 }
 
-// DirectPathMaxContractingSize is the maximum contracting dimension size for which
-// the direct (no-transpose) path is beneficial. Beyond this size, the strided RHS
+// smallMatMulMaxContractingSize is the maximum contracting dimension size for which
+// the small matmul (no-transpose) path is beneficial. Beyond this size, the strided RHS
 // access pattern causes too many cache misses, and the normalized path (which
 // transposes RHS for sequential access) becomes faster despite the transpose overhead.
 //
 // This threshold was determined by benchmarking (BenchmarkDirectPathThreshold):
-//   - For [256, K] × [K, 256]: DirectPath wins at K≤128, NormalizedPath wins at K≥256
+//   - For [256, K] × [K, 256]: SmallMatMul wins at K≤128, NormalizedPath wins at K≥256
 //   - Crossover point is between K=128 and K=256
 //
-// Exception: For single-row operations (M=1), DirectPath is always faster because
+// Exception: For single-row operations (M=1), SmallMatMul is always faster because
 // the transpose overhead dominates when there's only one output row to compute.
-const DirectPathMaxContractingSize = 128
+const smallMatMulMaxContractingSize = 128
 
-// DirectPathMaxBatchSize is the maximum batch size for which the direct path is beneficial.
+// smallMatMulMaxBatchSize is the maximum batch size for which the small matmul path is beneficial.
 // For larger batch sizes, the normalized path with batch parallelism is faster.
-// The direct path processes batches sequentially, while the normalized path can parallelize
+// The small matmul path processes batches sequentially, while the normalized path can parallelize
 // across batches using multiple workers.
-const DirectPathMaxBatchSize = 64
+const smallMatMulMaxBatchSize = 64
 
-// canUseDirectPath determines if we can use the direct (no-transpose) execution path.
+// smallMatMulMaxRhsCrossSize is the maximum RHS cross dimension (N) for which
+// the small matmul path is beneficial. In [M, K] × [K, N] → [M, N], the RHS is
+// accessed with stride N during the contracting loop. When N is large, each
+// iteration causes a cache line miss, making the normalized path faster despite
+// the transpose overhead.
 //
-// The direct path skips normalization/transpose but has strided RHS access.
+// This threshold is important because the RHS stride equals N, so large N causes
+// more cache misses per contracting step than large K does.
+const smallMatMulMaxRhsCrossSize = 256
+
+// canUseSmallMatMul determines if we can use the small matmul (no-transpose) execution path.
+//
+// The small matmul path skips normalization/transpose but has strided RHS access.
 // It's beneficial when:
 //  1. The dtype is float32 (currently the only optimized implementation)
-//  2. The axes are already in contract-last order for LHS
-//  3. The batch size is small (direct path doesn't parallelize across batches)
+//  2. The axes are already in standard matmul order
+//  3. The batch size is small (small matmul path doesn't parallelize across batches)
 //  4. Either:
 //     a. Single-row operation (lhsCrossSize=1) where transpose overhead dominates, OR
-//     b. Small contracting dimension where strided access doesn't cause excessive cache misses
+//     b. Small contracting dimension (K) AND small RHS cross dimension (N), where strided
+//     access doesn't cause excessive cache misses. N matters because the RHS stride is N.
 //
 // For larger matrices or batch sizes, use execDotGeneralSmallNormalized or execDotGeneralBlocked instead.
-func canUseDirectPath(lhs, rhs *Buffer, params *dotGeneralNodeData) bool {
-	// Only support float32 direct path for now (most common)
+func canUseSmallMatMul(lhs, rhs *Buffer, params *dotGeneralNodeData) bool {
+	// Only support float32 small matmul path for now (most common)
 	if lhs.shape.DType != dtypes.Float32 {
 		return false
 	}
 
-	// Check if axes are in contract-last order (standard matmul layout)
-	if !isContractLastOrder(lhs.shape, rhs.shape,
+	// Check if axes are in standard matmul order
+	if !isMatMulOrder(lhs.shape, rhs.shape,
 		params.lhsContractingAxes, params.rhsContractingAxes,
 		params.lhsBatchAxes, params.rhsBatchAxes) {
 		return false
 	}
 
 	// For large batch sizes, the normalized path with batch parallelism is faster.
-	// The direct path processes batches sequentially without parallelization.
-	if params.batchSize > DirectPathMaxBatchSize {
+	// The small matmul path processes batches sequentially without parallelization.
+	if params.batchSize > smallMatMulMaxBatchSize {
 		return false
 	}
 
-	// For single-row operations (M=1) with small batch sizes, direct path is faster
+	// For single-row operations (M=1) with small batch sizes, small matmul path is faster
 	// because transpose overhead dominates when computing just one output row per batch.
-	// Benchmarks show DirectPath is 10-15x faster for M=1, batchSize=1 cases.
+	// Benchmarks show SmallMatMul is 10-15x faster for M=1, batchSize=1 cases.
 	// Note: Large batch sizes are handled above (parallelization wins).
 	if params.lhsCrossSize == 1 {
 		return true
 	}
 
-	// For multi-row operations, only use direct path when contracting dimension
-	// is small enough that strided RHS access doesn't cause excessive cache misses.
-	if params.contractingSize > DirectPathMaxContractingSize {
+	// For multi-row operations, check both contracting and RHS cross dimensions.
+	// The RHS is accessed with stride N (rhsCrossSize), so large N causes more cache
+	// misses per contracting step. Both dimensions affect cache behavior.
+	if params.contractingSize > smallMatMulMaxContractingSize {
+		return false
+	}
+
+	// Check RHS cross size (N) - large N means large stride in RHS access
+	if params.rhsCrossSize > smallMatMulMaxRhsCrossSize {
 		return false
 	}
 
@@ -203,9 +208,9 @@ func canUseDirectPath(lhs, rhs *Buffer, params *dotGeneralNodeData) bool {
 // cache miss penalty from strided RHS access. For large matrices, use execDotGeneralSmallNormalized
 // or execDotGeneralBlocked instead.
 //
-// Returns true if direct path was used, false if caller should use another path.
+// Returns true if small matmul path was used, false if caller should use another path.
 func execDotGeneralSmallMatMul(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) bool {
-	if !canUseDirectPath(lhs, rhs, params) {
+	if !canUseSmallMatMul(lhs, rhs, params) {
 		return false
 	}
 
@@ -228,7 +233,7 @@ func execDotGeneralSmallMatMul(backend *Backend, lhs, rhs *Buffer, params *dotGe
 //
 // The strided RHS access is the key limitation of this path. For large K or N,
 // each RHS element access may cause a cache miss. This is why we limit this path
-// to small matrices (see DirectPathMaxContractingSize).
+// to small matrices (see smallMatMulMaxContractingSize).
 //
 // For large matrices, execDotGeneralSmallNormalized transposes RHS to [N, K] form where
 // "row" n (the original column) becomes contiguous, enabling efficient vectorization.
