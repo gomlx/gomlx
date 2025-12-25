@@ -32,7 +32,7 @@ func TestCapturedInputShapes(t *testing.T) {
 	g := NewGraph(backend, "TestCapturedInputShapes")
 
 	// Create nodes with symbolic dimensions
-	x := Parameter(g, "x", shapes.MakeDynamic(dtypes.Float32, int(shapes.DimBatch), 10))
+	x := Parameter(g, "x", shapes.MakeDynamic(dtypes.Float32, shapes.DynamicDim, 10).WithAxisName(0, "batch"))
 	y := Parameter(g, "y", shapes.Make(dtypes.Float32, 1, 10))
 
 	// Perform operations
@@ -54,7 +54,7 @@ func TestCapturedInputShapes(t *testing.T) {
 	require.Equal(t, y.Shape(), capturedY, "Captured shape should match y's shape")
 
 	// Verify symbolic dimension is preserved
-	require.Equal(t, int(shapes.DimBatch), capturedX.Dimensions[0], "First dimension should be symbolic (DimBatch)")
+	require.Equal(t, shapes.DynamicDim, capturedX.Dimensions[0], "First dimension should be symbolic (DynamicDim)")
 	require.Equal(t, 10, capturedX.Dimensions[1], "Second dimension should be static (10)")
 }
 
@@ -65,7 +65,7 @@ func TestGradientWithSymbolicDimensions(t *testing.T) {
 	g := NewGraph(backend, "TestGradientSymbolic")
 
 	// Create a simple computation with symbolic batch dimension
-	x := Parameter(g, "x", shapes.MakeDynamic(dtypes.Float32, int(shapes.DimBatch), 5))
+	x := Parameter(g, "x", shapes.MakeDynamic(dtypes.Float32, shapes.DynamicDim, 5).WithAxisName(0, "batch"))
 
 	// Simple operations that should work with symbolic dimensions
 	squared := Mul(x, x)
@@ -110,20 +110,20 @@ func TestShapesCompatibleForGradient(t *testing.T) {
 		},
 		{
 			name:       "symbolic in actual",
-			actual:     shapes.MakeDynamic(dtypes.Float32, int(shapes.DimBatch), 3),
+			actual:     shapes.MakeDynamic(dtypes.Float32, shapes.DynamicDim, 3).WithAxisName(0, "batch"),
 			expected:   shapes.Make(dtypes.Float32, 2, 3),
 			compatible: true,
 		},
 		{
 			name:       "symbolic in expected",
 			actual:     shapes.Make(dtypes.Float32, 2, 3),
-			expected:   shapes.MakeDynamic(dtypes.Float32, int(shapes.DimBatch), 3),
+			expected:   shapes.MakeDynamic(dtypes.Float32, shapes.DynamicDim, 3).WithAxisName(0, "batch"),
 			compatible: true,
 		},
 		{
-			name:       "both symbolic",
-			actual:     shapes.MakeDynamic(dtypes.Float32, int(shapes.DimBatch), 3),
-			expected:   shapes.MakeDynamic(dtypes.Float32, int(shapes.DimSeqLen), 3),
+			name:       "both symbolic different names",
+			actual:     shapes.MakeDynamic(dtypes.Float32, shapes.DynamicDim, 3).WithAxisName(0, "batch"),
+			expected:   shapes.MakeDynamic(dtypes.Float32, shapes.DynamicDim, 3).WithAxisName(0, "seq"),
 			compatible: true,
 		},
 		{
@@ -179,7 +179,7 @@ func TestReduceSumVJPWithSymbolicDims(t *testing.T) {
 	g := NewGraph(backend, "TestReduceSumVJPSymbolic")
 
 	// Create input with symbolic batch dimension
-	x := Parameter(g, "x", shapes.MakeDynamic(dtypes.Float32, int(shapes.DimBatch), 10))
+	x := Parameter(g, "x", shapes.MakeDynamic(dtypes.Float32, shapes.DynamicDim, 10).WithAxisName(0, "batch"))
 
 	// Reduce over the static dimension
 	reduced := ReduceSum(x, 1)
@@ -210,7 +210,7 @@ func TestBroadcastVJPWithSymbolicDims(t *testing.T) {
 	x := Parameter(g, "x", shapes.MakeDynamic(dtypes.Float32, 1, 5))
 
 	// Broadcast over symbolic dimension
-	broadcasted := BroadcastToShape(x, shapes.MakeDynamic(dtypes.Float32, int(shapes.DimBatch), 5))
+	broadcasted := BroadcastToShape(x, shapes.MakeDynamic(dtypes.Float32, shapes.DynamicDim, 5).WithAxisName(0, "batch"))
 
 	// Create scalar loss
 	loss := ReduceAllSum(broadcasted)

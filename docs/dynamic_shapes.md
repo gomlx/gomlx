@@ -48,31 +48,48 @@ func main() {
 }
 ```
 
-## Symbolic Dimensions
+## Dynamic Dimensions
 
-Symbolic dimensions represent sizes that are not fixed at graph build time. Instead of concrete values like `32`, you use symbolic constants:
+Dynamic dimensions represent sizes that are not fixed at graph build time. Use `shapes.DynamicDim` (value -1) for any dimension that should be dynamic:
 
 ```go
 import "github.com/gomlx/gomlx/pkg/core/shapes"
 
-// Create shape with symbolic batch dimension
+// Create shape with dynamic batch dimension
 inputShape := shapes.MakeDynamic(dtypes.Float32,
-    int(shapes.DimBatch),  // Symbolic
-    512)                    // Static
+    shapes.DynamicDim,  // Dynamic batch
+    512)                // Static features
 
-// Multiple symbolic dimensions
+// Multiple dynamic dimensions with axis names
 encoderShape := shapes.MakeDynamic(dtypes.Float32,
-    int(shapes.DimBatch),   // Symbolic batch
-    int(shapes.DimSeqLen),  // Symbolic sequence length
-    512)                     // Static feature dimension
+    shapes.DynamicDim,  // Dynamic batch
+    shapes.DynamicDim,  // Dynamic sequence length
+    512).               // Static feature dimension
+    WithAxisName(0, "batch").
+    WithAxisName(1, "seq")
 ```
 
-**Available symbolic dimensions:**
-- `shapes.DimBatch` (-1): Batch dimension
-- `shapes.DimSeqLen` (-2): Sequence length
-- `shapes.DimUnknown` (-3): Generic unknown dimension
+**Dynamic dimension constant:**
+- `shapes.DynamicDim` (-1): Marks a dimension as dynamic
 
-Symbolic dimensions are propagated automatically through operations, so operations like `Add`, `Mul`, `Transpose`, etc. preserve them correctly.
+**Optional axis names:**
+Axis names are optional metadata that help document the purpose of each dimension. When shapes with different axis names are combined (e.g., via broadcasting), the axis name is cleared.
+
+```go
+// Set individual axis names
+shape := shapes.MakeDynamic(dtypes.Float32, shapes.DynamicDim, 768).
+    WithAxisName(0, "batch")
+
+// Set all axis names at once
+shape := shapes.MakeDynamic(dtypes.Float32, shapes.DynamicDim, shapes.DynamicDim, 768).
+    WithAxisNames("batch", "seq", "hidden")
+
+// Make an axis dynamic and name it in one call
+shape := shapes.Make(dtypes.Float32, 32, 128, 768).
+    WithDynamicAxis(0, "batch")
+```
+
+Dynamic dimensions are propagated automatically through operations, so operations like `Add`, `Mul`, `Transpose`, etc. preserve them correctly.
 
 ## Bucketing Strategies
 
@@ -122,7 +139,7 @@ type FrameBucketing struct {
 
 func (f FrameBucketing) Bucket(dim int) int {
     if dim <= 0 {
-        return dim  // Preserve symbolic dimensions
+        return dim  // Preserve dynamic dimensions
     }
     for _, bucket := range f.Buckets {
         if dim <= bucket {
@@ -194,19 +211,19 @@ func main() {
 
 ```go
 func cnnForward(images *Node) *Node {
-    // images: [DimBatch, 224, 224, 3]
+    // images: [DynamicDim, 224, 224, 3]
 
     conv1 := Conv2D(images, kernel1, ConvConfig{
         Strides: []int{2, 2},
         Padding: "SAME",
     })
-    // Output: [DimBatch, 112, 112, 64]
+    // Output: [DynamicDim, 112, 112, 64]
 
     pooled := MaxPool2D(conv1, PoolConfig{
         WindowSize: []int{2, 2},
         Strides:    []int{2, 2},
     })
-    // Output: [DimBatch, 56, 56, 64]
+    // Output: [DynamicDim, 56, 56, 64]
 
     return pooled
 }
@@ -217,12 +234,12 @@ func cnnForward(images *Node) *Node {
 ```go
 func embeddingLookup(embeddingTable, tokenIDs *Node) *Node {
     // embeddingTable: [50000, 768] - static vocabulary
-    // tokenIDs: [DimBatch, DimSeqLen] - dynamic
+    // tokenIDs: [batch, seq] - dynamic (both batch and seq are DynamicDim)
 
     return Gather(embeddingTable, tokenIDs, GatherConfig{
         SliceSizes: []int{1, 768},
     })
-    // Output: [DimBatch, DimSeqLen, 768]
+    // Output: [batch, seq, 768]
 }
 ```
 
@@ -231,35 +248,36 @@ func embeddingLookup(embeddingTable, tokenIDs *Node) *Node {
 ### Shape Creation
 
 ```go
-// Create shape with symbolic dimensions
-func shapes.MakeDynamic(dtype dtypes.DType, dims ...Dimension) Shape
+// Create shape with dynamic dimensions
+func shapes.MakeDynamic(dtype dtypes.DType, dims ...int) Shape
 
 // Make existing shape have dynamic batch
 func (s Shape) WithDynamicBatch() Shape
 
-// Make specific dimension dynamic
-func (s Shape) WithDynamicDim(axis int, dim Dimension) Shape
+// Make specific dimension dynamic with an optional name
+func (s Shape) WithDynamicAxis(axis int, name string) Shape
+
+// Set axis name
+func (s Shape) WithAxisName(axis int, name string) Shape
+
+// Set all axis names at once
+func (s Shape) WithAxisNames(names ...string) Shape
+
+// Get axis name (returns "" if not set)
+func (s Shape) AxisName(axis int) string
+
+// Check if a dimension is dynamic
+func (s Shape) IsDynamicAxis(axis int) bool
 
 // Check if shape matches a pattern
 func (s Shape) Matches(pattern Shape) bool
 ```
 
-### Dimension Type
+### Dynamic Dimension Constant
 
 ```go
-type Dimension int
-
-const (
-    DimBatch     Dimension = -1  // Batch dimension
-    DimSeqLen    Dimension = -2  // Sequence length
-    DimUnknown   Dimension = -3  // Generic unknown
-)
-
-// Check if dimension is static (>0)
-func (d Dimension) IsStatic() bool
-
-// Get name for symbolic dimensions
-func (d Dimension) Name() string
+// DynamicDim marks a dimension as dynamic (not known at compile time)
+const DynamicDim = -1
 ```
 
 ### Exec Configuration
@@ -286,7 +304,7 @@ func (e *Exec) CacheSize() int
 ```go
 type BucketingStrategy interface {
     // Returns the bucketed dimension size
-    // Must preserve symbolic dimensions (negative values)
+    // Must preserve dynamic dimensions (negative values)
     Bucket(dim int) int
 }
 ```
@@ -345,8 +363,11 @@ Some operations support dynamic batch/sequence but require static structural par
 inputShape := shapes.Make(dtypes.Float32, 32, 512)
 
 // After: Dynamic batch
-inputShape := shapes.MakeDynamic(dtypes.Float32,
-    int(shapes.DimBatch), 512)
+inputShape := shapes.MakeDynamic(dtypes.Float32, shapes.DynamicDim, 512)
+
+// With optional axis name
+inputShape := shapes.MakeDynamic(dtypes.Float32, shapes.DynamicDim, 512).
+    WithAxisName(0, "batch")
 ```
 
 ### Step 2: Enable Bucketing
@@ -412,16 +433,19 @@ A: When you have variable batch sizes or sequence lengths and want to reduce com
 A: Start with `WithPow2Bucketing()`—good balance of memory and cache reduction. Use `WithLinearBucketing(step)` for more aggressive caching.
 
 **Q: Does this work with gradients?**
-A: Yes. Gradients fully support symbolic dimensions.
+A: Yes. Gradients fully support dynamic dimensions.
 
 **Q: What's the performance impact?**
 A: Pattern matching adds <1% overhead. Benefit is 50-99% fewer graph compilations.
 
-**Q: Can I mix static and symbolic dimensions?**
-A: Yes. Any shape can have both static and symbolic dimensions.
+**Q: Can I mix static and dynamic dimensions?**
+A: Yes. Any shape can have both static and dynamic dimensions.
 
 **Q: How do I debug cache issues?**
 A: Use `exec.CacheSize()` to monitor cached graph count. Enable logging to see bucketing behavior.
 
 **Q: Will my input be padded automatically?**
 A: No. GoMLX doesn't pad inputs. Most backends handle inputs smaller than the compiled size gracefully.
+
+**Q: What are axis names for?**
+A: Axis names are optional metadata that document the purpose of each dimension (e.g., "batch", "seq", "hidden"). They're useful for debugging and shape inference but don't affect computation.

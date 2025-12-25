@@ -1,7 +1,8 @@
 package examples
 
 // This file demonstrates symbolic shape inference capabilities.
-// These examples show how shape inference handles dynamic dimensions.
+// These examples show how shape inference handles dynamic dimensions
+// using the named axis API.
 
 import (
 	"github.com/gomlx/gomlx/backends"
@@ -13,15 +14,16 @@ import (
 // ExampleTransformerShapes demonstrates shape inference for a transformer-style model
 // with dynamic batch size and sequence length.
 func ExampleTransformerShapes() {
-	// Define dimensions
-	batchDim := int(shapes.DimBatch)  // Dynamic batch size
-	seqDim := int(shapes.DimSeqLen)   // Dynamic sequence length
-	hiddenSize := 768                 // Static hidden size (e.g., BERT base)
-	numHeads := 12                    // Static number of attention heads
-	headDim := hiddenSize / numHeads  // 64
+	// Define dimensions using named dynamic axes
+	hiddenSize := 768 // Static hidden size (e.g., BERT base)
+	numHeads := 12    // Static number of attention heads
+	headDim := hiddenSize / numHeads // 64
 
 	// Input embeddings: [batch, seq_len, hidden_size]
-	embeddings := shapes.MakeDynamic(dtypes.Float32, batchDim, seqDim, hiddenSize)
+	// Use WithDynamicAxis to create named dynamic dimensions
+	embeddings := shapes.Make(dtypes.Float32, 0, 0, hiddenSize).
+		WithDynamicAxis(0, "batch").
+		WithDynamicAxis(1, "seq")
 
 	// Self-attention computation
 
@@ -29,6 +31,8 @@ func ExampleTransformerShapes() {
 	qkvShape := embeddings // Same shape for Q, K, V
 
 	// 2. Reshape to multi-head: [batch, seq_len, num_heads, head_dim]
+	batchDim := shapes.DynamicDim
+	seqDim := shapes.DynamicDim
 	multiHeadShape, _ := shapeinference.ReshapeOp(qkvShape, []int{batchDim, seqDim, numHeads, headDim})
 
 	// 3. Transpose for attention: [batch, num_heads, seq_len, head_dim]
@@ -43,7 +47,9 @@ func ExampleTransformerShapes() {
 	// For now we demonstrate the shape transformations
 
 	// 5. Add positional bias: [1, 1, seq_len, seq_len]
-	posBias := shapes.Make(dtypes.Float32, 1, 1, seqDim, seqDim)
+	posBias := shapes.Make(dtypes.Float32, 1, 1, 0, 0).
+		WithDynamicAxis(2, "seq").
+		WithDynamicAxis(3, "seq")
 	// Broadcasting would work: [batch, num_heads, seq_len, seq_len] + [1, 1, seq_len, seq_len]
 
 	// 6. Reduce (e.g., mean pooling): [batch, hidden_size]
@@ -58,13 +64,13 @@ func ExampleTransformerShapes() {
 
 // ExampleBatchProcessing shows how batch dimension flows through operations
 func ExampleBatchProcessing() {
-	batch := int(shapes.DimBatch)
-
 	// Input: [batch, 224, 224, 3] (image batch)
-	input := shapes.MakeDynamic(dtypes.Float32, batch, 224, 224, 3)
+	input := shapes.Make(dtypes.Float32, 0, 224, 224, 3).
+		WithDynamicAxis(0, "batch")
 
 	// Conv output: [batch, 112, 112, 64]
-	convOut := shapes.MakeDynamic(dtypes.Float32, batch, 112, 112, 64)
+	convOut := shapes.Make(dtypes.Float32, 0, 112, 112, 64).
+		WithDynamicAxis(0, "batch")
 
 	// Batch norm scale: [1, 1, 1, 64]
 	bnScale := shapes.Make(dtypes.Float32, 1, 1, 1, 64)
@@ -78,28 +84,33 @@ func ExampleBatchProcessing() {
 
 	// Final classification: [batch, num_classes]
 	numClasses := 1000
-	logits := shapes.MakeDynamic(dtypes.Float32, batch, numClasses)
+	logits := shapes.Make(dtypes.Float32, 0, numClasses).
+		WithDynamicAxis(0, "batch")
 
 	_, _, _, _ = input, normalized, pooled, logits
 }
 
 // ExampleVariableSequenceLength demonstrates handling sequences of varying length
 func ExampleVariableSequenceLength() {
-	batch := int(shapes.DimBatch)
-	seqLen := int(shapes.DimSeqLen)
 	embedDim := 512
 
 	// Token IDs: [batch, seq_len]
-	tokenIDs := shapes.MakeDynamic(dtypes.Int32, batch, seqLen)
+	tokenIDs := shapes.Make(dtypes.Int32, 0, 0).
+		WithDynamicAxis(0, "batch").
+		WithDynamicAxis(1, "seq")
 
 	// Embeddings: [batch, seq_len, embed_dim]
-	embeddings := shapes.MakeDynamic(dtypes.Float32, batch, seqLen, embedDim)
+	embeddings := shapes.Make(dtypes.Float32, 0, 0, embedDim).
+		WithDynamicAxis(0, "batch").
+		WithDynamicAxis(1, "seq")
 
 	// Attention mask: [batch, seq_len] (1 for real tokens, 0 for padding)
-	mask := shapes.MakeDynamic(dtypes.Bool, batch, seqLen)
+	mask := shapes.Make(dtypes.Bool, 0, 0).
+		WithDynamicAxis(0, "batch").
+		WithDynamicAxis(1, "seq")
 
 	// Expand mask for broadcasting: [batch, seq_len, 1]
-	expandedMask, _ := shapeinference.ReshapeOp(mask, []int{batch, seqLen, 1})
+	expandedMask, _ := shapeinference.ReshapeOp(mask, []int{shapes.DynamicDim, shapes.DynamicDim, 1})
 
 	// Masked embeddings (would use Where operation)
 	// Result maintains symbolic dimensions: [batch, seq_len, embed_dim]
@@ -109,10 +120,9 @@ func ExampleVariableSequenceLength() {
 
 // ExampleMixedStaticDynamic shows mixing static and dynamic dimensions
 func ExampleMixedStaticDynamic() {
-	batch := int(shapes.DimBatch)
-
 	// Dynamic batch, static spatial: [batch, 32, 32, 128]
-	features := shapes.MakeDynamic(dtypes.Float32, batch, 32, 32, 128)
+	features := shapes.Make(dtypes.Float32, 0, 32, 32, 128).
+		WithDynamicAxis(0, "batch")
 
 	// Static kernel: [3, 3, 128, 256]
 	kernel := shapes.Make(dtypes.Float32, 3, 3, 128, 256)
@@ -128,11 +138,11 @@ func ExampleMixedStaticDynamic() {
 
 // ExampleConcatenation demonstrates concatenation with symbolic dimensions
 func ExampleConcatenation() {
-	batch := int(shapes.DimBatch)
-
 	// Two feature tensors from different branches
-	branch1 := shapes.MakeDynamic(dtypes.Float32, batch, 64)
-	branch2 := shapes.MakeDynamic(dtypes.Float32, batch, 128)
+	branch1 := shapes.Make(dtypes.Float32, 0, 64).
+		WithDynamicAxis(0, "batch")
+	branch2 := shapes.Make(dtypes.Float32, 0, 128).
+		WithDynamicAxis(0, "batch")
 
 	// Concatenate along feature dimension
 	concatenated, _ := shapeinference.ConcatenateOp([]shapes.Shape{branch1, branch2}, 1)
@@ -140,46 +150,43 @@ func ExampleConcatenation() {
 
 	// Concatenate along batch dimension
 	stacked, _ := shapeinference.ConcatenateOp([]shapes.Shape{branch1, branch1}, 0)
-	// Result: [unknown, 64] - two symbolic batches -> unknown total
+	// Result: [?, 64] - two symbolic batches -> unknown total
 
 	_, _ = concatenated, stacked
 }
 
 // ExampleDifferentSymbolicDimensions shows what happens when mixing different symbols
 func ExampleDifferentSymbolicDimensions() {
-	batch := int(shapes.DimBatch)
-	seqLen := int(shapes.DimSeqLen)
-
 	// Tensor A: [batch, 128]
-	tensorA := shapes.MakeDynamic(dtypes.Float32, batch, 128)
+	tensorA := shapes.Make(dtypes.Float32, 0, 128).
+		WithDynamicAxis(0, "batch")
 
-	// Tensor B: [seq_len, 128]  (Different symbolic dimension!)
-	tensorB := shapes.MakeDynamic(dtypes.Float32, seqLen, 128)
+	// Tensor B: [seq, 128] (Different symbolic dimension name!)
+	tensorB := shapes.Make(dtypes.Float32, 0, 128).
+		WithDynamicAxis(0, "seq")
 
 	// Adding these together
 	result, _ := shapeinference.BinaryOp(backends.OpTypeAdd, tensorA, tensorB)
-	// Result: [unknown, 128] - Different symbols become unknown
+	// Result: [?, 128] - Different axis names, axis name becomes empty
 	_ = result
 }
 
 // ExampleBroadcastingRules demonstrates the broadcasting hierarchy
 func ExampleBroadcastingRules() {
-	batch := int(shapes.DimBatch)
-
-	// Rule 1: Symbolic + same symbolic = symbolic
-	shape1 := shapes.MakeDynamic(dtypes.Float32, batch, 10)
-	shape2 := shapes.MakeDynamic(dtypes.Float32, batch, 10)
+	// Rule 1: Same named dynamic + same named dynamic = same named dynamic
+	shape1 := shapes.Make(dtypes.Float32, 0, 10).WithDynamicAxis(0, "batch")
+	shape2 := shapes.Make(dtypes.Float32, 0, 10).WithDynamicAxis(0, "batch")
 	result1, _ := shapeinference.BinaryOp(backends.OpTypeAdd, shape1, shape2)
-	// Result: [batch, 10]
+	// Result: [?batch, 10] - axis name preserved
 
-	// Rule 2: Symbolic + 1 = symbolic
-	shape3 := shapes.MakeDynamic(dtypes.Float32, batch, 10)
+	// Rule 2: Dynamic + 1 = dynamic (broadcast)
+	shape3 := shapes.Make(dtypes.Float32, 0, 10).WithDynamicAxis(0, "batch")
 	shape4 := shapes.Make(dtypes.Float32, 1, 10)
 	result2, _ := shapeinference.BinaryOp(backends.OpTypeAdd, shape3, shape4)
-	// Result: [batch, 10]
+	// Result: [?batch, 10]
 
-	// Rule 3: Symbolic + concrete > 1 = concrete
-	shape5 := shapes.MakeDynamic(dtypes.Float32, batch, 10)
+	// Rule 3: Dynamic + concrete > 1 = concrete
+	shape5 := shapes.Make(dtypes.Float32, 0, 10).WithDynamicAxis(0, "batch")
 	shape6 := shapes.Make(dtypes.Float32, 32, 10)
 	result3, _ := shapeinference.BinaryOp(backends.OpTypeAdd, shape5, shape6)
 	// Result: [32, 10] - concrete dimension assumed compatible

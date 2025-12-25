@@ -88,26 +88,40 @@ func TestFromAnyValue(t *testing.T) {
 	require.Errorf(t, err, "irregular shape should have returned an error, instead got shape %s", shape)
 }
 
-func TestDimension(t *testing.T) {
-	// Test static dimension
-	staticDim := Dimension(10)
-	require.True(t, staticDim.IsStatic())
-	require.False(t, staticDim.IsDynamic())
-	require.Equal(t, 10, staticDim.Value())
-	require.Equal(t, "10", staticDim.String())
+func TestAxisNames(t *testing.T) {
+	// Test IsDynamicAxis
+	shape := MakeDynamic(dtypes.Float32, -1, 10, -1)
+	require.True(t, shape.IsDynamicAxis(0))
+	require.False(t, shape.IsDynamicAxis(1))
+	require.True(t, shape.IsDynamicAxis(2))
+	require.True(t, shape.IsDynamicAxis(-1)) // Last axis
 
-	// Test symbolic dimensions
-	require.False(t, DimBatch.IsStatic())
-	require.True(t, DimBatch.IsDynamic())
-	require.Equal(t, -1, DimBatch.Value())
-	require.Equal(t, "batch", DimBatch.Name())
-	require.Equal(t, "?batch", DimBatch.String())
+	// Test WithAxisName and AxisName
+	named := shape.WithAxisName(0, "batch").WithAxisName(2, "seq")
+	require.Equal(t, "batch", named.AxisName(0))
+	require.Equal(t, "", named.AxisName(1))
+	require.Equal(t, "seq", named.AxisName(2))
+	require.Equal(t, "seq", named.AxisName(-1)) // Negative indexing
 
-	require.Equal(t, "seqlen", DimSeqLen.Name())
-	require.Equal(t, "?seqlen", DimSeqLen.String())
+	// Test WithAxisNames
+	allNamed := shape.WithAxisNames("batch", "hidden", "seq")
+	require.Equal(t, "batch", allNamed.AxisName(0))
+	require.Equal(t, "hidden", allNamed.AxisName(1))
+	require.Equal(t, "seq", allNamed.AxisName(2))
 
-	require.Equal(t, "unknown", DimUnknown.Name())
-	require.Equal(t, "?unknown", DimUnknown.String())
+	// Test WithDynamicAxis
+	staticShape := Make(dtypes.Float32, 32, 128, 64)
+	dynamic := staticShape.WithDynamicAxis(0, "batch")
+	require.Equal(t, DynamicDim, dynamic.Dimensions[0])
+	require.Equal(t, "batch", dynamic.AxisName(0))
+	require.Equal(t, 128, dynamic.Dimensions[1])
+
+	// Test String() with axis names
+	prettyShape := MakeDynamic(dtypes.Float32, -1, 768).
+		WithAxisName(0, "batch")
+	str := prettyShape.String()
+	require.Contains(t, str, "batch")
+	require.Contains(t, str, "768")
 }
 
 func TestMakeDynamic(t *testing.T) {
@@ -120,11 +134,11 @@ func TestMakeDynamic(t *testing.T) {
 	require.Equal(t, 128, shape.Dimensions[2])
 	require.Equal(t, 3, shape.Dimensions[3])
 
-	// Using named constants
-	shape2 := MakeDynamic(dtypes.Float32, int(DimBatch), int(DimSeqLen), 768)
+	// Using DynamicDim constant
+	shape2 := MakeDynamic(dtypes.Float32, DynamicDim, DynamicDim, 768)
 	require.Equal(t, 3, shape2.Rank())
-	require.Equal(t, int(DimBatch), shape2.Dimensions[0])
-	require.Equal(t, int(DimSeqLen), shape2.Dimensions[1])
+	require.Equal(t, DynamicDim, shape2.Dimensions[0])
+	require.Equal(t, DynamicDim, shape2.Dimensions[1])
 	require.Equal(t, 768, shape2.Dimensions[2])
 }
 
@@ -203,34 +217,42 @@ func TestWithDynamicBatch(t *testing.T) {
 	require.Equal(t, 0, scalarDynamic.Rank())
 }
 
-func TestWithDynamicDim(t *testing.T) {
+func TestWithDynamicAxis(t *testing.T) {
 	shape := Make(dtypes.Float32, 32, 128, 128, 3)
 
-	// Set first dimension to dynamic
-	dynamic0 := shape.WithDynamicDim(0, DimBatch)
-	require.Equal(t, int(DimBatch), dynamic0.Dimensions[0])
+	// Set first dimension to dynamic with name
+	dynamic0 := shape.WithDynamicAxis(0, "batch")
+	require.Equal(t, DynamicDim, dynamic0.Dimensions[0])
+	require.Equal(t, "batch", dynamic0.AxisName(0))
 	require.Equal(t, 128, dynamic0.Dimensions[1])
 
-	// Set second dimension to dynamic
-	dynamic1 := shape.WithDynamicDim(1, DimSeqLen)
+	// Set second dimension to dynamic with name
+	dynamic1 := shape.WithDynamicAxis(1, "seq")
 	require.Equal(t, 32, dynamic1.Dimensions[0])
-	require.Equal(t, int(DimSeqLen), dynamic1.Dimensions[1])
+	require.Equal(t, DynamicDim, dynamic1.Dimensions[1])
+	require.Equal(t, "seq", dynamic1.AxisName(1))
 	require.Equal(t, 128, dynamic1.Dimensions[2])
 
 	// Negative axis
-	dynamicLast := shape.WithDynamicDim(-1, DimUnknown)
+	dynamicLast := shape.WithDynamicAxis(-1, "channels")
 	require.Equal(t, 32, dynamicLast.Dimensions[0])
 	require.Equal(t, 128, dynamicLast.Dimensions[1])
 	require.Equal(t, 128, dynamicLast.Dimensions[2])
-	require.Equal(t, int(DimUnknown), dynamicLast.Dimensions[3])
+	require.Equal(t, DynamicDim, dynamicLast.Dimensions[3])
+	require.Equal(t, "channels", dynamicLast.AxisName(3))
 
 	// Out of bounds - should not panic, just return unchanged
-	outOfBounds := shape.WithDynamicDim(10, DimBatch)
+	outOfBounds := shape.WithDynamicAxis(10, "oob")
 	require.True(t, shape.Equal(outOfBounds))
 
 	// Original shape should be unchanged
 	require.Equal(t, 32, shape.Dimensions[0])
 	require.Equal(t, 128, shape.Dimensions[1])
+
+	// Empty name should still mark as dynamic
+	dynamicNoName := shape.WithDynamicAxis(0, "")
+	require.Equal(t, DynamicDim, dynamicNoName.Dimensions[0])
+	require.Equal(t, "", dynamicNoName.AxisName(0))
 }
 
 func TestCastDType(t *testing.T) {

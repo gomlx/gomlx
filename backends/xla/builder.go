@@ -336,8 +336,8 @@ func broadcastShapeForBinaryOps(
 				// Same symbol - preserve it
 				output.Dimensions[axis] = lhsDim
 			} else {
-				// Different symbols - unknown
-				output.Dimensions[axis] = int(shapes.DimUnknown)
+				// Different symbols - use generic dynamic
+				output.Dimensions[axis] = shapes.DynamicDim
 			}
 		case lhsDim < 0 && rhsDim == 1:
 			// Left is symbolic, right broadcasts

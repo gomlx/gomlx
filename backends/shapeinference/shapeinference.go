@@ -39,15 +39,7 @@ func canBroadcast(operandDim, outputDim int) bool {
 		// 1 broadcasts to anything
 		return true
 	case operandDim < 0 && outputDim < 0:
-		// Both symbolic: same symbol matches, DimUnknown matches anything, otherwise assume compatible
-		if operandDim == outputDim {
-			return true // Same symbolic dimension
-		}
-		// If either is DimUnknown, they're compatible (runtime will validate)
-		if operandDim == int(shapes.DimUnknown) || outputDim == int(shapes.DimUnknown) {
-			return true
-		}
-		// Different specific symbolic dimensions - assume compatible (runtime will validate)
+		// Both symbolic: assume compatible (runtime will validate)
 		return true
 	case operandDim < 0:
 		// Symbolic operand to concrete output: assume compatible (runtime check)
@@ -69,7 +61,7 @@ func symbolicMax(a, b int) int {
 		if a == b {
 			return a // Same symbolic dimension
 		}
-		return int(shapes.DimUnknown) // Different symbols
+		return shapes.DynamicDim // Different symbols -> generic dynamic
 	}
 	// One or both are static
 	if a < 0 {
@@ -311,8 +303,8 @@ func binaryOpImpl(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (outp
 				// Same symbol - preserve it
 				output.Dimensions[axis] = ld
 			} else {
-				// Different symbols - unknown
-				output.Dimensions[axis] = int(shapes.DimUnknown)
+				// Different symbols - use generic dynamic
+				output.Dimensions[axis] = shapes.DynamicDim
 			}
 		case ld < 0 && rd == 1:
 			// Left is symbolic, right broadcasts
@@ -340,6 +332,8 @@ func binaryOpImpl(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (outp
 			return
 		}
 	}
+	// Merge axis names from both operands
+	output.AxisNames = shapes.MergeAxisNames(lhsShape.AxisNames, rhsShape.AxisNames, output.Rank())
 	return
 }
 
@@ -493,7 +487,7 @@ func ReshapeOp(operand shapes.Shape, dims []int) (output shapes.Shape, err error
 	}
 
 	// If one or both have symbolic dimensions, check if static portions are compatible
-	// E.g., [DimBatch, 512] -> [DimBatch, 256, 2] is valid because 512 == 256*2
+	// E.g., [DynamicDim, 512] -> [DynamicDim, 256, 2] is valid because 512 == 256*2
 	if operandHasSymbolic && outputHasSymbolic {
 		// Both have symbolic - check static portions match if both non-trivial
 		if operandStaticSize != outputStaticSize && operandStaticSize > 1 && outputStaticSize > 1 {
@@ -803,8 +797,8 @@ func ConcatenateOp(inputs []shapes.Shape, axis int) (output shapes.Shape, err er
 				// Concatenation axis: handle symbolic dimensions
 				concatDim := currentShape.Dimensions[d]
 				if concatDim < 0 || output.Dimensions[d] < 0 {
-					// If either is symbolic, result is unknown
-					output.Dimensions[d] = int(shapes.DimUnknown)
+					// If either is symbolic, result is dynamic
+					output.Dimensions[d] = shapes.DynamicDim
 				} else {
 					output.Dimensions[d] += concatDim
 				}
@@ -824,6 +818,9 @@ func ConcatenateOp(inputs []shapes.Shape, axis int) (output shapes.Shape, err er
 				}
 			}
 		}
+
+		// Merge axis names from all inputs
+		output.AxisNames = shapes.MergeAxisNames(output.AxisNames, currentShape.AxisNames, rank)
 	}
 	return output, nil
 }
