@@ -3,6 +3,7 @@ package simplego
 import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/x448/float16"
 
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
@@ -30,7 +31,9 @@ var (
 )
 
 func init() {
-	for _, dtype := range []dtypes.DType{dtypes.F32, dtypes.F64, dtypes.BFloat16} {
+	// Initialize block dimensions for all numeric types that support DotGeneral.
+	// This includes float types and integer types (used by quantized models).
+	for _, dtype := range NumericDTypes {
 		sizePerElem := dtype.Size()
 		if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
 			// Because for BFloat16/Float16 we store the results in float32 and only later convert to
@@ -45,6 +48,10 @@ func init() {
 			log2Dim++
 		}
 		log2Dim--
+		// Ensure minimum block dimension of 8 (log2Dim >= 3) for the kernel's loop unrolling.
+		if log2Dim < 3 {
+			log2Dim = 3
+		}
 		DotGeneralTargetBlockLog2Dim[dtype] = log2Dim
 	}
 }
@@ -250,6 +257,9 @@ func dgCopyOutputBlockToFlat[T interface {
 
 func init() {
 	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.BFloat16, priorityTyped, dgCopyOutputBlockToFlatBFloat16)
+	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.Float16, priorityTyped, dgCopyOutputBlockToFlatFloat16)
+	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.Int8, priorityTyped, dgCopyOutputBlockToFlatInt8)
+	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.Uint8, priorityTyped, dgCopyOutputBlockToFlatUint8)
 }
 
 // dgCopyOutputBlockToFlatBFloat16 copies the blocked output to a flat output, removing the padding.
@@ -310,41 +320,247 @@ func dgCopyOutputBlockToFlatBFloat16(blockSource, output *Buffer) {
 	}
 }
 
-func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
-	dtype := lhs.shape.DType
+// dgCopyOutputBlockToFlatFloat16 copies the blocked output to a flat output, removing the padding.
+// The blockSource is assumed to be float32 -- matrix multiplication uses float32 to avoid
+// numeric errors when accumulating results.
+//
+// blockedSource shape: float32[batchSize, lhsCrossBlocks, rhsCrossBlocks, blockDim, blockDim]
+// output shape: float16[batchSize, lhsCrossSize, rhsCrossSize]
+func dgCopyOutputBlockToFlatFloat16(blockSource, output *Buffer) {
+	sourceDims := blockSource.shape.Dimensions
+	outputDims := output.shape.Dimensions
 
-	// Get block buffers.
-	blkLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
-	blockDim := 1 << blkLog2Dim
-	lhsBlocks := backend.getBuffer(dtype, params.lhsBlockedShape.Size())
-	lhsBlocks.shape = params.lhsBlockedShape
-	lhsBlocks.Zeros()
-	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
-	copyFlatToBlock(lhs, lhsBlocks, params.lhsContractingAxes, params.lhsBatchAxes,
-		params.batchSize, params.lhsCrossSize, params.contractingSize, blkLog2Dim)
+	batchSize := sourceDims[0]
+	lhsBlockCross := sourceDims[1]
+	rhsBlockCross := sourceDims[2]
+	blockDim := sourceDims[3] // Same as sourceDims[4]
+	lhsCrossSize := outputDims[1]
+	rhsCrossSize := outputDims[2]
 
-	rhsBlocks := backend.getBuffer(dtype, params.rhsBlockedShape.Size())
-	rhsBlocks.shape = params.rhsBlockedShape
-	rhsBlocks.Zeros()
-	copyFlatToBlock(rhs, rhsBlocks, params.rhsContractingAxes, params.rhsBatchAxes,
-		params.batchSize, params.rhsCrossSize, params.contractingSize, blkLog2Dim)
+	// Pre-calculate strides
+	outputRhsStride := 1
+	outputLhsStride := rhsCrossSize
+	outputBatchStride := lhsCrossSize * rhsCrossSize
 
-	outputBlocks := backend.getBuffer(params.outputBlockedShape.DType, params.outputBlockedShape.Size())
-	outputBlocks.shape = params.outputBlockedShape
-	outputBlocks.Zeros()
+	sourceBlockSize := blockDim * blockDim
+	sourceRhsBlockStride := sourceBlockSize
+	sourceLhsBlockStride := rhsBlockCross * sourceBlockSize
+	sourceBatchStride := lhsBlockCross * rhsBlockCross * sourceBlockSize
 
-	var recursive dotGeneralRecursiveData
-	recursive.backend = backend
+	sourceData := blockSource.flat.([]float32)
+	outputData := output.flat.([]float16.Float16)
 
-	// Get the matrix multiplication kernel for a block.
-	kernelBuilder := dotGeneralKernelDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, blockDim int) kernelFuncType)
-	recursive.kernelFn = kernelBuilder(lhsBlocks, rhsBlocks, outputBlocks, blockDim)
+	for batch := 0; batch < batchSize; batch++ {
+		sourceBatchOffset := batch * sourceBatchStride
+		outputBatchOffset := batch * outputBatchStride
 
-	// Straight block multiplying (as opposed to recursive)
-	recursive.lhsCrossBlocks = lhsBlocks.shape.Dimensions[1]
-	recursive.rhsCrossBlocks = rhsBlocks.shape.Dimensions[1]
-	recursive.contractBlocks = lhsBlocks.shape.Dimensions[2]
+		for lhsBlock := 0; lhsBlock < lhsBlockCross && lhsBlock*blockDim < lhsCrossSize; lhsBlock++ {
+			lhsStart := lhsBlock * blockDim
+			lhsEnd := min(lhsStart+blockDim, lhsCrossSize)
+			sourceLhsOffset := sourceBatchOffset + lhsBlock*sourceLhsBlockStride
+			outputLhsOffset := outputBatchOffset + lhsStart*outputLhsStride
 
+			for rhsBlock := 0; rhsBlock < rhsBlockCross && rhsBlock*blockDim < rhsCrossSize; rhsBlock++ {
+				rhsStart := rhsBlock * blockDim
+				rhsEnd := min(rhsStart+blockDim, rhsCrossSize)
+				sourceBlockOffset := sourceLhsOffset + rhsBlock*sourceRhsBlockStride
+				outputBlockOffset := outputLhsOffset + rhsStart*outputRhsStride
+
+				// Copy valid elements from the block
+				rowLen := rhsEnd - rhsStart
+				for blockRow := 0; blockRow < lhsEnd-lhsStart; blockRow++ {
+					sourceRowOffset := sourceBlockOffset + blockRow*blockDim
+					outputRowOffset := outputBlockOffset + blockRow*outputLhsStride
+					// Use the NEON-accelerated bulk converter when available
+					convertFloat32SliceToFloat16(
+						sourceData[sourceRowOffset:sourceRowOffset+rowLen],
+						outputData[outputRowOffset:outputRowOffset+rowLen],
+					)
+				}
+			}
+		}
+	}
+}
+
+// saturateInt32ToInt8 converts an int32 value to int8 with saturation.
+// Values below -128 become -128, values above 127 become 127.
+func saturateInt32ToInt8(v int32) int8 {
+	if v < -128 {
+		return -128
+	}
+	if v > 127 {
+		return 127
+	}
+	return int8(v)
+}
+
+// saturateInt32ToUint8 converts an int32 value to uint8 with saturation.
+// Values below 0 become 0, values above 255 become 255.
+func saturateInt32ToUint8(v int32) uint8 {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return uint8(v)
+}
+
+// dgCopyOutputBlockToFlatInt8 copies the blocked output to a flat output, removing the padding.
+// The blockSource is assumed to be int32 -- matrix multiplication uses int32 to avoid
+// overflow when accumulating results. Values are saturated to int8 range [-128, 127].
+//
+// blockedSource shape: int32[batchSize, lhsCrossBlocks, rhsCrossBlocks, blockDim, blockDim]
+// output shape: int8[batchSize, lhsCrossSize, rhsCrossSize]
+func dgCopyOutputBlockToFlatInt8(blockSource, output *Buffer) {
+	sourceDims := blockSource.shape.Dimensions
+	outputDims := output.shape.Dimensions
+
+	batchSize := sourceDims[0]
+	lhsBlockCross := sourceDims[1]
+	rhsBlockCross := sourceDims[2]
+	blockDim := sourceDims[3] // Same as sourceDims[4]
+	lhsCrossSize := outputDims[1]
+	rhsCrossSize := outputDims[2]
+
+	// Pre-calculate strides
+	outputRhsStride := 1
+	outputLhsStride := rhsCrossSize
+	outputBatchStride := lhsCrossSize * rhsCrossSize
+
+	sourceBlockSize := blockDim * blockDim
+	sourceRhsBlockStride := sourceBlockSize
+	sourceLhsBlockStride := rhsBlockCross * sourceBlockSize
+	sourceBatchStride := lhsBlockCross * rhsBlockCross * sourceBlockSize
+
+	sourceData := blockSource.flat.([]int32)
+	outputData := output.flat.([]int8)
+
+	for batch := 0; batch < batchSize; batch++ {
+		sourceBatchOffset := batch * sourceBatchStride
+		outputBatchOffset := batch * outputBatchStride
+
+		for lhsBlock := 0; lhsBlock < lhsBlockCross && lhsBlock*blockDim < lhsCrossSize; lhsBlock++ {
+			lhsStart := lhsBlock * blockDim
+			lhsEnd := min(lhsStart+blockDim, lhsCrossSize)
+			sourceLhsOffset := sourceBatchOffset + lhsBlock*sourceLhsBlockStride
+			outputLhsOffset := outputBatchOffset + lhsStart*outputLhsStride
+
+			for rhsBlock := 0; rhsBlock < rhsBlockCross && rhsBlock*blockDim < rhsCrossSize; rhsBlock++ {
+				rhsStart := rhsBlock * blockDim
+				rhsEnd := min(rhsStart+blockDim, rhsCrossSize)
+				sourceBlockOffset := sourceLhsOffset + rhsBlock*sourceRhsBlockStride
+				outputBlockOffset := outputLhsOffset + rhsStart*outputRhsStride
+
+				// Copy valid elements from the block with saturation
+				for blockRow := 0; blockRow < lhsEnd-lhsStart; blockRow++ {
+					sourceRowOffset := sourceBlockOffset + blockRow*blockDim
+					outputRowOffset := outputBlockOffset + blockRow*outputLhsStride
+					for blockCol := 0; blockCol < rhsEnd-rhsStart; blockCol++ {
+						outputData[outputRowOffset+blockCol] = saturateInt32ToInt8(sourceData[sourceRowOffset+blockCol])
+					}
+				}
+			}
+		}
+	}
+}
+
+// dgCopyOutputBlockToFlatUint8 copies the blocked output to a flat output, removing the padding.
+// The blockSource is assumed to be int32 -- matrix multiplication uses int32 to avoid
+// overflow when accumulating results. Values are saturated to uint8 range [0, 255].
+//
+// blockedSource shape: int32[batchSize, lhsCrossBlocks, rhsCrossBlocks, blockDim, blockDim]
+// output shape: uint8[batchSize, lhsCrossSize, rhsCrossSize]
+func dgCopyOutputBlockToFlatUint8(blockSource, output *Buffer) {
+	sourceDims := blockSource.shape.Dimensions
+	outputDims := output.shape.Dimensions
+
+	batchSize := sourceDims[0]
+	lhsBlockCross := sourceDims[1]
+	rhsBlockCross := sourceDims[2]
+	blockDim := sourceDims[3] // Same as sourceDims[4]
+	lhsCrossSize := outputDims[1]
+	rhsCrossSize := outputDims[2]
+
+	// Pre-calculate strides
+	outputRhsStride := 1
+	outputLhsStride := rhsCrossSize
+	outputBatchStride := lhsCrossSize * rhsCrossSize
+
+	sourceBlockSize := blockDim * blockDim
+	sourceRhsBlockStride := sourceBlockSize
+	sourceLhsBlockStride := rhsBlockCross * sourceBlockSize
+	sourceBatchStride := lhsBlockCross * rhsBlockCross * sourceBlockSize
+
+	sourceData := blockSource.flat.([]int32)
+	outputData := output.flat.([]uint8)
+
+	for batch := 0; batch < batchSize; batch++ {
+		sourceBatchOffset := batch * sourceBatchStride
+		outputBatchOffset := batch * outputBatchStride
+
+		for lhsBlock := 0; lhsBlock < lhsBlockCross && lhsBlock*blockDim < lhsCrossSize; lhsBlock++ {
+			lhsStart := lhsBlock * blockDim
+			lhsEnd := min(lhsStart+blockDim, lhsCrossSize)
+			sourceLhsOffset := sourceBatchOffset + lhsBlock*sourceLhsBlockStride
+			outputLhsOffset := outputBatchOffset + lhsStart*outputLhsStride
+
+			for rhsBlock := 0; rhsBlock < rhsBlockCross && rhsBlock*blockDim < rhsCrossSize; rhsBlock++ {
+				rhsStart := rhsBlock * blockDim
+				rhsEnd := min(rhsStart+blockDim, rhsCrossSize)
+				sourceBlockOffset := sourceLhsOffset + rhsBlock*sourceRhsBlockStride
+				outputBlockOffset := outputLhsOffset + rhsStart*outputRhsStride
+
+				// Copy valid elements from the block with saturation
+				for blockRow := 0; blockRow < lhsEnd-lhsStart; blockRow++ {
+					sourceRowOffset := sourceBlockOffset + blockRow*blockDim
+					outputRowOffset := outputBlockOffset + blockRow*outputLhsStride
+					for blockCol := 0; blockCol < rhsEnd-rhsStart; blockCol++ {
+						outputData[outputRowOffset+blockCol] = saturateInt32ToUint8(sourceData[sourceRowOffset+blockCol])
+					}
+				}
+			}
+		}
+	}
+}
+
+// execDotGeneralBlocked executes DotGeneral using a cache-tiled (blocked) algorithm.
+//
+// This is a convenience wrapper around execDotGeneralBlockedUnified for the case where
+// neither operand is pre-blocked. For pre-blocked cases, use execDotGeneralBlockedUnified directly.
+//
+// This implementation is optimized for large matrices where cache locality is critical.
+// It works by:
+//  1. Copying both operands into blocked format with zero-padding for alignment
+//  2. Processing blocks that fit in L1 cache
+//  3. Copying results back to the output tensor
+//
+// The blocking ensures that the working set for each inner computation fits in cache,
+// avoiding the cache thrashing that occurs with naive large matrix multiplication.
+//
+// See: https://en.wikipedia.org/wiki/Matrix_multiplication_algorithm#Non-square_matrices
+func execDotGeneralBlocked(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
+	return execDotGeneralBlockedUnified(backend, lhs, rhs, nil, nil, params, output)
+}
+
+// Information passed along the recursive splitting of the dot-general.
+type dotGeneralRecursiveData struct {
+	backend                                           *Backend
+	kernelFn                                          kernelFuncType
+	lhsCrossBlocks, rhsCrossBlocks, contractBlocks    int
+	lhsBatchOffset, rhsBatchOffset, outputBatchOffset int
+	maxDepthParallelization                           int
+}
+
+// runDotGeneralBatchLoop executes the blocked dot-general computation across the batch dimension.
+// It handles parallelism setup and the batch loop, calling recursive.apply for each batch element.
+//
+// Parameters:
+//   - backend: the SimpleGo backend
+//   - recursive: the pre-configured recursive data with kernelFn and block counts already set
+//   - batchSize: number of batch elements
+//   - rhsHasBatch: if true, RHS has batch dimension (use batch-specific offset); if false, RHS is shared (offset=0)
+func runDotGeneralBatchLoop(backend *Backend, recursive *dotGeneralRecursiveData, batchSize int, rhsHasBatch bool) {
 	// Decide on intra-example parallelism: up to which depth we should use a new worker.
 	maxParallelism := backend.workers.MaxParallelism()
 	recursive.maxDepthParallelization = -1 // Disable sub-batch parallelization.
@@ -352,8 +568,8 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 		if backend.workers.IsUnlimited() {
 			recursive.maxDepthParallelization = 8 // At most 2^8 = 256 goroutines are spawned.
 		} else {
+			// Use log2 of parallelism to reduce goroutine overhead.
 			recursive.maxDepthParallelization = log2int(maxParallelism)
-			recursive.maxDepthParallelization += 1 // We want to allow slightly more fine-grained parallelization.
 		}
 	}
 
@@ -361,19 +577,23 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 	useBatchParallelism := backend.workers.IsEnabled()
 	batchSplitSize := 1
 	if useBatchParallelism && !backend.workers.IsUnlimited() {
-		batchSplitSize = (params.batchSize + maxParallelism - 1) / maxParallelism
+		batchSplitSize = (batchSize + maxParallelism - 1) / maxParallelism
 	}
 
 	// Loop over examples in the batch:
 	wg := xsync.NewDynamicWaitGroup() // Control workers started.
-	for outerBatchIdx := 0; outerBatchIdx < params.batchSize; outerBatchIdx += batchSplitSize {
+	for outerBatchIdx := 0; outerBatchIdx < batchSize; outerBatchIdx += batchSplitSize {
 		wg.Add(1)
 		batchSplitFn := func() {
-			for innerBatchIdx := outerBatchIdx; innerBatchIdx < min(outerBatchIdx+batchSplitSize, params.batchSize); innerBatchIdx++ {
+			for innerBatchIdx := outerBatchIdx; innerBatchIdx < min(outerBatchIdx+batchSplitSize, batchSize); innerBatchIdx++ {
 				var batchRecursive dotGeneralRecursiveData
-				batchRecursive = recursive
+				batchRecursive = *recursive
 				batchRecursive.lhsBatchOffset = innerBatchIdx * recursive.lhsCrossBlocks * recursive.contractBlocks
-				batchRecursive.rhsBatchOffset = innerBatchIdx * recursive.rhsCrossBlocks * recursive.contractBlocks
+				if rhsHasBatch {
+					batchRecursive.rhsBatchOffset = innerBatchIdx * recursive.rhsCrossBlocks * recursive.contractBlocks
+				} else {
+					batchRecursive.rhsBatchOffset = 0 // RHS is shared across all batches
+				}
 				batchRecursive.outputBatchOffset = innerBatchIdx * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
 				wg.Add(1)
 				batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, wg)
@@ -387,25 +607,6 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 		}
 	}
 	wg.Wait()
-
-	// Free the block buffers.
-	backend.putBuffer(lhsBlocks)
-	backend.putBuffer(rhsBlocks)
-
-	// Copy over outputBlocks to the normal output.
-	copyOutputFn := dotGeneralOutputBlockToFlatDTypeMap.Get(dtype).(func(blockedSource, output *Buffer))
-	copyOutputFn(outputBlocks, output)
-	backend.putBuffer(outputBlocks)
-	return nil
-}
-
-// Information passed along the recursive splitting of the dot-general.
-type dotGeneralRecursiveData struct {
-	backend                                           *Backend
-	kernelFn                                          kernelFuncType
-	lhsCrossBlocks, rhsCrossBlocks, contractBlocks    int
-	lhsBatchOffset, rhsBatchOffset, outputBatchOffset int
-	maxDepthParallelization                           int
 }
 
 // apply recursively splits the dot-general into smaller blocks and applies the kernel to each block.
@@ -429,8 +630,8 @@ func (r *dotGeneralRecursiveData) apply(
 	maxLen := max(max(lhsCrossLen, rhsCrossLen), contractingLen)
 
 	// Base case: no splitting, simple go over all the crosses and calculate the matrix multiplication for this
-	// slice.
-	if maxLen <= 2 {
+	// slice. Threshold of 4 reduces recursion/threading overhead while maintaining parallelism.
+	if maxLen <= 4 {
 		for lhsCross := lhsCrossStart; lhsCross < lhsCrossEnd; lhsCross++ {
 			for rhsCross := rhsCrossStart; rhsCross < rhsCrossEnd; rhsCross++ {
 				outputBlockIdx := r.outputBatchOffset + lhsCross*r.rhsCrossBlocks + rhsCross
@@ -512,8 +713,11 @@ func buildDotGeneralKernel[T PODNumericConstraints](lhs, rhs, output *Buffer, bl
 		for range blockDim { // Loop over lhs rows:
 			rhsIdx := baseRhsIdx
 			// Loop 4 rows at a time.
-			for rhsRow := 0; rhsRow < blockDim; rhsRow += 4 { // range blockDim { // loop over rhs rows:
+			for rhsRow := 0; rhsRow < blockDim; rhsRow += 4 {
 				lhsIdx := baseLhsIdx
+
+				// Pure Go implementation (NEON-optimized float32 kernel is registered separately
+				// in dotgeneral_neon_arm64.go with priorityArch, eliminating branch overhead)
 				contractingIdx := 0
 				sum0 := outputFlat[outputIdx]
 				sum1 := outputFlat[outputIdx+1]
@@ -571,6 +775,7 @@ func buildDotGeneralKernel[T PODNumericConstraints](lhs, rhs, output *Buffer, bl
 					lhsIdx++
 					rhsIdx++
 				}
+
 				outputFlat[outputIdx] = sum0
 				outputFlat[outputIdx+1] = sum1
 				outputFlat[outputIdx+2] = sum2
@@ -579,7 +784,7 @@ func buildDotGeneralKernel[T PODNumericConstraints](lhs, rhs, output *Buffer, bl
 
 				// We unrolled 4 rows of RHS, so we need to skip the remaining 3 rows:
 				rhsIdx += 3 * blockDim
-			} // loop over rhs rows
+			}
 
 			// Start next lhs row.
 			baseLhsIdx += blockDim
@@ -613,6 +818,25 @@ func buildDotGeneralKernelBFloat16(lhs, rhs, output *Buffer, blockDim int) kerne
 			// Loop 4 rows at a time.
 			for rhsRow := 0; rhsRow < blockDim; rhsRow += 4 { // range blockDim { // loop over rhs rows:
 				lhsIdx := baseLhsIdx
+
+				// Try NEON BF16 path using BFMLAL instructions (ARMv8.6+)
+				// This avoids explicit BF16→FP32 conversion by using native instructions
+				if hasBF16NEON && blockDim >= 16 {
+					sum0 := outputFlat[outputIdx] + dotProductBF16InnerLoop(lhsFlat, rhsFlat, lhsIdx, rhsIdx, blockDim)
+					sum1 := outputFlat[outputIdx+1] + dotProductBF16InnerLoop(lhsFlat, rhsFlat, lhsIdx, rhsIdx+blockDim, blockDim)
+					sum2 := outputFlat[outputIdx+2] + dotProductBF16InnerLoop(lhsFlat, rhsFlat, lhsIdx, rhsIdx+2*blockDim, blockDim)
+					sum3 := outputFlat[outputIdx+3] + dotProductBF16InnerLoop(lhsFlat, rhsFlat, lhsIdx, rhsIdx+3*blockDim, blockDim)
+
+					outputFlat[outputIdx] = sum0
+					outputFlat[outputIdx+1] = sum1
+					outputFlat[outputIdx+2] = sum2
+					outputFlat[outputIdx+3] = sum3
+					outputIdx += 4
+					rhsIdx += 4 * blockDim
+					continue
+				}
+
+				// Scalar fallback
 				contractingIdx := 0
 				sum0 := outputFlat[outputIdx]
 				sum1 := outputFlat[outputIdx+1]
