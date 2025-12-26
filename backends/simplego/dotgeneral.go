@@ -154,8 +154,21 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	}
 	params.outputBlockedShape = dgCreateBlockedShape(outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
 
+	// Check if RHS should be pre-blocked for efficient repeated use (e.g., weight matrices).
+	// Pre-blocking converts the tensor to blocked format once, avoiding runtime blocking costs.
+	var blockedRHS *Node
+	if shouldPreBlockRHS(rhs, params.lhsContractingAxes, params.rhsContractingAxes, params.rhsBatchAxes) {
+		blockedRHS = b.getOrCreateBlockedInput(rhs)
+	}
+
 	// Create dot-general node: it will generate a normalized output [batchSize, lhsCrossSize, rhsCrossSize].
-	dotGeneral := b.newNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), lhs, rhs)
+	var dotGeneral *Node
+	if blockedRHS != nil {
+		// Pass the pre-blocked RHS to the DotGeneral node
+		dotGeneral = b.newNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), lhs, blockedRHS)
+	} else {
+		dotGeneral = b.newNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), lhs, rhs)
+	}
 	dotGeneral.data = &params
 
 	// Reshape result to recover batch and cross dimensions.
@@ -223,7 +236,30 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	output := backend.getBufferForShape(outputShape)
 	output.Zeros()
 
-	// Problem size (per example of the batch):
+	// Check if either input is pre-blocked (comes from BlockForDotGeneral node).
+	// When inputs are pre-blocked, they're in blocked format and MUST use the blocked path.
+	lhsNode := node.inputs[0]
+	rhsNode := node.inputs[1]
+	lhsPreBlocked := lhsNode.opType == backends.OpTypeBlockForDotGeneral
+	rhsPreBlocked := rhsNode.opType == backends.OpTypeBlockForDotGeneral
+
+	// Handle pre-blocked cases - always use blocked path since data is in blocked format
+	if lhsPreBlocked || rhsPreBlocked {
+		var lhsBlockData, rhsBlockData *blockForDotGeneralData
+		if lhsPreBlocked {
+			lhsBlockData = lhsNode.data.(*blockForDotGeneralData)
+		}
+		if rhsPreBlocked {
+			rhsBlockData = rhsNode.data.(*blockForDotGeneralData)
+		}
+		if err := execDotGeneralBlockedUnified(backend, lhs, rhs, lhsBlockData, rhsBlockData, params, output); err != nil {
+			backend.putBuffer(output)
+			return nil, err
+		}
+		return output, nil
+	}
+
+	// Non-pre-blocked path: choose based on problem size
 	crossesSize := params.rhsCrossSize * params.lhsCrossSize
 	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
 	blockSize := blockDim * blockDim
@@ -237,7 +273,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	}
 	switch problemSize {
 	case largeProblemSize:
-		err = execDotGeneralLarge(backend, lhs, rhs, params, output)
+		err = execDotGeneralBlocked(backend, lhs, rhs, params, output)
 	case smallProblemSize:
 		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
 	case checkProblemSize:
@@ -247,7 +283,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		if err != nil {
 			return nil, err
 		}
-		err = execDotGeneralLarge(backend, lhs, rhs, params, output)
+		err = execDotGeneralBlocked(backend, lhs, rhs, params, output)
 		if err != nil {
 			return nil, err
 		}
