@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/bucketing"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
@@ -319,7 +320,7 @@ func TestExecUnusedInput(t *testing.T) {
 // TestBucketingStrategies tests the different bucketing strategies.
 func TestBucketingStrategies(t *testing.T) {
 	t.Run("Pow2Bucketing", func(t *testing.T) {
-		strategy := Pow2Bucketing{}
+		strategy := bucketing.Pow2()
 		tests := []struct {
 			input int
 			want  int
@@ -343,7 +344,7 @@ func TestBucketingStrategies(t *testing.T) {
 	})
 
 	t.Run("LinearBucketing", func(t *testing.T) {
-		strategy := LinearBucketing{Step: 8}
+		strategy := bucketing.Linear(8)
 		tests := []struct {
 			input int
 			want  int
@@ -365,7 +366,7 @@ func TestBucketingStrategies(t *testing.T) {
 	})
 
 	t.Run("NoBucketing", func(t *testing.T) {
-		strategy := NoBucketing{}
+		strategy := bucketing.None()
 		tests := []int{0, -1, 1, 3, 5, 8, 16, 17}
 		for _, input := range tests {
 			got := strategy.Bucket(input)

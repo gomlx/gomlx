@@ -226,7 +226,9 @@ type Exec struct {
 	// Pattern caching options
 	enablePatternCaching bool
 	bucketingStrategy    bucketing.Strategy
-	patternAxes          []int // Which axes to treat as dynamic (default: first axis only)
+	patternAxes          []int            // Which axes to treat as dynamic (default: first axis only)
+	patternAxesPerInput  map[int][]int    // Per-input dynamic axes (input index -> axes)
+	padValue             any              // Custom pad value (default: nil means zero)
 }
 
 // execGraphCacheEntry: no hashing, just a simple list. This is faster
@@ -469,9 +471,31 @@ func (e *Exec) SetPatternCaching(strategy bucketing.Strategy) *Exec {
 
 // SetDynamicAxes specifies which axes should be treated as dynamic for pattern caching.
 // Default is []int{0} (first axis only, typically batch dimension).
+// This applies to all inputs. For per-input control, use SetDynamicAxesPerInput.
 // It returns a reference to itself so calls can be cascaded.
 func (e *Exec) SetDynamicAxes(axes []int) *Exec {
 	e.patternAxes = axes
+	return e
+}
+
+// SetDynamicAxesPerInput specifies which axes should be treated as dynamic for pattern caching
+// on a per-input basis. The map keys are input indices, and values are the axes for that input.
+// For inputs not specified in the map, the default axes from SetDynamicAxes are used.
+// Example: SetDynamicAxesPerInput(map[int][]int{0: {0, 1}, 1: {0}}) will bucket axes 0 and 1
+// for the first input, and only axis 0 for the second input.
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) SetDynamicAxesPerInput(axesMap map[int][]int) *Exec {
+	e.patternAxesPerInput = axesMap
+	return e
+}
+
+// SetPadValue sets the value used to pad tensors when bucketing results in larger shapes.
+// By default (when value is nil), padding uses zero values for the tensor's dtype.
+// The value must be type-compatible with the tensor being padded.
+// Example: SetPadValue(float32(-1.0)) will pad with -1.0 instead of 0.0 for float32 tensors.
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) SetPadValue(value any) *Exec {
+	e.padValue = value
 	return e
 }
 
@@ -1028,13 +1052,22 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 // applyBucketing applies the bucketing strategy to dynamic axes.
 func (e *Exec) applyBucketing(argsShapes []shapes.Shape) []shapes.Shape {
 	result := make([]shapes.Shape, len(argsShapes))
-	dynamicAxes := e.patternAxes
-	if len(dynamicAxes) == 0 {
-		dynamicAxes = []int{0} // Default: first axis
+	defaultDynamicAxes := e.patternAxes
+	if len(defaultDynamicAxes) == 0 {
+		defaultDynamicAxes = []int{0} // Default: first axis
 	}
 
 	for i, shape := range argsShapes {
 		result[i] = shape.Clone()
+
+		// Check for per-input axes first, fall back to default
+		dynamicAxes := defaultDynamicAxes
+		if e.patternAxesPerInput != nil {
+			if perInputAxes, ok := e.patternAxesPerInput[i]; ok {
+				dynamicAxes = perInputAxes
+			}
+		}
+
 		for _, axis := range dynamicAxes {
 			adjustedAxis := axis
 			if adjustedAxis < 0 {
@@ -1088,8 +1121,16 @@ func (e *Exec) padBuffer(
 		return nil, errors.WithMessage(err, "failed to create tensor from buffer")
 	}
 
-	// Create a new tensor with target shape, initialized to zero
+	// Create a new tensor with target shape
 	paddedTensor := tensors.FromShape(targetShape)
+
+	// Initialize with pad value if configured
+	if e.padValue != nil {
+		err = initTensorWithValue(paddedTensor, e.padValue)
+		if err != nil {
+			return nil, errors.WithMessage(err, "failed to initialize padded tensor with custom value")
+		}
+	}
 
 	// Copy original data to padded tensor
 	// The padding is always at the end of each axis
@@ -1135,6 +1176,72 @@ func copyTensorData(src, dst *tensors.Tensor, srcShape shapes.Shape) error {
 		})
 	})
 	return copyErr
+}
+
+// initTensorWithValue initializes all elements of a tensor with the given value.
+func initTensorWithValue(t *tensors.Tensor, value any) error {
+	var initErr error
+	t.MustMutableFlatData(func(flat any) {
+		switch data := flat.(type) {
+		case []float32:
+			v, ok := value.(float32)
+			if !ok {
+				initErr = errors.Errorf("pad value type %T does not match tensor type float32", value)
+				return
+			}
+			for i := range data {
+				data[i] = v
+			}
+		case []float64:
+			v, ok := value.(float64)
+			if !ok {
+				initErr = errors.Errorf("pad value type %T does not match tensor type float64", value)
+				return
+			}
+			for i := range data {
+				data[i] = v
+			}
+		case []int32:
+			v, ok := value.(int32)
+			if !ok {
+				initErr = errors.Errorf("pad value type %T does not match tensor type int32", value)
+				return
+			}
+			for i := range data {
+				data[i] = v
+			}
+		case []int64:
+			v, ok := value.(int64)
+			if !ok {
+				initErr = errors.Errorf("pad value type %T does not match tensor type int64", value)
+				return
+			}
+			for i := range data {
+				data[i] = v
+			}
+		case []uint8:
+			v, ok := value.(uint8)
+			if !ok {
+				initErr = errors.Errorf("pad value type %T does not match tensor type uint8", value)
+				return
+			}
+			for i := range data {
+				data[i] = v
+			}
+		case []bool:
+			v, ok := value.(bool)
+			if !ok {
+				initErr = errors.Errorf("pad value type %T does not match tensor type bool", value)
+				return
+			}
+			for i := range data {
+				data[i] = v
+			}
+		default:
+			initErr = errors.Errorf("unsupported tensor dtype for padding initialization: %T", flat)
+		}
+	})
+	return initErr
 }
 
 // findOrCreateGraph returns the graph for the given arguments shapes: either from cache or by creating a new one.
