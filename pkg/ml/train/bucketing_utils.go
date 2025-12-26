@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/gomlx/gomlx/pkg/core/bucketing"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/pkg/errors"
@@ -39,6 +40,10 @@ type BucketConfig struct {
 	// PadValue is the value to use for padding. Default is nil (zero padding).
 	// Must be type-compatible with the tensor's dtype.
 	PadValue any
+
+	// GenerateMask indicates whether to generate padding masks.
+	// When true, BucketTensors will return boolean masks indicating valid (non-padded) positions.
+	GenerateMask bool
 }
 
 // BucketInfo contains information about the bucketing applied to tensors.
@@ -52,12 +57,18 @@ type BucketInfo struct {
 	// BucketKey is a string representation of the bucketed shapes that can be used
 	// as a map key for grouping batches with the same bucketed dimensions.
 	BucketKey string
+
+	// PaddingMasks contains boolean tensors indicating valid (non-padded) positions.
+	// Each mask has the same shape as the corresponding bucketed tensor.
+	// Values are true for original data positions, false for padded positions.
+	// Only populated when BucketConfig.GenerateMask is true.
+	PaddingMasks []*tensors.Tensor
 }
 
 // BucketTensors applies the bucketing strategy to tensors and pads them if necessary.
 // Returns the padded tensors and bucketing information.
 //
-// Example:
+// Example without masks:
 //
 //	config := BucketConfig{
 //	    Strategy: bucketing.Pow2(),
@@ -69,6 +80,21 @@ type BucketInfo struct {
 //	    return err
 //	}
 //	// Use info.BucketKey to group batches
+//
+// Example with padding masks (for attention):
+//
+//	config := BucketConfig{
+//	    Strategy: bucketing.Pow2(),
+//	    DynamicAxes: []int{0, 1},  // bucket batch and sequence dims
+//	    PadValue: float32(0.0),
+//	    GenerateMask: true,  // generate masks for padded positions
+//	}
+//	paddedTensors, info, err := BucketTensors(config, sequences)
+//	if err != nil {
+//	    return err
+//	}
+//	// info.PaddingMasks[0] contains bool tensor: true=valid, false=padded
+//	// Use with attention: attention.SetKeyMask(info.PaddingMasks[0])
 func BucketTensors(config BucketConfig, inputTensors ...*tensors.Tensor) ([]*tensors.Tensor, *BucketInfo, error) {
 	if len(inputTensors) == 0 {
 		return nil, nil, errors.New("no tensors provided")
@@ -106,6 +132,15 @@ func BucketTensors(config BucketConfig, inputTensors ...*tensors.Tensor) ([]*ten
 		OriginalShapes: originalShapes,
 		BucketedShapes: bucketedShapes,
 		BucketKey:      bucketKey,
+	}
+
+	// Generate padding masks if requested
+	if config.GenerateMask {
+		masks, err := GeneratePadMask(originalShapes, bucketedShapes)
+		if err != nil {
+			return nil, nil, errors.WithMessage(err, "failed to generate padding masks")
+		}
+		info.PaddingMasks = masks
 	}
 
 	return result, info, nil
@@ -347,4 +382,95 @@ func copyTensorData(src, dst *tensors.Tensor) error {
 		})
 	})
 	return copyErr
+}
+
+// GeneratePadMask creates boolean mask tensors indicating valid (non-padded) positions.
+// For each pair of original and bucketed shapes, creates a mask where:
+//   - true = original data position (valid)
+//   - false = padded position (should be masked in attention)
+//
+// The masks can be used directly with attention layers:
+//
+//	attention.SetKeyMask(masks[0])
+//
+// Example:
+//
+//	originalShapes := []shapes.Shape{shapes.Make(dtypes.Float32, 3, 10)}
+//	bucketedShapes := []shapes.Shape{shapes.Make(dtypes.Float32, 4, 16)}
+//	masks, err := GeneratePadMask(originalShapes, bucketedShapes)
+//	// masks[0] has shape [4, 16] with true for positions [0:3, 0:10], false elsewhere
+func GeneratePadMask(originalShapes, bucketedShapes []shapes.Shape) ([]*tensors.Tensor, error) {
+	if len(originalShapes) != len(bucketedShapes) {
+		return nil, errors.Errorf("shape count mismatch: %d original vs %d bucketed",
+			len(originalShapes), len(bucketedShapes))
+	}
+
+	masks := make([]*tensors.Tensor, len(originalShapes))
+
+	for i := 0; i < len(originalShapes); i++ {
+		original := originalShapes[i]
+		bucketed := bucketedShapes[i]
+
+		// Validate shapes are compatible
+		if original.Rank() != bucketed.Rank() {
+			return nil, errors.Errorf("shape %d: rank mismatch: original=%d, bucketed=%d",
+				i, original.Rank(), bucketed.Rank())
+		}
+
+		// Check that bucketed shape is >= original in all dimensions
+		for j := 0; j < original.Rank(); j++ {
+			if bucketed.Dimensions[j] < original.Dimensions[j] {
+				return nil, errors.Errorf("shape %d: bucketed dimension %d (%d) is smaller than original (%d)",
+					i, j, bucketed.Dimensions[j], original.Dimensions[j])
+			}
+		}
+
+		// Create mask with bucketed shape (using Bool dtype)
+		maskShape := shapes.Make(dtypes.Bool, bucketed.Dimensions...)
+		mask := tensors.FromShape(maskShape)
+
+		// Initialize mask values
+		var maskErr error
+		mask.MustMutableFlatData(func(flat any) {
+			data, ok := flat.([]bool)
+			if !ok {
+				maskErr = errors.New("mask tensor is not bool type")
+				return
+			}
+
+			// Calculate strides for efficient indexing
+			strides := make([]int, bucketed.Rank())
+			stride := 1
+			for j := bucketed.Rank() - 1; j >= 0; j-- {
+				strides[j] = stride
+				stride *= bucketed.Dimensions[j]
+			}
+
+			// Set mask values: true for valid positions, false for padded positions
+			for flatIdx := 0; flatIdx < len(data); flatIdx++ {
+				// Convert flat index to multi-dimensional index
+				isValid := true
+				remaining := flatIdx
+				for j := 0; j < bucketed.Rank(); j++ {
+					dimIdx := remaining / strides[j]
+					remaining %= strides[j]
+
+					// Check if this position is within original bounds
+					if dimIdx >= original.Dimensions[j] {
+						isValid = false
+						break
+					}
+				}
+				data[flatIdx] = isValid
+			}
+		})
+
+		if maskErr != nil {
+			return nil, errors.WithMessagef(maskErr, "failed to initialize mask %d", i)
+		}
+
+		masks[i] = mask
+	}
+
+	return masks, nil
 }

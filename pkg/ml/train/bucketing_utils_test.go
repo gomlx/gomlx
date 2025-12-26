@@ -336,3 +336,316 @@ func TestPadTensorErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestGeneratePadMask(t *testing.T) {
+	tests := []struct {
+		name            string
+		originalShapes  []shapes.Shape
+		bucketedShapes  []shapes.Shape
+		wantErr         bool
+		validateMask    func(t *testing.T, masks []*tensors.Tensor)
+	}{
+		{
+			name: "1D mask - batch dimension",
+			originalShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 3),
+			},
+			bucketedShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 4),
+			},
+			wantErr: false,
+			validateMask: func(t *testing.T, masks []*tensors.Tensor) {
+				if len(masks) != 1 {
+					t.Fatalf("expected 1 mask, got %d", len(masks))
+				}
+				mask := masks[0]
+				expectedShape := shapes.Make(dtypes.Bool, 4)
+				if !mask.Shape().Equal(expectedShape) {
+					t.Errorf("expected shape %s, got %s", expectedShape, mask.Shape())
+				}
+				// Verify mask values: [true, true, true, false]
+				mask.ConstFlatData(func(flat any) {
+					data := flat.([]bool)
+					expected := []bool{true, true, true, false}
+					for i, exp := range expected {
+						if data[i] != exp {
+							t.Errorf("mask[%d]: expected %v, got %v", i, exp, data[i])
+						}
+					}
+				})
+			},
+		},
+		{
+			name: "2D mask - batch and sequence",
+			originalShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 3, 10),
+			},
+			bucketedShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 4, 16),
+			},
+			wantErr: false,
+			validateMask: func(t *testing.T, masks []*tensors.Tensor) {
+				mask := masks[0]
+				expectedShape := shapes.Make(dtypes.Bool, 4, 16)
+				if !mask.Shape().Equal(expectedShape) {
+					t.Errorf("expected shape %s, got %s", expectedShape, mask.Shape())
+				}
+				// Verify mask values
+				mask.ConstFlatData(func(flat any) {
+					data := flat.([]bool)
+					// Check first 3 rows (valid batch elements)
+					for batch := 0; batch < 3; batch++ {
+						for seq := 0; seq < 16; seq++ {
+							idx := batch*16 + seq
+							expected := seq < 10 // true for seq < 10, false for seq >= 10
+							if data[idx] != expected {
+								t.Errorf("mask[%d,%d]: expected %v, got %v", batch, seq, expected, data[idx])
+							}
+						}
+					}
+					// Check 4th row (padded batch element) - all false
+					for seq := 0; seq < 16; seq++ {
+						idx := 3*16 + seq
+						if data[idx] != false {
+							t.Errorf("mask[3,%d]: expected false (padded batch), got %v", seq, data[idx])
+						}
+					}
+				})
+			},
+		},
+		{
+			name: "No padding needed - shapes equal",
+			originalShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 4, 8),
+			},
+			bucketedShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 4, 8),
+			},
+			wantErr: false,
+			validateMask: func(t *testing.T, masks []*tensors.Tensor) {
+				mask := masks[0]
+				// All values should be true when no padding
+				mask.ConstFlatData(func(flat any) {
+					data := flat.([]bool)
+					for i, val := range data {
+						if !val {
+							t.Errorf("mask[%d]: expected true (no padding), got false", i)
+						}
+					}
+				})
+			},
+		},
+		{
+			name: "Multiple tensors with different padding",
+			originalShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 3, 10),
+				shapes.Make(dtypes.Int32, 5, 7),
+			},
+			bucketedShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 4, 16),
+				shapes.Make(dtypes.Int32, 8, 8),
+			},
+			wantErr: false,
+			validateMask: func(t *testing.T, masks []*tensors.Tensor) {
+				if len(masks) != 2 {
+					t.Fatalf("expected 2 masks, got %d", len(masks))
+				}
+				// Check first mask shape
+				if !masks[0].Shape().Equal(shapes.Make(dtypes.Bool, 4, 16)) {
+					t.Errorf("mask 0: unexpected shape %s", masks[0].Shape())
+				}
+				// Check second mask shape
+				if !masks[1].Shape().Equal(shapes.Make(dtypes.Bool, 8, 8)) {
+					t.Errorf("mask 1: unexpected shape %s", masks[1].Shape())
+				}
+			},
+		},
+		{
+			name: "3D tensor",
+			originalShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 2, 3, 4),
+			},
+			bucketedShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 4, 4, 8),
+			},
+			wantErr: false,
+			validateMask: func(t *testing.T, masks []*tensors.Tensor) {
+				mask := masks[0]
+				expectedShape := shapes.Make(dtypes.Bool, 4, 4, 8)
+				if !mask.Shape().Equal(expectedShape) {
+					t.Errorf("expected shape %s, got %s", expectedShape, mask.Shape())
+				}
+				// Sample checks: valid region should be true
+				mask.ConstFlatData(func(flat any) {
+					data := flat.([]bool)
+					// Check position [0,0,0] - should be true
+					if !data[0] {
+						t.Error("position [0,0,0] should be true")
+					}
+					// Check position [1,2,3] - should be true (within 2,3,4)
+					idx := 1*4*8 + 2*8 + 3
+					if !data[idx] {
+						t.Error("position [1,2,3] should be true")
+					}
+					// Check position [3,0,0] - should be false (batch padding)
+					idx = 3*4*8
+					if data[idx] {
+						t.Error("position [3,0,0] should be false (padded batch)")
+					}
+				})
+			},
+		},
+		{
+			name: "Error: shape count mismatch",
+			originalShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 3, 10),
+			},
+			bucketedShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 4, 16),
+				shapes.Make(dtypes.Float32, 8, 8),
+			},
+			wantErr: true,
+		},
+		{
+			name: "Error: rank mismatch",
+			originalShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 3, 10),
+			},
+			bucketedShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 4, 16, 1),
+			},
+			wantErr: true,
+		},
+		{
+			name: "Error: bucketed smaller than original",
+			originalShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 10, 10),
+			},
+			bucketedShapes: []shapes.Shape{
+				shapes.Make(dtypes.Float32, 8, 10),
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			masks, err := GeneratePadMask(tt.originalShapes, tt.bucketedShapes)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("GeneratePadMask failed: %v", err)
+			}
+
+			if tt.validateMask != nil {
+				tt.validateMask(t, masks)
+			}
+		})
+	}
+}
+
+func TestBucketTensorsWithMask(t *testing.T) {
+	config := BucketConfig{
+		Strategy:     bucketing.Pow2(),
+		DynamicAxes:  []int{0, 1},
+		PadValue:     float32(-1.0),
+		GenerateMask: true,
+	}
+
+	// Create test tensor with shape [3, 5]
+	tensor := tensors.FromShape(shapes.Make(dtypes.Float32, 3, 5))
+	tensor.MustMutableFlatData(func(flat any) {
+		data := flat.([]float32)
+		for i := range data {
+			data[i] = float32(i)
+		}
+	})
+
+	// Apply bucketing with mask generation
+	bucketed, info, err := BucketTensors(config, tensor)
+	if err != nil {
+		t.Fatalf("BucketTensors failed: %v", err)
+	}
+
+	// Verify bucketed tensor shape [3,5] -> [4,8]
+	expectedShape := shapes.Make(dtypes.Float32, 4, 8)
+	if !bucketed[0].Shape().Equal(expectedShape) {
+		t.Errorf("expected shape %s, got %s", expectedShape, bucketed[0].Shape())
+	}
+
+	// Verify mask was generated
+	if info.PaddingMasks == nil {
+		t.Fatal("PaddingMasks should not be nil when GenerateMask=true")
+	}
+	if len(info.PaddingMasks) != 1 {
+		t.Fatalf("expected 1 mask, got %d", len(info.PaddingMasks))
+	}
+
+	// Verify mask shape matches bucketed shape
+	mask := info.PaddingMasks[0]
+	expectedMaskShape := shapes.Make(dtypes.Bool, 4, 8)
+	if !mask.Shape().Equal(expectedMaskShape) {
+		t.Errorf("expected mask shape %s, got %s", expectedMaskShape, mask.Shape())
+	}
+
+	// Verify mask values
+	mask.ConstFlatData(func(flat any) {
+		data := flat.([]bool)
+		// Check valid region [0:3, 0:5] - should be true
+		for batch := 0; batch < 3; batch++ {
+			for seq := 0; seq < 5; seq++ {
+				idx := batch*8 + seq
+				if !data[idx] {
+					t.Errorf("mask[%d,%d]: expected true (valid region), got false", batch, seq)
+				}
+			}
+		}
+		// Check sequence padding [0:3, 5:8] - should be false
+		for batch := 0; batch < 3; batch++ {
+			for seq := 5; seq < 8; seq++ {
+				idx := batch*8 + seq
+				if data[idx] {
+					t.Errorf("mask[%d,%d]: expected false (sequence padding), got true", batch, seq)
+				}
+			}
+		}
+		// Check batch padding [3:4, :] - should be false
+		for seq := 0; seq < 8; seq++ {
+			idx := 3*8 + seq
+			if data[idx] {
+				t.Errorf("mask[3,%d]: expected false (batch padding), got true", seq)
+			}
+		}
+	})
+}
+
+func TestBucketTensorsWithoutMask(t *testing.T) {
+	config := BucketConfig{
+		Strategy:     bucketing.Pow2(),
+		DynamicAxes:  []int{0},
+		GenerateMask: false, // explicitly false
+	}
+
+	tensor := tensors.FromShape(shapes.Make(dtypes.Float32, 3, 5))
+
+	bucketed, info, err := BucketTensors(config, tensor)
+	if err != nil {
+		t.Fatalf("BucketTensors failed: %v", err)
+	}
+
+	// Verify mask was NOT generated
+	if info.PaddingMasks != nil {
+		t.Error("PaddingMasks should be nil when GenerateMask=false")
+	}
+
+	// Bucketing should still work
+	if len(bucketed) != 1 {
+		t.Errorf("expected 1 bucketed tensor, got %d", len(bucketed))
+	}
+}
