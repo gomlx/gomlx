@@ -502,3 +502,67 @@ func TestPatternCachingMultiDimensional(t *testing.T) {
 		assert.Equal(t, 2, exec.CacheSize(), "cache size with different feature dimensions")
 	})
 }
+
+// TestDynamicShapesSupport tests that backends with SupportsDynamicShapes=true
+// create graphs for each unique shape without bucketing (unless explicitly enabled).
+func TestDynamicShapesSupport(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+
+	sum := func(x *Node) *Node {
+		return ReduceAllSum(x)
+	}
+
+	t.Run("DynamicBackendWithoutExplicitBucketing", func(t *testing.T) {
+		// For backends that support dynamic shapes (like SimpleGo),
+		// we should create graphs for each unique shape without bucketing
+		exec := MustNewExec(backend, sum).SetMaxCache(10)
+
+		// Each different batch size creates a new graph (no bucketing)
+		for batchSize := 1; batchSize <= 5; batchSize++ {
+			input := xslices.SliceWithValue(batchSize, float32(1))
+			result := exec.MustExec(input)[0]
+			want := float32(batchSize)
+			got := tensors.ToScalar[float32](result)
+			assert.Equal(t, want, got, "sum with batch size %d", batchSize)
+		}
+
+		// For dynamic backends (SimpleGo), should have 5 cached graphs
+		// (one per unique shape, no bucketing)
+		if backend.Capabilities().SupportsDynamicShapes {
+			assert.Equal(t, 5, exec.CacheSize(), "cache size for dynamic backend without bucketing")
+		}
+	})
+
+	t.Run("DynamicBackendWithExplicitBucketing", func(t *testing.T) {
+		// Even for backends that support dynamic shapes,
+		// if the user explicitly enables bucketing, we should respect that
+		exec := MustNewExec(backend, sum).WithPow2Bucketing().SetMaxCache(10)
+
+		// Test batch sizes that should share graphs:
+		// 1 -> 1, 2 -> 2, 3-4 -> 4, 5-8 -> 8
+		for batchSize := 1; batchSize <= 8; batchSize++ {
+			input := xslices.SliceWithValue(batchSize, float32(1))
+			result := exec.MustExec(input)[0]
+			want := float32(batchSize)
+			got := tensors.ToScalar[float32](result)
+			assert.Equal(t, want, got, "sum with batch size %d", batchSize)
+		}
+
+		// Should have only 4 cached graphs even for dynamic backends
+		// when explicit bucketing is enabled: 1, 2, 4, 8
+		assert.Equal(t, 4, exec.CacheSize(), "cache size with explicit Pow2 bucketing")
+	})
+
+	t.Run("CapabilityFlag", func(t *testing.T) {
+		// Test that the capability flag is correctly reported
+		// SimpleGo should report SupportsDynamicShapes = true
+		caps := backend.Capabilities()
+		t.Logf("Backend %s SupportsDynamicShapes: %v", backend.Name(), caps.SupportsDynamicShapes)
+
+		// If this is SimpleGo backend, verify it reports dynamic shapes support
+		if backend.Name() == "simplego" {
+			assert.True(t, caps.SupportsDynamicShapes,
+				"SimpleGo backend should support dynamic shapes")
+		}
+	})
+}

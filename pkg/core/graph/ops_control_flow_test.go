@@ -23,7 +23,7 @@ func TestWhileCountTo10(t *testing.T) {
 	require.NotNil(t, backend, "XLA backend required for While loop tests")
 
 	// Test a loop that computes: counter from 0 to 10
-	exec := NewExec(backend, func(g *Graph) *Node {
+	exec := MustNewExec(backend, func(g *Graph) *Node {
 		counter := Scalar(g, dtypes.Int32, int32(0))
 
 		fn := g.StableHLOFunction()
@@ -70,7 +70,7 @@ func TestWhileMultipleStates(t *testing.T) {
 	require.NotNil(t, backend, "XLA backend required for While loop tests")
 
 	// Test a loop that computes: counter from 0 to 5, sum = 1+2+3+4+5 = 15
-	exec := NewExec(backend, func(g *Graph) *Node {
+	exec := MustNewExec(backend, func(g *Graph) *Node {
 		counter := Scalar(g, dtypes.Int32, int32(0))
 		sum := Scalar(g, dtypes.Int32, int32(0))
 
@@ -112,7 +112,7 @@ func TestWhileTensorState(t *testing.T) {
 	require.NotNil(t, backend, "XLA backend required for While loop tests")
 
 	// Test incrementing a vector [0, 0, 0] to [5, 5, 5]
-	exec := NewExec(backend, func(g *Graph) *Node {
+	exec := MustNewExec(backend, func(g *Graph) *Node {
 		vec := Const(g, []int32{0, 0, 0})
 
 		fn := g.StableHLOFunction()
