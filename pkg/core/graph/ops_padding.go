@@ -18,7 +18,7 @@ package graph
 
 import (
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/bucketing"
+	"github.com/gomlx/gomlx/pkg/core/tensors/bucketing"
 )
 
 // PadToBucketSize pads the tensor along specified axes to match the bucketed size.

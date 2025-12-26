@@ -21,7 +21,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/gomlx/gomlx/pkg/core/bucketing"
+	"github.com/gomlx/gomlx/pkg/core/tensors/bucketing"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"

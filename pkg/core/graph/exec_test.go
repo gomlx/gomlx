@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/bucketing"
+	"github.com/gomlx/gomlx/pkg/core/tensors/bucketing"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
