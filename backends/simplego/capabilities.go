@@ -144,6 +144,7 @@ var Capabilities = backends.Capabilities{
 		dtypes.Uint16:   true,
 		dtypes.Uint32:   true,
 		dtypes.Uint64:   true,
+		dtypes.Float16:  true,
 		dtypes.Float32:  true,
 		dtypes.Float64:  true,
 		dtypes.BFloat16: true,
