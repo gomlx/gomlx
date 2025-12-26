@@ -163,9 +163,10 @@ func (b ExponentialStrategy) Bucket(dim int) int {
 	logBase := math.Log(b.Base)
 	power := math.Ceil(math.Log(float64(dim)) / logBase)
 	result := int(math.Ceil(math.Pow(b.Base, power)))
-	// Ensure we never return less than the input
-	if result < dim {
-		result = int(math.Ceil(math.Pow(b.Base, power+1)))
+	// Ensure we never return less than the input (handles edge cases with low bases)
+	for result < dim {
+		power++
+		result = int(math.Ceil(math.Pow(b.Base, power)))
 	}
 	return result
 }
