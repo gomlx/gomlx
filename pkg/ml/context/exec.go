@@ -25,6 +25,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/bucketing"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -729,6 +730,55 @@ func (e *Exec) Name() string {
 func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 	e.exec.SetMaxCache(maxCacheSize)
 	return e
+}
+
+// SetPatternCaching enables pattern-based caching with the given bucketing strategy.
+// When enabled, shapes are bucketed before cache lookup, reducing the number of
+// unique compiled graphs for variable batch/sequence sizes.
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) SetPatternCaching(strategy bucketing.Strategy) *Exec {
+	e.exec.SetPatternCaching(strategy)
+	return e
+}
+
+// SetDynamicAxes specifies which axes should be treated as dynamic for pattern caching.
+// Default is []int{0} (first axis only, typically batch dimension).
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) SetDynamicAxes(axes []int) *Exec {
+	e.exec.SetDynamicAxes(axes)
+	return e
+}
+
+// WithPow2Bucketing returns an Exec configured for power-of-2 bucketing on the batch axis.
+// This is useful for models with variable batch sizes.
+// Example: batch sizes 1,2,3,4,5 → compiled for sizes 1,2,4,4,8
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithPow2Bucketing() *Exec {
+	e.exec.WithPow2Bucketing()
+	return e
+}
+
+// WithLinearBucketing returns an Exec configured for linear bucketing with the given step.
+// Example with step=8: batch sizes 1-8 → compiled for size 8
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithLinearBucketing(step int) *Exec {
+	e.exec.WithLinearBucketing(step)
+	return e
+}
+
+// WithExponentialBucketing returns an Exec configured for exponential bucketing with the given base.
+// This provides finer granularity than Pow2 for smaller dimensions.
+// Example with base=1.4: batch sizes follow powers of 1.4 (1,2,3,4,6,8,11,15,21,29,...)
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithExponentialBucketing(base float64) *Exec {
+	e.exec.WithExponentialBucketing(base)
+	return e
+}
+
+// CacheSize returns the current number of cached graphs.
+// This is useful for testing and debugging.
+func (e *Exec) CacheSize() int {
+	return e.exec.CacheSize()
 }
 
 // Context returns the associated Context object, usually created
