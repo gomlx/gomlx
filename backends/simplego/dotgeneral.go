@@ -252,11 +252,11 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	case largeProblemSize:
 		err = execDotGeneralLarge(backend, lhs, rhs, params, output)
 	case smallProblemSize:
-		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
+		err = execDotGeneralSmallNormalized(backend, lhs, rhs, params, output)
 	case checkProblemSize:
 		output2 := backend.getBufferForShape(outputShape)
 		output2.Zeros()
-		err = execDotGeneralSmall(backend, lhs, rhs, params, output2)
+		err = execDotGeneralSmallNormalized(backend, lhs, rhs, params, output2)
 		if err != nil {
 			return nil, err
 		}
