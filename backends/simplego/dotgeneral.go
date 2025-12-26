@@ -218,13 +218,18 @@ func dgFindSizes(shape shapes.Shape, contractingAxes, batchAxes []int) (batchSiz
 	return
 }
 
-type dotGeneralProblemSizeType int
+// dotGeneralExecutionPath indicates which execution strategy to use for DotGeneral.
+type dotGeneralExecutionPath int
 
 const (
-	unknownProblemSize dotGeneralProblemSizeType = iota
-	smallProblemSize
-	largeProblemSize
-	checkProblemSize
+	// autoSelectPath lets execDotGeneral choose based on matrix size
+	autoSelectPath dotGeneralExecutionPath = iota
+	// normalizedPath forces use of the normalized transpose path
+	normalizedPath
+	// blockedPath forces use of execDotGeneralBlocked (cache-tiled algorithm)
+	blockedPath
+	// checkPath runs both paths and compares outputs (for debugging)
+	checkPath
 )
 
 // execDotGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
@@ -264,19 +269,19 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
 	blockSize := blockDim * blockDim
 	var err error
-	problemSize := smallProblemSize
+	execPath := normalizedPath
 	if crossesSize > 16*blockSize {
-		problemSize = largeProblemSize
+		execPath = blockedPath
 	}
-	if backend.dotGeneralForceProblemSize != unknownProblemSize {
-		problemSize = backend.dotGeneralForceProblemSize
+	if backend.dotGeneralForceExecutionPath != autoSelectPath {
+		execPath = backend.dotGeneralForceExecutionPath
 	}
-	switch problemSize {
-	case largeProblemSize:
+	switch execPath {
+	case blockedPath:
 		err = execDotGeneralBlocked(backend, lhs, rhs, params, output)
-	case smallProblemSize:
+	case normalizedPath:
 		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
-	case checkProblemSize:
+	case checkPath:
 		output2 := backend.getBufferForShape(outputShape)
 		output2.Zeros()
 		err = execDotGeneralSmall(backend, lhs, rhs, params, output2)
@@ -290,7 +295,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
 		backend.putBuffer(output2)
 	default:
-		err = errors.Errorf("unknown problem size %d for DotGeneral", problemSize)
+		err = errors.Errorf("unknown execution path %d for DotGeneral", execPath)
 	}
 	if err != nil {
 		backend.putBuffer(output)

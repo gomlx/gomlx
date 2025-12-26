@@ -360,25 +360,25 @@ func TestDotGeneral_Exec(t *testing.T) {
 		return
 	}
 
-	// Reset dotGeneralForceProblemSize at exit.
+	// Reset dotGeneralForceExecutionPath at exit.
 	defer func() {
-		goBackend.dotGeneralForceProblemSize = unknownProblemSize
+		goBackend.dotGeneralForceExecutionPath = autoSelectPath
 	}()
 
-	for _, problemSize := range []dotGeneralProblemSizeType{smallProblemSize, largeProblemSize, checkProblemSize} {
-		// Force a specific problem size: so we exercise the corresponding algorithm irrespective of the actual size:
+	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, checkPath} {
+		// Force a specific execution path: so we exercise the corresponding algorithm irrespective of the actual size:
 		// it may not be efficient for the size, but it should be correct in all sizes.
-		goBackend.dotGeneralForceProblemSize = problemSize
+		goBackend.dotGeneralForceExecutionPath = execPath
 		var testName string
-		switch problemSize {
-		case smallProblemSize:
-			testName = "DotGeneral_small_version"
-		case largeProblemSize:
-			testName = "DotGeneral_large_version"
-		case checkProblemSize:
+		switch execPath {
+		case normalizedPath:
+			testName = "DotGeneral_normalized_version"
+		case blockedPath:
+			testName = "DotGeneral_blocked_version"
+		case checkPath:
 			testName = "DotGeneral_check_version"
 		default:
-			t.Fatalf("Unknown version for problem size: %d", problemSize)
+			t.Fatalf("Unknown execution path: %d", execPath)
 		}
 		t.Run(testName, func(t *testing.T) {
 			// Larger example, with multiple axes.
