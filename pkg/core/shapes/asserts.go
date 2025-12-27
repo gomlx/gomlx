@@ -24,7 +24,10 @@ import (
 )
 
 // UncheckedAxis can be used in CheckDims or AssertDims functions for an axis
-// whose dimension doesn't matter.
+// whose dimension doesn't matter. This is semantically similar to symbolic
+// dimensions (DimBatch, DimSeqLen, etc.) but used specifically in assertions.
+// Note: -1 is used both as UncheckedAxis in assertions and as DimBatch for
+// symbolic batch dimensions - these are different uses that happen to align.
 const UncheckedAxis = int(-1)
 
 // HasShape is an interface for objects that have an associated Shape.
