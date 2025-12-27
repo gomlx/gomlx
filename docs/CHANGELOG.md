@@ -4,6 +4,7 @@
 
 * Package `simplego`:
   * Added `Float16` support (thx @timkaye11) 
+  * Added dedup of computation nodes (aka. "common subexpression elimination" CSE) (thx @timkaye11)
 * New package `bucketing`:
   * Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
   
