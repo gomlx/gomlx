@@ -30,7 +30,9 @@ var (
 )
 
 func init() {
-	for _, dtype := range []dtypes.DType{dtypes.F32, dtypes.F64, dtypes.BFloat16} {
+	// Initialize block dimensions for all numeric types that support DotGeneral.
+	// This includes float types and integer types (used by quantized models).
+	for _, dtype := range NumericDTypes {
 		sizePerElem := dtype.Size()
 		if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
 			// Because for BFloat16/Float16 we store the results in float32 and only later convert to
@@ -45,6 +47,10 @@ func init() {
 			log2Dim++
 		}
 		log2Dim--
+		// Ensure minimum block dimension of 8 (log2Dim >= 3) for the kernel's loop unrolling.
+		if log2Dim < 3 {
+			log2Dim = 3
+		}
 		DotGeneralTargetBlockLog2Dim[dtype] = log2Dim
 	}
 }
@@ -310,41 +316,14 @@ func dgCopyOutputBlockToFlatBFloat16(blockSource, output *Buffer) {
 	}
 }
 
-func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
-	dtype := lhs.shape.DType
+// execDotGeneralBlocked is a wrapper that calls the unified blocked execution path.
+func execDotGeneralBlocked(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
+	return execDotGeneralBlockedUnified(backend, lhs, rhs, nil, nil, params, output)
+}
 
-	// Get block buffers.
-	blkLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
-	blockDim := 1 << blkLog2Dim
-	lhsBlocks := backend.getBuffer(dtype, params.lhsBlockedShape.Size())
-	lhsBlocks.shape = params.lhsBlockedShape
-	lhsBlocks.Zeros()
-	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
-	copyFlatToBlock(lhs, lhsBlocks, params.lhsContractingAxes, params.lhsBatchAxes,
-		params.batchSize, params.lhsCrossSize, params.contractingSize, blkLog2Dim)
-
-	rhsBlocks := backend.getBuffer(dtype, params.rhsBlockedShape.Size())
-	rhsBlocks.shape = params.rhsBlockedShape
-	rhsBlocks.Zeros()
-	copyFlatToBlock(rhs, rhsBlocks, params.rhsContractingAxes, params.rhsBatchAxes,
-		params.batchSize, params.rhsCrossSize, params.contractingSize, blkLog2Dim)
-
-	outputBlocks := backend.getBuffer(params.outputBlockedShape.DType, params.outputBlockedShape.Size())
-	outputBlocks.shape = params.outputBlockedShape
-	outputBlocks.Zeros()
-
-	var recursive dotGeneralRecursiveData
-	recursive.backend = backend
-
-	// Get the matrix multiplication kernel for a block.
-	kernelBuilder := dotGeneralKernelDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, blockDim int) kernelFuncType)
-	recursive.kernelFn = kernelBuilder(lhsBlocks, rhsBlocks, outputBlocks, blockDim)
-
-	// Straight block multiplying (as opposed to recursive)
-	recursive.lhsCrossBlocks = lhsBlocks.shape.Dimensions[1]
-	recursive.rhsCrossBlocks = rhsBlocks.shape.Dimensions[1]
-	recursive.contractBlocks = lhsBlocks.shape.Dimensions[2]
-
+// runDotGeneralBatchLoop runs the batch loop for blocked DotGeneral execution.
+// It handles parallelism across batch examples and within each example.
+func runDotGeneralBatchLoop(backend *Backend, recursive *dotGeneralRecursiveData, batchSize int, rhsHasBatch bool) {
 	// Decide on intra-example parallelism: up to which depth we should use a new worker.
 	maxParallelism := backend.workers.MaxParallelism()
 	recursive.maxDepthParallelization = -1 // Disable sub-batch parallelization.
@@ -352,8 +331,8 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 		if backend.workers.IsUnlimited() {
 			recursive.maxDepthParallelization = 8 // At most 2^8 = 256 goroutines are spawned.
 		} else {
+			// Use log2 of parallelism to reduce goroutine overhead.
 			recursive.maxDepthParallelization = log2int(maxParallelism)
-			recursive.maxDepthParallelization += 1 // We want to allow slightly more fine-grained parallelization.
 		}
 	}
 
@@ -361,19 +340,23 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 	useBatchParallelism := backend.workers.IsEnabled()
 	batchSplitSize := 1
 	if useBatchParallelism && !backend.workers.IsUnlimited() {
-		batchSplitSize = (params.batchSize + maxParallelism - 1) / maxParallelism
+		batchSplitSize = (batchSize + maxParallelism - 1) / maxParallelism
 	}
 
 	// Loop over examples in the batch:
 	wg := xsync.NewDynamicWaitGroup() // Control workers started.
-	for outerBatchIdx := 0; outerBatchIdx < params.batchSize; outerBatchIdx += batchSplitSize {
+	for outerBatchIdx := 0; outerBatchIdx < batchSize; outerBatchIdx += batchSplitSize {
 		wg.Add(1)
 		batchSplitFn := func() {
-			for innerBatchIdx := outerBatchIdx; innerBatchIdx < min(outerBatchIdx+batchSplitSize, params.batchSize); innerBatchIdx++ {
+			for innerBatchIdx := outerBatchIdx; innerBatchIdx < min(outerBatchIdx+batchSplitSize, batchSize); innerBatchIdx++ {
 				var batchRecursive dotGeneralRecursiveData
-				batchRecursive = recursive
+				batchRecursive = *recursive
 				batchRecursive.lhsBatchOffset = innerBatchIdx * recursive.lhsCrossBlocks * recursive.contractBlocks
-				batchRecursive.rhsBatchOffset = innerBatchIdx * recursive.rhsCrossBlocks * recursive.contractBlocks
+				if rhsHasBatch {
+					batchRecursive.rhsBatchOffset = innerBatchIdx * recursive.rhsCrossBlocks * recursive.contractBlocks
+				} else {
+					batchRecursive.rhsBatchOffset = 0 // RHS is shared across all batches
+				}
 				batchRecursive.outputBatchOffset = innerBatchIdx * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
 				wg.Add(1)
 				batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, wg)
@@ -387,16 +370,6 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 		}
 	}
 	wg.Wait()
-
-	// Free the block buffers.
-	backend.putBuffer(lhsBlocks)
-	backend.putBuffer(rhsBlocks)
-
-	// Copy over outputBlocks to the normal output.
-	copyOutputFn := dotGeneralOutputBlockToFlatDTypeMap.Get(dtype).(func(blockedSource, output *Buffer))
-	copyOutputFn(outputBlocks, output)
-	backend.putBuffer(outputBlocks)
-	return nil
 }
 
 // Information passed along the recursive splitting of the dot-general.
