@@ -13,7 +13,7 @@ type mockComparableData struct {
 	value int
 }
 
-func (m *mockComparableData) Equal(other NodeDataComparable) bool {
+func (m *mockComparableData) Equal(other nodeDataComparable) bool {
 	return m.value == other.(*mockComparableData).value
 }
 
@@ -85,11 +85,11 @@ func TestMakeNodeDedupKey(t *testing.T) {
 			if key.inputCount != tt.wantCount {
 				t.Errorf("inputCount = %v, want %v", key.inputCount, tt.wantCount)
 			}
-			if tt.wantHasPtr && key.firstInput == 0 {
-				t.Error("firstInput should be non-zero")
+			if tt.wantHasPtr && key.firstInput == nil {
+				t.Error("firstInput should be non-nil")
 			}
-			if !tt.wantHasPtr && key.firstInput != 0 {
-				t.Error("firstInput should be zero")
+			if !tt.wantHasPtr && key.firstInput != nil {
+				t.Error("firstInput should be nil")
 			}
 		})
 	}
