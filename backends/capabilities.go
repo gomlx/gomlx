@@ -11,6 +11,14 @@ type Capabilities struct {
 	// DTypes list the data types supported by a backend.
 	// If not listed, it's assumed to be false, hence not supported.
 	DTypes map[dtypes.DType]bool
+
+	// SupportsDynamicShapes indicates whether the backend can execute graphs
+	// with different input shapes without requiring expensive recompilation.
+	// When true, Exec can skip pattern caching and bucketing since creating
+	// new graphs is cheap. This is typically true for interpreted backends
+	// like SimpleGo, but false for compiled backends like XLA.
+	// Default is false (zero value).
+	SupportsDynamicShapes bool
 }
 
 // Clone makes a deep copy of the Capabilities.
@@ -24,5 +32,6 @@ func (c Capabilities) Clone() Capabilities {
 	for k, v := range c.DTypes {
 		c2.DTypes[k] = v
 	}
+	c2.SupportsDynamicShapes = c.SupportsDynamicShapes
 	return c2
 }

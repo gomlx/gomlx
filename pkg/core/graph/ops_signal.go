@@ -196,3 +196,148 @@ func inverseRealFftVJP(node, v *Node) []*Node {
 	vjp := Mul(RealFFT(v), normalizedMask)
 	return []*Node{vjp}
 }
+
+// nextPowerOf2 returns the smallest power of 2 that is >= n.
+// Returns 1 if n <= 0.
+func nextPowerOf2(n int) int {
+	if n <= 0 {
+		return 1
+	}
+	n--
+	n |= n >> 1
+	n |= n >> 2
+	n |= n >> 4
+	n |= n >> 8
+	n |= n >> 16
+	return n + 1
+}
+
+// FFTWithPadding performs FFT after padding the input to the next power of 2.
+// This is useful when the input size is not a power of 2, as FFT is most
+// efficient for power-of-2 sizes.
+//
+// The FFT is performed on the last dimension by default.
+//
+// Parameters:
+//   - operand: Complex input tensor (last dimension is the FFT dimension by default)
+//   - fftAxis: Optional axis along which to perform FFT (default: -1, last axis).
+//     Only one axis can be specified. If provided, must be a valid axis index.
+//
+// Returns the FFT result. Note: output size will be the padded size, not the original size.
+// The last dimension will be rounded up to the next power of 2.
+//
+// Example:
+//
+//	// Input shape [batch, 100] -> padded to [batch, 128] -> FFT -> output [batch, 128]
+//	x := ... // shape [32, 100], complex type
+//	fft := FFTWithPadding(x)  // shape [32, 128]
+//
+// For "dynamic" FFT with variable-length inputs, combine this with pattern caching:
+//
+//	exec := MustNewExec(backend, func(signal *Node) *Node {
+//	    return FFTWithPadding(signal)
+//	}).WithPow2Bucketing()  // Cache by power-of-2 sizes
+//
+// Different signal lengths will reuse cached FFT graphs for the same power-of-2 size.
+func FFTWithPadding(operand *Node, fftAxis ...int) *Node {
+	axis := -1
+	if len(fftAxis) > 0 {
+		if len(fftAxis) > 1 {
+			Panicf("FFTWithPadding: only one fftAxis can be specified, got %d", len(fftAxis))
+		}
+		axis = fftAxis[0]
+	}
+
+	shape := operand.Shape()
+
+	// Normalize axis
+	if axis < 0 {
+		axis = shape.Rank() + axis
+	}
+	if axis < 0 || axis >= shape.Rank() {
+		Panicf("FFTWithPadding: axis %d out of range for rank %d tensor", axis, shape.Rank())
+	}
+
+	currentDim := shape.Dimensions[axis]
+	if currentDim <= 0 {
+		// Symbolic dimension - can't pad, just do FFT
+		return FFT(operand)
+	}
+
+	// Pad to next power of 2
+	paddedDim := nextPowerOf2(currentDim)
+	if paddedDim > currentDim {
+		g := operand.Graph()
+		// Create padding config - only pad the FFT axis at the end
+		padConfigs := make([]backends.PadAxis, shape.Rank())
+		padConfigs[axis] = backends.PadAxis{End: paddedDim - currentDim}
+		operand = Pad(operand, Const(g, complex64(0)), padConfigs...)
+	}
+
+	return FFT(operand, paddedDim)
+}
+
+// RealFFTWithPadding performs real FFT after padding the input to the next power of 2.
+// This is useful when the input size is not a power of 2, as FFT is most
+// efficient for power-of-2 sizes.
+//
+// The FFT is performed on the last dimension by default.
+//
+// Parameters:
+//   - operand: Real (float) input tensor (last dimension is the FFT dimension by default)
+//   - fftAxis: Optional axis along which to perform FFT (default: -1, last axis).
+//     Only one axis can be specified. If provided, must be a valid axis index.
+//
+// Returns the FFT result with output shape [..., paddedDim/2 + 1] where paddedDim
+// is the next power of 2 >= input dimension.
+//
+// Example:
+//
+//	// Input shape [batch, 100] -> padded to [batch, 128] -> RealFFT -> output [batch, 65]
+//	x := ... // shape [32, 100], float type
+//	fft := RealFFTWithPadding(x)  // shape [32, 65]
+//
+// For "dynamic" FFT with variable-length inputs, combine this with pattern caching:
+//
+//	exec := MustNewExec(backend, func(signal *Node) *Node {
+//	    return RealFFTWithPadding(signal)
+//	}).WithPow2Bucketing()  // Cache by power-of-2 sizes
+//
+// Different signal lengths will reuse cached FFT graphs for the same power-of-2 size.
+func RealFFTWithPadding(operand *Node, fftAxis ...int) *Node {
+	axis := -1
+	if len(fftAxis) > 0 {
+		if len(fftAxis) > 1 {
+			Panicf("RealFFTWithPadding: only one fftAxis can be specified, got %d", len(fftAxis))
+		}
+		axis = fftAxis[0]
+	}
+
+	shape := operand.Shape()
+
+	// Normalize axis
+	if axis < 0 {
+		axis = shape.Rank() + axis
+	}
+	if axis < 0 || axis >= shape.Rank() {
+		Panicf("RealFFTWithPadding: axis %d out of range for rank %d tensor", axis, shape.Rank())
+	}
+
+	currentDim := shape.Dimensions[axis]
+	if currentDim <= 0 {
+		// Symbolic dimension - can't pad, just do FFT
+		return RealFFT(operand)
+	}
+
+	// Pad to next power of 2
+	paddedDim := nextPowerOf2(currentDim)
+	if paddedDim > currentDim {
+		g := operand.Graph()
+		// Create padding config - only pad the FFT axis at the end
+		padConfigs := make([]backends.PadAxis, shape.Rank())
+		padConfigs[axis] = backends.PadAxis{End: paddedDim - currentDim}
+		operand = Pad(operand, Const(g, float32(0)), padConfigs...)
+	}
+
+	return RealFFT(operand, paddedDim)
+}

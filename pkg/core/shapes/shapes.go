@@ -78,6 +78,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+// DynamicDim is the conventional value used to mark a dimension as dynamic.
+// Any negative value indicates a dynamic dimension, but -1 is the standard.
+const DynamicDim = -1
+
 // Shape represents the shape of either a Tensor or the expected shape
 // of the value from a computation node.
 //
@@ -87,7 +91,15 @@ type Shape struct {
 	DType dtypes.DType
 
 	// Dimensions is the size of each axis. Its length determines the rank.
+	// Positive values are static dimensions, negative values are dynamic/symbolic dimensions.
 	Dimensions []int
+
+	// AxisNames optionally provides names for each axis (e.g., "batch", "seq", "embed").
+	// When non-nil, it must have the same length as Dimensions.
+	// Named axes enable better error messages and runtime shape validation.
+	// Use WithAxisName or WithAxisNames to set axis names.
+	AxisNames []string `json:"axis_names,omitempty"`
+
 	// TupleShapes is used if this Shape represents a tuple of elements.
 	// Internal use only.
 	TupleShapes []Shape `json:"tuple,omitempty"` // Shapes of the tuple, if this is a tuple.
@@ -103,6 +115,12 @@ func Make(dtype dtypes.DType, dimensions ...int) Shape {
 		}
 	}
 	return s
+}
+
+// MakeDynamic creates a shape with symbolic dimensions.
+// Negative dimension values represent symbolic dimensions.
+func MakeDynamic(dtype dtypes.DType, dims ...int) Shape {
+	return Shape{DType: dtype, Dimensions: slices.Clone(dims)}
 }
 
 // Scalar returns a scalar Shape for the given type.
@@ -155,7 +173,27 @@ func (s Shape) String() string {
 	if s.Rank() == 0 {
 		return fmt.Sprintf("(%s)", s.DType)
 	}
-	return fmt.Sprintf("(%s)%v", s.DType, s.Dimensions)
+	// Format dimensions with optional axis names
+	dimStrs := make([]string, s.Rank())
+	for i, dim := range s.Dimensions {
+		name := s.AxisName(i)
+		if dim < 0 {
+			// Dynamic dimension
+			if name != "" {
+				dimStrs[i] = fmt.Sprintf("?%s", name)
+			} else {
+				dimStrs[i] = "?"
+			}
+		} else {
+			// Static dimension
+			if name != "" {
+				dimStrs[i] = fmt.Sprintf("%d:%s", dim, name)
+			} else {
+				dimStrs[i] = fmt.Sprintf("%d", dim)
+			}
+		}
+	}
+	return fmt.Sprintf("(%s)[%s]", s.DType, strings.Join(dimStrs, ", "))
 }
 
 // Size returns the number of elements (not bytes) for this shape. It's the product of all dimensions.
@@ -180,7 +218,94 @@ func (s Shape) IsZeroSize() bool {
 		}
 	}
 	return false
+}
 
+// HasSymbolicDim returns whether any of the dimensions is symbolic (negative).
+// Symbolic dimensions are used for dynamic shapes and pattern matching.
+func (s Shape) HasSymbolicDim() bool {
+	for _, d := range s.Dimensions {
+		if d < 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// IsDynamicAxis returns whether the dimension at the given axis is dynamic (negative).
+// Supports negative axis indexing (e.g., -1 for last axis).
+func (s Shape) IsDynamicAxis(axis int) bool {
+	if axis < 0 {
+		axis = s.Rank() + axis
+	}
+	if axis < 0 || axis >= s.Rank() {
+		return false
+	}
+	return s.Dimensions[axis] < 0
+}
+
+// AxisName returns the name of the axis, or empty string if not named.
+// Supports negative axis indexing (e.g., -1 for last axis).
+func (s Shape) AxisName(axis int) string {
+	if axis < 0 {
+		axis = s.Rank() + axis
+	}
+	if s.AxisNames == nil || axis < 0 || axis >= len(s.AxisNames) {
+		return ""
+	}
+	return s.AxisNames[axis]
+}
+
+// WithAxisName returns a copy of the shape with the specified axis named.
+// Supports negative axis indexing (e.g., -1 for last axis).
+func (s Shape) WithAxisName(axis int, name string) Shape {
+	clone := s.Clone()
+	if axis < 0 {
+		axis = clone.Rank() + axis
+	}
+	if axis < 0 || axis >= clone.Rank() {
+		return clone
+	}
+	if clone.AxisNames == nil {
+		clone.AxisNames = make([]string, clone.Rank())
+	}
+	clone.AxisNames[axis] = name
+	return clone
+}
+
+// WithAxisNames returns a copy of the shape with all axis names set.
+// The names slice must have the same length as Dimensions, or be nil.
+func (s Shape) WithAxisNames(names ...string) Shape {
+	clone := s.Clone()
+	if len(names) == 0 {
+		clone.AxisNames = nil
+		return clone
+	}
+	if len(names) != clone.Rank() {
+		panic(errors.Errorf("WithAxisNames: got %d names but shape has rank %d", len(names), clone.Rank()))
+	}
+	clone.AxisNames = slices.Clone(names)
+	return clone
+}
+
+// WithDynamicAxis returns a copy of the shape with the specified axis marked as dynamic.
+// Optionally sets an axis name if provided.
+// Supports negative axis indexing (e.g., -1 for last axis).
+func (s Shape) WithDynamicAxis(axis int, name string) Shape {
+	clone := s.Clone()
+	if axis < 0 {
+		axis = clone.Rank() + axis
+	}
+	if axis < 0 || axis >= clone.Rank() {
+		return clone
+	}
+	clone.Dimensions[axis] = DynamicDim
+	if name != "" {
+		if clone.AxisNames == nil {
+			clone.AxisNames = make([]string, clone.Rank())
+		}
+		clone.AxisNames[axis] = name
+	}
+	return clone
 }
 
 // Memory returns the memory used to store an array of the given shape, the same as the size in bytes.
@@ -230,6 +355,39 @@ func (s Shape) Equal(s2 Shape) bool {
 	return slices.Equal(s.Dimensions, s2.Dimensions)
 }
 
+// Matches checks if this concrete shape matches a pattern with symbolic dims.
+// Symbolic dimensions (negative values) in the pattern match any value.
+// This is useful for pattern matching with dynamic shapes.
+func (s Shape) Matches(pattern Shape) bool {
+	if s.DType != pattern.DType {
+		return false
+	}
+	if s.IsTuple() {
+		if pattern.TupleSize() != s.TupleSize() {
+			return false
+		}
+		for ii, element := range s.TupleShapes {
+			if !element.Matches(pattern.TupleShapes[ii]) {
+				return false
+			}
+		}
+		return true
+	}
+	if s.Rank() != pattern.Rank() {
+		return false
+	}
+	for i, d := range s.Dimensions {
+		pd := pattern.Dimensions[i]
+		if pd < 0 {
+			continue // Symbolic dimension matches anything
+		}
+		if d != pd {
+			return false
+		}
+	}
+	return true
+}
+
 // EqualDimensions compares two shapes for equality of dimensions. Dtypes can be different.
 func (s Shape) EqualDimensions(s2 Shape) bool {
 	if s.IsTuple() {
@@ -260,6 +418,7 @@ func (s Shape) EqualDimensions(s2 Shape) bool {
 func (s Shape) Clone() (s2 Shape) {
 	s2.DType = s.DType
 	s2.Dimensions = slices.Clone(s.Dimensions)
+	s2.AxisNames = slices.Clone(s.AxisNames)
 	if s.TupleSize() > 0 {
 		s2.TupleShapes = make([]Shape, 0, len(s.TupleShapes))
 		for _, subShape := range s.TupleShapes {
@@ -267,6 +426,53 @@ func (s Shape) Clone() (s2 Shape) {
 		}
 	}
 	return
+}
+
+// WithDynamicBatch returns a copy of the shape with the first dimension
+// marked as dynamic with the name "batch".
+func (s Shape) WithDynamicBatch() Shape {
+	return s.WithDynamicAxis(0, "batch")
+}
+
+// MergeAxisNames merges axis names from two shapes.
+// If both names are the same, the name is preserved.
+// If names differ, the result is empty string.
+// This is used during shape inference for binary operations.
+func MergeAxisNames(a, b []string, rank int) []string {
+	if a == nil && b == nil {
+		return nil
+	}
+	result := make([]string, rank)
+	for i := 0; i < rank; i++ {
+		nameA := ""
+		nameB := ""
+		if a != nil && i < len(a) {
+			nameA = a[i]
+		}
+		if b != nil && i < len(b) {
+			nameB = b[i]
+		}
+		if nameA == nameB {
+			result[i] = nameA
+		} else if nameA == "" {
+			result[i] = nameB
+		} else if nameB == "" {
+			result[i] = nameA
+		}
+		// If both non-empty and different, result[i] stays ""
+	}
+	// Check if all empty - if so, return nil
+	allEmpty := true
+	for _, n := range result {
+		if n != "" {
+			allEmpty = false
+			break
+		}
+	}
+	if allEmpty {
+		return nil
+	}
+	return result
 }
 
 // GobSerialize shape in binary format.
@@ -346,6 +552,44 @@ func ConcatenateDimensions(s1, s2 Shape) (shape Shape) {
 	copy(shape.Dimensions, s1.Dimensions)
 	copy(shape.Dimensions[s1.Rank():], s2.Dimensions)
 	return
+}
+
+// Concretize replaces symbolic dimensions in this shape with concrete values from another shape.
+// This is useful for gradient computation where we need concrete shapes but want to preserve
+// the pattern of the original shape.
+//
+// Example:
+//
+//	symbolic := MakeDynamic(Float32, -1, 3, 4)  // symbolic shape with dynamic batch
+//	concrete := Make(Float32, 10, 3, 4)         // concrete shape
+//	result := symbolic.Concretize(concrete)     // result: (Float32)[10, 3, 4]
+func (s Shape) Concretize(concrete Shape) Shape {
+	if s.DType != concrete.DType {
+		return s // Can't concretize if dtypes don't match
+	}
+	if s.IsTuple() {
+		if !concrete.IsTuple() || s.TupleSize() != concrete.TupleSize() {
+			return s
+		}
+		clone := s.Clone()
+		for ii := range clone.TupleShapes {
+			clone.TupleShapes[ii] = clone.TupleShapes[ii].Concretize(concrete.TupleShapes[ii])
+		}
+		return clone
+	}
+	if s.Rank() != concrete.Rank() {
+		return s // Can't concretize if ranks don't match
+	}
+
+	// Clone the shape and replace symbolic dimensions with concrete ones
+	result := s.Clone()
+	for i := range result.Dimensions {
+		if result.Dimensions[i] < 0 {
+			// This is a symbolic dimension, replace with concrete value
+			result.Dimensions[i] = concrete.Dimensions[i]
+		}
+	}
+	return result
 }
 
 // FromAnyValue attempts to convert a Go "any" value to its expected shape.

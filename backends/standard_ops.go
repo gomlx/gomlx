@@ -629,4 +629,31 @@ type StandardOps interface {
 	//
 	// If either condition, onTrue or onFalse is a scalar, it will be broadcasted to the shape of the other operands.
 	Where(condition, onTrue, onFalse Op) (Op, error)
+
+	// GetDimensionSize returns a scalar i32 containing the size of the specified dimension.
+	// The dimension parameter is the axis index to query the size of.
+	// The result is a scalar tensor of type int32.
+	GetDimensionSize(operand Op, dimension int) (Op, error)
+
+	// DynamicBroadcastInDim broadcasts operand to the shape specified by outputDimensions (provided as a tensor).
+	// The outputDimensions must be a 1D integer tensor containing the target shape dimensions.
+	// The broadcastDimensions slice specifies which axes of the output correspond to which axes of the input.
+	// This is similar to BroadcastInDim but uses a runtime-computed shape instead of a static shape.
+	DynamicBroadcastInDim(operand Op, outputDimensions Op, broadcastDimensions []int) (Op, error)
+
+	// DynamicReshape reshapes operand to the shape specified by outputShape tensor.
+	// The outputShape must be a 1D integer tensor containing the target shape dimensions.
+	// This is similar to Reshape but uses a runtime-computed shape instead of static dimensions.
+	DynamicReshape(operand Op, outputShape Op) (Op, error)
+
+	// While executes bodyFn repeatedly while condFn returns true.
+	// Both condFn and bodyFn must be closure functions that are child functions of the current graph.
+	// condFn: takes state nodes as inputs, returns a scalar bool output
+	// bodyFn: takes state nodes as inputs, returns updated state nodes as outputs
+	// initialStates: initial values for the loop state
+	// Returns: final state values after the loop terminates
+	//
+	// The closures are NOT Go function types, but rather references to sub-computations.
+	// They should be created using the backend-specific closure mechanism.
+	While(condFn, bodyFn any, initialStates ...Op) ([]Op, error)
 }

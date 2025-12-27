@@ -213,7 +213,8 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			}
 			//vjp.SetLoggedf("\tVJP for %s / input #%d VJP --> to be backprop to %s", node, ii, input)
 			combinedShape := combineOutputShape(outputShape, input.Shape())
-			if !vjp.Shape().Equal(combinedShape) {
+			// Use shapesCompatibleForGradient instead of Equal to allow symbolic dimensions
+			if !shapesCompatibleForGradient(vjp.Shape(), combinedShape) {
 				if node.Trace() != nil {
 					_, _ = fmt.Fprintf(os.Stderr, "Trace for node in error: %s\n%+v\n\n", node, node.Trace())
 				}
@@ -439,7 +440,15 @@ func zeroVJP(node, v *Node, outputShape shapes.Shape) []*Node {
 // It is a reduce-sum of the broadcast dimensions.
 func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 	_ = validateBuildingGraphFromInputs(node, input, v)
-	if input.Shape().Equal(node.Shape()) {
+
+	// Get the input shape, concretizing symbolic dimensions using v's concrete shape
+	inputShape := input.Shape()
+	if inputShape.HasSymbolicDim() {
+		// When input has symbolic dimensions, use concrete dimensions from v
+		inputShape = inputShape.Concretize(v.Shape())
+	}
+
+	if inputShape.Equal(node.Shape()) || inputShape.Equal(v.Shape()) {
 		// If there was no broadcast involved, VJP is the identity.
 		return v
 	} else if input.IsScalar() {
@@ -448,22 +457,22 @@ func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 	}
 
 	// Reduce-sum on the dimensions it was broadcast during the sum. Search for all dimensions that
-	// are 1 in the input, and > 1 in the output.
+	// are 1 in the input, and > 1 in the adjoint v (which has concrete dimensions).
 	var reduceDims []int
-	for ii, dim := range input.Shape().Dimensions {
+	for ii, dim := range inputShape.Dimensions {
 		if dim == 1 && v.Shape().Dimensions[ii] > 1 {
 			reduceDims = append(reduceDims, ii)
 		}
 	}
 	reduced := ReduceSum(v, reduceDims...)
 	// Since ReduceSum collapsed those reduced dimensions of now size 1, we need to reshape it back to the
-	// original input format.
+	// original input format. Use the concretized shape for the reshape.
 	var vjp *Node
 	err := TryCatch[error](func() {
-		vjp = ReshapeWithShape(reduced, input.Shape())
+		vjp = ReshapeWithShape(reduced, inputShape)
 	})
 	if err != nil {
-		err = errors.WithMessagef(err, "AutoGrad: calculating the AccumulatedVJP of a broadcast: v.Shape()=%s, input.Shape()=%s", v.Shape(), input.Shape())
+		err = errors.WithMessagef(err, "AutoGrad: calculating the AccumulatedVJP of a broadcast: v.Shape()=%s, input.Shape()=%s (concretized=%s)", v.Shape(), input.Shape(), inputShape)
 		panic(err)
 	}
 	return vjp
@@ -696,16 +705,25 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 		reducedDims = xslices.Iota(0, x.Rank())
 	}
 
+	// Use captured input shape to preserve symbolic dimensions.
+	// This is important when the input has symbolic dimensions that should be preserved in gradients.
+	inputShape := node.GetCapturedInputShape(0)
+	if !inputShape.Ok() {
+		// Fallback to current shape if not captured (backward compatibility)
+		inputShape = x.Shape()
+	}
+
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1.
-	newShape := x.Shape().Clone()
+	newShape := inputShape.Clone()
 	for _, dim := range reducedDims {
 		newShape.Dimensions[dim] = 1
 	}
 	expandedV := ReshapeWithShape(v, newShape)
 
 	// Now all we need it to broadcast the v on the reduced dimensions.
-	vjp := BroadcastToShape(expandedV, x.Shape())
+	// BroadcastToShape now supports symbolic dimensions via BroadcastToDims.
+	vjp := BroadcastToShape(expandedV, inputShape)
 	return []*Node{vjp}
 }
 
@@ -719,7 +737,15 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 		// Reduced all dims, reconstruct those.
 		reducedDims = xslices.Iota(0, x.Rank())
 	}
-	newShape := x.Shape().Clone()
+
+	// Use captured input shape to preserve symbolic dimensions
+	inputShape := node.GetCapturedInputShape(0)
+	if !inputShape.Ok() {
+		// Fallback to current shape if not captured
+		inputShape = x.Shape()
+	}
+
+	newShape := inputShape.Clone()
 	for _, dim := range reducedDims {
 		newShape.Dimensions[dim] = 1
 	}
@@ -732,7 +758,7 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1 and then broadcasting.
 	expandedV := ReshapeWithShape(v, newShape)
-	expandedV = BroadcastToShape(expandedV, x.Shape())
+	expandedV = BroadcastToShape(expandedV, inputShape)
 
 	// vjp is only propagated to the elements at the max value.
 	vjp := Mul(expandedV, maxIndicatorAtInput)
@@ -749,7 +775,15 @@ func reduceMinVJP(node, v *Node, _ shapes.Shape) []*Node {
 		// Reduced all dims, reconstruct those.
 		reducedDims = xslices.Iota(0, x.Rank())
 	}
-	newShape := x.Shape().Clone()
+
+	// Use captured input shape to preserve symbolic dimensions
+	inputShape := node.GetCapturedInputShape(0)
+	if !inputShape.Ok() {
+		// Fallback to current shape if not captured
+		inputShape = x.Shape()
+	}
+
+	newShape := inputShape.Clone()
 	for _, dim := range reducedDims {
 		newShape.Dimensions[dim] = 1
 	}
@@ -762,7 +796,7 @@ func reduceMinVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1 and then broadcasting.
 	expandedV := ReshapeWithShape(v, newShape)
-	expandedV = BroadcastToShape(expandedV, x.Shape())
+	expandedV = BroadcastToShape(expandedV, inputShape)
 
 	// vjp is only propagated to the elements at the min value.
 	vjp := Mul(expandedV, minIndicatorAtInput)
@@ -821,8 +855,16 @@ func sliceVJP(node, v *Node, _ shapes.Shape) []*Node {
 	g := node.Graph()
 	params := node.inputs.(*nodeInputsSlice)
 	x := params.x
-	rank := x.Rank()
-	dimensions := x.Shape().Dimensions
+
+	// Use captured input shape to handle symbolic dimensions
+	inputShape := node.GetCapturedInputShape(0)
+	if !inputShape.Ok() {
+		// Fallback to current shape if not captured
+		inputShape = x.Shape()
+	}
+
+	rank := inputShape.Rank()
+	dimensions := inputShape.Dimensions
 
 	// The incoming adjoint v must be applied only where the slice came from, and
 	// the new adjoint will have zero, filled with padding (`Pad()`) elsewhere.
@@ -852,7 +894,14 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// TODO: check that values are compatible with Gather() and return an error if not.
 	input := node.inputNodes[0]
 	indices := node.inputNodes[1]
-	inputShape := input.Shape()
+
+	// Use captured input shape to handle symbolic dimensions
+	inputShape := node.GetCapturedInputShape(0)
+	if !inputShape.Ok() {
+		// Fallback to current shape if not captured
+		inputShape = input.Shape()
+	}
+
 	params := node.inputs.(*nodeInputsGather)
 
 	// Gather() case: params.sliceSizes is 1 for the first dimensions, and full in the last. Plus the initial
@@ -874,7 +923,8 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 			}
 		} else {
 			// For non-collapsed axes, we expect the slice to be the full dimension.
-			if params.sliceSizes[axis] != inputSize {
+			// Handle symbolic dimensions: if either is symbolic, we can't check
+			if inputSize >= 0 && params.sliceSizes[axis] != inputSize {
 				isSimpleGather = false
 				break
 			}
@@ -955,19 +1005,32 @@ func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
 	x := params.x
 	shape := params.outputShape
 
-	if x.Rank() != len(params.broadcastAxes) {
+	// Use captured input shape to handle symbolic dimensions
+	inputShape := node.GetCapturedInputShape(0)
+	if !inputShape.Ok() {
+		// Fallback to current shape if not captured
+		inputShape = x.Shape()
+	}
+
+	if inputShape.Rank() != len(params.broadcastAxes) {
 		Panicf("there must be a broadcastAxes for each axis in x, instead got x.Shape()=%s and broadcastAxes=%v",
-			x.Shape(), params.broadcastAxes)
+			inputShape, params.broadcastAxes)
 	}
 
 	axesPreserved := make([]bool, shape.Rank())
 	for inputAxis, outputAxis := range params.broadcastAxes {
-		if x.Shape().Dimensions[inputAxis] == shape.Dimensions[outputAxis] {
+		inputDim := inputShape.Dimensions[inputAxis]
+		outputDim := shape.Dimensions[outputAxis]
+		// Handle symbolic dimensions: if either is symbolic, we can't determine if they match
+		if inputDim < 0 || outputDim < 0 {
+			// Assume symbolic dimensions are preserved (conservative approach)
+			axesPreserved[outputAxis] = true
+		} else if inputDim == outputDim {
 			axesPreserved[outputAxis] = true
 		} else {
-			if x.Shape().Dimensions[inputAxis] != 1 {
+			if inputDim != 1 {
 				Panicf("unexpected broadcast from shape %s to shape %s at axis %d -- don't know how to calculate gradient",
-					x.Shape(), shape, inputAxis)
+					inputShape, shape, inputAxis)
 			}
 		}
 	}
@@ -981,9 +1044,9 @@ func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
 	if len(axesToReduce) > 0 {
 		gradWrtX = ReduceSum(v, axesToReduce...)
 	}
-	if gradWrtX.Rank() != x.Rank() {
+	if gradWrtX.Rank() != inputShape.Rank() {
 		// X had some axes of dimension 1 that were reduced, we simply reshape it here.
-		gradWrtX = Reshape(gradWrtX, x.Shape().Dimensions...)
+		gradWrtX = Reshape(gradWrtX, inputShape.Dimensions...)
 	}
 	return []*Node{gradWrtX}
 }
@@ -1011,4 +1074,27 @@ func dynamicUpdateSliceVJP(node, v *Node, _ shapes.Shape) []*Node {
 	vjps[0] = vjpOperand
 	vjps[1] = vjpUpdate
 	return vjps
+}
+
+// shapesCompatibleForGradient checks if two shapes are compatible for gradient computation.
+// This allows symbolic dimensions (negative values) to match any concrete value.
+// This is more flexible than Equal() for gradient validation with dynamic shapes.
+func shapesCompatibleForGradient(actual, expected shapes.Shape) bool {
+	if actual.DType != expected.DType {
+		return false
+	}
+	if actual.Rank() != expected.Rank() {
+		return false
+	}
+	for i := range actual.Dimensions {
+		a, e := actual.Dimensions[i], expected.Dimensions[i]
+		// Symbolic dimensions (negative) match anything
+		if a < 0 || e < 0 {
+			continue
+		}
+		if a != e {
+			return false
+		}
+	}
+	return true
 }

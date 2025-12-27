@@ -215,3 +215,7 @@ func (b Builder) AllReduce(inputs []backends.Op, reduceOp backends.ReduceOpType,
 	[]backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeAllReduce)
 }
+
+func (b Builder) While(condFn, bodyFn any, initialStates ...backends.Op) ([]backends.Op, error) {
+	return nil, b.baseErrFn(backends.OpTypeWhile)
+}

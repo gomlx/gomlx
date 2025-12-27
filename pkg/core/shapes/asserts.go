@@ -24,7 +24,10 @@ import (
 )
 
 // UncheckedAxis can be used in CheckDims or AssertDims functions for an axis
-// whose dimension doesn't matter.
+// whose dimension doesn't matter. This is semantically similar to dynamic
+// dimensions (DynamicDim) but used specifically in assertions.
+// Note: -1 is used both as UncheckedAxis in assertions and as DynamicDim for
+// dynamic dimensions - these are different uses that happen to align.
 const UncheckedAxis = int(-1)
 
 // HasShape is an interface for objects that have an associated Shape.
@@ -43,8 +46,15 @@ func (s Shape) CheckDims(dimensions ...int) error {
 		return errors.Errorf("shape (%s) has incompatible rank %d (wanted %d)", s, s.Rank(), len(dimensions))
 	}
 	for ii, wantDim := range dimensions {
-		if wantDim != -1 && s.Dimensions[ii] != wantDim {
-			return errors.Errorf("shape (%s) axis %d has dimension %d, wanted %d (shape wanted=%v)", s, ii, s.Dimensions[ii], wantDim, dimensions)
+		actualDim := s.Dimensions[ii]
+		// Skip check if either dimension is symbolic/dynamic (negative)
+		// Note: -1 is the traditional wildcard, but we also handle other negative values (symbolic dims like -3)
+		if wantDim < 0 || actualDim < 0 {
+			continue
+		}
+		// Both dimensions are concrete, check they match
+		if actualDim != wantDim {
+			return errors.Errorf("shape (%s) axis %d has dimension %d, wanted %d (shape wanted=%v)", s, ii, actualDim, wantDim, dimensions)
 		}
 	}
 	return nil

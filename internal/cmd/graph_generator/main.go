@@ -45,7 +45,10 @@ var (
 		"Sign",
 		"ShiftLeft", "ShiftRightArithmetic", "ShiftRightLogical",
 		"Slice",
-		"Transpose", "Where")
+		"Transpose", "Where",
+
+		// Dynamic shape operations:
+		"GetDimensionSize", "DynamicBroadcastInDim", "DynamicReshape")
 
 	// methodsNotGenerated but for which there is still a NodeType.
 	methodsNotGenerated = sets.MakeWith(

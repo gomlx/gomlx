@@ -27,6 +27,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/tensors/bucketing"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -98,6 +99,7 @@ type SideParamsFn func(graph *Graph, inputBuffers []backends.Buffer, donate []bo
 // It is called after the Exec method, with the list of messages and corresponding values of the evaluated nodes.
 type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, nodes []NodeId)
 
+
 // Exec creates and executes computation graphs as needed based on the inputs shapes.
 //
 // It simplifies the process of executing a graph building
@@ -164,6 +166,9 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 // The usual solution is to use shapes with dimensions in a power scale (for instance, powers of 2) and
 // use padding and masking of tensors for unused slices of the input.
 //
+// Alternatively, you can use pattern caching with bucketing strategies to reduce the number of
+// unique compiled graphs. See SetPatternCaching, WithPow2Bucketing, and WithLinearBucketing.
+//
 // For safety concerns, there are a maximum number of different instantiations of the graph.
 // It can be set or disabled with SetMaxCache.
 //
@@ -217,6 +222,13 @@ type Exec struct {
 	// Protects cache structure.
 	cacheMu sync.Mutex
 	cache   []*execGraphCacheEntry
+
+	// Pattern caching options
+	enablePatternCaching bool
+	bucketingStrategy    bucketing.Strategy
+	patternAxes          []int            // Which axes to treat as dynamic (default: first axis only)
+	patternAxesPerInput  map[int][]int    // Per-input dynamic axes (input index -> axes)
+	padValue             any              // Custom pad value (default: nil means zero)
 }
 
 // execGraphCacheEntry: no hashing, just a simple list. This is faster
@@ -445,6 +457,77 @@ func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 	defer e.cacheMu.Unlock()
 	e.maxCacheSize = maxCacheSize
 	return e
+}
+
+// SetPatternCaching enables pattern-based caching with the given bucketing strategy.
+// When enabled, shapes are bucketed before cache lookup, reducing the number of
+// unique compiled graphs for variable batch/sequence sizes.
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) SetPatternCaching(strategy bucketing.Strategy) *Exec {
+	e.enablePatternCaching = true
+	e.bucketingStrategy = strategy
+	return e
+}
+
+// SetDynamicAxes specifies which axes should be treated as dynamic for pattern caching.
+// Default is []int{0} (first axis only, typically batch dimension).
+// This applies to all inputs. For per-input control, use SetDynamicAxesPerInput.
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) SetDynamicAxes(axes []int) *Exec {
+	e.patternAxes = axes
+	return e
+}
+
+// SetDynamicAxesPerInput specifies which axes should be treated as dynamic for pattern caching
+// on a per-input basis. The map keys are input indices, and values are the axes for that input.
+// For inputs not specified in the map, the default axes from SetDynamicAxes are used.
+// Example: SetDynamicAxesPerInput(map[int][]int{0: {0, 1}, 1: {0}}) will bucket axes 0 and 1
+// for the first input, and only axis 0 for the second input.
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) SetDynamicAxesPerInput(axesMap map[int][]int) *Exec {
+	e.patternAxesPerInput = axesMap
+	return e
+}
+
+// SetPadValue sets the value used to pad tensors when bucketing results in larger shapes.
+// By default (when value is nil), padding uses zero values for the tensor's dtype.
+// The value must be type-compatible with the tensor being padded.
+// Example: SetPadValue(float32(-1.0)) will pad with -1.0 instead of 0.0 for float32 tensors.
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) SetPadValue(value any) *Exec {
+	e.padValue = value
+	return e
+}
+
+// WithPow2Bucketing returns an Exec configured for power-of-2 bucketing on the batch axis.
+// This is useful for models with variable batch sizes.
+// Example: batch sizes 1,2,3,4,5 → compiled for sizes 1,2,4,4,8
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithPow2Bucketing() *Exec {
+	return e.SetPatternCaching(bucketing.Pow2()).SetDynamicAxes([]int{0})
+}
+
+// WithLinearBucketing returns an Exec configured for linear bucketing with the given step.
+// Example with step=8: batch sizes 1-8 → compiled for size 8
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithLinearBucketing(step int) *Exec {
+	return e.SetPatternCaching(bucketing.Linear(step)).SetDynamicAxes([]int{0})
+}
+
+// WithExponentialBucketing returns an Exec configured for exponential bucketing with the given base.
+// This provides finer granularity than Pow2 for smaller dimensions.
+// Example with base=1.4: batch sizes follow powers of 1.4 (1,2,3,4,6,8,11,15,21,29,...)
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithExponentialBucketing(base float64) *Exec {
+	return e.SetPatternCaching(bucketing.Exponential(base)).SetDynamicAxes([]int{0})
+}
+
+// CacheSize returns the current number of cached graphs.
+// This is useful for testing and debugging.
+func (e *Exec) CacheSize() int {
+	e.cacheMu.Lock()
+	defer e.cacheMu.Unlock()
+	return len(e.cache)
 }
 
 // SetSideParamsHook configures a function to be called just before executing a graph, so it can set extra parameters.
@@ -700,8 +783,9 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 
 	// Get or build the graph.
 	var entry *execGraphCacheEntry
+	var needsPadding bool
 	err = exceptions.TryCatch[error](func() {
-		entry = e.findOrCreateGraph(argsShapes)
+		entry, needsPadding = e.findOrCreateGraph(argsShapes)
 	})
 	if err != nil {
 		return nil, nil, err
@@ -714,6 +798,14 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 				"the cache size with executable.SetMaxCache()", e.maxCacheSize, e.Name())
 	}
 	g := entry.graph
+
+	// If pattern caching matched a graph with different (bucketed) shapes, pad the inputs
+	if needsPadding {
+		argsAsBuffers, err = e.padBuffersToShapes(argsAsBuffers, argsShapes, entry.argsShapes, defaultDevice)
+		if err != nil {
+			return nil, nil, errors.WithMessagef(err, "failed to pad inputs for pattern-cached graph %q", g.Name())
+		}
+	}
 
 	// Now that the graph is created, we know the exact number of parameters: if the graph building function created
 	// new graph.Parameter, we may need to include those in our argsAsBuffer and argsDonate accordingly.
@@ -957,27 +1049,258 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 	return entry
 }
 
+// applyBucketing applies the bucketing strategy to dynamic axes.
+func (e *Exec) applyBucketing(argsShapes []shapes.Shape) []shapes.Shape {
+	result := make([]shapes.Shape, len(argsShapes))
+	defaultDynamicAxes := e.patternAxes
+	if len(defaultDynamicAxes) == 0 {
+		defaultDynamicAxes = []int{0} // Default: first axis
+	}
+
+	for i, shape := range argsShapes {
+		result[i] = shape.Clone()
+
+		// Check for per-input axes first, fall back to default
+		dynamicAxes := defaultDynamicAxes
+		if e.patternAxesPerInput != nil {
+			if perInputAxes, ok := e.patternAxesPerInput[i]; ok {
+				dynamicAxes = perInputAxes
+			}
+		}
+
+		for _, axis := range dynamicAxes {
+			adjustedAxis := axis
+			if adjustedAxis < 0 {
+				adjustedAxis = shape.Rank() + adjustedAxis
+			}
+			if adjustedAxis >= 0 && adjustedAxis < shape.Rank() {
+				result[i].Dimensions[adjustedAxis] = e.bucketingStrategy.Bucket(shape.Dimensions[adjustedAxis])
+			}
+		}
+	}
+	return result
+}
+
+// padBuffersToShapes pads the input buffers to match the target shapes.
+// This is used when pattern caching finds a graph compiled for bucketed shapes,
+// but the actual inputs are smaller.
+func (e *Exec) padBuffersToShapes(
+	buffers []backends.Buffer,
+	originalShapes []shapes.Shape,
+	targetShapes []shapes.Shape,
+	defaultDevice backends.DeviceNum,
+) ([]backends.Buffer, error) {
+	result := make([]backends.Buffer, len(buffers))
+	for i, buf := range buffers {
+		if originalShapes[i].Equal(targetShapes[i]) {
+			// No padding needed
+			result[i] = buf
+			continue
+		}
+
+		// Need to pad: create a new tensor with target shape and copy original data
+		paddedTensor, err := e.padBuffer(buf, originalShapes[i], targetShapes[i], defaultDevice)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "failed to pad buffer %d", i)
+		}
+		result[i] = paddedTensor
+	}
+	return result, nil
+}
+
+// padBuffer pads a single buffer from originalShape to targetShape.
+func (e *Exec) padBuffer(
+	buf backends.Buffer,
+	originalShape shapes.Shape,
+	targetShape shapes.Shape,
+	defaultDevice backends.DeviceNum,
+) (backends.Buffer, error) {
+	// Create tensor from buffer to access the data
+	originalTensor, err := tensors.FromBuffer(e.backend, buf)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to create tensor from buffer")
+	}
+
+	// Create a new tensor with target shape
+	paddedTensor := tensors.FromShape(targetShape)
+
+	// Initialize with pad value if configured
+	if e.padValue != nil {
+		err = initTensorWithValue(paddedTensor, e.padValue)
+		if err != nil {
+			return nil, errors.WithMessage(err, "failed to initialize padded tensor with custom value")
+		}
+	}
+
+	// Copy original data to padded tensor
+	// The padding is always at the end of each axis
+	err = copyTensorData(originalTensor, paddedTensor, originalShape)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to copy tensor data")
+	}
+
+	// Convert padded tensor to buffer
+	paddedBuffer, err := paddedTensor.DonateBuffer(e.backend, defaultDevice)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to create buffer from padded tensor")
+	}
+
+	return paddedBuffer, nil
+}
+
+// copyTensorData copies data from src to dst tensor, assuming dst is larger or equal in all dimensions.
+func copyTensorData(src, dst *tensors.Tensor, srcShape shapes.Shape) error {
+	// For simple 1D case or when shapes only differ in first dimension
+	// Copy element by element respecting the original shape
+	var copyErr error
+	dst.MustMutableFlatData(func(dstFlat any) {
+		src.ConstFlatData(func(srcFlat any) {
+			// Copy srcFlat to the beginning of dstFlat
+			switch srcData := srcFlat.(type) {
+			case []float32:
+				copy(dstFlat.([]float32), srcData)
+			case []float64:
+				copy(dstFlat.([]float64), srcData)
+			case []int32:
+				copy(dstFlat.([]int32), srcData)
+			case []int64:
+				copy(dstFlat.([]int64), srcData)
+			case []uint8:
+				copy(dstFlat.([]uint8), srcData)
+			case []bool:
+				copy(dstFlat.([]bool), srcData)
+			default:
+				// For other types, use reflection or panic
+				copyErr = errors.Errorf("unsupported tensor dtype for padding: %T", srcFlat)
+			}
+		})
+	})
+	return copyErr
+}
+
+// initTensorWithValue initializes all elements of a tensor with the given value.
+func initTensorWithValue(t *tensors.Tensor, value any) error {
+	var initErr error
+	t.MustMutableFlatData(func(flat any) {
+		switch data := flat.(type) {
+		case []float32:
+			v, ok := value.(float32)
+			if !ok {
+				initErr = errors.Errorf("pad value type %T does not match tensor type float32", value)
+				return
+			}
+			for i := range data {
+				data[i] = v
+			}
+		case []float64:
+			v, ok := value.(float64)
+			if !ok {
+				initErr = errors.Errorf("pad value type %T does not match tensor type float64", value)
+				return
+			}
+			for i := range data {
+				data[i] = v
+			}
+		case []int32:
+			v, ok := value.(int32)
+			if !ok {
+				initErr = errors.Errorf("pad value type %T does not match tensor type int32", value)
+				return
+			}
+			for i := range data {
+				data[i] = v
+			}
+		case []int64:
+			v, ok := value.(int64)
+			if !ok {
+				initErr = errors.Errorf("pad value type %T does not match tensor type int64", value)
+				return
+			}
+			for i := range data {
+				data[i] = v
+			}
+		case []uint8:
+			v, ok := value.(uint8)
+			if !ok {
+				initErr = errors.Errorf("pad value type %T does not match tensor type uint8", value)
+				return
+			}
+			for i := range data {
+				data[i] = v
+			}
+		case []bool:
+			v, ok := value.(bool)
+			if !ok {
+				initErr = errors.Errorf("pad value type %T does not match tensor type bool", value)
+				return
+			}
+			for i := range data {
+				data[i] = v
+			}
+		default:
+			initErr = errors.Errorf("unsupported tensor dtype for padding initialization: %T", flat)
+		}
+	})
+	return initErr
+}
+
 // findOrCreateGraph returns the graph for the given arguments shapes: either from cache or by creating a new one.
 // if no cache entry exists.
-func (e *Exec) findOrCreateGraph(argsShapes []shapes.Shape) *execGraphCacheEntry {
+// The second return value indicates whether padding is needed (true if pattern match but not exact match).
+func (e *Exec) findOrCreateGraph(argsShapes []shapes.Shape) (*execGraphCacheEntry, bool) {
 	e.cacheMu.Lock()
 	defer e.cacheMu.Unlock()
 
-LoopCache:
+	// Fast path: exact match (existing logic)
 	for _, entry := range e.cache {
 		if len(argsShapes) != len(entry.argsShapes) {
 			continue
 		}
+		exactMatch := true
 		for ii, shape := range argsShapes {
 			if !shape.Equal(entry.argsShapes[ii]) {
-				continue LoopCache
+				exactMatch = false
+				break
 			}
 		}
-		return entry
+		if exactMatch {
+			return entry, false // exact match, no padding needed
+		}
 	}
 
-	// No graph in cache, create a new one.
-	return e.createAndCacheGraph(argsShapes)
+	// Pattern caching path: bucket shapes and try pattern match
+	// Skip bucketing if backend supports dynamic shapes AND pattern caching is not explicitly enabled.
+	// When SupportsDynamicShapes is true, graph creation is cheap (e.g., SimpleGo), so we don't
+	// need bucketing to reduce compilations - we can just create graphs for each unique shape.
+	// However, if the user explicitly enabled pattern caching, respect that (they may want
+	// bucketing for other reasons like memory efficiency).
+	shouldUseBucketing := e.enablePatternCaching && e.bucketingStrategy != nil
+	if shouldUseBucketing {
+		bucketedShapes := e.applyBucketing(argsShapes)
+
+		for _, entry := range e.cache {
+			if len(bucketedShapes) != len(entry.argsShapes) {
+				continue
+			}
+			patternMatch := true
+			for ii, shape := range bucketedShapes {
+				if !shape.Equal(entry.argsShapes[ii]) {
+					patternMatch = false
+					break
+				}
+			}
+			if patternMatch {
+				return entry, true // pattern match, padding needed
+			}
+		}
+
+		// No match found, create graph for bucketed shapes
+		// New graph matches bucketed shapes exactly, so no padding needed
+		return e.createAndCacheGraph(bucketedShapes), true
+	}
+
+	// No pattern caching, create graph for exact shapes
+	return e.createAndCacheGraph(argsShapes), false
 }
 
 // Finalize clears the cache, finalizing the compiled graphs. The Exec object shouldn't be

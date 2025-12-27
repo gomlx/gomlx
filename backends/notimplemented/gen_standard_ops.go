@@ -207,6 +207,21 @@ func (b Builder) DotGeneral(lhs backends.Op, lhsContractingAxes []int, lhsBatchA
 	return nil, b.baseErrFn(backends.OpTypeDotGeneral)
 }
 
+// DynamicBroadcastInDim broadcasts operand to the shape specified by outputDimensions (provided as a tensor).
+// The outputDimensions must be a 1D integer tensor containing the target shape dimensions.
+// The broadcastDimensions slice specifies which axes of the output correspond to which axes of the input.
+// This is similar to BroadcastInDim but uses a runtime-computed shape instead of a static shape.
+func (b Builder) DynamicBroadcastInDim(operand backends.Op, outputDimensions backends.Op, broadcastDimensions []int) (backends.Op, error) {
+	return nil, b.baseErrFn(backends.OpTypeDynamicBroadcastInDim)
+}
+
+// DynamicReshape reshapes operand to the shape specified by outputShape tensor.
+// The outputShape must be a 1D integer tensor containing the target shape dimensions.
+// This is similar to Reshape but uses a runtime-computed shape instead of static dimensions.
+func (b Builder) DynamicReshape(operand backends.Op, outputShape backends.Op) (backends.Op, error) {
+	return nil, b.baseErrFn(backends.OpTypeDynamicReshape)
+}
+
 // DynamicSlice extracts a slice from the operand at the startIndices position and the given sliceSizes.
 //
 // - operand: tensor from where to take the slice.
@@ -340,6 +355,13 @@ func (b Builder) Floor(x backends.Op) (backends.Op, error) {
 // TODO: Add batch support: operandBatchingAxes and startIndicesBatchingAxes.
 func (b Builder) Gather(operand backends.Op, startIndices backends.Op, indexVectorAxis int, offsetOutputAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeGather)
+}
+
+// GetDimensionSize returns a scalar i32 containing the size of the specified dimension.
+// The dimension parameter is the axis index to query the size of.
+// The result is a scalar tensor of type int32.
+func (b Builder) GetDimensionSize(operand backends.Op, dimension int) (backends.Op, error) {
+	return nil, b.baseErrFn(backends.OpTypeGetDimensionSize)
 }
 
 // GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.

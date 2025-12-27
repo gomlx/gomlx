@@ -13,6 +13,11 @@ import (
 
 // Capabilities of the SimpleGo backends: the set of supported operations and data types.
 var Capabilities = backends.Capabilities{
+	// SimpleGo supports dynamic shapes because graph creation is cheap (no JIT compilation).
+	// It's just building a Go execution graph, so we can create new graphs for each shape
+	// without expensive kernel compilation overhead.
+	SupportsDynamicShapes: true,
+
 	Operations: map[backends.OpType]bool{
 		// Graph inputs (leaf nodes)
 		backends.OpTypeParameter: true,

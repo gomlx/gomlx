@@ -21,6 +21,8 @@
 package lstm
 
 import (
+	"fmt"
+
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -174,6 +176,24 @@ func (l *LSTM) Done() (allHiddenStates, lastHiddenState, lastCellState *Node) {
 	sequenceSize := x.Shape().Dim(1)
 	featuresSize := l.featuresSize
 	hiddenSize := l.hiddenSize
+
+	// Check for symbolic dimensions that would cause runtime panics
+	if sequenceSize < 0 {
+		panic(fmt.Sprintf("LSTM.Done(): sequence dimension (axis 1) is symbolic (%d). "+
+			"LSTM currently requires a concrete sequence length at graph construction time. "+
+			"Please ensure the input tensor has a static sequence dimension, or use bucketing to provide a concrete value. "+
+			"Input shape: %v", sequenceSize, x.Shape()))
+	}
+	if batchSize < 0 {
+		panic(fmt.Sprintf("LSTM.Done(): batch dimension (axis 0) is symbolic (%d). "+
+			"LSTM currently requires a concrete batch size at graph construction time. "+
+			"Input shape: %v", batchSize, x.Shape()))
+	}
+	if featuresSize < 0 {
+		panic(fmt.Sprintf("LSTM.Done(): features dimension (axis 2) is symbolic (%d). "+
+			"LSTM currently requires a concrete features size at graph construction time. "+
+			"Input shape: %v", featuresSize, x.Shape()))
+	}
 	xLengths := l.xLengths
 	inputsW := l.inputsW
 	recurrentW := l.recurrentW
