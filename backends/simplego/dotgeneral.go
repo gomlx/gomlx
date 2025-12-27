@@ -214,7 +214,12 @@ const (
 	checkProblemSize
 )
 
-// execDotGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
+// execDotGeneral executes the DotGeneral operation, selecting the optimal execution path.
+//
+// Execution paths (in order of preference):
+//  1. SmallMatMul path: For small float32 matrices in contract-last order, skip transpose
+//  2. Normalized path: Transpose to [B,Cross,Contract] form for small/medium matrices
+//  3. Large (blocked) path: Cache-tiled algorithm for large matrices
 func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	params := node.data.(*dotGeneralNodeData)
@@ -223,7 +228,15 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	output := backend.getBufferForShape(outputShape)
 	output.Zeros()
 
-	// Problem size (per example of the batch):
+	// Try the direct path for small matrices in contract-last order.
+	// This skips transpose but has strided RHS access, so only beneficial for small matrices.
+	if execDotGeneralSmallMatMul(backend, lhs, rhs, params, output) {
+		return output, nil
+	}
+
+	// Select execution path based on problem size.
+	// For large matrices, the blocked (cache-tiled) algorithm is more efficient.
+	// For smaller matrices, the normalized path with simple loops is sufficient.
 	crossesSize := params.rhsCrossSize * params.lhsCrossSize
 	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
 	blockSize := blockDim * blockDim
@@ -239,11 +252,11 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	case largeProblemSize:
 		err = execDotGeneralLarge(backend, lhs, rhs, params, output)
 	case smallProblemSize:
-		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
+		err = execDotGeneralSmallNormalized(backend, lhs, rhs, params, output)
 	case checkProblemSize:
 		output2 := backend.getBufferForShape(outputShape)
 		output2.Zeros()
-		err = execDotGeneralSmall(backend, lhs, rhs, params, output2)
+		err = execDotGeneralSmallNormalized(backend, lhs, rhs, params, output2)
 		if err != nil {
 			return nil, err
 		}
