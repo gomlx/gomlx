@@ -117,16 +117,22 @@ const smallMatMulMaxRhsCrossSize = 256
 //
 // The small matmul path skips normalization/transpose but has strided RHS access.
 // It's beneficial when:
-//  1. The dtype is float32 (currently the only optimized implementation)
-//  2. The axes are already in standard matmul order
-//  3. The batch size is small (small matmul path doesn't parallelize across batches)
-//  4. Either:
+//  1. No forced execution path is set (respects dotGeneralForceProblemSize)
+//  2. The dtype is float32 (currently the only optimized implementation)
+//  3. The axes are already in standard matmul order
+//  4. The batch size is small (small matmul path doesn't parallelize across batches)
+//  5. Either:
 //     a. Single-row operation (lhsCrossSize=1) where transpose overhead dominates, OR
 //     b. Small contracting dimension (K) AND small RHS cross dimension (N), where strided
 //     access doesn't cause excessive cache misses. N matters because the RHS stride is N.
 //
 // For larger matrices or batch sizes, use execDotGeneralSmallNormalized or execDotGeneralBlocked instead.
-func useSmallMatMul(lhs, rhs *Buffer, params *dotGeneralNodeData) bool {
+func useSmallMatMul(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData) bool {
+	// If a specific execution path is forced, don't use SmallMatMul - use the standard path.
+	// This ensures testing can force the normalized or large path even for small matrices.
+	if backend.dotGeneralForceProblemSize != unknownProblemSize {
+		return false
+	}
 	// Only support float32 small matmul path for now (most common)
 	if lhs.shape.DType != dtypes.Float32 {
 		return false
@@ -176,7 +182,7 @@ func useSmallMatMul(lhs, rhs *Buffer, params *dotGeneralNodeData) bool {
 //
 // Returns true if small matmul path was used, false if caller should use another path.
 func execDotGeneralSmallMatMul(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) bool {
-	if !useSmallMatMul(lhs, rhs, params) {
+	if !useSmallMatMul(backend, lhs, rhs, params) {
 		return false
 	}
 
