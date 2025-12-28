@@ -89,7 +89,7 @@ func isMatMulOrder(lhsShape, rhsShape shapes.Shape, lhsContractingAxes, rhsContr
 // access pattern causes too many cache misses, and the normalized path (which
 // transposes RHS for sequential access) becomes faster despite the transpose overhead.
 //
-// This threshold was determined by benchmarking (BenchmarkDirectPathThreshold):
+// This threshold was determined by benchmarking (BenchmarkSmallMatMulThreshold):
 //   - For [256, K] × [K, 256]: SmallMatMul wins at K≤128, NormalizedPath wins at K≥256
 //   - Crossover point is between K=128 and K=256
 //
