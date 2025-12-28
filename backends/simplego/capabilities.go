@@ -11,9 +11,9 @@ import (
 // DotGeneral
 // ...
 
-// NumericDTypes is the list of numeric data types supported by the SimpleGo backend.
+// numericDTypes is the list of numeric data types supported by the SimpleGo backend.
 // This excludes Bool and is used for operations like DotGeneral that only work on numeric types.
-var NumericDTypes = []dtypes.DType{
+var numericDTypes = []dtypes.DType{
 	dtypes.Int8,
 	dtypes.Int16,
 	dtypes.Int32,

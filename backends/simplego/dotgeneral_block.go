@@ -29,8 +29,8 @@ type blockForDotGeneralData struct {
 	batchAxes       []int
 }
 
-// Equal implements NodeDataComparable for de-duplication.
-func (d *blockForDotGeneralData) Equal(other NodeDataComparable) bool {
+// Equal implements nodeDataComparable for de-duplication.
+func (d *blockForDotGeneralData) Equal(other nodeDataComparable) bool {
 	o, ok := other.(*blockForDotGeneralData)
 	if !ok {
 		return false
@@ -44,8 +44,8 @@ func (d *blockForDotGeneralData) Equal(other NodeDataComparable) bool {
 		slices.Equal(d.batchAxes, o.batchAxes)
 }
 
-// Compile-time check that blockForDotGeneralData implements NodeDataComparable.
-var _ NodeDataComparable = (*blockForDotGeneralData)(nil)
+// Compile-time check that blockForDotGeneralData implements nodeDataComparable.
+var _ nodeDataComparable = (*blockForDotGeneralData)(nil)
 
 func init() {
 	setNodeExecutor(backends.OpTypeBlockForDotGeneral, priorityGeneric, execBlockForDotGeneral)

@@ -3,9 +3,9 @@ package simplego
 import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
+	"github.com/x448/float16"
 )
 
 // This file contains the implementation for dot-general operations on large tensors -- except the batch
@@ -32,7 +32,7 @@ var (
 func init() {
 	// Initialize block dimensions for all numeric types that support DotGeneral.
 	// This includes float types and integer types (used by quantized models).
-	for _, dtype := range NumericDTypes {
+	for _, dtype := range numericDTypes {
 		sizePerElem := dtype.Size()
 		if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
 			// Because for BFloat16/Float16 we store the results in float32 and only later convert to
@@ -256,6 +256,7 @@ func dgCopyOutputBlockToFlat[T interface {
 
 func init() {
 	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.BFloat16, priorityTyped, dgCopyOutputBlockToFlatBFloat16)
+	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.Float16, priorityTyped, dgCopyOutputBlockToFlatFloat16)
 }
 
 // dgCopyOutputBlockToFlatBFloat16 copies the blocked output to a flat output, removing the padding.
@@ -309,6 +310,64 @@ func dgCopyOutputBlockToFlatBFloat16(blockSource, output *Buffer) {
 					outputRowOffset := outputBlockOffset + blockRow*outputLhsStride
 					for blockCol := range rhsEnd - rhsStart {
 						outputData[outputRowOffset+blockCol] = bfloat16.FromFloat32(sourceData[sourceRowOffset+blockCol])
+					}
+				}
+			}
+		}
+	}
+}
+
+// dgCopyOutputBlockToFlatFloat16 copies the blocked output to a flat output, removing the padding.
+// The blockSource is assumed to be float32 -- matrix multiplication uses float32 to accumulate.
+//
+// blockedSource shape: float32[batchSize, lhsCrossBlocks, rhsCrossBlocks, blockDim, blockDim]
+// output shape: float16[batchSize, lhsCrossSize, rhsCrossSize]
+func dgCopyOutputBlockToFlatFloat16(blockSource, output *Buffer) {
+	sourceDims := blockSource.shape.Dimensions
+	outputDims := output.shape.Dimensions
+
+	batchSize := sourceDims[0]
+	lhsBlockCross := sourceDims[1]
+	rhsBlockCross := sourceDims[2]
+	blockDim := sourceDims[3] // Same as sourceDims[4]
+	lhsCrossSize := outputDims[1]
+	rhsCrossSize := outputDims[2]
+
+	// Pre-calculate strides
+	outputRhsStride := 1
+	outputLhsStride := rhsCrossSize
+	outputBatchStride := lhsCrossSize * rhsCrossSize
+
+	sourceBlockSize := blockDim * blockDim
+	sourceRhsBlockStride := sourceBlockSize
+	sourceLhsBlockStride := rhsBlockCross * sourceBlockSize
+	sourceBatchStride := lhsBlockCross * rhsBlockCross * sourceBlockSize
+
+	sourceData := blockSource.flat.([]float32)
+	outputData := output.flat.([]float16.Float16)
+
+	for batch := 0; batch < batchSize; batch++ {
+		sourceBatchOffset := batch * sourceBatchStride
+		outputBatchOffset := batch * outputBatchStride
+
+		for lhsBlock := 0; lhsBlock < lhsBlockCross && lhsBlock*blockDim < lhsCrossSize; lhsBlock++ {
+			lhsStart := lhsBlock * blockDim
+			lhsEnd := min(lhsStart+blockDim, lhsCrossSize)
+			sourceLhsOffset := sourceBatchOffset + lhsBlock*sourceLhsBlockStride
+			outputLhsOffset := outputBatchOffset + lhsStart*outputLhsStride
+
+			for rhsBlock := 0; rhsBlock < rhsBlockCross && rhsBlock*blockDim < rhsCrossSize; rhsBlock++ {
+				rhsStart := rhsBlock * blockDim
+				rhsEnd := min(rhsStart+blockDim, rhsCrossSize)
+				sourceBlockOffset := sourceLhsOffset + rhsBlock*sourceRhsBlockStride
+				outputBlockOffset := outputLhsOffset + rhsStart*outputRhsStride
+
+				// Copy valid elements from the block
+				for blockRow := 0; blockRow < lhsEnd-lhsStart; blockRow++ {
+					sourceRowOffset := sourceBlockOffset + blockRow*blockDim
+					outputRowOffset := outputBlockOffset + blockRow*outputLhsStride
+					for blockCol := range rhsEnd - rhsStart {
+						outputData[outputRowOffset+blockCol] = float16.Fromfloat32(sourceData[sourceRowOffset+blockCol])
 					}
 				}
 			}
