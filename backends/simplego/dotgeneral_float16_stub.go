@@ -176,8 +176,8 @@ func init() {
 	dotGeneralNormalizedDTypeMap.Register(dtypes.Float16, priorityTyped, execNormalizedDotGeneralFloat16ToFloat32)
 	dotGeneralKernelDTypeMap.Register(dtypes.Float16, priorityTyped, buildDotGeneralKernelFloat16ToFloat32)
 
-	// Register BF16 fallback kernels for non-NEON platforms.
-	dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, priorityTyped, execNormalizedDotGeneralBFloat16ToFloat32)
+	// Note: BFloat16 is registered in dotgeneral_small.go with priorityTyped.
+	// On ARM64 with NEON, dotgeneral_float16_neon_arm64.go registers with priorityArch to override.
 }
 
 // dotProductBF16InnerLoop is the scalar fallback for BF16 dot product.
