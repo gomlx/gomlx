@@ -4,7 +4,10 @@
 
 * Package `simplego`:
   * Added `Float16` support (thx @timkaye11) 
-
+  * Added dedup of computation nodes (aka. "common subexpression elimination" CSE) (thx @timkaye11)
+* New package `bucketing`:
+  * Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
+  
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 
 API Change: `dtypes` package moved from `github.com/gomlx/gopjrt/dtypes` to `github.com/gomlx/gomlx/pkg/core/dtypes`.
