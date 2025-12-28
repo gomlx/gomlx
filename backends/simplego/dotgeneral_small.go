@@ -140,7 +140,30 @@ func dgNormalizeShape[T interface {
 	return
 }
 
-func execDotGeneralSmall(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
+// execDotGeneralSmallNormalized executes DotGeneral by first transposing operands to normalized form.
+//
+// The normalized form is [Batch, Cross, Contract] where:
+//   - Batch dimensions come first
+//   - Cross dimensions (output dimensions) come next
+//   - Contracting dimensions come LAST
+//
+// This ordering ensures that the contracting dimension is contiguous in memory for BOTH
+// operands, enabling efficient sequential access and vectorization.
+//
+// Memory access pattern after normalization:
+//
+//   LHS normalized to [B, M, K]: row (m) has K elements contiguous ✓
+//   RHS normalized to [B, N, K]: row (n) has K elements contiguous ✓
+//
+// Compare to the direct path (no transpose) where RHS column access is strided.
+// The transpose overhead is worthwhile for large matrices where cache locality matters.
+//
+// This function handles:
+//   - Arbitrary axis orderings (transposes as needed)
+//   - int8/uint8 quantized operations with int32 accumulation
+//   - float16/bfloat16 with float32 accumulation for precision
+//   - Batch parallelism across workers
+func execDotGeneralSmallNormalized(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
 	dtype := lhs.shape.DType
 	normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize int) *Buffer)
 
@@ -162,13 +185,32 @@ func execDotGeneralSmall(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 	}
 
 	tmpOutput := output
-	castToFloat32 := dtype == dtypes.BFloat16 || dtype == dtypes.Float16
-	if castToFloat32 {
-		outputShape := shapes.Make(dtypes.Float32, params.batchSize, params.lhsCrossSize, params.rhsCrossSize)
-		tmpOutput = backend.getBufferForShape(outputShape)
+	outputDType := output.shape.DType
+
+	// Check if we need a temporary output buffer with a different accumulator dtype.
+	// This is needed for:
+	// - int8/uint8: input is int8 but accumulator is int32
+	// - float16/bfloat16: input is fp16 but accumulator is float32 for precision
+	needsTempOutput := false
+	var accumulatorDType dtypes.DType
+	if dtype == dtypes.Int8 || dtype == dtypes.Uint8 {
+		accumulatorDType = dtypes.Int32
+		needsTempOutput = dtype != outputDType // int8→int32 case
+	} else if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
+		accumulatorDType = dtypes.Float32
+		needsTempOutput = true // Always need float32 temp for float16/bfloat16
+	}
+
+	if needsTempOutput {
+		// Create temporary output with intermediate dtype (float32 for fp16, int32 for int8)
+		tmpShape := shapes.Make(accumulatorDType, output.shape.Dimensions...)
+		tmpOutput = backend.getBufferForShape(tmpShape)
 		tmpOutput.Zeros()
 	}
 
+	// Select kernel based on input dtype.
+	// Specialized kernels for int8/uint8 are registered in the dtype map and handle
+	// accumulation in int32 internally with saturation to output dtype.
 	normalizeDotGeneral := dotGeneralNormalizedDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int))
 
 	// Decide on using parallelism across the batch -- each example is started on a separate worker.
@@ -196,11 +238,14 @@ func execDotGeneralSmall(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 		wg.Wait()
 	}
 
-	// If we created a temporary float32 output, convert it back to the original dtype.
-	if castToFloat32 {
-		convertFn := convertDTypePairMap.Get(dtypes.Float32, output.shape.DType).(convertFnType)
+	// If we created a temporary output with different dtype, handle conversion.
+	// This is only needed for float16/bfloat16 where we accumulated in float32.
+	// For int8/uint8, the specialized kernels handle int32 accumulation and saturation internally.
+	if needsTempOutput {
+		// For float16→float32, convert back to float16
+		convertFn := convertDTypePairMap.Get(tmpOutput.shape.DType, output.shape.DType).(convertFnType)
 		convertFn(tmpOutput, output)
-		backend.putBuffer(tmpOutput) // Return the temporary buffer to the pool.
+		backend.putBuffer(tmpOutput)
 	}
 	return nil
 }
@@ -283,81 +328,5 @@ func execNormalizedDotGeneralGeneric[T PODNumericConstraints](lhs, rhs, output *
 	}
 }
 
-func init() {
-	dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, priorityTyped, execNormalizedDotGeneralBfloat16)
-}
-func execNormalizedDotGeneralBfloat16(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
-	lhsFlat := lhs.flat.([]bfloat16.BFloat16)
-	rhsFlat := rhs.flat.([]bfloat16.BFloat16)
-	outputFlat := output.flat.([]float32) // Notice we use float32 for the output of BF16 DotGeneral.
-
-	// Notice we cannot trust lhs.shape and rhs.shape, in case they haven't been transposed or reshaped.
-	contractingSize := params.contractingSize
-	lhsCrossSize := params.lhsCrossSize
-	rhsCrossSize := params.rhsCrossSize
-
-	// Pre-compute strides to avoid repeated calculations
-	lhsBatchStride := lhsCrossSize * contractingSize
-	rhsBatchStride := rhsCrossSize * contractingSize
-	outputBatchStride := lhsCrossSize * rhsCrossSize
-
-	// Cache block sizes - adjust based on typical matrix sizes and CPU cache
-	const blockSize = 64 // Tune this based on your typical workload and L1 cache size
-	for batchIdx := batchStartIdx; batchIdx < batchEndIdx; batchIdx++ {
-		lhsBaseIdx := batchIdx * lhsBatchStride
-		rhsBaseIdx := batchIdx * rhsBatchStride
-		outputBaseIdx := batchIdx * outputBatchStride
-
-		// Use blocking to improve cache locality
-		for outerIdxLhsCross := 0; outerIdxLhsCross < lhsCrossSize; outerIdxLhsCross += blockSize {
-			lhsCrossBlockEnd := min(outerIdxLhsCross+blockSize, lhsCrossSize)
-
-			for outerIdxRhsCross := 0; outerIdxRhsCross < rhsCrossSize; outerIdxRhsCross += blockSize {
-				rhsCrossBlockEnd := min(outerIdxRhsCross+blockSize, rhsCrossSize)
-
-				for outerIdxContracting := 0; outerIdxContracting < contractingSize; outerIdxContracting += blockSize {
-					contractingBlockEnd := min(outerIdxContracting+blockSize, contractingSize)
-
-					// Process the current block
-					for idxLhsCross := outerIdxLhsCross; idxLhsCross < lhsCrossBlockEnd; idxLhsCross++ {
-						lhsRowStartIdx := lhsBaseIdx + idxLhsCross*contractingSize
-						outputRowStartIdx := outputBaseIdx + idxLhsCross*rhsCrossSize
-
-						for idxRhsCross := outerIdxRhsCross; idxRhsCross < rhsCrossBlockEnd; idxRhsCross++ {
-							rhsColStartIdx := rhsBaseIdx + idxRhsCross*contractingSize
-							sum := outputFlat[outputRowStartIdx+idxRhsCross]
-
-							// Unroll the innermost loop for better vectorization
-							idxContracting := outerIdxContracting
-							for ; idxContracting+7 < contractingBlockEnd; idxContracting += 8 {
-								if lhsRowStartIdx+idxContracting+7 >= len(lhsFlat) {
-									panic(errors.Errorf("Out-of-bounds for lhs: batchIdx=%d, idxLhsCross=%d, idxRhsCross=%d, idxContracting=%d, len(lhsFlat)=%d, lhsFlatIdx=%d",
-										batchIdx, idxLhsCross, idxRhsCross, idxContracting, len(lhsFlat), lhsRowStartIdx+idxContracting+7))
-								}
-								if rhsColStartIdx+idxContracting+7 >= len(rhsFlat) {
-									panic(errors.Errorf("Out-of-bounds for rhs: batchIdx=%d, idxLhsCross=%d, idxRhsCross=%d, idxContracting=%d, len(rhsFlat)=%d, rhsFlatIdx=%d",
-										batchIdx, idxLhsCross, idxRhsCross, idxContracting, len(rhsFlat), rhsColStartIdx+idxContracting+7))
-								}
-								sum += lhsFlat[lhsRowStartIdx+idxContracting].Float32()*rhsFlat[rhsColStartIdx+idxContracting].Float32() +
-									lhsFlat[lhsRowStartIdx+idxContracting+1].Float32()*rhsFlat[rhsColStartIdx+idxContracting+1].Float32() +
-									lhsFlat[lhsRowStartIdx+idxContracting+2].Float32()*rhsFlat[rhsColStartIdx+idxContracting+2].Float32() +
-									lhsFlat[lhsRowStartIdx+idxContracting+3].Float32()*rhsFlat[rhsColStartIdx+idxContracting+3].Float32() +
-									lhsFlat[lhsRowStartIdx+idxContracting+4].Float32()*rhsFlat[rhsColStartIdx+idxContracting+4].Float32() +
-									lhsFlat[lhsRowStartIdx+idxContracting+5].Float32()*rhsFlat[rhsColStartIdx+idxContracting+5].Float32() +
-									lhsFlat[lhsRowStartIdx+idxContracting+6].Float32()*rhsFlat[rhsColStartIdx+idxContracting+6].Float32() +
-									lhsFlat[lhsRowStartIdx+idxContracting+7].Float32()*rhsFlat[rhsColStartIdx+idxContracting+7].Float32()
-							}
-
-							// Handle remaining elements
-							for ; idxContracting < contractingBlockEnd; idxContracting++ {
-								sum += lhsFlat[lhsRowStartIdx+idxContracting].Float32() * rhsFlat[rhsColStartIdx+idxContracting].Float32()
-							}
-
-							outputFlat[outputRowStartIdx+idxRhsCross] = sum
-						}
-					}
-				}
-			}
-		}
-	}
-}
+// Note: BFloat16 DotGeneral is registered in dotgeneral_float16_stub.go (scalar fallback)
+// and dotgeneral_float16_neon_arm64.go (NEON optimized version for ARM64).
