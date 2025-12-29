@@ -1238,6 +1238,57 @@ func (b *Builder) DynamicReshape(operand backends.Op, outputShape backends.Op) (
 	return b.newNode(value), nil
 }
 
+// DynamicReshapeWithBounds reshapes operand to the shape specified by outputShape tensor,
+// using explicit dimension bounds for XLA compilation.
+//
+// This is useful for data-dependent shapes (e.g., NonZero output) where the shape
+// cannot be determined at compile time but the caller knows upper bounds.
+//
+// Parameters:
+//   - operand: the tensor to reshape.
+//   - outputShape: a 1D tensor specifying the target shape dimensions.
+//   - bounds: upper bounds for each output dimension. Must have length equal to output rank.
+//
+// The bounds are used by XLA to allocate buffers. At runtime, the actual dimensions
+// from outputShape are used, but they must not exceed the specified bounds.
+func (b *Builder) DynamicReshapeWithBounds(operand backends.Op, outputShape backends.Op, bounds []int) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("DynamicReshapeWithBounds", operand, outputShape)
+	if err != nil {
+		return nil, err
+	}
+	operandNode := nodes[0]
+	outputShapeNode := nodes[1]
+	value, err := stablehlo.SimpleDynamicReshape(operandNode.value, outputShapeNode.value, bounds)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+
+// DynamicBroadcastInDimWithBounds broadcasts operand to a shape specified by outputDimensions tensor,
+// using explicit dimension bounds for XLA compilation.
+//
+// This is useful for data-dependent shapes where the caller knows upper bounds.
+//
+// Parameters:
+//   - operand: the tensor to broadcast.
+//   - outputDimensions: a 1D tensor specifying the target shape.
+//   - broadcastDimensions: maps operand axes to output axes.
+//   - bounds: upper bounds for each output dimension.
+func (b *Builder) DynamicBroadcastInDimWithBounds(operand backends.Op, outputDimensions backends.Op, broadcastDimensions []int, bounds []int) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("DynamicBroadcastInDimWithBounds", operand, outputDimensions)
+	if err != nil {
+		return nil, err
+	}
+	operandNode := nodes[0]
+	outputDimensionsNode := nodes[1]
+	value, err := stablehlo.SimpleDynamicBroadcastInDim(operandNode.value, outputDimensionsNode.value, broadcastDimensions, bounds)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+
 // While implements backends.Builder interface.
 // Executes bodyFn repeatedly while condFn returns true.
 func (b *Builder) While(condFn, bodyFn any, initialStates ...backends.Op) ([]backends.Op, error) {
