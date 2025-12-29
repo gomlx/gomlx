@@ -222,13 +222,28 @@ func (s Shape) IsZeroSize() bool {
 
 // HasSymbolicDim returns whether any of the dimensions is symbolic (negative).
 // Symbolic dimensions are used for dynamic shapes and pattern matching.
+//
+// Deprecated: Use IsDynamic() instead for consistency with go-xla.
 func (s Shape) HasSymbolicDim() bool {
+	return s.IsDynamic()
+}
+
+// IsDynamic returns whether any dimension is dynamic (negative).
+// Dynamic dimensions represent values not known at compile time.
+// This is consistent with go-xla's Shape.IsDynamic() method.
+func (s Shape) IsDynamic() bool {
 	for _, d := range s.Dimensions {
 		if d < 0 {
 			return true
 		}
 	}
 	return false
+}
+
+// IsFullyConcrete returns whether all dimensions are concrete (non-negative).
+// This is the inverse of IsDynamic().
+func (s Shape) IsFullyConcrete() bool {
+	return !s.IsDynamic()
 }
 
 // IsDynamicAxis returns whether the dimension at the given axis is dynamic (negative).

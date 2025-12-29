@@ -328,22 +328,22 @@ func broadcastShapeForBinaryOps(
 		lhsDim := lhsShape.Dimensions[axis]
 		rhsDim := rhsShape.Dimensions[axis]
 
-		// Handle symbolic dimensions
+		// Handle dynamic dimensions
 		switch {
 		case lhsDim < 0 && rhsDim < 0:
-			// Both symbolic
+			// Both dynamic
 			if lhsDim == rhsDim {
-				// Same symbol - preserve it
+				// Same dynamic marker - preserve it
 				output.Dimensions[axis] = lhsDim
 			} else {
-				// Different symbols - use generic dynamic
+				// Different dynamic markers - use generic dynamic
 				output.Dimensions[axis] = shapes.DynamicDim
 			}
 		case lhsDim < 0 && rhsDim == 1:
-			// Left is symbolic, right broadcasts
+			// Left is dynamic, right broadcasts
 			output.Dimensions[axis] = lhsDim
 		case rhsDim < 0 && lhsDim == 1:
-			// Right is symbolic, left broadcasts
+			// Right is dynamic, left broadcasts
 			output.Dimensions[axis] = rhsDim
 		case lhsDim > 0 && rhsDim > 0:
 			// Both static - use existing max logic for broadcasting
@@ -359,13 +359,13 @@ func broadcastShapeForBinaryOps(
 			}
 			output.Dimensions[axis] = max(lhsDim, rhsDim)
 		case lhsDim < 0 && rhsDim > 1:
-			// Symbolic vs concrete > 1: use concrete (symbolic must be compatible)
+			// Dynamic vs concrete > 1: use concrete (dynamic must be compatible)
 			output.Dimensions[axis] = rhsDim
 		case rhsDim < 0 && lhsDim > 1:
-			// Concrete > 1 vs symbolic: use concrete
+			// Concrete > 1 vs dynamic: use concrete
 			output.Dimensions[axis] = lhsDim
 		default:
-			err = errors.Errorf("incompatible symbolic dimensions at axis %d: %d vs %d for BinaryOp (%s)",
+			err = errors.Errorf("incompatible dynamic dimensions at axis %d: %d vs %d for BinaryOp (%s)",
 				axis, lhsDim, rhsDim, opType)
 			return
 		}
@@ -398,10 +398,10 @@ func (b *Builder) broadcastForBinaryOps(
 	// If any is a scalar, just broadcast it to the other one.
 	if lhsNode.shape.IsScalar() {
 		var value *stablehlo.Value
-		// Check if the GoMLX shape has symbolic dimensions
-		// (not the StableHLO shape, which may have symbolic dims even when GoMLX shape is concrete)
-		if rhsNode.shape.HasSymbolicDim() {
-			// Use DynamicBroadcastInDim for shapes with symbolic dimensions
+		// Check if the GoMLX shape has dynamic dimensions
+		// (not the StableHLO shape, which may have dynamic dims even when GoMLX shape is concrete)
+		if rhsNode.shape.IsDynamic() {
+			// Use DynamicBroadcastInDim for shapes with dynamic dimensions
 			shapeTensor, shapeErr := b.shapeToTensor(rhsNode.value)
 			if shapeErr != nil {
 				return nil, nil, errors.WithMessagef(shapeErr, "while creating shape tensor for broadcasting in op %q", opType)
@@ -419,10 +419,10 @@ func (b *Builder) broadcastForBinaryOps(
 		return
 	} else if rhsNode.shape.IsScalar() {
 		var value *stablehlo.Value
-		// Check if the GoMLX shape has symbolic dimensions
-		// (not the StableHLO shape, which may have symbolic dims even when GoMLX shape is concrete)
-		if lhsNode.shape.HasSymbolicDim() {
-			// Use DynamicBroadcastInDim for shapes with symbolic dimensions
+		// Check if the GoMLX shape has dynamic dimensions
+		// (not the StableHLO shape, which may have dynamic dims even when GoMLX shape is concrete)
+		if lhsNode.shape.IsDynamic() {
+			// Use DynamicBroadcastInDim for shapes with dynamic dimensions
 			shapeTensor, shapeErr := b.shapeToTensor(lhsNode.value)
 			if shapeErr != nil {
 				return nil, nil, errors.WithMessagef(shapeErr, "while creating shape tensor for broadcasting in op %s", opName)
@@ -448,21 +448,21 @@ func (b *Builder) broadcastForBinaryOps(
 	newShapeStableHLO := ShapeToXLA(broadcastShape)
 	broadcastAxes := xslices.Iota(0, broadcastShape.Rank())
 
-	// Check if the broadcast shape has symbolic dimensions
-	useDynamicBroadcast := broadcastShape.HasSymbolicDim()
+	// Check if the broadcast shape has dynamic dimensions
+	useDynamicBroadcast := broadcastShape.IsDynamic()
 
 	if !broadcastShape.Equal(lhsNode.shape) {
 		var value *stablehlo.Value
 		if useDynamicBroadcast {
-			// Use DynamicBroadcastInDim for shapes with symbolic dimensions
+			// Use DynamicBroadcastInDim for shapes with dynamic dimensions
 			// Try to get shape from the concrete operand if available
 			var shapeTensor *stablehlo.Value
-			if !rhsNode.shape.HasSymbolicDim() {
+			if !rhsNode.shape.IsDynamic() {
 				shapeTensor, err = b.shapeToTensor(rhsNode.value)
-			} else if !lhsNode.shape.HasSymbolicDim() {
+			} else if !lhsNode.shape.IsDynamic() {
 				shapeTensor, err = b.shapeToTensor(lhsNode.value)
 			} else {
-				// Both have symbolic dims, create shape tensor from broadcast shape
+				// Both have dynamic dims, create shape tensor from broadcast shape
 				shapeTensor, err = b.createShapeTensorForBroadcast(broadcastShape, lhsNode.value, rhsNode.value)
 			}
 			if err != nil {
@@ -480,15 +480,15 @@ func (b *Builder) broadcastForBinaryOps(
 	if !broadcastShape.Equal(rhsNode.shape) {
 		var value *stablehlo.Value
 		if useDynamicBroadcast {
-			// Use DynamicBroadcastInDim for shapes with symbolic dimensions
+			// Use DynamicBroadcastInDim for shapes with dynamic dimensions
 			// Try to get shape from the concrete operand if available
 			var shapeTensor *stablehlo.Value
-			if !lhsNode.shape.HasSymbolicDim() {
+			if !lhsNode.shape.IsDynamic() {
 				shapeTensor, err = b.shapeToTensor(lhsNode.value)
-			} else if !rhsNode.shape.HasSymbolicDim() {
+			} else if !rhsNode.shape.IsDynamic() {
 				shapeTensor, err = b.shapeToTensor(rhsNode.value)
 			} else {
-				// Both have symbolic dims, create shape tensor from broadcast shape
+				// Both have dynamic dims, create shape tensor from broadcast shape
 				shapeTensor, err = b.createShapeTensorForBroadcast(broadcastShape, lhsNode.value, rhsNode.value)
 			}
 			if err != nil {
@@ -507,7 +507,7 @@ func (b *Builder) broadcastForBinaryOps(
 }
 
 // shapeToTensor creates a 1D tensor containing the runtime dimensions of the given value.
-// This is used for dynamic broadcast operations when the target shape has symbolic dimensions.
+// This is used for dynamic broadcast operations when the target shape has dynamic dimensions.
 func (b *Builder) shapeToTensor(value *stablehlo.Value) (*stablehlo.Value, error) {
 	shape := value.Shape()
 	rank := shape.Rank()
@@ -527,7 +527,7 @@ func (b *Builder) shapeToTensor(value *stablehlo.Value) (*stablehlo.Value, error
 				return nil, errors.WithMessagef(err, "creating constant for dimension %d", i)
 			}
 		} else {
-			// Symbolic dimension - use get_dimension_size
+			// Dynamic dimension - use get_dimension_size
 			dimSize, err := stablehlo.GetDimensionSize(value, i)
 			if err != nil {
 				return nil, errors.WithMessagef(err, "getting dimension size for axis %d", i)
@@ -565,7 +565,7 @@ func (b *Builder) shapeToTensor(value *stablehlo.Value) (*stablehlo.Value, error
 }
 
 // createShapeTensorForBroadcast creates a shape tensor for broadcast operations when
-// the broadcast shape has symbolic dimensions. It tries to resolve dimensions from
+// the broadcast shape has dynamic dimensions. It tries to resolve dimensions from
 // the concrete operands when possible.
 func (b *Builder) createShapeTensorForBroadcast(broadcastShape shapes.Shape, lhsValue, rhsValue *stablehlo.Value) (*stablehlo.Value, error) {
 	fn := b.fn
@@ -585,7 +585,7 @@ func (b *Builder) createShapeTensorForBroadcast(broadcastShape shapes.Shape, lhs
 				return nil, errors.WithMessagef(err, "creating constant for dimension %d", i)
 			}
 		} else {
-			// Symbolic dimension - try to get from operands
+			// Dynamic dimension - try to get from operands
 			// First try lhs
 			if i < lhsValue.Shape().Rank() {
 				lhsDim := lhsValue.Shape().Dimensions[i]
@@ -639,7 +639,7 @@ func (b *Builder) createShapeTensorForBroadcast(broadcastShape shapes.Shape, lhs
 					}
 				}
 			} else {
-				return nil, errors.Errorf("cannot resolve symbolic dimension %d in broadcast shape", i)
+				return nil, errors.Errorf("cannot resolve dynamic dimension %d in broadcast shape", i)
 			}
 		}
 

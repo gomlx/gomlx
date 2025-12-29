@@ -208,15 +208,15 @@ func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error)
 	xNode := nodes[0]
 	dtype := xNode.shape.DType
 
-	// Convert symbolic dimensions (negative values except -1) to placeholder values (1)
+	// Convert dynamic dimensions (negative values) to placeholder values (1)
 	// since StableHLO Reshape doesn't support unbounded dimensions.
-	// The actual symbolic dimensions will be tracked at the GoMLX graph level.
+	// The actual dynamic dimensions will be tracked at the GoMLX graph level.
 	concreteDims := make([]int, len(dimensions))
-	hasSymbolic := false
+	hasDynamic := false
 	for i, d := range dimensions {
-		if d < 0 && d != -1 { // d < 0 and not -1 means symbolic dimension
+		if d < 0 && d != -1 { // d < 0 and not -1 means dynamic dimension
 			concreteDims[i] = 1 // Use 1 as placeholder for StableHLO
-			hasSymbolic = true
+			hasDynamic = true
 		} else if d == -1 {
 			concreteDims[i] = 1 // Infer marker should have been resolved, use 1
 		} else {
@@ -230,14 +230,14 @@ func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error)
 		return nil, err
 	}
 
-	// If reshape has symbolic dimensions, override the node's shape with the symbolic version
-	// This preserves the symbolic information at the GoMLX level while using concrete
+	// If reshape has dynamic dimensions, override the node's shape with the dynamic version
+	// This preserves the dynamic information at the GoMLX level while using concrete
 	// placeholders at the StableHLO level
-	if hasSymbolic {
-		symbolicShape := shapes.MakeDynamic(dtype, dimensions...)
+	if hasDynamic {
+		dynamicShape := shapes.MakeDynamic(dtype, dimensions...)
 		return &Node{
 			value:   value,
-			shape:   symbolicShape,
+			shape:   dynamicShape,
 			builder: b,
 		}, nil
 	}
@@ -570,7 +570,7 @@ func (b *Builder) Concatenate(axis int, operands ...backends.Op) (backends.Op, e
 	}
 
 	// Check if we need to broadcast operands to make their non-concat dimensions compatible
-	// This happens when we have symbolic dimensions that were concretized to 1
+	// This happens when we have dynamic dimensions that were concretized to 1
 	rank := operandsNodes[0].shape.Rank()
 	adjustedAxis := axis
 	if adjustedAxis < 0 {
@@ -582,7 +582,7 @@ func (b *Builder) Concatenate(axis int, operands ...backends.Op) (backends.Op, e
 	for d := 0; d < rank; d++ {
 		maxDims[d] = 1
 		for _, node := range operandsNodes {
-			// Use GoMLX shape (which has symbolic dims) to find max
+			// Use GoMLX shape (which has dynamic dims) to find max
 			if dim := node.shape.Dimensions[d]; dim > maxDims[d] {
 				maxDims[d] = dim
 			}
@@ -643,23 +643,18 @@ func (b *Builder) Concatenate(axis int, operands ...backends.Op) (backends.Op, e
 		return nil, err
 	}
 
-	// Check if any operand has symbolic dimensions
+	// Check if any operand has dynamic dimensions
 	// If so, we need to compute the output shape using the GoMLX shapes, not the StableHLO shapes
-	hasSymbolic := false
+	hasDynamicDims := false
 	for _, node := range operandsNodes {
-		for _, dim := range node.shape.Dimensions {
-			if dim < 0 {
-				hasSymbolic = true
-				break
-			}
-		}
-		if hasSymbolic {
+		if node.shape.IsDynamic() {
+			hasDynamicDims = true
 			break
 		}
 	}
 
-	if hasSymbolic {
-		// Compute output shape using GoMLX shapes (which preserve symbolic dimensions)
+	if hasDynamicDims {
+		// Compute output shape using GoMLX shapes (which preserve dynamic dimensions)
 		outputShape := computeConcatenateShape(operandsNodes, axis)
 		return &Node{
 			value:   value,
@@ -689,19 +684,19 @@ func computeConcatenateShape(operands []*Node, axis int) shapes.Shape {
 	outputDims := make([]int, rank)
 	copy(outputDims, firstShape.Dimensions)
 
-	// For the concatenation axis, sum up dimensions or use -3 if any are symbolic
+	// For the concatenation axis, sum up dimensions or use -3 if any are dynamic
 	concatDim := firstShape.Dimensions[axis]
 	for i := 1; i < len(operands); i++ {
 		currentDim := operands[i].shape.Dimensions[axis]
 		if concatDim >= 0 && currentDim >= 0 {
 			concatDim += currentDim
 		} else {
-			concatDim = -3 // Symbolic
+			concatDim = -3 // Dynamic
 		}
 	}
 	outputDims[axis] = concatDim
 
-	// For non-concatenation axes, if one is symbolic and another is concrete, use concrete
+	// For non-concatenation axes, if one is dynamic and another is concrete, use concrete
 	for d := 0; d < rank; d++ {
 		if d == axis {
 			continue
@@ -738,32 +733,27 @@ func (b *Builder) Where(condition, onTrue, onFalse backends.Op) (backends.Op, er
 
 	// Helper to create shape (static or dynamic)
 	makeOutputShape := func(dtype dtypes.DType, dims []int) shapes.Shape {
-		// Check if any dimension is symbolic (negative)
-		hasSymbolic := false
+		// Check if any dimension is dynamic (negative)
 		for _, d := range dims {
 			if d < 0 {
-				hasSymbolic = true
-				break
+				return shapes.MakeDynamic(dtype, dims...)
 			}
-		}
-		if hasSymbolic {
-			return shapes.MakeDynamic(dtype, dims...)
 		}
 		return shapes.Make(dtype, dims...)
 	}
 
-	// Check if shapes match (considering symbolic dimensions)
+	// Check if shapes match (considering dynamic dimensions)
 	shapesMatch := func(dims1, dims2 []int) bool {
 		if len(dims1) != len(dims2) {
 			return false
 		}
 		for i := range dims1 {
 			d1, d2 := dims1[i], dims2[i]
-			// Both symbolic - they match
+			// Both dynamic - they match
 			if d1 < 0 && d2 < 0 {
 				continue
 			}
-			// One symbolic, one static - don't match (need to broadcast)
+			// One dynamic, one static - don't match (need to broadcast)
 			if (d1 < 0 && d2 >= 0) || (d1 >= 0 && d2 < 0) {
 				return false
 			}
@@ -840,8 +830,8 @@ func (b *Builder) Where(condition, onTrue, onFalse backends.Op) (backends.Op, er
 			}
 		}
 		onTrueN = onTrue.(*Node)
-		// Fix shape to preserve symbolic dimensions (BroadcastInDim converts them to 1)
-		// Create a new node with the correct symbolic shape
+		// Fix shape to preserve dynamic dimensions (BroadcastInDim converts them to 1)
+		// Create a new node with the correct dynamic shape
 		onTrueN = &Node{
 			value:   onTrueN.value,
 			shape:   outputShape,
@@ -915,8 +905,8 @@ func (b *Builder) Where(condition, onTrue, onFalse backends.Op) (backends.Op, er
 			}
 		}
 		onFalseN = onFalse.(*Node)
-		// Fix shape to preserve symbolic dimensions (BroadcastInDim converts them to 1)
-		// Create a new node with the correct symbolic shape
+		// Fix shape to preserve dynamic dimensions (BroadcastInDim converts them to 1)
+		// Create a new node with the correct dynamic shape
 		onFalseN = &Node{
 			value:   onFalseN.value,
 			shape:   outputShape,
@@ -926,9 +916,9 @@ func (b *Builder) Where(condition, onTrue, onFalse backends.Op) (backends.Op, er
 	}
 
 	// Where operation is called Select in stablehlo.
-	// TODO: There's a known issue with shape inference in go-xla when symbolic dimensions are involved.
+	// TODO: There's a known issue with shape inference in go-xla when dynamic dimensions are involved.
 	// The shapeinference.Select function doesn't properly handle the case where operands have
-	// different representations of the same logical shape (e.g., [1,1,1] static vs [-3,-3,-3] symbolic).
+	// different representations of the same logical shape (e.g., [1,1,1] static vs [-3,-3,-3] dynamic).
 	// This needs to be fixed in go-xla/internal/shapeinference/shapeinference.go
 	value, err := stablehlo.Select(conditionN.value, onTrueN.value, onFalseN.value)
 	if err != nil {

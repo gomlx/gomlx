@@ -284,18 +284,18 @@ func BFloat16SliceFromXLA(slice []xlabfloat16.BFloat16) []bfloat16.BFloat16 {
 }
 
 // ShapeToXLA converts a GoMLX shape to a go-xla shape.
-// Symbolic dimensions (negative values used for dynamic shapes) are replaced
-// with 1 since XLA doesn't support symbolic dimensions directly. The symbolic
-// dimensions are tracked at the GoMLX layer for pattern matching and gradients.
+// Dynamic dimensions (negative values) are replaced with 1 since XLA doesn't
+// support unbounded dimensions directly. The dynamic dimensions are tracked
+// at the GoMLX layer for pattern matching and gradients.
 func ShapeToXLA(shape shapes.Shape) xlashapes.Shape {
 	if !shape.Ok() || shape.IsTuple() {
 		return xlashapes.Invalid()
 	}
-	// Clone dimensions and replace symbolic (negative) values with 1
+	// Clone dimensions and replace dynamic (negative) values with 1
 	dims := slices.Clone(shape.Dimensions)
 	for i, d := range dims {
 		if d < 0 {
-			dims[i] = 1 // Use 1 as placeholder for symbolic dimensions
+			dims[i] = 1 // Use 1 as placeholder for dynamic dimensions
 		}
 	}
 	return xlashapes.Make(DTypeToXLA(shape.DType), dims...)
@@ -307,15 +307,8 @@ func ShapeFromXLA(shape xlashapes.Shape) shapes.Shape {
 		return shapes.Invalid()
 	}
 	dims := slices.Clone(shape.Dimensions)
-	// Check if any dimension is symbolic (negative)
-	hasSymbolic := false
-	for _, d := range dims {
-		if d < 0 {
-			hasSymbolic = true
-			break
-		}
-	}
-	if hasSymbolic {
+	// Check if any dimension is dynamic (negative)
+	if shape.IsDynamic() {
 		return shapes.MakeDynamic(DTypeFromXLA(shape.DType), dims...)
 	}
 	return shapes.Make(DTypeFromXLA(shape.DType), dims...)
