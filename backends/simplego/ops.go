@@ -101,13 +101,14 @@ func (b *Builder) Iota(shape shapes.Shape, iotaAxis int) (backends.Op, error) {
 }
 
 // Identity implements the backends.Identity interface.
+// This operation is not de-duplicated: if you issue it twice, it will not reuse the previous instance.
 func (b *Builder) Identity(operandOp backends.Op) (backends.Op, error) {
 	inputs, err := b.checkOps("Reshape", operandOp)
 	if err != nil {
 		return nil, err
 	}
 	operand := inputs[0]
-	node, _ := b.getOrCreateNode(backends.OpTypeIdentity, operand.shape, []*Node{operand}, nil)
+	node := b.newNode(backends.OpTypeIdentity, operand.shape, operand)
 	return node, nil
 }
 

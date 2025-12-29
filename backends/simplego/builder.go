@@ -55,9 +55,23 @@ func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingS
 	if err != nil {
 		return nil, err
 	}
-	nodeSet := sets.MakeWith(b.outputs...)
-	if len(nodeSet) != len(b.outputs) {
-		return nil, errors.Errorf("*** Repeated outputs: %d outputs, %d unique outputs", len(b.outputs), len(nodeSet))
+	// Handle duplicate outputs by creating Identity nodes for duplicates.
+	seenNodes := sets.Make[*Node]()
+	for i, node := range b.outputs {
+		if seenNodes.Has(node) {
+			// Create an Identity node for this duplicate output.
+			identityOp, err := b.Identity(node)
+			if err != nil {
+				return nil, errors.WithMessagef(err, "failed to create Identity node for duplicate output at index %d", i)
+			}
+			identityNode, ok := identityOp.(*Node)
+			if !ok {
+				return nil, errors.Errorf("Identity returned unexpected type for duplicate output at index %d", i)
+			}
+			b.outputs[i] = identityNode
+		} else {
+			seenNodes.Insert(node)
+		}
 	}
 	for _, node := range b.outputs {
 		if len(node.multiOutputsShapes) != 0 {

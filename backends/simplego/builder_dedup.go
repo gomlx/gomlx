@@ -54,9 +54,10 @@ func (b *Builder) getOrCreateNode(opType backends.OpType, shape shapes.Shape, in
 		if !candidate.shape.Equal(shape) {
 			continue
 		}
-		if dataEqual(candidate.data, data) {
-			return candidate, true
+		if !dataEqual(candidate.data, data) {
+			continue
 		}
+		return candidate, true
 	}
 
 	// Create new node.
