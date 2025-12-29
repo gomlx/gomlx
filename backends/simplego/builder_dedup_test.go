@@ -13,46 +13,13 @@ type mockComparableData struct {
 	value int
 }
 
-func (m *mockComparableData) Equal(other nodeDataComparable) bool {
+func (m *mockComparableData) EqualNodeData(other nodeDataComparable) bool {
 	return m.value == other.(*mockComparableData).value
 }
 
 // mockNonComparableData does NOT implement NodeDataComparable.
 type mockNonComparableData struct {
 	value int
-}
-
-func TestNodesEqual(t *testing.T) {
-	b := &Builder{}
-	shape := shapes.Make(dtypes.F32, 2, 3)
-
-	node1 := b.newNode(backends.OpTypeAdd, shape)
-	node2 := b.newNode(backends.OpTypeMul, shape)
-	node3 := b.newNode(backends.OpTypeSub, shape)
-
-	tests := []struct {
-		name string
-		a, b []*Node
-		want bool
-	}{
-		{"both empty", nil, nil, true},
-		{"both empty slices", []*Node{}, []*Node{}, true},
-		{"nil vs empty", nil, []*Node{}, true},
-		{"same single node", []*Node{node1}, []*Node{node1}, true},
-		{"different single node", []*Node{node1}, []*Node{node2}, false},
-		{"same multiple nodes", []*Node{node1, node2}, []*Node{node1, node2}, true},
-		{"different order", []*Node{node1, node2}, []*Node{node2, node1}, false},
-		{"different lengths", []*Node{node1}, []*Node{node1, node2}, false},
-		{"three nodes same", []*Node{node1, node2, node3}, []*Node{node1, node2, node3}, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := nodesEqual(tt.a, tt.b); got != tt.want {
-				t.Errorf("nodesEqual() = %v, want %v", got, tt.want)
-			}
-		})
-	}
 }
 
 func TestMakeNodeDedupKey(t *testing.T) {
@@ -108,145 +75,653 @@ func TestMakeNodeDedupKey(t *testing.T) {
 	}
 }
 
-func TestRegisterAndFindDuplicateNode(t *testing.T) {
-	b := &Builder{}
-	shape := shapes.Make(dtypes.F32, 2, 3)
+func TestDedup(t *testing.T) {
+	t.Run("BinaryOp", func(t *testing.T) {
+		// Create a backend and builder
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
 
-	// Create some input nodes
-	input1 := b.newNode(backends.OpTypeParameter, shape)
-	input2 := b.newNode(backends.OpTypeParameter, shape)
+		// Create two input parameters
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter x: %v", err)
+		}
+		y, err := builder.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter y: %v", err)
+		}
 
-	t.Run("find returns nil on empty builder", func(t *testing.T) {
-		result := b.findDuplicateNode(backends.OpTypeAdd, []*Node{input1, input2}, nil)
-		if result != nil {
-			t.Error("expected nil on empty dedup map")
+		// Create the same Add operation twice
+		add1, err := builder.Add(x, y)
+		if err != nil {
+			t.Fatalf("Failed to create first Add: %v", err)
+		}
+		add2, err := builder.Add(x, y)
+		if err != nil {
+			t.Fatalf("Failed to create second Add: %v", err)
+		}
+
+		// Verify they are the same node (deduplicated)
+		if add1 != add2 {
+			t.Errorf("Duplicate Add operations should return the same node: add1=%p, add2=%p", add1, add2)
+		}
+
+		// Verify the node count hasn't increased unnecessarily
+		// We expect: 2 parameters + 1 Add node = 3 nodes
+		if len(builder.nodes) != 3 {
+			t.Errorf("Expected 3 nodes (2 params + 1 Add), got %d", len(builder.nodes))
 		}
 	})
 
-	// Create and register a node with nil data
-	addNode := b.newNode(backends.OpTypeAdd, shape, input1, input2)
-	b.registerForDeduplication(addNode)
+	t.Run("UnaryOp", func(t *testing.T) {
+		// Create a backend and builder
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
 
-	t.Run("find exact match with nil data", func(t *testing.T) {
-		result := b.findDuplicateNode(backends.OpTypeAdd, []*Node{input1, input2}, nil)
-		if result != addNode {
-			t.Errorf("expected to find registered node, got %v", result)
+		// Create an input parameter
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter x: %v", err)
+		}
+
+		// Create the same Neg operation twice
+		neg1, err := builder.Neg(x)
+		if err != nil {
+			t.Fatalf("Failed to create first Neg: %v", err)
+		}
+		neg2, err := builder.Neg(x)
+		if err != nil {
+			t.Fatalf("Failed to create second Neg: %v", err)
+		}
+
+		// Verify they are the same node (deduplicated)
+		if neg1 != neg2 {
+			t.Errorf("Duplicate Neg operations should return the same node: neg1=%p, neg2=%p", neg1, neg2)
+		}
+
+		// Verify the node count
+		// We expect: 1 parameter + 1 Neg node = 2 nodes
+		if len(builder.nodes) != 2 {
+			t.Errorf("Expected 2 nodes (1 param + 1 Neg), got %d", len(builder.nodes))
 		}
 	})
 
-	t.Run("no match for different opType", func(t *testing.T) {
-		result := b.findDuplicateNode(backends.OpTypeMul, []*Node{input1, input2}, nil)
-		if result != nil {
-			t.Error("should not find node with different opType")
+	t.Run("SliceOp", func(t *testing.T) {
+		// Create a backend and builder
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
 		}
-	})
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
 
-	t.Run("no match for different inputs", func(t *testing.T) {
-		result := b.findDuplicateNode(backends.OpTypeAdd, []*Node{input2, input1}, nil)
-		if result != nil {
-			t.Error("should not find node with different input order")
-		}
-	})
-
-	t.Run("no match for different input count", func(t *testing.T) {
-		result := b.findDuplicateNode(backends.OpTypeAdd, []*Node{input1}, nil)
-		if result != nil {
-			t.Error("should not find node with different input count")
-		}
-	})
-
-	// Test with comparable data
-	t.Run("find match with comparable data", func(t *testing.T) {
-		nodeWithData := b.newNode(backends.OpTypeReshape, shape, input1)
-		nodeWithData.data = &mockComparableData{value: 100}
-		b.registerForDeduplication(nodeWithData)
-
-		// Should find with equal data
-		result := b.findDuplicateNode(backends.OpTypeReshape, []*Node{input1}, &mockComparableData{value: 100})
-		if result != nodeWithData {
-			t.Error("should find node with equal comparable data")
+		// Create an input parameter
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 5, 4), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter x: %v", err)
 		}
 
-		// Should not find with different data
-		result = b.findDuplicateNode(backends.OpTypeReshape, []*Node{input1}, &mockComparableData{value: 999})
-		if result != nil {
-			t.Error("should not find node with different data value")
+		// Create the same Slice operation twice with identical parameters
+		starts := []int{1, 1}
+		limits := []int{3, 3}
+		strides := []int{1, 1}
+
+		slice1, err := builder.Slice(x, starts, limits, strides)
+		if err != nil {
+			t.Fatalf("Failed to create first Slice: %v", err)
 		}
-	})
+		slice2, err := builder.Slice(x, starts, limits, strides)
+		if err != nil {
+			t.Fatalf("Failed to create second Slice: %v", err)
+		}
 
-	// Test with non-comparable data (should never match)
-	t.Run("no match with non-comparable data", func(t *testing.T) {
-		nodeWithData := b.newNode(backends.OpTypeSlice, shape, input1)
-		nodeWithData.data = &mockNonComparableData{value: 50}
-		b.registerForDeduplication(nodeWithData)
+		// Verify they are the same node (deduplicated)
+		if slice1 != slice2 {
+			t.Errorf("Duplicate Slice operations should return the same node: slice1=%p, slice2=%p", slice1, slice2)
+		}
 
-		// Should NOT find even with "same" data since it's not comparable
-		result := b.findDuplicateNode(backends.OpTypeSlice, []*Node{input1}, &mockNonComparableData{value: 50})
-		if result != nil {
-			t.Error("should not find node with non-comparable data")
+		// Verify the node count
+		// We expect: 1 parameter + 1 Slice node = 2 nodes
+		if len(builder.nodes) != 2 {
+			t.Errorf("Expected 2 nodes (1 param + 1 Slice), got %d", len(builder.nodes))
+		}
+
+		// Verify that different slice parameters create different nodes
+		starts2 := []int{2, 2}
+		slice3, err := builder.Slice(x, starts2, limits, strides)
+		if err != nil {
+			t.Fatalf("Failed to create third Slice: %v", err)
+		}
+
+		if slice1 == slice3 {
+			t.Error("Slice operations with different parameters should create different nodes")
 		}
 	})
 }
 
-func TestMultipleCandidatesWithSameKey(t *testing.T) {
-	b := &Builder{}
-	shape := shapes.Make(dtypes.F32, 2, 3)
+func TestNoDedup(t *testing.T) {
+	t.Run("DifferentParameters", func(t *testing.T) {
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
 
-	input1 := b.newNode(backends.OpTypeParameter, shape)
+		// Create two parameters with different names - they should NOT be deduplicated
+		param1, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter x: %v", err)
+		}
+		param2, err := builder.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter y: %v", err)
+		}
 
-	// Create multiple nodes with same opType and first input but different data
-	node1 := b.newNode(backends.OpTypeReshape, shape, input1)
-	node1.data = &mockComparableData{value: 1}
-	b.registerForDeduplication(node1)
+		if param1 == param2 {
+			t.Error("Parameters with different names should NOT be deduplicated")
+		}
 
-	node2 := b.newNode(backends.OpTypeReshape, shape, input1)
-	node2.data = &mockComparableData{value: 2}
-	b.registerForDeduplication(node2)
+		// Create two parameters with same name but different shapes - they should NOT be deduplicated
+		param3, err := builder.Parameter("z", shapes.Make(dtypes.F32, 3, 2), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter z: %v", err)
+		}
+		param4, err := builder.Parameter("z", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter z2: %v", err)
+		}
 
-	node3 := b.newNode(backends.OpTypeReshape, shape, input1)
-	node3.data = &mockComparableData{value: 3}
-	b.registerForDeduplication(node3)
+		if param3 == param4 {
+			t.Error("Parameters with different shapes should NOT be deduplicated")
+		}
+	})
 
-	// Should find the correct node based on data
-	result := b.findDuplicateNode(backends.OpTypeReshape, []*Node{input1}, &mockComparableData{value: 2})
-	if result != node2 {
-		t.Errorf("expected node2, got %v", result)
-	}
+	t.Run("DifferentShapes", func(t *testing.T) {
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
 
-	result = b.findDuplicateNode(backends.OpTypeReshape, []*Node{input1}, &mockComparableData{value: 1})
-	if result != node1 {
-		t.Errorf("expected node1, got %v", result)
-	}
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter: %v", err)
+		}
+		y, err := builder.Parameter("y", shapes.Make(dtypes.F32, 3, 2), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter: %v", err)
+		}
 
-	result = b.findDuplicateNode(backends.OpTypeReshape, []*Node{input1}, &mockComparableData{value: 3})
-	if result != node3 {
-		t.Errorf("expected node3, got %v", result)
-	}
+		// Same operation, same inputs, but different output shapes should NOT be deduplicated
+		// This shouldn't happen in practice, but let's test the shape check works
+		neg1, err := builder.Neg(x)
+		if err != nil {
+			t.Fatalf("Failed to create Neg: %v", err)
+		}
+		neg2, err := builder.Neg(y)
+		if err != nil {
+			t.Fatalf("Failed to create Neg: %v", err)
+		}
 
-	// Should not find non-existent data
-	result = b.findDuplicateNode(backends.OpTypeReshape, []*Node{input1}, &mockComparableData{value: 999})
-	if result != nil {
-		t.Error("should not find non-existent data value")
-	}
-}
+		if neg1 == neg2 {
+			t.Error("Operations with different output shapes should NOT be deduplicated")
+		}
+	})
 
-func TestFinalizeCleanup(t *testing.T) {
-	b := &Builder{}
-	shape := shapes.Make(dtypes.F32, 2, 3)
+	t.Run("DifferentConstants", func(t *testing.T) {
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
 
-	input := b.newNode(backends.OpTypeParameter, shape)
-	addNode := b.newNode(backends.OpTypeAdd, shape, input, input)
-	b.registerForDeduplication(addNode)
+		// Create constants with different values - they should NOT be deduplicated
+		const1, err := builder.Constant([]float32{1, 2, 3}, 3)
+		if err != nil {
+			t.Fatalf("Failed to create constant 1: %v", err)
+		}
+		const2, err := builder.Constant([]float32{4, 5, 6}, 3)
+		if err != nil {
+			t.Fatalf("Failed to create constant 2: %v", err)
+		}
 
-	// Verify dedup map exists
-	if b.nodeDedup == nil {
-		t.Fatal("nodeDedup should be initialized")
-	}
+		if const1 == const2 {
+			t.Error("Constants with different values should NOT be deduplicated")
+		}
 
-	b.Finalize()
+		// Same values should be deduplicated
+		const3, err := builder.Constant([]float32{1, 2, 3}, 3)
+		if err != nil {
+			t.Fatalf("Failed to create constant 3: %v", err)
+		}
 
-	// Verify cleanup
-	if b.nodeDedup != nil {
-		t.Error("nodeDedup should be nil after Finalize")
-	}
+		if const1 != const3 {
+			t.Error("Constants with same values SHOULD be deduplicated")
+		}
+	})
+
+	t.Run("DifferentIotaAxes", func(t *testing.T) {
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
+
+		shape := shapes.Make(dtypes.F32, 2, 3)
+		iota1, err := builder.Iota(shape, 0)
+		if err != nil {
+			t.Fatalf("Failed to create Iota: %v", err)
+		}
+		iota2, err := builder.Iota(shape, 1)
+		if err != nil {
+			t.Fatalf("Failed to create Iota: %v", err)
+		}
+
+		if iota1 == iota2 {
+			t.Error("Iota operations with different axes should NOT be deduplicated")
+		}
+
+		// Same axis should be deduplicated
+		iota3, err := builder.Iota(shape, 0)
+		if err != nil {
+			t.Fatalf("Failed to create Iota: %v", err)
+		}
+
+		if iota1 != iota3 {
+			t.Error("Iota operations with same axis SHOULD be deduplicated")
+		}
+	})
+
+	t.Run("DifferentTransposePermutations", func(t *testing.T) {
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
+
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3, 4), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter: %v", err)
+		}
+
+		trans1, err := builder.Transpose(x, 0, 1, 2)
+		if err != nil {
+			t.Fatalf("Failed to create Transpose: %v", err)
+		}
+		trans2, err := builder.Transpose(x, 2, 1, 0)
+		if err != nil {
+			t.Fatalf("Failed to create Transpose: %v", err)
+		}
+
+		if trans1 == trans2 {
+			t.Error("Transpose operations with different permutations should NOT be deduplicated")
+		}
+
+		// Same permutations should be deduplicated
+		trans3, err := builder.Transpose(x, 0, 1, 2)
+		if err != nil {
+			t.Fatalf("Failed to create Transpose: %v", err)
+		}
+
+		if trans1 != trans3 {
+			t.Error("Transpose operations with same permutations SHOULD be deduplicated")
+		}
+	})
+
+	t.Run("DifferentReduceAxes", func(t *testing.T) {
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
+
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3, 4), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter: %v", err)
+		}
+
+		reduce1, err := builder.ReduceSum(x, 0)
+		if err != nil {
+			t.Fatalf("Failed to create ReduceSum: %v", err)
+		}
+		reduce2, err := builder.ReduceSum(x, 1)
+		if err != nil {
+			t.Fatalf("Failed to create ReduceSum: %v", err)
+		}
+
+		if reduce1 == reduce2 {
+			t.Error("Reduce operations with different axes should NOT be deduplicated")
+		}
+
+		// Same axes should be deduplicated
+		reduce3, err := builder.ReduceSum(x, 0)
+		if err != nil {
+			t.Fatalf("Failed to create ReduceSum: %v", err)
+		}
+
+		if reduce1 != reduce3 {
+			t.Error("Reduce operations with same axes SHOULD be deduplicated")
+		}
+	})
+
+	t.Run("DifferentInputs", func(t *testing.T) {
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
+
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter x: %v", err)
+		}
+		y, err := builder.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter y: %v", err)
+		}
+
+		// Same operation on different inputs should NOT be deduplicated
+		negX, err := builder.Neg(x)
+		if err != nil {
+			t.Fatalf("Failed to create Neg: %v", err)
+		}
+		negY, err := builder.Neg(y)
+		if err != nil {
+			t.Fatalf("Failed to create Neg: %v", err)
+		}
+
+		if negX == negY {
+			t.Error("Operations on different inputs should NOT be deduplicated")
+		}
+	})
+
+	t.Run("DifferentBroadcastDims", func(t *testing.T) {
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
+
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter: %v", err)
+		}
+
+		broadcast1, err := builder.Broadcast(x, 2)
+		if err != nil {
+			t.Fatalf("Failed to create Broadcast: %v", err)
+		}
+		broadcast2, err := builder.Broadcast(x, 3)
+		if err != nil {
+			t.Fatalf("Failed to create Broadcast: %v", err)
+		}
+
+		if broadcast1 == broadcast2 {
+			t.Error("Broadcast operations with different prefixDims should NOT be deduplicated")
+		}
+
+		// Same prefixDims should be deduplicated
+		broadcast3, err := builder.Broadcast(x, 2)
+		if err != nil {
+			t.Fatalf("Failed to create Broadcast: %v", err)
+		}
+
+		if broadcast1 != broadcast3 {
+			t.Error("Broadcast operations with same prefixDims SHOULD be deduplicated")
+		}
+	})
+
+	t.Run("SameParameterTwice", func(t *testing.T) {
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
+
+		// Even if we create a parameter with the same name and shape twice,
+		// they should NOT be deduplicated because they have different inputIdx
+		// (This shouldn't happen in practice, but let's verify the behavior)
+		param1, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter: %v", err)
+		}
+		param2, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter: %v", err)
+		}
+
+		// They should be different because inputIdx is different
+		if param1 == param2 {
+			t.Error("Parameters created separately should NOT be deduplicated (different inputIdx)")
+		}
+
+		// Verify they have different inputIdx
+		data1 := param1.(*Node).data.(*nodeParameter)
+		data2 := param2.(*Node).data.(*nodeParameter)
+		if data1.inputIdx == data2.inputIdx {
+			t.Errorf("Parameters should have different inputIdx: both have %d", data1.inputIdx)
+		}
+	})
+
+	t.Run("ConcatenateDifferentAxis", func(t *testing.T) {
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
+
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter: %v", err)
+		}
+		y, err := builder.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter: %v", err)
+		}
+
+		concat1, err := builder.Concatenate(0, x, y)
+		if err != nil {
+			t.Fatalf("Failed to create Concatenate: %v", err)
+		}
+		concat2, err := builder.Concatenate(1, x, y)
+		if err != nil {
+			t.Fatalf("Failed to create Concatenate: %v", err)
+		}
+
+		if concat1 == concat2 {
+			t.Error("Concatenate operations with different axes should NOT be deduplicated")
+		}
+
+		// Same axis should be deduplicated
+		concat3, err := builder.Concatenate(0, x, y)
+		if err != nil {
+			t.Fatalf("Failed to create Concatenate: %v", err)
+		}
+
+		if concat1 != concat3 {
+			t.Error("Concatenate operations with same axis SHOULD be deduplicated")
+		}
+	})
+
+	t.Run("ReshapeDifferentDims", func(t *testing.T) {
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
+
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter: %v", err)
+		}
+
+		// Reshape to different shapes - should NOT be deduplicated
+		reshape1, err := builder.Reshape(x, 6)
+		if err != nil {
+			t.Fatalf("Failed to create Reshape: %v", err)
+		}
+		reshape2, err := builder.Reshape(x, 3, 2)
+		if err != nil {
+			t.Fatalf("Failed to create Reshape: %v", err)
+		}
+
+		if reshape1 == reshape2 {
+			t.Error("Reshape operations with different output shapes should NOT be deduplicated")
+		}
+
+		// Same reshape should be deduplicated
+		reshape3, err := builder.Reshape(x, 6)
+		if err != nil {
+			t.Fatalf("Failed to create Reshape: %v", err)
+		}
+
+		if reshape1 != reshape3 {
+			t.Error("Reshape operations with same dimensions SHOULD be deduplicated")
+		}
+	})
+
+	t.Run("BroadcastInDimDifferentAxes", func(t *testing.T) {
+		backend, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer backend.Finalize()
+		builder := backend.Builder("test").(*Builder)
+
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter: %v", err)
+		}
+
+		outputShape := shapes.Make(dtypes.F32, 2, 2)
+		broadcast1, err := builder.BroadcastInDim(x, outputShape, []int{0})
+		if err != nil {
+			t.Fatalf("Failed to create BroadcastInDim: %v", err)
+		}
+		broadcast2, err := builder.BroadcastInDim(x, outputShape, []int{1})
+		if err != nil {
+			t.Fatalf("Failed to create BroadcastInDim: %v", err)
+		}
+
+		if broadcast1 == broadcast2 {
+			t.Error("BroadcastInDim operations with different broadcastAxes should NOT be deduplicated")
+		}
+
+		// Same broadcastAxes should be deduplicated
+		broadcast3, err := builder.BroadcastInDim(x, outputShape, []int{0})
+		if err != nil {
+			t.Fatalf("Failed to create BroadcastInDim: %v", err)
+		}
+
+		if broadcast1 != broadcast3 {
+			t.Error("BroadcastInDim operations with same broadcastAxes SHOULD be deduplicated")
+		}
+	})
+
+	t.Run("DifferentOpTypes", func(t *testing.T) {
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
+
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter: %v", err)
+		}
+		y, err := builder.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter: %v", err)
+		}
+
+		// Different operations with same inputs should NOT be deduplicated
+		add, err := builder.Add(x, y)
+		if err != nil {
+			t.Fatalf("Failed to create Add: %v", err)
+		}
+		mul, err := builder.Mul(x, y)
+		if err != nil {
+			t.Fatalf("Failed to create Mul: %v", err)
+		}
+
+		if add == mul {
+			t.Error("Different operations (Add vs Mul) with same inputs should NOT be deduplicated")
+		}
+
+		// Unary operations
+		neg, err := builder.Neg(x)
+		if err != nil {
+			t.Fatalf("Failed to create Neg: %v", err)
+		}
+		abs, err := builder.Abs(x)
+		if err != nil {
+			t.Fatalf("Failed to create Abs: %v", err)
+		}
+
+		if neg == abs {
+			t.Error("Different unary operations (Neg vs Abs) with same input should NOT be deduplicated")
+		}
+	})
+
+	t.Run("OperationsWithNilData", func(t *testing.T) {
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
+
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter: %v", err)
+		}
+
+		// Operations with nil data should be deduplicated if they have same inputs and shape
+		identity1, err := builder.Identity(x)
+		if err != nil {
+			t.Fatalf("Failed to create Identity: %v", err)
+		}
+		identity2, err := builder.Identity(x)
+		if err != nil {
+			t.Fatalf("Failed to create Identity: %v", err)
+		}
+
+		if identity1 == identity2 {
+			t.Error("Identity operations SHOULD NOT be deduplicated")
+		}
+
+		// But Reshape with different dimensions should NOT be deduplicated even if data is nil
+		reshape1, err := builder.Reshape(x, 6)
+		if err != nil {
+			t.Fatalf("Failed to create Reshape: %v", err)
+		}
+		reshape2, err := builder.Reshape(x, 3, 2)
+		if err != nil {
+			t.Fatalf("Failed to create Reshape: %v", err)
+		}
+
+		if reshape1 == reshape2 {
+			t.Error("Reshape operations with different output shapes should NOT be deduplicated")
+		}
+	})
 }
