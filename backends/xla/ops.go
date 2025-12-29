@@ -191,7 +191,8 @@ func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error)
 	dtype := xNode.shape.DType
 
 	// Check if all dimensions are concrete (fast path)
-	targetShape := shapes.Make(dtype, dimensions...)
+	// Use MakeDynamic since dimensions may contain negative values (dynamic dims)
+	targetShape := shapes.MakeDynamic(dtype, dimensions...)
 	if targetShape.IsFullyConcrete() {
 		shape := stablehloshapes.Make(DTypeToXLA(dtype), dimensions...)
 		value, err := stablehlo.Reshape(xNode.value, shape)
