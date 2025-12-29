@@ -414,8 +414,9 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeConvGeneral:        vjpForSingleOutput(convGeneralVJP),
 	NodeTypeReduceWindow:       vjpForSingleOutput(reduceWindowVJP),
 	NodeTypeTranspose:          vjpForSingleOutput(transposeVJP),
-	NodeTypeBroadcastInDim:     vjpForSingleOutput(broadcastInDimVJP),
-	NodeTypeFFT:                vjpForSingleOutput(fftVJP),
+	NodeTypeBroadcastInDim:        vjpForSingleOutput(broadcastInDimVJP),
+	NodeTypeDynamicBroadcastInDim: vjpForSingleOutput(dynamicBroadcastInDimVJP),
+	NodeTypeFFT:                   vjpForSingleOutput(fftVJP),
 	NodeTypeDynamicSlice:       vjpForSingleOutput(dynamicSliceVJP),
 	NodeTypeDynamicUpdateSlice: vjpForSingleOutput(dynamicUpdateSliceVJP),
 }
@@ -1049,6 +1050,82 @@ func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
 		gradWrtX = Reshape(gradWrtX, inputShape.Dimensions...)
 	}
 	return []*Node{gradWrtX}
+}
+
+// dynamicBroadcastInDimVJP generates the "vector dot jacobian" w.r.t. the input of DynamicBroadcastInDim.
+// This is similar to broadcastInDimVJP but handles the dynamic shape case where the output shape
+// is determined at runtime.
+func dynamicBroadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
+	// Get broadcastDimensions from node inputs - handle both variants
+	var operand *Node
+	var broadcastDimensions []int
+
+	switch params := node.inputs.(type) {
+	case *nodeInputsDynamicBroadcastInDim:
+		operand = params.operand
+		broadcastDimensions = params.broadcastDimensions
+	case *nodeInputsDynamicBroadcastInDimWithBounds:
+		operand = params.operand
+		broadcastDimensions = params.broadcastDimensions
+	default:
+		Panicf("dynamicBroadcastInDimVJP: unexpected node inputs type %T", node.inputs)
+	}
+
+	// Get the output shape from the node itself (since it's dynamic)
+	outputShape := node.Shape()
+
+	// Use captured input shape to handle symbolic dimensions
+	inputShape := node.GetCapturedInputShape(0)
+	if !inputShape.Ok() {
+		// Fallback to operand's current shape if not captured
+		inputShape = operand.Shape()
+	}
+
+	if inputShape.Rank() != len(broadcastDimensions) {
+		Panicf("dynamicBroadcastInDimVJP: broadcastDimensions length (%d) must equal input rank (%d)",
+			len(broadcastDimensions), inputShape.Rank())
+	}
+
+	// Determine which axes were broadcast (where the dimension changed)
+	axesPreserved := make([]bool, outputShape.Rank())
+	for inputAxis, outputAxis := range broadcastDimensions {
+		inputDim := inputShape.Dimensions[inputAxis]
+		outputDim := outputShape.Dimensions[outputAxis]
+		// Handle symbolic dimensions: if either is symbolic, we can't determine if they match
+		if inputDim < 0 || outputDim < 0 {
+			// Assume symbolic dimensions are preserved (conservative approach)
+			axesPreserved[outputAxis] = true
+		} else if inputDim == outputDim {
+			axesPreserved[outputAxis] = true
+		} else {
+			if inputDim != 1 {
+				Panicf("dynamicBroadcastInDimVJP: unexpected broadcast from shape %s to shape %s at axis %d",
+					inputShape, outputShape, inputAxis)
+			}
+		}
+	}
+
+	// Collect axes to reduce (those that were broadcast)
+	axesToReduce := make([]int, 0, outputShape.Rank())
+	for axis, preserved := range axesPreserved {
+		if !preserved {
+			axesToReduce = append(axesToReduce, axis)
+		}
+	}
+
+	// Apply reduce sum over broadcast axes
+	gradWrtX := v
+	if len(axesToReduce) > 0 {
+		gradWrtX = ReduceSum(v, axesToReduce...)
+	}
+
+	// Reshape if needed to match the original input shape
+	if gradWrtX.Rank() != inputShape.Rank() {
+		gradWrtX = Reshape(gradWrtX, inputShape.Dimensions...)
+	}
+
+	// Return gradient for operand and nil for outputDimensions (no gradient wrt shape tensor)
+	return []*Node{gradWrtX, nil}
 }
 
 // dynamicSliceVJP generates the "vector dot jacobian" w.r.t. the input of DynamicSlice.
