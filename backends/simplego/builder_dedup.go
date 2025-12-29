@@ -2,8 +2,10 @@ package simplego
 
 import (
 	"reflect"
+	"slices"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
 // Dedup implementation: remove duplicated expressions, also known as "common subexpression elimination".
@@ -12,9 +14,9 @@ import (
 // Implementing this interface allows the Builder to automatically de-duplicate
 // nodes with matching inputs and equivalent data.
 type nodeDataComparable interface {
-	// Equal returns true if this data is semantically equivalent to other.
+	// EqualNodeData returns true if this data is semantically equivalent to other.
 	// The other parameter is guaranteed to be the same concrete type.
-	Equal(other nodeDataComparable) bool
+	EqualNodeData(other nodeDataComparable) bool
 }
 
 // nodeDedupKey is used to index into the de-duplication map.
@@ -38,60 +40,35 @@ func makeNodeDedupKey(opType backends.OpType, inputs []*Node) nodeDedupKey {
 	return key
 }
 
-// findDuplicateNode searches for an existing node that matches the given parameters.
-// Returns nil if no duplicate is found.
-//
-// The search process:
-//  1. Look up candidates by (opType, input count, first input pointer)
-//  2. For each candidate, verify all inputs match exactly
-//  3. If data implements NodeDataComparable, compare data; otherwise require nil data
-func (b *Builder) findDuplicateNode(opType backends.OpType, inputs []*Node, data any) *Node {
-	if b.nodeDedup == nil {
-		return nil
-	}
-
+// getOrCreateNode attempts to find a node with the content (opType, shape, inputs, data).
+// If found, it returns the node.
+// If not, it creates a new node with the filled fields, and returns found=false.
+func (b *Builder) getOrCreateNode(opType backends.OpType, shape shapes.Shape, inputs []*Node, data any) (n *Node, found bool) {
+	// Try to find existing node.
 	key := makeNodeDedupKey(opType, inputs)
 	candidates := b.nodeDedup[key]
-
 	for _, candidate := range candidates {
-		if !nodesEqual(candidate.inputs, inputs) {
+		if !slices.Equal(candidate.inputs, inputs) {
 			continue
 		}
-
-		if dataEqual(candidate.data, data) {
-			return candidate
+		if !candidate.shape.Equal(shape) {
+			continue
 		}
-	}
-
-	return nil
-}
-
-// registerForDeduplication adds a node to the de-duplication index.
-// Only nodes with data implementing NodeDataComparable (or nil data) should be registered.
-func (b *Builder) registerForDeduplication(node *Node) {
-	if b.nodeDedup == nil {
-		b.nodeDedup = make(map[nodeDedupKey][]*Node)
-	}
-
-	key := makeNodeDedupKey(node.opType, node.inputs)
-	b.nodeDedup[key] = append(b.nodeDedup[key], node)
-}
-
-// nodesEqual checks if two slices of nodes are equal (same pointers).
-func nodesEqual(a, b []*Node) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
+		if !dataEqual(candidate.data, data) {
+			continue
 		}
+		return candidate, true
 	}
-	return true
+
+	// Create new node.
+	n = b.newNode(opType, shape, inputs...)
+	n.data = data
+	b.nodeDedup[key] = append(b.nodeDedup[key], n)
+	return n, false
 }
 
 // dataEqual compares node data for equality.
-// Handles nil, NodeDataComparable, and uncomparable data.
+// Handles nil, NodeDataComparable, primitive types (int, []int), and uncomparable data.
 func dataEqual(a, b any) bool {
 	if a == nil && b == nil {
 		return true
@@ -101,13 +78,23 @@ func dataEqual(a, b any) bool {
 	}
 
 	// Both must be the same concrete type
-	if reflect.TypeOf(a) != reflect.TypeOf(b) {
+	aType := reflect.TypeOf(a)
+	bType := reflect.TypeOf(b)
+	if aType != bType {
 		return false
 	}
 
 	// If data implements NodeDataComparable, use that
 	if comparable, ok := a.(nodeDataComparable); ok {
-		return comparable.Equal(b.(nodeDataComparable))
+		return comparable.EqualNodeData(b.(nodeDataComparable))
+	}
+
+	// Handle primitive types
+	switch aVal := a.(type) {
+	case int:
+		return aVal == b.(int)
+	case []int:
+		return slices.Equal(aVal, b.([]int))
 	}
 
 	// For non-comparable data, don't de-duplicate
