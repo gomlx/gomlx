@@ -221,7 +221,8 @@ func (b *Builder) addUnaryOp(opType backends.OpType, operandOp backends.Op) (*No
 
 		return nil, err
 	}
-	return b.newNode(opType, shape, operand), nil
+	node, _ := b.createOrGetNode(opType, shape, []*Node{operand}, nil)
+	return node, nil
 }
 
 // addBinaryOp adds a generic binary op.
@@ -235,7 +236,8 @@ func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Op) 
 	if err != nil {
 		return nil, err
 	}
-	return b.newNode(opType, shape, lhs, rhs), nil
+	node, _ := b.createOrGetNode(opType, shape, []*Node{lhs, rhs}, nil)
+	return node, nil
 }
 
 // addComparisonOp adds a generic comparison binary op.
@@ -249,5 +251,6 @@ func (b *Builder) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.
 	if err != nil {
 		return nil, err
 	}
-	return b.newNode(opType, shape, lhs, rhs), nil
+	node, _ := b.createOrGetNode(opType, shape, []*Node{lhs, rhs}, nil)
+	return node, nil
 }

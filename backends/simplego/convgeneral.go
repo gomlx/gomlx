@@ -54,8 +54,6 @@ func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.Convo
 		return nil, err
 	}
 
-	node := b.newNode(opType, outputShape, input, kernel)
-
 	// Sanitize parameters.
 	spatialRank := outputShape.Rank() - 2
 	if strides == nil {
@@ -112,7 +110,7 @@ func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.Convo
 			params.dilatedInputSpatialDims[spatialIdx] = (dim-1)*inputDilations[spatialIdx] + 1
 		}
 	}
-	node.data = params
+	node, _ := b.createOrGetNode(opType, outputShape, []*Node{input, kernel}, params)
 	return node, nil
 }
 

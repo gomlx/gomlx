@@ -108,145 +108,134 @@ func TestMakeNodeDedupKey(t *testing.T) {
 	}
 }
 
-func TestRegisterAndFindDuplicateNode(t *testing.T) {
-	b := &Builder{}
-	shape := shapes.Make(dtypes.F32, 2, 3)
+func TestDedup(t *testing.T) {
+	t.Run("BinaryOp", func(t *testing.T) {
+		// Create a backend and builder
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
 
-	// Create some input nodes
-	input1 := b.newNode(backends.OpTypeParameter, shape)
-	input2 := b.newNode(backends.OpTypeParameter, shape)
+		// Create two input parameters
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter x: %v", err)
+		}
+		y, err := builder.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter y: %v", err)
+		}
 
-	t.Run("find returns nil on empty builder", func(t *testing.T) {
-		result := b.findDuplicateNode(backends.OpTypeAdd, []*Node{input1, input2}, nil)
-		if result != nil {
-			t.Error("expected nil on empty dedup map")
+		// Create the same Add operation twice
+		add1, err := builder.Add(x, y)
+		if err != nil {
+			t.Fatalf("Failed to create first Add: %v", err)
+		}
+		add2, err := builder.Add(x, y)
+		if err != nil {
+			t.Fatalf("Failed to create second Add: %v", err)
+		}
+
+		// Verify they are the same node (deduplicated)
+		if add1 != add2 {
+			t.Errorf("Duplicate Add operations should return the same node: add1=%p, add2=%p", add1, add2)
+		}
+
+		// Verify the node count hasn't increased unnecessarily
+		// We expect: 2 parameters + 1 Add node = 3 nodes
+		if len(builder.nodes) != 3 {
+			t.Errorf("Expected 3 nodes (2 params + 1 Add), got %d", len(builder.nodes))
 		}
 	})
 
-	// Create and register a node with nil data
-	addNode := b.newNode(backends.OpTypeAdd, shape, input1, input2)
-	b.registerForDeduplication(addNode)
+	t.Run("UnaryOp", func(t *testing.T) {
+		// Create a backend and builder
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
 
-	t.Run("find exact match with nil data", func(t *testing.T) {
-		result := b.findDuplicateNode(backends.OpTypeAdd, []*Node{input1, input2}, nil)
-		if result != addNode {
-			t.Errorf("expected to find registered node, got %v", result)
+		// Create an input parameter
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter x: %v", err)
+		}
+
+		// Create the same Neg operation twice
+		neg1, err := builder.Neg(x)
+		if err != nil {
+			t.Fatalf("Failed to create first Neg: %v", err)
+		}
+		neg2, err := builder.Neg(x)
+		if err != nil {
+			t.Fatalf("Failed to create second Neg: %v", err)
+		}
+
+		// Verify they are the same node (deduplicated)
+		if neg1 != neg2 {
+			t.Errorf("Duplicate Neg operations should return the same node: neg1=%p, neg2=%p", neg1, neg2)
+		}
+
+		// Verify the node count
+		// We expect: 1 parameter + 1 Neg node = 2 nodes
+		if len(builder.nodes) != 2 {
+			t.Errorf("Expected 2 nodes (1 param + 1 Neg), got %d", len(builder.nodes))
 		}
 	})
 
-	t.Run("no match for different opType", func(t *testing.T) {
-		result := b.findDuplicateNode(backends.OpTypeMul, []*Node{input1, input2}, nil)
-		if result != nil {
-			t.Error("should not find node with different opType")
+	t.Run("SliceOp", func(t *testing.T) {
+		// Create a backend and builder
+		be, err := New("")
+		if err != nil {
+			t.Fatalf("Failed to create backend: %v", err)
+		}
+		defer be.Finalize()
+		builder := be.Builder("test").(*Builder)
+
+		// Create an input parameter
+		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 5, 4), nil)
+		if err != nil {
+			t.Fatalf("Failed to create parameter x: %v", err)
+		}
+
+		// Create the same Slice operation twice with identical parameters
+		starts := []int{1, 1}
+		limits := []int{3, 3}
+		strides := []int{1, 1}
+
+		slice1, err := builder.Slice(x, starts, limits, strides)
+		if err != nil {
+			t.Fatalf("Failed to create first Slice: %v", err)
+		}
+		slice2, err := builder.Slice(x, starts, limits, strides)
+		if err != nil {
+			t.Fatalf("Failed to create second Slice: %v", err)
+		}
+
+		// Verify they are the same node (deduplicated)
+		if slice1 != slice2 {
+			t.Errorf("Duplicate Slice operations should return the same node: slice1=%p, slice2=%p", slice1, slice2)
+		}
+
+		// Verify the node count
+		// We expect: 1 parameter + 1 Slice node = 2 nodes
+		if len(builder.nodes) != 2 {
+			t.Errorf("Expected 2 nodes (1 param + 1 Slice), got %d", len(builder.nodes))
+		}
+
+		// Verify that different slice parameters create different nodes
+		starts2 := []int{2, 2}
+		slice3, err := builder.Slice(x, starts2, limits, strides)
+		if err != nil {
+			t.Fatalf("Failed to create third Slice: %v", err)
+		}
+
+		if slice1 == slice3 {
+			t.Error("Slice operations with different parameters should create different nodes")
 		}
 	})
-
-	t.Run("no match for different inputs", func(t *testing.T) {
-		result := b.findDuplicateNode(backends.OpTypeAdd, []*Node{input2, input1}, nil)
-		if result != nil {
-			t.Error("should not find node with different input order")
-		}
-	})
-
-	t.Run("no match for different input count", func(t *testing.T) {
-		result := b.findDuplicateNode(backends.OpTypeAdd, []*Node{input1}, nil)
-		if result != nil {
-			t.Error("should not find node with different input count")
-		}
-	})
-
-	// Test with comparable data
-	t.Run("find match with comparable data", func(t *testing.T) {
-		nodeWithData := b.newNode(backends.OpTypeReshape, shape, input1)
-		nodeWithData.data = &mockComparableData{value: 100}
-		b.registerForDeduplication(nodeWithData)
-
-		// Should find with equal data
-		result := b.findDuplicateNode(backends.OpTypeReshape, []*Node{input1}, &mockComparableData{value: 100})
-		if result != nodeWithData {
-			t.Error("should find node with equal comparable data")
-		}
-
-		// Should not find with different data
-		result = b.findDuplicateNode(backends.OpTypeReshape, []*Node{input1}, &mockComparableData{value: 999})
-		if result != nil {
-			t.Error("should not find node with different data value")
-		}
-	})
-
-	// Test with non-comparable data (should never match)
-	t.Run("no match with non-comparable data", func(t *testing.T) {
-		nodeWithData := b.newNode(backends.OpTypeSlice, shape, input1)
-		nodeWithData.data = &mockNonComparableData{value: 50}
-		b.registerForDeduplication(nodeWithData)
-
-		// Should NOT find even with "same" data since it's not comparable
-		result := b.findDuplicateNode(backends.OpTypeSlice, []*Node{input1}, &mockNonComparableData{value: 50})
-		if result != nil {
-			t.Error("should not find node with non-comparable data")
-		}
-	})
-}
-
-func TestMultipleCandidatesWithSameKey(t *testing.T) {
-	b := &Builder{}
-	shape := shapes.Make(dtypes.F32, 2, 3)
-
-	input1 := b.newNode(backends.OpTypeParameter, shape)
-
-	// Create multiple nodes with same opType and first input but different data
-	node1 := b.newNode(backends.OpTypeReshape, shape, input1)
-	node1.data = &mockComparableData{value: 1}
-	b.registerForDeduplication(node1)
-
-	node2 := b.newNode(backends.OpTypeReshape, shape, input1)
-	node2.data = &mockComparableData{value: 2}
-	b.registerForDeduplication(node2)
-
-	node3 := b.newNode(backends.OpTypeReshape, shape, input1)
-	node3.data = &mockComparableData{value: 3}
-	b.registerForDeduplication(node3)
-
-	// Should find the correct node based on data
-	result := b.findDuplicateNode(backends.OpTypeReshape, []*Node{input1}, &mockComparableData{value: 2})
-	if result != node2 {
-		t.Errorf("expected node2, got %v", result)
-	}
-
-	result = b.findDuplicateNode(backends.OpTypeReshape, []*Node{input1}, &mockComparableData{value: 1})
-	if result != node1 {
-		t.Errorf("expected node1, got %v", result)
-	}
-
-	result = b.findDuplicateNode(backends.OpTypeReshape, []*Node{input1}, &mockComparableData{value: 3})
-	if result != node3 {
-		t.Errorf("expected node3, got %v", result)
-	}
-
-	// Should not find non-existent data
-	result = b.findDuplicateNode(backends.OpTypeReshape, []*Node{input1}, &mockComparableData{value: 999})
-	if result != nil {
-		t.Error("should not find non-existent data value")
-	}
-}
-
-func TestFinalizeCleanup(t *testing.T) {
-	b := &Builder{}
-	shape := shapes.Make(dtypes.F32, 2, 3)
-
-	input := b.newNode(backends.OpTypeParameter, shape)
-	addNode := b.newNode(backends.OpTypeAdd, shape, input, input)
-	b.registerForDeduplication(addNode)
-
-	// Verify dedup map exists
-	if b.nodeDedup == nil {
-		t.Fatal("nodeDedup should be initialized")
-	}
-
-	b.Finalize()
-
-	// Verify cleanup
-	if b.nodeDedup != nil {
-		t.Error("nodeDedup should be nil after Finalize")
-	}
 }

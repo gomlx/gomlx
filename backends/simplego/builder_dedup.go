@@ -4,6 +4,7 @@ import (
 	"reflect"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
 // Dedup implementation: remove duplicated expressions, also known as "common subexpression elimination".
@@ -38,43 +39,27 @@ func makeNodeDedupKey(opType backends.OpType, inputs []*Node) nodeDedupKey {
 	return key
 }
 
-// findDuplicateNode searches for an existing node that matches the given parameters.
-// Returns nil if no duplicate is found.
-//
-// The search process:
-//  1. Look up candidates by (opType, input count, first input pointer)
-//  2. For each candidate, verify all inputs match exactly
-//  3. If data implements NodeDataComparable, compare data; otherwise require nil data
-func (b *Builder) findDuplicateNode(opType backends.OpType, inputs []*Node, data any) *Node {
-	if b.nodeDedup == nil {
-		return nil
-	}
-
+// createOrGetNode attempts to find a node with the content (opType, shape, inputs, data).
+// If found, it returns the node.
+// If not, it creates a new node with the filled fields, and returns found=false.
+func (b *Builder) createOrGetNode(opType backends.OpType, shape shapes.Shape, inputs []*Node, data any) (n *Node, found bool) {
+	// Try to find existing node.
 	key := makeNodeDedupKey(opType, inputs)
 	candidates := b.nodeDedup[key]
-
 	for _, candidate := range candidates {
 		if !nodesEqual(candidate.inputs, inputs) {
 			continue
 		}
-
 		if dataEqual(candidate.data, data) {
-			return candidate
+			return candidate, true
 		}
 	}
 
-	return nil
-}
-
-// registerForDeduplication adds a node to the de-duplication index.
-// Only nodes with data implementing NodeDataComparable (or nil data) should be registered.
-func (b *Builder) registerForDeduplication(node *Node) {
-	if b.nodeDedup == nil {
-		b.nodeDedup = make(map[nodeDedupKey][]*Node)
-	}
-
-	key := makeNodeDedupKey(node.opType, node.inputs)
-	b.nodeDedup[key] = append(b.nodeDedup[key], node)
+	// Create new node.
+	n = b.newNode(opType, shape, inputs...)
+	n.data = data
+	b.nodeDedup[key] = append(b.nodeDedup[key], n)
+	return n, false
 }
 
 // nodesEqual checks if two slices of nodes are equal (same pointers).
