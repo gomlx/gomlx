@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
+	"slices"
 	"strings"
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
@@ -24,6 +25,24 @@ type dotGeneralNodeData struct {
 	rhsContractingAxes, rhsBatchAxes                       []int
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int
 	lhsBlockedShape, rhsBlockedShape, outputBlockedShape   shapes.Shape
+}
+
+// EqualNodeData implements nodeDataComparable for dotGeneralNodeData.
+func (d *dotGeneralNodeData) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*dotGeneralNodeData)
+	if d.batchSize != o.batchSize ||
+		d.lhsCrossSize != o.lhsCrossSize ||
+		d.rhsCrossSize != o.rhsCrossSize ||
+		d.contractingSize != o.contractingSize {
+		return false
+	}
+	return slices.Equal(d.lhsContractingAxes, o.lhsContractingAxes) &&
+		slices.Equal(d.lhsBatchAxes, o.lhsBatchAxes) &&
+		slices.Equal(d.rhsContractingAxes, o.rhsContractingAxes) &&
+		slices.Equal(d.rhsBatchAxes, o.rhsBatchAxes) &&
+		d.lhsBlockedShape.Equal(o.lhsBlockedShape) &&
+		d.rhsBlockedShape.Equal(o.rhsBlockedShape) &&
+		d.outputBlockedShape.Equal(o.outputBlockedShape)
 }
 
 // adjustAxisToRank returns a positive axis, adjusting negative numbers to the correct rank.
@@ -155,7 +174,7 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	params.outputBlockedShape = dgCreateBlockedShape(outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
 
 	// Create dot-general node: it will generate a normalized output [batchSize, lhsCrossSize, rhsCrossSize].
-	dotGeneral, _ := b.createOrGetNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), []*Node{lhs, rhs}, &params)
+	dotGeneral, _ := b.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), []*Node{lhs, rhs}, &params)
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))

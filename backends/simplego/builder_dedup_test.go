@@ -13,46 +13,13 @@ type mockComparableData struct {
 	value int
 }
 
-func (m *mockComparableData) Equal(other nodeDataComparable) bool {
+func (m *mockComparableData) EqualNodeData(other nodeDataComparable) bool {
 	return m.value == other.(*mockComparableData).value
 }
 
 // mockNonComparableData does NOT implement NodeDataComparable.
 type mockNonComparableData struct {
 	value int
-}
-
-func TestNodesEqual(t *testing.T) {
-	b := &Builder{}
-	shape := shapes.Make(dtypes.F32, 2, 3)
-
-	node1 := b.newNode(backends.OpTypeAdd, shape)
-	node2 := b.newNode(backends.OpTypeMul, shape)
-	node3 := b.newNode(backends.OpTypeSub, shape)
-
-	tests := []struct {
-		name string
-		a, b []*Node
-		want bool
-	}{
-		{"both empty", nil, nil, true},
-		{"both empty slices", []*Node{}, []*Node{}, true},
-		{"nil vs empty", nil, []*Node{}, true},
-		{"same single node", []*Node{node1}, []*Node{node1}, true},
-		{"different single node", []*Node{node1}, []*Node{node2}, false},
-		{"same multiple nodes", []*Node{node1, node2}, []*Node{node1, node2}, true},
-		{"different order", []*Node{node1, node2}, []*Node{node2, node1}, false},
-		{"different lengths", []*Node{node1}, []*Node{node1, node2}, false},
-		{"three nodes same", []*Node{node1, node2, node3}, []*Node{node1, node2, node3}, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := nodesEqual(tt.a, tt.b); got != tt.want {
-				t.Errorf("nodesEqual() = %v, want %v", got, tt.want)
-			}
-		})
-	}
 }
 
 func TestMakeNodeDedupKey(t *testing.T) {

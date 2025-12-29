@@ -104,6 +104,8 @@ type Node struct {
 
 // newNode adds a new node of the given opType and shape to the Builder graph.
 // It's used by the other ops when creating new nodes.
+//
+// Use instead getOrCreateNode instead.
 func (b *Builder) newNode(opType backends.OpType, shape shapes.Shape, inputs ...*Node) *Node {
 	n := &Node{
 		builder:    b,
@@ -119,6 +121,8 @@ func (b *Builder) newNode(opType backends.OpType, shape shapes.Shape, inputs ...
 // newMultiOutputsNode create the multi-outputs node, and its "select nodes", one per output.
 // The node.multiOutputsNodes will be set with the individual outputs and can be used by the Builder to return
 // to the user.
+//
+// Note: no de-duplication of multi-output nodes.
 func (b *Builder) newMultiOutputsNode(
 	opType backends.OpType,
 	outputShapes []shapes.Shape,
@@ -221,7 +225,7 @@ func (b *Builder) addUnaryOp(opType backends.OpType, operandOp backends.Op) (*No
 
 		return nil, err
 	}
-	node, _ := b.createOrGetNode(opType, shape, []*Node{operand}, nil)
+	node, _ := b.getOrCreateNode(opType, shape, []*Node{operand}, nil)
 	return node, nil
 }
 
@@ -236,7 +240,7 @@ func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Op) 
 	if err != nil {
 		return nil, err
 	}
-	node, _ := b.createOrGetNode(opType, shape, []*Node{lhs, rhs}, nil)
+	node, _ := b.getOrCreateNode(opType, shape, []*Node{lhs, rhs}, nil)
 	return node, nil
 }
 
@@ -251,6 +255,6 @@ func (b *Builder) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.
 	if err != nil {
 		return nil, err
 	}
-	node, _ := b.createOrGetNode(opType, shape, []*Node{lhs, rhs}, nil)
+	node, _ := b.getOrCreateNode(opType, shape, []*Node{lhs, rhs}, nil)
 	return node, nil
 }

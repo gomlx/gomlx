@@ -110,7 +110,7 @@ func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.Convo
 			params.dilatedInputSpatialDims[spatialIdx] = (dim-1)*inputDilations[spatialIdx] + 1
 		}
 	}
-	node, _ := b.createOrGetNode(opType, outputShape, []*Node{input, kernel}, params)
+	node, _ := b.getOrCreateNode(opType, outputShape, []*Node{input, kernel}, params)
 	return node, nil
 }
 
@@ -129,6 +129,37 @@ type convNode struct {
 	// dilatedInputSpatialDims holds the dimensions of the input spatial axes after applying the dilations.
 	// For non-dilated dimensions it's the same as the original dimension.
 	dilatedInputSpatialDims []int
+}
+
+// EqualNodeData implements nodeDataComparable for convNode.
+func (c *convNode) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*convNode)
+	if c.channelGroupCount != o.channelGroupCount ||
+		c.batchGroupCount != o.batchGroupCount ||
+		c.hasInputDilations != o.hasInputDilations ||
+		c.hasKernelDilations != o.hasKernelDilations {
+		return false
+	}
+	// Compare ConvolveAxesConfig
+	if c.axes.InputBatch != o.axes.InputBatch ||
+		c.axes.InputChannels != o.axes.InputChannels ||
+		c.axes.KernelInputChannels != o.axes.KernelInputChannels ||
+		c.axes.KernelOutputChannels != o.axes.KernelOutputChannels ||
+		c.axes.OutputBatch != o.axes.OutputBatch ||
+		c.axes.OutputChannels != o.axes.OutputChannels {
+		return false
+	}
+	return slices.Equal(c.axes.InputSpatial, o.axes.InputSpatial) &&
+		slices.Equal(c.axes.KernelSpatial, o.axes.KernelSpatial) &&
+		slices.Equal(c.axes.OutputSpatial, o.axes.OutputSpatial) &&
+		slices.Equal(c.strides, o.strides) &&
+		slices.Equal(c.paddings, o.paddings) &&
+		slices.Equal(c.inputDilations, o.inputDilations) &&
+		slices.Equal(c.kernelDilations, o.kernelDilations) &&
+		slices.Equal(c.inputStrides, o.inputStrides) &&
+		slices.Equal(c.inputSpatialStrides, o.inputSpatialStrides) &&
+		slices.Equal(c.kernelStrides, o.kernelStrides) &&
+		slices.Equal(c.dilatedInputSpatialDims, o.dilatedInputSpatialDims)
 }
 
 // ConvGeneralDilated is a deprecated an alias to ConvGeneral.
