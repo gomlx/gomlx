@@ -646,6 +646,19 @@ type StandardOps interface {
 	// This is similar to Reshape but uses a runtime-computed shape instead of static dimensions.
 	DynamicReshape(operand Op, outputShape Op) (Op, error)
 
+	// DynamicReshapeWithBounds reshapes operand to the shape specified by outputShape tensor,
+	// using explicit dimension bounds for compilation.
+	// This is useful for data-dependent shapes (e.g., NonZero output) where the shape
+	// cannot be determined at compile time but the caller knows upper bounds.
+	// The bounds slice must have the same length as the output rank (as determined by outputShape).
+	DynamicReshapeWithBounds(operand Op, outputShape Op, bounds []int) (Op, error)
+
+	// DynamicBroadcastInDimWithBounds broadcasts operand to a shape specified by outputDimensions tensor,
+	// using explicit dimension bounds for compilation.
+	// This is useful for data-dependent shapes where bounds are known but exact dimensions are not.
+	// The bounds slice must have the same length as the output rank.
+	DynamicBroadcastInDimWithBounds(operand Op, outputDimensions Op, broadcastDimensions []int, bounds []int) (Op, error)
+
 	// While executes bodyFn repeatedly while condFn returns true.
 	// Both condFn and bodyFn must be closure functions that are child functions of the current graph.
 	// condFn: takes state nodes as inputs, returns a scalar bool output

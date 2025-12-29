@@ -105,3 +105,99 @@ func DynamicReshape(operand *Node, outputShape *Node) *Node {
 
 	return backendDynamicReshape(operand, outputShape)
 }
+
+// DynamicReshapeWithBounds reshapes operand to the shape specified by outputShape tensor,
+// using explicit dimension bounds for XLA compilation and buffer allocation.
+//
+// This is useful for data-dependent shapes (e.g., NonZero output) where the shape
+// cannot be determined at compile time but the caller knows upper bounds.
+//
+// Parameters:
+//   - operand: The tensor to reshape.
+//   - outputShape: A 1D integer tensor containing the target shape dimensions.
+//   - bounds: Upper bounds for each dimension. Must have len(bounds) == len(outputShape).
+//     Each bound value specifies the maximum possible size for that dimension.
+//
+// The bounds are used by XLA for buffer allocation and shape validation at compile time.
+//
+// Example:
+//
+//	// Reshape to a data-dependent shape with known upper bounds
+//	x := SomeTensor(g)                              // e.g., from NonZero
+//	targetShape := Const(g, []int32{numNonZeros, 64})  // computed at runtime
+//	bounds := []int{1000, 64}                       // max 1000 non-zeros
+//	y := DynamicReshapeWithBounds(x, targetShape, bounds)
+func DynamicReshapeWithBounds(operand *Node, outputShape *Node, bounds []int) *Node {
+	// Validate outputShape
+	if !outputShape.DType().IsInt() {
+		Panicf("DynamicReshapeWithBounds: outputShape must be integer type, got %s",
+			outputShape.DType())
+	}
+	if outputShape.Rank() != 1 {
+		Panicf("DynamicReshapeWithBounds: outputShape must be 1D, got rank %d",
+			outputShape.Rank())
+	}
+
+	// Validate bounds
+	outputRank := outputShape.Shape().Dimensions[0]
+	if len(bounds) != outputRank {
+		Panicf("DynamicReshapeWithBounds: len(bounds)=%d must equal output rank=%d",
+			len(bounds), outputRank)
+	}
+	for i, b := range bounds {
+		if b <= 0 {
+			Panicf("DynamicReshapeWithBounds: bounds[%d]=%d must be positive", i, b)
+		}
+	}
+
+	return backendDynamicReshapeWithBounds(operand, outputShape, bounds)
+}
+
+// DynamicBroadcastInDimWithBounds broadcasts operand to the shape specified by outputDimensions tensor,
+// using explicit dimension bounds for XLA compilation and buffer allocation.
+//
+// This is useful for data-dependent shapes where bounds are known but exact dimensions are not.
+//
+// Parameters:
+//   - operand: The tensor to broadcast.
+//   - outputDimensions: A 1D integer tensor containing the target shape dimensions.
+//   - broadcastDimensions: Specifies which axes of the output correspond to which axes of the input.
+//   - bounds: Upper bounds for each dimension. Must have len(bounds) == len(outputDimensions).
+//
+// Example:
+//
+//	x := Const(g, []float32{1.0, 2.0})           // shape [2]
+//	targetShape := SomeDataDependentShape(g)     // e.g., from NonZero
+//	bounds := []int{100, 2}                      // max sizes
+//	y := DynamicBroadcastInDimWithBounds(x, targetShape, []int{1}, bounds)
+func DynamicBroadcastInDimWithBounds(operand *Node, outputDimensions *Node, broadcastDimensions []int, bounds []int) *Node {
+	// Validate outputDimensions
+	if !outputDimensions.DType().IsInt() {
+		Panicf("DynamicBroadcastInDimWithBounds: outputDimensions must be integer type, got %s",
+			outputDimensions.DType())
+	}
+	if outputDimensions.Rank() != 1 {
+		Panicf("DynamicBroadcastInDimWithBounds: outputDimensions must be 1D, got rank %d",
+			outputDimensions.Rank())
+	}
+
+	// Validate broadcastDimensions
+	if len(broadcastDimensions) != operand.Rank() {
+		Panicf("DynamicBroadcastInDimWithBounds: len(broadcastDimensions)=%d must equal operand.Rank()=%d",
+			len(broadcastDimensions), operand.Rank())
+	}
+
+	// Validate bounds
+	outputRank := outputDimensions.Shape().Dimensions[0]
+	if len(bounds) != outputRank {
+		Panicf("DynamicBroadcastInDimWithBounds: len(bounds)=%d must equal output rank=%d",
+			len(bounds), outputRank)
+	}
+	for i, b := range bounds {
+		if b <= 0 {
+			Panicf("DynamicBroadcastInDimWithBounds: bounds[%d]=%d must be positive", i, b)
+		}
+	}
+
+	return backendDynamicBroadcastInDimWithBounds(operand, outputDimensions, broadcastDimensions, bounds)
+}

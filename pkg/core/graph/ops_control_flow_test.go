@@ -5,6 +5,7 @@ import (
 
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
+	stablehlodtypes "github.com/gomlx/go-xla/pkg/types/dtypes"
 	stablehloshapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/xla"
@@ -58,7 +59,7 @@ func TestWhileCountTo10(t *testing.T) {
 		return results[0]
 	})
 
-	result := exec.Call()[0]
+	result := exec.MustExec()[0]
 	value := result.Value().(int32)
 	assert.Equal(t, int32(10), value, "Counter should reach 10")
 }
@@ -99,7 +100,7 @@ func TestWhileMultipleStates(t *testing.T) {
 		return results[1]
 	})
 
-	result := exec.Call()[0]
+	result := exec.MustExec()[0]
 	value := result.Value().(int32)
 	// sum = 1 + 2 + 3 + 4 + 5 = 15
 	assert.Equal(t, int32(15), value, "Sum should be 15")
@@ -121,7 +122,7 @@ func TestWhileTensorState(t *testing.T) {
 		condFn := fn.Closure()
 		condVec, _ := condFn.Input(xla.ShapeToXLA(vec.Shape()))
 		firstElem, _ := stablehlo.Slice(condVec, []int{0}, []int{1}, []int{1})
-		scalar, _ := stablehlo.Reshape(firstElem, stablehloshapes.Make(stablehlotypes.I32))
+		scalar, _ := stablehlo.Reshape(firstElem, stablehloshapes.Make(stablehlodtypes.Int32))
 		limit, _ := condFn.ConstantFromScalar(int32(5))
 		cond, _ := stablehlo.Compare(scalar, limit, stablehlotypes.CompareLT, stablehlotypes.CompareSigned)
 		condFn.Return(cond)
@@ -137,7 +138,7 @@ func TestWhileTensorState(t *testing.T) {
 		return results[0]
 	})
 
-	result := exec.Call()[0]
+	result := exec.MustExec()[0]
 	value := result.Value().([]int32)
 	assert.Equal(t, []int32{5, 5, 5}, value, "Vector should be [5, 5, 5]")
 }
