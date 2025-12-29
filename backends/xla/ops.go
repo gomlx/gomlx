@@ -58,27 +58,17 @@ func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadc
 	}
 	xNode := nodes[0]
 
-	// Check if operand has dynamic dimensions
-	operandHasDynamic := false
-	for _, d := range xNode.shape.Dimensions {
-		if d < 0 {
-			operandHasDynamic = true
-			break
+	// Fast path: if both operand and output are fully concrete, use static broadcast
+	if xNode.shape.IsFullyConcrete() && outputShape.IsFullyConcrete() {
+		value, err := stablehlo.BroadcastInDim(xNode.value, ShapeToXLA(outputShape), broadcastAxes)
+		if err != nil {
+			return nil, err
 		}
-	}
-
-	// Check if output has dynamic dimensions
-	outputHasDynamic := false
-	for _, d := range outputShape.Dimensions {
-		if d < 0 {
-			outputHasDynamic = true
-			break
-		}
+		return b.newNode(value), nil
 	}
 
 	// If output has dynamic dimensions but operand is concrete, try to resolve them
-	if outputHasDynamic && !operandHasDynamic {
-		// Try to compute concrete output dimensions from the operand
+	if outputShape.IsDynamic() && xNode.shape.IsFullyConcrete() {
 		concreteOutputDims := make([]int, len(outputShape.Dimensions))
 		allResolved := true
 
@@ -101,7 +91,6 @@ func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadc
 					concreteOutputDims[i] = xNode.shape.Dimensions[operandDim]
 				} else {
 					// No mapping - this is a broadcast dimension, default to 1
-					// (the operand is being inserted at this position)
 					concreteOutputDims[i] = 1
 				}
 
@@ -124,69 +113,57 @@ func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadc
 		}
 	}
 
-	// If operand is dynamic or we couldn't resolve output dims, use dynamic broadcast
-	if operandHasDynamic || outputHasDynamic {
-		// Use DynamicBroadcastInDim for dynamic shapes
-		// We need to construct a tensor with the output dimensions
-		// For each dimension in the output:
-		// - If it's static (>= 0), use that value
-		// - If it's dynamic (< 0), get it from the operand at the corresponding broadcast dimension
-		dimOps := make([]backends.Op, len(outputShape.Dimensions))
-		for i, d := range outputShape.Dimensions {
-			var dimOp backends.Op
-			if d < 0 {
-				// Dynamic dimension in output - we need to get it from the operand
-				// The broadcast_dimensions array tells us which operand dimension maps to this output dimension
-				// We need to find which operand dimension (if any) broadcasts to output dimension i
-				operandDim := -1
-				for j, bd := range broadcastAxes {
-					if bd == i {
-						operandDim = j
-						break
-					}
-				}
-
-				if operandDim >= 0 && operandDim < xNode.shape.Rank() {
-					// Get the size from the operand at this dimension
-					dimOp, err = b.GetDimensionSize(x, operandDim)
-					if err != nil {
-						return nil, errors.Wrapf(err, "while getting dimension %d size for DynamicBroadcastInDim", operandDim)
-					}
-					// GetDimensionSize returns a scalar, reshape to rank 1 for concatenation
-					dimOp, err = b.Reshape(dimOp, 1)
-					if err != nil {
-						return nil, errors.Wrapf(err, "while reshaping dimension %d size for concatenation", i)
-					}
-				} else {
-					// This output dimension doesn't come from the operand, use 1
-					dimOp, err = b.Constant([]int32{1}, 1)
-					if err != nil {
-						return nil, errors.Wrapf(err, "while creating constant 1 for dimension %d", i)
-					}
-				}
-			} else {
-				// Static dimension - use the specified value
-				dimOp, err = b.Constant([]int32{int32(d)}, 1)
-				if err != nil {
-					return nil, errors.Wrapf(err, "while creating constant %d for dimension %d", d, i)
+	// Dynamic path: need DynamicBroadcastInDim
+	// Build a tensor with the output dimensions:
+	// - Static dims (>= 0): use constant
+	// - Dynamic dims (< 0): get from operand at corresponding broadcast dimension
+	dimOps := make([]backends.Op, len(outputShape.Dimensions))
+	for i, d := range outputShape.Dimensions {
+		var dimOp backends.Op
+		if d < 0 {
+			// Dynamic dimension - find source from operand via broadcast mapping
+			operandDim := -1
+			for j, bd := range broadcastAxes {
+				if bd == i {
+					operandDim = j
+					break
 				}
 			}
-			dimOps[i] = dimOp
+
+			if operandDim >= 0 && operandDim < xNode.shape.Rank() {
+				// Get runtime size from operand
+				dimOp, err = b.GetDimensionSize(x, operandDim)
+				if err != nil {
+					return nil, errors.Wrapf(err, "getting dimension %d size for DynamicBroadcastInDim", operandDim)
+				}
+				// Reshape scalar to rank 1 for concatenation
+				dimOp, err = b.Reshape(dimOp, 1)
+				if err != nil {
+					return nil, errors.Wrapf(err, "reshaping dimension %d size", i)
+				}
+			} else {
+				// No mapping - broadcast dimension, use 1
+				dimOp, err = b.Constant([]int32{1}, 1)
+				if err != nil {
+					return nil, errors.Wrapf(err, "creating constant 1 for dimension %d", i)
+				}
+			}
+		} else {
+			// Static dimension
+			dimOp, err = b.Constant([]int32{int32(d)}, 1)
+			if err != nil {
+				return nil, errors.Wrapf(err, "creating constant %d for dimension %d", d, i)
+			}
 		}
-		// Concatenate all dimension sizes into a 1D tensor
-		outputDimsTensor, err := b.Concatenate(0, dimOps...)
-		if err != nil {
-			return nil, errors.WithMessage(err, "while concatenating output dimensions for DynamicBroadcastInDim")
-		}
-		return b.DynamicBroadcastInDim(x, outputDimsTensor, broadcastAxes)
+		dimOps[i] = dimOp
 	}
 
-	// Static path: use the original implementation
-	value, err := stablehlo.BroadcastInDim(xNode.value, ShapeToXLA(outputShape), broadcastAxes)
+	// Concatenate all dimension sizes into a 1D tensor
+	outputDimsTensor, err := b.Concatenate(0, dimOps...)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithMessage(err, "concatenating output dimensions for DynamicBroadcastInDim")
 	}
-	return b.newNode(value), nil
+	return b.DynamicBroadcastInDim(x, outputDimsTensor, broadcastAxes)
 }
 
 // Iota implements backends.Builder interface.
@@ -200,6 +177,11 @@ func (b *Builder) Iota(shape shapes.Shape, iotaAxis int) (backends.Op, error) {
 }
 
 // Reshape implements backends.Builder interface.
+//
+// For shapes with dynamic dimensions (negative values), this uses placeholder values
+// at the StableHLO level while preserving dynamic shape information at the GoMLX level.
+// For truly dynamic reshapes where the target shape is computed at runtime, use
+// DynamicReshape with a shape tensor instead.
 func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error) {
 	nodes, err := b.verifyAndCastValues("Reshape", x)
 	if err != nil {
@@ -208,17 +190,23 @@ func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error)
 	xNode := nodes[0]
 	dtype := xNode.shape.DType
 
-	// Convert dynamic dimensions (negative values) to placeholder values (1)
-	// since StableHLO Reshape doesn't support unbounded dimensions.
-	// The actual dynamic dimensions will be tracked at the GoMLX graph level.
+	// Check if all dimensions are concrete (fast path)
+	targetShape := shapes.Make(dtype, dimensions...)
+	if targetShape.IsFullyConcrete() {
+		shape := stablehloshapes.Make(DTypeToXLA(dtype), dimensions...)
+		value, err := stablehlo.Reshape(xNode.value, shape)
+		if err != nil {
+			return nil, err
+		}
+		return b.newNode(value), nil
+	}
+
+	// Dynamic dimensions: convert to placeholder values (1) for StableHLO
+	// The actual dynamic dimensions are tracked at the GoMLX level
 	concreteDims := make([]int, len(dimensions))
-	hasDynamic := false
 	for i, d := range dimensions {
-		if d < 0 && d != -1 { // d < 0 and not -1 means dynamic dimension
-			concreteDims[i] = 1 // Use 1 as placeholder for StableHLO
-			hasDynamic = true
-		} else if d == -1 {
-			concreteDims[i] = 1 // Infer marker should have been resolved, use 1
+		if d < 0 {
+			concreteDims[i] = 1 // Placeholder for dynamic dimension
 		} else {
 			concreteDims[i] = d
 		}
@@ -230,19 +218,13 @@ func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error)
 		return nil, err
 	}
 
-	// If reshape has dynamic dimensions, override the node's shape with the dynamic version
-	// This preserves the dynamic information at the GoMLX level while using concrete
-	// placeholders at the StableHLO level
-	if hasDynamic {
-		dynamicShape := shapes.MakeDynamic(dtype, dimensions...)
-		return &Node{
-			value:   value,
-			shape:   dynamicShape,
-			builder: b,
-		}, nil
-	}
-
-	return b.newNode(value), nil
+	// Preserve dynamic shape information at GoMLX level
+	dynamicShape := shapes.MakeDynamic(dtype, dimensions...)
+	return &Node{
+		value:   value,
+		shape:   dynamicShape,
+		builder: b,
+	}, nil
 }
 
 // Slice implements backends.Builder interface.

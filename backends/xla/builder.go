@@ -445,61 +445,60 @@ func (b *Builder) broadcastForBinaryOps(
 	if err != nil {
 		return nil, nil, err
 	}
-	newShapeStableHLO := ShapeToXLA(broadcastShape)
 	broadcastAxes := xslices.Iota(0, broadcastShape.Rank())
 
-	// Check if the broadcast shape has dynamic dimensions
+	// Use dynamic broadcast if the result shape has dynamic dimensions
 	useDynamicBroadcast := broadcastShape.IsDynamic()
 
 	if !broadcastShape.Equal(lhsNode.shape) {
 		var value *stablehlo.Value
 		if useDynamicBroadcast {
-			// Use DynamicBroadcastInDim for shapes with dynamic dimensions
-			// Try to get shape from the concrete operand if available
+			// Use DynamicBroadcastInDim for dynamic shapes
+			// Prefer getting shape from concrete operand if available
 			var shapeTensor *stablehlo.Value
-			if !rhsNode.shape.IsDynamic() {
+			if rhsNode.shape.IsFullyConcrete() {
 				shapeTensor, err = b.shapeToTensor(rhsNode.value)
-			} else if !lhsNode.shape.IsDynamic() {
+			} else if lhsNode.shape.IsFullyConcrete() {
 				shapeTensor, err = b.shapeToTensor(lhsNode.value)
 			} else {
 				// Both have dynamic dims, create shape tensor from broadcast shape
 				shapeTensor, err = b.createShapeTensorForBroadcast(broadcastShape, lhsNode.value, rhsNode.value)
 			}
 			if err != nil {
-				return nil, nil, errors.WithMessagef(err, "while creating shape tensor for broadcasting lhs in op %q", opType)
+				return nil, nil, errors.WithMessagef(err, "creating shape tensor for broadcasting lhs in op %q", opType)
 			}
 			value, err = stablehlo.DynamicBroadcastInDim(lhsNode.value, shapeTensor, broadcastAxes)
 		} else {
-			value, err = stablehlo.BroadcastInDim(lhsNode.value, newShapeStableHLO, broadcastAxes)
+			value, err = stablehlo.BroadcastInDim(lhsNode.value, ShapeToXLA(broadcastShape), broadcastAxes)
 		}
 		if err != nil {
-			return nil, nil, errors.WithMessagef(err, "while broadcasting lhs for op %q", opType)
+			return nil, nil, errors.WithMessagef(err, "broadcasting lhs for op %q", opType)
 		}
 		lhsNode = b.newNode(value)
 	}
 	if !broadcastShape.Equal(rhsNode.shape) {
 		var value *stablehlo.Value
 		if useDynamicBroadcast {
-			// Use DynamicBroadcastInDim for shapes with dynamic dimensions
-			// Try to get shape from the concrete operand if available
+			// Use DynamicBroadcastInDim for dynamic shapes
+			// Prefer getting shape from concrete operand if available
 			var shapeTensor *stablehlo.Value
-			if !lhsNode.shape.IsDynamic() {
+			if lhsNode.shape.IsFullyConcrete() {
 				shapeTensor, err = b.shapeToTensor(lhsNode.value)
-			} else if !rhsNode.shape.IsDynamic() {
+			} else if rhsNode.shape.IsFullyConcrete() {
 				shapeTensor, err = b.shapeToTensor(rhsNode.value)
 			} else {
 				// Both have dynamic dims, create shape tensor from broadcast shape
 				shapeTensor, err = b.createShapeTensorForBroadcast(broadcastShape, lhsNode.value, rhsNode.value)
 			}
 			if err != nil {
-				return nil, nil, errors.WithMessagef(err, "while creating shape tensor for broadcasting rhs in op %q", opType)
+				return nil, nil, errors.WithMessagef(err, "creating shape tensor for broadcasting rhs in op %q", opType)
 			}
 			value, err = stablehlo.DynamicBroadcastInDim(rhsNode.value, shapeTensor, broadcastAxes)
 		} else {
-			value, err = stablehlo.BroadcastInDim(rhsNode.value, newShapeStableHLO, broadcastAxes)
+			value, err = stablehlo.BroadcastInDim(rhsNode.value, ShapeToXLA(broadcastShape), broadcastAxes)
 		}
 		if err != nil {
-			return nil, nil, errors.WithMessagef(err, "while broadcasting rhs for op %q", opType)
+			return nil, nil, errors.WithMessagef(err, "broadcasting rhs for op %q", opType)
 		}
 		rhsNode = b.newNode(value)
 	}
