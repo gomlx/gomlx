@@ -177,7 +177,7 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	// Pre-blocking converts the tensor to blocked format once, avoiding runtime blocking costs.
 	var blockedRHS *Node
 	if shouldPreBlockRHS(rhs, params.lhsContractingAxes, params.rhsContractingAxes, params.rhsBatchAxes) {
-		blockedRHS = b.getOrCreateBlockedInput(rhs)
+		blockedRHS = b.blockRHSForDotGeneral(rhs)
 	}
 
 	// Create dot-general node: it will generate a normalized output [batchSize, lhsCrossSize, rhsCrossSize].
@@ -262,16 +262,16 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	// When inputs are pre-blocked, they're in blocked format and MUST use the blocked path.
 	lhsNode := node.inputs[0]
 	rhsNode := node.inputs[1]
-	lhsPreBlocked := lhsNode.opType == backends.OpTypeBlockForDotGeneral
-	rhsPreBlocked := rhsNode.opType == backends.OpTypeBlockForDotGeneral
+	isLHSPreBlocked := lhsNode.opType == backends.OpTypeBlockForDotGeneral
+	isRHSPreBlocked := rhsNode.opType == backends.OpTypeBlockForDotGeneral
 
 	// Handle pre-blocked cases - always use blocked path since data is in blocked format
-	if lhsPreBlocked || rhsPreBlocked {
+	if isLHSPreBlocked || isRHSPreBlocked {
 		var lhsBlockData, rhsBlockData *blockForDotGeneralData
-		if lhsPreBlocked {
+		if isLHSPreBlocked {
 			lhsBlockData = lhsNode.data.(*blockForDotGeneralData)
 		}
-		if rhsPreBlocked {
+		if isRHSPreBlocked {
 			rhsBlockData = rhsNode.data.(*blockForDotGeneralData)
 		}
 		if err := execDotGeneralBlockedUnified(backend, lhs, rhs, lhsBlockData, rhsBlockData, params, output); err != nil {

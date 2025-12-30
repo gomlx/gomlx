@@ -715,8 +715,8 @@ func TestBlockForDotGeneral_Deduplication(t *testing.T) {
 	weightsNode := weights.(*Node)
 
 	// Get blocked input twice - should return the same node due to deduplication
-	blocked1 := builder.getOrCreateBlockedInput(weightsNode)
-	blocked2 := builder.getOrCreateBlockedInput(weightsNode)
+	blocked1 := builder.blockRHSForDotGeneral(weightsNode)
+	blocked2 := builder.blockRHSForDotGeneral(weightsNode)
 
 	// Should be the exact same node (pointer equality)
 	assert.Same(t, blocked1, blocked2, "Deduplication should return the same blocked node")
@@ -757,7 +757,7 @@ func TestBlockForDotGeneral_Execution(t *testing.T) {
 		sourceFlat[i] = float32(i + 1)
 	}
 
-	// Create block data (simulating what getOrCreateBlockedInput would create)
+	// Create block data (simulating what blockRHSForDotGeneral would create)
 	blockLog2Dim := 2 // Block dim = 4
 	blockDim := 1 << blockLog2Dim
 	blockedShape := dgCreateBlockedShape(dtype, 1, N, K, blockLog2Dim)
@@ -920,7 +920,7 @@ func TestBlockForDotGeneralData_Equal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := base.Equal(tt.other)
+			got := base.EqualNodeData(tt.other)
 			assert.Equal(t, tt.want, got)
 		})
 	}
