@@ -1,6 +1,8 @@
 package simplego
 
 import (
+	"slices"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/backends/shapeinference"
@@ -14,6 +16,12 @@ import (
 type nodeParameter struct {
 	name     string
 	inputIdx int
+}
+
+// EqualNodeData implements nodeDataComparable for nodeParameter.
+func (n *nodeParameter) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*nodeParameter)
+	return n.name == o.name && n.inputIdx == o.inputIdx
 }
 
 // Parameter creates an input parameter for the computation.
@@ -32,11 +40,11 @@ func (b *Builder) Parameter(name string, shape shapes.Shape, sharding *backends.
 			notimplemented.NotImplementedError,
 			"sharding spec %+v not supported for %q builder", sharding, BackendName)
 	}
-	n := b.newNode(backends.OpTypeParameter, shape)
-	n.data = &nodeParameter{
+	data := &nodeParameter{
 		name:     name,
 		inputIdx: len(b.inputs),
 	}
+	n, _ := b.getOrCreateNode(backends.OpTypeParameter, shape, nil, data)
 	b.inputs = append(b.inputs, n)
 	return n, nil
 }
@@ -65,12 +73,12 @@ func (b *Builder) Constant(flat any, dims ...int) (backends.Op, error) {
 		return nil, errors.Errorf("flat ([%d]%s) and shape size (%d) mismatch for constant value",
 			flatLen, dtype, shape.Size())
 	}
-	n := b.newNode(backends.OpTypeConstant, shape)
-	n.data = &Buffer{
+	data := &Buffer{
 		shape: shape,
 		flat:  flat,
 		valid: true,
 	}
+	n, _ := b.getOrCreateNode(backends.OpTypeConstant, shape, nil, data)
 	return n, nil
 }
 
@@ -88,19 +96,20 @@ func (b *Builder) Iota(shape shapes.Shape, iotaAxis int) (backends.Op, error) {
 	if iotaAxis < 0 || iotaAxis >= shape.Rank() {
 		return nil, errors.Errorf("Iota: iotaAxis (%d) must be in the range [0,%d)", iotaAxis, shape.Rank()-1)
 	}
-	node := b.newNode(backends.OpTypeIota, shape)
-	node.data = iotaAxis
+	node, _ := b.getOrCreateNode(backends.OpTypeIota, shape, nil, iotaAxis)
 	return node, nil
 }
 
 // Identity implements the backends.Identity interface.
+// This operation is not de-duplicated: if you issue it twice, it will not reuse the previous instance.
 func (b *Builder) Identity(operandOp backends.Op) (backends.Op, error) {
 	inputs, err := b.checkOps("Reshape", operandOp)
 	if err != nil {
 		return nil, err
 	}
 	operand := inputs[0]
-	return b.newNode(backends.OpTypeIdentity, operand.shape, operand), nil
+	node := b.newNode(backends.OpTypeIdentity, operand.shape, operand)
+	return node, nil
 }
 
 // Where implements the backends.Builder interface.
@@ -114,7 +123,8 @@ func (b *Builder) Where(conditionOp, onTrueOp, onFalseOp backends.Op) (backends.
 	if err != nil {
 		return nil, err
 	}
-	return b.newNode(backends.OpTypeWhere, outputShape, condition, onTrue, onFalse), nil
+	node, _ := b.getOrCreateNode(backends.OpTypeWhere, outputShape, []*Node{condition, onTrue, onFalse}, nil)
+	return node, nil
 }
 
 // Reshape implements the backends.Builder interface.
@@ -131,7 +141,8 @@ func (b *Builder) Reshape(operandOp backends.Op, dims ...int) (backends.Op, erro
 	if err != nil {
 		return nil, err
 	}
-	return b.newNode(opType, outputShape, operand), nil
+	node, _ := b.getOrCreateNode(opType, outputShape, []*Node{operand}, nil)
+	return node, nil
 }
 
 // Transpose axes of x.
@@ -148,8 +159,7 @@ func (b *Builder) Transpose(operandOp backends.Op, permutations ...int) (backend
 	if err != nil {
 		panic(err)
 	}
-	node := b.newNode(opType, outputShape, operand)
-	node.data = permutations
+	node, _ := b.getOrCreateNode(opType, outputShape, []*Node{operand}, permutations)
 	return node, nil
 }
 
@@ -173,8 +183,7 @@ func (b *Builder) Broadcast(operandOp backends.Op, prefixDims ...int) (backends.
 	if err != nil {
 		return nil, err
 	}
-	node := b.newNode(opType, outputShape, operand)
-	node.data = prefixDims
+	node, _ := b.getOrCreateNode(opType, outputShape, []*Node{operand}, prefixDims)
 	return node, nil
 }
 
@@ -212,8 +221,7 @@ func (b *Builder) BroadcastInDim(
 	if err != nil {
 		return nil, err
 	}
-	node := b.newNode(opType, outputShape, operand)
-	node.data = broadcastAxes
+	node, _ := b.getOrCreateNode(opType, outputShape, []*Node{operand}, broadcastAxes)
 	return node, nil
 }
 
@@ -282,8 +290,7 @@ func (b *Builder) reduceImpls(reduceOpType backends.OpType, operandOp backends.O
 		return nil, err
 	}
 	outputShape.DType = operand.shape.DType
-	node := b.newNode(reduceOpType, outputShape, operand)
-	node.data = axes
+	node, _ := b.getOrCreateNode(reduceOpType, outputShape, []*Node{operand}, axes)
 	return node, nil
 }
 
@@ -314,8 +321,7 @@ func (b *Builder) Gather(
 	if err != nil {
 		return nil, err
 	}
-	node := b.newNode(opType, shape, operand, startIndices)
-	node.data = &gatherNode{
+	data := &gatherNode{
 		indexVectorAxis,
 		offsetOutputAxes,
 		collapsedSliceAxes,
@@ -323,6 +329,7 @@ func (b *Builder) Gather(
 		sliceSizes,
 		indicesAreSorted,
 	}
+	node, _ := b.getOrCreateNode(opType, shape, []*Node{operand, startIndices}, data)
 	return node, nil
 }
 
@@ -330,6 +337,18 @@ type gatherNode struct {
 	indexVectorAxis                                                  int
 	offsetOutputAxes, collapsedSlicesAxes, startIndexMap, sliceSizes []int
 	indicesAreSorted                                                 bool
+}
+
+// EqualNodeData implements nodeDataComparable for gatherNode.
+func (g *gatherNode) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*gatherNode)
+	if g.indexVectorAxis != o.indexVectorAxis || g.indicesAreSorted != o.indicesAreSorted {
+		return false
+	}
+	return slices.Equal(g.offsetOutputAxes, o.offsetOutputAxes) &&
+		slices.Equal(g.collapsedSlicesAxes, o.collapsedSlicesAxes) &&
+		slices.Equal(g.startIndexMap, o.startIndexMap) &&
+		slices.Equal(g.sliceSizes, o.sliceSizes)
 }
 
 // Concatenate joins a sequence of tensors along the given axis (it must exist already).
@@ -354,8 +373,7 @@ func (b *Builder) Concatenate(axis int, operandOps ...backends.Op) (backends.Op,
 	if err != nil {
 		return nil, err
 	}
-	node := b.newNode(backends.OpTypeConcatenate, outputShape, operands...)
-	node.data = axis
+	node, _ := b.getOrCreateNode(backends.OpTypeConcatenate, outputShape, operands, axis)
 	return node, nil
 }
 
@@ -373,7 +391,8 @@ func (b *Builder) ConvertDType(operandOp backends.Op, dtype dtypes.DType) (backe
 	}
 	outputShape := operand.shape.Clone()
 	outputShape.DType = dtype
-	return b.newNode(opType, outputShape, operand), nil
+	node, _ := b.getOrCreateNode(opType, outputShape, []*Node{operand}, nil)
+	return node, nil
 }
 
 // ScatterMax implements the backends.Builder interface.
@@ -467,8 +486,7 @@ func (b *Builder) scatterImpls(
 	}
 
 	// The output shape of the scatter is the operand shape.
-	node := b.newNode(scatterOpType, outputShape, operand, indices, updates)
-	node.data = &scatterNode{
+	data := &scatterNode{
 		updateWindowAxes:         updateWindowAxes,
 		insertedWindowAxes:       insertedWindowAxes,
 		scatterAxesToOperandAxes: scatterAxesToOperandAxes,
@@ -476,6 +494,7 @@ func (b *Builder) scatterImpls(
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
+	node, _ := b.getOrCreateNode(scatterOpType, outputShape, []*Node{operand, indices, updates}, data)
 	return node, nil
 }
 
@@ -484,6 +503,19 @@ type scatterNode struct {
 	indexVectorAxis                                                int
 	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int
 	indicesAreSorted, uniqueIndices                                bool
+}
+
+// EqualNodeData implements nodeDataComparable for scatterNode.
+func (s *scatterNode) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*scatterNode)
+	if s.indexVectorAxis != o.indexVectorAxis ||
+		s.indicesAreSorted != o.indicesAreSorted ||
+		s.uniqueIndices != o.uniqueIndices {
+		return false
+	}
+	return slices.Equal(s.updateWindowAxes, o.updateWindowAxes) &&
+		slices.Equal(s.insertedWindowAxes, o.insertedWindowAxes) &&
+		slices.Equal(s.scatterAxesToOperandAxes, o.scatterAxesToOperandAxes)
 }
 
 // Slice extracts a subarray from the input array.
@@ -506,18 +538,26 @@ func (b *Builder) Slice(operandOp backends.Op, starts, limits, strides []int) (b
 	if err != nil {
 		return nil, err
 	}
-	node := b.newNode(opType, outputShape, operand)
-	node.data = &sliceNode{
+	data := &sliceNode{
 		starts,
 		limits,
 		strides,
 	}
+	node, _ := b.getOrCreateNode(opType, outputShape, []*Node{operand}, data)
 	return node, nil
 }
 
 // sliceNode is attached to the Node.data field for Slice.
 type sliceNode struct {
 	starts, limits, strides []int
+}
+
+// EqualNodeData implements nodeDataComparable for sliceNode.
+func (s *sliceNode) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*sliceNode)
+	return slices.Equal(s.starts, o.starts) &&
+		slices.Equal(s.limits, o.limits) &&
+		slices.Equal(s.strides, o.strides)
 }
 
 // RNGBitGenerator generates the given shape filled with random bits.
@@ -555,6 +595,12 @@ type argMinMaxNode struct {
 	isMin bool
 }
 
+// EqualNodeData implements nodeDataComparable for argMinMaxNode.
+func (a *argMinMaxNode) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*argMinMaxNode)
+	return a.axis == o.axis && a.isMin == o.isMin
+}
+
 // ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
 // outputDType defines the output of the argmin/argmax, it doesn't need to be the same as the input.
 // It's a form of reduction on the given axis, and that axis goes away. So the rank of the result is one less than
@@ -579,11 +625,11 @@ func (b *Builder) ArgMinMax(
 	if err != nil {
 		return nil, err
 	}
-	node := b.newNode(opType, outputShape, operand)
-	node.data = &argMinMaxNode{
+	data := &argMinMaxNode{
 		axis,
 		isMin,
 	}
+	node, _ := b.getOrCreateNode(opType, outputShape, []*Node{operand}, data)
 	return node, nil
 }
 
@@ -591,6 +637,19 @@ type reduceWindowNode struct {
 	reductionType                                             backends.ReduceOpType
 	windowDimensions, strides, baseDilations, windowDilations []int
 	paddings                                                  [][2]int
+}
+
+// EqualNodeData implements nodeDataComparable for reduceWindowNode.
+func (r *reduceWindowNode) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*reduceWindowNode)
+	if r.reductionType != o.reductionType {
+		return false
+	}
+	return slices.Equal(r.windowDimensions, o.windowDimensions) &&
+		slices.Equal(r.strides, o.strides) &&
+		slices.Equal(r.baseDilations, o.baseDilations) &&
+		slices.Equal(r.windowDilations, o.windowDilations) &&
+		slices.Equal(r.paddings, o.paddings)
 }
 
 // ReduceWindow runs a reduction function of reduceType (backends.ReduceOpMax, backends.ReduceOpSum or backends.ReduceOpProduct).
@@ -622,8 +681,7 @@ func (b *Builder) ReduceWindow(
 	if err != nil {
 		return nil, err
 	}
-	node := b.newNode(opType, outputShape, operand)
-	node.data = &reduceWindowNode{
+	data := &reduceWindowNode{
 		reductionType:    reductionType,
 		windowDimensions: windowDimensions,
 		strides:          strides,
@@ -631,6 +689,7 @@ func (b *Builder) ReduceWindow(
 		windowDilations:  windowDilations,
 		paddings:         paddings,
 	}
+	node, _ := b.getOrCreateNode(opType, outputShape, []*Node{operand}, data)
 	return node, nil
 }
 
@@ -762,7 +821,8 @@ func (b *Builder) IsFinite(operandOp backends.Op) (backends.Op, error) {
 	// Output will have the same shape but for the dtype that is bool.
 	shape := operand.shape.Clone()
 	shape.DType = dtypes.Bool
-	return b.newNode(opType, shape, operand), nil
+	node, _ := b.getOrCreateNode(opType, shape, []*Node{operand}, nil)
+	return node, nil
 }
 
 // Binary Operations:

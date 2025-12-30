@@ -29,6 +29,42 @@ type Buffer struct {
 	flat any
 }
 
+// EqualNodeData implements nodeDataComparable for Buffer.
+// For Constants, this compares the shape and the actual data values.
+func (b *Buffer) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*Buffer)
+	if !b.shape.Equal(o.shape) || b.valid != o.valid {
+		return false
+	}
+	// Compare flat data by comparing the underlying slice values
+	return compareFlatData(b.flat, o.flat)
+}
+
+// compareFlatData compares two flat data slices element by element.
+func compareFlatData(a, b any) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	// Use reflection to compare slices element by element
+	va := reflect.ValueOf(a)
+	vb := reflect.ValueOf(b)
+	if va.Kind() != reflect.Slice || vb.Kind() != reflect.Slice {
+		return false
+	}
+	if va.Len() != vb.Len() {
+		return false
+	}
+	for i := 0; i < va.Len(); i++ {
+		if va.Index(i).Interface() != vb.Index(i).Interface() {
+			return false
+		}
+	}
+	return true
+}
+
 type bufferPoolKey struct {
 	dtype  dtypes.DType
 	length int

@@ -153,8 +153,9 @@ func (b *Backend) Capabilities() backends.Capabilities {
 // Builder creates a new builder used to construct a named computation.
 func (b *Backend) Builder(name string) backends.Builder {
 	builder := &Builder{
-		backend: b,
-		name:    name,
+		backend:   b,
+		name:      name,
+		nodeDedup: make(map[nodeDedupKey][]*Node),
 	}
 	// Set the "not implemented" custom message:
 	builder.Builder.ErrFn = notImplementedError
