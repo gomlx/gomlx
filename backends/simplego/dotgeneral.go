@@ -235,9 +235,10 @@ const (
 // execDotGeneral executes the DotGeneral operation, selecting the optimal execution path.
 //
 // Execution paths (in order of preference):
-//  1. SmallMatMul path: For small float32 matrices in contract-last order, skip transpose
-//  2. Normalized path: Transpose to [B,Cross,Contract] form for small/medium matrices
-//  3. Large (blocked) path: Cache-tiled algorithm for large matrices
+//  1. Pre-blocked path: If inputs are pre-blocked via BlockForDotGeneral, use blocked execution
+//  2. SmallMatMul path: For small float32 matrices in contract-last order, skip transpose
+//  3. Normalized path: Transpose to [B,Cross,Contract] form for small/medium matrices
+//  4. Large (blocked) path: Cache-tiled algorithm for large matrices
 func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	params := node.data.(*dotGeneralNodeData)
@@ -245,6 +246,30 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	dtype := lhs.shape.DType
 	output := backend.getBufferForShape(outputShape)
 	output.Zeros()
+
+	// Check if inputs are pre-blocked (via BlockForDotGeneral ops).
+	// Pre-blocked inputs skip the runtime blocking cost.
+	lhsNode := node.inputs[0]
+	rhsNode := node.inputs[1]
+	isLHSPreBlocked := lhsNode.opType == backends.OpTypeBlockForDotGeneral
+	isRHSPreBlocked := rhsNode.opType == backends.OpTypeBlockForDotGeneral
+
+	// If any input is pre-blocked, use the blocked execution path.
+	if isLHSPreBlocked || isRHSPreBlocked {
+		var lhsBlockData, rhsBlockData *blockForDotGeneralData
+		if isLHSPreBlocked {
+			lhsBlockData = lhsNode.data.(*blockForDotGeneralData)
+		}
+		if isRHSPreBlocked {
+			rhsBlockData = rhsNode.data.(*blockForDotGeneralData)
+		}
+		err := execDotGeneralWithPreBlocked(backend, lhs, rhs, lhsBlockData, rhsBlockData, params, output)
+		if err != nil {
+			backend.putBuffer(output)
+			return nil, err
+		}
+		return output, nil
+	}
 
 	// Try the direct path for small matrices in contract-last order.
 	// This skips transpose but has strided RHS access, so only beneficial for small matrices.
