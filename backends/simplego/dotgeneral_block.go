@@ -158,47 +158,6 @@ func shouldPreBlock(node *Node, crossSize, contractingSize int) bool {
 	}
 }
 
-// shouldPreBlockRHS determines if the RHS (weights) should be pre-blocked for DotGeneral.
-// This is a specialized version for backward compatibility with 2D weight matrices.
-//
-// Pre-blocking is beneficial when:
-// - RHS is a 2D tensor [K, N] (standard weight layout)
-// - RHS has no batch dimensions (weights are shared across batch)
-// - Single contracting axis on axis 0 for RHS
-// - The dtype is supported for blocking
-// - The matrix is large enough to benefit from blocking (at least one full block in each dimension)
-func shouldPreBlockRHS(rhs *Node, lhsContractingAxes, rhsContractingAxes, rhsBatchAxes []int) bool {
-	// RHS (weights) must be 2D: [K, N]
-	if rhs.shape.Rank() != 2 {
-		return false
-	}
-
-	// RHS must have no batch dimensions (weights are shared across batch)
-	if len(rhsBatchAxes) != 0 {
-		return false
-	}
-
-	// Single contracting axis for RHS
-	if len(rhsContractingAxes) != 1 {
-		return false
-	}
-
-	// RHS contracts on axis 0 (standard [K, N] weight layout)
-	if rhsContractingAxes[0] != 0 {
-		return false
-	}
-
-	// LHS must also have single contracting axis
-	if len(lhsContractingAxes) != 1 {
-		return false
-	}
-
-	// Use the general shouldPreBlock with derived cross/contracting sizes
-	K := rhs.shape.Dimensions[0] // contracting size
-	N := rhs.shape.Dimensions[1] // cross size
-	return shouldPreBlock(rhs, N, K)
-}
-
 // blockForDotGeneral returns a BlockForDotGeneral node for the given input tensor.
 // Uses de-duplication via getOrCreateNode to return an existing node if available.
 //
@@ -228,16 +187,6 @@ func (b *Builder) blockForDotGeneral(input *Node,
 
 	blocked, _ := b.getOrCreateNode(backends.OpTypeBlockForDotGeneral, blockedShape, []*Node{input}, data)
 	return blocked
-}
-
-// blockRHSForDotGeneral returns a BlockForDotGeneral node for the given 2D RHS input.
-// This is a convenience wrapper for the common case of blocking weight matrices.
-func (b *Builder) blockRHSForDotGeneral(rhs *Node) *Node {
-	// For 2D RHS [K, N], the contracting axis is 0 and there are no batch axes
-	K := rhs.shape.Dimensions[0] // contracting size
-	N := rhs.shape.Dimensions[1] // cross size
-
-	return b.blockForDotGeneral(rhs, []int{0}, []int{}, 1, N, K)
 }
 
 // execBlockForDotGeneral executes the pre-blocking operation.

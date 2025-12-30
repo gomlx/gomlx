@@ -173,20 +173,10 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	}
 	params.outputBlockedShape = dgCreateBlockedShape(outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
 
-	// Check if RHS should be pre-blocked for efficient repeated use (e.g., weight matrices).
-	// Pre-blocking converts the tensor to blocked format once, avoiding runtime blocking costs.
-	var blockedRHS *Node
-	if shouldPreBlockRHS(rhs, params.lhsContractingAxes, params.rhsContractingAxes, params.rhsBatchAxes) {
-		blockedRHS = b.blockRHSForDotGeneral(rhs)
-	}
-
 	// Create dot-general node: it will generate a normalized output [batchSize, lhsCrossSize, rhsCrossSize].
-	// Use pre-blocked RHS if available, otherwise use original RHS.
-	rhsInput := rhs
-	if blockedRHS != nil {
-		rhsInput = blockedRHS
-	}
-	dotGeneral, _ := b.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), []*Node{lhs, rhsInput}, &params)
+	// Note: Pre-blocking of inputs (via BlockForDotGeneral op) can be done explicitly by the caller
+	// for performance optimization. This will be integrated with a future MatMul op.
+	dotGeneral, _ := b.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), []*Node{lhs, rhs}, &params)
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))

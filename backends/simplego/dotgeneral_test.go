@@ -625,79 +625,6 @@ func TestShouldPreBlock(t *testing.T) {
 	builder.Finalize()
 }
 
-// TestShouldPreBlockRHS tests the shouldPreBlockRHS function that determines
-// whether the RHS (weights) should be pre-blocked for standard 2D matmul pattern.
-func TestShouldPreBlockRHS(t *testing.T) {
-	tests := []struct {
-		name               string
-		rhsShape           shapes.Shape
-		lhsContractingAxes []int
-		rhsContractingAxes []int
-		rhsBatchAxes       []int
-		want               bool
-	}{
-		{
-			name:               "Standard_2D_Weights_LargeEnough",
-			rhsShape:           shapes.Make(dtypes.Float32, 128, 256), // [K, N]
-			lhsContractingAxes: []int{1},
-			rhsContractingAxes: []int{0},
-			rhsBatchAxes:       []int{},
-			want:               true,
-		},
-		{
-			name:               "Standard_2D_Weights_TooSmall",
-			rhsShape:           shapes.Make(dtypes.Float32, 16, 16), // [K, N] too small
-			lhsContractingAxes: []int{1},
-			rhsContractingAxes: []int{0},
-			rhsBatchAxes:       []int{},
-			want:               false,
-		},
-		{
-			name:               "3D_Tensor_NotSupported",
-			rhsShape:           shapes.Make(dtypes.Float32, 4, 128, 256), // 3D not supported
-			lhsContractingAxes: []int{1},
-			rhsContractingAxes: []int{1},
-			rhsBatchAxes:       []int{0},
-			want:               false,
-		},
-		{
-			name:               "RHS_HasBatchAxes_NotSupported",
-			rhsShape:           shapes.Make(dtypes.Float32, 128, 256),
-			lhsContractingAxes: []int{1},
-			rhsContractingAxes: []int{0},
-			rhsBatchAxes:       []int{1}, // Has batch axes
-			want:               false,
-		},
-		{
-			name:               "RHS_ContractsOnAxis1_NotSupported",
-			rhsShape:           shapes.Make(dtypes.Float32, 128, 256),
-			lhsContractingAxes: []int{1},
-			rhsContractingAxes: []int{1}, // Contracts on axis 1, not 0
-			rhsBatchAxes:       []int{},
-			want:               false,
-		},
-		{
-			name:               "Multiple_ContractingAxes_NotSupported",
-			rhsShape:           shapes.Make(dtypes.Float32, 128, 256),
-			lhsContractingAxes: []int{1, 2},
-			rhsContractingAxes: []int{0, 1},
-			rhsBatchAxes:       []int{},
-			want:               false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rhs := &Node{
-				opType: backends.OpTypeParameter,
-				shape:  tt.rhsShape,
-			}
-			got := shouldPreBlockRHS(rhs, tt.lhsContractingAxes, tt.rhsContractingAxes, tt.rhsBatchAxes)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 // TestBlockForDotGeneral_Deduplication tests that the same weight matrix
 // is only blocked once when used in multiple DotGeneral operations.
 func TestBlockForDotGeneral_Deduplication(t *testing.T) {
@@ -709,21 +636,22 @@ func TestBlockForDotGeneral_Deduplication(t *testing.T) {
 	builder := goBackend.Builder("TestDeduplication").(*Builder)
 
 	// Create a parameter node (simulating weights)
-	weightsShape := shapes.Make(dtypes.Float32, 128, 256) // [K, N]
+	K, N := 128, 256
+	weightsShape := shapes.Make(dtypes.Float32, K, N) // [K, N]
 	weights, err := builder.Parameter("weights", weightsShape, nil)
 	require.NoError(t, err)
 	weightsNode := weights.(*Node)
 
 	// Get blocked input twice - should return the same node due to deduplication
-	blocked1 := builder.blockRHSForDotGeneral(weightsNode)
-	blocked2 := builder.blockRHSForDotGeneral(weightsNode)
+	// Using blockForDotGeneral with explicit parameters for a 2D weight matrix
+	blocked1 := builder.blockForDotGeneral(weightsNode, []int{0}, []int{}, 1, N, K)
+	blocked2 := builder.blockForDotGeneral(weightsNode, []int{0}, []int{}, 1, N, K)
 
 	// Should be the exact same node (pointer equality)
 	assert.Same(t, blocked1, blocked2, "Deduplication should return the same blocked node")
 
 	// Verify the blocked shape is correct
 	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtypes.Float32]
-	K, N := 128, 256
 	expectedCrossBlocks := (N + blockDim - 1) / blockDim
 	expectedContractBlocks := (K + blockDim - 1) / blockDim
 	assert.Equal(t, []int{1, expectedCrossBlocks, expectedContractBlocks, blockDim, blockDim},
