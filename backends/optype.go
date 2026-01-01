@@ -108,11 +108,13 @@ const (
 	OpTypeSign
 	OpTypeSin
 	OpTypeSlice
+	OpTypeSort
 	OpTypeSqrt
 	OpTypeSub
 	OpTypeTanh
 	OpTypeTranspose
 	OpTypeWhere
+	OpTypeWhile
 
 	// Collective (distributed across devices) operations
 

@@ -45,6 +45,7 @@ var (
 		"Sign",
 		"ShiftLeft", "ShiftRightArithmetic", "ShiftRightLogical",
 		"Slice",
+		"Sort", "While", // Require backend-specific closures
 		"Transpose", "Where")
 
 	// methodsNotGenerated but for which there is still a NodeType.
@@ -135,7 +136,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.BackendType = "...backends." + pi.BackendType[3:]
 				pi.NodeInputType = "[]" + pi.BackendType[3:]
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
-				pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
+				pi.ConvertStatement = fmt.Sprintf("nodeInputs_.%s...", param.Name)
 				pi.Format = "%+v"
 			case "FFTType":
 				pi.BackendType = "backends." + pi.BackendType
@@ -145,7 +146,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				case strings.HasPrefix(pi.BackendType, "..."):
 					pi.NodeInputType = "[]" + pi.BackendType[3:]
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
-					pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
+					pi.ConvertStatement = fmt.Sprintf("nodeInputs_.%s...", param.Name)
 				case strings.HasPrefix(pi.BackendType, "[]"):
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
 				case strings.HasPrefix(pi.BackendType, "func"):
@@ -164,7 +165,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.CopyStatement = pi.Name
 			}
 			if pi.ConvertStatement == "" {
-				pi.ConvertStatement = "inputs." + pi.Name
+				pi.ConvertStatement = "nodeInputs_." + pi.Name
 			}
 			if pi.Format == "" {
 				pi.Format = "%v"
@@ -311,7 +312,7 @@ Body: */}}{
 {{- end}}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 {{- end}}
-	inputs := &nodeInputs{{.BackendName}}{
+	nodeInputs_ := &nodeInputs{{.BackendName}}{
 {{- range .Inputs}}
 		{{.Name}}: {{.CopyStatement}},
 {{- end}}
@@ -352,7 +353,7 @@ Convert result(s) to node(s):
 {{- end}}
 {{- /* Rest of node definition */}}
 		graph: g,
-		inputs: inputs,
+		inputs: nodeInputs_,
 {{- if not .HasGraph}}
 		inputNodes: inputNodes,
 {{- end}}{{/*

@@ -215,3 +215,11 @@ func (b Builder) AllReduce(inputs []backends.Op, reduceOp backends.ReduceOpType,
 	[]backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeAllReduce)
 }
+
+func (b Builder) While(condFn, bodyFn any, initialStates ...backends.Op) ([]backends.Op, error) {
+	return nil, b.baseErrFn(backends.OpTypeWhile)
+}
+
+func (b Builder) Sort(comparatorFn any, dimension int, isStable bool, inputs ...backends.Op) ([]backends.Op, error) {
+	return nil, b.baseErrFn(backends.OpTypeSort)
+}
