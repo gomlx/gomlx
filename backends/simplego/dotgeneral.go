@@ -173,8 +173,21 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	}
 	params.outputBlockedShape = dgCreateBlockedShape(outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
 
+	// Pre-block inputs at graph build time if beneficial.
+	// This converts constant/parameter tensors to blocked format once, avoiding runtime blocking cost.
+	// The builder decides here; the executor will detect pre-blocked inputs and use them directly.
+	lhsInput, rhsInput := lhs, rhs
+	if shouldPreBlock(lhs, params.lhsCrossSize, params.contractingSize) {
+		lhsInput = b.blockForDotGeneral(lhs, params.lhsContractingAxes, params.lhsBatchAxes,
+			params.batchSize, params.lhsCrossSize, params.contractingSize)
+	}
+	if shouldPreBlock(rhs, params.rhsCrossSize, params.contractingSize) {
+		rhsInput = b.blockForDotGeneral(rhs, params.rhsContractingAxes, params.rhsBatchAxes,
+			params.batchSize, params.rhsCrossSize, params.contractingSize)
+	}
+
 	// Create dot-general node: it will generate a normalized output [batchSize, lhsCrossSize, rhsCrossSize].
-	dotGeneral, _ := b.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), []*Node{lhs, rhs}, &params)
+	dotGeneral, _ := b.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), []*Node{lhsInput, rhsInput}, &params)
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))
