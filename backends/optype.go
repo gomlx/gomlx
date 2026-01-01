@@ -108,6 +108,7 @@ const (
 	OpTypeSign
 	OpTypeSin
 	OpTypeSlice
+	OpTypeSort
 	OpTypeSqrt
 	OpTypeSub
 	OpTypeTanh

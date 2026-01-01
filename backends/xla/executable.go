@@ -1,8 +1,6 @@
 package xla
 
 import (
-	"os"
-
 	"github.com/gomlx/go-xla/pkg/pjrt"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	"github.com/gomlx/go-xla/pkg/types/shardy"
@@ -85,11 +83,6 @@ func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingS
 	}
 	if klog.V(2).Enabled() { //nolint:mnd // Log-level numbers are ok.
 		klog.Infof("StableHLO program:\n%s\n", program)
-	}
-	// TEMPORARY DEBUG: Always dump StableHLO to file for debugging
-	if b.name == "Exec:main.main.func1#0" {
-		os.WriteFile("/tmp/stablehlo_debug.mlir", program, 0644)
-		klog.Infof("TEMPORARY DEBUG: Dumped StableHLO to /tmp/stablehlo_debug.mlir (%d bytes)", len(program))
 	}
 
 	compileConfig := b.backend.client.Compile().WithStableHLO(program)

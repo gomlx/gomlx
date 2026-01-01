@@ -608,6 +608,24 @@ type StandardOps interface {
 	// 	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={5}, strides={2}) -> {2, 4}
 	Slice(x Op, starts, limits, strides []int) (Op, error)
 
+	// Sort sorts one or more tensors along the specified dimension using a comparator function.
+	// This is useful for implementing operations like top-k, argsort, or custom sorting logic.
+	//
+	// Parameters:
+	//   - comparatorFn: A function that compares two elements and returns a boolean.
+	//     For N inputs, it must have signature (lhs_0, ..., lhs_{N-1}, rhs_0, ..., rhs_{N-1}) -> scalar_bool
+	//     Returns true if lhs should come before rhs in sorted order.
+	//     The comparator is backend-specific (e.g., *stablehlo.Function for XLA).
+	//   - dimension: The dimension along which to sort (negative values count from the end)
+	//   - isStable: Whether the sort should be stable (preserve relative order of equal elements)
+	//   - inputs: One or more tensors to sort. All must have the same shape.
+	//     The first tensor is used for comparison by the comparatorFn.
+	//     Additional tensors are reordered to match the sorting of the first tensor.
+	//
+	// Returns:
+	//   - The sorted tensors in the same order as inputs.
+	Sort(comparatorFn any, dimension int, isStable bool, inputs ...Op) ([]Op, error)
+
 	// Sqrt returns the Op that represents the output of the corresponding operation.
 	Sqrt(x Op) (Op, error)
 

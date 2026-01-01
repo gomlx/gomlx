@@ -8,11 +8,11 @@ import (
 	"strings"
 )
 
-const _NodeTypeName = "InvalidSplitNodeAbsAddAllReduceArgMinMaxBatchNormForInferenceBatchNormForTrainingBatchNormGradientBitCountBitcastBitwiseAndBitwiseNotBitwiseOrBitwiseXorBroadcastInDimCeilClampClzComplexConcatenateConjConstantConvGeneralConvertDTypeCosDivDotDotGeneralDynamicBroadcastInDimDynamicReshapeDynamicSliceDynamicUpdateSliceEqualEqualTotalOrderErfExpExpm1FFTFloorGatherGetDimensionSizeGreaterOrEqualGreaterOrEqualTotalOrderGreaterThanGreaterThanTotalOrderIdentityImagIotaIsFiniteIsNaNLessOrEqualLessOrEqualTotalOrderLessThanLessThanTotalOrderLogLog1pLogicalAndLogicalNotLogicalOrLogicalXorLogisticMaxMinMulNegNotEqualNotEqualTotalOrderPadParameterPowRNGBitGeneratorRealReduceBitwiseAndReduceBitwiseOrReduceBitwiseXorReduceLogicalAndReduceLogicalOrReduceLogicalXorReduceMaxReduceMinReduceProductReduceSumReduceWindowRemReshapeReverseRoundRsqrtScatterMaxScatterMinScatterSumSelectAndScatterMaxSelectAndScatterMinShiftLeftShiftRightArithmeticShiftRightLogicalSignSinSliceSqrtSubTanhTransposeWhereWhile"
+const _NodeTypeName = "InvalidSplitNodeAbsAddAllReduceArgMinMaxBatchNormForInferenceBatchNormForTrainingBatchNormGradientBitCountBitcastBitwiseAndBitwiseNotBitwiseOrBitwiseXorBroadcastInDimCeilClampClzComplexConcatenateConjConstantConvGeneralConvertDTypeCosDivDotDotGeneralDynamicBroadcastInDimDynamicBroadcastInDimWithBoundsDynamicReshapeDynamicReshapeWithBoundsDynamicSliceDynamicUpdateSliceEqualEqualTotalOrderErfExpExpm1FFTFloorGatherGetDimensionSizeGreaterOrEqualGreaterOrEqualTotalOrderGreaterThanGreaterThanTotalOrderIdentityImagIotaIsFiniteIsNaNLessOrEqualLessOrEqualTotalOrderLessThanLessThanTotalOrderLogLog1pLogicalAndLogicalNotLogicalOrLogicalXorLogisticMaxMinMulNegNotEqualNotEqualTotalOrderPadParameterPowRNGBitGeneratorRealReduceBitwiseAndReduceBitwiseOrReduceBitwiseXorReduceLogicalAndReduceLogicalOrReduceLogicalXorReduceMaxReduceMinReduceProductReduceSumReduceWindowRemReshapeReverseRoundRsqrtScatterMaxScatterMinScatterSumSelectAndScatterMaxSelectAndScatterMinShiftLeftShiftRightArithmeticShiftRightLogicalSignSinSliceSortSqrtSubTanhTransposeWhereWhile"
 
-var _NodeTypeIndex = [...]uint16{0, 7, 16, 19, 22, 31, 40, 61, 81, 98, 106, 113, 123, 133, 142, 152, 166, 170, 175, 178, 185, 196, 200, 208, 219, 231, 234, 237, 240, 250, 271, 285, 297, 315, 320, 335, 338, 341, 346, 349, 354, 360, 376, 390, 414, 425, 446, 454, 458, 462, 470, 475, 486, 507, 515, 533, 536, 541, 551, 561, 570, 580, 588, 591, 594, 597, 600, 608, 626, 629, 638, 641, 656, 660, 676, 691, 707, 723, 738, 754, 763, 772, 785, 794, 806, 809, 816, 823, 828, 833, 843, 853, 863, 882, 901, 910, 930, 947, 951, 954, 959, 963, 966, 970, 979, 984, 989}
+var _NodeTypeIndex = [...]uint16{0, 7, 16, 19, 22, 31, 40, 61, 81, 98, 106, 113, 123, 133, 142, 152, 166, 170, 175, 178, 185, 196, 200, 208, 219, 231, 234, 237, 240, 250, 271, 302, 316, 340, 352, 370, 375, 390, 393, 396, 401, 404, 409, 415, 431, 445, 469, 480, 501, 509, 513, 517, 525, 530, 541, 562, 570, 588, 591, 596, 606, 616, 625, 635, 643, 646, 649, 652, 655, 663, 681, 684, 693, 696, 711, 715, 731, 746, 762, 778, 793, 809, 818, 827, 840, 849, 861, 864, 871, 878, 883, 888, 898, 908, 918, 937, 956, 965, 985, 1002, 1006, 1009, 1014, 1018, 1022, 1025, 1029, 1038, 1043, 1048}
 
-const _NodeTypeLowerName = "invalidsplitnodeabsaddallreduceargminmaxbatchnormforinferencebatchnormfortrainingbatchnormgradientbitcountbitcastbitwiseandbitwisenotbitwiseorbitwisexorbroadcastindimceilclampclzcomplexconcatenateconjconstantconvgeneralconvertdtypecosdivdotdotgeneraldynamicbroadcastindimdynamicreshapedynamicslicedynamicupdatesliceequalequaltotalordererfexpexpm1fftfloorgathergetdimensionsizegreaterorequalgreaterorequaltotalordergreaterthangreaterthantotalorderidentityimagiotaisfiniteisnanlessorequallessorequaltotalorderlessthanlessthantotalorderloglog1plogicalandlogicalnotlogicalorlogicalxorlogisticmaxminmulnegnotequalnotequaltotalorderpadparameterpowrngbitgeneratorrealreducebitwiseandreducebitwiseorreducebitwisexorreducelogicalandreducelogicalorreducelogicalxorreducemaxreduceminreduceproductreducesumreducewindowremreshapereverseroundrsqrtscattermaxscatterminscattersumselectandscattermaxselectandscatterminshiftleftshiftrightarithmeticshiftrightlogicalsignsinslicesqrtsubtanhtransposewherewhile"
+const _NodeTypeLowerName = "invalidsplitnodeabsaddallreduceargminmaxbatchnormforinferencebatchnormfortrainingbatchnormgradientbitcountbitcastbitwiseandbitwisenotbitwiseorbitwisexorbroadcastindimceilclampclzcomplexconcatenateconjconstantconvgeneralconvertdtypecosdivdotdotgeneraldynamicbroadcastindimdynamicbroadcastindimwithboundsdynamicreshapedynamicreshapewithboundsdynamicslicedynamicupdatesliceequalequaltotalordererfexpexpm1fftfloorgathergetdimensionsizegreaterorequalgreaterorequaltotalordergreaterthangreaterthantotalorderidentityimagiotaisfiniteisnanlessorequallessorequaltotalorderlessthanlessthantotalorderloglog1plogicalandlogicalnotlogicalorlogicalxorlogisticmaxminmulnegnotequalnotequaltotalorderpadparameterpowrngbitgeneratorrealreducebitwiseandreducebitwiseorreducebitwisexorreducelogicalandreducelogicalorreducelogicalxorreducemaxreduceminreduceproductreducesumreducewindowremreshapereverseroundrsqrtscattermaxscatterminscattersumselectandscattermaxselectandscatterminshiftleftshiftrightarithmeticshiftrightlogicalsignsinslicesortsqrtsubtanhtransposewherewhile"
 
 func (i NodeType) String() string {
 	if i < 0 || i >= NodeType(len(_NodeTypeIndex)-1) {
@@ -59,299 +59,308 @@ func _NodeTypeNoOp() {
 	_ = x[NodeTypeDot-(27)]
 	_ = x[NodeTypeDotGeneral-(28)]
 	_ = x[NodeTypeDynamicBroadcastInDim-(29)]
-	_ = x[NodeTypeDynamicReshape-(30)]
-	_ = x[NodeTypeDynamicSlice-(31)]
-	_ = x[NodeTypeDynamicUpdateSlice-(32)]
-	_ = x[NodeTypeEqual-(33)]
-	_ = x[NodeTypeEqualTotalOrder-(34)]
-	_ = x[NodeTypeErf-(35)]
-	_ = x[NodeTypeExp-(36)]
-	_ = x[NodeTypeExpm1-(37)]
-	_ = x[NodeTypeFFT-(38)]
-	_ = x[NodeTypeFloor-(39)]
-	_ = x[NodeTypeGather-(40)]
-	_ = x[NodeTypeGetDimensionSize-(41)]
-	_ = x[NodeTypeGreaterOrEqual-(42)]
-	_ = x[NodeTypeGreaterOrEqualTotalOrder-(43)]
-	_ = x[NodeTypeGreaterThan-(44)]
-	_ = x[NodeTypeGreaterThanTotalOrder-(45)]
-	_ = x[NodeTypeIdentity-(46)]
-	_ = x[NodeTypeImag-(47)]
-	_ = x[NodeTypeIota-(48)]
-	_ = x[NodeTypeIsFinite-(49)]
-	_ = x[NodeTypeIsNaN-(50)]
-	_ = x[NodeTypeLessOrEqual-(51)]
-	_ = x[NodeTypeLessOrEqualTotalOrder-(52)]
-	_ = x[NodeTypeLessThan-(53)]
-	_ = x[NodeTypeLessThanTotalOrder-(54)]
-	_ = x[NodeTypeLog-(55)]
-	_ = x[NodeTypeLog1p-(56)]
-	_ = x[NodeTypeLogicalAnd-(57)]
-	_ = x[NodeTypeLogicalNot-(58)]
-	_ = x[NodeTypeLogicalOr-(59)]
-	_ = x[NodeTypeLogicalXor-(60)]
-	_ = x[NodeTypeLogistic-(61)]
-	_ = x[NodeTypeMax-(62)]
-	_ = x[NodeTypeMin-(63)]
-	_ = x[NodeTypeMul-(64)]
-	_ = x[NodeTypeNeg-(65)]
-	_ = x[NodeTypeNotEqual-(66)]
-	_ = x[NodeTypeNotEqualTotalOrder-(67)]
-	_ = x[NodeTypePad-(68)]
-	_ = x[NodeTypeParameter-(69)]
-	_ = x[NodeTypePow-(70)]
-	_ = x[NodeTypeRNGBitGenerator-(71)]
-	_ = x[NodeTypeReal-(72)]
-	_ = x[NodeTypeReduceBitwiseAnd-(73)]
-	_ = x[NodeTypeReduceBitwiseOr-(74)]
-	_ = x[NodeTypeReduceBitwiseXor-(75)]
-	_ = x[NodeTypeReduceLogicalAnd-(76)]
-	_ = x[NodeTypeReduceLogicalOr-(77)]
-	_ = x[NodeTypeReduceLogicalXor-(78)]
-	_ = x[NodeTypeReduceMax-(79)]
-	_ = x[NodeTypeReduceMin-(80)]
-	_ = x[NodeTypeReduceProduct-(81)]
-	_ = x[NodeTypeReduceSum-(82)]
-	_ = x[NodeTypeReduceWindow-(83)]
-	_ = x[NodeTypeRem-(84)]
-	_ = x[NodeTypeReshape-(85)]
-	_ = x[NodeTypeReverse-(86)]
-	_ = x[NodeTypeRound-(87)]
-	_ = x[NodeTypeRsqrt-(88)]
-	_ = x[NodeTypeScatterMax-(89)]
-	_ = x[NodeTypeScatterMin-(90)]
-	_ = x[NodeTypeScatterSum-(91)]
-	_ = x[NodeTypeSelectAndScatterMax-(92)]
-	_ = x[NodeTypeSelectAndScatterMin-(93)]
-	_ = x[NodeTypeShiftLeft-(94)]
-	_ = x[NodeTypeShiftRightArithmetic-(95)]
-	_ = x[NodeTypeShiftRightLogical-(96)]
-	_ = x[NodeTypeSign-(97)]
-	_ = x[NodeTypeSin-(98)]
-	_ = x[NodeTypeSlice-(99)]
-	_ = x[NodeTypeSqrt-(100)]
-	_ = x[NodeTypeSub-(101)]
-	_ = x[NodeTypeTanh-(102)]
-	_ = x[NodeTypeTranspose-(103)]
-	_ = x[NodeTypeWhere-(104)]
-	_ = x[NodeTypeWhile-(105)]
+	_ = x[NodeTypeDynamicBroadcastInDimWithBounds-(30)]
+	_ = x[NodeTypeDynamicReshape-(31)]
+	_ = x[NodeTypeDynamicReshapeWithBounds-(32)]
+	_ = x[NodeTypeDynamicSlice-(33)]
+	_ = x[NodeTypeDynamicUpdateSlice-(34)]
+	_ = x[NodeTypeEqual-(35)]
+	_ = x[NodeTypeEqualTotalOrder-(36)]
+	_ = x[NodeTypeErf-(37)]
+	_ = x[NodeTypeExp-(38)]
+	_ = x[NodeTypeExpm1-(39)]
+	_ = x[NodeTypeFFT-(40)]
+	_ = x[NodeTypeFloor-(41)]
+	_ = x[NodeTypeGather-(42)]
+	_ = x[NodeTypeGetDimensionSize-(43)]
+	_ = x[NodeTypeGreaterOrEqual-(44)]
+	_ = x[NodeTypeGreaterOrEqualTotalOrder-(45)]
+	_ = x[NodeTypeGreaterThan-(46)]
+	_ = x[NodeTypeGreaterThanTotalOrder-(47)]
+	_ = x[NodeTypeIdentity-(48)]
+	_ = x[NodeTypeImag-(49)]
+	_ = x[NodeTypeIota-(50)]
+	_ = x[NodeTypeIsFinite-(51)]
+	_ = x[NodeTypeIsNaN-(52)]
+	_ = x[NodeTypeLessOrEqual-(53)]
+	_ = x[NodeTypeLessOrEqualTotalOrder-(54)]
+	_ = x[NodeTypeLessThan-(55)]
+	_ = x[NodeTypeLessThanTotalOrder-(56)]
+	_ = x[NodeTypeLog-(57)]
+	_ = x[NodeTypeLog1p-(58)]
+	_ = x[NodeTypeLogicalAnd-(59)]
+	_ = x[NodeTypeLogicalNot-(60)]
+	_ = x[NodeTypeLogicalOr-(61)]
+	_ = x[NodeTypeLogicalXor-(62)]
+	_ = x[NodeTypeLogistic-(63)]
+	_ = x[NodeTypeMax-(64)]
+	_ = x[NodeTypeMin-(65)]
+	_ = x[NodeTypeMul-(66)]
+	_ = x[NodeTypeNeg-(67)]
+	_ = x[NodeTypeNotEqual-(68)]
+	_ = x[NodeTypeNotEqualTotalOrder-(69)]
+	_ = x[NodeTypePad-(70)]
+	_ = x[NodeTypeParameter-(71)]
+	_ = x[NodeTypePow-(72)]
+	_ = x[NodeTypeRNGBitGenerator-(73)]
+	_ = x[NodeTypeReal-(74)]
+	_ = x[NodeTypeReduceBitwiseAnd-(75)]
+	_ = x[NodeTypeReduceBitwiseOr-(76)]
+	_ = x[NodeTypeReduceBitwiseXor-(77)]
+	_ = x[NodeTypeReduceLogicalAnd-(78)]
+	_ = x[NodeTypeReduceLogicalOr-(79)]
+	_ = x[NodeTypeReduceLogicalXor-(80)]
+	_ = x[NodeTypeReduceMax-(81)]
+	_ = x[NodeTypeReduceMin-(82)]
+	_ = x[NodeTypeReduceProduct-(83)]
+	_ = x[NodeTypeReduceSum-(84)]
+	_ = x[NodeTypeReduceWindow-(85)]
+	_ = x[NodeTypeRem-(86)]
+	_ = x[NodeTypeReshape-(87)]
+	_ = x[NodeTypeReverse-(88)]
+	_ = x[NodeTypeRound-(89)]
+	_ = x[NodeTypeRsqrt-(90)]
+	_ = x[NodeTypeScatterMax-(91)]
+	_ = x[NodeTypeScatterMin-(92)]
+	_ = x[NodeTypeScatterSum-(93)]
+	_ = x[NodeTypeSelectAndScatterMax-(94)]
+	_ = x[NodeTypeSelectAndScatterMin-(95)]
+	_ = x[NodeTypeShiftLeft-(96)]
+	_ = x[NodeTypeShiftRightArithmetic-(97)]
+	_ = x[NodeTypeShiftRightLogical-(98)]
+	_ = x[NodeTypeSign-(99)]
+	_ = x[NodeTypeSin-(100)]
+	_ = x[NodeTypeSlice-(101)]
+	_ = x[NodeTypeSort-(102)]
+	_ = x[NodeTypeSqrt-(103)]
+	_ = x[NodeTypeSub-(104)]
+	_ = x[NodeTypeTanh-(105)]
+	_ = x[NodeTypeTranspose-(106)]
+	_ = x[NodeTypeWhere-(107)]
+	_ = x[NodeTypeWhile-(108)]
 }
 
-var _NodeTypeValues = []NodeType{NodeTypeInvalid, NodeTypeSplitNode, NodeTypeAbs, NodeTypeAdd, NodeTypeAllReduce, NodeTypeArgMinMax, NodeTypeBatchNormForInference, NodeTypeBatchNormForTraining, NodeTypeBatchNormGradient, NodeTypeBitCount, NodeTypeBitcast, NodeTypeBitwiseAnd, NodeTypeBitwiseNot, NodeTypeBitwiseOr, NodeTypeBitwiseXor, NodeTypeBroadcastInDim, NodeTypeCeil, NodeTypeClamp, NodeTypeClz, NodeTypeComplex, NodeTypeConcatenate, NodeTypeConj, NodeTypeConstant, NodeTypeConvGeneral, NodeTypeConvertDType, NodeTypeCos, NodeTypeDiv, NodeTypeDot, NodeTypeDotGeneral, NodeTypeDynamicBroadcastInDim, NodeTypeDynamicReshape, NodeTypeDynamicSlice, NodeTypeDynamicUpdateSlice, NodeTypeEqual, NodeTypeEqualTotalOrder, NodeTypeErf, NodeTypeExp, NodeTypeExpm1, NodeTypeFFT, NodeTypeFloor, NodeTypeGather, NodeTypeGetDimensionSize, NodeTypeGreaterOrEqual, NodeTypeGreaterOrEqualTotalOrder, NodeTypeGreaterThan, NodeTypeGreaterThanTotalOrder, NodeTypeIdentity, NodeTypeImag, NodeTypeIota, NodeTypeIsFinite, NodeTypeIsNaN, NodeTypeLessOrEqual, NodeTypeLessOrEqualTotalOrder, NodeTypeLessThan, NodeTypeLessThanTotalOrder, NodeTypeLog, NodeTypeLog1p, NodeTypeLogicalAnd, NodeTypeLogicalNot, NodeTypeLogicalOr, NodeTypeLogicalXor, NodeTypeLogistic, NodeTypeMax, NodeTypeMin, NodeTypeMul, NodeTypeNeg, NodeTypeNotEqual, NodeTypeNotEqualTotalOrder, NodeTypePad, NodeTypeParameter, NodeTypePow, NodeTypeRNGBitGenerator, NodeTypeReal, NodeTypeReduceBitwiseAnd, NodeTypeReduceBitwiseOr, NodeTypeReduceBitwiseXor, NodeTypeReduceLogicalAnd, NodeTypeReduceLogicalOr, NodeTypeReduceLogicalXor, NodeTypeReduceMax, NodeTypeReduceMin, NodeTypeReduceProduct, NodeTypeReduceSum, NodeTypeReduceWindow, NodeTypeRem, NodeTypeReshape, NodeTypeReverse, NodeTypeRound, NodeTypeRsqrt, NodeTypeScatterMax, NodeTypeScatterMin, NodeTypeScatterSum, NodeTypeSelectAndScatterMax, NodeTypeSelectAndScatterMin, NodeTypeShiftLeft, NodeTypeShiftRightArithmetic, NodeTypeShiftRightLogical, NodeTypeSign, NodeTypeSin, NodeTypeSlice, NodeTypeSqrt, NodeTypeSub, NodeTypeTanh, NodeTypeTranspose, NodeTypeWhere, NodeTypeWhile}
+var _NodeTypeValues = []NodeType{NodeTypeInvalid, NodeTypeSplitNode, NodeTypeAbs, NodeTypeAdd, NodeTypeAllReduce, NodeTypeArgMinMax, NodeTypeBatchNormForInference, NodeTypeBatchNormForTraining, NodeTypeBatchNormGradient, NodeTypeBitCount, NodeTypeBitcast, NodeTypeBitwiseAnd, NodeTypeBitwiseNot, NodeTypeBitwiseOr, NodeTypeBitwiseXor, NodeTypeBroadcastInDim, NodeTypeCeil, NodeTypeClamp, NodeTypeClz, NodeTypeComplex, NodeTypeConcatenate, NodeTypeConj, NodeTypeConstant, NodeTypeConvGeneral, NodeTypeConvertDType, NodeTypeCos, NodeTypeDiv, NodeTypeDot, NodeTypeDotGeneral, NodeTypeDynamicBroadcastInDim, NodeTypeDynamicBroadcastInDimWithBounds, NodeTypeDynamicReshape, NodeTypeDynamicReshapeWithBounds, NodeTypeDynamicSlice, NodeTypeDynamicUpdateSlice, NodeTypeEqual, NodeTypeEqualTotalOrder, NodeTypeErf, NodeTypeExp, NodeTypeExpm1, NodeTypeFFT, NodeTypeFloor, NodeTypeGather, NodeTypeGetDimensionSize, NodeTypeGreaterOrEqual, NodeTypeGreaterOrEqualTotalOrder, NodeTypeGreaterThan, NodeTypeGreaterThanTotalOrder, NodeTypeIdentity, NodeTypeImag, NodeTypeIota, NodeTypeIsFinite, NodeTypeIsNaN, NodeTypeLessOrEqual, NodeTypeLessOrEqualTotalOrder, NodeTypeLessThan, NodeTypeLessThanTotalOrder, NodeTypeLog, NodeTypeLog1p, NodeTypeLogicalAnd, NodeTypeLogicalNot, NodeTypeLogicalOr, NodeTypeLogicalXor, NodeTypeLogistic, NodeTypeMax, NodeTypeMin, NodeTypeMul, NodeTypeNeg, NodeTypeNotEqual, NodeTypeNotEqualTotalOrder, NodeTypePad, NodeTypeParameter, NodeTypePow, NodeTypeRNGBitGenerator, NodeTypeReal, NodeTypeReduceBitwiseAnd, NodeTypeReduceBitwiseOr, NodeTypeReduceBitwiseXor, NodeTypeReduceLogicalAnd, NodeTypeReduceLogicalOr, NodeTypeReduceLogicalXor, NodeTypeReduceMax, NodeTypeReduceMin, NodeTypeReduceProduct, NodeTypeReduceSum, NodeTypeReduceWindow, NodeTypeRem, NodeTypeReshape, NodeTypeReverse, NodeTypeRound, NodeTypeRsqrt, NodeTypeScatterMax, NodeTypeScatterMin, NodeTypeScatterSum, NodeTypeSelectAndScatterMax, NodeTypeSelectAndScatterMin, NodeTypeShiftLeft, NodeTypeShiftRightArithmetic, NodeTypeShiftRightLogical, NodeTypeSign, NodeTypeSin, NodeTypeSlice, NodeTypeSort, NodeTypeSqrt, NodeTypeSub, NodeTypeTanh, NodeTypeTranspose, NodeTypeWhere, NodeTypeWhile}
 
 var _NodeTypeNameToValueMap = map[string]NodeType{
-	_NodeTypeName[0:7]:          NodeTypeInvalid,
-	_NodeTypeLowerName[0:7]:     NodeTypeInvalid,
-	_NodeTypeName[7:16]:         NodeTypeSplitNode,
-	_NodeTypeLowerName[7:16]:    NodeTypeSplitNode,
-	_NodeTypeName[16:19]:        NodeTypeAbs,
-	_NodeTypeLowerName[16:19]:   NodeTypeAbs,
-	_NodeTypeName[19:22]:        NodeTypeAdd,
-	_NodeTypeLowerName[19:22]:   NodeTypeAdd,
-	_NodeTypeName[22:31]:        NodeTypeAllReduce,
-	_NodeTypeLowerName[22:31]:   NodeTypeAllReduce,
-	_NodeTypeName[31:40]:        NodeTypeArgMinMax,
-	_NodeTypeLowerName[31:40]:   NodeTypeArgMinMax,
-	_NodeTypeName[40:61]:        NodeTypeBatchNormForInference,
-	_NodeTypeLowerName[40:61]:   NodeTypeBatchNormForInference,
-	_NodeTypeName[61:81]:        NodeTypeBatchNormForTraining,
-	_NodeTypeLowerName[61:81]:   NodeTypeBatchNormForTraining,
-	_NodeTypeName[81:98]:        NodeTypeBatchNormGradient,
-	_NodeTypeLowerName[81:98]:   NodeTypeBatchNormGradient,
-	_NodeTypeName[98:106]:       NodeTypeBitCount,
-	_NodeTypeLowerName[98:106]:  NodeTypeBitCount,
-	_NodeTypeName[106:113]:      NodeTypeBitcast,
-	_NodeTypeLowerName[106:113]: NodeTypeBitcast,
-	_NodeTypeName[113:123]:      NodeTypeBitwiseAnd,
-	_NodeTypeLowerName[113:123]: NodeTypeBitwiseAnd,
-	_NodeTypeName[123:133]:      NodeTypeBitwiseNot,
-	_NodeTypeLowerName[123:133]: NodeTypeBitwiseNot,
-	_NodeTypeName[133:142]:      NodeTypeBitwiseOr,
-	_NodeTypeLowerName[133:142]: NodeTypeBitwiseOr,
-	_NodeTypeName[142:152]:      NodeTypeBitwiseXor,
-	_NodeTypeLowerName[142:152]: NodeTypeBitwiseXor,
-	_NodeTypeName[152:166]:      NodeTypeBroadcastInDim,
-	_NodeTypeLowerName[152:166]: NodeTypeBroadcastInDim,
-	_NodeTypeName[166:170]:      NodeTypeCeil,
-	_NodeTypeLowerName[166:170]: NodeTypeCeil,
-	_NodeTypeName[170:175]:      NodeTypeClamp,
-	_NodeTypeLowerName[170:175]: NodeTypeClamp,
-	_NodeTypeName[175:178]:      NodeTypeClz,
-	_NodeTypeLowerName[175:178]: NodeTypeClz,
-	_NodeTypeName[178:185]:      NodeTypeComplex,
-	_NodeTypeLowerName[178:185]: NodeTypeComplex,
-	_NodeTypeName[185:196]:      NodeTypeConcatenate,
-	_NodeTypeLowerName[185:196]: NodeTypeConcatenate,
-	_NodeTypeName[196:200]:      NodeTypeConj,
-	_NodeTypeLowerName[196:200]: NodeTypeConj,
-	_NodeTypeName[200:208]:      NodeTypeConstant,
-	_NodeTypeLowerName[200:208]: NodeTypeConstant,
-	_NodeTypeName[208:219]:      NodeTypeConvGeneral,
-	_NodeTypeLowerName[208:219]: NodeTypeConvGeneral,
-	_NodeTypeName[219:231]:      NodeTypeConvertDType,
-	_NodeTypeLowerName[219:231]: NodeTypeConvertDType,
-	_NodeTypeName[231:234]:      NodeTypeCos,
-	_NodeTypeLowerName[231:234]: NodeTypeCos,
-	_NodeTypeName[234:237]:      NodeTypeDiv,
-	_NodeTypeLowerName[234:237]: NodeTypeDiv,
-	_NodeTypeName[237:240]:      NodeTypeDot,
-	_NodeTypeLowerName[237:240]: NodeTypeDot,
-	_NodeTypeName[240:250]:      NodeTypeDotGeneral,
-	_NodeTypeLowerName[240:250]: NodeTypeDotGeneral,
-	_NodeTypeName[250:271]:      NodeTypeDynamicBroadcastInDim,
-	_NodeTypeLowerName[250:271]: NodeTypeDynamicBroadcastInDim,
-	_NodeTypeName[271:285]:      NodeTypeDynamicReshape,
-	_NodeTypeLowerName[271:285]: NodeTypeDynamicReshape,
-	_NodeTypeName[285:297]:      NodeTypeDynamicSlice,
-	_NodeTypeLowerName[285:297]: NodeTypeDynamicSlice,
-	_NodeTypeName[297:315]:      NodeTypeDynamicUpdateSlice,
-	_NodeTypeLowerName[297:315]: NodeTypeDynamicUpdateSlice,
-	_NodeTypeName[315:320]:      NodeTypeEqual,
-	_NodeTypeLowerName[315:320]: NodeTypeEqual,
-	_NodeTypeName[320:335]:      NodeTypeEqualTotalOrder,
-	_NodeTypeLowerName[320:335]: NodeTypeEqualTotalOrder,
-	_NodeTypeName[335:338]:      NodeTypeErf,
-	_NodeTypeLowerName[335:338]: NodeTypeErf,
-	_NodeTypeName[338:341]:      NodeTypeExp,
-	_NodeTypeLowerName[338:341]: NodeTypeExp,
-	_NodeTypeName[341:346]:      NodeTypeExpm1,
-	_NodeTypeLowerName[341:346]: NodeTypeExpm1,
-	_NodeTypeName[346:349]:      NodeTypeFFT,
-	_NodeTypeLowerName[346:349]: NodeTypeFFT,
-	_NodeTypeName[349:354]:      NodeTypeFloor,
-	_NodeTypeLowerName[349:354]: NodeTypeFloor,
-	_NodeTypeName[354:360]:      NodeTypeGather,
-	_NodeTypeLowerName[354:360]: NodeTypeGather,
-	_NodeTypeName[360:376]:      NodeTypeGetDimensionSize,
-	_NodeTypeLowerName[360:376]: NodeTypeGetDimensionSize,
-	_NodeTypeName[376:390]:      NodeTypeGreaterOrEqual,
-	_NodeTypeLowerName[376:390]: NodeTypeGreaterOrEqual,
-	_NodeTypeName[390:414]:      NodeTypeGreaterOrEqualTotalOrder,
-	_NodeTypeLowerName[390:414]: NodeTypeGreaterOrEqualTotalOrder,
-	_NodeTypeName[414:425]:      NodeTypeGreaterThan,
-	_NodeTypeLowerName[414:425]: NodeTypeGreaterThan,
-	_NodeTypeName[425:446]:      NodeTypeGreaterThanTotalOrder,
-	_NodeTypeLowerName[425:446]: NodeTypeGreaterThanTotalOrder,
-	_NodeTypeName[446:454]:      NodeTypeIdentity,
-	_NodeTypeLowerName[446:454]: NodeTypeIdentity,
-	_NodeTypeName[454:458]:      NodeTypeImag,
-	_NodeTypeLowerName[454:458]: NodeTypeImag,
-	_NodeTypeName[458:462]:      NodeTypeIota,
-	_NodeTypeLowerName[458:462]: NodeTypeIota,
-	_NodeTypeName[462:470]:      NodeTypeIsFinite,
-	_NodeTypeLowerName[462:470]: NodeTypeIsFinite,
-	_NodeTypeName[470:475]:      NodeTypeIsNaN,
-	_NodeTypeLowerName[470:475]: NodeTypeIsNaN,
-	_NodeTypeName[475:486]:      NodeTypeLessOrEqual,
-	_NodeTypeLowerName[475:486]: NodeTypeLessOrEqual,
-	_NodeTypeName[486:507]:      NodeTypeLessOrEqualTotalOrder,
-	_NodeTypeLowerName[486:507]: NodeTypeLessOrEqualTotalOrder,
-	_NodeTypeName[507:515]:      NodeTypeLessThan,
-	_NodeTypeLowerName[507:515]: NodeTypeLessThan,
-	_NodeTypeName[515:533]:      NodeTypeLessThanTotalOrder,
-	_NodeTypeLowerName[515:533]: NodeTypeLessThanTotalOrder,
-	_NodeTypeName[533:536]:      NodeTypeLog,
-	_NodeTypeLowerName[533:536]: NodeTypeLog,
-	_NodeTypeName[536:541]:      NodeTypeLog1p,
-	_NodeTypeLowerName[536:541]: NodeTypeLog1p,
-	_NodeTypeName[541:551]:      NodeTypeLogicalAnd,
-	_NodeTypeLowerName[541:551]: NodeTypeLogicalAnd,
-	_NodeTypeName[551:561]:      NodeTypeLogicalNot,
-	_NodeTypeLowerName[551:561]: NodeTypeLogicalNot,
-	_NodeTypeName[561:570]:      NodeTypeLogicalOr,
-	_NodeTypeLowerName[561:570]: NodeTypeLogicalOr,
-	_NodeTypeName[570:580]:      NodeTypeLogicalXor,
-	_NodeTypeLowerName[570:580]: NodeTypeLogicalXor,
-	_NodeTypeName[580:588]:      NodeTypeLogistic,
-	_NodeTypeLowerName[580:588]: NodeTypeLogistic,
-	_NodeTypeName[588:591]:      NodeTypeMax,
-	_NodeTypeLowerName[588:591]: NodeTypeMax,
-	_NodeTypeName[591:594]:      NodeTypeMin,
-	_NodeTypeLowerName[591:594]: NodeTypeMin,
-	_NodeTypeName[594:597]:      NodeTypeMul,
-	_NodeTypeLowerName[594:597]: NodeTypeMul,
-	_NodeTypeName[597:600]:      NodeTypeNeg,
-	_NodeTypeLowerName[597:600]: NodeTypeNeg,
-	_NodeTypeName[600:608]:      NodeTypeNotEqual,
-	_NodeTypeLowerName[600:608]: NodeTypeNotEqual,
-	_NodeTypeName[608:626]:      NodeTypeNotEqualTotalOrder,
-	_NodeTypeLowerName[608:626]: NodeTypeNotEqualTotalOrder,
-	_NodeTypeName[626:629]:      NodeTypePad,
-	_NodeTypeLowerName[626:629]: NodeTypePad,
-	_NodeTypeName[629:638]:      NodeTypeParameter,
-	_NodeTypeLowerName[629:638]: NodeTypeParameter,
-	_NodeTypeName[638:641]:      NodeTypePow,
-	_NodeTypeLowerName[638:641]: NodeTypePow,
-	_NodeTypeName[641:656]:      NodeTypeRNGBitGenerator,
-	_NodeTypeLowerName[641:656]: NodeTypeRNGBitGenerator,
-	_NodeTypeName[656:660]:      NodeTypeReal,
-	_NodeTypeLowerName[656:660]: NodeTypeReal,
-	_NodeTypeName[660:676]:      NodeTypeReduceBitwiseAnd,
-	_NodeTypeLowerName[660:676]: NodeTypeReduceBitwiseAnd,
-	_NodeTypeName[676:691]:      NodeTypeReduceBitwiseOr,
-	_NodeTypeLowerName[676:691]: NodeTypeReduceBitwiseOr,
-	_NodeTypeName[691:707]:      NodeTypeReduceBitwiseXor,
-	_NodeTypeLowerName[691:707]: NodeTypeReduceBitwiseXor,
-	_NodeTypeName[707:723]:      NodeTypeReduceLogicalAnd,
-	_NodeTypeLowerName[707:723]: NodeTypeReduceLogicalAnd,
-	_NodeTypeName[723:738]:      NodeTypeReduceLogicalOr,
-	_NodeTypeLowerName[723:738]: NodeTypeReduceLogicalOr,
-	_NodeTypeName[738:754]:      NodeTypeReduceLogicalXor,
-	_NodeTypeLowerName[738:754]: NodeTypeReduceLogicalXor,
-	_NodeTypeName[754:763]:      NodeTypeReduceMax,
-	_NodeTypeLowerName[754:763]: NodeTypeReduceMax,
-	_NodeTypeName[763:772]:      NodeTypeReduceMin,
-	_NodeTypeLowerName[763:772]: NodeTypeReduceMin,
-	_NodeTypeName[772:785]:      NodeTypeReduceProduct,
-	_NodeTypeLowerName[772:785]: NodeTypeReduceProduct,
-	_NodeTypeName[785:794]:      NodeTypeReduceSum,
-	_NodeTypeLowerName[785:794]: NodeTypeReduceSum,
-	_NodeTypeName[794:806]:      NodeTypeReduceWindow,
-	_NodeTypeLowerName[794:806]: NodeTypeReduceWindow,
-	_NodeTypeName[806:809]:      NodeTypeRem,
-	_NodeTypeLowerName[806:809]: NodeTypeRem,
-	_NodeTypeName[809:816]:      NodeTypeReshape,
-	_NodeTypeLowerName[809:816]: NodeTypeReshape,
-	_NodeTypeName[816:823]:      NodeTypeReverse,
-	_NodeTypeLowerName[816:823]: NodeTypeReverse,
-	_NodeTypeName[823:828]:      NodeTypeRound,
-	_NodeTypeLowerName[823:828]: NodeTypeRound,
-	_NodeTypeName[828:833]:      NodeTypeRsqrt,
-	_NodeTypeLowerName[828:833]: NodeTypeRsqrt,
-	_NodeTypeName[833:843]:      NodeTypeScatterMax,
-	_NodeTypeLowerName[833:843]: NodeTypeScatterMax,
-	_NodeTypeName[843:853]:      NodeTypeScatterMin,
-	_NodeTypeLowerName[843:853]: NodeTypeScatterMin,
-	_NodeTypeName[853:863]:      NodeTypeScatterSum,
-	_NodeTypeLowerName[853:863]: NodeTypeScatterSum,
-	_NodeTypeName[863:882]:      NodeTypeSelectAndScatterMax,
-	_NodeTypeLowerName[863:882]: NodeTypeSelectAndScatterMax,
-	_NodeTypeName[882:901]:      NodeTypeSelectAndScatterMin,
-	_NodeTypeLowerName[882:901]: NodeTypeSelectAndScatterMin,
-	_NodeTypeName[901:910]:      NodeTypeShiftLeft,
-	_NodeTypeLowerName[901:910]: NodeTypeShiftLeft,
-	_NodeTypeName[910:930]:      NodeTypeShiftRightArithmetic,
-	_NodeTypeLowerName[910:930]: NodeTypeShiftRightArithmetic,
-	_NodeTypeName[930:947]:      NodeTypeShiftRightLogical,
-	_NodeTypeLowerName[930:947]: NodeTypeShiftRightLogical,
-	_NodeTypeName[947:951]:      NodeTypeSign,
-	_NodeTypeLowerName[947:951]: NodeTypeSign,
-	_NodeTypeName[951:954]:      NodeTypeSin,
-	_NodeTypeLowerName[951:954]: NodeTypeSin,
-	_NodeTypeName[954:959]:      NodeTypeSlice,
-	_NodeTypeLowerName[954:959]: NodeTypeSlice,
-	_NodeTypeName[959:963]:      NodeTypeSqrt,
-	_NodeTypeLowerName[959:963]: NodeTypeSqrt,
-	_NodeTypeName[963:966]:      NodeTypeSub,
-	_NodeTypeLowerName[963:966]: NodeTypeSub,
-	_NodeTypeName[966:970]:      NodeTypeTanh,
-	_NodeTypeLowerName[966:970]: NodeTypeTanh,
-	_NodeTypeName[970:979]:      NodeTypeTranspose,
-	_NodeTypeLowerName[970:979]: NodeTypeTranspose,
-	_NodeTypeName[979:984]:      NodeTypeWhere,
-	_NodeTypeLowerName[979:984]: NodeTypeWhere,
-	_NodeTypeName[984:989]:      NodeTypeWhile,
-	_NodeTypeLowerName[984:989]: NodeTypeWhile,
+	_NodeTypeName[0:7]:            NodeTypeInvalid,
+	_NodeTypeLowerName[0:7]:       NodeTypeInvalid,
+	_NodeTypeName[7:16]:           NodeTypeSplitNode,
+	_NodeTypeLowerName[7:16]:      NodeTypeSplitNode,
+	_NodeTypeName[16:19]:          NodeTypeAbs,
+	_NodeTypeLowerName[16:19]:     NodeTypeAbs,
+	_NodeTypeName[19:22]:          NodeTypeAdd,
+	_NodeTypeLowerName[19:22]:     NodeTypeAdd,
+	_NodeTypeName[22:31]:          NodeTypeAllReduce,
+	_NodeTypeLowerName[22:31]:     NodeTypeAllReduce,
+	_NodeTypeName[31:40]:          NodeTypeArgMinMax,
+	_NodeTypeLowerName[31:40]:     NodeTypeArgMinMax,
+	_NodeTypeName[40:61]:          NodeTypeBatchNormForInference,
+	_NodeTypeLowerName[40:61]:     NodeTypeBatchNormForInference,
+	_NodeTypeName[61:81]:          NodeTypeBatchNormForTraining,
+	_NodeTypeLowerName[61:81]:     NodeTypeBatchNormForTraining,
+	_NodeTypeName[81:98]:          NodeTypeBatchNormGradient,
+	_NodeTypeLowerName[81:98]:     NodeTypeBatchNormGradient,
+	_NodeTypeName[98:106]:         NodeTypeBitCount,
+	_NodeTypeLowerName[98:106]:    NodeTypeBitCount,
+	_NodeTypeName[106:113]:        NodeTypeBitcast,
+	_NodeTypeLowerName[106:113]:   NodeTypeBitcast,
+	_NodeTypeName[113:123]:        NodeTypeBitwiseAnd,
+	_NodeTypeLowerName[113:123]:   NodeTypeBitwiseAnd,
+	_NodeTypeName[123:133]:        NodeTypeBitwiseNot,
+	_NodeTypeLowerName[123:133]:   NodeTypeBitwiseNot,
+	_NodeTypeName[133:142]:        NodeTypeBitwiseOr,
+	_NodeTypeLowerName[133:142]:   NodeTypeBitwiseOr,
+	_NodeTypeName[142:152]:        NodeTypeBitwiseXor,
+	_NodeTypeLowerName[142:152]:   NodeTypeBitwiseXor,
+	_NodeTypeName[152:166]:        NodeTypeBroadcastInDim,
+	_NodeTypeLowerName[152:166]:   NodeTypeBroadcastInDim,
+	_NodeTypeName[166:170]:        NodeTypeCeil,
+	_NodeTypeLowerName[166:170]:   NodeTypeCeil,
+	_NodeTypeName[170:175]:        NodeTypeClamp,
+	_NodeTypeLowerName[170:175]:   NodeTypeClamp,
+	_NodeTypeName[175:178]:        NodeTypeClz,
+	_NodeTypeLowerName[175:178]:   NodeTypeClz,
+	_NodeTypeName[178:185]:        NodeTypeComplex,
+	_NodeTypeLowerName[178:185]:   NodeTypeComplex,
+	_NodeTypeName[185:196]:        NodeTypeConcatenate,
+	_NodeTypeLowerName[185:196]:   NodeTypeConcatenate,
+	_NodeTypeName[196:200]:        NodeTypeConj,
+	_NodeTypeLowerName[196:200]:   NodeTypeConj,
+	_NodeTypeName[200:208]:        NodeTypeConstant,
+	_NodeTypeLowerName[200:208]:   NodeTypeConstant,
+	_NodeTypeName[208:219]:        NodeTypeConvGeneral,
+	_NodeTypeLowerName[208:219]:   NodeTypeConvGeneral,
+	_NodeTypeName[219:231]:        NodeTypeConvertDType,
+	_NodeTypeLowerName[219:231]:   NodeTypeConvertDType,
+	_NodeTypeName[231:234]:        NodeTypeCos,
+	_NodeTypeLowerName[231:234]:   NodeTypeCos,
+	_NodeTypeName[234:237]:        NodeTypeDiv,
+	_NodeTypeLowerName[234:237]:   NodeTypeDiv,
+	_NodeTypeName[237:240]:        NodeTypeDot,
+	_NodeTypeLowerName[237:240]:   NodeTypeDot,
+	_NodeTypeName[240:250]:        NodeTypeDotGeneral,
+	_NodeTypeLowerName[240:250]:   NodeTypeDotGeneral,
+	_NodeTypeName[250:271]:        NodeTypeDynamicBroadcastInDim,
+	_NodeTypeLowerName[250:271]:   NodeTypeDynamicBroadcastInDim,
+	_NodeTypeName[271:302]:        NodeTypeDynamicBroadcastInDimWithBounds,
+	_NodeTypeLowerName[271:302]:   NodeTypeDynamicBroadcastInDimWithBounds,
+	_NodeTypeName[302:316]:        NodeTypeDynamicReshape,
+	_NodeTypeLowerName[302:316]:   NodeTypeDynamicReshape,
+	_NodeTypeName[316:340]:        NodeTypeDynamicReshapeWithBounds,
+	_NodeTypeLowerName[316:340]:   NodeTypeDynamicReshapeWithBounds,
+	_NodeTypeName[340:352]:        NodeTypeDynamicSlice,
+	_NodeTypeLowerName[340:352]:   NodeTypeDynamicSlice,
+	_NodeTypeName[352:370]:        NodeTypeDynamicUpdateSlice,
+	_NodeTypeLowerName[352:370]:   NodeTypeDynamicUpdateSlice,
+	_NodeTypeName[370:375]:        NodeTypeEqual,
+	_NodeTypeLowerName[370:375]:   NodeTypeEqual,
+	_NodeTypeName[375:390]:        NodeTypeEqualTotalOrder,
+	_NodeTypeLowerName[375:390]:   NodeTypeEqualTotalOrder,
+	_NodeTypeName[390:393]:        NodeTypeErf,
+	_NodeTypeLowerName[390:393]:   NodeTypeErf,
+	_NodeTypeName[393:396]:        NodeTypeExp,
+	_NodeTypeLowerName[393:396]:   NodeTypeExp,
+	_NodeTypeName[396:401]:        NodeTypeExpm1,
+	_NodeTypeLowerName[396:401]:   NodeTypeExpm1,
+	_NodeTypeName[401:404]:        NodeTypeFFT,
+	_NodeTypeLowerName[401:404]:   NodeTypeFFT,
+	_NodeTypeName[404:409]:        NodeTypeFloor,
+	_NodeTypeLowerName[404:409]:   NodeTypeFloor,
+	_NodeTypeName[409:415]:        NodeTypeGather,
+	_NodeTypeLowerName[409:415]:   NodeTypeGather,
+	_NodeTypeName[415:431]:        NodeTypeGetDimensionSize,
+	_NodeTypeLowerName[415:431]:   NodeTypeGetDimensionSize,
+	_NodeTypeName[431:445]:        NodeTypeGreaterOrEqual,
+	_NodeTypeLowerName[431:445]:   NodeTypeGreaterOrEqual,
+	_NodeTypeName[445:469]:        NodeTypeGreaterOrEqualTotalOrder,
+	_NodeTypeLowerName[445:469]:   NodeTypeGreaterOrEqualTotalOrder,
+	_NodeTypeName[469:480]:        NodeTypeGreaterThan,
+	_NodeTypeLowerName[469:480]:   NodeTypeGreaterThan,
+	_NodeTypeName[480:501]:        NodeTypeGreaterThanTotalOrder,
+	_NodeTypeLowerName[480:501]:   NodeTypeGreaterThanTotalOrder,
+	_NodeTypeName[501:509]:        NodeTypeIdentity,
+	_NodeTypeLowerName[501:509]:   NodeTypeIdentity,
+	_NodeTypeName[509:513]:        NodeTypeImag,
+	_NodeTypeLowerName[509:513]:   NodeTypeImag,
+	_NodeTypeName[513:517]:        NodeTypeIota,
+	_NodeTypeLowerName[513:517]:   NodeTypeIota,
+	_NodeTypeName[517:525]:        NodeTypeIsFinite,
+	_NodeTypeLowerName[517:525]:   NodeTypeIsFinite,
+	_NodeTypeName[525:530]:        NodeTypeIsNaN,
+	_NodeTypeLowerName[525:530]:   NodeTypeIsNaN,
+	_NodeTypeName[530:541]:        NodeTypeLessOrEqual,
+	_NodeTypeLowerName[530:541]:   NodeTypeLessOrEqual,
+	_NodeTypeName[541:562]:        NodeTypeLessOrEqualTotalOrder,
+	_NodeTypeLowerName[541:562]:   NodeTypeLessOrEqualTotalOrder,
+	_NodeTypeName[562:570]:        NodeTypeLessThan,
+	_NodeTypeLowerName[562:570]:   NodeTypeLessThan,
+	_NodeTypeName[570:588]:        NodeTypeLessThanTotalOrder,
+	_NodeTypeLowerName[570:588]:   NodeTypeLessThanTotalOrder,
+	_NodeTypeName[588:591]:        NodeTypeLog,
+	_NodeTypeLowerName[588:591]:   NodeTypeLog,
+	_NodeTypeName[591:596]:        NodeTypeLog1p,
+	_NodeTypeLowerName[591:596]:   NodeTypeLog1p,
+	_NodeTypeName[596:606]:        NodeTypeLogicalAnd,
+	_NodeTypeLowerName[596:606]:   NodeTypeLogicalAnd,
+	_NodeTypeName[606:616]:        NodeTypeLogicalNot,
+	_NodeTypeLowerName[606:616]:   NodeTypeLogicalNot,
+	_NodeTypeName[616:625]:        NodeTypeLogicalOr,
+	_NodeTypeLowerName[616:625]:   NodeTypeLogicalOr,
+	_NodeTypeName[625:635]:        NodeTypeLogicalXor,
+	_NodeTypeLowerName[625:635]:   NodeTypeLogicalXor,
+	_NodeTypeName[635:643]:        NodeTypeLogistic,
+	_NodeTypeLowerName[635:643]:   NodeTypeLogistic,
+	_NodeTypeName[643:646]:        NodeTypeMax,
+	_NodeTypeLowerName[643:646]:   NodeTypeMax,
+	_NodeTypeName[646:649]:        NodeTypeMin,
+	_NodeTypeLowerName[646:649]:   NodeTypeMin,
+	_NodeTypeName[649:652]:        NodeTypeMul,
+	_NodeTypeLowerName[649:652]:   NodeTypeMul,
+	_NodeTypeName[652:655]:        NodeTypeNeg,
+	_NodeTypeLowerName[652:655]:   NodeTypeNeg,
+	_NodeTypeName[655:663]:        NodeTypeNotEqual,
+	_NodeTypeLowerName[655:663]:   NodeTypeNotEqual,
+	_NodeTypeName[663:681]:        NodeTypeNotEqualTotalOrder,
+	_NodeTypeLowerName[663:681]:   NodeTypeNotEqualTotalOrder,
+	_NodeTypeName[681:684]:        NodeTypePad,
+	_NodeTypeLowerName[681:684]:   NodeTypePad,
+	_NodeTypeName[684:693]:        NodeTypeParameter,
+	_NodeTypeLowerName[684:693]:   NodeTypeParameter,
+	_NodeTypeName[693:696]:        NodeTypePow,
+	_NodeTypeLowerName[693:696]:   NodeTypePow,
+	_NodeTypeName[696:711]:        NodeTypeRNGBitGenerator,
+	_NodeTypeLowerName[696:711]:   NodeTypeRNGBitGenerator,
+	_NodeTypeName[711:715]:        NodeTypeReal,
+	_NodeTypeLowerName[711:715]:   NodeTypeReal,
+	_NodeTypeName[715:731]:        NodeTypeReduceBitwiseAnd,
+	_NodeTypeLowerName[715:731]:   NodeTypeReduceBitwiseAnd,
+	_NodeTypeName[731:746]:        NodeTypeReduceBitwiseOr,
+	_NodeTypeLowerName[731:746]:   NodeTypeReduceBitwiseOr,
+	_NodeTypeName[746:762]:        NodeTypeReduceBitwiseXor,
+	_NodeTypeLowerName[746:762]:   NodeTypeReduceBitwiseXor,
+	_NodeTypeName[762:778]:        NodeTypeReduceLogicalAnd,
+	_NodeTypeLowerName[762:778]:   NodeTypeReduceLogicalAnd,
+	_NodeTypeName[778:793]:        NodeTypeReduceLogicalOr,
+	_NodeTypeLowerName[778:793]:   NodeTypeReduceLogicalOr,
+	_NodeTypeName[793:809]:        NodeTypeReduceLogicalXor,
+	_NodeTypeLowerName[793:809]:   NodeTypeReduceLogicalXor,
+	_NodeTypeName[809:818]:        NodeTypeReduceMax,
+	_NodeTypeLowerName[809:818]:   NodeTypeReduceMax,
+	_NodeTypeName[818:827]:        NodeTypeReduceMin,
+	_NodeTypeLowerName[818:827]:   NodeTypeReduceMin,
+	_NodeTypeName[827:840]:        NodeTypeReduceProduct,
+	_NodeTypeLowerName[827:840]:   NodeTypeReduceProduct,
+	_NodeTypeName[840:849]:        NodeTypeReduceSum,
+	_NodeTypeLowerName[840:849]:   NodeTypeReduceSum,
+	_NodeTypeName[849:861]:        NodeTypeReduceWindow,
+	_NodeTypeLowerName[849:861]:   NodeTypeReduceWindow,
+	_NodeTypeName[861:864]:        NodeTypeRem,
+	_NodeTypeLowerName[861:864]:   NodeTypeRem,
+	_NodeTypeName[864:871]:        NodeTypeReshape,
+	_NodeTypeLowerName[864:871]:   NodeTypeReshape,
+	_NodeTypeName[871:878]:        NodeTypeReverse,
+	_NodeTypeLowerName[871:878]:   NodeTypeReverse,
+	_NodeTypeName[878:883]:        NodeTypeRound,
+	_NodeTypeLowerName[878:883]:   NodeTypeRound,
+	_NodeTypeName[883:888]:        NodeTypeRsqrt,
+	_NodeTypeLowerName[883:888]:   NodeTypeRsqrt,
+	_NodeTypeName[888:898]:        NodeTypeScatterMax,
+	_NodeTypeLowerName[888:898]:   NodeTypeScatterMax,
+	_NodeTypeName[898:908]:        NodeTypeScatterMin,
+	_NodeTypeLowerName[898:908]:   NodeTypeScatterMin,
+	_NodeTypeName[908:918]:        NodeTypeScatterSum,
+	_NodeTypeLowerName[908:918]:   NodeTypeScatterSum,
+	_NodeTypeName[918:937]:        NodeTypeSelectAndScatterMax,
+	_NodeTypeLowerName[918:937]:   NodeTypeSelectAndScatterMax,
+	_NodeTypeName[937:956]:        NodeTypeSelectAndScatterMin,
+	_NodeTypeLowerName[937:956]:   NodeTypeSelectAndScatterMin,
+	_NodeTypeName[956:965]:        NodeTypeShiftLeft,
+	_NodeTypeLowerName[956:965]:   NodeTypeShiftLeft,
+	_NodeTypeName[965:985]:        NodeTypeShiftRightArithmetic,
+	_NodeTypeLowerName[965:985]:   NodeTypeShiftRightArithmetic,
+	_NodeTypeName[985:1002]:       NodeTypeShiftRightLogical,
+	_NodeTypeLowerName[985:1002]:  NodeTypeShiftRightLogical,
+	_NodeTypeName[1002:1006]:      NodeTypeSign,
+	_NodeTypeLowerName[1002:1006]: NodeTypeSign,
+	_NodeTypeName[1006:1009]:      NodeTypeSin,
+	_NodeTypeLowerName[1006:1009]: NodeTypeSin,
+	_NodeTypeName[1009:1014]:      NodeTypeSlice,
+	_NodeTypeLowerName[1009:1014]: NodeTypeSlice,
+	_NodeTypeName[1014:1018]:      NodeTypeSort,
+	_NodeTypeLowerName[1014:1018]: NodeTypeSort,
+	_NodeTypeName[1018:1022]:      NodeTypeSqrt,
+	_NodeTypeLowerName[1018:1022]: NodeTypeSqrt,
+	_NodeTypeName[1022:1025]:      NodeTypeSub,
+	_NodeTypeLowerName[1022:1025]: NodeTypeSub,
+	_NodeTypeName[1025:1029]:      NodeTypeTanh,
+	_NodeTypeLowerName[1025:1029]: NodeTypeTanh,
+	_NodeTypeName[1029:1038]:      NodeTypeTranspose,
+	_NodeTypeLowerName[1029:1038]: NodeTypeTranspose,
+	_NodeTypeName[1038:1043]:      NodeTypeWhere,
+	_NodeTypeLowerName[1038:1043]: NodeTypeWhere,
+	_NodeTypeName[1043:1048]:      NodeTypeWhile,
+	_NodeTypeLowerName[1043:1048]: NodeTypeWhile,
 }
 
 var _NodeTypeNames = []string{
@@ -385,82 +394,85 @@ var _NodeTypeNames = []string{
 	_NodeTypeName[237:240],
 	_NodeTypeName[240:250],
 	_NodeTypeName[250:271],
-	_NodeTypeName[271:285],
-	_NodeTypeName[285:297],
-	_NodeTypeName[297:315],
-	_NodeTypeName[315:320],
-	_NodeTypeName[320:335],
-	_NodeTypeName[335:338],
-	_NodeTypeName[338:341],
-	_NodeTypeName[341:346],
-	_NodeTypeName[346:349],
-	_NodeTypeName[349:354],
-	_NodeTypeName[354:360],
-	_NodeTypeName[360:376],
-	_NodeTypeName[376:390],
-	_NodeTypeName[390:414],
-	_NodeTypeName[414:425],
-	_NodeTypeName[425:446],
-	_NodeTypeName[446:454],
-	_NodeTypeName[454:458],
-	_NodeTypeName[458:462],
-	_NodeTypeName[462:470],
-	_NodeTypeName[470:475],
-	_NodeTypeName[475:486],
-	_NodeTypeName[486:507],
-	_NodeTypeName[507:515],
-	_NodeTypeName[515:533],
-	_NodeTypeName[533:536],
-	_NodeTypeName[536:541],
-	_NodeTypeName[541:551],
-	_NodeTypeName[551:561],
-	_NodeTypeName[561:570],
-	_NodeTypeName[570:580],
-	_NodeTypeName[580:588],
+	_NodeTypeName[271:302],
+	_NodeTypeName[302:316],
+	_NodeTypeName[316:340],
+	_NodeTypeName[340:352],
+	_NodeTypeName[352:370],
+	_NodeTypeName[370:375],
+	_NodeTypeName[375:390],
+	_NodeTypeName[390:393],
+	_NodeTypeName[393:396],
+	_NodeTypeName[396:401],
+	_NodeTypeName[401:404],
+	_NodeTypeName[404:409],
+	_NodeTypeName[409:415],
+	_NodeTypeName[415:431],
+	_NodeTypeName[431:445],
+	_NodeTypeName[445:469],
+	_NodeTypeName[469:480],
+	_NodeTypeName[480:501],
+	_NodeTypeName[501:509],
+	_NodeTypeName[509:513],
+	_NodeTypeName[513:517],
+	_NodeTypeName[517:525],
+	_NodeTypeName[525:530],
+	_NodeTypeName[530:541],
+	_NodeTypeName[541:562],
+	_NodeTypeName[562:570],
+	_NodeTypeName[570:588],
 	_NodeTypeName[588:591],
-	_NodeTypeName[591:594],
-	_NodeTypeName[594:597],
-	_NodeTypeName[597:600],
-	_NodeTypeName[600:608],
-	_NodeTypeName[608:626],
-	_NodeTypeName[626:629],
-	_NodeTypeName[629:638],
-	_NodeTypeName[638:641],
-	_NodeTypeName[641:656],
-	_NodeTypeName[656:660],
-	_NodeTypeName[660:676],
-	_NodeTypeName[676:691],
-	_NodeTypeName[691:707],
-	_NodeTypeName[707:723],
-	_NodeTypeName[723:738],
-	_NodeTypeName[738:754],
-	_NodeTypeName[754:763],
-	_NodeTypeName[763:772],
-	_NodeTypeName[772:785],
-	_NodeTypeName[785:794],
-	_NodeTypeName[794:806],
-	_NodeTypeName[806:809],
-	_NodeTypeName[809:816],
-	_NodeTypeName[816:823],
-	_NodeTypeName[823:828],
-	_NodeTypeName[828:833],
-	_NodeTypeName[833:843],
-	_NodeTypeName[843:853],
-	_NodeTypeName[853:863],
-	_NodeTypeName[863:882],
-	_NodeTypeName[882:901],
-	_NodeTypeName[901:910],
-	_NodeTypeName[910:930],
-	_NodeTypeName[930:947],
-	_NodeTypeName[947:951],
-	_NodeTypeName[951:954],
-	_NodeTypeName[954:959],
-	_NodeTypeName[959:963],
-	_NodeTypeName[963:966],
-	_NodeTypeName[966:970],
-	_NodeTypeName[970:979],
-	_NodeTypeName[979:984],
-	_NodeTypeName[984:989],
+	_NodeTypeName[591:596],
+	_NodeTypeName[596:606],
+	_NodeTypeName[606:616],
+	_NodeTypeName[616:625],
+	_NodeTypeName[625:635],
+	_NodeTypeName[635:643],
+	_NodeTypeName[643:646],
+	_NodeTypeName[646:649],
+	_NodeTypeName[649:652],
+	_NodeTypeName[652:655],
+	_NodeTypeName[655:663],
+	_NodeTypeName[663:681],
+	_NodeTypeName[681:684],
+	_NodeTypeName[684:693],
+	_NodeTypeName[693:696],
+	_NodeTypeName[696:711],
+	_NodeTypeName[711:715],
+	_NodeTypeName[715:731],
+	_NodeTypeName[731:746],
+	_NodeTypeName[746:762],
+	_NodeTypeName[762:778],
+	_NodeTypeName[778:793],
+	_NodeTypeName[793:809],
+	_NodeTypeName[809:818],
+	_NodeTypeName[818:827],
+	_NodeTypeName[827:840],
+	_NodeTypeName[840:849],
+	_NodeTypeName[849:861],
+	_NodeTypeName[861:864],
+	_NodeTypeName[864:871],
+	_NodeTypeName[871:878],
+	_NodeTypeName[878:883],
+	_NodeTypeName[883:888],
+	_NodeTypeName[888:898],
+	_NodeTypeName[898:908],
+	_NodeTypeName[908:918],
+	_NodeTypeName[918:937],
+	_NodeTypeName[937:956],
+	_NodeTypeName[956:965],
+	_NodeTypeName[965:985],
+	_NodeTypeName[985:1002],
+	_NodeTypeName[1002:1006],
+	_NodeTypeName[1006:1009],
+	_NodeTypeName[1009:1014],
+	_NodeTypeName[1014:1018],
+	_NodeTypeName[1018:1022],
+	_NodeTypeName[1022:1025],
+	_NodeTypeName[1025:1029],
+	_NodeTypeName[1029:1038],
+	_NodeTypeName[1038:1043],
+	_NodeTypeName[1043:1048],
 }
 
 // NodeTypeString retrieves an enum value from the enum constants string name.

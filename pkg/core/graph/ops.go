@@ -711,61 +711,82 @@ func Reshape(x *Node, dimensions ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 
 	// Check if input or output has symbolic dimensions
-	hasSymbolicInput := false
-	for _, dim := range x.Shape().Dimensions {
+	hasSymbolicInput := x.Shape().HasSymbolicDim()
+
+	// Count negative dimensions (-1 can mean "infer" if there's exactly one, or dynamic if multiple)
+	numNegative := 0
+	negativeIdx := -1
+	hasOtherNegative := false
+	for idx, dim := range dimensions {
 		if dim < 0 {
-			hasSymbolicInput = true
-			break
-		}
-	}
-	hasSymbolicOutput := false
-	for _, dim := range dimensions {
-		if dim < 0 && dim != -1 { // -1 is the "infer this dimension" marker
-			hasSymbolicOutput = true
-			break
+			numNegative++
+			if dim == -1 {
+				negativeIdx = idx
+			} else {
+				hasOtherNegative = true
+			}
 		}
 	}
 
-	// Skip size validation if any dimension is symbolic (will be validated at runtime)
-	if hasSymbolicInput || hasSymbolicOutput {
-		// For symbolic shapes, we can't validate sizes at compile time
+	// If there's exactly one -1 and no other negative values, it's the "infer" marker
+	// If there are multiple negative values (including multiple -1s), they're all dynamic
+	isSingleInfer := numNegative == 1 && !hasOtherNegative && negativeIdx >= 0
+
+	// Try to infer the single -1 dimension if input is concrete
+	if isSingleInfer && !hasSymbolicInput {
+		// Can infer the missing dimension from input size
+		totalSize := x.Shape().Size()
+		newSize := 1
+		for _, dim := range dimensions {
+			if dim > 0 {
+				newSize *= dim
+			}
+		}
+		if newSize > 0 {
+			tmpDim := slices.Clone(dimensions)
+			tmpDim[negativeIdx] = totalSize / newSize
+			checkSize := 1
+			for _, d := range tmpDim {
+				checkSize *= d
+			}
+			if checkSize == totalSize {
+				dimensions = tmpDim
+				isSingleInfer = false
+			}
+		}
+	}
+
+	// CRITICAL FIX: If input has symbolic dimensions, we must use DynamicReshape
+	// because XLA doesn't support static reshape on dynamic inputs.
+	// This prevents the error: "Dynamic input unexpectedly found for unsupported instruction: reshape"
+	if hasSymbolicInput {
+		// Convert dimensions to int32 slice for shape tensor
+		dims32 := make([]int32, len(dimensions))
+		for i, d := range dimensions {
+			dims32[i] = int32(d)
+		}
+		// Create shape tensor and use DynamicReshape
+		g := x.Graph()
+		shapeTensor := Const(g, dims32)
+		return DynamicReshape(x, shapeTensor)
+	}
+
+	// Skip size validation if any output dimension is symbolic (will be validated at runtime)
+	if numNegative > 0 {
+		// For symbolic output shapes (with negative dimensions), we can't validate sizes at compile time
 		// Just pass through the dimensions as-is
 		return backendReshape(x, dimensions...)
 	}
 
+	// Validate sizes for fully concrete reshape
 	totalSize := x.Shape().Size()
 	newSize := 1
-	missingIdx := -1
-	for idx, dim := range dimensions {
-		if dim != -1 {
-			newSize *= dim
-		} else {
-			if missingIdx != -1 {
-				exceptions.Panicf("only one dimension can be missing (that is, set to -1) for Reshape, %v given",
-					dimensions)
-			}
-			missingIdx = idx
-		}
+	for _, dim := range dimensions {
+		newSize *= dim
 	}
-	if missingIdx != -1 {
-		tmpDim := slices.Clone(dimensions)
-		tmpDim[missingIdx] = totalSize / newSize
-		newSize *= tmpDim[missingIdx]
-		if newSize != totalSize {
-			exceptions.Panicf(
-				"cannot find new dimension for axis %d that will make new dimensions %v match original the input size %d (dimensions %v)",
-				missingIdx,
-				dimensions,
-				totalSize,
-				x.Shape().Dimensions,
-			)
-		}
-		dimensions = tmpDim
-	} else {
-		if newSize != totalSize {
-			exceptions.Panicf("total requested size %d (dimensions=%v) doesnt match original size %d (dimensions %v)",
-				newSize, dimensions, totalSize, x.Shape().Dimensions)
-		}
+	if newSize != totalSize {
+		exceptions.Panicf("total requested size %d (dimensions=%v) doesnt match original size %d (dimensions %v)",
+			newSize, dimensions, totalSize, x.Shape().Dimensions)
 	}
 	return backendReshape(x, dimensions...)
 }
@@ -2138,6 +2159,13 @@ func MatMul(lhs, rhs *Node) *Node {
 		rightAxisDim := rhs.Shape().Dimensions[rightAxis]
 		if leftAxisDim == rightAxisDim {
 			// Same batch axis on both sides:
+			rhsRemap[rightAxis] = leftAxis
+			outputAxesLetters += letterForAxis(lhsIdx, leftAxis)
+			continue
+		}
+		// Allow dynamic dimensions (< 0) to match any size - they'll be validated at runtime
+		if leftAxisDim < 0 || rightAxisDim < 0 {
+			// One or both dimensions are dynamic - assume they'll match at runtime
 			rhsRemap[rightAxis] = leftAxis
 			outputAxesLetters += letterForAxis(lhsIdx, leftAxis)
 			continue

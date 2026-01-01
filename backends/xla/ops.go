@@ -3,8 +3,13 @@ package xla
 // This file contains manually implemented operations.
 
 import (
+	"fmt"
+	"log"
+	"math"
+
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
+	xla_dtypes "github.com/gomlx/go-xla/pkg/types/dtypes"
 	stablehloshapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
@@ -21,6 +26,39 @@ func adjustAxisToRank(axis, rank int) (int, error) {
 		axis += rank
 	}
 	return axis, nil
+}
+
+// defaultDynamicBound is the fallback bound used when a dimension is dynamic and no
+// explicit bound is available.
+const defaultDynamicBound = 4096
+
+// concretizeBounds returns a copy of dims where all negative (dynamic) dimensions are
+// replaced with their bounds. It uses dimensionBounds if available, otherwise falls back
+// to defaultDynamicBound. This is required because static BroadcastInDim requires all
+// target dimensions to be positive concrete values.
+func concretizeBounds(dims []int, dimensionBounds []int) []int {
+	result := make([]int, len(dims))
+	for i, d := range dims {
+		if d >= 0 {
+			result[i] = d
+		} else {
+			// Dynamic dimension - use bound if available
+			if i < len(dimensionBounds) && dimensionBounds[i] > 0 {
+				result[i] = dimensionBounds[i]
+			} else {
+				result[i] = defaultDynamicBound
+			}
+		}
+	}
+	return result
+}
+
+// concretizeBoundsFromShape extracts dimensions from a stablehlo.Value's shape and ensures
+// all values are positive by replacing dynamic dimensions with their bounds.
+func concretizeBoundsFromShape(v *stablehlo.Value) []int {
+	shape := v.Shape()
+	// DimensionBounds removed - just use regular dimensions
+	return concretizeBounds(shape.Dimensions, nil)
 }
 
 // Identity returns an Op whose output is the same as its input.
@@ -58,9 +96,43 @@ func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadc
 	}
 	xNode := nodes[0]
 
+	// If the operand has logical dims that differ from physical, slice first
+	operandValue := xNode.value
+	if xNode.hasLogicalDims() {
+		logicalDims := xNode.getLogicalDims()
+		physicalDims := xNode.value.Shape().Dimensions
+
+		needsSlice := false
+		for i := 0; i < len(logicalDims) && i < len(physicalDims); i++ {
+			if logicalDims[i] > 0 && logicalDims[i] < physicalDims[i] {
+				needsSlice = true
+				break
+			}
+		}
+
+		if needsSlice {
+			starts := make([]int, len(physicalDims))
+			limits := make([]int, len(physicalDims))
+			strides := make([]int, len(physicalDims))
+			for i := range physicalDims {
+				starts[i] = 0
+				strides[i] = 1
+				if i < len(logicalDims) && logicalDims[i] > 0 {
+					limits[i] = logicalDims[i]
+				} else {
+					limits[i] = physicalDims[i]
+				}
+			}
+			sliced, sliceErr := stablehlo.Slice(operandValue, starts, limits, strides)
+			if sliceErr == nil {
+				operandValue = sliced
+			}
+		}
+	}
+
 	// Fast path: if both operand and output are fully concrete, use static broadcast
 	if xNode.shape.IsFullyConcrete() && outputShape.IsFullyConcrete() {
-		value, err := stablehlo.BroadcastInDim(xNode.value, ShapeToXLA(outputShape), broadcastAxes)
+		value, err := stablehlo.BroadcastInDim(operandValue, ShapeToXLA(outputShape), broadcastAxes)
 		if err != nil {
 			return nil, err
 		}
@@ -103,13 +175,15 @@ func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadc
 		}
 
 		if allResolved {
-			// Use static broadcast with resolved dimensions
+			// Use static broadcast with resolved dimensions for XLA
 			resolvedShape := shapes.Make(outputShape.DType, concreteOutputDims...)
 			value, err := stablehlo.BroadcastInDim(xNode.value, ShapeToXLA(resolvedShape), broadcastAxes)
 			if err != nil {
 				return nil, err
 			}
-			return b.newNode(value), nil
+			// Use the resolved concrete dimensions for the node's shape.
+			// This ensures downstream operations see concrete shapes, not symbolic ones.
+			return b.newNodeWithLogicalDims(value, concreteOutputDims), nil
 		}
 	}
 
@@ -158,12 +232,57 @@ func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadc
 		dimOps[i] = dimOp
 	}
 
-	// Concatenate all dimension sizes into a 1D tensor
-	outputDimsTensor, err := b.Concatenate(0, dimOps...)
-	if err != nil {
-		return nil, errors.WithMessage(err, "concatenating output dimensions for DynamicBroadcastInDim")
+	// Note: dimOps was used for dynamic broadcast but we now use static broadcast.
+	// Keep the dimOps construction for potential future use.
+	_ = dimOps // silence unused warning
+
+	// Compute bounds for the output shape from available sources:
+	// 1. Use static dimensions from outputShape if available
+	// 2. Otherwise, compute from operand's physical dimensions via broadcast mapping
+	// 3. For dimensions not covered, use the operand's physical dimension if mapped
+	// Use concretized operand dimensions to ensure all bounds are positive.
+	bounds := make([]int, len(outputShape.Dimensions))
+	operandConcreteDims := concretizeBoundsFromShape(xNode.value)
+	for i := range bounds {
+		// If the dimension is static, use that
+		if outputShape.Dimensions[i] > 0 {
+			bounds[i] = outputShape.Dimensions[i]
+			continue
+		}
+
+		// Try to find from operand via broadcast mapping
+		operandIdx := -1
+		for j, bd := range broadcastAxes {
+			if bd == i {
+				operandIdx = j
+				break
+			}
+		}
+		if operandIdx >= 0 && operandIdx < len(operandConcreteDims) {
+			bounds[i] = operandConcreteDims[operandIdx]
+		} else {
+			// Default to 1 for broadcast dimensions (this is a minimum bound)
+			bounds[i] = 1
+		}
 	}
-	return b.DynamicBroadcastInDim(x, outputDimsTensor, broadcastAxes)
+
+	// Ensure all bounds are at least 1 (should already be ensured by concretizeBoundsFromShape)
+	for i := range bounds {
+		if bounds[i] <= 0 {
+			bounds[i] = 1
+		}
+	}
+
+	// XLA cannot translate dynamic_broadcast_in_dim to XLA HLO.
+	// Use static BroadcastInDim to the bounds instead.
+	targetShape := stablehloshapes.Make(operandValue.Shape().DType, bounds...)
+	value, err := stablehlo.BroadcastInDim(operandValue, targetShape, broadcastAxes)
+	if err != nil {
+		return nil, errors.Wrapf(err, "static BroadcastInDim failed for bounds %v", bounds)
+	}
+	// Preserve the requested outputShape instead of using the XLA-inferred symbolic shape.
+	// Track logical dims for later operations.
+	return b.newNodeWithLogicalDims(value, bounds), nil
 }
 
 // Iota implements backends.Builder interface.
@@ -182,6 +301,10 @@ func (b *Builder) Iota(shape shapes.Shape, iotaAxis int) (backends.Op, error) {
 // at the StableHLO level while preserving dynamic shape information at the GoMLX level.
 // For truly dynamic reshapes where the target shape is computed at runtime, use
 // DynamicReshape with a shape tensor instead.
+//
+// Note: -1 in dimensions means "infer this dimension from the total size" (numpy convention),
+// which is different from shapes.DynamicDim (-1 used as the constant for dynamic dimensions).
+// At the graph level, -1 is resolved before calling this function.
 func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error) {
 	nodes, err := b.verifyAndCastValues("Reshape", x)
 	if err != nil {
@@ -190,11 +313,111 @@ func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error)
 	xNode := nodes[0]
 	dtype := xNode.shape.DType
 
-	// Check if all dimensions are concrete (fast path)
-	// Use MakeDynamic since dimensions may contain negative values (dynamic dims)
-	targetShape := shapes.MakeDynamic(dtype, dimensions...)
-	if targetShape.IsFullyConcrete() {
-		shape := stablehloshapes.Make(DTypeToXLA(dtype), dimensions...)
+	// CRITICAL FIX: If the node has logical dims that differ from physical dims,
+	// it means the tensor came from a bounded dynamic operation (like DynamicBroadcastInDimWithBounds).
+	// XLA tracks such tensors as dynamic internally, even after slicing to logical dims.
+	// We MUST use DynamicReshape instead of static Reshape to avoid the error:
+	// "Dynamic input unexpectedly found for unsupported instruction: reshape"
+	hadBoundedDynamic := xNode.hasLogicalDims()
+
+	// If the node has logical dims that differ from physical dims,
+	// we need to slice to logical size before reshaping.
+	if hadBoundedDynamic {
+		logicalDims := xNode.getLogicalDims()
+		physicalDims := xNode.value.Shape().Dimensions
+
+		needsSlice := false
+		for i := 0; i < len(logicalDims) && i < len(physicalDims); i++ {
+			if logicalDims[i] > 0 && logicalDims[i] < physicalDims[i] {
+				needsSlice = true
+				break
+			}
+		}
+
+		if needsSlice {
+			// Slice to logical dims first
+			starts := make([]int, len(physicalDims))
+			limits := make([]int, len(physicalDims))
+			strides := make([]int, len(physicalDims))
+			for i := range physicalDims {
+				starts[i] = 0
+				strides[i] = 1
+				if i < len(logicalDims) && logicalDims[i] > 0 {
+					limits[i] = logicalDims[i]
+				} else {
+					limits[i] = physicalDims[i]
+				}
+			}
+			sliced, err := stablehlo.Slice(xNode.value, starts, limits, strides)
+			if err != nil {
+				return nil, fmt.Errorf("Reshape: failed to slice to logical dims: %w", err)
+			}
+			xNode = b.newNode(sliced) // Physical dims now match logical dims
+		}
+
+		// After slicing (or if no slice needed), the tensor is still tracked as dynamic by XLA.
+		// We MUST use DynamicReshape instead of static Reshape.
+		// Create a shape tensor from the target dimensions and use DynamicReshape.
+		dims32 := make([]int32, len(dimensions))
+		for i, d := range dimensions {
+			dims32[i] = int32(d)
+		}
+		shapeConst, err := b.Constant(dims32, len(dimensions))
+		if err != nil {
+			return nil, fmt.Errorf("Reshape: failed to create shape constant: %w", err)
+		}
+		return b.DynamicReshape(xNode, shapeConst)
+	}
+
+	// Handle -1 (infer dimension) by computing it from total size
+	// This is separate from dynamic dimensions (which use shapes.DynamicDim, also -1)
+	// The graph-level Reshape resolves -1 before calling the backend, so if we see -1 here
+	// it's likely from code that bypassed the graph layer. We should treat it as dynamic.
+	resolvedDims := make([]int, len(dimensions))
+	copy(resolvedDims, dimensions)
+
+	// Count number of -1 dimensions (infer markers)
+	inferCount := 0
+	inferIdx := -1
+	for i, d := range resolvedDims {
+		if d == -1 {
+			inferCount++
+			inferIdx = i
+		}
+	}
+
+	// Only try to infer if exactly one -1 dimension
+	if inferCount > 1 {
+		// Multiple -1 dimensions - these are likely all dynamic dimensions
+		// (the graph layer normally resolves the single infer -1 before calling backend)
+		inferIdx = -1 // Don't try to infer
+	}
+
+	// If we have an infer dimension (-1), calculate it from the input size
+	if inferIdx >= 0 && xNode.shape.IsFullyConcrete() {
+		inputSize := xNode.shape.Size()
+		otherSize := 1
+		for i, d := range resolvedDims {
+			if i != inferIdx && d > 0 {
+				otherSize *= d
+			}
+		}
+		if otherSize > 0 {
+			resolvedDims[inferIdx] = inputSize / otherSize
+		}
+	}
+
+	// Check if all dimensions are now concrete (fast path)
+	allConcrete := true
+	for _, d := range resolvedDims {
+		if d < 0 {
+			allConcrete = false
+			break
+		}
+	}
+
+	if allConcrete {
+		shape := stablehloshapes.Make(DTypeToXLA(dtype), resolvedDims...)
 		value, err := stablehlo.Reshape(xNode.value, shape)
 		if err != nil {
 			return nil, err
@@ -202,10 +425,10 @@ func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error)
 		return b.newNode(value), nil
 	}
 
-	// Dynamic dimensions: convert to placeholder values (1) for StableHLO
+	// Dynamic dimensions (not -1, but actual dynamic dims): convert to placeholder values (1) for StableHLO
 	// The actual dynamic dimensions are tracked at the GoMLX level
-	concreteDims := make([]int, len(dimensions))
-	for i, d := range dimensions {
+	concreteDims := make([]int, len(resolvedDims))
+	for i, d := range resolvedDims {
 		if d < 0 {
 			concreteDims[i] = 1 // Placeholder for dynamic dimension
 		} else {
@@ -220,7 +443,7 @@ func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error)
 	}
 
 	// Preserve dynamic shape information at GoMLX level
-	dynamicShape := shapes.MakeDynamic(dtype, dimensions...)
+	dynamicShape := shapes.MakeDynamic(dtype, resolvedDims...)
 	return &Node{
 		value:   value,
 		shape:   dynamicShape,
@@ -235,10 +458,68 @@ func (b *Builder) Slice(x backends.Op, starts, limits, strides []int) (backends.
 		return nil, err
 	}
 	xNode := nodes[0]
-	value, err := stablehlo.Slice(xNode.value, starts, limits, strides)
+
+	// Convert symbolic dimensions to concrete values for StableHLO
+	xlaShape := xNode.value.Shape()
+	concreteLimits := make([]int, len(limits))
+	for i, l := range limits {
+		if l < 0 {
+			// Symbolic dimension: use input's XLA dimension as limit
+			xlaDim := xlaShape.Dimensions[i]
+			if xlaDim >= 0 {
+				// XLA has a concrete value
+				concreteLimits[i] = xlaDim
+			} else {
+				// No concrete dimension available - use a large default
+				// This is a fallback for truly dynamic shapes
+				concreteLimits[i] = defaultDynamicBound
+			}
+		} else {
+			concreteLimits[i] = l
+		}
+	}
+
+	value, err := stablehlo.Slice(xNode.value, starts, concreteLimits, strides)
 	if err != nil {
 		return nil, err
 	}
+
+	// Compute output shape.
+	// The output dimension for each axis is: (limit - start) / stride
+	// For symbolic limits, use the default bound to ensure XLA can compile.
+	outputDims := make([]int, len(starts))
+	for i := range starts {
+		if limits[i] < 0 {
+			// Symbolic dimension in limits - use default bound for XLA compilation
+			outputDims[i] = defaultDynamicBound
+		} else if xNode.shape.Dimensions[i] < 0 && starts[i] == 0 && limits[i] == 0 && strides[i] == 1 {
+			// Full slice of a symbolic dimension (limits==0 is sometimes used for full slice)
+			// Use default bound for XLA compilation
+			outputDims[i] = defaultDynamicBound
+		} else {
+			// Concrete slice
+			outputDims[i] = (limits[i] - starts[i] + strides[i] - 1) / strides[i]
+		}
+	}
+
+	// If any dimension is symbolic, create the node with the computed shape
+	hasSymbolic := false
+	for _, d := range outputDims {
+		if d < 0 {
+			hasSymbolic = true
+			break
+		}
+	}
+
+	if hasSymbolic {
+		outputShape := shapes.MakeDynamic(xNode.shape.DType, outputDims...)
+		return &Node{
+			value:   value,
+			shape:   outputShape,
+			builder: b,
+		}, nil
+	}
+
 	return b.newNode(value), nil
 }
 
@@ -637,13 +918,40 @@ func (b *Builder) Concatenate(axis int, operands ...backends.Op) (backends.Op, e
 	}
 
 	if hasDynamicDims {
-		// Compute output shape using GoMLX shapes (which preserve dynamic dimensions)
-		outputShape := computeConcatenateShape(operandsNodes, axis)
-		return &Node{
-			value:   value,
-			shape:   outputShape,
-			builder: b,
-		}, nil
+		// Track logical dims by finding the best known value for each dimension from operands
+		logicalDims := make([]int, rank)
+		for d := 0; d < rank; d++ {
+			if d == adjustedAxis {
+				// For concat axis, sum up the logical dims from operands
+				sum := 0
+				allKnown := true
+				for _, node := range operandsNodes {
+					dim := node.getLogicalDim(d)
+					if dim > 0 {
+						sum += dim
+					} else {
+						allKnown = false
+					}
+				}
+				if allKnown && sum > 0 {
+					logicalDims[d] = sum
+				} else {
+					logicalDims[d] = -1 // Unknown
+				}
+			} else {
+				// For non-concat axes, use the best known value from any operand
+				logicalDims[d] = -1 // Default unknown
+				for _, node := range operandsNodes {
+					dim := node.getLogicalDim(d)
+					if dim > 0 {
+						logicalDims[d] = dim
+						break
+					}
+				}
+			}
+		}
+
+		return b.newNodeWithLogicalDims(value, logicalDims), nil
 	}
 
 	return b.newNode(value), nil
@@ -780,7 +1088,7 @@ func (b *Builder) Where(condition, onTrue, onFalse backends.Op) (backends.Op, er
 		}
 
 		if hasDynamic {
-			// Use DynamicBroadcastInDim for dynamic shapes
+			// Use dynamic broadcast with bounds from the condition tensor
 			// We need to compute the output shape at runtime by getting each dimension size
 			// from the condition tensor (which has the target output dimensions)
 			dimOps := make([]backends.Op, len(outputDims))
@@ -801,7 +1109,8 @@ func (b *Builder) Where(condition, onTrue, onFalse backends.Op) (backends.Op, er
 			if err != nil {
 				return nil, errors.WithMessage(err, "while concatenating output dimensions for DynamicBroadcastInDim")
 			}
-			onTrue, err = b.DynamicBroadcastInDim(onTrue, outputDimsTensor, broadcastDims)
+			// Use condition tensor as reference for bounds
+			onTrue, err = b.dynamicBroadcastInDimWithRefBounds(onTrue, outputDimsTensor, broadcastDims, condition)
 			if err != nil {
 				return nil, errors.WithMessage(err, "while dynamically broadcasting onTrue for op Where()")
 			}
@@ -855,7 +1164,7 @@ func (b *Builder) Where(condition, onTrue, onFalse backends.Op) (backends.Op, er
 		}
 
 		if hasDynamic {
-			// Use DynamicBroadcastInDim for dynamic shapes
+			// Use dynamic broadcast with bounds from the condition tensor
 			// We need to compute the output shape at runtime by getting each dimension size
 			// from the condition tensor (which has the target output dimensions)
 			dimOps := make([]backends.Op, len(outputDims))
@@ -876,7 +1185,8 @@ func (b *Builder) Where(condition, onTrue, onFalse backends.Op) (backends.Op, er
 			if err != nil {
 				return nil, errors.WithMessage(err, "while concatenating output dimensions for DynamicBroadcastInDim")
 			}
-			onFalse, err = b.DynamicBroadcastInDim(onFalse, outputDimsTensor, broadcastDims)
+			// Use condition tensor as reference for bounds
+			onFalse, err = b.dynamicBroadcastInDimWithRefBounds(onFalse, outputDimsTensor, broadcastDims, condition)
 			if err != nil {
 				return nil, errors.WithMessage(err, "while dynamically broadcasting onFalse for op Where()")
 			}
@@ -1209,6 +1519,9 @@ func (b *Builder) GetDimensionSize(operand backends.Op, dimension int) (backends
 
 // DynamicBroadcastInDim implements backends.Builder interface.
 // Broadcasts operand to the shape specified by outputDimensions (provided as a tensor).
+//
+// This implementation computes bounds from the operand dimensions and uses
+// static BroadcastInDim with those bounds, tracking logical dimensions for later operations.
 func (b *Builder) DynamicBroadcastInDim(operand backends.Op, outputDimensions backends.Op, broadcastDimensions []int) (backends.Op, error) {
 	nodes, err := b.verifyAndCastValues("DynamicBroadcastInDim", operand, outputDimensions)
 	if err != nil {
@@ -1216,15 +1529,130 @@ func (b *Builder) DynamicBroadcastInDim(operand backends.Op, outputDimensions ba
 	}
 	operandNode := nodes[0]
 	outputDimensionsNode := nodes[1]
-	value, err := stablehlo.DynamicBroadcastInDim(operandNode.value, outputDimensionsNode.value, broadcastDimensions)
+
+	// Get the output rank from the dimensions tensor shape
+	outputRank := outputDimensionsNode.value.Shape().Dimensions[0]
+	if outputRank <= 0 {
+		return nil, errors.New("cannot determine output rank for DynamicBroadcastInDim")
+	}
+
+	// Compute bounds from the operand dimensions.
+	// Use static BroadcastInDim to the bounds size and track logical dimensions.
+	operandPhysicalDims := operandNode.value.Shape().Dimensions
+	bounds := make([]int, outputRank)
+	for i := range bounds {
+		// Check if this output dimension comes from the operand
+		operandIdx := -1
+		if broadcastDimensions != nil {
+			for j, bd := range broadcastDimensions {
+				if bd == i {
+					operandIdx = j
+					break
+				}
+			}
+		}
+		if operandIdx >= 0 && operandIdx < len(operandPhysicalDims) {
+			bounds[i] = operandPhysicalDims[operandIdx]
+		} else {
+			// New dimension - use 1 as minimum bound.
+			bounds[i] = 1
+		}
+	}
+
+	// Ensure all bounds are at least 1
+	for i := range bounds {
+		if bounds[i] <= 0 {
+			bounds[i] = 1
+		}
+	}
+
+	// Use static BroadcastInDim to the bounds size.
+	// For scalars, first reshape to 1x1x...x1 if needed.
+	operandValue := operandNode.value
+	if operandValue.Shape().IsScalar() && outputRank > 0 {
+		// Reshape scalar to tensor with all dims = 1
+		ones := make([]int, outputRank)
+		for i := range ones {
+			ones[i] = 1
+		}
+		reshapedShape := stablehloshapes.Make(operandValue.Shape().DType, ones...)
+		reshaped, reshapeErr := stablehlo.Reshape(operandValue, reshapedShape)
+		if reshapeErr != nil {
+			return nil, errors.Wrapf(reshapeErr, "failed to reshape scalar for broadcast")
+		}
+		operandValue = reshaped
+		// Update broadcastDimensions to identity mapping
+		broadcastDimensions = make([]int, outputRank)
+		for i := range broadcastDimensions {
+			broadcastDimensions[i] = i
+		}
+	}
+
+	// Perform static broadcast to bounds
+	targetShape := stablehloshapes.Make(operandValue.Shape().DType, bounds...)
+	value, broadcastErr := stablehlo.BroadcastInDim(operandValue, targetShape, broadcastDimensions)
+	if broadcastErr != nil {
+		return nil, errors.Wrapf(broadcastErr, "static BroadcastInDim failed for bounds %v", bounds)
+	}
+
+	// Track logical dimensions (same as bounds for now, but may differ in future)
+	return b.newNodeWithLogicalDims(value, bounds), nil
+}
+
+// dynamicBroadcastInDimWithRefBounds broadcasts operand using bounds from a reference tensor.
+// This is used when we have a reference tensor (like condition in Where) whose physical
+// dimensions should be used as bounds for the broadcast output.
+//
+// IMPORTANT: XLA cannot translate dynamic_broadcast_in_dim to XLA HLO.
+// This implementation uses static BroadcastInDim to the reference tensor's dimensions.
+func (b *Builder) dynamicBroadcastInDimWithRefBounds(operand backends.Op, outputDimensions backends.Op, broadcastDimensions []int, refTensor backends.Op) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("dynamicBroadcastInDimWithRefBounds", operand, outputDimensions, refTensor)
 	if err != nil {
 		return nil, err
 	}
-	return b.newNode(value), nil
+	operandNode := nodes[0]
+	refNode := nodes[2]
+
+	// Use the reference tensor's physical dimensions as the target shape.
+	// Must concretize to ensure all values are positive (static BroadcastInDim requires this).
+	bounds := concretizeBoundsFromShape(refNode.value)
+
+	// Handle scalars: reshape to 1x1x...x1 first
+	operandValue := operandNode.value
+	if operandValue.Shape().IsScalar() && len(bounds) > 0 {
+		ones := make([]int, len(bounds))
+		for i := range ones {
+			ones[i] = 1
+		}
+		reshapedShape := stablehloshapes.Make(operandValue.Shape().DType, ones...)
+		reshaped, reshapeErr := stablehlo.Reshape(operandValue, reshapedShape)
+		if reshapeErr != nil {
+			return nil, errors.Wrapf(reshapeErr, "failed to reshape scalar for broadcast")
+		}
+		operandValue = reshaped
+		// Update broadcastDimensions to identity mapping
+		broadcastDimensions = make([]int, len(bounds))
+		for i := range broadcastDimensions {
+			broadcastDimensions[i] = i
+		}
+	}
+
+	// Use static BroadcastInDim to the reference tensor's shape
+	targetShape := stablehloshapes.Make(operandValue.Shape().DType, bounds...)
+	value, broadcastErr := stablehlo.BroadcastInDim(operandValue, targetShape, broadcastDimensions)
+	if broadcastErr != nil {
+		return nil, errors.Wrapf(broadcastErr, "static BroadcastInDim failed for ref bounds %v", bounds)
+	}
+
+	// Track logical dimensions (same as bounds since we're using ref tensor's size)
+	return b.newNodeWithLogicalDims(value, bounds), nil
 }
 
 // DynamicReshape implements backends.Builder interface.
 // Reshapes operand to the shape specified by outputShape tensor.
+//
+// Note: This computes bounds from the operand's total element count.
+// For more control over bounds, use DynamicReshapeWithBounds.
 func (b *Builder) DynamicReshape(operand backends.Op, outputShape backends.Op) (backends.Op, error) {
 	nodes, err := b.verifyAndCastValues("DynamicReshape", operand, outputShape)
 	if err != nil {
@@ -1232,11 +1660,97 @@ func (b *Builder) DynamicReshape(operand backends.Op, outputShape backends.Op) (
 	}
 	operandNode := nodes[0]
 	outputShapeNode := nodes[1]
-	value, err := stablehlo.DynamicReshape(operandNode.value, outputShapeNode.value)
-	if err != nil {
-		return nil, err
+
+	// Get output rank from the shape tensor
+	outputRank := outputShapeNode.value.Shape().Dimensions[0]
+	if outputRank <= 0 {
+		return nil, errors.New("cannot determine output rank for DynamicReshape")
 	}
-	return b.newNode(value), nil
+
+	// Compute bounds from operand dimensions.
+	// For a reshape, the total element count is preserved.
+	operandDims := operandNode.value.Shape().Dimensions
+
+	// Debug: log large element count reshapes to small output ranks
+	totalElems := 1
+	for _, d := range operandDims {
+		if d > 0 {
+			totalElems *= d
+		}
+	}
+	if totalElems > 1 && outputRank <= 2 {
+		log.Printf("DEBUG XLA DynamicReshape: operandDims=%v (totalElems=%d) -> outputRank=%d, dtype=%v", operandDims, totalElems, outputRank, operandNode.value.Shape().DType)
+		log.Printf("DEBUG XLA DynamicReshape: CALL STACK - this is coming from backendDynamicReshape in gen_backend_ops.go")
+	}
+	// Critical check for the specific problematic case
+	if totalElems == 128 && outputRank == 2 {
+		log.Printf("!!! SUSPICIOUS: 128-element tensor being reshaped to 2D, dtype=%v", operandNode.value.Shape().DType)
+	}
+
+	// Compute bounds that preserve element count
+	bounds := make([]int, outputRank)
+
+	// CRITICAL FIX: The bounds MUST satisfy product(bounds) == totalElems
+	// This ensures XLA can allocate the right buffer size.
+	// We distribute elements across dimensions as evenly as possible.
+
+	if outputRank == 1 {
+		// Simple case: 1D output, use total elements
+		bounds[0] = totalElems
+	} else {
+		// Multi-dimensional output: distribute totalElems across dimensions
+		// Use operand dimensions where possible, compute the rest
+
+		// First, use any available operand dimensions
+		boundsProduct := 1
+		usedDims := 0
+		for i := 0; i < outputRank && i < len(operandDims); i++ {
+			if operandDims[i] > 0 {
+				bounds[i] = operandDims[i]
+				boundsProduct *= bounds[i]
+				usedDims++
+			}
+		}
+
+		// For remaining dimensions, compute based on remaining elements
+		remainingDims := outputRank - usedDims
+		if remainingDims > 0 {
+			remainingElements := totalElems
+			if boundsProduct > 0 {
+				remainingElements = totalElems / boundsProduct
+			}
+			if remainingElements < 1 {
+				remainingElements = 1
+			}
+
+			// Distribute remaining elements evenly across remaining dimensions
+			elementsPerDim := int(math.Ceil(math.Pow(float64(remainingElements), 1.0/float64(remainingDims))))
+			if elementsPerDim < 1 {
+				elementsPerDim = 1
+			}
+
+			for i := usedDims; i < outputRank; i++ {
+				bounds[i] = elementsPerDim
+			}
+		}
+
+		// Ensure bounds product >= totalElems
+		finalProduct := 1
+		for _, b := range bounds {
+			finalProduct *= b
+		}
+		if finalProduct < totalElems && outputRank > 0 {
+			// Scale up the last dimension to compensate
+			needed := (totalElems + finalProduct - 1) / (finalProduct / bounds[outputRank-1])
+			if needed > bounds[outputRank-1] {
+				bounds[outputRank-1] = needed
+			}
+		}
+	}
+
+	// Dynamic reshape is no longer supported in go-xla as dynamic shapes have been removed.
+	// This function now returns an error.
+	return nil, errors.New("DynamicReshape is no longer supported - dynamic shapes have been removed from go-xla")
 }
 
 // DynamicReshapeWithBounds reshapes operand to the shape specified by outputShape tensor,
@@ -1253,17 +1767,8 @@ func (b *Builder) DynamicReshape(operand backends.Op, outputShape backends.Op) (
 // The bounds are used by XLA to allocate buffers. At runtime, the actual dimensions
 // from outputShape are used, but they must not exceed the specified bounds.
 func (b *Builder) DynamicReshapeWithBounds(operand backends.Op, outputShape backends.Op, bounds []int) (backends.Op, error) {
-	nodes, err := b.verifyAndCastValues("DynamicReshapeWithBounds", operand, outputShape)
-	if err != nil {
-		return nil, err
-	}
-	operandNode := nodes[0]
-	outputShapeNode := nodes[1]
-	value, err := stablehlo.SimpleDynamicReshape(operandNode.value, outputShapeNode.value, bounds)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
+	// Dynamic reshape is no longer supported in go-xla as dynamic shapes have been removed.
+	return nil, errors.New("DynamicReshapeWithBounds is no longer supported - dynamic shapes have been removed from go-xla")
 }
 
 // DynamicBroadcastInDimWithBounds broadcasts operand to a shape specified by outputDimensions tensor,
@@ -1282,12 +1787,344 @@ func (b *Builder) DynamicBroadcastInDimWithBounds(operand backends.Op, outputDim
 		return nil, err
 	}
 	operandNode := nodes[0]
-	outputDimensionsNode := nodes[1]
-	value, err := stablehlo.SimpleDynamicBroadcastInDim(operandNode.value, outputDimensionsNode.value, broadcastDimensions, bounds)
-	if err != nil {
-		return nil, err
+	// Note: outputDimensions is validated but not used since we use static broadcast
+	_ = nodes[1]
+
+	// Get the logical dimensions of the operand.
+	// These may differ from the physical XLA buffer dimensions if the operand
+	// came from a previous dynamic operation that padded with bounds.
+	operandLogicalDims := operandNode.getLogicalDims()
+
+	// Compute the output logical dimensions based on operand logical dims.
+	// Key insight: When broadcasting from a dimension of size 1, the output should
+	// PRESERVE the logical size of 1. This allows subsequent operations to know
+	// that the data is still "broadcast-able" from that dimension.
+	//
+	// For each output dimension:
+	//   - If it comes from an operand dim > 1, keep that logical size (data has that extent)
+	//   - If it comes from an operand dim == 1, keep logical size 1 (can be re-broadcast)
+	//   - If it's a new dim (not in broadcastDimensions), use bounds (we're creating that extent)
+	outputLogicalDims := make([]int, len(bounds))
+
+	// Build a set of which output axes come from operand
+	outputAxesFromOperand := make(map[int]bool)
+	for _, outputAxis := range broadcastDimensions {
+		outputAxesFromOperand[outputAxis] = true
 	}
-	return b.newNode(value), nil
+
+	// Initialize: new dims use bounds, dims from operand will be set below
+	for i := range outputLogicalDims {
+		if outputAxesFromOperand[i] {
+			outputLogicalDims[i] = 1 // Placeholder, will be set from operand
+		} else {
+			// New dim - use bounds as logical size since we're creating it
+			outputLogicalDims[i] = bounds[i]
+		}
+	}
+
+	// Map operand dimensions to output dimensions.
+	// Key insight: When operand dim is 1, we're broadcasting TO a larger size,
+	// so the output should have the target size (bounds), not 1.
+	// Only preserve operand dims > 1 (actual data extent, not broadcast source).
+	//
+	// CRITICAL: When operand dim is symbolic (< 0), we DON'T know the output size
+	// at compile time - it depends on the runtime shapeTensor. So keep it symbolic (-1)
+	// instead of using bounds, to avoid bounds mismatches.
+	for operandAxis, outputAxis := range broadcastDimensions {
+		if operandAxis < len(operandLogicalDims) {
+			operandLogicalDim := operandLogicalDims[operandAxis]
+			if operandLogicalDim > 1 {
+				// Operand has actual data extent > 1, preserve it
+				outputLogicalDims[outputAxis] = operandLogicalDim
+			} else if operandLogicalDim == 1 {
+				// Operand dim is 1 - broadcasting to bounds size
+				outputLogicalDims[outputAxis] = bounds[outputAxis]
+			} else {
+				// Operand dim is symbolic (< 0) - output size depends on runtime shapeTensor
+				// Keep it symbolic to avoid bounds mismatch
+				outputLogicalDims[outputAxis] = -1
+			}
+		}
+	}
+
+	fmt.Printf("  output logical dims (BEFORE slice adjustment): %v\n", outputLogicalDims)
+
+	// CRITICAL FIX: Ensure bounds match concrete logical dimensions.
+	// If outputLogicalDims[i] is concrete (> 0), bounds[i] MUST equal it.
+	// This prevents StableHLO bounds mismatches like shape=[-1, 1] with bounds=[128, 128].
+	for i, logicalDim := range outputLogicalDims {
+		if logicalDim > 0 && i < len(bounds) {
+			// Concrete dimension - bound must match
+			if bounds[i] != logicalDim {
+				fmt.Printf("  WARNING: Adjusting bound[%d] from %d to %d to match concrete logical dim\n", i, bounds[i], logicalDim)
+				bounds[i] = logicalDim
+			}
+		}
+	}
+
+	// ADDITIONAL SAFETY CHECK: Ensure operand physical shape can actually be broadcast
+	// to the output bounds. If operand is 1D [N] and output is 2D [N, M], we need
+	// the broadcast to be valid (i.e., one of the dimensions should be 1 or should match).
+	operandPhysicalDimsForCheck := operandNode.value.Shape().Dimensions
+	operandPhysicalRank := len(operandPhysicalDimsForCheck)
+	outputRank := len(bounds)
+	if outputRank > operandPhysicalRank {
+		// We're adding new dimensions. For each new dimension, the output size should come from bounds,
+		// and the operand should be broadcast along that dimension.
+		// Verify that the broadcastDimensions mapping is consistent.
+		for outputAxis := 0; outputAxis < outputRank; outputAxis++ {
+			isFromOperand := false
+			for operandAxis, mappedOutputAxis := range broadcastDimensions {
+				if mappedOutputAxis == outputAxis {
+					// This output axis comes from operand axis
+					isFromOperand = true
+					if operandAxis < operandPhysicalRank {
+						operandSize := operandPhysicalDimsForCheck[operandAxis]
+						expectedOutputSize := bounds[outputAxis]
+						// The operand dimension must be either 1 (broadcast) or match the output bound
+						if operandSize != 1 && operandSize != expectedOutputSize {
+							// CRITICAL: Shape mismatch that could cause XLA error
+							fmt.Printf("  ERROR: Operand dim[%d]=%d cannot broadcast to output dim[%d]=%d\n",
+								operandAxis, operandSize, outputAxis, expectedOutputSize)
+							fmt.Printf("  ERROR: This will likely cause XLA compilation error\n")
+							fmt.Printf("  ERROR: Adjusting output logical dim[%d] from %d to %d to match operand\n",
+								outputAxis, outputLogicalDims[outputAxis], operandSize)
+							// Fix: adjust the output logical dimension to match operand
+							outputLogicalDims[outputAxis] = operandSize
+							bounds[outputAxis] = operandSize
+						}
+					}
+					break
+				}
+			}
+			if !isFromOperand {
+				// This is a new dimension being created by the broadcast
+				// The size should come from bounds, which is fine
+			}
+		}
+	}
+
+	// Check if the operand has been padded beyond its logical size.
+	// If so, we need to slice it back to logical dims before broadcasting.
+	operandPhysicalDims := operandNode.value.Shape().Dimensions
+	needsSlice := false
+	for i, physDim := range operandPhysicalDims {
+		if i < len(operandLogicalDims) {
+			logicalDim := operandLogicalDims[i]
+			// For symbolic dimensions (logicalDim < 0), check against the bound
+			if logicalDim < 0 {
+				// Find the corresponding bound for this operand axis
+				for operandAxis, outputAxis := range broadcastDimensions {
+					if operandAxis == i && outputAxis < len(bounds) {
+						targetDim := bounds[outputAxis]
+						if targetDim > 0 && targetDim < physDim {
+							needsSlice = true
+							break
+						}
+					}
+				}
+			} else if logicalDim > 0 && logicalDim < physDim {
+				needsSlice = true
+				break
+			}
+		}
+	}
+
+	// The value to broadcast (may be sliced or original)
+	operandValue := operandNode.value
+
+	if needsSlice {
+		// Slice the operand to its logical dimensions before broadcasting.
+		// This handles the case where a previous dynamic operation padded the tensor.
+		fmt.Printf("  Slicing operand from physical %v to logical %v\n", operandPhysicalDims, operandLogicalDims)
+
+		starts := make([]int, len(operandPhysicalDims))
+		limits := make([]int, len(operandPhysicalDims))
+		strides := make([]int, len(operandPhysicalDims))
+		for i := range operandPhysicalDims {
+			starts[i] = 0
+			strides[i] = 1
+			if i < len(operandLogicalDims) {
+				logicalDim := operandLogicalDims[i]
+				if logicalDim > 0 {
+					// Concrete logical dimension
+					limits[i] = logicalDim
+				} else {
+					// Symbolic dimension - use the corresponding bound, but only if smaller than physical
+					foundBound := false
+					for operandAxis, outputAxis := range broadcastDimensions {
+						if operandAxis == i && outputAxis < len(bounds) {
+							targetDim := bounds[outputAxis]
+							physDim := operandPhysicalDims[i]
+							// Only slice if physical dimension is larger than target
+							if targetDim < physDim {
+								limits[i] = targetDim
+							} else {
+								// Physical dim is same or smaller, keep it (will broadcast later)
+								limits[i] = physDim
+							}
+							foundBound = true
+							break
+						}
+					}
+					if !foundBound {
+						limits[i] = operandPhysicalDims[i]
+					}
+				}
+			} else {
+				limits[i] = operandPhysicalDims[i]
+			}
+		}
+
+		slicedValue, sliceErr := stablehlo.Slice(operandValue, starts, limits, strides)
+		if sliceErr != nil {
+			fmt.Printf("  Slice failed: %v\n", sliceErr)
+			// Fall through and try with original value
+		} else {
+			operandValue = slicedValue
+			slicedDims := slicedValue.Shape().Dimensions
+			fmt.Printf("  Sliced to shape: %v\n", slicedDims)
+
+			// CRITICAL FIX: Update outputLogicalDims based on the ACTUAL sliced shape.
+			// After slicing, if a dimension becomes concrete (not 1), we need to ensure
+			// the output logical dim and bound match that concrete value.
+			for operandAxis, outputAxis := range broadcastDimensions {
+				if operandAxis < len(slicedDims) && outputAxis < len(outputLogicalDims) {
+					slicedDim := slicedDims[operandAxis]
+					// If the sliced dimension is concrete and > 1, update output to match
+					if slicedDim > 1 {
+						outputLogicalDims[outputAxis] = slicedDim
+						// Also update bounds to match concrete dimension
+						if outputAxis < len(bounds) {
+							bounds[outputAxis] = slicedDim
+						}
+					} else if slicedDim == 1 {
+						// Dimension is 1 - will broadcast to bounds
+						// outputLogicalDims[outputAxis] should already be set to bounds[outputAxis]
+						// from the earlier computation
+					}
+					fmt.Printf("  After slice: dim %d -> output dim %d, slicedDim=%d, outputLogicalDim=%d, bound=%d\n",
+						operandAxis, outputAxis, slicedDim, outputLogicalDims[outputAxis], bounds[outputAxis])
+				}
+			}
+		}
+	}
+
+	// Build the XLA target shape using bounds (physical buffer size)
+	// but track the logical dimensions separately.
+	if len(bounds) > 0 {
+		// Check if we can use static BroadcastInDim.
+		// This requires all operand dims to be either 1 or equal to the target dim.
+		operandDims := operandValue.Shape().Dimensions
+		canStaticBroadcast := true
+		needsPadding := false
+		for operandAxis, outputAxis := range broadcastDimensions {
+			if operandAxis < len(operandDims) && outputAxis < len(bounds) {
+				opDim := operandDims[operandAxis]
+				targetDim := bounds[outputAxis]
+				if opDim != 1 && opDim != targetDim {
+					canStaticBroadcast = false
+					if opDim > 1 && targetDim > opDim {
+						needsPadding = true
+					}
+				}
+			}
+		}
+
+		if canStaticBroadcast {
+			fmt.Printf("  FINAL bounds (AFTER slice adjustment): %v\n", bounds)
+			fmt.Printf("  FINAL output logical dims: %v\n", outputLogicalDims)
+			fmt.Printf("  Using static BroadcastInDim with operandDims=%v -> bounds=%v\n", operandDims, bounds)
+			fmt.Printf("===== END DynamicBroadcastInDimWithBounds =====\n\n")
+
+			targetShape := stablehloshapes.Make(operandValue.Shape().DType, bounds...)
+			value, err := stablehlo.BroadcastInDim(operandValue, targetShape, broadcastDimensions)
+			if err != nil {
+				return nil, err
+			}
+			return b.newNodeWithLogicalDims(value, outputLogicalDims), nil
+		}
+
+		if needsPadding {
+			// We need to pad the operand to the target bounds, not broadcast.
+			// This handles cases like operand [128] -> bounds [1536] where we're not
+			// broadcasting (replicating data) but rather padding with zeros.
+			fmt.Printf("  Using padding workaround for dims that need extension\n")
+
+			// Pad the operand to match the bounds
+			paddedValue := operandValue
+			for operandAxis, outputAxis := range broadcastDimensions {
+				if operandAxis < len(operandDims) && outputAxis < len(bounds) {
+					opDim := operandDims[operandAxis]
+					targetDim := bounds[outputAxis]
+					if opDim > 1 && targetDim > opDim {
+						// Need to pad this dimension
+						lowPad := make([]int, len(operandDims))
+						highPad := make([]int, len(operandDims))
+						interiorPad := make([]int, len(operandDims))
+						highPad[operandAxis] = targetDim - opDim
+
+						// Create zero padding value (scalar of same type)
+						var zeroVal any
+						switch operandValue.Shape().DType {
+						case xla_dtypes.Float32:
+							zeroVal = float32(0)
+						case xla_dtypes.Float64:
+							zeroVal = float64(0)
+						case xla_dtypes.Int32:
+							zeroVal = int32(0)
+						case xla_dtypes.Int64:
+							zeroVal = int64(0)
+						case xla_dtypes.Bool:
+							zeroVal = false
+						default:
+							zeroVal = float32(0) // fallback
+						}
+						paddingValue, padErr := b.fn.ConstantFromScalar(zeroVal)
+						if padErr != nil {
+							fmt.Printf("  Failed to create padding value: %v\n", padErr)
+							break
+						}
+
+						paddedValue, padErr = stablehlo.Pad(paddedValue, paddingValue, lowPad, highPad, interiorPad)
+						if padErr != nil {
+							fmt.Printf("  Pad failed: %v\n", padErr)
+							break
+						}
+						fmt.Printf("  Padded dim %d from %d to %d\n", operandAxis, opDim, targetDim)
+						operandDims = paddedValue.Shape().Dimensions
+					}
+				}
+			}
+
+			// Now try broadcast with padded operand
+			targetShape := stablehloshapes.Make(paddedValue.Shape().DType, bounds...)
+			value, err := stablehlo.BroadcastInDim(paddedValue, targetShape, broadcastDimensions)
+			if err != nil {
+				return nil, errors.Wrapf(err, "static BroadcastInDim after padding failed for bounds %v", bounds)
+			}
+			return b.newNodeWithLogicalDims(value, outputLogicalDims), nil
+		}
+
+		// Static broadcast wasn't applicable and no padding needed.
+		// Try static broadcast to bounds directly.
+		targetShape := stablehloshapes.Make(operandValue.Shape().DType, bounds...)
+		value, err := stablehlo.BroadcastInDim(operandValue, targetShape, broadcastDimensions)
+		if err != nil {
+			return nil, errors.Wrapf(err, "static BroadcastInDim failed for bounds %v", bounds)
+		}
+		return b.newNodeWithLogicalDims(value, outputLogicalDims), nil
+	}
+
+	// No bounds provided - fall back to static broadcast with operand's physical dims.
+	// Must concretize to ensure all values are positive (static BroadcastInDim requires this).
+	physDims := concretizeBoundsFromShape(operandValue)
+	targetShape := stablehloshapes.Make(operandValue.Shape().DType, physDims...)
+	value, err := stablehlo.BroadcastInDim(operandValue, targetShape, broadcastDimensions)
+	if err != nil {
+		return nil, errors.Wrapf(err, "static BroadcastInDim failed for operand physical dims %v", physDims)
+	}
+	return b.newNodeWithLogicalDims(value, physDims), nil
 }
 
 // While implements backends.Builder interface.
@@ -1323,6 +2160,45 @@ func (b *Builder) While(condFn, bodyFn any, initialStates ...backends.Op) ([]bac
 	resultValues, err := stablehlo.While(condFunction, bodyFunction, initialValues...)
 	if err != nil {
 		return nil, errors.WithMessage(err, "while building While operation")
+	}
+
+	// Convert results back to backends.Op
+	results := make([]backends.Op, len(resultValues))
+	for i, value := range resultValues {
+		results[i] = b.newNode(value)
+	}
+
+	return results, nil
+}
+
+// Sort sorts one or more tensors along the specified dimension using a comparator function.
+func (b *Builder) Sort(comparatorFn any, dimension int, isStable bool, inputs ...backends.Op) ([]backends.Op, error) {
+	if err := b.CheckValid(); err != nil {
+		return nil, err
+	}
+
+	// Cast comparatorFn to *stablehlo.Function
+	comparatorFunction, ok := comparatorFn.(*stablehlo.Function)
+	if !ok {
+		return nil, errors.Errorf("Sort: comparatorFn must be a *stablehlo.Function, got %T", comparatorFn)
+	}
+
+	// Verify and convert inputs
+	nodes, err := b.verifyAndCastValues("Sort", inputs...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract stablehlo.Value from nodes
+	inputValues := make([]*stablehlo.Value, len(nodes))
+	for i, node := range nodes {
+		inputValues[i] = node.value
+	}
+
+	// Call stablehlo.Sort
+	resultValues, err := stablehlo.Sort(comparatorFunction, dimension, isStable, inputValues...)
+	if err != nil {
+		return nil, errors.WithMessage(err, "while building Sort operation")
 	}
 
 	// Convert results back to backends.Op

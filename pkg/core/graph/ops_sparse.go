@@ -23,6 +23,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
+	stablehloshapes "github.com/gomlx/go-xla/pkg/types/shapes"
 )
 
 // NormalizeIndices converts Python-style negative indices to positive indices
@@ -150,7 +151,6 @@ func Gather(params, indices *Node, indicesAreSorted ...bool) *Node {
 	// * collapsedSliceDims sets to collapse all the indexed params dimensions (the first indexedSubRank).
 	sliceSizes := make([]int, paramsRank)
 	collapsedSliceDims := make([]int, indexedSubRank)
-	const maxDimSize = 1 << 30 // Sentinel value for symbolic/dynamic dimensions
 	for ii := 0; ii < paramsRank; ii++ {
 		if ii < indexedSubRank {
 			sliceSizes[ii] = 1
@@ -158,8 +158,9 @@ func Gather(params, indices *Node, indicesAreSorted ...bool) *Node {
 		} else {
 			dim := params.Shape().Dimensions[ii]
 			if dim < 0 {
-				// Symbolic dimension - use large sentinel value that will be clamped at runtime
-				sliceSizes[ii] = maxDimSize
+				// Dynamic dimension - use DimUnknown to signal shapeinference to use
+				// the operand's dimension (which may be dynamic).
+				sliceSizes[ii] = stablehloshapes.DimUnknown
 			} else {
 				sliceSizes[ii] = dim
 			}
@@ -592,6 +593,23 @@ func genericScatter(operand, indices, updates *Node, sorted, unique bool, fn sca
 	indicesRank := indices.Rank()
 	indexedRank := indices.Shape().Dimensions[indicesRank-1]
 	updatesRank := updates.Rank()
+	operandRank := operand.Shape().Rank()
+
+	// If indexedRank is negative (symbolic/dynamic), infer it from the relationship:
+	// operandRank = indexedRank + slicesRank
+	// slicesRank = updatesRank - (indicesRank - 1)
+	// Therefore: indexedRank = operandRank - (updatesRank - (indicesRank - 1))
+	//                        = operandRank - updatesRank + indicesRank - 1
+	if indexedRank < 0 {
+		inferredIndexedRank := operandRank - updatesRank + indicesRank - 1
+		if inferredIndexedRank > 0 && inferredIndexedRank <= operandRank {
+			indexedRank = inferredIndexedRank
+		} else {
+			Panicf("cannot infer indexed rank from dynamic indices dimension; operand.Shape()=%s, indices.Shape()=%s, updates.Shape()=%s",
+				operand.Shape(), indices.Shape(), updates.Shape())
+		}
+	}
+
 	if updatesRank < indicesRank-1 {
 		Panicf("updates rank prefix (shapes=%s) must match the first n-1 dimensions of the indices (shapes=%s)",
 			updates.Shape(), indices.Shape())
@@ -625,7 +643,6 @@ func genericScatter(operand, indices, updates *Node, sorted, unique bool, fn sca
 	}
 	slicesRank := updatesRank - (indicesRank - 1)
 	slicesDims := updates.Shape().Dimensions[indicesRank-1:]
-	operandRank := operand.Shape().Rank()
 
 	// Check operand rank
 	// For dynamic indexed rank (negative indexedRank), we can't validate this at graph build time

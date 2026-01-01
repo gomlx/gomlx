@@ -83,6 +83,19 @@ type Node struct {
 	value   *stablehlo.Value
 	shape   shapes.Shape
 	builder *Builder
+
+	// logicalDims tracks the "logical" dimensions of the tensor when they differ
+	// from the physical XLA buffer dimensions. This is used for dynamic shape
+	// operations where the XLA buffer is allocated with bounds (maximum size)
+	// but the actual data occupies a smaller logical region.
+	//
+	// If nil, logical dims equal physical dims (no padding occurred).
+	// If set, logicalDims[i] is the actual intended size for dimension i.
+	// A value of -1 indicates the logical dim is unknown/symbolic.
+	//
+	// Example: An operand with logicalDims=[1, 1536, 1] but XLA buffer [1536, 1536, 1536]
+	// can be broadcast from dims 0 and 2 (they're logically 1), but not dim 1.
+	logicalDims []int
 }
 
 // CheckValid returns an error if the backend or the builder are not ok.
@@ -141,6 +154,106 @@ func (b *Builder) newNode(value *stablehlo.Value) *Node {
 		shape:   ShapeFromXLA(value.Shape()),
 		builder: b,
 	}
+}
+
+// newNodeWithLogicalDims creates a node with explicit logical dimensions.
+// The logical dims track the actual data size when it differs from the XLA buffer size.
+// The returned Node's shape field reflects the logical dimensions, not the physical XLA buffer size.
+func (b *Builder) newNodeWithLogicalDims(value *stablehlo.Value, logicalDims []int) *Node {
+	xlaShape := value.Shape()
+	dtype := DTypeFromXLA(xlaShape.DType)
+
+	// Create shape from logical dimensions
+	// Any dimension that is -1 or unset remains dynamic
+	var logicalShape shapes.Shape
+	hasDynamic := false
+	for _, d := range logicalDims {
+		if d < 0 {
+			hasDynamic = true
+			break
+		}
+	}
+	if hasDynamic {
+		logicalShape = shapes.MakeDynamic(dtype, logicalDims...)
+	} else {
+		logicalShape = shapes.Make(dtype, logicalDims...)
+	}
+
+	return &Node{
+		value:       value,
+		shape:       logicalShape,
+		builder:     b,
+		logicalDims: logicalDims,
+	}
+}
+
+// getLogicalDims returns the logical dimensions of the node.
+// If logicalDims is not set, returns the physical XLA dimensions.
+func (n *Node) getLogicalDims() []int {
+	if n.logicalDims != nil {
+		return n.logicalDims
+	}
+	// Fall back to physical dimensions from XLA
+	xlaShape := n.value.Shape()
+	return xlaShape.Dimensions
+}
+
+// getLogicalDim returns the logical dimension for a specific axis.
+// Returns -1 if the dimension is unknown/symbolic.
+func (n *Node) getLogicalDim(axis int) int {
+	logicalDims := n.getLogicalDims()
+	if axis < 0 || axis >= len(logicalDims) {
+		return -1
+	}
+	return logicalDims[axis]
+}
+
+// hasLogicalDims returns true if this node has logical dimensions that differ from physical.
+func (n *Node) hasLogicalDims() bool {
+	return n.logicalDims != nil
+}
+
+// sliceToLogicalDims returns a node sliced to its logical dimensions if they differ from physical.
+// If no slicing is needed (logical == physical), returns the original node.
+func (b *Builder) sliceToLogicalDims(node *Node) (*Node, error) {
+	if !node.hasLogicalDims() {
+		return node, nil
+	}
+
+	logicalDims := node.getLogicalDims()
+	physicalDims := node.value.Shape().Dimensions
+
+	needsSlice := false
+	for i := 0; i < len(logicalDims) && i < len(physicalDims); i++ {
+		if logicalDims[i] > 0 && logicalDims[i] < physicalDims[i] {
+			needsSlice = true
+			break
+		}
+	}
+
+	if !needsSlice {
+		return node, nil
+	}
+
+	// Slice to logical dims
+	starts := make([]int, len(physicalDims))
+	limits := make([]int, len(physicalDims))
+	strides := make([]int, len(physicalDims))
+	for i := range physicalDims {
+		starts[i] = 0
+		strides[i] = 1
+		if i < len(logicalDims) && logicalDims[i] > 0 {
+			limits[i] = logicalDims[i]
+		} else {
+			limits[i] = physicalDims[i]
+		}
+	}
+
+	sliced, err := stablehlo.Slice(node.value, starts, limits, strides)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(sliced), nil
 }
 
 func (b *Builder) Parameter(name string, shape shapes.Shape, sharding *backends.ShardingSpec) (
@@ -386,6 +499,18 @@ func (b *Builder) broadcastForBinaryOps(
 		return
 	}
 	lhsNode, rhsNode = nodes[0], nodes[1]
+
+	// Slice operands to their logical dims if they have been padded.
+	// This ensures we operate on the actual data extent, not the padded buffer.
+	lhsNode, err = b.sliceToLogicalDims(lhsNode)
+	if err != nil {
+		return nil, nil, errors.WithMessagef(err, "slicing lhs to logical dims for %s", opName)
+	}
+	rhsNode, err = b.sliceToLogicalDims(rhsNode)
+	if err != nil {
+		return nil, nil, errors.WithMessagef(err, "slicing rhs to logical dims for %s", opName)
+	}
+
 	if lhsNode.shape.DType != rhsNode.shape.DType {
 		return nil, nil, errors.Errorf("cannot broadcast %s and %s for %q: they have different dtypes",
 			lhsNode.shape.DType, rhsNode.shape.DType, opType)
@@ -396,47 +521,75 @@ func (b *Builder) broadcastForBinaryOps(
 	}
 
 	// If any is a scalar, just broadcast it to the other one.
+	// IMPORTANT: XLA cannot translate dynamic_broadcast_in_dim to XLA HLO.
+	// For scalars, we use static BroadcastInDim to the target's physical dimensions.
 	if lhsNode.shape.IsScalar() {
 		var value *stablehlo.Value
-		// Check if the GoMLX shape has dynamic dimensions
-		// (not the StableHLO shape, which may have dynamic dims even when GoMLX shape is concrete)
-		if rhsNode.shape.IsDynamic() {
-			// Use DynamicBroadcastInDim for shapes with dynamic dimensions
-			shapeTensor, shapeErr := b.shapeToTensor(rhsNode.value)
-			if shapeErr != nil {
-				return nil, nil, errors.WithMessagef(shapeErr, "while creating shape tensor for broadcasting in op %q", opType)
+		// Use static BroadcastInDim to the target's physical shape (bounds).
+		// For dynamic shapes, this broadcasts to the padded buffer size, not the logical size.
+		// First reshape scalar to 1x1x...x1
+		// Must concretize to ensure all values are positive (static BroadcastInDim requires this).
+		targetDims := concretizeBoundsFromShape(rhsNode.value)
+		if len(targetDims) > 0 {
+			ones := make([]int, len(targetDims))
+			for i := range ones {
+				ones[i] = 1
 			}
-			value, err = stablehlo.DynamicBroadcastInDim(lhsNode.value, shapeTensor, nil)
+			reshapedShape := xla_shapes.Make(lhsNode.value.Shape().DType, ones...)
+			reshaped, reshapeErr := stablehlo.Reshape(lhsNode.value, reshapedShape)
+			if reshapeErr != nil {
+				return nil, nil, errors.WithMessagef(reshapeErr, "while reshaping scalar for broadcasting in op %q", opType)
+			}
+			// Now broadcast to target's physical dimensions
+			targetShape := xla_shapes.Make(lhsNode.value.Shape().DType, targetDims...)
+			broadcastAxes := make([]int, len(targetDims))
+			for i := range broadcastAxes {
+				broadcastAxes[i] = i
+			}
+			value, err = stablehlo.BroadcastInDim(reshaped, targetShape, broadcastAxes)
 		} else {
-			// Use static BroadcastInDim with the concrete GoMLX shape
-			targetShape := ShapeToXLA(rhsNode.shape)
-			value, err = stablehlo.BroadcastInDim(lhsNode.value, targetShape, nil)
+			// Target is also a scalar
+			value = lhsNode.value
 		}
 		if err != nil {
 			return nil, nil, errors.WithMessagef(err, "while building op %q", opType)
 		}
-		lhsNode = b.newNode(value)
+		// Preserve rhs's logical dims if it has any
+		lhsNode = b.newNodeWithLogicalDims(value, rhsNode.getLogicalDims())
 		return
 	} else if rhsNode.shape.IsScalar() {
 		var value *stablehlo.Value
-		// Check if the GoMLX shape has dynamic dimensions
-		// (not the StableHLO shape, which may have dynamic dims even when GoMLX shape is concrete)
-		if lhsNode.shape.IsDynamic() {
-			// Use DynamicBroadcastInDim for shapes with dynamic dimensions
-			shapeTensor, shapeErr := b.shapeToTensor(lhsNode.value)
-			if shapeErr != nil {
-				return nil, nil, errors.WithMessagef(shapeErr, "while creating shape tensor for broadcasting in op %s", opName)
+		// Use static BroadcastInDim to the target's physical shape (bounds).
+		// For dynamic shapes, this broadcasts to the padded buffer size, not the logical size.
+		// First reshape scalar to 1x1x...x1
+		// Must concretize to ensure all values are positive (static BroadcastInDim requires this).
+		targetDims := concretizeBoundsFromShape(lhsNode.value)
+		if len(targetDims) > 0 {
+			ones := make([]int, len(targetDims))
+			for i := range ones {
+				ones[i] = 1
 			}
-			value, err = stablehlo.DynamicBroadcastInDim(rhsNode.value, shapeTensor, nil)
+			reshapedShape := xla_shapes.Make(rhsNode.value.Shape().DType, ones...)
+			reshaped, reshapeErr := stablehlo.Reshape(rhsNode.value, reshapedShape)
+			if reshapeErr != nil {
+				return nil, nil, errors.WithMessagef(reshapeErr, "while reshaping scalar for broadcasting in op %s", opName)
+			}
+			// Now broadcast to target's physical dimensions
+			targetShape := xla_shapes.Make(rhsNode.value.Shape().DType, targetDims...)
+			broadcastAxes := make([]int, len(targetDims))
+			for i := range broadcastAxes {
+				broadcastAxes[i] = i
+			}
+			value, err = stablehlo.BroadcastInDim(reshaped, targetShape, broadcastAxes)
 		} else {
-			// Use static BroadcastInDim with the concrete GoMLX shape
-			targetShape := ShapeToXLA(lhsNode.shape)
-			value, err = stablehlo.BroadcastInDim(rhsNode.value, targetShape, nil)
+			// Target is also a scalar
+			value = rhsNode.value
 		}
 		if err != nil {
 			return nil, nil, errors.WithMessagef(err, "while building op %s", opName)
 		}
-		rhsNode = b.newNode(value)
+		// Preserve lhs's logical dims if it has any
+		rhsNode = b.newNodeWithLogicalDims(value, lhsNode.getLogicalDims())
 		return
 	}
 
@@ -453,54 +606,66 @@ func (b *Builder) broadcastForBinaryOps(
 	if !broadcastShape.Equal(lhsNode.shape) {
 		var value *stablehlo.Value
 		if useDynamicBroadcast {
-			// Use DynamicBroadcastInDim for dynamic shapes
-			// Prefer getting shape from concrete operand if available
-			var shapeTensor *stablehlo.Value
+			// XLA cannot translate dynamic_broadcast_in_dim to XLA HLO.
+			// Use static BroadcastInDim to the bounds (physical shape) instead.
+			// Must concretize to ensure all values are positive (static BroadcastInDim requires this).
+			var bounds []int
 			if rhsNode.shape.IsFullyConcrete() {
-				shapeTensor, err = b.shapeToTensor(rhsNode.value)
+				bounds = concretizeBoundsFromShape(rhsNode.value)
 			} else if lhsNode.shape.IsFullyConcrete() {
-				shapeTensor, err = b.shapeToTensor(lhsNode.value)
+				bounds = concretizeBoundsFromShape(lhsNode.value)
 			} else {
-				// Both have dynamic dims, create shape tensor from broadcast shape
-				shapeTensor, err = b.createShapeTensorForBroadcast(broadcastShape, lhsNode.value, rhsNode.value)
+				// Both have dynamic dims, compute bounds as max of both physical shapes
+				lhsBounds := concretizeBoundsFromShape(lhsNode.value)
+				rhsBounds := concretizeBoundsFromShape(rhsNode.value)
+				bounds = b.computeBroadcastBounds(lhsBounds, rhsBounds)
 			}
+			targetShape := xla_shapes.Make(lhsNode.value.Shape().DType, bounds...)
+			value, err = stablehlo.BroadcastInDim(lhsNode.value, targetShape, broadcastAxes)
 			if err != nil {
-				return nil, nil, errors.WithMessagef(err, "creating shape tensor for broadcasting lhs in op %q", opType)
+				return nil, nil, errors.WithMessagef(err, "broadcasting lhs for op %q", opType)
 			}
-			value, err = stablehlo.DynamicBroadcastInDim(lhsNode.value, shapeTensor, broadcastAxes)
+			// Track logical dims from rhs if it has any
+			lhsNode = b.newNodeWithLogicalDims(value, rhsNode.getLogicalDims())
 		} else {
 			value, err = stablehlo.BroadcastInDim(lhsNode.value, ShapeToXLA(broadcastShape), broadcastAxes)
+			if err != nil {
+				return nil, nil, errors.WithMessagef(err, "broadcasting lhs for op %q", opType)
+			}
+			lhsNode = b.newNode(value)
 		}
-		if err != nil {
-			return nil, nil, errors.WithMessagef(err, "broadcasting lhs for op %q", opType)
-		}
-		lhsNode = b.newNode(value)
 	}
 	if !broadcastShape.Equal(rhsNode.shape) {
 		var value *stablehlo.Value
 		if useDynamicBroadcast {
-			// Use DynamicBroadcastInDim for dynamic shapes
-			// Prefer getting shape from concrete operand if available
-			var shapeTensor *stablehlo.Value
+			// XLA cannot translate dynamic_broadcast_in_dim to XLA HLO.
+			// Use static BroadcastInDim to the bounds (physical shape) instead.
+			// Must concretize to ensure all values are positive (static BroadcastInDim requires this).
+			var bounds []int
 			if lhsNode.shape.IsFullyConcrete() {
-				shapeTensor, err = b.shapeToTensor(lhsNode.value)
+				bounds = concretizeBoundsFromShape(lhsNode.value)
 			} else if rhsNode.shape.IsFullyConcrete() {
-				shapeTensor, err = b.shapeToTensor(rhsNode.value)
+				bounds = concretizeBoundsFromShape(rhsNode.value)
 			} else {
-				// Both have dynamic dims, create shape tensor from broadcast shape
-				shapeTensor, err = b.createShapeTensorForBroadcast(broadcastShape, lhsNode.value, rhsNode.value)
+				// Both have dynamic dims, compute bounds as max of both physical shapes
+				lhsBounds := concretizeBoundsFromShape(lhsNode.value)
+				rhsBounds := concretizeBoundsFromShape(rhsNode.value)
+				bounds = b.computeBroadcastBounds(lhsBounds, rhsBounds)
 			}
+			targetShape := xla_shapes.Make(rhsNode.value.Shape().DType, bounds...)
+			value, err = stablehlo.BroadcastInDim(rhsNode.value, targetShape, broadcastAxes)
 			if err != nil {
-				return nil, nil, errors.WithMessagef(err, "creating shape tensor for broadcasting rhs in op %q", opType)
+				return nil, nil, errors.WithMessagef(err, "broadcasting rhs for op %q", opType)
 			}
-			value, err = stablehlo.DynamicBroadcastInDim(rhsNode.value, shapeTensor, broadcastAxes)
+			// Track logical dims from lhs if it has any
+			rhsNode = b.newNodeWithLogicalDims(value, lhsNode.getLogicalDims())
 		} else {
 			value, err = stablehlo.BroadcastInDim(rhsNode.value, ShapeToXLA(broadcastShape), broadcastAxes)
+			if err != nil {
+				return nil, nil, errors.WithMessagef(err, "broadcasting rhs for op %q", opType)
+			}
+			rhsNode = b.newNode(value)
 		}
-		if err != nil {
-			return nil, nil, errors.WithMessagef(err, "broadcasting rhs for op %q", opType)
-		}
-		rhsNode = b.newNode(value)
 	}
 	return
 }
@@ -653,4 +818,41 @@ func (b *Builder) createShapeTensorForBroadcast(broadcastShape shapes.Shape, lhs
 	} else {
 		return stablehlo.Concatenate(0, dimValues...)
 	}
+}
+
+// computeBroadcastBounds computes the bounds for a broadcast operation by taking
+// the element-wise maximum of two physical dimension arrays. This is used when
+// both operands have dynamic dimensions and we need to compute the output bounds.
+func (b *Builder) computeBroadcastBounds(lhsDims, rhsDims []int) []int {
+	maxRank := len(lhsDims)
+	if len(rhsDims) > maxRank {
+		maxRank = len(rhsDims)
+	}
+	bounds := make([]int, maxRank)
+
+	// Align from the right (broadcast semantics)
+	for i := 0; i < maxRank; i++ {
+		lhsIdx := len(lhsDims) - maxRank + i
+		rhsIdx := len(rhsDims) - maxRank + i
+
+		var lhsDim, rhsDim int
+		if lhsIdx >= 0 {
+			lhsDim = lhsDims[lhsIdx]
+		} else {
+			lhsDim = 1
+		}
+		if rhsIdx >= 0 {
+			rhsDim = rhsDims[rhsIdx]
+		} else {
+			rhsDim = 1
+		}
+
+		// Take the max of the two dimensions
+		if lhsDim > rhsDim {
+			bounds[i] = lhsDim
+		} else {
+			bounds[i] = rhsDim
+		}
+	}
+	return bounds
 }

@@ -101,7 +101,9 @@ func FromName(activationName string) Type {
 
 // Relu activation function. It returns Max(x, 0), and is commonly used as an activation function in neural networks.
 func Relu(x *Node) *Node {
-	return Max(x, ZerosLike(x))
+	// Use ScalarZero instead of ZerosLike to avoid shape mismatch issues
+	// when x has symbolic dimensions. The scalar will be broadcast by Max.
+	return Max(x, ScalarZero(x.Graph(), x.DType()))
 }
 
 // LeakyRelu activation function. It allows a small gradient when the unit is not active (x < 0).

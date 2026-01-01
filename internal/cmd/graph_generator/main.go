@@ -52,7 +52,9 @@ var (
 
 	// methodsNotGenerated but for which there is still a NodeType.
 	methodsNotGenerated = sets.MakeWith(
-		"Constant", "Parameter")
+		"Constant", "Parameter",
+		// Dynamic bounds operations - manually implemented in backend_dynamic_bounds.go and ops_dynamic.go
+		"DynamicReshapeWithBounds", "DynamicBroadcastInDimWithBounds")
 
 	// methodsExcluded from generating and even from having a NodeType.
 	// These are utility methods, not part of building a graph.
@@ -138,7 +140,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.BackendType = "...backends." + pi.BackendType[3:]
 				pi.NodeInputType = "[]" + pi.BackendType[3:]
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
-				pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
+				pi.ConvertStatement = fmt.Sprintf("ni.%s...", param.Name)
 				pi.Format = "%+v"
 			case "FFTType":
 				pi.BackendType = "backends." + pi.BackendType
@@ -148,7 +150,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				case strings.HasPrefix(pi.BackendType, "..."):
 					pi.NodeInputType = "[]" + pi.BackendType[3:]
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
-					pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
+					pi.ConvertStatement = fmt.Sprintf("ni.%s...", param.Name)
 				case strings.HasPrefix(pi.BackendType, "[]"):
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
 				case strings.HasPrefix(pi.BackendType, "func"):
@@ -167,7 +169,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.CopyStatement = pi.Name
 			}
 			if pi.ConvertStatement == "" {
-				pi.ConvertStatement = "inputs." + pi.Name
+				pi.ConvertStatement = "ni." + pi.Name
 			}
 			if pi.Format == "" {
 				pi.Format = "%v"
@@ -314,7 +316,7 @@ Body: */}}{
 {{- end}}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 {{- end}}
-	inputs := &nodeInputs{{.BackendName}}{
+	ni := &nodeInputs{{.BackendName}}{
 {{- range .Inputs}}
 		{{.Name}}: {{.CopyStatement}},
 {{- end}}
@@ -355,7 +357,7 @@ Convert result(s) to node(s):
 {{- end}}
 {{- /* Rest of node definition */}}
 		graph: g,
-		inputs: inputs,
+		inputs: ni,
 {{- if not .HasGraph}}
 		inputNodes: inputNodes,
 {{- end}}{{/*

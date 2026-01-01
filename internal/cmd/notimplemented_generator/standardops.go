@@ -26,7 +26,11 @@ var (
 		"Constant", "Parameter", "Identity", "ReduceWindow",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
 		"And", "Or", "Xor", "Not", "ReduceAnd", "ReduceOr", "ReduceXor", "ScatterAdd",
-		"AllReduce", // Output is not standard
+		"AllReduce",                   // Output is not standard
+		"While", "Sort",               // Returns []Op - manually implemented
+		"RNGBitGenerator",             // Has multiple outputs - manually implemented
+		"DynamicReshapeWithBounds",    // Manually implemented in dynamic_bounds.go
+		"DynamicBroadcastInDimWithBounds", // Manually implemented in dynamic_bounds.go
 	)
 
 	// methodsExcluded from generating and even from having a NodeType.
