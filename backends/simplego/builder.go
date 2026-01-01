@@ -30,6 +30,11 @@ type Builder struct {
 
 	// outputs can be any type of node.
 	outputs []*Node
+
+	// nodeDedup provides automatic de-duplication for nodes.
+	// Key: (opType, input count, first input pointer)
+	// Value: list of candidate nodes to check for exact match
+	nodeDedup map[nodeDedupKey][]*Node
 }
 
 // Compile-time check.
@@ -50,9 +55,23 @@ func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingS
 	if err != nil {
 		return nil, err
 	}
-	nodeSet := sets.MakeWith(b.outputs...)
-	if len(nodeSet) != len(b.outputs) {
-		return nil, errors.Errorf("*** Repeated outputs: %d outputs, %d unique outputs", len(b.outputs), len(nodeSet))
+	// Handle duplicate outputs by creating Identity nodes for duplicates.
+	seenNodes := sets.Make[*Node]()
+	for i, node := range b.outputs {
+		if seenNodes.Has(node) {
+			// Create an Identity node for this duplicate output.
+			identityOp, err := b.Identity(node)
+			if err != nil {
+				return nil, errors.WithMessagef(err, "failed to create Identity node for duplicate output at index %d", i)
+			}
+			identityNode, ok := identityOp.(*Node)
+			if !ok {
+				return nil, errors.Errorf("Identity returned unexpected type for duplicate output at index %d", i)
+			}
+			b.outputs[i] = identityNode
+		} else {
+			seenNodes.Insert(node)
+		}
 	}
 	for _, node := range b.outputs {
 		if len(node.multiOutputsShapes) != 0 {
@@ -72,6 +91,7 @@ func (b *Builder) Finalize() {
 	b.inputs = nil
 	b.outputs = nil
 	b.nodes = nil
+	b.nodeDedup = nil
 }
 
 // Node in the SimpleGo computation graph.
@@ -98,6 +118,8 @@ type Node struct {
 
 // newNode adds a new node of the given opType and shape to the Builder graph.
 // It's used by the other ops when creating new nodes.
+//
+// Use instead getOrCreateNode instead.
 func (b *Builder) newNode(opType backends.OpType, shape shapes.Shape, inputs ...*Node) *Node {
 	n := &Node{
 		builder:    b,
@@ -113,6 +135,8 @@ func (b *Builder) newNode(opType backends.OpType, shape shapes.Shape, inputs ...
 // newMultiOutputsNode create the multi-outputs node, and its "select nodes", one per output.
 // The node.multiOutputsNodes will be set with the individual outputs and can be used by the Builder to return
 // to the user.
+//
+// Note: no de-duplication of multi-output nodes.
 func (b *Builder) newMultiOutputsNode(
 	opType backends.OpType,
 	outputShapes []shapes.Shape,
@@ -215,7 +239,8 @@ func (b *Builder) addUnaryOp(opType backends.OpType, operandOp backends.Op) (*No
 
 		return nil, err
 	}
-	return b.newNode(opType, shape, operand), nil
+	node, _ := b.getOrCreateNode(opType, shape, []*Node{operand}, nil)
+	return node, nil
 }
 
 // addBinaryOp adds a generic binary op.
@@ -229,7 +254,8 @@ func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Op) 
 	if err != nil {
 		return nil, err
 	}
-	return b.newNode(opType, shape, lhs, rhs), nil
+	node, _ := b.getOrCreateNode(opType, shape, []*Node{lhs, rhs}, nil)
+	return node, nil
 }
 
 // addComparisonOp adds a generic comparison binary op.
@@ -243,5 +269,6 @@ func (b *Builder) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.
 	if err != nil {
 		return nil, err
 	}
-	return b.newNode(opType, shape, lhs, rhs), nil
+	node, _ := b.getOrCreateNode(opType, shape, []*Node{lhs, rhs}, nil)
+	return node, nil
 }
