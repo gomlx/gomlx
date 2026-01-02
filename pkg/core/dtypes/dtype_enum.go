@@ -87,22 +87,22 @@ const (
 	// F8E4M3FNUZ is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_F8E4M3FNUZ).
 	F8E4M3FNUZ DType = 20
 
-	// S4 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_S4).
+	// Int4 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_S4).
 	// 4-bit integer types
-	S4 DType = 21
+	Int4 DType = 21
 
-	// U4 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_U4).
-	U4 DType = 22
+	// Uint4 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_U4).
+	Uint4 DType = 22
 
 	// TOKEN is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_TOKEN).
 	TOKEN DType = 23
 
-	// S2 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_S2).
+	// Int2 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_S2).
 	// 2-bit integer types
-	S2 DType = 24
+	Int2 DType = 24
 
-	// U2 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_U2).
-	U2 DType = 25
+	// Uint2 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_U2).
+	Uint2 DType = 25
 
 	// F8E4M3 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_F8E4M3).
 	// More truncated 8 bit floating-point formats.
@@ -168,6 +168,18 @@ const (
 
 	// C128 (or PJRT_Buffer_Type_C128) is the C enum name for Complex128.
 	C128 = Complex128
+
+	// S4 (or PJRT_Buffer_Type_S4) is the C enum name for Int4.
+	S4 = Int4
+
+	// U4 (or PJRT_Buffer_Type_U4) is the C enum name for Uint4.
+	U4 = Uint4
+
+	// S2 (or PJRT_Buffer_Type_S2) is the C enum name for Int2.
+	S2 = Int2
+
+	// U2 (or PJRT_Buffer_Type_U2) is the C enum name for Uint2.
+	U2 = Uint2
 )
 
 // MapOfNames to their dtypes. It includes also aliases to the various dtypes.
@@ -210,11 +222,15 @@ var MapOfNames = map[string]DType{
 	"F8E4M3B11FNUZ": F8E4M3B11FNUZ,
 	"F8E5M2FNUZ":    F8E5M2FNUZ,
 	"F8E4M3FNUZ":    F8E4M3FNUZ,
-	"S4":            S4,
-	"U4":            U4,
+	"Int4":          Int4,
+	"S4":            Int4,
+	"Uint4":         Uint4,
+	"U4":            Uint4,
 	"TOKEN":         TOKEN,
-	"S2":            S2,
-	"U2":            U2,
+	"Int2":          Int2,
+	"S2":            Int2,
+	"Uint2":         Uint2,
+	"U2":            Uint2,
 	"F8E4M3":        F8E4M3,
 	"F8E3M4":        F8E3M4,
 	"F8E8M0FNU":     F8E8M0FNU,
