@@ -10,6 +10,8 @@
   - Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
 - Package `dtypes`:
   - Added 'Uint2', 'Uint4', 'Int2', 'Int4'. 
+- Package `graph`:
+  - Added `UnpackInt2()`, `UnpackInt4()`, `UnpackUint2()`, `UnpackUint4()`.  
 
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 
