@@ -173,8 +173,21 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	}
 	params.outputBlockedShape = dgCreateBlockedShape(outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
 
+	// Pre-block inputs at graph build time if beneficial.
+	// This converts constant/parameter tensors to blocked format once, avoiding runtime blocking cost.
+	// The builder decides here; the executor will detect pre-blocked inputs and use them directly.
+	lhsInput, rhsInput := lhs, rhs
+	if shouldPreBlock(lhs, params.lhsCrossSize, params.contractingSize) {
+		lhsInput = b.blockForDotGeneral(lhs, params.lhsContractingAxes, params.lhsBatchAxes,
+			params.batchSize, params.lhsCrossSize, params.contractingSize)
+	}
+	if shouldPreBlock(rhs, params.rhsCrossSize, params.contractingSize) {
+		rhsInput = b.blockForDotGeneral(rhs, params.rhsContractingAxes, params.rhsBatchAxes,
+			params.batchSize, params.rhsCrossSize, params.contractingSize)
+	}
+
 	// Create dot-general node: it will generate a normalized output [batchSize, lhsCrossSize, rhsCrossSize].
-	dotGeneral, _ := b.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), []*Node{lhs, rhs}, &params)
+	dotGeneral, _ := b.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), []*Node{lhsInput, rhsInput}, &params)
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))
@@ -232,7 +245,13 @@ const (
 	checkProblemSize
 )
 
-// execDotGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
+// execDotGeneral executes the DotGeneral operation, selecting the optimal execution path.
+//
+// Execution paths (in order of preference):
+//  1. Pre-blocked path: If inputs are pre-blocked via BlockForDotGeneral, use blocked execution
+//  2. SmallMatMul path: For small float32 matrices in contract-last order, skip transpose
+//  3. Normalized path: Transpose to [B,Cross,Contract] form for small/medium matrices
+//  4. Large (blocked) path: Cache-tiled algorithm for large matrices
 func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	params := node.data.(*dotGeneralNodeData)
@@ -241,7 +260,39 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	output := backend.getBufferForShape(outputShape)
 	output.Zeros()
 
-	// Problem size (per example of the batch):
+	// Check if inputs are pre-blocked (via BlockForDotGeneral ops).
+	// Pre-blocked inputs skip the runtime blocking cost.
+	lhsNode := node.inputs[0]
+	rhsNode := node.inputs[1]
+	isLHSPreBlocked := lhsNode.opType == backends.OpTypeBlockForDotGeneral
+	isRHSPreBlocked := rhsNode.opType == backends.OpTypeBlockForDotGeneral
+
+	// If any input is pre-blocked, use the blocked execution path.
+	if isLHSPreBlocked || isRHSPreBlocked {
+		var lhsBlockData, rhsBlockData *blockForDotGeneralData
+		if isLHSPreBlocked {
+			lhsBlockData = lhsNode.data.(*blockForDotGeneralData)
+		}
+		if isRHSPreBlocked {
+			rhsBlockData = rhsNode.data.(*blockForDotGeneralData)
+		}
+		err := execDotGeneralWithPreBlocked(backend, lhs, rhs, lhsBlockData, rhsBlockData, params, output)
+		if err != nil {
+			backend.putBuffer(output)
+			return nil, err
+		}
+		return output, nil
+	}
+
+	// Try the direct path for small matrices in contract-last order.
+	// This skips transpose but has strided RHS access, so only beneficial for small matrices.
+	if execDotGeneralSmallMatMul(backend, lhs, rhs, params, output) {
+		return output, nil
+	}
+
+	// Select execution path based on problem size.
+	// For large matrices, the blocked (cache-tiled) algorithm is more efficient.
+	// For smaller matrices, the normalized path with simple loops is sufficient.
 	crossesSize := params.rhsCrossSize * params.lhsCrossSize
 	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
 	blockSize := blockDim * blockDim
@@ -257,11 +308,11 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	case largeProblemSize:
 		err = execDotGeneralLarge(backend, lhs, rhs, params, output)
 	case smallProblemSize:
-		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
+		err = execDotGeneralSmallNormalized(backend, lhs, rhs, params, output)
 	case checkProblemSize:
 		output2 := backend.getBufferForShape(outputShape)
 		output2.Zeros()
-		err = execDotGeneralSmall(backend, lhs, rhs, params, output2)
+		err = execDotGeneralSmallNormalized(backend, lhs, rhs, params, output2)
 		if err != nil {
 			return nil, err
 		}
