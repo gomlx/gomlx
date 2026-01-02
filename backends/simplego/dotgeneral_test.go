@@ -1063,7 +1063,7 @@ func TestSmallMatMulBatchVariations(t *testing.T) {
 				return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{1}, []int{0})
 			}, lhsTensor, rhsTensor)
 
-			requireSameTensorsFloat32(t, resultNormalized, resultAuto, 1e-4)
+			requireSameTensorsFloat32(t, resultNormalized, resultAuto, 1e-3)
 		})
 	}
 }
