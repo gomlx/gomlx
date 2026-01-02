@@ -1,6 +1,9 @@
 package graph
 
-import "github.com/gomlx/gomlx/pkg/core/dtypes"
+import (
+	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+)
 
 // ReduceLogicalAnd returns true if all values of x evaluate to true
 // across the given axes.
@@ -163,4 +166,38 @@ func BitwiseShiftRightLogicalScalar[T dtypes.NumberNotComplex](x *Node, n T) *No
 	g := validateBuildingGraphFromInputs(x)
 	nNode := Scalar(g, x.DType(), n)
 	return BitwiseShiftRightLogical(x, nNode)
+}
+
+// UnpackInt2 unpacks a node with dtype dtypes.Uint8 (or dtypes.Int8) to dtypes.Int2 by
+// shifting the bits accordingly.
+// The final shape has one extra axis at the end of size 4 (4 Int2 values in an Uint8).
+//
+// Each Uint8 byte is unpacked into 4 Int2 values:
+//   - Bits 0-1 become the first Int2 value
+//   - Bits 2-3 become the second Int2 value
+//   - Bits 4-5 become the third Int2 value
+//   - Bits 6-7 become the fourth Int2 value
+//
+// The Int2 values are sign-extended from 2-bit signed integers.
+// UnpackInt2 unpacks 4 2-bit integers from each byte of the input x.
+//
+// The input x is converted to Int8 (if it isn't already), and the returned tensor
+// has one extra dimension of size 4 at the end, containing the unpacked values.
+// The sign is correctly preserved (2-bit 2's complement).
+//
+// The unpacked order is from the least significant bits (0-1) to the most significant (6-7).
+func UnpackInt2(x *Node) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	if x.DType() != dtypes.Uint8 && x.DType() != dtypes.Int8 {
+		Panicf("UnpackInt2: input must be Uint8 or Int8, got %s", x.DType())
+	}
+	// Ensure input is Int8 so that the sign bit is at the 7th bit position (MSB of a byte).
+	x = Bitcast(x, dtypes.Int8)
+	var unpacked [4]*Node
+	for i := range unpacked {
+		// Rotate the 2 bits to the left (most significant bits) so we get the sign bit in the 7th bit position.
+		// and then back again to the right, preserving the sign bit.
+		unpacked[i] = BitwiseShiftRightArithmeticScalar(BitwiseShiftLeftScalar(x, 6-2*i), 6)
+	}
+	return Stack(unpacked[:], -1)
 }
