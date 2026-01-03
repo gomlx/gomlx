@@ -2,13 +2,17 @@
 
 # Next
 
-* Package `simplego`:
-  * Added `Float16` support (thx @timkaye11) 
-  * Added dedup of computation nodes (aka. "common subexpression elimination" CSE) (thx @timkaye11)
+- Package `simplego`:
+  - Added `Float16` support (thx @timkaye11) 
+  - Added dedup of computation nodes (aka. "common subexpression elimination" CSE) (thx @timkaye11)
     - ~6% speedup for CSI-Adult demo training. 
-* New package `bucketing`:
-  * Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
-  
+- New package `bucketing`:
+  - Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
+- Package `dtypes`:
+  - Added 'Uint2', 'Uint4', 'Int2', 'Int4'. 
+- Package `graph`:
+  - Added `UnpackInt2()`, `UnpackInt4()`, `UnpackUint2()`, `UnpackUint4()`.  
+
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 
 API Change: `dtypes` package moved from `github.com/gomlx/gopjrt/dtypes` to `github.com/gomlx/gomlx/pkg/core/dtypes`.
