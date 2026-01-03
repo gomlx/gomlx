@@ -129,14 +129,14 @@ func buildDotGeneralKernelFloat16ToFloat32(lhs, rhs, output *Buffer, blockDim in
 		baseRhsIdx := rhsBlockIdx * blockSize
 		outputIdx := outputBlockIdx * blockSize
 
-		for range blockDim {
+		for range blockDim { // output's columns loop
 			rhsIdx := baseRhsIdx
 
-			for rhsRow := 0; rhsRow < blockDim; rhsRow++ {
+			for range blockDim { // output's rows loop
 				lhsIdx := baseLhsIdx
 				sum := outputFlat[outputIdx]
 
-				for contractingIdx := 0; contractingIdx < blockDim; contractingIdx++ {
+				for range blockDim { // contracting indices loop (only on the rhs and lhs)
 					sum += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx].Float32()
 					lhsIdx++
 					rhsIdx++
@@ -156,14 +156,4 @@ func init() {
 	// Uses priorityTyped so NEON implementations (priorityArch) can override.
 	dotGeneralNormalizedDTypeMap.Register(dtypes.Float16, priorityTyped, execNormalizedDotGeneralFloat16ToFloat32)
 	dotGeneralKernelDTypeMap.Register(dtypes.Float16, priorityTyped, buildDotGeneralKernelFloat16ToFloat32)
-}
-
-// dotProductBF16InnerLoop is the scalar fallback for BF16 dot product.
-// This is used by the BFloat16 kernel in dotgeneral_large.go on non-NEON platforms.
-func dotProductBF16InnerLoop(lhsFlat, rhsFlat []bfloat16.BFloat16, lhsIdx, rhsIdx, size int) float32 {
-	var sum float32
-	for i := 0; i < size; i++ {
-		sum += lhsFlat[lhsIdx+i].Float32() * rhsFlat[rhsIdx+i].Float32()
-	}
-	return sum
 }
