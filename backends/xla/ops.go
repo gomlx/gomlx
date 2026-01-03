@@ -740,3 +740,86 @@ func (b *Builder) BatchNormGradient(gradOutput, input, scale, mean, variance bac
 	}
 	return b.newNode(gradInputV), b.newNode(gradScaleV), b.newNode(gradOffsetV), nil
 }
+
+// While implements backends.Builder interface.
+// Executes bodyFn repeatedly while condFn returns true.
+func (b *Builder) While(condFn, bodyFn any, initialStates ...backends.Op) ([]backends.Op, error) {
+	if err := b.CheckValid(); err != nil {
+		return nil, err
+	}
+
+	// Cast condFn and bodyFn to *stablehlo.Function
+	condFunction, ok := condFn.(*stablehlo.Function)
+	if !ok {
+		return nil, errors.Errorf("While: condFn must be a *stablehlo.Function, got %T", condFn)
+	}
+	bodyFunction, ok := bodyFn.(*stablehlo.Function)
+	if !ok {
+		return nil, errors.Errorf("While: bodyFn must be a *stablehlo.Function, got %T", bodyFn)
+	}
+
+	// Verify and convert initial states
+	nodes, err := b.verifyAndCastValues("While", initialStates...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract stablehlo.Value from nodes
+	initialValues := make([]*stablehlo.Value, len(nodes))
+	for i, node := range nodes {
+		initialValues[i] = node.value
+	}
+
+	// Call stablehlo.While
+	resultValues, err := stablehlo.While(condFunction, bodyFunction, initialValues...)
+	if err != nil {
+		return nil, errors.WithMessage(err, "while building While operation")
+	}
+
+	// Convert results back to backends.Op
+	results := make([]backends.Op, len(resultValues))
+	for i, value := range resultValues {
+		results[i] = b.newNode(value)
+	}
+
+	return results, nil
+}
+
+// Sort sorts one or more tensors along the specified dimension using a comparator function.
+func (b *Builder) Sort(comparatorFn any, dimension int, isStable bool, inputs ...backends.Op) ([]backends.Op, error) {
+	if err := b.CheckValid(); err != nil {
+		return nil, err
+	}
+
+	// Cast comparatorFn to *stablehlo.Function
+	comparatorFunction, ok := comparatorFn.(*stablehlo.Function)
+	if !ok {
+		return nil, errors.Errorf("Sort: comparatorFn must be a *stablehlo.Function, got %T", comparatorFn)
+	}
+
+	// Verify and convert inputs
+	nodes, err := b.verifyAndCastValues("Sort", inputs...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract stablehlo.Value from nodes
+	inputValues := make([]*stablehlo.Value, len(nodes))
+	for i, node := range nodes {
+		inputValues[i] = node.value
+	}
+
+	// Call stablehlo.Sort
+	resultValues, err := stablehlo.Sort(comparatorFunction, dimension, isStable, inputValues...)
+	if err != nil {
+		return nil, errors.WithMessage(err, "while building Sort operation")
+	}
+
+	// Convert results back to backends.Op
+	results := make([]backends.Op, len(resultValues))
+	for i, value := range resultValues {
+		results[i] = b.newNode(value)
+	}
+
+	return results, nil
+}
