@@ -170,7 +170,6 @@ func BitwiseShiftRightLogicalScalar[T dtypes.NumberNotComplex](x *Node, n T) *No
 
 // UnpackInt2 unpacks a node with dtype dtypes.Uint8 (or dtypes.Int8) to dtypes.Int2 by
 // shifting the bits accordingly.
-// The final shape has one extra axis at the end of size 4 (4 Int2 values in an Uint8).
 //
 // Each Uint8 byte is unpacked into 4 Int2 values:
 //   - Bits 0-1 become the first Int2 value
@@ -182,7 +181,8 @@ func BitwiseShiftRightLogicalScalar[T dtypes.NumberNotComplex](x *Node, n T) *No
 // UnpackInt2 unpacks 4 2-bit integers from each byte of the input x.
 //
 // The input x is converted to Int8 (if it isn't already), and the returned tensor
-// has one extra dimension of size 4 at the end, containing the unpacked values.
+// has the last axis dimension multiplied by 4, containing the unpacked values.
+// If the input is a scalar, the output is a 1D tensor of size 4.
 // The sign is correctly preserved (2-bit 2's complement).
 //
 // The unpacked order is from the least significant bits (0-1) to the most significant (6-7).
@@ -199,12 +199,17 @@ func UnpackInt2(x *Node) *Node {
 		// and then back again to the right, preserving the sign bit.
 		unpacked[i] = BitwiseShiftRightArithmeticScalar(BitwiseShiftLeftScalar(x, 6-2*i), 6)
 	}
-	return Stack(unpacked[:], -1)
+	output := Stack(unpacked[:], -1)
+	if x.IsScalar() {
+		return output
+	}
+	newShape := x.Shape().Clone()
+	newShape.Dimensions[newShape.Rank()-1] *= 4
+	return Reshape(output, newShape.Dimensions...)
 }
 
 // UnpackInt4 unpacks a node with dtype dtypes.Uint8 (or dtypes.Int8) to dtypes.Int4 by
 // shifting the bits accordingly.
-// The final shape has one extra axis at the end of size 2 (2 Int4 values in an Uint8).
 //
 // Each Uint8 byte is unpacked into 2 Int4 values:
 //   - Bits 0-3 become the first Int4 value
@@ -214,7 +219,8 @@ func UnpackInt2(x *Node) *Node {
 // UnpackInt4 unpacks 2 4-bit integers from each byte of the input x.
 //
 // The input x is converted to Int8 (if it isn't already), and the returned tensor
-// has one extra dimension of size 2 at the end, containing the unpacked values.
+// has the last axis dimension multiplied by 2, containing the unpacked values.
+// If the input is a scalar, the output is a 1D tensor of size 2.
 // The sign is correctly preserved (4-bit 2's complement).
 //
 // The unpacked order is from the least significant bits (0-3) to the most significant (4-7).
@@ -231,12 +237,17 @@ func UnpackInt4(x *Node) *Node {
 		// and then back again to the right, preserving the sign bit.
 		unpacked[i] = BitwiseShiftRightArithmeticScalar(BitwiseShiftLeftScalar(x, 4-4*i), 4)
 	}
-	return Stack(unpacked[:], -1)
+	output := Stack(unpacked[:], -1)
+	if x.IsScalar() {
+		return output
+	}
+	newShape := x.Shape().Clone()
+	newShape.Dimensions[newShape.Rank()-1] *= 2
+	return Reshape(output, newShape.Dimensions...)
 }
 
 // UnpackUint2 unpacks a node with dtype dtypes.Uint8 (or dtypes.Int8) to dtypes.Uint2 by
 // shifting the bits accordingly.
-// The final shape has one extra axis at the end of size 4 (4 Uint2 values in an Uint8).
 //
 // Each Uint8 byte is unpacked into 4 Uint2 values:
 //   - Bits 0-1 become the first Uint2 value
@@ -248,7 +259,8 @@ func UnpackInt4(x *Node) *Node {
 // UnpackUint2 unpacks 4 2-bit unsigned integers from each byte of the input x.
 //
 // The input x is converted to Uint8 (if it isn't already), and the returned tensor
-// has one extra dimension of size 4 at the end, containing the unpacked values.
+// has the last axis dimension multiplied by 4, containing the unpacked values.
+// If the input is a scalar, the output is a 1D tensor of size 4.
 //
 // The unpacked order is from the least significant bits (0-1) to the most significant (6-7).
 func UnpackUint2(x *Node) *Node {
@@ -265,12 +277,17 @@ func UnpackUint2(x *Node) *Node {
 		// Shift right by 2*i bits and mask to get 2 bits.
 		unpacked[i] = BitwiseAnd(BitwiseShiftRightLogicalScalar(x, 2*i), mask)
 	}
-	return Stack(unpacked[:], -1)
+	output := Stack(unpacked[:], -1)
+	if x.IsScalar() {
+		return output
+	}
+	newShape := x.Shape().Clone()
+	newShape.Dimensions[newShape.Rank()-1] *= 4
+	return Reshape(output, newShape.Dimensions...)
 }
 
 // UnpackUint4 unpacks a node with dtype dtypes.Uint8 (or dtypes.Int8) to dtypes.Uint4 by
 // shifting the bits accordingly.
-// The final shape has one extra axis at the end of size 2 (2 Uint4 values in an Uint8).
 //
 // Each Uint8 byte is unpacked into 2 Uint4 values:
 //   - Bits 0-3 become the first Uint4 value
@@ -280,7 +297,8 @@ func UnpackUint2(x *Node) *Node {
 // UnpackUint4 unpacks 2 4-bit unsigned integers from each byte of the input x.
 //
 // The input x is converted to Uint8 (if it isn't already), and the returned tensor
-// has one extra dimension of size 2 at the end, containing the unpacked values.
+// has the last axis dimension multiplied by 2, containing the unpacked values.
+// If the input is a scalar, the output is a 1D tensor of size 2.
 //
 // The unpacked order is from the least significant bits (0-3) to the most significant (4-7).
 func UnpackUint4(x *Node) *Node {
@@ -297,7 +315,13 @@ func UnpackUint4(x *Node) *Node {
 		// Shift right by 4*i bits and mask to get 4 bits.
 		unpacked[i] = BitwiseAnd(BitwiseShiftRightLogicalScalar(x, 4*i), mask)
 	}
-	return Stack(unpacked[:], -1)
+	output := Stack(unpacked[:], -1)
+	if x.IsScalar() {
+		return output
+	}
+	newShape := x.Shape().Clone()
+	newShape.Dimensions[newShape.Rank()-1] *= 2
+	return Reshape(output, newShape.Dimensions...)
 }
 
 // Unpack unpacks a node with dtype dtypes.Uint8 (or dtypes.Int8) to the specified dtype.

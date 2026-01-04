@@ -41,16 +41,16 @@ func TestUnpack(t *testing.T) {
 			outputs = []*Node{UnpackInt2(operand)}
 			return
 		}, []any{
-			// Expected output shape: [7, 4] with dtype Int2
+			// Expected output shape: [28] with dtype Int2 (flattened 7*4)
 			// Each uint8 unpacks to 4 Int2 values in order: [bits 0-1, bits 2-3, bits 4-5, bits 6-7]
-			[][]int8{
-				{0, 0, 0, 0},     // 0x00: all bits are 00
-				{-1, 0, 0, 0},    // 0x03: bits 0-1=11(-1)
-				{0, -1, 0, 0},    // 0x0C: bits 2-3=11(-1)
-				{0, 0, -1, 0},    // 0x30: bits 4-5=11(-1)
-				{0, 0, 0, -1},    // 0xC0: bits 6-7=11(-1)
-				{-1, -1, -1, -1}, // 0xFF: all bits are 11(-1)
-				{-2, 0, 1, 0},    // 0x12: bits 0-1=10(-2), bits 2-3=00(0), bits 4-5=01(1), bits 6-7=00(0)
+			[]int8{
+				0, 0, 0, 0, // 0x00: all bits are 00
+				-1, 0, 0, 0, // 0x03: bits 0-1=11(-1)
+				0, -1, 0, 0, // 0x0C: bits 2-3=11(-1)
+				0, 0, -1, 0, // 0x30: bits 4-5=11(-1)
+				0, 0, 0, -1, // 0xC0: bits 6-7=11(-1)
+				-1, -1, -1, -1, // 0xFF: all bits are 11(-1)
+				-2, 0, 1, 0, // 0x12: bits 0-1=10(-2), bits 2-3=00(0), bits 4-5=01(1), bits 6-7=00(0)
 			},
 		}, -1)
 	})
@@ -71,16 +71,16 @@ func TestUnpack(t *testing.T) {
 			outputs = []*Node{UnpackInt4(operand)}
 			return
 		}, []any{
-			// Expected output shape: [7, 2] with dtype Int4
+			// Expected output shape: [14] with dtype Int4 (flattened 7*2)
 			// Each uint8 unpacks to 2 Int4 values in order: [bits 0-3, bits 4-7]
-			[][]int8{
-				{0, 0},   // 0x00: all nibbles are 0000
-				{-1, 0},  // 0x0F: bits 0-3=1111(-1)
-				{0, -1},  // 0xF0: bits 4-7=1111(-1)
-				{-1, -1}, // 0xFF: all nibbles are 1111(-1)
-				{2, 1},   // 0x12: bits 0-3=0010(2), bits 4-7=0001(1)
-				{7, -8},  // 0x87: bits 0-3=0111(7), bits 4-7=1000(-8)
-				{-8, 7},  // 0x78: bits 0-3=1000(-8), bits 4-7=0111(7)
+			[]int8{
+				0, 0, // 0x00: all nibbles are 0000
+				-1, 0, // 0x0F: bits 0-3=1111(-1)
+				0, -1, // 0xF0: bits 4-7=1111(-1)
+				-1, -1, // 0xFF: all nibbles are 1111(-1)
+				2, 1, // 0x12: bits 0-3=0010(2), bits 4-7=0001(1)
+				7, -8, // 0x87: bits 0-3=0111(7), bits 4-7=1000(-8)
+				-8, 7, // 0x78: bits 0-3=1000(-8), bits 4-7=0111(7)
 			},
 		}, -1)
 	})
@@ -101,16 +101,16 @@ func TestUnpack(t *testing.T) {
 			outputs = []*Node{UnpackUint2(operand)}
 			return
 		}, []any{
-			// Expected output shape: [7, 4] with dtype Uint2
+			// Expected output shape: [28] with dtype Uint2 (flattened 7*4)
 			// Each uint8 unpacks to 4 Uint2 values in order: [bits 0-1, bits 2-3, bits 4-5, bits 6-7]
-			[][]uint8{
-				{0, 0, 0, 0}, // 0x00: all bits are 00
-				{3, 0, 0, 0}, // 0x03: bits 0-1=11(3)
-				{0, 3, 0, 0}, // 0x0C: bits 2-3=11(3)
-				{0, 0, 3, 0}, // 0x30: bits 4-5=11(3)
-				{0, 0, 0, 3}, // 0xC0: bits 6-7=11(3)
-				{3, 3, 3, 3}, // 0xFF: all bits are 11(3)
-				{2, 0, 1, 0}, // 0x12: bits 0-1=10(2), bits 2-3=00(0), bits 4-5=01(1), bits 6-7=00(0)
+			[]uint8{
+				0, 0, 0, 0, // 0x00: all bits are 00
+				3, 0, 0, 0, // 0x03: bits 0-1=11(3)
+				0, 3, 0, 0, // 0x0C: bits 2-3=11(3)
+				0, 0, 3, 0, // 0x30: bits 4-5=11(3)
+				0, 0, 0, 3, // 0xC0: bits 6-7=11(3)
+				3, 3, 3, 3, // 0xFF: all bits are 11(3)
+				2, 0, 1, 0, // 0x12: bits 0-1=10(2), bits 2-3=00(0), bits 4-5=01(1), bits 6-7=00(0)
 			},
 		}, -1)
 	})
@@ -131,16 +131,16 @@ func TestUnpack(t *testing.T) {
 			outputs = []*Node{UnpackUint4(operand)}
 			return
 		}, []any{
-			// Expected output shape: [7, 2] with dtype Uint4
+			// Expected output shape: [14] with dtype Uint4 (flattened 7*2)
 			// Each uint8 unpacks to 2 Uint4 values in order: [bits 0-3, bits 4-7]
-			[][]uint8{
-				{0, 0},   // 0x00: all nibbles are 0000
-				{15, 0},  // 0x0F: bits 0-3=1111(15)
-				{0, 15},  // 0xF0: bits 4-7=1111(15)
-				{15, 15}, // 0xFF: all nibbles are 1111(15)
-				{2, 1},   // 0x12: bits 0-3=0010(2), bits 4-7=0001(1)
-				{7, 8},   // 0x87: bits 0-3=0111(7), bits 4-7=1000(8)
-				{8, 7},   // 0x78: bits 0-3=1000(8), bits 4-7=0111(7)
+			[]uint8{
+				0, 0, // 0x00: all nibbles are 0000
+				15, 0, // 0x0F: bits 0-3=1111(15)
+				0, 15, // 0xF0: bits 4-7=1111(15)
+				15, 15, // 0xFF: all nibbles are 1111(15)
+				2, 1, // 0x12: bits 0-3=0010(2), bits 4-7=0001(1)
+				7, 8, // 0x87: bits 0-3=0111(7), bits 4-7=1000(8)
+				8, 7, // 0x78: bits 0-3=1000(8), bits 4-7=0111(7)
 			},
 		}, -1)
 	})
@@ -157,10 +157,10 @@ func TestUnpack(t *testing.T) {
 			}
 			return
 		}, []any{
-			[][]int8{{-2, 0, 1, 0}},
-			[][]int8{{2, 1}},
-			[][]uint8{{2, 0, 1, 0}},
-			[][]uint8{{2, 1}},
+			[]int8{-2, 0, 1, 0},
+			[]int8{2, 1},
+			[]uint8{2, 0, 1, 0},
+			[]uint8{2, 1},
 		}, -1)
 	})
 
