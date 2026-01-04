@@ -299,3 +299,26 @@ func UnpackUint4(x *Node) *Node {
 	}
 	return Stack(unpacked[:], -1)
 }
+
+// Unpack unpacks a node with dtype dtypes.Uint8 (or dtypes.Int8) to the specified dtype.
+//
+// Supported dtypes are:
+//   - dtypes.Int2, dtypes.Int4: call UnpackInt2 or UnpackInt4 respectively.
+//   - dtypes.Uint2, dtypes.Uint4: call UnpackUint2 or UnpackUint4 respectively.
+//
+// It panics if the dtype is not supported.
+func Unpack(x *Node, dtype dtypes.DType) *Node {
+	switch dtype {
+	case dtypes.Int2:
+		return UnpackInt2(x)
+	case dtypes.Int4:
+		return UnpackInt4(x)
+	case dtypes.Uint2:
+		return UnpackUint2(x)
+	case dtypes.Uint4:
+		return UnpackUint4(x)
+	default:
+		Panicf("Unpack: unsupported dtype %s, only 2-bit and 4-bit integers are supported", dtype)
+		return nil
+	}
+}

@@ -3,6 +3,7 @@ package graph_test
 import (
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 )
@@ -142,5 +143,36 @@ func TestUnpack(t *testing.T) {
 				{8, 7},   // 0x78: bits 0-3=1000(8), bits 4-7=0111(7)
 			},
 		}, -1)
+	})
+
+	t.Run("Generic", func(t *testing.T) {
+		graphtest.RunTestGraphFn(t, "UnpackGeneric", func(g *Graph) (inputs, outputs []*Node) {
+			operand := Const(g, []uint8{0x12}) // 0001 0010
+			inputs = []*Node{operand}
+			outputs = []*Node{
+				Unpack(operand, dtypes.Int2),
+				Unpack(operand, dtypes.Int4),
+				Unpack(operand, dtypes.Uint2),
+				Unpack(operand, dtypes.Uint4),
+			}
+			return
+		}, []any{
+			[][]int8{{-2, 0, 1, 0}},
+			[][]int8{{2, 1}},
+			[][]uint8{{2, 0, 1, 0}},
+			[][]uint8{{2, 1}},
+		}, -1)
+	})
+
+	t.Run("GenericPanic", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf("The code did not panic")
+			}
+		}()
+		backend := graphtest.BuildTestBackend()
+		g := NewGraph(backend, "UnpackPanic")
+		operand := Const(g, []uint8{0x12})
+		Unpack(operand, dtypes.Int32)
 	})
 }
