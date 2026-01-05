@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
@@ -541,88 +540,6 @@ func TestDotGeneral_Dot(t *testing.T) {
 	y2 := exec.MustExec([][]float32{{1, 2, 3}, {2, 4, 6}}, [][]float32{{10}, {11}, {12}})[0]
 	fmt.Printf("\ty2=%s\n", y2.GoStr())
 	assert.Equal(t, [][]float32{{10 + 22 + 36}, {20 + 44 + 72}}, y2.Value())
-}
-
-// TestShouldPreBlock tests the shouldPreBlock function that determines
-// whether a tensor should be pre-blocked for DotGeneral.
-func TestShouldPreBlock(t *testing.T) {
-	goBackend, ok := backend.(*Backend)
-	if !ok {
-		t.Skip("Test requires SimpleGo backend")
-	}
-
-	builder := goBackend.Builder("TestShouldPreBlock").(*Builder)
-
-	tests := []struct {
-		name            string
-		opType          backends.OpType
-		dtype           dtypes.DType
-		crossSize       int
-		contractingSize int
-		want            bool
-	}{
-		{
-			name:            "Parameter_Float32_LargeEnough",
-			opType:          backends.OpTypeParameter,
-			dtype:           dtypes.Float32,
-			crossSize:       128,
-			contractingSize: 128,
-			want:            true,
-		},
-		{
-			name:            "Constant_Float32_LargeEnough",
-			opType:          backends.OpTypeConstant,
-			dtype:           dtypes.Float32,
-			crossSize:       128,
-			contractingSize: 128,
-			want:            true,
-		},
-		{
-			name:            "Parameter_Float32_TooSmall",
-			opType:          backends.OpTypeParameter,
-			dtype:           dtypes.Float32,
-			crossSize:       16,
-			contractingSize: 16,
-			want:            false,
-		},
-		{
-			name:            "ComputedNode_Float32_LargeEnough",
-			opType:          backends.OpTypeAdd, // Computed, not parameter/constant
-			dtype:           dtypes.Float32,
-			crossSize:       128,
-			contractingSize: 128,
-			want:            false,
-		},
-		{
-			name:            "Parameter_Bool_Unsupported",
-			opType:          backends.OpTypeParameter,
-			dtype:           dtypes.Bool,
-			crossSize:       128,
-			contractingSize: 128,
-			want:            false,
-		},
-		{
-			name:            "Parameter_BFloat16_LargeEnough",
-			opType:          backends.OpTypeParameter,
-			dtype:           dtypes.BFloat16,
-			crossSize:       128,
-			contractingSize: 128,
-			want:            true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a node with the specified characteristics
-			node := &Node{
-				opType: tt.opType,
-				shape:  shapes.Make(tt.dtype, tt.crossSize, tt.contractingSize),
-			}
-			got := shouldPreBlock(node, tt.crossSize, tt.contractingSize)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-	builder.Finalize()
 }
 
 // TestBlockForDotGeneral_Deduplication tests that the same weight matrix

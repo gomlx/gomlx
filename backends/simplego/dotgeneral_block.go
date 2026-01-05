@@ -116,48 +116,6 @@ func init() {
 	setNodeExecutor(backends.OpTypeBlockForDotGeneral, priorityGeneric, execBlockForDotGeneral)
 }
 
-// shouldPreBlock determines if a tensor should be pre-blocked for DotGeneral.
-// Unlike shouldPreBlockRHS, this works for both LHS and RHS with any normalized shape.
-//
-// Pre-blocking is beneficial when:
-// - The tensor is a constant or parameter (not computed dynamically)
-// - The tensor is large enough to benefit from blocking
-// - The dtype is supported for blocking
-//
-// Parameters:
-//   - node: the input node to potentially block
-//   - crossSize, contractingSize: normalized sizes for blocking calculation
-func shouldPreBlock(node *Node, crossSize, contractingSize int) bool {
-	dtype := node.shape.DType
-
-	// Check dtype is supported for blocking
-	switch dtype {
-	case dtypes.Float32, dtypes.Float64,
-		dtypes.Float16, dtypes.BFloat16,
-		dtypes.Int8, dtypes.Uint8,
-		dtypes.Int16, dtypes.Int32, dtypes.Int64,
-		dtypes.Uint16, dtypes.Uint32, dtypes.Uint64:
-		// dtype supported, continue to size check
-	default:
-		return false
-	}
-
-	// Must be large enough to benefit from blocking
-	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
-	if crossSize < blockDim || contractingSize < blockDim {
-		return false
-	}
-
-	// Only pre-block constants or parameters (not computed values)
-	// This ensures we only pay the blocking cost once
-	switch node.opType {
-	case backends.OpTypeParameter, backends.OpTypeConstant:
-		return true
-	default:
-		return false
-	}
-}
-
 // blockForDotGeneral returns a BlockForDotGeneral node for the given input tensor.
 // Uses de-duplication via getOrCreateNode to return an existing node if available.
 //
