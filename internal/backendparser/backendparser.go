@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/gomlx/internal/must"
 )
 
-// Method represents a single method from the backends.Builder interface
+// Method represents a single method from the backends.Builder or backends.Function interface
 // with all its signature information as strings.
 type Method struct {
 	// Name is the method name
@@ -25,14 +25,16 @@ type Method struct {
 	// Outputs of the method.
 	// Outputs names may contain all empty strings if they are not defined.
 	Outputs []NameAndType
+	// Interface indicates which interface this method belongs to: "Builder" or "Function"
+	Interface string
 }
 
 type NameAndType struct {
 	Name, Type string
 }
 
-// ParseBuilder returns all methods defined in the backends.Builder interface,
-// including those from embedded interfaces like backends.StandardOps.
+// ParseBuilder returns all methods defined in the backends.Builder and backends.Function interfaces,
+// including those from embedded interfaces like backends.StandardOps and backends.CollectiveOps.
 func ParseBuilder() ([]Method, error) {
 	fileSet := token.NewFileSet()
 	var methods []Method
@@ -42,8 +44,13 @@ func ParseBuilder() ([]Method, error) {
 		return nil, err
 	}
 
-	// Parse both files
+	// Parse all relevant files
 	builderFile, err := parser.ParseFile(fileSet, filepath.Join(root, "backends", "builder.go"),
+		nil, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+	functionFile, err := parser.ParseFile(fileSet, filepath.Join(root, "backends", "function.go"),
 		nil, parser.ParseComments)
 	if err != nil {
 		return nil, err
@@ -86,7 +93,7 @@ func ParseBuilder() ([]Method, error) {
 	}
 
 	// Helper to extract methods from interface declarations
-	includeInterfaces := []string{"Builder", "StandardOps", "CollectiveOps"}
+	includeInterfaces := []string{"Builder", "Function", "StandardOps", "CollectiveOps"}
 	extractMethods := func(file *ast.File) {
 		ast.Inspect(file, func(n ast.Node) bool {
 			if typeSpec, ok := n.(*ast.TypeSpec); ok {
@@ -102,7 +109,8 @@ func ParseBuilder() ([]Method, error) {
 						}
 
 						m := Method{
-							Name: method.Names[0].Name,
+							Name:      method.Names[0].Name,
+							Interface: typeSpec.Name.Name,
 						}
 
 						// Get method comment if any
@@ -148,6 +156,7 @@ func ParseBuilder() ([]Method, error) {
 	}
 
 	extractMethods(builderFile)
+	extractMethods(functionFile)
 	extractMethods(standardOpsFile)
 	extractMethods(collectiveOpsFile)
 

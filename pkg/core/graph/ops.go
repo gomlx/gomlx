@@ -90,7 +90,7 @@ func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distr
 		sharding: sharding, // it can be nil.
 		handle:   handle,
 	}
-	result, err := g.builder.Parameter(nodeInputs.name, nodeInputs.shape, sharding.ToBackendsSpec())
+	result, err := g.mainFn.Parameter(nodeInputs.name, nodeInputs.shape, sharding.ToBackendsSpec())
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to create parameter %q", name))
 	}
@@ -205,7 +205,7 @@ func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 	var result backends.Op
 	var err error
 	t.MustConstFlatData(func(flat any) {
-		result, err = g.builder.Constant(flat, nodeInputs.shape.Dimensions...)
+		result, err = g.mainFn.Constant(flat, nodeInputs.shape.Dimensions...)
 	})
 	if err != nil {
 		panic(errors.WithMessagef(err, "ConstTensor failed to create a constant in the backend"))

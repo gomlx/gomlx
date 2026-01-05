@@ -55,7 +55,8 @@ var (
 	// These are utility methods, not part of building a graph.
 	methodsExcluded = sets.MakeWith(
 		"Name", "Compile", "OpShape",
-		"DeviceAssignment", "DistributedSPMD", "DistributedAutoSharding")
+		"DeviceAssignment", "DistributedSPMD", "DistributedAutoSharding",
+		"Main", "NewFunction", "Return")
 
 	// methodsNoGradient will add a stop gradient to the node.
 	methodsNoGradient = sets.MakeWith(
@@ -323,7 +324,7 @@ Convert result(s) to node(s):
 */}}
 {{- if .HasMultipleOutputs}}
 {{- /* Version with multiple outputs: */}}
-{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}}, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}}, err := g.mainFn.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
 	if err != nil {
 		panic(err)
 	}
@@ -332,7 +333,7 @@ Convert result(s) to node(s):
 		outputShapes: []shapes.Shape{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}mustNoError(g.builder.OpShape(v{{$ii}})){{end}} },
 {{- else if .IsOutputSlice}}
 {{- /* Version with output slice: */}}
-	results, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	results, err := g.mainFn.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
 	if err != nil {
 		panic(err)
 	}
@@ -342,7 +343,7 @@ Convert result(s) to node(s):
 			func (op backends.Op) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
 {{- else}}
 {{- /* Version with single output: - node already defined. */}}
-	result, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	result, err := g.mainFn.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
 	if err != nil {
 		panic(err)
 	}

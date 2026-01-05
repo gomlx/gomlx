@@ -84,23 +84,24 @@ func TestDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
 		// Create two input parameters
-		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		x, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter x: %v", err)
 		}
-		y, err := builder.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
+		y, err := mainFn.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter y: %v", err)
 		}
 
 		// Create the same Add operation twice
-		add1, err := builder.Add(x, y)
+		add1, err := mainFn.Add(x, y)
 		if err != nil {
 			t.Fatalf("Failed to create first Add: %v", err)
 		}
-		add2, err := builder.Add(x, y)
+		add2, err := mainFn.Add(x, y)
 		if err != nil {
 			t.Fatalf("Failed to create second Add: %v", err)
 		}
@@ -125,19 +126,20 @@ func TestDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
 		// Create an input parameter
-		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		x, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter x: %v", err)
 		}
 
 		// Create the same Neg operation twice
-		neg1, err := builder.Neg(x)
+		neg1, err := mainFn.Neg(x)
 		if err != nil {
 			t.Fatalf("Failed to create first Neg: %v", err)
 		}
-		neg2, err := builder.Neg(x)
+		neg2, err := mainFn.Neg(x)
 		if err != nil {
 			t.Fatalf("Failed to create second Neg: %v", err)
 		}
@@ -162,9 +164,10 @@ func TestDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
 		// Create an input parameter
-		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 5, 4), nil)
+		x, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 5, 4), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter x: %v", err)
 		}
@@ -174,11 +177,11 @@ func TestDedup(t *testing.T) {
 		limits := []int{3, 3}
 		strides := []int{1, 1}
 
-		slice1, err := builder.Slice(x, starts, limits, strides)
+		slice1, err := mainFn.Slice(x, starts, limits, strides)
 		if err != nil {
 			t.Fatalf("Failed to create first Slice: %v", err)
 		}
-		slice2, err := builder.Slice(x, starts, limits, strides)
+		slice2, err := mainFn.Slice(x, starts, limits, strides)
 		if err != nil {
 			t.Fatalf("Failed to create second Slice: %v", err)
 		}
@@ -196,7 +199,7 @@ func TestDedup(t *testing.T) {
 
 		// Verify that different slice parameters create different nodes
 		starts2 := []int{2, 2}
-		slice3, err := builder.Slice(x, starts2, limits, strides)
+		slice3, err := mainFn.Slice(x, starts2, limits, strides)
 		if err != nil {
 			t.Fatalf("Failed to create third Slice: %v", err)
 		}
@@ -215,13 +218,14 @@ func TestNoDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
 		// Create two parameters with different names - they should NOT be deduplicated
-		param1, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		param1, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter x: %v", err)
 		}
-		param2, err := builder.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
+		param2, err := mainFn.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter y: %v", err)
 		}
@@ -231,11 +235,11 @@ func TestNoDedup(t *testing.T) {
 		}
 
 		// Create two parameters with same name but different shapes - they should NOT be deduplicated
-		param3, err := builder.Parameter("z", shapes.Make(dtypes.F32, 3, 2), nil)
+		param3, err := mainFn.Parameter("z", shapes.Make(dtypes.F32, 3, 2), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter z: %v", err)
 		}
-		param4, err := builder.Parameter("z", shapes.Make(dtypes.F32, 2, 3), nil)
+		param4, err := mainFn.Parameter("z", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter z2: %v", err)
 		}
@@ -252,23 +256,24 @@ func TestNoDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
-		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		x, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter: %v", err)
 		}
-		y, err := builder.Parameter("y", shapes.Make(dtypes.F32, 3, 2), nil)
+		y, err := mainFn.Parameter("y", shapes.Make(dtypes.F32, 3, 2), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter: %v", err)
 		}
 
 		// Same operation, same inputs, but different output shapes should NOT be deduplicated
 		// This shouldn't happen in practice, but let's test the shape check works
-		neg1, err := builder.Neg(x)
+		neg1, err := mainFn.Neg(x)
 		if err != nil {
 			t.Fatalf("Failed to create Neg: %v", err)
 		}
-		neg2, err := builder.Neg(y)
+		neg2, err := mainFn.Neg(y)
 		if err != nil {
 			t.Fatalf("Failed to create Neg: %v", err)
 		}
@@ -285,13 +290,14 @@ func TestNoDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
 		// Create constants with different values - they should NOT be deduplicated
-		const1, err := builder.Constant([]float32{1, 2, 3}, 3)
+		const1, err := mainFn.Constant([]float32{1, 2, 3}, 3)
 		if err != nil {
 			t.Fatalf("Failed to create constant 1: %v", err)
 		}
-		const2, err := builder.Constant([]float32{4, 5, 6}, 3)
+		const2, err := mainFn.Constant([]float32{4, 5, 6}, 3)
 		if err != nil {
 			t.Fatalf("Failed to create constant 2: %v", err)
 		}
@@ -301,7 +307,7 @@ func TestNoDedup(t *testing.T) {
 		}
 
 		// Same values should be deduplicated
-		const3, err := builder.Constant([]float32{1, 2, 3}, 3)
+		const3, err := mainFn.Constant([]float32{1, 2, 3}, 3)
 		if err != nil {
 			t.Fatalf("Failed to create constant 3: %v", err)
 		}
@@ -318,13 +324,14 @@ func TestNoDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
 		shape := shapes.Make(dtypes.F32, 2, 3)
-		iota1, err := builder.Iota(shape, 0)
+		iota1, err := mainFn.Iota(shape, 0)
 		if err != nil {
 			t.Fatalf("Failed to create Iota: %v", err)
 		}
-		iota2, err := builder.Iota(shape, 1)
+		iota2, err := mainFn.Iota(shape, 1)
 		if err != nil {
 			t.Fatalf("Failed to create Iota: %v", err)
 		}
@@ -334,7 +341,7 @@ func TestNoDedup(t *testing.T) {
 		}
 
 		// Same axis should be deduplicated
-		iota3, err := builder.Iota(shape, 0)
+		iota3, err := mainFn.Iota(shape, 0)
 		if err != nil {
 			t.Fatalf("Failed to create Iota: %v", err)
 		}
@@ -351,17 +358,18 @@ func TestNoDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
-		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3, 4), nil)
+		x, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2, 3, 4), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter: %v", err)
 		}
 
-		trans1, err := builder.Transpose(x, 0, 1, 2)
+		trans1, err := mainFn.Transpose(x, 0, 1, 2)
 		if err != nil {
 			t.Fatalf("Failed to create Transpose: %v", err)
 		}
-		trans2, err := builder.Transpose(x, 2, 1, 0)
+		trans2, err := mainFn.Transpose(x, 2, 1, 0)
 		if err != nil {
 			t.Fatalf("Failed to create Transpose: %v", err)
 		}
@@ -371,7 +379,7 @@ func TestNoDedup(t *testing.T) {
 		}
 
 		// Same permutations should be deduplicated
-		trans3, err := builder.Transpose(x, 0, 1, 2)
+		trans3, err := mainFn.Transpose(x, 0, 1, 2)
 		if err != nil {
 			t.Fatalf("Failed to create Transpose: %v", err)
 		}
@@ -388,17 +396,18 @@ func TestNoDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
-		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3, 4), nil)
+		x, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2, 3, 4), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter: %v", err)
 		}
 
-		reduce1, err := builder.ReduceSum(x, 0)
+		reduce1, err := mainFn.ReduceSum(x, 0)
 		if err != nil {
 			t.Fatalf("Failed to create ReduceSum: %v", err)
 		}
-		reduce2, err := builder.ReduceSum(x, 1)
+		reduce2, err := mainFn.ReduceSum(x, 1)
 		if err != nil {
 			t.Fatalf("Failed to create ReduceSum: %v", err)
 		}
@@ -408,7 +417,7 @@ func TestNoDedup(t *testing.T) {
 		}
 
 		// Same axes should be deduplicated
-		reduce3, err := builder.ReduceSum(x, 0)
+		reduce3, err := mainFn.ReduceSum(x, 0)
 		if err != nil {
 			t.Fatalf("Failed to create ReduceSum: %v", err)
 		}
@@ -425,22 +434,23 @@ func TestNoDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
-		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		x, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter x: %v", err)
 		}
-		y, err := builder.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
+		y, err := mainFn.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter y: %v", err)
 		}
 
 		// Same operation on different inputs should NOT be deduplicated
-		negX, err := builder.Neg(x)
+		negX, err := mainFn.Neg(x)
 		if err != nil {
 			t.Fatalf("Failed to create Neg: %v", err)
 		}
-		negY, err := builder.Neg(y)
+		negY, err := mainFn.Neg(y)
 		if err != nil {
 			t.Fatalf("Failed to create Neg: %v", err)
 		}
@@ -457,17 +467,18 @@ func TestNoDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
-		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		x, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter: %v", err)
 		}
 
-		broadcast1, err := builder.Broadcast(x, 2)
+		broadcast1, err := mainFn.Broadcast(x, 2)
 		if err != nil {
 			t.Fatalf("Failed to create Broadcast: %v", err)
 		}
-		broadcast2, err := builder.Broadcast(x, 3)
+		broadcast2, err := mainFn.Broadcast(x, 3)
 		if err != nil {
 			t.Fatalf("Failed to create Broadcast: %v", err)
 		}
@@ -477,7 +488,7 @@ func TestNoDedup(t *testing.T) {
 		}
 
 		// Same prefixDims should be deduplicated
-		broadcast3, err := builder.Broadcast(x, 2)
+		broadcast3, err := mainFn.Broadcast(x, 2)
 		if err != nil {
 			t.Fatalf("Failed to create Broadcast: %v", err)
 		}
@@ -494,15 +505,16 @@ func TestNoDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
 		// Even if we create a parameter with the same name and shape twice,
 		// they should NOT be deduplicated because they have different inputIdx
 		// (This shouldn't happen in practice, but let's verify the behavior)
-		param1, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		param1, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter: %v", err)
 		}
-		param2, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		param2, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter: %v", err)
 		}
@@ -527,21 +539,22 @@ func TestNoDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
-		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		x, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter: %v", err)
 		}
-		y, err := builder.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
+		y, err := mainFn.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter: %v", err)
 		}
 
-		concat1, err := builder.Concatenate(0, x, y)
+		concat1, err := mainFn.Concatenate(0, x, y)
 		if err != nil {
 			t.Fatalf("Failed to create Concatenate: %v", err)
 		}
-		concat2, err := builder.Concatenate(1, x, y)
+		concat2, err := mainFn.Concatenate(1, x, y)
 		if err != nil {
 			t.Fatalf("Failed to create Concatenate: %v", err)
 		}
@@ -551,7 +564,7 @@ func TestNoDedup(t *testing.T) {
 		}
 
 		// Same axis should be deduplicated
-		concat3, err := builder.Concatenate(0, x, y)
+		concat3, err := mainFn.Concatenate(0, x, y)
 		if err != nil {
 			t.Fatalf("Failed to create Concatenate: %v", err)
 		}
@@ -568,18 +581,19 @@ func TestNoDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
-		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		x, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter: %v", err)
 		}
 
 		// Reshape to different shapes - should NOT be deduplicated
-		reshape1, err := builder.Reshape(x, 6)
+		reshape1, err := mainFn.Reshape(x, 6)
 		if err != nil {
 			t.Fatalf("Failed to create Reshape: %v", err)
 		}
-		reshape2, err := builder.Reshape(x, 3, 2)
+		reshape2, err := mainFn.Reshape(x, 3, 2)
 		if err != nil {
 			t.Fatalf("Failed to create Reshape: %v", err)
 		}
@@ -589,7 +603,7 @@ func TestNoDedup(t *testing.T) {
 		}
 
 		// Same reshape should be deduplicated
-		reshape3, err := builder.Reshape(x, 6)
+		reshape3, err := mainFn.Reshape(x, 6)
 		if err != nil {
 			t.Fatalf("Failed to create Reshape: %v", err)
 		}
@@ -606,18 +620,19 @@ func TestNoDedup(t *testing.T) {
 		}
 		defer backend.Finalize()
 		builder := backend.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
-		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2), nil)
+		x, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter: %v", err)
 		}
 
 		outputShape := shapes.Make(dtypes.F32, 2, 2)
-		broadcast1, err := builder.BroadcastInDim(x, outputShape, []int{0})
+		broadcast1, err := mainFn.BroadcastInDim(x, outputShape, []int{0})
 		if err != nil {
 			t.Fatalf("Failed to create BroadcastInDim: %v", err)
 		}
-		broadcast2, err := builder.BroadcastInDim(x, outputShape, []int{1})
+		broadcast2, err := mainFn.BroadcastInDim(x, outputShape, []int{1})
 		if err != nil {
 			t.Fatalf("Failed to create BroadcastInDim: %v", err)
 		}
@@ -627,7 +642,7 @@ func TestNoDedup(t *testing.T) {
 		}
 
 		// Same broadcastAxes should be deduplicated
-		broadcast3, err := builder.BroadcastInDim(x, outputShape, []int{0})
+		broadcast3, err := mainFn.BroadcastInDim(x, outputShape, []int{0})
 		if err != nil {
 			t.Fatalf("Failed to create BroadcastInDim: %v", err)
 		}
@@ -644,22 +659,23 @@ func TestNoDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
-		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		x, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter: %v", err)
 		}
-		y, err := builder.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
+		y, err := mainFn.Parameter("y", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter: %v", err)
 		}
 
 		// Different operations with same inputs should NOT be deduplicated
-		add, err := builder.Add(x, y)
+		add, err := mainFn.Add(x, y)
 		if err != nil {
 			t.Fatalf("Failed to create Add: %v", err)
 		}
-		mul, err := builder.Mul(x, y)
+		mul, err := mainFn.Mul(x, y)
 		if err != nil {
 			t.Fatalf("Failed to create Mul: %v", err)
 		}
@@ -669,11 +685,11 @@ func TestNoDedup(t *testing.T) {
 		}
 
 		// Unary operations
-		neg, err := builder.Neg(x)
+		neg, err := mainFn.Neg(x)
 		if err != nil {
 			t.Fatalf("Failed to create Neg: %v", err)
 		}
-		abs, err := builder.Abs(x)
+		abs, err := mainFn.Abs(x)
 		if err != nil {
 			t.Fatalf("Failed to create Abs: %v", err)
 		}
@@ -690,18 +706,19 @@ func TestNoDedup(t *testing.T) {
 		}
 		defer be.Finalize()
 		builder := be.Builder("test").(*Builder)
+		mainFn := builder.Main().(*Function)
 
-		x, err := builder.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
+		x, err := mainFn.Parameter("x", shapes.Make(dtypes.F32, 2, 3), nil)
 		if err != nil {
 			t.Fatalf("Failed to create parameter: %v", err)
 		}
 
 		// Operations with nil data should be deduplicated if they have same inputs and shape
-		identity1, err := builder.Identity(x)
+		identity1, err := mainFn.Identity(x)
 		if err != nil {
 			t.Fatalf("Failed to create Identity: %v", err)
 		}
-		identity2, err := builder.Identity(x)
+		identity2, err := mainFn.Identity(x)
 		if err != nil {
 			t.Fatalf("Failed to create Identity: %v", err)
 		}
@@ -711,11 +728,11 @@ func TestNoDedup(t *testing.T) {
 		}
 
 		// But Reshape with different dimensions should NOT be deduplicated even if data is nil
-		reshape1, err := builder.Reshape(x, 6)
+		reshape1, err := mainFn.Reshape(x, 6)
 		if err != nil {
 			t.Fatalf("Failed to create Reshape: %v", err)
 		}
-		reshape2, err := builder.Reshape(x, 3, 2)
+		reshape2, err := mainFn.Reshape(x, 3, 2)
 		if err != nil {
 			t.Fatalf("Failed to create Reshape: %v", err)
 		}

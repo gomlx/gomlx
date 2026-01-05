@@ -2,8 +2,6 @@ package xla
 
 import (
 	"github.com/gomlx/go-xla/pkg/pjrt"
-	"github.com/gomlx/go-xla/pkg/stablehlo"
-	"github.com/gomlx/go-xla/pkg/types/shardy"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -29,53 +27,23 @@ type Executable struct {
 	portable         bool
 }
 
-func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingSpec) (backends.Executable, error) {
+func (b *Builder) Compile() (backends.Executable, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
-	if len(outputs) == 0 {
+	if !b.mainFn.returned {
 		return nil, errors.Errorf(
-			"backend %q, computation %q: you must have at least one output to a computation",
+			"backend %q, computation %q: Main().Return() must be called before Compile()",
 			BackendName, b.name)
 	}
 
-	outputNodes, err := b.verifyAndCastValues("Compile", outputs...)
-	if err != nil {
-		return nil, err
-	}
-	outputValues := make([]*stablehlo.Value, len(outputs))
-	outputShapes := make([]shapes.Shape, len(outputs))
-
-	for ii, outputNode := range outputNodes {
-		outputValues[ii] = outputNode.value
-		outputShapes[ii] = outputNode.shape
+	// Get output shapes from the main function
+	outputShapes := make([]shapes.Shape, len(b.mainFn.outputs))
+	for i, node := range b.mainFn.outputs {
+		outputShapes[i] = node.shape
 	}
 
-	// Verify shardings:
-	var shardySpecs []*shardy.ShardingSpec
-	if len(shardings) > 0 {
-		if b.distStrategy != distributed.AutoSharding {
-			return nil, errors.Errorf(
-				"backend %q, computation %q: sharding of the outputs are only supported with AutoSharding strategy",
-				BackendName, b.name)
-		}
-		shardySpecs = make([]*shardy.ShardingSpec, len(outputs))
-		for i, spec := range shardings {
-			shardySpecs[i], err = b.shardingSpecToShardy(spec)
-			if err != nil {
-				return nil, errors.WithMessagef(err,
-					"backend %q, computation %q: failed to convert sharding spec for output #%d",
-					BackendName, b.name, i)
-			}
-		}
-	}
-
-	// Finish StableHLO "main" function:
-	err = b.fn.ReturnWithShardingAndAttributes(outputValues, shardySpecs, nil)
-	if err != nil {
-		return nil, errors.WithMessagef(err,
-			"backend %q: failed to finish StableHLO program %q", BackendName, b.name)
-	}
+	// Build the StableHLO program
 	program, err := b.builder.Build()
 	if err != nil {
 		return nil, errors.WithMessagef(err,
@@ -115,9 +83,9 @@ func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingS
 		backend:         b.backend,
 		exec:            exec,
 		name:            b.name,
-		parameterNames:  b.parameterNames,
-		parameterShapes: b.parameterShapes,
-		parameterSpecs:  b.parameterSpecs,
+		parameterNames:  b.mainFn.parameterNames,
+		parameterShapes: b.mainFn.parameterShapes,
+		parameterSpecs:  b.mainFn.parameterSpecs,
 		outputShapes:    outputShapes,
 
 		distStrategy:     b.distStrategy,
