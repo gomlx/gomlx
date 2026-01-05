@@ -11,8 +11,8 @@
 - Package `dtypes`:
   - Added 'Uint2', 'Uint4', 'Int2', 'Int4'. 
 - Package `graph`:
-  - Added `UnpackInt2()`, `UnpackInt4()`, `UnpackUint2()`, `UnpackUint4()`.  
-
+  - Added `Unpack()` and `Pack()` for sub-byte dtypes.
+  
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 
 API Change: `dtypes` package moved from `github.com/gomlx/gopjrt/dtypes` to `github.com/gomlx/gomlx/pkg/core/dtypes`.

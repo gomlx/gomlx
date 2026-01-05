@@ -1,6 +1,8 @@
 package graph
 
 import (
+	"slices"
+
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
@@ -168,134 +170,146 @@ func BitwiseShiftRightLogicalScalar[T dtypes.NumberNotComplex](x *Node, n T) *No
 	return BitwiseShiftRightLogical(x, nNode)
 }
 
-// UnpackInt2 unpacks a node with dtype dtypes.Uint8 (or dtypes.Int8) to dtypes.Int2 by
-// shifting the bits accordingly.
-// The final shape has one extra axis at the end of size 4 (4 Int2 values in an Uint8).
+// Unpack unpacks a node with dtype dtypes.Uint8 (or dtypes.Int8) to the specified dtype.
 //
-// Each Uint8 byte is unpacked into 4 Int2 values:
-//   - Bits 0-1 become the first Int2 value
-//   - Bits 2-3 become the second Int2 value
-//   - Bits 4-5 become the third Int2 value
-//   - Bits 6-7 become the fourth Int2 value
+// The output shape is the same as the input shape, except the last dimension is multiplied by the
+// packing ratio (2 for Int4 or Uint4 or 4 for Int2 or Uint2).
+// The values in the lower bits come first (little-endian).
 //
-// The Int2 values are sign-extended from 2-bit signed integers.
-// UnpackInt2 unpacks 4 2-bit integers from each byte of the input x.
+// Supported dtypes are:
+//   - dtypes.Int2, dtypes.Int4: call UnpackInt2 or UnpackInt4 respectively.
+//   - dtypes.Uint2, dtypes.Uint4: call UnpackUint2 or UnpackUint4 respectively.
 //
-// The input x is converted to Int8 (if it isn't already), and the returned tensor
-// has one extra dimension of size 4 at the end, containing the unpacked values.
-// The sign is correctly preserved (2-bit 2's complement).
-//
-// The unpacked order is from the least significant bits (0-1) to the most significant (6-7).
-func UnpackInt2(x *Node) *Node {
+// It panics if the dtype is not supported.
+func Unpack(x *Node, dtype dtypes.DType) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	if x.DType() != dtypes.Uint8 && x.DType() != dtypes.Int8 {
-		Panicf("UnpackInt2: input must be Uint8 or Int8, got %s", x.DType())
+		Panicf("UnpackUint4: input must be Uint8 or Int8, got %s", x.DType())
 	}
-	// Ensure input is Int8 so that the sign bit is at the 7th bit position (MSB of a byte).
+	var output *Node
+	switch dtype {
+	case dtypes.Int2:
+		output = unpackInt2(x)
+	case dtypes.Int4:
+		output = unpackInt4(x)
+	case dtypes.Uint2:
+		output = unpackUint2(x)
+	case dtypes.Uint4:
+		output = unpackUint4(x)
+	default:
+		Panicf("Unpack: unsupported dtype %s, only 2-bit and 4-bit integers are supported", dtype)
+		return nil
+	}
+	if x.IsScalar() {
+		return output
+	}
+	newDims := slices.Clone(x.Shape().Dimensions)
+	newDims[len(newDims)-1] = -1 // auto-reshape.
+	return Reshape(output, newDims...)
+}
+
+func unpackInt2(x *Node) *Node {
 	x = Bitcast(x, dtypes.Int8)
 	var unpacked [4]*Node
 	for i := range unpacked {
-		// Rotate the 2 bits to the left (most significant bits) so we get the sign bit in the 7th bit position.
-		// and then back again to the right, preserving the sign bit.
 		unpacked[i] = BitwiseShiftRightArithmeticScalar(BitwiseShiftLeftScalar(x, 6-2*i), 6)
 	}
-	return Stack(unpacked[:], -1)
+	return ConvertDType(Stack(unpacked[:], -1), dtypes.Int2)
 }
 
-// UnpackInt4 unpacks a node with dtype dtypes.Uint8 (or dtypes.Int8) to dtypes.Int4 by
-// shifting the bits accordingly.
-// The final shape has one extra axis at the end of size 2 (2 Int4 values in an Uint8).
-//
-// Each Uint8 byte is unpacked into 2 Int4 values:
-//   - Bits 0-3 become the first Int4 value
-//   - Bits 4-7 become the second Int4 value
-//
-// The Int4 values are sign-extended from 4-bit signed integers.
-// UnpackInt4 unpacks 2 4-bit integers from each byte of the input x.
-//
-// The input x is converted to Int8 (if it isn't already), and the returned tensor
-// has one extra dimension of size 2 at the end, containing the unpacked values.
-// The sign is correctly preserved (4-bit 2's complement).
-//
-// The unpacked order is from the least significant bits (0-3) to the most significant (4-7).
-func UnpackInt4(x *Node) *Node {
-	_ = validateBuildingGraphFromInputs(x)
-	if x.DType() != dtypes.Uint8 && x.DType() != dtypes.Int8 {
-		Panicf("UnpackInt4: input must be Uint8 or Int8, got %s", x.DType())
-	}
-	// Ensure input is Int8 so that the sign bit is at the 7th bit position (MSB of a byte).
+func unpackInt4(x *Node) *Node {
 	x = Bitcast(x, dtypes.Int8)
 	var unpacked [2]*Node
 	for i := range unpacked {
-		// Rotate the 4 bits to the left (most significant bits) so we get the sign bit in the 7th bit position.
-		// and then back again to the right, preserving the sign bit.
 		unpacked[i] = BitwiseShiftRightArithmeticScalar(BitwiseShiftLeftScalar(x, 4-4*i), 4)
 	}
-	return Stack(unpacked[:], -1)
+	return ConvertDType(Stack(unpacked[:], -1), dtypes.Int4)
 }
 
-// UnpackUint2 unpacks a node with dtype dtypes.Uint8 (or dtypes.Int8) to dtypes.Uint2 by
-// shifting the bits accordingly.
-// The final shape has one extra axis at the end of size 4 (4 Uint2 values in an Uint8).
-//
-// Each Uint8 byte is unpacked into 4 Uint2 values:
-//   - Bits 0-1 become the first Uint2 value
-//   - Bits 2-3 become the second Uint2 value
-//   - Bits 4-5 become the third Uint2 value
-//   - Bits 6-7 become the fourth Uint2 value
-//
-// The Uint2 values are zero-extended (unsigned).
-// UnpackUint2 unpacks 4 2-bit unsigned integers from each byte of the input x.
-//
-// The input x is converted to Uint8 (if it isn't already), and the returned tensor
-// has one extra dimension of size 4 at the end, containing the unpacked values.
-//
-// The unpacked order is from the least significant bits (0-1) to the most significant (6-7).
-func UnpackUint2(x *Node) *Node {
-	_ = validateBuildingGraphFromInputs(x)
-	if x.DType() != dtypes.Uint8 && x.DType() != dtypes.Int8 {
-		Panicf("UnpackUint2: input must be Uint8 or Int8, got %s", x.DType())
-	}
-	// Ensure input is Uint8 for unsigned operations.
+func unpackUint2(x *Node) *Node {
 	x = Bitcast(x, dtypes.Uint8)
 	g := x.Graph()
 	mask := Scalar(g, dtypes.Uint8, uint8(0x03))
 	var unpacked [4]*Node
 	for i := range unpacked {
-		// Shift right by 2*i bits and mask to get 2 bits.
 		unpacked[i] = BitwiseAnd(BitwiseShiftRightLogicalScalar(x, 2*i), mask)
 	}
-	return Stack(unpacked[:], -1)
+	return ConvertDType(Stack(unpacked[:], -1), dtypes.Uint2)
 }
 
-// UnpackUint4 unpacks a node with dtype dtypes.Uint8 (or dtypes.Int8) to dtypes.Uint4 by
-// shifting the bits accordingly.
-// The final shape has one extra axis at the end of size 2 (2 Uint4 values in an Uint8).
-//
-// Each Uint8 byte is unpacked into 2 Uint4 values:
-//   - Bits 0-3 become the first Uint4 value
-//   - Bits 4-7 become the second Uint4 value
-//
-// The Uint4 values are zero-extended (unsigned).
-// UnpackUint4 unpacks 2 4-bit unsigned integers from each byte of the input x.
-//
-// The input x is converted to Uint8 (if it isn't already), and the returned tensor
-// has one extra dimension of size 2 at the end, containing the unpacked values.
-//
-// The unpacked order is from the least significant bits (0-3) to the most significant (4-7).
-func UnpackUint4(x *Node) *Node {
-	_ = validateBuildingGraphFromInputs(x)
-	if x.DType() != dtypes.Uint8 && x.DType() != dtypes.Int8 {
-		Panicf("UnpackUint4: input must be Uint8 or Int8, got %s", x.DType())
-	}
-	// Ensure input is Uint8 for unsigned operations.
+func unpackUint4(x *Node) *Node {
 	x = Bitcast(x, dtypes.Uint8)
 	g := x.Graph()
 	mask := Scalar(g, dtypes.Uint8, uint8(0x0F))
 	var unpacked [2]*Node
 	for i := range unpacked {
-		// Shift right by 4*i bits and mask to get 4 bits.
 		unpacked[i] = BitwiseAnd(BitwiseShiftRightLogicalScalar(x, 4*i), mask)
 	}
-	return Stack(unpacked[:], -1)
+	return ConvertDType(Stack(unpacked[:], -1), dtypes.Uint4)
+}
+
+// Pack packs a node with dtype dtypes.Int2, dtypes.Int4, dtypes.Uint2, or dtypes.Uint4
+// into a packed Uint8 tensor.
+//
+// The last axis dimension of x must be divisible by the packing ratio (number of elements
+// per byte, that is 2 for Int4 or Uint4 or 4 for Int2 or Uint2).
+// The output will have the same rank as x, but the last dimension will be divided by the
+// packing ratio.
+//
+// Sub-byte types don't transfer in a deterministic way in PJRT (that the author was able to find -- sometimes
+// they come out packed, sometimes not), so GoMLX offers this functionality to properly pack them into bytes (Uint8)
+// before transferring.
+func Pack(x *Node) *Node {
+	g := validateBuildingGraphFromInputs(x)
+	if x.DType() != dtypes.Int2 {
+		Panicf("Pack: input must be Int2, Int4, Uint2 or Uint4, got %s", x.DType())
+	}
+	shape := x.Shape()
+	srcDtype := x.DType()
+	var packingRatio, shiftCount int
+	var maskValue uint8
+	switch srcDtype {
+	case dtypes.Int2, dtypes.Uint2:
+		packingRatio = 4
+		shiftCount = 2
+		maskValue = 0x03
+	case dtypes.Int4, dtypes.Uint4:
+		packingRatio = 2
+		shiftCount = 4
+		maskValue = 0x0F
+	default:
+		Panicf("Pack: input must be Int2, Int4, Uint2 or Uint4, got %s", x.DType())
+		return nil
+	}
+
+	// Reshape to [..., N, packingRatio] where N = lastDim / packingRatio
+	lastDim := shape.Dim(-1)
+	if lastDim%packingRatio != 0 {
+		Panicf("Pack: input last dimension must be divisible by %d, got shape %s", packingRatio, shape)
+	}
+	newShapeDims := make([]int, shape.Rank())
+	copy(newShapeDims, shape.Dimensions[:shape.Rank()-1])
+	newShapeDims[shape.Rank()-1] = lastDim / packingRatio
+	newShapeDims = append(newShapeDims, packingRatio)
+	x = Reshape(x, newShapeDims...)
+
+	// Int8 is enough to represent both signed and unsigned 2-bit and 4-bit integers.
+	x = ConvertDType(x, dtypes.Int8)
+	parts := Split(x, -1, packingRatio)
+	mask := Const(g, maskValue)
+	for i := range parts {
+		// Convert to uint8 and mask the bits that matter.
+		parts[i] = BitwiseAnd(Bitcast(parts[i], dtypes.Uint8), mask)
+	}
+
+	// Pack the bits by shifting and combining.
+	// For Int4/Uint4: part[0] << 0 | part[1] << 2 | part[2] << 4 | part[3] << 6
+	res := parts[0]
+	for i := 1; i < packingRatio; i++ {
+		shifted := BitwiseShiftLeftScalar(parts[i], uint8(i*shiftCount))
+		res = BitwiseOr(res, shifted)
+	}
+
+	// Squeeze the last dimension (size 1) to get [..., N]
+	return Squeeze(res, -1)
 }

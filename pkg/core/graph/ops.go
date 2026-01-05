@@ -272,7 +272,14 @@ func ConstAsDType(g *Graph, dtype dtypes.DType, x any) *Node {
 	if dtype == dtypes.InvalidDType {
 		exceptions.Panicf("invalid DType given for ConstAsDType")
 	}
-	return Const(g, shapes.CastAsDType(x, dtype))
+	output := Const(g, shapes.CastAsDType(x, dtype))
+	if output.DType() != dtype {
+		// CastAsDType converts to the corresponding Go dtype, but this is not a 1:1 mapping, and sometimes
+		// (e.g.: sub-byte types, like Bool, Int4, Int2, Uint4, Uint2) many dtypes get mapped to the same Go type.
+		// For these cases we need to convert the dtype within the graph.
+		output = ConvertDType(output, dtype)
+	}
+	return output
 }
 
 // ConstAs creates a constant (slice or scalar) of the same DType and on the same Graph as
