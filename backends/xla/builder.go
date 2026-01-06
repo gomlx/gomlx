@@ -21,7 +21,8 @@ type Builder struct {
 	builder *stablehlo.Builder
 
 	// mainFn is the main function of the computation.
-	mainFn *Function
+	mainFn      *Function
+	topLevelFns map[string]*Function
 
 	numDevices       int // numDevices used by the builder <= backend.numDevices.
 	deviceAssignment []int
@@ -57,16 +58,11 @@ func (backend *Backend) Builder(name string) backends.Builder {
 	b := &Builder{
 		backend:         backend,
 		builder:         stablehlo.New(name),
+		topLevelFns:     make(map[string]*Function),
 		name:            name,
 		cacheReductions: make(map[reductionKey]*stablehlo.Function),
 		cacheArgMinMax:  make(map[argMinMaxKey]*stablehlo.Function),
 		cacheSelections: make(map[reductionKey]*stablehlo.Function),
-	}
-	// Create the main function
-	b.mainFn = &Function{
-		builder: b,
-		fn:      b.builder.Main(),
-		name:    "main",
 	}
 	return b
 }
@@ -78,6 +74,14 @@ func (b *Builder) Name() string {
 
 // Main returns the main function of this computation.
 func (b *Builder) Main() backends.Function {
+	if b.mainFn == nil {
+		b.mainFn = &Function{
+			builder: b,
+			fn:      b.builder.Main(),
+			name:    backends.MainName,
+		}
+		b.topLevelFns[backends.MainName] = b.mainFn
+	}
 	return b.mainFn
 }
 
@@ -86,12 +90,16 @@ func (b *Builder) NewFunction(name string) (backends.Function, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
-	fn := b.builder.NewFunction(name)
-	return &Function{
+	if _, found := b.topLevelFns[name]; found {
+		return nil, errors.Errorf("function %q already exists", name)
+	}
+	f := &Function{
 		builder: b,
-		fn:      fn,
+		fn:      b.builder.NewFunction(name),
 		name:    name,
-	}, nil
+	}
+	b.topLevelFns[name] = f
+	return f, nil
 }
 
 // Node represents the output of an operation and implements a "backends.Op" interface.

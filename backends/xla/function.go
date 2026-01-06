@@ -14,6 +14,7 @@ import (
 // Function implements backends.Function for XLA.
 type Function struct {
 	builder *Builder
+	parent  *Function // parent function if this is a closure.
 	fn      *stablehlo.Function
 	name    string
 
@@ -30,6 +31,29 @@ type Function struct {
 }
 
 var _ backends.Function = (*Function)(nil)
+
+// Name returns the name of this function.
+func (f *Function) Name() string {
+	return f.name
+}
+
+// Parent returns the parent function if this is a closure.
+func (f *Function) Parent() backends.Function {
+	return f.parent
+}
+
+// Closure creates a new closure function, within this function.
+func (f *Function) Closure() (backends.Function, error) {
+	if err := f.CheckValid(); err != nil {
+		return nil, err
+	}
+	closure := &Function{
+		parent:  f,
+		builder: f.builder,
+		fn:      f.fn.Closure(),
+	}
+	return closure, nil
+}
 
 // CheckValid returns an error if the builder or the function are not ok.
 func (f *Function) CheckValid() error {
