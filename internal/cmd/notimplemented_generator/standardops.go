@@ -27,7 +27,7 @@ var (
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
 		"And", "Or", "Xor", "Not", "ReduceAnd", "ReduceOr", "ReduceXor", "ScatterAdd",
 		"AllReduce", // Output is not standard
-		"Return",    // Function-specific method
+		"Return", "Closure", "Name",
 	)
 
 	// methodsExcluded from generating and even from having a NodeType.

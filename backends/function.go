@@ -24,15 +24,29 @@ import "github.com/gomlx/gomlx/pkg/core/shapes"
 // and parameters. Multiple functions can be composed within a Builder, with
 // Main() being the entry point that gets compiled.
 //
-// Sub-functions created via Builder.NewFunction() can be used for modular
+// Other top-level functions created via Builder.NewFunction() can be used for modular
 // computation, while-loop bodies, conditional branches, reduce operations, etc.
 //
 // The typical lifecycle is:
 //  1. Create parameters via Parameter()
 //  2. Build computation using StandardOps/CollectiveOps methods
 //  3. Mark outputs via Return()
-//  4. Compile via Builder.Compile()
+//
+// After all functions of a Builder are finished (and Return() has been called),
+// one compiles the Builder with Builder.Compile().
 type Function interface {
+	// Name of the function. It will return "" for closures.
+	Name() string
+
+	// Parent returns the parent function of the current function.
+	// This is only set for "closures" within another functions.
+	// For top-level functions, like "main", or for backends that don't support fun this returns nil.
+	Parent() Function
+
+	// Closure returns a new local function, that can be used by certain operations like While, If, Sort.
+	// Closure functions can access values from its parent function.
+	Closure() (Function, error)
+
 	// StandardOps includes all standard math/ML operations.
 	StandardOps
 
