@@ -123,6 +123,7 @@ import (
 type Graph struct {
 	backend backends.Backend
 	builder backends.Builder
+	mainFn  backends.Function
 
 	id   GraphId
 	name string
@@ -259,6 +260,7 @@ func (g *Graph) build() backends.Builder {
 	if g.builder == nil {
 		// Lazy construction of builder: this allows one to further configure the Graph object before using it.
 		g.builder = g.backend.Builder(g.name)
+		g.mainFn = g.builder.Main()
 		err := g.setupBuilderDistribution()
 		if err != nil {
 			panic(err)
@@ -474,7 +476,13 @@ func (g *Graph) CompileWithSharding(outputs []*Node, outputShardings []*distribu
 		return s.ToBackendsSpec()
 	})
 	var err error
-	g.executable, err = g.builder.Compile(outputsOps, backendShardings)
+	// Call Return on the main function with outputs and shardings
+	err = g.mainFn.Return(outputsOps, backendShardings)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Graph failed to set return values"))
+	}
+	// Compile the builder (which now takes no arguments)
+	g.executable, err = g.builder.Compile()
 	if err != nil {
 		panic(errors.WithMessagef(err, "Graph failed to compile for the backend"))
 	}

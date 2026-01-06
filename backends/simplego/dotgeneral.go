@@ -76,8 +76,8 @@ func adjustAxisToRank(rank, axis int) (int, error) {
 // node with normalized inputs. Finally, it reshapes back to the final result.
 //
 // See execDotGeneral for the implementation.
-func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Op, rhsContractingAxes, rhsBatchAxes []int) (backends.Op, error) {
-	inputs, err := b.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
+func (f *Function) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Op, rhsContractingAxes, rhsBatchAxes []int) (backends.Op, error) {
+	inputs, err := f.builder.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
 	}
@@ -174,14 +174,14 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	params.outputBlockedShape = dgCreateBlockedShape(outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
 
 	// Create dot-general node: it will generate a normalized output [batchSize, lhsCrossSize, rhsCrossSize].
-	dotGeneral, _ := b.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), []*Node{lhs, rhs}, &params)
+	dotGeneral, _ := f.builder.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), []*Node{lhs, rhs}, &params)
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))
 	resultingDims = append(resultingDims, batchDims...)
 	resultingDims = append(resultingDims, lhsCrossDims...)
 	resultingDims = append(resultingDims, rhsCrossDims...)
-	result, err := b.Reshape(dotGeneral, resultingDims...)
+	result, err := f.Reshape(dotGeneral, resultingDims...)
 
 	// fmt.Printf("DotGeneral(*lhs*: %s, c:%v, b:%v; *rhs*:  %s, c:%v, b:%v) -> %s\n",
 	//	lhs.shape, lhsContractingAxes, lhsBatchAxes, rhs.shape, rhsContractingAxes, rhsBatchAxes,
@@ -305,8 +305,8 @@ func log2int(x int) int {
 // In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
 // matrix/matrix multiplications.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) Dot(lhsOp, rhsOp backends.Op) (backends.Op, error) {
-	inputs, err := b.checkOps(backends.OpTypeDot.String(), lhsOp, rhsOp)
+func (f *Function) Dot(lhsOp, rhsOp backends.Op) (backends.Op, error) {
+	inputs, err := f.builder.checkOps(backends.OpTypeDot.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
 	}
@@ -315,13 +315,13 @@ func (b *Builder) Dot(lhsOp, rhsOp backends.Op) (backends.Op, error) {
 	switch {
 	case lhs.shape.Rank() == 1 && rhs.shape.Rank() == 1:
 		// Contracting both vectors.
-		output, err = b.DotGeneral(lhs, []int{0}, []int{}, rhs, []int{0}, []int{})
+		output, err = f.DotGeneral(lhs, []int{0}, []int{}, rhs, []int{0}, []int{})
 	case lhs.shape.Rank() == 2 && rhs.shape.Rank() == 1:
 		// Contract rhs vector.
-		output, err = b.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+		output, err = f.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
 	case lhs.shape.Rank() == 2 && rhs.shape.Rank() == 2:
 		// Traditional matrix multiplication:
-		output, err = b.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+		output, err = f.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
 	default:
 		return nil, errors.Errorf("Dot operands have invalid ranks: lhs=%v, rhs=%v", lhs.shape, rhs.shape)
 	}

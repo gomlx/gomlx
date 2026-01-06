@@ -64,7 +64,7 @@ func GenerateSingleOp(method backendparser.Method) {
 	}
 
 	// Method signature:
-	w("func (b *Builder) %s(", method.Name)
+	w("func (f *Function) %s(", method.Name)
 	for i, param := range method.Parameters {
 		if i > 0 {
 			w(", ")
@@ -117,14 +117,14 @@ func GenerateSingleOp(method backendparser.Method) {
 			opsParams = append(opsParams, param.Name)
 		}
 	}
-	w("\tnodes, err := b.verifyAndCastValues(\"%s\", %s)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n",
+	w("\tnodes, err := f.verifyAndCastValues(\"%s\", %s)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n",
 		method.Name, strings.Join(opsParams, ", "))
 	for i, opsParam := range opsParams {
 		w("\t%sNode := nodes[%d]\n", opsParam, i)
 	}
 
 	// Call the method from the stablehlo backend.
-	w("\tvalue, err := b.fn.%s(", method.Name)
+	w("\tvalue, err := f.fn.%s(", method.Name)
 	for i, param := range method.Parameters {
 		if i > 0 {
 			w(", ")
@@ -139,6 +139,6 @@ func GenerateSingleOp(method backendparser.Method) {
 	w("\tif err != nil {\n\t\treturn nil, err\n\t}\n")
 
 	// Return the node.
-	w("\treturn b.newNode(value), nil\n")
+	w("\treturn f.newNode(value), nil\n")
 	w("}\n")
 }

@@ -9,9 +9,9 @@ import (
 )
 
 // AllReduce implements the collective AllReduce operation.
-func (b *Builder) AllReduce(operands []backends.Op, reductionType backends.ReduceOpType,
+func (f *Function) AllReduce(operands []backends.Op, reductionType backends.ReduceOpType,
 	replicaGroups [][]int) ([]backends.Op, error) {
-	nodes, err := b.verifyAndCastValues("stablehlo.AllReduce", operands...)
+	nodes, err := f.verifyAndCastValues("stablehlo.AllReduce", operands...)
 	if err != nil {
 		return nil, err
 	}
@@ -22,11 +22,11 @@ func (b *Builder) AllReduce(operands []backends.Op, reductionType backends.Reduc
 	operandsPerDType, indicesPerDType := splitOperandsByDType(nodes)
 	outputs := make([]backends.Op, len(operands))
 	for dtype, operandsDType := range operandsPerDType {
-		opType, err := b.getReductionOp(reductionType)
+		opType, err := f.getReductionOp(reductionType)
 		if err != nil {
 			return nil, errors.WithMessage(err, "while building reduction function for AllReduce")
 		}
-		reduceFn, err := b.getReductionFn(dtype, opType)
+		reduceFn, err := f.getReductionFn(dtype, opType)
 		if err != nil {
 			return nil, errors.WithMessage(err, "while building reduction function for AllReduce")
 		}
@@ -37,7 +37,7 @@ func (b *Builder) AllReduce(operands []backends.Op, reductionType backends.Reduc
 			return nil, err
 		}
 		outputsPerDType := xslices.Map(values, func(v *stablehlo.Value) backends.Op {
-			return b.newNode(v)
+			return f.newNode(v)
 		})
 
 		// Place the "per dtype" outputs back into the original order.
