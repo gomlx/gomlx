@@ -1,7 +1,6 @@
 package simplego
 
 import (
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
@@ -113,83 +112,13 @@ const smallMatMulMaxBatchSize = 64
 // more cache misses per contracting step than large K does.
 const smallMatMulMaxRhsCrossSize = 256
 
-// useSmallMatMul determines if we should use the small matmul (no-transpose) execution path.
-//
-// The small matmul path skips normalization/transpose but has strided RHS access.
-// It's beneficial when:
-//  1. Not in checkPath mode (need deterministic paths for comparison)
-//  2. The dtype is float32 (currently the only optimized implementation)
-//  3. The axes are already in standard matmul order
-//  4. The batch size is small (small matmul path doesn't parallelize across batches)
-//  5. Either:
-//     a. Single-row operation (lhsCrossSize=1) where transpose overhead dominates, OR
-//     b. Small contracting dimension (K) AND small RHS cross dimension (N), where strided
-//     access doesn't cause excessive cache misses. N matters because the RHS stride is N.
-//
-// For larger matrices or batch sizes, use execDotGeneralSmall (normalized) or execDotGeneralBlocked instead.
-func useSmallMatMul(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData) bool {
-	// In checkPath mode, we need deterministic execution for comparison.
-	// SmallMatMul would only run for normalizedPath anyway, so skip it during checkPath.
-	if backend.dotGeneralForceExecutionPath == checkPath {
-		return false
-	}
-	// Only support float32 small matmul path for now (most common)
-	if lhs.shape.DType != dtypes.Float32 {
-		return false
-	}
-
-	// Check if axes are in standard matmul order
-	if !isMatMulOrder(lhs.shape, rhs.shape,
-		params.lhsContractingAxes, params.rhsContractingAxes,
-		params.lhsBatchAxes, params.rhsBatchAxes) {
-		return false
-	}
-
-	// For large batch sizes, the normalized path with batch parallelism is faster.
-	// The small matmul path processes batches sequentially without parallelization.
-	if params.batchSize > smallMatMulMaxBatchSize {
-		return false
-	}
-
-	// For single-row operations (M=1) with small batch sizes, small matmul path is faster
-	// because transpose overhead dominates when computing just one output row per batch.
-	// Benchmarks show SmallMatMul is 10-15x faster for M=1, batchSize=1 cases.
-	// Note: Large batch sizes are handled above (parallelization wins).
-	if params.lhsCrossSize == 1 {
-		return true
-	}
-
-	// For multi-row operations, check both contracting and RHS cross dimensions.
-	// The RHS is accessed with stride N (rhsCrossSize), so large N causes more cache
-	// misses per contracting step. Both dimensions affect cache behavior.
-	if params.contractingSize > smallMatMulMaxContractingSize {
-		return false
-	}
-
-	// Check RHS cross size (N) - large N means large stride in RHS access
-	if params.rhsCrossSize > smallMatMulMaxRhsCrossSize {
-		return false
-	}
-
-	return true
-}
-
-// execDotGeneralSmallMatMul executes matrix multiplication directly without transpose/normalization.
-//
-// This path is optimal for SMALL matrices where the transpose overhead exceeds the
-// cache miss penalty from strided RHS access. For large matrices, use execDotGeneralSmallNormalized
-// or execDotGeneralBlocked instead.
-//
-// Returns true if small matmul path was used, false if caller should use another path.
-func execDotGeneralSmallMatMul(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) bool {
-	if !useSmallMatMul(backend, lhs, rhs, params) {
-		return false
-	}
-
-	// Execute the optimized float32 path
-	execDotGeneralSmallMatMulFloat32(backend, lhs, rhs, params, output)
-	return true
-}
+// smallMatMulMaxRhsCrossSizeM1 is the maximum RHS cross dimension (N) for M=1 cases.
+// For single-row operations, transpose overhead is more significant relative to
+// computation, so we use a higher threshold. However, we still need a cap to avoid
+// catastrophic cache behavior with very large N (e.g., [1, K] × [K, 100000]).
+// The strided access pattern with stride N=100000 would cause a cache miss on
+// virtually every RHS element access.
+const smallMatMulMaxRhsCrossSizeM1 = 4096
 
 // execDotGeneralSmallMatMulFloat32 executes float32 matrix multiplication without transpose.
 //

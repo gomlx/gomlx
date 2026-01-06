@@ -813,56 +813,9 @@ func TestIsMatMulOrder(t *testing.T) {
 	}
 }
 
-// TestUseSmallMatMul tests the useSmallMatMul function with various configurations.
-func TestUseSmallMatMul(t *testing.T) {
-	goBackend, ok := backend.(*Backend)
-	if !ok {
-		t.Skip("Test requires SimpleGo backend")
-	}
-
-	// Save and restore the original force setting
-	originalForce := goBackend.dotGeneralForceExecutionPath
-	defer func() {
-		goBackend.dotGeneralForceExecutionPath = originalForce
-	}()
-
-	t.Run("RespectsForceExecutionPath", func(t *testing.T) {
-		// Create test buffers in matmul order
-		lhsShape := shapes.Make(dtypes.Float32, 4, 8)
-		rhsShape := shapes.Make(dtypes.Float32, 8, 6)
-		lhsBuf := goBackend.getBufferForShape(lhsShape)
-		rhsBuf := goBackend.getBufferForShape(rhsShape)
-		defer goBackend.putBuffer(lhsBuf)
-		defer goBackend.putBuffer(rhsBuf)
-
-		params := &dotGeneralNodeData{
-			lhsContractingAxes: []int{1},
-			lhsBatchAxes:       []int{},
-			rhsContractingAxes: []int{0},
-			rhsBatchAxes:       []int{},
-			batchSize:          1,
-			lhsCrossSize:       4,
-			rhsCrossSize:       6,
-			contractingSize:    8,
-		}
-
-		// With autoSelectPath (default), should use SmallMatMul for eligible matrices
-		goBackend.dotGeneralForceExecutionPath = autoSelectPath
-		assert.True(t, useSmallMatMul(goBackend, lhsBuf, rhsBuf, params),
-			"Should use SmallMatMul with autoSelectPath")
-
-		// With checkPath forced, should NOT use SmallMatMul (need deterministic paths)
-		goBackend.dotGeneralForceExecutionPath = checkPath
-		assert.False(t, useSmallMatMul(goBackend, lhsBuf, rhsBuf, params),
-			"Should not use SmallMatMul with forced checkPath")
-
-		// Reset for subsequent tests
-		goBackend.dotGeneralForceExecutionPath = autoSelectPath
-	})
-
+// TestDgCanUseSmallMatMul tests the build-time SmallMatMul path selection.
+func TestDgCanUseSmallMatMul(t *testing.T) {
 	t.Run("ThresholdBoundaries", func(t *testing.T) {
-		goBackend.dotGeneralForceExecutionPath = autoSelectPath
-
 		testCases := []struct {
 			name            string
 			batchSize       int
@@ -881,16 +834,22 @@ func TestUseSmallMatMul(t *testing.T) {
 			{"batchSize_over_threshold", 65, 10, 10, 32, false},
 			// M=1 special case - should use SmallMatMul even with large contracting
 			{"M_equals_1_large_K", 1, 1, 256, 512, true},
+			// M=1 with large N should still work (within M1 threshold of 4096)
+			{"M_equals_1_large_N", 1, 1, 1000, 256, true},
+			// M=1 with very large N should be rejected (over M1 threshold of 4096)
+			{"M_equals_1_very_large_N", 1, 1, 5000, 256, false},
+			// M=1 with large batch should be rejected
+			{"M_equals_1_large_batch", 100, 1, 256, 512, false},
+			// N (rhsCrossSize) at threshold (256)
+			{"rhsCrossSize_at_threshold", 1, 10, 256, 64, true},
+			// N over threshold
+			{"rhsCrossSize_over_threshold", 1, 10, 257, 64, false},
 		}
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				lhsShape := shapes.Make(dtypes.Float32, tc.batchSize, tc.lhsCrossSize, tc.contractingSize)
 				rhsShape := shapes.Make(dtypes.Float32, tc.batchSize, tc.contractingSize, tc.rhsCrossSize)
-				lhsBuf := goBackend.getBufferForShape(lhsShape)
-				rhsBuf := goBackend.getBufferForShape(rhsShape)
-				defer goBackend.putBuffer(lhsBuf)
-				defer goBackend.putBuffer(rhsBuf)
 
 				params := &dotGeneralNodeData{
 					lhsContractingAxes: []int{2},
@@ -903,24 +862,18 @@ func TestUseSmallMatMul(t *testing.T) {
 					contractingSize:    tc.contractingSize,
 				}
 
-				got := useSmallMatMul(goBackend, lhsBuf, rhsBuf, params)
+				got := dgCanUseSmallMatMul(dtypes.Float32, lhsShape, rhsShape, params)
 				assert.Equal(t, tc.want, got,
-					"useSmallMatMul with batch=%d, M=%d, N=%d, K=%d",
+					"dgCanUseSmallMatMul with batch=%d, M=%d, N=%d, K=%d",
 					tc.batchSize, tc.lhsCrossSize, tc.rhsCrossSize, tc.contractingSize)
 			})
 		}
 	})
 
 	t.Run("NonFloat32Rejected", func(t *testing.T) {
-		goBackend.dotGeneralForceExecutionPath = autoSelectPath
-
 		// Float64 should be rejected
 		lhsShape := shapes.Make(dtypes.Float64, 4, 8)
 		rhsShape := shapes.Make(dtypes.Float64, 8, 6)
-		lhsBuf := goBackend.getBufferForShape(lhsShape)
-		rhsBuf := goBackend.getBufferForShape(rhsShape)
-		defer goBackend.putBuffer(lhsBuf)
-		defer goBackend.putBuffer(rhsBuf)
 
 		params := &dotGeneralNodeData{
 			lhsContractingAxes: []int{1},
@@ -933,8 +886,28 @@ func TestUseSmallMatMul(t *testing.T) {
 			contractingSize:    8,
 		}
 
-		assert.False(t, useSmallMatMul(goBackend, lhsBuf, rhsBuf, params),
+		assert.False(t, dgCanUseSmallMatMul(dtypes.Float64, lhsShape, rhsShape, params),
 			"Should not use SmallMatMul for Float64")
+	})
+
+	t.Run("NonMatMulOrderRejected", func(t *testing.T) {
+		// Test with non-standard axis order (not [M,K]×[K,N])
+		lhsShape := shapes.Make(dtypes.Float32, 8, 4) // [K, M] instead of [M, K]
+		rhsShape := shapes.Make(dtypes.Float32, 8, 6) // [K, N]
+
+		params := &dotGeneralNodeData{
+			lhsContractingAxes: []int{0}, // K is first, not last
+			lhsBatchAxes:       []int{},
+			rhsContractingAxes: []int{0},
+			rhsBatchAxes:       []int{},
+			batchSize:          1,
+			lhsCrossSize:       4,
+			rhsCrossSize:       6,
+			contractingSize:    8,
+		}
+
+		assert.False(t, dgCanUseSmallMatMul(dtypes.Float32, lhsShape, rhsShape, params),
+			"Should not use SmallMatMul with non-matmul axis order")
 	})
 }
 

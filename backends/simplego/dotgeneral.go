@@ -177,9 +177,9 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	}
 	params.outputBlockedShape = dgCreateBlockedShape(outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
 
-	// Select execution path at build time based on problem size.
+	// Select execution path at build time based on problem size and matrix layout.
 	// This enables proper deduplication of pre-blocked inputs via getOrCreateNode.
-	params.execPath = dgSelectExecPath(f.builder.backend, dtype, params.lhsCrossSize, params.rhsCrossSize)
+	params.execPath = dgSelectExecPath(f.builder.backend, lhs.shape, rhs.shape, &params)
 
 	// Prepare inputs for the DotGeneral node.
 	var lhsInput, rhsInput *Node = lhs, rhs
@@ -258,27 +258,87 @@ const (
 	normalizedPath
 	// blockedPath uses execDotGeneralBlocked (cache-tiled algorithm, large matrices)
 	blockedPath
+	// smallMatMulPath uses the SmallMatMul fast path (small float32 matrices in standard order)
+	smallMatMulPath
 	// checkPath runs both paths and compares outputs (for debugging)
 	checkPath
 )
 
 // dgSelectExecPath selects the execution path based on problem size and backend configuration.
 // Called at graph-build time from DotGeneral().
-func dgSelectExecPath(backend *Backend, dtype dtypes.DType, lhsCrossSize, rhsCrossSize int) dotGeneralExecutionPath {
+func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params *dotGeneralNodeData) dotGeneralExecutionPath {
+	dtype := lhsShape.DType
+
 	// If a specific path is forced via backend config, use that.
 	if backend.dotGeneralForceExecutionPath != autoSelectPath {
 		return backend.dotGeneralForceExecutionPath
 	}
 
+	// Check for SmallMatMul fast path first.
+	// SmallMatMul is beneficial for small float32 matrices in standard [M,K]×[K,N] order.
+	if dgCanUseSmallMatMul(dtype, lhsShape, rhsShape, params) {
+		return smallMatMulPath
+	}
+
 	// Default selection based on problem size.
 	// For large matrices, the blocked path with cache-tiled algorithm is more efficient.
-	crossesSize := rhsCrossSize * lhsCrossSize
+	crossesSize := params.rhsCrossSize * params.lhsCrossSize
 	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
 	blockSize := blockDim * blockDim
 	if crossesSize > DotGeneralBlockedPathThreshold*blockSize {
 		return blockedPath
 	}
 	return normalizedPath
+}
+
+// dgCanUseSmallMatMul checks if the SmallMatMul fast path can be used at build time.
+// SmallMatMul skips transpose overhead but has strided RHS access, so it's only
+// beneficial for small float32 matrices in standard [M,K]×[K,N] order.
+func dgCanUseSmallMatMul(dtype dtypes.DType, lhsShape, rhsShape shapes.Shape, params *dotGeneralNodeData) bool {
+	// Only support float32 for SmallMatMul (most common case)
+	if dtype != dtypes.Float32 {
+		return false
+	}
+
+	// Check if axes are in standard matmul order
+	if !isMatMulOrder(lhsShape, rhsShape,
+		params.lhsContractingAxes, params.rhsContractingAxes,
+		params.lhsBatchAxes, params.rhsBatchAxes) {
+		return false
+	}
+
+	// For large batch sizes, the normalized path with batch parallelism is faster.
+	// The small matmul path processes batches sequentially without parallelization.
+	if params.batchSize > smallMatMulMaxBatchSize {
+		return false
+	}
+
+	// For single-row operations (M=1), SmallMatMul is faster because transpose overhead
+	// dominates when computing just one output row per batch.
+	// BUT we still need to check rhsCrossSize - for M=1 with huge N, the strided
+	// access across large N causes cache thrashing.
+	if params.lhsCrossSize == 1 {
+		// For M=1, use a larger threshold for N since transpose overhead is more significant
+		// But still cap it to avoid catastrophic cache behavior with very large N
+		if params.rhsCrossSize > smallMatMulMaxRhsCrossSizeM1 {
+			return false
+		}
+		return true
+	}
+
+	// For multi-row operations, check both contracting and RHS cross dimensions.
+	// The RHS is accessed with stride N (rhsCrossSize), so large N causes more cache
+	// misses per contracting step.
+	if params.contractingSize > smallMatMulMaxContractingSize {
+		return false
+	}
+
+	// Check RHS cross size (N) - large N means large stride in RHS access
+	if params.rhsCrossSize > smallMatMulMaxRhsCrossSize {
+		return false
+	}
+
+	return true
 }
 
 // execDotGeneral executes the DotGeneral operation.
@@ -309,14 +369,14 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		}
 		err = execDotGeneralBlocked(backend, lhs, rhs, lhsBlockData, rhsBlockData, params, output)
 
+	case smallMatMulPath:
+		// SmallMatMul fast path: small float32 matrices in standard [M,K]×[K,N] order.
+		// Path was selected at build time based on matrix layout and size.
+		execDotGeneralSmallMatMulFloat32(backend, lhs, rhs, params, output)
+		return output, nil
+
 	case normalizedPath:
-		// Try SmallMatMul fast path for eligible small float32 matrices.
-		// SmallMatMul skips transpose overhead but has strided RHS access,
-		// so it's only beneficial for small matrices in standard [M,K]×[K,N] order.
-		if execDotGeneralSmallMatMul(backend, lhs, rhs, params, output) {
-			return output, nil
-		}
-		// Fallback to transpose-based normalized path
+		// Transpose-based normalized path for small matrices
 		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
 
 	case checkPath:
