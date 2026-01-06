@@ -75,6 +75,9 @@ func New(config string) (backends.Backend, error) {
 		case "dotgeneral_check":
 			// Run both normalized and blocked paths and compare outputs (for debugging).
 			b.dotGeneralForceExecutionPath = checkPath
+		case "dotgeneral_smallmatmul":
+			// Force DotGeneral to use the SmallMatMul fast path (for small float32 matrices).
+			b.dotGeneralForceExecutionPath = smallMatMulPath
 		case "ops_sequential":
 			// This will force the ops to be executed sequentially.
 			// The default is running parallel if it's the only thing executing, otherwise sequentially.
@@ -87,7 +90,7 @@ func New(config string) (backends.Backend, error) {
 			// No-op, just skip.
 		default:
 			return nil, errors.Errorf("unknown configuration option %q for SimpleGo (go) backend -- valid configuration options are: "+
-				"parallelism=#workers, dotgeneral_normalized, dotgeneral_blocked, dotgeneral_check, ops_sequential, ops_parallel; see code for documentation", key)
+				"parallelism=#workers, dotgeneral_normalized, dotgeneral_blocked, dotgeneral_smallmatmul, dotgeneral_check, ops_sequential, ops_parallel; see code for documentation", key)
 		}
 	}
 	return b, nil

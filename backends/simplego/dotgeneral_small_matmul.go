@@ -138,7 +138,7 @@ const smallMatMulMaxRhsCrossSizeM1 = 4096
 //
 // For large matrices, execDotGeneralSmallNormalized transposes RHS to [N, K] form where
 // "row" n (the original column) becomes contiguous, enabling efficient vectorization.
-func execDotGeneralSmallMatMulFloat32(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) {
+func execDotGeneralSmallMatMulFloat32(_ *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) {
 	lhsFlat := lhs.flat.([]float32)
 	rhsFlat := rhs.flat.([]float32)
 	outputFlat := output.flat.([]float32)

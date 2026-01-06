@@ -838,12 +838,22 @@ func TestDgCanUseSmallMatMul(t *testing.T) {
 			{"M_equals_1_large_N", 1, 1, 1000, 256, true},
 			// M=1 with very large N should be rejected (over M1 threshold of 4096)
 			{"M_equals_1_very_large_N", 1, 1, 5000, 256, false},
+			// M=1 with N exactly at M1 threshold (4096) should be accepted
+			{"M_equals_1_N_at_M1_threshold", 1, 1, 4096, 256, true},
+			// M=1 with N just over M1 threshold should be rejected
+			{"M_equals_1_N_over_M1_threshold", 1, 1, 4097, 256, false},
 			// M=1 with large batch should be rejected
 			{"M_equals_1_large_batch", 100, 1, 256, 512, false},
 			// N (rhsCrossSize) at threshold (256)
 			{"rhsCrossSize_at_threshold", 1, 10, 256, 64, true},
 			// N over threshold
 			{"rhsCrossSize_over_threshold", 1, 10, 257, 64, false},
+			// Combined thresholds: both K and N at their limits
+			{"K_and_N_both_at_threshold", 1, 10, 256, 128, true},
+			// Combined thresholds: K at limit, N over
+			{"K_at_threshold_N_over", 1, 10, 257, 128, false},
+			// Combined thresholds: K over, N at limit
+			{"K_over_N_at_threshold", 1, 10, 256, 129, false},
 		}
 
 		for _, tc := range testCases {
@@ -871,10 +881,6 @@ func TestDgCanUseSmallMatMul(t *testing.T) {
 	})
 
 	t.Run("NonFloat32Rejected", func(t *testing.T) {
-		// Float64 should be rejected
-		lhsShape := shapes.Make(dtypes.Float64, 4, 8)
-		rhsShape := shapes.Make(dtypes.Float64, 8, 6)
-
 		params := &dotGeneralNodeData{
 			lhsContractingAxes: []int{1},
 			lhsBatchAxes:       []int{},
@@ -886,8 +892,17 @@ func TestDgCanUseSmallMatMul(t *testing.T) {
 			contractingSize:    8,
 		}
 
-		assert.False(t, dgCanUseSmallMatMul(dtypes.Float64, lhsShape, rhsShape, params),
+		// Float64 should be rejected
+		lhsF64 := shapes.Make(dtypes.Float64, 4, 8)
+		rhsF64 := shapes.Make(dtypes.Float64, 8, 6)
+		assert.False(t, dgCanUseSmallMatMul(dtypes.Float64, lhsF64, rhsF64, params),
 			"Should not use SmallMatMul for Float64")
+
+		// BFloat16 should also be rejected
+		lhsBF16 := shapes.Make(dtypes.BFloat16, 4, 8)
+		rhsBF16 := shapes.Make(dtypes.BFloat16, 8, 6)
+		assert.False(t, dgCanUseSmallMatMul(dtypes.BFloat16, lhsBF16, rhsBF16, params),
+			"Should not use SmallMatMul for BFloat16")
 	})
 
 	t.Run("NonMatMulOrderRejected", func(t *testing.T) {

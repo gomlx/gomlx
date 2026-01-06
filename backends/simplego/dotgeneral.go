@@ -206,10 +206,6 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	resultingDims = append(resultingDims, rhsCrossDims...)
 	result, err := f.Reshape(dotGeneral, resultingDims...)
 
-	// fmt.Printf("DotGeneral(*lhs*: %s, c:%v, b:%v; *rhs*:  %s, c:%v, b:%v) -> %s\n",
-	//	lhs.shape, lhsContractingAxes, lhsBatchAxes, rhs.shape, rhsContractingAxes, rhsBatchAxes,
-	//	result.(*Node).shape)
-
 	if err != nil {
 		return nil, err
 	}
