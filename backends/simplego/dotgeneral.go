@@ -187,6 +187,8 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	// For blockedPath, pre-block BOTH inputs at graph-build time.
 	// This allows deduplication: if the same tensor is used in multiple DotGenerals,
 	// the blocking is done once and shared.
+	// Note: checkPath intentionally does NOT pre-block - it needs raw inputs to compare
+	// runtime-blocked vs normalized paths.
 	if params.execPath == blockedPath {
 		lhsInput = f.builder.blockForDotGeneral(lhs, params.lhsContractingAxes, params.lhsBatchAxes,
 			params.batchSize, params.lhsCrossSize, params.contractingSize)
