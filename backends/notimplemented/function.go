@@ -24,47 +24,47 @@ func (f Function) baseErrFn(op backends.OpType) error {
 	return f.ErrFn(op)
 }
 
-func (f Function) Parameter(name string, shape shapes.Shape, spec *backends.ShardingSpec) (backends.Op, error) {
+func (f Function) Parameter(name string, shape shapes.Shape, spec *backends.ShardingSpec) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeParameter)
 }
 
-func (f Function) Constant(flat any, dims ...int) (backends.Op, error) {
+func (f Function) Constant(flat any, dims ...int) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeConstant)
 }
 
-func (f Function) Return(outputs []backends.Op, shardings []*backends.ShardingSpec) error {
+func (f Function) Return(outputs []backends.Value, shardings []*backends.ShardingSpec) error {
 	return errors.Wrapf(NotImplementedError, "in Return()")
 }
 
-func (f Function) Identity(x backends.Op) (backends.Op, error) {
+func (f Function) Identity(x backends.Value) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeIdentity)
 }
 
-func (f Function) ReduceWindow(x backends.Op, reductionType backends.ReduceOpType,
-	windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Op, error) {
+func (f Function) ReduceWindow(x backends.Value, reductionType backends.ReduceOpType,
+	windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeReduceWindow)
 }
 
-func (f Function) RNGBitGenerator(state backends.Op, shape shapes.Shape) (newState, values backends.Op, err error) {
+func (f Function) RNGBitGenerator(state backends.Value, shape shapes.Shape) (newState, values backends.Value, err error) {
 	return nil, nil, f.baseErrFn(backends.OpTypeRNGBitGenerator)
 }
 
-func (f Function) BatchNormForInference(operand, scale, offset, mean, variance backends.Op, epsilon float32, axis int) (
-	backends.Op, error) {
+func (f Function) BatchNormForInference(operand, scale, offset, mean, variance backends.Value, epsilon float32, axis int) (
+	backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeBatchNormForInference)
 }
 
-func (f Function) BatchNormForTraining(operand, scale, offset backends.Op, epsilon float32, axis int) (
-	normalized, batchMean, batchVariance backends.Op, err error) {
+func (f Function) BatchNormForTraining(operand, scale, offset backends.Value, epsilon float32, axis int) (
+	normalized, batchMean, batchVariance backends.Value, err error) {
 	return nil, nil, nil, f.baseErrFn(backends.OpTypeBatchNormForTraining)
 }
 
-func (f Function) BatchNormGradient(operand, scale, mean, variance, gradOutput backends.Op, epsilon float32, axis int) (
-	gradOperand, gradScale, gradOffset backends.Op, err error) {
+func (f Function) BatchNormGradient(operand, scale, mean, variance, gradOutput backends.Value, epsilon float32, axis int) (
+	gradOperand, gradScale, gradOffset backends.Value, err error) {
 	return nil, nil, nil, f.baseErrFn(backends.OpTypeBatchNormGradient)
 }
 
-func (f Function) AllReduce(inputs []backends.Op, reduceOp backends.ReduceOpType, replicaGroups [][]int) (
-	[]backends.Op, error) {
+func (f Function) AllReduce(inputs []backends.Value, reduceOp backends.ReduceOpType, replicaGroups [][]int) (
+	[]backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeAllReduce)
 }

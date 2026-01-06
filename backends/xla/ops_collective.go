@@ -9,8 +9,8 @@ import (
 )
 
 // AllReduce implements the collective AllReduce operation.
-func (f *Function) AllReduce(operands []backends.Op, reductionType backends.ReduceOpType,
-	replicaGroups [][]int) ([]backends.Op, error) {
+func (f *Function) AllReduce(operands []backends.Value, reductionType backends.ReduceOpType,
+	replicaGroups [][]int) ([]backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("stablehlo.AllReduce", operands...)
 	if err != nil {
 		return nil, err
@@ -20,7 +20,7 @@ func (f *Function) AllReduce(operands []backends.Op, reductionType backends.Redu
 	// So we need to split the operands by dtype and later re-merge them.
 	// Also, the reduceFn will be per operand.
 	operandsPerDType, indicesPerDType := splitOperandsByDType(nodes)
-	outputs := make([]backends.Op, len(operands))
+	outputs := make([]backends.Value, len(operands))
 	for dtype, operandsDType := range operandsPerDType {
 		opType, err := f.getReductionOp(reductionType)
 		if err != nil {
@@ -36,7 +36,7 @@ func (f *Function) AllReduce(operands []backends.Op, reductionType backends.Redu
 		if err != nil {
 			return nil, err
 		}
-		outputsPerDType := xslices.Map(values, func(v *stablehlo.Value) backends.Op {
+		outputsPerDType := xslices.Map(values, func(v *stablehlo.Value) backends.Value {
 			return f.newNode(v)
 		})
 

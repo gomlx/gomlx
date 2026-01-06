@@ -151,7 +151,7 @@ func Abs(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -196,7 +196,7 @@ func Add(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -238,14 +238,14 @@ func backendAllReduce(operands []*Node, reductionType ReduceOpType, replicaGroup
 		reductionType: reductionType,
 		replicaGroups: slices.Clone(replicaGroups),
 	}
-	results, err := g.mainFn.AllReduce(xslices.Map(operands, func(node *Node) backends.Op { return node.outputOps[0] }), inputs.reductionType, inputs.replicaGroups)
+	results, err := g.mainFn.AllReduce(xslices.Map(operands, func(node *Node) backends.Value { return node.outputOps[0] }), inputs.reductionType, inputs.replicaGroups)
 	if err != nil {
 		panic(err)
 	}
 	node := &Node{
 		outputOps: results,
 		outputShapes: xslices.Map(results,
-			func(op backends.Op) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
+			func(op backends.Value) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
 		graph:      g,
 		inputs:     inputs,
 		inputNodes: inputNodes,
@@ -294,7 +294,7 @@ func backendArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -353,7 +353,7 @@ func backendBatchNormForInference(operand *Node, scale *Node, offset *Node, mean
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -406,7 +406,7 @@ func backendBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsil
 		panic(err)
 	}
 	node := &Node{
-		outputOps:    []backends.Op{v0, v1, v2},
+		outputOps:    []backends.Value{v0, v1, v2},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1)), mustNoError(g.builder.OpShape(v2))},
 		graph:        g,
 		inputs:       inputs,
@@ -467,7 +467,7 @@ func backendBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *
 		panic(err)
 	}
 	node := &Node{
-		outputOps:    []backends.Op{v0, v1, v2},
+		outputOps:    []backends.Value{v0, v1, v2},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1)), mustNoError(g.builder.OpShape(v2))},
 		graph:        g,
 		inputs:       inputs,
@@ -511,7 +511,7 @@ func BitCount(operand *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -568,7 +568,7 @@ func Bitcast(x *Node, targetDType dtypes.DType) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -612,7 +612,7 @@ func BitwiseAnd(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -653,7 +653,7 @@ func BitwiseNot(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -697,7 +697,7 @@ func BitwiseOr(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -741,7 +741,7 @@ func BitwiseXor(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -788,7 +788,7 @@ func backendBroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []in
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -829,7 +829,7 @@ func Ceil(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -878,7 +878,7 @@ func Clamp(min *Node, x *Node, max *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -919,7 +919,7 @@ func Clz(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -968,7 +968,7 @@ func Complex(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1008,12 +1008,12 @@ func backendConcatenate(axis int, operands ...*Node) (
 		axis:     axis,
 		operands: slices.Clone(operands),
 	}
-	result, err := g.mainFn.Concatenate(inputs.axis, xslices.Map(operands, func(node *Node) backends.Op { return node.outputOps[0] })...)
+	result, err := g.mainFn.Concatenate(inputs.axis, xslices.Map(operands, func(node *Node) backends.Value { return node.outputOps[0] })...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1054,7 +1054,7 @@ func Conj(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1119,7 +1119,7 @@ func backendConvGeneral(input *Node, kernel *Node, axes backends.ConvolveAxesCon
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1163,7 +1163,7 @@ func backendConvertDType(x *Node, dtype dtypes.DType) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1204,7 +1204,7 @@ func Cos(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1249,7 +1249,7 @@ func Div(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1304,7 +1304,7 @@ func Dot(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1360,7 +1360,7 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1413,12 +1413,12 @@ func DynamicSlice(operand *Node, startIndices []*Node, sliceDims []int) (
 		startIndices: slices.Clone(startIndices),
 		sliceDims:    slices.Clone(sliceDims),
 	}
-	result, err := g.mainFn.DynamicSlice(operand.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Op { return node.outputOps[0] }), inputs.sliceDims)
+	result, err := g.mainFn.DynamicSlice(operand.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Value { return node.outputOps[0] }), inputs.sliceDims)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1472,12 +1472,12 @@ func DynamicUpdateSlice(operand *Node, update *Node, startIndices []*Node) (
 		update:       update,
 		startIndices: slices.Clone(startIndices),
 	}
-	result, err := g.mainFn.DynamicUpdateSlice(operand.outputOps[0], update.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Op { return node.outputOps[0] }))
+	result, err := g.mainFn.DynamicUpdateSlice(operand.outputOps[0], update.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Value { return node.outputOps[0] }))
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1521,7 +1521,7 @@ func Equal(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1568,7 +1568,7 @@ func EqualTotalOrder(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1610,7 +1610,7 @@ func Erf(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1651,7 +1651,7 @@ func Exp(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1692,7 +1692,7 @@ func Expm1(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1739,7 +1739,7 @@ func backendFFT(operand *Node, fftType backends.FFTType, fftLength []int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1780,7 +1780,7 @@ func Floor(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1842,7 +1842,7 @@ func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offse
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1886,7 +1886,7 @@ func GreaterOrEqual(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1933,7 +1933,7 @@ func GreaterOrEqualTotalOrder(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1978,7 +1978,7 @@ func GreaterThan(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2025,7 +2025,7 @@ func GreaterThanTotalOrder(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2068,7 +2068,7 @@ func Identity(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2109,7 +2109,7 @@ func Imag(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2152,7 +2152,7 @@ func backendIota(g *Graph, shape shapes.Shape, iotaAxis int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2194,7 +2194,7 @@ func IsFinite(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2235,7 +2235,7 @@ func IsNaN(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2279,7 +2279,7 @@ func LessOrEqual(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2326,7 +2326,7 @@ func LessOrEqualTotalOrder(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2371,7 +2371,7 @@ func LessThan(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2418,7 +2418,7 @@ func LessThanTotalOrder(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2460,7 +2460,7 @@ func Log(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2501,7 +2501,7 @@ func Log1p(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2545,7 +2545,7 @@ func LogicalAnd(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2586,7 +2586,7 @@ func LogicalNot(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2631,7 +2631,7 @@ func LogicalOr(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2675,7 +2675,7 @@ func LogicalXor(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2716,7 +2716,7 @@ func Logistic(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2760,7 +2760,7 @@ func Max(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2804,7 +2804,7 @@ func Min(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2849,7 +2849,7 @@ func Mul(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2890,7 +2890,7 @@ func Neg(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2934,7 +2934,7 @@ func NotEqual(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2981,7 +2981,7 @@ func NotEqualTotalOrder(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3031,7 +3031,7 @@ func Pad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3075,7 +3075,7 @@ func Pow(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3119,7 +3119,7 @@ func backendRNGBitGenerator(state *Node, shape shapes.Shape) (
 		panic(err)
 	}
 	node := &Node{
-		outputOps:    []backends.Op{v0, v1},
+		outputOps:    []backends.Value{v0, v1},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1))},
 		graph:        g,
 		inputs:       inputs,
@@ -3162,7 +3162,7 @@ func Real(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3206,7 +3206,7 @@ func backendReduceBitwiseAnd(x *Node, axes ...int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3250,7 +3250,7 @@ func backendReduceBitwiseOr(x *Node, axes ...int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3294,7 +3294,7 @@ func backendReduceBitwiseXor(x *Node, axes ...int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3338,7 +3338,7 @@ func backendReduceLogicalAnd(x *Node, axes ...int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3382,7 +3382,7 @@ func backendReduceLogicalOr(x *Node, axes ...int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3426,7 +3426,7 @@ func backendReduceLogicalXor(x *Node, axes ...int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3470,7 +3470,7 @@ func backendReduceMax(x *Node, axes ...int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3514,7 +3514,7 @@ func backendReduceMin(x *Node, axes ...int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3558,7 +3558,7 @@ func backendReduceProduct(x *Node, axes ...int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3602,7 +3602,7 @@ func backendReduceSum(x *Node, axes ...int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3661,7 +3661,7 @@ func backendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions [
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3706,7 +3706,7 @@ func Rem(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3750,7 +3750,7 @@ func backendReshape(x *Node, dimensions ...int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3794,7 +3794,7 @@ func backendReverse(x *Node, axes ...int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3836,7 +3836,7 @@ func Round(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3877,7 +3877,7 @@ func Rsqrt(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3942,7 +3942,7 @@ func backendScatterMax(operand *Node, scatterIndices *Node, updates *Node, index
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4007,7 +4007,7 @@ func backendScatterMin(operand *Node, scatterIndices *Node, updates *Node, index
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4072,7 +4072,7 @@ func backendScatterSum(operand *Node, scatterIndices *Node, updates *Node, index
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4125,7 +4125,7 @@ func backendSelectAndScatterMax(operand *Node, source *Node, windowDimensions []
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4178,7 +4178,7 @@ func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4222,7 +4222,7 @@ func backendShiftLeft(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4266,7 +4266,7 @@ func backendShiftRightArithmetic(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4310,7 +4310,7 @@ func backendShiftRightLogical(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4351,7 +4351,7 @@ func backendSign(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4392,7 +4392,7 @@ func Sin(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4442,7 +4442,7 @@ func backendSlice(x *Node, starts []int, limits []int, strides []int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4483,7 +4483,7 @@ func Sqrt(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4528,7 +4528,7 @@ func Sub(lhs *Node, rhs *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4569,7 +4569,7 @@ func Tanh(x *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4613,7 +4613,7 @@ func backendTranspose(x *Node, permutation ...int) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4660,7 +4660,7 @@ func backendWhere(condition *Node, onTrue *Node, onFalse *Node) (
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,

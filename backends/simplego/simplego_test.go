@@ -52,7 +52,7 @@ func TestDuplicatedOutputNodes(t *testing.T) {
 
 	// Compile with the same node duplicated as outputs
 	// This should create Identity nodes for the duplicate
-	err = mainFn.Return([]backends.Op{node, node}, nil)
+	err = mainFn.Return([]backends.Value{node, node}, nil)
 	require.NoError(t, err)
 	exec, err := builder.Compile()
 	require.NoError(t, err)

@@ -9,7 +9,7 @@ import (
 
 // Add returns the element-wise sum of the two values.
 // Standard broadcasting rules apply (see documentation).
-func (f *Function) Add(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) Add(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeAdd, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -22,7 +22,7 @@ func (f *Function) Add(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // BitwiseAnd returns the element-wise bitwise AND operation.
-func (f *Function) BitwiseAnd(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) BitwiseAnd(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeBitwiseAnd, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -35,7 +35,7 @@ func (f *Function) BitwiseAnd(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // BitwiseOr returns the element-wise bitwise OR operation.
-func (f *Function) BitwiseOr(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) BitwiseOr(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeBitwiseOr, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ func (f *Function) BitwiseOr(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // BitwiseXor returns the element-wise bitwise XOR operator.
-func (f *Function) BitwiseXor(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) BitwiseXor(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeBitwiseXor, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func (f *Function) BitwiseXor(lhs, rhs backends.Op) (backends.Op, error) {
 // The output will be either `dtypes.Complex64` or `dtypes.Complex128`, depending on x0 and x1 dtypes.
 // The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
 // the value is broadcast to every other value.
-func (f *Function) Complex(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) Complex(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeComplex, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func (f *Function) Complex(lhs, rhs backends.Op) (backends.Op, error) {
 
 // Div returns the element-wise division of the two values.
 // Standard broadcasting rules apply (see documentation).
-func (f *Function) Div(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) Div(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeDiv, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (f *Function) Div(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // LogicalAnd returns the element-wise logical AND operation.
-func (f *Function) LogicalAnd(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) LogicalAnd(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeLogicalAnd, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -106,7 +106,7 @@ func (f *Function) LogicalAnd(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // LogicalOr returns the element-wise logical OR operation.
-func (f *Function) LogicalOr(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) LogicalOr(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeLogicalOr, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -119,7 +119,7 @@ func (f *Function) LogicalOr(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // LogicalXor returns the element-wise logical XOR operator.
-func (f *Function) LogicalXor(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) LogicalXor(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeLogicalXor, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -132,7 +132,7 @@ func (f *Function) LogicalXor(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // Max returns the element-wise highest value among the two.
-func (f *Function) Max(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) Max(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeMax, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func (f *Function) Max(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // Min returns the element-wise smallest value among the two.
-func (f *Function) Min(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) Min(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeMin, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -159,7 +159,7 @@ func (f *Function) Min(lhs, rhs backends.Op) (backends.Op, error) {
 
 // Mul returns the element-wise multiplication of the two values.
 // Standard broadcasting rules apply (see documentation).
-func (f *Function) Mul(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) Mul(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeMul, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -172,7 +172,7 @@ func (f *Function) Mul(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // Pow returns the Op that represents the output of the corresponding operation.
-func (f *Function) Pow(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) Pow(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypePow, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -186,7 +186,7 @@ func (f *Function) Pow(lhs, rhs backends.Op) (backends.Op, error) {
 
 // Rem returns the remainder operation, also known as modulo (or Mod for short).
 // Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
-func (f *Function) Rem(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) Rem(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeRem, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -199,7 +199,7 @@ func (f *Function) Rem(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // ShiftLeft n bits. It implicitly preserves the sign bit if there is no overflow. So ShiftLeft(-1, 1) = -2.
-func (f *Function) ShiftLeft(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) ShiftLeft(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeShiftLeft, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -212,7 +212,7 @@ func (f *Function) ShiftLeft(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // ShiftRightArithmetic shifts right by n bits, preserving the sign bit. So ShiftRight(-2, 1) = -1.
-func (f *Function) ShiftRightArithmetic(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) ShiftRightArithmetic(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeShiftRightArithmetic, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -225,7 +225,7 @@ func (f *Function) ShiftRightArithmetic(lhs, rhs backends.Op) (backends.Op, erro
 }
 
 // ShiftRightLogical shifts right by n bits, destroying the sign bit.
-func (f *Function) ShiftRightLogical(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) ShiftRightLogical(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeShiftRightLogical, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -239,7 +239,7 @@ func (f *Function) ShiftRightLogical(lhs, rhs backends.Op) (backends.Op, error) 
 
 // Sub returns the element-wise subtraction of the two values.
 // Standard broadcasting rules apply (see documentation).
-func (f *Function) Sub(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) Sub(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeSub, lhs, rhs)
 	if err != nil {
 		return nil, err

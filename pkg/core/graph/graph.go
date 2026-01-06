@@ -471,7 +471,7 @@ func (g *Graph) CompileWithSharding(outputs []*Node, outputShardings []*distribu
 		}()
 	}
 
-	outputsOps := xslices.Map(outputs, func(node *Node) backends.Op { return node.outputOps[0] })
+	outputsOps := xslices.Map(outputs, func(node *Node) backends.Value { return node.outputOps[0] })
 	backendShardings := xslices.Map(outputShardings, func(s *distributed.ShardingSpec) *backends.ShardingSpec {
 		return s.ToBackendsSpec()
 	})

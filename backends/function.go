@@ -48,7 +48,7 @@ type Function interface {
 	//
 	// The sharding defines how the parameter will be sharded for distributed
 	// operations. Set it to nil if not using distribution.
-	Parameter(name string, shape shapes.Shape, sharding *ShardingSpec) (Op, error)
+	Parameter(name string, shape shapes.Shape, sharding *ShardingSpec) (Value, error)
 
 	// Constant creates a constant in the function with the given flat values
 	// and the shape defined by the dimensions.
@@ -58,7 +58,7 @@ type Function interface {
 	//
 	// The value is copied into the graph. It's recommended that for very large
 	// tensors, even if constants, that they are passed as parameters instead.
-	Constant(flat any, dims ...int) (Op, error)
+	Constant(flat any, dims ...int) (Value, error)
 
 	// Return marks the outputs of this function.
 	// Once called, the function can no longer be futher modified.
@@ -73,5 +73,5 @@ type Function interface {
 	// distributed computation with AutoSharding. Set to nil otherwise.
 	//
 	// Return must be called exactly once before Builder.Compile().
-	Return(outputs []Op, shardings []*ShardingSpec) error
+	Return(outputs []Value, shardings []*ShardingSpec) error
 }

@@ -32,10 +32,10 @@ func init() {
 // Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
 //
 // Note: input is aka. operand; kernel is aka. "filters". The input and output "channels" are also known as "features dimensions".
-func (f *Function) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
+func (f *Function) ConvGeneral(inputOp, kernelOp backends.Value, axes backends.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
-	channelGroupCount, batchGroupCount int) (backends.Op, error) {
+	channelGroupCount, batchGroupCount int) (backends.Value, error) {
 	// Sanitize group count.
 	channelGroupCount = max(channelGroupCount, 1)
 	batchGroupCount = max(batchGroupCount, 1)
@@ -165,10 +165,10 @@ func (c *convNode) EqualNodeData(other nodeDataComparable) bool {
 // ConvGeneralDilated is a deprecated an alias to ConvGeneral.
 //
 // Deprecated: use ConvGeneral instead.
-func (f *Function) ConvGeneralDilated(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
+func (f *Function) ConvGeneralDilated(inputOp, kernelOp backends.Value, axes backends.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
-	channelGroupCount, batchGroupCount int) (backends.Op, error) {
+	channelGroupCount, batchGroupCount int) (backends.Value, error) {
 	return f.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations, channelGroupCount, batchGroupCount)
 }
 

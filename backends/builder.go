@@ -7,10 +7,10 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
-// Op represents the output of an operation, during the computation graph building time.
+// Value represents the output of an operation, during the computation graph building time.
 //
-// It is opaque from the GoMLX perspective: it passes Op as input to the other methods.
-type Op any
+// It is opaque from the GoMLX perspective: it passes Value as input to the other methods.
+type Value any
 
 // Builder defines the interface for building a computation.
 //
@@ -46,7 +46,7 @@ type Builder interface {
 	// Notice this is not an operation and doesn't change the graph being built.
 	//
 	// One can use the shape and create a constant out of it.
-	OpShape(op Op) (shapes.Shape, error)
+	OpShape(op Value) (shapes.Shape, error)
 
 	// DistributedSPMD creates a computation that will be executed on multiple devices in SPMD fashion
 	// (SPMD = single program, multiple data).

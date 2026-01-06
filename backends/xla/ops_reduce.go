@@ -200,7 +200,7 @@ func (f *Function) getInitialValue(dtype dtypes.DType, opType backends.OpType) (
 }
 
 // reduce helper for all Reduce* methods.
-func (f *Function) reduce(opType backends.OpType, x backends.Op, axes ...int) (backends.Op, error) {
+func (f *Function) reduce(opType backends.OpType, x backends.Value, axes ...int) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues(opType.String(), x)
 	if err != nil {
 		return nil, err
@@ -281,61 +281,61 @@ func scalarAnyToFlat(valueAny any) any {
 }
 
 // ReduceSum implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceSum(x backends.Op, axes ...int) (backends.Op, error) {
+func (f *Function) ReduceSum(x backends.Value, axes ...int) (backends.Value, error) {
 	opType := backends.OpTypeReduceSum
 	return f.reduce(opType, x, axes...)
 }
 
 // ReduceProduct implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceProduct(x backends.Op, axes ...int) (backends.Op, error) {
+func (f *Function) ReduceProduct(x backends.Value, axes ...int) (backends.Value, error) {
 	opType := backends.OpTypeReduceProduct
 	return f.reduce(opType, x, axes...)
 }
 
 // ReduceMax implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceMax(x backends.Op, axes ...int) (backends.Op, error) {
+func (f *Function) ReduceMax(x backends.Value, axes ...int) (backends.Value, error) {
 	opType := backends.OpTypeReduceMax
 	return f.reduce(opType, x, axes...)
 }
 
 // ReduceMin implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceMin(x backends.Op, axes ...int) (backends.Op, error) {
+func (f *Function) ReduceMin(x backends.Value, axes ...int) (backends.Value, error) {
 	opType := backends.OpTypeReduceMin
 	return f.reduce(opType, x, axes...)
 }
 
 // ReduceBitwiseAnd implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceBitwiseAnd(x backends.Op, axes ...int) (backends.Op, error) {
+func (f *Function) ReduceBitwiseAnd(x backends.Value, axes ...int) (backends.Value, error) {
 	opType := backends.OpTypeReduceBitwiseAnd
 	return f.reduce(opType, x, axes...)
 }
 
 // ReduceBitwiseOr implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceBitwiseOr(x backends.Op, axes ...int) (backends.Op, error) {
+func (f *Function) ReduceBitwiseOr(x backends.Value, axes ...int) (backends.Value, error) {
 	opType := backends.OpTypeReduceBitwiseOr
 	return f.reduce(opType, x, axes...)
 }
 
 // ReduceBitwiseXor implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceBitwiseXor(x backends.Op, axes ...int) (backends.Op, error) {
+func (f *Function) ReduceBitwiseXor(x backends.Value, axes ...int) (backends.Value, error) {
 	opType := backends.OpTypeReduceBitwiseXor
 	return f.reduce(opType, x, axes...)
 }
 
 // ReduceLogicalAnd implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceLogicalAnd(x backends.Op, axes ...int) (backends.Op, error) {
+func (f *Function) ReduceLogicalAnd(x backends.Value, axes ...int) (backends.Value, error) {
 	opType := backends.OpTypeReduceLogicalAnd
 	return f.reduce(opType, x, axes...)
 }
 
 // ReduceLogicalOr implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceLogicalOr(x backends.Op, axes ...int) (backends.Op, error) {
+func (f *Function) ReduceLogicalOr(x backends.Value, axes ...int) (backends.Value, error) {
 	opType := backends.OpTypeReduceLogicalOr
 	return f.reduce(opType, x, axes...)
 }
 
 // ReduceLogicalXor implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceLogicalXor(x backends.Op, axes ...int) (backends.Op, error) {
+func (f *Function) ReduceLogicalXor(x backends.Value, axes ...int) (backends.Value, error) {
 	opType := backends.OpTypeReduceLogicalXor
 	return f.reduce(opType, x, axes...)
 }
@@ -350,7 +350,7 @@ func (f *Function) ReduceLogicalXor(x backends.Op, axes ...int) (backends.Op, er
 //
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
-func (f *Function) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, isMin bool) (backends.Op, error) {
+func (f *Function) ArgMinMax(x backends.Value, axis int, outputDType dtypes.DType, isMin bool) (backends.Value, error) {
 	opType := backends.OpTypeArgMinMax
 	nodes, err := f.verifyAndCastValues(opType.String(), x)
 	if err != nil {
@@ -509,7 +509,7 @@ func (f *Function) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, 
 // If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.
 // If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
 // If paddings is nil, they are assumed to be 0.
-func (f *Function) ReduceWindow(x backends.Op, reductionType backends.ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Op, error) {
+func (f *Function) ReduceWindow(x backends.Value, reductionType backends.ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Value, error) {
 	opType := backends.OpTypeReduceWindow
 	nodes, err := f.verifyAndCastValues(opType.String(), x)
 	if err != nil {
@@ -589,7 +589,7 @@ func (f *Function) getSelectFn(dtype dtypes.DType, opType backends.OpType) (*sta
 // Note: "Max" refers to the selection. After selected, the values are added into the output position.
 //
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func (f *Function) SelectAndScatterMax(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Op, error) {
+func (f *Function) SelectAndScatterMax(operand, source backends.Value, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Value, error) {
 	return f.selectAndScatterImpl(backends.OpTypeSelectAndScatterMax,
 		operand, source, windowDimensions, windowStrides, paddings)
 }
@@ -602,7 +602,7 @@ func (f *Function) SelectAndScatterMax(operand, source backends.Op, windowDimens
 // Note: "Min" refers to the selection. After selected, values are added into the output position.
 //
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func (f *Function) SelectAndScatterMin(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Op, error) {
+func (f *Function) SelectAndScatterMin(operand, source backends.Value, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Value, error) {
 	return f.selectAndScatterImpl(backends.OpTypeSelectAndScatterMin,
 		operand, source, windowDimensions, windowStrides, paddings)
 }
@@ -610,7 +610,7 @@ func (f *Function) SelectAndScatterMin(operand, source backends.Op, windowDimens
 // selectAndScatterImpl implements SelectAndScatterMax and SelectAndScatterMin.
 //
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func (f *Function) selectAndScatterImpl(opType backends.OpType, operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Op, error) {
+func (f *Function) selectAndScatterImpl(opType backends.OpType, operand, source backends.Value, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues(opType.String(), operand, source)
 	if err != nil {
 		return nil, err

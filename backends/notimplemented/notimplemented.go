@@ -176,6 +176,6 @@ func (b Builder) Compile() (backends.Executable, error) {
 	return nil, errors.Wrapf(NotImplementedError, "in Compile()")
 }
 
-func (b Builder) OpShape(op backends.Op) (shapes.Shape, error) {
+func (b Builder) OpShape(op backends.Value) (shapes.Shape, error) {
 	return shapes.Invalid(), errors.Wrapf(NotImplementedError, "in OpShape()")
 }

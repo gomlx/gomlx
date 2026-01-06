@@ -28,7 +28,7 @@ func TestBuilder_Compile(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, c)
 
-	err = mainFn.Return([]backends.Op{x, c}, nil)
+	err = mainFn.Return([]backends.Value{x, c}, nil)
 	require.NoError(t, err)
 	exec, err := builder.Compile()
 	require.NoError(t, err)

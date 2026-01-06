@@ -9,7 +9,7 @@ import (
 
 // BitCount returns the number of bits that are set to one.
 // Also known as Population Count ("Popcnt") or Hamming Weight.
-func (f *Function) BitCount(operand backends.Op) (backends.Op, error) {
+func (f *Function) BitCount(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("BitCount", operand)
 	if err != nil {
 		return nil, err
@@ -22,7 +22,7 @@ func (f *Function) BitCount(operand backends.Op) (backends.Op, error) {
 }
 
 // BitwiseNot returns the element-wise bitwise AND operation.
-func (f *Function) BitwiseNot(operand backends.Op) (backends.Op, error) {
+func (f *Function) BitwiseNot(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("BitwiseNot", operand)
 	if err != nil {
 		return nil, err
@@ -35,7 +35,7 @@ func (f *Function) BitwiseNot(operand backends.Op) (backends.Op, error) {
 }
 
 // Ceil returns the Op that represents the output of the corresponding operation.
-func (f *Function) Ceil(operand backends.Op) (backends.Op, error) {
+func (f *Function) Ceil(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Ceil", operand)
 	if err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ func (f *Function) Ceil(operand backends.Op) (backends.Op, error) {
 }
 
 // Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
-func (f *Function) Clz(operand backends.Op) (backends.Op, error) {
+func (f *Function) Clz(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Clz", operand)
 	if err != nil {
 		return nil, err
@@ -61,7 +61,7 @@ func (f *Function) Clz(operand backends.Op) (backends.Op, error) {
 }
 
 // Cos returns the Op that represents the output of the corresponding operation.
-func (f *Function) Cos(operand backends.Op) (backends.Op, error) {
+func (f *Function) Cos(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Cos", operand)
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (f *Function) Cos(operand backends.Op) (backends.Op, error) {
 }
 
 // Erf returns the "error function", defined as erf(x) = 2/Pi * \int_{0}^{x}{e^{-t^2}dt}.
-func (f *Function) Erf(operand backends.Op) (backends.Op, error) {
+func (f *Function) Erf(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Erf", operand)
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func (f *Function) Erf(operand backends.Op) (backends.Op, error) {
 }
 
 // Exp returns the Op that represents the output of the corresponding operation.
-func (f *Function) Exp(operand backends.Op) (backends.Op, error) {
+func (f *Function) Exp(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Exp", operand)
 	if err != nil {
 		return nil, err
@@ -100,7 +100,7 @@ func (f *Function) Exp(operand backends.Op) (backends.Op, error) {
 }
 
 // Expm1 returns the Op that represents the output of the corresponding operation.
-func (f *Function) Expm1(operand backends.Op) (backends.Op, error) {
+func (f *Function) Expm1(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Expm1", operand)
 	if err != nil {
 		return nil, err
@@ -113,7 +113,7 @@ func (f *Function) Expm1(operand backends.Op) (backends.Op, error) {
 }
 
 // Floor returns the Op that represents the output of the corresponding operation.
-func (f *Function) Floor(operand backends.Op) (backends.Op, error) {
+func (f *Function) Floor(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Floor", operand)
 	if err != nil {
 		return nil, err
@@ -126,7 +126,7 @@ func (f *Function) Floor(operand backends.Op) (backends.Op, error) {
 }
 
 // Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
-func (f *Function) Imag(operand backends.Op) (backends.Op, error) {
+func (f *Function) Imag(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Imag", operand)
 	if err != nil {
 		return nil, err
@@ -141,7 +141,7 @@ func (f *Function) Imag(operand backends.Op) (backends.Op, error) {
 // IsFinite tests whether each element of operand is finite, i.e., if it is not positive nor negative infinity, and it is not NaN.
 // It returns the same shape as the input, but with boolean values where each element is true if and only if
 // the corresponding input element is finite.
-func (f *Function) IsFinite(operand backends.Op) (backends.Op, error) {
+func (f *Function) IsFinite(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("IsFinite", operand)
 	if err != nil {
 		return nil, err
@@ -154,7 +154,7 @@ func (f *Function) IsFinite(operand backends.Op) (backends.Op, error) {
 }
 
 // Log returns the Op that represents the output of the corresponding operation.
-func (f *Function) Log(operand backends.Op) (backends.Op, error) {
+func (f *Function) Log(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Log", operand)
 	if err != nil {
 		return nil, err
@@ -167,7 +167,7 @@ func (f *Function) Log(operand backends.Op) (backends.Op, error) {
 }
 
 // Log1p returns the expression log(x+1).
-func (f *Function) Log1p(operand backends.Op) (backends.Op, error) {
+func (f *Function) Log1p(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Log1p", operand)
 	if err != nil {
 		return nil, err
@@ -180,7 +180,7 @@ func (f *Function) Log1p(operand backends.Op) (backends.Op, error) {
 }
 
 // LogicalNot returns the Op that represents the output of the corresponding operation.
-func (f *Function) LogicalNot(operand backends.Op) (backends.Op, error) {
+func (f *Function) LogicalNot(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("LogicalNot", operand)
 	if err != nil {
 		return nil, err
@@ -193,7 +193,7 @@ func (f *Function) LogicalNot(operand backends.Op) (backends.Op, error) {
 }
 
 // Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
-func (f *Function) Logistic(operand backends.Op) (backends.Op, error) {
+func (f *Function) Logistic(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Logistic", operand)
 	if err != nil {
 		return nil, err
@@ -206,7 +206,7 @@ func (f *Function) Logistic(operand backends.Op) (backends.Op, error) {
 }
 
 // Neg returns the Op that represents the output of the corresponding operation.
-func (f *Function) Neg(operand backends.Op) (backends.Op, error) {
+func (f *Function) Neg(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Neg", operand)
 	if err != nil {
 		return nil, err
@@ -219,7 +219,7 @@ func (f *Function) Neg(operand backends.Op) (backends.Op, error) {
 }
 
 // Real return the real part of a complex number. It returns x if the x is a float number.
-func (f *Function) Real(operand backends.Op) (backends.Op, error) {
+func (f *Function) Real(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Real", operand)
 	if err != nil {
 		return nil, err
@@ -233,7 +233,7 @@ func (f *Function) Real(operand backends.Op) (backends.Op, error) {
 
 // Round returns the Op that represents the output of the corresponding operation.
 // This operation rounds to the nearest even.
-func (f *Function) Round(operand backends.Op) (backends.Op, error) {
+func (f *Function) Round(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Round", operand)
 	if err != nil {
 		return nil, err
@@ -246,7 +246,7 @@ func (f *Function) Round(operand backends.Op) (backends.Op, error) {
 }
 
 // Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
-func (f *Function) Rsqrt(operand backends.Op) (backends.Op, error) {
+func (f *Function) Rsqrt(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Rsqrt", operand)
 	if err != nil {
 		return nil, err
@@ -259,7 +259,7 @@ func (f *Function) Rsqrt(operand backends.Op) (backends.Op, error) {
 }
 
 // Sign returns element-wise +1, +/-0 or -1 depending on the sign of x. It returns NaN if the input is NaN.
-func (f *Function) Sign(operand backends.Op) (backends.Op, error) {
+func (f *Function) Sign(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Sign", operand)
 	if err != nil {
 		return nil, err
@@ -272,7 +272,7 @@ func (f *Function) Sign(operand backends.Op) (backends.Op, error) {
 }
 
 // Sin returns the Op that represents the output of the corresponding operation.
-func (f *Function) Sin(operand backends.Op) (backends.Op, error) {
+func (f *Function) Sin(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Sin", operand)
 	if err != nil {
 		return nil, err
@@ -285,7 +285,7 @@ func (f *Function) Sin(operand backends.Op) (backends.Op, error) {
 }
 
 // Sqrt returns the Op that represents the output of the corresponding operation.
-func (f *Function) Sqrt(operand backends.Op) (backends.Op, error) {
+func (f *Function) Sqrt(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Sqrt", operand)
 	if err != nil {
 		return nil, err
@@ -298,7 +298,7 @@ func (f *Function) Sqrt(operand backends.Op) (backends.Op, error) {
 }
 
 // Tanh returns the Op that represents the output of the corresponding operation.
-func (f *Function) Tanh(operand backends.Op) (backends.Op, error) {
+func (f *Function) Tanh(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Tanh", operand)
 	if err != nil {
 		return nil, err
