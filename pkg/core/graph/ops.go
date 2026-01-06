@@ -96,7 +96,7 @@ func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distr
 	}
 	node = &Node{
 		graph:        g,
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		inputs:       nodeInputs,
 	}
@@ -145,7 +145,7 @@ func splitNode(multiOutputNode *Node) (splitNodes []*Node) {
 		}
 		inputNodes := []*Node{multiOutputNode}
 		node := &Node{
-			outputOps:    []backends.Op{op},
+			outputOps:    []backends.Value{op},
 			outputShapes: []shapes.Shape{multiOutputNode.outputShapes[ii]},
 			graph:        g,
 			inputs:       inputs,
@@ -202,7 +202,7 @@ func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 				"ConstTensor failed to create a local clone of the tensor in the graph"))
 		}
 	}
-	var result backends.Op
+	var result backends.Value
 	var err error
 	t.MustConstFlatData(func(flat any) {
 		result, err = g.mainFn.Constant(flat, nodeInputs.shape.Dimensions...)
@@ -212,7 +212,7 @@ func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 	}
 	node = &Node{
 		graph:        g,
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		inputs:       nodeInputs,
 	}

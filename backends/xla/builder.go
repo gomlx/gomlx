@@ -113,7 +113,7 @@ func (b *Builder) CheckValid() error {
 
 // verifyAndCastValues sanity checks that the values (backends.Op) are valid and created with this builder.
 // It returns the underlying *Node of the values.
-func (b *Builder) verifyAndCastValues(name string, values ...backends.Op) ([]*Node, error) {
+func (b *Builder) verifyAndCastValues(name string, values ...backends.Value) ([]*Node, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -140,7 +140,7 @@ func (b *Builder) verifyAndCastValues(name string, values ...backends.Op) ([]*No
 }
 
 // OpShape returns the shape of a computation Op.
-func (b *Builder) OpShape(op backends.Op) (shapes.Shape, error) {
+func (b *Builder) OpShape(op backends.Value) (shapes.Shape, error) {
 	if err := b.CheckValid(); err != nil {
 		return shapes.Invalid(), err
 	}
@@ -303,7 +303,7 @@ func broadcastShapeForBinaryOps(
 // converting them to Nodes in the process.
 func (b *Builder) broadcastForBinaryOps(
 	opType backends.OpType,
-	lhs, rhs backends.Op,
+	lhs, rhs backends.Value,
 ) (lhsNode, rhsNode *Node, err error) {
 	opName := opType.String()
 	nodes, err := b.verifyAndCastValues(opName, lhs, rhs)

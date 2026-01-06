@@ -76,7 +76,7 @@ func adjustAxisToRank(rank, axis int) (int, error) {
 // node with normalized inputs. Finally, it reshapes back to the final result.
 //
 // See execDotGeneral for the implementation.
-func (f *Function) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Op, rhsContractingAxes, rhsBatchAxes []int) (backends.Op, error) {
+func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Value, rhsContractingAxes, rhsBatchAxes []int) (backends.Value, error) {
 	inputs, err := f.builder.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
@@ -305,13 +305,13 @@ func log2int(x int) int {
 // In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
 // matrix/matrix multiplications.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (f *Function) Dot(lhsOp, rhsOp backends.Op) (backends.Op, error) {
+func (f *Function) Dot(lhsOp, rhsOp backends.Value) (backends.Value, error) {
 	inputs, err := f.builder.checkOps(backends.OpTypeDot.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
 	}
 	lhs, rhs := inputs[0], inputs[1]
-	var output backends.Op
+	var output backends.Value
 	switch {
 	case lhs.shape.Rank() == 1 && rhs.shape.Rank() == 1:
 		// Contracting both vectors.

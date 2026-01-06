@@ -29,7 +29,7 @@ type DotGeneralConfig struct {
 // It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
-func (f *Function) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhs backends.Op, rhsContractingAxes []int, rhsBatchAxes []int) (backends.Op, error) {
+func (f *Function) DotGeneral(lhs backends.Value, lhsContractingAxes, lhsBatchAxes []int, rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Dot", lhs, rhs)
 	if err != nil {
 		return nil, err

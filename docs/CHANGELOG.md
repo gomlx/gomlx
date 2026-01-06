@@ -2,6 +2,9 @@
 
 # Next
 
+- Package `backends`: major refactoring to add support for functions/closures.
+  - Added `backends.Function`, which now holds all the "ops" methods.
+  - Renamed `backends.Op` -> `backends.Value`.
 - Package `simplego`:
   - Added `Float16` support (thx @timkaye11) 
   - Added dedup of computation nodes (aka. "common subexpression elimination" CSE) (thx @timkaye11)

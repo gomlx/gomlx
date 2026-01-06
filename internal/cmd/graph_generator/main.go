@@ -92,34 +92,34 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			}
 			mi.Inputs = append(mi.Inputs, pi)
 			switch pi.BackendType {
-			case "Op":
-				pi.BackendType = "backends.Op"
+			case "Value":
+				pi.BackendType = "backends.Value"
 				pi.GraphType = "*Node"
 				pi.ConvertStatement = fmt.Sprintf("%s.outputOps[0]", param.Name)
 				mi.OpInputs = append(mi.OpInputs, param.Name)
 				pi.Format = "[#%d]"
 				pi.FormatValue = fmt.Sprintf("ni.%s.Id()", param.Name)
-			case "...Op":
-				pi.BackendType = "...backends.Op"
+			case "...Value":
+				pi.BackendType = "...backends.Value"
 				pi.GraphType = "...*Node"
 				mi.OpInputSlices = append(mi.OpInputSlices, param.Name)
 				pi.NodeInputType = "[]*Node"
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
 				pi.ConvertStatement = fmt.Sprintf(
-					"xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })...", param.Name)
+					"xslices.Map(%s, func(node *Node) backends.Value { return node.outputOps[0] })...", param.Name)
 				pi.Format = "[#%s]"
 				pi.FormatValue = fmt.Sprintf(
 					`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
 					param.Name,
 				)
-			case "[]Op":
-				pi.BackendType = "[]backends.Op"
+			case "[]Value":
+				pi.BackendType = "[]backends.Value"
 				pi.GraphType = "[]*Node"
 				mi.OpInputSlices = append(mi.OpInputSlices, param.Name)
 				pi.NodeInputType = "[]*Node"
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
 				pi.ConvertStatement = fmt.Sprintf(
-					"xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })", param.Name)
+					"xslices.Map(%s, func(node *Node) backends.Value { return node.outputOps[0] })", param.Name)
 				pi.Format = "[#%s]"
 				pi.FormatValue = fmt.Sprintf(
 					`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
@@ -177,9 +177,9 @@ func buildMethodInfo() (methods []*MethodInfo) {
 		}
 		for _, output := range raw.Outputs[:len(raw.Outputs)-1] { // Skip the error.
 			switch output.Type {
-			case "Op":
+			case "Value":
 				mi.OutputNames = append(mi.OutputNames, output.Name)
-			case "[]Op":
+			case "[]Value":
 				mi.OutputNames = append(mi.OutputNames, output.Name)
 				mi.IsOutputSlice = true
 			default:
@@ -329,7 +329,7 @@ Convert result(s) to node(s):
 		panic(err)
 	}
 	node := &Node{
-		outputOps: []backends.Op{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}} },
+		outputOps: []backends.Value{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}} },
 		outputShapes: []shapes.Shape{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}mustNoError(g.builder.OpShape(v{{$ii}})){{end}} },
 {{- else if .IsOutputSlice}}
 {{- /* Version with output slice: */}}
@@ -340,7 +340,7 @@ Convert result(s) to node(s):
 	node := &Node{
 		outputOps: results,
 		outputShapes: xslices.Map(results,
-			func (op backends.Op) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
+			func (op backends.Value) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
 {{- else}}
 {{- /* Version with single output: - node already defined. */}}
 	result, err := g.mainFn.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
@@ -348,7 +348,7 @@ Convert result(s) to node(s):
 		panic(err)
 	}
 	node = &Node{
-		outputOps: []backends.Op{result},
+		outputOps: []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 {{- end}}
 {{- /* Rest of node definition */}}

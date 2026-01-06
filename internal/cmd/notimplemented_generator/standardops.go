@@ -51,7 +51,7 @@ import (
 {{- range .Comments}}
 {{.}}
 {{- end}}
-func (f Function) {{.Name}}({{range .Parameters}}{{.Name}} {{.Type}},{{end}}) (backends.Op, error) {
+func (f Function) {{.Name}}({{range .Parameters}}{{.Name}} {{.Type}},{{end}}) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpType{{.Name}})
 }
 {{end}}
@@ -66,25 +66,26 @@ func GenerateStandardOpsInterface(methods []backendparser.Method) {
 		if methodsExcluded.Has(method.Name) || methodsNotGenerated.Has(method.Name) {
 			continue
 		}
-		if len(method.Outputs) != 2 || method.Outputs[0].Type != "Op" || method.Outputs[1].Type != "error" {
+		if len(method.Outputs) != 2 || method.Outputs[0].Type != "Value" || method.Outputs[1].Type != "error" {
 			// Non-conventional op, skipping.
 			continue
 		}
 		for i := range method.Parameters {
 			pi := &method.Parameters[i]
-			if pi.Type == "Op" {
-				pi.Type = "backends.Op"
-			} else if pi.Type == "...Op" {
-				pi.Type = "...backends.Op"
-			} else if pi.Type == "[]Op" {
-				pi.Type = "[]backends.Op"
-			} else if pi.Type == "Shape" {
+			switch pi.Type {
+			case "Value":
+				pi.Type = "backends.Value"
+			case "...Value":
+				pi.Type = "...backends.Value"
+			case "[]Value":
+				pi.Type = "[]backends.Value"
+			case "Shape":
 				pi.Type = "shapes.Shape"
-			} else if pi.Type == "xla_data.FftType" || pi.Type == "FFTType" {
+			case "xla_data.FftType", "FFTType":
 				pi.Type = "backends.FFTType"
-			} else if pi.Type == "ConvolveAxesConfig" {
+			case "ConvolveAxesConfig":
 				pi.Type = "backends.ConvolveAxesConfig"
-			} else if pi.Type == "...PadAxis" {
+			case "...PadAxis":
 				pi.Type = "...backends.PadAxis"
 			}
 		}

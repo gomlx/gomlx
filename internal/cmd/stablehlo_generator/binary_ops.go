@@ -21,13 +21,13 @@ func IsBinaryOp(method backendparser.Method) bool {
 	if len(method.Parameters) != 2 {
 		return false
 	}
-	if method.Parameters[0].Type != "Op" || method.Parameters[1].Type != "Op" {
+	if method.Parameters[0].Type != "Value" || method.Parameters[1].Type != "Value" {
 		return false
 	}
 	if BinaryOpsToExclude.Has(method.Name) {
 		return false
 	}
-	if len(method.Outputs) != 2 || method.Outputs[0].Type != "Op" || method.Outputs[1].Type != "error" {
+	if len(method.Outputs) != 2 || method.Outputs[0].Type != "Value" || method.Outputs[1].Type != "error" {
 		return false
 	}
 	return true
@@ -72,7 +72,7 @@ import (
 {{- range .Method.Comments}}
 {{.}}
 {{- end}}
-func (f *Function) {{.Method.Name}}(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) {{.Method.Name}}(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpType{{.Method.Name}}, lhs, rhs)
 	if err != nil {
 		return nil, err

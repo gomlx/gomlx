@@ -74,12 +74,12 @@ func GenerateSingleOp(method backendparser.Method) {
 			// This parameter will use the same type as the next one, no need to repeat it here.
 			continue
 		}
-		if param.Type == "Op" {
-			w(" backends.Op")
-		} else if param.Type == "...Op" {
-			w(" ...backends.Op")
-		} else if param.Type == "[]Op" {
-			w(" []backends.Op")
+		if param.Type == "Value" {
+			w(" backends.Value")
+		} else if param.Type == "...Value" {
+			w(" ...backends.Value")
+		} else if param.Type == "[]Value" {
+			w(" []backends.Value")
 		} else {
 			w(" %s", param.Type)
 		}
@@ -95,8 +95,8 @@ func GenerateSingleOp(method backendparser.Method) {
 				w(", ")
 			}
 			outputType := output.Type
-			if outputType == "Op" {
-				outputType = "backends.Op"
+			if outputType == "Value" {
+				outputType = "backends.Value"
 			}
 			if output.Name == "" {
 				w("%s", outputType)
@@ -129,7 +129,7 @@ func GenerateSingleOp(method backendparser.Method) {
 		if i > 0 {
 			w(", ")
 		}
-		if param.Type == "Op" {
+		if param.Type == "Value" {
 			w("%sNode.value", param.Name)
 		} else {
 			w("%s", param.Name)

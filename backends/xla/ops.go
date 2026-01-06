@@ -25,7 +25,7 @@ func adjustAxisToRank(axis, rank int) (int, error) {
 
 // Identity returns an Op whose output is the same as its input.
 // It's a no-op that can serve as a place-holder.
-func (f *Function) Identity(x backends.Op) (backends.Op, error) {
+func (f *Function) Identity(x backends.Value) (backends.Value, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (f *Function) Identity(x backends.Op) (backends.Op, error) {
 //     will generate output
 //     {{1 , 1},
 //     {2 , 2}}
-func (f *Function) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadcastAxes []int) (backends.Op, error) {
+func (f *Function) BroadcastInDim(x backends.Value, outputShape shapes.Shape, broadcastAxes []int) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("BroadcastInDim", x)
 	if err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func (f *Function) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broad
 }
 
 // Iota implements backends.Function interface.
-func (f *Function) Iota(shape shapes.Shape, iotaAxis int) (backends.Op, error) {
+func (f *Function) Iota(shape shapes.Shape, iotaAxis int) (backends.Value, error) {
 	value, err := f.fn.Iota(ShapeToXLA(shape), iotaAxis)
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (f *Function) Iota(shape shapes.Shape, iotaAxis int) (backends.Op, error) {
 }
 
 // Reshape implements backends.Function interface.
-func (f *Function) Reshape(x backends.Op, dimensions ...int) (backends.Op, error) {
+func (f *Function) Reshape(x backends.Value, dimensions ...int) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Reshape", x)
 	if err != nil {
 		return nil, err
@@ -90,7 +90,7 @@ func (f *Function) Reshape(x backends.Op, dimensions ...int) (backends.Op, error
 }
 
 // Slice implements backends.Function interface.
-func (f *Function) Slice(x backends.Op, starts, limits, strides []int) (backends.Op, error) {
+func (f *Function) Slice(x backends.Value, starts, limits, strides []int) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Slice", x)
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func compareTypeForDType(dtype dtypes.DType) stablehlotypes.ComparisonType {
 }
 
 // comparison generic operation.
-func (f *Function) comparison(opType backends.OpType, lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) comparison(opType backends.OpType, lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(opType, lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -171,37 +171,37 @@ func (f *Function) comparison(opType backends.OpType, lhs, rhs backends.Op) (bac
 
 // Equal returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
-func (f *Function) Equal(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) Equal(lhs, rhs backends.Value) (backends.Value, error) {
 	return f.comparison(backends.OpTypeEqual, lhs, rhs)
 }
 
 // NotEqual returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
-func (f *Function) NotEqual(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) NotEqual(lhs, rhs backends.Value) (backends.Value, error) {
 	return f.comparison(backends.OpTypeNotEqual, lhs, rhs)
 }
 
 // GreaterThan returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
-func (f *Function) GreaterThan(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) GreaterThan(lhs, rhs backends.Value) (backends.Value, error) {
 	return f.comparison(backends.OpTypeGreaterThan, lhs, rhs)
 }
 
 // GreaterOrEqual returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
-func (f *Function) GreaterOrEqual(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) GreaterOrEqual(lhs, rhs backends.Value) (backends.Value, error) {
 	return f.comparison(backends.OpTypeGreaterOrEqual, lhs, rhs)
 }
 
 // LessThan returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
-func (f *Function) LessThan(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) LessThan(lhs, rhs backends.Value) (backends.Value, error) {
 	return f.comparison(backends.OpTypeLessThan, lhs, rhs)
 }
 
 // LessOrEqual returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
-func (f *Function) LessOrEqual(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) LessOrEqual(lhs, rhs backends.Value) (backends.Value, error) {
 	return f.comparison(backends.OpTypeLessOrEqual, lhs, rhs)
 }
 
@@ -209,7 +209,7 @@ func (f *Function) LessOrEqual(lhs, rhs backends.Op) (backends.Op, error) {
 // Standard broadcasting rules apply (see documentation).
 //
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func (f *Function) EqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) EqualTotalOrder(lhs, rhs backends.Value) (backends.Value, error) {
 	return f.comparison(backends.OpTypeEqualTotalOrder, lhs, rhs)
 }
 
@@ -217,7 +217,7 @@ func (f *Function) EqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
 // Standard broadcasting rules apply (see documentation).
 //
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func (f *Function) NotEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) NotEqualTotalOrder(lhs, rhs backends.Value) (backends.Value, error) {
 	return f.comparison(backends.OpTypeNotEqualTotalOrder, lhs, rhs)
 }
 
@@ -225,7 +225,7 @@ func (f *Function) NotEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error)
 // Standard broadcasting rules apply (see documentation).
 //
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func (f *Function) GreaterThanTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) GreaterThanTotalOrder(lhs, rhs backends.Value) (backends.Value, error) {
 	return f.comparison(backends.OpTypeGreaterThanTotalOrder, lhs, rhs)
 }
 
@@ -233,7 +233,7 @@ func (f *Function) GreaterThanTotalOrder(lhs, rhs backends.Op) (backends.Op, err
 // Standard broadcasting rules apply (see documentation).
 //
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func (f *Function) GreaterOrEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) GreaterOrEqualTotalOrder(lhs, rhs backends.Value) (backends.Value, error) {
 	return f.comparison(backends.OpTypeGreaterOrEqualTotalOrder, lhs, rhs)
 }
 
@@ -241,7 +241,7 @@ func (f *Function) GreaterOrEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, 
 // Standard broadcasting rules apply (see documentation).
 //
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func (f *Function) LessThanTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) LessThanTotalOrder(lhs, rhs backends.Value) (backends.Value, error) {
 	return f.comparison(backends.OpTypeLessThanTotalOrder, lhs, rhs)
 }
 
@@ -249,14 +249,14 @@ func (f *Function) LessThanTotalOrder(lhs, rhs backends.Op) (backends.Op, error)
 // Standard broadcasting rules apply (see documentation).
 //
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func (f *Function) LessOrEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) LessOrEqualTotalOrder(lhs, rhs backends.Value) (backends.Value, error) {
 	return f.comparison(backends.OpTypeLessOrEqualTotalOrder, lhs, rhs)
 }
 
 // Abs returns the Op that represents the output of the corresponding operation.
 //
 // It is special-cased here because StableHLO doesn't define the Abs() of complex numbers.
-func (f *Function) Abs(operand backends.Op) (backends.Op, error) {
+func (f *Function) Abs(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Abs", operand)
 	if err != nil {
 		return nil, err
@@ -298,7 +298,7 @@ func (f *Function) Abs(operand backends.Op) (backends.Op, error) {
 }
 
 // Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
-func (f *Function) Conj(operand backends.Op) (backends.Op, error) {
+func (f *Function) Conj(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Conj", operand)
 	if err != nil {
 		return nil, err
@@ -335,13 +335,13 @@ func (f *Function) Conj(operand backends.Op) (backends.Op, error) {
 // The contracted dimensions of x0 and x1 must be of the same size.
 // In practice, it can be used to perform dot products between vectors, vector/matrix multiplications, or
 // matrix/matrix multiplications.
-func (f *Function) Dot(lhs, rhs backends.Op) (backends.Op, error) {
+func (f *Function) Dot(lhs, rhs backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Dot", lhs, rhs)
 	if err != nil {
 		return nil, err
 	}
 	lhsNode, rhsNode := nodes[0], nodes[1]
-	var output backends.Op
+	var output backends.Value
 	if lhsNode.shape.Rank() == 1 && rhsNode.shape.Rank() == 1 {
 		// Contracting both vectors.
 		output, err = f.DotGeneral(lhsNode, []int{0}, []int{}, rhsNode, []int{0}, []int{})
@@ -366,7 +366,7 @@ func (f *Function) Dot(lhs, rhs backends.Op) (backends.Op, error) {
 // Clamp returns the element-wise clamping operation.
 //
 // The values max and min can either be a scalar or have the same shape as x.
-func (f *Function) Clamp(min, a backends.Op, max backends.Op) (backends.Op, error) {
+func (f *Function) Clamp(min, a backends.Value, max backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Clamp", min, a, max)
 	if err != nil {
 		return nil, err
@@ -385,7 +385,7 @@ func (f *Function) Clamp(min, a backends.Op, max backends.Op) (backends.Op, erro
 //
 // Notice GoMLX backend Gather operation doesn't support batching axes, which StableHLO does.
 // For compatibility, we simply leave them empty.
-func (f *Function) Gather(operand, startIndices backends.Op, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) (backends.Op, error) {
+func (f *Function) Gather(operand, startIndices backends.Value, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Gather", operand, startIndices)
 	if err != nil {
 		return nil, err
@@ -407,7 +407,7 @@ func (f *Function) Gather(operand, startIndices backends.Op, indexVectorAxis int
 // All axes that are not being concatenated must match dimensions, except on the axes being concatenated.
 // It doesn't work with scalars -- use ExpandAxes.
 // If there is only one operand, it is returned and this is a no-op.
-func (f *Function) Concatenate(axis int, operands ...backends.Op) (backends.Op, error) {
+func (f *Function) Concatenate(axis int, operands ...backends.Value) (backends.Value, error) {
 	operandsNodes, err := f.verifyAndCastValues("Concatenate", operands...)
 	if err != nil {
 		return nil, err
@@ -424,7 +424,7 @@ func (f *Function) Concatenate(axis int, operands ...backends.Op) (backends.Op, 
 }
 
 // Where implements backends.Function interface.
-func (f *Function) Where(condition, onTrue, onFalse backends.Op) (backends.Op, error) {
+func (f *Function) Where(condition, onTrue, onFalse backends.Value) (backends.Value, error) {
 	operandsNodes, err := f.verifyAndCastValues("Where", condition, onTrue, onFalse)
 	if err != nil {
 		return nil, err
@@ -464,7 +464,7 @@ func (f *Function) Where(condition, onTrue, onFalse backends.Op) (backends.Op, e
 }
 
 // IsNaN implements backends.Function interface.
-func (f *Function) IsNaN(x backends.Op) (backends.Op, error) {
+func (f *Function) IsNaN(x backends.Value) (backends.Value, error) {
 	result, err := f.NotEqual(x, x)
 	if err != nil {
 		return nil, errors.WithMessage(err, "while building op IsNaN")
@@ -473,7 +473,7 @@ func (f *Function) IsNaN(x backends.Op) (backends.Op, error) {
 }
 
 // Bitcast implements backends.Function interface.
-func (f *Function) Bitcast(x backends.Op, targetDType dtypes.DType) (backends.Op, error) {
+func (f *Function) Bitcast(x backends.Value, targetDType dtypes.DType) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Bitcast", x)
 	if err != nil {
 		return nil, err
@@ -487,7 +487,7 @@ func (f *Function) Bitcast(x backends.Op, targetDType dtypes.DType) (backends.Op
 
 // Transpose implements backends.Function interface.
 // It transposes input tensor x according to the given permutation axes.
-func (f *Function) Transpose(x backends.Op, permutation ...int) (backends.Op, error) {
+func (f *Function) Transpose(x backends.Value, permutation ...int) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Transpose", x)
 	if err != nil {
 		return nil, err
@@ -504,7 +504,7 @@ func (f *Function) Transpose(x backends.Op, permutation ...int) (backends.Op, er
 // It takes as input a state (usually [3]uint64) and returns the updated state and the generated values (with random bits).
 //
 // Currently, the backend only supports the Philox algorithm. See https://dl.acm.org/doi/10.1145/2063384.2063405
-func (f *Function) RNGBitGenerator(state backends.Op, shape shapes.Shape) (newState backends.Op, values backends.Op, err error) {
+func (f *Function) RNGBitGenerator(state backends.Value, shape shapes.Shape) (newState backends.Value, values backends.Value, err error) {
 	nodes, err := f.verifyAndCastValues("RNGBitGenerator", state)
 	if err != nil {
 		return nil, nil, err
@@ -521,7 +521,7 @@ func (f *Function) RNGBitGenerator(state backends.Op, shape shapes.Shape) (newSt
 }
 
 // ConvertDType implements backends.Function interface.
-func (f *Function) ConvertDType(x backends.Op, dtype dtypes.DType) (backends.Op, error) {
+func (f *Function) ConvertDType(x backends.Value, dtype dtypes.DType) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("ConvertDType", x)
 	if err != nil {
 		return nil, err
@@ -536,7 +536,7 @@ func (f *Function) ConvertDType(x backends.Op, dtype dtypes.DType) (backends.Op,
 // Pad injects padding on the start, end, or interior (in between each element) of the given operand.
 // There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
-func (f *Function) Pad(x, fillValue backends.Op, axesConfig ...backends.PadAxis) (backends.Op, error) {
+func (f *Function) Pad(x, fillValue backends.Value, axesConfig ...backends.PadAxis) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("ConvertDType", x, fillValue)
 	if err != nil {
 		return nil, err
@@ -564,9 +564,9 @@ func (f *Function) Pad(x, fillValue backends.Op, axesConfig ...backends.PadAxis)
 }
 
 // ConvGeneral implements the backends.Function interface.
-func (f *Function) ConvGeneral(input, kernel backends.Op,
+func (f *Function) ConvGeneral(input, kernel backends.Value,
 	axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int,
-	inputDilations, kernelDilations []int, channelGroupCount, batchGroupCount int) (backends.Op, error) {
+	inputDilations, kernelDilations []int, channelGroupCount, batchGroupCount int) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("ConvGeneral", input, kernel)
 	if err != nil {
 		return nil, err
@@ -586,7 +586,7 @@ func (f *Function) ConvGeneral(input, kernel backends.Op,
 }
 
 // Reverse implements the backends.Function interface.
-func (f *Function) Reverse(x backends.Op, axes ...int) (backends.Op, error) {
+func (f *Function) Reverse(x backends.Value, axes ...int) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Reverse", x)
 	if err != nil {
 		return nil, err
@@ -602,7 +602,7 @@ func (f *Function) Reverse(x backends.Op, axes ...int) (backends.Op, error) {
 // FFT implements the Fast Fourier Transform operation.
 // fftType specifies the type of FFT operation to perform.
 // fftLength specifies the length of the transform for each axis.
-func (f *Function) FFT(x backends.Op, fftType backends.FFTType, fftLength []int) (backends.Op, error) {
+func (f *Function) FFT(x backends.Value, fftType backends.FFTType, fftLength []int) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("FFT", x)
 	if err != nil {
 		return nil, err
@@ -652,8 +652,8 @@ func (f *Function) extractStartIndexValues(startIndexNodes []*Node, rank int) ([
 //	adjustedStartIndices[i] = clamp(0, StartIndices[i], operand.Dimensions[i] - sliceSizes[i])
 //
 // See description in https://openxla.org/xla/operation_semantics#dynamicslice
-func (f *Function) DynamicSlice(operand backends.Op, startIndices []backends.Op, sliceDims []int) (backends.Op, error) {
-	nodes, err := f.verifyAndCastValues("DynamicSlice", append([]backends.Op{operand}, startIndices...)...)
+func (f *Function) DynamicSlice(operand backends.Value, startIndices []backends.Value, sliceDims []int) (backends.Value, error) {
+	nodes, err := f.verifyAndCastValues("DynamicSlice", append([]backends.Value{operand}, startIndices...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -681,8 +681,8 @@ func (f *Function) DynamicSlice(operand backends.Op, startIndices []backends.Op,
 // The startIndices are adjusted as follows:
 //
 //	adjustedStartIndices[i] = clamp(0, StartIndices[i], operand.Dimensions[i] - update.Dimensions[i])
-func (f *Function) DynamicUpdateSlice(operand, update backends.Op, startIndices []backends.Op) (backends.Op, error) {
-	nodes, err := f.verifyAndCastValues("DynamicUpdateSlice", append([]backends.Op{operand, update}, startIndices...)...)
+func (f *Function) DynamicUpdateSlice(operand, update backends.Value, startIndices []backends.Value) (backends.Value, error) {
+	nodes, err := f.verifyAndCastValues("DynamicUpdateSlice", append([]backends.Value{operand, update}, startIndices...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -700,7 +700,7 @@ func (f *Function) DynamicUpdateSlice(operand, update backends.Op, startIndices 
 }
 
 // BatchNormForInference implements backends.Function interface.
-func (f *Function) BatchNormForInference(input, scale, offset, mean, variance backends.Op, epsilon float32, featureAxis int) (backends.Op, error) {
+func (f *Function) BatchNormForInference(input, scale, offset, mean, variance backends.Value, epsilon float32, featureAxis int) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("BatchNormForInference", input, scale, offset, mean, variance)
 	if err != nil {
 		return nil, err
@@ -714,7 +714,7 @@ func (f *Function) BatchNormForInference(input, scale, offset, mean, variance ba
 }
 
 // BatchNormForTraining implements backends.Function interface.
-func (f *Function) BatchNormForTraining(input, scale, offset backends.Op, epsilon float32, featureAxis int) (output, batchMean, batchVar backends.Op, err error) {
+func (f *Function) BatchNormForTraining(input, scale, offset backends.Value, epsilon float32, featureAxis int) (output, batchMean, batchVar backends.Value, err error) {
 	nodes, err := f.verifyAndCastValues("BatchNormForTraining", input, scale, offset)
 	if err != nil {
 		return nil, nil, nil, err
@@ -728,7 +728,7 @@ func (f *Function) BatchNormForTraining(input, scale, offset backends.Op, epsilo
 }
 
 // BatchNormGradient implements backends.Function interface.
-func (f *Function) BatchNormGradient(gradOutput, input, scale, mean, variance backends.Op, epsilon float32, featureAxis int) (gradInput, gradScale, gradOffset backends.Op, err error) {
+func (f *Function) BatchNormGradient(gradOutput, input, scale, mean, variance backends.Value, epsilon float32, featureAxis int) (gradInput, gradScale, gradOffset backends.Value, err error) {
 	nodes, err := f.verifyAndCastValues("BatchNormGradient", gradOutput, input, scale, mean, variance)
 	if err != nil {
 		return nil, nil, nil, err

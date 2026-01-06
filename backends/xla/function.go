@@ -41,7 +41,7 @@ func (f *Function) CheckValid() error {
 
 // verifyAndCastValues sanity checks that the values (backends.Op) are valid and created with this builder.
 // It returns the underlying *Node of the values.
-func (f *Function) verifyAndCastValues(name string, values ...backends.Op) ([]*Node, error) {
+func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([]*Node, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (f *Function) newNode(value *stablehlo.Value) *Node {
 
 // Parameter creates an input parameter for this function.
 func (f *Function) Parameter(name string, shape shapes.Shape, sharding *backends.ShardingSpec) (
-	backends.Op, error) {
+	backends.Value, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (f *Function) Parameter(name string, shape shapes.Shape, sharding *backends
 }
 
 // Constant creates a constant in the function with the given flat values and the shape defined by the dimensions.
-func (f *Function) Constant(flat any, dimensions ...int) (backends.Op, error) {
+func (f *Function) Constant(flat any, dimensions ...int) (backends.Value, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (f *Function) Constant(flat any, dimensions ...int) (backends.Op, error) {
 }
 
 // Return marks the outputs of this function.
-func (f *Function) Return(outputs []backends.Op, shardings []*backends.ShardingSpec) error {
+func (f *Function) Return(outputs []backends.Value, shardings []*backends.ShardingSpec) error {
 	if err := f.CheckValid(); err != nil {
 		return err
 	}

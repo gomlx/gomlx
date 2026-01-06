@@ -19,8 +19,8 @@ func scatterOpToReduceOp(opType backends.OpType) backends.OpType {
 }
 
 func (f *Function) scatter(opType backends.OpType,
-	operandOp, scatterIndicesOp, updatesOp backends.Op, indexVectorAxis int, updateWindowAxes,
-	insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Op, error) {
+	operandOp, scatterIndicesOp, updatesOp backends.Value, indexVectorAxis int, updateWindowAxes,
+	insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues(opType.String(), operandOp, scatterIndicesOp, updatesOp)
 	if err != nil {
 		return nil, err
@@ -51,22 +51,22 @@ func (f *Function) scatter(opType backends.OpType,
 }
 
 // ScatterMax scatter values from updates pointed by scatterIndices to operand, by taking the Max.
-func (f *Function) ScatterMax(operand, scatterIndices, updates backends.Op, indexVectorAxis int,
-	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Op, error) {
+func (f *Function) ScatterMax(operand, scatterIndices, updates backends.Value, indexVectorAxis int,
+	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Value, error) {
 	return f.scatter(backends.OpTypeScatterMax,
 		operand, scatterIndices, updates, indexVectorAxis,
 		updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
 }
 
 // ScatterMin scatter values from updates pointed by scatterIndices to operand, by taking the Min.
-func (f *Function) ScatterMin(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Op, error) {
+func (f *Function) ScatterMin(operand, scatterIndices, updates backends.Value, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Value, error) {
 	return f.scatter(backends.OpTypeScatterMin,
 		operand, scatterIndices, updates, indexVectorAxis,
 		updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
 }
 
 // ScatterSum values from updates pointed by scatterIndices to operand.
-func (f *Function) ScatterSum(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Op, error) {
+func (f *Function) ScatterSum(operand, scatterIndices, updates backends.Value, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Value, error) {
 	return f.scatter(backends.OpTypeScatterSum,
 		operand, scatterIndices, updates, indexVectorAxis,
 		updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)

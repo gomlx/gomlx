@@ -21,13 +21,13 @@ func IsUnaryOp(method backendparser.Method) bool {
 	if len(method.Parameters) != 1 {
 		return false
 	}
-	if method.Parameters[0].Type != "Op" {
+	if method.Parameters[0].Type != "Value" {
 		return false
 	}
 	if UnaryOpsToExclude.Has(method.Name) {
 		return false
 	}
-	if len(method.Outputs) != 2 || method.Outputs[0].Type != "Op" || method.Outputs[1].Type != "error" {
+	if len(method.Outputs) != 2 || method.Outputs[0].Type != "Value" || method.Outputs[1].Type != "error" {
 		return false
 	}
 	return true
@@ -68,7 +68,7 @@ import (
 {{- range .Method.Comments}}
 {{.}}
 {{- end}}
-func (f *Function) {{.Method.Name}}(operand backends.Op) (backends.Op, error) {
+func (f *Function) {{.Method.Name}}(operand backends.Value) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("{{.Method.Name}}", operand)
 	if err != nil {
 		return nil, err
