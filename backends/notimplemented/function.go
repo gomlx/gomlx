@@ -24,6 +24,18 @@ func (f Function) baseErrFn(op backends.OpType) error {
 	return f.ErrFn(op)
 }
 
+func (f Function) Name() string {
+	return backends.MainName
+}
+
+func (f Function) Parent() backends.Function {
+	return nil
+}
+
+func (f Function) Closure() (backends.Function, error) {
+	return nil, f.baseErrFn(backends.OpTypeInvalid)
+}
+
 func (f Function) Parameter(name string, shape shapes.Shape, spec *backends.ShardingSpec) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeParameter)
 }
