@@ -360,7 +360,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 		return
 	}
 
-	// Reset dotGeneralForceExecutionPath at exit.
+	// Reset dotGeneralForceExecutionPath at exit to default (auto-select).
 	defer func() {
 		goBackend.dotGeneralForceExecutionPath = autoSelectPath
 	}()
@@ -684,7 +684,7 @@ func TestDotGeneral_PreBlockedCorrectness(t *testing.T) {
 		return graph.DotGeneral(lhs, []int{1}, nil, rhs, []int{0}, nil)
 	}, lhs, rhs)
 
-	// Reset
+	// Reset to default (auto-select)
 	goBackend.dotGeneralForceExecutionPath = autoSelectPath
 
 	// Compare results

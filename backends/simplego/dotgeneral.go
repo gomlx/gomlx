@@ -25,6 +25,9 @@ type dotGeneralNodeData struct {
 	rhsContractingAxes, rhsBatchAxes                       []int
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int
 	lhsBlockedShape, rhsBlockedShape, outputBlockedShape   shapes.Shape
+
+	// execPath determines which execution strategy to use. Decided at graph-build time.
+	execPath dotGeneralExecutionPath
 }
 
 // EqualNodeData implements nodeDataComparable for dotGeneralNodeData.
@@ -33,7 +36,8 @@ func (d *dotGeneralNodeData) EqualNodeData(other nodeDataComparable) bool {
 	if d.batchSize != o.batchSize ||
 		d.lhsCrossSize != o.lhsCrossSize ||
 		d.rhsCrossSize != o.rhsCrossSize ||
-		d.contractingSize != o.contractingSize {
+		d.contractingSize != o.contractingSize ||
+		d.execPath != o.execPath {
 		return false
 	}
 	return slices.Equal(d.lhsContractingAxes, o.lhsContractingAxes) &&
@@ -173,10 +177,25 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	}
 	params.outputBlockedShape = dgCreateBlockedShape(outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
 
+	// Select execution path at build time based on problem size.
+	// This enables proper deduplication of pre-blocked inputs via getOrCreateNode.
+	params.execPath = dgSelectExecPath(b.backend, dtype, params.lhsCrossSize, params.rhsCrossSize)
+
+	// Prepare inputs for the DotGeneral node.
+	var lhsInput, rhsInput *Node = lhs, rhs
+
+	// For blockedPath, pre-block BOTH inputs at graph-build time.
+	// This allows deduplication: if the same tensor is used in multiple DotGenerals,
+	// the blocking is done once and shared.
+	if params.execPath == blockedPath {
+		lhsInput = b.blockForDotGeneral(lhs, params.lhsContractingAxes, params.lhsBatchAxes,
+			params.batchSize, params.lhsCrossSize, params.contractingSize)
+		rhsInput = b.blockForDotGeneral(rhs, params.rhsContractingAxes, params.rhsBatchAxes,
+			params.batchSize, params.rhsCrossSize, params.contractingSize)
+	}
+
 	// Create dot-general node: it will generate a normalized output [batchSize, lhsCrossSize, rhsCrossSize].
-	// Note: Pre-blocking of inputs (via BlockForDotGeneral op) can be done explicitly by the caller
-	// for performance optimization. This will be integrated with a future MatMul op.
-	dotGeneral, _ := b.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), []*Node{lhs, rhs}, &params)
+	dotGeneral, _ := b.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), []*Node{lhsInput, rhsInput}, &params)
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))
@@ -226,84 +245,96 @@ func dgFindSizes(shape shapes.Shape, contractingAxes, batchAxes []int) (batchSiz
 }
 
 // dotGeneralExecutionPath indicates which execution strategy to use for DotGeneral.
+// Path selection happens at graph-build time in DotGeneral(), not at execution time.
 type dotGeneralExecutionPath int
 
 const (
-	// autoSelectPath lets execDotGeneral choose based on matrix size
+	// autoSelectPath means the execution path should be auto-selected based on matrix size.
+	// This is used only for backend.dotGeneralForceExecutionPath; never stored in params.execPath.
 	autoSelectPath dotGeneralExecutionPath = iota
-	// normalizedPath forces use of the normalized transpose path
+	// normalizedPath uses the normalized transpose path (small matrices)
 	normalizedPath
-	// blockedPath forces use of execDotGeneralBlocked (cache-tiled algorithm)
+	// blockedPath uses execDotGeneralBlocked (cache-tiled algorithm, large matrices)
 	blockedPath
 	// checkPath runs both paths and compares outputs (for debugging)
 	checkPath
 )
 
-// execDotGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
+// dgSelectExecPath selects the execution path based on problem size and backend configuration.
+// Called at graph-build time from DotGeneral().
+func dgSelectExecPath(backend *Backend, dtype dtypes.DType, lhsCrossSize, rhsCrossSize int) dotGeneralExecutionPath {
+	// If a specific path is forced via backend config, use that.
+	if backend.dotGeneralForceExecutionPath != autoSelectPath {
+		return backend.dotGeneralForceExecutionPath
+	}
+
+	// Default selection based on problem size.
+	// For large matrices, the blocked path with cache-tiled algorithm is more efficient.
+	crossesSize := rhsCrossSize * lhsCrossSize
+	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
+	blockSize := blockDim * blockDim
+	if crossesSize > DotGeneralBlockedPathThreshold*blockSize {
+		return blockedPath
+	}
+	return normalizedPath
+}
+
+// execDotGeneral executes the DotGeneral operation.
+// The execution path is pre-selected at graph-build time and stored in params.execPath.
+// For blockedPath, inputs are already pre-blocked at build time.
 func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	params := node.data.(*dotGeneralNodeData)
 	outputShape := node.shape
-	dtype := lhs.shape.DType
 	output := backend.getBufferForShape(outputShape)
 	output.Zeros()
 
-	// Check if either input is pre-blocked (comes from BlockForDotGeneral node).
-	// When inputs are pre-blocked, they're in blocked format and MUST use the blocked path.
-	lhsNode := node.inputs[0]
-	rhsNode := node.inputs[1]
-	isLHSPreBlocked := lhsNode.opType == backends.OpTypeBlockForDotGeneral
-	isRHSPreBlocked := rhsNode.opType == backends.OpTypeBlockForDotGeneral
-
-	// Handle pre-blocked cases - always use blocked path since data is in blocked format
-	if isLHSPreBlocked || isRHSPreBlocked {
-		var lhsBlockData, rhsBlockData *blockForDotGeneralData
-		if isLHSPreBlocked {
-			lhsBlockData = lhsNode.data.(*blockForDotGeneralData)
-		}
-		if isRHSPreBlocked {
-			rhsBlockData = rhsNode.data.(*blockForDotGeneralData)
-		}
-		if err := execDotGeneralBlockedUnified(backend, lhs, rhs, lhsBlockData, rhsBlockData, params, output); err != nil {
-			backend.putBuffer(output)
-			return nil, err
-		}
-		return output, nil
-	}
-
-	// Non-pre-blocked path: choose based on problem size
-	crossesSize := params.rhsCrossSize * params.lhsCrossSize
-	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
-	blockSize := blockDim * blockDim
 	var err error
-	execPath := normalizedPath
-	if crossesSize > 16*blockSize {
-		execPath = blockedPath
-	}
-	if backend.dotGeneralForceExecutionPath != autoSelectPath {
-		execPath = backend.dotGeneralForceExecutionPath
-	}
-	switch execPath {
+	switch params.execPath {
 	case blockedPath:
-		err = execDotGeneralBlocked(backend, lhs, rhs, params, output)
+		// Inputs are pre-blocked at graph-build time. Extract block metadata from input nodes.
+		lhsNode := node.inputs[0]
+		rhsNode := node.inputs[1]
+		lhsBlockData, ok := lhsNode.data.(*blockForDotGeneralData)
+		if !ok {
+			backend.putBuffer(output)
+			return nil, errors.Errorf("blockedPath requires pre-blocked LHS input, got %T (node type: %s)", lhsNode.data, lhsNode.opType)
+		}
+		rhsBlockData, ok := rhsNode.data.(*blockForDotGeneralData)
+		if !ok {
+			backend.putBuffer(output)
+			return nil, errors.Errorf("blockedPath requires pre-blocked RHS input, got %T (node type: %s)", rhsNode.data, rhsNode.opType)
+		}
+		err = execDotGeneralBlocked(backend, lhs, rhs, lhsBlockData, rhsBlockData, params, output)
+
 	case normalizedPath:
 		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
+
 	case checkPath:
+		// Debug path: run both paths and compare results
 		output2 := backend.getBufferForShape(outputShape)
 		output2.Zeros()
 		err = execDotGeneralSmall(backend, lhs, rhs, params, output2)
 		if err != nil {
+			backend.putBuffer(output2)
+			backend.putBuffer(output)
 			return nil, err
 		}
-		err = execDotGeneralBlocked(backend, lhs, rhs, params, output)
+		// For checkPath, we need to run the blocked path with runtime blocking
+		// since the inputs aren't pre-blocked when checkPath is selected.
+		err = execDotGeneralBlockedWithRuntimeBlocking(backend, lhs, rhs, params, output)
 		if err != nil {
+			backend.putBuffer(output2)
+			backend.putBuffer(output)
 			return nil, err
 		}
 		err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
 		backend.putBuffer(output2)
+
 	default:
-		err = errors.Errorf("unknown execution path %d for DotGeneral", execPath)
+		err = errors.Errorf("unknown execution path %d for DotGeneral", params.execPath)
 	}
+
 	if err != nil {
 		backend.putBuffer(output)
 		return nil, err
