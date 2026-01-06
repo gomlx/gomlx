@@ -61,6 +61,7 @@ type Function interface {
 	Constant(flat any, dims ...int) (Op, error)
 
 	// Return marks the outputs of this function.
+	// Once called, the function can no longer be futher modified.
 	//
 	// For the Main function, this defines what values will be returned when
 	// the compiled computation is executed.
