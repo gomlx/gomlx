@@ -310,6 +310,13 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		err = execDotGeneralBlocked(backend, lhs, rhs, lhsBlockData, rhsBlockData, params, output)
 
 	case normalizedPath:
+		// Try SmallMatMul fast path for eligible small float32 matrices.
+		// SmallMatMul skips transpose overhead but has strided RHS access,
+		// so it's only beneficial for small matrices in standard [M,K]×[K,N] order.
+		if execDotGeneralSmallMatMul(backend, lhs, rhs, params, output) {
+			return output, nil
+		}
+		// Fallback to transpose-based normalized path
 		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
 
 	case checkPath:
