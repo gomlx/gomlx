@@ -12,6 +12,9 @@ import (
 // It is opaque from the GoMLX perspective: it passes Value as input to the other methods.
 type Value any
 
+// Main function name, created by Builder.Main().
+const MainName = "main"
+
 // Builder defines the interface for building a computation.
 //
 // A Builder manages one or more Functions, with Main() being the primary
@@ -29,15 +32,20 @@ type Builder interface {
 	// Name of the computation being built.
 	Name() string
 
-	// Main returns the main function of this computation.
+	// Main returns the main function of this computation, named MainName.
 	// Operations added to Main become part of the compiled computation.
 	// This is the default function where all operations should be added
 	// unless explicitly building a sub-function.
 	Main() Function
 
 	// NewFunction creates a new named function within this builder.
-	// Sub-functions can be used for modular computation, while-loop bodies,
-	// conditional branches, reduce operations, etc.
+	// These are top-level functions that can be called form the main function.
+	//
+	// The name must be unique, and differnt from MainName (== "main"), the main function's name.
+	//
+	// These functions can be called from the main function or other functions.
+	//
+	// See also Function.Closure() to create unnamed local functions used in ops like While, If and others.
 	//
 	// Returns an error if the backend doesn't support sub-functions.
 	NewFunction(name string) (Function, error)

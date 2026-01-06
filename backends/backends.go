@@ -1,19 +1,21 @@
 // Package backends defines the interface to computation building and execution system needs to implement to be used
 // by GoMLX.
 //
-// It is based on 3 interfaces:
+// It is based on 4 interfaces:
 //
 //   - DataInterface: handles how data (Tensors) is stored in buffers for the backend. These things are handled
 //     differently by different backends and even by different accelerators with the same backend.
-//   - Builder: how computation graphs are built.
+//   - Builder: how computation graphs are built. Usually composed by a "main" function, and optionally others.
+//   - Function: how functions are defined, it's a sub-unit of a computation.
 //   - Executable: how executable computations are executed.
 //
-// It is based on OpenXLA's API for now.
+// While loosely based on OpenXLA's StableHLO API, it diverges as it supports different APIs.
 //
 // A backend that doesn't implement every operation can simply return an "<op> not implemented" error
 // for any op, and it would still work for computations that don't require those operations.
 // The backend/notimplemented package helps bootstrap any new backend implementation by providing
 // a "Not Implemented" implementation for all methods of the Builder interface.
+// Alternatively, there is a Capabilities method that can be called and inspected.
 package backends
 
 import (
