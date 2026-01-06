@@ -90,13 +90,13 @@ func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distr
 		sharding: sharding, // it can be nil.
 		handle:   handle,
 	}
-	result, err := g.builder.Parameter(nodeInputs.name, nodeInputs.shape, sharding.ToBackendsSpec())
+	result, err := g.mainFn.Parameter(nodeInputs.name, nodeInputs.shape, sharding.ToBackendsSpec())
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to create parameter %q", name))
 	}
 	node = &Node{
 		graph:        g,
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		inputs:       nodeInputs,
 	}
@@ -145,7 +145,7 @@ func splitNode(multiOutputNode *Node) (splitNodes []*Node) {
 		}
 		inputNodes := []*Node{multiOutputNode}
 		node := &Node{
-			outputOps:    []backends.Op{op},
+			outputOps:    []backends.Value{op},
 			outputShapes: []shapes.Shape{multiOutputNode.outputShapes[ii]},
 			graph:        g,
 			inputs:       inputs,
@@ -202,17 +202,17 @@ func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 				"ConstTensor failed to create a local clone of the tensor in the graph"))
 		}
 	}
-	var result backends.Op
+	var result backends.Value
 	var err error
 	t.MustConstFlatData(func(flat any) {
-		result, err = g.builder.Constant(flat, nodeInputs.shape.Dimensions...)
+		result, err = g.mainFn.Constant(flat, nodeInputs.shape.Dimensions...)
 	})
 	if err != nil {
 		panic(errors.WithMessagef(err, "ConstTensor failed to create a constant in the backend"))
 	}
 	node = &Node{
 		graph:        g,
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		inputs:       nodeInputs,
 	}
@@ -272,7 +272,14 @@ func ConstAsDType(g *Graph, dtype dtypes.DType, x any) *Node {
 	if dtype == dtypes.InvalidDType {
 		exceptions.Panicf("invalid DType given for ConstAsDType")
 	}
-	return Const(g, shapes.CastAsDType(x, dtype))
+	output := Const(g, shapes.CastAsDType(x, dtype))
+	if output.DType() != dtype {
+		// CastAsDType converts to the corresponding Go dtype, but this is not a 1:1 mapping, and sometimes
+		// (e.g.: sub-byte types, like Bool, Int4, Int2, Uint4, Uint2) many dtypes get mapped to the same Go type.
+		// For these cases we need to convert the dtype within the graph.
+		output = ConvertDType(output, dtype)
+	}
+	return output
 }
 
 // ConstAs creates a constant (slice or scalar) of the same DType and on the same Graph as

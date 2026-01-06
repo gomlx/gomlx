@@ -21,6 +21,9 @@ type Builder struct {
 	backend  *Backend
 	compiled bool
 
+	// mainFn is the main function of the computation.
+	mainFn *Function
+
 	// nodes are only created when their inputs have already been created. So this is a natural DAG (Directed Acyclic Graph)
 	// ordering of the graph. The executor rely on this invariance.
 	nodes []*Node
@@ -45,22 +48,33 @@ func (b *Builder) Name() string {
 	return b.name
 }
 
+// Main returns the main function of this computation.
+func (b *Builder) Main() backends.Function {
+	return b.mainFn
+}
+
+// NewFunction creates a new named function within this builder.
+func (b *Builder) NewFunction(name string) (backends.Function, error) {
+	return nil, errors.Wrapf(
+		notimplemented.NotImplementedError,
+		"sub-functions not supported for %q builder", BackendName)
+}
+
 // Compile implements backends.Builder.
-func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingSpec) (backends.Executable, error) {
-	if len(shardings) != 0 {
-		return nil, errors.Errorf("sharding or distributed execution are not supported by SimpleGo backend")
+func (b *Builder) Compile() (backends.Executable, error) {
+	if !b.mainFn.returned {
+		return nil, errors.Errorf("Main function must have Return() called before Compile()")
 	}
-	var err error
-	b.outputs, err = b.checkOps("Compile", outputs...)
-	if err != nil {
-		return nil, err
-	}
+
+	// Use the outputs from mainFn
+	b.outputs = b.mainFn.outputs
+
 	// Handle duplicate outputs by creating Identity nodes for duplicates.
 	seenNodes := sets.Make[*Node]()
 	for i, node := range b.outputs {
 		if seenNodes.Has(node) {
 			// Create an Identity node for this duplicate output.
-			identityOp, err := b.Identity(node)
+			identityOp, err := b.mainFn.Identity(node)
 			if err != nil {
 				return nil, errors.WithMessagef(err, "failed to create Identity node for duplicate output at index %d", i)
 			}
@@ -167,7 +181,7 @@ func (n *Node) IsMultiOutputs() bool {
 
 // checkOps validates that the ops are from SimpleGo and from this builder.
 // It also checks whether the Builder is not yet compiled.
-func (b *Builder) checkOps(opType string, ops ...backends.Op) ([]*Node, error) {
+func (b *Builder) checkOps(opType string, ops ...backends.Value) ([]*Node, error) {
 	if b == nil {
 		return nil, errors.Errorf("%s: Builder is nil (!?), cannot build a graph", opType)
 	}
@@ -203,7 +217,7 @@ func (b *Builder) checkOps(opType string, ops ...backends.Op) ([]*Node, error) {
 }
 
 // OpShape returns the shape of a computation Op.
-func (b *Builder) OpShape(op backends.Op) (shapes.Shape, error) {
+func (b *Builder) OpShape(op backends.Value) (shapes.Shape, error) {
 	inputs, err := b.checkOps("OpShape", op)
 	if err != nil {
 		return shapes.Invalid(), err
@@ -228,7 +242,7 @@ func checkFlat(flat any) (dtype dtypes.DType, flatLen int, err error) {
 }
 
 // addUnaryOp adds a generic binary op.
-func (b *Builder) addUnaryOp(opType backends.OpType, operandOp backends.Op) (*Node, error) {
+func (b *Builder) addUnaryOp(opType backends.OpType, operandOp backends.Value) (*Node, error) {
 	inputs, err := b.checkOps(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
@@ -244,7 +258,7 @@ func (b *Builder) addUnaryOp(opType backends.OpType, operandOp backends.Op) (*No
 }
 
 // addBinaryOp adds a generic binary op.
-func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Op) (*Node, error) {
+func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Value) (*Node, error) {
 	inputs, err := b.checkOps(opType.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
@@ -259,7 +273,7 @@ func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Op) 
 }
 
 // addComparisonOp adds a generic comparison binary op.
-func (b *Builder) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.Op) (*Node, error) {
+func (b *Builder) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.Value) (*Node, error) {
 	inputs, err := b.checkOps(opType.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err

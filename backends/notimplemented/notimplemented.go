@@ -131,23 +131,28 @@ type Builder struct {
 	//
 	// For non-ops methods (like Builder.Name and Builder.Compile) you will have to override them.
 	ErrFn func(op backends.OpType) error
+
+	// mainFn is the main function, lazily created.
+	mainFn *Function
 }
 
 var _ backends.Builder = Builder{}
 
 //go:generate go run ../../internal/cmd/notimplemented_generator
 
-// baseErrFn returns the error corresponding to the op.
-// It falls back to Builder.ErrFn if it is defined.
-func (b Builder) baseErrFn(op backends.OpType) error {
-	if b.ErrFn == nil {
-		return NotImplementedError
-	}
-	return b.ErrFn(op)
-}
-
 func (b Builder) Name() string {
 	return "Dummy \"not implemented\" backend, please override this method"
+}
+
+func (b Builder) Main() backends.Function {
+	if b.mainFn == nil {
+		b.mainFn = &Function{ErrFn: b.ErrFn}
+	}
+	return b.mainFn
+}
+
+func (b Builder) NewFunction(name string) (backends.Function, error) {
+	return &Function{ErrFn: b.ErrFn}, nil
 }
 
 func (b Builder) DistributedSPMD(numDevices int) error {
@@ -167,51 +172,10 @@ func (b Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
 	return nil
 }
 
-func (b Builder) Compile(_ []backends.Op, _ []*backends.ShardingSpec) (backends.Executable, error) {
+func (b Builder) Compile() (backends.Executable, error) {
 	return nil, errors.Wrapf(NotImplementedError, "in Compile()")
 }
 
-func (b Builder) OpShape(op backends.Op) (shapes.Shape, error) {
+func (b Builder) OpShape(op backends.Value) (shapes.Shape, error) {
 	return shapes.Invalid(), errors.Wrapf(NotImplementedError, "in OpShape()")
-}
-
-func (b Builder) Parameter(name string, shape shapes.Shape, spec *backends.ShardingSpec) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeParameter)
-}
-
-func (b Builder) Constant(flat any, dims ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeConstant)
-}
-
-func (b Builder) Identity(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeIdentity)
-}
-
-func (b Builder) ReduceWindow(x backends.Op, reductionType backends.ReduceOpType,
-	windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeReduceWindow)
-}
-
-func (b Builder) RNGBitGenerator(state backends.Op, shape shapes.Shape) (newState, values backends.Op, err error) {
-	return nil, nil, b.baseErrFn(backends.OpTypeRNGBitGenerator)
-}
-
-func (b Builder) BatchNormForInference(operand, scale, offset, mean, variance backends.Op, epsilon float32, axis int) (
-	backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeBatchNormForInference)
-}
-
-func (b Builder) BatchNormForTraining(operand, scale, offset backends.Op, epsilon float32, axis int) (
-	normalized, batchMean, batchVariance backends.Op, err error) {
-	return nil, nil, nil, b.baseErrFn(backends.OpTypeBatchNormForTraining)
-}
-
-func (b Builder) BatchNormGradient(operand, scale, mean, variance, gradOutput backends.Op, epsilon float32, axis int) (
-	gradOperand, gradScale, gradOffset backends.Op, err error) {
-	return nil, nil, nil, b.baseErrFn(backends.OpTypeBatchNormGradient)
-}
-
-func (b Builder) AllReduce(inputs []backends.Op, reduceOp backends.ReduceOpType, replicaGroups [][]int) (
-	[]backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeAllReduce)
 }

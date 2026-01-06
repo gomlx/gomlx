@@ -47,7 +47,7 @@ type Node struct {
 	graph        *Graph
 	id           NodeId // id within graph.
 	outputShapes []shapes.Shape
-	outputOps    []backends.Op
+	outputOps    []backends.Value
 
 	// inputNodes are the edges of the computation graph.
 	// Notice that other static inputs to the node are registered in inputs

@@ -50,9 +50,6 @@ func init() {
 	}
 }
 
-// Generate automatic C-to-Go boilerplate code for pjrt_c_api.h.
-//go:generate go run ../../../internal/cmd/dtypes_codegen
-
 // FromGenericsType returns the DType enum for the given type that this package knows about.
 func FromGenericsType[T Supported]() DType {
 	var t T
@@ -72,7 +69,7 @@ func FromGenericsType[T Supported]() DType {
 		case 64:
 			return Int64
 		default:
-			panicf("Cannot use int of %d bits with gopjrt -- try using int32 or int64", strconv.IntSize)
+			panicf("Cannot use int of %d bits with go-xla -- try using int32 or int64", strconv.IntSize)
 		}
 	case int64:
 		return Int64
@@ -103,9 +100,10 @@ func FromGenericsType[T Supported]() DType {
 // FromGoType returns the DType for the given "reflect.Type".
 // It panics for unknown DType values.
 func FromGoType(t reflect.Type) DType {
-	if t == float16Type {
+	switch t {
+	case float16Type:
 		return Float16
-	} else if t == bfloat16Type {
+	case bfloat16Type:
 		return BFloat16
 	}
 	switch t.Kind() {
@@ -161,14 +159,23 @@ func FromAny(value any) DType {
 }
 
 // Size returns the number of bytes for the given DType, or 0 if the dtype uses fraction(s) of bytes.
-// If the size is 0 (like a 4-bits quantity), consider the Bits or SizeForDimensions method.
 func (dtype DType) Size() int {
 	return int(dtype.GoType().Size())
 }
 
 // Bits returns the number of bits for the given DType.
+// This is only used for "packed" storage version -- e.g.: bool by default will be transferred as one byte per value (like in Go)
 func (dtype DType) Bits() int {
-	return dtype.Size() * 8
+	switch dtype {
+	case Int4, Uint4:
+		return 4
+	case Int2, Uint2:
+		return 2
+	case Bool:
+		return 1
+	default:
+		return dtype.Size() * 8
+	}
 }
 
 // SizeForDimensions returns the size in bytes used for the given dimensions.
@@ -179,14 +186,10 @@ func (dtype DType) SizeForDimensions(dimensions ...int) int {
 	numElements := 1
 	for _, dim := range dimensions {
 		if dim < 0 {
-			panicf("dim cannot be neative for SizeForDimensions, got %v", dimensions)
+			panicf("dim cannot be negative for SizeForDimensions, got %v", dimensions)
 		}
 		numElements *= dim
 	}
-
-	// Switch case for dtypes with size not multiple of 8 bits (1 byte).
-
-	// Default is simply the number of elements times the size in bytes per element.
 	return numElements * dtype.Size()
 }
 
@@ -196,37 +199,39 @@ func (dtype DType) Memory() uintptr {
 	return uintptr(dtype.Size())
 }
 
-// Pre-generate constant reflect.TypeOf for convenience.
+// Pre-generate constant reflect.TypeFor for convenience.
 var (
-	float32Type  = reflect.TypeOf(float32(0))
-	float64Type  = reflect.TypeOf(float64(0))
-	float16Type  = reflect.TypeOf(float16.Float16(0))
-	bfloat16Type = reflect.TypeOf(bfloat16.BFloat16(0))
+	float32Type  = reflect.TypeFor[float32]()
+	float64Type  = reflect.TypeFor[float64]()
+	float16Type  = reflect.TypeFor[float16.Float16]()
+	bfloat16Type = reflect.TypeFor[bfloat16.BFloat16]()
 )
 
 // GoType returns the Go `reflect.Type` corresponding to the tensor DType.
 func (dtype DType) GoType() reflect.Type {
 	switch dtype {
 	case Int64:
-		return reflect.TypeOf(int64(0))
+		return reflect.TypeFor[int64]()
 	case Int32:
-		return reflect.TypeOf(int32(0))
+		return reflect.TypeFor[int32]()
 	case Int16:
-		return reflect.TypeOf(int16(0))
-	case Int8:
-		return reflect.TypeOf(int8(0))
+		return reflect.TypeFor[int16]()
+	case Int8, Int4, Int2:
+		// Int4 and Int2 are converted in the host to int8 by default.
+		return reflect.TypeFor[int8]()
 
 	case Uint64:
-		return reflect.TypeOf(uint64(0))
+		return reflect.TypeFor[uint64]()
 	case Uint32:
-		return reflect.TypeOf(uint32(0))
+		return reflect.TypeFor[uint32]()
 	case Uint16:
-		return reflect.TypeOf(uint16(0))
-	case Uint8:
-		return reflect.TypeOf(uint8(0))
+		return reflect.TypeFor[uint16]()
+	case Uint8, Uint4, Uint2:
+		// Uint4 and Uint2 are converted in the host to int8 by default.
+		return reflect.TypeFor[uint8]()
 
 	case Bool:
-		return reflect.TypeOf(true)
+		return reflect.TypeFor[bool]()
 
 	case Float16:
 		return float16Type
@@ -238,9 +243,9 @@ func (dtype DType) GoType() reflect.Type {
 		return float64Type
 
 	case Complex64:
-		return reflect.TypeOf(complex64(0))
+		return reflect.TypeFor[complex64]()
 	case Complex128:
-		return reflect.TypeOf(complex128(0))
+		return reflect.TypeFor[complex128]()
 
 	default:
 		// This should never happen, except if someone entered an invalid DType number beyond the values
@@ -268,7 +273,11 @@ func (dtype DType) LowestValue() any {
 	case Int16:
 		return int16(math.MinInt16)
 	case Int8:
-		return int16(math.MinInt8)
+		return int8(math.MinInt8)
+	case Int4:
+		return int8(-8)
+	case Int2:
+		return int8(-2)
 
 	case Uint64:
 		return uint64(0)
@@ -276,7 +285,7 @@ func (dtype DType) LowestValue() any {
 		return uint32(0)
 	case Uint16:
 		return uint16(0)
-	case Uint8:
+	case Uint8, Uint4, Uint2:
 		return uint8(0)
 
 	case Bool:
@@ -310,6 +319,10 @@ func (dtype DType) HighestValue() any {
 		return int16(math.MaxInt16)
 	case Int8:
 		return int8(math.MaxInt8)
+	case Int4:
+		return int8(7)
+	case Int2:
+		return int8(1)
 
 	case Uint64:
 		return uint64(math.MaxUint64)
@@ -319,6 +332,10 @@ func (dtype DType) HighestValue() any {
 		return uint16(math.MaxUint16)
 	case Uint8:
 		return uint8(math.MaxUint8)
+	case Uint4:
+		return uint8(15)
+	case Uint2:
+		return uint8(3)
 
 	case Bool:
 		return true
@@ -350,7 +367,7 @@ func (dtype DType) SmallestNonZeroValueForDType() any {
 		return int32(1)
 	case Int16:
 		return int16(1)
-	case Int8:
+	case Int8, Int4, Int2:
 		return int8(1)
 
 	case Uint64:
@@ -359,7 +376,7 @@ func (dtype DType) SmallestNonZeroValueForDType() any {
 		return uint32(1)
 	case Uint16:
 		return uint16(1)
-	case Uint8:
+	case Uint8, Uint4, Uint2:
 		return uint8(1)
 
 	case Bool:
@@ -380,20 +397,48 @@ func (dtype DType) SmallestNonZeroValueForDType() any {
 	}
 }
 
+// MaxDType is the maximum number of DTypes that there can be.
+const MaxDType = 64
+
+// DTypeSet represents a set of DTypes.
+type DTypeSet [MaxDType]bool
+
+// dtypeSetWith creates a DTypeSet with the given values.
+func dtypeSetWith(included ...DType) DTypeSet {
+	var ds DTypeSet
+	for _, dtype := range included {
+		ds[dtype] = true
+	}
+	return ds
+}
+
+var (
+	FloatDTypes     = dtypeSetWith(Float32, Float64, Float16, BFloat16)
+	Float16DTypes   = dtypeSetWith(Float16, BFloat16)
+	ComplexDTypes   = dtypeSetWith(Complex64, Complex128)
+	IntDTypes       = dtypeSetWith(Int64, Int32, Int16, Int8, Int4, Int2, Uint2, Uint4, Uint8, Uint16, Uint32, Uint64)
+	UnsignedDTypes  = dtypeSetWith(Uint8, Uint16, Uint32, Uint64, Uint4, Uint2)
+	SupportedDTypes = dtypeSetWith(Bool,
+		Float16, BFloat16, Float32, Float64,
+		Int64, Int32, Int16, Int8, Int4, Int2,
+		Uint64, Uint32, Uint16, Uint8, Uint4, Uint2,
+		Complex64, Complex128)
+)
+
 // IsFloat returns whether dtype is a supported float -- float types not yet supported will return false.
 // It returns false for complex numbers.
 func (dtype DType) IsFloat() bool {
-	return dtype == Float32 || dtype == Float64 || dtype == Float16 || dtype == BFloat16
+	return FloatDTypes[dtype]
 }
 
 // IsFloat16 returns whether dtype is a supported float with 16 bits: [Float16] or [BFloat16].
 func (dtype DType) IsFloat16() bool {
-	return dtype == Float16 || dtype == BFloat16
+	return Float16DTypes[dtype]
 }
 
 // IsComplex returns whether dtype is a supported complex number type.
 func (dtype DType) IsComplex() bool {
-	return dtype == Complex64 || dtype == Complex128
+	return ComplexDTypes[dtype]
 }
 
 // RealDType returns the real component of complex dtypes.
@@ -417,18 +462,17 @@ func (dtype DType) RealDType() DType {
 
 // IsInt returns whether dtype is a supported integer type -- float types not yet supported will return false.
 func (dtype DType) IsInt() bool {
-	return dtype == Int64 || dtype == Int32 || dtype == Int16 || dtype == Int8 ||
-		dtype == Uint8 || dtype == Uint16 || dtype == Uint32 || dtype == Uint64
+	return IntDTypes[dtype]
 }
 
 // IsUnsigned returns whether dtype is one of the unsigned (only int for now) types.
 func (dtype DType) IsUnsigned() bool {
-	return dtype == Uint8 || dtype == Uint16 || dtype == Uint32 || dtype == Uint64
+	return UnsignedDTypes[dtype]
 }
 
 // IsSupported returns whether dtype is supported by `gopjrt`.
 func (dtype DType) IsSupported() bool {
-	return dtype == Bool || dtype == Float16 || dtype == BFloat16 || dtype == Float32 || dtype == Float64 || dtype == Int64 || dtype == Int32 || dtype == Int16 || dtype == Int8 || dtype == Uint32 || dtype == Uint16 || dtype == Uint8 || dtype == Complex64 || dtype == Complex128
+	return SupportedDTypes[dtype]
 }
 
 // IsPromotableTo returns whether dtype can be promoted to target.

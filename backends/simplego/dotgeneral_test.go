@@ -304,11 +304,12 @@ func TestDotGeneral_Shape(t *testing.T) {
 	S := shapes.Make
 	F32 := dtypes.Float32
 	builder := backend.Builder("DotGeneral Test").(*Builder)
-	lhs, err := builder.Parameter("lhs", S(F32, 2, 3, 4, 5), nil)
+	mainFn := builder.Main().(*Function)
+	lhs, err := mainFn.Parameter("lhs", S(F32, 2, 3, 4, 5), nil)
 	require.NoError(t, err)
-	rhs, err := builder.Parameter("rhs", S(F32, 5, 1, 2, 3), nil)
+	rhs, err := mainFn.Parameter("rhs", S(F32, 5, 1, 2, 3), nil)
 	require.NoError(t, err)
-	gotOp, err := builder.DotGeneral(
+	gotOp, err := mainFn.DotGeneral(
 		lhs, []int{1}, []int{3, 0},
 		rhs, []int{3}, []int{0, 2},
 	)
@@ -551,11 +552,12 @@ func TestBlockForDotGeneral_Deduplication(t *testing.T) {
 	}
 
 	builder := goBackend.Builder("TestDeduplication").(*Builder)
+	mainFn := builder.Main().(*Function)
 
 	// Create a parameter node (simulating weights)
 	K, N := 128, 256
 	weightsShape := shapes.Make(dtypes.Float32, K, N) // [K, N]
-	weights, err := builder.Parameter("weights", weightsShape, nil)
+	weights, err := mainFn.Parameter("weights", weightsShape, nil)
 	require.NoError(t, err)
 	weightsNode := weights.(*Node)
 

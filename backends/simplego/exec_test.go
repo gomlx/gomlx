@@ -17,17 +17,20 @@ import (
 func TestBuilder_Compile(t *testing.T) {
 	// backend must be exclusive (not shared across tests) for this test to work.
 	builder := backend.Builder("test")
-	x, err := builder.Parameter("x", shapes.Make(dtypes.Float32, 3), nil)
+	mainFn := builder.Main()
+	x, err := mainFn.Parameter("x", shapes.Make(dtypes.Float32, 3), nil)
 	require.NoError(t, err)
 	require.NotNil(t, x)
-	x, err = builder.Neg(x)
+	x, err = mainFn.Neg(x)
 	require.NoError(t, err)
 	require.NotNil(t, x)
-	c, err := builder.Constant([]int64{1, 2, 3}, 3)
+	c, err := mainFn.Constant([]int64{1, 2, 3}, 3)
 	require.NoError(t, err)
 	require.NotNil(t, c)
 
-	exec, err := builder.Compile([]backends.Op{x, c}, nil)
+	err = mainFn.Return([]backends.Value{x, c}, nil)
+	require.NoError(t, err)
+	exec, err := builder.Compile()
 	require.NoError(t, err)
 	require.NotNil(t, exec)
 

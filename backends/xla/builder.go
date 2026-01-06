@@ -1,14 +1,11 @@
 package xla
 
 import (
-	"slices"
-
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	"github.com/gomlx/go-xla/pkg/types/shardy"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
@@ -22,16 +19,15 @@ type Builder struct {
 	compiled bool
 
 	builder *stablehlo.Builder
-	fn      *stablehlo.Function
+
+	// mainFn is the main function of the computation.
+	mainFn      *Function
+	topLevelFns map[string]*Function
 
 	numDevices       int // numDevices used by the builder <= backend.numDevices.
 	deviceAssignment []int
 	distStrategy     distributed.Strategy
 	meshes           []*shardy.DeviceMesh
-
-	parameterNames  []string
-	parameterShapes []shapes.Shape
-	parameterSpecs  []*backends.ShardingSpec
 
 	// Various caches.
 	cacheReductions map[reductionKey]*stablehlo.Function
@@ -62,18 +58,48 @@ func (backend *Backend) Builder(name string) backends.Builder {
 	b := &Builder{
 		backend:         backend,
 		builder:         stablehlo.New(name),
+		topLevelFns:     make(map[string]*Function),
 		name:            name,
 		cacheReductions: make(map[reductionKey]*stablehlo.Function),
 		cacheArgMinMax:  make(map[argMinMaxKey]*stablehlo.Function),
 		cacheSelections: make(map[reductionKey]*stablehlo.Function),
 	}
-	b.fn = b.builder.Main()
 	return b
 }
 
 // Name returns the name of the builder.
 func (b *Builder) Name() string {
 	return b.name
+}
+
+// Main returns the main function of this computation.
+func (b *Builder) Main() backends.Function {
+	if b.mainFn == nil {
+		b.mainFn = &Function{
+			builder: b,
+			fn:      b.builder.Main(),
+			name:    backends.MainName,
+		}
+		b.topLevelFns[backends.MainName] = b.mainFn
+	}
+	return b.mainFn
+}
+
+// NewFunction creates a new named function within this builder.
+func (b *Builder) NewFunction(name string) (backends.Function, error) {
+	if err := b.CheckValid(); err != nil {
+		return nil, err
+	}
+	if _, found := b.topLevelFns[name]; found {
+		return nil, errors.Errorf("function %q already exists", name)
+	}
+	f := &Function{
+		builder: b,
+		fn:      b.builder.NewFunction(name),
+		name:    name,
+	}
+	b.topLevelFns[name] = f
+	return f, nil
 }
 
 // Node represents the output of an operation and implements a "backends.Op" interface.
@@ -95,7 +121,7 @@ func (b *Builder) CheckValid() error {
 
 // verifyAndCastValues sanity checks that the values (backends.Op) are valid and created with this builder.
 // It returns the underlying *Node of the values.
-func (b *Builder) verifyAndCastValues(name string, values ...backends.Op) ([]*Node, error) {
+func (b *Builder) verifyAndCastValues(name string, values ...backends.Value) ([]*Node, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -122,7 +148,7 @@ func (b *Builder) verifyAndCastValues(name string, values ...backends.Op) ([]*No
 }
 
 // OpShape returns the shape of a computation Op.
-func (b *Builder) OpShape(op backends.Op) (shapes.Shape, error) {
+func (b *Builder) OpShape(op backends.Value) (shapes.Shape, error) {
 	if err := b.CheckValid(); err != nil {
 		return shapes.Invalid(), err
 	}
@@ -139,60 +165,6 @@ func (b *Builder) newNode(value *stablehlo.Value) *Node {
 		shape:   ShapeFromXLA(value.Shape()),
 		builder: b,
 	}
-}
-
-func (b *Builder) Parameter(name string, shape shapes.Shape, sharding *backends.ShardingSpec) (
-	backends.Op, error) {
-	if err := b.CheckValid(); err != nil {
-		return nil, err
-	}
-	normalizedName := stablehlo.NormalizeIdentifier(name)
-	if slices.Index(b.parameterNames, normalizedName) != -1 {
-		if name == normalizedName {
-			return nil, errors.Errorf("parameter named %q already exists", name)
-		}
-		return nil, errors.Errorf("parameter named %q (normalized to %q) already exists",
-			name, normalizedName)
-	}
-	b.parameterNames = append(b.parameterNames, normalizedName)
-	b.parameterShapes = append(b.parameterShapes, shape)
-	b.parameterSpecs = append(b.parameterSpecs, sharding)
-	var shardySpec *shardy.ShardingSpec
-	if sharding != nil {
-		var err error
-		shardySpec, err = b.shardingSpecToShardy(sharding)
-		if err != nil {
-			return nil, errors.WithMessagef(err, "while creating sharding spec for parameter %q", name)
-		}
-	}
-	value, err := b.fn.NamedInputWithSharding(name, ShapeToXLA(shape), shardySpec)
-	if err != nil {
-		return nil, errors.WithMessagef(err, "while building parameter %q", name)
-	}
-	return b.newNode(value), nil
-}
-
-// Constant creates a constant in the graph with the given flat values and the shape defined by the dimensions.
-//
-// The flat value must be a slice of a basic type supported -- that can be converted to a DType.
-//
-// The value is copied into the graph. It's recommended that for very large tensors,
-// even if constants, that they are passed as side inputNodes (or variables, see context package) instead.
-func (b *Builder) Constant(flat any, dimensions ...int) (backends.Op, error) {
-	if err := b.CheckValid(); err != nil {
-		return nil, err
-	}
-	if flat == nil {
-		return nil, errors.Errorf("nil value given to Constant")
-	}
-	if bf16Slice, ok := flat.([]bfloat16.BFloat16); ok {
-		flat = any(BFloat16SliceToXLA(bf16Slice))
-	}
-	value, err := b.fn.ConstantFromFlatAndDimensions(flat, dimensions...)
-	if err != nil {
-		return nil, errors.WithMessagef(err, "while building op Constant()")
-	}
-	return b.newNode(value), nil
 }
 
 // DistributedSPMD creates a computation that will be executed on multiple devices in SPMD fashion
@@ -339,7 +311,7 @@ func broadcastShapeForBinaryOps(
 // converting them to Nodes in the process.
 func (b *Builder) broadcastForBinaryOps(
 	opType backends.OpType,
-	lhs, rhs backends.Op,
+	lhs, rhs backends.Value,
 ) (lhsNode, rhsNode *Node, err error) {
 	opName := opType.String()
 	nodes, err := b.verifyAndCastValues(opName, lhs, rhs)

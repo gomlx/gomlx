@@ -2,12 +2,19 @@
 
 # Next
 
-* Package `simplego`:
-  * Added `Float16` support (thx @timkaye11) 
-  * Added dedup of computation nodes (aka. "common subexpression elimination" CSE) (thx @timkaye11)
+- Package `backends`: major refactoring to add support for functions/closures.
+  - Added `backends.Function`, which now holds all the "ops" methods.
+  - Renamed `backends.Op` -> `backends.Value`.
+- Package `simplego`:
+  - Added `Float16` support (thx @timkaye11) 
+  - Added dedup of computation nodes (aka. "common subexpression elimination" CSE) (thx @timkaye11)
     - ~6% speedup for CSI-Adult demo training. 
-* New package `bucketing`:
-  * Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
+- New package `bucketing`:
+  - Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
+- Package `dtypes`:
+  - Added 'Uint2', 'Uint4', 'Int2', 'Int4'. 
+- Package `graph`:
+  - Added `Unpack()` and `Pack()` for sub-byte dtypes.
   
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 

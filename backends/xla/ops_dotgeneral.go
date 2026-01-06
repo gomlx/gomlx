@@ -29,15 +29,15 @@ type DotGeneralConfig struct {
 // It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
-func (b *Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhs backends.Op, rhsContractingAxes []int, rhsBatchAxes []int) (backends.Op, error) {
-	nodes, err := b.verifyAndCastValues("Dot", lhs, rhs)
+func (f *Function) DotGeneral(lhs backends.Value, lhsContractingAxes, lhsBatchAxes []int, rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int) (backends.Value, error) {
+	nodes, err := f.verifyAndCastValues("Dot", lhs, rhs)
 	if err != nil {
 		return nil, err
 	}
 	lhsNode := nodes[0]
 	rhsNode := nodes[1]
 
-	config := b.backend.DotGeneralConfig
+	config := f.builder.backend.DotGeneralConfig
 	dtype := lhsNode.shape.DType
 
 	dotGeneralBuilder := stablehlo.DotGeneral(lhsNode.value, lhsContractingAxes, lhsBatchAxes, rhsNode.value, rhsContractingAxes, rhsBatchAxes)
@@ -56,5 +56,5 @@ func (b *Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes [
 	if err != nil {
 		return nil, err
 	}
-	return b.newNode(value), nil
+	return f.newNode(value), nil
 }

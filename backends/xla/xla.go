@@ -24,9 +24,9 @@
 //     but allows one to build a static binary that can be deployed without extra dependencies (except the standard C and C++ libraries,
 //     usually available in most machines).
 //     To enable, build using the tag `pjrt_cpu_static` (e.g.: `go build --tags pjrt_cpu_static ...`),
-//     or import `github.com/gomlx/gomlx/backends/stablehlo/cpu/static`. Both methods have the same effect.
+//     or import `github.com/gomlx/gomlx/backends/xla/cpu/static`. Both methods have the same effect.
 //   - Pre-link the CPU PJRT plugin dynamically: build with the build tag `pjrt_cpu_dynamic` (e.g.: `go test --tags pjrt_cpu_dynamic ...`),
-//     or import `github.com/gomlx/gomlx/backends/stablehlo/cpu/dynamic`. Not much difference from linking the PJRT plugin
+//     or import `github.com/gomlx/gomlx/backends/xla/cpu/dynamic`. Not much difference from linking the PJRT plugin
 //     after the program starts, as default.
 //
 // # Shared Buffers Support:
@@ -60,7 +60,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-//go:generate go run ../../internal/cmd/stablehlo_generator
+//go:generate go run ../../internal/cmd/xla_generator
 
 // BackendName is the name of the backend.
 //
@@ -120,7 +120,12 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		if pluginName == "" {
 			pluginName = plugins[0]
 		} else if slices.Index(plugins, pluginName) == -1 {
-			return nil, errors.Errorf("Plugin %q for backend %q not found: available plugins found %q", pluginName, BackendName, plugins)
+			// Try to find a versioned plugin matching the base name (e.g., "cpu" matches "cpu_v0.83.1")
+			versionedName := findVersionedPlugin(pluginName, plugins)
+			if versionedName == "" {
+				return nil, errors.Errorf("Plugin %q for backend %q not found: available plugins found %q", pluginName, BackendName, plugins)
+			}
+			pluginName = versionedName
 		}
 	}
 
@@ -143,7 +148,7 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 	}
 
 	// Support "shared buffers":
-	backend.hasSharedBuffers = pluginName == "cpu"
+	backend.hasSharedBuffers = isPluginType(pluginName, "cpu")
 	if idx := slices.Index(pluginOptions, "shared_buffers"); idx != -1 {
 		backend.hasSharedBuffers = true
 		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
@@ -255,6 +260,25 @@ func GetAvailablePlugins() []string {
 		availablePluginsList = append(availablePluginsList, pluginName)
 	}
 	return availablePluginsList
+}
+
+// findVersionedPlugin looks for a versioned plugin matching the given base name.
+// For example, if baseName is "cpu" and plugins contains "cpu_v0.83.1", it returns "cpu_v0.83.1".
+// If no versioned match is found, it returns an empty string.
+func findVersionedPlugin(baseName string, plugins []string) string {
+	prefix := baseName + "_v"
+	for _, p := range plugins {
+		if strings.HasPrefix(p, prefix) {
+			return p
+		}
+	}
+	return ""
+}
+
+// isPluginType checks if pluginName matches the given base type.
+// For example, isPluginType("cpu_v0.83.1", "cpu") returns true.
+func isPluginType(pluginName, baseType string) bool {
+	return pluginName == baseType || strings.HasPrefix(pluginName, baseType+"_v")
 }
 
 // DTypeToXLA converts a GoMLX dtypes.DType to a go-xla xladtypes.DType.
