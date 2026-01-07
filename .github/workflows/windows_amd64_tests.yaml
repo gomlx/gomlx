@@ -1,4 +1,4 @@
-name: "Darwin/arm64"
+name: "Windows/amd64"
 permissions:
   # read|write|none
   actions: read
@@ -25,14 +25,23 @@ on:
   workflow_dispatch:
 
 jobs:
-  macos-tests:
-    runs-on: macos-latest
+  test:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Go
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: Install Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.25.x"
