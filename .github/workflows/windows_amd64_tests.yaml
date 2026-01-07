@@ -49,7 +49,9 @@ jobs:
       - name: PreTest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Run one test that triggers the auto-install first (concurrency issues)
         run: |
+          go test ./pkg/core/graph/ -test.run TestAdd -test.v
           go test ./pkg/core/graph
 
       - name: Test
