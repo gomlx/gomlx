@@ -210,7 +210,7 @@ func FortranToCLayout(dtypeSize int, dims []int, fortranData []byte, cData []byt
 		// This converts tensor coordinates to a flat column-major index.
 		fortranIndex := 0
 		multiplier := 1
-		for i := 0; i < len(dims); i++ {
+		for i := range dims {
 			fortranIndex += coordinates[i] * multiplier
 			multiplier *= dims[i]
 		}

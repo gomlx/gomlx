@@ -15,6 +15,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/downloader"
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -22,7 +23,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
 	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 )
 
@@ -379,7 +379,7 @@ func allEdgesCount(downloadDir string) error {
 	}
 	idxTensor := 0
 	for idxInput, input := range []*tensors.Tensor{EdgesAffiliatedWith, EdgesCites, EdgesHasTopic, EdgesWrites} {
-		for column := 0; column < 2; column++ {
+		for column := range 2 {
 			outputFilePath := path.Join(downloadDir, countsFileNames[idxTensor]+".tensor")
 			var counts *tensors.Tensor
 			var err error
@@ -424,7 +424,7 @@ func edgesCount(input *tensors.Tensor, column, numElements int) (output *tensors
 		output.MustMutableFlatData(func(flatAny any) {
 			outputData := flatAny.([]int32)
 			numRows := input.Shape().Dimensions[0]
-			for row := 0; row < numRows; row++ {
+			for row := range numRows {
 				idx := inputData[2*row+column]
 				if idx < 0 || int(idx) > numElements {
 					err = errors.Errorf(

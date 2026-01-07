@@ -475,7 +475,7 @@ func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
 	return MustGetParam[T](ctx, key)
 }
 
-var textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
+var textUnmarshalerType = reflect.TypeFor[encoding.TextUnmarshaler]()
 
 // SetParam sets the given param in the current scope. It will be visible (by GetParam)
 // within this scope and descendant scopes (but not by other scopes).

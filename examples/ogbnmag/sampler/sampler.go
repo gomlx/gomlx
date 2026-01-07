@@ -270,7 +270,7 @@ func (p *pairsToSort) Less(i, j int) bool {
 	return p.data[i<<1+p.sortColumn] < p.data[j<<1+p.sortColumn]
 }
 func (p *pairsToSort) Swap(i, j int) {
-	for column := 0; column < 2; column++ {
+	for column := range 2 {
 		p.data[i<<1+column], p.data[j<<1+column] = p.data[j<<1+column], p.data[i<<1+column]
 	}
 }

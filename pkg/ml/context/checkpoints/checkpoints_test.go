@@ -62,7 +62,7 @@ func TestCheckpoints(t *testing.T) {
 		dir = checkpoint.Dir()
 		fmt.Printf("Checkpoint directory: %s\n", dir)
 		e := context.MustNewExec(backend, ctx, testGraphFn)
-		for ii := 0; ii < 10; ii++ {
+		for ii := range 10 {
 			results := e.MustExec()
 			globalStep := tensors.ToScalar[float64](results[0])
 			assert.Equal(t, float64(ii)+1, globalStep, "LoopStep")

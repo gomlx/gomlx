@@ -1,6 +1,8 @@
 package distributed
 
 import (
+	"strings"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
@@ -115,26 +117,27 @@ func (s *ShardingSpec) String() string {
 	if len(s.Axes) == 0 {
 		return "ShardingSpec{mesh=" + s.Mesh.name + ", axes=[]}"
 	}
-	result := "ShardingSpec{mesh=" + s.Mesh.name + ", axes=["
+	var result strings.Builder
+	result.WriteString("ShardingSpec{mesh=" + s.Mesh.name + ", axes=[")
 	for i, axisSpec := range s.Axes {
 		if i > 0 {
-			result += ", "
+			result.WriteString(", ")
 		}
 		if len(axisSpec) == 0 {
-			result += "R"
+			result.WriteString("R")
 		} else {
-			result += "S("
+			result.WriteString("S(")
 			for j, meshAxis := range axisSpec {
 				if j > 0 {
-					result += ","
+					result.WriteString(",")
 				}
-				result += meshAxis
+				result.WriteString(meshAxis)
 			}
-			result += ")"
+			result.WriteString(")")
 		}
 	}
-	result += "]}"
-	return result
+	result.WriteString("]}")
+	return result.String()
 }
 
 // SpecBuilder is a more ergonomic way of building SharingSpec.

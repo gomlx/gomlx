@@ -27,13 +27,13 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -96,7 +96,7 @@ func TestBatchedDataset(t *testing.T) {
 	ds := &testDS{}
 	batchSize := 3
 	numFullBatches := int(testDSMaxValue) / batchSize
-	for ii := 0; ii < 2; ii++ {
+	for ii := range 2 {
 		dropIncompleteBatch := ii == 0
 		batched := Batch(manager, ds, batchSize, true, dropIncompleteBatch)
 		wantNumBatches := numFullBatches + 1
@@ -193,7 +193,7 @@ func TestInMemoryDataset(t *testing.T) {
 	)
 
 	// Read one element at a time: repeat 4 times, the last two are randomized.
-	for repeat := 0; repeat < 4; repeat++ {
+	for repeat := range 4 {
 		//fmt.Printf("\tRepeat %d:\n", repeat)
 		count := 0
 		if repeat == 2 {
@@ -338,7 +338,7 @@ func TestNormalization(t *testing.T) {
 	)
 	wantMean := make([]float64, numFeatures)
 	wantStddev := make([]float64, numFeatures)
-	for featureIdx := 0; featureIdx < numFeatures; featureIdx++ {
+	for featureIdx := range numFeatures {
 		wantMean[featureIdx] = baseMean + float64(featureIdx)
 		wantStddev[featureIdx] = baseStddev + float64(featureIdx)
 	}

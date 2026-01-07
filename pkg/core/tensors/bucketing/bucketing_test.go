@@ -29,7 +29,7 @@ func TestPow2Strategy(t *testing.T) {
 	}{
 		// Edge cases
 		{0, 0},
-		{-1, -1},   // Symbolic dimension preserved
+		{-1, -1},     // Symbolic dimension preserved
 		{-100, -100}, // Symbolic dimension preserved
 
 		// Powers of 2 stay the same
@@ -226,28 +226,28 @@ func TestExponentialGranularity(t *testing.T) {
 // Benchmark tests
 func BenchmarkPow2(b *testing.B) {
 	s := Pow2()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		s.Bucket(i % 1000)
 	}
 }
 
 func BenchmarkLinear(b *testing.B) {
 	s := Linear(8)
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		s.Bucket(i % 1000)
 	}
 }
 
 func BenchmarkExponential(b *testing.B) {
 	s := Exponential(1.4)
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		s.Bucket(i % 1000)
 	}
 }
 
 func BenchmarkNone(b *testing.B) {
 	s := None()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		s.Bucket(i % 1000)
 	}
 }

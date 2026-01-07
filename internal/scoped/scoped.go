@@ -18,6 +18,7 @@
 package scoped
 
 import (
+	"maps"
 	"strings"
 
 	"github.com/gomlx/gomlx/pkg/support/xslices"
@@ -66,9 +67,7 @@ func (p *Params) Clone() *Params {
 	newScopedParams := New(p.Separator)
 	for scope, dataMap := range p.scopeToMap {
 		newScopedParams.scopeToMap[scope] = make(map[string]any)
-		for key, value := range dataMap {
-			newScopedParams.scopeToMap[scope][key] = value
-		}
+		maps.Copy(newScopedParams.scopeToMap[scope], dataMap)
 	}
 	return newScopedParams
 }

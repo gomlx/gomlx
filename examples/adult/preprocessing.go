@@ -481,7 +481,7 @@ func (r *RawData) SampleWithReplacement(numExamples int) *RawData {
 		Weights:        make([]float32, numExamples),
 		Labels:         make([]float32, numExamples),
 	}
-	for ii := 0; ii < numExamples; ii++ {
+	for ii := range numExamples {
 		choice := rand.Intn(r.NumRows)
 		copy(sampled.ContinuousRow(ii), r.ContinuousRow(choice))
 		copy(sampled.CategoricalRow(ii), r.CategoricalRow(choice))
@@ -536,7 +536,7 @@ func PrintRawData(r *RawData) {
 	}
 	fmt.Printf("\nSample Categorical: (%.2f%% positive ratio, %.2f%% weighted positive ratio)\n",
 		100.0*positive/float32(r.NumRows), 100.0*positiveWeighted/totalWeight)
-	for rowNum := 0; rowNum < 3; rowNum++ {
+	for rowNum := range 3 {
 		fmt.Printf("\tRow %d:\t%v\n", rowNum, r.CategoricalRow(rowNum))
 	}
 	fmt.Println("\t...")
@@ -545,7 +545,7 @@ func PrintRawData(r *RawData) {
 	}
 
 	fmt.Printf("\nSample Continuous:\n")
-	for rowNum := 0; rowNum < 3; rowNum++ {
+	for rowNum := range 3 {
 		fmt.Printf("\tRow %d:\t%v\n", rowNum, r.ContinuousRow(rowNum))
 	}
 	fmt.Println("\t...")

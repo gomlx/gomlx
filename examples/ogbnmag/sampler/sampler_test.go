@@ -366,7 +366,7 @@ func TestRandKOfN(t *testing.T) {
 		for range numRepeats {
 			fn(sample, n)
 			for ii, x := range sample {
-				for jj := 0; jj < ii; jj++ {
+				for jj := range ii {
 					require.NotEqualf(t, sample[jj], x, "Repeated value %d for %s", x, name)
 				}
 				counts[x]++
