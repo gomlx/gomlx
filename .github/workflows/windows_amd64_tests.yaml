@@ -41,10 +41,15 @@ jobs:
         with:
           go-version: "1.25.x"
 
-      - name: Install Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.25.x"
+      - name: Install PJRT plugin
+        run: |
+          (cd ./cmd/pjrt_installer && go work init && go work use . '..\..' && go install .)
+          export CPU_VERSION="0.83.4"
+          env GH_TOKEN=$GH_TOKEN go github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin cpu -version "${CPU_VERSION}" -path '~\AppData\Local\go-xla'
+          echo "Contents for go-xla:"
+          ls -la "${HOME}/AppData/Local/go-xla"
+          echo "-----------"
+          echo
 
       - name: PreTest
         env:
