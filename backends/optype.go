@@ -121,6 +121,12 @@ const (
 	OpTypeCollectiveBroadcast
 	OpTypeAllGather
 
+	// Internal operations (backend-specific, not part of public API)
+
+	// OpTypeBlockForDotGeneral pre-blocks a tensor for efficient DotGeneral execution.
+	// This is an internal optimization used by the simplego backend.
+	OpTypeBlockForDotGeneral
+
 	// OpTypeLast should always be kept the last, it is used as a counter/marker for OpType.
 	OpTypeLast
 )

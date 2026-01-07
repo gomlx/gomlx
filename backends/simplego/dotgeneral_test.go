@@ -361,25 +361,25 @@ func TestDotGeneral_Exec(t *testing.T) {
 		return
 	}
 
-	// Reset dotGeneralForceProblemSize at exit.
+	// Reset dotGeneralForceExecutionPath at exit to default (auto-select).
 	defer func() {
-		goBackend.dotGeneralForceProblemSize = unknownProblemSize
+		goBackend.dotGeneralForceExecutionPath = autoSelectPath
 	}()
 
-	for _, problemSize := range []dotGeneralProblemSizeType{smallProblemSize, largeProblemSize, checkProblemSize} {
-		// Force a specific problem size: so we exercise the corresponding algorithm irrespective of the actual size:
+	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, checkPath} {
+		// Force a specific execution path: so we exercise the corresponding algorithm irrespective of the actual size:
 		// it may not be efficient for the size, but it should be correct in all sizes.
-		goBackend.dotGeneralForceProblemSize = problemSize
+		goBackend.dotGeneralForceExecutionPath = execPath
 		var testName string
-		switch problemSize {
-		case smallProblemSize:
-			testName = "DotGeneral_small_version"
-		case largeProblemSize:
-			testName = "DotGeneral_large_version"
-		case checkProblemSize:
+		switch execPath {
+		case normalizedPath:
+			testName = "DotGeneral_normalized_version"
+		case blockedPath:
+			testName = "DotGeneral_blocked_version"
+		case checkPath:
 			testName = "DotGeneral_check_version"
 		default:
-			t.Fatalf("Unknown version for problem size: %d", problemSize)
+			t.Fatalf("Unknown execution path: %d", execPath)
 		}
 		t.Run(testName, func(t *testing.T) {
 			// Larger example, with multiple axes.
@@ -541,4 +541,234 @@ func TestDotGeneral_Dot(t *testing.T) {
 	y2 := exec.MustExec([][]float32{{1, 2, 3}, {2, 4, 6}}, [][]float32{{10}, {11}, {12}})[0]
 	fmt.Printf("\ty2=%s\n", y2.GoStr())
 	assert.Equal(t, [][]float32{{10 + 22 + 36}, {20 + 44 + 72}}, y2.Value())
+}
+
+// TestBlockForDotGeneral_Deduplication tests that the same weight matrix
+// is only blocked once when used in multiple DotGeneral operations.
+func TestBlockForDotGeneral_Deduplication(t *testing.T) {
+	goBackend, ok := backend.(*Backend)
+	if !ok {
+		t.Skip("Test requires SimpleGo backend")
+	}
+
+	builder := goBackend.Builder("TestDeduplication").(*Builder)
+	mainFn := builder.Main().(*Function)
+
+	// Create a parameter node (simulating weights)
+	K, N := 128, 256
+	weightsShape := shapes.Make(dtypes.Float32, K, N) // [K, N]
+	weights, err := mainFn.Parameter("weights", weightsShape, nil)
+	require.NoError(t, err)
+	weightsNode := weights.(*Node)
+
+	// Get blocked input twice - should return the same node due to deduplication
+	// Using blockForDotGeneral with explicit parameters for a 2D weight matrix
+	blocked1 := builder.blockForDotGeneral(weightsNode, []int{0}, []int{}, 1, N, K)
+	blocked2 := builder.blockForDotGeneral(weightsNode, []int{0}, []int{}, 1, N, K)
+
+	// Should be the exact same node (pointer equality)
+	assert.Same(t, blocked1, blocked2, "Deduplication should return the same blocked node")
+
+	// Verify the blocked shape is correct
+	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtypes.Float32]
+	expectedCrossBlocks := (N + blockDim - 1) / blockDim
+	expectedContractBlocks := (K + blockDim - 1) / blockDim
+	assert.Equal(t, []int{1, expectedCrossBlocks, expectedContractBlocks, blockDim, blockDim},
+		blocked1.shape.Dimensions)
+
+	builder.Finalize()
+}
+
+// TestBlockForDotGeneral_Execution tests that the BlockForDotGeneral operation
+// correctly converts a flat tensor to blocked format.
+func TestBlockForDotGeneral_Execution(t *testing.T) {
+	goBackend, ok := backend.(*Backend)
+	if !ok {
+		t.Skip("Test requires SimpleGo backend")
+	}
+
+	// Use a small block size for testing
+	// Create a simple 2D tensor [4, 4] with known values
+	K, N := 4, 4
+	dtype := dtypes.Float32
+
+	// Create source buffer
+	sourceShape := shapes.Make(dtype, K, N)
+	sourceAny, sourceFlatAny, err := goBackend.NewSharedBuffer(0, sourceShape)
+	require.NoError(t, err)
+	source := sourceAny.(*Buffer)
+	sourceFlat := sourceFlatAny.([]float32)
+
+	// Fill with sequential values: 1, 2, 3, ..., 16
+	for i := range sourceFlat {
+		sourceFlat[i] = float32(i + 1)
+	}
+
+	// Create block data (simulating what blockRHSForDotGeneral would create)
+	blockLog2Dim := 2 // Block dim = 4
+	blockDim := 1 << blockLog2Dim
+	blockedShape := dgCreateBlockedShape(dtype, 1, N, K, blockLog2Dim)
+
+	data := &blockForDotGeneralData{
+		blockLog2Dim:    blockLog2Dim,
+		blockedShape:    blockedShape,
+		batchSize:       1,
+		crossSize:       N,
+		contractingSize: K,
+		contractingAxes: []int{0},
+		batchAxes:       []int{},
+	}
+
+	// Create a mock node
+	node := &Node{
+		shape: blockedShape,
+		data:  data,
+	}
+
+	// Execute the blocking operation
+	output, err := execBlockForDotGeneral(goBackend, node, []*Buffer{source}, nil)
+	require.NoError(t, err)
+
+	// Verify output shape
+	assert.Equal(t, blockedShape, output.shape)
+
+	// Verify output has correct size
+	expectedSize := 1 * 1 * 1 * blockDim * blockDim // [1, 1, 1, 4, 4]
+	assert.Equal(t, expectedSize, len(output.flat.([]float32)))
+
+	// The blocked output should preserve all the values (just reorganized)
+	outputFlat := output.flat.([]float32)
+	inputSum := float32(0)
+	for _, v := range sourceFlat {
+		inputSum += v
+	}
+	outputSum := float32(0)
+	for _, v := range outputFlat {
+		outputSum += v
+	}
+	assert.Equal(t, inputSum, outputSum, "Sum of values should be preserved after blocking")
+}
+
+// TestDotGeneral_PreBlockedCorrectness tests that DotGeneral with pre-blocked
+// weights produces the same results as without pre-blocking.
+func TestDotGeneral_PreBlockedCorrectness(t *testing.T) {
+	goBackend, ok := backend.(*Backend)
+	if !ok {
+		t.Skip("Test requires SimpleGo backend")
+	}
+
+	// Test with matrices large enough to trigger pre-blocking
+	// but small enough to run quickly
+	M, K, N := 32, 128, 64
+
+	// Create input tensors
+	lhsData := make([]float32, M*K)
+	rhsData := make([]float32, K*N)
+	for i := range lhsData {
+		lhsData[i] = float32(i%100) * 0.01
+	}
+	for i := range rhsData {
+		rhsData[i] = float32(i%100) * 0.01
+	}
+
+	lhs := tensors.FromFlatDataAndDimensions(lhsData, M, K)
+	rhs := tensors.FromFlatDataAndDimensions(rhsData, K, N)
+
+	// First, compute with normalized path (no pre-blocking)
+	goBackend.dotGeneralForceExecutionPath = normalizedPath
+	wantResult := graph.MustExecOnce(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+		return graph.DotGeneral(lhs, []int{1}, nil, rhs, []int{0}, nil)
+	}, lhs, rhs)
+
+	// Now compute with blocked path (which may use pre-blocking for constant RHS)
+	goBackend.dotGeneralForceExecutionPath = blockedPath
+	gotResult := graph.MustExecOnce(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+		return graph.DotGeneral(lhs, []int{1}, nil, rhs, []int{0}, nil)
+	}, lhs, rhs)
+
+	// Reset to default (auto-select)
+	goBackend.dotGeneralForceExecutionPath = autoSelectPath
+
+	// Compare results
+	require.True(t, gotResult.Shape().Equal(wantResult.Shape()))
+	requireSameTensorsFloat32(t, wantResult, gotResult, 1e-4)
+}
+
+// TestBlockForDotGeneralData_Equal tests the Equal method for deduplication.
+func TestBlockForDotGeneralData_Equal(t *testing.T) {
+	base := &blockForDotGeneralData{
+		blockLog2Dim:    5,
+		blockedShape:    shapes.Make(dtypes.Float32, 1, 4, 4, 32, 32),
+		batchSize:       1,
+		crossSize:       128,
+		contractingSize: 128,
+		contractingAxes: []int{0},
+		batchAxes:       []int{},
+	}
+
+	tests := []struct {
+		name  string
+		other *blockForDotGeneralData
+		want  bool
+	}{
+		{
+			name: "Identical",
+			other: &blockForDotGeneralData{
+				blockLog2Dim:    5,
+				blockedShape:    shapes.Make(dtypes.Float32, 1, 4, 4, 32, 32),
+				batchSize:       1,
+				crossSize:       128,
+				contractingSize: 128,
+				contractingAxes: []int{0},
+				batchAxes:       []int{},
+			},
+			want: true,
+		},
+		{
+			name: "DifferentBlockLog2Dim",
+			other: &blockForDotGeneralData{
+				blockLog2Dim:    4, // Different
+				blockedShape:    shapes.Make(dtypes.Float32, 1, 4, 4, 32, 32),
+				batchSize:       1,
+				crossSize:       128,
+				contractingSize: 128,
+				contractingAxes: []int{0},
+				batchAxes:       []int{},
+			},
+			want: false,
+		},
+		{
+			name: "DifferentContractingAxes",
+			other: &blockForDotGeneralData{
+				blockLog2Dim:    5,
+				blockedShape:    shapes.Make(dtypes.Float32, 1, 4, 4, 32, 32),
+				batchSize:       1,
+				crossSize:       128,
+				contractingSize: 128,
+				contractingAxes: []int{1}, // Different
+				batchAxes:       []int{},
+			},
+			want: false,
+		},
+		{
+			name: "DifferentBatchAxes",
+			other: &blockForDotGeneralData{
+				blockLog2Dim:    5,
+				blockedShape:    shapes.Make(dtypes.Float32, 1, 4, 4, 32, 32),
+				batchSize:       1,
+				crossSize:       128,
+				contractingSize: 128,
+				contractingAxes: []int{0},
+				batchAxes:       []int{0}, // Different
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := base.EqualNodeData(tt.other)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
