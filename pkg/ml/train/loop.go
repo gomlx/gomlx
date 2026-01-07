@@ -21,7 +21,6 @@ import (
 	"iter"
 	"math"
 	"slices"
-	"sort"
 	"time"
 
 	"github.com/gomlx/gomlx/backends"
@@ -635,9 +634,7 @@ func (h *priorityHooks[H]) All() iter.Seq[H] {
 		for key := range h.hooks {
 			keys = append(keys, key)
 		}
-		sort.Slice(keys, func(i, j int) bool {
-			return keys[i] < keys[j]
-		})
+		slices.Sort(keys)
 		for _, key := range keys {
 			for _, hook := range h.hooks[key] {
 				if !yield(hook) {

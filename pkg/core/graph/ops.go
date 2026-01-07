@@ -1273,7 +1273,7 @@ func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 				newAxesSpec = append(newAxesSpec, spec)
 			} else {
 				spec.IsSpacer = false
-				for ii := 0; ii < copies; ii++ {
+				for range copies {
 					newAxesSpec = append(newAxesSpec, spec)
 				}
 			}
@@ -1351,7 +1351,7 @@ func Split(x *Node, axis int, numSplits int) []*Node {
 
 	splits := make([]*Node, numSplits)
 	splitDim := dim / numSplits
-	for ii := 0; ii < numSplits; ii++ {
+	for ii := range numSplits {
 		start := ii * splitDim
 		end := start + splitDim
 		if ii == numSplits-1 {
@@ -1707,12 +1707,7 @@ func newEinsumOperandDesc(str string) (einsumOperandDesc, error) {
 }
 
 func (e einsumOperandDesc) hasAxis(axis rune) bool {
-	for _, r := range e {
-		if r == axis {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(e, axis)
 }
 
 func (e einsumOperandDesc) axisIndex(axis rune) int {
@@ -1966,7 +1961,7 @@ func MatMul(lhs, rhs *Node) *Node {
 		}
 		return string('a' + rune(offset+axis))
 	}
-	var outputAxesLetters string
+	var outputAxesLetters strings.Builder
 
 	var lhsBatchAxes, rhsBatchAxes []int
 	minRank := min(rhs.Rank(), lhs.Rank())
@@ -1980,10 +1975,10 @@ func MatMul(lhs, rhs *Node) *Node {
 	// First axes of the output are the "batch" axes not present in the other side.
 	// Only one of the two for-loop belows will run.
 	for axis := range lhs.Rank() - minRank {
-		outputAxesLetters += letterForAxis(lhsIdx, axis)
+		outputAxesLetters.WriteString(letterForAxis(lhsIdx, axis))
 	}
 	for axis := range rhs.Rank() - minRank {
-		outputAxesLetters += letterForAxis(rhsIdx, axis)
+		outputAxesLetters.WriteString(letterForAxis(rhsIdx, axis))
 	}
 
 	// Process common batch axes:
@@ -1995,7 +1990,7 @@ func MatMul(lhs, rhs *Node) *Node {
 		if leftAxisDim == rightAxisDim {
 			// Same batch axis on both sides:
 			rhsRemap[rightAxis] = leftAxis
-			outputAxesLetters += letterForAxis(lhsIdx, leftAxis)
+			outputAxesLetters.WriteString(letterForAxis(lhsIdx, leftAxis))
 			continue
 		}
 		if leftAxisDim != 1 && rightAxisDim != 1 {
@@ -2005,16 +2000,16 @@ func MatMul(lhs, rhs *Node) *Node {
 		}
 		if leftAxisDim == 1 {
 			lhsSqueezedAxes = append(lhsSqueezedAxes, leftAxis)
-			outputAxesLetters += letterForAxis(rhsIdx, rightAxis)
+			outputAxesLetters.WriteString(letterForAxis(rhsIdx, rightAxis))
 		} else { // rightAxisDim == 1
 			rhsSqueezedAxes = append(rhsSqueezedAxes, rightAxis)
-			outputAxesLetters += letterForAxis(lhsIdx, leftAxis)
+			outputAxesLetters.WriteString(letterForAxis(lhsIdx, leftAxis))
 		}
 	}
 
 	// Final output axes
-	outputAxesLetters += letterForAxis(lhsIdx, lhs.Rank()-2)
-	outputAxesLetters += letterForAxis(rhsIdx, rhs.Rank()-1)
+	outputAxesLetters.WriteString(letterForAxis(lhsIdx, lhs.Rank()-2))
+	outputAxesLetters.WriteString(letterForAxis(rhsIdx, rhs.Rank()-1))
 
 	// List lhs and rhs axes as letters:
 	var lhsLetters, rhsLetters string
@@ -2035,6 +2030,6 @@ func MatMul(lhs, rhs *Node) *Node {
 		rhsSqueezed = Squeeze(rhs, rhsSqueezedAxes...)
 	}
 
-	equation := fmt.Sprintf("%s,%s->%s", lhsLetters, rhsLetters, outputAxesLetters)
+	equation := fmt.Sprintf("%s,%s->%s", lhsLetters, rhsLetters, outputAxesLetters.String())
 	return Einsum(equation, lhsSqueezed, rhsSqueezed)
 }

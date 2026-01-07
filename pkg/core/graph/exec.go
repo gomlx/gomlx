@@ -282,10 +282,8 @@ func (e *Exec) parseGraphFn() error {
 		return errors.Errorf("graphFn must be a function")
 	}
 
-	var node *Node
-	nodeType := reflect.TypeOf(node)
-	var tmpGraph *Graph
-	graphType := reflect.TypeOf(tmpGraph)
+	nodeType := reflect.TypeFor[*Node]()
+	graphType := reflect.TypeFor[*Graph]()
 
 	if graphFnT.NumIn() < 1 || graphFnT.NumOut() < 1 {
 		// It requires at least one input and one output.

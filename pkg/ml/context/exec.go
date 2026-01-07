@@ -214,11 +214,9 @@ func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, 
 	if ctxGraphFnT.Kind() != reflect.Func {
 		return nil, errors.Errorf("ctxGraphFn must be a function")
 	}
-	var node *Node
-	nodeType := reflect.TypeOf(node)
-	contextType := reflect.TypeOf(ctx)
-	var tmpGraph *Graph
-	graphType := reflect.TypeOf(tmpGraph)
+	nodeType := reflect.TypeFor[*Node]()
+	contextType := reflect.TypeFor[*Context]()
+	graphType := reflect.TypeFor[*Graph]()
 
 	// Must have at least 2 arguments, and the first must be of type *Context.
 	if ctxGraphFnT.NumIn() < 2 {
@@ -290,12 +288,9 @@ func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, 
 func (e *Exec) buildGraphFn() {
 	ctxGraphFnT := reflect.TypeOf(e.ctxGraphFn)
 	numIn := ctxGraphFnT.NumIn() - 1
-	var node *Node
-	nodeT := reflect.TypeOf(node)
-	var nodeSlice []*Node
-	nodeSliceT := reflect.TypeOf(nodeSlice)
-	var tmpGraph *Graph
-	graphT := reflect.TypeOf(tmpGraph)
+	nodeT := reflect.TypeFor[*Node]()
+	nodeSliceT := reflect.TypeFor[[]*Node]()
+	graphT := reflect.TypeFor[*Graph]()
 
 	// Build input types for new graphFn: same as ctxGraphFn, but without the Context.
 	var inT []reflect.Type
@@ -307,7 +302,7 @@ func (e *Exec) buildGraphFn() {
 		inT = []reflect.Type{nodeSliceT}
 	} else {
 		inT = make([]reflect.Type, numIn)
-		for ii := 0; ii < numIn; ii++ {
+		for ii := range numIn {
 			inT[ii] = nodeT
 		}
 	}

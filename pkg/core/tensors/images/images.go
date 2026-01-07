@@ -387,11 +387,11 @@ func toImageGenericsImpl[T dtypes.NumberNotComplex | float16.Float16 | bfloat16.
 	isBFloat16 := imagesTensor.DType() == dtypes.BFloat16
 	imagesTensor.MustConstFlatData(func(flatAny any) {
 		tensorData := flatAny.([]T)
-		for imageIdx := 0; imageIdx < numImages; imageIdx++ {
+		for range numImages {
 			img := image.NewNRGBA(image.Rect(0, 0, width, height))
-			for h := 0; h < height; h++ {
-				for w := 0; w < width; w++ {
-					for d := 0; d < channels; d++ {
+			for h := range height {
+				for w := range width {
+					for d := range channels {
 						var v float64
 						if isFloat16 {
 							v = float64(float16.Float16(tensorData[tensorPos]).Float32())

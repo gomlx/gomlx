@@ -67,7 +67,7 @@ func TestOnDevice(t *testing.T) {
 
 	// Verify we can yield 100 batches
 	yieldedValues := make(map[float32]bool)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		_, inputs, labels, err := onDeviceDS.Yield()
 		require.NoError(t, err, "yield #%d should not error", i)
 		require.NotNil(t, inputs)
@@ -108,7 +108,7 @@ func TestOnDevice(t *testing.T) {
 
 	// Verify we get the same 100 batches again
 	resetValues := make(map[float32]bool)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		_, inputs, labels, err := onDeviceDS.Yield()
 		require.NoError(t, err, "yield #%d after reset should not error", i)
 		require.NotNil(t, inputs)

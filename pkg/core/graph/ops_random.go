@@ -5,9 +5,9 @@ import (
 	"math/rand"
 	"reflect"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"golang.org/x/exp/constraints"
@@ -260,7 +260,7 @@ func RandomIntN[IntT interface{ *Node | constraints.Integer }](
 		ratio = Div(Const(g, uint64(math.MaxUint64)), ConvertDType(n, dtypes.U64))
 		maxValue = ConvertDType(AddScalar(n, -1), shape.DType)
 	default:
-		nUint64 := reflect.ValueOf(n).Convert(reflect.TypeOf(uint64(0))).Interface().(uint64)
+		nUint64 := reflect.ValueOf(n).Convert(reflect.TypeFor[uint64]()).Interface().(uint64)
 		ratio = Scalar(g, dtypes.U64, uint64(math.MaxUint64)/nUint64)
 		maxValue = Scalar(g, shape.DType, nUint64-1)
 	}

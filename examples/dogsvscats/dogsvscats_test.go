@@ -70,7 +70,6 @@ func BenchmarkDataset(b *testing.B) {
 	trainDS, trainEvalDS, _ := CreateDatasets(config)
 	allDatasets := []train.Dataset{trainDS, trainEvalDS}
 	for dsIdx, dsType := range []string{"train-augmented", "eval"} {
-		dsIdx := dsIdx
 		for _, useParallelism := range []bool{false, true} {
 			name := dsType
 			ds := train.Dataset(allDatasets[dsIdx])

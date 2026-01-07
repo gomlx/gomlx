@@ -57,7 +57,7 @@ func NewDataset(backend backends.Backend, rawData *RawData, name string) *datase
 func PrintBatchSamples(backend backends.Backend, data *RawData) {
 	sampler := NewDataset(backend, data, "batched sample dataset")
 	sampler.BatchSize(3, true)
-	for ii := 0; ii < 2; ii++ {
+	for ii := range 2 {
 		fmt.Printf("\nSample batch %d:\n", ii)
 		_, inputs, labels, err := sampler.Yield()
 		if err != nil {

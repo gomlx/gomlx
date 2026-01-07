@@ -1,5 +1,7 @@
 package backends
 
+import "maps"
+
 import "github.com/gomlx/gomlx/pkg/core/dtypes"
 
 // Capabilities holds mappings of what is supported by a backend.
@@ -17,12 +19,8 @@ type Capabilities struct {
 func (c Capabilities) Clone() Capabilities {
 	var c2 Capabilities
 	c2.Operations = make(map[OpType]bool, len(c.Operations))
-	for k, v := range c.Operations {
-		c2.Operations[k] = v
-	}
+	maps.Copy(c2.Operations, c.Operations)
 	c2.DTypes = make(map[dtypes.DType]bool, len(c.DTypes))
-	for k, v := range c.DTypes {
-		c2.DTypes[k] = v
-	}
+	maps.Copy(c2.DTypes, c.DTypes)
 	return c2
 }

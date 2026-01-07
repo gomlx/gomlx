@@ -494,7 +494,7 @@ func DropdownFlowerTypes(
 		noise := cfg.GenerateNoise(numImages)
 		statusId := "flower_types_status_" + gonbui.UniqueId()
 		gonbui.UpdateHTML(statusId, "Generating flowers ...")
-		for flowerType := 0; flowerType < numFlowerTypes; flowerType++ {
+		for flowerType := range numFlowerTypes {
 			flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 			generator := NewImagesGenerator(cfg, noise, flowerIds, numDiffusionSteps)
 			denoisedImages := generator.Generate()

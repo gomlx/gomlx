@@ -144,14 +144,14 @@ func Gather(params, indices *Node, indicesAreSorted ...bool) *Node {
 	indexVectorDim := indicesRank - 1
 	// * startIndexMap is sequential and sorted: it always points to the first axes of params.
 	startIndexMap := make([]int, indexedSubRank)
-	for ii := 0; ii < indexedSubRank; ii++ {
+	for ii := range indexedSubRank {
 		startIndexMap[ii] = ii
 	}
 	// * sliceSizes are 1 where we indexed (indexedSubRank), and the full params size else where (the slices we are gathering).
 	// * collapsedSliceDims sets to collapse all the indexed params dimensions (the first indexedSubRank).
 	sliceSizes := make([]int, paramsRank)
 	collapsedSliceDims := make([]int, indexedSubRank)
-	for ii := 0; ii < paramsRank; ii++ {
+	for ii := range paramsRank {
 		if ii < indexedSubRank {
 			sliceSizes[ii] = 1
 			collapsedSliceDims[ii] = ii
@@ -274,7 +274,7 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int, indic
 	//   the input (the order in `slicedAxes` will be ignored).
 	offsetOutputAxes := make([]int, 0, numSlicedAxes)
 	var collapsedSliceDims []int // Left empty.
-	for ii := 0; ii < inputRank; ii++ {
+	for ii := range inputRank {
 		axis := ii + outputPrefixRank
 		offsetOutputAxes = append(offsetOutputAxes, axis)
 	}
@@ -539,11 +539,11 @@ func genericScatter(operand, indices, updates *Node, sorted, unique bool, fn sca
 		updateWindowsAxes = append(updateWindowsAxes, ii)
 	}
 	insertedWindowsAxes := make([]int, 0, indexedRank)
-	for ii := 0; ii < indexedRank; ii++ {
+	for ii := range indexedRank {
 		insertedWindowsAxes = append(insertedWindowsAxes, ii)
 	}
 	scatterAxesToOperandAxes := make([]int, 0, 10)
-	for ii := 0; ii < indexedRank; ii++ {
+	for ii := range indexedRank {
 		scatterAxesToOperandAxes = append(scatterAxesToOperandAxes, ii)
 	}
 	return fn(operand, indices, updates, indicesRank-1, updateWindowsAxes, insertedWindowsAxes, scatterAxesToOperandAxes,

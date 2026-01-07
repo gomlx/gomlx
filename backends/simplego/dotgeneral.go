@@ -81,11 +81,11 @@ func adjustAxisToRank(rank, axis int) (int, error) {
 //
 // See execDotGeneral for the implementation.
 func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Value, rhsContractingAxes, rhsBatchAxes []int) (backends.Value, error) {
-	inputs, err := f.builder.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
+	inputPair, err := f.builder.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
 	}
-	lhs, rhs := inputs[0], inputs[1]
+	lhs, rhs := inputPair[0], inputPair[1]
 	dtype := lhs.shape.DType
 	if dtype != rhs.shape.DType {
 		return nil, errors.Errorf("DotGeneral lhs (left-hand-side) and rhs operands don't match data types: %s and %s", dtype, rhs.shape.DType)
@@ -181,23 +181,29 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	// This enables proper deduplication of pre-blocked inputs via getOrCreateNode.
 	params.execPath = dgSelectExecPath(f.builder.backend, lhs.shape, rhs.shape, &params)
 
-	// Prepare inputs for the DotGeneral node.
-	var lhsInput, rhsInput *Node = lhs, rhs
-
 	// For blockedPath, pre-block BOTH inputs at graph-build time.
 	// This allows deduplication: if the same tensor is used in multiple DotGenerals,
 	// the blocking is done once and shared.
-	// Note: checkPath intentionally does NOT pre-block - it needs raw inputs to compare
-	// runtime-blocked vs normalized paths.
-	if params.execPath == blockedPath {
-		lhsInput = f.builder.blockForDotGeneral(lhs, params.lhsContractingAxes, params.lhsBatchAxes,
+	var lhsBlocked, rhsBlocked *Node
+	if params.execPath == blockedPath || params.execPath == checkPath {
+		lhsBlocked = f.builder.blockForDotGeneral(lhs, params.lhsContractingAxes, params.lhsBatchAxes,
 			params.batchSize, params.lhsCrossSize, params.contractingSize)
-		rhsInput = f.builder.blockForDotGeneral(rhs, params.rhsContractingAxes, params.rhsBatchAxes,
+		rhsBlocked = f.builder.blockForDotGeneral(rhs, params.rhsContractingAxes, params.rhsBatchAxes,
 			params.batchSize, params.rhsCrossSize, params.contractingSize)
 	}
 
 	// Create dot-general node: it will generate a normalized output [batchSize, lhsCrossSize, rhsCrossSize].
-	dotGeneral, _ := f.builder.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), []*Node{lhsInput, rhsInput}, &params)
+	var inputs []*Node
+	switch params.execPath {
+	case blockedPath:
+		inputs = []*Node{lhsBlocked, rhsBlocked}
+	case checkPath:
+		// Include inputs in both forms.
+		inputs = []*Node{lhsBlocked, rhsBlocked, lhs, rhs}
+	default:
+		inputs = []*Node{lhs, rhs}
+	}
+	dotGeneral, _ := f.builder.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), inputs, &params)
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))
@@ -349,21 +355,39 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 
 	var err error
 	switch params.execPath {
-	case blockedPath:
+	case blockedPath, checkPath:
 		// Inputs are pre-blocked at graph-build time. Extract block metadata from input nodes.
 		lhsNode := node.inputs[0]
 		rhsNode := node.inputs[1]
-		lhsBlockData, ok := lhsNode.data.(*blockForDotGeneralData)
+		_, ok := lhsNode.data.(*blockForDotGeneralData)
 		if !ok {
 			backend.putBuffer(output)
-			return nil, errors.Errorf("blockedPath requires pre-blocked LHS input, got %T (node type: %s)", lhsNode.data, lhsNode.opType)
+			return nil, errors.Errorf("blockedPath requires pre-blocked LHS input, got %T (node type: %s)",
+				lhsNode.data, lhsNode.opType)
 		}
 		rhsBlockData, ok := rhsNode.data.(*blockForDotGeneralData)
 		if !ok {
 			backend.putBuffer(output)
-			return nil, errors.Errorf("blockedPath requires pre-blocked RHS input, got %T (node type: %s)", rhsNode.data, rhsNode.opType)
+			return nil, errors.Errorf("blockedPath requires pre-blocked RHS input, got %T (node type: %s)",
+				rhsNode.data, rhsNode.opType)
 		}
-		err = execDotGeneralBlocked(backend, lhs, rhs, lhsBlockData, rhsBlockData, params, output)
+		hasBatch := len(rhsBlockData.batchAxes) > 0 && rhsBlockData.batchSize > 1 // batchSize is the same for lhs and rhs
+		err = execDotGeneralBlocked(backend, lhs, rhs, hasBatch, params, output)
+
+		if err != nil && params.execPath == checkPath {
+			// Debug path: run also the small path and compare results:
+			lhsRaw, rhsRaw := inputs[2], inputs[3]
+			output2 := backend.getBufferForShape(outputShape)
+			output2.Zeros()
+			err = execDotGeneralSmall(backend, lhsRaw, rhsRaw, params, output2)
+			if err != nil {
+				backend.putBuffer(output2)
+				backend.putBuffer(output)
+				return nil, err
+			}
+			err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+			backend.putBuffer(output2) // Discard second output, no longer needed
+		}
 
 	case smallMatMulPath:
 		// SmallMatMul fast path: small float32 matrices in standard [M,K]×[K,N] order.
@@ -374,27 +398,6 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	case normalizedPath:
 		// Transpose-based normalized path for small matrices
 		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
-
-	case checkPath:
-		// Debug path: run both paths and compare results
-		output2 := backend.getBufferForShape(outputShape)
-		output2.Zeros()
-		err = execDotGeneralSmall(backend, lhs, rhs, params, output2)
-		if err != nil {
-			backend.putBuffer(output2)
-			backend.putBuffer(output)
-			return nil, err
-		}
-		// For checkPath, we need to run the blocked path with runtime blocking
-		// since the inputs aren't pre-blocked when checkPath is selected.
-		err = execDotGeneralBlockedWithRuntimeBlocking(backend, lhs, rhs, params, output)
-		if err != nil {
-			backend.putBuffer(output2)
-			backend.putBuffer(output)
-			return nil, err
-		}
-		err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
-		backend.putBuffer(output2)
 
 	default:
 		err = errors.Errorf("unknown execution path %d for DotGeneral", params.execPath)

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"slices"
 
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -132,13 +133,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 		if !needGradientForNode(node) {
 			continue
 		}
-		needInputs := false
-		for _, input := range node.Inputs() {
-			if needGradientForNode(input) {
-				needInputs = true
-				break
-			}
-		}
+		needInputs := slices.ContainsFunc(node.Inputs(), needGradientForNode)
 		if !needInputs {
 			continue
 		}
@@ -612,13 +607,13 @@ func whereVJP(node, v *Node, _ shapes.Shape) []*Node {
 func mulVJP(node, v *Node, _ shapes.Shape) []*Node {
 	inputsVJPs := make([]*Node, 2)
 	broadcastInputs := make([]*Node, 2)
-	for ii := 0; ii < 2; ii++ {
+	for ii := range 2 {
 		broadcastInputs[ii] = node.inputNodes[ii]
 		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
 			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
 		}
 	}
-	for ii := 0; ii < 2; ii++ {
+	for ii := range 2 {
 		vMul := Mul(v, broadcastInputs[1-ii])
 		inputsVJPs[ii] = vjpForDefaultBroadcast(node, node.inputNodes[ii], vMul)
 	}
@@ -630,7 +625,7 @@ func mulVJP(node, v *Node, _ shapes.Shape) []*Node {
 func divVJP(node, v *Node, _ shapes.Shape) []*Node {
 	inputsVJPs := make([]*Node, 2)
 	broadcastInputs := make([]*Node, 2)
-	for ii := 0; ii < 2; ii++ {
+	for ii := range 2 {
 		broadcastInputs[ii] = node.inputNodes[ii]
 		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
 			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
@@ -651,7 +646,7 @@ func divVJP(node, v *Node, _ shapes.Shape) []*Node {
 // TODO: handle the negative case for complex numbers, if one wants that.
 func powVJP(node, v *Node, _ shapes.Shape) []*Node {
 	broadcastInputs := make([]*Node, 2)
-	for ii := 0; ii < 2; ii++ {
+	for ii := range 2 {
 		broadcastInputs[ii] = node.inputNodes[ii]
 		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
 			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())

@@ -136,7 +136,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 	require.NoError(t, err, "Dataset.Yield")
 
 	backend := graphtest.BuildTestBackend()
-	for ctxSourceIdx := 0; ctxSourceIdx < 2; ctxSourceIdx++ {
+	for ctxSourceIdx := range 2 {
 		// Create context.
 		ctx := context.New()
 		if ctxSourceIdx == 0 {

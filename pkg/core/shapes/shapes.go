@@ -174,12 +174,7 @@ func (s Shape) Size() (size int) {
 //
 // Notice scalars are not zero in size -- they have size one, but rank zero.
 func (s Shape) IsZeroSize() bool {
-	for _, d := range s.Dimensions {
-		if d == 0 {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s.Dimensions, 0)
 
 }
 
