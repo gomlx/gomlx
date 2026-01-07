@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strings"
 
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
@@ -277,12 +278,12 @@ func (b *MultiHeadAttentionBuilder) Dropout(rate float64) *MultiHeadAttentionBui
 // nextNAxes enumerates the next n consecutive axis, starting from nextAxis. It returns
 // the string with the axis concatenated.
 func nextNAxes(n int, nextAxis rune) string {
-	var eq string
-	for ii := 0; ii < n; ii++ {
-		eq += string(nextAxis)
+	var eq strings.Builder
+	for range n {
+		eq.WriteString(string(nextAxis))
 		nextAxis++
 	}
-	return eq
+	return eq.String()
 }
 
 // DoneWithCoefficients or Done should be called after all optional settings are configured.

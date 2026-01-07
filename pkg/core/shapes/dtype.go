@@ -126,10 +126,10 @@ func UnsafeSliceForDType(dtype DType, unsafePtr unsafe.Pointer, len int) any {
 
 // Pre-generate constant reflect.TypeOf for convenience.
 var (
-	float32Type  = reflect.TypeOf(float32(0))
-	float64Type  = reflect.TypeOf(float64(0))
-	float16Type  = reflect.TypeOf(float16.Float16(0))
-	bfloat16Type = reflect.TypeOf(bfloat16.BFloat16(0))
+	float32Type  = reflect.TypeFor[float32]()
+	float64Type  = reflect.TypeFor[float64]()
+	float16Type  = reflect.TypeFor[float16.Float16]()
+	bfloat16Type = reflect.TypeFor[bfloat16.BFloat16]()
 )
 
 // CastAsDType casts a numeric value to the corresponding for the DType.

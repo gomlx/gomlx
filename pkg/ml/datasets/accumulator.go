@@ -384,8 +384,8 @@ func (ds *DistributedAccumulator) aggregateShards(shardsToUse []shardBatch, spec
 
 			// Replicate each source shard replicationFactor times
 			shardIdx := 0
-			for i := 0; i < numShardsNeeded; i++ {
-				for j := 0; j < replicationFactor; j++ {
+			for i := range numShardsNeeded {
+				for j := range replicationFactor {
 					if j == 0 {
 						// First replication: use the original shard
 						shards[shardIdx] = sourceShards[i]
@@ -481,8 +481,8 @@ func (ds *DistributedAccumulator) aggregateShards(shardsToUse []shardBatch, spec
 
 			// Replicate each source shard replicationFactor times
 			shardIdx := 0
-			for i := 0; i < numShardsNeeded; i++ {
-				for j := 0; j < replicationFactor; j++ {
+			for i := range numShardsNeeded {
+				for j := range replicationFactor {
 					if j == 0 {
 						// First replication: use the original shard
 						shards[shardIdx] = sourceShards[i]
@@ -719,10 +719,10 @@ func (ds *DistributedAccumulator) StatsString() string {
 		return "No statistics collected yet"
 	}
 
-	var s string
-	s += fmt.Sprintf("Distributed Dataset Statistics (%d bucket types):\n", len(stats))
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("Distributed Dataset Statistics (%d bucket types):\n", len(stats)))
 	for key, count := range stats {
-		s += fmt.Sprintf("  %s: %d batches\n", key, count)
+		s.WriteString(fmt.Sprintf("  %s: %d batches\n", key, count))
 	}
-	return s
+	return s.String()
 }

@@ -232,7 +232,7 @@ func (ds *batchedDataset) lockedBatchTensorsList(
 	numParts := len(inputs)
 	batchedTensors = make([]*tensors.Tensor, 0, numBatchedTensors)
 	parts := make([]*tensors.Tensor, numParts)
-	for batchedTensorIdx := 0; batchedTensorIdx < numBatchedTensors; batchedTensorIdx++ {
+	for batchedTensorIdx := range numBatchedTensors {
 		for ii, inputTensors := range inputs {
 			parts[ii] = inputTensors[batchedTensorIdx]
 		}

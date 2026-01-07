@@ -648,7 +648,7 @@ func ConcatenateOp(inputs []shapes.Shape, axis int) (output shapes.Shape, err er
 				rank, i, currentShape.Rank())
 		}
 
-		for d := 0; d < rank; d++ {
+		for d := range rank {
 			if d == axis {
 				output.Dimensions[d] += currentShape.Dimensions[d]
 			} else {
@@ -767,7 +767,7 @@ func SliceOp(operand shapes.Shape, starts, limits, strides []int) (output shapes
 		Dimensions: make([]int, rank),
 	}
 
-	for axis := 0; axis < rank; axis++ {
+	for axis := range rank {
 		start, limit, stride := starts[axis], limits[axis], strides[axis]
 		dimSize := operand.Dimensions[axis]
 
@@ -853,7 +853,7 @@ func ReduceWindowOp(operand shapes.Shape, windowDimensions, strides, baseDilatio
 
 	// Each output dimension is calculated orthogonally to the others.
 	outputDims := make([]int, rank)
-	for i := 0; i < rank; i++ {
+	for i := range rank {
 		inputDim := operand.Dimensions[i] // Already validated to be > 0 by shapes.Make
 		windowDim := 1
 		if len(windowDimensions) > 0 {

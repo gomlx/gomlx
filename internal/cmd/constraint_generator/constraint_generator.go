@@ -31,7 +31,7 @@ const SliceLevels = 7
 
 func TensorSlicesConstraints() {
 	count := 0
-	for slices := 0; slices < SliceLevels; slices++ {
+	for slices := range SliceLevels {
 		fmt.Printf("\t")
 		for idxType, t := range baseTypes {
 			if idxType > 0 {
@@ -54,7 +54,7 @@ func GraphExecFnConstraints(withContext bool) {
 	var parts []string
 	possibleInputs := []string{"*Graph", "[]*Node"}
 	nodesParams := "*Node"
-	for ii := 0; ii < 6; ii++ {
+	for range 6 {
 		possibleInputs = append(possibleInputs, nodesParams)
 		nodesParams = nodesParams + ", *Node"
 	}

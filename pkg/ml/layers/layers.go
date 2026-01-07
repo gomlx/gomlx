@@ -26,12 +26,12 @@ import (
 	"fmt"
 
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 const (
@@ -122,7 +122,7 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 		featureAxis := axis
 		axis += 1
 		var outputSuffix string
-		for ii := 0; ii < len(outputDimensions); ii++ {
+		for range outputDimensions {
 			outputSuffix += string(axis)
 			axis += 1
 		}

@@ -27,7 +27,7 @@ import (
 	"math/cmplx"
 	"reflect"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -105,7 +105,7 @@ func SlicesInDelta(s0, s1 any, delta float64) bool {
 		}
 
 		// Other numbers:
-		deltaType := reflect.TypeOf(delta)
+		deltaType := reflect.TypeFor[float64]()
 		if !e0v.CanConvert(deltaType) {
 			// Not numeric, cannot check for delta.
 			return false
@@ -236,9 +236,7 @@ func Keys[K comparable, V any](m map[K]V) []K {
 // SortedKeys returns the sorted keys of a map in the form of a slice.
 func SortedKeys[K cmp.Ordered, V any](m map[K]V) []K {
 	s := Keys(m)
-	sort.Slice(s, func(i, j int) bool {
-		return s[i] < s[j]
-	})
+	slices.Sort(s)
 	return s
 }
 
@@ -327,10 +325,7 @@ func MapParallel[In, Out any](in []In, fn func(e In) Out) (out []Out) {
 		return Map(in, fn)
 	}
 	out = make([]Out, len(in))
-	goroutines := runtime.NumCPU()
-	if goroutines > len(in) {
-		goroutines = len(in)
-	}
+	goroutines := min(runtime.NumCPU(), len(in))
 	indices := make(chan int, goroutines)
 	var wg sync.WaitGroup
 	for ii := 0; ii < goroutines; ii++ {
@@ -342,7 +337,7 @@ func MapParallel[In, Out any](in []In, fn func(e In) Out) (out []Out) {
 			wg.Done()
 		}()
 	}
-	for ii := 0; ii < len(in); ii++ {
+	for ii := range in {
 		indices <- ii
 	}
 	close(indices)
@@ -442,7 +437,7 @@ func (f *genericSliceFlagImpl[T]) String() string {
 	parts := make([]string, len(f.parsedSlice))
 	for ii, elem := range f.parsedSlice {
 		v := reflect.ValueOf(elem)
-		stringerType := reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
+		stringerType := reflect.TypeFor[fmt.Stringer]()
 		if v.CanConvert(stringerType) {
 			parts[ii] = v.Convert(stringerType).Interface().(fmt.Stringer).String()
 		} else {

@@ -158,9 +158,9 @@ func NewOrErr() (Backend, error) {
 func splitConfig(config string) (string, string) {
 	backendName := config
 	var backendConfig string
-	if idx := strings.Index(config, ":"); idx != -1 {
-		backendName = config[:idx]
-		backendConfig = config[idx+1:]
+	if before, after, ok := strings.Cut(config, ":"); ok {
+		backendName = before
+		backendConfig = after
 	}
 	return backendName, backendConfig
 }

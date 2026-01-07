@@ -50,7 +50,7 @@ func GenerateSingleOp(method backendparser.Method) {
 	defer func() {
 		must.M(writer.Flush())
 	}()
-	w := func(format string, args ...interface{}) {
+	w := func(format string, args ...any) {
 		_, err := fmt.Fprintf(writer, format, args...)
 		if err != nil {
 			exceptions.Panicf("Failed to write to stdout: %v", err)

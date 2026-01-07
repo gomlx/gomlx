@@ -32,16 +32,17 @@ import (
 	"path"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gomlx/gomlx/examples/downloader"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 
@@ -320,12 +321,7 @@ func (ds *Dataset) inFold(imgType DogOrCat, imgIdx int) bool {
 	}
 	hashValue := crc32.ChecksumIEEE(buffer.Bytes())
 	fold := int(hashValue % uint32(ds.numFolds))
-	for _, included := range ds.folds {
-		if fold == included {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ds.folds, fold)
 }
 
 // yieldIndices deals with the selection of the images to yield for each batch.
@@ -339,10 +335,10 @@ func (ds *Dataset) yieldIndices() (dogsAndCats [2][]int, err error) {
 	defer ds.muCountersSelection.Unlock()
 
 	numYield := [2]int{(ds.batchSize + 1) / 2, ds.batchSize / 2}
-	for imgType := 0; imgType < 2; imgType++ {
+	for imgType := range 2 {
 		dogsAndCats[imgType] = make([]int, 0, numYield[imgType])
 	}
-	for imgType := 0; imgType < 2; imgType++ {
+	for imgType := range 2 {
 		for ii := 0; ii < numYield[imgType]; ii++ {
 			for {
 				var imgIdx int
@@ -508,7 +504,7 @@ func (ds *Dataset) Reset() {
 		ds.selection[Dog] = make([]int, 0, numDogsFold)
 		ds.selection[Cat] = make([]int, 0, numCatsFold)
 
-		for imgType := 0; imgType < 2; imgType++ {
+		for imgType := range 2 {
 			for imgIdx := 0; imgIdx < MaxCount; imgIdx++ {
 				if !ds.inFold(DogOrCat(imgType), imgIdx) {
 					continue
@@ -519,7 +515,7 @@ func (ds *Dataset) Reset() {
 	}
 
 	// (Re-)Shuffle the selections.
-	for imgType := 0; imgType < 2; imgType++ {
+	for imgType := range 2 {
 		ds.shuffle.Shuffle(len(ds.selection[imgType]), func(i, j int) {
 			ds.selection[imgType][i], ds.selection[imgType][j] = ds.selection[imgType][j], ds.selection[imgType][i]
 		})
@@ -612,12 +608,12 @@ func (ds *Dataset) Save(numEpochs int, verbose bool, writers ...io.Writer) error
 	var err error
 	parallelism := runtime.NumCPU() + 1
 	fmt.Printf("\tParallelism: %d\n", parallelism-1)
-	for epoch := 0; epoch < numEpochs; epoch++ {
+	for range numEpochs {
 		var wg sync.WaitGroup
 		var muWrite sync.Mutex
 		errChan := make(chan error, parallelism)
 		// Start parallelism goroutines that read images and write them.
-		for ii := 0; ii < parallelism; ii++ {
+		for range parallelism {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -894,12 +890,12 @@ func BytesToTensor[T interface {
 		convertToDType := func(val byte) T {
 			return T(val) / T(0xFF)
 		}
-		for imgIdx := 0; imgIdx < numImages; imgIdx++ {
+		for range numImages {
 			bufferPos += 1 // Skip the label.
-			for y := 0; y < height; y++ {
-				for x := 0; x < width; x++ {
+			for range height {
+				for range width {
 					// Channel varies through RGBA (4)
-					for channel := 0; channel < 4; channel++ {
+					for range 4 {
 						tensorData[dataPos] = convertToDType(buffer[bufferPos])
 						dataPos++
 						bufferPos++

@@ -84,8 +84,7 @@ func BenchmarkParallelSampling(b *testing.B) {
 	ds, _, _, _, err := MakeDatasets(*flagDataDir)
 	require.NoError(b, err)
 
-	b.ResetTimer()
-	for range b.N {
+	for b.Loop() {
 		_, inputs, _, err := ds.Yield()
 		if err != nil {
 			b.Fatalf("Failed to sample: %+v", err)
