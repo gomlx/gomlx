@@ -180,15 +180,16 @@ func execBlockForDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []
 // Blocked DotGeneral Execution
 // ============================================================================
 
-// runBlockedDotGeneralKernel runs the blocked matrix multiplication kernel on pre-blocked inputs.
-// This is the common execution path shared by both pre-blocked and runtime-blocked execution.
+// execDotGeneralBlocked executes DotGeneral using the blocked (cache-tiled) algorithm.
+// Both inputs MUST be pre-blocked (coming from BlockForDotGeneral nodes).
+// This is the main blocked execution path used when blockedPath is selected at build time.
 //
 // Parameters:
-//   - lhsBlocks, rhsBlocks: blocked input buffers
-//   - params: DotGeneral parameters (for output shape and batch size)
+//   - lhs, rhs: input buffers in blocked format (from BlockForDotGeneral)
+//   - lhsBlockData, rhsBlockData: pre-blocking metadata from the input nodes
+//   - params: DotGeneral parameters
 //   - output: output buffer in flat format
-//   - rhsHasBatch: whether RHS has a batch dimension
-func runBlockedDotGeneralKernel(backend *Backend, lhsBlocks, rhsBlocks *Buffer, params *dotGeneralNodeData, output *Buffer, rhsHasBatch bool) {
+func execDotGeneralBlocked(backend *Backend, lhsBlocks, rhsBlocks *Buffer, hasBatch bool, params *dotGeneralNodeData, output *Buffer) error {
 	dtype := lhsBlocks.shape.DType
 	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
 
@@ -213,67 +214,13 @@ func runBlockedDotGeneralKernel(backend *Backend, lhsBlocks, rhsBlocks *Buffer, 
 	recursive.contractBlocks = lhsBlocks.shape.Dimensions[2]
 
 	// Execute the batch loop with parallelism
-	runDotGeneralBatchLoop(backend, &recursive, params.batchSize, rhsHasBatch)
+	runDotGeneralBatchLoop(backend, &recursive, params.batchSize, hasBatch)
 
 	// Copy output from blocked to flat format
 	finalOutputDType := output.shape.DType
 	copyOutputBlockToFlat := dotGeneralOutputBlockToFlatDTypeMap.Get(finalOutputDType).(func(blockedSource, output *Buffer))
 	copyOutputBlockToFlat(outputBlocks, output)
 	backend.putBuffer(outputBlocks)
-}
-
-// execDotGeneralBlocked executes DotGeneral using the blocked (cache-tiled) algorithm.
-// Both inputs MUST be pre-blocked (coming from BlockForDotGeneral nodes).
-// This is the main blocked execution path used when blockedPath is selected at build time.
-//
-// Parameters:
-//   - lhs, rhs: input buffers in blocked format (from BlockForDotGeneral)
-//   - lhsBlockData, rhsBlockData: pre-blocking metadata from the input nodes
-//   - params: DotGeneral parameters
-//   - output: output buffer in flat format
-func execDotGeneralBlocked(backend *Backend, lhs, rhs *Buffer, lhsBlockData, rhsBlockData *blockForDotGeneralData, params *dotGeneralNodeData, output *Buffer) error {
-	// Determine if RHS has batch dimension from the pre-blocked metadata.
-	// Must check both that batch axes exist AND batch size > 1.
-	rhsHasBatch := len(rhsBlockData.batchAxes) > 0 && rhsBlockData.batchSize > 1
-
-	// Inputs are already in blocked format - run the kernel directly
-	runBlockedDotGeneralKernel(backend, lhs, rhs, params, output, rhsHasBatch)
-	return nil
-}
-
-// execDotGeneralBlockedWithRuntimeBlocking executes DotGeneral using the blocked algorithm
-// with runtime blocking of inputs. Used only for checkPath debugging mode.
-//
-// This is less efficient than pre-blocking at build time because:
-// 1. Blocking happens at runtime for each execution
-// 2. No deduplication if the same tensor is used multiple times
-func execDotGeneralBlockedWithRuntimeBlocking(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
-	dtype := lhs.shape.DType
-	blkLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
-
-	// Block LHS at runtime
-	lhsBlocks := backend.getBuffer(dtype, params.lhsBlockedShape.Size())
-	lhsBlocks.shape = params.lhsBlockedShape
-	lhsBlocks.Zeros()
-	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
-	copyFlatToBlock(lhs, lhsBlocks, params.lhsContractingAxes, params.lhsBatchAxes, params.batchSize, params.lhsCrossSize, params.contractingSize, blkLog2Dim)
-
-	// Block RHS at runtime
-	rhsBlocks := backend.getBuffer(dtype, params.rhsBlockedShape.Size())
-	rhsBlocks.shape = params.rhsBlockedShape
-	rhsBlocks.Zeros()
-	copyFlatToBlock(rhs, rhsBlocks, params.rhsContractingAxes, params.rhsBatchAxes, params.batchSize, params.rhsCrossSize, params.contractingSize, blkLog2Dim)
-
-	// Determine if RHS has batch dimension
-	rhsHasBatch := len(params.rhsBatchAxes) > 0 && params.batchSize > 1
-
-	// Run the kernel
-	runBlockedDotGeneralKernel(backend, lhsBlocks, rhsBlocks, params, output, rhsHasBatch)
-
-	// Free the runtime-allocated blocked buffers
-	backend.putBuffer(lhsBlocks)
-	backend.putBuffer(rhsBlocks)
-
 	return nil
 }
 
