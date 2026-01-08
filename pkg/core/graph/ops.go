@@ -79,11 +79,11 @@ func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distr
 			name, g.name, sharding.Mesh,
 		)
 	}
-	handle := ParameterHandle(len(g.parameters))
+	handle := ParameterHandle(len(g.currentFunc.parameters))
 	if name == "" {
 		name = fmt.Sprintf("parameter_#%d", handle)
 	}
-	if _, ok := g.parameterNameToHandle[name]; ok {
+	if _, ok := g.currentFunc.parameterNameToHandle[name]; ok {
 		exceptions.Panicf("requested parameter with name %q for graph %q already exists", name, g.name)
 	}
 	nodeInputs := &nodeInputsParameter{
@@ -92,7 +92,7 @@ func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distr
 		sharding: sharding, // it can be nil.
 		handle:   handle,
 	}
-	result, err := g.mainFn.Parameter(nodeInputs.name, nodeInputs.shape, sharding.ToBackendsSpec())
+	result, err := g.currentFunc.backendFunc.Parameter(nodeInputs.name, nodeInputs.shape, sharding.ToBackendsSpec())
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to create parameter %q", name))
 	}
@@ -103,8 +103,8 @@ func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distr
 		inputs:       nodeInputs,
 	}
 	g.registerNode(node)
-	g.parameters = append(g.parameters, node)
-	g.parameterNameToHandle[name] = handle
+	g.currentFunc.parameters = append(g.currentFunc.parameters, node)
+	g.currentFunc.parameterNameToHandle[name] = handle
 	return
 }
 
@@ -207,7 +207,7 @@ func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 	var result backends.Value
 	var err error
 	t.MustConstFlatData(func(flat any) {
-		result, err = g.mainFn.Constant(flat, nodeInputs.shape.Dimensions...)
+		result, err = g.currentFunc.backendFunc.Constant(flat, nodeInputs.shape.Dimensions...)
 	})
 	if err != nil {
 		panic(errors.WithMessagef(err, "ConstTensor failed to create a constant in the backend"))

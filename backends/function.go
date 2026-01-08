@@ -74,4 +74,9 @@ type Function interface {
 	//
 	// Return must be called exactly once before Builder.Compile().
 	Return(outputs []Value, shardings []*ShardingSpec) error
+
+	// Call a function with the given inputs.
+	//
+	// The function f must be from the same builder.
+	Call(f Function, inputs ...Value) ([]Value, error)
 }

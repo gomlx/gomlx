@@ -126,6 +126,8 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeAllReduce: true,
 	},
 
+	Functions: true,
+
 	DTypes: map[dtypes.DType]bool{
 		dtypes.Bool:       true,
 		dtypes.Int8:       true,
