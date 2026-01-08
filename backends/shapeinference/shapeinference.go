@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package shapeinference calculates the shape resulting from operations and validates its inputs.
 //
 // This can be useful for new backends to test and help plan for buffer space for temporary or output buffers.

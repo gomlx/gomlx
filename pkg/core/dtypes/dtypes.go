@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package dtypes includes the DType enum for all supported data types for GoMLX.
 //
 // It is forked from XLA based github.com/gomlx/go-xla/pkg/types/dtypes, and likely it will almost

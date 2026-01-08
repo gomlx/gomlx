@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package classifier is a Cifar-10 classifier.
 // It loads a pre-trained model and offers a Classify method that will classify any image,
 // by first resizing it to the model's input size.

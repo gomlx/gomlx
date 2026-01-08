@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package dynamic links the XLA/PJRT CPU plugin dynamically (as in ".so" libraries) with your binary.
 //
 // The default is to load PJRT plugins only after the program starts, using unix `dlopen`.

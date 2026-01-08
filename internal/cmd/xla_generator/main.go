@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // xla_generator generates xla.Backend implementations based on backend.Builder API.
 package main
 

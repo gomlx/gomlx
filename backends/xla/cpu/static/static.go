@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package static links the XLA/PJRT CPU plugin statically with your binary.
 //
 // This is slower than dynamically (pre-)linking, but it may be convenient because the binary won't dependent
