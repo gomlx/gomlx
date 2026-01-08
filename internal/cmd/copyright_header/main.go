@@ -54,6 +54,11 @@ func main() {
 				return nil
 			}
 
+			// Skip generated files.
+			if strings.HasPrefix(d.Name(), "gen_") {
+				return nil
+			}
+
 			return processFile(path, header)
 		})
 		if err != nil {
