@@ -104,7 +104,6 @@ func (f *Function) Return(outputs []*Node, outputShardings []*distributed.Shardi
 	g := f.graph
 	g.AssertValid()
 	g.AssertBuilding()
-	f.returned = true
 	if len(outputs) == 0 {
 		exceptions.Panicf("no outputs selected when Graph.Compile graph %q", g.name)
 	}
@@ -159,6 +158,7 @@ func (f *Function) Return(outputs []*Node, outputShardings []*distributed.Shardi
 	if err := g.currentFunc.backendFunc.Return(outputsOps, backendShardings); err != nil {
 		panic(errors.WithMessagef(err, "Graph failed to set return values"))
 	}
+	f.returned = true
 }
 
 // innermostFunction finds the "innermost" (deepest) function scope among the inputs.
