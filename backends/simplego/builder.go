@@ -56,10 +56,23 @@ func (b *Builder) Main() backends.Function {
 }
 
 // NewFunction creates a new named function within this builder.
+// Named functions can be called with Call() and are independent of the main function.
 func (b *Builder) NewFunction(name string) (backends.Function, error) {
-	return nil, errors.Wrapf(
-		notimplemented.NotImplementedError,
-		"sub-functions not supported for %q builder", BackendName)
+	if b == nil {
+		return nil, errors.Errorf("Builder is nil")
+	}
+	if b.compiled {
+		return nil, errors.Errorf("cannot create new function, builder has already been compiled")
+	}
+	if name == "" {
+		return nil, errors.Errorf("function name cannot be empty")
+	}
+	f := &Function{
+		builder: b,
+		name:    name,
+		parent:  nil, // Top-level functions have no parent
+	}
+	return f, nil
 }
 
 // Compile implements backends.Builder.

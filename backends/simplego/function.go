@@ -19,11 +19,18 @@ type Function struct {
 	builder *Builder
 	name    string
 
+	// parent is the parent function if this is a closure.
+	// For top-level functions (including main), this is nil.
+	parent *Function
+
 	// returned indicates Return() was called.
 	returned bool
 
 	// outputs stores the return values set by Return().
 	outputs []*Node
+
+	// parameters stores the parameter nodes for this function.
+	parameters []*Node
 }
 
 var _ backends.Function = (*Function)(nil)
@@ -37,6 +44,35 @@ func (f *Function) CheckValid() error {
 		return errors.Errorf("cannot add new op to Function %q, builder has already been compiled", f.name)
 	}
 	return nil
+}
+
+// Name returns the name of this function.
+// For closures, this returns "".
+func (f *Function) Name() string {
+	return f.name
+}
+
+// Parent returns the parent function if this is a closure.
+// Returns nil for top-level functions (including main).
+func (f *Function) Parent() backends.Function {
+	if f.parent == nil {
+		return nil
+	}
+	return f.parent
+}
+
+// Closure creates a new closure function within this function.
+// Closures can access values from their parent function's scope.
+func (f *Function) Closure() (backends.Function, error) {
+	if err := f.CheckValid(); err != nil {
+		return nil, err
+	}
+	closure := &Function{
+		builder: f.builder,
+		name:    "", // Closures have empty names
+		parent:  f,
+	}
+	return closure, nil
 }
 
 // verifyAndCastValues sanity checks that the values (backends.Op) are valid and created with this builder.
@@ -974,4 +1010,42 @@ func (f *Function) AllReduce(operands []backends.Value, reductionType backends.R
 	return nil, errors.Wrapf(
 		notimplemented.NotImplementedError,
 		"AllReduce not supported for %q builder", BackendName)
+}
+
+// Call calls a function with the given inputs.
+// The function fn must be from the same builder.
+//
+// Note: Call is used for named top-level functions. Closures cannot be called directly;
+// they are used as parameters to control flow operations like While, If, and Sort.
+func (f *Function) Call(fn backends.Function, inputs ...backends.Value) ([]backends.Value, error) {
+	// For now, Call is not implemented in SimpleGo.
+	// Closures are used inline in control flow operations (While, If, Sort),
+	// not called directly. Full function call support can be added later.
+	return nil, errors.Wrapf(
+		notimplemented.NotImplementedError,
+		"Call not yet supported for %q builder -- closures are used inline in control flow ops", BackendName)
+}
+
+// Sort sorts one or more tensors along the specified axis using a comparator closure.
+// This is a control flow operation that uses a closure.
+func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, inputs ...backends.Value) ([]backends.Value, error) {
+	return nil, errors.Wrapf(
+		notimplemented.NotImplementedError,
+		"Sort not yet supported for %q builder", BackendName)
+}
+
+// While executes a loop while a condition is true.
+// This is a control flow operation that uses closures for condition and body.
+func (f *Function) While(cond, body backends.Function, initialState ...backends.Value) ([]backends.Value, error) {
+	return nil, errors.Wrapf(
+		notimplemented.NotImplementedError,
+		"While not yet supported for %q builder", BackendName)
+}
+
+// If executes one of two branches based on a boolean predicate.
+// This is a control flow operation that uses closures for true and false branches.
+func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Function) ([]backends.Value, error) {
+	return nil, errors.Wrapf(
+		notimplemented.NotImplementedError,
+		"If not yet supported for %q builder", BackendName)
 }
