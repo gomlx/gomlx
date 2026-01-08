@@ -3,6 +3,8 @@
 package simplego
 
 import (
+	"slices"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/backends/shapeinference"
@@ -31,6 +33,10 @@ type Function struct {
 
 	// parameters stores the parameter nodes for this function.
 	parameters []*Node
+
+	// compiled holds pre-compiled execution info (only for closures).
+	// This is set during Return() for closures to allow efficient execution.
+	compiled *CompiledClosure
 }
 
 var _ backends.Function = (*Function)(nil)
@@ -105,6 +111,7 @@ func (f *Function) Parameter(name string, shape shapes.Shape, sharding *backends
 	}
 	n, _ := f.builder.getOrCreateNode(backends.OpTypeParameter, shape, nil, data)
 	f.builder.inputs = append(f.builder.inputs, n)
+	f.parameters = append(f.parameters, n) // Track in function for closures
 	return n, nil
 }
 
@@ -168,7 +175,86 @@ func (f *Function) Return(outputs []backends.Value, shardings []*backends.Shardi
 
 	f.outputs = outputNodes
 	f.returned = true
+
+	// If this is a closure, pre-compile it for efficient execution
+	if f.parent != nil {
+		compiled, err := f.compile()
+		if err != nil {
+			return errors.WithMessagef(err, "failed to compile closure")
+		}
+		f.compiled = compiled
+	}
+
 	return nil
+}
+
+// CompiledClosure returns the pre-compiled closure, or nil if not a closure.
+func (f *Function) CompiledClosure() *CompiledClosure {
+	return f.compiled
+}
+
+// compile pre-compiles a closure for efficient execution.
+// This computes the execution order, parameter mappings, and usage counts.
+func (f *Function) compile() (*CompiledClosure, error) {
+	cc := &CompiledClosure{
+		function:         f,
+		outputNodes:      f.outputs,
+		parameterIndices: make(map[int]int),
+		nodeToSortedIdx:  make(map[int]int),
+	}
+
+	// 1. Identify all nodes reachable from outputs using DFS
+	neededNodes := make(map[int]bool)
+	var findNeeded func(node *Node)
+	findNeeded = func(node *Node) {
+		if neededNodes[node.builderIdx] {
+			return
+		}
+		neededNodes[node.builderIdx] = true
+		for _, input := range node.inputs {
+			findNeeded(input)
+		}
+	}
+	for _, out := range f.outputs {
+		findNeeded(out)
+	}
+
+	// 2. Collect and sort nodes topologically (by builderIdx order)
+	for nodeIdx := range neededNodes {
+		cc.sortedNodes = append(cc.sortedNodes, f.builder.nodes[nodeIdx])
+	}
+	slices.SortFunc(cc.sortedNodes, func(a, b *Node) int {
+		return a.builderIdx - b.builderIdx
+	})
+
+	// 3. Build reverse mapping from builderIdx to sortedNodes index
+	for i, node := range cc.sortedNodes {
+		cc.nodeToSortedIdx[node.builderIdx] = i
+	}
+
+	// 4. Map parameters to input indices
+	for i, param := range f.parameters {
+		cc.parameterIndices[param.builderIdx] = i
+	}
+
+	// 5. Count uses and find max inputs
+	cc.numUses = make([]int, len(cc.sortedNodes))
+	for _, node := range cc.sortedNodes {
+		cc.maxInputs = max(cc.maxInputs, len(node.inputs))
+		for _, input := range node.inputs {
+			if inputSortedIdx, ok := cc.nodeToSortedIdx[input.builderIdx]; ok {
+				cc.numUses[inputSortedIdx]++
+			}
+		}
+	}
+	// Count output uses
+	for _, out := range f.outputs {
+		if outSortedIdx, ok := cc.nodeToSortedIdx[out.builderIdx]; ok {
+			cc.numUses[outSortedIdx]++
+		}
+	}
+
+	return cc, nil
 }
 
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
