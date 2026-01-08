@@ -19,14 +19,46 @@ type Function struct {
 	builder *Builder
 	name    string
 
+	// parent is the parent function if this is a closure, nil otherwise.
+	parent *Function
+
 	// returned indicates Return() was called.
 	returned bool
 
 	// outputs stores the return values set by Return().
 	outputs []*Node
+
+	// parameters stores the parameter nodes for this function (closures have their own parameters).
+	parameters []*Node
 }
 
 var _ backends.Function = (*Function)(nil)
+
+// Name returns the function name. Empty string for closures.
+func (f *Function) Name() string {
+	return f.name
+}
+
+// Parent returns the parent function if this is a closure, nil otherwise.
+func (f *Function) Parent() backends.Function {
+	if f.parent == nil {
+		return nil
+	}
+	return f.parent
+}
+
+// Closure creates a new local function (closure) within this function.
+func (f *Function) Closure() (backends.Function, error) {
+	if err := f.CheckValid(); err != nil {
+		return nil, err
+	}
+	closure := &Function{
+		builder: f.builder,
+		name:    "", // Closures have empty names
+		parent:  f,
+	}
+	return closure, nil
+}
 
 // CheckValid returns an error if the builder or the function are not ok.
 func (f *Function) CheckValid() error {
@@ -63,12 +95,21 @@ func (f *Function) Parameter(name string, shape shapes.Shape, sharding *backends
 			notimplemented.NotImplementedError,
 			"sharding spec %+v not supported for %q builder", sharding, BackendName)
 	}
+
+	// For closures, parameters are tracked in the function's own list
+	// For main function, they're also added to builder.inputs
+	paramIdx := len(f.parameters)
 	data := &nodeParameter{
 		name:     name,
-		inputIdx: len(f.builder.inputs),
+		inputIdx: paramIdx,
 	}
 	n, _ := f.builder.getOrCreateNode(backends.OpTypeParameter, shape, nil, data)
-	f.builder.inputs = append(f.builder.inputs, n)
+	f.parameters = append(f.parameters, n)
+
+	// For the main function, also track in builder.inputs for execution
+	if f.parent == nil {
+		f.builder.inputs = append(f.builder.inputs, n)
+	}
 	return n, nil
 }
 
@@ -974,4 +1015,268 @@ func (f *Function) AllReduce(operands []backends.Value, reductionType backends.R
 	return nil, errors.Wrapf(
 		notimplemented.NotImplementedError,
 		"AllReduce not supported for %q builder", BackendName)
+}
+
+// verifyClosure checks that the given function is a valid closure of the current function.
+// It returns the underlying *Function after verification.
+func (f *Function) verifyClosure(opName string, closureName string, fn backends.Function) (*Function, error) {
+	closure, ok := fn.(*Function)
+	if !ok {
+		return nil, errors.Errorf("%s: %s must be a SimpleGo Function, got %T", opName, closureName, fn)
+	}
+	if closure.parent != f {
+		return nil, errors.Errorf("%s: %s must be a closure of the current function", opName, closureName)
+	}
+	if !closure.returned {
+		return nil, errors.Errorf("%s: %s must have Return() called before use", opName, closureName)
+	}
+	return closure, nil
+}
+
+// sortNode holds the data for a Sort operation.
+type sortNode struct {
+	comparatorFn *Function
+	axis         int
+	isStable     bool
+}
+
+// Sort sorts one or more tensors along the specified axis using a comparator function.
+func (f *Function) Sort(comparatorFn backends.Function, axis int, isStable bool, inputs ...backends.Value) ([]backends.Value, error) {
+	if len(inputs) == 0 {
+		return nil, errors.New("Sort requires at least one input tensor")
+	}
+
+	nodes, err := f.verifyAndCastValues("Sort", inputs...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify comparator is a SimpleGo closure
+	comparator, err := f.verifyClosure("Sort", "comparatorFn", comparatorFn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate axis
+	rank := nodes[0].shape.Rank()
+	if axis < 0 {
+		axis = rank + axis
+	}
+	if axis < 0 || axis >= rank {
+		return nil, errors.Errorf("Sort: axis %d out of range for rank %d", axis, rank)
+	}
+
+	// All inputs must have the same shape
+	for i, node := range nodes[1:] {
+		if !node.shape.Equal(nodes[0].shape) {
+			return nil, errors.Errorf("Sort: all inputs must have the same shape, input 0 has %s, input %d has %s",
+				nodes[0].shape, i+1, node.shape)
+		}
+	}
+
+	data := &sortNode{
+		comparatorFn: comparator,
+		axis:         axis,
+		isStable:     isStable,
+	}
+
+	// Output shapes are the same as input shapes
+	outputShapes := make([]shapes.Shape, len(nodes))
+	for i, node := range nodes {
+		outputShapes[i] = node.shape.Clone()
+	}
+
+	// Create a multi-output node for Sort
+	node := f.builder.newMultiOutputsNode(backends.OpTypeSort, outputShapes, nodes...)
+	node.data = data
+
+	// Return the individual output nodes
+	outputs := make([]backends.Value, len(node.multiOutputsNodes))
+	for i, n := range node.multiOutputsNodes {
+		outputs[i] = n
+	}
+	return outputs, nil
+}
+
+// whileNode holds the data for a While operation.
+type whileNode struct {
+	condFn *Function
+	bodyFn *Function
+}
+
+// While executes bodyFn repeatedly while condFn returns true.
+func (f *Function) While(condFn, bodyFn backends.Function, initialStates ...backends.Value) ([]backends.Value, error) {
+	if len(initialStates) == 0 {
+		return nil, errors.New("While requires at least one initial state value")
+	}
+
+	nodes, err := f.verifyAndCastValues("While", initialStates...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify condFn is a SimpleGo closure
+	cond, err := f.verifyClosure("While", "condFn", condFn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify bodyFn is a SimpleGo closure
+	body, err := f.verifyClosure("While", "bodyFn", bodyFn)
+	if err != nil {
+		return nil, err
+	}
+
+	data := &whileNode{
+		condFn: cond,
+		bodyFn: body,
+	}
+
+	// Output shapes are the same as input shapes
+	outputShapes := make([]shapes.Shape, len(nodes))
+	for i, node := range nodes {
+		outputShapes[i] = node.shape.Clone()
+	}
+
+	// Create a multi-output node for While
+	node := f.builder.newMultiOutputsNode(backends.OpTypeWhile, outputShapes, nodes...)
+	node.data = data
+
+	// Return the individual output nodes
+	outputs := make([]backends.Value, len(node.multiOutputsNodes))
+	for i, n := range node.multiOutputsNodes {
+		outputs[i] = n
+	}
+	return outputs, nil
+}
+
+// ifNode holds the data for an If operation.
+type ifNode struct {
+	trueBranch  *Function
+	falseBranch *Function
+}
+
+// If executes one of two branches based on a predicate.
+func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Function) ([]backends.Value, error) {
+	nodes, err := f.verifyAndCastValues("If", pred)
+	if err != nil {
+		return nil, err
+	}
+	predNode := nodes[0]
+
+	// Verify pred is a scalar boolean
+	if !predNode.shape.IsScalar() || predNode.shape.DType != dtypes.Bool {
+		return nil, errors.Errorf("If: pred must be a scalar boolean, got %s", predNode.shape)
+	}
+
+	// Verify trueBranch is a SimpleGo closure
+	trueFn, err := f.verifyClosure("If", "trueBranch", trueBranch)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify falseBranch is a SimpleGo closure
+	falseFn, err := f.verifyClosure("If", "falseBranch", falseBranch)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify both branches have the same number of outputs
+	if len(trueFn.outputs) != len(falseFn.outputs) {
+		return nil, errors.Errorf("If: trueBranch has %d outputs but falseBranch has %d outputs",
+			len(trueFn.outputs), len(falseFn.outputs))
+	}
+
+	// Verify output shapes match
+	for i := range trueFn.outputs {
+		if !trueFn.outputs[i].shape.Equal(falseFn.outputs[i].shape) {
+			return nil, errors.Errorf("If: output %d shape mismatch: trueBranch has %s, falseBranch has %s",
+				i, trueFn.outputs[i].shape, falseFn.outputs[i].shape)
+		}
+	}
+
+	data := &ifNode{
+		trueBranch:  trueFn,
+		falseBranch: falseFn,
+	}
+
+	// Output shapes are from the branches
+	outputShapes := make([]shapes.Shape, len(trueFn.outputs))
+	for i, out := range trueFn.outputs {
+		outputShapes[i] = out.shape.Clone()
+	}
+
+	// Create a multi-output node for If
+	node := f.builder.newMultiOutputsNode(backends.OpTypeIf, outputShapes, predNode)
+	node.data = data
+
+	// Return the individual output nodes
+	outputs := make([]backends.Value, len(node.multiOutputsNodes))
+	for i, n := range node.multiOutputsNodes {
+		outputs[i] = n
+	}
+	return outputs, nil
+}
+
+// callNode holds the data for a Call operation.
+type callNode struct {
+	targetFn *Function
+}
+
+// Call invokes a named function with the given arguments.
+func (f *Function) Call(fn backends.Function, args ...backends.Value) ([]backends.Value, error) {
+	nodes, err := f.verifyAndCastValues("Call", args...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify fn is a SimpleGo function
+	targetFn, ok := fn.(*Function)
+	if !ok {
+		return nil, errors.Errorf("Call: fn must be a SimpleGo Function, got %T", fn)
+	}
+	if targetFn.builder != f.builder {
+		return nil, errors.Errorf("Call: fn must be from the same Builder")
+	}
+	if !targetFn.returned {
+		return nil, errors.Errorf("Call: fn must have Return() called before use")
+	}
+	if targetFn.name == "" {
+		return nil, errors.Errorf("Call: cannot call a closure directly, use the closure as an argument to Sort/While/If instead")
+	}
+
+	// Verify number of arguments matches function parameters
+	if len(nodes) != len(targetFn.parameters) {
+		return nil, errors.Errorf("Call: function %q expects %d arguments but got %d",
+			targetFn.name, len(targetFn.parameters), len(nodes))
+	}
+
+	// Verify argument shapes match parameter shapes
+	for i, node := range nodes {
+		if !node.shape.Equal(targetFn.parameters[i].shape) {
+			return nil, errors.Errorf("Call: argument %d shape %s doesn't match parameter shape %s",
+				i, node.shape, targetFn.parameters[i].shape)
+		}
+	}
+
+	data := &callNode{
+		targetFn: targetFn,
+	}
+
+	// Output shapes are from the target function outputs
+	outputShapes := make([]shapes.Shape, len(targetFn.outputs))
+	for i, out := range targetFn.outputs {
+		outputShapes[i] = out.shape.Clone()
+	}
+
+	// Create a multi-output node for Call
+	node := f.builder.newMultiOutputsNode(backends.OpTypeCall, outputShapes, nodes...)
+	node.data = data
+
+	// Return the individual output nodes
+	outputs := make([]backends.Value, len(node.multiOutputsNodes))
+	for i, n := range node.multiOutputsNodes {
+		outputs[i] = n
+	}
+	return outputs, nil
 }

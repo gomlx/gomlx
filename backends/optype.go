@@ -117,6 +117,12 @@ const (
 	OpTypeTranspose
 	OpTypeWhere
 
+	// Control flow operations
+
+	OpTypeSort
+	OpTypeWhile
+	OpTypeIf
+
 	// Collective (distributed across devices) operations
 
 	OpTypeAllReduce
