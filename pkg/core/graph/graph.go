@@ -131,11 +131,6 @@ type Graph struct {
 	// nodes include all nodes known to Graph.
 	nodes []*Node
 
-	// parameters keeps track of parameter nodes its names and a mapping of name to index.
-	parameters            []*Node
-	parametersNames       []string
-	parameterNameToHandle map[string]ParameterHandle
-
 	traced bool
 
 	// scalars maintains a cache of scalar values already created in the current Graph for re-use.
@@ -191,13 +186,12 @@ func NewGraph(backend backends.Backend, name string) *Graph {
 		name = fmt.Sprintf("graph_#%d", graphCount)
 	}
 	g := &Graph{
-		backend:               backend,
-		id:                    graphCount,
-		name:                  name,
-		parameterNameToHandle: make(map[string]ParameterHandle),
-		scalars:               make(scalarCache),
-		tensorConstants:       make(tensorConstCache),
-		aliasToNode:           make(map[string]*Node),
+		backend:         backend,
+		id:              graphCount,
+		name:            name,
+		scalars:         make(scalarCache),
+		tensorConstants: make(tensorConstCache),
+		aliasToNode:     make(map[string]*Node),
 
 		distStrategy: distributed.None,
 		numDevices:   1,
@@ -292,9 +286,6 @@ func (g *Graph) Finalize() {
 		g.executable = nil
 	}
 	g.nodes = nil
-	g.parameters = nil
-	g.parametersNames = nil
-	g.parameterNameToHandle = nil
 	g.name = ""
 	g.backend = nil
 }
@@ -733,27 +724,33 @@ func tensorToDeviceBuffer(
 // NumParameters returns the number of parameters created for this graph.
 func (g *Graph) NumParameters() int {
 	g.AssertValid()
-	return len(g.parameters)
+	if g.mainFunc == nil {
+		return 0
+	}
+	return len(g.mainFunc.parameters)
 }
 
 // GetParameterByHandle returns the ii-th parameter, in order of creation, registered for this graph.
 func (g *Graph) GetParameterByHandle(handle ParameterHandle) *Node {
 	g.AssertValid()
-	return g.parameters[handle]
+	if g.mainFunc == nil {
+		return nil
+	}
+	return g.mainFunc.parameters[handle]
 }
 
 // GetParameterByName returns the parameter registered with the given name. Returns nil if the parameter
 // with the given name hasn't been registered (see Parameter method).
 func (g *Graph) GetParameterByName(name string) (node *Node) {
 	g.AssertValid()
-	if name == "" {
+	if name == "" || g.mainFunc == nil {
 		return
 	}
-	handle, ok := g.parameterNameToHandle[name]
+	handle, ok := g.mainFunc.parameterNameToHandle[name]
 	if !ok {
 		return
 	}
-	return g.parameters[handle]
+	return g.mainFunc.parameters[handle]
 }
 
 // String converts the Graph to a multiline string with a description of the full graph.

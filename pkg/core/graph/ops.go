@@ -79,11 +79,11 @@ func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distr
 			name, g.name, sharding.Mesh,
 		)
 	}
-	handle := ParameterHandle(len(g.parameters))
+	handle := ParameterHandle(len(g.currentFunc.parameters))
 	if name == "" {
 		name = fmt.Sprintf("parameter_#%d", handle)
 	}
-	if _, ok := g.parameterNameToHandle[name]; ok {
+	if _, ok := g.currentFunc.parameterNameToHandle[name]; ok {
 		exceptions.Panicf("requested parameter with name %q for graph %q already exists", name, g.name)
 	}
 	nodeInputs := &nodeInputsParameter{
@@ -103,8 +103,8 @@ func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distr
 		inputs:       nodeInputs,
 	}
 	g.registerNode(node)
-	g.parameters = append(g.parameters, node)
-	g.parameterNameToHandle[name] = handle
+	g.currentFunc.parameters = append(g.currentFunc.parameters, node)
+	g.currentFunc.parameterNameToHandle[name] = handle
 	return
 }
 

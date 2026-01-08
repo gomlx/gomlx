@@ -36,16 +36,22 @@ type Function struct {
 	returned bool
 
 	inputs, outputs []shapes.Shape
+
+	// parameters keeps track of parameter nodes its names and a mapping of name to index.
+	parameters            []*Node
+	parametersNames       []string
+	parameterNameToHandle map[string]ParameterHandle
 }
 
 // newMainFunc is called during the creation of a Graph.
 func (g *Graph) newMainFunc() *Function {
 	return &Function{
-		graph:       g,
-		backendFunc: g.builder.Main(),
-		name:        MainName,
-		parent:      nil,
-		returned:    false,
+		graph:                 g,
+		backendFunc:           g.builder.Main(),
+		name:                  MainName,
+		parent:                nil,
+		returned:              false,
+		parameterNameToHandle: make(map[string]ParameterHandle),
 	}
 }
 
@@ -159,6 +165,7 @@ func (f *Function) Return(outputs []*Node, outputShardings []*distributed.Shardi
 		panic(errors.WithMessagef(err, "Graph failed to set return values"))
 	}
 	f.returned = true
+	f.outputs = xslices.Map(outputs, func(n *Node) shapes.Shape { return n.Shape() })
 }
 
 // innermostFunction finds the "innermost" (deepest) function scope among the inputs.
