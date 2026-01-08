@@ -31,6 +31,7 @@ const (
 // Node.String allows for a pretty-printing of node. To see the full graph with all nodes, use Graph.String.
 type Node struct {
 	graph        *Graph
+	scope        *Function
 	id           NodeId // id within graph.
 	outputShapes []shapes.Shape
 	outputOps    []backends.Value
@@ -74,6 +75,14 @@ func (n *Node) Graph() *Graph {
 		return nil
 	}
 	return n.graph
+}
+
+// Function scope that holds this Node.
+func (n *Node) Function() *Function {
+	if n == nil {
+		return nil
+	}
+	return n.scope
 }
 
 // Shape of the Node's output. It can be `nil`, for nodes that simply have a side effect, like a "Print" Node.
