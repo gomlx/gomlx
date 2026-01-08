@@ -86,3 +86,18 @@ func (f Function) AllReduce(inputs []backends.Value, reduceOp backends.ReduceOpT
 	[]backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeAllReduce)
 }
+
+func (f Function) Sort(comparator backends.Function, axis int, isStable bool, inputs ...backends.Value) (
+	[]backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeSort)
+}
+
+func (f Function) While(cond, body backends.Function, initialState ...backends.Value) (
+	[]backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeWhile)
+}
+
+func (f Function) If(pred backends.Value, trueBranch, falseBranch backends.Function) (
+	[]backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeIf)
+}

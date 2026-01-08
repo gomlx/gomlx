@@ -7,11 +7,11 @@ import (
 	"strings"
 )
 
-const _OpTypeName = "InvalidParameterConstantIdentityReduceWindowRNGBitGeneratorBatchNormForInferenceBatchNormForTrainingBatchNormGradientBitCountAbsAddArgMinMaxBitcastBitwiseAndBitwiseNotBitwiseOrBitwiseXorBroadcastBroadcastInDimCallClampCeilClzComplexConcatenateConjConvGeneralConvertDTypeCosDivDotDotGeneralDynamicSliceDynamicUpdateSliceEqualEqualTotalOrderErfExpExpm1FFTFloorGatherGreaterOrEqualGreaterOrEqualTotalOrderGreaterThanGreaterThanTotalOrderImagIotaIsFiniteIsNaNLessOrEqualLessOrEqualTotalOrderLessThanLessThanTotalOrderLogLog1pLogicalAndLogicalNotLogicalOrLogicalXorLogisticMaxMinMulNegNotEqualNotEqualTotalOrderPadPowRealReduceBitwiseAndReduceBitwiseOrReduceBitwiseXorReduceLogicalAndReduceLogicalOrReduceLogicalXorReduceMaxReduceMinReduceProductReduceSumRemReshapeReverseRoundRsqrtScatterMaxScatterMinScatterSumSelectAndScatterMaxSelectAndScatterMinSelectAndScatterSumShiftLeftShiftRightArithmeticShiftRightLogicalSignSinSliceSqrtSubTanhTransposeWhereAllReduceCollectiveBroadcastAllGatherBlockForDotGeneralLast"
+const _OpTypeName = "InvalidParameterConstantIdentityReduceWindowRNGBitGeneratorBatchNormForInferenceBatchNormForTrainingBatchNormGradientBitCountAbsAddArgMinMaxBitcastBitwiseAndBitwiseNotBitwiseOrBitwiseXorBroadcastBroadcastInDimCallClampCeilClzComplexConcatenateConjConvGeneralConvertDTypeCosDivDotDotGeneralDynamicSliceDynamicUpdateSliceEqualEqualTotalOrderErfExpExpm1FFTFloorGatherGreaterOrEqualGreaterOrEqualTotalOrderGreaterThanGreaterThanTotalOrderImagIotaIsFiniteIsNaNLessOrEqualLessOrEqualTotalOrderLessThanLessThanTotalOrderLogLog1pLogicalAndLogicalNotLogicalOrLogicalXorLogisticMaxMinMulNegNotEqualNotEqualTotalOrderPadPowRealReduceBitwiseAndReduceBitwiseOrReduceBitwiseXorReduceLogicalAndReduceLogicalOrReduceLogicalXorReduceMaxReduceMinReduceProductReduceSumRemReshapeReverseRoundRsqrtScatterMaxScatterMinScatterSumSelectAndScatterMaxSelectAndScatterMinSelectAndScatterSumShiftLeftShiftRightArithmeticShiftRightLogicalSignSinSliceSqrtSubTanhTransposeWhereSortWhileIfAllReduceCollectiveBroadcastAllGatherBlockForDotGeneralLast"
 
-var _OpTypeIndex = [...]uint16{0, 7, 16, 24, 32, 44, 59, 80, 100, 117, 125, 128, 131, 140, 147, 157, 167, 176, 186, 195, 209, 213, 218, 222, 225, 232, 243, 247, 258, 270, 273, 276, 279, 289, 301, 319, 324, 339, 342, 345, 350, 353, 358, 364, 378, 402, 413, 434, 438, 442, 450, 455, 466, 487, 495, 513, 516, 521, 531, 541, 550, 560, 568, 571, 574, 577, 580, 588, 606, 609, 612, 616, 632, 647, 663, 679, 694, 710, 719, 728, 741, 750, 753, 760, 767, 772, 777, 787, 797, 807, 826, 845, 864, 873, 893, 910, 914, 917, 922, 926, 929, 933, 942, 947, 956, 975, 984, 1002, 1006}
+var _OpTypeIndex = [...]uint16{0, 7, 16, 24, 32, 44, 59, 80, 100, 117, 125, 128, 131, 140, 147, 157, 167, 176, 186, 195, 209, 213, 218, 222, 225, 232, 243, 247, 258, 270, 273, 276, 279, 289, 301, 319, 324, 339, 342, 345, 350, 353, 358, 364, 378, 402, 413, 434, 438, 442, 450, 455, 466, 487, 495, 513, 516, 521, 531, 541, 550, 560, 568, 571, 574, 577, 580, 588, 606, 609, 612, 616, 632, 647, 663, 679, 694, 710, 719, 728, 741, 750, 753, 760, 767, 772, 777, 787, 797, 807, 826, 845, 864, 873, 893, 910, 914, 917, 922, 926, 929, 933, 942, 947, 951, 956, 958, 967, 986, 995, 1013, 1017}
 
-const _OpTypeLowerName = "invalidparameterconstantidentityreducewindowrngbitgeneratorbatchnormforinferencebatchnormfortrainingbatchnormgradientbitcountabsaddargminmaxbitcastbitwiseandbitwisenotbitwiseorbitwisexorbroadcastbroadcastindimcallclampceilclzcomplexconcatenateconjconvgeneralconvertdtypecosdivdotdotgeneraldynamicslicedynamicupdatesliceequalequaltotalordererfexpexpm1fftfloorgathergreaterorequalgreaterorequaltotalordergreaterthangreaterthantotalorderimagiotaisfiniteisnanlessorequallessorequaltotalorderlessthanlessthantotalorderloglog1plogicalandlogicalnotlogicalorlogicalxorlogisticmaxminmulnegnotequalnotequaltotalorderpadpowrealreducebitwiseandreducebitwiseorreducebitwisexorreducelogicalandreducelogicalorreducelogicalxorreducemaxreduceminreduceproductreducesumremreshapereverseroundrsqrtscattermaxscatterminscattersumselectandscattermaxselectandscatterminselectandscattersumshiftleftshiftrightarithmeticshiftrightlogicalsignsinslicesqrtsubtanhtransposewhereallreducecollectivebroadcastallgatherblockfordotgenerallast"
+const _OpTypeLowerName = "invalidparameterconstantidentityreducewindowrngbitgeneratorbatchnormforinferencebatchnormfortrainingbatchnormgradientbitcountabsaddargminmaxbitcastbitwiseandbitwisenotbitwiseorbitwisexorbroadcastbroadcastindimcallclampceilclzcomplexconcatenateconjconvgeneralconvertdtypecosdivdotdotgeneraldynamicslicedynamicupdatesliceequalequaltotalordererfexpexpm1fftfloorgathergreaterorequalgreaterorequaltotalordergreaterthangreaterthantotalorderimagiotaisfiniteisnanlessorequallessorequaltotalorderlessthanlessthantotalorderloglog1plogicalandlogicalnotlogicalorlogicalxorlogisticmaxminmulnegnotequalnotequaltotalorderpadpowrealreducebitwiseandreducebitwiseorreducebitwisexorreducelogicalandreducelogicalorreducelogicalxorreducemaxreduceminreduceproductreducesumremreshapereverseroundrsqrtscattermaxscatterminscattersumselectandscattermaxselectandscatterminselectandscattersumshiftleftshiftrightarithmeticshiftrightlogicalsignsinslicesqrtsubtanhtransposewheresortwhileifallreducecollectivebroadcastallgatherblockfordotgenerallast"
 
 func (i OpType) String() string {
 	if i < 0 || i >= OpType(len(_OpTypeIndex)-1) {
@@ -127,14 +127,17 @@ func _OpTypeNoOp() {
 	_ = x[OpTypeTanh-(100)]
 	_ = x[OpTypeTranspose-(101)]
 	_ = x[OpTypeWhere-(102)]
-	_ = x[OpTypeAllReduce-(103)]
-	_ = x[OpTypeCollectiveBroadcast-(104)]
-	_ = x[OpTypeAllGather-(105)]
-	_ = x[OpTypeBlockForDotGeneral-(106)]
-	_ = x[OpTypeLast-(107)]
+	_ = x[OpTypeSort-(103)]
+	_ = x[OpTypeWhile-(104)]
+	_ = x[OpTypeIf-(105)]
+	_ = x[OpTypeAllReduce-(106)]
+	_ = x[OpTypeCollectiveBroadcast-(107)]
+	_ = x[OpTypeAllGather-(108)]
+	_ = x[OpTypeBlockForDotGeneral-(109)]
+	_ = x[OpTypeLast-(110)]
 }
 
-var _OpTypeValues = []OpType{OpTypeInvalid, OpTypeParameter, OpTypeConstant, OpTypeIdentity, OpTypeReduceWindow, OpTypeRNGBitGenerator, OpTypeBatchNormForInference, OpTypeBatchNormForTraining, OpTypeBatchNormGradient, OpTypeBitCount, OpTypeAbs, OpTypeAdd, OpTypeArgMinMax, OpTypeBitcast, OpTypeBitwiseAnd, OpTypeBitwiseNot, OpTypeBitwiseOr, OpTypeBitwiseXor, OpTypeBroadcast, OpTypeBroadcastInDim, OpTypeCall, OpTypeClamp, OpTypeCeil, OpTypeClz, OpTypeComplex, OpTypeConcatenate, OpTypeConj, OpTypeConvGeneral, OpTypeConvertDType, OpTypeCos, OpTypeDiv, OpTypeDot, OpTypeDotGeneral, OpTypeDynamicSlice, OpTypeDynamicUpdateSlice, OpTypeEqual, OpTypeEqualTotalOrder, OpTypeErf, OpTypeExp, OpTypeExpm1, OpTypeFFT, OpTypeFloor, OpTypeGather, OpTypeGreaterOrEqual, OpTypeGreaterOrEqualTotalOrder, OpTypeGreaterThan, OpTypeGreaterThanTotalOrder, OpTypeImag, OpTypeIota, OpTypeIsFinite, OpTypeIsNaN, OpTypeLessOrEqual, OpTypeLessOrEqualTotalOrder, OpTypeLessThan, OpTypeLessThanTotalOrder, OpTypeLog, OpTypeLog1p, OpTypeLogicalAnd, OpTypeLogicalNot, OpTypeLogicalOr, OpTypeLogicalXor, OpTypeLogistic, OpTypeMax, OpTypeMin, OpTypeMul, OpTypeNeg, OpTypeNotEqual, OpTypeNotEqualTotalOrder, OpTypePad, OpTypePow, OpTypeReal, OpTypeReduceBitwiseAnd, OpTypeReduceBitwiseOr, OpTypeReduceBitwiseXor, OpTypeReduceLogicalAnd, OpTypeReduceLogicalOr, OpTypeReduceLogicalXor, OpTypeReduceMax, OpTypeReduceMin, OpTypeReduceProduct, OpTypeReduceSum, OpTypeRem, OpTypeReshape, OpTypeReverse, OpTypeRound, OpTypeRsqrt, OpTypeScatterMax, OpTypeScatterMin, OpTypeScatterSum, OpTypeSelectAndScatterMax, OpTypeSelectAndScatterMin, OpTypeSelectAndScatterSum, OpTypeShiftLeft, OpTypeShiftRightArithmetic, OpTypeShiftRightLogical, OpTypeSign, OpTypeSin, OpTypeSlice, OpTypeSqrt, OpTypeSub, OpTypeTanh, OpTypeTranspose, OpTypeWhere, OpTypeAllReduce, OpTypeCollectiveBroadcast, OpTypeAllGather, OpTypeBlockForDotGeneral, OpTypeLast}
+var _OpTypeValues = []OpType{OpTypeInvalid, OpTypeParameter, OpTypeConstant, OpTypeIdentity, OpTypeReduceWindow, OpTypeRNGBitGenerator, OpTypeBatchNormForInference, OpTypeBatchNormForTraining, OpTypeBatchNormGradient, OpTypeBitCount, OpTypeAbs, OpTypeAdd, OpTypeArgMinMax, OpTypeBitcast, OpTypeBitwiseAnd, OpTypeBitwiseNot, OpTypeBitwiseOr, OpTypeBitwiseXor, OpTypeBroadcast, OpTypeBroadcastInDim, OpTypeCall, OpTypeClamp, OpTypeCeil, OpTypeClz, OpTypeComplex, OpTypeConcatenate, OpTypeConj, OpTypeConvGeneral, OpTypeConvertDType, OpTypeCos, OpTypeDiv, OpTypeDot, OpTypeDotGeneral, OpTypeDynamicSlice, OpTypeDynamicUpdateSlice, OpTypeEqual, OpTypeEqualTotalOrder, OpTypeErf, OpTypeExp, OpTypeExpm1, OpTypeFFT, OpTypeFloor, OpTypeGather, OpTypeGreaterOrEqual, OpTypeGreaterOrEqualTotalOrder, OpTypeGreaterThan, OpTypeGreaterThanTotalOrder, OpTypeImag, OpTypeIota, OpTypeIsFinite, OpTypeIsNaN, OpTypeLessOrEqual, OpTypeLessOrEqualTotalOrder, OpTypeLessThan, OpTypeLessThanTotalOrder, OpTypeLog, OpTypeLog1p, OpTypeLogicalAnd, OpTypeLogicalNot, OpTypeLogicalOr, OpTypeLogicalXor, OpTypeLogistic, OpTypeMax, OpTypeMin, OpTypeMul, OpTypeNeg, OpTypeNotEqual, OpTypeNotEqualTotalOrder, OpTypePad, OpTypePow, OpTypeReal, OpTypeReduceBitwiseAnd, OpTypeReduceBitwiseOr, OpTypeReduceBitwiseXor, OpTypeReduceLogicalAnd, OpTypeReduceLogicalOr, OpTypeReduceLogicalXor, OpTypeReduceMax, OpTypeReduceMin, OpTypeReduceProduct, OpTypeReduceSum, OpTypeRem, OpTypeReshape, OpTypeReverse, OpTypeRound, OpTypeRsqrt, OpTypeScatterMax, OpTypeScatterMin, OpTypeScatterSum, OpTypeSelectAndScatterMax, OpTypeSelectAndScatterMin, OpTypeSelectAndScatterSum, OpTypeShiftLeft, OpTypeShiftRightArithmetic, OpTypeShiftRightLogical, OpTypeSign, OpTypeSin, OpTypeSlice, OpTypeSqrt, OpTypeSub, OpTypeTanh, OpTypeTranspose, OpTypeWhere, OpTypeSort, OpTypeWhile, OpTypeIf, OpTypeAllReduce, OpTypeCollectiveBroadcast, OpTypeAllGather, OpTypeBlockForDotGeneral, OpTypeLast}
 
 var _OpTypeNameToValueMap = map[string]OpType{
 	_OpTypeName[0:7]:            OpTypeInvalid,
@@ -343,16 +346,22 @@ var _OpTypeNameToValueMap = map[string]OpType{
 	_OpTypeLowerName[933:942]:   OpTypeTranspose,
 	_OpTypeName[942:947]:        OpTypeWhere,
 	_OpTypeLowerName[942:947]:   OpTypeWhere,
-	_OpTypeName[947:956]:        OpTypeAllReduce,
-	_OpTypeLowerName[947:956]:   OpTypeAllReduce,
-	_OpTypeName[956:975]:        OpTypeCollectiveBroadcast,
-	_OpTypeLowerName[956:975]:   OpTypeCollectiveBroadcast,
-	_OpTypeName[975:984]:        OpTypeAllGather,
-	_OpTypeLowerName[975:984]:   OpTypeAllGather,
-	_OpTypeName[984:1002]:       OpTypeBlockForDotGeneral,
-	_OpTypeLowerName[984:1002]:  OpTypeBlockForDotGeneral,
-	_OpTypeName[1002:1006]:      OpTypeLast,
-	_OpTypeLowerName[1002:1006]: OpTypeLast,
+	_OpTypeName[947:951]:        OpTypeSort,
+	_OpTypeLowerName[947:951]:   OpTypeSort,
+	_OpTypeName[951:956]:        OpTypeWhile,
+	_OpTypeLowerName[951:956]:   OpTypeWhile,
+	_OpTypeName[956:958]:        OpTypeIf,
+	_OpTypeLowerName[956:958]:   OpTypeIf,
+	_OpTypeName[958:967]:        OpTypeAllReduce,
+	_OpTypeLowerName[958:967]:   OpTypeAllReduce,
+	_OpTypeName[967:986]:        OpTypeCollectiveBroadcast,
+	_OpTypeLowerName[967:986]:   OpTypeCollectiveBroadcast,
+	_OpTypeName[986:995]:        OpTypeAllGather,
+	_OpTypeLowerName[986:995]:   OpTypeAllGather,
+	_OpTypeName[995:1013]:       OpTypeBlockForDotGeneral,
+	_OpTypeLowerName[995:1013]:  OpTypeBlockForDotGeneral,
+	_OpTypeName[1013:1017]:      OpTypeLast,
+	_OpTypeLowerName[1013:1017]: OpTypeLast,
 }
 
 var _OpTypeNames = []string{
@@ -459,11 +468,14 @@ var _OpTypeNames = []string{
 	_OpTypeName[929:933],
 	_OpTypeName[933:942],
 	_OpTypeName[942:947],
-	_OpTypeName[947:956],
-	_OpTypeName[956:975],
-	_OpTypeName[975:984],
-	_OpTypeName[984:1002],
-	_OpTypeName[1002:1006],
+	_OpTypeName[947:951],
+	_OpTypeName[951:956],
+	_OpTypeName[956:958],
+	_OpTypeName[958:967],
+	_OpTypeName[967:986],
+	_OpTypeName[986:995],
+	_OpTypeName[995:1013],
+	_OpTypeName[1013:1017],
 }
 
 // OpTypeString retrieves an enum value from the enum constants string name.
