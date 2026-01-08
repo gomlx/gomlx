@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package main
 
 import (
@@ -48,8 +50,8 @@ func processLine(line string, targetTag string) string {
 
 	// Combine all parts
 	// Split lineTag into multiple tags if pipe separator exists
-	tags := strings.Split(lineTag, "|")
-	for _, tag := range tags {
+	tags := strings.SplitSeq(lineTag, "|")
+	for tag := range tags {
 		if tag == targetTag {
 			// Move tag to the end
 			if rest == "" && beforeTag == "" {

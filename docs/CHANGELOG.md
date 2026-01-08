@@ -2,17 +2,23 @@
 
 # Next
 
+- Package `backends`: major refactoring to add support for functions/closures.
+  - Added `backends.Function`, which now holds all the "ops" methods.
+  - Added `NewFunction`, `Closure` and `Call`.
+  - Renamed `backends.Op` -> `backends.Value`.
 - Package `simplego`:
   - Added `Float16` support (thx @timkaye11) 
   - Added dedup of computation nodes (aka. "common subexpression elimination" CSE) (thx @timkaye11)
     - ~6% speedup for CSI-Adult demo training. 
+  - DotGeneral: Pre-blocking of the blocked path, which may lead to deduplication of blocking nodes.
 - New package `bucketing`:
   - Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
 - Package `dtypes`:
   - Added 'Uint2', 'Uint4', 'Int2', 'Int4'. 
 - Package `graph`:
-  - Added `UnpackInt2()`, `UnpackInt4()`, `UnpackUint2()`, `UnpackUint4()`.  
-
+  - Added `Unpack()` and `Pack()` for sub-byte dtypes.
+  - Added `Function` concept (and support for closures) and the `Function.Call` operation.
+  
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 
 API Change: `dtypes` package moved from `github.com/gomlx/gopjrt/dtypes` to `github.com/gomlx/gomlx/pkg/core/dtypes`.

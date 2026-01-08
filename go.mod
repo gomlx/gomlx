@@ -13,7 +13,7 @@ require (
 	github.com/erkkah/margaid v0.3.0
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/bsplines v0.2.0
-	github.com/gomlx/go-xla v0.1.5-0.20260103070734-6a2f2a23e7fa
+	github.com/gomlx/go-xla v0.1.5-0.20260107152240-2890a4924d88
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.1
 	github.com/muesli/termenv v0.16.0

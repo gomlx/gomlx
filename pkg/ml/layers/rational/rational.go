@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package rational implements "learnable rational functions".
 //
 // They can be used for activations or simply as a univariate learnable function -- they are used for

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package simplego
 
 import (
@@ -32,16 +34,16 @@ func init() {
 // Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
 //
 // Note: input is aka. operand; kernel is aka. "filters". The input and output "channels" are also known as "features dimensions".
-func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
+func (f *Function) ConvGeneral(inputOp, kernelOp backends.Value, axes backends.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
-	channelGroupCount, batchGroupCount int) (backends.Op, error) {
+	channelGroupCount, batchGroupCount int) (backends.Value, error) {
 	// Sanitize group count.
 	channelGroupCount = max(channelGroupCount, 1)
 	batchGroupCount = max(batchGroupCount, 1)
 
 	opType := backends.OpTypeConvGeneral
-	inputs, err := b.checkOps(opType.String(), inputOp, kernelOp)
+	inputs, err := f.builder.checkOps(opType.String(), inputOp, kernelOp)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +112,7 @@ func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.Convo
 			params.dilatedInputSpatialDims[spatialIdx] = (dim-1)*inputDilations[spatialIdx] + 1
 		}
 	}
-	node, _ := b.getOrCreateNode(opType, outputShape, []*Node{input, kernel}, params)
+	node, _ := f.builder.getOrCreateNode(opType, outputShape, []*Node{input, kernel}, params)
 	return node, nil
 }
 
@@ -165,11 +167,11 @@ func (c *convNode) EqualNodeData(other nodeDataComparable) bool {
 // ConvGeneralDilated is a deprecated an alias to ConvGeneral.
 //
 // Deprecated: use ConvGeneral instead.
-func (b *Builder) ConvGeneralDilated(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
+func (f *Function) ConvGeneralDilated(inputOp, kernelOp backends.Value, axes backends.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
-	channelGroupCount, batchGroupCount int) (backends.Op, error) {
-	return b.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations, channelGroupCount, batchGroupCount)
+	channelGroupCount, batchGroupCount int) (backends.Value, error) {
+	return f.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations, channelGroupCount, batchGroupCount)
 }
 
 // execConvGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.

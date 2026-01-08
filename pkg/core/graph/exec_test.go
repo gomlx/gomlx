@@ -1,18 +1,4 @@
-/*
- *	Copyright 2023 Jan Pfeifer
- *
- *	Licensed under the Apache License, Version 2.0 (the "License");
- *	you may not use this file except in compliance with the License.
- *	You may obtain a copy of the License at
- *
- *	http://www.apache.org/licenses/LICENSE-2.0
- *
- *	Unless required by applicable law or agreed to in writing, software
- *	distributed under the License is distributed on an "AS IS" BASIS,
- *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *	See the License for the specific language governing permissions and
- *	limitations under the License.
- */
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 package graph_test
 
@@ -67,7 +53,7 @@ func TestExec(t *testing.T) {
 		var results []*tensors.Tensor
 		require.Panicsf(t, func() { results = dist.MustExec(a, b) },
 			"EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v",
-			reflect.TypeOf(a), a, reflect.TypeOf(b), b, results)
+			reflect.TypeFor[[]float64](), a, reflect.TypeFor[[]float32](), b, results)
 	})
 
 	// Check different shapes will fail.
@@ -78,7 +64,7 @@ func TestExec(t *testing.T) {
 		results, err := dist.Exec(a, b)
 		require.Errorf(t, err,
 			"EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v",
-			reflect.TypeOf(a), a, reflect.TypeOf(b), b, results)
+			reflect.TypeFor[[]float32](), a, reflect.TypeFor[[]float32](), b, results)
 	})
 
 	// Check out-of-cache failure.
@@ -93,10 +79,10 @@ func TestExec(t *testing.T) {
 		b := []float64{1, 1}
 		results, err := dist.Exec(a, b)
 		require.Errorf(t, err, "EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v",
-			reflect.TypeOf(a), a, reflect.TypeOf(b), b, results)
+			reflect.TypeFor[[]float64](), a, reflect.TypeFor[[]float64](), b, results)
 		require.ErrorContainsf(t, err, "maximum cache",
 			"EuclideanDistance(%v:%v, %v:%v) failed on something that was not cache: %+v",
-			reflect.TypeOf(a), a, reflect.TypeOf(b), b, err)
+			reflect.TypeFor[[]float64](), a, reflect.TypeFor[[]float64](), b, err)
 	})
 
 	// Check different shapes will fail.
@@ -108,7 +94,7 @@ func TestExec(t *testing.T) {
 		fmt.Printf("- Expected error: %v\n", err)
 		require.Errorf(t, err,
 			"EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v",
-			reflect.TypeOf(a), a, reflect.TypeOf(b), b, results)
+			reflect.TypeFor[[][]float32](), a, reflect.TypeFor[[][]float32](), b, results)
 	})
 
 	t.Run("AddAndSub", func(t *testing.T) {
@@ -120,11 +106,11 @@ func TestExec(t *testing.T) {
 		b := []float32{1, 1}
 		var outputs []*tensors.Tensor
 		require.NotPanicsf(t, func() { outputs = addAndSub.MustExec(a, b) },
-			"%q(%v:%v, %v:%v) failed", addAndSub.Name(), reflect.TypeOf(a), a, reflect.TypeOf(b), b)
+			"%q(%v:%v, %v:%v) failed", addAndSub.Name(), reflect.TypeFor[[]float32](), a, reflect.TypeFor[[]float32](), b)
 		add, sub := outputs[0].Value(), outputs[1].Value()
 		wantAdd, wantSub := []float32{3, 3}, b
-		require.Equalf(t, wantAdd, add, "%q(%v:%v, %v:%v) got (%v, %v), but wanted (%v, %v)", addAndSub.Name(), reflect.TypeOf(a), a, reflect.TypeOf(b), b, add, sub, wantAdd, wantSub)
-		require.Equalf(t, wantSub, sub, "%q(%v:%v, %v:%v) got (%v, %v), but wanted (%v, %v)", addAndSub.Name(), reflect.TypeOf(a), a, reflect.TypeOf(b), b, add, sub, wantAdd, wantSub)
+		require.Equalf(t, wantAdd, add, "%q(%v:%v, %v:%v) got (%v, %v), but wanted (%v, %v)", addAndSub.Name(), reflect.TypeFor[[]float32](), a, reflect.TypeFor[[]float32](), b, add, sub, wantAdd, wantSub)
+		require.Equalf(t, wantSub, sub, "%q(%v:%v, %v:%v) got (%v, %v), but wanted (%v, %v)", addAndSub.Name(), reflect.TypeFor[[]float32](), a, reflect.TypeFor[[]float32](), b, add, sub, wantAdd, wantSub)
 	})
 
 	t.Run("IotaMatrix", func(t *testing.T) {

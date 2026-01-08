@@ -1,18 +1,4 @@
-/*
- *	Copyright 2023 Jan Pfeifer
- *
- *	Licensed under the Apache License, Version 2.0 (the "License");
- *	you may not use this file except in compliance with the License.
- *	You may obtain a copy of the License at
- *
- *	http://www.apache.org/licenses/LICENSE-2.0
- *
- *	Unless required by applicable law or agreed to in writing, software
- *	distributed under the License is distributed on an "AS IS" BASIS,
- *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *	See the License for the specific language governing permissions and
- *	limitations under the License.
- */
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 package graph
 
@@ -522,7 +508,7 @@ func convGeneralWithChannelGroupingVJP(node, x, kernel, v *Node, numSpatialDims 
 
 	// Compute the gradients for each slice of the input (x).
 	var xGradSlices []*Node
-	for i := 0; i < channelGroupCount; i++ {
+	for i := range channelGroupCount {
 		gradSlice := convVJPWrtX(node, xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, kernelDilations)
 		xGradSlices = append(xGradSlices, gradSlice)
 	}
@@ -530,7 +516,7 @@ func convGeneralWithChannelGroupingVJP(node, x, kernel, v *Node, numSpatialDims 
 
 	// Compute the gradients for each slice of the kernel.
 	var kernelGradSlices []*Node
-	for i := 0; i < channelGroupCount; i++ {
+	for i := range channelGroupCount {
 		gradSlice := convVJPWrtKernel(vSlices[i], xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, kernelDilations)
 		kernelGradSlices = append(kernelGradSlices, gradSlice)
 	}
@@ -548,7 +534,7 @@ func convGeneralWithBatchGroupingVJP(node, x, kernel, v *Node, numSpatialDims in
 
 	// Compute the gradients for each slice of the input (x).
 	var xGradSlices []*Node
-	for i := 0; i < batchGroupCount; i++ {
+	for i := range batchGroupCount {
 		gradSlice := convVJPWrtX(node, xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, kernelDilations)
 		xGradSlices = append(xGradSlices, gradSlice)
 	}
@@ -556,7 +542,7 @@ func convGeneralWithBatchGroupingVJP(node, x, kernel, v *Node, numSpatialDims in
 
 	// Compute the gradients for each slice of the kernel.
 	var kernelGradSlices []*Node
-	for i := 0; i < batchGroupCount; i++ {
+	for i := range batchGroupCount {
 		gradSlice := convVJPWrtKernel(vSlices[i], xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, kernelDilations)
 		kernelGradSlices = append(kernelGradSlices, gradSlice)
 	}
@@ -586,7 +572,7 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 	// (2) we need to pad the reverse convolution to match get the original input.
 	reversePaddings := make([][2]int, numSpatialDims)
 	dilation := 1
-	for axis := 0; axis < numSpatialDims; axis++ {
+	for axis := range numSpatialDims {
 		//fmt.Printf("\taxis %d\n", axis)
 		// Effective kernel size.
 		kernelSize := kernelSpatialDims[axis]
@@ -694,7 +680,7 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 	inputSpatialDims := gatherSlice(axes.InputSpatial, x.Shape().Dimensions)
 	outputSpatialDims := gatherSlice(axes.OutputSpatial, node.Shape().Dimensions)
 	kernelSpatialDims := gatherSlice(axes.KernelSpatial, kernel.Shape().Dimensions)
-	for axisIdx := 0; axisIdx < numSpatialDims; axisIdx++ {
+	for axisIdx := range numSpatialDims {
 		// Get all the metrics for this spatial dimension.
 		kernelDimSize := kernelSpatialDims[axisIdx]
 		dimFilterDilation := 1

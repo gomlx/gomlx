@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package stablehlo has been renamed to backends/xla.
 //
 // Deprecated: Use the backends/xla package instead.

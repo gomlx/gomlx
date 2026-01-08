@@ -1,18 +1,4 @@
-/*
- *	Copyright 2025 Jan Pfeifer
- *
- *	Licensed under the Apache License, Version 2.0 (the "License");
- *	you may not use this file except in compliance with the License.
- *	You may obtain a copy of the License at
- *
- *	http://www.apache.org/licenses/LICENSE-2.0
- *
- *	Unless required by applicable law or agreed to in writing, software
- *	distributed under the License is distributed on an "AS IS" BASIS,
- *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *	See the License for the specific language governing permissions and
- *	limitations under the License.
- */
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 package bucketing
 
@@ -29,7 +15,7 @@ func TestPow2Strategy(t *testing.T) {
 	}{
 		// Edge cases
 		{0, 0},
-		{-1, -1},   // Symbolic dimension preserved
+		{-1, -1},     // Symbolic dimension preserved
 		{-100, -100}, // Symbolic dimension preserved
 
 		// Powers of 2 stay the same
@@ -226,28 +212,28 @@ func TestExponentialGranularity(t *testing.T) {
 // Benchmark tests
 func BenchmarkPow2(b *testing.B) {
 	s := Pow2()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		s.Bucket(i % 1000)
 	}
 }
 
 func BenchmarkLinear(b *testing.B) {
 	s := Linear(8)
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		s.Bucket(i % 1000)
 	}
 }
 
 func BenchmarkExponential(b *testing.B) {
 	s := Exponential(1.4)
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		s.Bucket(i % 1000)
 	}
 }
 
 func BenchmarkNone(b *testing.B) {
 	s := None()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		s.Bucket(i % 1000)
 	}
 }

@@ -1,4 +1,19 @@
-name: Darwin
+name: "Darwin/arm64"
+permissions:
+  # read|write|none
+  actions: read
+  checks: read
+  contents: write
+  deployments: read
+  # id-token: read    --> doesn't work
+  issues: read
+  discussions: read
+  packages: read
+  pages: read
+  pull-requests: write
+  repository-projects: read
+  security-events: read
+  statuses: read
 
 # Triggers the workflow on push or pull request events but only for the "main" branch
 on:

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package simplego
 
 import (
@@ -151,6 +153,9 @@ var mutableBytesDTypeMap = NewDTypeMap("MutableBytes")
 // mutableBytesGeneric is the generic implementation of mutableBytes.
 func mutableBytesGeneric[T SupportedTypesConstraints](b *Buffer) []byte {
 	flat := b.flat.([]T)
+	if len(flat) == 0 {
+		return nil // Handle empty tensors
+	}
 	bytePointer := (*byte)(unsafe.Pointer(&flat[0]))
 	var t T
 	return unsafe.Slice(bytePointer, len(flat)*int(unsafe.Sizeof(t)))

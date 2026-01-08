@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package lstm provides a minimal "Long Short-Term Memory RNN" (LSTM) [1] implementation.
 //
 // An LSTM is a type of recurrent neural network that addresses the vanishing gradient problem in vanilla RNNs through

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package diffusion
 
 import (
@@ -17,7 +19,7 @@ import (
 func benchmarkDataset(ds train.Dataset) {
 	var batchSize int
 	// Warm up, run 100 ds.Yield().
-	for ii := 0; ii < 10; ii++ {
+	for range 10 {
 		_, inputs, labels := must.M3(ds.Yield())
 		batchSize = inputs[0].Shape().Dimensions[0]
 		finalize(inputs)
@@ -42,7 +44,7 @@ func benchmarkDataset(ds train.Dataset) {
 }
 
 func loopDataset(b *testing.B, ds train.Dataset, n int) {
-	for ii := 0; ii < n; ii++ {
+	for range n {
 		_, inputs, labels, err := ds.Yield()
 		if err == io.EOF {
 			ds.Reset()

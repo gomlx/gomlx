@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package numpy allows one to read/write tensors to Python's NumPy npy and npz file formats.
 //
 // Experimental: this package (numpy) is fresh from the oven and not well tested. Please open an issue if you find any bugs.
@@ -210,7 +212,7 @@ func FortranToCLayout(dtypeSize int, dims []int, fortranData []byte, cData []byt
 		// This converts tensor coordinates to a flat column-major index.
 		fortranIndex := 0
 		multiplier := 1
-		for i := 0; i < len(dims); i++ {
+		for i := range dims {
 			fortranIndex += coordinates[i] * multiplier
 			multiplier *= dims[i]
 		}

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package tensors
 
 import (
@@ -6,14 +8,14 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/x448/float16"
 )
 
 var (
-	typeFloat16  = reflect.TypeOf(float16.Float16(0))
-	typeBFloat16 = reflect.TypeOf(bfloat16.BFloat16(0))
+	typeFloat16  = reflect.TypeFor[float16.Float16]()
+	typeBFloat16 = reflect.TypeFor[bfloat16.BFloat16]()
 )
 
 // Summary returns a multi-line summary of the Tensor's content.
@@ -77,7 +79,7 @@ func (t *Tensor) Summary(precision int) string {
 				w("{")
 				if currentShape[0] > 6 {
 					// Apply ellipsis for large arrays
-					for i := 0; i < 3; i++ {
+					for i := range 3 {
 						if i > 0 {
 							w(", ")
 						}

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package tensors
 
 import (
@@ -758,7 +760,7 @@ func FromAnyValue(value any) *Tensor {
 	}
 	t := FromShape(shape)
 	t.MustMutableFlatData(func(flatAny any) {
-		if baseType(reflect.TypeOf(value)) == reflect.TypeOf(int(0)) {
+		if baseType(reflect.TypeOf(value)) == reflect.TypeFor[int]() {
 			// Go `int` type can be either an int32 or int64 depending on the architecture (anything else would panic
 			// already). For the copy operation to work, we have to cast flatRefAny (either a []int64 or []int32) as an []int.
 			// This is not pretty (using unsafe), but it avoids individually converting values, which is important for large tensors.

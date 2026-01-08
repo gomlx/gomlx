@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package graph
 
 import (
@@ -210,7 +212,7 @@ func (c *InterpolationConfig) Done() (output *Node) {
 		broadcastSpanStart := ConvertDType(spanStart, dtypes.Int32)
 		{
 			spanExpandAxes := make([]int, 0, numAxesToInterpolate)
-			for axis := 0; axis < axisIdx; axis++ {
+			for axis := range axisIdx {
 				spanExpandAxes = append(spanExpandAxes, axis)
 			}
 			for axis := axisIdx + 1; axis < numAxesToInterpolate; axis++ {

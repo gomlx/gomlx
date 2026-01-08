@@ -1,18 +1,4 @@
-/*
- *	Copyright 2023 Jan Pfeifer
- *
- *	Licensed under the Apache License, Version 2.0 (the "License");
- *	you may not use this file except in compliance with the License.
- *	You may obtain a copy of the License at
- *
- *	http://www.apache.org/licenses/LICENSE-2.0
- *
- *	Unless required by applicable law or agreed to in writing, software
- *	distributed under the License is distributed on an "AS IS" BASIS,
- *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *	See the License for the specific language governing permissions and
- *	limitations under the License.
- */
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 package graph
 
@@ -20,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"slices"
 
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -132,13 +119,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 		if !needGradientForNode(node) {
 			continue
 		}
-		needInputs := false
-		for _, input := range node.Inputs() {
-			if needGradientForNode(input) {
-				needInputs = true
-				break
-			}
-		}
+		needInputs := slices.ContainsFunc(node.Inputs(), needGradientForNode)
 		if !needInputs {
 			continue
 		}
@@ -612,13 +593,13 @@ func whereVJP(node, v *Node, _ shapes.Shape) []*Node {
 func mulVJP(node, v *Node, _ shapes.Shape) []*Node {
 	inputsVJPs := make([]*Node, 2)
 	broadcastInputs := make([]*Node, 2)
-	for ii := 0; ii < 2; ii++ {
+	for ii := range 2 {
 		broadcastInputs[ii] = node.inputNodes[ii]
 		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
 			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
 		}
 	}
-	for ii := 0; ii < 2; ii++ {
+	for ii := range 2 {
 		vMul := Mul(v, broadcastInputs[1-ii])
 		inputsVJPs[ii] = vjpForDefaultBroadcast(node, node.inputNodes[ii], vMul)
 	}
@@ -630,7 +611,7 @@ func mulVJP(node, v *Node, _ shapes.Shape) []*Node {
 func divVJP(node, v *Node, _ shapes.Shape) []*Node {
 	inputsVJPs := make([]*Node, 2)
 	broadcastInputs := make([]*Node, 2)
-	for ii := 0; ii < 2; ii++ {
+	for ii := range 2 {
 		broadcastInputs[ii] = node.inputNodes[ii]
 		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
 			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
@@ -651,7 +632,7 @@ func divVJP(node, v *Node, _ shapes.Shape) []*Node {
 // TODO: handle the negative case for complex numbers, if one wants that.
 func powVJP(node, v *Node, _ shapes.Shape) []*Node {
 	broadcastInputs := make([]*Node, 2)
-	for ii := 0; ii < 2; ii++ {
+	for ii := range 2 {
 		broadcastInputs[ii] = node.inputNodes[ii]
 		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
 			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())

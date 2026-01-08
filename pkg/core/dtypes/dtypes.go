@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package dtypes includes the DType enum for all supported data types for GoMLX.
 //
 // It is forked from XLA based github.com/gomlx/go-xla/pkg/types/dtypes, and likely it will almost
@@ -49,9 +51,6 @@ func init() {
 		MapOfNames[lowerKey] = MapOfNames[key]
 	}
 }
-
-// Generate automatic C-to-Go boilerplate code for pjrt_c_api.h.
-//go:generate go run ../../../internal/cmd/dtypes_codegen
 
 // FromGenericsType returns the DType enum for the given type that this package knows about.
 func FromGenericsType[T Supported]() DType {

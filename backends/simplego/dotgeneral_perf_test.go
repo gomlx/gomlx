@@ -1,5 +1,8 @@
 //go:build perf
 
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
+
 package simplego
 
 import (
@@ -20,8 +23,11 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/commandline"
+	"github.com/janpfeifer/must"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
+
+	_ "github.com/gomlx/gomlx/backends/xla" // We also want xla backend included for tests.
 )
 
 // dotGeneralBenchmarkParamsCase defines input parameters for DotGeneral to be benchmarked.
@@ -48,17 +54,6 @@ var (
 		"Comma-separated list of dtypes to run performance test (part of TestDotGeneral_PerformanceTable). If empty, it will run for all supported dtypes.",
 	)
 )
-
-func must(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-func must1[T any](value T, err error) T {
-	must(err)
-	return value
-}
 
 // TestDotGeneral_PerformanceTable generates a performance table for differently
 // sized matrices.
@@ -222,13 +217,14 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			// Construct shapes from dimensions and current dtype
 			lhsShape := shapes.Make(dtype, benchCase.lhsShape...)
 			rhsShape := shapes.Make(dtype, benchCase.rhsShape...)
+			var numOps int
 			batchSize, lhsCrossSize, contractingSize, _ := dgFindSizes(
 				lhsShape,
 				benchCase.lhsContractingAxes,
 				benchCase.lhsBatchAxes,
 			)
 			_, rhsCrossSize, _, _ := dgFindSizes(rhsShape, benchCase.rhsContractingAxes, benchCase.rhsBatchAxes)
-			numOps := batchSize * lhsCrossSize * rhsCrossSize * contractingSize * 2 // 1 mult + 1 add = 2 ops
+			numOps = batchSize * lhsCrossSize * rhsCrossSize * contractingSize * 2 // 1 mult + 1 add = 2 ops
 
 			// Create and initialize input Buffers
 			lhsBuffer, lhsFlatAny, err := backend.NewSharedBuffer(0, lhsShape)
@@ -266,8 +262,8 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 					rhsFlatBF16[i] = bfloat16.FromFloat32(float32(i%10 + 1))
 				}
 			}
-			lhsTensor := must1(tensors.FromBuffer(backend, lhsBuffer))
-			rhsTensor := must1(tensors.FromBuffer(backend, rhsBuffer))
+			lhsTensor := must.M1(tensors.FromBuffer(backend, lhsBuffer))
+			rhsTensor := must.M1(tensors.FromBuffer(backend, rhsBuffer))
 
 			// Create the program that does the DotGeneral.
 			testExec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {

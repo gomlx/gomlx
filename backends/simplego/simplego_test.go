@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package simplego
 
 import (
@@ -45,13 +47,16 @@ func TestMain(m *testing.M) {
 func TestDuplicatedOutputNodes(t *testing.T) {
 	// Create a builder and a node
 	builder := backend.Builder("test_duplicated_outputs")
-	node, err := builder.Constant([]float32{1.0, 2.0, 3.0}, 3)
+	mainFn := builder.Main()
+	node, err := mainFn.Constant([]float32{1.0, 2.0, 3.0}, 3)
 	require.NoError(t, err)
 	require.NotNil(t, node)
 
 	// Compile with the same node duplicated as outputs
 	// This should create Identity nodes for the duplicate
-	exec, err := builder.Compile([]backends.Op{node, node}, nil)
+	err = mainFn.Return([]backends.Value{node, node}, nil)
+	require.NoError(t, err)
+	exec, err := builder.Compile()
 	require.NoError(t, err)
 	require.NotNil(t, exec)
 
