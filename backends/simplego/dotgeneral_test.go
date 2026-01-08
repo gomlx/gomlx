@@ -832,8 +832,14 @@ func TestDgCanUseSmallMatMul(t *testing.T) {
 			{"batchSize_at_threshold", 64, 10, 10, 32, true},
 			// Batch size over threshold
 			{"batchSize_over_threshold", 65, 10, 10, 32, false},
-			// M=1 special case - should use SmallMatMul even with large contracting
-			{"M_equals_1_large_K", 1, 1, 256, 512, true},
+			// M=1 special case - uses higher thresholds for K and N
+			{"M_equals_1_moderate_K", 1, 1, 256, 512, true},
+			// M=1 with K at M1 threshold (1024) should be accepted
+			{"M_equals_1_K_at_M1_threshold", 1, 1, 256, 1024, true},
+			// M=1 with K over M1 threshold should be rejected
+			{"M_equals_1_K_over_M1_threshold", 1, 1, 256, 1025, false},
+			// M=1 with very large K should be rejected
+			{"M_equals_1_very_large_K", 1, 1, 256, 2000, false},
 			// M=1 with large N should still work (within M1 threshold of 4096)
 			{"M_equals_1_large_N", 1, 1, 1000, 256, true},
 			// M=1 with very large N should be rejected (over M1 threshold of 4096)

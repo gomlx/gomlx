@@ -120,6 +120,12 @@ const smallMatMulMaxRhsCrossSize = 256
 // virtually every RHS element access.
 const smallMatMulMaxRhsCrossSizeM1 = 4096
 
+// smallMatMulMaxContractingSizeM1 is the maximum contracting dimension (K) for M=1 cases.
+// For single-row operations, transpose overhead is more significant, so we use a higher
+// threshold than smallMatMulMaxContractingSize. However, very large K values (e.g., 10000)
+// still cause cache thrashing due to strided RHS access, so we cap it.
+const smallMatMulMaxContractingSizeM1 = 1024
+
 // execDotGeneralSmallMatMulFloat32 executes float32 matrix multiplication without transpose.
 //
 // Memory layout for row-major tensors [M, K] × [K, N] → [M, N]:

@@ -317,12 +317,15 @@ func dgCanUseSmallMatMul(dtype dtypes.DType, lhsShape, rhsShape shapes.Shape, pa
 
 	// For single-row operations (M=1), SmallMatMul is faster because transpose overhead
 	// dominates when computing just one output row per batch.
-	// BUT we still need to check rhsCrossSize - for M=1 with huge N, the strided
-	// access across large N causes cache thrashing.
+	// BUT we still need to check rhsCrossSize and contractingSize - for M=1 with huge N or K,
+	// the strided access causes cache thrashing.
 	if params.lhsCrossSize == 1 {
-		// For M=1, use a larger threshold for N since transpose overhead is more significant
-		// But still cap it to avoid catastrophic cache behavior with very large N
+		// For M=1, use larger thresholds since transpose overhead is more significant
+		// But still cap to avoid catastrophic cache behavior with very large dimensions
 		if params.rhsCrossSize > smallMatMulMaxRhsCrossSizeM1 {
+			return false
+		}
+		if params.contractingSize > smallMatMulMaxContractingSizeM1 {
 			return false
 		}
 		return true
@@ -374,7 +377,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		hasBatch := len(rhsBlockData.batchAxes) > 0 && rhsBlockData.batchSize > 1 // batchSize is the same for lhs and rhs
 		err = execDotGeneralBlocked(backend, lhs, rhs, hasBatch, params, output)
 
-		if err != nil && params.execPath == checkPath {
+		if err == nil && params.execPath == checkPath {
 			// Debug path: run also the small path and compare results:
 			lhsRaw, rhsRaw := inputs[2], inputs[3]
 			output2 := backend.getBufferForShape(outputShape)
@@ -386,6 +389,20 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 				return nil, err
 			}
 			err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+			if err != nil {
+				backend.putBuffer(output2)
+				backend.putBuffer(output)
+				return nil, err
+			}
+
+			// Also verify SmallMatMul path for matrices in matmul order (float32 only)
+			if lhsRaw.shape.DType == dtypes.Float32 && isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
+				params.lhsContractingAxes, params.rhsContractingAxes,
+				params.lhsBatchAxes, params.rhsBatchAxes) {
+				output2.Zeros()
+				execDotGeneralSmallMatMulFloat32(backend, lhsRaw, rhsRaw, params, output2)
+				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+			}
 			backend.putBuffer(output2) // Discard second output, no longer needed
 		}
 
