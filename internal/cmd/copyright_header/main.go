@@ -68,17 +68,60 @@ func processFile(path, header string) error {
 		return fmt.Errorf("failed to read %q: %w", path, err)
 	}
 
-	// Check if header exists.
-	// We check for "// Copyright" prefix.
-	if strings.HasPrefix(string(content), "// Copyright") {
-		return nil
+	lines := strings.Split(string(content), "\n")
+
+	// Check for existing copyright header in the first 50 lines.
+	// Also find the last build tag line.
+	lastBuildTagIndex := -1
+	for i, line := range lines {
+		if i > 50 {
+			break
+		}
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "// Copyright") {
+			return nil
+		}
+		if strings.HasPrefix(trimmed, "//go:build") || strings.HasPrefix(trimmed, "// +build") {
+			lastBuildTagIndex = i
+		}
 	}
 
 	log.Printf("Adding header to %s", path)
 
-	newContent := append([]byte(header), content...)
-	if err := os.WriteFile(path, newContent, 0644); err != nil {
-		return fmt.Errorf("failed to write %q: %w", path, err)
+	if lastBuildTagIndex != -1 {
+		// Insert after the last build tag.
+		// We want an empty line between build tags and copyright.
+		// And the header itself has 2 newlines at the end.
+
+		// If the line after the build tag is not empty, we add a newline separator.
+		prefix := strings.Join(lines[:lastBuildTagIndex+1], "\n")
+		suffix := strings.Join(lines[lastBuildTagIndex+1:], "\n")
+
+		// Add an empty line after build tags if not present in the suffixes start?
+		// Actually, let's just force the structure:
+		// [Build Tags]
+		// <Empty Line>
+		// [Header]
+		// [Rest] (The header already ends with \n\n, so we just need one \n separator from build tags)
+
+		newContent := prefix + "\n\n" + header + suffix
+		// Warning: if suffix started with empty lines, we might have too many.
+		// But simplicity first.
+
+		// Wait, header is "// Copyright ...\n\n".
+		// So prefix + "\n\n" + header + suffix might be:
+		// //go:build foo\n\n// Copyright ...\n\npackage bar
+		// That looks perfect.
+
+		if err := os.WriteFile(path, []byte(newContent), 0644); err != nil {
+			return fmt.Errorf("failed to write %q: %w", path, err)
+		}
+	} else {
+		// No build tags, prepend at top.
+		newContent := append([]byte(header), content...)
+		if err := os.WriteFile(path, newContent, 0644); err != nil {
+			return fmt.Errorf("failed to write %q: %w", path, err)
+		}
 	}
 
 	return nil
