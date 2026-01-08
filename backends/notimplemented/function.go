@@ -50,6 +50,10 @@ func (f Function) Return(outputs []backends.Value, shardings []*backends.Shardin
 	return errors.Wrapf(NotImplementedError, "in Return()")
 }
 
+func (f Function) Call(target backends.Function, inputs ...backends.Value) ([]backends.Value, error) {
+	return nil, errors.New("Call not implemented")
+}
+
 func (f Function) Identity(x backends.Value) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeIdentity)
 }

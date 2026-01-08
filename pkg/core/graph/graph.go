@@ -131,6 +131,9 @@ type Graph struct {
 	// nodes include all nodes known to Graph.
 	nodes []*Node
 
+	// functions maps function names to the function object.
+	functions map[string]*Function
+
 	traced bool
 
 	// scalars maintains a cache of scalar values already created in the current Graph for re-use.
@@ -192,6 +195,7 @@ func NewGraph(backend backends.Backend, name string) *Graph {
 		scalars:         make(scalarCache),
 		tensorConstants: make(tensorConstCache),
 		aliasToNode:     make(map[string]*Node),
+		functions:       make(map[string]*Function),
 
 		distStrategy: distributed.None,
 		numDevices:   1,

@@ -3,6 +3,7 @@
 package graph
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -45,7 +46,7 @@ type Function struct {
 
 // newMainFunc is called during the creation of a Graph.
 func (g *Graph) newMainFunc() *Function {
-	return &Function{
+	f := &Function{
 		graph:                 g,
 		backendFunc:           g.builder.Main(),
 		name:                  MainName,
@@ -53,6 +54,8 @@ func (g *Graph) newMainFunc() *Function {
 		returned:              false,
 		parameterNameToHandle: make(map[string]ParameterHandle),
 	}
+	g.functions[MainName] = f
+	return f
 }
 
 // Name returns the name of the function.
@@ -209,4 +212,173 @@ func innermostFunction(inputs []*Node) (*Function, error) {
 		// else: other is ancestor of candidate, so candidate remains the deeper one.
 	}
 	return candidate, nil
+}
+
+// NewFunction creates a new top-level function in the current graph.
+//
+// It creates the new Function object, sets it temporarily as the current for the Graph (reversed on exit)
+// and call the funcDef with it.
+//
+// The signature of the created function will have the inputs based on the parameters created by funcDef, and
+// the outputs based on the return values of funcDef.
+func NewFunction(g *Graph, name string, funcDef func(g *Graph) []*Node) *Function {
+	g.AssertBuilding()
+	return NewFunctionWithSharding(g, name, func(g *Graph) ([]*Node, []*distributed.ShardingSpec) {
+		return funcDef(g), nil
+	})
+}
+
+// NewFunctionWithSharding creates a new top-level function in the current graph.
+//
+// It is similar to NewFunction, but funcDef also returns the sharding information, and it is used on f.Return in the end.
+//
+// If the returned sharding information if not nil, it validates the sharding to the output nodes.
+// Otherwise (sharding is nil), it behaves just like NewFunction.
+func NewFunctionWithSharding(g *Graph, name string, funcDef func(g *Graph) ([]*Node, []*distributed.ShardingSpec)) *Function {
+	g.AssertBuilding()
+	if !g.backend.Capabilities().Functions {
+		exceptions.Panicf("backend %q does not support other top-level functions (while attempting to create function %q)", g.backend.Name(), name)
+	}
+	if name == "" {
+		exceptions.Panicf("function name cannot be empty")
+	}
+	if _, found := g.functions[name]; found {
+		exceptions.Panicf("function name %q already exists in graph %q", name, g.name)
+	}
+
+	// Create the function.
+	f := &Function{
+		graph:                 g,
+		name:                  name,
+		parameterNameToHandle: make(map[string]ParameterHandle),
+	}
+	var err error
+	f.backendFunc, err = g.builder.NewFunction(name)
+	if err != nil {
+		panic(errors.WithMessagef(err, "failed to create new function %q", name))
+	}
+
+	// Temporarily set the current function.
+	prevFunc := g.currentFunc
+	g.currentFunc = f
+	defer func() {
+		g.currentFunc = prevFunc
+	}()
+
+	// Call the definition.
+	outputs, shardings := funcDef(g)
+
+	// Validate shardings
+	if len(shardings) > 0 {
+		if len(shardings) != len(outputs) {
+			exceptions.Panicf("NewFunctionWithSharding: got %d outputs but %d sharding specs", len(outputs), len(shardings))
+		}
+		for i, node := range outputs {
+			spec := shardings[i]
+			if spec == nil {
+				continue
+			}
+			shape := node.Shape()
+			if spec.Rank() != shape.Rank() {
+				exceptions.Panicf("NewFunctionWithSharding: output #%d has shape %s (rank %d) but sharding spec has rank %d -- they must match",
+					i, shape, shape.Rank(), spec.Rank())
+			}
+			shardShape := spec.ShardShape(shape)
+			if !shardShape.Ok() {
+				exceptions.Panicf("NewFunctionWithSharding: output #%d shape %s is not compatible with sharding spec %s: shard shape is invalid",
+					i, shape, spec)
+			}
+		}
+	}
+
+	g.functions[name] = f
+
+	// Return the outputs.
+	f.Return(outputs, shardings)
+	return f
+}
+
+// NodeTypeCall is the NodeType for function calls.
+// We use a large number to avoid conflict with generated NodeTypes in gen_backend_ops.go.
+const NodeTypeCall NodeType = 1000
+
+// nodeInputsCall holds the inputs used for the call to backends.Function.Call.
+type nodeInputsCall struct {
+	f      *Function
+	inputs []*Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsCall) Type() NodeType {
+	return NodeTypeCall
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsCall) String() string {
+	return fmt.Sprintf("Call(%s, %d inputs)", ni.f.name, len(ni.inputs))
+}
+
+// Call a function with the given inputs.
+//
+// The function f must be from the same graph.
+func (f *Function) Call(inputs ...*Node) []*Node {
+	g := f.graph
+	g.AssertBuilding()
+
+	// Validate inputs
+	if len(inputs) != len(f.parameters) {
+		exceptions.Panicf("Function %q expects %d inputs, but got %d", f.name, len(f.parameters), len(inputs))
+	}
+
+	// Combine inputs for validation
+	validateBuildingGraphFromInputs(inputs...) // Ensures inputs are from same graph g.
+
+	for i, input := range inputs {
+		param := f.parameters[i]
+		// Check shape compatibility
+		// For now, strict check on Rank and DType.
+		if input.Rank() != param.Rank() {
+			exceptions.Panicf("Function %q input #%d expects rank %d (param shape %s), got rank %d (input shape %s)",
+				f.name, i, param.Rank(), param.Shape(), input.Rank(), input.Shape())
+		}
+		if input.DType() != param.DType() {
+			exceptions.Panicf("Function %q input #%d expects dtype %s, got %s",
+				f.name, i, param.DType(), input.DType())
+		}
+	}
+
+	// Create node inputs
+	ni := &nodeInputsCall{
+		f:      f,
+		inputs: inputs,
+	}
+
+	// Prepare backend inputs
+	inputOps := make([]backends.Value, len(inputs))
+	for i, n := range inputs {
+		inputOps[i] = n.outputOps[0]
+	}
+
+	// Call backend
+	results, err := g.currentFunc.backendFunc.Call(f.backendFunc, inputOps...)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Failed to call function %q", f.name))
+	}
+
+	// Create output node
+	outputShapes := make([]shapes.Shape, len(results))
+	for i, res := range results {
+		outputShapes[i] = mustNoError(g.builder.OpShape(res))
+	}
+
+	node := &Node{
+		graph:        g,
+		outputOps:    results,
+		outputShapes: outputShapes,
+		inputs:       ni,
+		inputNodes:   inputs,
+	}
+	g.registerNode(node)
+
+	return splitNode(node)
 }

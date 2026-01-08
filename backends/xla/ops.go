@@ -742,3 +742,32 @@ func (f *Function) BatchNormGradient(gradOutput, input, scale, mean, variance ba
 	}
 	return f.newNode(gradInputV), f.newNode(gradScaleV), f.newNode(gradOffsetV), nil
 }
+
+// Call implements the backends.Function interface.
+func (f *Function) Call(target backends.Function, inputs ...backends.Value) ([]backends.Value, error) {
+	nodes, err := f.verifyAndCastValues("Call", inputs...)
+	if err != nil {
+		return nil, err
+	}
+	targetF, ok := target.(*Function)
+	if !ok {
+		return nil, errors.Errorf("Call target function must be of type *xla.Function, but got %T", target)
+	}
+	if targetF.builder != f.builder {
+		return nil, errors.Errorf("Call target function must be from the same builder")
+	}
+
+	inputValues := make([]*stablehlo.Value, len(nodes))
+	for i, n := range nodes {
+		inputValues[i] = n.value
+	}
+	outputValues, err := stablehlo.Call(targetF.fn, inputValues...)
+	if err != nil {
+		return nil, err
+	}
+	outputNodes := make([]backends.Value, len(outputValues))
+	for i, v := range outputValues {
+		outputNodes[i] = f.newNode(v)
+	}
+	return outputNodes, nil
+}
