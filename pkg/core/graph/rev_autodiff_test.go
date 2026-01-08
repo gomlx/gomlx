@@ -7,11 +7,11 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/stretchr/testify/require"
 )
 
@@ -193,8 +193,10 @@ func testGradientsInDelta(t *testing.T, name string, testFn gradTestFunc, wantFo
 			grads := Gradient(ReduceAllSum(output), nodesForGrad...)
 			return append([]*Node{output}, grads...)
 		}
-		exec := MustNewExec(backend, fn)
-		results := exec.MustExec()
+		exec, err := NewExec(backend, fn)
+		require.NoError(t, err)
+		results, err := exec.Exec()
+		require.NoError(t, err)
 		fmt.Printf("\toutput=%v\n", results[0].GoStr())
 		gradients := results[1:]
 		for ii, output := range gradients {
