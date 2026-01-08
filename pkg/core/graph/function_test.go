@@ -138,4 +138,33 @@ func TestFunction(t *testing.T) {
 			addFn.Call(v, a)
 		})
 	})
+
+	t.Run("Closure", func(t *testing.T) {
+		backend := graphtest.BuildTestBackend()
+		g := graph.NewGraph(backend, "Closure")
+
+		// Create a closure: f(x) = x + y, where y is captured from parent
+		// Note: since we can't easily capture variable in this simple test without full context support,
+		// we will just verify the closure structure and call it.
+		// Real closure capturing depends on how variables are handled in upper layers (like context package).
+		// Here we just check NewClosure works.
+		closureFn := graph.NewClosure(g, func(g *graph.Graph) []*graph.Node {
+			x := graph.Parameter(g, "x", shapes.Make(dtypes.F32))
+			// We simulate a capture by just creating a constant here, or if we had a parent param...
+			// To keep it simple and test machinery: return x * 2
+			two := graph.Const(g, float32(2))
+			return []*graph.Node{graph.Mul(x, two)}
+		})
+
+		assert.Equal(t, "", closureFn.Name())
+		// Expected path depends on how many layers. CurrentFunc is Main. So Path should be "main/closure".
+		assert.Equal(t, "main/closure", closureFn.Path())
+		assert.True(t, g.CurrentFunc().IsAncestorOf(closureFn))
+
+		// Closures are not callable.
+		val := graph.Const(g, float32(21)) // 21 * 2 = 42
+		assert.Panics(t, func() {
+			_ = closureFn.Call(val)
+		})
+	})
 }

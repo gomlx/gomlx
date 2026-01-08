@@ -105,6 +105,11 @@ func (f *Function) IsAncestorOf(leafFunc *Function) bool {
 	return false
 }
 
+// IsClosure returns whether this is a closure.
+func (f *Function) IsClosure() bool {
+	return f.name == "" && f.parent != nil
+}
+
 // Return from the given function. This is the last operation of a function.
 //
 // Don't call this directly, this is mostly for internal use and testing:
@@ -212,6 +217,92 @@ func innermostFunction(inputs []*Node) (*Function, error) {
 		// else: other is ancestor of candidate, so candidate remains the deeper one.
 	}
 	return candidate, nil
+}
+
+// NewClosure creates a new closure in the current graph.
+//
+// Closures are used as parameters for special operations like While, If, etc;
+// they cannot be called directly.
+//
+// Closures, unlike top-level functions (created with NewFunction), can access variables from the parent scope.
+// Because of that they are not named and not registered in the Graph (so they cannot be retrieved by name).
+//
+// It creates the new Function object, sets it temporarily as the current for the Graph (reversed on exit)
+// and call the funcDef with it.
+//
+// The signature of the created function will have the inputs based on the parameters created by funcDef, and
+// the outputs based on the return values of funcDef.
+func NewClosure(g *Graph, funcDef func(g *Graph) []*Node) *Function {
+	g.AssertBuilding()
+	return NewClosureWithSharding(g, func(g *Graph) ([]*Node, []*distributed.ShardingSpec) {
+		return funcDef(g), nil
+	})
+}
+
+// NewClosureWithSharding creates a new closure in the current graph.
+//
+// Closures are used as parameters for special operations like While, If, etc;
+// they cannot be called directly.
+//
+// It is similar to NewClosure, but funcDef also returns the sharding information, and it is used on f.Return in the end.
+//
+// If the returned sharding information if not nil, it validates the sharding to the output nodes.
+// Otherwise (sharding is nil), it behaves just like NewClosure.
+func NewClosureWithSharding(g *Graph, funcDef func(g *Graph) ([]*Node, []*distributed.ShardingSpec)) *Function {
+	g.AssertBuilding()
+	if !g.backend.Capabilities().Functions {
+		exceptions.Panicf("backend %q does not support functions (needed for closures)", g.backend.Name())
+	}
+
+	// Create the function.
+	f := &Function{
+		graph:                 g,
+		name:                  "",
+		parent:                g.currentFunc,
+		parameterNameToHandle: make(map[string]ParameterHandle),
+	}
+	var err error
+	f.backendFunc, err = g.builder.Main().Closure()
+	if err != nil {
+		panic(errors.WithMessagef(err, "failed to create new closure"))
+	}
+
+	// Temporarily set the current function.
+	prevFunc := g.currentFunc
+	g.currentFunc = f
+	defer func() {
+		g.currentFunc = prevFunc
+	}()
+
+	// Call the definition.
+	outputs, shardings := funcDef(g)
+
+	// Validate shardings
+	if len(shardings) > 0 {
+		if len(shardings) != len(outputs) {
+			exceptions.Panicf("NewClosureWithSharding: got %d outputs but %d sharding specs", len(outputs), len(shardings))
+		}
+		for i, node := range outputs {
+			spec := shardings[i]
+			if spec == nil {
+				continue
+			}
+			shape := node.Shape()
+			if spec.Rank() != shape.Rank() {
+				exceptions.Panicf("NewClosureWithSharding: output #%d has shape %s (rank %d) but sharding spec has rank %d -- they must match",
+					i, shape, shape.Rank(), spec.Rank())
+			}
+			shardShape := spec.ShardShape(shape)
+			if !shardShape.Ok() {
+				exceptions.Panicf("NewClosureWithSharding: output #%d shape %s is not compatible with sharding spec %s: shard shape is invalid",
+					i, shape, spec)
+			}
+		}
+	}
+
+	// Return the outputs.
+	f.Return(outputs, shardings)
+	return f
 }
 
 // NewFunction creates a new top-level function in the current graph.
@@ -324,6 +415,10 @@ func (ni *nodeInputsCall) String() string {
 func (f *Function) Call(inputs ...*Node) []*Node {
 	g := f.graph
 	g.AssertBuilding()
+	if f.IsClosure() {
+		exceptions.Panicf("closure functions (%q) cannot be called directly, only used as "+
+			"inputs to other functions", f.Path())
+	}
 
 	// Validate inputs
 	if len(inputs) != len(f.parameters) {
