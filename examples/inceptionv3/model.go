@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 /*
 Package inceptionv3 provides a pre-trained (or only its structure) InceptionV3 model.
 

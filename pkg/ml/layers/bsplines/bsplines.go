@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package bsplines provide a GoMLX version of github.com/gomlx/bsplines: it provides evaluation of bsplines
 // curves, that can be used as layers.
 // Currently, it's best used through `gomlx/ml/layers/kan` package.

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package backends
 
 // OpType is an enum of all generic operations that can be supported by a Backend.Builder.

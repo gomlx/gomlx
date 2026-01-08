@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package oxfordflowers102 provides tools to download and cache the dataset
 // and a `train.Dataset` implementation that can be used to train models
 // using GoMLX (http://github.com/gomlx/gomlx/).

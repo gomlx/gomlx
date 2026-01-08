@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package notimplemented implements a backends.Builder interface that throws a "Not implemented"
 // exception to all operations.
 //

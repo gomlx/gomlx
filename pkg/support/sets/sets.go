@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package sets implement a set type as a `map[T]struct{}` but with better ergonomics.
 package sets
 

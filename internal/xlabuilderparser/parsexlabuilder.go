@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package xlabuilderparser parses the xlabuilder API to enumerate graph building functions, and the `op_types.txt`
 // file to get a list of the supported ops.
 //

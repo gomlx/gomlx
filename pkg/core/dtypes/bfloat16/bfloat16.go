@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package bfloat16 is a trivial implementation for the bfloat16 type,
 // based on https://github.com/x448/float16 and the pending issue in
 // https://github.com/x448/float16/issues/22

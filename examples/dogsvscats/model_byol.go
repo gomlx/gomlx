@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package dogsvscats
 
 // This file defines the BYOL-CNN (Bootstrap Your Own Latent) model, based on

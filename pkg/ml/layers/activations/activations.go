@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package activations implements several common activations, and includes a generic Apply method to apply an
 // activation by its type.
 //

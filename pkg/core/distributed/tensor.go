@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package distributed defines the following objects related to cross-device execution:
 //
 // - DeviceMesh: expresses the topology of a set of devices, in terms of axis and their sizes.
