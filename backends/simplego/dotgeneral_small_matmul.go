@@ -1,6 +1,7 @@
 package simplego
 
 import (
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
@@ -12,9 +13,9 @@ import (
 //
 // Memory access pattern analysis for row-major storage:
 //
-//   For [M, K] × [K, N] → [M, N]:
-//   - LHS row m: elements at [m*K, m*K+1, ..., m*K+K-1] → SEQUENTIAL (good cache locality)
-//   - RHS col n: elements at [n, N+n, 2N+n, ...] → STRIDED with stride N (poor cache locality)
+//	For [M, K] × [K, N] → [M, N]:
+//	- LHS row m: elements at [m*K, m*K+1, ..., m*K+K-1] → SEQUENTIAL (good cache locality)
+//	- RHS col n: elements at [n, N+n, 2N+n, ...] → STRIDED with stride N (poor cache locality)
 //
 // This function returns true when inputs are already in this standard order, meaning we can
 // skip the transpose/normalization step. However, note that for LARGE matrices, the strided
@@ -43,14 +44,12 @@ func isMatMulOrder(lhsShape, rhsShape shapes.Shape, lhsContractingAxes, rhsContr
 		return false
 	}
 
-	// Batch axes must match in count
+	// Batch axes must match in count and must precede other dimensions.
 	numBatchAxes := len(lhsBatchAxes)
 	if len(rhsBatchAxes) != numBatchAxes {
 		return false
 	}
-
-	// Batch axes must be leading and sequential: 0, 1, 2, ...
-	for i := 0; i < numBatchAxes; i++ {
+	for i := range numBatchAxes {
 		if lhsBatchAxes[i] != i || rhsBatchAxes[i] != i {
 			return false
 		}
@@ -61,9 +60,9 @@ func isMatMulOrder(lhsShape, rhsShape shapes.Shape, lhsContractingAxes, rhsContr
 		return false
 	}
 
-	// LHS must have shape [Batch..., M, K] where M is the cross dimension
-	// rank = numBatchAxes + 1 (cross) + 1 (contracting) = numBatchAxes + 2
-	if lhsRank != numBatchAxes+2 {
+	// LHS must have at most one cross dimension "M": [Batch..., M, K] or [Batch..., K]
+	// rank = numBatchAxes + 1/0 (cross) + 1 (contracting) = numBatchAxes + 2
+	if lhsRank > numBatchAxes+2 {
 		return false
 	}
 
@@ -77,6 +76,11 @@ func isMatMulOrder(lhsShape, rhsShape shapes.Shape, lhsContractingAxes, rhsContr
 	// - [Batch..., K, N] where rank = numBatchAxes + 2 (matrix)
 	// - [Batch..., K] where rank = numBatchAxes + 1 (vector, no cross dimension)
 	if rhsRank != numBatchAxes+2 && rhsRank != numBatchAxes+1 {
+		return false
+	}
+
+	// Only support float32 for SmallMatMul (most common case)
+	if lhsShape.DType != dtypes.Float32 {
 		return false
 	}
 
@@ -110,7 +114,7 @@ const smallMatMulMaxBatchSize = 64
 //
 // This threshold is important because the RHS stride equals N, so large N causes
 // more cache misses per contracting step than large K does.
-const smallMatMulMaxRhsCrossSize = 256
+const smallMatMulMaxRhsCrossSize = 64
 
 // smallMatMulMaxRhsCrossSizeM1 is the maximum RHS cross dimension (N) for M=1 cases.
 // For single-row operations, transpose overhead is more significant relative to
@@ -126,17 +130,84 @@ const smallMatMulMaxRhsCrossSizeM1 = 4096
 // still cause cache thrashing due to strided RHS access, so we cap it.
 const smallMatMulMaxContractingSizeM1 = 1024
 
+// smallMatMulMaxSize is the maximum size in bytes of the output for which the small matmul
+// path is beneficial. This is a sanity check to avoid using the small matmul path for
+// very large outputs -- which usually will do better with normalized/blocked paths
+const smallMatMulMaxSize = 256 * 1024 // 256Kb
+
+// dgUseSmallMatMul checks whether the SmallMatMul fast path is beneficial.
+// SmallMatMul skips transpose overhead but has strided RHS access, so it's only
+// beneficial for small float32 matrices in standard [M,K]×[K,N] order.
+func dgUseSmallMatMul(dtype dtypes.DType, lhsShape, rhsShape shapes.Shape, params *dotGeneralNodeData) bool {
+	// Only support float32 for SmallMatMul (most common case)
+	if dtype != dtypes.Float32 {
+		return false
+	}
+
+	// Check if axes are in standard matmul order
+	if !isMatMulOrder(lhsShape, rhsShape,
+		params.lhsContractingAxes, params.rhsContractingAxes,
+		params.lhsBatchAxes, params.rhsBatchAxes) {
+		return false
+	}
+
+	// For large batch sizes, the normalized path with batch parallelism is faster.
+	// The small matmul path processes batches sequentially without parallelization.
+	if params.batchSize > smallMatMulMaxBatchSize {
+		return false
+	}
+
+	// For single-row operations (M=1), SmallMatMul is faster because transpose overhead
+	// dominates when computing just one output row per batch.
+	// BUT we still need to check rhsCrossSize and contractingSize - for M=1 with huge N or K,
+	// the strided access causes cache thrashing.
+	if params.lhsCrossSize == 1 {
+		// For M=1, use larger thresholds since transpose overhead is more significant
+		// But still cap to avoid catastrophic cache behavior with very large dimensions
+		if params.rhsCrossSize > smallMatMulMaxRhsCrossSizeM1 {
+			return false
+		}
+		if params.contractingSize > smallMatMulMaxContractingSizeM1 {
+			return false
+		}
+		return true
+	}
+
+	// For multi-row operations, check both contracting and RHS cross dimensions.
+	// The RHS is accessed with stride N (rhsCrossSize), so large N causes more cache
+	// misses per contracting step.
+	if params.contractingSize > smallMatMulMaxContractingSize {
+		return false
+	}
+
+	// Check RHS cross size (N) - large N means large stride in RHS access
+	if params.rhsCrossSize > smallMatMulMaxRhsCrossSize {
+		return false
+	}
+
+	// Larger data size benefit from the blocking done by the blocked and normalized paths.
+	problemSize := /* LHS size */ params.lhsCrossSize*params.contractingSize +
+		/* RHS size */ params.rhsCrossSize*params.contractingSize +
+		/* Output size */ params.lhsCrossSize*params.rhsCrossSize
+	problemSize *= params.batchSize
+	problemSize *= dtype.Size()
+	if problemSize > smallMatMulMaxSize {
+		return false
+	}
+	return true
+}
+
 // execDotGeneralSmallMatMulFloat32 executes float32 matrix multiplication without transpose.
 //
 // Memory layout for row-major tensors [M, K] × [K, N] → [M, N]:
 //
-//   LHS [M, K]: element [m, k] at index m*K + k
-//     → Row m is CONTIGUOUS: [m*K, m*K+1, ..., m*K+K-1] ✓ Good cache locality
+//	LHS [M, K]: element [m, k] at index m*K + k
+//	  → Row m is CONTIGUOUS: [m*K, m*K+1, ..., m*K+K-1] ✓ Good cache locality
 //
-//   RHS [K, N]: element [k, n] at index k*N + n
-//     → Column n is STRIDED: [n, N+n, 2N+n, ...] with stride N ✗ Poor cache locality
+//	RHS [K, N]: element [k, n] at index k*N + n
+//	  → Column n is STRIDED: [n, N+n, 2N+n, ...] with stride N ✗ Poor cache locality
 //
-//   Output [M, N]: element [m, n] at index m*N + n
+//	Output [M, N]: element [m, n] at index m*N + n
 //
 // The strided RHS access is the key limitation of this path. For large K or N,
 // each RHS element access may cause a cache miss. This is why we limit this path
@@ -150,27 +221,27 @@ func execDotGeneralSmallMatMulFloat32(_ *Backend, lhs, rhs *Buffer, params *dotG
 	outputFlat := output.flat.([]float32)
 
 	batchSize := params.batchSize
-	lhsCrossSize := params.lhsCrossSize      // M
-	rhsCrossSize := params.rhsCrossSize      // N
+	lhsCrossSize := params.lhsCrossSize       // M
+	rhsCrossSize := params.rhsCrossSize       // N
 	contractingSize := params.contractingSize // K
 
-	lhsBatchStride := lhsCrossSize * contractingSize  // M * K elements per batch
-	rhsBatchStride := contractingSize * rhsCrossSize  // K * N elements per batch (for [B,K,N] layout)
-	outputBatchStride := lhsCrossSize * rhsCrossSize  // M * N elements per batch
+	lhsBatchStride := lhsCrossSize * contractingSize // M * K elements per batch
+	rhsBatchStride := contractingSize * rhsCrossSize // K * N elements per batch (for [B,K,N] layout)
+	outputBatchStride := lhsCrossSize * rhsCrossSize // M * N elements per batch
 
 	// For row-major RHS [K, N], the stride between elements in the same column is N
 	rhsColStride := rhsCrossSize // N
 
-	for batchIdx := 0; batchIdx < batchSize; batchIdx++ {
+	for batchIdx := range batchSize {
 		lhsBaseIdx := batchIdx * lhsBatchStride
 		rhsBaseIdx := batchIdx * rhsBatchStride
 		outputBaseIdx := batchIdx * outputBatchStride
 
-		for m := 0; m < lhsCrossSize; m++ {
+		for m := range lhsCrossSize {
 			lhsRowStart := lhsBaseIdx + m*contractingSize
 			outputRowStart := outputBaseIdx + m*rhsCrossSize
 
-			for n := 0; n < rhsCrossSize; n++ {
+			for n := range rhsCrossSize {
 				// For column n in row-major [K,N], element [k,n] is at k*N + n
 				rhsColStart := rhsBaseIdx + n
 				var sum float32

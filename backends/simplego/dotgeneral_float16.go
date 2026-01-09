@@ -5,8 +5,8 @@ package simplego
 // Float16 DotGeneral operations
 
 import (
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/x448/float16"
 )
 
@@ -155,7 +155,7 @@ func dgNormalizeShapeFloat16(backend *Backend, source *Buffer, contractingAxes, 
 		perm[permIdx] = axis
 		permIdx++
 	}
-	for axis := 0; axis < rank; axis++ {
+	for axis := range rank {
 		if axesTypes[axis] == 0 {
 			perm[permIdx] = axis
 			permIdx++
@@ -183,7 +183,7 @@ func dgNormalizeShapeFloat16(backend *Backend, source *Buffer, contractingAxes, 
 	for outputFlatIdx := range outputData {
 		// Calculate source flat index
 		sourceFlatIdx := 0
-		for axis := 0; axis < rank; axis++ {
+		for axis := range rank {
 			sourceFlatIdx += sourceIdx[perm[axis]] * sourceStrides[perm[axis]]
 		}
 		outputData[outputFlatIdx] = sourceData[sourceFlatIdx]

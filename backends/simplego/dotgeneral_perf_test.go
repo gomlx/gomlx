@@ -2,7 +2,6 @@
 
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-
 package simplego
 
 import (
@@ -63,8 +62,7 @@ var (
 // Examples:
 //
 //	$ GOMLX_BACKEND=go go test -tags=perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
-//	$ GOMLX_BACKEND=xla:cuda go test -tags=xla,perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
-//	$ GOMLX_BACKEND=stablehlo:cpu go test -tags=stablehlo,perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
+//	$ GOMLX_BACKEND=xla:cuda go test -tags=perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
 func TestDotGeneral_PerformanceTable(t *testing.T) {
 	filterPerfs := *flagPerfTests != ""
 	perfsToRun := sets.MakeWith(strings.Split(*flagPerfTests, ",")...)
@@ -82,6 +80,11 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			rhsShape: []int{4, 1}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
 		},
 		{
+			name:     "NoBatch-Tiny-Normalized",
+			lhsShape: []int{128, 4}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
+			rhsShape: []int{1, 4}, rhsContractingAxes: []int{1}, rhsBatchAxes: []int{},
+		},
+		{
 			name:     "NoBatch-Small",
 			lhsShape: []int{16, 128}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
 			rhsShape: []int{128, 32}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
@@ -90,6 +93,16 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			name:     "NoBatch-Medium",
 			lhsShape: []int{128, 128}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
 			rhsShape: []int{128, 256}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
+		},
+		{
+			name:     "NoBatch-NoLHSCross-LargeRHSCross-Matmul",
+			lhsShape: []int{128}, lhsContractingAxes: []int{0}, lhsBatchAxes: nil,
+			rhsShape: []int{128, 256}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
+		},
+		{
+			name:     "NoBatch-LargeLHSCross-SmallRHSCross-Matmul",
+			lhsShape: []int{4096, 32}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
+			rhsShape: []int{32, 16}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
 		},
 		{
 			name:     "LargeBatch-Tiny",
@@ -172,6 +185,11 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			lhsShape: []int{49, 69}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
 			rhsShape: []int{69, 4}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
 		},
+		{
+			name:     "adult-#6-Normalized",
+			lhsShape: []int{49, 69}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
+			rhsShape: []int{4, 69}, rhsContractingAxes: []int{1}, rhsBatchAxes: []int{},
+		},
 
 		// Add more test cases relevant to your models here
 	}
@@ -207,8 +225,17 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 	fmt.Println(strings.Repeat("-", len(header)))
 
 	for benchCaseIdx, benchCase := range benchmarkCases {
-		if filterPerfs && !perfsToRun.Has(benchCase.name) {
-			continue
+		if filterPerfs {
+			found := false
+			for perfToRun := range perfsToRun {
+				if strings.Contains(benchCase.name, perfToRun) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
 		}
 		for _, dtype := range dtypesToTest {
 			if filterDTypes && !dtypesToRun.Has(dtype.String()) {

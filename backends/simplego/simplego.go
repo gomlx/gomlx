@@ -53,12 +53,12 @@ var GetBackend = sync.OnceValue(func() backends.Backend {
 // There are no configurations, the string is simply ignored.
 func New(config string) (backends.Backend, error) {
 	b := newDefaultBackend()
-	parts := strings.Split(config, ",")
-	for _, part := range parts {
+	parts := strings.SplitSeq(config, ",")
+	for part := range parts {
 		key := part
 		var value string
-		if eqPos := strings.Index(part, "="); eqPos != -1 {
-			key, value = part[0:eqPos], part[eqPos+1:]
+		if before, after, ok := strings.Cut(part, "="); ok {
+			key, value = before, after
 		}
 		switch key {
 		case "parallelism":

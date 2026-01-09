@@ -11,6 +11,7 @@
   - Added dedup of computation nodes (aka. "common subexpression elimination" CSE) (thx @timkaye11)
     - ~6% speedup for CSI-Adult demo training. 
   - DotGeneral: Pre-blocking of the blocked path, which may lead to deduplication of blocking nodes.
+  - DotGeneral: Added smallMatMul execution path, optimized for small matrix multiplications (thx @timkaye11)
 - New package `bucketing`:
   - Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
 - Package `dtypes`:
