@@ -79,6 +79,8 @@ github.com/gomlx/exceptions v0.0.3 h1:HKnTgEjj4jlmhr8zVFkTP9qmV1ey7ypYYosQ8GzXWu
 github.com/gomlx/exceptions v0.0.3/go.mod h1:uHL0TQwJ0xaV2/snJOJV6hSE4yRmhhfymuYgNredGxU=
 github.com/gomlx/go-coreml v0.0.0-20260105190916-0dde0fd04eeb h1:ATVuOnYOvXc0EDArcbTz/d0ERxT/PMfhnXBUmJlFPeg=
 github.com/gomlx/go-coreml v0.0.0-20260105190916-0dde0fd04eeb/go.mod h1:iZG+LBo+jgnd44RMPJCVDfYmDaIH5P7mg5p2rVNoaIM=
+github.com/gomlx/go-coreml v0.0.0-20260109045350-0b720b1b4a65 h1:3nq7wsMv2KpcTzj/P3hl8x9kRvLNuCnifbgsc5N2qq4=
+github.com/gomlx/go-coreml v0.0.0-20260109045350-0b720b1b4a65/go.mod h1:iZG+LBo+jgnd44RMPJCVDfYmDaIH5P7mg5p2rVNoaIM=
 github.com/gomlx/go-xla v0.1.5-0.20260107152240-2890a4924d88 h1:3FAQ+KA5WY/AzZ62JGg1AbkCgtSiYAZpZV37IaxdGws=
 github.com/gomlx/go-xla v0.1.5-0.20260107152240-2890a4924d88/go.mod h1:K/hj2IVnPJPuyypawBeTju2IgaP/CUlf1ziOZzPiWjw=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=

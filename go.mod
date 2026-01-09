@@ -11,7 +11,7 @@ require (
 	github.com/erkkah/margaid v0.3.0
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/bsplines v0.2.0
-	github.com/gomlx/go-coreml v0.0.0-20260105190916-0dde0fd04eeb
+	github.com/gomlx/go-coreml v0.0.0-20260109045350-0b720b1b4a65
 	github.com/gomlx/go-xla v0.1.5-0.20260107152240-2890a4924d88
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.1
