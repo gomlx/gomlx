@@ -1038,7 +1038,7 @@ func execConcatenate(backend *Backend, node *Node, inputs []*Buffer, inputsOwned
 
 	// Calculate the size of the blocks before and after the concatenation axis.
 	outerBlockSize := 1 // Number of independent blocks to copy
-	for i := 0; i < axis; i++ {
+	for i := range axis {
 		outerBlockSize *= outputShape.Dimensions[i]
 	}
 	innerBlockSize := 1 // Size of the innermost contiguous block (in elements)

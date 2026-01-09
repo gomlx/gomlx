@@ -389,7 +389,7 @@ func dgCopyOutputBlockToFlat[T interface {
 	sourceData := blockSource.flat.([]T)
 	outputData := output.flat.([]T)
 
-	for batch := 0; batch < batchSize; batch++ {
+	for batch := range batchSize {
 		sourceBatchOffset := batch * sourceBatchStride
 		outputBatchOffset := batch * outputBatchStride
 
@@ -451,7 +451,7 @@ func dgCopyOutputBlockToFlatBFloat16(blockSource, output *Buffer) {
 	sourceData := blockSource.flat.([]float32)
 	outputData := output.flat.([]bfloat16.BFloat16)
 
-	for batch := 0; batch < batchSize; batch++ {
+	for batch := range batchSize {
 		sourceBatchOffset := batch * sourceBatchStride
 		outputBatchOffset := batch * outputBatchStride
 
@@ -509,7 +509,7 @@ func dgCopyOutputBlockToFlatFloat16(blockSource, output *Buffer) {
 	sourceData := blockSource.flat.([]float32)
 	outputData := output.flat.([]float16.Float16)
 
-	for batch := 0; batch < batchSize; batch++ {
+	for batch := range batchSize {
 		sourceBatchOffset := batch * sourceBatchStride
 		outputBatchOffset := batch * outputBatchStride
 

@@ -221,16 +221,16 @@ func execDotGeneralSmallMatMulFloat32(_ *Backend, lhs, rhs *Buffer, params *dotG
 	// For row-major RHS [K, N], the stride between elements in the same column is N
 	rhsColStride := rhsCrossSize // N
 
-	for batchIdx := 0; batchIdx < batchSize; batchIdx++ {
+	for batchIdx := range batchSize {
 		lhsBaseIdx := batchIdx * lhsBatchStride
 		rhsBaseIdx := batchIdx * rhsBatchStride
 		outputBaseIdx := batchIdx * outputBatchStride
 
-		for m := 0; m < lhsCrossSize; m++ {
+		for m := range lhsCrossSize {
 			lhsRowStart := lhsBaseIdx + m*contractingSize
 			outputRowStart := outputBaseIdx + m*rhsCrossSize
 
-			for n := 0; n < rhsCrossSize; n++ {
+			for n := range rhsCrossSize {
 				// For column n in row-major [K,N], element [k,n] is at k*N + n
 				rhsColStart := rhsBaseIdx + n
 				var sum float32
