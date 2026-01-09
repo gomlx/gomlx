@@ -1,5 +1,7 @@
 //go:build darwin
 
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package coreml
 
 import (
@@ -38,8 +40,11 @@ type Builder struct {
 	// outputs can be any type of node
 	outputs []*Node
 
-	// nodeMap maps GoMLX Op to MIL Value for tracking
-	nodeMap map[backends.Op]*model.Value
+	// nodeMap maps GoMLX Value to MIL Value for tracking
+	nodeMap map[backends.Value]*model.Value
+
+	// mainFn is the main function, created lazily.
+	mainFn *Function
 
 	// Input/output metadata for execution
 	inputNames   []string
@@ -66,17 +71,40 @@ func (b *Builder) Name() string {
 	return b.name
 }
 
+// Main returns the main function of this builder.
+func (b *Builder) Main() backends.Function {
+	if b.mainFn == nil {
+		b.mainFn = &Function{
+			builder: b,
+			name:    backends.MainName,
+		}
+	}
+	return b.mainFn
+}
+
+// NewFunction creates a new named function within this builder.
+func (b *Builder) NewFunction(name string) (backends.Function, error) {
+	if name == backends.MainName {
+		return nil, errors.Errorf("cannot create function with reserved name %q", backends.MainName)
+	}
+	fn := &Function{
+		builder: b,
+		name:    name,
+	}
+	return fn, nil
+}
+
 // Compile implements backends.Builder.
-func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingSpec) (backends.Executable, error) {
-	if len(shardings) != 0 {
-		return nil, errors.Errorf("sharding or distributed execution are not supported by CoreML backend")
+func (b *Builder) Compile() (backends.Executable, error) {
+	// Ensure main function has been defined with outputs
+	if b.mainFn == nil {
+		return nil, errors.Errorf("no computation defined - call Main() and add operations before Compile()")
+	}
+	if !b.mainFn.returned {
+		return nil, errors.Errorf("Main function has not called Return() - no outputs defined")
 	}
 
-	var err error
-	b.outputs, err = b.checkOps("Compile", outputs...)
-	if err != nil {
-		return nil, err
-	}
+	b.outputs = b.mainFn.outputs
 
 	// Track output metadata and mark outputs in the MIL builder
 	for i, node := range b.outputs {
@@ -96,8 +124,8 @@ func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingS
 	return newExecutable(b, runtimeExec), nil
 }
 
-// OpShape returns the shape of a computation Op.
-func (b *Builder) OpShape(op backends.Op) (shapes.Shape, error) {
+// OpShape returns the shape of a computation Value.
+func (b *Builder) OpShape(op backends.Value) (shapes.Shape, error) {
 	nodes, err := b.checkOps("OpShape", op)
 	if err != nil {
 		return shapes.Invalid(), err
@@ -105,94 +133,9 @@ func (b *Builder) OpShape(op backends.Op) (shapes.Shape, error) {
 	return nodes[0].shape, nil
 }
 
-// Parameter creates an input parameter for the computation.
-func (b *Builder) Parameter(name string, shape shapes.Shape, sharding *backends.ShardingSpec) (backends.Op, error) {
-	if b.compiled {
-		return nil, errors.Errorf("cannot add parameter to compiled builder")
-	}
-	if sharding != nil {
-		return nil, errors.Errorf("sharding not supported by CoreML backend")
-	}
-
-	// Convert GoMLX dtype to CoreML dtype
-	milDType, err := gomlxDTypeToMIL(shape.DType)
-	if err != nil {
-		return nil, errors.Wrapf(err, "Parameter %q", name)
-	}
-
-	// Convert shape dimensions to int64
-	dims := make([]int64, shape.Rank())
-	for i := 0; i < shape.Rank(); i++ {
-		dims[i] = int64(shape.Dimensions[i])
-	}
-
-	// Create input in MIL builder
-	milValue := b.milBuilder.Input(name, milDType, dims...)
-
-	// Create node
-	node := b.newNode(backends.OpTypeParameter, shape, milValue)
-	b.inputs = append(b.inputs, node)
-	b.nodeMap[node] = milValue
-
-	// Track input metadata
-	b.inputNames = append(b.inputNames, name)
-	b.inputShapes = append(b.inputShapes, shape)
-
-	return node, nil
-}
-
-// Constant creates a constant in the graph.
-func (b *Builder) Constant(flat any, dims ...int) (backends.Op, error) {
-	if b.compiled {
-		return nil, errors.Errorf("cannot add constant to compiled builder")
-	}
-
-	// Validate and get dtype
-	dtype, flatLen, err := checkFlat(flat)
-	if err != nil {
-		return nil, errors.Wrap(err, "Constant")
-	}
-
-	// Validate dimensions
-	shape := shapes.Make(dtype, dims...)
-	if shape.Size() != flatLen {
-		return nil, errors.Errorf(
-			"Constant: shape %s has size %d, but flat data has length %d",
-			shape,
-			shape.Size(),
-			flatLen,
-		)
-	}
-
-	// Convert to MIL dtype
-	milDType, err := gomlxDTypeToMIL(dtype)
-	if err != nil {
-		return nil, errors.Wrap(err, "Constant")
-	}
-
-	// Convert dimensions to int64
-	milShape := make([]int64, len(dims))
-	for i, d := range dims {
-		milShape[i] = int64(d)
-	}
-
-	// Generate unique name for constant
-	constName := fmt.Sprintf("const_%d", b.nextConstID)
-	b.nextConstID++
-
-	// Create constant in MIL builder
-	milValue := b.milBuilder.Const(constName, milDType, milShape, flat)
-
-	// Create node
-	node := b.newNode(backends.OpTypeConstant, shape, milValue)
-	b.nodeMap[node] = milValue
-
-	return node, nil
-}
-
-// checkOps validates that the ops are from CoreML and from this builder.
+// checkOps validates that the values are from CoreML and from this builder.
 // It also checks whether the Builder is not yet compiled.
-func (b *Builder) checkOps(opType string, ops ...backends.Op) ([]*Node, error) {
+func (b *Builder) checkOps(opType string, ops ...backends.Value) ([]*Node, error) {
 	if b == nil {
 		return nil, errors.Errorf("%s: Builder is nil (!?), cannot build a graph", opType)
 	}

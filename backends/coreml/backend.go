@@ -117,7 +117,7 @@ func (b *Backend) Builder(name string) backends.Builder {
 		nodes:      make([]*Node, 0),
 		inputs:     make([]*Node, 0),
 		outputs:    make([]*Node, 0),
-		nodeMap:    make(map[backends.Op]*model.Value),
+		nodeMap:    make(map[backends.Value]*model.Value),
 	}
 	return builder
 }
