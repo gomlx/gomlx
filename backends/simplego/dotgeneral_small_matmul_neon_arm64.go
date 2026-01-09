@@ -94,20 +94,8 @@ func execDotGeneralSmallMatMulFloat32NEON(_ *Backend, lhs, rhs *Buffer, params *
 			// Scalar fallback for remainder columns (0-3 columns)
 			for ; n < rhsCrossSize; n++ {
 				rhsColStart := rhsBaseIdx + n
-				var sum float32
-
-				k := 0
-				for ; k+3 < contractingSize; k += 4 {
-					sum += lhsFlat[lhsRowStart+k]*rhsFlat[rhsColStart+k*rhsCrossSize] +
-						lhsFlat[lhsRowStart+k+1]*rhsFlat[rhsColStart+(k+1)*rhsCrossSize] +
-						lhsFlat[lhsRowStart+k+2]*rhsFlat[rhsColStart+(k+2)*rhsCrossSize] +
-						lhsFlat[lhsRowStart+k+3]*rhsFlat[rhsColStart+(k+3)*rhsCrossSize]
-				}
-				for ; k < contractingSize; k++ {
-					sum += lhsFlat[lhsRowStart+k] * rhsFlat[rhsColStart+k*rhsCrossSize]
-				}
-
-				outputFlat[outputRowStart+n] = sum
+				outputFlat[outputRowStart+n] = smallMatMulScalarDotColumn(
+					lhsFlat, rhsFlat, lhsRowStart, rhsColStart, contractingSize, rhsCrossSize)
 			}
 		}
 	}

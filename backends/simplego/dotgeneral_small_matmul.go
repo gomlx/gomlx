@@ -1,8 +1,34 @@
+// Copyright 2025 The GoMLX Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package simplego
 
 import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
+
+// smallMatMulScalarDotColumn computes a single output element for SmallMatMul.
+// It calculates: output = sum over k of lhs[lhsStart+k] * rhs[rhsStart + k*rhsStride]
+//
+// This is the scalar inner loop for strided RHS column access pattern.
+// Used by both the pure scalar path and as remainder handling for the NEON path.
+func smallMatMulScalarDotColumn(lhs, rhs []float32, lhsStart, rhsStart, contractingSize, rhsStride int) float32 {
+	var sum float32
+	k := 0
+	// Unroll by 4 for better performance
+	for ; k+3 < contractingSize; k += 4 {
+		sum += lhs[lhsStart+k]*rhs[rhsStart+k*rhsStride] +
+			lhs[lhsStart+k+1]*rhs[rhsStart+(k+1)*rhsStride] +
+			lhs[lhsStart+k+2]*rhs[rhsStart+(k+2)*rhsStride] +
+			lhs[lhsStart+k+3]*rhs[rhsStart+(k+3)*rhsStride]
+	}
+	// Handle remainder
+	for ; k < contractingSize; k++ {
+		sum += lhs[lhsStart+k] * rhs[rhsStart+k*rhsStride]
+	}
+	return sum
+}
 
 // isMatMulOrder checks if the DotGeneral operands are in standard matrix multiplication order:
 // LHS: [Batch..., M, K] (contracting dimension last)
@@ -184,22 +210,9 @@ func execDotGeneralSmallMatMulFloat32(backend *Backend, lhs, rhs *Buffer, params
 			for n := 0; n < rhsCrossSize; n++ {
 				// For column n in row-major [K,N], element [k,n] is at k*N + n
 				rhsColStart := rhsBaseIdx + n
-				var sum float32
-
-				// Scalar loop with strided RHS access
-				// Note: NEON version uses register blocking to avoid this strided access
-				k := 0
-				for ; k+3 < contractingSize; k += 4 {
-					sum += lhsFlat[lhsRowStart+k]*rhsFlat[rhsColStart+k*rhsColStride] +
-						lhsFlat[lhsRowStart+k+1]*rhsFlat[rhsColStart+(k+1)*rhsColStride] +
-						lhsFlat[lhsRowStart+k+2]*rhsFlat[rhsColStart+(k+2)*rhsColStride] +
-						lhsFlat[lhsRowStart+k+3]*rhsFlat[rhsColStart+(k+3)*rhsColStride]
-				}
-				for ; k < contractingSize; k++ {
-					sum += lhsFlat[lhsRowStart+k] * rhsFlat[rhsColStart+k*rhsColStride]
-				}
-
-				outputFlat[outputRowStart+n] = sum
+				// Note: NEON version uses register blocking to avoid strided access
+				outputFlat[outputRowStart+n] = smallMatMulScalarDotColumn(
+					lhsFlat, rhsFlat, lhsRowStart, rhsColStart, contractingSize, rhsColStride)
 			}
 		}
 	}
