@@ -880,7 +880,7 @@ func TestDgCanUseSmallMatMul(t *testing.T) {
 					contractingSize:    tc.contractingSize,
 				}
 
-				got := dgCanUseSmallMatMul(dtypes.Float32, lhsShape, rhsShape, params)
+				got := dgUseSmallMatMul(dtypes.Float32, lhsShape, rhsShape, params)
 				assert.Equal(t, tc.want, got,
 					"dgCanUseSmallMatMul with batch=%d, M=%d, N=%d, K=%d",
 					tc.batchSize, tc.lhsCrossSize, tc.rhsCrossSize, tc.contractingSize)
@@ -903,13 +903,13 @@ func TestDgCanUseSmallMatMul(t *testing.T) {
 		// Float64 should be rejected
 		lhsF64 := shapes.Make(dtypes.Float64, 4, 8)
 		rhsF64 := shapes.Make(dtypes.Float64, 8, 6)
-		assert.False(t, dgCanUseSmallMatMul(dtypes.Float64, lhsF64, rhsF64, params),
+		assert.False(t, dgUseSmallMatMul(dtypes.Float64, lhsF64, rhsF64, params),
 			"Should not use SmallMatMul for Float64")
 
 		// BFloat16 should also be rejected
 		lhsBF16 := shapes.Make(dtypes.BFloat16, 4, 8)
 		rhsBF16 := shapes.Make(dtypes.BFloat16, 8, 6)
-		assert.False(t, dgCanUseSmallMatMul(dtypes.BFloat16, lhsBF16, rhsBF16, params),
+		assert.False(t, dgUseSmallMatMul(dtypes.BFloat16, lhsBF16, rhsBF16, params),
 			"Should not use SmallMatMul for BFloat16")
 	})
 
@@ -929,7 +929,7 @@ func TestDgCanUseSmallMatMul(t *testing.T) {
 			contractingSize:    8,
 		}
 
-		assert.False(t, dgCanUseSmallMatMul(dtypes.Float32, lhsShape, rhsShape, params),
+		assert.False(t, dgUseSmallMatMul(dtypes.Float32, lhsShape, rhsShape, params),
 			"Should not use SmallMatMul with non-matmul axis order")
 	})
 }

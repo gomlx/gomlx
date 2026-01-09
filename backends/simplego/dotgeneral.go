@@ -287,7 +287,7 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 
 	// Check for SmallMatMul fast path first.
 	// SmallMatMul is beneficial for small float32 matrices in standard [M,K]×[K,N] order.
-	if dgCanUseSmallMatMul(dtype, lhsShape, rhsShape, params) {
+	if dgUseSmallMatMul(dtype, lhsShape, rhsShape, params) {
 		return smallMatMulPath
 	}
 
@@ -300,59 +300,6 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 		return blockedPath
 	}
 	return normalizedPath
-}
-
-// dgCanUseSmallMatMul checks if the SmallMatMul fast path can be used at build time.
-// SmallMatMul skips transpose overhead but has strided RHS access, so it's only
-// beneficial for small float32 matrices in standard [M,K]×[K,N] order.
-func dgCanUseSmallMatMul(dtype dtypes.DType, lhsShape, rhsShape shapes.Shape, params *dotGeneralNodeData) bool {
-	// Only support float32 for SmallMatMul (most common case)
-	if dtype != dtypes.Float32 {
-		return false
-	}
-
-	// Check if axes are in standard matmul order
-	if !isMatMulOrder(lhsShape, rhsShape,
-		params.lhsContractingAxes, params.rhsContractingAxes,
-		params.lhsBatchAxes, params.rhsBatchAxes) {
-		return false
-	}
-
-	// For large batch sizes, the normalized path with batch parallelism is faster.
-	// The small matmul path processes batches sequentially without parallelization.
-	if params.batchSize > smallMatMulMaxBatchSize {
-		return false
-	}
-
-	// For single-row operations (M=1), SmallMatMul is faster because transpose overhead
-	// dominates when computing just one output row per batch.
-	// BUT we still need to check rhsCrossSize and contractingSize - for M=1 with huge N or K,
-	// the strided access causes cache thrashing.
-	if params.lhsCrossSize == 1 {
-		// For M=1, use larger thresholds since transpose overhead is more significant
-		// But still cap to avoid catastrophic cache behavior with very large dimensions
-		if params.rhsCrossSize > smallMatMulMaxRhsCrossSizeM1 {
-			return false
-		}
-		if params.contractingSize > smallMatMulMaxContractingSizeM1 {
-			return false
-		}
-		return true
-	}
-
-	// For multi-row operations, check both contracting and RHS cross dimensions.
-	// The RHS is accessed with stride N (rhsCrossSize), so large N causes more cache
-	// misses per contracting step.
-	if params.contractingSize > smallMatMulMaxContractingSize {
-		return false
-	}
-
-	// Check RHS cross size (N) - large N means large stride in RHS access
-	if params.rhsCrossSize > smallMatMulMaxRhsCrossSize {
-		return false
-	}
-
-	return true
 }
 
 // execDotGeneral executes the DotGeneral operation.
