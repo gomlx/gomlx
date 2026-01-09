@@ -1,8 +1,6 @@
 module github.com/gomlx/gomlx
 
-go 1.24.3
-
-toolchain go1.24.6
+go 1.25.5
 
 require (
 	github.com/MetalBlueberry/go-plotly v0.7.0
@@ -13,6 +11,7 @@ require (
 	github.com/erkkah/margaid v0.3.0
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/bsplines v0.2.0
+	github.com/gomlx/go-coreml v0.0.0-20260105190916-0dde0fd04eeb
 	github.com/gomlx/go-xla v0.1.5-0.20260107152240-2890a4924d88
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.1
@@ -69,7 +68,7 @@ require (
 	golang.org/x/text v0.30.0 // indirect
 	golang.org/x/tools v0.38.0 // indirect
 	gonum.org/v1/gonum v0.16.0 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
