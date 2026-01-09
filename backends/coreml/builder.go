@@ -1,4 +1,4 @@
-//go:build darwin
+//go:build darwin && cgo
 
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 

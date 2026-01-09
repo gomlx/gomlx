@@ -1,4 +1,4 @@
-//go:build darwin
+//go:build darwin && cgo
 
 // Package coreml implements a CoreML backend for GoMLX targeting Apple Silicon.
 //
