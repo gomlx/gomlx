@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 /*
 Package inceptionv3 provides a pre-trained (or only its structure) InceptionV3 model.
 
@@ -65,6 +67,7 @@ import (
 	"strings"
 
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/core/tensors/images"
@@ -73,7 +76,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 )
 
@@ -388,7 +390,7 @@ func (cfg *Config) Done() (output *Node) {
 	x = Concatenate([]*Node{branch1x1, branch7x7, branch7x7Dbl, branchPool}, cfg.channelsAxis)
 
 	// Mixed convolutions 5 & 6: 768 channels
-	for ii := 0; ii < 2; ii++ {
+	for range 2 {
 		branch1x1 = cfg.conv2DWithBatchNorm(ctx, x, 192, 1, 1, nil, true)
 
 		branch7x7 = cfg.conv2DWithBatchNorm(ctx, x, 160, 1, 1, nil, true)
@@ -436,7 +438,7 @@ func (cfg *Config) Done() (output *Node) {
 	x = Concatenate([]*Node{branch3x3, branch7x7x3, branchPool}, cfg.channelsAxis)
 
 	// Mixed convolutions 9 & 10: 2048 channels
-	for ii := 0; ii < 2; ii++ {
+	for range 2 {
 		branch1x1 = cfg.conv2DWithBatchNorm(ctx, x, 320, 1, 1, nil, true)
 
 		branch3x3 = cfg.conv2DWithBatchNorm(ctx, x, 384, 1, 1, nil, true)

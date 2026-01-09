@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package backends
 
 import (
@@ -7,13 +9,20 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
-// Op represents the output of an operation, during the computation graph building time.
+// Value represents the output of an operation, during the computation graph building time.
 //
-// It is opaque from the GoMLX perspective: it passes Op as input to the other methods.
-type Op any
+// It is opaque from the GoMLX perspective: it passes Value as input to the other methods.
+type Value any
 
-// Builder defines the set of ops to support building a computation.
-// It is the sub-interface of Backend.
+// Main function name, created by Builder.Main().
+const MainName = "main"
+
+// Builder defines the interface for building a computation.
+//
+// A Builder manages one or more Functions, with Main() being the primary
+// entry point that gets compiled into an Executable. Operations are added
+// to Functions (not directly to Builder), and Function.Return() must be
+// called before Builder.Compile().
 //
 // Each Builder can also:
 //  1. Not implement standard operations by returning an error -- this restricts what type of models it can support.
@@ -22,40 +31,32 @@ type Op any
 //     careful interface casting by the caller (in package github.com/gomlx/gomlx/pkg/core/graph) and
 //     fallback to backends that don't support these specialized ops.
 type Builder interface {
-	// Compile the computation built. This immediately invalidates the Builder and returns an Executable that
-	// can now be used to run the computation.
-	//
-	// It optionally also takes the corresponding output sharding specs: this is only needed for distributed
-	// computations with AutoSharding strategy and can be set to nil otherwise.
-	//
-	// It is given the list of outputs.
-	Compile(outputs []Op, shardings []*ShardingSpec) (Executable, error)
-
 	// Name of the computation being built.
 	Name() string
+
+	// Main returns the main function of this computation, named MainName.
+	// Operations added to Main become part of the compiled computation.
+	// This is the default function where all operations should be added
+	// unless explicitly building a sub-function.
+	Main() Function
+
+	// NewFunction creates a new named function within this builder.
+	// These are top-level functions that can be called form the main function.
+	//
+	// The name must be unique, and differnt from MainName (== "main"), the main function's name.
+	//
+	// These functions can be called from the main function or other functions.
+	//
+	// See also Function.Closure() to create unnamed local functions used in ops like While, If and others.
+	//
+	// Returns an error if the backend doesn't support sub-functions.
+	NewFunction(name string) (Function, error)
 
 	// OpShape returns the shape of a computation Op.
 	// Notice this is not an operation and doesn't change the graph being built.
 	//
 	// One can use the shape and create a constant out of it.
-	OpShape(op Op) (shapes.Shape, error)
-
-	// Parameter creates an input parameter for the computation.
-	// During the execution of a compiled computation (returned by Builder.Compile), this value will need to be fed
-	// in the same order it is created.
-	//
-	// The sharding defines how the parameter will be shared for distributed operations.
-	// Set it to nil if not using distribution.
-	Parameter(name string, shape shapes.Shape, sharding *ShardingSpec) (Op, error)
-
-	// Constant creates a constant in the graph with the given flat values and the shape defined by
-	// the dimensions in dim.
-	//
-	// The flat value must be a slice of a basic type supported -- that can be converted to a DType.
-	//
-	// The value is copied into the graph. It's recommended that for very large tensors,
-	// even if constants, that they are passed as side inputNodes (or variables, see context package) instead.
-	Constant(flat any, dims ...int) (Op, error)
+	OpShape(op Value) (shapes.Shape, error)
 
 	// DistributedSPMD creates a computation that will be executed on multiple devices in SPMD fashion
 	// (SPMD = single program, multiple data).
@@ -77,11 +78,11 @@ type Builder interface {
 	// Usually, that is 1. But if DistributedSPMD was used, it can be more.
 	DeviceAssignment(devices ...DeviceNum) error
 
-	// StandardOps include all other standard math (or ML) operations.
-	StandardOps
-
-	// CollectiveOps include all collective (distributed cross-device) operations.
-	CollectiveOps
+	// Compile the computation built. This immediately invalidates the Builder
+	// and returns an Executable that can be used to run the computation.
+	//
+	// The Main function must have had Return() called before compilation.
+	Compile() (Executable, error)
 }
 
 // ConvolveAxesConfig defines the interpretation of the input/kernel/output tensor axes.

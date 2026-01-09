@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 type NodeType int
@@ -146,12 +146,12 @@ func Abs(x *Node) (
 	inputs := &nodeInputsAbs{
 		x: x,
 	}
-	result, err := g.builder.Abs(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Abs(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -191,12 +191,12 @@ func Add(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.Add(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Add(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -238,14 +238,14 @@ func backendAllReduce(operands []*Node, reductionType ReduceOpType, replicaGroup
 		reductionType: reductionType,
 		replicaGroups: slices.Clone(replicaGroups),
 	}
-	results, err := g.builder.AllReduce(xslices.Map(operands, func(node *Node) backends.Op { return node.outputOps[0] }), inputs.reductionType, inputs.replicaGroups)
+	results, err := g.currentFunc.backendFunc.AllReduce(xslices.Map(operands, func(node *Node) backends.Value { return node.outputOps[0] }), inputs.reductionType, inputs.replicaGroups)
 	if err != nil {
 		panic(err)
 	}
 	node := &Node{
 		outputOps: results,
 		outputShapes: xslices.Map(results,
-			func(op backends.Op) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
+			func(op backends.Value) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
 		graph:      g,
 		inputs:     inputs,
 		inputNodes: inputNodes,
@@ -289,12 +289,12 @@ func backendArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (
 		outputDType: outputDType,
 		isMin:       isMin,
 	}
-	result, err := g.builder.ArgMinMax(x.outputOps[0], inputs.axis, inputs.outputDType, inputs.isMin)
+	result, err := g.currentFunc.backendFunc.ArgMinMax(x.outputOps[0], inputs.axis, inputs.outputDType, inputs.isMin)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -348,12 +348,12 @@ func backendBatchNormForInference(operand *Node, scale *Node, offset *Node, mean
 		epsilon:     epsilon,
 		featureAxis: featureAxis,
 	}
-	result, err := g.builder.BatchNormForInference(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], mean.outputOps[0], variance.outputOps[0], inputs.epsilon, inputs.featureAxis)
+	result, err := g.currentFunc.backendFunc.BatchNormForInference(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], mean.outputOps[0], variance.outputOps[0], inputs.epsilon, inputs.featureAxis)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -401,12 +401,12 @@ func backendBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsil
 		epsilon:     epsilon,
 		featureAxis: featureAxis,
 	}
-	v0, v1, v2, err := g.builder.BatchNormForTraining(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], inputs.epsilon, inputs.featureAxis)
+	v0, v1, v2, err := g.currentFunc.backendFunc.BatchNormForTraining(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], inputs.epsilon, inputs.featureAxis)
 	if err != nil {
 		panic(err)
 	}
 	node := &Node{
-		outputOps:    []backends.Op{v0, v1, v2},
+		outputOps:    []backends.Value{v0, v1, v2},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1)), mustNoError(g.builder.OpShape(v2))},
 		graph:        g,
 		inputs:       inputs,
@@ -462,12 +462,12 @@ func backendBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *
 		epsilon:     epsilon,
 		featureAxis: featureAxis,
 	}
-	v0, v1, v2, err := g.builder.BatchNormGradient(operand.outputOps[0], scale.outputOps[0], mean.outputOps[0], variance.outputOps[0], gradOutput.outputOps[0], inputs.epsilon, inputs.featureAxis)
+	v0, v1, v2, err := g.currentFunc.backendFunc.BatchNormGradient(operand.outputOps[0], scale.outputOps[0], mean.outputOps[0], variance.outputOps[0], gradOutput.outputOps[0], inputs.epsilon, inputs.featureAxis)
 	if err != nil {
 		panic(err)
 	}
 	node := &Node{
-		outputOps:    []backends.Op{v0, v1, v2},
+		outputOps:    []backends.Value{v0, v1, v2},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1)), mustNoError(g.builder.OpShape(v2))},
 		graph:        g,
 		inputs:       inputs,
@@ -506,12 +506,12 @@ func BitCount(operand *Node) (
 	inputs := &nodeInputsBitCount{
 		operand: operand,
 	}
-	result, err := g.builder.BitCount(operand.outputOps[0])
+	result, err := g.currentFunc.backendFunc.BitCount(operand.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -563,12 +563,12 @@ func Bitcast(x *Node, targetDType dtypes.DType) (
 		x:           x,
 		targetDType: targetDType,
 	}
-	result, err := g.builder.Bitcast(x.outputOps[0], inputs.targetDType)
+	result, err := g.currentFunc.backendFunc.Bitcast(x.outputOps[0], inputs.targetDType)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -607,12 +607,12 @@ func BitwiseAnd(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.BitwiseAnd(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.BitwiseAnd(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -648,12 +648,12 @@ func BitwiseNot(x *Node) (
 	inputs := &nodeInputsBitwiseNot{
 		x: x,
 	}
-	result, err := g.builder.BitwiseNot(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.BitwiseNot(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -692,12 +692,12 @@ func BitwiseOr(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.BitwiseOr(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.BitwiseOr(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -736,12 +736,12 @@ func BitwiseXor(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.BitwiseXor(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.BitwiseXor(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -783,12 +783,12 @@ func backendBroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []in
 		outputShape:   outputShape,
 		broadcastAxes: slices.Clone(broadcastAxes),
 	}
-	result, err := g.builder.BroadcastInDim(x.outputOps[0], inputs.outputShape, inputs.broadcastAxes)
+	result, err := g.currentFunc.backendFunc.BroadcastInDim(x.outputOps[0], inputs.outputShape, inputs.broadcastAxes)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -824,12 +824,12 @@ func Ceil(x *Node) (
 	inputs := &nodeInputsCeil{
 		x: x,
 	}
-	result, err := g.builder.Ceil(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Ceil(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -873,12 +873,12 @@ func Clamp(min *Node, x *Node, max *Node) (
 		x:   x,
 		max: max,
 	}
-	result, err := g.builder.Clamp(min.outputOps[0], x.outputOps[0], max.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Clamp(min.outputOps[0], x.outputOps[0], max.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -914,12 +914,12 @@ func Clz(x *Node) (
 	inputs := &nodeInputsClz{
 		x: x,
 	}
-	result, err := g.builder.Clz(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Clz(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -963,12 +963,12 @@ func Complex(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.Complex(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Complex(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1008,12 +1008,12 @@ func backendConcatenate(axis int, operands ...*Node) (
 		axis:     axis,
 		operands: slices.Clone(operands),
 	}
-	result, err := g.builder.Concatenate(inputs.axis, xslices.Map(operands, func(node *Node) backends.Op { return node.outputOps[0] })...)
+	result, err := g.currentFunc.backendFunc.Concatenate(inputs.axis, xslices.Map(operands, func(node *Node) backends.Value { return node.outputOps[0] })...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1049,12 +1049,12 @@ func Conj(x *Node) (
 	inputs := &nodeInputsConj{
 		x: x,
 	}
-	result, err := g.builder.Conj(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Conj(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1114,12 +1114,12 @@ func backendConvGeneral(input *Node, kernel *Node, axes backends.ConvolveAxesCon
 		channelGroupCount: channelGroupCount,
 		batchGroupCount:   batchGroupCount,
 	}
-	result, err := g.builder.ConvGeneral(input.outputOps[0], kernel.outputOps[0], inputs.axes, inputs.strides, inputs.paddings, inputs.inputDilations, inputs.kernelDilations, inputs.channelGroupCount, inputs.batchGroupCount)
+	result, err := g.currentFunc.backendFunc.ConvGeneral(input.outputOps[0], kernel.outputOps[0], inputs.axes, inputs.strides, inputs.paddings, inputs.inputDilations, inputs.kernelDilations, inputs.channelGroupCount, inputs.batchGroupCount)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1158,12 +1158,12 @@ func backendConvertDType(x *Node, dtype dtypes.DType) (
 		x:     x,
 		dtype: dtype,
 	}
-	result, err := g.builder.ConvertDType(x.outputOps[0], inputs.dtype)
+	result, err := g.currentFunc.backendFunc.ConvertDType(x.outputOps[0], inputs.dtype)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1199,12 +1199,12 @@ func Cos(x *Node) (
 	inputs := &nodeInputsCos{
 		x: x,
 	}
-	result, err := g.builder.Cos(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Cos(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1244,12 +1244,12 @@ func Div(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.Div(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Div(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1299,12 +1299,12 @@ func Dot(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.Dot(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Dot(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1355,12 +1355,12 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 		rhsContractingAxes: slices.Clone(rhsContractingAxes),
 		rhsBatchAxes:       slices.Clone(rhsBatchAxes),
 	}
-	result, err := g.builder.DotGeneral(lhs.outputOps[0], inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.outputOps[0], inputs.rhsContractingAxes, inputs.rhsBatchAxes)
+	result, err := g.currentFunc.backendFunc.DotGeneral(lhs.outputOps[0], inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.outputOps[0], inputs.rhsContractingAxes, inputs.rhsBatchAxes)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1413,12 +1413,12 @@ func DynamicSlice(operand *Node, startIndices []*Node, sliceDims []int) (
 		startIndices: slices.Clone(startIndices),
 		sliceDims:    slices.Clone(sliceDims),
 	}
-	result, err := g.builder.DynamicSlice(operand.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Op { return node.outputOps[0] }), inputs.sliceDims)
+	result, err := g.currentFunc.backendFunc.DynamicSlice(operand.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Value { return node.outputOps[0] }), inputs.sliceDims)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1472,12 +1472,12 @@ func DynamicUpdateSlice(operand *Node, update *Node, startIndices []*Node) (
 		update:       update,
 		startIndices: slices.Clone(startIndices),
 	}
-	result, err := g.builder.DynamicUpdateSlice(operand.outputOps[0], update.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Op { return node.outputOps[0] }))
+	result, err := g.currentFunc.backendFunc.DynamicUpdateSlice(operand.outputOps[0], update.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Value { return node.outputOps[0] }))
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1516,12 +1516,12 @@ func Equal(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.Equal(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Equal(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1563,12 +1563,12 @@ func EqualTotalOrder(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.EqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.EqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1605,12 +1605,12 @@ func Erf(x *Node) (
 	inputs := &nodeInputsErf{
 		x: x,
 	}
-	result, err := g.builder.Erf(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Erf(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1646,12 +1646,12 @@ func Exp(x *Node) (
 	inputs := &nodeInputsExp{
 		x: x,
 	}
-	result, err := g.builder.Exp(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Exp(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1687,12 +1687,12 @@ func Expm1(x *Node) (
 	inputs := &nodeInputsExpm1{
 		x: x,
 	}
-	result, err := g.builder.Expm1(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Expm1(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1734,12 +1734,12 @@ func backendFFT(operand *Node, fftType backends.FFTType, fftLength []int) (
 		fftType:   fftType,
 		fftLength: slices.Clone(fftLength),
 	}
-	result, err := g.builder.FFT(operand.outputOps[0], inputs.fftType, inputs.fftLength)
+	result, err := g.currentFunc.backendFunc.FFT(operand.outputOps[0], inputs.fftType, inputs.fftLength)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1775,12 +1775,12 @@ func Floor(x *Node) (
 	inputs := &nodeInputsFloor{
 		x: x,
 	}
-	result, err := g.builder.Floor(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Floor(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1837,12 +1837,12 @@ func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offse
 		sliceSizes:         slices.Clone(sliceSizes),
 		indicesAreSorted:   indicesAreSorted,
 	}
-	result, err := g.builder.Gather(operand.outputOps[0], startIndices.outputOps[0], inputs.indexVectorAxis, inputs.offsetOutputAxes, inputs.collapsedSliceAxes, inputs.startIndexMap, inputs.sliceSizes, inputs.indicesAreSorted)
+	result, err := g.currentFunc.backendFunc.Gather(operand.outputOps[0], startIndices.outputOps[0], inputs.indexVectorAxis, inputs.offsetOutputAxes, inputs.collapsedSliceAxes, inputs.startIndexMap, inputs.sliceSizes, inputs.indicesAreSorted)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1881,12 +1881,12 @@ func GreaterOrEqual(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.GreaterOrEqual(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.GreaterOrEqual(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1928,12 +1928,12 @@ func GreaterOrEqualTotalOrder(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.GreaterOrEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.GreaterOrEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -1973,12 +1973,12 @@ func GreaterThan(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.GreaterThan(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.GreaterThan(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2020,12 +2020,12 @@ func GreaterThanTotalOrder(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.GreaterThanTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.GreaterThanTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2063,12 +2063,12 @@ func Identity(x *Node) (
 	inputs := &nodeInputsIdentity{
 		x: x,
 	}
-	result, err := g.builder.Identity(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Identity(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2104,12 +2104,12 @@ func Imag(x *Node) (
 	inputs := &nodeInputsImag{
 		x: x,
 	}
-	result, err := g.builder.Imag(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Imag(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2147,12 +2147,12 @@ func backendIota(g *Graph, shape shapes.Shape, iotaAxis int) (
 		shape:    shape,
 		iotaAxis: iotaAxis,
 	}
-	result, err := g.builder.Iota(inputs.shape, inputs.iotaAxis)
+	result, err := g.currentFunc.backendFunc.Iota(inputs.shape, inputs.iotaAxis)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2189,12 +2189,12 @@ func IsFinite(x *Node) (
 	inputs := &nodeInputsIsFinite{
 		x: x,
 	}
-	result, err := g.builder.IsFinite(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.IsFinite(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2230,12 +2230,12 @@ func IsNaN(x *Node) (
 	inputs := &nodeInputsIsNaN{
 		x: x,
 	}
-	result, err := g.builder.IsNaN(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.IsNaN(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2274,12 +2274,12 @@ func LessOrEqual(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.LessOrEqual(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LessOrEqual(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2321,12 +2321,12 @@ func LessOrEqualTotalOrder(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.LessOrEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LessOrEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2366,12 +2366,12 @@ func LessThan(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.LessThan(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LessThan(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2413,12 +2413,12 @@ func LessThanTotalOrder(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.LessThanTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LessThanTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2455,12 +2455,12 @@ func Log(x *Node) (
 	inputs := &nodeInputsLog{
 		x: x,
 	}
-	result, err := g.builder.Log(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Log(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2496,12 +2496,12 @@ func Log1p(x *Node) (
 	inputs := &nodeInputsLog1p{
 		x: x,
 	}
-	result, err := g.builder.Log1p(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Log1p(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2540,12 +2540,12 @@ func LogicalAnd(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.LogicalAnd(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LogicalAnd(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2581,12 +2581,12 @@ func LogicalNot(x *Node) (
 	inputs := &nodeInputsLogicalNot{
 		x: x,
 	}
-	result, err := g.builder.LogicalNot(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LogicalNot(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2626,12 +2626,12 @@ func LogicalOr(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.LogicalOr(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LogicalOr(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2670,12 +2670,12 @@ func LogicalXor(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.LogicalXor(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LogicalXor(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2711,12 +2711,12 @@ func Logistic(x *Node) (
 	inputs := &nodeInputsLogistic{
 		x: x,
 	}
-	result, err := g.builder.Logistic(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Logistic(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2755,12 +2755,12 @@ func Max(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.Max(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Max(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2799,12 +2799,12 @@ func Min(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.Min(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Min(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2844,12 +2844,12 @@ func Mul(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.Mul(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Mul(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2885,12 +2885,12 @@ func Neg(x *Node) (
 	inputs := &nodeInputsNeg{
 		x: x,
 	}
-	result, err := g.builder.Neg(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Neg(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2929,12 +2929,12 @@ func NotEqual(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.NotEqual(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.NotEqual(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -2976,12 +2976,12 @@ func NotEqualTotalOrder(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.NotEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.NotEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3026,12 +3026,12 @@ func Pad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (
 		fillValue:  fillValue,
 		axesConfig: slices.Clone(axesConfig),
 	}
-	result, err := g.builder.Pad(x.outputOps[0], fillValue.outputOps[0], inputs.axesConfig...)
+	result, err := g.currentFunc.backendFunc.Pad(x.outputOps[0], fillValue.outputOps[0], inputs.axesConfig...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3070,12 +3070,12 @@ func Pow(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.Pow(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Pow(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3114,12 +3114,12 @@ func backendRNGBitGenerator(state *Node, shape shapes.Shape) (
 		state: state,
 		shape: shape,
 	}
-	v0, v1, err := g.builder.RNGBitGenerator(state.outputOps[0], inputs.shape)
+	v0, v1, err := g.currentFunc.backendFunc.RNGBitGenerator(state.outputOps[0], inputs.shape)
 	if err != nil {
 		panic(err)
 	}
 	node := &Node{
-		outputOps:    []backends.Op{v0, v1},
+		outputOps:    []backends.Value{v0, v1},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1))},
 		graph:        g,
 		inputs:       inputs,
@@ -3157,12 +3157,12 @@ func Real(x *Node) (
 	inputs := &nodeInputsReal{
 		x: x,
 	}
-	result, err := g.builder.Real(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Real(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3201,12 +3201,12 @@ func backendReduceBitwiseAnd(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.builder.ReduceBitwiseAnd(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceBitwiseAnd(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3245,12 +3245,12 @@ func backendReduceBitwiseOr(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.builder.ReduceBitwiseOr(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceBitwiseOr(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3289,12 +3289,12 @@ func backendReduceBitwiseXor(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.builder.ReduceBitwiseXor(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceBitwiseXor(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3333,12 +3333,12 @@ func backendReduceLogicalAnd(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.builder.ReduceLogicalAnd(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceLogicalAnd(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3377,12 +3377,12 @@ func backendReduceLogicalOr(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.builder.ReduceLogicalOr(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceLogicalOr(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3421,12 +3421,12 @@ func backendReduceLogicalXor(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.builder.ReduceLogicalXor(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceLogicalXor(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3465,12 +3465,12 @@ func backendReduceMax(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.builder.ReduceMax(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceMax(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3509,12 +3509,12 @@ func backendReduceMin(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.builder.ReduceMin(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceMin(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3553,12 +3553,12 @@ func backendReduceProduct(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.builder.ReduceProduct(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceProduct(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3597,12 +3597,12 @@ func backendReduceSum(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.builder.ReduceSum(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceSum(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3656,12 +3656,12 @@ func backendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions [
 		windowDilations:  slices.Clone(windowDilations),
 		paddings:         slices.Clone(paddings),
 	}
-	result, err := g.builder.ReduceWindow(x.outputOps[0], inputs.reductionType, inputs.windowDimensions, inputs.strides, inputs.baseDilations, inputs.windowDilations, inputs.paddings)
+	result, err := g.currentFunc.backendFunc.ReduceWindow(x.outputOps[0], inputs.reductionType, inputs.windowDimensions, inputs.strides, inputs.baseDilations, inputs.windowDilations, inputs.paddings)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3701,12 +3701,12 @@ func Rem(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.Rem(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Rem(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3745,12 +3745,12 @@ func backendReshape(x *Node, dimensions ...int) (
 		x:          x,
 		dimensions: slices.Clone(dimensions),
 	}
-	result, err := g.builder.Reshape(x.outputOps[0], inputs.dimensions...)
+	result, err := g.currentFunc.backendFunc.Reshape(x.outputOps[0], inputs.dimensions...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3789,12 +3789,12 @@ func backendReverse(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.builder.Reverse(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.Reverse(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3831,12 +3831,12 @@ func Round(x *Node) (
 	inputs := &nodeInputsRound{
 		x: x,
 	}
-	result, err := g.builder.Round(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Round(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3872,12 +3872,12 @@ func Rsqrt(x *Node) (
 	inputs := &nodeInputsRsqrt{
 		x: x,
 	}
-	result, err := g.builder.Rsqrt(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Rsqrt(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -3937,12 +3937,12 @@ func backendScatterMax(operand *Node, scatterIndices *Node, updates *Node, index
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	result, err := g.builder.ScatterMax(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
+	result, err := g.currentFunc.backendFunc.ScatterMax(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4002,12 +4002,12 @@ func backendScatterMin(operand *Node, scatterIndices *Node, updates *Node, index
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	result, err := g.builder.ScatterMin(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
+	result, err := g.currentFunc.backendFunc.ScatterMin(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4067,12 +4067,12 @@ func backendScatterSum(operand *Node, scatterIndices *Node, updates *Node, index
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	result, err := g.builder.ScatterSum(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
+	result, err := g.currentFunc.backendFunc.ScatterSum(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4120,12 +4120,12 @@ func backendSelectAndScatterMax(operand *Node, source *Node, windowDimensions []
 		windowStrides:    slices.Clone(windowStrides),
 		paddings:         slices.Clone(paddings),
 	}
-	result, err := g.builder.SelectAndScatterMax(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
+	result, err := g.currentFunc.backendFunc.SelectAndScatterMax(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4173,12 +4173,12 @@ func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []
 		windowStrides:    slices.Clone(windowStrides),
 		paddings:         slices.Clone(paddings),
 	}
-	result, err := g.builder.SelectAndScatterMin(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
+	result, err := g.currentFunc.backendFunc.SelectAndScatterMin(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4217,12 +4217,12 @@ func backendShiftLeft(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.ShiftLeft(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.ShiftLeft(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4261,12 +4261,12 @@ func backendShiftRightArithmetic(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.ShiftRightArithmetic(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.ShiftRightArithmetic(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4305,12 +4305,12 @@ func backendShiftRightLogical(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.ShiftRightLogical(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.ShiftRightLogical(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4346,12 +4346,12 @@ func backendSign(x *Node) (
 	inputs := &nodeInputsSign{
 		x: x,
 	}
-	result, err := g.builder.Sign(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Sign(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4387,12 +4387,12 @@ func Sin(x *Node) (
 	inputs := &nodeInputsSin{
 		x: x,
 	}
-	result, err := g.builder.Sin(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Sin(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4437,12 +4437,12 @@ func backendSlice(x *Node, starts []int, limits []int, strides []int) (
 		limits:  slices.Clone(limits),
 		strides: slices.Clone(strides),
 	}
-	result, err := g.builder.Slice(x.outputOps[0], inputs.starts, inputs.limits, inputs.strides)
+	result, err := g.currentFunc.backendFunc.Slice(x.outputOps[0], inputs.starts, inputs.limits, inputs.strides)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4478,12 +4478,12 @@ func Sqrt(x *Node) (
 	inputs := &nodeInputsSqrt{
 		x: x,
 	}
-	result, err := g.builder.Sqrt(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Sqrt(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4523,12 +4523,12 @@ func Sub(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.builder.Sub(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Sub(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4564,12 +4564,12 @@ func Tanh(x *Node) (
 	inputs := &nodeInputsTanh{
 		x: x,
 	}
-	result, err := g.builder.Tanh(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Tanh(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4608,12 +4608,12 @@ func backendTranspose(x *Node, permutation ...int) (
 		x:           x,
 		permutation: slices.Clone(permutation),
 	}
-	result, err := g.builder.Transpose(x.outputOps[0], inputs.permutation...)
+	result, err := g.currentFunc.backendFunc.Transpose(x.outputOps[0], inputs.permutation...)
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -4655,12 +4655,12 @@ func backendWhere(condition *Node, onTrue *Node, onFalse *Node) (
 		onTrue:    onTrue,
 		onFalse:   onFalse,
 	}
-	result, err := g.builder.Where(condition.outputOps[0], onTrue.outputOps[0], onFalse.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Where(condition.outputOps[0], onTrue.outputOps[0], onFalse.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,

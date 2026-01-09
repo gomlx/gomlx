@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package backends
 
 // CollectiveOps is an interface for collective operations, that is, operations executed across multiple devices.
@@ -15,7 +17,7 @@ type CollectiveOps interface {
 	// - replicaGroups: a collection of replica groups: each replica group ([]int) is a collection of devices that
 	//   will participate in the distributed operation. The devices are given as indices (hence []int) into the
 	//   device assignments (not absolute DeviceNum).
-	AllReduce(operands []Op, reductionType ReduceOpType, replicaGroups [][]int) ([]Op, error)
+	AllReduce(operands []Value, reductionType ReduceOpType, replicaGroups [][]int) ([]Value, error)
 
 	// CollectiveBroadcast broadcasts the value from the first replica (in each group) to all others.
 	// The returned shape is the same as the source.

@@ -1,23 +1,10 @@
-/*
- *	Copyright 2023 Jan Pfeifer
- *
- *	Licensed under the Apache License, Version 2.0 (the "License");
- *	you may not use this file except in compliance with the License.
- *	You may obtain a copy of the License at
- *
- *	http://www.apache.org/licenses/LICENSE-2.0
- *
- *	Unless required by applicable law or agreed to in writing, software
- *	distributed under the License is distributed on an "AS IS" BASIS,
- *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *	See the License for the specific language governing permissions and
- *	limitations under the License.
- */
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 // Package scoped provides a mapping from a string to any data type that is "scoped".
 package scoped
 
 import (
+	"maps"
 	"strings"
 
 	"github.com/gomlx/gomlx/pkg/support/xslices"
@@ -66,9 +53,7 @@ func (p *Params) Clone() *Params {
 	newScopedParams := New(p.Separator)
 	for scope, dataMap := range p.scopeToMap {
 		newScopedParams.scopeToMap[scope] = make(map[string]any)
-		for key, value := range dataMap {
-			newScopedParams.scopeToMap[scope][key] = value
-		}
+		maps.Copy(newScopedParams.scopeToMap[scope], dataMap)
 	}
 	return newScopedParams
 }

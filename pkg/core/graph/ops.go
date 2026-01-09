@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package graph
 
 import (
@@ -77,11 +79,11 @@ func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distr
 			name, g.name, sharding.Mesh,
 		)
 	}
-	handle := ParameterHandle(len(g.parameters))
+	handle := ParameterHandle(len(g.currentFunc.parameters))
 	if name == "" {
 		name = fmt.Sprintf("parameter_#%d", handle)
 	}
-	if _, ok := g.parameterNameToHandle[name]; ok {
+	if _, ok := g.currentFunc.parameterNameToHandle[name]; ok {
 		exceptions.Panicf("requested parameter with name %q for graph %q already exists", name, g.name)
 	}
 	nodeInputs := &nodeInputsParameter{
@@ -90,19 +92,19 @@ func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distr
 		sharding: sharding, // it can be nil.
 		handle:   handle,
 	}
-	result, err := g.builder.Parameter(nodeInputs.name, nodeInputs.shape, sharding.ToBackendsSpec())
+	result, err := g.currentFunc.backendFunc.Parameter(nodeInputs.name, nodeInputs.shape, sharding.ToBackendsSpec())
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to create parameter %q", name))
 	}
 	node = &Node{
 		graph:        g,
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		inputs:       nodeInputs,
 	}
 	g.registerNode(node)
-	g.parameters = append(g.parameters, node)
-	g.parameterNameToHandle[name] = handle
+	g.currentFunc.parameters = append(g.currentFunc.parameters, node)
+	g.currentFunc.parameterNameToHandle[name] = handle
 	return
 }
 
@@ -145,7 +147,7 @@ func splitNode(multiOutputNode *Node) (splitNodes []*Node) {
 		}
 		inputNodes := []*Node{multiOutputNode}
 		node := &Node{
-			outputOps:    []backends.Op{op},
+			outputOps:    []backends.Value{op},
 			outputShapes: []shapes.Shape{multiOutputNode.outputShapes[ii]},
 			graph:        g,
 			inputs:       inputs,
@@ -202,17 +204,17 @@ func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 				"ConstTensor failed to create a local clone of the tensor in the graph"))
 		}
 	}
-	var result backends.Op
+	var result backends.Value
 	var err error
 	t.MustConstFlatData(func(flat any) {
-		result, err = g.builder.Constant(flat, nodeInputs.shape.Dimensions...)
+		result, err = g.currentFunc.backendFunc.Constant(flat, nodeInputs.shape.Dimensions...)
 	})
 	if err != nil {
 		panic(errors.WithMessagef(err, "ConstTensor failed to create a constant in the backend"))
 	}
 	node = &Node{
 		graph:        g,
-		outputOps:    []backends.Op{result},
+		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		inputs:       nodeInputs,
 	}
@@ -272,7 +274,14 @@ func ConstAsDType(g *Graph, dtype dtypes.DType, x any) *Node {
 	if dtype == dtypes.InvalidDType {
 		exceptions.Panicf("invalid DType given for ConstAsDType")
 	}
-	return Const(g, shapes.CastAsDType(x, dtype))
+	output := Const(g, shapes.CastAsDType(x, dtype))
+	if output.DType() != dtype {
+		// CastAsDType converts to the corresponding Go dtype, but this is not a 1:1 mapping, and sometimes
+		// (e.g.: sub-byte types, like Bool, Int4, Int2, Uint4, Uint2) many dtypes get mapped to the same Go type.
+		// For these cases we need to convert the dtype within the graph.
+		output = ConvertDType(output, dtype)
+	}
+	return output
 }
 
 // ConstAs creates a constant (slice or scalar) of the same DType and on the same Graph as
@@ -1266,7 +1275,7 @@ func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 				newAxesSpec = append(newAxesSpec, spec)
 			} else {
 				spec.IsSpacer = false
-				for ii := 0; ii < copies; ii++ {
+				for range copies {
 					newAxesSpec = append(newAxesSpec, spec)
 				}
 			}
@@ -1344,7 +1353,7 @@ func Split(x *Node, axis int, numSplits int) []*Node {
 
 	splits := make([]*Node, numSplits)
 	splitDim := dim / numSplits
-	for ii := 0; ii < numSplits; ii++ {
+	for ii := range numSplits {
 		start := ii * splitDim
 		end := start + splitDim
 		if ii == numSplits-1 {
@@ -1700,12 +1709,7 @@ func newEinsumOperandDesc(str string) (einsumOperandDesc, error) {
 }
 
 func (e einsumOperandDesc) hasAxis(axis rune) bool {
-	for _, r := range e {
-		if r == axis {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(e, axis)
 }
 
 func (e einsumOperandDesc) axisIndex(axis rune) int {
@@ -1959,7 +1963,7 @@ func MatMul(lhs, rhs *Node) *Node {
 		}
 		return string('a' + rune(offset+axis))
 	}
-	var outputAxesLetters string
+	var outputAxesLetters strings.Builder
 
 	var lhsBatchAxes, rhsBatchAxes []int
 	minRank := min(rhs.Rank(), lhs.Rank())
@@ -1973,10 +1977,10 @@ func MatMul(lhs, rhs *Node) *Node {
 	// First axes of the output are the "batch" axes not present in the other side.
 	// Only one of the two for-loop belows will run.
 	for axis := range lhs.Rank() - minRank {
-		outputAxesLetters += letterForAxis(lhsIdx, axis)
+		outputAxesLetters.WriteString(letterForAxis(lhsIdx, axis))
 	}
 	for axis := range rhs.Rank() - minRank {
-		outputAxesLetters += letterForAxis(rhsIdx, axis)
+		outputAxesLetters.WriteString(letterForAxis(rhsIdx, axis))
 	}
 
 	// Process common batch axes:
@@ -1988,7 +1992,7 @@ func MatMul(lhs, rhs *Node) *Node {
 		if leftAxisDim == rightAxisDim {
 			// Same batch axis on both sides:
 			rhsRemap[rightAxis] = leftAxis
-			outputAxesLetters += letterForAxis(lhsIdx, leftAxis)
+			outputAxesLetters.WriteString(letterForAxis(lhsIdx, leftAxis))
 			continue
 		}
 		if leftAxisDim != 1 && rightAxisDim != 1 {
@@ -1998,16 +2002,16 @@ func MatMul(lhs, rhs *Node) *Node {
 		}
 		if leftAxisDim == 1 {
 			lhsSqueezedAxes = append(lhsSqueezedAxes, leftAxis)
-			outputAxesLetters += letterForAxis(rhsIdx, rightAxis)
+			outputAxesLetters.WriteString(letterForAxis(rhsIdx, rightAxis))
 		} else { // rightAxisDim == 1
 			rhsSqueezedAxes = append(rhsSqueezedAxes, rightAxis)
-			outputAxesLetters += letterForAxis(lhsIdx, leftAxis)
+			outputAxesLetters.WriteString(letterForAxis(lhsIdx, leftAxis))
 		}
 	}
 
 	// Final output axes
-	outputAxesLetters += letterForAxis(lhsIdx, lhs.Rank()-2)
-	outputAxesLetters += letterForAxis(rhsIdx, rhs.Rank()-1)
+	outputAxesLetters.WriteString(letterForAxis(lhsIdx, lhs.Rank()-2))
+	outputAxesLetters.WriteString(letterForAxis(rhsIdx, rhs.Rank()-1))
 
 	// List lhs and rhs axes as letters:
 	var lhsLetters, rhsLetters string
@@ -2028,6 +2032,6 @@ func MatMul(lhs, rhs *Node) *Node {
 		rhsSqueezed = Squeeze(rhs, rhsSqueezedAxes...)
 	}
 
-	equation := fmt.Sprintf("%s,%s->%s", lhsLetters, rhsLetters, outputAxesLetters)
+	equation := fmt.Sprintf("%s,%s->%s", lhsLetters, rhsLetters, outputAxesLetters.String())
 	return Einsum(equation, lhsSqueezed, rhsSqueezed)
 }

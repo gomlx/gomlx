@@ -1,9 +1,12 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package simplego
 
 import (
 	"fmt"
 	"math"
 	"math/bits"
+	"slices"
 	"strings"
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
@@ -24,6 +27,28 @@ type dotGeneralNodeData struct {
 	rhsContractingAxes, rhsBatchAxes                       []int
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int
 	lhsBlockedShape, rhsBlockedShape, outputBlockedShape   shapes.Shape
+
+	// execPath determines which execution strategy to use. Decided at graph-build time.
+	execPath dotGeneralExecutionPath
+}
+
+// EqualNodeData implements nodeDataComparable for dotGeneralNodeData.
+func (d *dotGeneralNodeData) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*dotGeneralNodeData)
+	if d.batchSize != o.batchSize ||
+		d.lhsCrossSize != o.lhsCrossSize ||
+		d.rhsCrossSize != o.rhsCrossSize ||
+		d.contractingSize != o.contractingSize ||
+		d.execPath != o.execPath {
+		return false
+	}
+	return slices.Equal(d.lhsContractingAxes, o.lhsContractingAxes) &&
+		slices.Equal(d.lhsBatchAxes, o.lhsBatchAxes) &&
+		slices.Equal(d.rhsContractingAxes, o.rhsContractingAxes) &&
+		slices.Equal(d.rhsBatchAxes, o.rhsBatchAxes) &&
+		d.lhsBlockedShape.Equal(o.lhsBlockedShape) &&
+		d.rhsBlockedShape.Equal(o.rhsBlockedShape) &&
+		d.outputBlockedShape.Equal(o.outputBlockedShape)
 }
 
 // adjustAxisToRank returns a positive axis, adjusting negative numbers to the correct rank.
@@ -57,12 +82,12 @@ func adjustAxisToRank(rank, axis int) (int, error) {
 // node with normalized inputs. Finally, it reshapes back to the final result.
 //
 // See execDotGeneral for the implementation.
-func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Op, rhsContractingAxes, rhsBatchAxes []int) (backends.Op, error) {
-	inputs, err := b.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
+func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Value, rhsContractingAxes, rhsBatchAxes []int) (backends.Value, error) {
+	inputPair, err := f.builder.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
 	}
-	lhs, rhs := inputs[0], inputs[1]
+	lhs, rhs := inputPair[0], inputPair[1]
 	dtype := lhs.shape.DType
 	if dtype != rhs.shape.DType {
 		return nil, errors.Errorf("DotGeneral lhs (left-hand-side) and rhs operands don't match data types: %s and %s", dtype, rhs.shape.DType)
@@ -154,20 +179,40 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	}
 	params.outputBlockedShape = dgCreateBlockedShape(outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
 
+	// Select execution path at build time based on problem size and matrix layout.
+	// This enables proper deduplication of pre-blocked inputs via getOrCreateNode.
+	params.execPath = dgSelectExecPath(f.builder.backend, lhs.shape, rhs.shape, &params)
+
+	// For blockedPath, pre-block BOTH inputs at graph-build time.
+	// This allows deduplication: if the same tensor is used in multiple DotGenerals,
+	// the blocking is done once and shared.
+	var lhsBlocked, rhsBlocked *Node
+	if params.execPath == blockedPath || params.execPath == checkPath {
+		lhsBlocked = f.builder.blockForDotGeneral(lhs, params.lhsContractingAxes, params.lhsBatchAxes,
+			params.batchSize, params.lhsCrossSize, params.contractingSize)
+		rhsBlocked = f.builder.blockForDotGeneral(rhs, params.rhsContractingAxes, params.rhsBatchAxes,
+			params.batchSize, params.rhsCrossSize, params.contractingSize)
+	}
+
 	// Create dot-general node: it will generate a normalized output [batchSize, lhsCrossSize, rhsCrossSize].
-	dotGeneral := b.newNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), lhs, rhs)
-	dotGeneral.data = &params
+	var inputs []*Node
+	switch params.execPath {
+	case blockedPath:
+		inputs = []*Node{lhsBlocked, rhsBlocked}
+	case checkPath:
+		// Include inputs in both forms.
+		inputs = []*Node{lhsBlocked, rhsBlocked, lhs, rhs}
+	default:
+		inputs = []*Node{lhs, rhs}
+	}
+	dotGeneral, _ := f.builder.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), inputs, &params)
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))
 	resultingDims = append(resultingDims, batchDims...)
 	resultingDims = append(resultingDims, lhsCrossDims...)
 	resultingDims = append(resultingDims, rhsCrossDims...)
-	result, err := b.Reshape(dotGeneral, resultingDims...)
-
-	// fmt.Printf("DotGeneral(*lhs*: %s, c:%v, b:%v; *rhs*:  %s, c:%v, b:%v) -> %s\n",
-	//	lhs.shape, lhsContractingAxes, lhsBatchAxes, rhs.shape, rhsContractingAxes, rhsBatchAxes,
-	//	result.(*Node).shape)
+	result, err := f.Reshape(dotGeneral, resultingDims...)
 
 	if err != nil {
 		return nil, err
@@ -205,57 +250,178 @@ func dgFindSizes(shape shapes.Shape, contractingAxes, batchAxes []int) (batchSiz
 	return
 }
 
-type dotGeneralProblemSizeType int
+// dotGeneralExecutionPath indicates which execution strategy to use for DotGeneral.
+// Path selection happens at graph-build time in DotGeneral(), not at execution time.
+type dotGeneralExecutionPath int
 
 const (
-	unknownProblemSize dotGeneralProblemSizeType = iota
-	smallProblemSize
-	largeProblemSize
-	checkProblemSize
+	// autoSelectPath means the execution path should be auto-selected based on matrix size.
+	// This is used only for backend.dotGeneralForceExecutionPath; never stored in params.execPath.
+	autoSelectPath dotGeneralExecutionPath = iota
+	// normalizedPath uses the normalized transpose path (small matrices)
+	normalizedPath
+	// blockedPath uses execDotGeneralBlocked (cache-tiled algorithm, large matrices)
+	blockedPath
+	// smallMatMulPath uses the SmallMatMul fast path (small float32 matrices in standard order)
+	smallMatMulPath
+	// checkPath runs both paths and compares outputs (for debugging)
+	checkPath
 )
 
-// execDotGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
+// dgSelectExecPath selects the execution path based on problem size and backend configuration.
+// Called at graph-build time from DotGeneral().
+func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params *dotGeneralNodeData) dotGeneralExecutionPath {
+	dtype := lhsShape.DType
+
+	// If a specific path is forced via backend config, use that.
+	if backend.dotGeneralForceExecutionPath != autoSelectPath {
+		return backend.dotGeneralForceExecutionPath
+	}
+
+	// Check for SmallMatMul fast path first.
+	// SmallMatMul is beneficial for small float32 matrices in standard [M,K]×[K,N] order.
+	if dgCanUseSmallMatMul(dtype, lhsShape, rhsShape, params) {
+		return smallMatMulPath
+	}
+
+	// Default selection based on problem size.
+	// For large matrices, the blocked path with cache-tiled algorithm is more efficient.
+	crossesSize := params.rhsCrossSize * params.lhsCrossSize
+	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
+	blockSize := blockDim * blockDim
+	if crossesSize > DotGeneralBlockedPathThreshold*blockSize {
+		return blockedPath
+	}
+	return normalizedPath
+}
+
+// dgCanUseSmallMatMul checks if the SmallMatMul fast path can be used at build time.
+// SmallMatMul skips transpose overhead but has strided RHS access, so it's only
+// beneficial for small float32 matrices in standard [M,K]×[K,N] order.
+func dgCanUseSmallMatMul(dtype dtypes.DType, lhsShape, rhsShape shapes.Shape, params *dotGeneralNodeData) bool {
+	// Only support float32 for SmallMatMul (most common case)
+	if dtype != dtypes.Float32 {
+		return false
+	}
+
+	// Check if axes are in standard matmul order
+	if !isMatMulOrder(lhsShape, rhsShape,
+		params.lhsContractingAxes, params.rhsContractingAxes,
+		params.lhsBatchAxes, params.rhsBatchAxes) {
+		return false
+	}
+
+	// For large batch sizes, the normalized path with batch parallelism is faster.
+	// The small matmul path processes batches sequentially without parallelization.
+	if params.batchSize > smallMatMulMaxBatchSize {
+		return false
+	}
+
+	// For single-row operations (M=1), SmallMatMul is faster because transpose overhead
+	// dominates when computing just one output row per batch.
+	// BUT we still need to check rhsCrossSize and contractingSize - for M=1 with huge N or K,
+	// the strided access causes cache thrashing.
+	if params.lhsCrossSize == 1 {
+		// For M=1, use larger thresholds since transpose overhead is more significant
+		// But still cap to avoid catastrophic cache behavior with very large dimensions
+		if params.rhsCrossSize > smallMatMulMaxRhsCrossSizeM1 {
+			return false
+		}
+		if params.contractingSize > smallMatMulMaxContractingSizeM1 {
+			return false
+		}
+		return true
+	}
+
+	// For multi-row operations, check both contracting and RHS cross dimensions.
+	// The RHS is accessed with stride N (rhsCrossSize), so large N causes more cache
+	// misses per contracting step.
+	if params.contractingSize > smallMatMulMaxContractingSize {
+		return false
+	}
+
+	// Check RHS cross size (N) - large N means large stride in RHS access
+	if params.rhsCrossSize > smallMatMulMaxRhsCrossSize {
+		return false
+	}
+
+	return true
+}
+
+// execDotGeneral executes the DotGeneral operation.
+// The execution path is pre-selected at graph-build time and stored in params.execPath.
+// For blockedPath, inputs are already pre-blocked at build time.
 func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	params := node.data.(*dotGeneralNodeData)
 	outputShape := node.shape
-	dtype := lhs.shape.DType
 	output := backend.getBufferForShape(outputShape)
 	output.Zeros()
 
-	// Problem size (per example of the batch):
-	crossesSize := params.rhsCrossSize * params.lhsCrossSize
-	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
-	blockSize := blockDim * blockDim
 	var err error
-	problemSize := smallProblemSize
-	if crossesSize > 16*blockSize {
-		problemSize = largeProblemSize
-	}
-	if backend.dotGeneralForceProblemSize != unknownProblemSize {
-		problemSize = backend.dotGeneralForceProblemSize
-	}
-	switch problemSize {
-	case largeProblemSize:
-		err = execDotGeneralLarge(backend, lhs, rhs, params, output)
-	case smallProblemSize:
+	switch params.execPath {
+	case blockedPath, checkPath:
+		// Inputs are pre-blocked at graph-build time. Extract block metadata from input nodes.
+		lhsNode := node.inputs[0]
+		rhsNode := node.inputs[1]
+		_, ok := lhsNode.data.(*blockForDotGeneralData)
+		if !ok {
+			backend.putBuffer(output)
+			return nil, errors.Errorf("blockedPath requires pre-blocked LHS input, got %T (node type: %s)",
+				lhsNode.data, lhsNode.opType)
+		}
+		rhsBlockData, ok := rhsNode.data.(*blockForDotGeneralData)
+		if !ok {
+			backend.putBuffer(output)
+			return nil, errors.Errorf("blockedPath requires pre-blocked RHS input, got %T (node type: %s)",
+				rhsNode.data, rhsNode.opType)
+		}
+		hasBatch := len(rhsBlockData.batchAxes) > 0 && rhsBlockData.batchSize > 1 // batchSize is the same for lhs and rhs
+		err = execDotGeneralBlocked(backend, lhs, rhs, hasBatch, params, output)
+
+		if err == nil && params.execPath == checkPath {
+			// Debug path: run also the small path and compare results:
+			lhsRaw, rhsRaw := inputs[2], inputs[3]
+			output2 := backend.getBufferForShape(outputShape)
+			output2.Zeros()
+			err = execDotGeneralSmall(backend, lhsRaw, rhsRaw, params, output2)
+			if err != nil {
+				backend.putBuffer(output2)
+				backend.putBuffer(output)
+				return nil, err
+			}
+			err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+			if err != nil {
+				backend.putBuffer(output2)
+				backend.putBuffer(output)
+				return nil, err
+			}
+
+			// Also verify SmallMatMul path for matrices in matmul order (float32 only)
+			if lhsRaw.shape.DType == dtypes.Float32 && isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
+				params.lhsContractingAxes, params.rhsContractingAxes,
+				params.lhsBatchAxes, params.rhsBatchAxes) {
+				output2.Zeros()
+				execDotGeneralSmallMatMulFloat32(backend, lhsRaw, rhsRaw, params, output2)
+				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+			}
+			backend.putBuffer(output2) // Discard second output, no longer needed
+		}
+
+	case smallMatMulPath:
+		// SmallMatMul fast path: small float32 matrices in standard [M,K]×[K,N] order.
+		// Path was selected at build time based on matrix layout and size.
+		execDotGeneralSmallMatMulFloat32(backend, lhs, rhs, params, output)
+		return output, nil
+
+	case normalizedPath:
+		// Transpose-based normalized path for small matrices
 		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
-	case checkProblemSize:
-		output2 := backend.getBufferForShape(outputShape)
-		output2.Zeros()
-		err = execDotGeneralSmall(backend, lhs, rhs, params, output2)
-		if err != nil {
-			return nil, err
-		}
-		err = execDotGeneralLarge(backend, lhs, rhs, params, output)
-		if err != nil {
-			return nil, err
-		}
-		err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
-		backend.putBuffer(output2)
+
 	default:
-		err = errors.Errorf("unknown problem size %d for DotGeneral", problemSize)
+		err = errors.Errorf("unknown execution path %d for DotGeneral", params.execPath)
 	}
+
 	if err != nil {
 		backend.putBuffer(output)
 		return nil, err
@@ -287,23 +453,23 @@ func log2int(x int) int {
 // In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
 // matrix/matrix multiplications.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) Dot(lhsOp, rhsOp backends.Op) (backends.Op, error) {
-	inputs, err := b.checkOps(backends.OpTypeDot.String(), lhsOp, rhsOp)
+func (f *Function) Dot(lhsOp, rhsOp backends.Value) (backends.Value, error) {
+	inputs, err := f.builder.checkOps(backends.OpTypeDot.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
 	}
 	lhs, rhs := inputs[0], inputs[1]
-	var output backends.Op
+	var output backends.Value
 	switch {
 	case lhs.shape.Rank() == 1 && rhs.shape.Rank() == 1:
 		// Contracting both vectors.
-		output, err = b.DotGeneral(lhs, []int{0}, []int{}, rhs, []int{0}, []int{})
+		output, err = f.DotGeneral(lhs, []int{0}, []int{}, rhs, []int{0}, []int{})
 	case lhs.shape.Rank() == 2 && rhs.shape.Rank() == 1:
 		// Contract rhs vector.
-		output, err = b.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+		output, err = f.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
 	case lhs.shape.Rank() == 2 && rhs.shape.Rank() == 2:
 		// Traditional matrix multiplication:
-		output, err = b.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+		output, err = f.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
 	default:
 		return nil, errors.Errorf("Dot operands have invalid ranks: lhs=%v, rhs=%v", lhs.shape, rhs.shape)
 	}

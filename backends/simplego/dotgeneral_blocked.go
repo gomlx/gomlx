@@ -1,15 +1,19 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package simplego
 
 import (
+	"slices"
+
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
+	"github.com/x448/float16"
 )
 
-// This file contains the implementation for dot-general operations on large tensors -- except the batch
-// dimension, which is handled the same way for large or small tensors.
+// This file contains the implementation for the blocked (cache-tiled) DotGeneral algorithm.
 //
 // The underlying algorithm is based on the wikipedia description here:
 // https://en.wikipedia.org/wiki/Matrix_multiplication_algorithm#Non-square_matrices
@@ -27,10 +31,20 @@ var (
 	// DotGeneralTargetBlockLog2Dim is set per dtype, such that it is square and fits DotGeneralTargetBlockSize.
 	// The block dim is 2^(DotGeneralTargetBlockLog2Dim[dtype]).
 	DotGeneralTargetBlockLog2Dim [MaxDTypes]int
+
+	// DotGeneralBlockedPathThreshold is the multiplier for determining when to use the blocked execution path.
+	// When crossesSize (lhsCrossSize * rhsCrossSize) exceeds this multiplier times blockSize,
+	// the blocked path is chosen over the normalized path.
+	//
+	// Empirically determined: below this threshold, the overhead of cache-tiled blocking
+	// outweighs its benefits. Above this threshold, the blocked path's cache efficiency wins.
+	DotGeneralBlockedPathThreshold = 16
 )
 
 func init() {
-	for _, dtype := range []dtypes.DType{dtypes.F32, dtypes.F64, dtypes.BFloat16} {
+	// Initialize block dimensions for all numeric types that support DotGeneral.
+	// This includes float types and integer types (used by quantized models).
+	for _, dtype := range numericDTypes {
 		sizePerElem := dtype.Size()
 		if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
 			// Because for BFloat16/Float16 we store the results in float32 and only later convert to
@@ -45,6 +59,10 @@ func init() {
 			log2Dim++
 		}
 		log2Dim--
+		// Ensure minimum block dimension of 8 (log2Dim >= 3) for the kernel's loop unrolling.
+		if log2Dim < 3 {
+			log2Dim = 3
+		}
 		DotGeneralTargetBlockLog2Dim[dtype] = log2Dim
 	}
 }
@@ -61,9 +79,160 @@ func dgCreateBlockedShape(dtype dtypes.DType, batchSize, crossSize, contractingS
 	return shapes.Make(dtype, batchSize, newCrossDim, newContractDim, blkDim, blkDim)
 }
 
+// ============================================================================
+// Pre-blocking for DotGeneral
+// ============================================================================
+
+// blockForDotGeneralData holds parameters for the BlockForDotGeneral operation.
+// This operation pre-blocks a tensor (LHS or RHS) for efficient DotGeneral execution.
+// Works with any shape after normalization to [batchSize, crossSize, contractingSize].
+type blockForDotGeneralData struct {
+	// blockLog2Dim is log2 of the block dimension
+	blockLog2Dim int
+
+	// blockedShape is the output shape after blocking
+	// Format: [batchSize, crossBlocks, contractBlocks, blockDim, blockDim]
+	blockedShape shapes.Shape
+
+	// Original tensor characteristics (after axis adjustment, before blocking)
+	batchSize       int
+	crossSize       int
+	contractingSize int
+
+	// Axes from the original tensor shape (needed for copying flat -> blocked)
+	contractingAxes []int
+	batchAxes       []int
+}
+
+// EqualNodeData implements nodeDataComparable for de-duplication.
+func (d *blockForDotGeneralData) EqualNodeData(other nodeDataComparable) bool {
+	o, ok := other.(*blockForDotGeneralData)
+	if !ok {
+		return false
+	}
+	return d.blockLog2Dim == o.blockLog2Dim &&
+		d.blockedShape.Equal(o.blockedShape) &&
+		d.batchSize == o.batchSize &&
+		d.crossSize == o.crossSize &&
+		d.contractingSize == o.contractingSize &&
+		slices.Equal(d.contractingAxes, o.contractingAxes) &&
+		slices.Equal(d.batchAxes, o.batchAxes)
+}
+
+// Compile-time check that blockForDotGeneralData implements nodeDataComparable.
+var _ nodeDataComparable = (*blockForDotGeneralData)(nil)
+
+func init() {
+	setNodeExecutor(backends.OpTypeBlockForDotGeneral, priorityGeneric, execBlockForDotGeneral)
+}
+
+// blockForDotGeneral returns a BlockForDotGeneral node for the given input tensor.
+// Uses de-duplication via getOrCreateNode to return an existing node if available.
+//
+// This is the generalized version that works for both LHS and RHS operands with any shape.
+//
+// Parameters:
+//   - input: the node to block
+//   - contractingAxes, batchAxes: axes from the original tensor shape
+//   - batchSize, crossSize, contractingSize: normalized sizes
+func (b *Builder) blockForDotGeneral(input *Node,
+	contractingAxes, batchAxes []int,
+	batchSize, crossSize, contractingSize int) *Node {
+
+	dtype := input.shape.DType
+	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
+	blockedShape := dgCreateBlockedShape(dtype, batchSize, crossSize, contractingSize, blockLog2Dim)
+
+	data := &blockForDotGeneralData{
+		blockLog2Dim:    blockLog2Dim,
+		blockedShape:    blockedShape,
+		batchSize:       batchSize,
+		crossSize:       crossSize,
+		contractingSize: contractingSize,
+		contractingAxes: slices.Clone(contractingAxes),
+		batchAxes:       slices.Clone(batchAxes),
+	}
+
+	blocked, _ := b.getOrCreateNode(backends.OpTypeBlockForDotGeneral, blockedShape, []*Node{input}, data)
+	return blocked
+}
+
+// execBlockForDotGeneral executes the pre-blocking operation.
+// It takes a tensor (any shape) and converts it to blocked format
+// for efficient DotGeneral execution.
+func execBlockForDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
+	input := inputs[0]
+	data := node.data.(*blockForDotGeneralData)
+
+	dtype := input.shape.DType
+
+	// Allocate output buffer for blocked data
+	output := backend.getBuffer(dtype, data.blockedShape.Size())
+	output.shape = data.blockedShape
+	output.Zeros()
+
+	// Copy data from flat to blocked format using the generic copy function
+	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
+	copyFlatToBlock(input, output, data.contractingAxes, data.batchAxes, data.batchSize, data.crossSize, data.contractingSize, data.blockLog2Dim)
+
+	return output, nil
+}
+
+// ============================================================================
+// Blocked DotGeneral Execution
+// ============================================================================
+
+// execDotGeneralBlocked executes DotGeneral using the blocked (cache-tiled) algorithm.
+// Both inputs MUST be pre-blocked (coming from BlockForDotGeneral nodes).
+// This is the main blocked execution path used when blockedPath is selected at build time.
+//
+// Parameters:
+//   - lhs, rhs: input buffers in blocked format (from BlockForDotGeneral)
+//   - lhsBlockData, rhsBlockData: pre-blocking metadata from the input nodes
+//   - params: DotGeneral parameters
+//   - output: output buffer in flat format
+func execDotGeneralBlocked(backend *Backend, lhsBlocks, rhsBlocks *Buffer, hasBatch bool, params *dotGeneralNodeData, output *Buffer) error {
+	dtype := lhsBlocks.shape.DType
+	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
+
+	// Allocate output buffer in blocked format.
+	// Use params.outputBlockedShape.DType which is the accumulator type (Float32 for FP16/BF16).
+	accumulatorDType := params.outputBlockedShape.DType
+	outputBlocks := backend.getBuffer(accumulatorDType, params.outputBlockedShape.Size())
+	outputBlocks.shape = params.outputBlockedShape
+	outputBlocks.Zeros()
+
+	// Set up recursive data for kernel execution
+	var recursive dotGeneralRecursiveData
+	recursive.backend = backend
+
+	// Get the matrix multiplication kernel for a block
+	kernelBuilder := dotGeneralKernelDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, blockDim int) kernelFuncType)
+	recursive.kernelFn = kernelBuilder(lhsBlocks, rhsBlocks, outputBlocks, blockDim)
+
+	// Set block counts from blocked buffer dimensions
+	recursive.lhsCrossBlocks = lhsBlocks.shape.Dimensions[1]
+	recursive.rhsCrossBlocks = rhsBlocks.shape.Dimensions[1]
+	recursive.contractBlocks = lhsBlocks.shape.Dimensions[2]
+
+	// Execute the batch loop with parallelism
+	runDotGeneralBatchLoop(backend, &recursive, params.batchSize, hasBatch)
+
+	// Copy output from blocked to flat format
+	finalOutputDType := output.shape.DType
+	copyOutputBlockToFlat := dotGeneralOutputBlockToFlatDTypeMap.Get(finalOutputDType).(func(blockedSource, output *Buffer))
+	copyOutputBlockToFlat(outputBlocks, output)
+	backend.putBuffer(outputBlocks)
+	return nil
+}
+
+// ============================================================================
+// Data Copy Functions (Flat <-> Blocked)
+// ============================================================================
+
 var dotGeneralFlatToBlockDTypeMap = NewDTypeMap("DotGeneralFlatToBlock")
 
-// dgCopyDataToBlockedShape copies the data from the original (with a non-normalized shape, with the contracting axes
+// dgCopyFlatToBlockShape copies the data from the original (with a non-normalized shape, with the contracting axes
 // and batch axes given) to blocked, whose shape is normalized to [batchSize, crossSize, contractingSize] and
 // is organized in blocks (packages) of shape [1, blkDim, blkDim].
 //
@@ -250,10 +419,11 @@ func dgCopyOutputBlockToFlat[T interface {
 
 func init() {
 	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.BFloat16, priorityTyped, dgCopyOutputBlockToFlatBFloat16)
+	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.Float16, priorityTyped, dgCopyOutputBlockToFlatFloat16)
 }
 
 // dgCopyOutputBlockToFlatBFloat16 copies the blocked output to a flat output, removing the padding.
-// The blockSource is assumed to be float32 -- matrix multiplication uses float32 to s
+// The blockSource is assumed to be float32 -- matrix multiplication uses float32 to store intermediary results.
 //
 // blockedSource shape: float32[batchSize, lhsCrossBlocks, rhsCrossBlocks, blockDim, blockDim]
 // output shape: bfloat16[batchSize, lhsCrossSize, rhsCrossSize]
@@ -310,41 +480,71 @@ func dgCopyOutputBlockToFlatBFloat16(blockSource, output *Buffer) {
 	}
 }
 
-func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
-	dtype := lhs.shape.DType
+// dgCopyOutputBlockToFlatFloat16 copies the blocked output to a flat output, removing the padding.
+// The blockSource is assumed to be float32 -- matrix multiplication uses float32 to accumulate.
+//
+// blockedSource shape: float32[batchSize, lhsCrossBlocks, rhsCrossBlocks, blockDim, blockDim]
+// output shape: float16[batchSize, lhsCrossSize, rhsCrossSize]
+func dgCopyOutputBlockToFlatFloat16(blockSource, output *Buffer) {
+	sourceDims := blockSource.shape.Dimensions
+	outputDims := output.shape.Dimensions
 
-	// Get block buffers.
-	blkLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
-	blockDim := 1 << blkLog2Dim
-	lhsBlocks := backend.getBuffer(dtype, params.lhsBlockedShape.Size())
-	lhsBlocks.shape = params.lhsBlockedShape
-	lhsBlocks.Zeros()
-	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
-	copyFlatToBlock(lhs, lhsBlocks, params.lhsContractingAxes, params.lhsBatchAxes,
-		params.batchSize, params.lhsCrossSize, params.contractingSize, blkLog2Dim)
+	batchSize := sourceDims[0]
+	lhsBlockCross := sourceDims[1]
+	rhsBlockCross := sourceDims[2]
+	blockDim := sourceDims[3] // Same as sourceDims[4]
+	lhsCrossSize := outputDims[1]
+	rhsCrossSize := outputDims[2]
 
-	rhsBlocks := backend.getBuffer(dtype, params.rhsBlockedShape.Size())
-	rhsBlocks.shape = params.rhsBlockedShape
-	rhsBlocks.Zeros()
-	copyFlatToBlock(rhs, rhsBlocks, params.rhsContractingAxes, params.rhsBatchAxes,
-		params.batchSize, params.rhsCrossSize, params.contractingSize, blkLog2Dim)
+	// Pre-calculate strides
+	outputRhsStride := 1
+	outputLhsStride := rhsCrossSize
+	outputBatchStride := lhsCrossSize * rhsCrossSize
 
-	outputBlocks := backend.getBuffer(params.outputBlockedShape.DType, params.outputBlockedShape.Size())
-	outputBlocks.shape = params.outputBlockedShape
-	outputBlocks.Zeros()
+	sourceBlockSize := blockDim * blockDim
+	sourceRhsBlockStride := sourceBlockSize
+	sourceLhsBlockStride := rhsBlockCross * sourceBlockSize
+	sourceBatchStride := lhsBlockCross * rhsBlockCross * sourceBlockSize
 
-	var recursive dotGeneralRecursiveData
-	recursive.backend = backend
+	sourceData := blockSource.flat.([]float32)
+	outputData := output.flat.([]float16.Float16)
 
-	// Get the matrix multiplication kernel for a block.
-	kernelBuilder := dotGeneralKernelDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, blockDim int) kernelFuncType)
-	recursive.kernelFn = kernelBuilder(lhsBlocks, rhsBlocks, outputBlocks, blockDim)
+	for batch := 0; batch < batchSize; batch++ {
+		sourceBatchOffset := batch * sourceBatchStride
+		outputBatchOffset := batch * outputBatchStride
 
-	// Straight block multiplying (as opposed to recursive)
-	recursive.lhsCrossBlocks = lhsBlocks.shape.Dimensions[1]
-	recursive.rhsCrossBlocks = rhsBlocks.shape.Dimensions[1]
-	recursive.contractBlocks = lhsBlocks.shape.Dimensions[2]
+		for lhsBlock := 0; lhsBlock < lhsBlockCross && lhsBlock*blockDim < lhsCrossSize; lhsBlock++ {
+			lhsStart := lhsBlock * blockDim
+			lhsEnd := min(lhsStart+blockDim, lhsCrossSize)
+			sourceLhsOffset := sourceBatchOffset + lhsBlock*sourceLhsBlockStride
+			outputLhsOffset := outputBatchOffset + lhsStart*outputLhsStride
 
+			for rhsBlock := 0; rhsBlock < rhsBlockCross && rhsBlock*blockDim < rhsCrossSize; rhsBlock++ {
+				rhsStart := rhsBlock * blockDim
+				rhsEnd := min(rhsStart+blockDim, rhsCrossSize)
+				sourceBlockOffset := sourceLhsOffset + rhsBlock*sourceRhsBlockStride
+				outputBlockOffset := outputLhsOffset + rhsStart*outputRhsStride
+
+				// Copy valid elements from the block
+				for blockRow := 0; blockRow < lhsEnd-lhsStart; blockRow++ {
+					sourceRowOffset := sourceBlockOffset + blockRow*blockDim
+					outputRowOffset := outputBlockOffset + blockRow*outputLhsStride
+					for blockCol := range rhsEnd - rhsStart {
+						outputData[outputRowOffset+blockCol] = float16.Fromfloat32(sourceData[sourceRowOffset+blockCol])
+					}
+				}
+			}
+		}
+	}
+}
+
+// ============================================================================
+// Batch Loop and Recursive Splitting
+// ============================================================================
+
+// runDotGeneralBatchLoop runs the batch loop for blocked DotGeneral execution.
+// It handles parallelism across batch examples and within each example.
+func runDotGeneralBatchLoop(backend *Backend, recursive *dotGeneralRecursiveData, batchSize int, rhsHasBatch bool) {
 	// Decide on intra-example parallelism: up to which depth we should use a new worker.
 	maxParallelism := backend.workers.MaxParallelism()
 	recursive.maxDepthParallelization = -1 // Disable sub-batch parallelization.
@@ -352,8 +552,8 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 		if backend.workers.IsUnlimited() {
 			recursive.maxDepthParallelization = 8 // At most 2^8 = 256 goroutines are spawned.
 		} else {
+			// Use log2 of parallelism to reduce goroutine overhead.
 			recursive.maxDepthParallelization = log2int(maxParallelism)
-			recursive.maxDepthParallelization += 1 // We want to allow slightly more fine-grained parallelization.
 		}
 	}
 
@@ -361,19 +561,23 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 	useBatchParallelism := backend.workers.IsEnabled()
 	batchSplitSize := 1
 	if useBatchParallelism && !backend.workers.IsUnlimited() {
-		batchSplitSize = (params.batchSize + maxParallelism - 1) / maxParallelism
+		batchSplitSize = (batchSize + maxParallelism - 1) / maxParallelism
 	}
 
 	// Loop over examples in the batch:
 	wg := xsync.NewDynamicWaitGroup() // Control workers started.
-	for outerBatchIdx := 0; outerBatchIdx < params.batchSize; outerBatchIdx += batchSplitSize {
+	for outerBatchIdx := 0; outerBatchIdx < batchSize; outerBatchIdx += batchSplitSize {
 		wg.Add(1)
 		batchSplitFn := func() {
-			for innerBatchIdx := outerBatchIdx; innerBatchIdx < min(outerBatchIdx+batchSplitSize, params.batchSize); innerBatchIdx++ {
+			for innerBatchIdx := outerBatchIdx; innerBatchIdx < min(outerBatchIdx+batchSplitSize, batchSize); innerBatchIdx++ {
 				var batchRecursive dotGeneralRecursiveData
-				batchRecursive = recursive
+				batchRecursive = *recursive
 				batchRecursive.lhsBatchOffset = innerBatchIdx * recursive.lhsCrossBlocks * recursive.contractBlocks
-				batchRecursive.rhsBatchOffset = innerBatchIdx * recursive.rhsCrossBlocks * recursive.contractBlocks
+				if rhsHasBatch {
+					batchRecursive.rhsBatchOffset = innerBatchIdx * recursive.rhsCrossBlocks * recursive.contractBlocks
+				} else {
+					batchRecursive.rhsBatchOffset = 0 // RHS is shared across all batches
+				}
 				batchRecursive.outputBatchOffset = innerBatchIdx * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
 				wg.Add(1)
 				batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, wg)
@@ -387,16 +591,6 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 		}
 	}
 	wg.Wait()
-
-	// Free the block buffers.
-	backend.putBuffer(lhsBlocks)
-	backend.putBuffer(rhsBlocks)
-
-	// Copy over outputBlocks to the normal output.
-	copyOutputFn := dotGeneralOutputBlockToFlatDTypeMap.Get(dtype).(func(blockedSource, output *Buffer))
-	copyOutputFn(outputBlocks, output)
-	backend.putBuffer(outputBlocks)
-	return nil
 }
 
 // Information passed along the recursive splitting of the dot-general.
@@ -489,6 +683,10 @@ func (r *dotGeneralRecursiveData) apply(
 		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, split, contractEnd, depth, wg)
 	}
 }
+
+// ============================================================================
+// Matrix Multiplication Kernels
+// ============================================================================
 
 var dotGeneralKernelDTypeMap = NewDTypeMap("DotGeneralKernel")
 

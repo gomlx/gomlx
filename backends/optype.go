@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package backends
 
 // OpType is an enum of all generic operations that can be supported by a Backend.Builder.
@@ -31,6 +33,7 @@ const (
 	OpTypeBitwiseXor
 	OpTypeBroadcast
 	OpTypeBroadcastInDim
+	OpTypeCall
 	OpTypeClamp
 	OpTypeCeil
 	OpTypeClz
@@ -114,11 +117,23 @@ const (
 	OpTypeTranspose
 	OpTypeWhere
 
+	// Control flow operations
+
+	OpTypeSort
+	OpTypeWhile
+	OpTypeIf
+
 	// Collective (distributed across devices) operations
 
 	OpTypeAllReduce
 	OpTypeCollectiveBroadcast
 	OpTypeAllGather
+
+	// Internal operations (backend-specific, not part of public API)
+
+	// OpTypeBlockForDotGeneral pre-blocks a tensor for efficient DotGeneral execution.
+	// This is an internal optimization used by the simplego backend.
+	OpTypeBlockForDotGeneral
 
 	// OpTypeLast should always be kept the last, it is used as a counter/marker for OpType.
 	OpTypeLast

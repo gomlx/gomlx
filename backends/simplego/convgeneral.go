@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package simplego
 
 import (
@@ -32,16 +34,16 @@ func init() {
 // Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
 //
 // Note: input is aka. operand; kernel is aka. "filters". The input and output "channels" are also known as "features dimensions".
-func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
+func (f *Function) ConvGeneral(inputOp, kernelOp backends.Value, axes backends.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
-	channelGroupCount, batchGroupCount int) (backends.Op, error) {
+	channelGroupCount, batchGroupCount int) (backends.Value, error) {
 	// Sanitize group count.
 	channelGroupCount = max(channelGroupCount, 1)
 	batchGroupCount = max(batchGroupCount, 1)
 
 	opType := backends.OpTypeConvGeneral
-	inputs, err := b.checkOps(opType.String(), inputOp, kernelOp)
+	inputs, err := f.builder.checkOps(opType.String(), inputOp, kernelOp)
 	if err != nil {
 		return nil, err
 	}
@@ -53,8 +55,6 @@ func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.Convo
 			input.shape, kernel.shape, outputShape, axes, strides, paddings, inputDilations, kernelDilations, channelGroupCount, batchGroupCount)
 		return nil, err
 	}
-
-	node := b.newNode(opType, outputShape, input, kernel)
 
 	// Sanitize parameters.
 	spatialRank := outputShape.Rank() - 2
@@ -112,7 +112,7 @@ func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.Convo
 			params.dilatedInputSpatialDims[spatialIdx] = (dim-1)*inputDilations[spatialIdx] + 1
 		}
 	}
-	node.data = params
+	node, _ := f.builder.getOrCreateNode(opType, outputShape, []*Node{input, kernel}, params)
 	return node, nil
 }
 
@@ -133,14 +133,45 @@ type convNode struct {
 	dilatedInputSpatialDims []int
 }
 
+// EqualNodeData implements nodeDataComparable for convNode.
+func (c *convNode) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*convNode)
+	if c.channelGroupCount != o.channelGroupCount ||
+		c.batchGroupCount != o.batchGroupCount ||
+		c.hasInputDilations != o.hasInputDilations ||
+		c.hasKernelDilations != o.hasKernelDilations {
+		return false
+	}
+	// Compare ConvolveAxesConfig
+	if c.axes.InputBatch != o.axes.InputBatch ||
+		c.axes.InputChannels != o.axes.InputChannels ||
+		c.axes.KernelInputChannels != o.axes.KernelInputChannels ||
+		c.axes.KernelOutputChannels != o.axes.KernelOutputChannels ||
+		c.axes.OutputBatch != o.axes.OutputBatch ||
+		c.axes.OutputChannels != o.axes.OutputChannels {
+		return false
+	}
+	return slices.Equal(c.axes.InputSpatial, o.axes.InputSpatial) &&
+		slices.Equal(c.axes.KernelSpatial, o.axes.KernelSpatial) &&
+		slices.Equal(c.axes.OutputSpatial, o.axes.OutputSpatial) &&
+		slices.Equal(c.strides, o.strides) &&
+		slices.Equal(c.paddings, o.paddings) &&
+		slices.Equal(c.inputDilations, o.inputDilations) &&
+		slices.Equal(c.kernelDilations, o.kernelDilations) &&
+		slices.Equal(c.inputStrides, o.inputStrides) &&
+		slices.Equal(c.inputSpatialStrides, o.inputSpatialStrides) &&
+		slices.Equal(c.kernelStrides, o.kernelStrides) &&
+		slices.Equal(c.dilatedInputSpatialDims, o.dilatedInputSpatialDims)
+}
+
 // ConvGeneralDilated is a deprecated an alias to ConvGeneral.
 //
 // Deprecated: use ConvGeneral instead.
-func (b *Builder) ConvGeneralDilated(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
+func (f *Function) ConvGeneralDilated(inputOp, kernelOp backends.Value, axes backends.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
-	channelGroupCount, batchGroupCount int) (backends.Op, error) {
-	return b.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations, channelGroupCount, batchGroupCount)
+	channelGroupCount, batchGroupCount int) (backends.Value, error) {
+	return f.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations, channelGroupCount, batchGroupCount)
 }
 
 // execConvGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.

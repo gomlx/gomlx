@@ -1,18 +1,4 @@
-/*
- *	Copyright 2023 Jan Pfeifer
- *
- *	Licensed under the Apache License, Version 2.0 (the "License");
- *	you may not use this file except in compliance with the License.
- *	You may obtain a copy of the License at
- *
- *	http://www.apache.org/licenses/LICENSE-2.0
- *
- *	Unless required by applicable law or agreed to in writing, software
- *	distributed under the License is distributed on an "AS IS" BASIS,
- *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *	See the License for the specific language governing permissions and
- *	limitations under the License.
- */
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 package context
 
@@ -214,11 +200,9 @@ func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, 
 	if ctxGraphFnT.Kind() != reflect.Func {
 		return nil, errors.Errorf("ctxGraphFn must be a function")
 	}
-	var node *Node
-	nodeType := reflect.TypeOf(node)
-	contextType := reflect.TypeOf(ctx)
-	var tmpGraph *Graph
-	graphType := reflect.TypeOf(tmpGraph)
+	nodeType := reflect.TypeFor[*Node]()
+	contextType := reflect.TypeFor[*Context]()
+	graphType := reflect.TypeFor[*Graph]()
 
 	// Must have at least 2 arguments, and the first must be of type *Context.
 	if ctxGraphFnT.NumIn() < 2 {
@@ -290,12 +274,9 @@ func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, 
 func (e *Exec) buildGraphFn() {
 	ctxGraphFnT := reflect.TypeOf(e.ctxGraphFn)
 	numIn := ctxGraphFnT.NumIn() - 1
-	var node *Node
-	nodeT := reflect.TypeOf(node)
-	var nodeSlice []*Node
-	nodeSliceT := reflect.TypeOf(nodeSlice)
-	var tmpGraph *Graph
-	graphT := reflect.TypeOf(tmpGraph)
+	nodeT := reflect.TypeFor[*Node]()
+	nodeSliceT := reflect.TypeFor[[]*Node]()
+	graphT := reflect.TypeFor[*Graph]()
 
 	// Build input types for new graphFn: same as ctxGraphFn, but without the Context.
 	var inT []reflect.Type
@@ -307,7 +288,7 @@ func (e *Exec) buildGraphFn() {
 		inT = []reflect.Type{nodeSliceT}
 	} else {
 		inT = make([]reflect.Type, numIn)
-		for ii := 0; ii < numIn; ii++ {
+		for ii := range numIn {
 			inT[ii] = nodeT
 		}
 	}

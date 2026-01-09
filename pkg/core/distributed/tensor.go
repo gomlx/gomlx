@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package distributed defines the following objects related to cross-device execution:
 //
 // - DeviceMesh: expresses the topology of a set of devices, in terms of axis and their sizes.
@@ -10,9 +12,9 @@ import (
 	"slices"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 )
 
@@ -287,7 +289,7 @@ func (dt *Tensor) Merge() (*tensors.Tensor, error) {
 
 			// Calculate the shard position for each tensor axis based on which mesh axes shard it.
 			shardPos := make([]int, rank)
-			for tensorAxis := 0; tensorAxis < rank; tensorAxis++ {
+			for tensorAxis := range rank {
 				if tensorAxis >= spec.Rank() || len(spec.Axes[tensorAxis]) == 0 {
 					// Replicated tensor axis: shard position is 0.
 					shardPos[tensorAxis] = 0
@@ -367,7 +369,7 @@ func (dt *Tensor) Merge() (*tensors.Tensor, error) {
 					// Recursive Step: Iterate along the split dimensions.
 					dimSize := dt.shardShape.Dimensions[axis]
 					step := toStrides[axis] * elementSize
-					for i := 0; i < dimSize; i++ {
+					for i := range dimSize {
 						copier(axis+1, dstOffset+i*step)
 					}
 				}
@@ -466,7 +468,7 @@ func ShardTensor(spec *ShardingSpec, t *tensors.Tensor) (*Tensor, error) {
 
 			// Calculate the shard position for each tensor axis based on which mesh axes shard it.
 			shardPos := make([]int, rank)
-			for tensorAxis := 0; tensorAxis < rank; tensorAxis++ {
+			for tensorAxis := range rank {
 				if tensorAxis >= spec.Rank() || len(spec.Axes[tensorAxis]) == 0 {
 					// Replicated tensor axis: shard position is 0.
 					shardPos[tensorAxis] = 0

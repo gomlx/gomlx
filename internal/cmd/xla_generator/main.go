@@ -1,24 +1,146 @@
-// xla_generator generates the xla.Backend implementation based on the github.com/gomlx/gopjrt/xlabuilder implementation.
-//
-// Although GoMLX can support more than one backend, the XlaBuilder is the reference implementation for now.
-//
-// If the environment variable GOPJRT_SRC is set, it parses the ops from there.
-// Otherwise it clones the gopjrt repository to a temporary sub-directory.
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
+// xla_generator generates xla.Backend implementations based on backend.Builder API.
 package main
 
 import (
+	"bufio"
 	"flag"
+	"fmt"
+	"os"
+	"strings"
 
-	"github.com/gomlx/gomlx/internal/xlabuilderparser"
+	"github.com/gomlx/gomlx/internal/backendparser"
+	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/must"
 	"k8s.io/klog/v2"
 )
+
+var flagOp = flag.String("op", "", "Generate only the specified operation in the standard out: "+
+	"This is meant to generate a skeleton that will copy&pasted and then manually completed.")
 
 func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
 	klog.V(1).Info("xla_generator:")
-	opsInfo := xlabuilderparser.ReadOpsInfo()
-	_ = opsInfo
-	extractor, xlaBuilderAst := xlabuilderparser.Parse()
-	GenerateStandardOpsImplementation(extractor, xlaBuilderAst)
+	methods := must.M1(backendparser.ParseBuilder())
+
+	if *flagOp == "" {
+		// Generate standard files for stablehlo backend.
+		GenerateBinaryOps(methods)
+		GenerateUnaryOps(methods)
+		return
+	}
+
+	// Select the method corresponding to the selected op.
+	var method backendparser.Method
+	for _, m := range methods {
+		if m.Name == *flagOp {
+			method = m
+			break
+		}
+	}
+	if method.Name == "" {
+		klog.Fatalf("No such op %q in the list of Backend methods", *flagOp)
+	}
+	GenerateSingleOp(method)
+}
+
+func GenerateSingleOp(method backendparser.Method) {
+	// Prepare writing.
+	writer := bufio.NewWriter(os.Stdout)
+	defer func() {
+		must.M(writer.Flush())
+	}()
+	w := func(format string, args ...any) {
+		_, err := fmt.Fprintf(writer, format, args...)
+		if err != nil {
+			exceptions.Panicf("Failed to write to stdout: %v", err)
+		}
+	}
+
+	// Comments:
+	w("\n") // Separate from previous content.
+	for _, comment := range method.Comments {
+		w("%s\n", comment)
+	}
+
+	// Method signature:
+	w("func (f *Function) %s(", method.Name)
+	for i, param := range method.Parameters {
+		if i > 0 {
+			w(", ")
+		}
+		w("%s", param.Name)
+		if i < len(method.Parameters)-2 && method.Parameters[i+1].Type == param.Type {
+			// This parameter will use the same type as the next one, no need to repeat it here.
+			continue
+		}
+		if param.Type == "Value" {
+			w(" backends.Value")
+		} else if param.Type == "...Value" {
+			w(" ...backends.Value")
+		} else if param.Type == "[]Value" {
+			w(" []backends.Value")
+		} else {
+			w(" %s", param.Type)
+		}
+	}
+	w(")")
+	if len(method.Outputs) > 0 {
+		w(" ")
+		if len(method.Outputs) > 1 || method.Outputs[0].Name != "" {
+			w("(")
+		}
+		for i, output := range method.Outputs {
+			if i > 0 {
+				w(", ")
+			}
+			outputType := output.Type
+			if outputType == "Value" {
+				outputType = "backends.Value"
+			}
+			if output.Name == "" {
+				w("%s", outputType)
+			} else {
+				w("%s %s", output.Name, output.Type)
+			}
+		}
+		if len(method.Outputs) > 1 || method.Outputs[0].Name != "" {
+			w(")")
+		}
+	}
+	w(" {\n")
+
+	// Write parsing of the "backend.Op" parameters.
+	var opsParams []string
+	for _, param := range method.Parameters {
+		if param.Type == "Op" {
+			opsParams = append(opsParams, param.Name)
+		}
+	}
+	w("\tnodes, err := f.verifyAndCastValues(\"%s\", %s)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n",
+		method.Name, strings.Join(opsParams, ", "))
+	for i, opsParam := range opsParams {
+		w("\t%sNode := nodes[%d]\n", opsParam, i)
+	}
+
+	// Call the method from the stablehlo backend.
+	w("\tvalue, err := f.fn.%s(", method.Name)
+	for i, param := range method.Parameters {
+		if i > 0 {
+			w(", ")
+		}
+		if param.Type == "Value" {
+			w("%sNode.value", param.Name)
+		} else {
+			w("%s", param.Name)
+		}
+	}
+	w(")\n")
+	w("\tif err != nil {\n\t\treturn nil, err\n\t}\n")
+
+	// Return the node.
+	w("\treturn f.newNode(value), nil\n")
+	w("}\n")
 }

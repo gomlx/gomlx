@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package inceptionv3
 
 import (
@@ -60,10 +62,7 @@ func PreprocessImage(image *Node, maxValue float64, channelsConfig images.Channe
 	if upScale > 1.0 {
 		newShape := image.Shape().Clone()
 		for _, axis := range spatialDims {
-			newSize := int(math.Round(float64(shape.Dimensions[axis]) * upScale))
-			if newSize < MinimumImageSize {
-				newSize = MinimumImageSize
-			}
+			newSize := max(int(math.Round(float64(shape.Dimensions[axis])*upScale)), MinimumImageSize)
 			newShape.Dimensions[axis] = newSize
 		}
 		image = Interpolate(image, newShape.Dimensions...).Done()
