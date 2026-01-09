@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package main
 
 import (
@@ -56,7 +58,7 @@ var (
 	methodsExcluded = sets.MakeWith(
 		"Name", "Compile", "OpShape",
 		"DeviceAssignment", "DistributedSPMD", "DistributedAutoSharding",
-		"Main", "NewFunction", "Return")
+		"Main", "NewFunction", "Return", "Closure", "Parent")
 
 	// methodsNoGradient will add a stop gradient to the node.
 	methodsNoGradient = sets.MakeWith(
@@ -175,7 +177,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			}
 			mi.HasGraph = len(mi.OpInputSlices) == 0 && len(mi.OpInputs) == 0
 		}
-		for _, output := range raw.Outputs[:len(raw.Outputs)-1] { // Skip the error.
+		for outputIdx, output := range raw.Outputs[:len(raw.Outputs)-1] { // Skip the error.
 			switch output.Type {
 			case "Value":
 				mi.OutputNames = append(mi.OutputNames, output.Name)
@@ -183,7 +185,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				mi.OutputNames = append(mi.OutputNames, output.Name)
 				mi.IsOutputSlice = true
 			default:
-				exceptions.Panicf("unexpected output type: %s", output.Type)
+				exceptions.Panicf("unexpected output type %q for output #%d of %q", output.Type, outputIdx, name)
 			}
 		}
 		if len(mi.OutputNames) > 1 {
@@ -324,7 +326,7 @@ Convert result(s) to node(s):
 */}}
 {{- if .HasMultipleOutputs}}
 {{- /* Version with multiple outputs: */}}
-{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}}, err := g.mainFn.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}}, err := g.currentFunc.backendFunc.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
 	if err != nil {
 		panic(err)
 	}
@@ -333,7 +335,7 @@ Convert result(s) to node(s):
 		outputShapes: []shapes.Shape{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}mustNoError(g.builder.OpShape(v{{$ii}})){{end}} },
 {{- else if .IsOutputSlice}}
 {{- /* Version with output slice: */}}
-	results, err := g.mainFn.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	results, err := g.currentFunc.backendFunc.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
 	if err != nil {
 		panic(err)
 	}
@@ -343,7 +345,7 @@ Convert result(s) to node(s):
 			func (op backends.Value) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
 {{- else}}
 {{- /* Version with single output: - node already defined. */}}
-	result, err := g.mainFn.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	result, err := g.currentFunc.backendFunc.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
 	if err != nil {
 		panic(err)
 	}

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package ogbnmag provides `Download` method for the corresponding dataset, and some dataset tools
 //
 // See https://ogb.stanford.edu/ for all Open Graph Benchmark (OGB) datasets.

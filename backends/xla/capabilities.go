@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package xla
 
 import (
@@ -123,6 +125,8 @@ var Capabilities = backends.Capabilities{
 		// Collective (distributed across devices) operations:
 		backends.OpTypeAllReduce: true,
 	},
+
+	Functions: true,
 
 	DTypes: map[dtypes.DType]bool{
 		dtypes.Bool:       true,

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package fnn implements a generic FNN (Feedforward Neural Network) with various configurations.
 // It should suffice for the common cases and can be extended as needed.
 //

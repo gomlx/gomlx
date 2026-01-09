@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package gnn implements a generic GNN modeling based on [TF-GNN MtAlbis].
 //
 // [TF-GNN MtAlbis]: https://github.com/tensorflow/gnn/tree/main/tensorflow_gnn/models/mt_albis

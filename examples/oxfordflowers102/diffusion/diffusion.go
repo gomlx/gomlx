@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package diffusion contains an example diffusion model, trained on Oxford Flowers 102 dataset.
 //
 // See the accompanying jupyter notebook for some results, and how to call it.

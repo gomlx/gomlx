@@ -1,5 +1,8 @@
 //go:build noasm || !arm64
 
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
+
 package simplego
 
 // Scalar fallback implementations for Float16/BFloat16 dot general operations.

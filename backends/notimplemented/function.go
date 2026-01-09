@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package notimplemented
 
 import (
@@ -46,6 +48,10 @@ func (f Function) Constant(flat any, dims ...int) (backends.Value, error) {
 
 func (f Function) Return(outputs []backends.Value, shardings []*backends.ShardingSpec) error {
 	return errors.Wrapf(NotImplementedError, "in Return()")
+}
+
+func (f Function) Call(target backends.Function, inputs ...backends.Value) ([]backends.Value, error) {
+	return nil, errors.New("Call not implemented")
 }
 
 func (f Function) Identity(x backends.Value) (backends.Value, error) {

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package vnn implements the Vector Neuron Networks operators described in https://arxiv.org/abs/2104.12229
 //
 // It operates on 3D vectors -- so most tensors will has the last axis with dimension 3.

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package must provide a set of functions that check for errors and panic on error.
 //
 // Convenient to writing command-line tools that need to fail on error, or tests.

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package hdf5 provides a trivial API to access HDF5 file contents.
 //
 // It requires the `hdf5-tools` (a deb package) installed in the system, more specifically the

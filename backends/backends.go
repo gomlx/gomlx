@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package backends defines the interface to computation building and execution system needs to implement to be used
 // by GoMLX.
 //

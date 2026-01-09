@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package simplego implements a simple, and not very fast, but very portable backend for GoMLX.
 //
 // It only implements the most popular dtypes and operations.

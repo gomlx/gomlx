@@ -146,7 +146,7 @@ func Abs(x *Node) (
 	inputs := &nodeInputsAbs{
 		x: x,
 	}
-	result, err := g.mainFn.Abs(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Abs(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -191,7 +191,7 @@ func Add(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.Add(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Add(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -238,7 +238,7 @@ func backendAllReduce(operands []*Node, reductionType ReduceOpType, replicaGroup
 		reductionType: reductionType,
 		replicaGroups: slices.Clone(replicaGroups),
 	}
-	results, err := g.mainFn.AllReduce(xslices.Map(operands, func(node *Node) backends.Value { return node.outputOps[0] }), inputs.reductionType, inputs.replicaGroups)
+	results, err := g.currentFunc.backendFunc.AllReduce(xslices.Map(operands, func(node *Node) backends.Value { return node.outputOps[0] }), inputs.reductionType, inputs.replicaGroups)
 	if err != nil {
 		panic(err)
 	}
@@ -289,7 +289,7 @@ func backendArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (
 		outputDType: outputDType,
 		isMin:       isMin,
 	}
-	result, err := g.mainFn.ArgMinMax(x.outputOps[0], inputs.axis, inputs.outputDType, inputs.isMin)
+	result, err := g.currentFunc.backendFunc.ArgMinMax(x.outputOps[0], inputs.axis, inputs.outputDType, inputs.isMin)
 	if err != nil {
 		panic(err)
 	}
@@ -348,7 +348,7 @@ func backendBatchNormForInference(operand *Node, scale *Node, offset *Node, mean
 		epsilon:     epsilon,
 		featureAxis: featureAxis,
 	}
-	result, err := g.mainFn.BatchNormForInference(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], mean.outputOps[0], variance.outputOps[0], inputs.epsilon, inputs.featureAxis)
+	result, err := g.currentFunc.backendFunc.BatchNormForInference(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], mean.outputOps[0], variance.outputOps[0], inputs.epsilon, inputs.featureAxis)
 	if err != nil {
 		panic(err)
 	}
@@ -401,7 +401,7 @@ func backendBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsil
 		epsilon:     epsilon,
 		featureAxis: featureAxis,
 	}
-	v0, v1, v2, err := g.mainFn.BatchNormForTraining(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], inputs.epsilon, inputs.featureAxis)
+	v0, v1, v2, err := g.currentFunc.backendFunc.BatchNormForTraining(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], inputs.epsilon, inputs.featureAxis)
 	if err != nil {
 		panic(err)
 	}
@@ -462,7 +462,7 @@ func backendBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *
 		epsilon:     epsilon,
 		featureAxis: featureAxis,
 	}
-	v0, v1, v2, err := g.mainFn.BatchNormGradient(operand.outputOps[0], scale.outputOps[0], mean.outputOps[0], variance.outputOps[0], gradOutput.outputOps[0], inputs.epsilon, inputs.featureAxis)
+	v0, v1, v2, err := g.currentFunc.backendFunc.BatchNormGradient(operand.outputOps[0], scale.outputOps[0], mean.outputOps[0], variance.outputOps[0], gradOutput.outputOps[0], inputs.epsilon, inputs.featureAxis)
 	if err != nil {
 		panic(err)
 	}
@@ -506,7 +506,7 @@ func BitCount(operand *Node) (
 	inputs := &nodeInputsBitCount{
 		operand: operand,
 	}
-	result, err := g.mainFn.BitCount(operand.outputOps[0])
+	result, err := g.currentFunc.backendFunc.BitCount(operand.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -563,7 +563,7 @@ func Bitcast(x *Node, targetDType dtypes.DType) (
 		x:           x,
 		targetDType: targetDType,
 	}
-	result, err := g.mainFn.Bitcast(x.outputOps[0], inputs.targetDType)
+	result, err := g.currentFunc.backendFunc.Bitcast(x.outputOps[0], inputs.targetDType)
 	if err != nil {
 		panic(err)
 	}
@@ -607,7 +607,7 @@ func BitwiseAnd(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.BitwiseAnd(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.BitwiseAnd(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -648,7 +648,7 @@ func BitwiseNot(x *Node) (
 	inputs := &nodeInputsBitwiseNot{
 		x: x,
 	}
-	result, err := g.mainFn.BitwiseNot(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.BitwiseNot(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -692,7 +692,7 @@ func BitwiseOr(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.BitwiseOr(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.BitwiseOr(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -736,7 +736,7 @@ func BitwiseXor(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.BitwiseXor(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.BitwiseXor(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -783,7 +783,7 @@ func backendBroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []in
 		outputShape:   outputShape,
 		broadcastAxes: slices.Clone(broadcastAxes),
 	}
-	result, err := g.mainFn.BroadcastInDim(x.outputOps[0], inputs.outputShape, inputs.broadcastAxes)
+	result, err := g.currentFunc.backendFunc.BroadcastInDim(x.outputOps[0], inputs.outputShape, inputs.broadcastAxes)
 	if err != nil {
 		panic(err)
 	}
@@ -824,7 +824,7 @@ func Ceil(x *Node) (
 	inputs := &nodeInputsCeil{
 		x: x,
 	}
-	result, err := g.mainFn.Ceil(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Ceil(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -873,7 +873,7 @@ func Clamp(min *Node, x *Node, max *Node) (
 		x:   x,
 		max: max,
 	}
-	result, err := g.mainFn.Clamp(min.outputOps[0], x.outputOps[0], max.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Clamp(min.outputOps[0], x.outputOps[0], max.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -914,7 +914,7 @@ func Clz(x *Node) (
 	inputs := &nodeInputsClz{
 		x: x,
 	}
-	result, err := g.mainFn.Clz(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Clz(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -963,7 +963,7 @@ func Complex(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.Complex(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Complex(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1008,7 +1008,7 @@ func backendConcatenate(axis int, operands ...*Node) (
 		axis:     axis,
 		operands: slices.Clone(operands),
 	}
-	result, err := g.mainFn.Concatenate(inputs.axis, xslices.Map(operands, func(node *Node) backends.Value { return node.outputOps[0] })...)
+	result, err := g.currentFunc.backendFunc.Concatenate(inputs.axis, xslices.Map(operands, func(node *Node) backends.Value { return node.outputOps[0] })...)
 	if err != nil {
 		panic(err)
 	}
@@ -1049,7 +1049,7 @@ func Conj(x *Node) (
 	inputs := &nodeInputsConj{
 		x: x,
 	}
-	result, err := g.mainFn.Conj(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Conj(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1114,7 +1114,7 @@ func backendConvGeneral(input *Node, kernel *Node, axes backends.ConvolveAxesCon
 		channelGroupCount: channelGroupCount,
 		batchGroupCount:   batchGroupCount,
 	}
-	result, err := g.mainFn.ConvGeneral(input.outputOps[0], kernel.outputOps[0], inputs.axes, inputs.strides, inputs.paddings, inputs.inputDilations, inputs.kernelDilations, inputs.channelGroupCount, inputs.batchGroupCount)
+	result, err := g.currentFunc.backendFunc.ConvGeneral(input.outputOps[0], kernel.outputOps[0], inputs.axes, inputs.strides, inputs.paddings, inputs.inputDilations, inputs.kernelDilations, inputs.channelGroupCount, inputs.batchGroupCount)
 	if err != nil {
 		panic(err)
 	}
@@ -1158,7 +1158,7 @@ func backendConvertDType(x *Node, dtype dtypes.DType) (
 		x:     x,
 		dtype: dtype,
 	}
-	result, err := g.mainFn.ConvertDType(x.outputOps[0], inputs.dtype)
+	result, err := g.currentFunc.backendFunc.ConvertDType(x.outputOps[0], inputs.dtype)
 	if err != nil {
 		panic(err)
 	}
@@ -1199,7 +1199,7 @@ func Cos(x *Node) (
 	inputs := &nodeInputsCos{
 		x: x,
 	}
-	result, err := g.mainFn.Cos(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Cos(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1244,7 +1244,7 @@ func Div(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.Div(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Div(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1299,7 +1299,7 @@ func Dot(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.Dot(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Dot(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1355,7 +1355,7 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 		rhsContractingAxes: slices.Clone(rhsContractingAxes),
 		rhsBatchAxes:       slices.Clone(rhsBatchAxes),
 	}
-	result, err := g.mainFn.DotGeneral(lhs.outputOps[0], inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.outputOps[0], inputs.rhsContractingAxes, inputs.rhsBatchAxes)
+	result, err := g.currentFunc.backendFunc.DotGeneral(lhs.outputOps[0], inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.outputOps[0], inputs.rhsContractingAxes, inputs.rhsBatchAxes)
 	if err != nil {
 		panic(err)
 	}
@@ -1413,7 +1413,7 @@ func DynamicSlice(operand *Node, startIndices []*Node, sliceDims []int) (
 		startIndices: slices.Clone(startIndices),
 		sliceDims:    slices.Clone(sliceDims),
 	}
-	result, err := g.mainFn.DynamicSlice(operand.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Value { return node.outputOps[0] }), inputs.sliceDims)
+	result, err := g.currentFunc.backendFunc.DynamicSlice(operand.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Value { return node.outputOps[0] }), inputs.sliceDims)
 	if err != nil {
 		panic(err)
 	}
@@ -1472,7 +1472,7 @@ func DynamicUpdateSlice(operand *Node, update *Node, startIndices []*Node) (
 		update:       update,
 		startIndices: slices.Clone(startIndices),
 	}
-	result, err := g.mainFn.DynamicUpdateSlice(operand.outputOps[0], update.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Value { return node.outputOps[0] }))
+	result, err := g.currentFunc.backendFunc.DynamicUpdateSlice(operand.outputOps[0], update.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Value { return node.outputOps[0] }))
 	if err != nil {
 		panic(err)
 	}
@@ -1516,7 +1516,7 @@ func Equal(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.Equal(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Equal(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1563,7 +1563,7 @@ func EqualTotalOrder(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.EqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.EqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1605,7 +1605,7 @@ func Erf(x *Node) (
 	inputs := &nodeInputsErf{
 		x: x,
 	}
-	result, err := g.mainFn.Erf(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Erf(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1646,7 +1646,7 @@ func Exp(x *Node) (
 	inputs := &nodeInputsExp{
 		x: x,
 	}
-	result, err := g.mainFn.Exp(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Exp(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1687,7 +1687,7 @@ func Expm1(x *Node) (
 	inputs := &nodeInputsExpm1{
 		x: x,
 	}
-	result, err := g.mainFn.Expm1(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Expm1(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1734,7 +1734,7 @@ func backendFFT(operand *Node, fftType backends.FFTType, fftLength []int) (
 		fftType:   fftType,
 		fftLength: slices.Clone(fftLength),
 	}
-	result, err := g.mainFn.FFT(operand.outputOps[0], inputs.fftType, inputs.fftLength)
+	result, err := g.currentFunc.backendFunc.FFT(operand.outputOps[0], inputs.fftType, inputs.fftLength)
 	if err != nil {
 		panic(err)
 	}
@@ -1775,7 +1775,7 @@ func Floor(x *Node) (
 	inputs := &nodeInputsFloor{
 		x: x,
 	}
-	result, err := g.mainFn.Floor(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Floor(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1837,7 +1837,7 @@ func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offse
 		sliceSizes:         slices.Clone(sliceSizes),
 		indicesAreSorted:   indicesAreSorted,
 	}
-	result, err := g.mainFn.Gather(operand.outputOps[0], startIndices.outputOps[0], inputs.indexVectorAxis, inputs.offsetOutputAxes, inputs.collapsedSliceAxes, inputs.startIndexMap, inputs.sliceSizes, inputs.indicesAreSorted)
+	result, err := g.currentFunc.backendFunc.Gather(operand.outputOps[0], startIndices.outputOps[0], inputs.indexVectorAxis, inputs.offsetOutputAxes, inputs.collapsedSliceAxes, inputs.startIndexMap, inputs.sliceSizes, inputs.indicesAreSorted)
 	if err != nil {
 		panic(err)
 	}
@@ -1881,7 +1881,7 @@ func GreaterOrEqual(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.GreaterOrEqual(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.GreaterOrEqual(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1928,7 +1928,7 @@ func GreaterOrEqualTotalOrder(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.GreaterOrEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.GreaterOrEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1973,7 +1973,7 @@ func GreaterThan(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.GreaterThan(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.GreaterThan(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2020,7 +2020,7 @@ func GreaterThanTotalOrder(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.GreaterThanTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.GreaterThanTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2063,7 +2063,7 @@ func Identity(x *Node) (
 	inputs := &nodeInputsIdentity{
 		x: x,
 	}
-	result, err := g.mainFn.Identity(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Identity(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2104,7 +2104,7 @@ func Imag(x *Node) (
 	inputs := &nodeInputsImag{
 		x: x,
 	}
-	result, err := g.mainFn.Imag(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Imag(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2147,7 +2147,7 @@ func backendIota(g *Graph, shape shapes.Shape, iotaAxis int) (
 		shape:    shape,
 		iotaAxis: iotaAxis,
 	}
-	result, err := g.mainFn.Iota(inputs.shape, inputs.iotaAxis)
+	result, err := g.currentFunc.backendFunc.Iota(inputs.shape, inputs.iotaAxis)
 	if err != nil {
 		panic(err)
 	}
@@ -2189,7 +2189,7 @@ func IsFinite(x *Node) (
 	inputs := &nodeInputsIsFinite{
 		x: x,
 	}
-	result, err := g.mainFn.IsFinite(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.IsFinite(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2230,7 +2230,7 @@ func IsNaN(x *Node) (
 	inputs := &nodeInputsIsNaN{
 		x: x,
 	}
-	result, err := g.mainFn.IsNaN(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.IsNaN(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2274,7 +2274,7 @@ func LessOrEqual(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.LessOrEqual(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LessOrEqual(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2321,7 +2321,7 @@ func LessOrEqualTotalOrder(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.LessOrEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LessOrEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2366,7 +2366,7 @@ func LessThan(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.LessThan(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LessThan(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2413,7 +2413,7 @@ func LessThanTotalOrder(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.LessThanTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LessThanTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2455,7 +2455,7 @@ func Log(x *Node) (
 	inputs := &nodeInputsLog{
 		x: x,
 	}
-	result, err := g.mainFn.Log(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Log(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2496,7 +2496,7 @@ func Log1p(x *Node) (
 	inputs := &nodeInputsLog1p{
 		x: x,
 	}
-	result, err := g.mainFn.Log1p(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Log1p(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2540,7 +2540,7 @@ func LogicalAnd(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.LogicalAnd(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LogicalAnd(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2581,7 +2581,7 @@ func LogicalNot(x *Node) (
 	inputs := &nodeInputsLogicalNot{
 		x: x,
 	}
-	result, err := g.mainFn.LogicalNot(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LogicalNot(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2626,7 +2626,7 @@ func LogicalOr(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.LogicalOr(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LogicalOr(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2670,7 +2670,7 @@ func LogicalXor(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.LogicalXor(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.LogicalXor(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2711,7 +2711,7 @@ func Logistic(x *Node) (
 	inputs := &nodeInputsLogistic{
 		x: x,
 	}
-	result, err := g.mainFn.Logistic(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Logistic(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2755,7 +2755,7 @@ func Max(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.Max(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Max(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2799,7 +2799,7 @@ func Min(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.Min(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Min(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2844,7 +2844,7 @@ func Mul(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.Mul(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Mul(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2885,7 +2885,7 @@ func Neg(x *Node) (
 	inputs := &nodeInputsNeg{
 		x: x,
 	}
-	result, err := g.mainFn.Neg(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Neg(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2929,7 +2929,7 @@ func NotEqual(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.NotEqual(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.NotEqual(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2976,7 +2976,7 @@ func NotEqualTotalOrder(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.NotEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.NotEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -3026,7 +3026,7 @@ func Pad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (
 		fillValue:  fillValue,
 		axesConfig: slices.Clone(axesConfig),
 	}
-	result, err := g.mainFn.Pad(x.outputOps[0], fillValue.outputOps[0], inputs.axesConfig...)
+	result, err := g.currentFunc.backendFunc.Pad(x.outputOps[0], fillValue.outputOps[0], inputs.axesConfig...)
 	if err != nil {
 		panic(err)
 	}
@@ -3070,7 +3070,7 @@ func Pow(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.Pow(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Pow(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -3114,7 +3114,7 @@ func backendRNGBitGenerator(state *Node, shape shapes.Shape) (
 		state: state,
 		shape: shape,
 	}
-	v0, v1, err := g.mainFn.RNGBitGenerator(state.outputOps[0], inputs.shape)
+	v0, v1, err := g.currentFunc.backendFunc.RNGBitGenerator(state.outputOps[0], inputs.shape)
 	if err != nil {
 		panic(err)
 	}
@@ -3157,7 +3157,7 @@ func Real(x *Node) (
 	inputs := &nodeInputsReal{
 		x: x,
 	}
-	result, err := g.mainFn.Real(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Real(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -3201,7 +3201,7 @@ func backendReduceBitwiseAnd(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.mainFn.ReduceBitwiseAnd(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceBitwiseAnd(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
@@ -3245,7 +3245,7 @@ func backendReduceBitwiseOr(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.mainFn.ReduceBitwiseOr(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceBitwiseOr(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
@@ -3289,7 +3289,7 @@ func backendReduceBitwiseXor(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.mainFn.ReduceBitwiseXor(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceBitwiseXor(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
@@ -3333,7 +3333,7 @@ func backendReduceLogicalAnd(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.mainFn.ReduceLogicalAnd(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceLogicalAnd(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
@@ -3377,7 +3377,7 @@ func backendReduceLogicalOr(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.mainFn.ReduceLogicalOr(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceLogicalOr(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
@@ -3421,7 +3421,7 @@ func backendReduceLogicalXor(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.mainFn.ReduceLogicalXor(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceLogicalXor(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
@@ -3465,7 +3465,7 @@ func backendReduceMax(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.mainFn.ReduceMax(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceMax(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
@@ -3509,7 +3509,7 @@ func backendReduceMin(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.mainFn.ReduceMin(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceMin(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
@@ -3553,7 +3553,7 @@ func backendReduceProduct(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.mainFn.ReduceProduct(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceProduct(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
@@ -3597,7 +3597,7 @@ func backendReduceSum(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.mainFn.ReduceSum(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.ReduceSum(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
@@ -3656,7 +3656,7 @@ func backendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions [
 		windowDilations:  slices.Clone(windowDilations),
 		paddings:         slices.Clone(paddings),
 	}
-	result, err := g.mainFn.ReduceWindow(x.outputOps[0], inputs.reductionType, inputs.windowDimensions, inputs.strides, inputs.baseDilations, inputs.windowDilations, inputs.paddings)
+	result, err := g.currentFunc.backendFunc.ReduceWindow(x.outputOps[0], inputs.reductionType, inputs.windowDimensions, inputs.strides, inputs.baseDilations, inputs.windowDilations, inputs.paddings)
 	if err != nil {
 		panic(err)
 	}
@@ -3701,7 +3701,7 @@ func Rem(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.Rem(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Rem(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -3745,7 +3745,7 @@ func backendReshape(x *Node, dimensions ...int) (
 		x:          x,
 		dimensions: slices.Clone(dimensions),
 	}
-	result, err := g.mainFn.Reshape(x.outputOps[0], inputs.dimensions...)
+	result, err := g.currentFunc.backendFunc.Reshape(x.outputOps[0], inputs.dimensions...)
 	if err != nil {
 		panic(err)
 	}
@@ -3789,7 +3789,7 @@ func backendReverse(x *Node, axes ...int) (
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result, err := g.mainFn.Reverse(x.outputOps[0], inputs.axes...)
+	result, err := g.currentFunc.backendFunc.Reverse(x.outputOps[0], inputs.axes...)
 	if err != nil {
 		panic(err)
 	}
@@ -3831,7 +3831,7 @@ func Round(x *Node) (
 	inputs := &nodeInputsRound{
 		x: x,
 	}
-	result, err := g.mainFn.Round(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Round(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -3872,7 +3872,7 @@ func Rsqrt(x *Node) (
 	inputs := &nodeInputsRsqrt{
 		x: x,
 	}
-	result, err := g.mainFn.Rsqrt(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Rsqrt(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -3937,7 +3937,7 @@ func backendScatterMax(operand *Node, scatterIndices *Node, updates *Node, index
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	result, err := g.mainFn.ScatterMax(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
+	result, err := g.currentFunc.backendFunc.ScatterMax(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	if err != nil {
 		panic(err)
 	}
@@ -4002,7 +4002,7 @@ func backendScatterMin(operand *Node, scatterIndices *Node, updates *Node, index
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	result, err := g.mainFn.ScatterMin(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
+	result, err := g.currentFunc.backendFunc.ScatterMin(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	if err != nil {
 		panic(err)
 	}
@@ -4067,7 +4067,7 @@ func backendScatterSum(operand *Node, scatterIndices *Node, updates *Node, index
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	result, err := g.mainFn.ScatterSum(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
+	result, err := g.currentFunc.backendFunc.ScatterSum(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	if err != nil {
 		panic(err)
 	}
@@ -4120,7 +4120,7 @@ func backendSelectAndScatterMax(operand *Node, source *Node, windowDimensions []
 		windowStrides:    slices.Clone(windowStrides),
 		paddings:         slices.Clone(paddings),
 	}
-	result, err := g.mainFn.SelectAndScatterMax(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
+	result, err := g.currentFunc.backendFunc.SelectAndScatterMax(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	if err != nil {
 		panic(err)
 	}
@@ -4173,7 +4173,7 @@ func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []
 		windowStrides:    slices.Clone(windowStrides),
 		paddings:         slices.Clone(paddings),
 	}
-	result, err := g.mainFn.SelectAndScatterMin(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
+	result, err := g.currentFunc.backendFunc.SelectAndScatterMin(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	if err != nil {
 		panic(err)
 	}
@@ -4217,7 +4217,7 @@ func backendShiftLeft(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.ShiftLeft(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.ShiftLeft(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -4261,7 +4261,7 @@ func backendShiftRightArithmetic(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.ShiftRightArithmetic(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.ShiftRightArithmetic(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -4305,7 +4305,7 @@ func backendShiftRightLogical(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.ShiftRightLogical(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.ShiftRightLogical(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -4346,7 +4346,7 @@ func backendSign(x *Node) (
 	inputs := &nodeInputsSign{
 		x: x,
 	}
-	result, err := g.mainFn.Sign(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Sign(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -4387,7 +4387,7 @@ func Sin(x *Node) (
 	inputs := &nodeInputsSin{
 		x: x,
 	}
-	result, err := g.mainFn.Sin(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Sin(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -4437,7 +4437,7 @@ func backendSlice(x *Node, starts []int, limits []int, strides []int) (
 		limits:  slices.Clone(limits),
 		strides: slices.Clone(strides),
 	}
-	result, err := g.mainFn.Slice(x.outputOps[0], inputs.starts, inputs.limits, inputs.strides)
+	result, err := g.currentFunc.backendFunc.Slice(x.outputOps[0], inputs.starts, inputs.limits, inputs.strides)
 	if err != nil {
 		panic(err)
 	}
@@ -4478,7 +4478,7 @@ func Sqrt(x *Node) (
 	inputs := &nodeInputsSqrt{
 		x: x,
 	}
-	result, err := g.mainFn.Sqrt(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Sqrt(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -4523,7 +4523,7 @@ func Sub(lhs *Node, rhs *Node) (
 		lhs: lhs,
 		rhs: rhs,
 	}
-	result, err := g.mainFn.Sub(lhs.outputOps[0], rhs.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Sub(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -4564,7 +4564,7 @@ func Tanh(x *Node) (
 	inputs := &nodeInputsTanh{
 		x: x,
 	}
-	result, err := g.mainFn.Tanh(x.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Tanh(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -4608,7 +4608,7 @@ func backendTranspose(x *Node, permutation ...int) (
 		x:           x,
 		permutation: slices.Clone(permutation),
 	}
-	result, err := g.mainFn.Transpose(x.outputOps[0], inputs.permutation...)
+	result, err := g.currentFunc.backendFunc.Transpose(x.outputOps[0], inputs.permutation...)
 	if err != nil {
 		panic(err)
 	}
@@ -4655,7 +4655,7 @@ func backendWhere(condition *Node, onTrue *Node, onFalse *Node) (
 		onTrue:    onTrue,
 		onFalse:   onFalse,
 	}
-	result, err := g.mainFn.Where(condition.outputOps[0], onTrue.outputOps[0], onFalse.outputOps[0])
+	result, err := g.currentFunc.backendFunc.Where(condition.outputOps[0], onTrue.outputOps[0], onFalse.outputOps[0])
 	if err != nil {
 		panic(err)
 	}

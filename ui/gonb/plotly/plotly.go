@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package plotly uses GoNB plotly support (`github.com/janpfeifer/gonb/gonbui/plotly`) to plot both
 // on dynamic plots while training or to quickly plot the results of a previously
 // saved plot results in a checkpoints directory.
