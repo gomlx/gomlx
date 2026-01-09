@@ -196,3 +196,111 @@ func (f *Function) Return(outputs []backends.Value, shardings []*backends.Shardi
 
 	return nil
 }
+
+// Sort sorts one or more tensors along the specified axis using a comparator function.
+func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, inputs ...backends.Value) ([]backends.Value, error) {
+	nodes, err := f.verifyAndCastValues("Sort", inputs...)
+	if err != nil {
+		return nil, err
+	}
+
+	comparatorF, ok := comparator.(*Function)
+	if !ok {
+		return nil, errors.Errorf("Sort comparator function must be of type *xla.Function, but got %T", comparator)
+	}
+	if comparatorF.parent != f {
+		return nil, errors.Errorf("Sort comparator must be a closure of the current function")
+	}
+
+	inputValues := make([]*stablehlo.Value, len(nodes))
+	for i, n := range nodes {
+		inputValues[i] = n.value
+	}
+
+	outputValues, err := stablehlo.Sort(comparatorF.fn, axis, isStable, inputValues...)
+	if err != nil {
+		return nil, err
+	}
+
+	outputNodes := make([]backends.Value, len(outputValues))
+	for i, v := range outputValues {
+		outputNodes[i] = f.newNode(v)
+	}
+	return outputNodes, nil
+}
+
+// While executes bodyFn repeatedly while condFn returns true.
+func (f *Function) While(cond, body backends.Function, initialState ...backends.Value) ([]backends.Value, error) {
+	nodes, err := f.verifyAndCastValues("While", initialState...)
+	if err != nil {
+		return nil, err
+	}
+
+	condF, ok := cond.(*Function)
+	if !ok {
+		return nil, errors.Errorf("While cond function must be of type *xla.Function, but got %T", cond)
+	}
+	if condF.parent != f {
+		return nil, errors.Errorf("While cond must be a closure of the current function")
+	}
+
+	bodyF, ok := body.(*Function)
+	if !ok {
+		return nil, errors.Errorf("While body function must be of type *xla.Function, but got %T", body)
+	}
+	if bodyF.parent != f {
+		return nil, errors.Errorf("While body must be a closure of the current function")
+	}
+
+	inputValues := make([]*stablehlo.Value, len(nodes))
+	for i, n := range nodes {
+		inputValues[i] = n.value
+	}
+
+	outputValues, err := stablehlo.While(condF.fn, bodyF.fn, inputValues...)
+	if err != nil {
+		return nil, err
+	}
+
+	outputNodes := make([]backends.Value, len(outputValues))
+	for i, v := range outputValues {
+		outputNodes[i] = f.newNode(v)
+	}
+	return outputNodes, nil
+}
+
+// If executes one of two branches based on a predicate.
+func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Function) ([]backends.Value, error) {
+	nodes, err := f.verifyAndCastValues("If", pred)
+	if err != nil {
+		return nil, err
+	}
+	predNode := nodes[0]
+
+	trueF, ok := trueBranch.(*Function)
+	if !ok {
+		return nil, errors.Errorf("If trueBranch function must be of type *xla.Function, but got %T", trueBranch)
+	}
+	if trueF.parent != f {
+		return nil, errors.Errorf("If trueBranch must be a closure of the current function")
+	}
+
+	falseF, ok := falseBranch.(*Function)
+	if !ok {
+		return nil, errors.Errorf("If falseBranch function must be of type *xla.Function, but got %T", falseBranch)
+	}
+	if falseF.parent != f {
+		return nil, errors.Errorf("If falseBranch must be a closure of the current function")
+	}
+
+	outputValues, err := stablehlo.If(predNode.value, trueF.fn, falseF.fn)
+	if err != nil {
+		return nil, err
+	}
+
+	outputNodes := make([]backends.Value, len(outputValues))
+	for i, v := range outputValues {
+		outputNodes[i] = f.newNode(v)
+	}
+	return outputNodes, nil
+}
