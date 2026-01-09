@@ -27,6 +27,7 @@ type dotGeneralNodeData struct {
 	rhsContractingAxes, rhsBatchAxes                       []int
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int
 	lhsBlockedShape, rhsBlockedShape, outputBlockedShape   shapes.Shape
+	lhsNormalization, rhsNormalization                     *dgNormalizationInfo
 
 	// execPath determines which execution strategy to use. Decided at graph-build time.
 	execPath dotGeneralExecutionPath
@@ -168,6 +169,9 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 			params.rhsCrossSize)
 	}
 
+	params.lhsNormalization = dgNormalizePrepare(lhs.shape, params.lhsContractingAxes, params.lhsBatchAxes)
+	params.rhsNormalization = dgNormalizePrepare(rhs.shape, params.rhsContractingAxes, params.rhsBatchAxes)
+
 	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
 	params.lhsBlockedShape = dgCreateBlockedShape(dtype, params.batchSize, params.lhsCrossSize, params.contractingSize, blockLog2Dim)
 	params.rhsBlockedShape = dgCreateBlockedShape(dtype, params.batchSize, params.rhsCrossSize, params.contractingSize, blockLog2Dim)
@@ -182,6 +186,7 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	// Select execution path at build time based on problem size and matrix layout.
 	// This enables proper deduplication of pre-blocked inputs via getOrCreateNode.
 	params.execPath = dgSelectExecPath(f.builder.backend, lhs.shape, rhs.shape, &params)
+	klog.V(1).Infof("DotGeneral execPath: %s\n", params.execPath)
 
 	// For blockedPath, pre-block BOTH inputs at graph-build time.
 	// This allows deduplication: if the same tensor is used in multiple DotGenerals,
@@ -267,6 +272,8 @@ const (
 	// checkPath runs both paths and compares outputs (for debugging)
 	checkPath
 )
+
+//go:generate go tool enumer -type dotGeneralExecutionPath -output=gen_dotgeneral_execution_path_enumer.go dotgeneral.go
 
 // dgSelectExecPath selects the execution path based on problem size and backend configuration.
 // Called at graph-build time from DotGeneral().
@@ -384,7 +391,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			lhsRaw, rhsRaw := inputs[2], inputs[3]
 			output2 := backend.getBufferForShape(outputShape)
 			output2.Zeros()
-			err = execDotGeneralSmall(backend, lhsRaw, rhsRaw, params, output2)
+			err = execDotGeneralNormalized(backend, lhsRaw, rhsRaw, params, output2)
 			if err != nil {
 				backend.putBuffer(output2)
 				backend.putBuffer(output)
@@ -416,7 +423,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 
 	case normalizedPath:
 		// Transpose-based normalized path for small matrices
-		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
+		err = execDotGeneralNormalized(backend, lhs, rhs, params, output)
 
 	default:
 		err = errors.Errorf("unknown execution path %d for DotGeneral", params.execPath)

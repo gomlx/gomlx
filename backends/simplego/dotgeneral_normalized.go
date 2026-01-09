@@ -14,24 +14,31 @@ import (
 
 var dotGeneralNormalizeShapeDTypeMap = NewDTypeMap("DotGeneralNormalizeShape")
 
-// dgNormalizeShape reshapes the source to a rank-3 shape [batchSize, crossSize, contractingSize].
-//
-// It returns a buffer with the transposed/reshaped source.
-//
-// In the chance that the source needs no transposing, output is returned nil.
-func dgNormalizeShape[T interface {
-	PODNumericConstraints | bfloat16.BFloat16
-}](backend *Backend, source *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize int) (output *Buffer) {
-	rank := source.shape.Rank()
+// dgNormalizationInfo holds pre-calculated information for dgNormalizeShape.
+// This is calculated at graph construction time.
+type dgNormalizationInfo struct {
+	needsTranspose     bool
+	axisToOutputAxis   []int // For each source axis, which output axis (0=batch, 1=cross, 2=contracting) it maps to.
+	sourceStrides      []int
+	sourceRewindAmount []int
+}
+
+// dgNormalizePrepare pre-calculates the information needed for dgNormalizeShape.
+func dgNormalizePrepare(shape shapes.Shape, contractingAxes, batchAxes []int) *dgNormalizationInfo {
+	rank := shape.Rank()
+	info := &dgNormalizationInfo{
+		axisToOutputAxis:   make([]int, rank),
+		sourceStrides:      make([]int, rank),
+		sourceRewindAmount: make([]int, rank),
+	}
 
 	// Map source axes to their types (0: cross, 1: contracting, 2: batch)
-	var needsTranspose bool
 	axesTypes := make([]int, rank)
 	currentAxis := -1
 	for _, axis := range contractingAxes {
 		axesTypes[axis] = 1
 		if axis < currentAxis {
-			needsTranspose = true
+			info.needsTranspose = true
 		}
 		currentAxis = axis
 	}
@@ -39,11 +46,11 @@ func dgNormalizeShape[T interface {
 	for _, axis := range batchAxes {
 		axesTypes[axis] = 2
 		if axis < currentAxis {
-			needsTranspose = true
+			info.needsTranspose = true
 		}
 		currentAxis = axis
 	}
-	sourceDims := source.shape.Dimensions
+	sourceDims := shape.Dimensions
 
 	// Check whether the axes types are in the right order:
 	currentType := 2 // 2: batch, 1: contracting, 0: cross
@@ -53,28 +60,38 @@ func dgNormalizeShape[T interface {
 		}
 		if (axisType == 2) || (currentType == 1) {
 			// Invalid transition.
-			needsTranspose = true
+			info.needsTranspose = true
 			break
 		}
 		currentType = axisType
 	}
-	if !needsTranspose {
-		// Axes are given in the correct order, no need to transpose (only maybe a reshape).
-		return nil
+
+	// Pre-fill axisToOutputAxis
+	for axis, axisType := range axesTypes {
+		switch axisType {
+		case 0: // Cross
+			info.axisToOutputAxis[axis] = 1
+		case 1: // Contracting
+			info.axisToOutputAxis[axis] = 2
+		case 2: // Batch
+			info.axisToOutputAxis[axis] = 0
+		}
+	}
+
+	if !info.needsTranspose {
+		return info
 	}
 
 	// sourceStrides stores strides per axis-type: crossStride, contractStride or batchStride.
 	// sourceRewindAmount stores the amount needed to rewind when the axis index goes back to zero (see the loop that updates the index below)
-	sourceStrides := make([]int, rank)      // Stride is per type of axis.
-	sourceRewindAmount := make([]int, rank) // dim-1 * stride.
 	batchStride, crossStride, contractStride := 1, 1, 1
 	// - crossStride:
 	for axis := rank - 1; axis >= 0; axis-- {
 		if axesTypes[axis] != 0 {
 			continue
 		}
-		sourceStrides[axis] = crossStride
-		sourceRewindAmount[axis] = crossStride * (sourceDims[axis] - 1)
+		info.sourceStrides[axis] = crossStride
+		info.sourceRewindAmount[axis] = crossStride * (sourceDims[axis] - 1)
 		crossStride *= sourceDims[axis]
 	}
 	// batchStride and contractStride must be computed in order of the axes given: they may be transposed.
@@ -82,17 +99,31 @@ func dgNormalizeShape[T interface {
 	lenContracting := len(contractingAxes)
 	for ii := lenContracting - 1; ii >= 0; ii-- {
 		axis := contractingAxes[ii]
-		sourceStrides[axis] = contractStride
-		sourceRewindAmount[axis] = contractStride * (sourceDims[axis] - 1)
+		info.sourceStrides[axis] = contractStride
+		info.sourceRewindAmount[axis] = contractStride * (sourceDims[axis] - 1)
 		contractStride *= sourceDims[axis]
 	}
 	// - batchStride: strides go from the last axis to the first.
 	lenBatch := len(batchAxes)
 	for ii := lenBatch - 1; ii >= 0; ii-- {
 		axis := batchAxes[ii]
-		sourceStrides[axis] = batchStride
-		sourceRewindAmount[axis] = batchStride * (sourceDims[axis] - 1)
+		info.sourceStrides[axis] = batchStride
+		info.sourceRewindAmount[axis] = batchStride * (sourceDims[axis] - 1)
 		batchStride *= sourceDims[axis]
+	}
+	return info
+}
+
+// dgNormalizeShape reshapes the source to a rank-3 shape [batchSize, crossSize, contractingSize].
+//
+// It returns a buffer with the transposed/reshaped source.
+//
+// In the chance that the source needs no transposing, output is returned nil.
+func dgNormalizeShape[T interface {
+	PODNumericConstraints | bfloat16.BFloat16
+}](backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) (output *Buffer) {
+	if !info.needsTranspose {
+		return nil
 	}
 
 	// Create the output buffer.
@@ -100,6 +131,9 @@ func dgNormalizeShape[T interface {
 	output = backend.getBufferForShape(outputShape)
 	outputStrides := [3]int{crossSize * contractingSize, contractingSize, 1}
 	var outputIdx [3]int
+
+	sourceDims := source.shape.Dimensions
+	rank := source.shape.Rank()
 
 	// Indices we are going to iterate.
 	sourceData := source.flat.([]T)
@@ -118,49 +152,43 @@ func dgNormalizeShape[T interface {
 			sourceIdx[axis]++
 
 			// The source axis corresponds to one of the 3 output axes depending on the axis type.
-			var outputAxis int
-			switch axesTypes[axis] {
-			case 0: // Cross
-				outputAxis = 1
-			case 1: // Contracting
-				outputAxis = 2
-			case 2: // Batch
-				outputAxis = 0
-			}
+			outputAxis := info.axisToOutputAxis[axis]
 
 			if sourceIdx[axis] < sourceDims[axis] {
 				// Not reached the end of this axis, continue to next copy position.
-				outputIdx[outputAxis] += sourceStrides[axis]
+				outputIdx[outputAxis] += info.sourceStrides[axis]
 				break
 			}
 
 			// Reached the end of this axis, rewind the index to 0: both in sourceIdx and the corresponding output index.
 			sourceIdx[axis] = 0
-			outputIdx[outputAxis] -= sourceRewindAmount[axis]
+			outputIdx[outputAxis] -= info.sourceRewindAmount[axis]
 		}
 	}
 	return
 }
 
-func execDotGeneralSmall(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
+// execDotGeneralNormalized executes the dot general operation for normalized shapes:
+// both rhs and lhs are shaped [batchSize, crossSize, contractingSize]
+func execDotGeneralNormalized(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
 	dtype := lhs.shape.DType
-	normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize int) *Buffer)
+	normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) *Buffer)
 
 	batchSize := params.batchSize
 	contractingSize := params.contractingSize
 	lhsCrossSize := params.lhsCrossSize
 	rhsCrossSize := params.rhsCrossSize
 
-	lhsNormalized := normalizeFn(backend, lhs, params.lhsContractingAxes, params.lhsBatchAxes,
-		batchSize, lhsCrossSize, contractingSize)
-	if lhsNormalized == nil {
-		lhsNormalized = lhs // The shape is wrong, but the flat values are correct.
+	// Normalize lhs and rhs if needed.
+	lhsNormalized := lhs
+	rhsNormalized := rhs
+	if params.lhsNormalization.needsTranspose {
+		lhsNormalized = normalizeFn(backend, lhs, params.lhsNormalization,
+			batchSize, lhsCrossSize, contractingSize)
 	}
-
-	rhsNormalized := normalizeFn(backend, rhs, params.rhsContractingAxes, params.rhsBatchAxes,
-		batchSize, rhsCrossSize, contractingSize)
-	if rhsNormalized == nil {
-		rhsNormalized = rhs // The shape is wrong, but the flat values are correct.
+	if params.rhsNormalization.needsTranspose {
+		rhsNormalized = normalizeFn(backend, rhs, params.rhsNormalization,
+			batchSize, rhsCrossSize, contractingSize)
 	}
 
 	tmpOutput := output

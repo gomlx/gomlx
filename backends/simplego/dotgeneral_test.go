@@ -197,12 +197,12 @@ func TestDotGeneral_SmallNormalize(t *testing.T) {
 		for i := range sourceFlat {
 			sourceFlat[i] = float64(i + 1)
 		}
-		normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize int) *Buffer)
+		normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) *Buffer)
+		info := dgNormalizePrepare(source.shape, contractingAxes, batchAxes)
 		output := normalizeFn(
 			backend.(*Backend),
 			source,
-			contractingAxes,
-			batchAxes,
+			info,
 			batchSize,
 			crossSize,
 			contractingSize,
@@ -231,12 +231,12 @@ func TestDotGeneral_SmallNormalize(t *testing.T) {
 		for i := range sourceFlat {
 			sourceFlat[i] = float32(i + 1)
 		}
-		normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize int) *Buffer)
+		normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) *Buffer)
+		info := dgNormalizePrepare(source.shape, contractingAxes, batchAxes)
 		output := normalizeFn(
 			backend.(*Backend),
 			source,
-			contractingAxes,
-			batchAxes,
+			info,
 			batchSize,
 			crossSize,
 			contractingSize,
@@ -274,12 +274,12 @@ func TestDotGeneral_SmallNormalize(t *testing.T) {
 		sourceIf, _, err := backend.NewSharedBuffer(0, sourceShape)
 		require.NoError(t, err)
 		source := sourceIf.(*Buffer)
-		normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize int) *Buffer)
+		normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) *Buffer)
+		info := dgNormalizePrepare(source.shape, contractingAxes, batchAxes)
 		output := normalizeFn(
 			backend.(*Backend),
 			source,
-			contractingAxes,
-			batchAxes,
+			info,
 			batchSize,
 			crossSize,
 			contractingSize,
@@ -288,11 +288,11 @@ func TestDotGeneral_SmallNormalize(t *testing.T) {
 
 		// If we invert the contracting axes, we need the transposition, and normalizeFn must handle it.
 		contractingAxes = []int{3, 2}
+		info = dgNormalizePrepare(source.shape, contractingAxes, batchAxes)
 		output = normalizeFn(
 			backend.(*Backend),
 			source,
-			contractingAxes,
-			batchAxes,
+			info,
 			batchSize,
 			crossSize,
 			contractingSize,
