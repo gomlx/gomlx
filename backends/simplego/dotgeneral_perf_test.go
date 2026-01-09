@@ -42,16 +42,13 @@ func dimsToStr(dims []int) string {
 }
 
 var (
-	flagPerfTests = flag.String(
-		"perf_names",
-		"",
-		"Comma-separated list of performance tests (part of TestDotGeneral_PerformanceTable) to run. If empty, it will run all the perf tests.",
-	)
-	flagPerfDTypes = flag.String(
-		"perf_dtypes",
-		"",
-		"Comma-separated list of dtypes to run performance test (part of TestDotGeneral_PerformanceTable). If empty, it will run for all supported dtypes.",
-	)
+	flagPerfTests = flag.String("perf_names", "",
+		"Comma-separated list of performance tests (part of TestDotGeneral_PerformanceTable) to "+
+			"run. If empty, it will run all the perf tests.")
+	flagPerfDTypes = flag.String("perf_dtypes", "",
+		"Comma-separated list of dtypes to run performance test (part of TestDotGeneral_PerformanceTable). "+
+			"If empty, it will run for all supported dtypes.")
+	flagMarkdown = flag.Bool("markdown", false, "If true, it will print the performance table in markdown format.")
 )
 
 // TestDotGeneral_PerformanceTable generates a performance table for differently
@@ -210,19 +207,35 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 
 	// Print table header
 	fmt.Printf("\n--- execNormalizedDotGeneral Performance ---\n")
-	header := fmt.Sprintf(
-		"| %-20s | %-20s | %-20s | %-10s | %-10s | %-12s | %-15s | %-10s |",
-		"Test Name",
-		"LHS Dims",
-		"RHS Dims",
-		"DType",
-		"BatchSize",
-		"Time/Run",
-		"Num Ops",
-		"GOps/Sec",
-	)
+	var header string
+	if *flagMarkdown {
+		header = "| Test Name | LHS Dims | RHS Dims | DType | BatchSize | Time/Run | Num Ops | GOps/Sec |"
+	} else {
+		header = fmt.Sprintf(
+			"| %-20s | %-20s | %-20s | %-10s | %-10s | %-12s | %-15s | %-10s |",
+			"Test Name",
+			"LHS Dims",
+			"RHS Dims",
+			"DType",
+			"BatchSize",
+			"Time/Run",
+			"Num Ops",
+			"GOps/Sec",
+		)
+	}
 	fmt.Println(header)
-	fmt.Println(strings.Repeat("-", len(header)))
+
+	if *flagMarkdown {
+		// Markdown header separator.
+		fmt.Println("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+	} else {
+		fmt.Println(strings.Repeat("-", len(header)))
+	}
+
+	rowFormat := "| %-20s | %-20s | %-20s | %-10s | %-10d | %-12s | %-15s | %-10.1f |"
+	if *flagMarkdown {
+		rowFormat = "| %s | %s | %s | %s | %d | %s | %s | %.1f |"
+	}
 
 	for benchCaseIdx, benchCase := range benchmarkCases {
 		if filterPerfs {
@@ -307,7 +320,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			// Timed runs
 			startTime := time.Now()
 			var numRuns int
-			for numRuns < minNumTimedRuns || time.Since(startTime) < minTestTime { // i := 0; i < numTimedRuns; i++ {
+			for numRuns < minNumTimedRuns || time.Since(startTime) < minTestTime {
 				output := testExec.MustExec(lhsTensor, rhsTensor)[0]
 				output.MustFinalizeAll()
 				numRuns++
@@ -323,7 +336,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			if benchCaseIdx%2 == 1 {
 				style = style2
 			}
-			row := fmt.Sprintf("| %-20s | %-20s | %-20s | %-10s | %-10d | %-12s | %-15s | %-10.1f |",
+			row := fmt.Sprintf(rowFormat,
 				benchCase.name,
 				dimsToStr(benchCase.lhsShape), dimsToStr(benchCase.rhsShape),
 				dtype,
@@ -331,9 +344,16 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				commandline.FormatDuration(avgDurationPerRun),
 				humanize.Comma(int64(numOps)),
 				gOpsPerSecond)
-			fmt.Println(style.Render(row))
+			if *flagMarkdown {
+				// No color styles for markdown.
+				fmt.Println(row)
+			} else {
+				fmt.Println(style.Render(row))
+			}
 		}
 	}
-	fmt.Println(strings.Repeat("-", len(header)))
+	if !*flagMarkdown {
+		fmt.Println(strings.Repeat("-", len(header)))
+	}
 	fmt.Println()
 }
