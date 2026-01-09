@@ -81,6 +81,11 @@ func isMatMulOrder(lhsShape, rhsShape shapes.Shape, lhsContractingAxes, rhsContr
 		return false
 	}
 
+	// Only support float32 for SmallMatMul (most common case)
+	if lhsShape.DType != dtypes.Float32 {
+		return false
+	}
+
 	return true
 }
 

@@ -282,7 +282,19 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 
 	// If a specific path is forced via backend config, use that.
 	if backend.dotGeneralForceExecutionPath != autoSelectPath {
-		return backend.dotGeneralForceExecutionPath
+		// Checks whether the forced path is valid for the given problem.
+		var valid bool
+		switch backend.dotGeneralForceExecutionPath {
+		case smallMatMulPath:
+			valid = isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
+				params.lhsBatchAxes, params.rhsBatchAxes)
+		default:
+			valid = true
+		}
+		if valid {
+			return backend.dotGeneralForceExecutionPath
+		}
+		klog.V(1).Infof("DotGeneral: forced path %s is invalid for problem size %s×%s\n", backend.dotGeneralForceExecutionPath, lhsShape, rhsShape)
 	}
 
 	// Check for SmallMatMul fast path first.
