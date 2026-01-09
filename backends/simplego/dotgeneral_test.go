@@ -774,3 +774,233 @@ func TestBlockForDotGeneralData_Equal(t *testing.T) {
 		})
 	}
 }
+
+// TestIsMatMulOrder tests the isMatMulOrder function for various axis configurations.
+func TestIsMatMulOrder(t *testing.T) {
+	if _, ok := backend.(*Backend); !ok {
+		t.Skip("Test requires SimpleGo backend")
+	}
+
+	testCases := []struct {
+		name               string
+		lhsShape           shapes.Shape
+		rhsShape           shapes.Shape
+		lhsContractingAxes []int
+		rhsContractingAxes []int
+		lhsBatchAxes       []int
+		rhsBatchAxes       []int
+		want               bool
+	}{
+		// Standard 2D matrix multiplication: [M, K] x [K, N]
+		{"2D_matmul_standard", shapes.Make(dtypes.Float32, 3, 4), shapes.Make(dtypes.Float32, 4, 5), []int{1}, []int{0}, []int{}, []int{}, true},
+		// Transposed LHS: [K, M] x [K, N] - not matmul order
+		{"2D_transposed_lhs", shapes.Make(dtypes.Float32, 4, 3), shapes.Make(dtypes.Float32, 4, 5), []int{0}, []int{0}, []int{}, []int{}, false},
+		// Transposed RHS: [M, K] x [N, K] - not matmul order
+		{"2D_transposed_rhs", shapes.Make(dtypes.Float32, 3, 4), shapes.Make(dtypes.Float32, 5, 4), []int{1}, []int{1}, []int{}, []int{}, false},
+		// Matrix x Vector: [M, K] x [K]
+		{"matrix_vector", shapes.Make(dtypes.Float32, 3, 4), shapes.Make(dtypes.Float32, 4), []int{1}, []int{0}, []int{}, []int{}, true},
+		// Batched matrix multiplication: [B, M, K] x [B, K, N]
+		{"batched_matmul", shapes.Make(dtypes.Float32, 2, 3, 4), shapes.Make(dtypes.Float32, 2, 4, 5), []int{2}, []int{1}, []int{0}, []int{0}, true},
+		// Multiple contracting axes - not supported by SmallMatMul
+		{"multiple_contracting", shapes.Make(dtypes.Float32, 2, 3, 4), shapes.Make(dtypes.Float32, 3, 4, 5), []int{1, 2}, []int{0, 1}, []int{}, []int{}, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isMatMulOrder(tc.lhsShape, tc.rhsShape,
+				tc.lhsContractingAxes, tc.rhsContractingAxes,
+				tc.lhsBatchAxes, tc.rhsBatchAxes)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestDgCanUseSmallMatMul tests the build-time SmallMatMul path selection.
+func TestDgCanUseSmallMatMul(t *testing.T) {
+	t.Run("ThresholdBoundaries", func(t *testing.T) {
+		testCases := []struct {
+			name            string
+			batchSize       int
+			lhsCrossSize    int
+			rhsCrossSize    int
+			contractingSize int
+			want            bool
+		}{
+			// At contracting threshold (128)
+			{"contractingSize_at_threshold", 1, 10, 10, 128, true},
+			// Over contracting threshold
+			{"contractingSize_over_threshold", 1, 10, 10, 129, false},
+			// Batch size at threshold (64)
+			{"batchSize_at_threshold", 64, 10, 10, 32, true},
+			// Batch size over threshold
+			{"batchSize_over_threshold", 65, 10, 10, 32, false},
+			// M=1 special case - uses higher thresholds for K and N
+			{"M_equals_1_moderate_K", 1, 1, 256, 512, true},
+			// M=1 with K at M1 threshold (1024) should be accepted
+			{"M_equals_1_K_at_M1_threshold", 1, 1, 256, 1024, true},
+			// M=1 with K over M1 threshold should be rejected
+			{"M_equals_1_K_over_M1_threshold", 1, 1, 256, 1025, false},
+			// M=1 with very large K should be rejected
+			{"M_equals_1_very_large_K", 1, 1, 256, 2000, false},
+			// M=1 with large N should still work (within M1 threshold of 4096)
+			{"M_equals_1_large_N", 1, 1, 1000, 256, true},
+			// M=1 with very large N should be rejected (over M1 threshold of 4096)
+			{"M_equals_1_very_large_N", 1, 1, 5000, 256, false},
+			// M=1 with N exactly at M1 threshold (4096) should be accepted
+			{"M_equals_1_N_at_M1_threshold", 1, 1, 4096, 256, true},
+			// M=1 with N just over M1 threshold should be rejected
+			{"M_equals_1_N_over_M1_threshold", 1, 1, 4097, 256, false},
+			// M=1 with large batch should be rejected
+			{"M_equals_1_large_batch", 100, 1, 256, 512, false},
+			// N (rhsCrossSize) at threshold (256)
+			{"rhsCrossSize_at_threshold", 1, 10, 256, 64, true},
+			// N over threshold
+			{"rhsCrossSize_over_threshold", 1, 10, 257, 64, false},
+			// Combined thresholds: both K and N at their limits
+			{"K_and_N_both_at_threshold", 1, 10, 256, 128, true},
+			// Combined thresholds: K at limit, N over
+			{"K_at_threshold_N_over", 1, 10, 257, 128, false},
+			// Combined thresholds: K over, N at limit
+			{"K_over_N_at_threshold", 1, 10, 256, 129, false},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				lhsShape := shapes.Make(dtypes.Float32, tc.batchSize, tc.lhsCrossSize, tc.contractingSize)
+				rhsShape := shapes.Make(dtypes.Float32, tc.batchSize, tc.contractingSize, tc.rhsCrossSize)
+
+				params := &dotGeneralNodeData{
+					lhsContractingAxes: []int{2},
+					lhsBatchAxes:       []int{0},
+					rhsContractingAxes: []int{1},
+					rhsBatchAxes:       []int{0},
+					batchSize:          tc.batchSize,
+					lhsCrossSize:       tc.lhsCrossSize,
+					rhsCrossSize:       tc.rhsCrossSize,
+					contractingSize:    tc.contractingSize,
+				}
+
+				got := dgCanUseSmallMatMul(dtypes.Float32, lhsShape, rhsShape, params)
+				assert.Equal(t, tc.want, got,
+					"dgCanUseSmallMatMul with batch=%d, M=%d, N=%d, K=%d",
+					tc.batchSize, tc.lhsCrossSize, tc.rhsCrossSize, tc.contractingSize)
+			})
+		}
+	})
+
+	t.Run("NonFloat32Rejected", func(t *testing.T) {
+		params := &dotGeneralNodeData{
+			lhsContractingAxes: []int{1},
+			lhsBatchAxes:       []int{},
+			rhsContractingAxes: []int{0},
+			rhsBatchAxes:       []int{},
+			batchSize:          1,
+			lhsCrossSize:       4,
+			rhsCrossSize:       6,
+			contractingSize:    8,
+		}
+
+		// Float64 should be rejected
+		lhsF64 := shapes.Make(dtypes.Float64, 4, 8)
+		rhsF64 := shapes.Make(dtypes.Float64, 8, 6)
+		assert.False(t, dgCanUseSmallMatMul(dtypes.Float64, lhsF64, rhsF64, params),
+			"Should not use SmallMatMul for Float64")
+
+		// BFloat16 should also be rejected
+		lhsBF16 := shapes.Make(dtypes.BFloat16, 4, 8)
+		rhsBF16 := shapes.Make(dtypes.BFloat16, 8, 6)
+		assert.False(t, dgCanUseSmallMatMul(dtypes.BFloat16, lhsBF16, rhsBF16, params),
+			"Should not use SmallMatMul for BFloat16")
+	})
+
+	t.Run("NonMatMulOrderRejected", func(t *testing.T) {
+		// Test with non-standard axis order (not [M,K]×[K,N])
+		lhsShape := shapes.Make(dtypes.Float32, 8, 4) // [K, M] instead of [M, K]
+		rhsShape := shapes.Make(dtypes.Float32, 8, 6) // [K, N]
+
+		params := &dotGeneralNodeData{
+			lhsContractingAxes: []int{0}, // K is first, not last
+			lhsBatchAxes:       []int{},
+			rhsContractingAxes: []int{0},
+			rhsBatchAxes:       []int{},
+			batchSize:          1,
+			lhsCrossSize:       4,
+			rhsCrossSize:       6,
+			contractingSize:    8,
+		}
+
+		assert.False(t, dgCanUseSmallMatMul(dtypes.Float32, lhsShape, rhsShape, params),
+			"Should not use SmallMatMul with non-matmul axis order")
+	})
+}
+
+// TestSmallMatMulCorrectness verifies that SmallMatMul produces correct results.
+func TestSmallMatMulCorrectness(t *testing.T) {
+	goBackend, ok := backend.(*Backend)
+	if !ok {
+		t.Skip("Test requires SimpleGo backend")
+	}
+
+	originalForce := goBackend.dotGeneralForceExecutionPath
+	defer func() {
+		goBackend.dotGeneralForceExecutionPath = originalForce
+	}()
+
+	testCases := []struct {
+		name     string
+		lhsDims  []int
+		rhsDims  []int
+		lhsContr []int
+		lhsBatch []int
+		rhsContr []int
+		rhsBatch []int
+	}{
+		{"2D_matmul", []int{4, 8}, []int{8, 6}, []int{1}, []int{}, []int{0}, []int{}},
+		{"matrix_vector", []int{4, 8}, []int{8}, []int{1}, []int{}, []int{0}, []int{}},
+		{"M_equals_1", []int{1, 64}, []int{64, 32}, []int{1}, []int{}, []int{0}, []int{}},
+		{"batched", []int{2, 4, 8}, []int{2, 8, 6}, []int{2}, []int{0}, []int{1}, []int{0}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create test data
+			lhsSize := 1
+			for _, d := range tc.lhsDims {
+				lhsSize *= d
+			}
+			rhsSize := 1
+			for _, d := range tc.rhsDims {
+				rhsSize *= d
+			}
+
+			lhsData := make([]float32, lhsSize)
+			for i := range lhsData {
+				lhsData[i] = float32(i+1) * 0.01
+			}
+			rhsData := make([]float32, rhsSize)
+			for i := range rhsData {
+				rhsData[i] = float32(i+1) * 0.01
+			}
+
+			lhsTensor := tensors.FromFlatDataAndDimensions(lhsData, tc.lhsDims...)
+			rhsTensor := tensors.FromFlatDataAndDimensions(rhsData, tc.rhsDims...)
+
+			// Compute with auto-select (may use SmallMatMul)
+			goBackend.dotGeneralForceExecutionPath = autoSelectPath
+			resultAuto := graph.MustExecOnce(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+				return graph.DotGeneral(lhs, tc.lhsContr, tc.lhsBatch, rhs, tc.rhsContr, tc.rhsBatch)
+			}, lhsTensor, rhsTensor)
+
+			// Compute with forced checkPath (uses normalized path, not SmallMatMul)
+			goBackend.dotGeneralForceExecutionPath = checkPath
+			resultNormalized := graph.MustExecOnce(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+				return graph.DotGeneral(lhs, tc.lhsContr, tc.lhsBatch, rhs, tc.rhsContr, tc.rhsBatch)
+			}, lhsTensor, rhsTensor)
+
+			// Compare results
+			require.True(t, resultAuto.Shape().Equal(resultNormalized.Shape()),
+				"Shapes should match")
+			requireSameTensorsFloat32(t, resultNormalized, resultAuto, 1e-3)
+		})
+	}
+}
