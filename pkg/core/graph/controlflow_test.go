@@ -163,3 +163,89 @@ func TestWhile_Factorial(t *testing.T) {
 		0,
 	)
 }
+
+func TestTopK_1D(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "TopK: 1D largest",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, []float32{3, 1, 4, 1, 5, 9, 2, 6})
+			values, indices := TopK(x, 3, 0)
+			return nil, []*Node{values, indices}
+		},
+		[]any{
+			[]float32{9, 6, 5},
+			[]int32{5, 7, 4},
+		},
+		0,
+	)
+}
+
+func TestTopK_2D(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "TopK: 2D along axis 1",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, [][]float32{
+				{3, 1, 4},
+				{1, 5, 9},
+			})
+			values, indices := TopK(x, 2, 1)
+			return nil, []*Node{values, indices}
+		},
+		[]any{
+			[][]float32{{4, 3}, {9, 5}},
+			[][]int32{{2, 0}, {2, 1}},
+		},
+		0,
+	)
+}
+
+func TestBottomK_1D(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "BottomK: 1D smallest",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, []float32{3, 1, 4, 1, 5, 9, 2, 6})
+			values, indices := BottomK(x, 3, 0)
+			return nil, []*Node{values, indices}
+		},
+		[]any{
+			[]float32{1, 1, 2},
+			[]int32{1, 3, 6},
+		},
+		0,
+	)
+}
+
+func TestTopK_ArgMax(t *testing.T) {
+	// TopK with k=1 can be used as ArgMax
+	graphtest.RunTestGraphFn(t, "TopK: argmax behavior",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, [][]float32{
+				{3, 1, 4},
+				{1, 5, 9},
+				{2, 6, 5},
+			})
+			_, indices := TopK(x, 1, 1)
+			return nil, []*Node{indices}
+		},
+		[]any{
+			[][]int32{{2}, {2}, {1}},
+		},
+		0,
+	)
+}
+
+func TestBottomK_ArgMin(t *testing.T) {
+	// BottomK with k=1 can be used as ArgMin
+	graphtest.RunTestGraphFn(t, "BottomK: argmin behavior",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, [][]float32{
+				{3, 1, 4},
+				{1, 5, 9},
+				{2, 6, 5},
+			})
+			_, indices := BottomK(x, 1, 1)
+			return nil, []*Node{indices}
+		},
+		[]any{
+			[][]int32{{1}, {0}, {0}},
+		},
+		0,
+	)
+}
