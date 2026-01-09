@@ -1,3 +1,9 @@
+// *** DO NOT EDIT ***: File generatored by internal/cmd/alternates_generator.
+// - Base source file (edit this one): convgeneral_exec.go
+// - Tag used for this generation: full
+
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package simplego
 
 import "github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
