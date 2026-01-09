@@ -17,7 +17,7 @@ func BenchmarkMatMulExecution(b *testing.B) {
 	defer backend.Finalize()
 
 	sizes := []struct {
-		name string
+		name    string
 		m, k, n int
 	}{
 		{"64x64x64", 64, 64, 64},
@@ -29,21 +29,35 @@ func BenchmarkMatMulExecution(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(size.name, func(b *testing.B) {
 			builder := backend.Builder("benchmark_matmul")
+			mainFn := builder.Main()
 
 			lhsShape := shapes.Make(dtypes.Float32, size.m, size.k)
 			rhsShape := shapes.Make(dtypes.Float32, size.k, size.n)
 
-			lhs, _ := builder.Parameter("lhs", lhsShape, nil)
-			rhs, _ := builder.Parameter("rhs", rhsShape, nil)
+			lhs, err := mainFn.Parameter("lhs", lhsShape, nil)
+			if err != nil {
+				b.Fatalf("Parameter(lhs) failed: %v", err)
+			}
+			rhs, err := mainFn.Parameter("rhs", rhsShape, nil)
+			if err != nil {
+				b.Fatalf("Parameter(rhs) failed: %v", err)
+			}
 
-			result, _ := builder.DotGeneral(
+			result, err := mainFn.DotGeneral(
 				lhs,
 				[]int{1}, []int{},
 				rhs,
 				[]int{0}, []int{},
 			)
+			if err != nil {
+				b.Fatalf("DotGeneral failed: %v", err)
+			}
 
-			exec, err := builder.Compile([]backends.Op{result}, nil)
+			if err := mainFn.Return([]backends.Value{result}, nil); err != nil {
+				b.Fatalf("Return failed: %v", err)
+			}
+
+			exec, err := builder.Compile()
 			if err != nil {
 				b.Fatalf("Compile failed: %v", err)
 			}
@@ -85,7 +99,7 @@ func BenchmarkBatchedMatMul(b *testing.B) {
 	defer backend.Finalize()
 
 	sizes := []struct {
-		name    string
+		name           string
 		batch, m, k, n int
 	}{
 		{"1x64x64x64", 1, 64, 64, 64},
@@ -96,21 +110,35 @@ func BenchmarkBatchedMatMul(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(size.name, func(b *testing.B) {
 			builder := backend.Builder("benchmark_batched_matmul")
+			mainFn := builder.Main()
 
 			lhsShape := shapes.Make(dtypes.Float32, size.batch, size.m, size.k)
 			rhsShape := shapes.Make(dtypes.Float32, size.batch, size.k, size.n)
 
-			lhs, _ := builder.Parameter("lhs", lhsShape, nil)
-			rhs, _ := builder.Parameter("rhs", rhsShape, nil)
+			lhs, err := mainFn.Parameter("lhs", lhsShape, nil)
+			if err != nil {
+				b.Fatalf("Parameter(lhs) failed: %v", err)
+			}
+			rhs, err := mainFn.Parameter("rhs", rhsShape, nil)
+			if err != nil {
+				b.Fatalf("Parameter(rhs) failed: %v", err)
+			}
 
-			result, _ := builder.DotGeneral(
+			result, err := mainFn.DotGeneral(
 				lhs,
 				[]int{2}, []int{0},
 				rhs,
 				[]int{1}, []int{0},
 			)
+			if err != nil {
+				b.Fatalf("DotGeneral failed: %v", err)
+			}
 
-			exec, err := builder.Compile([]backends.Op{result}, nil)
+			if err := mainFn.Return([]backends.Value{result}, nil); err != nil {
+				b.Fatalf("Return failed: %v", err)
+			}
+
+			exec, err := builder.Compile()
 			if err != nil {
 				b.Fatalf("Compile failed: %v", err)
 			}
