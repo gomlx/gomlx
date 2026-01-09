@@ -1,8 +1,6 @@
 package simplego
 
 import (
-	"fmt"
-
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
@@ -89,60 +87,6 @@ func isMatMulOrder(lhsShape, rhsShape shapes.Shape, lhsContractingAxes, rhsContr
 	return true
 }
 
-// dgUseSmallMatMul checks whether the SmallMatMul fast path is beneficial.
-// SmallMatMul skips transpose overhead but has strided RHS access, so it's only
-// beneficial for small float32 matrices in standard [M,K]×[K,N] order.
-func dgUseSmallMatMul(dtype dtypes.DType, lhsShape, rhsShape shapes.Shape, params *dotGeneralNodeData) bool {
-	// Only support float32 for SmallMatMul (most common case)
-	if dtype != dtypes.Float32 {
-		return false
-	}
-
-	// Check if axes are in standard matmul order
-	if !isMatMulOrder(lhsShape, rhsShape,
-		params.lhsContractingAxes, params.rhsContractingAxes,
-		params.lhsBatchAxes, params.rhsBatchAxes) {
-		fmt.Printf("Not matmul order: %v x %v\n", lhsShape, rhsShape)
-		return false
-	}
-
-	// For large batch sizes, the normalized path with batch parallelism is faster.
-	// The small matmul path processes batches sequentially without parallelization.
-	if params.batchSize > smallMatMulMaxBatchSize {
-		return false
-	}
-
-	// For single-row operations (M=1), SmallMatMul is faster because transpose overhead
-	// dominates when computing just one output row per batch.
-	// BUT we still need to check rhsCrossSize and contractingSize - for M=1 with huge N or K,
-	// the strided access causes cache thrashing.
-	if params.lhsCrossSize == 1 {
-		// For M=1, use larger thresholds since transpose overhead is more significant
-		// But still cap to avoid catastrophic cache behavior with very large dimensions
-		if params.rhsCrossSize > smallMatMulMaxRhsCrossSizeM1 {
-			return false
-		}
-		if params.contractingSize > smallMatMulMaxContractingSizeM1 {
-			return false
-		}
-		return true
-	}
-
-	// For multi-row operations, check both contracting and RHS cross dimensions.
-	// The RHS is accessed with stride N (rhsCrossSize), so large N causes more cache
-	// misses per contracting step.
-	if params.contractingSize > smallMatMulMaxContractingSize {
-		return false
-	}
-
-	// Check RHS cross size (N) - large N means large stride in RHS access
-	if params.rhsCrossSize > smallMatMulMaxRhsCrossSize {
-		return false
-	}
-
-	return true
-}
-
 // smallMatMulMaxContractingSize is the maximum contracting dimension size for which
 // the small matmul (no-transpose) path is beneficial. Beyond this size, the strided RHS
 // access pattern causes too many cache misses, and the normalized path (which
@@ -185,6 +129,73 @@ const smallMatMulMaxRhsCrossSizeM1 = 4096
 // threshold than smallMatMulMaxContractingSize. However, very large K values (e.g., 10000)
 // still cause cache thrashing due to strided RHS access, so we cap it.
 const smallMatMulMaxContractingSizeM1 = 1024
+
+// smallMatMulMaxSize is the maximum size in bytes of the output for which the small matmul
+// path is beneficial. This is a sanity check to avoid using the small matmul path for
+// very large outputs -- which usually will do better with normalized/blocked paths
+const smallMatMulMaxSize = 256 * 1024 // 256Kb
+
+// dgUseSmallMatMul checks whether the SmallMatMul fast path is beneficial.
+// SmallMatMul skips transpose overhead but has strided RHS access, so it's only
+// beneficial for small float32 matrices in standard [M,K]×[K,N] order.
+func dgUseSmallMatMul(dtype dtypes.DType, lhsShape, rhsShape shapes.Shape, params *dotGeneralNodeData) bool {
+	// Only support float32 for SmallMatMul (most common case)
+	if dtype != dtypes.Float32 {
+		return false
+	}
+
+	// Check if axes are in standard matmul order
+	if !isMatMulOrder(lhsShape, rhsShape,
+		params.lhsContractingAxes, params.rhsContractingAxes,
+		params.lhsBatchAxes, params.rhsBatchAxes) {
+		return false
+	}
+
+	// For large batch sizes, the normalized path with batch parallelism is faster.
+	// The small matmul path processes batches sequentially without parallelization.
+	if params.batchSize > smallMatMulMaxBatchSize {
+		return false
+	}
+
+	// For single-row operations (M=1), SmallMatMul is faster because transpose overhead
+	// dominates when computing just one output row per batch.
+	// BUT we still need to check rhsCrossSize and contractingSize - for M=1 with huge N or K,
+	// the strided access causes cache thrashing.
+	if params.lhsCrossSize == 1 {
+		// For M=1, use larger thresholds since transpose overhead is more significant
+		// But still cap to avoid catastrophic cache behavior with very large dimensions
+		if params.rhsCrossSize > smallMatMulMaxRhsCrossSizeM1 {
+			return false
+		}
+		if params.contractingSize > smallMatMulMaxContractingSizeM1 {
+			return false
+		}
+		return true
+	}
+
+	// For multi-row operations, check both contracting and RHS cross dimensions.
+	// The RHS is accessed with stride N (rhsCrossSize), so large N causes more cache
+	// misses per contracting step.
+	if params.contractingSize > smallMatMulMaxContractingSize {
+		return false
+	}
+
+	// Check RHS cross size (N) - large N means large stride in RHS access
+	if params.rhsCrossSize > smallMatMulMaxRhsCrossSize {
+		return false
+	}
+
+	// Larger data size benefit from the blocking done by the blocked and normalized paths.
+	problemSize := /* LHS size */ params.lhsCrossSize*params.contractingSize +
+		/* RHS size */ params.rhsCrossSize*params.contractingSize +
+		/* Output size */ params.lhsCrossSize*params.rhsCrossSize
+	problemSize *= params.batchSize
+	problemSize *= dtype.Size()
+	if problemSize > smallMatMulMaxSize {
+		return false
+	}
+	return true
+}
 
 // execDotGeneralSmallMatMulFloat32 executes float32 matrix multiplication without transpose.
 //

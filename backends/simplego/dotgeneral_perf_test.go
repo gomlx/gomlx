@@ -100,6 +100,11 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			rhsShape: []int{128, 256}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
 		},
 		{
+			name:     "NoBatch-LargeLHSCross-SmallRHSCross-Matmul",
+			lhsShape: []int{4096, 32}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
+			rhsShape: []int{32, 16}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
+		},
+		{
 			name:     "LargeBatch-Tiny",
 			lhsShape: []int{1024, 128, 4}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int{0},
 			rhsShape: []int{1024, 4, 1}, rhsContractingAxes: []int{1}, rhsBatchAxes: []int{0},
