@@ -144,7 +144,18 @@ const smallMatMulMaxContractingSizeM1 = 1024
 //
 // For large matrices, execDotGeneralSmallNormalized transposes RHS to [N, K] form where
 // "row" n (the original column) becomes contiguous, enabling efficient vectorization.
-func execDotGeneralSmallMatMulFloat32(_ *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) {
+//
+// On ARM64 with NEON, we use a different approach: process 4 output columns at once
+// (register blocking), which converts strided column access into contiguous row access.
+// See execDotGeneralSmallMatMulFloat32NEON for details.
+func execDotGeneralSmallMatMulFloat32(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) {
+	// Dispatch to NEON-accelerated version on ARM64
+	if hasNEON && params.rhsCrossSize >= 4 {
+		execDotGeneralSmallMatMulFloat32NEON(backend, lhs, rhs, params, output)
+		return
+	}
+
+	// Scalar fallback for non-ARM64 or small N
 	lhsFlat := lhs.flat.([]float32)
 	rhsFlat := rhs.flat.([]float32)
 	outputFlat := output.flat.([]float32)
@@ -176,7 +187,7 @@ func execDotGeneralSmallMatMulFloat32(_ *Backend, lhs, rhs *Buffer, params *dotG
 				var sum float32
 
 				// Scalar loop with strided RHS access
-				// We cannot use NEON here because RHS column elements are not contiguous
+				// Note: NEON version uses register blocking to avoid this strided access
 				k := 0
 				for ; k+3 < contractingSize; k += 4 {
 					sum += lhsFlat[lhsRowStart+k]*rhsFlat[rhsColStart+k*rhsColStride] +
