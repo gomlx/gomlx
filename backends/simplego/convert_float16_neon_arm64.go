@@ -3,6 +3,7 @@
 package simplego
 
 import (
+	"runtime"
 	"unsafe"
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
@@ -35,6 +36,9 @@ func execConvertDTypeFloat16ToFloat32NEON(operand, output *Buffer) {
 			unsafe.Pointer(&outputFlat[0]),
 			int64(neonCount),
 		)
+		// Keep slices alive until after assembly completes
+		runtime.KeepAlive(operandFlat)
+		runtime.KeepAlive(outputFlat)
 		// Handle remainder with scalar Go code
 		for idx := neonCount; idx < n; idx++ {
 			outputFlat[idx] = operandFlat[idx].Float32()
@@ -61,6 +65,9 @@ func execConvertDTypeFloat32ToFloat16NEON(operand, output *Buffer) {
 			unsafe.Pointer(&outputFlat[0]),
 			int64(neonCount),
 		)
+		// Keep slices alive until after assembly completes
+		runtime.KeepAlive(operandFlat)
+		runtime.KeepAlive(outputFlat)
 		// Handle remainder with scalar Go code
 		for idx := neonCount; idx < n; idx++ {
 			outputFlat[idx] = float16.Fromfloat32(operandFlat[idx])
@@ -85,6 +92,9 @@ func convertFloat32SliceToFloat16(input []float32, output []float16.Float16) {
 			unsafe.Pointer(&output[0]),
 			int64(neonCount),
 		)
+		// Keep slices alive until after assembly completes
+		runtime.KeepAlive(input)
+		runtime.KeepAlive(output)
 		// Handle remainder with scalar
 		for idx := neonCount; idx < n; idx++ {
 			output[idx] = float16.Fromfloat32(input[idx])
@@ -108,6 +118,9 @@ func convertFloat16SliceToFloat32(input []float16.Float16, output []float32) {
 			unsafe.Pointer(&output[0]),
 			int64(neonCount),
 		)
+		// Keep slices alive until after assembly completes
+		runtime.KeepAlive(input)
+		runtime.KeepAlive(output)
 		// Handle remainder with scalar
 		for idx := neonCount; idx < n; idx++ {
 			output[idx] = input[idx].Float32()

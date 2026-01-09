@@ -30,8 +30,11 @@ func dotProductBF16_neon_asm(a, b unsafe.Pointer, n int64) float32 {
 	panic("dotProductBF16_neon_asm not available on this platform")
 }
 
-var hasFP16NEON = false
-var hasBF16NEON = false
+// hasFP16NEON indicates FP16 NEON is not available on non-ARM64 platforms.
+const hasFP16NEON = false
+
+// hasBF16NEON indicates BF16 NEON is not available on non-ARM64 platforms.
+const hasBF16NEON = false
 
 // execNormalizedDotGeneralFloat16ToFloat32 is the scalar fallback for FP16×FP16→FP32.
 func execNormalizedDotGeneralFloat16ToFloat32(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
@@ -179,6 +182,7 @@ func init() {
 	dotGeneralNormalizedDTypeMap.Register(dtypes.Float16, priorityTyped, execNormalizedDotGeneralFloat16ToFloat32)
 	dotGeneralKernelDTypeMap.Register(dtypes.Float16, priorityTyped, buildDotGeneralKernelFloat16ToFloat32)
 
-	// Note: BFloat16 is registered in dotgeneral_small.go with priorityTyped.
+	// Register BF16 fallback kernels for non-NEON platforms.
 	// On ARM64 with NEON, dotgeneral_float16_neon_arm64.go registers with priorityArch to override.
+	dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, priorityTyped, execNormalizedDotGeneralBFloat16ToFloat32)
 }

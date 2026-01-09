@@ -3,6 +3,7 @@
 package simplego
 
 import (
+	"runtime"
 	"unsafe"
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
@@ -75,6 +76,8 @@ func execNormalizedDotGeneralFloat16ToFloat32(lhs, rhs, output *Buffer, params *
 								lhsPtr := unsafe.Pointer(&lhsFlat[lhsRowStartIdx+outerIdxContracting])
 								rhsPtr := unsafe.Pointer(&rhsFlat[rhsColStartIdx+outerIdxContracting])
 								dotResult := dotProductFP16_neon_asm(lhsPtr, rhsPtr, int64(dotSize))
+								runtime.KeepAlive(lhsFlat)
+								runtime.KeepAlive(rhsFlat)
 								sum += dotResult
 							} else {
 								// Scalar fallback with explicit conversion
@@ -139,6 +142,8 @@ func execNormalizedDotGeneralBFloat16ToFloat32(lhs, rhs, output *Buffer, params 
 								lhsPtr := unsafe.Pointer(&lhsFlat[lhsRowStartIdx+outerIdxContracting])
 								rhsPtr := unsafe.Pointer(&rhsFlat[rhsColStartIdx+outerIdxContracting])
 								dotResult := dotProductBF16_neon_asm(lhsPtr, rhsPtr, int64(dotSize))
+								runtime.KeepAlive(lhsFlat)
+								runtime.KeepAlive(rhsFlat)
 								sum += dotResult
 							} else {
 								// Scalar fallback
@@ -186,6 +191,8 @@ func buildDotGeneralKernelFloat16ToFloat32(lhs, rhs, output *Buffer, blockDim in
 						int64(blockDim),
 						int64(blockDim),
 					)
+					runtime.KeepAlive(lhsFlat)
+					runtime.KeepAlive(rhsFlat)
 					sum0 += outputFlat[outputIdx]
 					sum1 += outputFlat[outputIdx+1]
 					sum2 += outputFlat[outputIdx+2]
@@ -231,18 +238,19 @@ func buildDotGeneralKernelFloat16ToFloat32(lhs, rhs, output *Buffer, blockDim in
 }
 
 func init() {
-	// Register FP16 NEON-optimized kernels (uses NEON FMLAL/FMLAL2).
+	// Register FP16 NEON-optimized kernels only when NEON FP16 is available.
 	// priorityArch overrides priorityTyped fallback in dotgeneral_fp16_stub.go
-	dotGeneralNormalizedDTypeMap.Register(dtypes.Float16, priorityArch, execNormalizedDotGeneralFloat16ToFloat32)
-
-	// Register BF16 NEON-optimized kernels (uses NEON BFMLALB).
-	// This overrides the scalar version in dotgeneral_small.go when NEON is available.
-	if hasBF16NEON {
-		dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, priorityArch, execNormalizedDotGeneralBFloat16ToFloat32)
+	if hasFP16NEON {
+		dotGeneralNormalizedDTypeMap.Register(dtypes.Float16, priorityArch, execNormalizedDotGeneralFloat16ToFloat32)
+		dotGeneralKernelDTypeMap.Register(dtypes.Float16, priorityArch, buildDotGeneralKernelFloat16ToFloat32)
 	}
 
-	// Register kernel builders for large matrix path
-	dotGeneralKernelDTypeMap.Register(dtypes.Float16, priorityArch, buildDotGeneralKernelFloat16ToFloat32)
+	// Register BF16 NEON-optimized kernels (uses NEON BFMLALB/BFMLALT).
+	// This overrides the scalar version when BF16 NEON is available.
+	if hasBF16NEON {
+		dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, priorityArch, execNormalizedDotGeneralBFloat16ToFloat32)
+		// Note: BF16 kernel builder for large matrix path would go here if needed
+	}
 }
 
 // dotProductBF16InnerLoop computes the dot product of lhs[lhsIdx:lhsIdx+size] and rhs[rhsIdx:rhsIdx+size]
@@ -251,5 +259,8 @@ func init() {
 func dotProductBF16InnerLoop(lhsFlat, rhsFlat []bfloat16.BFloat16, lhsIdx, rhsIdx, size int) float32 {
 	lhsPtr := unsafe.Pointer(&lhsFlat[lhsIdx])
 	rhsPtr := unsafe.Pointer(&rhsFlat[rhsIdx])
-	return dotProductBF16_neon_asm(lhsPtr, rhsPtr, int64(size))
+	result := dotProductBF16_neon_asm(lhsPtr, rhsPtr, int64(size))
+	runtime.KeepAlive(lhsFlat)
+	runtime.KeepAlive(rhsFlat)
+	return result
 }

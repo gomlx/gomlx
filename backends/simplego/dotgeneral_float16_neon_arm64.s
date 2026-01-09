@@ -201,11 +201,14 @@ bf16_vectorloop:
 	WORD $0x4cdf7804       // ld1 {v4.8h}, [x0], #16
 	WORD $0x4cdf7828       // ld1 {v8.8h}, [x1], #16
 
-	// BFMLALB: BFloat16 fused multiply-add long
-	// On Apple Silicon, BFMLALB computes BOTH a[2i]*b[2i] AND a[2i+1]*b[2i+1]
-	// for each lane, giving the full dot product of each element pair.
-	// We do NOT use BFMLALT because that would double-count the odd elements.
+	// BFMLALB: BFloat16 fused multiply-add long (lower/even elements)
+	// Processes elements 0, 2, 4, 6 from each vector
 	WORD $0x6e48fc80       // bfmlalb v0.4s, v4.8h, v8.8h
+
+	// BFMLALT: BFloat16 fused multiply-add long (upper/odd elements)
+	// Processes elements 1, 3, 5, 7 from each vector
+	// Both BFMLALB and BFMLALT are needed for a complete dot product
+	WORD $0x6ec8fc80       // bfmlalt v0.4s, v4.8h, v8.8h
 
 	SUBS $1, R3, R3
 	BNE bf16_vectorloop

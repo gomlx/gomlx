@@ -9,7 +9,8 @@ package simplego
 // dotProduct_neon stub for non-ARM64 platforms.
 // Signature matches dotgeneral_neon_arm64.go for consistency.
 func dotProduct_neon(aSlice, bSlice []float32, aIdx, bIdx int, n int64) float32 {
-	return 0
+	// Should never be called since hasNEON will be false
+	panic("NEON not available")
 }
 
 // dotProductInnerLoopNEON stub for non-ARM64 platforms
