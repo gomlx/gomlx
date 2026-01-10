@@ -9,8 +9,8 @@ package simplego
 //go:generate go run ../../internal/cmd/alternates_generator -base=dotgeneral_small_matmul_alt_base.go -tags=bf16,f16
 
 //alt:base import (
-//alt:base "github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-//alt:base "github.com/x448/float16"
+//alt:base _ "github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+//alt:base _ "github.com/x448/float16"
 //alt:base )
 //alt:bf16  import	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 import "github.com/x448/float16" //alt:f16
@@ -34,8 +34,8 @@ import "github.com/x448/float16" //alt:f16
 // For large matrices, execDotGeneralSmallNormalized transposes RHS to [N, K] form where
 // "row" n (the original column) becomes contiguous, enabling efficient vectorization.
 //
-// BFloat16/Float16 variants accumulate in float32 for numerical stability, and output
-// is stored in float32. The caller handles any needed dtype conversion.
+// BFloat16/Float16 variants accumulate in float32 for numerical stability, then
+// convert to the native dtype when writing to output (fused conversion).
 //
 //alt:base func execDotGeneralSmallMatMulFloat32(_ *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) {
 //alt:bf16  func execDotGeneralSmallMatMulBFloat16(_ *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) {
@@ -46,9 +46,10 @@ func execDotGeneralSmallMatMulFloat16(_ *Backend, lhs, rhs *Buffer, params *dotG
 	//alt:base outputFlat := output.flat.([]float32)
 	//alt:bf16  lhsFlat := lhs.flat.([]bfloat16.BFloat16)
 	//alt:bf16  rhsFlat := rhs.flat.([]bfloat16.BFloat16)
-	lhsFlat := lhs.flat.([]float16.Float16) //alt:f16
-	rhsFlat := rhs.flat.([]float16.Float16) //alt:f16
-	outputFlat := output.flat.([]float32)   //alt:bf16|f16
+	//alt:bf16  outputFlat := output.flat.([]bfloat16.BFloat16)
+	lhsFlat := lhs.flat.([]float16.Float16)       //alt:f16
+	rhsFlat := rhs.flat.([]float16.Float16)       //alt:f16
+	outputFlat := output.flat.([]float16.Float16) //alt:f16
 
 	batchSize := params.batchSize
 	lhsCrossSize := params.lhsCrossSize       // M
@@ -98,7 +99,9 @@ func execDotGeneralSmallMatMulFloat16(_ *Backend, lhs, rhs *Buffer, params *dotG
 					sum += lhsFlat[lhsRowStart+k].Float32() * rhsFlat[rhsColStart+k*rhsColStride].Float32() //alt:bf16|f16
 				}
 
-				outputFlat[outputRowStart+n] = sum
+				//alt:base outputFlat[outputRowStart+n] = sum
+				//alt:bf16  outputFlat[outputRowStart+n] = bfloat16.FromFloat32(sum)
+				outputFlat[outputRowStart+n] = float16.Fromfloat32(sum) //alt:f16
 			}
 		}
 	}
