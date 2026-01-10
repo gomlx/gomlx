@@ -191,7 +191,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 		// Add more test cases relevant to your models here
 	}
 
-	dtypesToTest := []dtypes.DType{dtypes.Float32, dtypes.Float64, dtypes.BFloat16}
+	dtypesToTest := []dtypes.DType{dtypes.Float32, dtypes.Float64, dtypes.BFloat16, dtypes.Float16}
 
 	// Adjust for desired precision vs. test duration
 	const numWarmupRuns = 2
