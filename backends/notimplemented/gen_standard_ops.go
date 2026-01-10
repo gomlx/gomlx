@@ -4,19 +4,19 @@ package notimplemented
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // Abs returns the Op that represents the output of the corresponding operation.
-func (b Builder) Abs(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeAbs)
+func (f Function) Abs(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeAbs)
 }
 
 // Add returns the element-wise sum of the two values.
 // Standard broadcasting rules apply (see documentation).
-func (b Builder) Add(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeAdd)
+func (f Function) Add(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeAdd)
 }
 
 // ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
@@ -31,14 +31,14 @@ func (b Builder) Add(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
 //
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it chooses the 2, 4, and 7)
-func (b Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, isMin bool) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeArgMinMax)
+func (f Function) ArgMinMax(x backends.Value, axis int, outputDType dtypes.DType, isMin bool) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeArgMinMax)
 }
 
 // BitCount returns the number of bits that are set to one.
 // Also known as Population Count ("Popcnt") or Hamming Weight.
-func (b Builder) BitCount(operand backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeBitCount)
+func (f Function) BitCount(operand backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeBitCount)
 }
 
 // Bitcast performs an elementwise bit-cast operation from a dtype to another dtype.
@@ -55,28 +55,28 @@ func (b Builder) BitCount(operand backends.Op) (backends.Op, error) {
 // x.DType().Size() / targetDType.Size().
 //
 // E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xbeef, 0xdead}} // Little-endian encoding.
-func (b Builder) Bitcast(x backends.Op, targetDType dtypes.DType) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeBitcast)
+func (f Function) Bitcast(x backends.Value, targetDType dtypes.DType) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeBitcast)
 }
 
 // BitwiseAnd returns the element-wise bitwise AND operation.
-func (b Builder) BitwiseAnd(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeBitwiseAnd)
+func (f Function) BitwiseAnd(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeBitwiseAnd)
 }
 
 // BitwiseNot returns the element-wise bitwise AND operation.
-func (b Builder) BitwiseNot(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeBitwiseNot)
+func (f Function) BitwiseNot(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeBitwiseNot)
 }
 
 // BitwiseOr returns the element-wise bitwise OR operation.
-func (b Builder) BitwiseOr(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeBitwiseOr)
+func (f Function) BitwiseOr(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeBitwiseOr)
 }
 
 // BitwiseXor returns the element-wise bitwise XOR operator.
-func (b Builder) BitwiseXor(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeBitwiseXor)
+func (f Function) BitwiseXor(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeBitwiseXor)
 }
 
 // BroadcastInDim broadcasts x to an output with the given shape.
@@ -94,25 +94,25 @@ func (b Builder) BitwiseXor(lhs backends.Op, rhs backends.Op) (backends.Op, erro
 //     will generate output
 //     {{1 , 1},
 //     {2 , 2}}
-func (b Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadcastAxes []int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeBroadcastInDim)
+func (f Function) BroadcastInDim(x backends.Value, outputShape shapes.Shape, broadcastAxes []int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeBroadcastInDim)
 }
 
 // Ceil returns the Op that represents the output of the corresponding operation.
-func (b Builder) Ceil(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeCeil)
+func (f Function) Ceil(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeCeil)
 }
 
 // Clamp returns the element-wise clamping operation.
 //
 // The values max and min can either be a scalar or have the same shape as x.
-func (b Builder) Clamp(min backends.Op, x backends.Op, max backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeClamp)
+func (f Function) Clamp(min backends.Value, x backends.Value, max backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeClamp)
 }
 
 // Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
-func (b Builder) Clz(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeClz)
+func (f Function) Clz(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeClz)
 }
 
 // Complex returns the complex number taking x0 as the real part and x1 as the imaginary part.
@@ -121,8 +121,8 @@ func (b Builder) Clz(x backends.Op) (backends.Op, error) {
 // The output will be either `dtypes.Complex64` or `dtypes.Complex128`, depending on x0 and x1 dtypes.
 // The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
 // the value is broadcast to every other value.
-func (b Builder) Complex(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeComplex)
+func (f Function) Complex(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeComplex)
 }
 
 // Concatenate operands on the given axis.
@@ -130,13 +130,13 @@ func (b Builder) Complex(lhs backends.Op, rhs backends.Op) (backends.Op, error) 
 // All axes that are not being concatenated must match dimensions, except on the axes being concatenated.
 // It doesn't work with scalars -- use ExpandAxes.
 // If there is only one operand, it is returned and this is a no-op.
-func (b Builder) Concatenate(axis int, operands ...backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeConcatenate)
+func (f Function) Concatenate(axis int, operands ...backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeConcatenate)
 }
 
 // Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
-func (b Builder) Conj(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeConj)
+func (f Function) Conj(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeConj)
 }
 
 // ConvGeneral is a generic Convolution operation with support for:
@@ -154,24 +154,24 @@ func (b Builder) Conj(x backends.Op) (backends.Op, error) {
 // Note:
 //   - Another common term for "channels" is "features".
 //   - "Kernel" is also commonly called "weights" or "filters".
-func (b Builder) ConvGeneral(input backends.Op, kernel backends.Op, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilations []int, kernelDilations []int, channelGroupCount int, batchGroupCount int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeConvGeneral)
+func (f Function) ConvGeneral(input backends.Value, kernel backends.Value, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilations []int, kernelDilations []int, channelGroupCount int, batchGroupCount int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeConvGeneral)
 }
 
 // ConvertDType of x to dtype.
-func (b Builder) ConvertDType(x backends.Op, dtype dtypes.DType) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeConvertDType)
+func (f Function) ConvertDType(x backends.Value, dtype dtypes.DType) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeConvertDType)
 }
 
 // Cos returns the Op that represents the output of the corresponding operation.
-func (b Builder) Cos(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeCos)
+func (f Function) Cos(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeCos)
 }
 
 // Div returns the element-wise division of the two values.
 // Standard broadcasting rules apply (see documentation).
-func (b Builder) Div(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeDiv)
+func (f Function) Div(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeDiv)
 }
 
 // Dot returns the "dot product" operation.
@@ -186,8 +186,8 @@ func (b Builder) Div(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
 // The contracted dimensions of x0 and x1 must be of the same size.
 // In practice, it can be used to perform dot products between vectors, vector/matrix multiplications, or
 // matrix/matrix multiplications.
-func (b Builder) Dot(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeDot)
+func (f Function) Dot(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeDot)
 }
 
 // DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
@@ -203,8 +203,8 @@ func (b Builder) Dot(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
 // It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
-func (b Builder) DotGeneral(lhs backends.Op, lhsContractingAxes []int, lhsBatchAxes []int, rhs backends.Op, rhsContractingAxes []int, rhsBatchAxes []int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeDotGeneral)
+func (f Function) DotGeneral(lhs backends.Value, lhsContractingAxes []int, lhsBatchAxes []int, rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeDotGeneral)
 }
 
 // DynamicSlice extracts a slice from the operand at the startIndices position and the given sliceSizes.
@@ -218,8 +218,8 @@ func (b Builder) DotGeneral(lhs backends.Op, lhsContractingAxes []int, lhsBatchA
 //	adjustedStartIndices[i] = clamp(0, StartIndices[i], operand.Dimensions[i] - sliceSizes[i])
 //
 // See description in https://openxla.org/xla/operation_semantics#dynamicslice
-func (b Builder) DynamicSlice(operand backends.Op, startIndices []backends.Op, sliceDims []int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeDynamicSlice)
+func (f Function) DynamicSlice(operand backends.Value, startIndices []backends.Value, sliceDims []int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeDynamicSlice)
 }
 
 // DynamicUpdateSlice updates the operand with the values given in update, at the position given by startIndices.
@@ -234,47 +234,47 @@ func (b Builder) DynamicSlice(operand backends.Op, startIndices []backends.Op, s
 // The startIndices are adjusted as follows:
 //
 //	adjustedStartIndices[i] = clamp(0, StartIndices[i], operand.Dimensions[i] - update.Dimensions[i])
-func (b Builder) DynamicUpdateSlice(operand backends.Op, update backends.Op, startIndices []backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeDynamicUpdateSlice)
+func (f Function) DynamicUpdateSlice(operand backends.Value, update backends.Value, startIndices []backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeDynamicUpdateSlice)
 }
 
 // Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
-func (b Builder) Equal(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeEqual)
+func (f Function) Equal(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeEqual)
 }
 
 // EqualTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func (b Builder) EqualTotalOrder(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeEqualTotalOrder)
+func (f Function) EqualTotalOrder(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeEqualTotalOrder)
 }
 
 // Erf returns the "error function", defined as erf(x) = 2/Pi * \int_{0}^{x}{e^{-t^2}dt}.
-func (b Builder) Erf(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeErf)
+func (f Function) Erf(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeErf)
 }
 
 // Exp returns the Op that represents the output of the corresponding operation.
-func (b Builder) Exp(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeExp)
+func (f Function) Exp(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeExp)
 }
 
 // Expm1 returns the Op that represents the output of the corresponding operation.
-func (b Builder) Expm1(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeExpm1)
+func (f Function) Expm1(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeExpm1)
 }
 
 // FFT calls the XLA FFT operation, which implements {Forward, Inverse} x {Complex, Real} versions.
 // See documentation in https://www.tensorflow.org/xla/operation_semantics.
 // Underlying, CPU FFT is backed by Eigen's TensorFFT, and GPU FFT uses cuFFT.
-func (b Builder) FFT(operand backends.Op, fftType backends.FFTType, fftLength []int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeFFT)
+func (f Function) FFT(operand backends.Value, fftType backends.FFTType, fftLength []int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFFT)
 }
 
 // Floor returns the Op that represents the output of the corresponding operation.
-func (b Builder) Floor(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeFloor)
+func (f Function) Floor(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFloor)
 }
 
 // Gather is a powerful but cumbersome Gather operation offered by XLA.
@@ -338,165 +338,165 @@ func (b Builder) Floor(x backends.Op) (backends.Op, error) {
 // Out-of-bound (and negative) indices <i> are adjusted with max(min(<i>, axisDimension-1), 0), meaning they
 // are taken from the border of the axes.
 // TODO: Add batch support: operandBatchingAxes and startIndicesBatchingAxes.
-func (b Builder) Gather(operand backends.Op, startIndices backends.Op, indexVectorAxis int, offsetOutputAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeGather)
+func (f Function) Gather(operand backends.Value, startIndices backends.Value, indexVectorAxis int, offsetOutputAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeGather)
 }
 
 // GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
-func (b Builder) GreaterOrEqual(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeGreaterOrEqual)
+func (f Function) GreaterOrEqual(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeGreaterOrEqual)
 }
 
 // GreaterOrEqualTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func (b Builder) GreaterOrEqualTotalOrder(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeGreaterOrEqualTotalOrder)
+func (f Function) GreaterOrEqualTotalOrder(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeGreaterOrEqualTotalOrder)
 }
 
 // GreaterThan performs element-wise comparison, returns boolean results with the same dimensions as input.
-func (b Builder) GreaterThan(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeGreaterThan)
+func (f Function) GreaterThan(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeGreaterThan)
 }
 
 // GreaterThanTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func (b Builder) GreaterThanTotalOrder(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeGreaterThanTotalOrder)
+func (f Function) GreaterThanTotalOrder(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeGreaterThanTotalOrder)
 }
 
 // Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
-func (b Builder) Imag(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeImag)
+func (f Function) Imag(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeImag)
 }
 
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
 // on the given axis. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
 // returns [[0 0][1 1]].
-func (b Builder) Iota(shape shapes.Shape, iotaAxis int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeIota)
+func (f Function) Iota(shape shapes.Shape, iotaAxis int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeIota)
 }
 
 // IsFinite tests whether each element of operand is finite, i.e., if it is not positive nor negative infinity, and it is not NaN.
 // It returns the same shape as the input, but with boolean values where each element is true if and only if
 // the corresponding input element is finite.
-func (b Builder) IsFinite(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeIsFinite)
+func (f Function) IsFinite(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeIsFinite)
 }
 
 // IsNaN tests whether each element of operand is NaN, i.e., if it is not a finite number.
-func (b Builder) IsNaN(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeIsNaN)
+func (f Function) IsNaN(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeIsNaN)
 }
 
 // LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
-func (b Builder) LessOrEqual(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeLessOrEqual)
+func (f Function) LessOrEqual(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeLessOrEqual)
 }
 
 // LessOrEqualTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func (b Builder) LessOrEqualTotalOrder(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeLessOrEqualTotalOrder)
+func (f Function) LessOrEqualTotalOrder(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeLessOrEqualTotalOrder)
 }
 
 // LessThan performs element-wise comparison, returns boolean results with the same dimensions as input.
-func (b Builder) LessThan(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeLessThan)
+func (f Function) LessThan(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeLessThan)
 }
 
 // LessThanTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func (b Builder) LessThanTotalOrder(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeLessThanTotalOrder)
+func (f Function) LessThanTotalOrder(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeLessThanTotalOrder)
 }
 
 // Log returns the Op that represents the output of the corresponding operation.
-func (b Builder) Log(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeLog)
+func (f Function) Log(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeLog)
 }
 
 // Log1p returns the expression log(x+1).
-func (b Builder) Log1p(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeLog1p)
+func (f Function) Log1p(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeLog1p)
 }
 
 // LogicalAnd returns the element-wise logical AND operation.
-func (b Builder) LogicalAnd(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeLogicalAnd)
+func (f Function) LogicalAnd(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeLogicalAnd)
 }
 
 // LogicalNot returns the Op that represents the output of the corresponding operation.
-func (b Builder) LogicalNot(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeLogicalNot)
+func (f Function) LogicalNot(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeLogicalNot)
 }
 
 // LogicalOr returns the element-wise logical OR operation.
-func (b Builder) LogicalOr(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeLogicalOr)
+func (f Function) LogicalOr(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeLogicalOr)
 }
 
 // LogicalXor returns the element-wise logical XOR operator.
-func (b Builder) LogicalXor(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeLogicalXor)
+func (f Function) LogicalXor(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeLogicalXor)
 }
 
 // Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
-func (b Builder) Logistic(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeLogistic)
+func (f Function) Logistic(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeLogistic)
 }
 
 // Max returns the element-wise highest value among the two.
-func (b Builder) Max(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeMax)
+func (f Function) Max(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeMax)
 }
 
 // Min returns the element-wise smallest value among the two.
-func (b Builder) Min(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeMin)
+func (f Function) Min(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeMin)
 }
 
 // Mul returns the element-wise multiplication of the two values.
 // Standard broadcasting rules apply (see documentation).
-func (b Builder) Mul(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeMul)
+func (f Function) Mul(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeMul)
 }
 
 // Neg returns the Op that represents the output of the corresponding operation.
-func (b Builder) Neg(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeNeg)
+func (f Function) Neg(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeNeg)
 }
 
 // NotEqual performs element-wise inequality check, returns boolean results with the same dimensions as input.
-func (b Builder) NotEqual(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeNotEqual)
+func (f Function) NotEqual(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeNotEqual)
 }
 
 // NotEqualTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func (b Builder) NotEqualTotalOrder(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeNotEqualTotalOrder)
+func (f Function) NotEqualTotalOrder(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeNotEqualTotalOrder)
 }
 
 // Pad injects padding on the start, end, or interior (in between each element) of the given operand.
 // There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
-func (b Builder) Pad(x backends.Op, fillValue backends.Op, axesConfig ...backends.PadAxis) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypePad)
+func (f Function) Pad(x backends.Value, fillValue backends.Value, axesConfig ...backends.PadAxis) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypePad)
 }
 
 // Pow returns the Op that represents the output of the corresponding operation.
-func (b Builder) Pow(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypePow)
+func (f Function) Pow(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypePow)
 }
 
 // Real return the real part of a complex number. It returns x if the x is a float number.
-func (b Builder) Real(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeReal)
+func (f Function) Real(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeReal)
 }
 
 // ReduceBitwiseAnd reduces x over the axes selected, performing a BitwiseAnd on the slices reduced.
@@ -504,8 +504,8 @@ func (b Builder) Real(x backends.Op) (backends.Op, error) {
 // The returned result rank is decreased by len(axes).
 //
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceBitwiseAnd(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeReduceBitwiseAnd)
+func (f Function) ReduceBitwiseAnd(x backends.Value, axes ...int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeReduceBitwiseAnd)
 }
 
 // ReduceBitwiseOr reduces x over the axes selected, performing a BitwiseOr on the slices reduced.
@@ -513,8 +513,8 @@ func (b Builder) ReduceBitwiseAnd(x backends.Op, axes ...int) (backends.Op, erro
 // The returned result rank is decreased by len(axes).
 //
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceBitwiseOr(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeReduceBitwiseOr)
+func (f Function) ReduceBitwiseOr(x backends.Value, axes ...int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeReduceBitwiseOr)
 }
 
 // ReduceBitwiseXor reduces x over the axes selected, performing a BitwiseXor on the slices reduced.
@@ -522,8 +522,8 @@ func (b Builder) ReduceBitwiseOr(x backends.Op, axes ...int) (backends.Op, error
 // The returned result rank is decreased by len(axes).
 //
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceBitwiseXor(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeReduceBitwiseXor)
+func (f Function) ReduceBitwiseXor(x backends.Value, axes ...int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeReduceBitwiseXor)
 }
 
 // ReduceLogicalAnd reduces x over the axes selected, performing a LogicalAnd on the slices reduced.
@@ -531,8 +531,8 @@ func (b Builder) ReduceBitwiseXor(x backends.Op, axes ...int) (backends.Op, erro
 // The returned result rank is decreased by len(axes).
 //
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceLogicalAnd(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeReduceLogicalAnd)
+func (f Function) ReduceLogicalAnd(x backends.Value, axes ...int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeReduceLogicalAnd)
 }
 
 // ReduceLogicalOr reduces x over the axes selected, performing a LogicalOr on the slices reduced.
@@ -540,8 +540,8 @@ func (b Builder) ReduceLogicalAnd(x backends.Op, axes ...int) (backends.Op, erro
 // The returned result rank is decreased by len(axes).
 //
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceLogicalOr(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeReduceLogicalOr)
+func (f Function) ReduceLogicalOr(x backends.Value, axes ...int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeReduceLogicalOr)
 }
 
 // ReduceLogicalXor reduces x over the axes selected, performing a LogicalXor on the slices reduced.
@@ -549,8 +549,8 @@ func (b Builder) ReduceLogicalOr(x backends.Op, axes ...int) (backends.Op, error
 // The returned result rank is decreased by len(axes).
 //
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceLogicalXor(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeReduceLogicalXor)
+func (f Function) ReduceLogicalXor(x backends.Value, axes ...int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeReduceLogicalXor)
 }
 
 // ReduceMax reduces x over the axes selected, taking the Max value of the slices reduced.
@@ -558,8 +558,8 @@ func (b Builder) ReduceLogicalXor(x backends.Op, axes ...int) (backends.Op, erro
 // The returned result rank is decreased by len(axes).
 //
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceMax(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeReduceMax)
+func (f Function) ReduceMax(x backends.Value, axes ...int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeReduceMax)
 }
 
 // ReduceMin reduces x over the axes selected, taking the Min value of the slices reduced.
@@ -567,8 +567,8 @@ func (b Builder) ReduceMax(x backends.Op, axes ...int) (backends.Op, error) {
 // The returned result rank is decreased by len(axes).
 //
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceMin(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeReduceMin)
+func (f Function) ReduceMin(x backends.Value, axes ...int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeReduceMin)
 }
 
 // ReduceProduct reduces x over the axes selected, taking the product of the slices reduced.
@@ -576,8 +576,8 @@ func (b Builder) ReduceMin(x backends.Op, axes ...int) (backends.Op, error) {
 // The returned result rank is decreased by len(axes).
 //
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceProduct(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeReduceProduct)
+func (f Function) ReduceProduct(x backends.Value, axes ...int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeReduceProduct)
 }
 
 // ReduceSum reduces x over the axes selected, taking the sum of the slices reduced.
@@ -585,93 +585,93 @@ func (b Builder) ReduceProduct(x backends.Op, axes ...int) (backends.Op, error) 
 // The returned result rank is decreased by len(axes).
 //
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceSum(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeReduceSum)
+func (f Function) ReduceSum(x backends.Value, axes ...int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeReduceSum)
 }
 
 // Rem returns the remainder operation, also known as modulo (or Mod for short).
 // Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
-func (b Builder) Rem(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeRem)
+func (f Function) Rem(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeRem)
 }
 
 // Reshape reshapes x to the new dimensions.
 // Total size cannot change, it's just a "reinterpretation" of the same flat data.
 // The dtype remains the same, see ConvertDType to actually convert the values.
-func (b Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeReshape)
+func (f Function) Reshape(x backends.Value, dimensions ...int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeReshape)
 }
 
 // Reverse returns x with the values for the given dimensions reversed, that is,
 // the value indexed at `i` will be swapped with the value at indexed `(dimension_size - 1 - i)`.
 // The shape remains the same.
-func (b Builder) Reverse(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeReverse)
+func (f Function) Reverse(x backends.Value, axes ...int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeReverse)
 }
 
 // Round returns the Op that represents the output of the corresponding operation.
 // This operation rounds to the nearest even.
-func (b Builder) Round(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeRound)
+func (f Function) Round(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeRound)
 }
 
 // Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
-func (b Builder) Rsqrt(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeRsqrt)
+func (f Function) Rsqrt(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeRsqrt)
 }
 
 // ScatterMax scatter values from updates pointed by scatterIndices to operand, by taking the Max.
-func (b Builder) ScatterMax(operand backends.Op, scatterIndices backends.Op, updates backends.Op, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeScatterMax)
+func (f Function) ScatterMax(operand backends.Value, scatterIndices backends.Value, updates backends.Value, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeScatterMax)
 }
 
 // ScatterMin scatter values from updates pointed by scatterIndices to operand, by taking the Min.
-func (b Builder) ScatterMin(operand backends.Op, scatterIndices backends.Op, updates backends.Op, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeScatterMin)
+func (f Function) ScatterMin(operand backends.Value, scatterIndices backends.Value, updates backends.Value, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeScatterMin)
 }
 
 // ScatterSum values from updates pointed by scatterIndices to operand.
-func (b Builder) ScatterSum(operand backends.Op, scatterIndices backends.Op, updates backends.Op, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeScatterSum)
+func (f Function) ScatterSum(operand backends.Value, scatterIndices backends.Value, updates backends.Value, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeScatterSum)
 }
 
 // SelectAndScatterMax runs windows (similar to ReduceWindow) over the operand, selects values to update the output (like ScatterAdd)
 // It selects the values in the window such that it works as reverse for a PoolMax operation.
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func (b Builder) SelectAndScatterMax(operand backends.Op, source backends.Op, windowDimensions []int, windowStrides []int, paddings [][2]int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeSelectAndScatterMax)
+func (f Function) SelectAndScatterMax(operand backends.Value, source backends.Value, windowDimensions []int, windowStrides []int, paddings [][2]int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeSelectAndScatterMax)
 }
 
 // SelectAndScatterMin runs windows (similar to ReduceWindow) over the operand, selects values to update the output (like ScatterAdd)
 // It selects the values in the window such that it works as reverse for a PoolMin operation.
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func (b Builder) SelectAndScatterMin(operand backends.Op, source backends.Op, windowDimensions []int, windowStrides []int, paddings [][2]int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeSelectAndScatterMin)
+func (f Function) SelectAndScatterMin(operand backends.Value, source backends.Value, windowDimensions []int, windowStrides []int, paddings [][2]int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeSelectAndScatterMin)
 }
 
 // ShiftLeft n bits. It implicitly preserves the sign bit if there is no overflow. So ShiftLeft(-1, 1) = -2.
-func (b Builder) ShiftLeft(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeShiftLeft)
+func (f Function) ShiftLeft(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeShiftLeft)
 }
 
 // ShiftRightArithmetic shifts right by n bits, preserving the sign bit. So ShiftRight(-2, 1) = -1.
-func (b Builder) ShiftRightArithmetic(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeShiftRightArithmetic)
+func (f Function) ShiftRightArithmetic(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeShiftRightArithmetic)
 }
 
 // ShiftRightLogical shifts right by n bits, destroying the sign bit.
-func (b Builder) ShiftRightLogical(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeShiftRightLogical)
+func (f Function) ShiftRightLogical(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeShiftRightLogical)
 }
 
 // Sign returns element-wise +1, +/-0 or -1 depending on the sign of x. It returns NaN if the input is NaN.
-func (b Builder) Sign(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeSign)
+func (f Function) Sign(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeSign)
 }
 
 // Sin returns the Op that represents the output of the corresponding operation.
-func (b Builder) Sin(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeSin)
+func (f Function) Sin(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeSin)
 }
 
 // Slice extracts a subarray from the input array.
@@ -683,31 +683,31 @@ func (b Builder) Sin(x backends.Op) (backends.Op, error) {
 //
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={4}, strides=nil) -> {2, 3}
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={5}, strides={2}) -> {2, 4}
-func (b Builder) Slice(x backends.Op, starts []int, limits []int, strides []int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeSlice)
+func (f Function) Slice(x backends.Value, starts []int, limits []int, strides []int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeSlice)
 }
 
 // Sqrt returns the Op that represents the output of the corresponding operation.
-func (b Builder) Sqrt(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeSqrt)
+func (f Function) Sqrt(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeSqrt)
 }
 
 // Sub returns the element-wise subtraction of the two values.
 // Standard broadcasting rules apply (see documentation).
-func (b Builder) Sub(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeSub)
+func (f Function) Sub(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeSub)
 }
 
 // Tanh returns the Op that represents the output of the corresponding operation.
-func (b Builder) Tanh(x backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeTanh)
+func (f Function) Tanh(x backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeTanh)
 }
 
 // Transpose axes of x.
 // There should be one value in permutations for each axis in x.
 // The output will have: output.Shape.Dimension[ii] = x.Shape.Dimension[permutations[i]].
-func (b Builder) Transpose(x backends.Op, permutation ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeTranspose)
+func (f Function) Transpose(x backends.Value, permutation ...int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeTranspose)
 }
 
 // Where takes element-wise values from onTrue or onFalse depending on the value of the condition (must be boolean).
@@ -715,6 +715,6 @@ func (b Builder) Transpose(x backends.Op, permutation ...int) (backends.Op, erro
 // The condition must be boolean, and onTrue and onFalse must have the same dtype.
 //
 // If either condition, onTrue or onFalse is a scalar, it will be broadcasted to the shape of the other operands.
-func (b Builder) Where(condition backends.Op, onTrue backends.Op, onFalse backends.Op) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeWhere)
+func (f Function) Where(condition backends.Value, onTrue backends.Value, onFalse backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeWhere)
 }

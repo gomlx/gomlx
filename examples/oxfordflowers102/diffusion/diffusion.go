@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package diffusion contains an example diffusion model, trained on Oxford Flowers 102 dataset.
 //
 // See the accompanying jupyter notebook for some results, and how to call it.
@@ -156,7 +158,7 @@ func ResidualBlock(ctx *context.Context, nanLogger *nanlogger.NanLogger, x *Node
 //
 // It returns the transformed `x` and `skips` with newly stacked skip connections.
 func DownBlock(ctx *context.Context, nanLoggger *nanlogger.NanLogger, x *Node, skips []*Node, numBlocks, outputChannels int) (*Node, []*Node) {
-	for ii := 0; ii < numBlocks; ii++ {
+	for ii := range numBlocks {
 		x = ResidualBlock(ctx.Inf("%03d-residual", ii), nanLogger, x, outputChannels)
 		skips = append(skips, x)
 	}
@@ -200,7 +202,7 @@ func UpBlock(ctx *context.Context, nanLogger *nanlogger.NanLogger, x *Node, skip
 	//x = Interpolate(x, timages.GetUpSampledSizes(x, timages.ChannelsLast, 2)...).Nearest().Done()
 	x = UpSampleImages(x)
 	nanLogger.TraceFirstNaN(x, "UpSampleImage")
-	for ii := 0; ii < numBlocks; ii++ {
+	for ii := range numBlocks {
 		scopedCtx := ctx.Inf("%03d-residual", ii)
 		nanLogger.PushScope(scopedCtx.Scope())
 		var skip *Node
@@ -513,7 +515,7 @@ func TransformerBlock(ctx *context.Context, nanLogger *nanlogger.NanLogger, x *N
 	posEmbed = BroadcastToDims(posEmbed, batchDim, spatialDim, posEmbedDim) // Broadcast batch axis so we can concatenate it later.
 
 	// Add the requested number of attention layers.
-	for ii := 0; ii < numLayers; ii++ {
+	for ii := range numLayers {
 		// Each layer in its own scope.
 		scopedCtx := ctx.In(fmt.Sprintf("AttLayer_%d", ii))
 		residual := embed

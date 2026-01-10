@@ -1,14 +1,16 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package graph_test
 
 import (
 	"fmt"
 	"math"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/x448/float16"
 
 	"testing"
@@ -20,7 +22,7 @@ func testRandomUniform[T interface {
 	dtype := dtypes.FromGenericsType[T]()
 	graphtest.RunTestGraphFn(t, fmt.Sprintf("TestRandomUniform(%s)", dtype),
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
-			state := Const(g, must1(RNGStateFromSeed(42)))
+			state := RNGStateFromSeedForGraph(g, 42)
 			shape := shapes.Make(dtype, 100, 5000) // 500k / 1 million numbers (for complex numbers).
 			var r, sample *Node
 			state, r = RandomUniform(state, shape)

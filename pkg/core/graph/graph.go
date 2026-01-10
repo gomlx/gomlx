@@ -1,18 +1,4 @@
-/*
- *	Copyright 2025 Jan Pfeifer
- *
- *	Licensed under the Apache License, Version 2.0 (the "License");
- *	you may not use this file except in compliance with the License.
- *	You may obtain a copy of the License at
- *
- *	http://www.apache.org/licenses/LICENSE-2.0
- *
- *	Unless required by applicable law or agreed to in writing, software
- *	distributed under the License is distributed on an "AS IS" BASIS,
- *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *	See the License for the specific language governing permissions and
- *	limitations under the License.
- */
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 // Package graph is the core package for GoMLX. It is used to create and run computation graphs
 // on different backends.
@@ -97,6 +83,19 @@
 //     create an intermediary language with proper shape checking.
 //
 // [1]: Jupyter Notebook kernel for Go: https://github.com/janpfeifer/gonb
+//
+// # Functions
+//
+// When the Graph is created a "main" function is automatically associated with it and everything goes into it.
+// Typically, a model will be a giant "main" function.
+//
+// Some backends support other top-level functions (uniquely named) and closures (functions that can capture
+// variables from the parent scope). See NewFunction and NewClosure to create those, and Call to execute top-level
+// functions.
+//
+// The graph has a field associated to the CurrentFunction(), on which define some operations like Parameters and Const
+// will be created. It is initialized to the "main" function, and it is only temporarily changed inside
+// NewFunction and NewClosure.
 package graph
 
 //go:generate go run ../../../internal/cmd/graph_generator
@@ -110,19 +109,21 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
 
 // Graph with the operations and dependencies needed to run a computation.
+//
+// See details in the package graph documentation.
 type Graph struct {
-	backend backends.Backend
-	builder backends.Builder
+	backend               backends.Backend
+	builder               backends.Builder
+	mainFunc, currentFunc *Function
 
 	id   GraphId
 	name string
@@ -130,10 +131,8 @@ type Graph struct {
 	// nodes include all nodes known to Graph.
 	nodes []*Node
 
-	// parameters keeps track of parameter nodes its names and a mapping of name to index.
-	parameters            []*Node
-	parametersNames       []string
-	parameterNameToHandle map[string]ParameterHandle
+	// functions maps function names to the function object.
+	functions map[string]*Function
 
 	traced bool
 
@@ -190,13 +189,13 @@ func NewGraph(backend backends.Backend, name string) *Graph {
 		name = fmt.Sprintf("graph_#%d", graphCount)
 	}
 	g := &Graph{
-		backend:               backend,
-		id:                    graphCount,
-		name:                  name,
-		parameterNameToHandle: make(map[string]ParameterHandle),
-		scalars:               make(scalarCache),
-		tensorConstants:       make(tensorConstCache),
-		aliasToNode:           make(map[string]*Node),
+		backend:         backend,
+		id:              graphCount,
+		name:            name,
+		scalars:         make(scalarCache),
+		tensorConstants: make(tensorConstCache),
+		aliasToNode:     make(map[string]*Node),
+		functions:       make(map[string]*Function),
 
 		distStrategy: distributed.None,
 		numDevices:   1,
@@ -242,29 +241,31 @@ func (g *Graph) WithName(name string) *Graph {
 // IsBuilding returns whether the Graph already started building a computation, in which case
 // Graph parameters (like name, distribution strategy, etc.) can no longer be changed.
 func (g *Graph) IsBuilding() bool {
-	return g.IsValid() && !g.IsCompiled() && g.builder != nil
+	return g.IsValid() && g.builder != nil && !g.IsCompiled()
 }
 
-// build sets the Graph into "building" mode by creating the Backend Builder object.
+// setBuilding sets the Graph into "building" mode by creating the Backend Builder object.
 // After this Graph parameters (like name, distribution strategy, etc.) can no longer be changed.
 //
 // This sets Graph.IsBuilding() to true, until the graph is compiled.
-func (g *Graph) build() backends.Builder {
+func (g *Graph) setBuilding() {
 	if !g.IsValid() {
 		exceptions.Panicf("Graph is nil or has been finalized already")
 	}
 	if g.IsCompiled() {
 		exceptions.Panicf("Graph already compiled and can't be used for building")
 	}
-	if g.builder == nil {
-		// Lazy construction of builder: this allows one to further configure the Graph object before using it.
-		g.builder = g.backend.Builder(g.name)
-		err := g.setupBuilderDistribution()
-		if err != nil {
-			panic(err)
-		}
+	if g.builder != nil {
+		return // Already building.
 	}
-	return g.builder
+
+	g.builder = g.backend.Builder(g.name)
+	g.mainFunc = g.newMainFunc()
+	g.currentFunc = g.mainFunc
+	err := g.setupBuilderDistribution()
+	if err != nil {
+		panic(err)
+	}
 }
 
 // Backend this Graph is using.
@@ -289,9 +290,6 @@ func (g *Graph) Finalize() {
 		g.executable = nil
 	}
 	g.nodes = nil
-	g.parameters = nil
-	g.parametersNames = nil
-	g.parameterNameToHandle = nil
 	g.name = ""
 	g.backend = nil
 }
@@ -299,6 +297,19 @@ func (g *Graph) Finalize() {
 // GraphId is a globally unique id (even across different Backend's) of the graph. It's a counter that starts with 0.
 func (g *Graph) GraphId() GraphId {
 	return g.id
+}
+
+// CurrentFunc returns the current function scope of the Graph.
+func (g *Graph) CurrentFunc() *Function {
+	return g.currentFunc
+}
+
+// IsMainFunc returns whether the current Graph scope is the main function,
+// that is, if we are not defining a separate top-level function or a closure.
+//
+// See NewFunction or NewClosure for more details.
+func (g *Graph) IsMainFunc() bool {
+	return g.currentFunc.IsMain()
 }
 
 // IsValid returns whether the Graph is in a valid state: it is valid if it is in a configuring, building,
@@ -348,11 +359,20 @@ func (g *Graph) IsCompiled() bool {
 // If the Graph was in a configuring state (just after the creation), this triggers it to enter into a "building" state.
 func (g *Graph) AssertBuilding() {
 	g.AssertValid()
-	if g.IsCompiled() {
-		exceptions.Panicf("Graph %q has already been compiled, one cannot further build computations with it",
-			g.name)
+	g.setBuilding()
+	g.AssertNotReturned()
+}
+
+// AssertNotReturned panics if the graph is nil, has been finalized, or if the current function
+// has already returned or the graph has already been compiled.
+func (g *Graph) AssertNotReturned() {
+	g.AssertValid()
+	if g.mainFunc == nil {
+		return // Not even building yet.
 	}
-	_ = g.build()
+	if g.currentFunc.returned || g.IsCompiled() {
+		exceptions.Panicf("Graph %q function %q has already returned or been compiled", g.name, g.currentFunc.name)
+	}
 }
 
 // AssertCompiled panics if the graph is nil, if it has already been finalized, or if it is not yet compiled (still
@@ -380,6 +400,21 @@ func (g *Graph) registerNode(node *Node) (id NodeId) {
 	g.AssertBuilding()
 	if node.NumOutputs() == 1 && node.DType() == dtypes.InvalidDType {
 		exceptions.Panicf("trying to add non-multioutput node with invalid DType: %s", node)
+	}
+
+	// Update node.scope:
+	if len(node.inputNodes) == 0 {
+		node.scope = g.currentFunc
+	} else {
+		scope, err := innermostFunction(node.inputNodes)
+		if err != nil {
+			exceptions.Panicf("failed to find scope for node %s: %v", node, err)
+		}
+		if scope == nil {
+			node.scope = g.currentFunc
+		} else {
+			node.scope = scope
+		}
 	}
 	id = NodeId(len(g.nodes))
 	g.nodes = append(g.nodes, node)
@@ -425,56 +460,11 @@ func (g *Graph) Compile(outputs ...*Node) {
 //
 // This is an advanced version of Compile, used for distributed computation with AutoSharding.
 func (g *Graph) CompileWithSharding(outputs []*Node, outputShardings []*distributed.ShardingSpec) {
-	g.AssertValid()
-	g.AssertBuilding()
-	if len(outputs) == 0 {
-		exceptions.Panicf("no outputs selected when Graph.Compile graph %q", g.name)
-	}
-	if len(outputShardings) > 0 && len(outputShardings) != len(outputs) {
-		exceptions.Panicf("if outputShardings are given, there must be one for each output, "+
-			"but got %d outputs and %d shardings", len(outputs), len(outputShardings))
-	}
+	g.currentFunc.Return(outputs, outputShardings)
 
-	// Sanity check on the output nodes.
-	for ii, node := range outputs {
-		if node.NumOutputs() != 1 {
-			exceptions.Panicf("Graph(%q).Compile cannot take multi-output nodes (output #%d: %s), this type of Node"+
-				" is internal only", g.name, ii, node)
-		}
-		if node == nil {
-			exceptions.Panicf("output node %d is nil when compiling graph %q", ii, g.name)
-			panic(nil) // Never executed, just to quiet warning below.
-		}
-		if node.Graph() != g {
-			exceptions.Panicf("output node %d is part of a different graph (name=%q) than the one being "+
-				"compiled (name=%q)", ii, node.graph.name, g.name)
-		}
-	}
-
-	// Create "identities" for duplicate outputs and create a mapping if there are any:
-	outputsSet := sets.Make[*Node]()
-	for ii, node := range outputs {
-		if outputsSet.Has(node) {
-			outputs[ii] = Identity(node)
-		} else {
-			outputsSet.Insert(node)
-		}
-	}
-
-	if klog.V(1).Enabled() {
-		start := time.Now()
-		defer func() {
-			elapsed := time.Since(start)
-			klog.Infof("Graph.Compile time for graph %q: %s", g.Name(), elapsed)
-		}()
-	}
-
-	outputsOps := xslices.Map(outputs, func(node *Node) backends.Op { return node.outputOps[0] })
-	backendShardings := xslices.Map(outputShardings, func(s *distributed.ShardingSpec) *backends.ShardingSpec {
-		return s.ToBackendsSpec()
-	})
+	// Compile the builder (which now takes no arguments)
 	var err error
-	g.executable, err = g.builder.Compile(outputsOps, backendShardings)
+	g.executable, err = g.builder.Compile()
 	if err != nil {
 		panic(errors.WithMessagef(err, "Graph failed to compile for the backend"))
 	}
@@ -738,27 +728,33 @@ func tensorToDeviceBuffer(
 // NumParameters returns the number of parameters created for this graph.
 func (g *Graph) NumParameters() int {
 	g.AssertValid()
-	return len(g.parameters)
+	if g.mainFunc == nil {
+		return 0
+	}
+	return len(g.mainFunc.parameters)
 }
 
 // GetParameterByHandle returns the ii-th parameter, in order of creation, registered for this graph.
 func (g *Graph) GetParameterByHandle(handle ParameterHandle) *Node {
 	g.AssertValid()
-	return g.parameters[handle]
+	if g.mainFunc == nil {
+		return nil
+	}
+	return g.mainFunc.parameters[handle]
 }
 
 // GetParameterByName returns the parameter registered with the given name. Returns nil if the parameter
 // with the given name hasn't been registered (see Parameter method).
 func (g *Graph) GetParameterByName(name string) (node *Node) {
 	g.AssertValid()
-	if name == "" {
+	if name == "" || g.mainFunc == nil {
 		return
 	}
-	handle, ok := g.parameterNameToHandle[name]
+	handle, ok := g.mainFunc.parameterNameToHandle[name]
 	if !ok {
 		return
 	}
-	return g.parameters[handle]
+	return g.mainFunc.parameters[handle]
 }
 
 // String converts the Graph to a multiline string with a description of the full graph.
@@ -809,9 +805,9 @@ func (g *Graph) getScalarConst(dtype dtypes.DType, value float64) (output *Node)
 	}
 	output, found = dtypeMap[value]
 	if found {
-		return
+		return output
 	}
 	output = Const(g, shapes.CastAsDType(value, dtype))
 	dtypeMap[value] = output
-	return
+	return output
 }

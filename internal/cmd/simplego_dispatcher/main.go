@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package main
 
 import (
@@ -88,11 +90,21 @@ var (
 			{
 				MapName: "convertDTypePairMap", Generic: "execConvertDTypeToBFloat16",
 				DTypes1: makeDTypes(true, true, true, false, false),
-				DTypes2: makeDTypes(false, false, false, true, false),
+				DTypes2: dtypesBFloat16,
 			},
 			{
 				MapName: "convertDTypePairMap", Generic: "execConvertDTypeFromBFloat16",
-				DTypes1: makeDTypes(false, false, false, true, false),
+				DTypes1: dtypesBFloat16,
+				DTypes2: makeDTypes(true, true, true, false, false),
+			},
+			{
+				MapName: "convertDTypePairMap", Generic: "execConvertDTypeToFloat16",
+				DTypes1: makeDTypes(true, true, true, false, false),
+				DTypes2: dtypesFloat16,
+			},
+			{
+				MapName: "convertDTypePairMap", Generic: "execConvertDTypeFromFloat16",
+				DTypes1: dtypesFloat16,
 				DTypes2: makeDTypes(true, true, true, false, false),
 			},
 			{
@@ -117,7 +129,12 @@ var (
 	fileName = "gen_register_dtypes.go"
 )
 
-func makeDTypes(ints, uints, floats, bfloat16, boolean bool) []DTypeInfo {
+var (
+	dtypesBFloat16 = []DTypeInfo{DTypeInfo{"BFloat16", "bfloat16.BFloat16"}}
+	dtypesFloat16  = []DTypeInfo{DTypeInfo{"Float16", "float16.Float16"}}
+)
+
+func makeDTypes(ints, uints, floats, floats16, boolean bool) []DTypeInfo {
 	dtypes := make([]DTypeInfo, 0, 32)
 	if ints {
 		dtypes = append(dtypes,
@@ -141,9 +158,10 @@ func makeDTypes(ints, uints, floats, bfloat16, boolean bool) []DTypeInfo {
 			DTypeInfo{"Float64", "float64"},
 		)
 	}
-	if bfloat16 {
+	if floats16 {
 		dtypes = append(dtypes,
 			DTypeInfo{"BFloat16", "bfloat16.BFloat16"},
+			DTypeInfo{"Float16", "float16.Float16"},
 		)
 	}
 	if boolean {
@@ -168,19 +186,20 @@ func main() {
 package simplego
 
 import (
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/x448/float16"
 )
 
 
-func init() { 
+func init() {
 {{- range .Dispatchers}}
 
 	// DTypeDispatcher: {{.Dispatcher}}
 {{- $dispatcher := .Dispatcher }}
 {{- $generic := .Generic }}
 {{- range .DTypes }}
-	{{$dispatcher}}.RegisterIfNotSet(dtypes.{{.DType}}, {{$generic}}[{{.GoType}}])
+	{{$dispatcher}}.Register(dtypes.{{.DType}}, priorityGeneric, {{$generic}}[{{.GoType}}])
 {{- end }}
 {{- end }}
 
@@ -190,7 +209,7 @@ func init() {
 {{- $mapName := .MapName }}
 {{- $generic := .Generic }}
 {{- range .DTypes }}
-	{{$mapName}}.RegisterIfNotSet(dtypes.{{.DType}}, {{$generic}}[{{.GoType}}])
+	{{$mapName}}.Register(dtypes.{{.DType}}, priorityGeneric, {{$generic}}[{{.GoType}}])
 {{- end }}
 {{- end }}
 
@@ -204,12 +223,12 @@ func init() {
 {{- $dtype1 := .DType }}
 {{- $goType1 := .GoType }}
 {{- range $dtypes2 }}
-	{{$mapName}}.RegisterIfNotSet(dtypes.{{$dtype1}}, dtypes.{{.DType}}, {{$generic}}[{{$goType1}}, {{.GoType}}])
+	{{$mapName}}.Register(dtypes.{{$dtype1}}, dtypes.{{.DType}}, priorityGeneric, {{$generic}}[{{$goType1}}, {{.GoType}}])
 {{- end }}
 {{- end }}
 {{- end }}
 
-}	
+}
 `))
 	fullPath := path.Join(must.M1(os.Getwd()), fileName)
 	f := must.M1(os.Create(fullPath))

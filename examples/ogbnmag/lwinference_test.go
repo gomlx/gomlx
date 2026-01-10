@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package ogbnmag
 
 import (
@@ -10,6 +12,7 @@ import (
 
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -21,7 +24,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
 )
@@ -117,6 +119,8 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 		t.Skipf("Skipping TestLayerWiseInference: it requires downloading OGBN-MAG data.")
 		return
 	}
+	checkMemory(t)
+
 	fmt.Printf("Creating dataset.\n")
 	const batchSize = 1
 	// Paper id with the least amount of degrees in its subgraph.
@@ -134,7 +138,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 	require.NoError(t, err, "Dataset.Yield")
 
 	backend := graphtest.BuildTestBackend()
-	for ctxSourceIdx := 0; ctxSourceIdx < 2; ctxSourceIdx++ {
+	for ctxSourceIdx := range 2 {
 		// Create context.
 		ctx := context.New()
 		if ctxSourceIdx == 0 {
@@ -188,6 +192,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 		t.Skipf("Skipping TestLayerWiseInferencePredictions: it requires downloading OGBN-MAG data.")
 		return
 	}
+	checkMemory(t)
 	fmt.Printf("Creating dataset.\n")
 	const batchSize = 32
 

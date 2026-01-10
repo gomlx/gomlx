@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package shapeinference calculates the shape resulting from operations and validates its inputs.
 //
 // This can be useful for new backends to test and help plan for buffer space for temporary or output buffers.
@@ -15,9 +17,9 @@ import (
 	"slices"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
 
@@ -321,12 +323,21 @@ func UnaryOp(opType backends.OpType, operand shapes.Shape) (output shapes.Shape,
 //
 // Shape constraints for the operation:
 //
-//  1. The onTrue and onFalse must have the exact same shape, or one can be a scalar.
-//  2. The condition must either be a scalar or match the shape of onTrue or onFalse, except for the DType that
+//  1. The onTrue and onFalse must have the exact same dtype.
+//  2. The onTrue and onFalse must have the exact same shape, or one can be a scalar.
+//  3. The condition must either be a scalar or match the shape of onTrue or onFalse, except for the DType that
 //     must be Bool.
+//
+// Note: If you need to select between values of different dtypes, use ConvertDType to convert them
+// to a common dtype before calling Where.
 func WhereOp(condition, onTrue, onFalse shapes.Shape) (output shapes.Shape, err error) {
 	if condition.DType != dtypes.Bool {
 		err = errors.Errorf("condition for Where() must be a boolean, got %s instead", condition)
+		return
+	}
+	if onTrue.DType != onFalse.DType {
+		err = errors.Errorf("Where() requires onTrue and onFalse to have matching dtypes: got onTrue=%s, onFalse=%s. Use ConvertDType to convert to a common dtype first",
+			onTrue.DType, onFalse.DType)
 		return
 	}
 	if !onTrue.IsScalar() && !onFalse.IsScalar() && !onTrue.Equal(onFalse) {
@@ -639,7 +650,7 @@ func ConcatenateOp(inputs []shapes.Shape, axis int) (output shapes.Shape, err er
 				rank, i, currentShape.Rank())
 		}
 
-		for d := 0; d < rank; d++ {
+		for d := range rank {
 			if d == axis {
 				output.Dimensions[d] += currentShape.Dimensions[d]
 			} else {
@@ -758,7 +769,7 @@ func SliceOp(operand shapes.Shape, starts, limits, strides []int) (output shapes
 		Dimensions: make([]int, rank),
 	}
 
-	for axis := 0; axis < rank; axis++ {
+	for axis := range rank {
 		start, limit, stride := starts[axis], limits[axis], strides[axis]
 		dimSize := operand.Dimensions[axis]
 
@@ -766,11 +777,11 @@ func SliceOp(operand shapes.Shape, starts, limits, strides []int) (output shapes
 			return shapes.Invalid(), errors.Errorf("%s: stride must be positive, but got stride[%d]=%d for operand shape %s",
 				opName, axis, stride, operand)
 		}
-		if start < 0 || start >= dimSize {
+		if start < 0 || start > dimSize {
 			return shapes.Invalid(), errors.Errorf("%s: start index %d is out of bounds for axis %d with size %d (operand shape %s)",
 				opName, start, axis, dimSize, operand)
 		}
-		// Limit can be equal to dimSize.
+		// Limit can be equal to dimSize. Also allow start == dimSize for empty slices.
 		if limit < start || limit > dimSize {
 			return shapes.Invalid(), errors.Errorf("%s: limit index %d is out of bounds for axis %d (start=%d, size=%d, operand shape %s)",
 				opName, limit, axis, start, dimSize, operand)
@@ -844,7 +855,7 @@ func ReduceWindowOp(operand shapes.Shape, windowDimensions, strides, baseDilatio
 
 	// Each output dimension is calculated orthogonally to the others.
 	outputDims := make([]int, rank)
-	for i := 0; i < rank; i++ {
+	for i := range rank {
 		inputDim := operand.Dimensions[i] // Already validated to be > 0 by shapes.Make
 		windowDim := 1
 		if len(windowDimensions) > 0 {

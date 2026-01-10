@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package discretekan
 
 import (
@@ -11,7 +13,7 @@ import (
 	"github.com/gomlx/gomlx/internal/must"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	gonbplotly "github.com/janpfeifer/gonb/gonbui/plotly"
 
 	_ "github.com/gomlx/gomlx/backends/default"

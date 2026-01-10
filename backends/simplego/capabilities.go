@@ -1,8 +1,10 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package simplego
 
 import (
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 // TODO:
@@ -10,6 +12,23 @@ import (
 // Broadcast
 // DotGeneral
 // ...
+
+// numericDTypes is the list of numeric data types supported by the SimpleGo backend.
+// This excludes Bool and is used for operations like DotGeneral that only work on numeric types.
+var numericDTypes = []dtypes.DType{
+	dtypes.Int8,
+	dtypes.Int16,
+	dtypes.Int32,
+	dtypes.Int64,
+	dtypes.Uint8,
+	dtypes.Uint16,
+	dtypes.Uint32,
+	dtypes.Uint64,
+	dtypes.Float16,
+	dtypes.Float32,
+	dtypes.Float64,
+	dtypes.BFloat16,
+}
 
 // Capabilities of the SimpleGo backends: the set of supported operations and data types.
 var Capabilities = backends.Capabilities{
@@ -139,6 +158,7 @@ var Capabilities = backends.Capabilities{
 		dtypes.Uint16:   true,
 		dtypes.Uint32:   true,
 		dtypes.Uint64:   true,
+		dtypes.Float16:  true,
 		dtypes.Float32:  true,
 		dtypes.Float64:  true,
 		dtypes.BFloat16: true,

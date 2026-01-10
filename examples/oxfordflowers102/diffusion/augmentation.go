@@ -1,10 +1,12 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package diffusion
 
 import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 // AugmentImages applies random augmentations if context is set to training, otherwise it's a no-op.

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package simplego
 
 import (
@@ -81,14 +83,14 @@ var _ backends.Executable = (*Executable)(nil)
 // Finalize immediately frees resources associated with the executable.
 //
 // TODO: Race-condition where calling Finalize will make execution crash, if finalized while executing.
-//       Make Finalize wait for all the current executions to exit, before finalizing.
-//       And add a latch indicating Finalize has been called, to tell the executions to exit immediately
-//       without finishing. Finally, remove the `e.builder == nil` checks, that won't be necessary anymore,
-//       since e.builder will never be set to nil while there is an execution alive.
+//
+//	Make Finalize wait for all the current executions to exit, before finalizing.
+//	And add a latch indicating Finalize has been called, to tell the executions to exit immediately
+//	without finishing. Finally, remove the `e.builder == nil` checks, that won't be necessary anymore,
+//	since e.builder will never be set to nil while there is an execution alive.
 func (e *Executable) Finalize() {
 	e.builder.Finalize()
 	e.builder = nil
-	return
 }
 
 // Inputs returns the list of parameters names and shapes, in order created by the Builder.Parameter calls.
@@ -133,7 +135,7 @@ func newExecutable(builder *Builder) *Executable {
 		numNodesToProcess: numNodesToProcess,
 		numUses:           make([]int, numNodesToProcess),
 		executionBuffersPool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return &executionBuffers{
 					results:       make([]*Buffer, numNodesToProcess),
 					numUsed:       make([]int, numNodesToProcess),
@@ -183,12 +185,38 @@ type nodeMultiOutputExecutor func(backend *Backend, node *Node, inputs []*Buffer
 var (
 	// nodeExecutors should be populated during initialization (`init` functions) for the ops implemented.
 	// For the nodes not implemented, leave it as nil, and it will return an error.
-	nodeExecutors [backends.OpTypeLast]nodeExecutor
+	//
+	// nodeExecutors should be populated with a priority (see setNodeExecutor), which can conctorl whether
+	// to overwrite a nodeExecutors configuration independent of the order of settting.
+	nodeExecutors         [backends.OpTypeLast]nodeExecutor
+	nodeExecutorsPriority [backends.OpTypeLast]registerPriority
 
 	// multiOutputsNodeExecutors should be populated during initialization for the multi-output ops
-	// implemented. E.g.: RngBitGenerator.
+	// implemented. E.g.: RNGBitGenerator.
 	multiOutputsNodeExecutors [backends.OpTypeLast]nodeMultiOutputExecutor
 )
+
+// registerPriority defines the priority of a node executor. Highest priority takes precedence.
+// Anything with priority < 0 is ignored.
+type registerPriority int
+
+const (
+	priorityGeneric registerPriority = 0
+	priorityTyped   registerPriority = 1   // Specialized typed implementation.
+	priorityArch    registerPriority = 10  // Specialized architecture implementation.
+	priorityUser    registerPriority = 100 // Custom user overrides.
+)
+
+// setNodeExecutor sets the node executor for the given operation type with the specified priority.
+// If the priority is lower than the current priority for the operation type, the executor is ignored.
+func setNodeExecutor(opType backends.OpType, priority registerPriority, executor nodeExecutor) {
+	if priority < nodeExecutorsPriority[opType] {
+		// We have soemthing registered with higher priority, ignore.
+		return
+	}
+	nodeExecutorsPriority[opType] = priority
+	nodeExecutors[opType] = executor
+}
 
 type opsExecutionType int
 

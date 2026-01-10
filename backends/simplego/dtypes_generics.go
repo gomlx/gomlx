@@ -1,9 +1,12 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package simplego
 
 import (
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/x448/float16"
 )
 
 const MaxDTypes = 32
@@ -12,8 +15,9 @@ const MaxDTypes = 32
 
 // DTypeMap manages registering of an arbitrary value per dtype.
 type DTypeMap struct {
-	Name string
-	Map  [MaxDTypes]any
+	Name     string
+	Map      [MaxDTypes]any
+	Priority [MaxDTypes]registerPriority
 }
 
 // NewDTypeMap creates a new DTypeMap.
@@ -37,23 +41,17 @@ func (d *DTypeMap) Get(dtype dtypes.DType) any {
 	return value
 }
 
-// Register a value for a dtype.
-// This overwrites any previous setting for the same dtype.
-func (d *DTypeMap) Register(dtype dtypes.DType, value any) {
+// Register a value for a dtype with the specified priority.
+// If the priority is lower than the current priority for the dtype, the value is ignored.
+func (d *DTypeMap) Register(dtype dtypes.DType, priority registerPriority, value any) {
 	if dtype >= MaxDTypes {
 		exceptions.Panicf("dtype %s not supported by %s", dtype, d.Name)
 	}
-	d.Map[dtype] = value
-}
-
-// RegisterIfNotSet a value for a dtype.
-func (d *DTypeMap) RegisterIfNotSet(dtype dtypes.DType, value any) {
-	if dtype >= MaxDTypes {
-		exceptions.Panicf("dtype %s not supported by %s", dtype, d.Name)
-	}
-	if d.Map[dtype] != nil {
+	if priority < d.Priority[dtype] {
+		// We have something registered with higher priority, ignore.
 		return
 	}
+	d.Priority[dtype] = priority
 	d.Map[dtype] = value
 }
 
@@ -65,8 +63,9 @@ type FuncForDispatcher func(params ...any) any
 // DTypeDispatcher manages dispatching functions to handle specific DTypes.
 // Often, these functions will be instances of a generic function.
 type DTypeDispatcher struct {
-	Name  string
-	fnMap [MaxDTypes]FuncForDispatcher
+	Name     string
+	fnMap    [MaxDTypes]FuncForDispatcher
+	Priority [MaxDTypes]registerPriority
 }
 
 // NewDTypeDispatcher creates a new dispatcher for a class of functions.
@@ -90,23 +89,17 @@ func (d *DTypeDispatcher) Dispatch(dtype dtypes.DType, params ...any) any {
 	return fn(params...)
 }
 
-// Register a function to handle a specific dtype.
-// This overwrites any previous setting for the same dtype.
-func (d *DTypeDispatcher) Register(dtype dtypes.DType, fn FuncForDispatcher) {
+// Register a function to handle a specific dtype with the specified priority.
+// If the priority is lower than the current priority for the dtype, the function is ignored.
+func (d *DTypeDispatcher) Register(dtype dtypes.DType, priority registerPriority, fn FuncForDispatcher) {
 	if dtype >= MaxDTypes {
 		exceptions.Panicf("dtype %s not supported by %s", dtype, d.Name)
 	}
-	d.fnMap[dtype] = fn
-}
-
-// RegisterIfNotSet a function to handle a specific dtype.
-func (d *DTypeDispatcher) RegisterIfNotSet(dtype dtypes.DType, fn FuncForDispatcher) {
-	if dtype >= MaxDTypes {
-		exceptions.Panicf("dtype %s not supported by %s", dtype, d.Name)
-	}
-	if d.fnMap[dtype] != nil {
+	if priority < d.Priority[dtype] {
+		// We have something registered with higher priority, ignore.
 		return
 	}
+	d.Priority[dtype] = priority
 	d.fnMap[dtype] = fn
 }
 
@@ -114,8 +107,9 @@ func (d *DTypeDispatcher) RegisterIfNotSet(dtype dtypes.DType, fn FuncForDispatc
 
 // DTypePairMap manages registering of an arbitrary value per dtype pair.
 type DTypePairMap struct {
-	Name string
-	Map  [MaxDTypes][MaxDTypes]any
+	Name     string
+	Map      [MaxDTypes][MaxDTypes]any
+	Priority [MaxDTypes][MaxDTypes]registerPriority
 }
 
 // NewDTypePairMap creates a new DTypePairMap.
@@ -139,23 +133,17 @@ func (d *DTypePairMap) Get(dtype1, dtype2 dtypes.DType) any {
 	return value
 }
 
-// Register a value for a dtype pair.
-// This overwrites any previous setting for the same dtype.
-func (d *DTypePairMap) Register(dtype1, dtype2 dtypes.DType, value any) {
+// Register a value for a dtype pair with the specified priority.
+// If the priority is lower than the current priority for the dtype pair, the value is ignored.
+func (d *DTypePairMap) Register(dtype1, dtype2 dtypes.DType, priority registerPriority, value any) {
 	if dtype1 >= MaxDTypes || dtype2 >= MaxDTypes {
 		exceptions.Panicf("dtypes %s or %s not supported by %s", dtype1, dtype2, d.Name)
 	}
-	d.Map[dtype1][dtype2] = value
-}
-
-// RegisterIfNotSet a value for a dtype pair.
-func (d *DTypePairMap) RegisterIfNotSet(dtype1, dtype2 dtypes.DType, value any) {
-	if dtype1 >= MaxDTypes || dtype2 >= MaxDTypes {
-		exceptions.Panicf("dtypes %s or %s not supported by %s", dtype1, dtype2, d.Name)
-	}
-	if d.Map[dtype1][dtype2] != nil {
+	if priority < d.Priority[dtype1][dtype2] {
+		// We have something registered with higher priority, ignore.
 		return
 	}
+	d.Priority[dtype1][dtype2] = priority
 	d.Map[dtype1][dtype2] = value
 }
 
@@ -163,7 +151,8 @@ func (d *DTypePairMap) RegisterIfNotSet(dtype1, dtype2 dtypes.DType, value any) 
 
 // SupportedTypesConstraints enumerates the types supported by SimpleGo.
 type SupportedTypesConstraints interface {
-	bool | int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64 | float32 | float64 | bfloat16.BFloat16
+	bool | int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64 | float32 | float64 |
+		bfloat16.BFloat16 | float16.Float16
 }
 
 // PODNumericConstraints are used for generics for the Golang pod (plain-old-data) types.
@@ -173,7 +162,7 @@ type PODNumericConstraints interface {
 }
 
 // PODSignedNumericConstraints are used for generics for the Golang pod (plain-old-data) types.
-// BFloat16 is not included because it is a specialized type, not natively supported by Go.
+// BFloat16 and Float16 are not included because they are specialized types, not natively supported by Go.
 type PODSignedNumericConstraints interface {
 	int8 | int16 | int32 | int64 | float32 | float64
 }
@@ -189,7 +178,7 @@ type PODUnsignedConstraints interface {
 }
 
 // PODFloatConstraints are used for generics for the Golang pod (plain-old-data) types.
-// BFloat16 is not included because it is a specialized type, not natively supported by Go.
+// BFloat16 and Float16 are not included because they are specialized types, not natively supported by Go.
 type PODFloatConstraints interface {
 	float32 | float64
 }

@@ -1,91 +1,99 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package xla
 
 import (
+	"github.com/gomlx/go-xla/pkg/pjrt"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/pjrt"
-	"github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
 
-// Executable implements backends.Executable for XLA/PJRT github.com/gomlx/gopjrt
+// Executable implements the backends.Executable for XLA/PJRT github.com/gomlx/gopjrt.
 type Executable struct {
 	backend         *Backend
 	exec            *pjrt.LoadedExecutable
 	name            string
 	parameterNames  []string
 	parameterShapes []shapes.Shape
+	parameterSpecs  []*backends.ShardingSpec
 	outputShapes    []shapes.Shape
+	outputSpecs     []*backends.ShardingSpec
+
+	distStrategy     distributed.Strategy
+	numDevices       int
+	deviceAssignment []int
+	portable         bool
 }
 
-func (b *Builder) Compile(outputs []backends.Op, shardings []*backends.ShardingSpec) (backends.Executable, error) {
+func (b *Builder) Compile() (backends.Executable, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
-	if len(outputs) == 0 {
+	if !b.mainFn.returned {
 		return nil, errors.Errorf(
-			"backend %q, computation %q: you must have at least one output to a computation",
-			BackendName,
-			b.name,
-		)
-	}
-	if len(shardings) != 0 {
-		return nil, errors.Errorf("sharding or distributed execution are not supported by SimpleGo backend")
-	}
-	xOutputs := make([]*xlabuilder.Op, len(outputs))
-	outputShapes := make([]shapes.Shape, len(outputs))
-	for ii, output := range outputs {
-		xOutputs[ii] = castToXlaOp(output)
-		outputShapes[ii] = xshapeToShape(xOutputs[ii].Shape)
+			"backend %q, computation %q: Main().Return() must be called before Compile()",
+			BackendName, b.name)
 	}
 
-	// If there are more than 1 outputs, use a tuple output -- PJRT un-tuples them during execution..
-	tupleOutput := xOutputs[0]
-	if len(xOutputs) > 1 {
-		var err error
-		tupleOutput, err = xlabuilder.Tuple(xOutputs...)
-		if err != nil {
-			return nil, errors.WithMessagef(
-				err,
-				"backend %q: failed to tuple the outputs to compile computation %q",
-				BackendName,
-				b.name,
-			)
-		}
+	// Get output shapes from the main function
+	outputShapes := make([]shapes.Shape, len(b.mainFn.outputs))
+	for i, node := range b.mainFn.outputs {
+		outputShapes[i] = node.shape
 	}
-	comp, err := b.builder.Build(tupleOutput)
+
+	// Build the StableHLO program
+	program, err := b.builder.Build()
 	if err != nil {
-		return nil, errors.WithMessagef(err, "backend %q: failed to build HLO from computation %q", BackendName, b.name)
+		return nil, errors.WithMessagef(err,
+			"backend %q: failed to build StableHLO from computation %q", BackendName, b.name)
 	}
-	if klog.V(2).Enabled() {
-		if comp.HasStableHLO() {
-			stableHLO, err := comp.TextStableHLO()
-			if err != nil {
-				return nil, errors.WithMessagef(
-					err,
-					"backend %q: failed to print out StableHLO from computation %q",
-					BackendName,
-					b.name,
-				)
-			}
-			klog.Infof("StableHLO program:\n%s\n", stableHLO)
+	if klog.V(2).Enabled() { //nolint:mnd // Log-level numbers are ok.
+		klog.Infof("StableHLO program:\n%s\n", program)
+	}
+
+	compileConfig := b.backend.client.Compile().WithStableHLO(program)
+	var portable bool
+	switch b.distStrategy {
+	case distributed.SPMD:
+		compileConfig = compileConfig.
+			WithSPMD(b.numDevices).
+			WithDeviceAssignment(b.deviceAssignment)
+	case distributed.AutoSharding:
+		compileConfig = compileConfig.
+			WithShardy(b.numDevices).
+			WithDeviceAssignment(b.deviceAssignment)
+	case distributed.None:
+		// Device Assignment is optional, only if set.
+		// Otherwise, the compilation is "portable" and can be executed on any device.
+		if b.deviceAssignment != nil {
+			compileConfig = compileConfig.
+				WithDeviceAssignment(b.deviceAssignment)
 		} else {
-			klog.Infof("HLO program:\n%s\n", comp.TextHLO())
+			portable = true
 		}
 	}
-	exec, err := b.backend.client.Compile().WithComputation(comp).Done()
+	exec, err := compileConfig.Done()
 	if err != nil {
-		return nil, errors.WithMessagef(err, "backend %q: failed to compile computation %q", BackendName, b.name)
+		return nil, errors.WithMessagef(err,
+			"backend %q: failed to compile computation %q", BackendName, b.name)
 	}
 	return &Executable{
 		backend:         b.backend,
 		exec:            exec,
 		name:            b.name,
-		parameterNames:  b.parameterNames,
-		parameterShapes: b.parameterShapes,
+		parameterNames:  b.mainFn.parameterNames,
+		parameterShapes: b.mainFn.parameterShapes,
+		parameterSpecs:  b.mainFn.parameterSpecs,
 		outputShapes:    outputShapes,
+
+		distStrategy:     b.distStrategy,
+		numDevices:       max(1, len(b.deviceAssignment)),
+		deviceAssignment: b.deviceAssignment,
+		portable:         portable,
 	}, nil
 }
 
@@ -98,7 +106,7 @@ func (e *Executable) CheckValid() error {
 	return e.backend.CheckValid()
 }
 
-// Finalize immediately frees resources associated to the executable.
+// Finalize immediately frees resources associated with the executable.
 func (e *Executable) Finalize() {
 	if e == nil || e.exec == nil || e.backend == nil {
 		return
@@ -119,42 +127,43 @@ func (e *Executable) Inputs() (names []string, inputShapes []shapes.Shape) {
 	return e.parameterNames, e.parameterShapes
 }
 
-// Outputs returns the computation's output shapes, in the order given to the Builder.Compile call.
+// Outputs return the computation's output shapes, in the order given to the Builder.Compile call.
 func (e *Executable) Outputs() (outputShapes []shapes.Shape) {
 	return e.outputShapes
 }
 
 // Execute the executable on the default device (0). The number and shapes of the inputs must match those returned by Inputs.
-func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, _ backends.DeviceNum) ([]backends.Buffer, error) {
+func (e *Executable) Execute(
+	inputs []backends.Buffer,
+	donate []bool,
+	defaultDevice backends.DeviceNum,
+) ([]backends.Buffer, error) {
 	if err := e.CheckValid(); err != nil {
 		return nil, err
 	}
-	if len(inputs) != len(e.parameterShapes) {
+	numParams := len(e.parameterShapes)
+	numDevices := e.numDevices
+	if len(inputs) != numParams*numDevices {
 		return nil, errors.Errorf(
-			"backend %q: wrong number of parameters to Execute %q: %d given, %d expected",
-			BackendName,
-			e.name,
-			len(inputs),
-			len(e.parameterShapes),
-		)
+			"backend %q: wrong number of parameters to Execute %q: %d given, %d * %d expected",
+			BackendName, e.name, len(inputs), numParams, numDevices)
 	}
-	if len(donate) > 0 && len(donate) != len(e.parameterShapes) {
+	if len(donate) > 0 && len(donate) != numParams*numDevices {
 		return nil, errors.Errorf(
-			"backend %q: wrong number of donate values to Execute %q: %d given, nil or %d expected",
-			BackendName,
-			e.name,
-			len(donate),
-			len(e.parameterShapes),
-		)
+			"backend %q: wrong number of donate values to Execute %q: %d given, nil or %d * %d expected",
+			BackendName, e.name, len(donate), numParams, numDevices)
 	}
 	pInputs := xslices.Map(inputs, castToPJRT)
-	var pOutputs []*pjrt.Buffer
-	var err error
+	execBuilder := e.exec.Execute(pInputs...)
 	if len(donate) == 0 {
-		pOutputs, err = e.exec.Execute(pInputs...).DonateNone().Done()
+		execBuilder = execBuilder.DonateNone()
 	} else {
-		pOutputs, err = e.exec.Execute(pInputs...).SetDonate(donate).Done()
+		execBuilder = execBuilder.SetDonate(donate)
 	}
+	if e.portable {
+		execBuilder = execBuilder.OnDeviceByNum(int(defaultDevice))
+	}
+	pOutputs, err := execBuilder.Done()
 	if err != nil {
 		return nil, errors.WithMessagef(err, "backend %q: failed to execute computation %q", BackendName, e.name)
 	}

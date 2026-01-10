@@ -1,11 +1,13 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package simplego
 
 import (
 	"fmt"
 	"testing"
 
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

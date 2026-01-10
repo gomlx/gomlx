@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package fnn implements a feed-forward neural network for the OGBN-MAG problem.
 package fnn
 
@@ -22,7 +24,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )

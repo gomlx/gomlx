@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package exceptions provide helper functions to leverage Go's `panic`, `recover` and `defer`
 // as an "exceptions" system.
 //

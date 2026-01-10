@@ -1,12 +1,14 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package imdb
 
 import (
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
-	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // EmbedTokensGraph creates embeddings for tokens and returns them along with the mask of used tokens --

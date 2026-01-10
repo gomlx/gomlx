@@ -1,14 +1,18 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package diffusion
 
 import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"time"
 
 	"github.com/gomlx/gomlx/backends"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -24,7 +28,6 @@ import (
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	stdplots "github.com/gomlx/gomlx/ui/plots"
-	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
 )
 
@@ -332,7 +335,7 @@ func CompareModelPlots(dataDir string, modelNames ...string) {
 	plots := margaid.New(1024, 400).LogScaleX().LogScaleY()
 	for _, modelName := range modelNames {
 		modelPath := modelName
-		if !path.IsAbs(modelPath) {
+		if !filepath.IsAbs(modelPath) {
 			modelPath = path.Join(dataDir, modelPath)
 		}
 		modelPath = path.Join(modelPath, stdplots.TrainingPlotFileName)

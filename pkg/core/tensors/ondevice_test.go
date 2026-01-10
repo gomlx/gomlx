@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package tensors_test
 
 import (
@@ -11,9 +13,9 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	_ "github.com/gomlx/gomlx/backends/default" // Use xla backend.
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
 )
@@ -66,11 +68,14 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 
 		dims := []int{3, 2}
 		builder := backend.Builder(fmt.Sprintf("%s_%s", t.Name(), dtype))
-		x, err := builder.Parameter("x", shapes.Make(dtype, dims...), nil)
+		mainFn := builder.Main()
+		x, err := mainFn.Parameter("x", shapes.Make(dtype, dims...), nil)
 		require.NoError(t, err)
-		x2, err := builder.Mul(x, x)
+		x2, err := mainFn.Mul(x, x)
 		require.NoError(t, err)
-		exec, err := builder.Compile([]backends.Op{x2}, nil)
+		err = mainFn.Return([]backends.Value{x2}, nil)
+		require.NoError(t, err)
+		exec, err := builder.Compile()
 		require.NoError(t, err)
 
 		// Create local Tensor input.

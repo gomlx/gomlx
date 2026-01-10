@@ -1,18 +1,4 @@
-/*
- *	Copyright 2025 Jan Pfeifer
- *
- *	Licensed under the Apache License, Version 2.0 (the "License");
- *	you may not use this file except in compliance with the License.
- *	You may obtain a copy of the License at
- *
- *	http://www.apache.org/licenses/LICENSE-2.0
- *
- *	Unless required by applicable law or agreed to in writing, software
- *	distributed under the License is distributed on an "AS IS" BASIS,
- *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *	See the License for the specific language governing permissions and
- *	limitations under the License.
- */
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 // Package shapes define Shape and DType and associated tools.
 //
@@ -23,7 +9,7 @@
 // working on the symbolic computation graph (see pkg/core/graph package).
 //
 // Go float16 support (commonly used by Nvidia GPUs) uses github.com/x448/float16 implementation,
-// and bfloat16 uses a simple implementation in github.com/gomlx/gopjrt/dtypes/bfloat16.
+// and bfloat16 uses a simple implementation in github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16.
 //
 // ## Glossary
 //
@@ -32,7 +18,7 @@
 //     interchangeably with Dimension, but here we try to refer to a dimension index as "axis"
 //     (plural axes), and its size as its dimension.
 //   - Dimension: the size of a multi-dimension Tensor in one of its axes. See the example below.
-//   - DType: the data type of the unit element in a tensor. Enumeration defined in github.com/gomlx/gopjrt/dtypes
+//   - DType: the data type of the unit element in a tensor. Enumeration defined in github.com/gomlx/gomlx/pkg/core/dtypes
 //   - Scalar: is a shape where there are no axes (or dimensions), only a single value
 //     of the associated DType.
 //
@@ -74,7 +60,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 )
 
@@ -174,12 +160,7 @@ func (s Shape) Size() (size int) {
 //
 // Notice scalars are not zero in size -- they have size one, but rank zero.
 func (s Shape) IsZeroSize() bool {
-	for _, d := range s.Dimensions {
-		if d == 0 {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s.Dimensions, 0)
 
 }
 

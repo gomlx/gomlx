@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package vnn
 
 import (
@@ -6,6 +8,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -17,7 +20,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/gomlx/gomlx/backends/default"

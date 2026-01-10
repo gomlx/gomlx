@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package sampler
 
 import (
@@ -5,10 +7,10 @@ import (
 	"path"
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/constraints"
@@ -366,7 +368,7 @@ func TestRandKOfN(t *testing.T) {
 		for range numRepeats {
 			fn(sample, n)
 			for ii, x := range sample {
-				for jj := 0; jj < ii; jj++ {
+				for jj := range ii {
 					require.NotEqualf(t, sample[jj], x, "Repeated value %d for %s", x, name)
 				}
 				counts[x]++

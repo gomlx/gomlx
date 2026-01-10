@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package fm
 
 import (
@@ -494,7 +496,7 @@ func DropdownFlowerTypes(
 		noise := cfg.GenerateNoise(numImages)
 		statusId := "flower_types_status_" + gonbui.UniqueId()
 		gonbui.UpdateHTML(statusId, "Generating flowers ...")
-		for flowerType := 0; flowerType < numFlowerTypes; flowerType++ {
+		for flowerType := range numFlowerTypes {
 			flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 			generator := NewImagesGenerator(cfg, noise, flowerIds, numDiffusionSteps)
 			denoisedImages := generator.Generate()

@@ -1,7 +1,7 @@
-//go:build linux && amd64 && oldxla
+//go:build ((linux && amd64) || darwin) && !noxla
 
-// For now XLA is only supported for linux/amd64.
-// TODO: change when more platforms are supported (linux/arm64, darwin/amd64, darwin/arm64, etc.)
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 
 package _default
 

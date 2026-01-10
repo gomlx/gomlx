@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package images provides several functions to transform images back and
 // forth from tensors.
 package images
@@ -8,11 +10,11 @@ import (
 	"math"
 
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/x448/float16"
 	"k8s.io/klog/v2"
 )
@@ -387,11 +389,11 @@ func toImageGenericsImpl[T dtypes.NumberNotComplex | float16.Float16 | bfloat16.
 	isBFloat16 := imagesTensor.DType() == dtypes.BFloat16
 	imagesTensor.MustConstFlatData(func(flatAny any) {
 		tensorData := flatAny.([]T)
-		for imageIdx := 0; imageIdx < numImages; imageIdx++ {
+		for range numImages {
 			img := image.NewNRGBA(image.Rect(0, 0, width, height))
-			for h := 0; h < height; h++ {
-				for w := 0; w < width; w++ {
-					for d := 0; d < channels; d++ {
+			for h := range height {
+				for w := range width {
+					for d := range channels {
 						var v float64
 						if isFloat16 {
 							v = float64(float16.Float16(tensorData[tensorPos]).Float32())

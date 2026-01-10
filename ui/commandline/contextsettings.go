@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package commandline
 
 import (
@@ -44,8 +46,8 @@ import (
 //		...
 //	}
 func ParseContextSettings(ctx *context.Context, settings string) (paramsSet []string, err error) {
-	settingsList := strings.Split(settings, ";")
-	for _, setting := range settingsList {
+	settingsList := strings.SplitSeq(settings, ";")
+	for setting := range settingsList {
 		paramsSet, err = parseContextSetting(ctx, setting, paramsSet)
 		if err != nil {
 			return
@@ -59,9 +61,9 @@ func parseContextSetting(ctx *context.Context, setting string, paramsSet []strin
 	if setting == "" {
 		return
 	}
-	if strings.HasPrefix(setting, "file:") {
+	if after, ok := strings.CutPrefix(setting, "file:"); ok {
 		// Read parameters from a file.
-		filePath := strings.TrimPrefix(setting, "file:")
+		filePath := after
 		filePath = fsutil.MustReplaceTildeInDir(filePath)
 		var contents []byte
 		contents, err = os.ReadFile(filePath)
@@ -69,14 +71,14 @@ func parseContextSetting(ctx *context.Context, setting string, paramsSet []strin
 			err = errors.Wrapf(err, "failed to read settings from file %q", filePath)
 			return
 		}
-		lines := strings.Split(string(contents), "\n")
-		for _, line := range lines {
+		lines := strings.SplitSeq(string(contents), "\n")
+		for line := range lines {
 			line = strings.TrimSpace(line)
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue
 			}
-			settings := strings.Split(line, ";")
-			for _, setting := range settings {
+			settings := strings.SplitSeq(line, ";")
+			for setting := range settings {
 				newParamsSet, err = parseContextSetting(ctx, setting, newParamsSet)
 				if err != nil {
 					return

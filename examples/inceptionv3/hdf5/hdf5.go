@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package hdf5 provides a trivial API to access HDF5 file contents.
 //
 // It requires the `hdf5-tools` (a deb package) installed in the system, more specifically the
@@ -17,10 +19,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 	_ "github.com/schollz/progressbar/v3"

@@ -1,13 +1,15 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package graph_test
 
 import (
 	"fmt"
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gopjrt/dtypes"
 
 	"github.com/stretchr/testify/assert"
 )

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package main
 
 import (
@@ -55,7 +57,9 @@ var (
 	// These are utility methods, not part of building a graph.
 	methodsExcluded = sets.MakeWith(
 		"Name", "Compile", "OpShape",
-		"DeviceAssignment", "DistributedSPMD", "DistributedAutoSharding")
+		"DeviceAssignment", "DistributedSPMD", "DistributedAutoSharding",
+		"Main", "NewFunction", "Return", "Closure", "Parent",
+		"Call", "If", "Sort", "While")
 
 	// methodsNoGradient will add a stop gradient to the node.
 	methodsNoGradient = sets.MakeWith(
@@ -91,34 +95,34 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			}
 			mi.Inputs = append(mi.Inputs, pi)
 			switch pi.BackendType {
-			case "Op":
-				pi.BackendType = "backends.Op"
+			case "Value":
+				pi.BackendType = "backends.Value"
 				pi.GraphType = "*Node"
 				pi.ConvertStatement = fmt.Sprintf("%s.outputOps[0]", param.Name)
 				mi.OpInputs = append(mi.OpInputs, param.Name)
 				pi.Format = "[#%d]"
 				pi.FormatValue = fmt.Sprintf("ni.%s.Id()", param.Name)
-			case "...Op":
-				pi.BackendType = "...backends.Op"
+			case "...Value":
+				pi.BackendType = "...backends.Value"
 				pi.GraphType = "...*Node"
 				mi.OpInputSlices = append(mi.OpInputSlices, param.Name)
 				pi.NodeInputType = "[]*Node"
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
 				pi.ConvertStatement = fmt.Sprintf(
-					"xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })...", param.Name)
+					"xslices.Map(%s, func(node *Node) backends.Value { return node.outputOps[0] })...", param.Name)
 				pi.Format = "[#%s]"
 				pi.FormatValue = fmt.Sprintf(
 					`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
 					param.Name,
 				)
-			case "[]Op":
-				pi.BackendType = "[]backends.Op"
+			case "[]Value":
+				pi.BackendType = "[]backends.Value"
 				pi.GraphType = "[]*Node"
 				mi.OpInputSlices = append(mi.OpInputSlices, param.Name)
 				pi.NodeInputType = "[]*Node"
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
 				pi.ConvertStatement = fmt.Sprintf(
-					"xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })", param.Name)
+					"xslices.Map(%s, func(node *Node) backends.Value { return node.outputOps[0] })", param.Name)
 				pi.Format = "[#%s]"
 				pi.FormatValue = fmt.Sprintf(
 					`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
@@ -174,15 +178,15 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			}
 			mi.HasGraph = len(mi.OpInputSlices) == 0 && len(mi.OpInputs) == 0
 		}
-		for _, output := range raw.Outputs[:len(raw.Outputs)-1] { // Skip the error.
+		for outputIdx, output := range raw.Outputs[:len(raw.Outputs)-1] { // Skip the error.
 			switch output.Type {
-			case "Op":
+			case "Value":
 				mi.OutputNames = append(mi.OutputNames, output.Name)
-			case "[]Op":
+			case "[]Value":
 				mi.OutputNames = append(mi.OutputNames, output.Name)
 				mi.IsOutputSlice = true
 			default:
-				exceptions.Panicf("unexpected output type: %s", output.Type)
+				exceptions.Panicf("unexpected output type %q for output #%d of %q", output.Type, outputIdx, name)
 			}
 		}
 		if len(mi.OutputNames) > 1 {
@@ -234,7 +238,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 type NodeType int
@@ -323,31 +327,31 @@ Convert result(s) to node(s):
 */}}
 {{- if .HasMultipleOutputs}}
 {{- /* Version with multiple outputs: */}}
-{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}}, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}}, err := g.currentFunc.backendFunc.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
 	if err != nil {
 		panic(err)
 	}
 	node := &Node{
-		outputOps: []backends.Op{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}} },
+		outputOps: []backends.Value{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}} },
 		outputShapes: []shapes.Shape{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}mustNoError(g.builder.OpShape(v{{$ii}})){{end}} },
 {{- else if .IsOutputSlice}}
 {{- /* Version with output slice: */}}
-	results, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	results, err := g.currentFunc.backendFunc.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
 	if err != nil {
 		panic(err)
 	}
 	node := &Node{
 		outputOps: results,
 		outputShapes: xslices.Map(results,
-			func (op backends.Op) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
+			func (op backends.Value) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
 {{- else}}
 {{- /* Version with single output: - node already defined. */}}
-	result, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	result, err := g.currentFunc.backendFunc.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
 	if err != nil {
 		panic(err)
 	}
 	node = &Node{
-		outputOps: []backends.Op{result},
+		outputOps: []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 {{- end}}
 {{- /* Rest of node definition */}}

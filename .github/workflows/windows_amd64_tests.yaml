@@ -1,0 +1,73 @@
+name: "Windows/amd64"
+permissions:
+  # read|write|none
+  actions: read
+  checks: read
+  contents: write
+  deployments: read
+  # id-token: read    --> doesn't work
+  issues: read
+  discussions: read
+  packages: read
+  pages: read
+  pull-requests: write
+  repository-projects: read
+  security-events: read
+  statuses: read
+
+# Triggers the workflow on push or pull request events but only for the "main" branch
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: Install PJRT plugin
+        run: |
+          export CPU_VERSION="v0.83.4"
+          env GH_TOKEN=$GH_TOKEN go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin cpu -version "${CPU_VERSION}" -path '~\AppData\Local\go-xla'
+          echo "Contents for go-xla:"
+          ls -la "${HOME}/AppData/Local/go-xla"
+          echo "-----------"
+          echo
+
+      - name: PreTest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Run one test that triggers the auto-install first (concurrency issues)
+          # TestGradientFFT is not working in windows.
+        run: |
+          go test ./pkg/core/graph -test.skip 'TestGradientFFT'
+
+      - name: Test
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Tests only run with --short, since the full tests involve downloading datasets and would be too costly for a GitHub action.
+        # The non-short tests work well locally (in the development box) because the datasets are cached.
+        # Also excludes tests that have large dependencies (e.g.: X11):
+        run: |
+          go test -short $(go list ./... | \
+            grep -v "backends/xla" | \
+            grep -v "ui/fyneui" | \
+            grep -v "pkg/ml/context/checkpoints"
+            grep -v "examples/ogbnmag") \
+            -test.skip 'TestGradientFFT'

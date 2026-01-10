@@ -1,5 +1,7 @@
 //go:build perf
 
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package simplego
 
 import (
@@ -12,16 +14,19 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dustin/go-humanize"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/commandline"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/janpfeifer/must"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
+
+	_ "github.com/gomlx/gomlx/backends/xla" // We also want xla backend included for tests.
 )
 
 // dotGeneralBenchmarkParamsCase defines input parameters for DotGeneral to be benchmarked.
@@ -37,28 +42,14 @@ func dimsToStr(dims []int) string {
 }
 
 var (
-	flagPerfTests = flag.String(
-		"perf_names",
-		"",
-		"Comma-separated list of performance tests (part of TestDotGeneral_PerformanceTable) to run. If empty, it will run all the perf tests.",
-	)
-	flagPerfDTypes = flag.String(
-		"perf_dtypes",
-		"",
-		"Comma-separated list of dtypes to run performance test (part of TestDotGeneral_PerformanceTable). If empty, it will run for all supported dtypes.",
-	)
+	flagPerfTests = flag.String("perf_names", "",
+		"Comma-separated list of performance tests (part of TestDotGeneral_PerformanceTable) to "+
+			"run. If empty, it will run all the perf tests.")
+	flagPerfDTypes = flag.String("perf_dtypes", "",
+		"Comma-separated list of dtypes to run performance test (part of TestDotGeneral_PerformanceTable). "+
+			"If empty, it will run for all supported dtypes.")
+	flagMarkdown = flag.Bool("markdown", false, "If true, it will print the performance table in markdown format.")
 )
-
-func must(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-func must1[T any](value T, err error) T {
-	must(err)
-	return value
-}
 
 // TestDotGeneral_PerformanceTable generates a performance table for differently
 // sized matrices.
@@ -68,8 +59,7 @@ func must1[T any](value T, err error) T {
 // Examples:
 //
 //	$ GOMLX_BACKEND=go go test -tags=perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
-//	$ GOMLX_BACKEND=xla:cuda go test -tags=xla,perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
-//	$ GOMLX_BACKEND=stablehlo:cpu go test -tags=stablehlo,perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
+//	$ GOMLX_BACKEND=xla:cuda go test -tags=perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
 func TestDotGeneral_PerformanceTable(t *testing.T) {
 	filterPerfs := *flagPerfTests != ""
 	perfsToRun := sets.MakeWith(strings.Split(*flagPerfTests, ",")...)
@@ -87,6 +77,11 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			rhsShape: []int{4, 1}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
 		},
 		{
+			name:     "NoBatch-Tiny-Normalized",
+			lhsShape: []int{128, 4}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
+			rhsShape: []int{1, 4}, rhsContractingAxes: []int{1}, rhsBatchAxes: []int{},
+		},
+		{
 			name:     "NoBatch-Small",
 			lhsShape: []int{16, 128}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
 			rhsShape: []int{128, 32}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
@@ -95,6 +90,16 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			name:     "NoBatch-Medium",
 			lhsShape: []int{128, 128}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
 			rhsShape: []int{128, 256}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
+		},
+		{
+			name:     "NoBatch-NoLHSCross-LargeRHSCross-Matmul",
+			lhsShape: []int{128}, lhsContractingAxes: []int{0}, lhsBatchAxes: nil,
+			rhsShape: []int{128, 256}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
+		},
+		{
+			name:     "NoBatch-LargeLHSCross-SmallRHSCross-Matmul",
+			lhsShape: []int{4096, 32}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
+			rhsShape: []int{32, 16}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
 		},
 		{
 			name:     "LargeBatch-Tiny",
@@ -177,11 +182,16 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			lhsShape: []int{49, 69}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
 			rhsShape: []int{69, 4}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
 		},
+		{
+			name:     "adult-#6-Normalized",
+			lhsShape: []int{49, 69}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
+			rhsShape: []int{4, 69}, rhsContractingAxes: []int{1}, rhsBatchAxes: []int{},
+		},
 
 		// Add more test cases relevant to your models here
 	}
 
-	dtypesToTest := []dtypes.DType{dtypes.Float32, dtypes.Float64, dtypes.BFloat16}
+	dtypesToTest := []dtypes.DType{dtypes.Float32, dtypes.Float64, dtypes.BFloat16, dtypes.Float16}
 
 	// Adjust for desired precision vs. test duration
 	const numWarmupRuns = 2
@@ -197,23 +207,48 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 
 	// Print table header
 	fmt.Printf("\n--- execNormalizedDotGeneral Performance ---\n")
-	header := fmt.Sprintf(
-		"| %-20s | %-20s | %-20s | %-10s | %-10s | %-12s | %-15s | %-10s |",
-		"Test Name",
-		"LHS Dims",
-		"RHS Dims",
-		"DType",
-		"BatchSize",
-		"Time/Run",
-		"Num Ops",
-		"GOps/Sec",
-	)
+	var header string
+	if *flagMarkdown {
+		header = "| Test Name | LHS Dims | RHS Dims | DType | BatchSize | Time/Run | Num Ops | GOps/Sec |"
+	} else {
+		header = fmt.Sprintf(
+			"| %-20s | %-20s | %-20s | %-10s | %-10s | %-12s | %-15s | %-10s |",
+			"Test Name",
+			"LHS Dims",
+			"RHS Dims",
+			"DType",
+			"BatchSize",
+			"Time/Run",
+			"Num Ops",
+			"GOps/Sec",
+		)
+	}
 	fmt.Println(header)
-	fmt.Println(strings.Repeat("-", len(header)))
+
+	if *flagMarkdown {
+		// Markdown header separator.
+		fmt.Println("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+	} else {
+		fmt.Println(strings.Repeat("-", len(header)))
+	}
+
+	rowFormat := "| %-20s | %-20s | %-20s | %-10s | %-10d | %-12s | %-15s | %-10.1f |"
+	if *flagMarkdown {
+		rowFormat = "| %s | %s | %s | %s | %d | %s | %s | %.1f |"
+	}
 
 	for benchCaseIdx, benchCase := range benchmarkCases {
-		if filterPerfs && !perfsToRun.Has(benchCase.name) {
-			continue
+		if filterPerfs {
+			found := false
+			for perfToRun := range perfsToRun {
+				if strings.Contains(benchCase.name, perfToRun) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
 		}
 		for _, dtype := range dtypesToTest {
 			if filterDTypes && !dtypesToRun.Has(dtype.String()) {
@@ -222,13 +257,14 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			// Construct shapes from dimensions and current dtype
 			lhsShape := shapes.Make(dtype, benchCase.lhsShape...)
 			rhsShape := shapes.Make(dtype, benchCase.rhsShape...)
+			var numOps int
 			batchSize, lhsCrossSize, contractingSize, _ := dgFindSizes(
 				lhsShape,
 				benchCase.lhsContractingAxes,
 				benchCase.lhsBatchAxes,
 			)
 			_, rhsCrossSize, _, _ := dgFindSizes(rhsShape, benchCase.rhsContractingAxes, benchCase.rhsBatchAxes)
-			numOps := batchSize * lhsCrossSize * rhsCrossSize * contractingSize * 2 // 1 mult + 1 add = 2 ops
+			numOps = batchSize * lhsCrossSize * rhsCrossSize * contractingSize * 2 // 1 mult + 1 add = 2 ops
 
 			// Create and initialize input Buffers
 			lhsBuffer, lhsFlatAny, err := backend.NewSharedBuffer(0, lhsShape)
@@ -266,8 +302,8 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 					rhsFlatBF16[i] = bfloat16.FromFloat32(float32(i%10 + 1))
 				}
 			}
-			lhsTensor := must1(tensors.FromBuffer(backend, lhsBuffer))
-			rhsTensor := must1(tensors.FromBuffer(backend, rhsBuffer))
+			lhsTensor := must.M1(tensors.FromBuffer(backend, lhsBuffer))
+			rhsTensor := must.M1(tensors.FromBuffer(backend, rhsBuffer))
 
 			// Create the program that does the DotGeneral.
 			testExec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
@@ -284,7 +320,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			// Timed runs
 			startTime := time.Now()
 			var numRuns int
-			for numRuns < minNumTimedRuns || time.Since(startTime) < minTestTime { // i := 0; i < numTimedRuns; i++ {
+			for numRuns < minNumTimedRuns || time.Since(startTime) < minTestTime {
 				output := testExec.MustExec(lhsTensor, rhsTensor)[0]
 				output.MustFinalizeAll()
 				numRuns++
@@ -300,7 +336,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			if benchCaseIdx%2 == 1 {
 				style = style2
 			}
-			row := fmt.Sprintf("| %-20s | %-20s | %-20s | %-10s | %-10d | %-12s | %-15s | %-10.1f |",
+			row := fmt.Sprintf(rowFormat,
 				benchCase.name,
 				dimsToStr(benchCase.lhsShape), dimsToStr(benchCase.rhsShape),
 				dtype,
@@ -308,9 +344,16 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				commandline.FormatDuration(avgDurationPerRun),
 				humanize.Comma(int64(numOps)),
 				gOpsPerSecond)
-			fmt.Println(style.Render(row))
+			if *flagMarkdown {
+				// No color styles for markdown.
+				fmt.Println(row)
+			} else {
+				fmt.Println(style.Render(row))
+			}
 		}
 	}
-	fmt.Println(strings.Repeat("-", len(header)))
+	if !*flagMarkdown {
+		fmt.Println(strings.Repeat("-", len(header)))
+	}
 	fmt.Println()
 }

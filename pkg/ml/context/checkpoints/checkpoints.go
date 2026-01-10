@@ -1,18 +1,4 @@
-/*
- *	Copyright 2023 Jan Pfeifer
- *
- *	Licensed under the Apache License, Version 2.0 (the "License");
- *	you may not use this file except in compliance with the License.
- *	You may obtain a copy of the License at
- *
- *	http://www.apache.org/licenses/LICENSE-2.0
- *
- *	Unless required by applicable law or agreed to in writing, software
- *	distributed under the License is distributed on an "AS IS" BASIS,
- *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *	See the License for the specific language governing permissions and
- *	limitations under the License.
- */
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 // Package checkpoints implements checkpoint management: saving and loading of checkpoints to file,
 // or loading a checkpoint from an embedded checkpoint.
@@ -83,7 +69,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 
@@ -228,7 +214,7 @@ func (c *Config) Dir(dir string) *Config {
 // One must be set either Dir, DirFromBase, or TempDir before building the checkpoints.Handler.
 func (c *Config) DirFromBase(dir, baseDir string) *Config {
 	dir = fsutil.MustReplaceTildeInDir(dir)
-	if !path.IsAbs(dir) {
+	if !filepath.IsAbs(dir) {
 		baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 		dir = path.Join(baseDir, dir)
 	}

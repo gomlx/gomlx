@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package bsplines provide a GoMLX version of github.com/gomlx/bsplines: it provides evaluation of bsplines
 // curves, that can be used as layers.
 // Currently, it's best used through `gomlx/ml/layers/kan` package.
@@ -17,7 +19,7 @@ import (
 	"github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 // Evaluate creates the computation graph to evaluate the B-splines defined by b (it's used only for the knots) and

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package numpy allows one to read/write tensors to Python's NumPy npy and npz file formats.
 //
 // Experimental: this package (numpy) is fresh from the oven and not well tested. Please open an issue if you find any bugs.
@@ -11,13 +13,14 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -209,7 +212,7 @@ func FortranToCLayout(dtypeSize int, dims []int, fortranData []byte, cData []byt
 		// This converts tensor coordinates to a flat column-major index.
 		fortranIndex := 0
 		multiplier := 1
-		for i := 0; i < len(dims); i++ {
+		for i := range dims {
 			fortranIndex += coordinates[i] * multiplier
 			multiplier *= dims[i]
 		}
@@ -357,7 +360,7 @@ func FromNpzReader(r io.ReaderAt, size int64) (map[string]*tensors.Tensor, error
 	for _, f := range zipReader.File {
 		// For extra safety.
 		cleanPath := path.Clean(f.Name)
-		if path.IsAbs(cleanPath) || strings.HasPrefix(cleanPath, "..") {
+		if filepath.IsAbs(cleanPath) || strings.HasPrefix(cleanPath, "..") {
 			return nil, errors.Errorf(
 				"invalid (malicious?) path in .npz archive: %q (normalized to %q)",
 				f.Name,

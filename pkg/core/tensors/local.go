@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package tensors
 
 import (
@@ -14,7 +16,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 )
 
@@ -408,16 +410,32 @@ func ToScalar[T dtypes.Supported](t *Tensor) T {
 	return t.local.flat.([]T)[0]
 }
 
+// CopyFlatData returns a copy of the flat data of the Tensor.
+//
+// It triggers a synchronous transfer from device to local if the tensor is only on-device.
+//
+// It returns an error if the given generic type doesn't match the DType of the tensor.
+func CopyFlatData[T dtypes.Supported](t *Tensor) ([]T, error) {
+	var flatCopy []T
+	err := ConstFlatData(t, func(flat []T) {
+		flatCopy = xslices.Copy(flat)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return flatCopy, nil
+}
+
 // MustCopyFlatData returns a copy of the flat data of the Tensor.
 //
 // It triggers a synchronous transfer from device to local if the tensor is only on-device.
 //
 // It will panic if the given generic type doesn't match the DType of the tensor.
 func MustCopyFlatData[T dtypes.Supported](t *Tensor) []T {
-	var flatCopy []T
-	MustConstFlatData(t, func(flat []T) {
-		flatCopy = xslices.Copy(flat)
-	})
+	flatCopy, err := CopyFlatData[T](t)
+	if err != nil {
+		panic(err)
+	}
 	return flatCopy
 }
 
@@ -742,7 +760,7 @@ func FromAnyValue(value any) *Tensor {
 	}
 	t := FromShape(shape)
 	t.MustMutableFlatData(func(flatAny any) {
-		if baseType(reflect.TypeOf(value)) == reflect.TypeOf(int(0)) {
+		if baseType(reflect.TypeOf(value)) == reflect.TypeFor[int]() {
 			// Go `int` type can be either an int32 or int64 depending on the architecture (anything else would panic
 			// already). For the copy operation to work, we have to cast flatRefAny (either a []int64 or []int32) as an []int.
 			// This is not pretty (using unsafe), but it avoids individually converting values, which is important for large tensors.
@@ -779,7 +797,7 @@ func copySlicesRecursively(data reflect.Value, mdSlice reflect.Value, strides []
 
 	numElements := mdSlice.Len()
 	subStrides := strides[1:]
-	for ii := 0; ii < numElements; ii++ {
+	for ii := range numElements {
 		start := ii * strides[0]
 		end := (ii + 1) * strides[0]
 		subData := data.Slice(start, end)
@@ -820,7 +838,7 @@ func createSlicesRecursively(resultT reflect.Type, data reflect.Value, dimension
 	subStrides := strides[1:]
 	subDimensions := dimensions[1:]
 	subResultT := resultT.Elem()
-	for ii := 0; ii < numElements; ii++ {
+	for ii := range numElements {
 		start := ii * strides[0]
 		end := (ii + 1) * strides[0]
 		subData := data.Slice(start, end)

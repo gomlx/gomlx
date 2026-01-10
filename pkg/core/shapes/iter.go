@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package shapes
 
 import (
@@ -233,7 +235,7 @@ func (s Shape) IterOnAxes(axesToIterate, strides, indices []int) iter.Seq2[int, 
 
 		// Calculate initial flatIdx based on the current indices
 		flatIdx := 0
-		for axis := 0; axis < rank; axis++ {
+		for axis := range rank {
 			flatIdx += indices[axis] * strides[axis]
 		}
 

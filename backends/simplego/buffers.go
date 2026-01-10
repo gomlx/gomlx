@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package simplego
 
 import (
@@ -6,7 +8,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 
 	"github.com/gomlx/gomlx/backends"
@@ -29,6 +31,42 @@ type Buffer struct {
 	flat any
 }
 
+// EqualNodeData implements nodeDataComparable for Buffer.
+// For Constants, this compares the shape and the actual data values.
+func (b *Buffer) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*Buffer)
+	if !b.shape.Equal(o.shape) || b.valid != o.valid {
+		return false
+	}
+	// Compare flat data by comparing the underlying slice values
+	return compareFlatData(b.flat, o.flat)
+}
+
+// compareFlatData compares two flat data slices element by element.
+func compareFlatData(a, b any) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	// Use reflection to compare slices element by element
+	va := reflect.ValueOf(a)
+	vb := reflect.ValueOf(b)
+	if va.Kind() != reflect.Slice || vb.Kind() != reflect.Slice {
+		return false
+	}
+	if va.Len() != vb.Len() {
+		return false
+	}
+	for i := 0; i < va.Len(); i++ {
+		if va.Index(i).Interface() != vb.Index(i).Interface() {
+			return false
+		}
+	}
+	return true
+}
+
 type bufferPoolKey struct {
 	dtype  dtypes.DType
 	length int
@@ -40,7 +78,7 @@ func (b *Backend) getBufferPool(dtype dtypes.DType, length int) *sync.Pool {
 	poolInterface, ok := b.bufferPools.Load(key)
 	if !ok {
 		poolInterface, _ = b.bufferPools.LoadOrStore(key, &sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return &Buffer{
 					flat:  reflect.MakeSlice(reflect.SliceOf(dtype.GoType()), length, length).Interface(),
 					shape: shapes.Make(dtype, length),
@@ -115,6 +153,9 @@ var mutableBytesDTypeMap = NewDTypeMap("MutableBytes")
 // mutableBytesGeneric is the generic implementation of mutableBytes.
 func mutableBytesGeneric[T SupportedTypesConstraints](b *Buffer) []byte {
 	flat := b.flat.([]T)
+	if len(flat) == 0 {
+		return nil // Handle empty tensors
+	}
 	bytePointer := (*byte)(unsafe.Pointer(&flat[0]))
 	var t T
 	return unsafe.Slice(bytePointer, len(flat)*int(unsafe.Sizeof(t)))

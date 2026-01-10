@@ -1,17 +1,26 @@
-// Package xla implements the XLA/PJRT (https://openxla.org/) based backend for GoMLX.
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
+// Package xla implements a GoMLX backend using Google's XLA (see github.com/gomlx/go-xla).
 //
-// Deprecated: use the new `stablehlo` backend, a new "intermediate representation" to execute computation graphs
-// on the same XLA's PJRT executors -- it's much better supported.
+// The backend is registered with the aliases "xla", "stablehlo", "shlo" or "hlo" (all aliases to the same backend).
 //
-// To make it available in your program, import it with:
+// By default, the XLA/PJRT backend loads the requested plugins after the program starts and specifies the desired
+// plugin name (default to "cpu") using `dlopen`.
 //
-//	import _ "github.com/gomlx/gomlx/backends/xla"
+// If the plugins are not available, the backend will download them automatically ("auto-install):
 //
-// It will register itself as an available backend during initialization.
+// - From github.com/gomlx/pjrt-cpu-binaries for CPU PJRT plugins.
+// - From pypi.org, using the Jax pacakges for the CUDA and TPU PJRT plugins.
 //
-// By default, XLA/PJRT backend loads requested plugins after the program starts and specifies the desired
-// plugin name (default to "cpu") using `dlopen`. Now there are cases that one may simply want to pre-link
-// a plugin with the program. There are two options here (at most one can be selected):
+// Auto-install has no effect if default plugins are already installed. But to control it you can:
+//
+//   - Call xla.AutoInstall() directly if you want to call it immediately.
+//   - Configure it with xla.EnableAutoInstall() if you want to enable/disable it globally (default is enabled).
+//   - Set GOMLX_NO_AUTO_INSTALL, which sets the global auto-install flag to false -- but it can be overridden by
+//     calling xla.EnableAutoInstall().
+//
+// Experimentally, one can get this backend to work with pre-linked PJRT plugins, but it will require the user to
+// add the `.so` files in a library in LD_LIBRARY_PATH, or precompile a `.a` static library.
 //
 //   - Pre-link the CPU PJRT plugin statically: this will generate a bigger binary (+ ~200Mb, so slower to build),
 //     but allows one to build a static binary that can be deployed without extra dependencies (except the standard C and C++ libraries,
@@ -22,43 +31,69 @@
 //     or import `github.com/gomlx/gomlx/backends/xla/cpu/dynamic`. Not much difference from linking the PJRT plugin
 //     after the program starts, as default.
 //
-// Darwin (MacOS): currently dynamic linking XLA/PJRT is not working, so it links the CPU PJRT plugin by default,
-// no need to manually link `github.com/gomlx/gomlx/backends/xla/cpu/static`.
-//
 // # Shared Buffers Support:
 //
 // XLA/PJRT for CPU allows the "device buffer" (where device=CPU) to be addressed directly, which
 // saves the copy from "host/local tensor" to the "on-device tensor" when executing a computation.
 // This is enabled by default if the plugin is called "cpu". To force advertising support for this
-// for other PJRTs provide the "shared_buffers" option, e.g.: GOMLX_BACKEND="oldxla:my_pjrt,shared_buffers".
+// for other PJRTs provide the "shared_buffers" option, e.g.: GOMLX_BACKEND="xla:my_pjrt,shared_buffers".
 // Or to force disabling the support, provide the "noshared_buffers" option.
 package xla
 
-//go:generate go run ../../internal/cmd/xla_generator
-
 import (
-	"path"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"unsafe"
 
+	"github.com/gomlx/go-xla/pkg/installer"
+	"github.com/gomlx/go-xla/pkg/pjrt"
+	xladtypes "github.com/gomlx/go-xla/pkg/types/dtypes"
+	xlabfloat16 "github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
+	xlashapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
 
-const BackendName = "oldxla"
+//go:generate go run ../../internal/cmd/xla_generator
+
+// BackendName is the name of the backend.
+//
+// The stablehlo backend also accepts the "xla", "hlo" and "pjrt" aliases.
+const BackendName = "xla"
+
+// Disable XLA logging by default by setting TF_CPP_MIN_LOG_LEVEL to 2 (errors level), if it is not already set.
+// This won't work if the PJRT is linked statically or dynamically before the go program start (without `dlopen` that is).
+func init() {
+	const TensorflowCPPMinLogLevelEnv = "TF_CPP_MIN_LOG_LEVEL"
+	tfLogLevel := os.Getenv(TensorflowCPPMinLogLevelEnv)
+	if tfLogLevel == "" {
+		err := os.Setenv(TensorflowCPPMinLogLevelEnv, "2")
+		if err != nil {
+			klog.Errorf("Failed to set $%s to 2: %v", TensorflowCPPMinLogLevelEnv, err)
+		}
+	}
+}
 
 // New returns a new Backend using the config as a configuration.
 // The config string should be the name of the PJRT plugin to use.
+//
+// This function triggers AutoInstall if it is enabled (the default). See EnableAutoInstall to disable it.
 func New(config string) (backends.Backend, error) {
 	return NewWithOptions(config, nil)
 }
 
-// NewWithOptions creates a XlaBackend with the given client options.
+// NewWithOptions creates a StableHLO backend with the given client options.
 // It allows more control, not available with the default New constructor.
+//
+// This function triggers AutoInstall if it is enabled (the default). See EnableAutoInstall to disable it.
 func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error) {
 	pluginName := config
 	var pluginOptions []string
@@ -69,7 +104,14 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		pluginName = parts[0]
 	}
 
-	if !path.IsAbs(pluginName) {
+	if !filepath.IsAbs(pluginName) {
+		if autoInstall {
+			err := AutoInstall()
+			if err != nil {
+				return nil, errors.WithMessagef(err, "backend %q failed to auto-install default plugins", BackendName)
+			}
+		}
+
 		// Verify the pluginName is available.
 		plugins := GetAvailablePlugins()
 		if len(plugins) == 0 {
@@ -80,7 +122,12 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		if pluginName == "" {
 			pluginName = plugins[0]
 		} else if slices.Index(plugins, pluginName) == -1 {
-			return nil, errors.Errorf("Plugin %q for backend %q not found: available plugins found %q", pluginName, BackendName, plugins)
+			// Try to find a versioned plugin matching the base name (e.g., "cpu" matches "cpu_v0.83.1")
+			versionedName := findVersionedPlugin(pluginName, plugins)
+			if versionedName == "" {
+				return nil, errors.Errorf("Plugin %q for backend %q not found: available plugins found %q", pluginName, BackendName, plugins)
+			}
+			pluginName = versionedName
 		}
 	}
 
@@ -98,12 +145,12 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		plugin:       plugin,
 		client:       client,
 		pluginName:   pluginName,
-		capabilities: CPUCapabilities.Clone(),
+		capabilities: Capabilities.Clone(),
 		numDevices:   len(client.AddressableDevices()),
 	}
 
 	// Support "shared buffers":
-	backend.hasSharedBuffers = pluginName == "cpu"
+	backend.hasSharedBuffers = isPluginType(pluginName, "cpu")
 	if idx := slices.Index(pluginOptions, "shared_buffers"); idx != -1 {
 		backend.hasSharedBuffers = true
 		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
@@ -111,36 +158,87 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		backend.hasSharedBuffers = false
 		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
 	}
+
+	// Support for tf32 DotGeneral.
+	if idx := slices.Index(pluginOptions, "tf32"); idx != -1 {
+		backend.DotGeneralConfig.UseTF32 = true
+		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
+	}
+
+	// Any leftover plugin options are unknown.
 	if len(pluginOptions) != 0 {
 		klog.Errorf("backend %q: unknown plugin options %q", BackendName, pluginOptions)
 	}
 	return backend, nil
 }
 
-// Registers New() as the default constructor for "oldxla" backend.
+// Registers New() as the default constructor for "xla" backend.
 func init() {
 	backends.Register(BackendName, New)
+
+	// Other aliases for this backend.
+	backends.Register("stablehlo", New)
+	backends.Register("hlo", New)
+	backends.Register("shlo", New)
 }
 
 var (
 	// DefaultPlugins is the list of plugins to use in preference order, if not otherwise specified.
 	DefaultPlugins = []string{"cuda", "cpu"}
 
-	// availablePluginsList are the keys to availablePluginsMap sorted by DefaultPlugins.
+	// availablePluginsList are the keys to the available plugins sorted by DefaultPlugins.
 	availablePluginsList []string
 )
 
+var autoInstall bool = true // Whether it should always auto-install at every call to New()
+
+func init() {
+	_, found := os.LookupEnv(NoAutoInstallEnv)
+	if found {
+		autoInstall = false
+	}
+}
+
+const NoAutoInstallEnv = "GOMLX_NO_AUTO_INSTALL"
+
+// AutoInstall the standard plugin version tested for the current go-xla version.
+// If GPU or TPU are detected, it will also install the corresponding plugins.
+//
+// This simply calls github.com/gomlx/go-xla/pkg/installer.AutoInstall().
+// If you want more control over the installation path, cache usage, or verbosity,
+// you can use the AutoInstall function from go-xla's installer package directly.
+func AutoInstall() error {
+	return installer.AutoInstall("", true, installer.Normal)
+}
+
+// EnableAutoInstall sets whether AutoInstall should be triggered automatically for GetAvailablePlugins or New.
+//
+// If enabled, the default, the AutoInstall function will be called automatically when GetAvailablePlugins or New is called.
+func EnableAutoInstall(enable bool) {
+	autoInstall = enable
+}
+
 // GetAvailablePlugins lists the available platforms -- it caches and reuses the result in future calls.
 //
-// Plugins are searched in the PJRT_PLUGIN_LIBRARY_PATH directory -- or directories, if it is a ":" separated list.
-// If it is not set it will search in "/usr/local/lib/gomlx/pjrt" and the standard libraries directories of the
+// This function triggers AutoInstall if it is enabled (the default). See EnableAutoInstall to disable it.
+//
+// Plugins are searched in the PJRT_PLUGIN_LIBRARY_PATH directory -- or directories if it is a ":" separated list.
+// If it is not set, it will search the system "/usr/local/lib/go-xla", the users $HOME/.local/lib/go-xla (or
+// "$HOME/Library/Application Support/go-xla" in MacOS) and the standard libraries directories of the
 // system (in linux in LD_LIBRARY_PATH and /etc/ld.so.conf file) in that order.
 //
-// If there are plugins with the same name but different versions in different directories, it respects the order of the directories given by
-// PJRT_PLUGIN_LIBRARY_PATH or by the system.
+// If there are plugins with the same name but different versions in different directories, it respects the order
+// of the directories given by PJRT_PLUGIN_LIBRARY_PATH or by the system.
 //
 // See details in pjrt.AvailablePlugins.
 func GetAvailablePlugins() []string {
+	if autoInstall {
+		err := AutoInstall()
+		if err != nil {
+			klog.Errorf("Error auto-installing plugins: %+v", err)
+		}
+	}
+
 	if len(availablePluginsList) > 0 {
 		// Use cache results.
 		return availablePluginsList
@@ -164,4 +262,65 @@ func GetAvailablePlugins() []string {
 		availablePluginsList = append(availablePluginsList, pluginName)
 	}
 	return availablePluginsList
+}
+
+// findVersionedPlugin looks for a versioned plugin matching the given base name.
+// For example, if baseName is "cpu" and plugins contains "cpu_v0.83.1", it returns "cpu_v0.83.1".
+// If no versioned match is found, it returns an empty string.
+func findVersionedPlugin(baseName string, plugins []string) string {
+	prefix := baseName + "_v"
+	for _, p := range plugins {
+		if strings.HasPrefix(p, prefix) {
+			return p
+		}
+	}
+	return ""
+}
+
+// isPluginType checks if pluginName matches the given base type.
+// For example, isPluginType("cpu_v0.83.1", "cpu") returns true.
+func isPluginType(pluginName, baseType string) bool {
+	return pluginName == baseType || strings.HasPrefix(pluginName, baseType+"_v")
+}
+
+// DTypeToXLA converts a GoMLX dtypes.DType to a go-xla xladtypes.DType.
+// Currently, they are identical types, but this function centralizes the conversion
+// in case they diverge in the future.
+func DTypeToXLA(dtype dtypes.DType) xladtypes.DType {
+	return xladtypes.DType(dtype)
+}
+
+// DTypeFromXLA converts a go-xla xladtypes.DType to a GoMLX dtypes.DType.
+// Currently, they are identical types, but this function centralizes the conversion
+// in case they diverge in the future.
+func DTypeFromXLA(xlaDType xladtypes.DType) dtypes.DType {
+	return dtypes.DType(xlaDType)
+}
+
+// BFloat16SliceToXLA converts a GoMLX []bfloat16.BFloat16 slice to a go-xla []xlabfloat16.BFloat16 slice.
+// Both types are defined as `type BFloat16 uint16`, so this is a zero-copy conversion using unsafe.
+func BFloat16SliceToXLA(slice []bfloat16.BFloat16) []xlabfloat16.BFloat16 {
+	return unsafe.Slice((*xlabfloat16.BFloat16)(unsafe.Pointer(unsafe.SliceData(slice))), len(slice))
+}
+
+// BFloat16SliceFromXLA converts a go-xla []xlabfloat16.BFloat16 slice to a GoMLX []bfloat16.BFloat16 slice.
+// Both types are defined as `type BFloat16 uint16`, so this is a zero-copy conversion using unsafe.
+func BFloat16SliceFromXLA(slice []xlabfloat16.BFloat16) []bfloat16.BFloat16 {
+	return unsafe.Slice((*bfloat16.BFloat16)(unsafe.Pointer(unsafe.SliceData(slice))), len(slice))
+}
+
+// ShapeToXLA converts a GoMLX shape to a go-xla shape.
+func ShapeToXLA(shape shapes.Shape) xlashapes.Shape {
+	if !shape.Ok() || shape.IsTuple() {
+		return xlashapes.Invalid()
+	}
+	return xlashapes.Make(DTypeToXLA(shape.DType), slices.Clone(shape.Dimensions)...)
+}
+
+// ShapeFromXLA converts a go-xla shape to a GoMLX shape.
+func ShapeFromXLA(shape xlashapes.Shape) shapes.Shape {
+	if !shape.Ok() || shape.IsTuple() {
+		return shapes.Invalid()
+	}
+	return shapes.Make(DTypeFromXLA(shape.DType), slices.Clone(shape.Dimensions)...)
 }

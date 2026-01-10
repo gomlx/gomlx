@@ -1,19 +1,21 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package backends
 
 import (
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // StandardOps lists the bulk of the operations that a backends.Builder must support.
 type StandardOps interface {
 
 	// Abs returns the Op that represents the output of the corresponding operation.
-	Abs(x Op) (Op, error)
+	Abs(x Value) (Value, error)
 
 	// Add returns the element-wise sum of the two values.
 	// Standard broadcasting rules apply (see documentation).
-	Add(lhs, rhs Op) (Op, error)
+	Add(lhs, rhs Value) (Value, error)
 
 	// ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
 	//
@@ -27,7 +29,7 @@ type StandardOps interface {
 	//
 	//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
 	//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it chooses the 2, 4, and 7)
-	ArgMinMax(x Op, axis int, outputDType dtypes.DType, isMin bool) (Op, error)
+	ArgMinMax(x Value, axis int, outputDType dtypes.DType, isMin bool) (Value, error)
 
 	// BatchNormForInference implements batch normalization for inference.
 	//
@@ -35,7 +37,7 @@ type StandardOps interface {
 	//
 	// Based on the paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
-	BatchNormForInference(operand, scale, offset, mean, variance Op, epsilon float32, featureAxis int) (Op, error)
+	BatchNormForInference(operand, scale, offset, mean, variance Value, epsilon float32, featureAxis int) (Value, error)
 
 	// BatchNormForTraining implements batch normalization for training.
 	//
@@ -46,10 +48,10 @@ type StandardOps interface {
 	// Based on the paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
 	BatchNormForTraining(
-		operand, scale, offset Op,
+		operand, scale, offset Value,
 		epsilon float32,
 		featureAxis int,
-	) (normalized Op, batchMean Op, batchVariance Op, err error)
+	) (normalized Value, batchMean Value, batchVariance Value, err error)
 
 	// BatchNormGradient calculates the batch normalization gradients with respect to the input, scale, and offset.
 	//
@@ -61,10 +63,10 @@ type StandardOps interface {
 	// Based on the paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
 	BatchNormGradient(
-		operand, scale, mean, variance, gradOutput Op,
+		operand, scale, mean, variance, gradOutput Value,
 		epsilon float32,
 		featureAxis int,
-	) (gradOperand Op, gradScale Op, gradOffset Op, err error)
+	) (gradOperand Value, gradScale Value, gradOffset Value, err error)
 
 	// Bitcast performs an elementwise bit-cast operation from a dtype to another dtype.
 	//
@@ -80,23 +82,23 @@ type StandardOps interface {
 	// x.DType().Size() / targetDType.Size().
 	//
 	// E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xbeef, 0xdead}} // Little-endian encoding.
-	Bitcast(x Op, targetDType dtypes.DType) (Op, error)
+	Bitcast(x Value, targetDType dtypes.DType) (Value, error)
 
 	// BitCount returns the number of bits that are set to one.
 	// Also known as Population Count ("Popcnt") or Hamming Weight.
-	BitCount(operand Op) (Op, error)
+	BitCount(operand Value) (Value, error)
 
 	// BitwiseAnd returns the element-wise bitwise AND operation.
-	BitwiseAnd(lhs, rhs Op) (Op, error)
+	BitwiseAnd(lhs, rhs Value) (Value, error)
 
 	// BitwiseNot returns the element-wise bitwise AND operation.
-	BitwiseNot(x Op) (Op, error)
+	BitwiseNot(x Value) (Value, error)
 
 	// BitwiseOr returns the element-wise bitwise OR operation.
-	BitwiseOr(lhs, rhs Op) (Op, error)
+	BitwiseOr(lhs, rhs Value) (Value, error)
 
 	// BitwiseXor returns the element-wise bitwise XOR operator.
-	BitwiseXor(lhs, rhs Op) (Op, error)
+	BitwiseXor(lhs, rhs Value) (Value, error)
 
 	// BroadcastInDim broadcasts x to an output with the given shape.
 	// broadcastAxes has an output axes value for each x axes (len(broadcastAxes) == x.Shape.Rank()).
@@ -113,18 +115,18 @@ type StandardOps interface {
 	//     will generate output
 	//     {{1 , 1},
 	//     {2 , 2}}
-	BroadcastInDim(x Op, outputShape shapes.Shape, broadcastAxes []int) (Op, error)
+	BroadcastInDim(x Value, outputShape shapes.Shape, broadcastAxes []int) (Value, error)
 
 	// Ceil returns the Op that represents the output of the corresponding operation.
-	Ceil(x Op) (Op, error)
+	Ceil(x Value) (Value, error)
 
 	// Clamp returns the element-wise clamping operation.
 	//
 	// The values max and min can either be a scalar or have the same shape as x.
-	Clamp(min, x, max Op) (Op, error)
+	Clamp(min, x, max Value) (Value, error)
 
 	// Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
-	Clz(x Op) (Op, error)
+	Clz(x Value) (Value, error)
 
 	// Complex returns the complex number taking x0 as the real part and x1 as the imaginary part.
 	// The real (x0) and imaginary (x1) must have the same dtype, and they must be either `dtypes.Float32` or
@@ -132,17 +134,17 @@ type StandardOps interface {
 	// The output will be either `dtypes.Complex64` or `dtypes.Complex128`, depending on x0 and x1 dtypes.
 	// The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
 	// the value is broadcast to every other value.
-	Complex(lhs, rhs Op) (Op, error)
+	Complex(lhs, rhs Value) (Value, error)
 
 	// Concatenate operands on the given axis.
 	//
 	// All axes that are not being concatenated must match dimensions, except on the axes being concatenated.
 	// It doesn't work with scalars -- use ExpandAxes.
 	// If there is only one operand, it is returned and this is a no-op.
-	Concatenate(axis int, operands ...Op) (Op, error)
+	Concatenate(axis int, operands ...Value) (Value, error)
 
 	// Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
-	Conj(x Op) (Op, error)
+	Conj(x Value) (Value, error)
 
 	// ConvGeneral is a generic Convolution operation with support for:
 	// - Arbitrary number of spatial axes.
@@ -160,23 +162,23 @@ type StandardOps interface {
 	//   - Another common term for "channels" is "features".
 	//   - "Kernel" is also commonly called "weights" or "filters".
 	ConvGeneral(
-		input, kernel Op,
+		input, kernel Value,
 		axes ConvolveAxesConfig,
 		strides []int,
 		paddings [][2]int,
 		inputDilations, kernelDilations []int,
 		channelGroupCount, batchGroupCount int,
-	) (Op, error)
+	) (Value, error)
 
 	// ConvertDType of x to dtype.
-	ConvertDType(x Op, dtype dtypes.DType) (Op, error)
+	ConvertDType(x Value, dtype dtypes.DType) (Value, error)
 
 	// Cos returns the Op that represents the output of the corresponding operation.
-	Cos(x Op) (Op, error)
+	Cos(x Value) (Value, error)
 
 	// Div returns the element-wise division of the two values.
 	// Standard broadcasting rules apply (see documentation).
-	Div(lhs, rhs Op) (Op, error)
+	Div(lhs, rhs Value) (Value, error)
 
 	// Dot returns the "dot product" operation.
 	// The exact semantics of this operation depend on the ranks of the operands:
@@ -190,7 +192,7 @@ type StandardOps interface {
 	// The contracted dimensions of x0 and x1 must be of the same size.
 	// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications, or
 	// matrix/matrix multiplications.
-	Dot(lhs, rhs Op) (Op, error)
+	Dot(lhs, rhs Value) (Value, error)
 
 	// DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
 	// for a general vector product -- a generalized "Einsum". Each axis can be:
@@ -206,11 +208,11 @@ type StandardOps interface {
 	// non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 	// It provides the basic means of implementing Einsum.
 	DotGeneral(
-		lhs Op,
+		lhs Value,
 		lhsContractingAxes, lhsBatchAxes []int,
-		rhs Op,
+		rhs Value,
 		rhsContractingAxes, rhsBatchAxes []int,
-	) (Op, error)
+	) (Value, error)
 
 	// DynamicSlice extracts a slice from the operand at the startIndices position and the given sliceSizes.
 	//
@@ -223,7 +225,7 @@ type StandardOps interface {
 	//	adjustedStartIndices[i] = clamp(0, StartIndices[i], operand.Dimensions[i] - sliceSizes[i])
 	//
 	// See description in https://openxla.org/xla/operation_semantics#dynamicslice
-	DynamicSlice(operand Op, startIndices []Op, sliceDims []int) (Op, error)
+	DynamicSlice(operand Value, startIndices []Value, sliceDims []int) (Value, error)
 
 	// DynamicUpdateSlice updates the operand with the values given in update, at the position given by startIndices.
 	//
@@ -237,32 +239,32 @@ type StandardOps interface {
 	// The startIndices are adjusted as follows:
 	//
 	//	adjustedStartIndices[i] = clamp(0, StartIndices[i], operand.Dimensions[i] - update.Dimensions[i])
-	DynamicUpdateSlice(operand, update Op, startIndices []Op) (Op, error)
+	DynamicUpdateSlice(operand, update Value, startIndices []Value) (Value, error)
 
 	// Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
-	Equal(lhs, rhs Op) (Op, error)
+	Equal(lhs, rhs Value) (Value, error)
 
 	// EqualTotalOrder returns the element-wise operation.
 	// Standard broadcasting rules apply (see documentation).
 	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-	EqualTotalOrder(lhs, rhs Op) (Op, error)
+	EqualTotalOrder(lhs, rhs Value) (Value, error)
 
 	// Erf returns the "error function", defined as erf(x) = 2/Pi * \int_{0}^{x}{e^{-t^2}dt}.
-	Erf(x Op) (Op, error)
+	Erf(x Value) (Value, error)
 
 	// Exp returns the Op that represents the output of the corresponding operation.
-	Exp(x Op) (Op, error)
+	Exp(x Value) (Value, error)
 
 	// Expm1 returns the Op that represents the output of the corresponding operation.
-	Expm1(x Op) (Op, error)
+	Expm1(x Value) (Value, error)
 
 	// FFT calls the XLA FFT operation, which implements {Forward, Inverse} x {Complex, Real} versions.
 	// See documentation in https://www.tensorflow.org/xla/operation_semantics.
 	// Underlying, CPU FFT is backed by Eigen's TensorFFT, and GPU FFT uses cuFFT.
-	FFT(operand Op, fftType FFTType, fftLength []int) (Op, error)
+	FFT(operand Value, fftType FFTType, fftLength []int) (Value, error)
 
 	// Floor returns the Op that represents the output of the corresponding operation.
-	Floor(x Op) (Op, error)
+	Floor(x Value) (Value, error)
 
 	// Gather is a powerful but cumbersome Gather operation offered by XLA.
 	// Full details in https://www.tensorflow.org/xla/operation_semantics#gather or
@@ -326,186 +328,186 @@ type StandardOps interface {
 	// are taken from the border of the axes.
 	// TODO: Add batch support: operandBatchingAxes and startIndicesBatchingAxes.
 	Gather(
-		operand, startIndices Op,
+		operand, startIndices Value,
 		indexVectorAxis int,
 		offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int,
 		indicesAreSorted bool,
-	) (Op, error)
+	) (Value, error)
 
 	// GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
-	GreaterOrEqual(lhs, rhs Op) (Op, error)
+	GreaterOrEqual(lhs, rhs Value) (Value, error)
 
 	// GreaterOrEqualTotalOrder returns the element-wise operation.
 	// Standard broadcasting rules apply (see documentation).
 	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-	GreaterOrEqualTotalOrder(lhs, rhs Op) (Op, error)
+	GreaterOrEqualTotalOrder(lhs, rhs Value) (Value, error)
 
 	// GreaterThan performs element-wise comparison, returns boolean results with the same dimensions as input.
-	GreaterThan(lhs, rhs Op) (Op, error)
+	GreaterThan(lhs, rhs Value) (Value, error)
 
 	// GreaterThanTotalOrder returns the element-wise operation.
 	// Standard broadcasting rules apply (see documentation).
 	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-	GreaterThanTotalOrder(lhs, rhs Op) (Op, error)
+	GreaterThanTotalOrder(lhs, rhs Value) (Value, error)
 
 	// Identity returns an Op whose output is the same as its input.
 	// It's a no-op that can serve as a place-holder.
-	Identity(x Op) (Op, error)
+	Identity(x Value) (Value, error)
 
 	// Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
-	Imag(x Op) (Op, error)
+	Imag(x Value) (Value, error)
 
 	// Iota creates a constant of the given shape with increasing numbers (starting from 0)
 	// on the given axis. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
 	// returns [[0 0][1 1]].
-	Iota(shape shapes.Shape, iotaAxis int) (Op, error)
+	Iota(shape shapes.Shape, iotaAxis int) (Value, error)
 
 	// IsFinite tests whether each element of operand is finite, i.e., if it is not positive nor negative infinity, and it is not NaN.
 	// It returns the same shape as the input, but with boolean values where each element is true if and only if
 	// the corresponding input element is finite.
-	IsFinite(x Op) (Op, error)
+	IsFinite(x Value) (Value, error)
 
 	// IsNaN tests whether each element of operand is NaN, i.e., if it is not a finite number.
-	IsNaN(x Op) (Op, error)
+	IsNaN(x Value) (Value, error)
 
 	// LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
-	LessOrEqual(lhs, rhs Op) (Op, error)
+	LessOrEqual(lhs, rhs Value) (Value, error)
 
 	// LessOrEqualTotalOrder returns the element-wise operation.
 	// Standard broadcasting rules apply (see documentation).
 	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-	LessOrEqualTotalOrder(lhs, rhs Op) (Op, error)
+	LessOrEqualTotalOrder(lhs, rhs Value) (Value, error)
 
 	// LessThan performs element-wise comparison, returns boolean results with the same dimensions as input.
-	LessThan(lhs, rhs Op) (Op, error)
+	LessThan(lhs, rhs Value) (Value, error)
 
 	// LessThanTotalOrder returns the element-wise operation.
 	// Standard broadcasting rules apply (see documentation).
 	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-	LessThanTotalOrder(lhs, rhs Op) (Op, error)
+	LessThanTotalOrder(lhs, rhs Value) (Value, error)
 
 	// Log returns the Op that represents the output of the corresponding operation.
-	Log(x Op) (Op, error)
+	Log(x Value) (Value, error)
 
 	// Log1p returns the expression log(x+1).
-	Log1p(x Op) (Op, error)
+	Log1p(x Value) (Value, error)
 
 	// LogicalAnd returns the element-wise logical AND operation.
-	LogicalAnd(lhs, rhs Op) (Op, error)
+	LogicalAnd(lhs, rhs Value) (Value, error)
 
 	// LogicalNot returns the Op that represents the output of the corresponding operation.
-	LogicalNot(x Op) (Op, error)
+	LogicalNot(x Value) (Value, error)
 
 	// LogicalOr returns the element-wise logical OR operation.
-	LogicalOr(lhs, rhs Op) (Op, error)
+	LogicalOr(lhs, rhs Value) (Value, error)
 
 	// LogicalXor returns the element-wise logical XOR operator.
-	LogicalXor(lhs, rhs Op) (Op, error)
+	LogicalXor(lhs, rhs Value) (Value, error)
 
 	// Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
-	Logistic(x Op) (Op, error)
+	Logistic(x Value) (Value, error)
 
 	// Max returns the element-wise highest value among the two.
-	Max(lhs, rhs Op) (Op, error)
+	Max(lhs, rhs Value) (Value, error)
 
 	// Min returns the element-wise smallest value among the two.
-	Min(lhs, rhs Op) (Op, error)
+	Min(lhs, rhs Value) (Value, error)
 
 	// Mul returns the element-wise multiplication of the two values.
 	// Standard broadcasting rules apply (see documentation).
-	Mul(lhs, rhs Op) (Op, error)
+	Mul(lhs, rhs Value) (Value, error)
 
 	// Neg returns the Op that represents the output of the corresponding operation.
-	Neg(x Op) (Op, error)
+	Neg(x Value) (Value, error)
 
 	// NotEqual performs element-wise inequality check, returns boolean results with the same dimensions as input.
-	NotEqual(lhs, rhs Op) (Op, error)
+	NotEqual(lhs, rhs Value) (Value, error)
 
 	// NotEqualTotalOrder returns the element-wise operation.
 	// Standard broadcasting rules apply (see documentation).
 	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-	NotEqualTotalOrder(lhs, rhs Op) (Op, error)
+	NotEqualTotalOrder(lhs, rhs Value) (Value, error)
 
 	// Pad injects padding on the start, end, or interior (in between each element) of the given operand.
 	// There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 	// that is, no padding for those axes.
-	Pad(x, fillValue Op, axesConfig ...PadAxis) (Op, error)
+	Pad(x, fillValue Value, axesConfig ...PadAxis) (Value, error)
 
 	// Pow returns the Op that represents the output of the corresponding operation.
-	Pow(lhs, rhs Op) (Op, error)
+	Pow(lhs, rhs Value) (Value, error)
 
 	// Real return the real part of a complex number. It returns x if the x is a float number.
-	Real(x Op) (Op, error)
+	Real(x Value) (Value, error)
 
 	// ReduceBitwiseAnd reduces x over the axes selected, performing a BitwiseAnd on the slices reduced.
 	//
 	// The returned result rank is decreased by len(axes).
 	//
 	// If no axes are given, it reduces the full array.
-	ReduceBitwiseAnd(x Op, axes ...int) (Op, error)
+	ReduceBitwiseAnd(x Value, axes ...int) (Value, error)
 
 	// ReduceBitwiseOr reduces x over the axes selected, performing a BitwiseOr on the slices reduced.
 	//
 	// The returned result rank is decreased by len(axes).
 	//
 	// If no axes are given, it reduces the full array.
-	ReduceBitwiseOr(x Op, axes ...int) (Op, error)
+	ReduceBitwiseOr(x Value, axes ...int) (Value, error)
 
 	// ReduceBitwiseXor reduces x over the axes selected, performing a BitwiseXor on the slices reduced.
 	//
 	// The returned result rank is decreased by len(axes).
 	//
 	// If no axes are given, it reduces the full array.
-	ReduceBitwiseXor(x Op, axes ...int) (Op, error)
+	ReduceBitwiseXor(x Value, axes ...int) (Value, error)
 
 	// ReduceLogicalAnd reduces x over the axes selected, performing a LogicalAnd on the slices reduced.
 	//
 	// The returned result rank is decreased by len(axes).
 	//
 	// If no axes are given, it reduces the full array.
-	ReduceLogicalAnd(x Op, axes ...int) (Op, error)
+	ReduceLogicalAnd(x Value, axes ...int) (Value, error)
 
 	// ReduceLogicalOr reduces x over the axes selected, performing a LogicalOr on the slices reduced.
 	//
 	// The returned result rank is decreased by len(axes).
 	//
 	// If no axes are given, it reduces the full array.
-	ReduceLogicalOr(x Op, axes ...int) (Op, error)
+	ReduceLogicalOr(x Value, axes ...int) (Value, error)
 
 	// ReduceLogicalXor reduces x over the axes selected, performing a LogicalXor on the slices reduced.
 	//
 	// The returned result rank is decreased by len(axes).
 	//
 	// If no axes are given, it reduces the full array.
-	ReduceLogicalXor(x Op, axes ...int) (Op, error)
+	ReduceLogicalXor(x Value, axes ...int) (Value, error)
 
 	// ReduceMax reduces x over the axes selected, taking the Max value of the slices reduced.
 	//
 	// The returned result rank is decreased by len(axes).
 	//
 	// If no axes are given, it reduces the full array.
-	ReduceMax(x Op, axes ...int) (Op, error)
+	ReduceMax(x Value, axes ...int) (Value, error)
 
 	// ReduceMin reduces x over the axes selected, taking the Min value of the slices reduced.
 	//
 	// The returned result rank is decreased by len(axes).
 	//
 	// If no axes are given, it reduces the full array.
-	ReduceMin(x Op, axes ...int) (Op, error)
+	ReduceMin(x Value, axes ...int) (Value, error)
 
 	// ReduceProduct reduces x over the axes selected, taking the product of the slices reduced.
 	//
 	// The returned result rank is decreased by len(axes).
 	//
 	// If no axes are given, it reduces the full array.
-	ReduceProduct(x Op, axes ...int) (Op, error)
+	ReduceProduct(x Value, axes ...int) (Value, error)
 
 	// ReduceSum reduces x over the axes selected, taking the sum of the slices reduced.
 	//
 	// The returned result rank is decreased by len(axes).
 	//
 	// If no axes are given, it reduces the full array.
-	ReduceSum(x Op, axes ...int) (Op, error)
+	ReduceSum(x Value, axes ...int) (Value, error)
 
 	// ReduceWindow runs a reduction function of the type given by reductionType,
 	// it can be either ReduceMaxNode, ReduceSumNode, or ReduceMultiplyNode.
@@ -515,88 +517,88 @@ type StandardOps interface {
 	// If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
 	// If paddings is nil, they are assumed to be 0.
 	ReduceWindow(
-		x Op,
+		x Value,
 		reductionType ReduceOpType,
 		windowDimensions, strides, baseDilations, windowDilations []int,
 		paddings [][2]int,
-	) (Op, error)
+	) (Value, error)
 
 	// Rem returns the remainder operation, also known as modulo (or Mod for short).
 	// Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
-	Rem(lhs, rhs Op) (Op, error)
+	Rem(lhs, rhs Value) (Value, error)
 
 	// Reshape reshapes x to the new dimensions.
 	// Total size cannot change, it's just a "reinterpretation" of the same flat data.
 	// The dtype remains the same, see ConvertDType to actually convert the values.
-	Reshape(x Op, dimensions ...int) (Op, error)
+	Reshape(x Value, dimensions ...int) (Value, error)
 
 	// Reverse returns x with the values for the given dimensions reversed, that is,
 	// the value indexed at `i` will be swapped with the value at indexed `(dimension_size - 1 - i)`.
 	// The shape remains the same.
-	Reverse(x Op, axes ...int) (Op, error)
+	Reverse(x Value, axes ...int) (Value, error)
 
 	// RNGBitGenerator generates the given shape filled with random bits.
 	//
 	// It takes as input a state (usually [3]uint64) and returns the updated state and the generated values (with random bits).
 	//
 	// Currently, the backend only supports the Philox algorithm. See https://dl.acm.org/doi/10.1145/2063384.2063405
-	RNGBitGenerator(state Op, shape shapes.Shape) (newState Op, values Op, err error)
+	RNGBitGenerator(state Value, shape shapes.Shape) (newState Value, values Value, err error)
 
 	// Round returns the Op that represents the output of the corresponding operation.
 	// This operation rounds to the nearest even.
-	Round(x Op) (Op, error)
+	Round(x Value) (Value, error)
 
 	// Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
-	Rsqrt(x Op) (Op, error)
+	Rsqrt(x Value) (Value, error)
 
 	// ScatterMax scatter values from updates pointed by scatterIndices to operand, by taking the Max.
 	ScatterMax(
-		operand, scatterIndices, updates Op,
+		operand, scatterIndices, updates Value,
 		indexVectorAxis int,
 		updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int,
 		indicesAreSorted, uniqueIndices bool,
-	) (Op, error)
+	) (Value, error)
 
 	// ScatterMin scatter values from updates pointed by scatterIndices to operand, by taking the Min.
 	ScatterMin(
-		operand, scatterIndices, updates Op,
+		operand, scatterIndices, updates Value,
 		indexVectorAxis int,
 		updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int,
 		indicesAreSorted, uniqueIndices bool,
-	) (Op, error)
+	) (Value, error)
 
 	// ScatterSum values from updates pointed by scatterIndices to operand.
 	ScatterSum(
-		operand, scatterIndices, updates Op,
+		operand, scatterIndices, updates Value,
 		indexVectorAxis int,
 		updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int,
 		indicesAreSorted, uniqueIndices bool,
-	) (Op, error)
+	) (Value, error)
 
 	// SelectAndScatterMax runs windows (similar to ReduceWindow) over the operand, selects values to update the output (like ScatterAdd)
 	// It selects the values in the window such that it works as reverse for a PoolMax operation.
 	// See details in https://openxla.org/xla/operation_semantics#selectandscatter
-	SelectAndScatterMax(operand, source Op, windowDimensions, windowStrides []int, paddings [][2]int) (Op, error)
+	SelectAndScatterMax(operand, source Value, windowDimensions, windowStrides []int, paddings [][2]int) (Value, error)
 
 	// SelectAndScatterMin runs windows (similar to ReduceWindow) over the operand, selects values to update the output (like ScatterAdd)
 	// It selects the values in the window such that it works as reverse for a PoolMin operation.
 	// See details in https://openxla.org/xla/operation_semantics#selectandscatter
-	SelectAndScatterMin(operand, source Op, windowDimensions, windowStrides []int, paddings [][2]int) (Op, error)
+	SelectAndScatterMin(operand, source Value, windowDimensions, windowStrides []int, paddings [][2]int) (Value, error)
 
 	// ShiftLeft n bits. It implicitly preserves the sign bit if there is no overflow. So ShiftLeft(-1, 1) = -2.
-	ShiftLeft(lhs, rhs Op) (Op, error)
+	ShiftLeft(lhs, rhs Value) (Value, error)
 
 	// ShiftRightArithmetic shifts right by n bits, preserving the sign bit. So ShiftRight(-2, 1) = -1.
-	ShiftRightArithmetic(lhs, rhs Op) (Op, error)
+	ShiftRightArithmetic(lhs, rhs Value) (Value, error)
 
 	// ShiftRightLogical shifts right by n bits, destroying the sign bit.
-	ShiftRightLogical(lhs, rhs Op) (Op, error)
+	ShiftRightLogical(lhs, rhs Value) (Value, error)
 
 	// Sign returns element-wise +1, +/-0 or -1 depending on the sign of x. It returns NaN if the input is NaN.
-	Sign(x Op) (Op, error)
+	Sign(x Value) (Value, error)
 
 	// Sin returns the Op that represents the output of the corresponding operation.
-	Sin(x Op) (Op, error)
+	Sin(x Value) (Value, error)
 
 	// Slice extracts a subarray from the input array.
 	// The subarray is of the same rank as the input and contains the values inside a bounding box within the input array
@@ -606,27 +608,27 @@ type StandardOps interface {
 	// Examples:
 	// 	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={4}, strides=nil) -> {2, 3}
 	// 	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={5}, strides={2}) -> {2, 4}
-	Slice(x Op, starts, limits, strides []int) (Op, error)
+	Slice(x Value, starts, limits, strides []int) (Value, error)
 
 	// Sqrt returns the Op that represents the output of the corresponding operation.
-	Sqrt(x Op) (Op, error)
+	Sqrt(x Value) (Value, error)
 
 	// Sub returns the element-wise subtraction of the two values.
 	// Standard broadcasting rules apply (see documentation).
-	Sub(lhs, rhs Op) (Op, error)
+	Sub(lhs, rhs Value) (Value, error)
 
 	// Tanh returns the Op that represents the output of the corresponding operation.
-	Tanh(x Op) (Op, error)
+	Tanh(x Value) (Value, error)
 
 	// Transpose axes of x.
 	// There should be one value in permutations for each axis in x.
 	// The output will have: output.Shape.Dimension[ii] = x.Shape.Dimension[permutations[i]].
-	Transpose(x Op, permutation ...int) (Op, error)
+	Transpose(x Value, permutation ...int) (Value, error)
 
 	// Where takes element-wise values from onTrue or onFalse depending on the value of the condition (must be boolean).
 	//
 	// The condition must be boolean, and onTrue and onFalse must have the same dtype.
 	//
 	// If either condition, onTrue or onFalse is a scalar, it will be broadcasted to the shape of the other operands.
-	Where(condition, onTrue, onFalse Op) (Op, error)
+	Where(condition, onTrue, onFalse Value) (Value, error)
 }

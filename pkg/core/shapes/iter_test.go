@@ -1,10 +1,12 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package shapes
 
 import (
 	"slices"
 	"testing"
 
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/stretchr/testify/require"
 )
 

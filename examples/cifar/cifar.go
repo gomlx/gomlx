@@ -1,18 +1,4 @@
-/*
- *	Copyright 2023 Jan Pfeifer
- *
- *	Licensed under the Apache License, Version 2.0 (the "License");
- *	you may not use this file except in compliance with the License.
- *	You may obtain a copy of the License at
- *
- *	http://www.apache.org/licenses/LICENSE-2.0
- *
- *	Unless required by applicable law or agreed to in writing, software
- *	distributed under the License is distributed on an "AS IS" BASIS,
- *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *	See the License for the specific language governing permissions and
- *	limitations under the License.
- */
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 // Package cifar provides a library of tools to download and manipulate Cifar-10 dataset.
 // Information about it in https://www.cs.toronto.edu/~kriz/cifar.html
@@ -29,12 +15,12 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/downloader"
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
 
@@ -108,9 +94,9 @@ func convertBytesToTensor[T dtypes.GoFloat](image []byte, imagesT *tensors.Tenso
 	}
 	tensors.MustMutableFlatData[T](imagesT, func(tensorData []T) {
 		tensorPos := exampleNum * imageSizeBytes
-		for h := 0; h < Height; h++ {
-			for w := 0; w < Width; w++ {
-				for d := 0; d < Depth; d++ {
+		for h := range Height {
+			for w := range Width {
+				for d := range Depth {
 					value := T(image[d*(Height*Width)+h*(Width)+w]) / T(255)
 					tensorData[tensorPos] = value
 					tensorPos++
@@ -143,7 +129,7 @@ func LoadCifar10(
 	}()
 	tensors.MustMutableFlatData[int64](labels, func(labelsData []int64) {
 		var labelImageBytes [imageSizeBytes + 1]byte
-		for fileIdx := 0; fileIdx < 6; fileIdx++ {
+		for fileIdx := range 6 {
 			dataFile := path.Join(baseDir, C10SubDir, fmt.Sprintf("data_batch_%d.bin", fileIdx+1))
 			if fileIdx == 5 {
 				dataFile = path.Join(baseDir, C10SubDir, "test_batch.bin")
@@ -153,7 +139,7 @@ func LoadCifar10(
 				panic(errors.Wrapf(err, "opening data file %q", dataFile))
 			}
 			fileStart := fileIdx * C10ExamplesPerFile
-			for inFileIdx := 0; inFileIdx < C10ExamplesPerFile; inFileIdx++ {
+			for inFileIdx := range C10ExamplesPerFile {
 				exampleIdx := fileStart + inFileIdx
 				bytesRead, err := f.Read(labelImageBytes[:])
 				if err != nil {
@@ -245,10 +231,10 @@ func ConvertToGoImage(images *tensors.Tensor, exampleNum int) *image.NRGBA {
 	images.MustConstFlatData(func(flatAny any) {
 		tensorData := reflect.ValueOf(flatAny)
 		tensorPos := exampleNum * imageSizeBytes
-		floatT := reflect.TypeOf(float64(0))
-		for h := 0; h < Height; h++ {
-			for w := 0; w < Width; w++ {
-				for d := 0; d < Depth; d++ {
+		floatT := reflect.TypeFor[float64]()
+		for h := range Height {
+			for w := range Width {
+				for d := range Depth {
 					v := tensorData.Index(tensorPos)
 					f := v.Convert(floatT).Interface().(float64)
 					tensorPos++

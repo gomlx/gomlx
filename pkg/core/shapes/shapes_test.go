@@ -1,25 +1,13 @@
-/*
- *	Copyright 2023 Jan Pfeifer
- *
- *	Licensed under the Apache License, Version 2.0 (the "License");
- *	you may not use this file except in compliance with the License.
- *	You may obtain a copy of the License at
- *
- *	http://www.apache.org/licenses/LICENSE-2.0
- *
- *	Unless required by applicable law or agreed to in writing, software
- *	distributed under the License is distributed on an "AS IS" BASIS,
- *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *	See the License for the specific language governing permissions and
- *	limitations under the License.
- */
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 package shapes
 
 import (
+	"math"
 	"testing"
 
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/stretchr/testify/require"
 )
 
@@ -84,4 +72,20 @@ func TestFromAnyValue(t *testing.T) {
 	// Irregular shape is not accepted:
 	shape, err = FromAnyValue([][]float32{{1, 2, 3}, {4, 5}})
 	require.Errorf(t, err, "irregular shape should have returned an error, instead got shape %s", shape)
+}
+
+func TestCastDType(t *testing.T) {
+	t.Run("BFloat16", func(t *testing.T) {
+		for _, v := range []float64{math.Inf(-1), -1, 0, 2, math.Inf(1)} {
+			vAny := CastAsDType(v, dtypes.BF16)
+			if _, ok := vAny.(bfloat16.BFloat16); !ok {
+				t.Errorf("Failed CastAsDType from float64(%g) to BFloat16, got %T instead", v, vAny)
+			}
+			v32 := float32(v)
+			vAny = CastAsDType(v32, dtypes.BF16)
+			if _, ok := vAny.(bfloat16.BFloat16); !ok {
+				t.Errorf("Failed CastAsDType from float32(%g) to BFloat16, got %T instead", v32, vAny)
+			}
+		}
+	})
 }

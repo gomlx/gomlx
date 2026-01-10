@@ -1,18 +1,4 @@
-/*
- *	Copyright 2023 Jan Pfeifer
- *
- *	Licensed under the Apache License, Version 2.0 (the "License");
- *	you may not use this file except in compliance with the License.
- *	You may obtain a copy of the License at
- *
- *	http://www.apache.org/licenses/LICENSE-2.0
- *
- *	Unless required by applicable law or agreed to in writing, software
- *	distributed under the License is distributed on an "AS IS" BASIS,
- *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *	See the License for the specific language governing permissions and
- *	limitations under the License.
- */
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 // IMDB Movie Review library (imdb) demo: you can run this program in 4 different ways:
 package main
@@ -23,8 +9,8 @@ import (
 	_ "github.com/gomlx/gomlx/backends/default"
 	"github.com/gomlx/gomlx/examples/imdb"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/ui/commandline"
-	"github.com/gomlx/gopjrt/dtypes"
 
 	"github.com/gomlx/gomlx/internal/must"
 	"k8s.io/klog/v2"

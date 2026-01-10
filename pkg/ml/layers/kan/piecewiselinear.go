@@ -1,9 +1,12 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package kan
 
 import (
 	"math"
 
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -11,7 +14,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
 )
 

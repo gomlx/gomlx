@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package ogbnmag
 
 // Test will download OGBN-MAG dataset if not yet downloaded, into the directory `~/work/ogbnmag`.
@@ -5,15 +7,17 @@ package ogbnmag
 import (
 	"flag"
 	"fmt"
+	"testing"
+
 	"github.com/dustin/go-humanize"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pbnjay/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
@@ -22,10 +26,19 @@ var (
 	flagDataDir = flag.String("data", "~/work/ogbnmag", "Directory to cache downloaded and generated dataset files.")
 )
 
+func checkMemory(t *testing.T) {
+	fmt.Printf("Total memory: %s\n", humanize.Bytes(memory.TotalMemory()))
+	if memory.TotalMemory() < 32*1024*1024*1024 {
+		t.Skipf("Test requires at least 32GB RAM, found %s", humanize.Bytes(memory.TotalMemory()))
+	}
+}
+
 func TestModel(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping long-running test.")
 	}
+	checkMemory(t)
+
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
 	err := Download(*flagDataDir)
@@ -73,8 +86,7 @@ func BenchmarkParallelSampling(b *testing.B) {
 	ds, _, _, _, err := MakeDatasets(*flagDataDir)
 	require.NoError(b, err)
 
-	b.ResetTimer()
-	for range b.N {
+	for b.Loop() {
 		_, inputs, _, err := ds.Yield()
 		if err != nil {
 			b.Fatalf("Failed to sample: %+v", err)

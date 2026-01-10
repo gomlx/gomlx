@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 // Package classifier is a MNIST-based digit classifier.
 // It loads a pre-trained model and offers a Classify method that will classify any image,
 // by first resizing it to the model's input size.
@@ -19,7 +21,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 )
 
