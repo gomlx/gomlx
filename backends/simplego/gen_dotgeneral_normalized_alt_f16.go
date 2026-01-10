@@ -6,7 +6,7 @@
 
 package simplego
 
-//alt:bf16 import "github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+//alt:bf16  import "github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 import "github.com/x448/float16" //alt:f16
 
 // This file serves as a base version of the `execDotGeneralNormalized*` functions, as well as a template
@@ -20,15 +20,15 @@ import "github.com/x448/float16" //alt:f16
 // buffers -- they need to be normalized first.
 //
 //alt:base func execNormalizedDotGeneralGeneric[T PODNumericConstraints](
-//alt:bf16 func execNormalizedDotGeneralBFloat16(
+//alt:bf16  func execNormalizedDotGeneralBFloat16(
 func execNormalizedDotGeneralFloat16( //alt:f16
 	lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
 	//alt:base lhsFlat := lhs.flat.([]T)
 	//alt:base rhsFlat := rhs.flat.([]T)
 	//alt:base outputFlat := output.flat.([]T)
-	//alt:bf16 lhsFlat := lhs.flat.([]bfloat16.BFloat16)
-	//alt:bf16 rhsFlat := rhs.flat.([]bfloat16.BFloat16)
-	//alt:bf16 outputFlat := output.flat.([]float32)
+	//alt:bf16  lhsFlat := lhs.flat.([]bfloat16.BFloat16)
+	//alt:bf16  rhsFlat := rhs.flat.([]bfloat16.BFloat16)
+	//alt:bf16  outputFlat := output.flat.([]float32)
 	lhsFlat := lhs.flat.([]float16.Float16) //alt:f16
 	rhsFlat := rhs.flat.([]float16.Float16) //alt:f16
 	outputFlat := output.flat.([]float32)   //alt:f16

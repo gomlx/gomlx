@@ -150,44 +150,44 @@ func buildDotGeneralKernel[T PODNumericConstraints]( //alt:base
 						lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx3+5] +
 						lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx3+6] +
 						lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx3+7]
+						//alt:base}
+						/* //alt:bf16|f16{
+						sum0 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx].Float32() +
+							lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx+1].Float32() +
+							lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx+2].Float32() +
+							lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx+3].Float32() +
+							lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx+4].Float32() +
+							lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx+5].Float32() +
+							lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx+6].Float32() +
+							lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx+7].Float32()
+						sum1 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx1].Float32() +
+							lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx1+1].Float32() +
+							lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx1+2].Float32() +
+							lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx1+3].Float32() +
+							lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx1+4].Float32() +
+							lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx1+5].Float32() +
+							lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx1+6].Float32() +
+							lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx1+7].Float32()
+						sum2 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx2].Float32() +
+							lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx2+1].Float32() +
+							lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx2+2].Float32() +
+							lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx2+3].Float32() +
+							lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx2+4].Float32() +
+							lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx2+5].Float32() +
+							lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx2+6].Float32() +
+							lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx2+7].Float32()
+						sum3 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx3].Float32() +
+							lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx3+1].Float32() +
+							lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx3+2].Float32() +
+							lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx3+3].Float32() +
+							lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx3+4].Float32() +
+							lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx3+5].Float32() +
+							lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx3+6].Float32() +
+							lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx3+7].Float32()
+						*/ //alt:bf16|f16}
 					lhsIdx += 8
 					rhsIdx += 8
 				}
-				//alt:base}
-				/* //alt:bf16|f16{
-				sum0 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx].Float32() +
-					lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx+1].Float32() +
-					lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx+2].Float32() +
-					lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx+3].Float32() +
-					lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx+4].Float32() +
-					lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx+5].Float32() +
-					lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx+6].Float32() +
-					lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx+7].Float32()
-				sum1 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx1].Float32() +
-					lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx1+1].Float32() +
-					lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx1+2].Float32() +
-					lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx1+3].Float32() +
-					lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx1+4].Float32() +
-					lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx1+5].Float32() +
-					lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx1+6].Float32() +
-					lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx1+7].Float32()
-				sum2 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx2].Float32() +
-					lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx2+1].Float32() +
-					lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx2+2].Float32() +
-					lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx2+3].Float32() +
-					lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx2+4].Float32() +
-					lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx2+5].Float32() +
-					lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx2+6].Float32() +
-					lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx2+7].Float32()
-				sum3 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx3].Float32() +
-					lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx3+1].Float32() +
-					lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx3+2].Float32() +
-					lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx3+3].Float32() +
-					lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx3+4].Float32() +
-					lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx3+5].Float32() +
-					lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx3+6].Float32() +
-					lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx3+7].Float32()
-				*/ //alt:bf16|f16}
 
 				// Tail loop.
 				for ; contractingIdx < blockDim; contractingIdx++ {

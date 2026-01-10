@@ -11,7 +11,7 @@ package simplego
 //alt:base "github.com/x448/float16"
 //alt:base )
 //alt:bf16  import	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-import	"github.com/x448/float16" //alt:f16 
+import "github.com/x448/float16" //alt:f16
 
 // dgCopyOutputBlockToFlat* copies the blocked output to a flat output, removing the padding.
 // The base version works for cases where the blockSource and output have the same dtype.
@@ -19,11 +19,12 @@ import	"github.com/x448/float16" //alt:f16
 //
 // blockedSource shape: [batchSize, lhsCrossBlocks, rhsCrossBlocks, blockDim, blockDim]
 // output shape: [batchSize, lhsCrossSize, rhsCrossSize]
+//
 //alt:base func dgCopyOutputBlockToFlat[T interface {
 //alt:base PODNumericConstraints | bfloat16.BFloat16 | float16.Float16
 //alt:base }](
 //alt:bf16  func dgCopyOutputBlockToFlatF32ToBF16(
-func dgCopyOutputBlockToFlatF32ToF16( //alt:f16 
+func dgCopyOutputBlockToFlatF32ToF16( //alt:f16
 
 	blockSource, output *Buffer) {
 	sourceDims := blockSource.shape.Dimensions
@@ -46,11 +47,11 @@ func dgCopyOutputBlockToFlatF32ToF16( //alt:f16
 	sourceLhsBlockStride := rhsBlockCross * sourceBlockSize
 	sourceBatchStride := lhsBlockCross * rhsBlockCross * sourceBlockSize
 
-//alt:base sourceData := blockSource.flat.([]T)
-//alt:base outputData := output.flat.([]T)
-sourceData := blockSource.flat.([]float32) //alt:bf16|f16 
-//alt:bf16  outputData := output.flat.([]bfloat16.BFloat16)
-outputData := output.flat.([]float16.Float16) //alt:f16 
+	//alt:base sourceData := blockSource.flat.([]T)
+	//alt:base outputData := output.flat.([]T)
+	sourceData := blockSource.flat.([]float32) //alt:bf16|f16
+	//alt:bf16  outputData := output.flat.([]bfloat16.BFloat16)
+	outputData := output.flat.([]float16.Float16) //alt:f16
 
 	for batch := range batchSize {
 		sourceBatchOffset := batch * sourceBatchStride
@@ -72,12 +73,12 @@ outputData := output.flat.([]float16.Float16) //alt:f16
 				for i := 0; i < lhsEnd-lhsStart; i++ {
 					sourceRowOffset := sourceBlockOffset + i*blockDim
 					outputRowOffset := outputBlockOffset + i*outputLhsStride
-//alt:base copy(outputData[outputRowOffset:outputRowOffset+rhsEnd-rhsStart],
-//alt:base sourceData[sourceRowOffset:sourceRowOffset+rhsEnd-rhsStart])
-for blockCol := range rhsEnd - rhsStart { //alt:bf16|f16 
-//alt:bf16  outputData[outputRowOffset+blockCol] = bfloat16.FromFloat32(sourceData[sourceRowOffset+blockCol])
-outputData[outputRowOffset+blockCol] = float16.Fromfloat32(sourceData[sourceRowOffset+blockCol]) //alt:f16 
-} //alt:bf16|f16 
+					//alt:base copy(outputData[outputRowOffset:outputRowOffset+rhsEnd-rhsStart],
+					//alt:base sourceData[sourceRowOffset:sourceRowOffset+rhsEnd-rhsStart])
+					for blockCol := range rhsEnd - rhsStart { //alt:bf16|f16
+						//alt:bf16  outputData[outputRowOffset+blockCol] = bfloat16.FromFloat32(sourceData[sourceRowOffset+blockCol])
+						outputData[outputRowOffset+blockCol] = float16.Fromfloat32(sourceData[sourceRowOffset+blockCol]) //alt:f16
+					} //alt:bf16|f16
 
 				}
 			}
@@ -87,18 +88,19 @@ outputData[outputRowOffset+blockCol] = float16.Fromfloat32(sourceData[sourceRowO
 
 // buildDotGeneralKernel* returns a kernel function that does a DotGeneral (matrix multiplication) of the lhs/rhs block
 // to the corresponding output buffer block, given the indices of the square blocks.
+//
 //alt:base func buildDotGeneralKernel[T PODNumericConstraints](
 //alt:bf16  func buildDotGeneralKernelBFloat16(
-func buildDotGeneralKernelFloat16( //alt:f16 
+func buildDotGeneralKernelFloat16( //alt:f16
 	lhs, rhs, output *Buffer, blockDim int) kernelFuncType {
-//alt:base lhsFlat := lhs.flat.([]T)
-//alt:base rhsFlat := rhs.flat.([]T)
-//alt:base outputFlat := output.flat.([]T)
-//alt:bf16  lhsFlat := lhs.flat.([]bfloat16.BFloat16)
-//alt:bf16  rhsFlat := rhs.flat.([]bfloat16.BFloat16)
-lhsFlat := lhs.flat.([]float16.Float16) //alt:f16 
-rhsFlat := rhs.flat.([]float16.Float16) //alt:f16 
-outputFlat := output.flat.([]float32) //alt:bf16|f16 
+	//alt:base lhsFlat := lhs.flat.([]T)
+	//alt:base rhsFlat := rhs.flat.([]T)
+	//alt:base outputFlat := output.flat.([]T)
+	//alt:bf16  lhsFlat := lhs.flat.([]bfloat16.BFloat16)
+	//alt:bf16  rhsFlat := rhs.flat.([]bfloat16.BFloat16)
+	lhsFlat := lhs.flat.([]float16.Float16) //alt:f16
+	rhsFlat := rhs.flat.([]float16.Float16) //alt:f16
+	outputFlat := output.flat.([]float32)   //alt:bf16|f16
 
 	blockSize := blockDim * blockDim
 
@@ -121,7 +123,7 @@ outputFlat := output.flat.([]float32) //alt:bf16|f16
 					rhsIdx1 := rhsIdx + blockDim
 					rhsIdx2 := rhsIdx + 2*blockDim
 					rhsIdx3 := rhsIdx + 3*blockDim
-/* //alt:base{
+					/* //alt:base{
 					sum0 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx] +
 						lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx+1] +
 						lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx+2] +
@@ -154,58 +156,58 @@ outputFlat := output.flat.([]float32) //alt:bf16|f16
 						lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx3+5] +
 						lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx3+6] +
 						lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx3+7]
+					*/ //alt:base}
+					//alt:bf16|f16{
+					sum0 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx].Float32() +
+						lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx+1].Float32() +
+						lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx+2].Float32() +
+						lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx+3].Float32() +
+						lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx+4].Float32() +
+						lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx+5].Float32() +
+						lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx+6].Float32() +
+						lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx+7].Float32()
+					sum1 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx1].Float32() +
+						lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx1+1].Float32() +
+						lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx1+2].Float32() +
+						lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx1+3].Float32() +
+						lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx1+4].Float32() +
+						lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx1+5].Float32() +
+						lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx1+6].Float32() +
+						lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx1+7].Float32()
+					sum2 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx2].Float32() +
+						lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx2+1].Float32() +
+						lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx2+2].Float32() +
+						lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx2+3].Float32() +
+						lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx2+4].Float32() +
+						lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx2+5].Float32() +
+						lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx2+6].Float32() +
+						lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx2+7].Float32()
+					sum3 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx3].Float32() +
+						lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx3+1].Float32() +
+						lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx3+2].Float32() +
+						lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx3+3].Float32() +
+						lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx3+4].Float32() +
+						lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx3+5].Float32() +
+						lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx3+6].Float32() +
+						lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx3+7].Float32()
+						//alt:bf16|f16}
 					lhsIdx += 8
 					rhsIdx += 8
 				}
-*/ //alt:base}
-//alt:bf16|f16{
-				sum0 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx].Float32() +
-					lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx+1].Float32() +
-					lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx+2].Float32() +
-					lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx+3].Float32() +
-					lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx+4].Float32() +
-					lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx+5].Float32() +
-					lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx+6].Float32() +
-					lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx+7].Float32()
-				sum1 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx1].Float32() +
-					lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx1+1].Float32() +
-					lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx1+2].Float32() +
-					lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx1+3].Float32() +
-					lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx1+4].Float32() +
-					lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx1+5].Float32() +
-					lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx1+6].Float32() +
-					lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx1+7].Float32()
-				sum2 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx2].Float32() +
-					lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx2+1].Float32() +
-					lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx2+2].Float32() +
-					lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx2+3].Float32() +
-					lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx2+4].Float32() +
-					lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx2+5].Float32() +
-					lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx2+6].Float32() +
-					lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx2+7].Float32()
-				sum3 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx3].Float32() +
-					lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx3+1].Float32() +
-					lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx3+2].Float32() +
-					lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx3+3].Float32() +
-					lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx3+4].Float32() +
-					lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx3+5].Float32() +
-					lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx3+6].Float32() +
-					lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx3+7].Float32()
-//alt:bf16|f16}
 
 				// Tail loop.
 				for ; contractingIdx < blockDim; contractingIdx++ {
 					rhsIdx1 := rhsIdx + blockDim
 					rhsIdx2 := rhsIdx + 2*blockDim
 					rhsIdx3 := rhsIdx + 3*blockDim
-//alt:base sum0 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx]
-//alt:base sum1 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx1]
-//alt:base sum2 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx2]
-//alt:base sum3 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx3]
-sum0 += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx].Float32() //alt:bf16|f16 
-sum1 += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx1].Float32() //alt:bf16|f16 
-sum2 += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx2].Float32() //alt:bf16|f16 
-sum3 += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx3].Float32() //alt:bf16|f16 
+					//alt:base sum0 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx]
+					//alt:base sum1 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx1]
+					//alt:base sum2 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx2]
+					//alt:base sum3 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx3]
+					sum0 += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx].Float32()  //alt:bf16|f16
+					sum1 += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx1].Float32() //alt:bf16|f16
+					sum2 += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx2].Float32() //alt:bf16|f16
+					sum3 += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx3].Float32() //alt:bf16|f16
 					lhsIdx++
 					rhsIdx++
 				}
