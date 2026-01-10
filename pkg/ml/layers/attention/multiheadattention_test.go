@@ -14,7 +14,7 @@
  *	limitations under the License.
  */
 
-package layers
+package attention
 
 import (
 	"fmt"
@@ -30,11 +30,13 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/ctxtest"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/commandline"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,9 +47,9 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 		ctx := context.New()
 		g := NewGraph(backend, "test")
 		batchSize := 3
-		key := IotaFull(g, shapes.Make(F32, batchSize, 4, 5, 3))
-		query := IotaFull(g, shapes.Make(F32, batchSize, 7, 1, 2))
-		value := IotaFull(g, shapes.Make(F32, batchSize, 4, 5, 10))
+		key := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 4, 5, 3))
+		query := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 7, 1, 2))
+		value := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 4, 5, 10))
 		attOutput, attCoef := MultiHeadAttention(ctx, query, key, value, 6, 12).
 			SetOutputDim(11).DoneWithCoefficients()
 		assert.EqualValues(t, []int{batchSize, 7, 1, 11}, attOutput.Shape().Dimensions, "AttentionOutput shape mismatch")
@@ -57,9 +59,9 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 	ctxtest.RunTestGraphFn(t, "MultiHeadAttention with masking",
 		func(ctx *context.Context, g *Graph) (inputs, outputs []*Node) {
 			batchSize := 2
-			key := IotaFull(g, shapes.Make(F32, batchSize, 3, 3))
-			query := IotaFull(g, shapes.Make(F32, batchSize, 3, 2))
-			value := OnePlus(IotaFull(g, shapes.Make(F32, batchSize, 3, 2)))
+			key := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 3))
+			query := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 2))
+			value := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 2)))
 			attOutput, attCoef := MultiHeadAttention(ctx.WithInitializer(initializers.One),
 				query, key, value, 1, 2).
 				UseCausalMask().
@@ -115,10 +117,10 @@ func buildSyntheticAttentionModelFn(debug bool) (modelGraphFn func(ctx *context.
 		}
 		residual := logits
 		logits = Sigmoid(logits)
-		logits = Dense(ctx.In("dense_seq_1"), logits, true, logits.Shape().Dimensions[2])
+		logits = layers.Dense(ctx.In("dense_seq_1"), logits, true, logits.Shape().Dimensions[2])
 		logits = Add(residual, logits)
 		logits = Sigmoid(logits)
-		logits = Dense(ctx.In("dense_seq_0"), logits, true, 1)
+		logits = layers.Dense(ctx.In("dense_seq_0"), logits, true, 1)
 		logits = Squeeze(logits, -1)
 		allLogits = []*Node{logits}
 		return

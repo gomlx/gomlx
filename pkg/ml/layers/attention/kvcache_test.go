@@ -6,6 +6,7 @@ import (
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
@@ -268,4 +269,60 @@ func TestKVCacheCreateAttentionMask(t *testing.T) {
 		result := exec.MustExec(keys, values)[0]
 		assert.Equal(t, []int{batchSize, 1, 1, 1}, result.Shape().Dimensions)
 	})
+}
+
+// TestKVCachePersistence tests that cache variables persist across multiple graph executions
+func TestKVCachePersistence(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	ctx := context.New()
+
+	// Create a cache
+	cache := NewKVCache(ctx, "test", 1, 2, 10, 4, dtypes.Float32)
+
+	// First execution: Initialize and update with 3 keys/values
+	exec1 := context.MustNewExec(backend, ctx.Reuse(), func(testCtx *context.Context, input *Node) *Node {
+		g := input.Graph()
+
+		// Initialize cache
+		cache.Initialize(g)
+
+		// Create dummy keys/values: [batch=1, heads=2, seq=3, dim=4]
+		keys := IotaFull(g, shapes.Make(dtypes.Float32, 1, 2, 3, 4))
+		values := Mul(keys, Const(g, float32(2.0))) // values = 2 * keys
+
+		// Update cache
+		_ = cache.Update(g, keys, values)
+
+		// Get cache position
+		_, _, pos := cache.Get(g)
+		return pos
+	})
+
+	outputs1 := exec1.MustExec(int32(0))
+	position1 := outputs1[0].Value().([]int32)[0]
+	t.Logf("After first update: position = %d", position1)
+
+	assert.Equal(t, int32(3), position1, "Expected position=3 after first update")
+
+	// Second execution: Update with 1 more key/value
+	exec2 := context.MustNewExec(backend, ctx.Reuse(), func(testCtx *context.Context, input *Node) *Node {
+		g := input.Graph()
+
+		// Create dummy keys/values: [batch=1, heads=2, seq=1, dim=4]
+		keys := IotaFull(g, shapes.Make(dtypes.Float32, 1, 2, 1, 4))
+		values := Mul(keys, Const(g, float32(2.0)))
+
+		// Update cache (should append to existing)
+		_ = cache.Update(g, keys, values)
+
+		// Get cache position
+		_, _, pos := cache.Get(g)
+		return pos
+	})
+
+	outputs2 := exec2.MustExec(int32(0))
+	position2 := outputs2[0].Value().([]int32)[0]
+	t.Logf("After second update: position = %d", position2)
+
+	assert.Equal(t, int32(4), position2, "Expected position=4 after second update")
 }

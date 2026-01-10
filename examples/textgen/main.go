@@ -29,6 +29,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
+	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
 	"github.com/gomlx/gomlx/pkg/ml/layers/generation"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
@@ -112,7 +113,7 @@ func simpleTransformerModel(ctx *context.Context, inputs []*Node) []*Node {
 	for layer := 0; layer < numLayers; layer++ {
 		layerCtx := ctx.In(fmt.Sprintf("layer_%d", layer))
 		residual := x
-		attn := layers.MultiHeadAttention(layerCtx.In("attn"), x, x, x, numHeads, headDim).
+		attn := attention.MultiHeadAttention(layerCtx.In("attn"), x, x, x, numHeads, headDim).
 			UseCausalMask().
 			Done()
 		x = layers.LayerNormalization(layerCtx.In("norm1"), Add(residual, attn), -1).Done()

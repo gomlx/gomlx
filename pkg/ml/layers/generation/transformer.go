@@ -176,10 +176,11 @@ func (ct *CachedTransformer) forwardFull(
 		layerCtx := ctx.In(fmt.Sprintf("layer_%d", layer))
 
 		residual := x
-		var cache *attention.KVCache
+		var attn *Node
 
 		if useCache {
-			cache = attention.NewKVCache(
+			// Generation mode: use KV cache for efficient incremental decoding
+			cache := attention.NewKVCache(
 				ctx.In("layer").In(strconv.Itoa(layer)),
 				"attn_cache",
 				x.Shape().Dimensions[0],
@@ -188,29 +189,44 @@ func (ct *CachedTransformer) forwardFull(
 				cfg.HeadDim,
 				cfg.DType,
 			)
+
+			// Convert position int to a Node for the new WithKVCache API
+			positionNode := Const(x.Graph(), int32(position))
+			attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, cfg.NumHeads, cfg.HeadDim).
+				WithKVCache(cache, positionNode)
+
+			if cfg.UseRoPE {
+				attnBuilder = attnBuilder.WithRoPE(cfg.RoPEBaseFreq)
+			}
+
+			if !cfg.UseBias {
+				attnBuilder = attnBuilder.UseProjectionBias(false)
+			}
+
+			if cfg.Dropout > 0 {
+				attnBuilder = attnBuilder.Dropout(cfg.Dropout)
+			}
+
+			attn = attnBuilder.Done()
+		} else {
+			// Training mode: no cache, use causal mask
+			attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, cfg.NumHeads, cfg.HeadDim).
+				UseCausalMask()
+
+			if cfg.UseRoPE {
+				attnBuilder = attnBuilder.WithRoPE(cfg.RoPEBaseFreq)
+			}
+
+			if !cfg.UseBias {
+				attnBuilder = attnBuilder.UseProjectionBias(false)
+			}
+
+			if cfg.Dropout > 0 {
+				attnBuilder = attnBuilder.Dropout(cfg.Dropout)
+			}
+
+			attn = attnBuilder.Done()
 		}
-
-		attnConfig := attention.NewIncrementalAttention(
-			layerCtx.In("attn"),
-			x,
-			cfg.NumHeads,
-			cfg.HeadDim,
-			cache,
-		).WithPosition(position)
-
-		if cfg.UseRoPE {
-			attnConfig = attnConfig.WithRoPE(cfg.RoPEBaseFreq)
-		}
-
-		if !cfg.UseBias {
-			attnConfig = attnConfig.WithProjectionBias(false)
-		}
-
-		if cfg.Dropout > 0 {
-			attnConfig = attnConfig.WithDropout(cfg.Dropout)
-		}
-
-		attn := attnConfig.Done()
 
 		if cfg.UseLayerNorm {
 			x = layers.LayerNormalization(layerCtx.In("norm1"), Add(residual, attn), -1).Done()

@@ -40,9 +40,19 @@ type KVCache struct {
 // NewKVCache creates pre-allocated KV buffers.
 func NewKVCache(ctx *context.Context, scope string, batchSize, numHeads, maxSeqLen, headDim int, dtype dtypes.DType) *KVCache {
 	scopedCtx := ctx.In(scope)
+	// CRITICAL FIX: If context is already in reuse mode, don't call Reuse() again!
+	// Calling Reuse() on an already-reused context creates a DIFFERENT reuse scope,
+	// which prevents variables from persisting across graph executions.
+	var reuseCtx *context.Context
+	if scopedCtx.IsReuse() {
+		// Bug fix: Don't call Reuse() on a context that's already in reuse mode.
+		reuseCtx = scopedCtx
+	} else {
+		reuseCtx = scopedCtx.Reuse()
+	}
 	return &KVCache{
 		ctx:       scopedCtx,
-		reuseCtx:  scopedCtx.Reuse(),
+		reuseCtx:  reuseCtx,
 		scope:     scope,
 		batchSize: batchSize,
 		numHeads:  numHeads,
@@ -60,8 +70,9 @@ func (c *KVCache) Initialize(g *Graph) {
 
 	cacheShape := shapes.Make(c.dtype, c.batchSize, c.numHeads, c.maxSeqLen, c.headDim)
 
-	// Use Check(false) to allow redefinition in case Initialize is called multiple times
-	initCtx := c.ctx.Checked(false)
+	// BUG FIX: Use reuseCtx consistently! Variables must be created and accessed with the same context.
+	// Previously used c.ctx here but c.reuseCtx in Update/Get, causing scope mismatch!
+	initCtx := c.reuseCtx.Checked(false)
 
 	// Create key and value cache variables, initialized to zeros
 	initCtx.VariableWithShape("key_cache", cacheShape)

@@ -14,7 +14,7 @@
  *	limitations under the License.
  */
 
-package layers
+package attention
 
 import (
 	"fmt"
@@ -25,7 +25,10 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/layers"
+	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // This file contains all parts of the layers.MultiHeadAttention implementation.
@@ -51,6 +54,15 @@ type MultiHeadAttentionBuilder struct {
 	keyMask, queryMask *Node
 	queryKeyMatrixMask *Node
 	useCausalMask      bool
+
+	// KV cache and incremental generation support.
+	kvCache        *KVCache
+	position       *Node // Position as a graph node (scalar int32) for graph caching
+	actualCacheLen *Node // Actual filled cache length (scalar int32)
+
+	// RoPE (Rotary Position Embeddings) support.
+	useRoPE      bool
+	ropeBaseFreq float64
 }
 
 // MultiHeadAttention defines a multi-head attention layers, as described in the paper
@@ -274,6 +286,31 @@ func (b *MultiHeadAttentionBuilder) Dropout(rate float64) *MultiHeadAttentionBui
 	return b
 }
 
+// WithKVCache enables incremental generation mode with KV caching.
+// When set, the builder will cache past key/value projections for efficient
+// token-by-token generation. Position should be a graph Node (scalar int32) representing
+// the absolute position in the sequence for proper masking with cached keys.
+// Passing position as a Node allows the same compiled graph to be reused for different positions.
+// Automatically enables causal masking for proper attention during generation.
+func (b *MultiHeadAttentionBuilder) WithKVCache(kvCache *KVCache, position *Node) *MultiHeadAttentionBuilder {
+	b.kvCache = kvCache
+	b.position = position
+	// When using KV cache, automatically enable causal mask for proper attention
+	b.useCausalMask = true
+	// Rebuild attention shape with cache dimensions
+	b.buildAttentionShape()
+	return b
+}
+
+// WithRoPE enables Rotary Position Embeddings on query and key projections.
+// baseFreq is typically 10000.0 (default from RoFormer paper).
+// RoPE is applied after projections and works with both training and generation modes.
+func (b *MultiHeadAttentionBuilder) WithRoPE(baseFreq float64) *MultiHeadAttentionBuilder {
+	b.useRoPE = true
+	b.ropeBaseFreq = baseFreq
+	return b
+}
+
 // nextNAxes enumerates the next n consecutive axis, starting from nextAxis. It returns
 // the string with the axis concatenated.
 func nextNAxes(n int, nextAxis rune) string {
@@ -294,12 +331,39 @@ func nextNAxes(n int, nextAxis rune) string {
 // `coefficients` is shaped `[batch_size, <query_elements>, <num_heads>, <key_elements>]`
 // with the attention weights (from 0 to 1).
 func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, attentionCoefficients *Node) {
-	projectedKey := Dense(b.ctx.In("key"), b.key, true, b.numHeads, b.keyQueryDim)
-	projectedQuery := Dense(b.ctx.In("query"), b.query, true, b.numHeads, b.keyQueryDim)
-	projectedValue := Dense(b.ctx.In("value"), b.value, true, b.numHeads, b.valueDim)
+	projectedKey := layers.Dense(b.ctx.In("key"), b.key, true, b.numHeads, b.keyQueryDim)
+	projectedQuery := layers.Dense(b.ctx.In("query"), b.query, true, b.numHeads, b.keyQueryDim)
+	projectedValue := layers.Dense(b.ctx.In("value"), b.value, true, b.numHeads, b.valueDim)
 
-	// LearnedScale attentionLogits by 1/sqrt(keyQueryDim).
-	projectedQuery = Mul(projectedQuery, ConstAs(projectedQuery, 1.0/math.Sqrt(float64(b.keyQueryDim))))
+	// Apply RoPE if enabled (before KV cache to cache rotated embeddings)
+	if b.useRoPE {
+		rope := pos.NewRoPE(b.ropeBaseFreq)
+		// Pass position as *Node for dynamic positioning
+		projectedQuery = rope.Apply(projectedQuery, b.position)
+		projectedKey = rope.Apply(projectedKey, b.position)
+	}
+
+	// Handle KV cache if in incremental generation mode
+	if b.kvCache != nil {
+		// Cache expects shape: [batch, numHeads, seqLen, headDim]
+		// projectedKey/Value shape: [batch, seqLen, numHeads, headDim]
+		// Transpose: (0,1,2,3) -> (0,2,1,3)
+		keyForCache := TransposeAllDims(projectedKey, 0, 2, 1, 3)
+		valueForCache := TransposeAllDims(projectedValue, 0, 2, 1, 3)
+
+		// Update cache and get full key/value (including past)
+		_ = b.kvCache.Update(b.g, keyForCache, valueForCache)
+		fullKey, fullValue, cachePos := b.kvCache.Get(b.g)
+
+		// Store actual cache length for use in causal mask
+		// cachePos is [batch], extract first element as scalar
+		b.actualCacheLen = Squeeze(Slice(cachePos, AxisRange(0, 1)), 0)
+
+		// Transpose back to attention format: (0,2,1,3) -> (0,1,2,3)
+		// Result: [batch, maxSeqLen, numHeads, headDim]
+		projectedKey = TransposeAllDims(fullKey, 0, 2, 1, 3)
+		projectedValue = TransposeAllDims(fullValue, 0, 2, 1, 3)
+	}
 
 	// Build equation for attention Einsum.
 	batchAxis := 'b'
@@ -325,6 +389,7 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 
 	// Attention logits: outer product of key/query inner dimensions, with a dot-product of their projections.
 	// Shape: [batch, <query_elements>, num_heads, <key_elements>]
+	// Note: We scale by 1/sqrt(keyQueryDim) ONCE here (removed duplicate scaling below)
 	attentionLogits := Einsum(attentionEquation, projectedQuery, projectedKey)
 	normalizingFactor := math.Sqrt(float64(b.keyQueryDim))
 	attentionLogits = DivScalar(attentionLogits, normalizingFactor)
@@ -342,7 +407,7 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	}
 	//fmt.Printf("\tattentionCoefficients: %s\n", attentionLogits.Shape())
 	if b.dropoutRate > 0 {
-		attentionCoefficients = Dropout(b.ctx, attentionCoefficients, ConstAs(attentionCoefficients, b.dropoutRate))
+		attentionCoefficients = layers.Dropout(b.ctx, attentionCoefficients, ConstAs(attentionCoefficients, b.dropoutRate))
 	}
 
 	// Build equation for the attention output Einsum.
@@ -365,7 +430,7 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	// New shape: `[batch, <query_elements>, num_head*value_dim]`
 	attentionOutput = Reshape(attentionOutput, flatDims...)
 	// Final shape: `[batch, <query_elements>, outputDim]`
-	attentionOutput = Dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
+	attentionOutput = layers.Dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
 
 	return attentionOutput, attentionCoefficients
 }
@@ -383,15 +448,29 @@ func (b *MultiHeadAttentionBuilder) Done() (output *Node) {
 // buildAttentionShape returns the shape of the attention coefficients and mask, and sets it to b.attentionShape.
 // attentionShape is `[batch, <query_elements>, num_heads, <key_elements>]`.
 func (b *MultiHeadAttentionBuilder) buildAttentionShape() {
+	// Determine effective key length (may be larger than current key when caching)
+	var keyLen int
+	if b.kvCache != nil {
+		// In cache mode, key length is the full cache size
+		keyLen = b.kvCache.maxSeqLen
+	} else {
+		keyLen = b.key.Shape().Dimensions[1]
+	}
+
 	finalDims := make([]int, 2+b.innerQueryAxes+b.innerKeyAxes)
 	pos := 0
-	finalDims[pos] = b.key.Shape().Dimensions[0]
+	finalDims[pos] = b.key.Shape().Dimensions[0] // batch
 	pos += 1
 	copy(finalDims[pos:], b.query.Shape().Dimensions[1:1+b.innerQueryAxes]) // <query_elements>
 	pos += b.innerQueryAxes
 	finalDims[pos] = b.numHeads
 	pos += 1
-	copy(finalDims[pos:], b.key.Shape().Dimensions[1:1+b.innerKeyAxes]) // <query_elements>
+	// Use effective key length
+	finalDims[pos] = keyLen
+	// Copy remaining inner key axes if any (though typically innerKeyAxes == 1)
+	if b.innerKeyAxes > 1 {
+		copy(finalDims[pos+1:], b.key.Shape().Dimensions[2:1+b.innerKeyAxes])
+	}
 
 	b.attentionShape = shapes.Make(b.key.DType(), finalDims...)
 }
@@ -447,15 +526,116 @@ func (b *MultiHeadAttentionBuilder) buildMaskFromSplitMasks() (mask *Node) {
 }
 
 // buildCausalMask creates a mask where queries can only attend to keys with "smaller index" than itself.
+// When using KV cache (incremental generation), the mask accounts for the current position.
 func (b *MultiHeadAttentionBuilder) buildCausalMask() (mask *Node) {
-	keyShape := b.key.Shape()
-	dim := keyShape.Dimensions[1] // Same as queryShape.Dimensions[1].
+	queryShape := b.query.Shape()
+	queryLen := queryShape.Dimensions[1]
 
-	// mask is [<query_elements>, <key_elements>]
-	mask = LowerTriangular(b.g, dim)
+	var keyLen int
+	if b.kvCache != nil {
+		// In incremental mode: queries are at position [position:position+queryLen]
+		// keys span the cache [0:actualCacheLen] (not maxSeqLen!)
+		// We'll use the actual length from the cache
+		keyLen = b.kvCache.maxSeqLen // Static shape for graph building
+	} else {
+		// Training mode: key and query have same length
+		keyShape := b.key.Shape()
+		keyLen = keyShape.Dimensions[1]
+	}
 
-	// Broadcast mask to target shape of `[batch, <query_elements>, numHeads, <key_elements>]`
-	mask = InsertAxes(mask, 0, 1)                                // Add batch and numHeads axes.
-	mask = BroadcastToDims(mask, b.attentionShape.Dimensions...) // Broadcast to target dimensions.
+	if b.kvCache != nil {
+		// Build position-aware causal mask for incremental generation
+		// Query positions: [position, position+1, ..., position+queryLen-1]
+		// Key positions: [0, 1, ..., actualCacheLen-1]
+		// mask[q, k] = (q_pos >= k_pos) AND (k < actualCacheLen)
+
+		queryPositions := Iota(b.g, shapes.Make(dtypes.Int32, queryLen), 0)
+		// Add position offset using the position Node
+		positionInt32 := ConvertDType(b.position, dtypes.Int32)
+		if positionInt32.Rank() > 0 {
+			positionInt32 = Squeeze(positionInt32) // Ensure scalar
+		}
+		positionBroadcast := ExpandDims(positionInt32, 0) // [1]
+		positionBroadcast = BroadcastToShape(positionBroadcast, shapes.Make(dtypes.Int32, queryLen))
+		queryPositions = Add(queryPositions, positionBroadcast)
+		queryPositions = ExpandDims(queryPositions, -1) // [queryLen, 1]
+
+		keyPositions := Iota(b.g, shapes.Make(dtypes.Int32, keyLen), 0)
+		keyPositions = ExpandDims(keyPositions, 0) // [1, keyLen]
+
+		causalMask := GreaterOrEqual(queryPositions, keyPositions) // [queryLen, keyLen]
+
+		// Additional mask for valid cached positions: k < actualCacheLen
+		// actualCacheLen is scalar, broadcast to [keyLen]
+		keyIndices := Iota(b.g, shapes.Make(dtypes.Int32, keyLen), 0)
+		actualLenBroadcast := BroadcastToShape(b.actualCacheLen, keyIndices.Shape())
+		validMask := LessThan(keyIndices, actualLenBroadcast) // [keyLen]
+
+		// Broadcast to [queryLen, keyLen] and combine with causal mask
+		validMask = ExpandDims(validMask, 0) // [1, keyLen]
+		validMask = BroadcastToShape(validMask, causalMask.Shape())
+
+		mask = LogicalAnd(causalMask, validMask) // [queryLen, keyLen]
+	} else {
+		// Original training mode logic
+		keyShape := b.key.Shape()
+		if queryShape.Rank() != 3 || keyShape.Rank() != 3 {
+			Panicf("MultiHeadAttention's UseCausalMask requires key and query to be rank-3,"+
+				" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
+		}
+		if !reflect.DeepEqual(keyShape.Dimensions[:keyShape.Rank()-1], queryShape.Dimensions[:queryShape.Rank()-1]) {
+			Panicf("MultiHeadAttention's UseCausalMask requires inner shapes of query and key be the same,"+
+				" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
+		}
+		if queryLen != keyLen {
+			Panicf("causal mask in training mode requires query and key lengths to match, got query=%d, key=%d",
+				queryLen, keyLen)
+		}
+		mask = LowerTriangular(b.g, queryLen)
+	}
+
+	// Broadcast mask to target shape: [batch, <query_elements>, numHeads, <key_elements>]
+	// mask is currently [queryLen, keyLen], need to add batch and numHeads dimensions
+	// InsertAxes at beginning for batch dimension
+	mask = ExpandDims(mask, 0) // [1, queryLen, keyLen]
+	// Add dimension for numHeads at position 2 (after batch and query)
+	mask = ExpandDims(mask, 2)                                   // [1, queryLen, 1, keyLen]
+	mask = BroadcastToDims(mask, b.attentionShape.Dimensions...) // Broadcast to target dimensions
+
+	// Combine with cache validity mask if using cache
+	if b.kvCache != nil {
+		cacheValidMask := b.kvCache.CreateAttentionMask(b.g, queryLen, keyLen)
+		// cacheValidMask shape: [batch, 1, queryLen, keyLen]
+		// Remove the '1' dimension at position 1 and add numHeads dimension at position 2
+		cacheValidMask = Squeeze(cacheValidMask, 1)    // [batch, queryLen, keyLen]
+		cacheValidMask = ExpandDims(cacheValidMask, 2) // [batch, queryLen, 1, keyLen]
+		cacheValidMask = BroadcastToDims(cacheValidMask, b.attentionShape.Dimensions...)
+		mask = LogicalAnd(mask, cacheValidMask)
+	}
+
 	return
+}
+
+// SelfAttention is a convenience wrapper for MultiHeadAttention where query, key, and value
+// are all the same tensor (self-attention).
+//
+// This is equivalent to calling MultiHeadAttention(ctx, x, x, x, numHeads, headDim).
+// Returns a builder that can be further configured with methods like WithKVCache, WithRoPE,
+// UseCausalMask, etc.
+//
+// Example usage for training:
+//
+//	output := layers.SelfAttention(ctx, x, numHeads, headDim).
+//	    UseCausalMask().
+//	    Dropout(0.1).
+//	    Done()
+//
+// Example usage for generation with KV cache:
+//
+//	output := layers.SelfAttention(ctx, x, numHeads, headDim).
+//	    WithKVCache(cache, position).
+//	    WithRoPE(10000.0).
+//	    Done()
+func SelfAttention(ctx *context.Context, x *Node, numHeads int, headDim int) *MultiHeadAttentionBuilder {
+	return MultiHeadAttention(ctx, x, x, x, numHeads, headDim)
 }
