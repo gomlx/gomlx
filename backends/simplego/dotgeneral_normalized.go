@@ -7,7 +7,7 @@ import (
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-	"github.com/pkg/errors"
+	"github.com/x448/float16"
 
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
@@ -120,7 +120,7 @@ func dgNormalizePrepare(shape shapes.Shape, contractingAxes, batchAxes []int) *d
 //
 // In the chance that the source needs no transposing, output is returned nil.
 func dgNormalizeShape[T interface {
-	PODNumericConstraints | bfloat16.BFloat16
+	PODNumericConstraints | bfloat16.BFloat16 | float16.Float16
 }](backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) (output *Buffer) {
 	if !info.needsTranspose {
 		return nil
@@ -237,157 +237,11 @@ func execDotGeneralNormalized(backend *Backend, lhs, rhs *Buffer, params *dotGen
 
 var dotGeneralNormalizedDTypeMap = NewDTypeMap("DotGeneralNormalized")
 
-func execNormalizedDotGeneralGeneric[T PODNumericConstraints](lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
-	lhsFlat := lhs.flat.([]T)
-	rhsFlat := rhs.flat.([]T)
-	outputFlat := output.flat.([]T)
-
-	// Notice we cannot trust lhs.shape and rhs.shape, in case they haven't been transposed or reshaped.
-	contractingSize := params.contractingSize
-	lhsCrossSize := params.lhsCrossSize
-	rhsCrossSize := params.rhsCrossSize
-
-	// Pre-compute strides to avoid repeated calculations
-	lhsBatchStride := lhsCrossSize * contractingSize
-	rhsBatchStride := rhsCrossSize * contractingSize
-	outputBatchStride := lhsCrossSize * rhsCrossSize
-
-	// Cache block sizes - adjust based on typical matrix sizes and CPU cache
-	const blockSize = 64 // Tune this based on your typical workload and L1 cache size
-	for batchIdx := batchStartIdx; batchIdx < batchEndIdx; batchIdx++ {
-		lhsBaseIdx := batchIdx * lhsBatchStride
-		rhsBaseIdx := batchIdx * rhsBatchStride
-		outputBaseIdx := batchIdx * outputBatchStride
-
-		// Use blocking to improve cache locality
-		for outerIdxLhsCross := 0; outerIdxLhsCross < lhsCrossSize; outerIdxLhsCross += blockSize {
-			lhsCrossBlockEnd := min(outerIdxLhsCross+blockSize, lhsCrossSize)
-
-			for outerIdxRhsCross := 0; outerIdxRhsCross < rhsCrossSize; outerIdxRhsCross += blockSize {
-				rhsCrossBlockEnd := min(outerIdxRhsCross+blockSize, rhsCrossSize)
-
-				for outerIdxContracting := 0; outerIdxContracting < contractingSize; outerIdxContracting += blockSize {
-					contractingBlockEnd := min(outerIdxContracting+blockSize, contractingSize)
-
-					// Process the current block
-					for idxLhsCross := outerIdxLhsCross; idxLhsCross < lhsCrossBlockEnd; idxLhsCross++ {
-						lhsRowStartIdx := lhsBaseIdx + idxLhsCross*contractingSize
-						outputRowStartIdx := outputBaseIdx + idxLhsCross*rhsCrossSize
-
-						for idxRhsCross := outerIdxRhsCross; idxRhsCross < rhsCrossBlockEnd; idxRhsCross++ {
-							rhsColStartIdx := rhsBaseIdx + idxRhsCross*contractingSize
-							sum := outputFlat[outputRowStartIdx+idxRhsCross]
-
-							// Unroll the innermost loop for better vectorization
-							idxContracting := outerIdxContracting
-							for ; idxContracting+7 < contractingBlockEnd; idxContracting += 8 {
-								if lhsRowStartIdx+idxContracting+7 >= len(lhsFlat) {
-									panic(errors.Errorf("Out-of-bounds for lhs: batchIdx=%d, idxLhsCross=%d, idxRhsCross=%d, idxContracting=%d, len(lhsFlat)=%d, lhsFlatIdx=%d",
-										batchIdx, idxLhsCross, idxRhsCross, idxContracting, len(lhsFlat), lhsRowStartIdx+idxContracting+7))
-								}
-								if rhsColStartIdx+idxContracting+7 >= len(rhsFlat) {
-									panic(errors.Errorf("Out-of-bounds for rhs: batchIdx=%d, idxLhsCross=%d, idxRhsCross=%d, idxContracting=%d, len(rhsFlat)=%d, rhsFlatIdx=%d",
-										batchIdx, idxLhsCross, idxRhsCross, idxContracting, len(rhsFlat), rhsColStartIdx+idxContracting+7))
-								}
-								sum += lhsFlat[lhsRowStartIdx+idxContracting]*rhsFlat[rhsColStartIdx+idxContracting] +
-									lhsFlat[lhsRowStartIdx+idxContracting+1]*rhsFlat[rhsColStartIdx+idxContracting+1] +
-									lhsFlat[lhsRowStartIdx+idxContracting+2]*rhsFlat[rhsColStartIdx+idxContracting+2] +
-									lhsFlat[lhsRowStartIdx+idxContracting+3]*rhsFlat[rhsColStartIdx+idxContracting+3] +
-									lhsFlat[lhsRowStartIdx+idxContracting+4]*rhsFlat[rhsColStartIdx+idxContracting+4] +
-									lhsFlat[lhsRowStartIdx+idxContracting+5]*rhsFlat[rhsColStartIdx+idxContracting+5] +
-									lhsFlat[lhsRowStartIdx+idxContracting+6]*rhsFlat[rhsColStartIdx+idxContracting+6] +
-									lhsFlat[lhsRowStartIdx+idxContracting+7]*rhsFlat[rhsColStartIdx+idxContracting+7]
-							}
-
-							// Handle remaining elements
-							for ; idxContracting < contractingBlockEnd; idxContracting++ {
-								sum += lhsFlat[lhsRowStartIdx+idxContracting] * rhsFlat[rhsColStartIdx+idxContracting]
-							}
-
-							outputFlat[outputRowStartIdx+idxRhsCross] = sum
-						}
-					}
-				}
-			}
-		}
-	}
-}
+// Auto-generate alternate specialized versions of execNormalizedDotGeneral
+// (that can't easily be refactored into smaller functions due to latency penalities)
+//go:generate go run ../../internal/cmd/alternates_generator -base=dotgeneral_normalized_exec.go -tags=bf16,f16
 
 func init() {
-	dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, priorityTyped, execNormalizedDotGeneralBfloat16)
-}
-func execNormalizedDotGeneralBfloat16(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int) {
-	lhsFlat := lhs.flat.([]bfloat16.BFloat16)
-	rhsFlat := rhs.flat.([]bfloat16.BFloat16)
-	outputFlat := output.flat.([]float32) // Notice we use float32 for the output of BF16 DotGeneral.
-
-	// Notice we cannot trust lhs.shape and rhs.shape, in case they haven't been transposed or reshaped.
-	contractingSize := params.contractingSize
-	lhsCrossSize := params.lhsCrossSize
-	rhsCrossSize := params.rhsCrossSize
-
-	// Pre-compute strides to avoid repeated calculations
-	lhsBatchStride := lhsCrossSize * contractingSize
-	rhsBatchStride := rhsCrossSize * contractingSize
-	outputBatchStride := lhsCrossSize * rhsCrossSize
-
-	// Cache block sizes - adjust based on typical matrix sizes and CPU cache
-	const blockSize = 64 // Tune this based on your typical workload and L1 cache size
-	for batchIdx := batchStartIdx; batchIdx < batchEndIdx; batchIdx++ {
-		lhsBaseIdx := batchIdx * lhsBatchStride
-		rhsBaseIdx := batchIdx * rhsBatchStride
-		outputBaseIdx := batchIdx * outputBatchStride
-
-		// Use blocking to improve cache locality
-		for outerIdxLhsCross := 0; outerIdxLhsCross < lhsCrossSize; outerIdxLhsCross += blockSize {
-			lhsCrossBlockEnd := min(outerIdxLhsCross+blockSize, lhsCrossSize)
-
-			for outerIdxRhsCross := 0; outerIdxRhsCross < rhsCrossSize; outerIdxRhsCross += blockSize {
-				rhsCrossBlockEnd := min(outerIdxRhsCross+blockSize, rhsCrossSize)
-
-				for outerIdxContracting := 0; outerIdxContracting < contractingSize; outerIdxContracting += blockSize {
-					contractingBlockEnd := min(outerIdxContracting+blockSize, contractingSize)
-
-					// Process the current block
-					for idxLhsCross := outerIdxLhsCross; idxLhsCross < lhsCrossBlockEnd; idxLhsCross++ {
-						lhsRowStartIdx := lhsBaseIdx + idxLhsCross*contractingSize
-						outputRowStartIdx := outputBaseIdx + idxLhsCross*rhsCrossSize
-
-						for idxRhsCross := outerIdxRhsCross; idxRhsCross < rhsCrossBlockEnd; idxRhsCross++ {
-							rhsColStartIdx := rhsBaseIdx + idxRhsCross*contractingSize
-							sum := outputFlat[outputRowStartIdx+idxRhsCross]
-
-							// Unroll the innermost loop for better vectorization
-							idxContracting := outerIdxContracting
-							for ; idxContracting+7 < contractingBlockEnd; idxContracting += 8 {
-								if lhsRowStartIdx+idxContracting+7 >= len(lhsFlat) {
-									panic(errors.Errorf("Out-of-bounds for lhs: batchIdx=%d, idxLhsCross=%d, idxRhsCross=%d, idxContracting=%d, len(lhsFlat)=%d, lhsFlatIdx=%d",
-										batchIdx, idxLhsCross, idxRhsCross, idxContracting, len(lhsFlat), lhsRowStartIdx+idxContracting+7))
-								}
-								if rhsColStartIdx+idxContracting+7 >= len(rhsFlat) {
-									panic(errors.Errorf("Out-of-bounds for rhs: batchIdx=%d, idxLhsCross=%d, idxRhsCross=%d, idxContracting=%d, len(rhsFlat)=%d, rhsFlatIdx=%d",
-										batchIdx, idxLhsCross, idxRhsCross, idxContracting, len(rhsFlat), rhsColStartIdx+idxContracting+7))
-								}
-								sum += lhsFlat[lhsRowStartIdx+idxContracting].Float32()*rhsFlat[rhsColStartIdx+idxContracting].Float32() +
-									lhsFlat[lhsRowStartIdx+idxContracting+1].Float32()*rhsFlat[rhsColStartIdx+idxContracting+1].Float32() +
-									lhsFlat[lhsRowStartIdx+idxContracting+2].Float32()*rhsFlat[rhsColStartIdx+idxContracting+2].Float32() +
-									lhsFlat[lhsRowStartIdx+idxContracting+3].Float32()*rhsFlat[rhsColStartIdx+idxContracting+3].Float32() +
-									lhsFlat[lhsRowStartIdx+idxContracting+4].Float32()*rhsFlat[rhsColStartIdx+idxContracting+4].Float32() +
-									lhsFlat[lhsRowStartIdx+idxContracting+5].Float32()*rhsFlat[rhsColStartIdx+idxContracting+5].Float32() +
-									lhsFlat[lhsRowStartIdx+idxContracting+6].Float32()*rhsFlat[rhsColStartIdx+idxContracting+6].Float32() +
-									lhsFlat[lhsRowStartIdx+idxContracting+7].Float32()*rhsFlat[rhsColStartIdx+idxContracting+7].Float32()
-							}
-
-							// Handle remaining elements
-							for ; idxContracting < contractingBlockEnd; idxContracting++ {
-								sum += lhsFlat[lhsRowStartIdx+idxContracting].Float32() * rhsFlat[rhsColStartIdx+idxContracting].Float32()
-							}
-
-							outputFlat[outputRowStartIdx+idxRhsCross] = sum
-						}
-					}
-				}
-			}
-		}
-	}
+	dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, priorityTyped, execNormalizedDotGeneralBFloat16)
+	dotGeneralNormalizedDTypeMap.Register(dtypes.Float16, priorityTyped, execNormalizedDotGeneralFloat16)
 }

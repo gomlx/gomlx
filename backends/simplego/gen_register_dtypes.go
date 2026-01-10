@@ -5,6 +5,7 @@ package simplego
 import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/x448/float16"
 )
 
 func init() {
@@ -21,6 +22,7 @@ func init() {
 	dispatchBroadcast.Register(dtypes.Float32, priorityGeneric, execBroadcastGeneric[float32])
 	dispatchBroadcast.Register(dtypes.Float64, priorityGeneric, execBroadcastGeneric[float64])
 	dispatchBroadcast.Register(dtypes.BFloat16, priorityGeneric, execBroadcastGeneric[bfloat16.BFloat16])
+	dispatchBroadcast.Register(dtypes.Float16, priorityGeneric, execBroadcastGeneric[float16.Float16])
 	dispatchBroadcast.Register(dtypes.Bool, priorityGeneric, execBroadcastGeneric[bool])
 
 	// DTypeDispatcher: dispatchBroadcastInDim
@@ -35,6 +37,7 @@ func init() {
 	dispatchBroadcastInDim.Register(dtypes.Float32, priorityGeneric, execBroadcastInDimGeneric[float32])
 	dispatchBroadcastInDim.Register(dtypes.Float64, priorityGeneric, execBroadcastInDimGeneric[float64])
 	dispatchBroadcastInDim.Register(dtypes.BFloat16, priorityGeneric, execBroadcastInDimGeneric[bfloat16.BFloat16])
+	dispatchBroadcastInDim.Register(dtypes.Float16, priorityGeneric, execBroadcastInDimGeneric[float16.Float16])
 	dispatchBroadcastInDim.Register(dtypes.Bool, priorityGeneric, execBroadcastInDimGeneric[bool])
 
 	// DTypeDispatcher: dispatchIota
@@ -71,6 +74,7 @@ func init() {
 	dotGeneralFlatToBlockDTypeMap.Register(dtypes.Float32, priorityGeneric, dgCopyFlatToBlockShape[float32])
 	dotGeneralFlatToBlockDTypeMap.Register(dtypes.Float64, priorityGeneric, dgCopyFlatToBlockShape[float64])
 	dotGeneralFlatToBlockDTypeMap.Register(dtypes.BFloat16, priorityGeneric, dgCopyFlatToBlockShape[bfloat16.BFloat16])
+	dotGeneralFlatToBlockDTypeMap.Register(dtypes.Float16, priorityGeneric, dgCopyFlatToBlockShape[float16.Float16])
 
 	// DTypeMap: dotGeneralOutputBlockToFlatDTypeMap
 	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.Int8, priorityGeneric, dgCopyOutputBlockToFlat[int8])
@@ -108,6 +112,7 @@ func init() {
 	dotGeneralNormalizeShapeDTypeMap.Register(dtypes.Float32, priorityGeneric, dgNormalizeShape[float32])
 	dotGeneralNormalizeShapeDTypeMap.Register(dtypes.Float64, priorityGeneric, dgNormalizeShape[float64])
 	dotGeneralNormalizeShapeDTypeMap.Register(dtypes.BFloat16, priorityGeneric, dgNormalizeShape[bfloat16.BFloat16])
+	dotGeneralNormalizeShapeDTypeMap.Register(dtypes.Float16, priorityGeneric, dgNormalizeShape[float16.Float16])
 
 	// DTypeMap: dotGeneralNormalizedDTypeMap
 	dotGeneralNormalizedDTypeMap.Register(dtypes.Int8, priorityGeneric, execNormalizedDotGeneralGeneric[int8])
@@ -133,6 +138,7 @@ func init() {
 	mutableBytesDTypeMap.Register(dtypes.Float32, priorityGeneric, mutableBytesGeneric[float32])
 	mutableBytesDTypeMap.Register(dtypes.Float64, priorityGeneric, mutableBytesGeneric[float64])
 	mutableBytesDTypeMap.Register(dtypes.BFloat16, priorityGeneric, mutableBytesGeneric[bfloat16.BFloat16])
+	mutableBytesDTypeMap.Register(dtypes.Float16, priorityGeneric, mutableBytesGeneric[float16.Float16])
 	mutableBytesDTypeMap.Register(dtypes.Bool, priorityGeneric, mutableBytesGeneric[bool])
 
 	// DTypeMap: fillBufferDTypeMap
@@ -147,6 +153,7 @@ func init() {
 	fillBufferDTypeMap.Register(dtypes.Float32, priorityGeneric, fillBufferGeneric[float32])
 	fillBufferDTypeMap.Register(dtypes.Float64, priorityGeneric, fillBufferGeneric[float64])
 	fillBufferDTypeMap.Register(dtypes.BFloat16, priorityGeneric, fillBufferGeneric[bfloat16.BFloat16])
+	fillBufferDTypeMap.Register(dtypes.Float16, priorityGeneric, fillBufferGeneric[float16.Float16])
 	fillBufferDTypeMap.Register(dtypes.Bool, priorityGeneric, fillBufferGeneric[bool])
 
 	// DTypeMap: reduceMaxDTypeMap
@@ -239,6 +246,7 @@ func init() {
 	transposeDTypeMap.Register(dtypes.Float32, priorityGeneric, execTransposeGeneric[float32])
 	transposeDTypeMap.Register(dtypes.Float64, priorityGeneric, execTransposeGeneric[float64])
 	transposeDTypeMap.Register(dtypes.BFloat16, priorityGeneric, execTransposeGeneric[bfloat16.BFloat16])
+	transposeDTypeMap.Register(dtypes.Float16, priorityGeneric, execTransposeGeneric[float16.Float16])
 	transposeDTypeMap.Register(dtypes.Bool, priorityGeneric, execTransposeGeneric[bool])
 
 	// DTypeMap: whereDTypeMap
@@ -253,6 +261,7 @@ func init() {
 	whereDTypeMap.Register(dtypes.Float32, priorityGeneric, execWhereGeneric[float32])
 	whereDTypeMap.Register(dtypes.Float64, priorityGeneric, execWhereGeneric[float64])
 	whereDTypeMap.Register(dtypes.BFloat16, priorityGeneric, execWhereGeneric[bfloat16.BFloat16])
+	whereDTypeMap.Register(dtypes.Float16, priorityGeneric, execWhereGeneric[float16.Float16])
 	whereDTypeMap.Register(dtypes.Bool, priorityGeneric, execWhereGeneric[bool])
 
 	// DTypeMap: combineMaxDTypeMap
@@ -303,6 +312,7 @@ func init() {
 	scatterDTypeMap.Register(dtypes.Float32, priorityGeneric, execScatterGeneric[float32])
 	scatterDTypeMap.Register(dtypes.Float64, priorityGeneric, execScatterGeneric[float64])
 	scatterDTypeMap.Register(dtypes.BFloat16, priorityGeneric, execScatterGeneric[bfloat16.BFloat16])
+	scatterDTypeMap.Register(dtypes.Float16, priorityGeneric, execScatterGeneric[float16.Float16])
 
 	// DTypeMap: dereferenceIntsDTypeMap
 	dereferenceIntsDTypeMap.Register(dtypes.Int8, priorityGeneric, dereferenceIntsGeneric[int8])
@@ -326,6 +336,7 @@ func init() {
 	sliceDTypeMap.Register(dtypes.Float32, priorityGeneric, execSliceGeneric[float32])
 	sliceDTypeMap.Register(dtypes.Float64, priorityGeneric, execSliceGeneric[float64])
 	sliceDTypeMap.Register(dtypes.BFloat16, priorityGeneric, execSliceGeneric[bfloat16.BFloat16])
+	sliceDTypeMap.Register(dtypes.Float16, priorityGeneric, execSliceGeneric[float16.Float16])
 	sliceDTypeMap.Register(dtypes.Bool, priorityGeneric, execSliceGeneric[bool])
 
 	// DTypeMap: argMinMaxDTypeMap
@@ -547,6 +558,30 @@ func init() {
 	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Uint64, priorityGeneric, execConvertDTypeFromBFloat16[bfloat16.BFloat16, uint64])
 	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Float32, priorityGeneric, execConvertDTypeFromBFloat16[bfloat16.BFloat16, float32])
 	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Float64, priorityGeneric, execConvertDTypeFromBFloat16[bfloat16.BFloat16, float64])
+
+	// DTypePairMap: convertDTypePairMap
+	convertDTypePairMap.Register(dtypes.Int8, dtypes.Float16, priorityGeneric, execConvertDTypeToFloat16[int8, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Int16, dtypes.Float16, priorityGeneric, execConvertDTypeToFloat16[int16, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Int32, dtypes.Float16, priorityGeneric, execConvertDTypeToFloat16[int32, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Int64, dtypes.Float16, priorityGeneric, execConvertDTypeToFloat16[int64, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Uint8, dtypes.Float16, priorityGeneric, execConvertDTypeToFloat16[uint8, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Uint16, dtypes.Float16, priorityGeneric, execConvertDTypeToFloat16[uint16, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Uint32, dtypes.Float16, priorityGeneric, execConvertDTypeToFloat16[uint32, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Uint64, dtypes.Float16, priorityGeneric, execConvertDTypeToFloat16[uint64, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Float32, dtypes.Float16, priorityGeneric, execConvertDTypeToFloat16[float32, float16.Float16])
+	convertDTypePairMap.Register(dtypes.Float64, dtypes.Float16, priorityGeneric, execConvertDTypeToFloat16[float64, float16.Float16])
+
+	// DTypePairMap: convertDTypePairMap
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Int8, priorityGeneric, execConvertDTypeFromFloat16[float16.Float16, int8])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Int16, priorityGeneric, execConvertDTypeFromFloat16[float16.Float16, int16])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Int32, priorityGeneric, execConvertDTypeFromFloat16[float16.Float16, int32])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Int64, priorityGeneric, execConvertDTypeFromFloat16[float16.Float16, int64])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Uint8, priorityGeneric, execConvertDTypeFromFloat16[float16.Float16, uint8])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Uint16, priorityGeneric, execConvertDTypeFromFloat16[float16.Float16, uint16])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Uint32, priorityGeneric, execConvertDTypeFromFloat16[float16.Float16, uint32])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Uint64, priorityGeneric, execConvertDTypeFromFloat16[float16.Float16, uint64])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Float32, priorityGeneric, execConvertDTypeFromFloat16[float16.Float16, float32])
+	convertDTypePairMap.Register(dtypes.Float16, dtypes.Float64, priorityGeneric, execConvertDTypeFromFloat16[float16.Float16, float64])
 
 	// DTypePairMap: convertDTypePairMap
 	convertDTypePairMap.Register(dtypes.Int8, dtypes.Bool, priorityGeneric, execConvertDTypeToBool[int8, bool])

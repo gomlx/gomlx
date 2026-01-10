@@ -241,7 +241,7 @@ var dotGeneralFlatToBlockDTypeMap = NewDTypeMap("DotGeneralFlatToBlock")
 // source shape: any combination of batch, cross or contracting dimensions.
 // blkOutput shape: [batchSize, crossBlocks * blkDim, contractBlocks * blkDim]
 func dgCopyFlatToBlockShape[T interface {
-	PODNumericConstraints | bfloat16.BFloat16
+	PODNumericConstraints | bfloat16.BFloat16 | float16.Float16
 }](
 	source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int) {
 	rank := source.shape.Rank()
