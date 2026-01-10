@@ -92,10 +92,7 @@ func main() {
 	tags := strings.Split(*tagsStr, ",")
 	baseFileName := filepath.Base(*baseFile)
 	baseName := strings.TrimSuffix(baseFileName, filepath.Ext(baseFileName))
-	if strings.HasSuffix(baseName, "_base") {
-		// If source file name has "_base" at the end, remove it: it will be replaced by the tags we are generating.
-		baseName = strings.TrimSuffix(baseName, "_base")
-	}
+	baseName, _ = strings.CutSuffix(baseName, "_base") // "_base" at the end is replaced by the tags we are generating.
 
 	// 4. Process the file for each specified tag.
 	for _, tag := range tags {
