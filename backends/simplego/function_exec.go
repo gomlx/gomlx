@@ -4,6 +4,7 @@ package simplego
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
@@ -71,7 +72,7 @@ func newFunctionExecutable(f *Function) (*FunctionExecutable, error) {
 		New: func() interface{} {
 			return &funcExecBuffers{
 				results:       make([]*Buffer, numNodesToProcess),
-				numUsed:       make([]int, numNodesToProcess),
+				numUsed:       make([]atomic.Int32, numNodesToProcess),
 				owned:         make([]bool, numNodesToProcess),
 				remainingDeps: make([]int, numNodesToProcess),
 			}
@@ -100,7 +101,8 @@ type funcExecBuffers struct {
 	results []*Buffer
 
 	// numUsed tracks how many times each node has been used already.
-	numUsed []int
+	// Uses atomic.Int32 to allow safe concurrent reads in ownership checks.
+	numUsed []atomic.Int32
 
 	// owned indicates whether the corresponding buffer is owned by the executor.
 	owned []bool
@@ -137,7 +139,7 @@ func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate
 	// Get execution buffers from pool and reset
 	execBuf := fe.executionBuffersPool.Get().(*funcExecBuffers)
 	for i := range fe.numNodesToProcess {
-		execBuf.numUsed[i] = 0
+		execBuf.numUsed[i].Store(0)
 		execBuf.owned[i] = false
 		execBuf.results[i] = nil
 		execBuf.remainingDeps[i] = 0
@@ -363,11 +365,11 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			return errors.Errorf("input %d for node %s not computed yet", i, node.opType)
 		}
 		// Only "own" the input if this is the last use of it.
-		// Note: In parallel mode, this check is racy but that's okay - if we don't
-		// get ownership, the buffer just won't be reused in-place. The important thing
+		// The atomic Load is safe for concurrent access - if we miss ownership,
+		// the buffer just won't be reused in-place. The important thing
 		// is we don't free the buffer until all users have finished (handled in cleanup).
 		inputsOwned[i] = execBuf.owned[inputIdx] &&
-			fe.numUses[inputIdx]-execBuf.numUsed[inputIdx] == 1
+			fe.numUses[inputIdx]-int(execBuf.numUsed[inputIdx].Load()) == 1
 	}
 
 	// Execute the node
@@ -407,21 +409,19 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 	}
 
 	// Update usage counts and free unused buffers.
-	// The lock protects numUsed and results in parallel mode.
+	// The lock protects results in parallel mode; numUsed uses atomics for safe reads.
 	if execBuf.opsExecutionType == opsExecutionParallel {
 		execBuf.mu.Lock()
 	}
 	for i, input := range node.inputs {
 		inputIdx := input.builderIdx
-		execBuf.numUsed[inputIdx]++ // Mark this input as used.
+		newCount := execBuf.numUsed[inputIdx].Add(1) // Mark this input as used.
 		if inputBuffers[i] == nil {
 			execBuf.results[inputIdx] = nil
 			continue
 		}
-		if execBuf.numUsed[inputIdx] == fe.numUses[inputIdx] && execBuf.owned[inputIdx] {
+		if int(newCount) == fe.numUses[inputIdx] && execBuf.owned[inputIdx] {
 			// Release the input buffer - all users have finished.
-			// Note: In parallel mode there's a race where this might not free
-			// optimally, but leftover buffers are cleaned up at the end.
 			backend.putBuffer(inputBuffers[i])
 			execBuf.results[inputIdx] = nil
 		}
