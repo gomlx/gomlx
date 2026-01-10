@@ -260,9 +260,7 @@ func TestClosurePreCompilation(t *testing.T) {
 
 	// Verify compiled closure properties
 	cc := closureFn.compiled
-	require.NotNil(t, cc.sortedNodes, "Compiled closure should have sorted nodes")
-	require.Greater(t, len(cc.sortedNodes), 0, "Should have at least one node")
-	require.Len(t, cc.parameterIndices, 1, "Should have one parameter")
+	require.Greater(t, cc.numNodesToProcess, 0, "Should have nodes to process")
 	require.Len(t, cc.outputNodes, 1, "Should have one output")
 	require.NotNil(t, cc.numUses, "Should have numUses")
 }

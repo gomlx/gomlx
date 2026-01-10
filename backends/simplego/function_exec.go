@@ -3,7 +3,6 @@
 package simplego
 
 import (
-	"slices"
 	"sync"
 
 	"github.com/gomlx/gomlx/backends"
@@ -16,21 +15,15 @@ type FunctionExecutable struct {
 	// function is the source Function this was compiled from.
 	function *Function
 
-	// sortedNodes are the nodes needed for execution, in topological order.
-	sortedNodes []*Node
+	// numNodesToProcess is the max(outputs.builderIdx)+1.
+	// Arrays are sized to this to allow direct builderIdx indexing.
+	numNodesToProcess int
 
-	// nodeToSortedIdx maps a node's builderIdx to its index in sortedNodes.
-	// This allows O(1) lookup when executing.
-	nodeToSortedIdx map[int]int
-
-	// numUses tracks how many times each node's result is used (indexed by sortedNodes position).
+	// numUses tracks how many times each node's result is used (indexed by builderIdx).
 	numUses []int
 
-	// dependents maps each node (by sortedNodes position) to the list of dependent nodes.
+	// dependents maps each node (by builderIdx) to the list of dependent node builderIdxs.
 	dependents [][]int
-
-	// parameterIndices maps parameter nodes (by builderIdx) to their input index.
-	parameterIndices map[int]int
 
 	// outputNodes are the nodes that produce the function's outputs.
 	outputNodes []*Node
@@ -49,78 +42,38 @@ func newFunctionExecutable(f *Function) (*FunctionExecutable, error) {
 		return nil, errors.Errorf("function must have Return() called before compilation")
 	}
 
+	// Calculate numNodesToProcess from outputs
+	var numNodesToProcess int
+	for _, output := range f.outputs {
+		numNodesToProcess = max(numNodesToProcess, output.builderIdx+1)
+	}
+
 	fe := &FunctionExecutable{
-		function:         f,
-		outputNodes:      f.outputs,
-		parameterIndices: make(map[int]int),
-		nodeToSortedIdx:  make(map[int]int),
+		function:          f,
+		outputNodes:       f.outputs,
+		numNodesToProcess: numNodesToProcess,
+		numUses:           make([]int, numNodesToProcess),
+		dependents:        make([][]int, numNodesToProcess),
 	}
 
-	// 1. Identify all nodes reachable from outputs using DFS
-	neededNodes := make(map[int]bool)
-	var findNeeded func(node *Node)
-	findNeeded = func(node *Node) {
-		if neededNodes[node.builderIdx] {
-			return
-		}
-		neededNodes[node.builderIdx] = true
-		for _, input := range node.inputs {
-			findNeeded(input)
-		}
-	}
-	for _, out := range f.outputs {
-		findNeeded(out)
+	// Find max inputs and count uses/dependents
+	for nodeIdx := range numNodesToProcess {
+		fe.maxInputs = max(fe.maxInputs, len(f.builder.nodes[nodeIdx].inputs))
 	}
 
-	// 2. Collect and sort nodes topologically (by builderIdx order)
-	for nodeIdx := range neededNodes {
-		fe.sortedNodes = append(fe.sortedNodes, f.builder.nodes[nodeIdx])
-	}
-	slices.SortFunc(fe.sortedNodes, func(a, b *Node) int {
-		return a.builderIdx - b.builderIdx
-	})
-
-	numNodes := len(fe.sortedNodes)
-
-	// 3. Build reverse mapping from builderIdx to sortedNodes index
-	for i, node := range fe.sortedNodes {
-		fe.nodeToSortedIdx[node.builderIdx] = i
+	// Count uses for each node starting from outputs
+	for _, output := range f.outputs {
+		fe.countNodeUsesAndDependents(output)
 	}
 
-	// 4. Map parameters to input indices
-	for i, param := range f.parameters {
-		fe.parameterIndices[param.builderIdx] = i
-	}
-
-	// 5. Count uses, find max inputs, and build dependents
-	fe.numUses = make([]int, numNodes)
-	fe.dependents = make([][]int, numNodes)
-
-	for sortedIdx, node := range fe.sortedNodes {
-		fe.maxInputs = max(fe.maxInputs, len(node.inputs))
-		for _, input := range node.inputs {
-			if inputSortedIdx, ok := fe.nodeToSortedIdx[input.builderIdx]; ok {
-				fe.numUses[inputSortedIdx]++
-				fe.dependents[inputSortedIdx] = append(fe.dependents[inputSortedIdx], sortedIdx)
-			}
-		}
-	}
-
-	// Count output uses
-	for _, out := range f.outputs {
-		if outSortedIdx, ok := fe.nodeToSortedIdx[out.builderIdx]; ok {
-			fe.numUses[outSortedIdx]++
-		}
-	}
-
-	// 6. Initialize execution buffers pool
+	// Initialize execution buffers pool
 	fe.executionBuffersPool = sync.Pool{
 		New: func() interface{} {
 			return &funcExecBuffers{
-				results:       make([]*Buffer, numNodes),
-				numUsed:       make([]int, numNodes),
-				owned:         make([]bool, numNodes),
-				remainingDeps: make([]int, numNodes),
+				results:       make([]*Buffer, numNodesToProcess),
+				numUsed:       make([]int, numNodesToProcess),
+				owned:         make([]bool, numNodesToProcess),
+				remainingDeps: make([]int, numNodesToProcess),
 			}
 		},
 	}
@@ -128,9 +81,22 @@ func newFunctionExecutable(f *Function) (*FunctionExecutable, error) {
 	return fe, nil
 }
 
+// countNodeUsesAndDependents recursively counts how many times a node is used.
+func (fe *FunctionExecutable) countNodeUsesAndDependents(node *Node) {
+	nodeIdx := node.builderIdx
+	fe.numUses[nodeIdx]++
+	if fe.numUses[nodeIdx] == 1 {
+		// On the first visit, recursively traverse inputs of the node.
+		for _, input := range node.inputs {
+			fe.dependents[input.builderIdx] = append(fe.dependents[input.builderIdx], nodeIdx)
+			fe.countNodeUsesAndDependents(input)
+		}
+	}
+}
+
 // funcExecBuffers holds intermediate results during function execution.
 type funcExecBuffers struct {
-	// results hold the calculated computations at each step.
+	// results hold the calculated computations at each step (indexed by builderIdx).
 	results []*Buffer
 
 	// numUsed tracks how many times each node has been used already.
@@ -156,10 +122,11 @@ type funcExecBuffers struct {
 // Execute runs the compiled function with the given inputs.
 // The inputs must match the function's parameters in count and shape.
 func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate []bool) ([]*Buffer, error) {
-	// Validate input count
-	if len(inputs) != len(fe.function.parameters) {
+	// Validate input count - use builder.inputs for main function compatibility
+	builderInputs := fe.function.builder.inputs
+	if len(inputs) != len(builderInputs) {
 		return nil, errors.Errorf("function expects %d inputs, got %d",
-			len(fe.function.parameters), len(inputs))
+			len(builderInputs), len(inputs))
 	}
 
 	// donate defaults to false
@@ -167,23 +134,21 @@ func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate
 		donate = make([]bool, len(inputs))
 	}
 
-	numNodes := len(fe.sortedNodes)
-
 	// Get execution buffers from pool and reset
 	execBuf := fe.executionBuffersPool.Get().(*funcExecBuffers)
-	for i := range numNodes {
+	for i := range fe.numNodesToProcess {
 		execBuf.numUsed[i] = 0
 		execBuf.owned[i] = false
 		execBuf.results[i] = nil
 		execBuf.remainingDeps[i] = 0
 	}
 
-	// Set up parameters from inputs
-	for paramBuilderIdx, inputIdx := range fe.parameterIndices {
-		if sortedIdx, ok := fe.nodeToSortedIdx[paramBuilderIdx]; ok {
-			execBuf.results[sortedIdx] = inputs[inputIdx]
-			execBuf.owned[sortedIdx] = donate[inputIdx]
-		}
+	// Set up parameters from inputs using builderIdx directly
+	// Use builder.inputs to match the order inputs are passed from Executable.Execute
+	for i, inputNode := range builderInputs {
+		inputIdx := inputNode.builderIdx
+		execBuf.results[inputIdx] = inputs[i]
+		execBuf.owned[inputIdx] = donate[i]
 	}
 
 	// Decide execution mode
@@ -212,26 +177,22 @@ func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate
 	// Collect outputs
 	outputs := make([]*Buffer, len(fe.outputNodes))
 	for i, outNode := range fe.outputNodes {
-		sortedIdx, ok := fe.nodeToSortedIdx[outNode.builderIdx]
-		if !ok {
-			fe.executionBuffersPool.Put(execBuf)
-			return nil, errors.Errorf("output node %d not found in sorted nodes", outNode.builderIdx)
-		}
-		outputs[i] = execBuf.results[sortedIdx]
+		outIdx := outNode.builderIdx
+		outputs[i] = execBuf.results[outIdx]
 		if outputs[i] == nil {
 			fe.executionBuffersPool.Put(execBuf)
 			return nil, errors.Errorf("output %d not computed", i)
 		}
-		if !execBuf.owned[sortedIdx] {
+		if !execBuf.owned[outIdx] {
 			// Clone the buffer since we don't own it
-			outputs[i] = backend.cloneBuffer(execBuf.results[sortedIdx])
+			outputs[i] = backend.cloneBuffer(execBuf.results[outIdx])
 		}
-		execBuf.results[sortedIdx] = nil // Prevent double-free
+		execBuf.results[outIdx] = nil // Prevent double-free
 	}
 
 	// Free any remaining owned buffers that weren't outputs
-	for sortedIdx, buf := range execBuf.results {
-		if buf != nil && execBuf.owned[sortedIdx] {
+	for idx, buf := range execBuf.results {
+		if buf != nil && execBuf.owned[idx] {
 			backend.putBuffer(buf)
 		}
 	}
@@ -250,17 +211,18 @@ func (fe *FunctionExecutable) executeSequentially(backend *Backend, execBuf *fun
 		execBuf.opInputsOwned = nil
 	}()
 
-	for sortedIdx, node := range fe.sortedNodes {
-		if execBuf.results[sortedIdx] != nil {
-			// Already computed (parameter or multi-output)
+	for nodeIdx := range fe.numNodesToProcess {
+		if execBuf.results[nodeIdx] != nil {
+			// Already computed (parameter)
 			continue
 		}
-		if fe.numUses[sortedIdx] == 0 {
+		if fe.numUses[nodeIdx] == 0 {
 			// Not used by any output
 			continue
 		}
 
-		if err := fe.executeNode(backend, sortedIdx, node, execBuf); err != nil {
+		node := fe.function.builder.nodes[nodeIdx]
+		if err := fe.executeNode(backend, node, execBuf); err != nil {
 			return err
 		}
 	}
@@ -269,34 +231,25 @@ func (fe *FunctionExecutable) executeSequentially(backend *Backend, execBuf *fun
 
 // executeParallel executes nodes in parallel based on dependency graph.
 func (fe *FunctionExecutable) executeParallel(backend *Backend, execBuf *funcExecBuffers) error {
-	numNodes := len(fe.sortedNodes)
-
 	var (
 		readyToExecute chan int
 		collectErrors  []error
 		execMu         sync.Mutex
 	)
-	readyToExecute = make(chan int, numNodes+10)
+	readyToExecute = make(chan int, fe.numNodesToProcess+10)
 	stopExecutionFn := sync.OnceFunc(func() { close(readyToExecute) })
 
 	expected := 0
 	completed := 0
 
 	// Count expected nodes and initialize dependencies
-	for sortedIdx := range numNodes {
-		if fe.numUses[sortedIdx] > 0 {
+	for nodeIdx := range fe.numNodesToProcess {
+		if fe.numUses[nodeIdx] > 0 {
 			expected++
-			node := fe.sortedNodes[sortedIdx]
-			// Count only inputs that are in our sorted nodes
-			depCount := 0
-			for _, input := range node.inputs {
-				if _, ok := fe.nodeToSortedIdx[input.builderIdx]; ok {
-					depCount++
-				}
-			}
-			execBuf.remainingDeps[sortedIdx] = depCount
-			if depCount == 0 {
-				readyToExecute <- sortedIdx
+			node := fe.function.builder.nodes[nodeIdx]
+			execBuf.remainingDeps[nodeIdx] = len(node.inputs)
+			if len(node.inputs) == 0 {
+				readyToExecute <- nodeIdx
 			}
 		}
 	}
@@ -308,11 +261,12 @@ func (fe *FunctionExecutable) executeParallel(backend *Backend, execBuf *funcExe
 		stopExecutionFn()
 	}
 
-	for sortedIdx := range readyToExecute {
+	for nodeIdx := range readyToExecute {
+		nodeIdx := nodeIdx // Capture loop variable
 		nodeExecFn := func() {
-			node := fe.sortedNodes[sortedIdx]
+			node := fe.function.builder.nodes[nodeIdx]
 
-			defer func(sortedIdx int) {
+			defer func(nodeIdx int) {
 				execMu.Lock()
 				defer execMu.Unlock()
 				if len(collectErrors) > 0 {
@@ -327,8 +281,8 @@ func (fe *FunctionExecutable) executeParallel(backend *Backend, execBuf *funcExe
 				// Handle multi-output nodes
 				if node.IsMultiOutputs() {
 					for _, outputNode := range node.multiOutputsNodes {
-						outputSortedIdx, ok := fe.nodeToSortedIdx[outputNode.builderIdx]
-						if !ok || fe.numUses[outputSortedIdx] == 0 {
+						outputIdx := outputNode.builderIdx
+						if outputIdx >= fe.numNodesToProcess || fe.numUses[outputIdx] == 0 {
 							continue
 						}
 						completed++
@@ -336,7 +290,7 @@ func (fe *FunctionExecutable) executeParallel(backend *Backend, execBuf *funcExe
 							stopExecutionFn()
 							return
 						}
-						for _, depIdx := range fe.dependents[outputSortedIdx] {
+						for _, depIdx := range fe.dependents[outputIdx] {
 							execBuf.remainingDeps[depIdx]--
 							if execBuf.remainingDeps[depIdx] == 0 {
 								readyToExecute <- depIdx
@@ -344,23 +298,23 @@ func (fe *FunctionExecutable) executeParallel(backend *Backend, execBuf *funcExe
 						}
 					}
 				} else {
-					for _, depIdx := range fe.dependents[sortedIdx] {
+					for _, depIdx := range fe.dependents[nodeIdx] {
 						execBuf.remainingDeps[depIdx]--
 						if execBuf.remainingDeps[depIdx] == 0 {
 							readyToExecute <- depIdx
 						}
 					}
 				}
-			}(sortedIdx)
+			}(nodeIdx)
 
-			if execBuf.results[sortedIdx] != nil {
+			if execBuf.results[nodeIdx] != nil {
 				return
 			}
-			if fe.numUses[sortedIdx] == 0 {
+			if fe.numUses[nodeIdx] == 0 {
 				return
 			}
 
-			if err := fe.executeNode(backend, sortedIdx, node, execBuf); err != nil {
+			if err := fe.executeNode(backend, node, execBuf); err != nil {
 				appendErrorFn(err)
 				return
 			}
@@ -376,11 +330,13 @@ func (fe *FunctionExecutable) executeParallel(backend *Backend, execBuf *funcExe
 }
 
 // executeNode executes a single node and stores its result.
-func (fe *FunctionExecutable) executeNode(backend *Backend, sortedIdx int, node *Node, execBuf *funcExecBuffers) error {
+func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf *funcExecBuffers) error {
+	nodeIdx := node.builderIdx
+
 	// Handle constants specially
 	if node.opType == backends.OpTypeConstant {
-		execBuf.owned[sortedIdx] = false
-		execBuf.results[sortedIdx] = node.data.(*Buffer)
+		execBuf.owned[nodeIdx] = false
+		execBuf.results[nodeIdx] = node.data.(*Buffer)
 		return nil
 	}
 
@@ -398,18 +354,20 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, sortedIdx int, node 
 		inputsOwned = make([]bool, numInputs)
 	}
 
+	// Gather inputs. In parallel mode, we do NOT hold a lock here - the dependency
+	// tracking ensures inputs are ready. The lock is only used in cleanup.
 	for i, input := range node.inputs {
-		inputSortedIdx, ok := fe.nodeToSortedIdx[input.builderIdx]
-		if !ok {
-			return errors.Errorf("input node %d not found in sorted nodes", input.builderIdx)
-		}
-		inputBuffers[i] = execBuf.results[inputSortedIdx]
+		inputIdx := input.builderIdx
+		inputBuffers[i] = execBuf.results[inputIdx]
 		if inputBuffers[i] == nil {
 			return errors.Errorf("input %d for node %s not computed yet", i, node.opType)
 		}
-		// Only own the input if this is the last use
-		inputsOwned[i] = execBuf.owned[inputSortedIdx] &&
-			fe.numUses[inputSortedIdx]-execBuf.numUsed[inputSortedIdx] == 1
+		// Only "own" the input if this is the last use of it.
+		// Note: In parallel mode, this check is racy but that's okay - if we don't
+		// get ownership, the buffer just won't be reused in-place. The important thing
+		// is we don't free the buffer until all users have finished (handled in cleanup).
+		inputsOwned[i] = execBuf.owned[inputIdx] &&
+			fe.numUses[inputIdx]-execBuf.numUsed[inputIdx] == 1
 	}
 
 	// Execute the node
@@ -426,13 +384,13 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, sortedIdx int, node 
 
 		for outputIdx, outputBuf := range outputBuffers {
 			outputNode := node.multiOutputsNodes[outputIdx]
-			outputSortedIdx, ok := fe.nodeToSortedIdx[outputNode.builderIdx]
-			if !ok || fe.numUses[outputSortedIdx] == 0 {
+			outputNodeIdx := outputNode.builderIdx
+			if outputNodeIdx >= fe.numNodesToProcess || fe.numUses[outputNodeIdx] == 0 {
 				backend.putBuffer(outputBuf)
 				continue
 			}
-			execBuf.results[outputSortedIdx] = outputBuf
-			execBuf.owned[outputSortedIdx] = true
+			execBuf.results[outputNodeIdx] = outputBuf
+			execBuf.owned[outputNodeIdx] = true
 		}
 	} else {
 		executor := nodeExecutors[node.opType]
@@ -444,22 +402,28 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, sortedIdx int, node 
 		if err != nil {
 			return errors.WithMessagef(err, "executing %s", node.opType)
 		}
-		execBuf.results[sortedIdx] = result
-		execBuf.owned[sortedIdx] = true
+		execBuf.results[nodeIdx] = result
+		execBuf.owned[nodeIdx] = true
 	}
 
-	// Update usage counts and free unused buffers
+	// Update usage counts and free unused buffers.
+	// The lock protects numUsed and results in parallel mode.
 	if execBuf.opsExecutionType == opsExecutionParallel {
 		execBuf.mu.Lock()
 	}
 	for i, input := range node.inputs {
-		inputSortedIdx := fe.nodeToSortedIdx[input.builderIdx]
-		execBuf.numUsed[inputSortedIdx]++
-		if execBuf.numUsed[inputSortedIdx] == fe.numUses[inputSortedIdx] &&
-			execBuf.owned[inputSortedIdx] &&
-			inputBuffers[i] != nil {
+		inputIdx := input.builderIdx
+		execBuf.numUsed[inputIdx]++ // Mark this input as used.
+		if inputBuffers[i] == nil {
+			execBuf.results[inputIdx] = nil
+			continue
+		}
+		if execBuf.numUsed[inputIdx] == fe.numUses[inputIdx] && execBuf.owned[inputIdx] {
+			// Release the input buffer - all users have finished.
+			// Note: In parallel mode there's a race where this might not free
+			// optimally, but leftover buffers are cleaned up at the end.
 			backend.putBuffer(inputBuffers[i])
-			execBuf.results[inputSortedIdx] = nil
+			execBuf.results[inputIdx] = nil
 		}
 	}
 	if execBuf.opsExecutionType == opsExecutionParallel {
