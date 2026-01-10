@@ -239,7 +239,7 @@ var dotGeneralNormalizedDTypeMap = NewDTypeMap("DotGeneralNormalized")
 
 // Auto-generate alternate specialized versions of execNormalizedDotGeneral
 // (that can't easily be refactored into smaller functions due to latency penalities)
-//go:generate go run ../../internal/cmd/alternates_generator -base=dotgeneral_normalized_exec.go -tags=bf16,f16
+//go:generate go run ../../internal/cmd/alternates_generator -base=dotgeneral_normalized_alt_base.go -tags=bf16,f16
 
 func init() {
 	dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, priorityTyped, execNormalizedDotGeneralBFloat16)
