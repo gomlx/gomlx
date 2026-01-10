@@ -19,6 +19,8 @@
 - Package `graph`:
   - Added `Unpack()` and `Pack()` for sub-byte dtypes.
   - Added `Function` concept (and support for closures) and the `Function.Call` operation.
+  - Control Flow: Added `While` and `If` operations.
+  - Order operations: Added `Sort`, `SortFunc`, `TopK`, `BottomK`.
   
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 
