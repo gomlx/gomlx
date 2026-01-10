@@ -363,21 +363,55 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 				return nil, err
 			}
 
-			// Also verify SmallMatMul path for matrices in matmul order (float32 only)
-			if lhsRaw.shape.DType == dtypes.Float32 && isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
-				params.lhsContractingAxes, params.rhsContractingAxes,
-				params.lhsBatchAxes, params.rhsBatchAxes) {
-				output2.Zeros()
-				execDotGeneralSmallMatMulFloat32(backend, lhsRaw, rhsRaw, params, output2)
+			// Also verify SmallMatMul path for matrices in matmul order
+			rawDType := lhsRaw.shape.DType
+			if (rawDType == dtypes.Float32 || rawDType == dtypes.BFloat16 || rawDType == dtypes.Float16) &&
+				isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
+					params.lhsContractingAxes, params.rhsContractingAxes,
+					params.lhsBatchAxes, params.rhsBatchAxes) {
+				// For BFloat16/Float16, use temporary Float32 buffer then convert back
+				tmpOutput2 := output2
+				castToFloat32 := rawDType == dtypes.BFloat16 || rawDType == dtypes.Float16
+				if castToFloat32 {
+					tmpOutputShape := shapes.Make(dtypes.Float32, params.batchSize, params.lhsCrossSize, params.rhsCrossSize)
+					tmpOutput2 = backend.getBufferForShape(tmpOutputShape)
+					tmpOutput2.Zeros()
+				} else {
+					output2.Zeros()
+				}
+				execSmallMatMulFn := dotGeneralSmallMatMulDTypeMap.Get(rawDType).(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
+				execSmallMatMulFn(backend, lhsRaw, rhsRaw, params, tmpOutput2)
+				if castToFloat32 {
+					convertFn := convertDTypePairMap.Get(dtypes.Float32, output2.shape.DType).(convertFnType)
+					convertFn(tmpOutput2, output2)
+					backend.putBuffer(tmpOutput2)
+				}
 				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
 			}
 			backend.putBuffer(output2) // Discard second output, no longer needed
 		}
 
 	case smallMatMulPath:
-		// SmallMatMul fast path: small float32 matrices in standard [M,K]×[K,N] order.
+		// SmallMatMul fast path: small matrices in standard [M,K]×[K,N] order.
 		// Path was selected at build time based on matrix layout and size.
-		execDotGeneralSmallMatMulFloat32(backend, lhs, rhs, params, output)
+		// Supports float32, bfloat16, and float16 dtypes.
+		dtype := lhs.shape.DType
+		tmpOutput := output
+		castToFloat32 := dtype == dtypes.BFloat16 || dtype == dtypes.Float16
+		if castToFloat32 {
+			// BFloat16/Float16 accumulate in Float32 for numerical stability
+			tmpOutputShape := shapes.Make(dtypes.Float32, params.batchSize, params.lhsCrossSize, params.rhsCrossSize)
+			tmpOutput = backend.getBufferForShape(tmpOutputShape)
+			tmpOutput.Zeros()
+		}
+		execSmallMatMulFn := dotGeneralSmallMatMulDTypeMap.Get(dtype).(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
+		execSmallMatMulFn(backend, lhs, rhs, params, tmpOutput)
+		if castToFloat32 {
+			// Convert Float32 result back to original dtype
+			convertFn := convertDTypePairMap.Get(dtypes.Float32, output.shape.DType).(convertFnType)
+			convertFn(tmpOutput, output)
+			backend.putBuffer(tmpOutput)
+		}
 		return output, nil
 
 	case normalizedPath:
