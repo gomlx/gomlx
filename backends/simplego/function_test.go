@@ -290,7 +290,7 @@ func TestCompiledClosureExecute(t *testing.T) {
 
 	// Get the compiled closure
 	closureFn := closure.(*Function)
-	cc := closureFn.CompiledClosure()
+	cc := closureFn.Compiled()
 	require.NotNil(t, cc, "Should have compiled closure")
 
 	// Create input buffers
@@ -307,7 +307,7 @@ func TestCompiledClosureExecute(t *testing.T) {
 
 	// Execute the closure
 	b := backend.(*Backend)
-	outputs, err := cc.Execute(b, []*Buffer{xBuf, yBuf})
+	outputs, err := cc.Execute(b, []*Buffer{xBuf, yBuf}, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1, "Should have one output")
 
@@ -341,7 +341,7 @@ func TestCompiledClosureMultipleExecutions(t *testing.T) {
 	err = closure.Return([]backends.Value{product}, nil)
 	require.NoError(t, err)
 
-	cc := closure.(*Function).CompiledClosure()
+	cc := closure.(*Function).Compiled()
 	require.NotNil(t, cc)
 
 	b := backend.(*Backend)
@@ -363,7 +363,7 @@ func TestCompiledClosureMultipleExecutions(t *testing.T) {
 			valid: true,
 		}
 
-		outputs, err := cc.Execute(b, []*Buffer{inputBuf})
+		outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil)
 		require.NoError(t, err, "Execution %d failed", i)
 		require.Len(t, outputs, 1)
 
@@ -393,12 +393,12 @@ func TestCompiledClosureWithConstants(t *testing.T) {
 	err = closure.Return([]backends.Value{sum}, nil)
 	require.NoError(t, err)
 
-	cc := closure.(*Function).CompiledClosure()
+	cc := closure.(*Function).Compiled()
 	require.NotNil(t, cc)
 
 	// Execute with no inputs
 	simpleGoBackend := backend.(*Backend)
-	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{})
+	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{}, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)
 
@@ -433,7 +433,7 @@ func TestCompiledClosureMultipleOutputs(t *testing.T) {
 	err = closure.Return([]backends.Value{sum, product}, nil)
 	require.NoError(t, err)
 
-	cc := closure.(*Function).CompiledClosure()
+	cc := closure.(*Function).Compiled()
 	require.NotNil(t, cc)
 
 	inputBuf := &Buffer{
@@ -443,7 +443,7 @@ func TestCompiledClosureMultipleOutputs(t *testing.T) {
 	}
 
 	b := backend.(*Backend)
-	outputs, err := cc.Execute(b, []*Buffer{inputBuf})
+	outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 2)
 
@@ -489,7 +489,7 @@ func TestCompiledClosureChainedOperations(t *testing.T) {
 	err = closure.Return([]backends.Value{diff}, nil)
 	require.NoError(t, err)
 
-	cc := closure.(*Function).CompiledClosure()
+	cc := closure.(*Function).Compiled()
 	require.NotNil(t, cc)
 
 	// x = [1, 2]
@@ -503,7 +503,7 @@ func TestCompiledClosureChainedOperations(t *testing.T) {
 	}
 
 	simpleGoBackend := backend.(*Backend)
-	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{inputBuf})
+	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{inputBuf}, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)
 
@@ -532,7 +532,7 @@ func TestCompiledClosureInputValidation(t *testing.T) {
 	err = closure.Return([]backends.Value{sum}, nil)
 	require.NoError(t, err)
 
-	cc := closure.(*Function).CompiledClosure()
+	cc := closure.(*Function).Compiled()
 	require.NotNil(t, cc)
 
 	// Try to execute with wrong number of inputs
@@ -545,12 +545,12 @@ func TestCompiledClosureInputValidation(t *testing.T) {
 	simpleGoBackend := backend.(*Backend)
 
 	// Too few inputs
-	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf})
+	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expects 2 inputs, got 1")
 
 	// Too many inputs
-	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf, xBuf, xBuf})
+	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf, xBuf, xBuf}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expects 2 inputs, got 3")
 }

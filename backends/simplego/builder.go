@@ -111,8 +111,17 @@ func (b *Builder) Compile() (backends.Executable, error) {
 			)
 		}
 	}
+
+	// Update mainFn outputs (in case duplicates were handled) and recompile
+	b.mainFn.outputs = b.outputs
+	mainFnExec, err := newFunctionExecutable(b.mainFn)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed to compile main function")
+	}
+	b.mainFn.compiled = mainFnExec
+
 	b.compiled = true
-	return newExecutable(b), nil
+	return newExecutable(b, mainFnExec), nil
 }
 
 // Finalize immediately release the resources associated with the Builder.
