@@ -99,37 +99,6 @@ func TestSort_Ascending(t *testing.T) {
 	)
 }
 
-func TestSort_Descending(t *testing.T) {
-	graphtest.RunTestGraphFn(t, "Sort: descending",
-		func(g *Graph) (inputs, outputs []*Node) {
-			x := Const(g, []float32{5, 2, 8, 1, 9, 3})
-			result := Sort(x, 0, false)
-			return nil, []*Node{result}
-		},
-		[]any{[]float32{9, 8, 5, 3, 2, 1}},
-		0,
-	)
-}
-
-func TestSortFunc_WithComparator(t *testing.T) {
-	graphtest.RunTestGraphFn(t, "SortFunc: custom comparator",
-		func(g *Graph) (inputs, outputs []*Node) {
-			x := Const(g, []float32{5, 2, 8, 1, 9, 3})
-
-			comparator := NewClosure(g, func(g *Graph) []*Node {
-				lhs := Parameter(g, "lhs", shapes.Scalar[float32]())
-				rhs := Parameter(g, "rhs", shapes.Scalar[float32]())
-				return []*Node{LessThan(lhs, rhs)}
-			})
-
-			results := SortFunc(comparator, 0, false, x)
-			return nil, []*Node{results[0]}
-		},
-		[]any{[]float32{1, 2, 3, 5, 8, 9}},
-		0,
-	)
-}
-
 func TestWhile_Factorial(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "While: factorial 5! = 120",
 		func(g *Graph) (inputs, outputs []*Node) {

@@ -25,10 +25,6 @@ import (
 // Registers the various generics function instances.
 //go:generate go run ../../internal/cmd/simplego_dispatcher
 
-// Auto-generate alternate versions of functions, with small changes.
-// (that can't easily be refactored into smaller functions due to latency penalities)
-//go:generate go run ../../internal/cmd/alternates_generator -base=convgeneral_exec.go -tags=bf16,full,full_bf16
-
 // BackendName to be used in GOMLX_BACKEND to specify this backend.
 const BackendName = "go"
 
@@ -53,12 +49,12 @@ var GetBackend = sync.OnceValue(func() backends.Backend {
 // There are no configurations, the string is simply ignored.
 func New(config string) (backends.Backend, error) {
 	b := newDefaultBackend()
-	parts := strings.Split(config, ",")
-	for _, part := range parts {
+	parts := strings.SplitSeq(config, ",")
+	for part := range parts {
 		key := part
 		var value string
-		if eqPos := strings.Index(part, "="); eqPos != -1 {
-			key, value = part[0:eqPos], part[eqPos+1:]
+		if before, after, ok := strings.Cut(part, "="); ok {
+			key, value = before, after
 		}
 		switch key {
 		case "parallelism":
@@ -77,6 +73,9 @@ func New(config string) (backends.Backend, error) {
 		case "dotgeneral_check":
 			// Run both normalized and blocked paths and compare outputs (for debugging).
 			b.dotGeneralForceExecutionPath = checkPath
+		case "dotgeneral_smallmatmul":
+			// Force DotGeneral to use the SmallMatMul fast path (for small float32 matrices).
+			b.dotGeneralForceExecutionPath = smallMatMulPath
 		case "ops_sequential":
 			// This will force the ops to be executed sequentially.
 			// The default is running parallel if it's the only thing executing, otherwise sequentially.
@@ -89,7 +88,7 @@ func New(config string) (backends.Backend, error) {
 			// No-op, just skip.
 		default:
 			return nil, errors.Errorf("unknown configuration option %q for SimpleGo (go) backend -- valid configuration options are: "+
-				"parallelism=#workers, dotgeneral_normalized, dotgeneral_blocked, dotgeneral_check, ops_sequential, ops_parallel; see code for documentation", key)
+				"parallelism=#workers, dotgeneral_normalized, dotgeneral_blocked, dotgeneral_smallmatmul, dotgeneral_check, ops_sequential, ops_parallel; see code for documentation", key)
 		}
 	}
 	return b, nil

@@ -18,6 +18,10 @@ func init() {
 	setNodeExecutor(backends.OpTypeConvGeneral, priorityGeneric, execConvGeneral)
 }
 
+// Auto-generate alternate specialized versions of execConvGeneral, with small changes.
+// (that can't easily be refactored into smaller functions due to latency penalities)
+//go:generate go run ../../internal/cmd/alternates_generator -base=convgeneral_exec.go -tags=bf16,full,full_bf16
+
 // ConvGeneral is a generic Convolution operation with support for:
 //
 // - Arbitrary number of spatial axes.

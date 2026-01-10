@@ -58,7 +58,8 @@ var (
 	methodsExcluded = sets.MakeWith(
 		"Name", "Compile", "OpShape",
 		"DeviceAssignment", "DistributedSPMD", "DistributedAutoSharding",
-		"Main", "NewFunction", "Return", "Closure", "Parent")
+		"Main", "NewFunction", "Return", "Closure", "Parent",
+		"Call", "If", "Sort", "While")
 
 	// methodsNoGradient will add a stop gradient to the node.
 	methodsNoGradient = sets.MakeWith(
