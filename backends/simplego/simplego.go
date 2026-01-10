@@ -25,10 +25,6 @@ import (
 // Registers the various generics function instances.
 //go:generate go run ../../internal/cmd/simplego_dispatcher
 
-// Auto-generate alternate versions of functions, with small changes.
-// (that can't easily be refactored into smaller functions due to latency penalities)
-//go:generate go run ../../internal/cmd/alternates_generator -base=convgeneral_exec.go -tags=bf16,full,full_bf16
-
 // BackendName to be used in GOMLX_BACKEND to specify this backend.
 const BackendName = "go"
 
