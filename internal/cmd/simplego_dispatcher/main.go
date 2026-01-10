@@ -90,11 +90,21 @@ var (
 			{
 				MapName: "convertDTypePairMap", Generic: "execConvertDTypeToBFloat16",
 				DTypes1: makeDTypes(true, true, true, false, false),
-				DTypes2: makeDTypes(false, false, false, true, false),
+				DTypes2: dtypesBFloat16,
 			},
 			{
 				MapName: "convertDTypePairMap", Generic: "execConvertDTypeFromBFloat16",
-				DTypes1: makeDTypes(false, false, false, true, false),
+				DTypes1: dtypesBFloat16,
+				DTypes2: makeDTypes(true, true, true, false, false),
+			},
+			{
+				MapName: "convertDTypePairMap", Generic: "execConvertDTypeToFloat16",
+				DTypes1: makeDTypes(true, true, true, false, false),
+				DTypes2: dtypesFloat16,
+			},
+			{
+				MapName: "convertDTypePairMap", Generic: "execConvertDTypeFromFloat16",
+				DTypes1: dtypesFloat16,
 				DTypes2: makeDTypes(true, true, true, false, false),
 			},
 			{
@@ -119,7 +129,12 @@ var (
 	fileName = "gen_register_dtypes.go"
 )
 
-func makeDTypes(ints, uints, floats, bfloat16, boolean bool) []DTypeInfo {
+var (
+	dtypesBFloat16 = []DTypeInfo{DTypeInfo{"BFloat16", "bfloat16.BFloat16"}}
+	dtypesFloat16  = []DTypeInfo{DTypeInfo{"Float16", "float16.Float16"}}
+)
+
+func makeDTypes(ints, uints, floats, floats16, boolean bool) []DTypeInfo {
 	dtypes := make([]DTypeInfo, 0, 32)
 	if ints {
 		dtypes = append(dtypes,
@@ -143,9 +158,10 @@ func makeDTypes(ints, uints, floats, bfloat16, boolean bool) []DTypeInfo {
 			DTypeInfo{"Float64", "float64"},
 		)
 	}
-	if bfloat16 {
+	if floats16 {
 		dtypes = append(dtypes,
 			DTypeInfo{"BFloat16", "bfloat16.BFloat16"},
+			DTypeInfo{"Float16", "float16.Float16"},
 		)
 	}
 	if boolean {
@@ -172,6 +188,7 @@ package simplego
 import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/x448/float16"
 )
 
 
