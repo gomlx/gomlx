@@ -3,10 +3,10 @@ package context
 import (
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -88,7 +88,10 @@ func TestReuseContextSeparateCalls(t *testing.T) {
 	exec1, err := NewExec(backend, ctx.Reuse(), func(testCtx *Context, input *graph.Node) *graph.Node {
 		g := input.Graph()
 
-		counter := testCtx.VariableWithShape("counter", shapes.Make(dtypes.Int32, 1)).ValueGraph(g)
+		// First call to VariableWithShape - create/get the variable
+		counter := testCtx.Checked(false).VariableWithShape("counter", shapes.Make(dtypes.Int32, 1)).ValueGraph(g)
+
+		// Second call to VariableWithShape on same variable - test it works
 		newCounter := graph.Const(g, []int32{10})
 		testCtx.VariableWithShape("counter", newCounter.Shape()).SetValueGraph(newCounter)
 
