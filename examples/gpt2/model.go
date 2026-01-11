@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -12,7 +13,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
 	"github.com/gomlx/gomlx/pkg/ml/layers/generation"
-	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // GPT2Config holds the architecture configuration for GPT-2.

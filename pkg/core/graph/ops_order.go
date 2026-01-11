@@ -285,3 +285,60 @@ func topKImpl(x *Node, k int, axis int, ascending bool) (values, indices *Node) 
 
 	return values, indices
 }
+
+// TopKMask returns a boolean mask of the top-k elements along the specified axis.
+// This is more efficient than TopK when you only need to know which elements are in the top-k.
+//
+// Parameters:
+//   - x: Input tensor
+//   - k: Number of top elements to mark
+//   - axis: The axis along which to find top K (can be negative to count from the end)
+//
+// Returns:
+//   - mask: Boolean mask with same shape as x, true for top-k elements
+//
+// Example:
+//
+//	x := Const(g, []float32{3, 1, 4, 1, 5, 9, 2, 6})
+//	mask := TopKMask(x, 3, 0)
+//	// mask = [false, false, false, false, true, true, false, true]
+func TopKMask(x *Node, k int, axis int) *Node {
+	g := x.graph
+	g.AssertBuilding()
+
+	shape := x.Shape()
+	rank := shape.Rank()
+
+	// Normalize axis
+	if axis < 0 {
+		axis = rank + axis
+	}
+	if axis < 0 || axis >= rank {
+		exceptions.Panicf("TopKMask: axis %d out of range for rank %d", axis, rank)
+	}
+
+	// Validate k
+	axisSize := shape.Dimensions[axis]
+	if k <= 0 {
+		exceptions.Panicf("TopKMask: k must be positive, got %d", k)
+	}
+	if k > axisSize {
+		exceptions.Panicf("TopKMask: k=%d exceeds axis size %d", k, axisSize)
+	}
+
+	// If k equals the axis size, all elements are in the top-k
+	if k == axisSize {
+		boolShape := shape.Clone()
+		boolShape.DType = dtypes.Bool
+		return Ones(g, boolShape)
+	}
+
+	// Get the k-th largest value (the smallest value in the top-k)
+	values, _ := TopK(x, k, axis)
+	// Get the minimum value from the top-k (which is the threshold)
+	threshold := ReduceMin(values, axis)
+	threshold = ExpandDims(threshold, axis)
+
+	// Elements >= threshold are in the top-k
+	return GreaterOrEqual(x, threshold)
+}

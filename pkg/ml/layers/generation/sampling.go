@@ -1,9 +1,9 @@
 package generation
 
 import (
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // GreedySample: select max-logit token.
@@ -33,7 +33,7 @@ func TopKSample(ctx *context.Context, logits *Node, k int, temperature float64) 
 	g := logits.Graph()
 
 	// Get mask of top-k elements
-	topKMask := TopKMask(logits, k)
+	topKMask := TopKMask(logits, k, -1)
 
 	// Set non-top-k logits to -inf so they have zero probability
 	maskedLogits := Where(
@@ -71,7 +71,7 @@ func TopPSample(ctx *context.Context, logits *Node, p float64, temperature float
 	}
 
 	// Default mask: full vocab (last candidate)
-	defaultMask := TopKMask(probs, ks[len(ks)-1])
+	defaultMask := TopKMask(probs, ks[len(ks)-1], -1)
 	selectedMask := defaultMask
 
 	// Threshold p as tensor
@@ -80,11 +80,11 @@ func TopPSample(ctx *context.Context, logits *Node, p float64, temperature float
 	// Select smallest k where cumulative top-k prob >= p
 	for i := 0; i < len(ks)-1; i++ {
 		k := ks[i]
-		topVals, _ := TopK(probs, k)
+		topVals, _ := TopK(probs, k, -1)
 		cum := ReduceSum(topVals, -1)
 		cond := GreaterOrEqual(cum, pNode)
 		cond = ExpandDims(cond, -1)
-		maskK := TopKMask(probs, k)
+		maskK := TopKMask(probs, k, -1)
 		selectedMask = Where(cond, maskK, selectedMask)
 	}
 

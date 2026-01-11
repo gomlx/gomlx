@@ -17,9 +17,9 @@
 package generation
 
 import (
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // BeamSearchConfig: beam search config.
@@ -114,7 +114,7 @@ func BeamSearchStep(
 	batchSize := batchBeamSize / config.beamSize
 	scores = Reshape(scores, batchSize, config.beamSize*vocabSize)
 	// TopK scores/indices: [batch, beam]
-	topKScores, topKIndices := TopK(scores, config.beamSize)
+	topKScores, topKIndices := TopK(scores, config.beamSize, -1)
 
 	// beamIdx = topKIndices // vocab_size
 	beamIdx := ConvertDType(topKIndices, dtypes.Float32)
@@ -159,7 +159,7 @@ func SelectBestSequences(
 	_ = sequences.Shape().Dimensions[1] // seqLen - preserved by Gather
 	batchSize := batchBeamSize / config.beamSize
 	scores = Reshape(scores, batchSize, config.beamSize)
-	topScores, topIndices := TopK(scores, config.numReturnSeqs)
+	topScores, topIndices := TopK(scores, config.numReturnSeqs, -1)
 	bestScores = Reshape(topScores, batchSize*config.numReturnSeqs)
 
 	g := sequences.Graph()

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // SafetensorsHeader describes the metadata for tensors in a safetensors file.

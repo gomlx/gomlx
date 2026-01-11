@@ -20,13 +20,13 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
-	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // TransformerConfig holds configuration for building a cached transformer model.
