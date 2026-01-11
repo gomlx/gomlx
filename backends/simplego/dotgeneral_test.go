@@ -676,12 +676,14 @@ func TestDotGeneral_PreBlockedCorrectness(t *testing.T) {
 	wantResult := graph.MustExecOnce(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
 		return graph.DotGeneral(lhs, []int{1}, nil, rhs, []int{0}, nil)
 	}, lhs, rhs)
+	fmt.Printf("WantResult: %s\n", wantResult)
 
 	// Now compute with blocked path (which may use pre-blocking for constant RHS)
 	goBackend.dotGeneralForceExecutionPath = blockedPath
 	gotResult := graph.MustExecOnce(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
 		return graph.DotGeneral(lhs, []int{1}, nil, rhs, []int{0}, nil)
 	}, lhs, rhs)
+	fmt.Printf("GotResult: %s\n", gotResult)
 
 	// Reset to default (auto-select)
 	goBackend.dotGeneralForceExecutionPath = autoSelectPath

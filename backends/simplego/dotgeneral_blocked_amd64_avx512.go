@@ -101,13 +101,13 @@ func buildDotGeneralBlockKernel_avx512_float32(
 				sum6 := reduceSumFloat32x16(sumRow6x16)
 				sum7 := reduceSumFloat32x16(sumRow7x16)
 				outputFlat[outputIdx] += sum0
-				outputFlat[outputIdx+1] = sum1
-				outputFlat[outputIdx+2] = sum2
-				outputFlat[outputIdx+3] = sum3
-				outputFlat[outputIdx+4] = sum4
-				outputFlat[outputIdx+5] = sum5
-				outputFlat[outputIdx+6] = sum6
-				outputFlat[outputIdx+7] = sum7
+				outputFlat[outputIdx+1] += sum1
+				outputFlat[outputIdx+2] += sum2
+				outputFlat[outputIdx+3] += sum3
+				outputFlat[outputIdx+4] += sum4
+				outputFlat[outputIdx+5] += sum5
+				outputFlat[outputIdx+6] += sum6
+				outputFlat[outputIdx+7] += sum7
 				outputIdx += 8
 
 				// We unrolled 8 rows of RHS, so we need to skip the remaining 7 rows:
