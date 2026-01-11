@@ -38,7 +38,7 @@ var (
 	//
 	// Empirically determined: below this threshold, the overhead of cache-tiled blocking
 	// outweighs its benefits. Above this threshold, the blocked path's cache efficiency wins.
-	DotGeneralBlockedPathThreshold = 16
+	DotGeneralBlockedPathThreshold = 4
 )
 
 func init() {
