@@ -79,13 +79,6 @@ func isMatMulOrder(lhsShape, rhsShape shapes.Shape, lhsContractingAxes, rhsContr
 		return false
 	}
 
-	// Only support float32, bfloat16, and float16 for SmallMatMul
-	if lhsShape.DType != dtypes.Float32 &&
-		lhsShape.DType != dtypes.BFloat16 &&
-		lhsShape.DType != dtypes.Float16 {
-		return false
-	}
-
 	return true
 }
 
@@ -140,12 +133,10 @@ const smallMatMulMaxSize = 256 * 1024 // 256Kb
 // dgUseSmallMatMul checks whether the SmallMatMul fast path is beneficial.
 // SmallMatMul skips transpose overhead but has strided RHS access, so it's only
 // beneficial for small matrices in standard [M,K]×[K,N] order.
-// Supports float32, bfloat16, and float16 dtypes.
+// Supports all numeric dtypes (POD types + BFloat16 + Float16).
 func dgUseSmallMatMul(dtype dtypes.DType, lhsShape, rhsShape shapes.Shape, params *dotGeneralNodeData) bool {
-	// Only support float32, bfloat16, and float16 for SmallMatMul
-	if dtype != dtypes.Float32 &&
-		dtype != dtypes.BFloat16 &&
-		dtype != dtypes.Float16 {
+	// Check if dtype has a registered SmallMatMul implementation
+	if dtype >= MaxDTypes || dotGeneralSmallMatMulDTypeMap.Map[dtype] == nil {
 		return false
 	}
 
@@ -205,15 +196,80 @@ func dgUseSmallMatMul(dtype dtypes.DType, lhsShape, rhsShape shapes.Shape, param
 // dotGeneralSmallMatMulDTypeMap holds the dtype-specific implementations for SmallMatMul.
 var dotGeneralSmallMatMulDTypeMap = NewDTypeMap("DotGeneralSmallMatMul")
 
-// Auto-generate alternate specialized versions of execDotGeneralSmallMatMul
-// (that can't easily be refactored into smaller functions due to latency penalties)
+// Auto-generate alternate specialized versions of execDotGeneralSmallMatMul for BFloat16/Float16
+// (these need float32 accumulation for numerical stability)
 //go:generate go run ../../internal/cmd/alternates_generator -base=dotgeneral_small_matmul_alt_base.go -tags=bf16,f16
 
 func init() {
-	// Register base float32 implementation
+	// Optimized Float32 implementation (from alt_base, with 4-way loop unrolling)
 	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Float32, priorityGeneric, execDotGeneralSmallMatMulFloat32)
 
-	// Register specialized BFloat16 and Float16 implementations (defined in generated files)
+	// Generic implementation for other POD numeric types
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Float64, priorityGeneric, execDotGeneralSmallMatMulGeneric[float64])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Int8, priorityGeneric, execDotGeneralSmallMatMulGeneric[int8])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Int16, priorityGeneric, execDotGeneralSmallMatMulGeneric[int16])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Int32, priorityGeneric, execDotGeneralSmallMatMulGeneric[int32])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Int64, priorityGeneric, execDotGeneralSmallMatMulGeneric[int64])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Uint8, priorityGeneric, execDotGeneralSmallMatMulGeneric[uint8])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Uint16, priorityGeneric, execDotGeneralSmallMatMulGeneric[uint16])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Uint32, priorityGeneric, execDotGeneralSmallMatMulGeneric[uint32])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Uint64, priorityGeneric, execDotGeneralSmallMatMulGeneric[uint64])
+
+	// Specialized BFloat16 and Float16 implementations (need float32 accumulation)
 	dotGeneralSmallMatMulDTypeMap.Register(dtypes.BFloat16, priorityTyped, execDotGeneralSmallMatMulBFloat16)
 	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Float16, priorityTyped, execDotGeneralSmallMatMulFloat16)
+}
+
+// execDotGeneralSmallMatMulGeneric is a generic implementation for POD numeric types.
+// It uses the same algorithm as Float32 but works with any numeric type that supports
+// direct arithmetic operations.
+func execDotGeneralSmallMatMulGeneric[T PODNumericConstraints](
+	_ *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer,
+) {
+	lhsFlat := lhs.flat.([]T)
+	rhsFlat := rhs.flat.([]T)
+	outputFlat := output.flat.([]T)
+
+	batchSize := params.batchSize
+	lhsCrossSize := params.lhsCrossSize       // M
+	rhsCrossSize := params.rhsCrossSize       // N
+	contractingSize := params.contractingSize // K
+
+	lhsBatchStride := lhsCrossSize * contractingSize // M * K elements per batch
+	rhsBatchStride := contractingSize * rhsCrossSize // K * N elements per batch (for [B,K,N] layout)
+	outputBatchStride := lhsCrossSize * rhsCrossSize // M * N elements per batch
+
+	// For row-major RHS [K, N], the stride between elements in the same column is N
+	rhsColStride := rhsCrossSize // N
+
+	for batchIdx := range batchSize {
+		lhsBaseIdx := batchIdx * lhsBatchStride
+		rhsBaseIdx := batchIdx * rhsBatchStride
+		outputBaseIdx := batchIdx * outputBatchStride
+
+		for m := range lhsCrossSize {
+			lhsRowStart := lhsBaseIdx + m*contractingSize
+			outputRowStart := outputBaseIdx + m*rhsCrossSize
+
+			for n := range rhsCrossSize {
+				// For column n in row-major [K,N], element [k,n] is at k*N + n
+				rhsColStart := rhsBaseIdx + n
+				var sum T
+
+				// Scalar loop with strided RHS access and 4-way unrolling
+				k := 0
+				for ; k+3 < contractingSize; k += 4 {
+					sum += lhsFlat[lhsRowStart+k]*rhsFlat[rhsColStart+k*rhsColStride] +
+						lhsFlat[lhsRowStart+k+1]*rhsFlat[rhsColStart+(k+1)*rhsColStride] +
+						lhsFlat[lhsRowStart+k+2]*rhsFlat[rhsColStart+(k+2)*rhsColStride] +
+						lhsFlat[lhsRowStart+k+3]*rhsFlat[rhsColStart+(k+3)*rhsColStride]
+				}
+				for ; k < contractingSize; k++ {
+					sum += lhsFlat[lhsRowStart+k] * rhsFlat[rhsColStart+k*rhsColStride]
+				}
+
+				outputFlat[outputRowStart+n] = sum
+			}
+		}
+	}
 }
