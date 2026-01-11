@@ -234,7 +234,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 
 	rowFormat := "| %-20s | %-20s | %-20s | %-10s | %-10d | %-12s | %-15s | %-10.1f |"
 	if *flagMarkdown {
-		rowFormat = "| %s | %s | %s | %s | %d | %s | %s | %.1f |"
+		rowFormat = "| `%s` | %s | %s | %s | %d | %s | %s | %.1f |"
 	}
 
 	for benchCaseIdx, benchCase := range benchmarkCases {
