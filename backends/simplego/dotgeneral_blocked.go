@@ -26,7 +26,7 @@ var (
 	// It should be the number per thread, not necessarily the number per core.
 	// It was empirically optimized in an AMD 9950x3d.
 	// TODO: find out how to initialize this number in runtime.
-	DotGeneralTargetBlockSize = 32 * 1024
+	DotGeneralTargetBlockSize = 16 * 1024
 
 	// DotGeneralTargetBlockLog2Dim is set per dtype, such that it is square and fits DotGeneralTargetBlockSize.
 	// The block dim is 2^(DotGeneralTargetBlockLog2Dim[dtype]).
@@ -38,7 +38,7 @@ var (
 	//
 	// Empirically determined: below this threshold, the overhead of cache-tiled blocking
 	// outweighs its benefits. Above this threshold, the blocked path's cache efficiency wins.
-	DotGeneralBlockedPathThreshold = 4
+	DotGeneralBlockedPathThreshold = 16
 )
 
 func init() {
