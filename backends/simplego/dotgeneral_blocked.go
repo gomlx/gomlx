@@ -44,6 +44,12 @@ var (
 func init() {
 	// Initialize block dimensions for all numeric types that support DotGeneral.
 	// This includes float types and integer types (used by quantized models).
+	setDotGeneralTargetBlockSize(DotGeneralTargetBlockSize)
+}
+
+// setDotGeneralTargetBlockSize sets the target block size for DotGeneral.
+func setDotGeneralTargetBlockSize(blockSize int) {
+	DotGeneralTargetBlockSize = blockSize
 	for _, dtype := range numericDTypes {
 		sizePerElem := dtype.Size()
 		if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
