@@ -35,7 +35,7 @@ func Normalization(backend backends.Backend, ds train.Dataset, inputsIndex int, 
 		// Find axes to reduce from the input.
 		mapIndependentAxes := make([]bool, batch.Rank())
 		for _, axis := range independentAxes {
-			adjustedAxis := AdjustAxisToOperandRank(batch, axis)
+			adjustedAxis := MustAdjustAxis(axis, batch)
 			mapIndependentAxes[adjustedAxis] = true
 		}
 		reduceAxes := make([]int, 0, batch.Rank()-len(independentAxes))

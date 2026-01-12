@@ -116,7 +116,7 @@ func LayerNormalization(ctx *context.Context, x *Node, normalizingAxes ...int) *
 
 	// Convert negative axes to their actual value.
 	for ii := range builder.normalizingAxes {
-		builder.normalizingAxes[ii] = AdjustAxisToOperandRank(x, builder.normalizingAxes[ii])
+		builder.normalizingAxes[ii] = MustAdjustAxis(builder.normalizingAxes[ii], x)
 	}
 
 	// Add default dtype for normalization.

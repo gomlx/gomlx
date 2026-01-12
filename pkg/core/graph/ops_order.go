@@ -123,7 +123,7 @@ func SortFunc(comparator *Function, axis int, isStable bool, inputs ...*Node) []
 				shape, i+1, input.Shape())
 		}
 	}
-	axis = AdjustAxisToOperandRank(inputs[0], axis)
+	axis = MustAdjustAxis(axis, inputs[0])
 
 	// Convert inputs to backend values
 	inputValues := make([]backends.Value, len(inputs))
@@ -219,7 +219,7 @@ func topKImpl(x *Node, k int, axis int, ascending bool) (values, indices *Node) 
 	shape := x.Shape()
 	rank := x.Rank()
 	dtype := shape.DType
-	axis = AdjustAxisToOperandRank(x, axis)
+	axis = MustAdjustAxis(axis, x)
 
 	// Validate k
 	axisSize := shape.Dimensions[axis]
