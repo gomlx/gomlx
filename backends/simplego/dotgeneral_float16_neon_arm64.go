@@ -164,12 +164,20 @@ func execNormalizedDotGeneralBFloat16ToFloat32(lhs, rhs, output *Buffer, params 
 }
 
 // buildDotGeneralKernelFloat16ToFloat32 returns a kernel function for FP16×FP16→FP32 blocked matrix multiplication.
+// Uses NEON FMLAL instructions when blockDim >= 8, otherwise falls back to scalar.
 func buildDotGeneralKernelFloat16ToFloat32(lhs, rhs, output *Buffer, blockDim int) kernelFuncType {
 	lhsFlat := lhs.flat.([]float16.Float16)
 	rhsFlat := rhs.flat.([]float16.Float16)
 	outputFlat := output.flat.([]float32)
 	blockSize := blockDim * blockDim
 
+	// Check blockDim at kernel build time to avoid branch in hot path
+	if blockDim < 8 {
+		// Scalar fallback for small block dimensions
+		return buildDotGeneralKernelFloat16ToFloat32Scalar(lhsFlat, rhsFlat, outputFlat, blockDim, blockSize)
+	}
+
+	// NEON-accelerated kernel for blockDim >= 8
 	return func(lhsBlockIdx, rhsBlockIdx, outputBlockIdx int) {
 		baseLhsIdx := lhsBlockIdx * blockSize
 		baseRhsIdx := rhsBlockIdx * blockSize
@@ -180,56 +188,54 @@ func buildDotGeneralKernelFloat16ToFloat32(lhs, rhs, output *Buffer, blockDim in
 
 			for rhsRow := 0; rhsRow < blockDim; rhsRow += 4 {
 				lhsIdx := baseLhsIdx
-				var sum0, sum1, sum2, sum3 float32
 
-				if hasFP16NEON && blockDim >= 8 {
-					// Use NEON Group4 for 4 parallel dot products
-					lhsPtr := unsafe.Pointer(&lhsFlat[lhsIdx])
-					sum0, sum1, sum2, sum3 = dotProductFP16Group4_neon_asm(
-						lhsPtr,
-						unsafe.Pointer(&rhsFlat[rhsIdx]),
-						int64(blockDim),
-						int64(blockDim),
-					)
-					runtime.KeepAlive(lhsFlat)
-					runtime.KeepAlive(rhsFlat)
-					sum0 += outputFlat[outputIdx]
-					sum1 += outputFlat[outputIdx+1]
-					sum2 += outputFlat[outputIdx+2]
-					sum3 += outputFlat[outputIdx+3]
-					rhsIdx += blockDim
-					goto fp16done
-				}
+				// Use NEON Group4 for 4 parallel dot products
+				lhsPtr := unsafe.Pointer(&lhsFlat[lhsIdx])
+				sum0, sum1, sum2, sum3 := dotProductFP16Group4_neon_asm(
+					lhsPtr,
+					unsafe.Pointer(&rhsFlat[rhsIdx]),
+					int64(blockDim),
+					int64(blockDim),
+				)
+				runtime.KeepAlive(lhsFlat)
+				runtime.KeepAlive(rhsFlat)
 
-				// Scalar fallback
-				{
-					sum0 = outputFlat[outputIdx]
-					sum1 = outputFlat[outputIdx+1]
-					sum2 = outputFlat[outputIdx+2]
-					sum3 = outputFlat[outputIdx+3]
-
-					for contractingIdx := 0; contractingIdx < blockDim; contractingIdx++ {
-						rhsIdx1 := rhsIdx + blockDim
-						rhsIdx2 := rhsIdx + 2*blockDim
-						rhsIdx3 := rhsIdx + 3*blockDim
-						lhsVal := lhsFlat[lhsIdx].Float32()
-						sum0 += lhsVal * rhsFlat[rhsIdx].Float32()
-						sum1 += lhsVal * rhsFlat[rhsIdx1].Float32()
-						sum2 += lhsVal * rhsFlat[rhsIdx2].Float32()
-						sum3 += lhsVal * rhsFlat[rhsIdx3].Float32()
-						lhsIdx++
-						rhsIdx++
-					}
-				}
-
-			fp16done:
-				outputFlat[outputIdx] = sum0
-				outputFlat[outputIdx+1] = sum1
-				outputFlat[outputIdx+2] = sum2
-				outputFlat[outputIdx+3] = sum3
+				outputFlat[outputIdx] = outputFlat[outputIdx] + sum0
+				outputFlat[outputIdx+1] = outputFlat[outputIdx+1] + sum1
+				outputFlat[outputIdx+2] = outputFlat[outputIdx+2] + sum2
+				outputFlat[outputIdx+3] = outputFlat[outputIdx+3] + sum3
 				outputIdx += 4
 
-				rhsIdx += 3 * blockDim
+				rhsIdx += 4 * blockDim
+			}
+
+			baseLhsIdx += blockDim
+		}
+	}
+}
+
+// buildDotGeneralKernelFloat16ToFloat32Scalar returns a scalar kernel for small block dimensions.
+func buildDotGeneralKernelFloat16ToFloat32Scalar(lhsFlat []float16.Float16, rhsFlat []float16.Float16, outputFlat []float32, blockDim, blockSize int) kernelFuncType {
+	return func(lhsBlockIdx, rhsBlockIdx, outputBlockIdx int) {
+		baseLhsIdx := lhsBlockIdx * blockSize
+		baseRhsIdx := rhsBlockIdx * blockSize
+		outputIdx := outputBlockIdx * blockSize
+
+		for range blockDim {
+			rhsIdx := baseRhsIdx
+
+			for range blockDim {
+				lhsIdx := baseLhsIdx
+				sum := outputFlat[outputIdx]
+
+				for range blockDim {
+					sum += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx].Float32()
+					lhsIdx++
+					rhsIdx++
+				}
+
+				outputFlat[outputIdx] = sum
+				outputIdx++
 			}
 
 			baseLhsIdx += blockDim
@@ -251,16 +257,4 @@ func init() {
 		dotGeneralNormalizedDTypeMap.Register(dtypes.BFloat16, priorityArch, execNormalizedDotGeneralBFloat16ToFloat32)
 		// Note: BF16 kernel builder for large matrix path would go here if needed
 	}
-}
-
-// dotProductBF16InnerLoop computes the dot product of lhs[lhsIdx:lhsIdx+size] and rhs[rhsIdx:rhsIdx+size]
-// using NEON BFMLAL instructions when available.
-// This is used by the BFloat16 kernel in dotgeneral_large.go.
-func dotProductBF16InnerLoop(lhsFlat, rhsFlat []bfloat16.BFloat16, lhsIdx, rhsIdx, size int) float32 {
-	lhsPtr := unsafe.Pointer(&lhsFlat[lhsIdx])
-	rhsPtr := unsafe.Pointer(&rhsFlat[rhsIdx])
-	result := dotProductBF16_neon_asm(lhsPtr, rhsPtr, int64(size))
-	runtime.KeepAlive(lhsFlat)
-	runtime.KeepAlive(rhsFlat)
-	return result
 }
