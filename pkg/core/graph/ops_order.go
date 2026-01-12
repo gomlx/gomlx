@@ -292,17 +292,7 @@ func TopKMask(x *Node, k int, axis int) *Node {
 	g.AssertBuilding()
 
 	shape := x.Shape()
-	rank := shape.Rank()
-
-	// Normalize axis
-	if axis < 0 {
-		axis = rank + axis
-	}
-	if axis < 0 || axis >= rank {
-		exceptions.Panicf("TopKMask: axis %d out of range for rank %d", axis, rank)
-	}
-
-	// Validate k
+	axis = MustAdjustAxis(axis, x)
 	axisSize := shape.Dimensions[axis]
 	if k <= 0 {
 		exceptions.Panicf("TopKMask: k must be positive, got %d", k)
@@ -321,8 +311,7 @@ func TopKMask(x *Node, k int, axis int) *Node {
 	// Get the k-th largest value (the smallest value in the top-k)
 	values, _ := TopK(x, k, axis)
 	// Get the minimum value from the top-k (which is the threshold)
-	threshold := ReduceMin(values, axis)
-	threshold = ExpandDims(threshold, axis)
+	threshold := ReduceAndKeep(values, ReduceMin, axis)
 
 	// Elements >= threshold are in the top-k
 	return GreaterOrEqual(x, threshold)

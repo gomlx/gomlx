@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/gomlx/go-huggingface/hub"
 )
 
 // Tokenizer handles text encoding/decoding for GPT-2 models using BPE.
@@ -19,10 +20,18 @@ type Tokenizer struct {
 	byteDecoder map[rune]byte  // unicode char -> byte
 }
 
-// LoadTokenizer loads the BPE tokenizer from vocab.json and merges.txt
-func LoadTokenizer(checkpointPath string) (*Tokenizer, error) {
-	vocabPath := filepath.Join(checkpointPath, "vocab.json")
-	mergesPath := filepath.Join(checkpointPath, "merges.txt")
+// LoadTokenizer loads the BPE tokenizer from the HuggingFace repository
+func LoadTokenizer(repo *hub.Repo) (*Tokenizer, error) {
+	// Download vocab.json and merges.txt
+	vocabPath, err := repo.DownloadFile("vocab.json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to download vocab.json: %w", err)
+	}
+
+	mergesPath, err := repo.DownloadFile("merges.txt")
+	if err != nil {
+		return nil, fmt.Errorf("failed to download merges.txt: %w", err)
+	}
 
 	// Load vocabulary
 	vocabData, err := os.ReadFile(vocabPath)

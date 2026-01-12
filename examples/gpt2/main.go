@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 
+	"github.com/gomlx/go-huggingface/hub"
 	"github.com/gomlx/gomlx/backends"
 	_ "github.com/gomlx/gomlx/backends/default"
 )
@@ -20,7 +20,8 @@ var (
 	flagMaxTokens    = flag.Int("max-tokens", 50, "Maximum number of tokens to generate")
 	flagTemperature  = flag.Float64("temperature", 0.8, "Sampling temperature (higher = more random)")
 	flagTopP         = flag.Float64("top-p", 0.95, "Nucleus sampling threshold")
-	flagCheckpoint   = flag.String("checkpoint", "", "Path to model checkpoint (default: auto-download)")
+	flagTopK         = flag.Int("top-k", 0, "Top-k sampling (0 = disabled)")
+	flagStrategy     = flag.String("strategy", "temperature", "Sampling strategy: greedy, temperature, top_k, top_p")
 	flagDownloadOnly = flag.Bool("download-only", false, "Only download weights, don't run inference")
 	flagBackend      = flag.String("backend", "", "Backend to use (default: auto-detect)")
 )
@@ -28,21 +29,15 @@ var (
 func main() {
 	flag.Parse()
 
-	// Get checkpoint path (download if needed)
-	checkpointPath := *flagCheckpoint
-	if checkpointPath == "" {
-		fmt.Println("Downloading DistilGPT-2 weights from Hugging Face...")
-		var err error
-		checkpointPath, err = downloadGPT2()
-		if err != nil {
-			log.Fatalf("Failed to download model: %v", err)
-		}
-		fmt.Printf("Weights downloaded to: %s\n", checkpointPath)
+	// Validate sampling strategy
+	validStrategies := map[string]bool{
+		"greedy":      true,
+		"temperature": true,
+		"top_k":       true,
+		"top_p":       true,
 	}
-
-	if *flagDownloadOnly {
-		fmt.Println("Download complete. Use without --download-only to run inference.")
-		return
+	if !validStrategies[*flagStrategy] {
+		log.Fatalf("Unknown strategy: %s (must be greedy, temperature, top_k, or top_p)", *flagStrategy)
 	}
 
 	// Initialize backend
@@ -58,9 +53,21 @@ func main() {
 	}
 	fmt.Printf("Using backend: %s\n", backend)
 
+	repo := hub.New("distilgpt2")
+	if *flagDownloadOnly {
+		fmt.Println("Downloading DistilGPT-2 files...")
+		files := []string{"model.safetensors", "vocab.json", "merges.txt", "config.json"}
+		_, err := repo.DownloadFiles(files...)
+		if err != nil {
+			log.Fatalf("Failed to download files: %v", err)
+		}
+		fmt.Println("Download complete. Files cached in ~/.cache/huggingface/hub/")
+		return
+	}
+
 	// Load model
 	fmt.Println("Loading DistilGPT-2 model...")
-	model, tokenizer, err := LoadGPT2(backend, checkpointPath)
+	model, tokenizer, err := LoadGPT2(backend, repo)
 	if err != nil {
 		log.Fatalf("Failed to load model: %v", err)
 	}
@@ -79,7 +86,9 @@ func main() {
 	fmt.Print(*flagPrompt)
 	config := GenerationConfig{
 		MaxTokens:   *flagMaxTokens,
+		Strategy:    *flagStrategy,
 		Temperature: *flagTemperature,
+		TopK:        *flagTopK,
 		TopP:        *flagTopP,
 	}
 	err = model.Generate(tokens, config, func(token int) bool {
@@ -96,46 +105,4 @@ func main() {
 	}
 
 	fmt.Println("\n\nGeneration complete!")
-}
-
-// downloadGPT2 downloads the DistilGPT-2 weights from Hugging Face.
-// DistilGPT-2 is a distilled version that's 2x smaller (6 layers vs 12).
-func downloadGPT2() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
-
-	cacheDir := filepath.Join(homeDir, ".cache", "gomlx", "distilgpt2")
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create cache directory: %w", err)
-	}
-
-	// Check if already downloaded
-	checkpointFile := filepath.Join(cacheDir, "model.safetensors")
-	if _, err := os.Stat(checkpointFile); err == nil {
-		fmt.Println("Using cached DistilGPT-2 weights")
-		return cacheDir, nil
-	}
-
-	fmt.Println("Downloading DistilGPT-2 files...")
-
-	baseURL := "https://huggingface.co/distilgpt2/resolve/main"
-	files := []string{
-		"model.safetensors",
-		"vocab.json",
-		"merges.txt",
-		"config.json",
-	}
-
-	for _, file := range files {
-		url := fmt.Sprintf("%s/%s", baseURL, file)
-		destPath := filepath.Join(cacheDir, file)
-		fmt.Printf("  %s...\n", file)
-		if err := downloadFile(url, destPath); err != nil {
-			return "", fmt.Errorf("failed to download %s: %w", file, err)
-		}
-	}
-
-	return cacheDir, nil
 }

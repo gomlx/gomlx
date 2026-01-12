@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 )
@@ -27,32 +28,28 @@ type TensorInfo struct {
 
 // LoadSafetensors loads tensors from a safetensors file into the context.
 func LoadSafetensors(ctx *context.Context, filepath string) error {
-	// Read entire file into memory first
-	fileData, err := os.ReadFile(filepath)
+	file, err := os.Open(filepath)
 	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
+		return fmt.Errorf("failed to open file: %w", err)
 	}
+	defer file.Close()
 
 	// Read header size (first 8 bytes, little-endian)
-	if len(fileData) < 8 {
-		return fmt.Errorf("file too small")
+	var headerSize uint64
+	if err := binary.Read(file, binary.LittleEndian, &headerSize); err != nil {
+		return fmt.Errorf("failed to read header size: %w", err)
 	}
-	headerSize := int64(binary.LittleEndian.Uint64(fileData[0:8]))
 
-	// Read header JSON
-	if len(fileData) < int(8+headerSize) {
-		return fmt.Errorf("file too small for header")
+	// Read and parse header JSON
+	headerBytes := make([]byte, headerSize)
+	if _, err := file.Read(headerBytes); err != nil {
+		return fmt.Errorf("failed to read header: %w", err)
 	}
-	headerBytes := fileData[8 : 8+headerSize]
 
-	// Parse header
 	var rawHeader map[string]interface{}
 	if err := json.Unmarshal(headerBytes, &rawHeader); err != nil {
 		return fmt.Errorf("failed to parse header: %w", err)
 	}
-
-	// Data section starts after header
-	dataSectionOffset := 8 + headerSize
 
 	// Load each tensor
 	fmt.Printf("Found %d items in safetensors header\n", len(rawHeader))
@@ -84,44 +81,58 @@ func LoadSafetensors(ctx *context.Context, filepath string) error {
 			shape[i] = int(v.(float64))
 		}
 
-		// Offsets are relative to start of data section (after header)
 		dataStart := int64(offsetsRaw[0].(float64))
 		dataEnd := int64(offsetsRaw[1].(float64))
-
-		// Convert dtype string to dtypes.DType
 		dtype := parseDType(dtypeStr)
 
 		// Map tensor name to GoMLX structure
 		scopePath, varName, ok := mapTensorName(name)
 		if !ok {
 			skipped++
-			continue // Skip unmapped tensors
-		}
-
-		// Read tensor data from memory
-		// dataStart and dataEnd are relative to the beginning of the data section
-		tensorDataStart := dataSectionOffset + dataStart
-		tensorDataEnd := dataSectionOffset + dataEnd
-		if int64(len(fileData)) < tensorDataEnd {
-			fmt.Printf("Warning: file too small for %s (need %d, have %d)\n", name, tensorDataEnd, len(fileData))
 			continue
 		}
 
-		tensorData := fileData[tensorDataStart:tensorDataEnd]
+		// Create tensor with the correct shape
+		tensorShape := shapes.Make(dtype, shape...)
+		t := tensors.FromShape(tensorShape)
+
+		// Read tensor data directly into tensor's memory
+		_, err := file.Seek(8+int64(headerSize)+dataStart, 0)
+		if err != nil {
+			fmt.Printf("Warning: failed to seek to tensor %s: %v\n", name, err)
+			continue
+		}
+
+		bytesToRead := int(dataEnd - dataStart)
+		var readErr error
+		t.MutableBytes(func(data []byte) {
+			if len(data) != bytesToRead {
+				readErr = fmt.Errorf("size mismatch: expected %d bytes, got %d", bytesToRead, len(data))
+				return
+			}
+			_, readErr = file.Read(data)
+		})
+
+		if readErr != nil {
+			fmt.Printf("Warning: failed to read tensor %s: %v\n", name, readErr)
+			continue
+		}
 
 		// Set variable in context
 		scopePathStr := strings.Join(scopePath, "/")
-		if err := setContextVariable(ctx, scopePath, varName, shape, dtype, tensorData); err != nil {
+		if err := setContextVariableFromTensor(ctx, scopePath, varName, t); err != nil {
 			fmt.Printf("Warning: failed to load %s -> %s/%s: %v\n", name, scopePathStr, varName, err)
 			continue
 		}
 
 		// Handle weight tying: GPT-2 shares token embeddings with output projection
 		if name == "transformer.wte.weight" {
-			// Copy to output layer - Dense expects [hidden, vocab] so transpose [vocab, hidden] -> [hidden, vocab]
-			transposedData := transposeWeights(tensorData, shape, dtype)
+			// Transpose [vocab, hidden] -> [hidden, vocab] for output layer
+			transposedShape := shapes.Make(dtype, shape[1], shape[0])
+			tTransposed := tensors.FromShape(transposedShape)
+			transposeFloat32Tensor(t, tTransposed)
 
-			if err := setContextVariable(ctx, []string{"output", "dense"}, "weights", []int{shape[1], shape[0]}, dtype, transposedData); err != nil {
+			if err := setContextVariableFromTensor(ctx, []string{"output", "dense"}, "weights", tTransposed); err != nil {
 				fmt.Printf("Warning: failed to set tied output weights: %v\n", err)
 			}
 		}
@@ -224,8 +235,130 @@ func mapTensorName(safetensorsName string) (scopePath []string, varName string, 
 	return nil, "", false
 }
 
-// setContextVariable sets a variable in the context from raw bytes
-// setContextVariable sets a variable in the context from raw bytes
+// setContextVariableFromTensor sets a variable in the context from a tensor
+func setContextVariableFromTensor(ctx *context.Context, scopePath []string, varName string, t *tensors.Tensor) error {
+	// Check if this is a fused QKV weight that needs splitting
+	if len(scopePath) >= 3 && scopePath[len(scopePath)-1] == "_fused_qkv" {
+		return splitAndSetQKV(ctx, scopePath, varName, t)
+	}
+
+	// Normal case: set single variable
+	scopeCtx := ctx
+	for _, scope := range scopePath {
+		scopeCtx = scopeCtx.In(scope)
+	}
+
+	scopeCtx.VariableWithValue(varName, t)
+	return nil
+}
+
+// splitAndSetQKV splits fused QKV weights/biases into separate Q, K, V tensors
+func splitAndSetQKV(ctx *context.Context, scopePath []string, varName string, t *tensors.Tensor) error {
+	// Get the actual scope without "_fused_qkv"
+	baseScopePath := scopePath[:len(scopePath)-1]
+	baseCtx := ctx
+	for _, scope := range baseScopePath {
+		baseCtx = baseCtx.In(scope)
+	}
+	baseCtx = baseCtx.In("MultiHeadAttention")
+
+	shape := t.Shape().Dimensions
+	var flatData []float32
+	t.ConstBytes(func(data []byte) {
+		numElements := t.Shape().Size()
+		flatData = make([]float32, numElements)
+		for i := 0; i < numElements; i++ {
+			flatData[i] = float32FromBytes(data[i*4 : (i+1)*4])
+		}
+	})
+
+	if len(shape) == 2 {
+		// Weight matrix: [hiddenSize, 3*hiddenSize]
+		hiddenSize := shape[0]
+		totalSize := shape[1]
+		if totalSize%3 != 0 {
+			return fmt.Errorf("expected fused QKV size to be divisible by 3, got %d", totalSize)
+		}
+		singleSize := totalSize / 3
+
+		numHeads := 12
+		headDim := singleSize / numHeads
+
+		qData := make([]float32, hiddenSize*numHeads*headDim)
+		kData := make([]float32, hiddenSize*numHeads*headDim)
+		vData := make([]float32, hiddenSize*numHeads*headDim)
+
+		for i := 0; i < hiddenSize; i++ {
+			for h := 0; h < numHeads; h++ {
+				for d := 0; d < headDim; d++ {
+					flatIdx := h*headDim + d
+					qData[i*numHeads*headDim+h*headDim+d] = flatData[i*totalSize+flatIdx]
+					kData[i*numHeads*headDim+h*headDim+d] = flatData[i*totalSize+singleSize+flatIdx]
+					vData[i*numHeads*headDim+h*headDim+d] = flatData[i*totalSize+2*singleSize+flatIdx]
+				}
+			}
+		}
+
+		baseCtx.In("query").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, hiddenSize, numHeads, headDim))
+		baseCtx.In("key").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, hiddenSize, numHeads, headDim))
+		baseCtx.In("value").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, hiddenSize, numHeads, headDim))
+	} else if len(shape) == 1 {
+		// Bias vector: [3*hiddenSize]
+		totalSize := shape[0]
+		if totalSize%3 != 0 {
+			return fmt.Errorf("expected fused QKV bias size to be divisible by 3, got %d", totalSize)
+		}
+		singleSize := totalSize / 3
+
+		numHeads := 12
+		headDim := singleSize / numHeads
+
+		qData := make([]float32, numHeads*headDim)
+		kData := make([]float32, numHeads*headDim)
+		vData := make([]float32, numHeads*headDim)
+
+		for h := 0; h < numHeads; h++ {
+			for d := 0; d < headDim; d++ {
+				flatIdx := h*headDim + d
+				qData[h*headDim+d] = flatData[flatIdx]
+				kData[h*headDim+d] = flatData[singleSize+flatIdx]
+				vData[h*headDim+d] = flatData[2*singleSize+flatIdx]
+			}
+		}
+
+		baseCtx.In("query").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, numHeads, headDim))
+		baseCtx.In("key").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, numHeads, headDim))
+		baseCtx.In("value").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, numHeads, headDim))
+	} else {
+		return fmt.Errorf("unexpected shape for fused QKV: %v", shape)
+	}
+
+	return nil
+}
+
+// transposeFloat32Tensor transposes a 2D [A, B] tensor to [B, A]
+func transposeFloat32Tensor(src, dst *tensors.Tensor) {
+	srcShape := src.Shape().Dimensions
+	if len(srcShape) != 2 {
+		panic("can only transpose 2D tensors")
+	}
+
+	rows, cols := srcShape[0], srcShape[1]
+
+	src.ConstBytes(func(srcData []byte) {
+		dst.MutableBytes(func(dstData []byte) {
+			for i := 0; i < rows; i++ {
+				for j := 0; j < cols; j++ {
+					srcOffset := (i*cols + j) * 4
+					dstOffset := (j*rows + i) * 4
+					copy(dstData[dstOffset:dstOffset+4], srcData[srcOffset:srcOffset+4])
+				}
+			}
+		})
+	})
+}
+
+// setContextVariable sets a variable in the context from raw bytes (legacy function, kept for compatibility)
 func setContextVariable(ctx *context.Context, scopePath []string, varName string, shape []int, dtype dtypes.DType, data []byte) error {
 	// Check if we need to transpose (GPT-2's Conv1D stores as [out, in])
 	needsTranspose := false

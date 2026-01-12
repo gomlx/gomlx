@@ -84,8 +84,9 @@ func TopPSample(ctx *context.Context, logits *Node, p float64, temperature float
 		cum := ReduceSum(topVals, -1)
 		cond := GreaterOrEqual(cum, pNode)
 		cond = ExpandDims(cond, -1)
+		condShaped := BroadcastToShape(cond, probs.Shape())
 		maskK := TopKMask(probs, k, -1)
-		selectedMask = Where(cond, maskK, selectedMask)
+		selectedMask = Where(condShaped, maskK, selectedMask)
 	}
 
 	// Mask outside nucleus
