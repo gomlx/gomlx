@@ -45,7 +45,8 @@ func makeNodeDedupKey(opType backends.OpType, inputs []*Node) nodeDedupKey {
 // getOrCreateNode attempts to find a node with the content (opType, shape, inputs, data).
 // If found, it returns the node.
 // If not, it creates a new node with the filled fields, and returns found=false.
-func (b *Builder) getOrCreateNode(opType backends.OpType, shape shapes.Shape, inputs []*Node, data any) (n *Node, found bool) {
+// The function parameter tracks which function this node was created in.
+func (b *Builder) getOrCreateNode(f *Function, opType backends.OpType, shape shapes.Shape, inputs []*Node, data any) (n *Node, found bool) {
 	// Try to find existing node.
 	key := makeNodeDedupKey(opType, inputs)
 	candidates := b.nodeDedup[key]
@@ -63,7 +64,7 @@ func (b *Builder) getOrCreateNode(opType backends.OpType, shape shapes.Shape, in
 	}
 
 	// Create new node.
-	n = b.newNode(opType, shape, inputs...)
+	n = b.newNode(f, opType, shape, inputs...)
 	n.data = data
 	b.nodeDedup[key] = append(b.nodeDedup[key], n)
 	return n, false

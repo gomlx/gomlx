@@ -569,3 +569,82 @@ func TestMainFunctionNotCompiled(t *testing.T) {
 	mainFnImpl := mainFn.(*Function)
 	require.Nil(t, mainFnImpl.compiled, "Main function should not be pre-compiled")
 }
+
+// TestClosureCapturingParentNodeError tests that using a node from a parent function
+// (closure capturing) produces an error, as this is not yet supported.
+func TestClosureCapturingParentNodeError(t *testing.T) {
+	builder := backend.Builder("test_closure_capture_error")
+	mainFn := builder.Main()
+
+	// Create a constant in the main function
+	parentNode, err := mainFn.Constant([]float32{1.0, 2.0}, 2)
+	require.NoError(t, err)
+
+	// Create a closure
+	closure, err := mainFn.Closure()
+	require.NoError(t, err)
+
+	// Create a parameter in the closure
+	y, err := closure.Parameter("y", shapes.Make(dtypes.Float32, 2), nil)
+	require.NoError(t, err)
+
+	// Try to use the parent node in the closure - this should error
+	_, err = closure.Add(parentNode, y)
+	require.Error(t, err, "Using a parent function's node in a closure should produce an error")
+	require.Contains(t, err.Error(), "parent function scope")
+	require.Contains(t, err.Error(), "closure capturing")
+}
+
+// TestClosureCapturingParentNodeErrorNested tests that using a node from a grandparent function
+// (nested closure capturing) also produces an error.
+func TestClosureCapturingParentNodeErrorNested(t *testing.T) {
+	builder := backend.Builder("test_nested_closure_capture_error")
+	mainFn := builder.Main()
+
+	// Create a constant in the main function
+	parentNode, err := mainFn.Constant([]float32{1.0, 2.0}, 2)
+	require.NoError(t, err)
+
+	// Create first closure
+	closure1, err := mainFn.Closure()
+	require.NoError(t, err)
+
+	// Create second (nested) closure
+	closure2, err := closure1.Closure()
+	require.NoError(t, err)
+
+	// Create a parameter in the nested closure
+	y, err := closure2.Parameter("y", shapes.Make(dtypes.Float32, 2), nil)
+	require.NoError(t, err)
+
+	// Try to use the grandparent node in the nested closure - this should error
+	_, err = closure2.Add(parentNode, y)
+	require.Error(t, err, "Using a grandparent function's node in a nested closure should produce an error")
+	require.Contains(t, err.Error(), "parent function scope")
+}
+
+// TestClosureSameFunctionNodesAllowed tests that using nodes from the same function is allowed.
+func TestClosureSameFunctionNodesAllowed(t *testing.T) {
+	builder := backend.Builder("test_same_function_nodes")
+	mainFn := builder.Main()
+
+	// Create a closure
+	closure, err := mainFn.Closure()
+	require.NoError(t, err)
+
+	// Create nodes in the closure
+	x, err := closure.Parameter("x", shapes.Make(dtypes.Float32, 2), nil)
+	require.NoError(t, err)
+
+	c, err := closure.Constant([]float32{1.0, 2.0}, 2)
+	require.NoError(t, err)
+
+	// Using nodes from the same function should work fine
+	sum, err := closure.Add(x, c)
+	require.NoError(t, err)
+	require.NotNil(t, sum)
+
+	// Return should also work
+	err = closure.Return([]backends.Value{sum}, nil)
+	require.NoError(t, err)
+}

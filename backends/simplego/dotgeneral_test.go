@@ -554,8 +554,8 @@ func TestBlockForDotGeneral_Deduplication(t *testing.T) {
 
 	// Get blocked input twice - should return the same node due to deduplication
 	// Using blockForDotGeneral with explicit parameters for a 2D weight matrix
-	blocked1 := builder.blockForDotGeneral(weightsNode, []int{0}, []int{}, 1, N, K)
-	blocked2 := builder.blockForDotGeneral(weightsNode, []int{0}, []int{}, 1, N, K)
+	blocked1 := builder.blockForDotGeneral(mainFn, weightsNode, []int{0}, []int{}, 1, N, K)
+	blocked2 := builder.blockForDotGeneral(mainFn, weightsNode, []int{0}, []int{}, 1, N, K)
 
 	// Should be the exact same node (pointer equality)
 	assert.Same(t, blocked1, blocked2, "Deduplication should return the same blocked node")

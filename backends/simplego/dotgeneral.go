@@ -193,9 +193,9 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	// the blocking is done once and shared.
 	var lhsBlocked, rhsBlocked *Node
 	if params.execPath == blockedPath || params.execPath == checkPath {
-		lhsBlocked = f.builder.blockForDotGeneral(lhs, params.lhsContractingAxes, params.lhsBatchAxes,
+		lhsBlocked = f.builder.blockForDotGeneral(f, lhs, params.lhsContractingAxes, params.lhsBatchAxes,
 			params.batchSize, params.lhsCrossSize, params.contractingSize)
-		rhsBlocked = f.builder.blockForDotGeneral(rhs, params.rhsContractingAxes, params.rhsBatchAxes,
+		rhsBlocked = f.builder.blockForDotGeneral(f, rhs, params.rhsContractingAxes, params.rhsBatchAxes,
 			params.batchSize, params.rhsCrossSize, params.contractingSize)
 	}
 
@@ -210,7 +210,7 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	default:
 		inputs = []*Node{lhs, rhs}
 	}
-	dotGeneral, _ := f.builder.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), inputs, &params)
+	dotGeneral, _ := f.builder.getOrCreateNode(f, backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), inputs, &params)
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))
