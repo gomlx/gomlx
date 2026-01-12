@@ -22,7 +22,7 @@ func init() {
 	if archsimd.X86.AVX512() {
 		dotGeneralKernelDTypeMap.Register(dtypes.Float32, priorityArch, buildDotGeneralBlockKernel_avx512_float32)
 		// Adjust block-size: we can be more aggressive with AVX512 support:
-		DotGeneralTargetBlockSize = 32 * 1024
+		setDotGeneralTargetBlockSize(16 * 1024)
 		DotGeneralBlockedPathThreshold = 8
 	}
 }
