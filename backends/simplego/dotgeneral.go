@@ -27,6 +27,7 @@ type dotGeneralNodeData struct {
 	rhsContractingAxes, rhsBatchAxes                       []int
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int
 	lhsBlockedShape, rhsBlockedShape, outputBlockedShape   shapes.Shape
+	lhsNormalization, rhsNormalization                     *dgNormalizationInfo
 
 	// execPath determines which execution strategy to use. Decided at graph-build time.
 	execPath dotGeneralExecutionPath
@@ -168,6 +169,9 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 			params.rhsCrossSize)
 	}
 
+	params.lhsNormalization = dgNormalizePrepare(lhs.shape, params.lhsContractingAxes, params.lhsBatchAxes)
+	params.rhsNormalization = dgNormalizePrepare(rhs.shape, params.rhsContractingAxes, params.rhsBatchAxes)
+
 	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
 	params.lhsBlockedShape = dgCreateBlockedShape(dtype, params.batchSize, params.lhsCrossSize, params.contractingSize, blockLog2Dim)
 	params.rhsBlockedShape = dgCreateBlockedShape(dtype, params.batchSize, params.rhsCrossSize, params.contractingSize, blockLog2Dim)
@@ -182,6 +186,7 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	// Select execution path at build time based on problem size and matrix layout.
 	// This enables proper deduplication of pre-blocked inputs via getOrCreateNode.
 	params.execPath = dgSelectExecPath(f.builder.backend, lhs.shape, rhs.shape, &params)
+	klog.V(1).Infof("DotGeneral execPath: %s\n", params.execPath)
 
 	// For blockedPath, pre-block BOTH inputs at graph-build time.
 	// This allows deduplication: if the same tensor is used in multiple DotGenerals,
@@ -268,6 +273,8 @@ const (
 	checkPath
 )
 
+//go:generate go tool enumer -type dotGeneralExecutionPath -output=gen_dotgeneral_execution_path_enumer.go dotgeneral.go
+
 // dgSelectExecPath selects the execution path based on problem size and backend configuration.
 // Called at graph-build time from DotGeneral().
 func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params *dotGeneralNodeData) dotGeneralExecutionPath {
@@ -275,12 +282,24 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 
 	// If a specific path is forced via backend config, use that.
 	if backend.dotGeneralForceExecutionPath != autoSelectPath {
-		return backend.dotGeneralForceExecutionPath
+		// Checks whether the forced path is valid for the given problem.
+		var valid bool
+		switch backend.dotGeneralForceExecutionPath {
+		case smallMatMulPath:
+			valid = isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
+				params.lhsBatchAxes, params.rhsBatchAxes)
+		default:
+			valid = true
+		}
+		if valid {
+			return backend.dotGeneralForceExecutionPath
+		}
+		klog.V(1).Infof("DotGeneral: forced path %s is invalid for problem size %s×%s\n", backend.dotGeneralForceExecutionPath, lhsShape, rhsShape)
 	}
 
 	// Check for SmallMatMul fast path first.
 	// SmallMatMul is beneficial for small float32 matrices in standard [M,K]×[K,N] order.
-	if dgCanUseSmallMatMul(dtype, lhsShape, rhsShape, params) {
+	if dgUseSmallMatMul(dtype, lhsShape, rhsShape, params) {
 		return smallMatMulPath
 	}
 
@@ -293,59 +312,6 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 		return blockedPath
 	}
 	return normalizedPath
-}
-
-// dgCanUseSmallMatMul checks if the SmallMatMul fast path can be used at build time.
-// SmallMatMul skips transpose overhead but has strided RHS access, so it's only
-// beneficial for small float32 matrices in standard [M,K]×[K,N] order.
-func dgCanUseSmallMatMul(dtype dtypes.DType, lhsShape, rhsShape shapes.Shape, params *dotGeneralNodeData) bool {
-	// Only support float32 for SmallMatMul (most common case)
-	if dtype != dtypes.Float32 {
-		return false
-	}
-
-	// Check if axes are in standard matmul order
-	if !isMatMulOrder(lhsShape, rhsShape,
-		params.lhsContractingAxes, params.rhsContractingAxes,
-		params.lhsBatchAxes, params.rhsBatchAxes) {
-		return false
-	}
-
-	// For large batch sizes, the normalized path with batch parallelism is faster.
-	// The small matmul path processes batches sequentially without parallelization.
-	if params.batchSize > smallMatMulMaxBatchSize {
-		return false
-	}
-
-	// For single-row operations (M=1), SmallMatMul is faster because transpose overhead
-	// dominates when computing just one output row per batch.
-	// BUT we still need to check rhsCrossSize and contractingSize - for M=1 with huge N or K,
-	// the strided access causes cache thrashing.
-	if params.lhsCrossSize == 1 {
-		// For M=1, use larger thresholds since transpose overhead is more significant
-		// But still cap to avoid catastrophic cache behavior with very large dimensions
-		if params.rhsCrossSize > smallMatMulMaxRhsCrossSizeM1 {
-			return false
-		}
-		if params.contractingSize > smallMatMulMaxContractingSizeM1 {
-			return false
-		}
-		return true
-	}
-
-	// For multi-row operations, check both contracting and RHS cross dimensions.
-	// The RHS is accessed with stride N (rhsCrossSize), so large N causes more cache
-	// misses per contracting step.
-	if params.contractingSize > smallMatMulMaxContractingSize {
-		return false
-	}
-
-	// Check RHS cross size (N) - large N means large stride in RHS access
-	if params.rhsCrossSize > smallMatMulMaxRhsCrossSize {
-		return false
-	}
-
-	return true
 }
 
 // execDotGeneral executes the DotGeneral operation.
@@ -384,7 +350,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			lhsRaw, rhsRaw := inputs[2], inputs[3]
 			output2 := backend.getBufferForShape(outputShape)
 			output2.Zeros()
-			err = execDotGeneralSmall(backend, lhsRaw, rhsRaw, params, output2)
+			err = execDotGeneralNormalized(backend, lhsRaw, rhsRaw, params, output2)
 			if err != nil {
 				backend.putBuffer(output2)
 				backend.putBuffer(output)
@@ -416,7 +382,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 
 	case normalizedPath:
 		// Transpose-based normalized path for small matrices
-		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
+		err = execDotGeneralNormalized(backend, lhs, rhs, params, output)
 
 	default:
 		err = errors.Errorf("unknown execution path %d for DotGeneral", params.execPath)

@@ -135,7 +135,7 @@ func newExecutable(builder *Builder) *Executable {
 		numNodesToProcess: numNodesToProcess,
 		numUses:           make([]int, numNodesToProcess),
 		executionBuffersPool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return &executionBuffers{
 					results:       make([]*Buffer, numNodesToProcess),
 					numUsed:       make([]int, numNodesToProcess),

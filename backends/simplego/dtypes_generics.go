@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/x448/float16"
 )
 
 const MaxDTypes = 32
@@ -150,7 +151,8 @@ func (d *DTypePairMap) Register(dtype1, dtype2 dtypes.DType, priority registerPr
 
 // SupportedTypesConstraints enumerates the types supported by SimpleGo.
 type SupportedTypesConstraints interface {
-	bool | int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64 | float32 | float64 | bfloat16.BFloat16
+	bool | int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64 | float32 | float64 |
+		bfloat16.BFloat16 | float16.Float16
 }
 
 // PODNumericConstraints are used for generics for the Golang pod (plain-old-data) types.
@@ -160,7 +162,7 @@ type PODNumericConstraints interface {
 }
 
 // PODSignedNumericConstraints are used for generics for the Golang pod (plain-old-data) types.
-// BFloat16 is not included because it is a specialized type, not natively supported by Go.
+// BFloat16 and Float16 are not included because they are specialized types, not natively supported by Go.
 type PODSignedNumericConstraints interface {
 	int8 | int16 | int32 | int64 | float32 | float64
 }
@@ -176,7 +178,7 @@ type PODUnsignedConstraints interface {
 }
 
 // PODFloatConstraints are used for generics for the Golang pod (plain-old-data) types.
-// BFloat16 is not included because it is a specialized type, not natively supported by Go.
+// BFloat16 and Float16 are not included because they are specialized types, not natively supported by Go.
 type PODFloatConstraints interface {
 	float32 | float64
 }

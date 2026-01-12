@@ -78,7 +78,7 @@ func (b *Backend) getBufferPool(dtype dtypes.DType, length int) *sync.Pool {
 	poolInterface, ok := b.bufferPools.Load(key)
 	if !ok {
 		poolInterface, _ = b.bufferPools.LoadOrStore(key, &sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return &Buffer{
 					flat:  reflect.MakeSlice(reflect.SliceOf(dtype.GoType()), length, length).Interface(),
 					shape: shapes.Make(dtype, length),
