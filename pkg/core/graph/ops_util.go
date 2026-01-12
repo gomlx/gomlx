@@ -1006,7 +1006,7 @@ func CosineSimilarity(lhs *Node, rhs *Node, axis int) *Node {
 	rhs = Where(rhsMask, one, rhs)
 
 	// Set up contracting axis and the remaining batch axes.
-	adjustedAxis := adjustAxisToRank(axis, lhs.Rank())
+	adjustedAxis := AdjustAxisToOperandRank(lhs, axis)
 	contractingAxes := [][2]int{{adjustedAxis, adjustedAxis}}
 	batchAxes := make([][2]int, 0, lhs.Rank()-1)
 	for batchAxis := range lhs.Rank() {

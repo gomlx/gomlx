@@ -123,15 +123,7 @@ func SortFunc(comparator *Function, axis int, isStable bool, inputs ...*Node) []
 				shape, i+1, input.Shape())
 		}
 	}
-
-	// Normalize axis
-	rank := shape.Rank()
-	if axis < 0 {
-		axis = rank + axis
-	}
-	if axis < 0 || axis >= rank {
-		exceptions.Panicf("SortFunc: axis %d out of range for rank %d", axis, rank)
-	}
+	axis = AdjustAxisToOperandRank(inputs[0], axis)
 
 	// Convert inputs to backend values
 	inputValues := make([]backends.Value, len(inputs))
@@ -225,16 +217,9 @@ func topKImpl(x *Node, k int, axis int, ascending bool) (values, indices *Node) 
 	g.AssertBuilding()
 
 	shape := x.Shape()
-	rank := shape.Rank()
+	rank := x.Rank()
 	dtype := shape.DType
-
-	// Normalize axis
-	if axis < 0 {
-		axis = rank + axis
-	}
-	if axis < 0 || axis >= rank {
-		exceptions.Panicf("TopK/BottomK: axis %d out of range for rank %d", axis, rank)
-	}
+	axis = AdjustAxisToOperandRank(x, axis)
 
 	// Validate k
 	axisSize := shape.Dimensions[axis]
