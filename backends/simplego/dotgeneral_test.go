@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
@@ -368,7 +369,11 @@ func TestDotGeneral_Exec(t *testing.T) {
 		goBackend.dotGeneralForceExecutionPath = autoSelectPath
 	}()
 
-	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, smallMatMulPath, gemmPath, checkPath} {
+	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, smallMatMulPath, packgemmPath, checkPath} {
+		if execPath == packgemmPath && packgemm.Float32 == nil {
+			continue
+		}
+
 		// Force a specific execution path: so we exercise the corresponding algorithm irrespective of the actual size:
 		// it may not be efficient for the size, but it should be correct in all sizes.
 		goBackend.dotGeneralForceExecutionPath = execPath
