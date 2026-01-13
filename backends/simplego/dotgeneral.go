@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/gomlx/backends/simplego/gemm"
+	gemm "github.com/gomlx/gomlx/backends/simplego/packedgemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/pkg/errors"
@@ -392,7 +392,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			if inputDType == dtypes.Float32 && isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
 				params.lhsContractingAxes, params.rhsContractingAxes,
 				params.lhsBatchAxes, params.rhsBatchAxes) {
-				gemm.BasicFloat32(lhsRaw.flat.([]float32), rhsRaw.flat.([]float32),
+				gemm.Float32(1, 0, lhsRaw.flat.([]float32), rhsRaw.flat.([]float32),
 					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 					output2.flat.([]float32))
 				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
@@ -418,7 +418,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 
 	case gemmPath:
 		// Custom GEMM path for large "malmul" order.
-		gemm.BasicFloat32(lhs.flat.([]float32), rhs.flat.([]float32),
+		gemm.Float32(1, 0, lhs.flat.([]float32), rhs.flat.([]float32),
 			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 			output.flat.([]float32))
 		return output, nil

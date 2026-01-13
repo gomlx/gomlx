@@ -482,7 +482,7 @@ func (r *dotGeneralRecursiveData) apply(
 
 	// Recursively split on the largest axis:
 	// - The opportunity to parallelize the split, if possible.
-	parallelize := depth < r.maxDepthParallelization
+	parallelize := depth < r.maxDepthParallelization && false
 	switch maxLen {
 	case lhsCrossLen:
 		// Split on lhs cross dimension.
