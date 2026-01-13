@@ -293,8 +293,8 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 			valid = isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
 				params.lhsBatchAxes, params.rhsBatchAxes)
 		case packgemmPath:
-			valid = dtype == dtypes.Float32 && isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
-				params.lhsBatchAxes, params.rhsBatchAxes)
+			valid = dtype == dtypes.Float32 && packgemm.Float32 != nil &&
+				isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes, params.lhsBatchAxes, params.rhsBatchAxes)
 		default:
 			valid = true
 		}
