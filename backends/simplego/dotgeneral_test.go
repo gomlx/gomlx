@@ -1006,3 +1006,84 @@ func TestSmallMatMulCorrectness(t *testing.T) {
 		})
 	}
 }
+
+// TestSmallMatMulNEONEdgeCases tests NEON-specific edge cases for SmallMatMul.
+// This covers:
+// - N=4 exactly (pure NEON, no remainder)
+// - N=5,6,7 (remainder columns handled by scalar fallback)
+// - Various K values to test assembly loop
+func TestSmallMatMulNEONEdgeCases(t *testing.T) {
+	goBackend, ok := backend.(*Backend)
+	if !ok {
+		t.Skip("Test requires SimpleGo backend")
+	}
+
+	originalForce := goBackend.dotGeneralForceExecutionPath
+	defer func() {
+		goBackend.dotGeneralForceExecutionPath = originalForce
+	}()
+
+	// Test cases designed to exercise NEON path and remainder handling
+	// Format: M, K, N where [M,K] x [K,N] -> [M,N]
+	testCases := []struct {
+		name    string
+		M, K, N int
+	}{
+		// NEON boundary: N=4 (exactly 4 columns, pure NEON)
+		{"M8_K16_N4_pure_neon", 8, 16, 4},
+		{"M1_K32_N4_single_row", 1, 32, 4},
+
+		// Remainder columns: N % 4 != 0
+		{"M8_K16_N5_remainder1", 8, 16, 5},
+		{"M8_K16_N6_remainder2", 8, 16, 6},
+		{"M8_K16_N7_remainder3", 8, 16, 7},
+
+		// Multiple of 4 (N=8, 12, 16)
+		{"M8_K16_N8_two_neon_groups", 8, 16, 8},
+		{"M4_K32_N12_three_neon_groups", 4, 32, 12},
+
+		// Small K values (test assembly loop edge cases)
+		{"M8_K1_N8_minimal_K", 8, 1, 8},
+		{"M8_K2_N8_small_K", 8, 2, 8},
+		{"M8_K3_N8_odd_K", 8, 3, 8},
+		{"M8_K4_N8_exact_K", 8, 4, 8},
+
+		// Larger matrices still within SmallMatMul thresholds
+		{"M64_K64_N32_medium", 64, 64, 32},
+		{"M32_K128_N16_large_K", 32, 128, 16},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create test data
+			lhsData := make([]float32, tc.M*tc.K)
+			for i := range lhsData {
+				lhsData[i] = float32(i%100+1) * 0.01
+			}
+			rhsData := make([]float32, tc.K*tc.N)
+			for i := range rhsData {
+				rhsData[i] = float32(i%100+1) * 0.01
+			}
+
+			lhsTensor := tensors.FromFlatDataAndDimensions(lhsData, tc.M, tc.K)
+			rhsTensor := tensors.FromFlatDataAndDimensions(rhsData, tc.K, tc.N)
+
+			// Force smallMatMulPath to ensure NEON is used (if available)
+			goBackend.dotGeneralForceExecutionPath = smallMatMulPath
+			resultSmallMatMul := graph.MustExecOnce(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+				return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+			}, lhsTensor, rhsTensor)
+
+			// Compute reference with normalized path
+			goBackend.dotGeneralForceExecutionPath = normalizedPath
+			resultNormalized := graph.MustExecOnce(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+				return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+			}, lhsTensor, rhsTensor)
+
+			// Compare results
+			require.True(t, resultSmallMatMul.Shape().Equal(resultNormalized.Shape()),
+				"Shapes should match")
+			requireSameTensorsFloat32(t, resultNormalized, resultSmallMatMul, 1e-4)
+		})
+	}
+}
