@@ -335,18 +335,13 @@ func packRhs(src, dst []float32, rowStart, colStart, strideRow, strideCol, depth
 		validCols := min(nr, width-stripColIdx)
 
 		// Iterate over rows (k)
-		for k := 0; k < depth; k++ {
-			srcRow := rowStart + k
+		for row := range depth {
+			srcRow := rowStart + row
 			srcColBase := colStart + stripColIdx
-
 			// Copy valid columns
-			for c := 0; c < validCols; c++ {
-				// src is Row-Major [Contracting, RhsCross]
-				// Index = (row * strideCol) + col
-				srcIdx := (srcRow * strideCol) + (srcColBase + c)
-				dst[dstIdx] = src[srcIdx]
-				dstIdx++
-			}
+			srcIdx := (srcRow * strideCol) + srcColBase
+			copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
+			dstIdx += validCols
 			// Zero-pad if strip is incomplete (edge of matrix)
 			for c := validCols; c < nr; c++ {
 				dst[dstIdx] = 0.0
@@ -358,25 +353,25 @@ func packRhs(src, dst []float32, rowStart, colStart, strideRow, strideCol, depth
 
 // packLhs packs a [height, depth] block from LHS into packedLhs.
 // It rearranges data into horizontal strips of height Mr (lhsL1BlockRows).
-func packLhs(src, dst []float32, rowStart, colStart, strideRow, strideCol, height, depth, mr int) {
+func packLhs(src, dst []float32, rowStart, colStart, strideRow, strideCol, height, depth, lhsL1KernelRows int) {
 	dstIdx := 0
 	// Iterate over strips of height mr
-	for stripRowIdx := 0; stripRowIdx < height; stripRowIdx += mr {
-		validRows := min(mr, height-stripRowIdx)
+	for stripRowIdx := 0; stripRowIdx < height; stripRowIdx += lhsL1KernelRows {
+		validRows := min(lhsL1KernelRows, height-stripRowIdx)
 
 		// Iterate over columns (k) (We want LHS to be traversed K-first in the kernel)
-		for k := 0; k < depth; k++ {
-			srcCol := colStart + k
+		for col := range depth {
+			srcCol := colStart + col
 			srcRowBase := rowStart + stripRowIdx
 
 			// Copy valid rows
-			for r := 0; r < validRows; r++ {
-				srcIdx := ((srcRowBase + r) * strideCol) + srcCol
+			for row := range validRows {
+				srcIdx := ((srcRowBase + row) * strideCol) + srcCol
 				dst[dstIdx] = src[srcIdx]
 				dstIdx++
 			}
 			// Zero-pad
-			for r := validRows; r < mr; r++ {
+			for r := validRows; r < lhsL1KernelRows; r++ {
 				dst[dstIdx] = 0.0
 				dstIdx++
 			}
