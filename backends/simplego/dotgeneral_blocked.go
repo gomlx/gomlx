@@ -184,7 +184,6 @@ func execBlockForDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []
 	// Copy data from flat to blocked format using the generic copy function
 	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
 	copyFlatToBlock(input, output, data.contractingAxes, data.batchAxes, data.batchSize, data.crossSize, data.contractingSize, data.blockLog2Dim)
-	_ = copyFlatToBlock
 	return output, nil
 }
 
@@ -482,7 +481,7 @@ func (r *dotGeneralRecursiveData) apply(
 
 	// Recursively split on the largest axis:
 	// - The opportunity to parallelize the split, if possible.
-	parallelize := depth < r.maxDepthParallelization && false
+	parallelize := depth < r.maxDepthParallelization
 	switch maxLen {
 	case lhsCrossLen:
 		// Split on lhs cross dimension.
