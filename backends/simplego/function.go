@@ -65,6 +65,19 @@ func (f *Function) Parent() backends.Function {
 	return f.parent
 }
 
+// IsAncestorOf checks whether f is an ancestor of leafFunc.
+// It returns true if f == leafFunc.
+//
+// Typically, leafFunc will be a closure.
+func (f *Function) IsAncestorOf(leafFunc *Function) bool {
+	for ; leafFunc != nil; leafFunc = leafFunc.parent {
+		if leafFunc == f {
+			return true
+		}
+	}
+	return false
+}
+
 // Closure creates a new closure function within this function.
 // Closures can access values from their parent function's scope.
 func (f *Function) Closure() (backends.Function, error) {

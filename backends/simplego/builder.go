@@ -286,7 +286,8 @@ func (b *Builder) addUnaryOp(opType backends.OpType, operandOp backends.Value) (
 
 		return nil, err
 	}
-	node, _ := b.getOrCreateNode(b.mainFn, opType, shape, []*Node{operand}, nil)
+	// Pass nil to derive function from inputs (uses deepest function from input nodes).
+	node, _ := b.getOrCreateNode(nil, opType, shape, []*Node{operand}, nil)
 	return node, nil
 }
 
@@ -301,7 +302,8 @@ func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Valu
 	if err != nil {
 		return nil, err
 	}
-	node, _ := b.getOrCreateNode(b.mainFn, opType, shape, []*Node{lhs, rhs}, nil)
+	// Pass nil to derive function from inputs (uses deepest function from input nodes).
+	node, _ := b.getOrCreateNode(nil, opType, shape, []*Node{lhs, rhs}, nil)
 	return node, nil
 }
 
@@ -316,6 +318,7 @@ func (b *Builder) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.
 	if err != nil {
 		return nil, err
 	}
-	node, _ := b.getOrCreateNode(b.mainFn, opType, shape, []*Node{lhs, rhs}, nil)
+	// Pass nil to derive function from inputs (uses deepest function from input nodes).
+	node, _ := b.getOrCreateNode(nil, opType, shape, []*Node{lhs, rhs}, nil)
 	return node, nil
 }
