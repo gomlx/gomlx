@@ -32,13 +32,14 @@ import ( //alt:base
 //
 // BFloat16/Float16 variants accumulate in float32 for numerical stability, then
 // convert to the native dtype when writing to output (fused conversion).
-func execDotGeneralSmallMatMulFloat32(_ *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) { //alt:base
-	//alt:bf16 func execDotGeneralSmallMatMulBFloat16(_ *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) {
-	//alt:f16 func execDotGeneralSmallMatMulFloat16(_ *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) {
+func execDotGeneralSmallMatMulGeneric[T PODNumericConstraints]( //alt:base
+	//alt:bf16 func execDotGeneralSmallMatMulBFloat16(
+	//alt:f16 func execDotGeneralSmallMatMulFloat16(
+	_ *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) {
 
-	lhsFlat := lhs.flat.([]float32)   //alt:base
-	rhsFlat := rhs.flat.([]float32)   //alt:base
-	outputFlat := output.flat.([]float32) //alt:base
+	lhsFlat := lhs.flat.([]T)             //alt:base
+	rhsFlat := rhs.flat.([]T)             //alt:base
+	outputFlat := output.flat.([]T)       //alt:base
 	//alt:bf16 lhsFlat := lhs.flat.([]bfloat16.BFloat16)
 	//alt:bf16 rhsFlat := rhs.flat.([]bfloat16.BFloat16)
 	//alt:bf16 outputFlat := output.flat.([]bfloat16.BFloat16)
@@ -70,7 +71,8 @@ func execDotGeneralSmallMatMulFloat32(_ *Backend, lhs, rhs *Buffer, params *dotG
 			for n := range rhsCrossSize {
 				// For column n in row-major [K,N], element [k,n] is at k*N + n
 				rhsColStart := rhsBaseIdx + n
-				var sum float32
+				var sum T       //alt:base
+				//alt:bf16|f16 var sum float32
 
 				// Scalar loop with strided RHS access
 				// We cannot use NEON here because RHS column elements are not contiguous

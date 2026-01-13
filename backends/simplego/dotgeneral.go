@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/pkg/errors"
@@ -269,6 +270,9 @@ const (
 	blockedPath
 	// smallMatMulPath uses the SmallMatMul fast path (small float32 matrices in standard order)
 	smallMatMulPath
+	// packgemmPath uses the packgemm package with a fast matmul algorithm with continuous packing of the matrices.
+	// For now, only for large float32 matrices in standard order, for AVX512 only.
+	packgemmPath
 	// checkPath runs both paths and compares outputs (for debugging)
 	checkPath
 )
@@ -288,6 +292,9 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 		case smallMatMulPath:
 			valid = isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
 				params.lhsBatchAxes, params.rhsBatchAxes)
+		case packgemmPath:
+			valid = dtype == dtypes.Float32 && packgemm.Float32 != nil &&
+				isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes, params.lhsBatchAxes, params.rhsBatchAxes)
 		default:
 			valid = true
 		}
@@ -301,6 +308,12 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 	// SmallMatMul is beneficial for small float32 matrices in standard [M,K]×[K,N] order.
 	if dgUseSmallMatMul(dtype, lhsShape, rhsShape, params) {
 		return smallMatMulPath
+	}
+
+	// GEMM path:
+	if dtype == dtypes.Float32 && isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
+		params.lhsBatchAxes, params.rhsBatchAxes) && packgemm.Float32 != nil {
+		return packgemmPath
 	}
 
 	// Default selection based on problem size.
@@ -322,7 +335,6 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	params := node.data.(*dotGeneralNodeData)
 	outputShape := node.shape
 	output := backend.getBufferForShape(outputShape)
-	output.Zeros()
 
 	var err error
 	switch params.execPath {
@@ -344,9 +356,10 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		}
 		hasBatch := len(rhsBlockData.batchAxes) > 0 && rhsBlockData.batchSize > 1 // batchSize is the same for lhs and rhs
 		err = execDotGeneralBlocked(backend, lhs, rhs, hasBatch, params, output)
+		inputDType := lhs.shape.DType
 
 		if err == nil && params.execPath == checkPath {
-			// Debug path: run also the small path and compare results:
+			// Debug path: run all paths where possible and compare results.
 			lhsRaw, rhsRaw := inputs[2], inputs[3]
 			output2 := backend.getBufferForShape(outputShape)
 			output2.Zeros()
@@ -374,6 +387,27 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 				// BFloat16/Float16 implementations accumulate in float32 internally but write to native output
 				execSmallMatMulFn(backend, lhsRaw, rhsRaw, params, output2)
 				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+				if err != nil {
+					backend.putBuffer(output2)
+					backend.putBuffer(output)
+					return nil, err
+				}
+			}
+
+			// GEMM specialized executor.
+			if inputDType == dtypes.Float32 && isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
+				params.lhsContractingAxes, params.rhsContractingAxes,
+				params.lhsBatchAxes, params.rhsBatchAxes) && packgemm.Float32 != nil {
+				packgemm.Float32(1, 0, lhsRaw.flat.([]float32), rhsRaw.flat.([]float32),
+					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
+					output2.flat.([]float32),
+					getBufAllocator[float32](backend), getBufReleaser(backend), getGoroutineStarter(backend))
+				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+				if err != nil {
+					backend.putBuffer(output2)
+					backend.putBuffer(output)
+					return nil, err
+				}
 			}
 			backend.putBuffer(output2) // Discard second output, no longer needed
 		}
@@ -390,7 +424,16 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 
 	case normalizedPath:
 		// Transpose-based normalized path for small matrices
+		output.Zeros()
 		err = execDotGeneralNormalized(backend, lhs, rhs, params, output)
+
+	case packgemmPath:
+		// Custom GEMM path for large "malmul" order.
+		packgemm.Float32(1, 0, lhs.flat.([]float32), rhs.flat.([]float32),
+			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
+			output.flat.([]float32),
+			getBufAllocator[float32](backend), getBufReleaser(backend), getGoroutineStarter(backend))
+		return output, nil
 
 	default:
 		err = errors.Errorf("unknown execution path %d for DotGeneral", params.execPath)
@@ -521,4 +564,27 @@ func dotGeneralCheckVersionsCmp(outputLarge, outputSmall *Buffer) (messages []st
 		return messages, errors.Errorf("found %d mismatches (out of %d values) between DotGeneral large and small versions", mismatches, outputLarge.shape.Size())
 	}
 	return
+}
+
+// getBufAllocator returns a buffer allocator for the given numeric type.
+func getBufAllocator[T dtypes.NumberNotComplex](backend *Backend) packgemm.BufAllocFn[T] {
+	dtype := dtypes.FromGenericsType[T]()
+	return func(size int) (ref any, data []T) {
+		buf := backend.getBuffer(dtype, size)
+		return buf, buf.flat.([]T)
+	}
+}
+
+// getBufReleaser returns a buffer releaser for the given numeric type.
+func getBufReleaser(backend *Backend) packgemm.BufReleaseFn {
+	return func(ref any) {
+		backend.putBuffer(ref.(*Buffer))
+	}
+}
+
+// getGoroutineStarter returns a function that can be used to start a goroutines in the backend worker pool.
+func getGoroutineStarter(backend *Backend) packgemm.GoroutineStarter {
+	return func(work func()) bool {
+		return backend.workers.StartIfAvailable(work)
+	}
 }

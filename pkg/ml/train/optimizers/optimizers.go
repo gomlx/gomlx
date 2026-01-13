@@ -6,10 +6,10 @@ package optimizers
 
 import (
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"golang.org/x/exp/maps"
 )
 
@@ -405,7 +405,7 @@ func addGradientsToVariablesGraph(ctx *context.Context, grads []*Node, learningR
 // The usual way to use this is inside a call to train.AddPerStepUpdateGraphFn, making the projection happen after
 // the gradient step.
 func MonotonicProjection(input *Node, margin *Node, axis int) *Node {
-	adjustedAxis := AdjustAxisToOperandRank(input, axis)
+	adjustedAxis := MustAdjustAxis(axis, input)
 	axisDim := input.Shape().Dim(axis)
 	if axisDim < 2 {
 		Panicf(

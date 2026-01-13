@@ -83,7 +83,7 @@ func (rms *RMSNormBuilder) Done() *Node {
 	x = Div(x, rmsX)
 	if rms.useScale {
 		// Create scale variable: shaped with the dimensions of the sorted normalized axes.
-		normAxes := xslices.Map(rms.normalizationAxes, func(axis int) int { return AdjustAxisToOperandRank(x, axis) })
+		normAxes := xslices.Map(rms.normalizationAxes, func(axis int) int { return MustAdjustAxis(axis, x) })
 		sort.Ints(normAxes)
 		dims := xslices.Map(normAxes, func(axis int) int { return shape.Dim(axis) })
 		scaleShape := shapes.Make(dtype, dims...)
