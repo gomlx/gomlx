@@ -368,7 +368,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 		goBackend.dotGeneralForceExecutionPath = autoSelectPath
 	}()
 
-	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, smallMatMulPath, checkPath} {
+	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, smallMatMulPath, gemmPath, checkPath} {
 		// Force a specific execution path: so we exercise the corresponding algorithm irrespective of the actual size:
 		// it may not be efficient for the size, but it should be correct in all sizes.
 		goBackend.dotGeneralForceExecutionPath = execPath

@@ -77,7 +77,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			rhsShape: []int{4, 1}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
 		},
 		{
-			name:     "NoBatch-Tiny-Normalized",
+			name:     "NoBatch-Tiny-Norm",
 			lhsShape: []int{128, 4}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
 			rhsShape: []int{1, 4}, rhsContractingAxes: []int{1}, rhsBatchAxes: []int{},
 		},

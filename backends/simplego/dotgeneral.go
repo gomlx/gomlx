@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gomlx/gomlx/backends/simplego/gemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/pkg/errors"
@@ -269,6 +270,8 @@ const (
 	blockedPath
 	// smallMatMulPath uses the SmallMatMul fast path (small float32 matrices in standard order)
 	smallMatMulPath
+	// gemm path
+	gemmPath
 	// checkPath runs both paths and compares outputs (for debugging)
 	checkPath
 )
@@ -288,6 +291,9 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 		case smallMatMulPath:
 			valid = isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
 				params.lhsBatchAxes, params.rhsBatchAxes)
+		case gemmPath:
+			valid = dtype == dtypes.Float32 && isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
+				params.lhsBatchAxes, params.rhsBatchAxes)
 		default:
 			valid = true
 		}
@@ -301,6 +307,12 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 	// SmallMatMul is beneficial for small float32 matrices in standard [M,K]×[K,N] order.
 	if dgUseSmallMatMul(dtype, lhsShape, rhsShape, params) {
 		return smallMatMulPath
+	}
+
+	// GEMM path:
+	if dtype == dtypes.Float32 && isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
+		params.lhsBatchAxes, params.rhsBatchAxes) {
+		return gemmPath
 	}
 
 	// Default selection based on problem size.
@@ -322,7 +334,6 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	params := node.data.(*dotGeneralNodeData)
 	outputShape := node.shape
 	output := backend.getBufferForShape(outputShape)
-	output.Zeros()
 
 	var err error
 	switch params.execPath {
@@ -344,9 +355,10 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		}
 		hasBatch := len(rhsBlockData.batchAxes) > 0 && rhsBlockData.batchSize > 1 // batchSize is the same for lhs and rhs
 		err = execDotGeneralBlocked(backend, lhs, rhs, hasBatch, params, output)
+		inputDType := lhs.shape.DType
 
 		if err == nil && params.execPath == checkPath {
-			// Debug path: run also the small path and compare results:
+			// Debug path: run all paths where possible and compare results.
 			lhsRaw, rhsRaw := inputs[2], inputs[3]
 			output2 := backend.getBufferForShape(outputShape)
 			output2.Zeros()
@@ -364,12 +376,31 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			}
 
 			// Also verify SmallMatMul path for matrices in matmul order (float32 only)
-			if lhsRaw.shape.DType == dtypes.Float32 && isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
+			if inputDType == dtypes.Float32 && isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
 				params.lhsContractingAxes, params.rhsContractingAxes,
 				params.lhsBatchAxes, params.rhsBatchAxes) {
-				output2.Zeros()
 				execDotGeneralSmallMatMulFloat32(backend, lhsRaw, rhsRaw, params, output2)
 				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+				if err != nil {
+					backend.putBuffer(output2)
+					backend.putBuffer(output)
+					return nil, err
+				}
+			}
+
+			// GEMM specialized executor.
+			if inputDType == dtypes.Float32 && isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
+				params.lhsContractingAxes, params.rhsContractingAxes,
+				params.lhsBatchAxes, params.rhsBatchAxes) {
+				gemm.BasicFloat32(lhsRaw.flat.([]float32), rhsRaw.flat.([]float32),
+					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
+					output2.flat.([]float32))
+				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+				if err != nil {
+					backend.putBuffer(output2)
+					backend.putBuffer(output)
+					return nil, err
+				}
 			}
 			backend.putBuffer(output2) // Discard second output, no longer needed
 		}
@@ -382,7 +413,15 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 
 	case normalizedPath:
 		// Transpose-based normalized path for small matrices
+		output.Zeros()
 		err = execDotGeneralNormalized(backend, lhs, rhs, params, output)
+
+	case gemmPath:
+		// Custom GEMM path for large "malmul" order.
+		gemm.BasicFloat32(lhs.flat.([]float32), rhs.flat.([]float32),
+			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
+			output.flat.([]float32))
+		return output, nil
 
 	default:
 		err = errors.Errorf("unknown execution path %d for DotGeneral", params.execPath)
