@@ -326,21 +326,6 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 	return normalizedPath
 }
 
-// getBufAllocator returns a buffer allocator for the given numeric type.
-func getBufAllocator[T dtypes.NumberNotComplex](backend *Backend) gemm.BufAllocFn[T] {
-	dtype := dtypes.FromGenericsType[T]()
-	return func(size int) (ref any, data []T) {
-		buf := backend.getBuffer(dtype, size)
-		return buf, buf.flat.([]T)
-	}
-}
-
-func getBufReleaser[T dtypes.NumberNotComplex](backend *Backend) gemm.BufReleaseFn[T] {
-	return func(ref any) {
-		backend.putBuffer(ref.(*Buffer))
-	}
-}
-
 // execDotGeneral executes the DotGeneral operation.
 // The execution path is pre-selected at graph-build time and stored in params.execPath.
 // For blockedPath, inputs are already pre-blocked at build time.
@@ -410,7 +395,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 				gemm.Float32(1, 0, lhsRaw.flat.([]float32), rhsRaw.flat.([]float32),
 					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 					output2.flat.([]float32),
-					getBufAllocator[float32](backend), getBufReleaser[float32](backend))
+					getBufAllocator[float32](backend), getBufReleaser(backend), getGoroutineStarter(backend))
 				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
 				if err != nil {
 					backend.putBuffer(output2)
@@ -437,7 +422,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		gemm.Float32(1, 0, lhs.flat.([]float32), rhs.flat.([]float32),
 			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 			output.flat.([]float32),
-			getBufAllocator[float32](backend), getBufReleaser[float32](backend))
+			getBufAllocator[float32](backend), getBufReleaser(backend), getGoroutineStarter(backend))
 		return output, nil
 
 	default:
@@ -569,4 +554,27 @@ func dotGeneralCheckVersionsCmp(outputLarge, outputSmall *Buffer) (messages []st
 		return messages, errors.Errorf("found %d mismatches (out of %d values) between DotGeneral large and small versions", mismatches, outputLarge.shape.Size())
 	}
 	return
+}
+
+// getBufAllocator returns a buffer allocator for the given numeric type.
+func getBufAllocator[T dtypes.NumberNotComplex](backend *Backend) gemm.BufAllocFn[T] {
+	dtype := dtypes.FromGenericsType[T]()
+	return func(size int) (ref any, data []T) {
+		buf := backend.getBuffer(dtype, size)
+		return buf, buf.flat.([]T)
+	}
+}
+
+// getBufReleaser returns a buffer releaser for the given numeric type.
+func getBufReleaser(backend *Backend) gemm.BufReleaseFn {
+	return func(ref any) {
+		backend.putBuffer(ref.(*Buffer))
+	}
+}
+
+// getGoroutineStarter returns a function that can be used to start a goroutines in the backend worker pool.
+func getGoroutineStarter(backend *Backend) gemm.GoroutineStarter {
+	return func(work func()) bool {
+		return backend.workers.StartIfAvailable(work)
+	}
 }

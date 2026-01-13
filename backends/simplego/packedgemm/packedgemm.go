@@ -5,10 +5,9 @@
 package packedgemm
 
 import (
+	"runtime"
 	"simd/archsimd"
 	"unsafe"
-
-	"k8s.io/klog/v2"
 )
 
 // "internal/archsimd" // Pseudo-import based on your example
@@ -35,12 +34,16 @@ var DefaultCacheParams = CacheParams{
 type BufAllocFn[T any] func(size int) (ref any, data []T)
 
 // BufReleaseFn is a function that releases a buffer allocated with BufAllocFn.
-type BufReleaseFn[T any] func(ref any)
+type BufReleaseFn func(ref any)
+
+// GoroutineStarter is a function that starts a goroutine, if available from the global pool.
+// It returns false if no goroutine was started.
+type GoroutineStarter func(work func()) bool
 
 // Float32 implements generic matrix multiplication for float32 inputs and outputs.
 // output = alpha * (lhs x rhs) + beta * output
 func Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []float32,
-	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn[float32]) {
+	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, starter GoroutineStarter) {
 
 	// 1. Resolve Strides
 	lhsBatchStride := lhsCrossSize * contractingSize
@@ -49,7 +52,83 @@ func Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCros
 
 	params := DefaultCacheParams
 
-	// 2. Allocate packing buffers for panels.
+	// 2. Determine "Quantum" Size (Splitting Strategy)
+	// We want enough tasks to fill the machine, but not so many that we trash the cache/packing.
+	// Target parallelism: Number of physical cores (or default GOMAXPROCS).
+	targetParallelism := runtime.GOMAXPROCS(0)
+
+	// Default: Treat the whole N (rhsCrossSize) as one quantum.
+	// This minimizes redundant packing of Matrix A.
+	rhsColSplitSize := rhsCrossSize
+
+	// Heuristic: If we don't have enough batches to saturate the cores,
+	// we MUST split the columns to get parallelism.
+	if batchSize < targetParallelism {
+		// Example: 16 cores, Batch=2. We want ~8 tasks per batch.
+		// tasksPerBatch := targetParallelism / batchSize
+		// This is a rough estimate.
+
+		// Ensure we don't split too small (avoid overhead for tiny strips).
+		// Minimum strip size e.g., 256 columns or the L1 Block Size.
+		minSplit := 256
+		if rhsColSplitSize > minSplit {
+			neededSplits := (targetParallelism + batchSize - 1) / batchSize
+			calculatedSplit := rhsCrossSize / neededSplits
+
+			// Clamp to valid range
+			if calculatedSplit < minSplit {
+				calculatedSplit = minSplit
+			}
+
+			// Align to 32 (Nr) for SIMD efficiency
+			rhsColSplitSize = (calculatedSplit + 31) &^ 31
+		}
+	}
+
+	// 3. The Work Loop
+	// We iterate sequentially. If the pool is full, we do the work ourselves.
+	for batchIdx := range batchSize {
+		// Capture batch offsets once per batch
+		batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
+		batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
+		batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
+
+		// Iterate over Column Strips (The "Quantum")
+		for colStart := 0; colStart < rhsCrossSize; colStart += rhsColSplitSize {
+			colEnd := colStart + rhsColSplitSize
+			if colEnd > rhsCrossSize {
+				colEnd = rhsCrossSize
+			}
+
+			// Define the task closure
+			task := func() {
+				gemmChunk(
+					alpha, beta,
+					batchLhs, batchRhs, batchOutput,
+					lhsCrossSize, rhsCrossSize, contractingSize,
+					params, colStart, colEnd,
+					bufAllocFn, bufReleaseFn,
+				)
+			}
+
+			// 4. Try to Offload
+			if !starter(task) {
+				// Pool is busy/full.
+				// Execute immediately on this thread to prevent starvation.
+				task()
+			}
+		}
+	}
+}
+
+// gemmChunk performs the 5-loop GotoBLAS algorithm on a slice of a single batch matrix.
+func gemmChunk(
+	alpha, beta float32,
+	lhs, rhs, output []float32,
+	lhsCrossSize, rhsCrossSize, contractingSize int,
+	params CacheParams, colStart, colEnd int,
+	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn,
+) {
 	packedLhsRef, packedLhs := bufAllocFn(params.lhsL2PanelCrossSize * params.contractingPanelSize)
 	packedRhsRef, packedRhs := bufAllocFn(params.contractingPanelSize * params.rhsL3PanelCrossSize)
 	defer func() {
@@ -57,43 +136,13 @@ func Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCros
 		bufReleaseFn(packedRhsRef)
 	}()
 
-	// 3. Iterate Batch
-	for batchIdx := range batchSize {
-		// Calculate slice offsets for this batch
-		lhsStart := batchIdx * lhsBatchStride
-		rhsStart := batchIdx * rhsBatchStride
-		outputStart := batchIdx * outputBatchStride
-
-		gemmSingleBatch(
-			alpha, beta,
-			lhsFlat[lhsStart:lhsStart+lhsBatchStride],
-			rhsFlat[rhsStart:rhsStart+rhsBatchStride],
-			outputFlat[outputStart:outputStart+outputBatchStride],
-			lhsCrossSize, rhsCrossSize, contractingSize,
-			params,
-			packedLhs, packedRhs,
-		)
-	}
-}
-
-// gemmSingleBatch performs the 5-loop GotoBLAS algorithm on a single batch matrix.
-func gemmSingleBatch(
-	alpha, beta float32,
-	lhs, rhs, output []float32,
-	lhsCrossSize, rhsCrossSize, contractingSize int,
-	params CacheParams,
-	packedLhs, packedRhs []float32,
-) {
-	defer func() {
-		if err := recover(); err != nil {
-			klog.Exitf("Fatal error in gemmSingleBatch: %+v", err)
-		}
-	}()
-
 	// Loop 5 (jc): Tiling N (Output Columns) - Fits in L3
-	// Iterates over the RHS width in chunks of rhsL3PanelCrossSize
-	for rhsPanelColIdx := 0; rhsPanelColIdx < rhsCrossSize; rhsPanelColIdx += params.rhsL3PanelCrossSize {
-		rhsPanelWidth := min(params.rhsL3PanelCrossSize, rhsCrossSize-rhsPanelColIdx)
+	// Iterates over the assigned strip [colStart, colEnd) in chunks of rhsL3PanelCrossSize.
+	for rhsPanelColIdx := colStart; rhsPanelColIdx < colEnd; rhsPanelColIdx += params.rhsL3PanelCrossSize {
+
+		// The width of the current panel is limited by the L3 block size (Nc)
+		// AND the end of our assigned chunk (colEnd).
+		rhsPanelWidth := min(params.rhsL3PanelCrossSize, colEnd-rhsPanelColIdx)
 
 		// Loop 4 (p): Tiling K (Depth) - Fits in L1
 		// Iterates over the contracting dimension in chunks of contractingPanelSize
