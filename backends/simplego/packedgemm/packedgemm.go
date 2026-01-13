@@ -31,9 +31,16 @@ var DefaultCacheParams = CacheParams{
 	rhsL3PanelCrossSize:  4096, // Nc: Fits in L3 cache (multiple of 32)
 }
 
+// BufAllocFn is a function that allocates a buffer of type T, of the given size.
+type BufAllocFn[T any] func(size int) (ref any, data []T)
+
+// BufReleaseFn is a function that releases a buffer allocated with BufAllocFn.
+type BufReleaseFn[T any] func(ref any)
+
 // Float32 implements generic matrix multiplication for float32 inputs and outputs.
 // output = alpha * (lhs x rhs) + beta * output
-func Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []float32) {
+func Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []float32,
+	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn[float32]) {
 
 	// 1. Resolve Strides
 	lhsBatchStride := lhsCrossSize * contractingSize
@@ -42,11 +49,13 @@ func Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCros
 
 	params := DefaultCacheParams
 
-	// 2. Allocate Packing Buffers (One set per thread, allocating here for simplicity)
-	// Pack A buffer: Mc x Kc
-	packedLhs := make([]float32, params.lhsL2PanelCrossSize*params.contractingPanelSize)
-	// Pack B buffer: Kc x Nc
-	packedRhs := make([]float32, params.contractingPanelSize*params.rhsL3PanelCrossSize)
+	// 2. Allocate packing buffers for panels.
+	packedLhsRef, packedLhs := bufAllocFn(params.lhsL2PanelCrossSize * params.contractingPanelSize)
+	packedRhsRef, packedRhs := bufAllocFn(params.contractingPanelSize * params.rhsL3PanelCrossSize)
+	defer func() {
+		bufReleaseFn(packedLhsRef)
+		bufReleaseFn(packedRhsRef)
+	}()
 
 	// 3. Iterate Batch
 	for batchIdx := range batchSize {

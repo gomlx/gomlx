@@ -326,6 +326,21 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 	return normalizedPath
 }
 
+// getBufAllocator returns a buffer allocator for the given numeric type.
+func getBufAllocator[T dtypes.NumberNotComplex](backend *Backend) gemm.BufAllocFn[T] {
+	dtype := dtypes.FromGenericsType[T]()
+	return func(size int) (ref any, data []T) {
+		buf := backend.getBuffer(dtype, size)
+		return buf, buf.flat.([]T)
+	}
+}
+
+func getBufReleaser[T dtypes.NumberNotComplex](backend *Backend) gemm.BufReleaseFn[T] {
+	return func(ref any) {
+		backend.putBuffer(ref.(*Buffer))
+	}
+}
+
 // execDotGeneral executes the DotGeneral operation.
 // The execution path is pre-selected at graph-build time and stored in params.execPath.
 // For blockedPath, inputs are already pre-blocked at build time.
@@ -394,7 +409,8 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 				params.lhsBatchAxes, params.rhsBatchAxes) {
 				gemm.Float32(1, 0, lhsRaw.flat.([]float32), rhsRaw.flat.([]float32),
 					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
-					output2.flat.([]float32))
+					output2.flat.([]float32),
+					getBufAllocator[float32](backend), getBufReleaser[float32](backend))
 				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
 				if err != nil {
 					backend.putBuffer(output2)
@@ -420,7 +436,8 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		// Custom GEMM path for large "malmul" order.
 		gemm.Float32(1, 0, lhs.flat.([]float32), rhs.flat.([]float32),
 			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
-			output.flat.([]float32))
+			output.flat.([]float32),
+			getBufAllocator[float32](backend), getBufReleaser[float32](backend))
 		return output, nil
 
 	default:
