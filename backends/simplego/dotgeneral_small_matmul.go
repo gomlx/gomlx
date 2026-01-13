@@ -194,6 +194,8 @@ func dgUseSmallMatMul(dtype dtypes.DType, lhsShape, rhsShape shapes.Shape, param
 }
 
 // dotGeneralSmallMatMulDTypeMap holds the dtype-specific implementations for SmallMatMul.
+// Generic POD types are registered via simplego_dispatcher (gen_register_dtypes.go).
+// BFloat16/Float16 are registered here with specialized implementations that output to float32.
 var dotGeneralSmallMatMulDTypeMap = NewDTypeMap("DotGeneralSmallMatMul")
 
 // Auto-generate alternate specialized versions of execDotGeneralSmallMatMul for BFloat16/Float16
@@ -201,21 +203,8 @@ var dotGeneralSmallMatMulDTypeMap = NewDTypeMap("DotGeneralSmallMatMul")
 //go:generate go run ../../internal/cmd/alternates_generator -base=dotgeneral_small_matmul_alt_base.go -tags=bf16,f16
 
 func init() {
-	// Optimized Float32 implementation (from alt_base, with 4-way loop unrolling)
-	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Float32, priorityGeneric, execDotGeneralSmallMatMulFloat32)
-
-	// Generic implementation for other POD numeric types
-	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Float64, priorityGeneric, execDotGeneralSmallMatMulGeneric[float64])
-	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Int8, priorityGeneric, execDotGeneralSmallMatMulGeneric[int8])
-	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Int16, priorityGeneric, execDotGeneralSmallMatMulGeneric[int16])
-	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Int32, priorityGeneric, execDotGeneralSmallMatMulGeneric[int32])
-	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Int64, priorityGeneric, execDotGeneralSmallMatMulGeneric[int64])
-	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Uint8, priorityGeneric, execDotGeneralSmallMatMulGeneric[uint8])
-	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Uint16, priorityGeneric, execDotGeneralSmallMatMulGeneric[uint16])
-	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Uint32, priorityGeneric, execDotGeneralSmallMatMulGeneric[uint32])
-	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Uint64, priorityGeneric, execDotGeneralSmallMatMulGeneric[uint64])
-
-	// Specialized BFloat16 and Float16 implementations (need float32 accumulation)
+	// BFloat16 and Float16 need float32 accumulation and output to float32 buffer.
+	// The caller (execDotGeneral) handles conversion back to native dtype.
 	dotGeneralSmallMatMulDTypeMap.Register(dtypes.BFloat16, priorityTyped, execDotGeneralSmallMatMulBFloat16)
 	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Float16, priorityTyped, execDotGeneralSmallMatMulFloat16)
 }

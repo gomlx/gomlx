@@ -365,12 +365,13 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 
 			// Also verify SmallMatMul path for matrices in matmul order
 			rawDType := lhsRaw.shape.DType
-			if (rawDType == dtypes.Float32 || rawDType == dtypes.BFloat16 || rawDType == dtypes.Float16) &&
+			if rawDType < MaxDTypes && dotGeneralSmallMatMulDTypeMap.Map[rawDType] != nil &&
 				isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
 					params.lhsContractingAxes, params.rhsContractingAxes,
 					params.lhsBatchAxes, params.rhsBatchAxes) {
 				output2.Zeros()
 				execSmallMatMulFn := dotGeneralSmallMatMulDTypeMap.Get(rawDType).(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
+				// BFloat16/Float16 implementations accumulate in float32 internally but write to native output
 				execSmallMatMulFn(backend, lhsRaw, rhsRaw, params, output2)
 				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
 			}
@@ -380,7 +381,8 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	case smallMatMulPath:
 		// SmallMatMul fast path: small matrices in standard [M,K]×[K,N] order.
 		// Path was selected at build time based on matrix layout and size.
-		// Supports float32, bfloat16, and float16 dtypes with fused conversion.
+		// Supports all numeric dtypes via DTypeMap registration.
+		// BFloat16/Float16 implementations accumulate in float32 internally but write to native output.
 		dtype := lhs.shape.DType
 		execSmallMatMulFn := dotGeneralSmallMatMulDTypeMap.Get(dtype).(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
 		execSmallMatMulFn(backend, lhs, rhs, params, output)
