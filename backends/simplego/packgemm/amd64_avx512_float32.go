@@ -303,21 +303,23 @@ func microKernelFloat32(
 				curValue = curValue.Add(acc0)
 				curValue.StoreSlice(outSlice)
 
-				// Store second row.
-				if rhsActiveCols == 32 {
-					// Full second row.
-					outSlice = output[outputIdx+16 : outputIdx+32]
-					curValue = archsimd.LoadFloat32x16Slice(outSlice)
-					curValue = curValue.Mul(betaBroadcast)
-					curValue = curValue.Add(acc1)
-					curValue.StoreSlice(outSlice)
-				} else {
-					// Partial second row.
-					outSlice := output[outputIdx+16 : outputIdx+rhsActiveCols]
-					curValue = archsimd.LoadFloat32x16SlicePart(outSlice)
-					curValue = curValue.Mul(betaBroadcast)
-					curValue = curValue.Add(acc1)
-					curValue.StoreMasked(castToArray16(&outSlice[0]), maskForCols1)
+				if rhsActiveCols > 16 {
+					// Store second row.
+					if rhsActiveCols == 32 {
+						// Full second row.
+						outSlice = output[outputIdx+16 : outputIdx+32]
+						curValue = archsimd.LoadFloat32x16Slice(outSlice)
+						curValue = curValue.Mul(betaBroadcast)
+						curValue = curValue.Add(acc1)
+						curValue.StoreSlice(outSlice)
+					} else {
+						// Partial second row.
+						outSlice := output[outputIdx+16 : outputIdx+rhsActiveCols]
+						curValue = archsimd.LoadFloat32x16SlicePart(outSlice)
+						curValue = curValue.Mul(betaBroadcast)
+						curValue = curValue.Add(acc1)
+						curValue.StoreMasked(castToArray16(&outSlice[0]), maskForCols1)
+					}
 				}
 			} else {
 				// Store partial first row.
