@@ -336,10 +336,7 @@ func Iota(g *Graph, shape shapes.Shape, iotaAxis int) *Node {
 	if shape.IsScalar() {
 		exceptions.Panicf("cannot Iota a scalar shape, shape=%s", shape)
 	}
-	adjustedAxis := adjustAxisToRank(iotaAxis, shape.Rank())
-	if adjustedAxis < 0 || adjustedAxis >= shape.Rank() {
-		exceptions.Panicf("invalid axis #%d for Iota, when shape is rank %d", iotaAxis, shape.Rank())
-	}
+	adjustedAxis := MustAdjustAxis(iotaAxis, shape)
 	return backendIota(g, shape, adjustedAxis)
 }
 
@@ -754,8 +751,9 @@ func ExpandAxes(x *Node, newAxes ...int) *Node {
 	adjustedNewAxes := make([]int, len(newAxes))
 	copy(adjustedNewAxes, newAxes)
 	for ii, axis := range newAxes {
-		if axis < 0 {
-			adjustedNewAxes[ii] = toRank + axis
+		adjustedNewAxes[ii] = adjustAxisToRank(axis, toRank)
+		if adjustedNewAxes[ii] < 0 || adjustedNewAxes[ii] >= toRank {
+			exceptions.Panicf("ExpandedAxes(x, newAxes=%v...) got new axis #%d=%d which doesn't make sense -- likely an error", ii, newAxes, adjustedNewAxes[ii])
 		}
 	}
 	slices.Sort(adjustedNewAxes)
@@ -822,12 +820,7 @@ func Squeeze(x *Node, axes ...int) *Node {
 		}
 	} else {
 		for axisIdx, axis := range axes {
-			if axis < 0 {
-				axis = x.Rank() + axis
-			}
-			if axis < 0 || axis >= x.Rank() {
-				exceptions.Panicf("Squeeze() for x.shape=%s, axis %d is out-of-range", x.Shape(), axes[axisIdx])
-			}
+			axis = MustAdjustAxis(axis, x)
 			if newDims[axis] == 0 {
 				exceptions.Panicf("Squeeze() for x.shape=%s, axis %d was selected twice!?", x.Shape(), axes[axisIdx])
 			}
@@ -863,7 +856,7 @@ func ArgMax(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 	} else if len(outputDType) == 1 {
 		dtype = outputDType[0]
 	}
-	axis = adjustAxisToRank(axis, x.Rank())
+	axis = MustAdjustAxis(axis, x)
 	return backendArgMinMax(x, axis, dtype, false)
 }
 
@@ -881,7 +874,7 @@ func ArgMin(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 	} else if len(outputDType) == 1 {
 		dtype = outputDType[0]
 	}
-	axis = adjustAxisToRank(axis, x.Rank())
+	axis = MustAdjustAxis(axis, x)
 	return backendArgMinMax(x, axis, dtype, true)
 }
 
@@ -1194,14 +1187,6 @@ func AxisElem(index int) SliceAxisSpec {
 	return SliceAxisSpec{Start: index, End: index + 1}
 }
 
-// adjustAxisToRank converts negative axes to a value starting from the end.
-func adjustAxisToRank(axis, rank int) int {
-	if axis >= 0 {
-		return axis
-	}
-	return rank + axis
-}
-
 // Slice take slices of the operand.
 //
 // Each axis can have a range defined as (start, end) pairs. Any axis for which a range
@@ -1315,7 +1300,7 @@ func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 //	SliceAxis(x, 1, AxisElem(1)) -> shape [5, 1 (sliced axis), 3]
 func SliceAxis(x *Node, axis int, axisSpec SliceAxisSpec) *Node {
 	specs := make([]SliceAxisSpec, x.Rank())
-	adjustedAxis := AdjustAxisToOperandRank(x, axis)
+	adjustedAxis := MustAdjustAxis(axis, x)
 	for ii := range specs {
 		if ii == adjustedAxis {
 			specs[ii] = axisSpec
@@ -1335,7 +1320,7 @@ func SliceAxis(x *Node, axis int, axisSpec SliceAxisSpec) *Node {
 //	splits := Split(x, 1, 3) // Split along axis 1 into 3 parts
 //	// Now splits[0] is [[0][3]], splits[1] is [[1][4]], splits[2] is [[2][5]]
 func Split(x *Node, axis int, numSplits int) []*Node {
-	axis = AdjustAxisToOperandRank(x, axis)
+	axis = MustAdjustAxis(axis, x)
 	dim := x.Shape().Dimensions[axis]
 	if dim%numSplits != 0 {
 		exceptions.Panicf(
@@ -1384,7 +1369,7 @@ func Concatenate(operands []*Node, axis int) *Node {
 		return operands[0]
 	}
 	baseShape := operands[0].Shape()
-	adjustedAxis := adjustAxisToRank(axis, rank)
+	adjustedAxis := MustAdjustAxis(axis, baseShape)
 	for ii, node := range operands[1:] {
 		if node.DType() != baseShape.DType {
 			exceptions.Panicf("Concatenate operand #%d has different dtype (%s) than operand 0's dtype (%s)",
@@ -1460,14 +1445,9 @@ func concatenateVJP(node, v *Node, _ shapes.Shape) []*Node {
 // The shape remains the same.
 func Reverse(x *Node, axes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
-	rank := x.Rank()
 	adjustedAxes := slices.Clone(axes)
 	for ii, axis := range adjustedAxes {
-		adjustedAxes[ii] = adjustAxisToRank(axis, rank)
-		if adjustedAxes[ii] > rank || adjustedAxes[ii] < 0 {
-			exceptions.Panicf("in Reverse(x, axes=%v), passed axis %d which is out-of-limits for x rank %d",
-				axes, axis, rank)
-		}
+		adjustedAxes[ii] = MustAdjustAxis(axis, x)
 	}
 	return backendReverse(x, adjustedAxes...)
 }
@@ -1484,22 +1464,13 @@ func ConvertDType(x *Node, dtype dtypes.DType) (node *Node) {
 // Transpose returns x with the axes axisA and axisB transposed.
 func Transpose(x *Node, axisA, axisB int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
-	rank := x.Rank()
-	dims := []int{axisA, axisB}
-	for ii, dim := range dims {
-		if dim < 0 {
-			dims[ii] = rank + dim
-		}
-		if dims[ii] > rank || dims[ii] < 0 {
-			exceptions.Panicf("in Transpose(x, %d, %d), passed dimension %d which is out-of-limits for x rank %d",
-				axisA, axisB, dim, rank)
-		}
-	}
+	axisA = MustAdjustAxis(axisA, x)
+	axisB = MustAdjustAxis(axisB, x)
 	permutation := make([]int, x.Rank())
 	for dimIdx := range permutation {
 		permutation[dimIdx] = dimIdx
 	}
-	permutation[dims[0]], permutation[dims[1]] = dims[1], dims[0]
+	permutation[axisA], permutation[axisB] = axisB, axisA
 	return TransposeAllAxes(x, permutation...)
 }
 
@@ -1763,12 +1734,7 @@ func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *No
 		lhsAxes = make([]int, 0, len(contractingAxes))
 		rhsAxes = make([]int, 0, len(contractingAxes))
 		for _, pair := range pairs {
-			lhsAxis, rhsAxis := adjustAxisToRank(pair[0], lhsRank), adjustAxisToRank(pair[1], rhsRank)
-
-			if lhsAxis < 0 || lhsAxis >= lhs.Rank() {
-				exceptions.Panicf("EinsumAxes %s has out-of-bound axis for left-hand-side operand: %v",
-					name, pairs)
-			}
+			lhsAxis := MustAdjustAxis(pair[0], lhs)
 			if lhsSeen.Has(lhsAxis) {
 				exceptions.Panicf(
 					"EinsumAxes %s axis for left-hand-side operand is duplicate -- each axis can only be contracted or batch once: %v",
@@ -1778,9 +1744,7 @@ func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *No
 			}
 			lhsSeen.Insert(lhsAxis)
 
-			if rhsAxis < 0 || rhsAxis >= rhs.Rank() {
-				exceptions.Panicf("EinsumAxes %s has out-of-bound axis for right-hand-side operand: %v", name, pairs)
-			}
+			rhsAxis := MustAdjustAxis(pair[1], rhs)
 			if rhsSeen.Has(rhsAxis) {
 				exceptions.Panicf(
 					"EinsumAxes %s axis for right-hand-side operand is duplicate -- each axis can only be contracted or batch once: %v",
@@ -1848,7 +1812,7 @@ func InternalBatchNormForTraining(
 			offset.Shape(),
 		)
 	}
-	axis = adjustAxisToRank(axis, operand.Rank())
+	axis = MustAdjustAxis(axis, operand)
 	return backendBatchNormForTraining(operand, scale, offset, epsilon, axis)
 }
 
@@ -1873,7 +1837,7 @@ func InternalBatchNormForInference(
 			offset.Shape(),
 		)
 	}
-	axis = adjustAxisToRank(axis, operand.Rank())
+	axis = MustAdjustAxis(axis, operand)
 	return backendBatchNormForInference(operand, scale, offset, mean, variance, epsilon, axis)
 }
 
@@ -1899,7 +1863,7 @@ func InternalBatchNormGradient(
 			variance.DType(),
 		)
 	}
-	axis = adjustAxisToRank(axis, operand.Rank())
+	axis = MustAdjustAxis(axis, operand)
 	return backendBatchNormGradient(operand, scale, mean, variance, gradOutput, epsilon, axis)
 }
 

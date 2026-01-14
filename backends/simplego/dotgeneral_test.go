@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
@@ -368,60 +369,70 @@ func TestDotGeneral_Exec(t *testing.T) {
 		goBackend.dotGeneralForceExecutionPath = autoSelectPath
 	}()
 
-	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, smallMatMulPath, checkPath} {
+	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, smallMatMulPath, packgemmPath, checkPath} {
+		if execPath == packgemmPath && packgemm.Float32 == nil {
+			continue
+		}
+
 		// Force a specific execution path: so we exercise the corresponding algorithm irrespective of the actual size:
 		// it may not be efficient for the size, but it should be correct in all sizes.
 		goBackend.dotGeneralForceExecutionPath = execPath
 		t.Run(execPath.String(), func(t *testing.T) {
-			// Larger example, with multiple axes.
-			y0 := graph.MustExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
-				return graph.DotGeneral(lhs, []int{1}, []int{3, 0}, rhs, []int{1}, []int{0, 2})
-			},
-				tensors.FromFlatDataAndDimensions(xslices.Iota(float32(1), 2*3*1*5), 2, 3, 1, 5),
-				tensors.FromFlatDataAndDimensions(xslices.Iota(float32(1), 5*3*2*4), 5, 3, 2, 4),
-			)
-			fmt.Printf("\ty0=%s\n", y0)
-			want := [][][][]float32{
-				{
-					{{242, 260, 278, 296}},
-					{{899, 962, 1025, 1088}},
-				}, {
-					{{773, 794, 815, 836}},
-					{{2522, 2588, 2654, 2720}},
-				}, {
-					{{1448, 1472, 1496, 1520}},
-					{{4289, 4358, 4427, 4496}},
-				}, {
-					{{2267, 2294, 2321, 2348}},
-					{{6200, 6272, 6344, 6416}},
-				}, {
-					{{3230, 3260, 3290, 3320}},
-					{{8255, 8330, 8405, 8480}},
-				}}
-			require.Equal(t, want, y0.Value())
+			t.Run("Float32", func(t *testing.T) {
+				// Larger example, with multiple axes.
+				y0 := graph.MustExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+					return graph.DotGeneral(lhs, []int{1}, []int{3, 0}, rhs, []int{1}, []int{0, 2})
+				},
+					tensors.FromFlatDataAndDimensions(xslices.Iota(float32(1), 2*3*1*5), 2, 3, 1, 5),
+					tensors.FromFlatDataAndDimensions(xslices.Iota(float32(1), 5*3*2*4), 5, 3, 2, 4),
+				)
+				fmt.Printf("\ty0=%s\n", y0)
+				want := [][][][]float32{
+					{
+						{{242, 260, 278, 296}},
+						{{899, 962, 1025, 1088}},
+					}, {
+						{{773, 794, 815, 836}},
+						{{2522, 2588, 2654, 2720}},
+					}, {
+						{{1448, 1472, 1496, 1520}},
+						{{4289, 4358, 4427, 4496}},
+					}, {
+						{{2267, 2294, 2321, 2348}},
+						{{6200, 6272, 6344, 6416}},
+					}, {
+						{{3230, 3260, 3290, 3320}},
+						{{8255, 8330, 8405, 8480}},
+					}}
+				require.Equal(t, want, y0.Value())
+			})
 
 			// Axis transposition example:
-			y1 := graph.MustExecOnce(backend, func(g *graph.Graph) *graph.Node {
-				lhs := graph.MulScalar(graph.OnePlus(graph.IotaFull(g, shapes.Make(F32, 2, 1, 3))), 1)
-				rhs := graph.Ones(g, shapes.Make(F32, 1, 3, 2))
-				return graph.DotGeneral(lhs, []int{1}, []int{2, 0}, rhs, []int{0}, []int{1, 2})
+			t.Run("AxisTransposition", func(t *testing.T) {
+				y1 := graph.MustExecOnce(backend, func(g *graph.Graph) *graph.Node {
+					lhs := graph.MulScalar(graph.OnePlus(graph.IotaFull(g, shapes.Make(F32, 2, 1, 3))), 1)
+					rhs := graph.Ones(g, shapes.Make(F32, 1, 3, 2))
+					return graph.DotGeneral(lhs, []int{1}, []int{2, 0}, rhs, []int{0}, []int{1, 2})
+				})
+				fmt.Printf("\ty1=%s\n", y1)
+				require.NoError(t, y1.Shape().Check(F32, 3, 2))
+				want1 := [][]float32{{1, 4}, {2, 5}, {3, 6}}
+				require.Equal(t, want1, y1.Value())
 			})
-			fmt.Printf("\ty1=%s\n", y1)
-			require.NoError(t, y1.Shape().Check(F32, 3, 2))
-			want1 := [][]float32{{1, 4}, {2, 5}, {3, 6}}
-			require.Equal(t, want1, y1.Value())
 
 			// A very large example: expected value computed using XLA.
-			y3 := graph.MustExecOnce(backend, func(g *graph.Graph) *graph.Node {
-				lhs := graph.MulScalar(graph.OnePlus(graph.IotaFull(g, shapes.Make(dtypes.F64, 16, 13, 384))), 1e-5)
-				rhs := graph.Ones(g, shapes.Make(dtypes.F64, 384, 1536))
-				out := graph.DotGeneral(
-					lhs, []int{2}, nil,
-					rhs, []int{0}, nil)
-				return graph.Gather(out, graph.Const(g, [][]int32{{0, 0, 0}}))
+			t.Run("VeryLarge", func(t *testing.T) {
+				y3 := graph.MustExecOnce(backend, func(g *graph.Graph) *graph.Node {
+					lhs := graph.MulScalar(graph.OnePlus(graph.IotaFull(g, shapes.Make(dtypes.F64, 16, 13, 384))), 1e-5)
+					rhs := graph.Ones(g, shapes.Make(dtypes.F64, 384, 1536))
+					out := graph.DotGeneral(
+						lhs, []int{2}, nil,
+						rhs, []int{0}, nil)
+					return graph.Gather(out, graph.Const(g, [][]int32{{0, 0, 0}}))
+				})
+				fmt.Printf("\ty3=%s\n", y3)
+				require.InDelta(t, 0.7392, tensors.MustCopyFlatData[float64](y3)[0], 1e-4)
 			})
-			fmt.Printf("\ty3=%s\n", y3)
-			require.InDelta(t, 0.7392, tensors.MustCopyFlatData[float64](y3)[0], 1e-4)
 
 			// BFloat16 example.
 			t.Run("BFloat16", func(t *testing.T) {
@@ -670,12 +681,14 @@ func TestDotGeneral_PreBlockedCorrectness(t *testing.T) {
 	wantResult := graph.MustExecOnce(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
 		return graph.DotGeneral(lhs, []int{1}, nil, rhs, []int{0}, nil)
 	}, lhs, rhs)
+	fmt.Printf("WantResult: %s\n", wantResult)
 
 	// Now compute with blocked path (which may use pre-blocking for constant RHS)
 	goBackend.dotGeneralForceExecutionPath = blockedPath
 	gotResult := graph.MustExecOnce(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
 		return graph.DotGeneral(lhs, []int{1}, nil, rhs, []int{0}, nil)
 	}, lhs, rhs)
+	fmt.Printf("GotResult: %s\n", gotResult)
 
 	// Reset to default (auto-select)
 	goBackend.dotGeneralForceExecutionPath = autoSelectPath

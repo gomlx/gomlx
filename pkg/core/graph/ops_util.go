@@ -732,7 +732,7 @@ func ShiftWithValue(x *Node, axis int, shiftDir ShiftDirection, n int, value *No
 func Shift(x *Node, axis int, shiftDir ShiftDirection, n int) *Node {
 	rank := x.Rank()
 	dims := x.Shape().Dimensions
-	shiftAxis := AdjustAxisToOperandRank(x, axis)
+	shiftAxis := MustAdjustAxis(axis, x)
 
 	// Find slice of left-most / right-most values to use for filling.
 	axisRanges := make([]SliceAxisSpec, rank)
@@ -758,7 +758,7 @@ func genericShiftImpl(x *Node, axis int, shiftDir ShiftDirection, n int, fill fl
 	dtype := x.DType()
 	rank := x.Rank()
 	dims := x.Shape().Dimensions
-	shiftAxis := AdjustAxisToOperandRank(x, axis)
+	shiftAxis := MustAdjustAxis(axis, x)
 	if n > dims[shiftAxis] {
 		Panicf("cannot shift %d positions for axis %d, x.shape=%s", n, axis, x.Shape())
 	}
@@ -829,7 +829,7 @@ func growImpl(x *Node, axis int, dir ShiftDirection, n int, fillValue float64) *
 	g := x.Graph()
 	rank := x.Rank()
 	dtype := x.DType()
-	growAxis := AdjustAxisToOperandRank(x, axis)
+	growAxis := MustAdjustAxis(axis, x)
 	dims := x.Shape().Dimensions
 
 	// Create slice to be concatenated for our desired growth: the slice is the same, independent of the direction.
@@ -869,7 +869,7 @@ func growImpl(x *Node, axis int, dir ShiftDirection, n int, fillValue float64) *
 //	CumSum([[1, 2, 3], [4, 5, 6]], -1) = [[1, 3, 6], [4, 9, 15]]
 //	CumSum([[1, 2, 3], [4, 5, 6]], 0) = [[1, 2, 3], [5, 7, 9]]
 func CumSum(x *Node, axis int) *Node {
-	adjustedAxis := AdjustAxisToOperandRank(x, axis)
+	adjustedAxis := MustAdjustAxis(axis, x)
 	windowSizes := xslices.SliceWithValue(x.Rank(), 1)
 	windowSizes[adjustedAxis] = x.Shape().Dimensions[adjustedAxis]
 	paddings := make([][2]int, x.Rank())
@@ -895,7 +895,7 @@ var consecutiveDifferenceKernel = tensors.FromValue([]int32{-1, 1})
 //	ConsecutiveDifference([[1, 3, 6], [4, 9, 15]], -1, true) = [[1, 2, 3], [4, 5, 6]]
 //	ConsecutiveDifference([[1, 2, 3], [5, 7, 9]], 0, true) = [[1, 2, 3], [4, 5, 6]]
 func ConsecutiveDifference(x *Node, axis int, preserveShape bool) *Node {
-	adjustedAxis := AdjustAxisToOperandRank(x, axis)
+	adjustedAxis := MustAdjustAxis(axis, x)
 	if true {
 		diff := Sub(
 			SliceAxis(x, adjustedAxis, AxisRangeToEnd(1)),
@@ -1006,7 +1006,7 @@ func CosineSimilarity(lhs *Node, rhs *Node, axis int) *Node {
 	rhs = Where(rhsMask, one, rhs)
 
 	// Set up contracting axis and the remaining batch axes.
-	adjustedAxis := adjustAxisToRank(axis, lhs.Rank())
+	adjustedAxis := MustAdjustAxis(axis, lhs)
 	contractingAxes := [][2]int{{adjustedAxis, adjustedAxis}}
 	batchAxes := make([][2]int, 0, lhs.Rank()-1)
 	for batchAxis := range lhs.Rank() {
