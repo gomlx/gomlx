@@ -4,11 +4,15 @@ package imdb
 
 import (
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -27,10 +31,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
-
-	"github.com/charmbracelet/lipgloss"
-	"github.com/gomlx/gomlx/internal/must"
-	"golang.org/x/exp/maps"
 )
 
 var (
@@ -195,7 +195,7 @@ func TrainModel(
 	modelType := context.GetParamOr(ctx, "model", "bow")
 	modelFn, found := ValidModels[modelType]
 	if !found {
-		exceptions.Panicf("Parameter \"model\" must take one value from %v, got %q", maps.Keys(ValidModels), modelType)
+		exceptions.Panicf("Parameter \"model\" must take one value from %v, got %q", slices.Collect(maps.Keys(ValidModels)), modelType)
 	}
 	fmt.Printf("Model: %s\n", modelType)
 

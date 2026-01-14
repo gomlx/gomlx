@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
 	"path"
@@ -23,7 +24,6 @@ import (
 	types "github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
-	"golang.org/x/exp/maps"
 	"k8s.io/klog/v2"
 )
 
@@ -228,7 +228,7 @@ func NewPoints(rawPoints []Point) (points Points) {
 // If you need to reindex the [Step] after the `Map` transformation, you may call [Extract]
 // followed by [NewPoints] to create the re-indexed structure.
 func (points Points) Map(fn func(p *Point)) {
-	sortedKeys := maps.Keys(points)
+	sortedKeys := slices.Collect(maps.Keys(points))
 	slices.Sort(sortedKeys)
 	for _, step := range sortedKeys {
 		stepPoints := points[step]
@@ -240,7 +240,7 @@ func (points Points) Map(fn func(p *Point)) {
 
 // Filter only keeps those points for which `fn` returns true, removing the other ones.
 func (points Points) Filter(fn func(p Point) bool) {
-	sortedKeys := maps.Keys(points)
+	sortedKeys := slices.Collect(maps.Keys(points))
 	slices.Sort(sortedKeys)
 	for _, step := range sortedKeys {
 		stepPoints := points[step]
@@ -319,7 +319,7 @@ func (points Points) TableForMetrics(metrics ...string) string {
 	table.Headers(headers...)
 
 	// Add rows:
-	sortedKeys := maps.Keys(points)
+	sortedKeys := slices.Collect(maps.Keys(points))
 	slices.Sort(sortedKeys)
 	for _, step := range sortedKeys {
 		row := make([]string, 1+len(metrics))
