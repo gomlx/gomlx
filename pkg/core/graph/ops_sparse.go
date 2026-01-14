@@ -49,7 +49,7 @@ func NormalizeIndices(data, indices *Node, axis int) *Node {
 		return indices
 	}
 
-	axis = AdjustAxisToOperandRank(data, axis)
+	axis = MustAdjustAxis(axis, data)
 	if axis < 0 || axis >= data.Rank() {
 		Panicf("NormalizeIndices: axis %d out of range for data with rank %d", axis, data.Rank())
 	}

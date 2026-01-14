@@ -77,7 +77,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			rhsShape: []int{4, 1}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
 		},
 		{
-			name:     "NoBatch-Tiny-Normalized",
+			name:     "NoBatch-Tiny-Norm",
 			lhsShape: []int{128, 4}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
 			rhsShape: []int{1, 4}, rhsContractingAxes: []int{1}, rhsBatchAxes: []int{},
 		},
@@ -92,12 +92,17 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			rhsShape: []int{128, 256}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
 		},
 		{
-			name:     "NoBatch-NoLHSCross-LargeRHSCross-Matmul",
+			name:     "NoBatch-Large",
+			lhsShape: []int{1536, 1920}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
+			rhsShape: []int{1920, 1024}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
+		},
+		{
+			name:     "R-Unbalanced-Cross",
 			lhsShape: []int{128}, lhsContractingAxes: []int{0}, lhsBatchAxes: nil,
 			rhsShape: []int{128, 256}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
 		},
 		{
-			name:     "NoBatch-LargeLHSCross-SmallRHSCross-Matmul",
+			name:     "L-Unbalanced-Cross",
 			lhsShape: []int{4096, 32}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
 			rhsShape: []int{32, 16}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
 		},
@@ -117,11 +122,10 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			rhsShape: []int{64, 64, 128}, rhsContractingAxes: []int{2}, rhsBatchAxes: []int{0},
 		},
 		{
-			name:     "NoBatch-Large",
-			lhsShape: []int{1536, 1920}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
-			rhsShape: []int{1920, 1024}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
+			name:     "Batched-Large",
+			lhsShape: []int{16, 1536, 1920}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int{0},
+			rhsShape: []int{16, 1920, 1024}, rhsContractingAxes: []int{1}, rhsBatchAxes: []int{0},
 		},
-
 		// Shape values taken from the model https://huggingface.co/KnightsAnalytics/all-MiniLM-L6-v2
 		// while running the benchmark `TestBenchRobSentencesXLA` from github.com/gomlx/onnx-gomlx/internal/benchmark
 		// with batch size 16.
@@ -195,7 +199,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 
 	// Adjust for desired precision vs. test duration
 	const numWarmupRuns = 2
-	const minNumTimedRuns = 50
+	const minNumTimedRuns = 10
 	const minTestTime = time.Second
 
 	// Colors: tests usually run in batch and that disallows colors. We temporarily force a different profile:
