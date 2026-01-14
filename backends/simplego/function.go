@@ -100,7 +100,7 @@ func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
-	nodes, err := f.builder.checkOps(name, values...)
+	nodes, err := f.builder.checkValues(name, values...)
 	if err != nil {
 		return nil, err
 	}
