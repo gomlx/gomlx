@@ -9,6 +9,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/pkg/errors"
 )
 
 // Dedup implementation: remove duplicated expressions, also known as "common subexpression elimination".
@@ -56,10 +57,10 @@ func innermostFunction(inputs []*Node) (*Function, error) {
 	var candidate *Function
 	for i, node := range inputs {
 		if node == nil {
-			return nil, fmt.Errorf("input node #%d is nil", i)
+			return nil, errors.Errorf("input node #%d is nil", i)
 		}
 		if node.function == nil {
-			return nil, fmt.Errorf("input node #%d has a nil function", i)
+			return nil, errors.Errorf("input node #%d has a nil function", i)
 		}
 
 		if candidate == nil {
@@ -79,7 +80,9 @@ func innermostFunction(inputs []*Node) (*Function, error) {
 		} else if !other.IsAncestorOf(candidate) {
 			// candidate is NOT ancestor of other, AND other is NOT ancestor of candidate.
 			// Disjoint branches.
-			return nil, fmt.Errorf("incompatible scopes for inputs: scope %q and scope %q are not in the same ancestry line", candidate.name, other.name)
+			return nil, errors.Errorf(
+				"incompatible scopes for inputs: scope %q and scope %q are not in the same ancestry line",
+				candidate.name, other.name)
 		}
 		// else: other is ancestor of candidate, so candidate remains the deeper one.
 	}
@@ -91,14 +94,16 @@ func innermostFunction(inputs []*Node) (*Function, error) {
 // If not, it creates a new node with the filled fields, and returns found=false.
 // The function parameter tracks which function this node was created in.
 // If f is nil, the function is derived from the inputs (using innermostFunction).
-func (b *Builder) getOrCreateNode(f *Function, opType backends.OpType, shape shapes.Shape, inputs []*Node, data any) (n *Node, found bool) {
+func (b *Builder) getOrCreateNode(
+	f *Function, opType backends.OpType, shape shapes.Shape, inputs []*Node, data any) (
+	n *Node, found bool) {
 	// Derive function from inputs if not specified.
 	if f == nil {
 		var err error
 		f, err = innermostFunction(inputs)
 		if err != nil {
 			// This should never happen if the graph layer validated correctly.
-			panic(fmt.Sprintf("getOrCreateNode: %v", err))
+			panic(errors.WithMessagef(err, "while adding operation %q", opType))
 		}
 		if f == nil {
 			// Fallback to mainFn if no inputs (e.g., for constants without inputs).
