@@ -145,7 +145,7 @@ func init() {
 //   - input: the node to block
 //   - contractingAxes, batchAxes: axes from the original tensor shape
 //   - batchSize, axesASize, axesBSize: normalized sizes
-func (b *Builder) blockForDotGeneral(input *Node,
+func (f *Function) blockForDotGeneral(input *Node,
 	contractingAxes, batchAxes []int,
 	batchSize, axesASize, axesBSize int) *Node {
 
@@ -163,7 +163,7 @@ func (b *Builder) blockForDotGeneral(input *Node,
 		batchAxes:       slices.Clone(batchAxes),
 	}
 
-	blocked, _ := b.getOrCreateNode(backends.OpTypeBlockForDotGeneral, blockedShape, []*Node{input}, data)
+	blocked, _ := f.getOrCreateNode(backends.OpTypeBlockForDotGeneral, blockedShape, []*Node{input}, data)
 	return blocked
 }
 

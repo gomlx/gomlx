@@ -116,7 +116,7 @@ func (f *Function) ConvGeneral(inputOp, kernelOp backends.Value, axes backends.C
 			params.dilatedInputSpatialDims[spatialIdx] = (dim-1)*inputDilations[spatialIdx] + 1
 		}
 	}
-	node, _ := f.builder.getOrCreateNode(opType, outputShape, []*Node{input, kernel}, params)
+	node, _ := f.getOrCreateNode(opType, outputShape, []*Node{input, kernel}, params)
 	return node, nil
 }
 

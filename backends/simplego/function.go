@@ -19,11 +19,22 @@ type Function struct {
 	builder *Builder
 	name    string
 
+	// parent is the parent function if this is a closure.
+	// For top-level functions (including main), this is nil.
+	parent *Function
+
 	// returned indicates Return() was called.
 	returned bool
 
 	// outputs stores the return values set by Return().
 	outputs []*Node
+
+	// parameters stores the parameter nodes for this function.
+	parameters []*Node
+
+	// compiled holds pre-compiled execution info.
+	// This is set during Return() to allow efficient execution.
+	compiled *FunctionExecutable
 }
 
 var _ backends.Function = (*Function)(nil)
@@ -39,13 +50,90 @@ func (f *Function) CheckValid() error {
 	return nil
 }
 
+// Name returns the name of this function.
+// For closures, this returns "".
+func (f *Function) Name() string {
+	return f.name
+}
+
+// Parent returns the parent function if this is a closure.
+// Returns nil for top-level functions (including main).
+func (f *Function) Parent() backends.Function {
+	if f.parent == nil {
+		return nil
+	}
+	return f.parent
+}
+
+// IsAncestorOf checks whether f is an ancestor of leafFunc.
+// It returns true if f == leafFunc.
+//
+// Typically, leafFunc will be a closure.
+func (f *Function) IsAncestorOf(leafFunc *Function) bool {
+	for ; leafFunc != nil; leafFunc = leafFunc.parent {
+		if leafFunc == f {
+			return true
+		}
+	}
+	return false
+}
+
+// Closure creates a new closure function within this function.
+// Closures can access values from their parent function's scope.
+func (f *Function) Closure() (backends.Function, error) {
+	if err := f.CheckValid(); err != nil {
+		return nil, err
+	}
+	closure := &Function{
+		builder: f.builder,
+		name:    "", // Closures have empty names
+		parent:  f,
+	}
+	return closure, nil
+}
+
 // verifyAndCastValues sanity checks that the values (backends.Op) are valid and created with this builder.
+// It also verifies that all input nodes belong to the same function - using nodes from a parent
+// function (closure capturing) is not yet supported.
 // It returns the underlying *Node of the values.
 func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([]*Node, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
-	return f.builder.checkOps(name, values...)
+	nodes, err := f.builder.checkOps(name, values...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check that all input nodes belong to this function.
+	// Capturing nodes from a parent function (closure capture) is not yet supported
+	// because it introduces complexity in tracking node usage for buffer management.
+	for idx, node := range nodes {
+		if node.function != nil && node.function != f {
+			// Check if the node is from a parent function (closure capture)
+			isFromParent := false
+			for parent := f.parent; parent != nil; parent = parent.parent {
+				if node.function == parent {
+					isFromParent = true
+					break
+				}
+			}
+			if isFromParent {
+				return nil, errors.Errorf(
+					"%s: input #%d uses a node from a parent function scope (closure capturing parent values). "+
+						"This is not yet supported in the SimpleGo backend. "+
+						"Please pass the value as a closure parameter instead. "+
+						"If you need this feature, please open an issue at github.com/gomlx/gomlx",
+					name, idx)
+			}
+			// Node from a completely different function (not parent)
+			return nil, errors.Errorf(
+				"%s: input #%d uses a node from a different function scope",
+				name, idx)
+		}
+	}
+
+	return nodes, nil
 }
 
 // Parameter creates an input parameter for this function.
@@ -67,8 +155,9 @@ func (f *Function) Parameter(name string, shape shapes.Shape, sharding *backends
 		name:     name,
 		inputIdx: len(f.builder.inputs),
 	}
-	n, _ := f.builder.getOrCreateNode(backends.OpTypeParameter, shape, nil, data)
+	n, _ := f.getOrCreateNode( backends.OpTypeParameter, shape, nil, data)
 	f.builder.inputs = append(f.builder.inputs, n)
+	f.parameters = append(f.parameters, n) // Track in function for closures
 	return n, nil
 }
 
@@ -96,7 +185,7 @@ func (f *Function) Constant(flat any, dims ...int) (backends.Value, error) {
 		flat:  flat,
 		valid: true,
 	}
-	n, _ := f.builder.getOrCreateNode(backends.OpTypeConstant, shape, nil, data)
+	n, _ := f.getOrCreateNode( backends.OpTypeConstant, shape, nil, data)
 	return n, nil
 }
 
@@ -132,7 +221,24 @@ func (f *Function) Return(outputs []backends.Value, shardings []*backends.Shardi
 
 	f.outputs = outputNodes
 	f.returned = true
+
+	// If this is a closure, pre-compile it for efficient execution.
+	// Main functions are compiled later in Builder.Compile() after
+	// duplicate output handling.
+	if f.parent != nil {
+		compiled, err := newFunctionExecutable(f)
+		if err != nil {
+			return errors.WithMessagef(err, "failed to compile closure")
+		}
+		f.compiled = compiled
+	}
+
 	return nil
+}
+
+// Compiled returns the pre-compiled function executable, or nil if not yet compiled.
+func (f *Function) Compiled() *FunctionExecutable {
+	return f.compiled
 }
 
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
@@ -149,25 +255,25 @@ func (f *Function) Iota(shape shapes.Shape, iotaAxis int) (backends.Value, error
 	if iotaAxis < 0 || iotaAxis >= shape.Rank() {
 		return nil, errors.Errorf("Iota: iotaAxis (%d) must be in the range [0,%d)", iotaAxis, shape.Rank()-1)
 	}
-	node, _ := f.builder.getOrCreateNode(backends.OpTypeIota, shape, nil, iotaAxis)
+	node, _ := f.getOrCreateNode( backends.OpTypeIota, shape, nil, iotaAxis)
 	return node, nil
 }
 
 // Identity implements the backends.Identity interface.
 // This operation is not de-duplicated: if you issue it twice, it will not reuse the previous instance.
 func (f *Function) Identity(operandOp backends.Value) (backends.Value, error) {
-	inputs, err := f.builder.checkOps("Reshape", operandOp)
+	inputs, err := f.verifyAndCastValues("Reshape", operandOp)
 	if err != nil {
 		return nil, err
 	}
 	operand := inputs[0]
-	node := f.builder.newNode(backends.OpTypeIdentity, operand.shape, operand)
+	node := f.builder.newNode(f, backends.OpTypeIdentity, operand.shape, operand)
 	return node, nil
 }
 
 // Where implements the backends.Builder interface.
 func (f *Function) Where(conditionOp, onTrueOp, onFalseOp backends.Value) (backends.Value, error) {
-	inputs, err := f.builder.checkOps("Where", conditionOp, onTrueOp, onFalseOp)
+	inputs, err := f.verifyAndCastValues("Where", conditionOp, onTrueOp, onFalseOp)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +282,7 @@ func (f *Function) Where(conditionOp, onTrueOp, onFalseOp backends.Value) (backe
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(backends.OpTypeWhere, outputShape, []*Node{condition, onTrue, onFalse}, nil)
+	node, _ := f.getOrCreateNode( backends.OpTypeWhere, outputShape, []*Node{condition, onTrue, onFalse}, nil)
 	return node, nil
 }
 
@@ -185,7 +291,7 @@ func (f *Function) Where(conditionOp, onTrueOp, onFalseOp backends.Value) (backe
 // Notice the backends.Reshape doesn't support auto-scaling dimensions (set to -1), as graph.Reshape does.
 func (f *Function) Reshape(operandOp backends.Value, dims ...int) (backends.Value, error) {
 	opType := backends.OpTypeReshape
-	inputs, err := f.builder.checkOps(opType.String(), operandOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +300,7 @@ func (f *Function) Reshape(operandOp backends.Value, dims ...int) (backends.Valu
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(opType, outputShape, []*Node{operand}, nil)
+	node, _ := f.getOrCreateNode( opType, outputShape, []*Node{operand}, nil)
 	return node, nil
 }
 
@@ -203,7 +309,7 @@ func (f *Function) Reshape(operandOp backends.Value, dims ...int) (backends.Valu
 // The output will have: output.Shape.Dimension[ii] = operand.Shape.Dimension[permutations[i]].
 func (f *Function) Transpose(operandOp backends.Value, permutations ...int) (backends.Value, error) {
 	opType := backends.OpTypeTranspose
-	inputs, err := f.builder.checkOps(opType.String(), operandOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +318,7 @@ func (f *Function) Transpose(operandOp backends.Value, permutations ...int) (bac
 	if err != nil {
 		panic(err)
 	}
-	node, _ := f.builder.getOrCreateNode(opType, outputShape, []*Node{operand}, permutations)
+	node, _ := f.getOrCreateNode( opType, outputShape, []*Node{operand}, permutations)
 	return node, nil
 }
 
@@ -227,7 +333,7 @@ func (f *Function) Transpose(operandOp backends.Value, permutations ...int) (bac
 //	output[i0, ..., iN, j0, ..., jM] = operand[j0, ..., jM]
 func (f *Function) Broadcast(operandOp backends.Value, prefixDims ...int) (backends.Value, error) {
 	opType := backends.OpTypeBroadcast
-	inputs, err := f.builder.checkOps(opType.String(), operandOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +342,7 @@ func (f *Function) Broadcast(operandOp backends.Value, prefixDims ...int) (backe
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(opType, outputShape, []*Node{operand}, prefixDims)
+	node, _ := f.getOrCreateNode( opType, outputShape, []*Node{operand}, prefixDims)
 	return node, nil
 }
 
@@ -265,7 +371,7 @@ func (f *Function) BroadcastInDim(
 	broadcastAxes []int,
 ) (backends.Value, error) {
 	opType := backends.OpTypeBroadcastInDim
-	inputs, err := f.builder.checkOps(opType.String(), operandOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +380,7 @@ func (f *Function) BroadcastInDim(
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(opType, outputShape, []*Node{operand}, broadcastAxes)
+	node, _ := f.getOrCreateNode( opType, outputShape, []*Node{operand}, broadcastAxes)
 	return node, nil
 }
 
@@ -329,7 +435,7 @@ func (f *Function) ReduceLogicalXor(operandOp backends.Value, axis ...int) (back
 }
 
 func (f *Function) reduceImpls(reduceOpType backends.OpType, operandOp backends.Value, axes ...int) (backends.Value, error) {
-	inputs, err := f.builder.checkOps("ReduceOp", operandOp)
+	inputs, err := f.verifyAndCastValues("ReduceOp", operandOp)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +449,7 @@ func (f *Function) reduceImpls(reduceOpType backends.OpType, operandOp backends.
 		return nil, err
 	}
 	outputShape.DType = operand.shape.DType
-	node, _ := f.builder.getOrCreateNode(reduceOpType, outputShape, []*Node{operand}, axes)
+	node, _ := f.getOrCreateNode( reduceOpType, outputShape, []*Node{operand}, axes)
 	return node, nil
 }
 
@@ -356,7 +462,7 @@ func (f *Function) Gather(
 	indicesAreSorted bool,
 ) (backends.Value, error) {
 	opType := backends.OpTypeGather
-	inputs, err := f.builder.checkOps(opType.String(), operandOp, startIndicesOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), operandOp, startIndicesOp)
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +488,7 @@ func (f *Function) Gather(
 		sliceSizes,
 		indicesAreSorted,
 	}
-	node, _ := f.builder.getOrCreateNode(opType, shape, []*Node{operand, startIndices}, data)
+	node, _ := f.getOrCreateNode( opType, shape, []*Node{operand, startIndices}, data)
 	return node, nil
 }
 
@@ -394,7 +500,7 @@ func (f *Function) Concatenate(axis int, operandOps ...backends.Value) (backends
 	if len(operandOps) == 0 {
 		return nil, errors.Errorf("Concatenate requires at least one input tensor")
 	}
-	operands, err := f.builder.checkOps("Concatenate", operandOps...)
+	operands, err := f.verifyAndCastValues("Concatenate", operandOps...)
 	if err != nil {
 		return nil, err
 	}
@@ -408,14 +514,14 @@ func (f *Function) Concatenate(axis int, operandOps ...backends.Value) (backends
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(backends.OpTypeConcatenate, outputShape, operands, axis)
+	node, _ := f.getOrCreateNode( backends.OpTypeConcatenate, outputShape, operands, axis)
 	return node, nil
 }
 
 // ConvertDType converts operandOp to the given dtype. It implements the backends.Builder interface.
 func (f *Function) ConvertDType(operandOp backends.Value, dtype dtypes.DType) (backends.Value, error) {
 	opType := backends.OpTypeConvertDType
-	inputs, err := f.builder.checkOps(opType.String(), operandOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +532,7 @@ func (f *Function) ConvertDType(operandOp backends.Value, dtype dtypes.DType) (b
 	}
 	outputShape := operand.shape.Clone()
 	outputShape.DType = dtype
-	node, _ := f.builder.getOrCreateNode(opType, outputShape, []*Node{operand}, nil)
+	node, _ := f.getOrCreateNode( opType, outputShape, []*Node{operand}, nil)
 	return node, nil
 }
 
@@ -501,7 +607,7 @@ func (f *Function) scatterImpls(
 	indicesAreSorted, uniqueIndices bool,
 ) (
 	backends.Value, error) {
-	inputs, err := f.builder.checkOps(scatterOpType.String(), operandOp, scatterIndicesOp, updatesOp)
+	inputs, err := f.verifyAndCastValues(scatterOpType.String(), operandOp, scatterIndicesOp, updatesOp)
 	if err != nil {
 		return nil, err
 	}
@@ -529,7 +635,7 @@ func (f *Function) scatterImpls(
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	node, _ := f.builder.getOrCreateNode(scatterOpType, outputShape, []*Node{operand, indices, updates}, data)
+	node, _ := f.getOrCreateNode( scatterOpType, outputShape, []*Node{operand, indices, updates}, data)
 	return node, nil
 }
 
@@ -544,7 +650,7 @@ func (f *Function) scatterImpls(
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={5}, strides={2}) -> {2, 4}
 func (f *Function) Slice(operandOp backends.Value, starts, limits, strides []int) (backends.Value, error) {
 	opType := backends.OpTypeSlice
-	inputs, err := f.builder.checkOps(opType.String(), operandOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
 	}
@@ -558,7 +664,7 @@ func (f *Function) Slice(operandOp backends.Value, starts, limits, strides []int
 		limits,
 		strides,
 	}
-	node, _ := f.builder.getOrCreateNode(opType, outputShape, []*Node{operand}, data)
+	node, _ := f.getOrCreateNode( opType, outputShape, []*Node{operand}, data)
 	return node, nil
 }
 
@@ -569,7 +675,7 @@ func (f *Function) Slice(operandOp backends.Value, starts, limits, strides []int
 // It returns the new state of the RNG and the generated values (with random bits) with the given shape.
 func (f *Function) RNGBitGenerator(stateOp backends.Value, shape shapes.Shape) (newState, values backends.Value, err error) {
 	opType := backends.OpTypeRNGBitGenerator
-	inputs, err := f.builder.checkOps(opType.String(), stateOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), stateOp)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -586,7 +692,7 @@ func (f *Function) RNGBitGenerator(stateOp backends.Value, shape shapes.Shape) (
 		state.shape.Clone(),
 		shape.Clone(),
 	}
-	node := f.builder.newMultiOutputsNode(opType, outputShapes, state)
+	node := f.builder.newMultiOutputsNode(f, opType, outputShapes, state)
 	newState = node.multiOutputsNodes[0]
 	values = node.multiOutputsNodes[1]
 	return
@@ -607,7 +713,7 @@ func (f *Function) ArgMinMax(
 	isMin bool,
 ) (backends.Value, error) {
 	opType := backends.OpTypeArgMinMax
-	inputs, err := f.builder.checkOps(opType.String(), operandOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
 	}
@@ -620,7 +726,7 @@ func (f *Function) ArgMinMax(
 		axis,
 		isMin,
 	}
-	node, _ := f.builder.getOrCreateNode(opType, outputShape, []*Node{operand}, data)
+	node, _ := f.getOrCreateNode( opType, outputShape, []*Node{operand}, data)
 	return node, nil
 }
 
@@ -637,7 +743,7 @@ func (f *Function) ReduceWindow(
 	paddings [][2]int,
 ) (backends.Value, error) {
 	opType := backends.OpTypeReduceWindow
-	inputs, err := f.builder.checkOps(opType.String(), operandOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
 	}
@@ -661,7 +767,7 @@ func (f *Function) ReduceWindow(
 		windowDilations:  windowDilations,
 		paddings:         paddings,
 	}
-	node, _ := f.builder.getOrCreateNode(opType, outputShape, []*Node{operand}, data)
+	node, _ := f.getOrCreateNode( opType, outputShape, []*Node{operand}, data)
 	return node, nil
 }
 
@@ -777,7 +883,7 @@ func (f *Function) Erf(operand backends.Value) (backends.Value, error) {
 // IsFinite implements the backends.Builder interface.
 func (f *Function) IsFinite(operandOp backends.Value) (backends.Value, error) {
 	opType := backends.OpTypeIsFinite
-	inputs, err := f.builder.checkOps(opType.String(), operandOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
 	}
@@ -793,13 +899,13 @@ func (f *Function) IsFinite(operandOp backends.Value) (backends.Value, error) {
 	// Output will have the same shape but for the dtype that is bool.
 	shape := operand.shape.Clone()
 	shape.DType = dtypes.Bool
-	node, _ := f.builder.getOrCreateNode(opType, shape, []*Node{operand}, nil)
+	node, _ := f.getOrCreateNode( opType, shape, []*Node{operand}, nil)
 	return node, nil
 }
 
 // addUnaryOp adds a generic binary op.
 func (f *Function) addUnaryOp(opType backends.OpType, operandOp backends.Value) (*Node, error) {
-	inputs, err := f.builder.checkOps(opType.String(), operandOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
 	}
@@ -809,7 +915,7 @@ func (f *Function) addUnaryOp(opType backends.OpType, operandOp backends.Value) 
 
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(opType, shape, []*Node{operand}, nil)
+	node, _ := f.getOrCreateNode( opType, shape, []*Node{operand}, nil)
 	return node, nil
 }
 
@@ -917,7 +1023,7 @@ func (f *Function) LessThan(lhsOp, rhsOp backends.Value) (backends.Value, error)
 
 // addBinaryOp adds a generic binary op.
 func (f *Function) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Value) (*Node, error) {
-	inputs, err := f.builder.checkOps(opType.String(), lhsOp, rhsOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
 	}
@@ -926,13 +1032,13 @@ func (f *Function) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Val
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(opType, shape, []*Node{lhs, rhs}, nil)
+	node, _ := f.getOrCreateNode( opType, shape, []*Node{lhs, rhs}, nil)
 	return node, nil
 }
 
 // addComparisonOp adds a generic comparison binary op.
 func (f *Function) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.Value) (*Node, error) {
-	inputs, err := f.builder.checkOps(opType.String(), lhsOp, rhsOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
 	}
@@ -941,7 +1047,7 @@ func (f *Function) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(opType, shape, []*Node{lhs, rhs}, nil)
+	node, _ := f.getOrCreateNode( opType, shape, []*Node{lhs, rhs}, nil)
 	return node, nil
 }
 
@@ -975,3 +1081,4 @@ func (f *Function) AllReduce(operands []backends.Value, reductionType backends.R
 		notimplemented.NotImplementedError,
 		"AllReduce not supported for %q builder", BackendName)
 }
+
