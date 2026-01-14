@@ -189,27 +189,153 @@ func TestClosureFromNamedFunction(t *testing.T) {
 	require.Equal(t, namedFn, closure.Parent())
 }
 
-// TestControlFlowOpsNotImplemented tests that control flow ops return not implemented errors.
-func TestControlFlowOpsNotImplemented(t *testing.T) {
-	builder := backend.Builder("test_control_flow")
+// TestIfOperation tests the If control flow operation.
+func TestIfOperation(t *testing.T) {
+	builder := backend.Builder("test_if")
 	mainFn := builder.Main()
 
-	// Create a simple closure for testing
-	closure, err := mainFn.Closure()
+	// Create true branch: returns constant 10
+	trueBranch, err := mainFn.Closure()
+	require.NoError(t, err)
+	trueConst, err := trueBranch.Constant([]int32{10})
+	require.NoError(t, err)
+	err = trueBranch.Return([]backends.Value{trueConst}, nil)
 	require.NoError(t, err)
 
-	// Sort should return not implemented
-	_, err = mainFn.Sort(closure, 0, true)
-	require.Error(t, err)
+	// Create false branch: returns constant 20
+	falseBranch, err := mainFn.Closure()
+	require.NoError(t, err)
+	falseConst, err := falseBranch.Constant([]int32{20})
+	require.NoError(t, err)
+	err = falseBranch.Return([]backends.Value{falseConst}, nil)
+	require.NoError(t, err)
 
-	// While should return not implemented
-	_, err = mainFn.While(closure, closure)
-	require.Error(t, err)
+	// Create predicate parameter
+	pred, err := mainFn.Parameter("pred", shapes.Make(dtypes.Bool), nil)
+	require.NoError(t, err)
 
-	// If should return not implemented (need a predicate)
-	pred, _ := mainFn.Constant([]bool{true})
-	_, err = mainFn.If(pred, closure, closure)
-	require.Error(t, err)
+	// Create If operation
+	results, err := mainFn.If(pred, trueBranch, falseBranch)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	// Return the result
+	err = mainFn.Return(results, nil)
+	require.NoError(t, err)
+
+	// Compile and execute with true
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	trueInput := &Buffer{shape: shapes.Make(dtypes.Bool), flat: []bool{true}, valid: true}
+	outputs, err := exec.Execute([]backends.Buffer{trueInput}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	require.Equal(t, []int32{10}, outputs[0].(*Buffer).flat)
+
+	// Execute with false
+	falseInput := &Buffer{shape: shapes.Make(dtypes.Bool), flat: []bool{false}, valid: true}
+	outputs, err = exec.Execute([]backends.Buffer{falseInput}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	require.Equal(t, []int32{20}, outputs[0].(*Buffer).flat)
+}
+
+// TestWhileOperation tests the While control flow operation.
+func TestWhileOperation(t *testing.T) {
+	builder := backend.Builder("test_while")
+	mainFn := builder.Main()
+
+	// Create condition closure: counter < 5
+	cond, err := mainFn.Closure()
+	require.NoError(t, err)
+	condCounter, err := cond.Parameter("counter", shapes.Make(dtypes.Int32), nil)
+	require.NoError(t, err)
+	condLimit, err := cond.Constant([]int32{5})
+	require.NoError(t, err)
+	condResult, err := cond.LessThan(condCounter, condLimit)
+	require.NoError(t, err)
+	err = cond.Return([]backends.Value{condResult}, nil)
+	require.NoError(t, err)
+
+	// Create body closure: counter + 1
+	body, err := mainFn.Closure()
+	require.NoError(t, err)
+	bodyCounter, err := body.Parameter("counter", shapes.Make(dtypes.Int32), nil)
+	require.NoError(t, err)
+	bodyOne, err := body.Constant([]int32{1})
+	require.NoError(t, err)
+	bodyResult, err := body.Add(bodyCounter, bodyOne)
+	require.NoError(t, err)
+	err = body.Return([]backends.Value{bodyResult}, nil)
+	require.NoError(t, err)
+
+	// Create initial state
+	initCounter, err := mainFn.Constant([]int32{0})
+	require.NoError(t, err)
+
+	// Create While operation
+	results, err := mainFn.While(cond, body, initCounter)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	// Return the result
+	err = mainFn.Return(results, nil)
+	require.NoError(t, err)
+
+	// Compile and execute
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	outputs, err := exec.Execute(nil, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	require.Equal(t, []int32{5}, outputs[0].(*Buffer).flat)
+}
+
+// TestSortOperation tests the Sort control flow operation.
+func TestSortOperation(t *testing.T) {
+	builder := backend.Builder("test_sort")
+	mainFn := builder.Main()
+
+	// Create comparator closure: lhs < rhs (ascending sort)
+	comp, err := mainFn.Closure()
+	require.NoError(t, err)
+	lhs, err := comp.Parameter("lhs", shapes.Make(dtypes.Float32), nil)
+	require.NoError(t, err)
+	rhs, err := comp.Parameter("rhs", shapes.Make(dtypes.Float32), nil)
+	require.NoError(t, err)
+	compResult, err := comp.LessThan(lhs, rhs)
+	require.NoError(t, err)
+	err = comp.Return([]backends.Value{compResult}, nil)
+	require.NoError(t, err)
+
+	// Create input parameter
+	input, err := mainFn.Parameter("input", shapes.Make(dtypes.Float32, 5), nil)
+	require.NoError(t, err)
+
+	// Create Sort operation
+	results, err := mainFn.Sort(comp, 0, false, input)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	// Return the result
+	err = mainFn.Return(results, nil)
+	require.NoError(t, err)
+
+	// Compile and execute
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	inputBuf := &Buffer{
+		shape: shapes.Make(dtypes.Float32, 5),
+		flat:  []float32{5.0, 2.0, 8.0, 1.0, 3.0},
+		valid: true,
+	}
+	outputs, err := exec.Execute([]backends.Buffer{inputBuf}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	require.Equal(t, []float32{1.0, 2.0, 3.0, 5.0, 8.0}, outputs[0].(*Buffer).flat)
 }
 
 // TestCallNotImplemented tests that Call returns not implemented error.

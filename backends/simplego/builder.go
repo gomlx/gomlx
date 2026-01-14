@@ -207,6 +207,15 @@ func (b *Builder) newMultiOutputsNode(
 	return node
 }
 
+// MultiOutputValues converts a multi-output node's outputs to []backends.Value.
+func (node *Node) MultiOutputValues() []backends.Value {
+	outputs := make([]backends.Value, len(node.multiOutputsNodes))
+	for i, outNode := range node.multiOutputsNodes {
+		outputs[i] = outNode
+	}
+	return outputs
+}
+
 // IsMultiOutputs returns whether this node yields multiple outputs.
 func (n *Node) IsMultiOutputs() bool {
 	return len(n.multiOutputsShapes) > 0

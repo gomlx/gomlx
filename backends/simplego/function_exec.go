@@ -124,11 +124,11 @@ type funcExecBuffers struct {
 // Execute runs the compiled function with the given inputs.
 // The inputs must match the function's parameters in count and shape.
 func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate []bool) ([]*Buffer, error) {
-	// Validate input count - use builder.inputs for main function compatibility
-	builderInputs := fe.function.builder.inputs
-	if len(inputs) != len(builderInputs) {
+	// Use function's parameters (not builder.inputs) for proper closure support
+	funcParams := fe.function.parameters
+	if len(inputs) != len(funcParams) {
 		return nil, errors.Errorf("function expects %d inputs, got %d",
-			len(builderInputs), len(inputs))
+			len(funcParams), len(inputs))
 	}
 
 	// donate defaults to false
@@ -146,8 +146,7 @@ func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate
 	}
 
 	// Set up parameters from inputs using builderIdx directly
-	// Use builder.inputs to match the order inputs are passed from Executable.Execute
-	for i, inputNode := range builderInputs {
+	for i, inputNode := range funcParams {
 		inputIdx := inputNode.builderIdx
 		execBuf.results[inputIdx] = inputs[i]
 		execBuf.owned[inputIdx] = donate[i]

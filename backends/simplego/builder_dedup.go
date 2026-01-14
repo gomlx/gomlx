@@ -109,6 +109,12 @@ func (b *Builder) getOrCreateNode(f *Function, opType backends.OpType, shape sha
 	key := makeNodeDedupKey(opType, inputs)
 	candidates := b.nodeDedup[key]
 	for _, candidate := range candidates {
+		// Only deduplicate within the same function scope.
+		// Deduplicating across functions would cause "different function scope" errors
+		// when the node is used in a closure.
+		if candidate.function != f {
+			continue
+		}
 		if !slices.Equal(candidate.inputs, inputs) {
 			continue
 		}
