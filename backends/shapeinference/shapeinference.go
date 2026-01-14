@@ -222,10 +222,10 @@ func BinaryOp(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (output s
 func binaryOpImpl(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (output shapes.Shape, err error) {
 	// Trivial cases: if one of the sides is a scalar, return the other side shape.
 	if lhsShape.IsScalar() {
-		return rhsShape, nil
+		return rhsShape.Clone(), nil
 	}
 	if rhsShape.IsScalar() {
-		return lhsShape, nil
+		return lhsShape.Clone(), nil
 	}
 
 	// Other cases, either the dimensions match or one of them is 1.
@@ -238,12 +238,39 @@ func binaryOpImpl(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (outp
 	for axis := range output.Rank() {
 		lhsDim := lhsShape.Dimensions[axis]
 		rhsDim := rhsShape.Dimensions[axis]
-		if lhsDim != 1 && rhsDim != 1 && lhsDim != rhsDim {
+
+		// Handle dynamic dimensions (DimDynamic = -1)
+		// Dynamic dimensions are compatible with any concrete dimension
+		if lhsDim == shapes.DimDynamic || rhsDim == shapes.DimDynamic {
+			// If one is dynamic, take the concrete one; if both dynamic, stay dynamic
+			if lhsDim == shapes.DimDynamic && rhsDim != shapes.DimDynamic {
+				output.Dimensions[axis] = rhsDim
+			} else if rhsDim == shapes.DimDynamic && lhsDim != shapes.DimDynamic {
+				output.Dimensions[axis] = lhsDim
+			}
+			// else: both dynamic, keep DimDynamic (already in output from Clone)
+		} else if lhsDim != 1 && rhsDim != 1 && lhsDim != rhsDim {
 			err = errors.Errorf("dimension of axis #%d doesn't match and cannot be broadcast for BinaryOp (%s), got shapes %s and %s",
 				axis, opType, lhsShape, rhsShape)
 			return
+		} else {
+			output.Dimensions[axis] = max(lhsDim, rhsDim)
 		}
-		output.Dimensions[axis] = max(lhsDim, rhsDim)
+
+		// Unify axis names
+		lhsName := lhsShape.AxisName(axis)
+		rhsName := rhsShape.AxisName(axis)
+		unifiedName, unifyErr := shapes.UnifyAxisName(lhsName, rhsName)
+		if unifyErr != nil {
+			err = errors.Errorf("axis %d for BinaryOp (%s): %v", axis, opType, unifyErr)
+			return
+		}
+		if unifiedName != "" {
+			if output.AxisNames == nil {
+				output.AxisNames = make([]string, output.Rank())
+			}
+			output.AxisNames[axis] = unifiedName
+		}
 	}
 	return
 }
@@ -346,10 +373,10 @@ func WhereOp(condition, onTrue, onFalse shapes.Shape) (output shapes.Shape, err 
 		return
 	}
 
-	output = onTrue
-	if output.IsScalar() {
-		output = onFalse
-		if output.IsScalar() && !condition.IsScalar() {
+	output = onTrue.Clone()
+	if onTrue.IsScalar() {
+		output = onFalse.Clone()
+		if onFalse.IsScalar() && !condition.IsScalar() {
 			output = condition.Clone()
 			output.DType = onTrue.DType
 		}
@@ -359,6 +386,25 @@ func WhereOp(condition, onTrue, onFalse shapes.Shape) (output shapes.Shape, err 
 		err = errors.Errorf("condition for Where() must either be a scalar or match the output shape (not the DType), instead got shapes condition=%s, onTrue=%s and onFalse=%s",
 			condition, onTrue, onFalse)
 		return
+	}
+
+	// Unify axis names from onTrue and onFalse (both non-scalar)
+	if !onTrue.IsScalar() && !onFalse.IsScalar() {
+		for axis := range output.Rank() {
+			trueName := onTrue.AxisName(axis)
+			falseName := onFalse.AxisName(axis)
+			unifiedName, unifyErr := shapes.UnifyAxisName(trueName, falseName)
+			if unifyErr != nil {
+				err = errors.Errorf("axis %d for Where(): %v", axis, unifyErr)
+				return
+			}
+			if unifiedName != "" {
+				if output.AxisNames == nil {
+					output.AxisNames = make([]string, output.Rank())
+				}
+				output.AxisNames[axis] = unifiedName
+			}
+		}
 	}
 
 	return
@@ -413,6 +459,15 @@ func TransposeOp(operand shapes.Shape, permutations []int) (output shapes.Shape,
 		srcAxis := permutations[axis]
 		output.Dimensions[axis] = operand.Dimensions[srcAxis]
 	}
+
+	// Permute axis names along with dimensions
+	if operand.HasNamedAxes() {
+		output.AxisNames = make([]string, rank)
+		for axis := range output.Dimensions {
+			srcAxis := permutations[axis]
+			output.AxisNames[axis] = operand.AxisName(srcAxis)
+		}
+	}
 	return
 }
 
@@ -423,7 +478,7 @@ func BroadcastOp(operand shapes.Shape, prefixDims []int) (output shapes.Shape, e
 		return
 	}
 	if len(prefixDims) == 0 {
-		return operand, nil
+		return operand.Clone(), nil
 	}
 	for _, dim := range prefixDims {
 		if dim <= 0 {
@@ -435,6 +490,16 @@ func BroadcastOp(operand shapes.Shape, prefixDims []int) (output shapes.Shape, e
 	output.Dimensions = make([]int, len(prefixDims)+operand.Rank())
 	copy(output.Dimensions, prefixDims)
 	copy(output.Dimensions[len(prefixDims):], operand.Dimensions)
+
+	// Prepend empty names for prefix dims, preserve operand's axis names
+	if operand.HasNamedAxes() {
+		output.AxisNames = make([]string, len(output.Dimensions))
+		// First len(prefixDims) entries are empty strings (broadcast dims have no names)
+		// Copy operand's axis names to the suffix
+		for i := range operand.Rank() {
+			output.AxisNames[len(prefixDims)+i] = operand.AxisName(i)
+		}
+	}
 	return
 }
 
@@ -470,7 +535,7 @@ func BroadcastInDimOp(operand, outputShape shapes.Shape, broadcastAxes []int) er
 // ReduceOp works for the ReduceMax, ReduceMin, ReduceSum and ReduceProduct ops.
 func ReduceOp(operand shapes.Shape, axes []int) (output shapes.Shape, err error) {
 	if len(axes) == 0 {
-		return operand, nil
+		return operand.Clone(), nil
 	}
 	output = shapes.Make(operand.DType)
 	outputRank := operand.Rank() - len(axes)
@@ -483,10 +548,25 @@ func ReduceOp(operand shapes.Shape, axes []int) (output shapes.Shape, err error)
 			}
 		}
 		axesSet := sets.MakeWith(axes...)
+
+		// Also preserve axis names for non-reduced axes
+		var axisNames []string
+		if operand.HasNamedAxes() {
+			axisNames = make([]string, 0, outputRank)
+		}
+
 		for axis, dim := range operand.Dimensions {
 			if !axesSet.Has(axis) {
 				output.Dimensions = append(output.Dimensions, dim)
+				if axisNames != nil {
+					axisNames = append(axisNames, operand.AxisName(axis))
+				}
 			}
+		}
+
+		// Set axis names if any non-empty names exist
+		if axisNames != nil && slices.ContainsFunc(axisNames, func(s string) bool { return s != "" }) {
+			output.AxisNames = axisNames
 		}
 	}
 	return
@@ -628,11 +708,28 @@ func ConcatenateOp(inputs []shapes.Shape, axis int) (output shapes.Shape, err er
 		return shapes.Invalid(), errors.Errorf("invalid shape %s for first input of ConcatenateOp", firstShape)
 	}
 	if len(inputs) == 1 {
-		return firstShape, nil
+		return firstShape.Clone(), nil
 	}
 
 	if axis < 0 || axis >= rank {
 		return shapes.Invalid(), errors.Errorf("invalid concatenation axis %d for shapes with rank %d", axis, rank)
+	}
+
+	// Track unified axis names
+	var axisNames []string
+	anyHasNames := false
+	for _, inp := range inputs {
+		if inp.HasNamedAxes() {
+			anyHasNames = true
+			break
+		}
+	}
+	if anyHasNames {
+		axisNames = make([]string, rank)
+		// Copy from first shape
+		for d := range rank {
+			axisNames[d] = firstShape.AxisName(d)
+		}
 	}
 
 	// Validate further inputs and accumulate the concatenation axis size.
@@ -652,14 +749,40 @@ func ConcatenateOp(inputs []shapes.Shape, axis int) (output shapes.Shape, err er
 
 		for d := range rank {
 			if d == axis {
-				output.Dimensions[d] += currentShape.Dimensions[d]
+				// Handle dynamic dimensions for concatenation axis
+				if output.Dimensions[d] == shapes.DimDynamic || currentShape.Dimensions[d] == shapes.DimDynamic {
+					output.Dimensions[d] = shapes.DimDynamic // Result is dynamic if any input is dynamic
+				} else {
+					output.Dimensions[d] += currentShape.Dimensions[d]
+				}
 			} else {
-				if currentShape.Dimensions[d] != output.Dimensions[d] {
+				// Handle dynamic dimensions for non-concatenation axes
+				if output.Dimensions[d] == shapes.DimDynamic || currentShape.Dimensions[d] == shapes.DimDynamic {
+					// If one is dynamic, take the concrete one; if both dynamic, stay dynamic
+					if output.Dimensions[d] == shapes.DimDynamic && currentShape.Dimensions[d] != shapes.DimDynamic {
+						output.Dimensions[d] = currentShape.Dimensions[d]
+					}
+				} else if currentShape.Dimensions[d] != output.Dimensions[d] {
 					return shapes.Invalid(), errors.Errorf("mismatched dimensions for ConcatenateOp at axis %d (non-concatenation axis): input #0 has %d, input #%d has %d",
 						d, output.Dimensions[d], i, currentShape.Dimensions[d])
 				}
 			}
+
+			// Unify axis names
+			if axisNames != nil {
+				currentName := currentShape.AxisName(d)
+				unifiedName, unifyErr := shapes.UnifyAxisName(axisNames[d], currentName)
+				if unifyErr != nil {
+					return shapes.Invalid(), errors.Errorf("axis %d for ConcatenateOp: %v (input #%d)", d, unifyErr, i)
+				}
+				axisNames[d] = unifiedName
+			}
 		}
+	}
+
+	// Set axis names on output if any non-empty names exist
+	if axisNames != nil && slices.ContainsFunc(axisNames, func(s string) bool { return s != "" }) {
+		output.AxisNames = axisNames
 	}
 	return output, nil
 }
@@ -741,7 +864,7 @@ func ScatterOp(operand, indices, updates shapes.Shape, indexVectorAxis int, upda
 				updatesAxis, updates.Dimensions[updatesAxis], operandAxis, operand.Dimensions[operandAxis])
 		}
 	}
-	return operand, nil
+	return operand.Clone(), nil
 }
 
 // SliceOp calculates the output shape for a Slice operation.
@@ -769,6 +892,11 @@ func SliceOp(operand shapes.Shape, starts, limits, strides []int) (output shapes
 		Dimensions: make([]int, rank),
 	}
 
+	// Preserve axis names from operand
+	if operand.HasNamedAxes() {
+		output.AxisNames = slices.Clone(operand.AxisNames)
+	}
+
 	for axis := range rank {
 		start, limit, stride := starts[axis], limits[axis], strides[axis]
 		dimSize := operand.Dimensions[axis]
@@ -776,6 +904,11 @@ func SliceOp(operand shapes.Shape, starts, limits, strides []int) (output shapes
 		if stride <= 0 {
 			return shapes.Invalid(), errors.Errorf("%s: stride must be positive, but got stride[%d]=%d for operand shape %s",
 				opName, axis, stride, operand)
+		}
+		// Handle dynamic dimensions - can't validate bounds for dynamic dims
+		if dimSize == shapes.DimDynamic {
+			output.Dimensions[axis] = shapes.DimDynamic
+			continue
 		}
 		if start < 0 || start > dimSize {
 			return shapes.Invalid(), errors.Errorf("%s: start index %d is out of bounds for axis %d with size %d (operand shape %s)",
@@ -817,6 +950,20 @@ func ArgMinMaxOp(operand shapes.Shape, axis int, outputDType dtypes.DType) (outp
 	newDims := slices.Clone(operand.Dimensions)
 	newDims = slices.Delete(newDims, axis, axis+1)
 	output = shapes.Make(outputDType, newDims...)
+
+	// Preserve axis names for non-reduced axes
+	if operand.HasNamedAxes() {
+		var axisNames []string
+		for i := range operand.Rank() {
+			if i != axis {
+				axisNames = append(axisNames, operand.AxisName(i))
+			}
+		}
+		// Only set if there are non-empty names
+		if slices.ContainsFunc(axisNames, func(s string) bool { return s != "" }) {
+			output.AxisNames = axisNames
+		}
+	}
 	return
 }
 

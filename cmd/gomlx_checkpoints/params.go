@@ -4,11 +4,11 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/support/sets"
-	"golang.org/x/exp/maps"
 )
 
 func Params(ctxs, scopedCtxs []*context.Context, names []string) {
@@ -38,8 +38,7 @@ func Params(ctxs, scopedCtxs []*context.Context, names []string) {
 			scopeKeySet.Insert(scopeKey{Scope: scope, Key: key})
 		})
 	}
-	scopeKeys := maps.Keys(scopeKeySet)
-	slices.SortFunc(scopeKeys, func(a scopeKey, b scopeKey) int {
+	scopeKeys := slices.SortedFunc(maps.Keys(scopeKeySet), func(a scopeKey, b scopeKey) int {
 		if a.Scope < b.Scope {
 			return -1
 		}

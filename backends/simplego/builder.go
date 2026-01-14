@@ -56,10 +56,23 @@ func (b *Builder) Main() backends.Function {
 }
 
 // NewFunction creates a new named function within this builder.
+// Named functions can be called with Call() and are independent of the main function.
 func (b *Builder) NewFunction(name string) (backends.Function, error) {
-	return nil, errors.Wrapf(
-		notimplemented.NotImplementedError,
-		"sub-functions not supported for %q builder", BackendName)
+	if b == nil {
+		return nil, errors.Errorf("Builder is nil")
+	}
+	if b.compiled {
+		return nil, errors.Errorf("cannot create new function, builder has already been compiled")
+	}
+	if name == "" {
+		return nil, errors.Errorf("function name cannot be empty")
+	}
+	f := &Function{
+		builder: b,
+		name:    name,
+		parent:  nil, // Top-level functions have no parent
+	}
+	return f, nil
 }
 
 // Compile implements backends.Builder.
@@ -98,8 +111,17 @@ func (b *Builder) Compile() (backends.Executable, error) {
 			)
 		}
 	}
+
+	// Update mainFn outputs (in case duplicates were handled) and recompile
+	b.mainFn.outputs = b.outputs
+	mainFnExec, err := newFunctionExecutable(b.mainFn)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed to compile main function")
+	}
+	b.mainFn.compiled = mainFnExec
+
 	b.compiled = true
-	return newExecutable(b), nil
+	return newExecutable(b, mainFnExec), nil
 }
 
 // Finalize immediately release the resources associated with the Builder.
@@ -121,6 +143,10 @@ type Node struct {
 	shape   shapes.Shape
 	builder *Builder
 
+	// function is the function in which this node was created.
+	// This is used to detect cross-function node usage.
+	function *Function
+
 	// multiOutputsShapes are set for a few specialized nodes.
 	// For most nodes this is set to nil.
 	multiOutputsShapes []shapes.Shape
@@ -134,15 +160,17 @@ type Node struct {
 
 // newNode adds a new node of the given opType and shape to the Builder graph.
 // It's used by the other ops when creating new nodes.
+// The function parameter tracks which function this node was created in.
 //
 // Use instead getOrCreateNode instead.
-func (b *Builder) newNode(opType backends.OpType, shape shapes.Shape, inputs ...*Node) *Node {
+func (b *Builder) newNode(f *Function, opType backends.OpType, shape shapes.Shape, inputs ...*Node) *Node {
 	n := &Node{
 		builder:    b,
 		opType:     opType,
 		builderIdx: len(b.nodes),
 		shape:      shape,
 		inputs:     slices.Clone(inputs),
+		function:   f,
 	}
 	b.nodes = append(b.nodes, n)
 	return n
@@ -151,14 +179,16 @@ func (b *Builder) newNode(opType backends.OpType, shape shapes.Shape, inputs ...
 // newMultiOutputsNode create the multi-outputs node, and its "select nodes", one per output.
 // The node.multiOutputsNodes will be set with the individual outputs and can be used by the Builder to return
 // to the user.
+// The function parameter tracks which function this node was created in.
 //
 // Note: no de-duplication of multi-output nodes.
 func (b *Builder) newMultiOutputsNode(
+	f *Function,
 	opType backends.OpType,
 	outputShapes []shapes.Shape,
 	inputs ...*Node,
 ) (node *Node) {
-	node = b.newNode(opType, shapes.Invalid(), inputs...)
+	node = b.newNode(f, opType, shapes.Invalid(), inputs...)
 	node.multiOutputsShapes = outputShapes
 	node.multiOutputsNodes = make([]*Node, len(outputShapes))
 	for idx, shape := range outputShapes {
@@ -170,10 +200,20 @@ func (b *Builder) newMultiOutputsNode(
 			inputs:             []*Node{node},
 			isNodeSelectOutput: true,
 			selectOutputIdx:    idx,
+			function:           f,
 		}
 		b.nodes = append(b.nodes, node.multiOutputsNodes[idx])
 	}
 	return node
+}
+
+// MultiOutputValues converts a multi-output node's outputs to []backends.Value.
+func (node *Node) MultiOutputValues() []backends.Value {
+	outputs := make([]backends.Value, len(node.multiOutputsNodes))
+	for i, outNode := range node.multiOutputsNodes {
+		outputs[i] = outNode
+	}
+	return outputs
 }
 
 // IsMultiOutputs returns whether this node yields multiple outputs.
@@ -255,7 +295,8 @@ func (b *Builder) addUnaryOp(opType backends.OpType, operandOp backends.Value) (
 
 		return nil, err
 	}
-	node, _ := b.getOrCreateNode(opType, shape, []*Node{operand}, nil)
+	// Pass nil to derive function from inputs (uses deepest function from input nodes).
+	node, _ := b.getOrCreateNode(nil, opType, shape, []*Node{operand}, nil)
 	return node, nil
 }
 
@@ -270,7 +311,8 @@ func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Valu
 	if err != nil {
 		return nil, err
 	}
-	node, _ := b.getOrCreateNode(opType, shape, []*Node{lhs, rhs}, nil)
+	// Pass nil to derive function from inputs (uses deepest function from input nodes).
+	node, _ := b.getOrCreateNode(nil, opType, shape, []*Node{lhs, rhs}, nil)
 	return node, nil
 }
 
@@ -285,6 +327,7 @@ func (b *Builder) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.
 	if err != nil {
 		return nil, err
 	}
-	node, _ := b.getOrCreateNode(opType, shape, []*Node{lhs, rhs}, nil)
+	// Pass nil to derive function from inputs (uses deepest function from input nodes).
+	node, _ := b.getOrCreateNode(nil, opType, shape, []*Node{lhs, rhs}, nil)
 	return node, nil
 }
