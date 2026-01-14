@@ -142,11 +142,10 @@ func init() {
 // This is the generalized version that works for both LHS and RHS operands with any shape.
 //
 // Parameters:
-//   - f: the function in which this node is created
 //   - input: the node to block
 //   - contractingAxes, batchAxes: axes from the original tensor shape
 //   - batchSize, axesASize, axesBSize: normalized sizes
-func (b *Builder) blockForDotGeneral(f *Function, input *Node,
+func (f *Function) blockForDotGeneral(input *Node,
 	contractingAxes, batchAxes []int,
 	batchSize, axesASize, axesBSize int) *Node {
 
@@ -164,7 +163,7 @@ func (b *Builder) blockForDotGeneral(f *Function, input *Node,
 		batchAxes:       slices.Clone(batchAxes),
 	}
 
-	blocked, _ := b.getOrCreateNode(f, backends.OpTypeBlockForDotGeneral, blockedShape, []*Node{input}, data)
+	blocked, _ := f.getOrCreateNode(backends.OpTypeBlockForDotGeneral, blockedShape, []*Node{input}, data)
 	return blocked
 }
 

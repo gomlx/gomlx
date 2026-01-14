@@ -85,7 +85,7 @@ func adjustAxisToRank(rank, axis int) (int, error) {
 //
 // See execDotGeneral for the implementation.
 func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Value, rhsContractingAxes, rhsBatchAxes []int) (backends.Value, error) {
-	inputPair, err := f.builder.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
+	inputPair, err := f.verifyAndCastValues(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
 	}
@@ -194,9 +194,9 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	// the blocking is done once and shared.
 	var lhsBlocked, rhsBlocked *Node
 	if params.execPath == blockedPath || params.execPath == checkPath {
-		lhsBlocked = f.builder.blockForDotGeneral(f, lhs, params.lhsContractingAxes, params.lhsBatchAxes,
+		lhsBlocked = f.blockForDotGeneral(lhs, params.lhsContractingAxes, params.lhsBatchAxes,
 			params.batchSize, params.lhsCrossSize, params.contractingSize)
-		rhsBlocked = f.builder.blockForDotGeneral(f, rhs, params.rhsContractingAxes, params.rhsBatchAxes,
+		rhsBlocked = f.blockForDotGeneral(rhs, params.rhsContractingAxes, params.rhsBatchAxes,
 			params.batchSize, params.rhsCrossSize, params.contractingSize)
 	}
 
@@ -211,7 +211,7 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	default:
 		inputs = []*Node{lhs, rhs}
 	}
-	dotGeneral, _ := f.builder.getOrCreateNode(f, backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), inputs, &params)
+	dotGeneral, _ := f.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), inputs, &params)
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))
@@ -376,11 +376,16 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 				return nil, err
 			}
 
-			// Also verify SmallMatMul path for matrices in matmul order (float32 only)
-			if inputDType == dtypes.Float32 && isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
-				params.lhsContractingAxes, params.rhsContractingAxes,
-				params.lhsBatchAxes, params.rhsBatchAxes) {
-				execDotGeneralSmallMatMulFloat32(backend, lhsRaw, rhsRaw, params, output2)
+			// Also verify SmallMatMul path for matrices in matmul order
+			rawDType := lhsRaw.shape.DType
+			if rawDType < MaxDTypes && dotGeneralSmallMatMulDTypeMap.Map[rawDType] != nil &&
+				isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
+					params.lhsContractingAxes, params.rhsContractingAxes,
+					params.lhsBatchAxes, params.rhsBatchAxes) {
+				output2.Zeros()
+				execSmallMatMulFn := dotGeneralSmallMatMulDTypeMap.Get(rawDType).(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
+				// BFloat16/Float16 implementations accumulate in float32 internally but write to native output
+				execSmallMatMulFn(backend, lhsRaw, rhsRaw, params, output2)
 				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
 				if err != nil {
 					backend.putBuffer(output2)
@@ -408,9 +413,13 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		}
 
 	case smallMatMulPath:
-		// SmallMatMul fast path: small float32 matrices in standard [M,K]×[K,N] order.
+		// SmallMatMul fast path: small matrices in standard [M,K]×[K,N] order.
 		// Path was selected at build time based on matrix layout and size.
-		execDotGeneralSmallMatMulFloat32(backend, lhs, rhs, params, output)
+		// Supports all numeric dtypes via DTypeMap registration.
+		// BFloat16/Float16 implementations accumulate in float32 internally but write to native output.
+		dtype := lhs.shape.DType
+		execSmallMatMulFn := dotGeneralSmallMatMulDTypeMap.Get(dtype).(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
+		execSmallMatMulFn(backend, lhs, rhs, params, output)
 		return output, nil
 
 	case normalizedPath:
@@ -462,7 +471,7 @@ func log2int(x int) int {
 // matrix/matrix multiplications.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (f *Function) Dot(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	inputs, err := f.builder.checkOps(backends.OpTypeDot.String(), lhsOp, rhsOp)
+	inputs, err := f.verifyAndCastValues(backends.OpTypeDot.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
 	}

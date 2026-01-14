@@ -100,7 +100,7 @@ func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
-	nodes, err := f.builder.checkOps(name, values...)
+	nodes, err := f.builder.checkValues(name, values...)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func (f *Function) Parameter(name string, shape shapes.Shape, sharding *backends
 		name:     name,
 		inputIdx: len(f.parameters), // Use function-specific parameter index
 	}
-	n, _ := f.builder.getOrCreateNode(f, backends.OpTypeParameter, shape, nil, data)
+	n, _ := f.getOrCreateNode(backends.OpTypeParameter, shape, nil, data)
 	f.parameters = append(f.parameters, n)
 	// Only add to builder.inputs for the main function (non-closures)
 	if f.parent == nil {
@@ -166,7 +166,7 @@ func (f *Function) Parameter(name string, shape shapes.Shape, sharding *backends
 
 // Constant creates a constant in the function with the given flat values and the shape defined by the dimensions.
 func (f *Function) Constant(flat any, dims ...int) (backends.Value, error) {
-	_, err := f.builder.checkOps("Constant")
+	_, err := f.verifyAndCastValues("Constant")
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +188,7 @@ func (f *Function) Constant(flat any, dims ...int) (backends.Value, error) {
 		flat:  flat,
 		valid: true,
 	}
-	n, _ := f.builder.getOrCreateNode(f, backends.OpTypeConstant, shape, nil, data)
+	n, _ := f.getOrCreateNode(backends.OpTypeConstant, shape, nil, data)
 	return n, nil
 }
 
@@ -248,7 +248,7 @@ func (f *Function) Compiled() *FunctionExecutable {
 // on the given axis. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
 // returns [[0 0][1 1]].
 func (f *Function) Iota(shape shapes.Shape, iotaAxis int) (backends.Value, error) {
-	_, err := f.builder.checkOps("Iota")
+	_, err := f.verifyAndCastValues("Iota")
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +258,7 @@ func (f *Function) Iota(shape shapes.Shape, iotaAxis int) (backends.Value, error
 	if iotaAxis < 0 || iotaAxis >= shape.Rank() {
 		return nil, errors.Errorf("Iota: iotaAxis (%d) must be in the range [0,%d)", iotaAxis, shape.Rank()-1)
 	}
-	node, _ := f.builder.getOrCreateNode(f, backends.OpTypeIota, shape, nil, iotaAxis)
+	node, _ := f.getOrCreateNode(backends.OpTypeIota, shape, nil, iotaAxis)
 	return node, nil
 }
 
@@ -285,7 +285,7 @@ func (f *Function) Where(conditionOp, onTrueOp, onFalseOp backends.Value) (backe
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(f, backends.OpTypeWhere, outputShape, []*Node{condition, onTrue, onFalse}, nil)
+	node, _ := f.getOrCreateNode(backends.OpTypeWhere, outputShape, []*Node{condition, onTrue, onFalse}, nil)
 	return node, nil
 }
 
@@ -303,7 +303,7 @@ func (f *Function) Reshape(operandOp backends.Value, dims ...int) (backends.Valu
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(f, opType, outputShape, []*Node{operand}, nil)
+	node, _ := f.getOrCreateNode(opType, outputShape, []*Node{operand}, nil)
 	return node, nil
 }
 
@@ -321,7 +321,7 @@ func (f *Function) Transpose(operandOp backends.Value, permutations ...int) (bac
 	if err != nil {
 		panic(err)
 	}
-	node, _ := f.builder.getOrCreateNode(f, opType, outputShape, []*Node{operand}, permutations)
+	node, _ := f.getOrCreateNode(opType, outputShape, []*Node{operand}, permutations)
 	return node, nil
 }
 
@@ -345,7 +345,7 @@ func (f *Function) Broadcast(operandOp backends.Value, prefixDims ...int) (backe
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(f, opType, outputShape, []*Node{operand}, prefixDims)
+	node, _ := f.getOrCreateNode(opType, outputShape, []*Node{operand}, prefixDims)
 	return node, nil
 }
 
@@ -383,7 +383,7 @@ func (f *Function) BroadcastInDim(
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(f, opType, outputShape, []*Node{operand}, broadcastAxes)
+	node, _ := f.getOrCreateNode(opType, outputShape, []*Node{operand}, broadcastAxes)
 	return node, nil
 }
 
@@ -452,7 +452,7 @@ func (f *Function) reduceImpls(reduceOpType backends.OpType, operandOp backends.
 		return nil, err
 	}
 	outputShape.DType = operand.shape.DType
-	node, _ := f.builder.getOrCreateNode(f, reduceOpType, outputShape, []*Node{operand}, axes)
+	node, _ := f.getOrCreateNode(reduceOpType, outputShape, []*Node{operand}, axes)
 	return node, nil
 }
 
@@ -491,7 +491,7 @@ func (f *Function) Gather(
 		sliceSizes,
 		indicesAreSorted,
 	}
-	node, _ := f.builder.getOrCreateNode(f, opType, shape, []*Node{operand, startIndices}, data)
+	node, _ := f.getOrCreateNode(opType, shape, []*Node{operand, startIndices}, data)
 	return node, nil
 }
 
@@ -517,7 +517,7 @@ func (f *Function) Concatenate(axis int, operandOps ...backends.Value) (backends
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(f, backends.OpTypeConcatenate, outputShape, operands, axis)
+	node, _ := f.getOrCreateNode(backends.OpTypeConcatenate, outputShape, operands, axis)
 	return node, nil
 }
 
@@ -535,7 +535,7 @@ func (f *Function) ConvertDType(operandOp backends.Value, dtype dtypes.DType) (b
 	}
 	outputShape := operand.shape.Clone()
 	outputShape.DType = dtype
-	node, _ := f.builder.getOrCreateNode(f, opType, outputShape, []*Node{operand}, nil)
+	node, _ := f.getOrCreateNode(opType, outputShape, []*Node{operand}, nil)
 	return node, nil
 }
 
@@ -638,7 +638,7 @@ func (f *Function) scatterImpls(
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	node, _ := f.builder.getOrCreateNode(f, scatterOpType, outputShape, []*Node{operand, indices, updates}, data)
+	node, _ := f.getOrCreateNode(scatterOpType, outputShape, []*Node{operand, indices, updates}, data)
 	return node, nil
 }
 
@@ -667,7 +667,7 @@ func (f *Function) Slice(operandOp backends.Value, starts, limits, strides []int
 		limits,
 		strides,
 	}
-	node, _ := f.builder.getOrCreateNode(f, opType, outputShape, []*Node{operand}, data)
+	node, _ := f.getOrCreateNode(opType, outputShape, []*Node{operand}, data)
 	return node, nil
 }
 
@@ -729,7 +729,7 @@ func (f *Function) ArgMinMax(
 		axis,
 		isMin,
 	}
-	node, _ := f.builder.getOrCreateNode(f, opType, outputShape, []*Node{operand}, data)
+	node, _ := f.getOrCreateNode(opType, outputShape, []*Node{operand}, data)
 	return node, nil
 }
 
@@ -770,7 +770,7 @@ func (f *Function) ReduceWindow(
 		windowDilations:  windowDilations,
 		paddings:         paddings,
 	}
-	node, _ := f.builder.getOrCreateNode(f, opType, outputShape, []*Node{operand}, data)
+	node, _ := f.getOrCreateNode(opType, outputShape, []*Node{operand}, data)
 	return node, nil
 }
 
@@ -902,7 +902,7 @@ func (f *Function) IsFinite(operandOp backends.Value) (backends.Value, error) {
 	// Output will have the same shape but for the dtype that is bool.
 	shape := operand.shape.Clone()
 	shape.DType = dtypes.Bool
-	node, _ := f.builder.getOrCreateNode(f, opType, shape, []*Node{operand}, nil)
+	node, _ := f.getOrCreateNode(opType, shape, []*Node{operand}, nil)
 	return node, nil
 }
 
@@ -918,7 +918,7 @@ func (f *Function) addUnaryOp(opType backends.OpType, operandOp backends.Value) 
 
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(f, opType, shape, []*Node{operand}, nil)
+	node, _ := f.getOrCreateNode(opType, shape, []*Node{operand}, nil)
 	return node, nil
 }
 
@@ -1035,7 +1035,7 @@ func (f *Function) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Val
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(f, opType, shape, []*Node{lhs, rhs}, nil)
+	node, _ := f.getOrCreateNode(opType, shape, []*Node{lhs, rhs}, nil)
 	return node, nil
 }
 
@@ -1050,7 +1050,7 @@ func (f *Function) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.builder.getOrCreateNode(f, opType, shape, []*Node{lhs, rhs}, nil)
+	node, _ := f.getOrCreateNode(opType, shape, []*Node{lhs, rhs}, nil)
 	return node, nil
 }
 
@@ -1385,4 +1385,3 @@ func shapesEqualDimensions(a, b shapes.Shape) bool {
 	}
 	return true
 }
-
