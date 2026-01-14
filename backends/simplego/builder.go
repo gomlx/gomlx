@@ -8,7 +8,6 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
-	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
@@ -274,51 +273,3 @@ func checkFlat(flat any) (dtype dtypes.DType, flatLen int, err error) {
 	return dtype, flatLen, nil
 }
 
-// addUnaryOp adds a generic binary op.
-func (b *Builder) addUnaryOp(opType backends.OpType, operandOp backends.Value) (*Node, error) {
-	inputs, err := b.checkOps(opType.String(), operandOp)
-	if err != nil {
-		return nil, err
-	}
-	operand := inputs[0]
-	shape, err := shapeinference.UnaryOp(opType, operand.shape)
-	if err != nil {
-
-		return nil, err
-	}
-	// Pass nil to derive function from inputs (uses deepest function from input nodes).
-	node, _ := b.getOrCreateNode(nil, opType, shape, []*Node{operand}, nil)
-	return node, nil
-}
-
-// addBinaryOp adds a generic binary op.
-func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Value) (*Node, error) {
-	inputs, err := b.checkOps(opType.String(), lhsOp, rhsOp)
-	if err != nil {
-		return nil, err
-	}
-	lhs, rhs := inputs[0], inputs[1]
-	shape, err := shapeinference.BinaryOp(opType, lhs.shape, rhs.shape)
-	if err != nil {
-		return nil, err
-	}
-	// Pass nil to derive function from inputs (uses deepest function from input nodes).
-	node, _ := b.getOrCreateNode(nil, opType, shape, []*Node{lhs, rhs}, nil)
-	return node, nil
-}
-
-// addComparisonOp adds a generic comparison binary op.
-func (b *Builder) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.Value) (*Node, error) {
-	inputs, err := b.checkOps(opType.String(), lhsOp, rhsOp)
-	if err != nil {
-		return nil, err
-	}
-	lhs, rhs := inputs[0], inputs[1]
-	shape, err := shapeinference.ComparisonOp(opType, lhs.shape, rhs.shape)
-	if err != nil {
-		return nil, err
-	}
-	// Pass nil to derive function from inputs (uses deepest function from input nodes).
-	node, _ := b.getOrCreateNode(nil, opType, shape, []*Node{lhs, rhs}, nil)
-	return node, nil
-}
