@@ -47,7 +47,7 @@ func (f *Function) ConvGeneral(inputOp, kernelOp backends.Value, axes backends.C
 	batchGroupCount = max(batchGroupCount, 1)
 
 	opType := backends.OpTypeConvGeneral
-	inputs, err := f.builder.checkOps(opType.String(), inputOp, kernelOp)
+	inputs, err := f.verifyAndCastValues(opType.String(), inputOp, kernelOp)
 	if err != nil {
 		return nil, err
 	}
