@@ -25,7 +25,6 @@ The initial implementation was focused on portability and getting it to work.
 
 But there are many relatively "low-hanging fruits" for optimization, a few obvious items:
 
-* Eliminate common sub-expressions.
 * Pre-calculate constant sub-expressions.
 * Fuse unary ops: it's much faster (for larger data blocks) to loop over the data only once and apply various functions than
   loop over the data many times, each time applying the unary function.
@@ -34,3 +33,4 @@ But there are many relatively "low-hanging fruits" for optimization, a few obvio
 * Parallelization: in-operation, and across operations.
   * Only DotGeneral has been parallelized so far: it is usually the one that consumes most of the time.
 * Use intrinsics/SIMD on platforms that allow it. It was announced as experimental in Go 1.25.
+* ~~Eliminate common sub-expressions.~~
