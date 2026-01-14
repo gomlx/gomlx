@@ -376,11 +376,16 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 				return nil, err
 			}
 
-			// Also verify SmallMatMul path for matrices in matmul order (float32 only)
-			if inputDType == dtypes.Float32 && isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
-				params.lhsContractingAxes, params.rhsContractingAxes,
-				params.lhsBatchAxes, params.rhsBatchAxes) {
-				execDotGeneralSmallMatMulFloat32(backend, lhsRaw, rhsRaw, params, output2)
+			// Also verify SmallMatMul path for matrices in matmul order
+			rawDType := lhsRaw.shape.DType
+			if rawDType < MaxDTypes && dotGeneralSmallMatMulDTypeMap.Map[rawDType] != nil &&
+				isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
+					params.lhsContractingAxes, params.rhsContractingAxes,
+					params.lhsBatchAxes, params.rhsBatchAxes) {
+				output2.Zeros()
+				execSmallMatMulFn := dotGeneralSmallMatMulDTypeMap.Get(rawDType).(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
+				// BFloat16/Float16 implementations accumulate in float32 internally but write to native output
+				execSmallMatMulFn(backend, lhsRaw, rhsRaw, params, output2)
 				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
 				if err != nil {
 					backend.putBuffer(output2)
@@ -408,9 +413,13 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		}
 
 	case smallMatMulPath:
-		// SmallMatMul fast path: small float32 matrices in standard [M,K]×[K,N] order.
+		// SmallMatMul fast path: small matrices in standard [M,K]×[K,N] order.
 		// Path was selected at build time based on matrix layout and size.
-		execDotGeneralSmallMatMulFloat32(backend, lhs, rhs, params, output)
+		// Supports all numeric dtypes via DTypeMap registration.
+		// BFloat16/Float16 implementations accumulate in float32 internally but write to native output.
+		dtype := lhs.shape.DType
+		execSmallMatMulFn := dotGeneralSmallMatMulDTypeMap.Get(dtype).(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
+		execSmallMatMulFn(backend, lhs, rhs, params, output)
 		return output, nil
 
 	case normalizedPath:

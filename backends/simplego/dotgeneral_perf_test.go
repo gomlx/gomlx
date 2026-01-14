@@ -17,6 +17,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/x448/float16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/sets"
@@ -304,6 +305,16 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				}
 				for i := range rhsFlatBF16 {
 					rhsFlatBF16[i] = bfloat16.FromFloat32(float32(i%10 + 1))
+				}
+
+			case dtypes.Float16:
+				lhsFlatF16 := lhsFlatAny.([]float16.Float16)
+				rhsFlatF16 := rhsFlatAny.([]float16.Float16)
+				for i := range lhsFlatF16 {
+					lhsFlatF16[i] = float16.Fromfloat32(float32(i%10 + 1))
+				}
+				for i := range rhsFlatF16 {
+					rhsFlatF16[i] = float16.Fromfloat32(float32(i%10 + 1))
 				}
 			}
 			lhsTensor := must.M1(tensors.FromBuffer(backend, lhsBuffer))

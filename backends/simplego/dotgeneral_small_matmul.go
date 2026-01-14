@@ -79,11 +79,6 @@ func isMatMulOrder(lhsShape, rhsShape shapes.Shape, lhsContractingAxes, rhsContr
 		return false
 	}
 
-	// Only support float32 for SmallMatMul (most common case)
-	if lhsShape.DType != dtypes.Float32 {
-		return false
-	}
-
 	return true
 }
 
@@ -137,10 +132,11 @@ const smallMatMulMaxSize = 256 * 1024 // 256Kb
 
 // dgUseSmallMatMul checks whether the SmallMatMul fast path is beneficial.
 // SmallMatMul skips transpose overhead but has strided RHS access, so it's only
-// beneficial for small float32 matrices in standard [M,K]×[K,N] order.
+// beneficial for small matrices in standard [M,K]×[K,N] order.
+// Supports all numeric dtypes (POD types + BFloat16 + Float16).
 func dgUseSmallMatMul(dtype dtypes.DType, lhsShape, rhsShape shapes.Shape, params *dotGeneralNodeData) bool {
-	// Only support float32 for SmallMatMul (most common case)
-	if dtype != dtypes.Float32 {
+	// Check if dtype has a registered SmallMatMul implementation
+	if dtype >= MaxDTypes || dotGeneralSmallMatMulDTypeMap.Map[dtype] == nil {
 		return false
 	}
 
@@ -197,70 +193,18 @@ func dgUseSmallMatMul(dtype dtypes.DType, lhsShape, rhsShape shapes.Shape, param
 	return true
 }
 
-// execDotGeneralSmallMatMulFloat32 executes float32 matrix multiplication without transpose.
-//
-// Memory layout for row-major tensors [M, K] × [K, N] → [M, N]:
-//
-//	LHS [M, K]: element [m, k] at index m*K + k
-//	  → Row m is CONTIGUOUS: [m*K, m*K+1, ..., m*K+K-1] ✓ Good cache locality
-//
-//	RHS [K, N]: element [k, n] at index k*N + n
-//	  → Column n is STRIDED: [n, N+n, 2N+n, ...] with stride N ✗ Poor cache locality
-//
-//	Output [M, N]: element [m, n] at index m*N + n
-//
-// The strided RHS access is the key limitation of this path. For large K or N,
-// each RHS element access may cause a cache miss. This is why we limit this path
-// to small matrices (see smallMatMulMaxContractingSize).
-//
-// For large matrices, execDotGeneralSmallNormalized transposes RHS to [N, K] form where
-// "row" n (the original column) becomes contiguous, enabling efficient vectorization.
-func execDotGeneralSmallMatMulFloat32(_ *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) {
-	lhsFlat := lhs.flat.([]float32)
-	rhsFlat := rhs.flat.([]float32)
-	outputFlat := output.flat.([]float32)
+// dotGeneralSmallMatMulDTypeMap holds the dtype-specific implementations for SmallMatMul.
+// Generic POD types are registered via simplego_dispatcher (gen_register_dtypes.go).
+// BFloat16/Float16 are registered here with specialized implementations that output to float32.
+var dotGeneralSmallMatMulDTypeMap = NewDTypeMap("DotGeneralSmallMatMul")
 
-	batchSize := params.batchSize
-	lhsCrossSize := params.lhsCrossSize       // M
-	rhsCrossSize := params.rhsCrossSize       // N
-	contractingSize := params.contractingSize // K
+// Auto-generate alternate specialized versions of execDotGeneralSmallMatMul for BFloat16/Float16
+// (these need float32 accumulation for numerical stability)
+//go:generate go run ../../internal/cmd/alternates_generator -base=dotgeneral_small_matmul_alt_base.go -tags=bf16,f16
 
-	lhsBatchStride := lhsCrossSize * contractingSize // M * K elements per batch
-	rhsBatchStride := contractingSize * rhsCrossSize // K * N elements per batch (for [B,K,N] layout)
-	outputBatchStride := lhsCrossSize * rhsCrossSize // M * N elements per batch
-
-	// For row-major RHS [K, N], the stride between elements in the same column is N
-	rhsColStride := rhsCrossSize // N
-
-	for batchIdx := range batchSize {
-		lhsBaseIdx := batchIdx * lhsBatchStride
-		rhsBaseIdx := batchIdx * rhsBatchStride
-		outputBaseIdx := batchIdx * outputBatchStride
-
-		for m := range lhsCrossSize {
-			lhsRowStart := lhsBaseIdx + m*contractingSize
-			outputRowStart := outputBaseIdx + m*rhsCrossSize
-
-			for n := range rhsCrossSize {
-				// For column n in row-major [K,N], element [k,n] is at k*N + n
-				rhsColStart := rhsBaseIdx + n
-				var sum float32
-
-				// Scalar loop with strided RHS access
-				// We cannot use NEON here because RHS column elements are not contiguous
-				k := 0
-				for ; k+3 < contractingSize; k += 4 {
-					sum += lhsFlat[lhsRowStart+k]*rhsFlat[rhsColStart+k*rhsColStride] +
-						lhsFlat[lhsRowStart+k+1]*rhsFlat[rhsColStart+(k+1)*rhsColStride] +
-						lhsFlat[lhsRowStart+k+2]*rhsFlat[rhsColStart+(k+2)*rhsColStride] +
-						lhsFlat[lhsRowStart+k+3]*rhsFlat[rhsColStart+(k+3)*rhsColStride]
-				}
-				for ; k < contractingSize; k++ {
-					sum += lhsFlat[lhsRowStart+k] * rhsFlat[rhsColStart+k*rhsColStride]
-				}
-
-				outputFlat[outputRowStart+n] = sum
-			}
-		}
-	}
+func init() {
+	// BFloat16 and Float16 need float32 accumulation and output to float32 buffer.
+	// The caller (execDotGeneral) handles conversion back to native dtype.
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.BFloat16, priorityTyped, execDotGeneralSmallMatMulBFloat16)
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Float16, priorityTyped, execDotGeneralSmallMatMulFloat16)
 }
