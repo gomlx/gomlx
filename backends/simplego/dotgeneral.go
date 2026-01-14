@@ -85,7 +85,7 @@ func adjustAxisToRank(rank, axis int) (int, error) {
 //
 // See execDotGeneral for the implementation.
 func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Value, rhsContractingAxes, rhsBatchAxes []int) (backends.Value, error) {
-	inputPair, err := f.builder.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
+	inputPair, err := f.verifyAndCastValues(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +471,7 @@ func log2int(x int) int {
 // matrix/matrix multiplications.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (f *Function) Dot(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	inputs, err := f.builder.checkOps(backends.OpTypeDot.String(), lhsOp, rhsOp)
+	inputs, err := f.verifyAndCastValues(backends.OpTypeDot.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
 	}

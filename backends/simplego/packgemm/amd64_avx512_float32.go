@@ -18,7 +18,9 @@ func init() {
 		lhsL2PanelCrossSize:  528,  // Mc: Fits in L2 cache (multiple of 6)
 		rhsL3PanelCrossSize:  4096, // Nc: Fits in L3 cache (multiple of 32)
 	}
-	Float32 = avx512Float32
+	if archsimd.X86.AVX512() {
+		Float32 = avx512Float32
+	}
 }
 
 // avx512Float32 implements generic matrix multiplication for float32 inputs and outputs.

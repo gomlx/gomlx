@@ -211,18 +211,18 @@ func (n *Node) IsMultiOutputs() bool {
 	return len(n.multiOutputsShapes) > 0
 }
 
-// checkOps validates that the ops are from SimpleGo and from this builder.
+// checkValues validates that the values are from SimpleGo and from this builder.
 // It also checks whether the Builder is not yet compiled.
-func (b *Builder) checkOps(opType string, ops ...backends.Value) ([]*Node, error) {
+func (b *Builder) checkValues(opType string, values ...backends.Value) ([]*Node, error) {
 	if b == nil {
 		return nil, errors.Errorf("%s: Builder is nil (!?), cannot build a graph", opType)
 	}
 	if b.compiled {
 		return nil, errors.Errorf("cannot add new op (%s) to Builder %q, it has already been compiled", opType, b.name)
 	}
-	nodes := make([]*Node, len(ops))
+	nodes := make([]*Node, len(values))
 	var ok bool
-	for idx, op := range ops {
+	for idx, op := range values {
 		if op == nil {
 			return nil, errors.Errorf("%s: input op #%d is nil!?", opType, idx)
 		}
@@ -250,7 +250,7 @@ func (b *Builder) checkOps(opType string, ops ...backends.Value) ([]*Node, error
 
 // OpShape returns the shape of a computation Op.
 func (b *Builder) OpShape(op backends.Value) (shapes.Shape, error) {
-	inputs, err := b.checkOps("OpShape", op)
+	inputs, err := b.checkValues("OpShape", op)
 	if err != nil {
 		return shapes.Invalid(), err
 	}
@@ -272,4 +272,3 @@ func checkFlat(flat any) (dtype dtypes.DType, flatLen int, err error) {
 	flatLen = flatValue.Len()
 	return dtype, flatLen, nil
 }
-
