@@ -4,6 +4,7 @@ package packgemm_test
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
@@ -51,6 +52,35 @@ func TestPackGemmFloat32(t *testing.T) {
 		want := 3*1_000 + float32(contractingSize*(contractingSize-1))/2
 		if Cdata[0] != want {
 			t.Errorf("Cdata[0] = %g, want %g", Cdata[0], want)
+		}
+	})
+
+	t.Run("kernel-rows-p1", func(t *testing.T) {
+		contractingSize := packgemm.Float32Params.ContractingPanelSize + 1 // Make it larger than contracting panel size.
+		lhsCrossSize := packgemm.Float32Params.LHSL1KernelRows + 1
+		rhsCrossSize := 1
+		batchSize := 1
+		fmt.Printf("- C=AxB, shapes [1, %d, %d] x [1, %d, 1] -> [1, %d, 1]\n", lhsCrossSize, contractingSize, contractingSize, lhsCrossSize)
+
+		// C = alpha * (A x B) + beta * C
+		alpha := float32(1)
+		beta := float32(3)
+		Adata := xslices.Iota(float32(0), lhsCrossSize*contractingSize)
+		Bdata := xslices.SliceWithValue(contractingSize, float32(1))
+		Cdata := xslices.Iota(float32(1000), lhsCrossSize)
+		want := slices.Clone(Cdata)
+		base := float32(contractingSize*(contractingSize-1)) / 2
+		rowIncrement := float32(contractingSize * contractingSize)
+		for ii := range want {
+			want[ii] *= beta
+			want[ii] += alpha * (base + rowIncrement*float32(ii))
+		}
+
+		packgemm.Float32(alpha, beta, Adata, Bdata, batchSize, lhsCrossSize, rhsCrossSize, contractingSize, Cdata,
+			sequentialFloat32BufAllocFn, sequentialFloat32BufReleaseFn, sequentialWorkerPool)
+
+		if slices.Compare(Cdata, want) != 0 {
+			t.Errorf("Cdata = %v, want %v", Cdata, want)
 		}
 	})
 }
