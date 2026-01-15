@@ -18,10 +18,10 @@ func init() {
 }
 
 var avx512Float32Params = CacheParams{
-	LHSL1KernelRows:      4,    // Mr: Uses 4 ZMM registers for accumulation rows
+	LHSL1KernelRows:      8,    // Mr: Uses 8 ZMM registers for accumulation rows (processed in two 4-row steps)
 	RHSL1KernelCols:      32,   // Nr: Uses 2 ZMM registers (2x16) for accumulation cols
 	ContractingPanelSize: 256,  // Kc: A strip fits in L1 cache
-	LHSL2PanelCrossSize:  512,  // Mc: Fits in L2 cache (multiple of 4)
+	LHSL2PanelCrossSize:  512,  // Mc: Fits in L2 cache (multiple of 8)
 	RHSL3PanelCrossSize:  4096, // Nc: Fits in L3 cache (multiple of 32)
 }
 
@@ -203,9 +203,9 @@ func avx512Float32GemmChunk(
 	}
 }
 
-// avx512Float32MicroKernel computes a 4x32 tile.
+// avx512Float32MicroKernel computes a 8x32 tile.
 // It uses simulated SIMD logic based on the user's pseudo-code.
-// This assumes lhsCrossSize=4 and rhsCrossSize=32 (2x Float32x16).
+// This assumes lhsCrossSize=8 and rhsCrossSize=32 (2x Float32x16).
 //
 // lhsActiveRows and rhsActiveCols are the number of rows/cols that should be
 // written back to the output. Notice the input is padded.
@@ -222,87 +222,13 @@ func avx512Float32MicroKernel(
 	// 	beta, contractingLen, lhsActiveRows, rhsActiveCols)
 
 	// ---------------------------------------------------------
-	// 1. Initialize Accumulators (Registers) to 0.0
+	// 1. Write Back Setup
 	// ---------------------------------------------------------
-	// We have 4 rows (Mr), each needs 2 vectors (Nr=32, vec=16)
-	// Expanded to individual variables to ensure register allocation.
-	accum_lhs0_rhs0 := archsimd.BroadcastFloat32x16(0.0)
-	accum_lhs0_rhs1 := archsimd.BroadcastFloat32x16(0.0)
-	accum_lhs1_rhs0 := archsimd.BroadcastFloat32x16(0.0)
-	accum_lhs1_rhs1 := archsimd.BroadcastFloat32x16(0.0)
-	accum_lhs2_rhs0 := archsimd.BroadcastFloat32x16(0.0)
-	accum_lhs2_rhs1 := archsimd.BroadcastFloat32x16(0.0)
-	accum_lhs3_rhs0 := archsimd.BroadcastFloat32x16(0.0)
-	accum_lhs3_rhs1 := archsimd.BroadcastFloat32x16(0.0)
-
-	// ---------------------------------------------------------
-	// 2. The K-Loop (Dot Product)
-	// ---------------------------------------------------------
-	idxLhs := 0
-	idxRhs := 0
-	for range contractingLen {
-		// Load RHS (Broadcasting/Streaming)
-		// We know packedRhs is arranged as [Nr] linear.
-		// Since Nr=32, we load two 16-wide vectors.
-		// Because we zero-padded in packRhs, this is always safe!
-		rhsVec0 := archsimd.LoadFloat32x16Slice(ptrRhs[idxRhs : idxRhs+16])
-		rhsVec1 := archsimd.LoadFloat32x16Slice(ptrRhs[idxRhs+16 : idxRhs+32])
-		idxRhs += 32 // This automatically skips to the next contracting strip in rhs kernel.
-
-		// Unrolled loop over 6 rows of LHS
-
-		// Row 0
-		lhsVal0 := ptrLhs[idxLhs+0]
-		lhsVec0 := archsimd.BroadcastFloat32x16(lhsVal0)
-		accum_lhs0_rhs0 = rhsVec0.MulAdd(lhsVec0, accum_lhs0_rhs0)
-		accum_lhs0_rhs1 = rhsVec1.MulAdd(lhsVec0, accum_lhs0_rhs1)
-
-		// Row 1
-		lhsVal1 := ptrLhs[idxLhs+1]
-		lhsVec1 := archsimd.BroadcastFloat32x16(lhsVal1)
-		accum_lhs1_rhs0 = rhsVec0.MulAdd(lhsVec1, accum_lhs1_rhs0)
-		accum_lhs1_rhs1 = rhsVec1.MulAdd(lhsVec1, accum_lhs1_rhs1)
-
-		// Row 2
-		lhsVal2 := ptrLhs[idxLhs+2]
-		lhsVec2 := archsimd.BroadcastFloat32x16(lhsVal2)
-		accum_lhs2_rhs0 = rhsVec0.MulAdd(lhsVec2, accum_lhs2_rhs0)
-		accum_lhs2_rhs1 = rhsVec1.MulAdd(lhsVec2, accum_lhs2_rhs1)
-
-		// Row 3
-		lhsVal3 := ptrLhs[idxLhs+3]
-		lhsVec3 := archsimd.BroadcastFloat32x16(lhsVal3)
-		accum_lhs3_rhs0 = rhsVec0.MulAdd(lhsVec3, accum_lhs3_rhs0)
-		accum_lhs3_rhs1 = rhsVec1.MulAdd(lhsVec3, accum_lhs3_rhs1)
-
-		idxLhs += 4 // Skips to the next contracting strip in lhs kernel.
-	}
-
-	// Apply alpha factor.
-	if alpha != 1 {
-		alphaBroadcast := archsimd.BroadcastFloat32x16(alpha)
-		accum_lhs0_rhs0 = accum_lhs0_rhs0.Mul(alphaBroadcast)
-		accum_lhs0_rhs1 = accum_lhs0_rhs1.Mul(alphaBroadcast)
-		accum_lhs1_rhs0 = accum_lhs1_rhs0.Mul(alphaBroadcast)
-		accum_lhs1_rhs1 = accum_lhs1_rhs1.Mul(alphaBroadcast)
-		accum_lhs2_rhs0 = accum_lhs2_rhs0.Mul(alphaBroadcast)
-		accum_lhs2_rhs1 = accum_lhs2_rhs1.Mul(alphaBroadcast)
-		accum_lhs3_rhs0 = accum_lhs3_rhs0.Mul(alphaBroadcast)
-		accum_lhs3_rhs1 = accum_lhs3_rhs1.Mul(alphaBroadcast)
-	}
-
-	// ---------------------------------------------------------
-	// 2. Write Back to Output (Scaling with Beta/Alpha)
-	// ---------------------------------------------------------
-
 	betaBroadcast := archsimd.BroadcastFloat32x16(beta)
 	cols0Bits := min(16, rhsActiveCols)
 	cols1Bits := min(16, max(0, rhsActiveCols-16))
 	maskForCols0 := archsimd.Mask32x16FromBits(uint16(uint64(1<<cols0Bits) - 1))
 	maskForCols1 := archsimd.Mask32x16FromBits(uint16(uint64(1<<cols1Bits) - 1))
-
-	// fmt.Printf("\t- accum_lhs0_rhs0=%v\n", accum_lhs0_rhs0)
-	// fmt.Printf("\t- maskForCols0=%v\n", maskForCols0)
 
 	writeRow := func(row int, acc0, acc1 archsimd.Float32x16) {
 		outputIdx := (outputRowStart+row)*outputStride + outputColStart
@@ -343,18 +269,88 @@ func avx512Float32MicroKernel(
 		}
 	}
 
-	switch {
-	case lhsActiveRows > 3:
-		writeRow(3, accum_lhs3_rhs0, accum_lhs3_rhs1)
-		fallthrough
-	case lhsActiveRows > 2:
-		writeRow(2, accum_lhs2_rhs0, accum_lhs2_rhs1)
-		fallthrough
-	case lhsActiveRows > 1:
-		writeRow(1, accum_lhs1_rhs0, accum_lhs1_rhs1)
-		fallthrough
-	case lhsActiveRows > 0:
-		writeRow(0, accum_lhs0_rhs0, accum_lhs0_rhs1)
+	for rowOffset := 0; rowOffset < lhsActiveRows; rowOffset += 4 {
+		// ---------------------------------------------------------
+		// 2. Initialize Accumulators (Registers) to 0.0
+		// ---------------------------------------------------------
+		// We use 4 rows (Mr) worth of registers at a time.
+		accum_lhs0_rhs0 := archsimd.BroadcastFloat32x16(0.0)
+		accum_lhs0_rhs1 := archsimd.BroadcastFloat32x16(0.0)
+		accum_lhs1_rhs0 := archsimd.BroadcastFloat32x16(0.0)
+		accum_lhs1_rhs1 := archsimd.BroadcastFloat32x16(0.0)
+		accum_lhs2_rhs0 := archsimd.BroadcastFloat32x16(0.0)
+		accum_lhs2_rhs1 := archsimd.BroadcastFloat32x16(0.0)
+		accum_lhs3_rhs0 := archsimd.BroadcastFloat32x16(0.0)
+		accum_lhs3_rhs1 := archsimd.BroadcastFloat32x16(0.0)
+
+		// ---------------------------------------------------------
+		// 3. The K-Loop (Dot Product)
+		// ---------------------------------------------------------
+		idxLhs := rowOffset
+		idxRhs := 0
+		for range contractingLen {
+			// Load RHS (Broadcasting/Streaming)
+			rhsVec0 := archsimd.LoadFloat32x16Slice(ptrRhs[idxRhs : idxRhs+16])
+			rhsVec1 := archsimd.LoadFloat32x16Slice(ptrRhs[idxRhs+16 : idxRhs+32])
+			idxRhs += 32
+
+			// Row 0
+			lhsVal0 := ptrLhs[idxLhs+0]
+			lhsVec0 := archsimd.BroadcastFloat32x16(lhsVal0)
+			accum_lhs0_rhs0 = rhsVec0.MulAdd(lhsVec0, accum_lhs0_rhs0)
+			accum_lhs0_rhs1 = rhsVec1.MulAdd(lhsVec0, accum_lhs0_rhs1)
+
+			// Row 1
+			lhsVal1 := ptrLhs[idxLhs+1]
+			lhsVec1 := archsimd.BroadcastFloat32x16(lhsVal1)
+			accum_lhs1_rhs0 = rhsVec0.MulAdd(lhsVec1, accum_lhs1_rhs0)
+			accum_lhs1_rhs1 = rhsVec1.MulAdd(lhsVec1, accum_lhs1_rhs1)
+
+			// Row 2
+			lhsVal2 := ptrLhs[idxLhs+2]
+			lhsVec2 := archsimd.BroadcastFloat32x16(lhsVal2)
+			accum_lhs2_rhs0 = rhsVec0.MulAdd(lhsVec2, accum_lhs2_rhs0)
+			accum_lhs2_rhs1 = rhsVec1.MulAdd(lhsVec2, accum_lhs2_rhs1)
+
+			// Row 3
+			lhsVal3 := ptrLhs[idxLhs+3]
+			lhsVec3 := archsimd.BroadcastFloat32x16(lhsVal3)
+			accum_lhs3_rhs0 = rhsVec0.MulAdd(lhsVec3, accum_lhs3_rhs0)
+			accum_lhs3_rhs1 = rhsVec1.MulAdd(lhsVec3, accum_lhs3_rhs1)
+
+			idxLhs += 8 // Skips to the next contracting strip in lhs kernel (8 rows).
+		}
+
+		// Apply alpha factor.
+		if alpha != 1 {
+			alphaBroadcast := archsimd.BroadcastFloat32x16(alpha)
+			accum_lhs0_rhs0 = accum_lhs0_rhs0.Mul(alphaBroadcast)
+			accum_lhs0_rhs1 = accum_lhs0_rhs1.Mul(alphaBroadcast)
+			accum_lhs1_rhs0 = accum_lhs1_rhs0.Mul(alphaBroadcast)
+			accum_lhs1_rhs1 = accum_lhs1_rhs1.Mul(alphaBroadcast)
+			accum_lhs2_rhs0 = accum_lhs2_rhs0.Mul(alphaBroadcast)
+			accum_lhs2_rhs1 = accum_lhs2_rhs1.Mul(alphaBroadcast)
+			accum_lhs3_rhs0 = accum_lhs3_rhs0.Mul(alphaBroadcast)
+			accum_lhs3_rhs1 = accum_lhs3_rhs1.Mul(alphaBroadcast)
+		}
+
+		// ---------------------------------------------------------
+		// 4. Write Back to Output
+		// ---------------------------------------------------------
+		remainingRows := lhsActiveRows - rowOffset
+		switch {
+		case remainingRows > 3:
+			writeRow(rowOffset+3, accum_lhs3_rhs0, accum_lhs3_rhs1)
+			fallthrough
+		case remainingRows > 2:
+			writeRow(rowOffset+2, accum_lhs2_rhs0, accum_lhs2_rhs1)
+			fallthrough
+		case remainingRows > 1:
+			writeRow(rowOffset+1, accum_lhs1_rhs0, accum_lhs1_rhs1)
+			fallthrough
+		case remainingRows > 0:
+			writeRow(rowOffset+0, accum_lhs0_rhs0, accum_lhs0_rhs1)
+		}
 	}
 }
 
