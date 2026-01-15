@@ -83,4 +83,35 @@ func TestPackGemmFloat32(t *testing.T) {
 			t.Errorf("Cdata = %v, want %v", Cdata, want)
 		}
 	})
+
+	t.Run("kernel-cols-p1", func(t *testing.T) {
+		contractingSize := packgemm.Float32Params.ContractingPanelSize + 1 // Make it larger than contracting panel size.
+		lhsCrossSize := packgemm.Float32Params.LHSL1KernelRows + 1
+		rhsCrossSize := packgemm.Float32Params.RHSL1KernelCols + 1
+		batchSize := 1
+		fmt.Printf("- C=AxB, shapes [1, %d, %d] x [1, %d, %d] -> [1, %d, %d]\n", lhsCrossSize, contractingSize, contractingSize, rhsCrossSize, lhsCrossSize, rhsCrossSize)
+
+		// C = alpha * (A x B) + beta * C
+		alpha := float32(1)
+		beta := float32(3)
+		Adata := xslices.Iota(float32(0), lhsCrossSize*contractingSize)
+		Bdata := xslices.SliceWithValue(contractingSize*rhsCrossSize, float32(1))
+		Cdata := xslices.Iota(float32(1000), lhsCrossSize*rhsCrossSize)
+		want := slices.Clone(Cdata)
+		base := float32(contractingSize*(contractingSize-1)) / 2
+		rowIncrement := float32(contractingSize * contractingSize)
+		for row := range lhsCrossSize {
+			for col := range rhsCrossSize {
+				idx := col + row*rhsCrossSize
+				want[idx] *= beta
+				want[idx] += alpha * (base + rowIncrement*float32(row))
+			}
+		}
+		packgemm.Float32(alpha, beta, Adata, Bdata, batchSize, lhsCrossSize, rhsCrossSize, contractingSize, Cdata,
+			sequentialFloat32BufAllocFn, sequentialFloat32BufReleaseFn, sequentialWorkerPool)
+
+		if slices.Compare(Cdata, want) != 0 {
+			t.Errorf("Cdata = %v, want %v", Cdata, want)
+		}
+	})
 }
