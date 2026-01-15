@@ -5,6 +5,7 @@ package graph_test
 import (
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"slices"
 	"testing"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/rand"
 )
 
 func TestIndicesForShape(t *testing.T) {
@@ -295,7 +295,7 @@ func BenchmarkScatter(b *testing.B) {
 	)
 	indices := make([]int32, BatchSize)
 	for ii := range indices {
-		indices[ii] = int32(rand.Int31n(NumEntries - ConsecutiveScatters))
+		indices[ii] = rand.Int32N(NumEntries - ConsecutiveScatters)
 	}
 	slices.Sort(indices)
 	indicesT := tensors.FromValue(indices)

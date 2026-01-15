@@ -123,6 +123,12 @@ const (
 	OpTypeWhile
 	OpTypeIf
 
+	// Closure-related operations
+
+	// OpTypeCapturedValue represents a value captured from a parent scope in a closure.
+	// At execution time, the captured value is looked up from the parent's execution context.
+	OpTypeCapturedValue
+
 	// Collective (distributed across devices) operations
 
 	OpTypeAllReduce
