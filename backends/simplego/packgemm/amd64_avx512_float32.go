@@ -18,10 +18,10 @@ func init() {
 }
 
 var avx512Float32Params = CacheParams{
-	LHSL1KernelRows:      6,    // Mr: Uses 6 ZMM registers for accumulation rows
+	LHSL1KernelRows:      4,    // Mr: Uses 4 ZMM registers for accumulation rows
 	RHSL1KernelCols:      32,   // Nr: Uses 2 ZMM registers (2x16) for accumulation cols
 	ContractingPanelSize: 256,  // Kc: A strip fits in L1 cache
-	LHSL2PanelCrossSize:  528,  // Mc: Fits in L2 cache (multiple of 6)
+	LHSL2PanelCrossSize:  512,  // Mc: Fits in L2 cache (multiple of 4)
 	RHSL3PanelCrossSize:  4096, // Nc: Fits in L3 cache (multiple of 32)
 }
 
@@ -85,7 +85,7 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 
 			// Define the task closure
 			task := func() {
-				gemmChunk(
+				avx512Float32GemmChunk(
 					alpha, beta,
 					batchLhs, batchRhs, batchOutput,
 					lhsCrossSize, rhsCrossSize, contractingSize,
@@ -104,8 +104,8 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 	}
 }
 
-// gemmChunk performs the 5-loop GotoBLAS algorithm on a slice of a single batch matrix.
-func gemmChunk(
+// avx512Float32GemmChunk performs the 5-loop GotoBLAS algorithm on a slice of a single batch matrix.
+func avx512Float32GemmChunk(
 	alpha, beta float32,
 	lhs, rhs, output []float32,
 	lhsCrossSize, rhsCrossSize, contractingSize int,
@@ -186,7 +186,7 @@ func gemmChunk(
 						outputRow := lhsPanelRowIdx + microRowIdx
 						outputCol := rhsPanelColIdx + microColIdx
 
-						microKernelFloat32(
+						avx512Float32MicroKernel(
 							contractingPanelWidth,
 							alpha, effectiveBeta,
 							packedLhs[offsetLhs:],
@@ -203,13 +203,13 @@ func gemmChunk(
 	}
 }
 
-// microKernelFloat32 computes a 6x32 tile.
+// avx512Float32MicroKernel computes a 4x32 tile.
 // It uses simulated SIMD logic based on the user's pseudo-code.
-// This assumes lhsCrossSize=6 and rhsCrossSize=32 (2x Float32x16).
+// This assumes lhsCrossSize=4 and rhsCrossSize=32 (2x Float32x16).
 //
 // lhsActiveRows and rhsActiveCols are the number of rows/cols that should be
 // written back to the output. Notice the input is padded.
-func microKernelFloat32(
+func avx512Float32MicroKernel(
 	contractingLen int,
 	alpha, beta float32,
 	ptrLhs, ptrRhs []float32, // Packed Buffers
@@ -224,7 +224,7 @@ func microKernelFloat32(
 	// ---------------------------------------------------------
 	// 1. Initialize Accumulators (Registers) to 0.0
 	// ---------------------------------------------------------
-	// We have 6 rows (Mr), each needs 2 vectors (Nr=32, vec=16)
+	// We have 4 rows (Mr), each needs 2 vectors (Nr=32, vec=16)
 	// Expanded to individual variables to ensure register allocation.
 	accum_lhs0_rhs0 := archsimd.BroadcastFloat32x16(0.0)
 	accum_lhs0_rhs1 := archsimd.BroadcastFloat32x16(0.0)
@@ -234,10 +234,6 @@ func microKernelFloat32(
 	accum_lhs2_rhs1 := archsimd.BroadcastFloat32x16(0.0)
 	accum_lhs3_rhs0 := archsimd.BroadcastFloat32x16(0.0)
 	accum_lhs3_rhs1 := archsimd.BroadcastFloat32x16(0.0)
-	accum_lhs4_rhs0 := archsimd.BroadcastFloat32x16(0.0)
-	accum_lhs4_rhs1 := archsimd.BroadcastFloat32x16(0.0)
-	accum_lhs5_rhs0 := archsimd.BroadcastFloat32x16(0.0)
-	accum_lhs5_rhs1 := archsimd.BroadcastFloat32x16(0.0)
 
 	// ---------------------------------------------------------
 	// 2. The K-Loop (Dot Product)
@@ -279,19 +275,7 @@ func microKernelFloat32(
 		accum_lhs3_rhs0 = rhsVec0.MulAdd(lhsVec3, accum_lhs3_rhs0)
 		accum_lhs3_rhs1 = rhsVec1.MulAdd(lhsVec3, accum_lhs3_rhs1)
 
-		// Row 4
-		lhsVal4 := ptrLhs[idxLhs+4]
-		lhsVec4 := archsimd.BroadcastFloat32x16(lhsVal4)
-		accum_lhs4_rhs0 = rhsVec0.MulAdd(lhsVec4, accum_lhs4_rhs0)
-		accum_lhs4_rhs1 = rhsVec1.MulAdd(lhsVec4, accum_lhs4_rhs1)
-
-		// Row 5
-		lhsVal5 := ptrLhs[idxLhs+5]
-		lhsVec5 := archsimd.BroadcastFloat32x16(lhsVal5)
-		accum_lhs5_rhs0 = rhsVec0.MulAdd(lhsVec5, accum_lhs5_rhs0)
-		accum_lhs5_rhs1 = rhsVec1.MulAdd(lhsVec5, accum_lhs5_rhs1)
-
-		idxLhs += 6 // Skips to the next contracting strip in lhs kernel.
+		idxLhs += 4 // Skips to the next contracting strip in lhs kernel.
 	}
 
 	// Apply alpha factor.
@@ -305,10 +289,6 @@ func microKernelFloat32(
 		accum_lhs2_rhs1 = accum_lhs2_rhs1.Mul(alphaBroadcast)
 		accum_lhs3_rhs0 = accum_lhs3_rhs0.Mul(alphaBroadcast)
 		accum_lhs3_rhs1 = accum_lhs3_rhs1.Mul(alphaBroadcast)
-		accum_lhs4_rhs0 = accum_lhs4_rhs0.Mul(alphaBroadcast)
-		accum_lhs4_rhs1 = accum_lhs4_rhs1.Mul(alphaBroadcast)
-		accum_lhs5_rhs0 = accum_lhs5_rhs0.Mul(alphaBroadcast)
-		accum_lhs5_rhs1 = accum_lhs5_rhs1.Mul(alphaBroadcast)
 	}
 
 	// ---------------------------------------------------------
@@ -364,12 +344,6 @@ func microKernelFloat32(
 	}
 
 	switch {
-	case lhsActiveRows > 5:
-		writeRow(5, accum_lhs5_rhs0, accum_lhs5_rhs1)
-		fallthrough
-	case lhsActiveRows > 4:
-		writeRow(4, accum_lhs4_rhs0, accum_lhs4_rhs1)
-		fallthrough
 	case lhsActiveRows > 3:
 		writeRow(3, accum_lhs3_rhs0, accum_lhs3_rhs1)
 		fallthrough
