@@ -1,5 +1,6 @@
 This package implements the GEMM (General Matrix Multiplication) used by the `simplego` backend.
 
+EXPERIMENTAL: this is current a straw-man implementation, later we want to rewrite it using Go-highway.
 
 ## Performance before for Float32 (Using AVX512):
 
