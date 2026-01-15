@@ -14,17 +14,17 @@ type GoroutineStarter func(work func()) bool
 
 // Block/packs parameters for current architecture.
 type CacheParams struct {
-	lhsL1KernelRows int // or Mr: number of lhs kernel rows going to registers.
-	rhsL1KernelCols int // or Nr: Register Block Width
+	LHSL1KernelRows int // or Mr: number of lhs kernel rows going to registers.
+	RHSL1KernelCols int // or Nr: Register Block Width
 
-	contractingPanelSize int // Kc: L1 Block Depth
-	lhsL2PanelCrossSize  int // Mc: L2 Block Height
-	rhsL3PanelCrossSize  int // Nc: L3 Block Width
+	ContractingPanelSize int // Kc: L1 Block Depth
+	LHSL2PanelCrossSize  int // Mc: L2 Block Height
+	RHSL3PanelCrossSize  int // Nc: L3 Block Width
 }
 
 var (
-	// Set by the architecture files.
-	DefaultCacheParams CacheParams
+	// Float32Params is set by the architecture files.
+	Float32Params CacheParams
 
 	// Float32 implements generic matrix multiplication for float32 inputs and outputs.
 	// output = alpha * (lhs x rhs) + beta * output
