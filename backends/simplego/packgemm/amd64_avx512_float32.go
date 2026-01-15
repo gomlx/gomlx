@@ -258,38 +258,38 @@ func microKernelFloat32(
 		// Row 0
 		lhsVal0 := ptrLhs[idxLhs+0]
 		lhsVec0 := archsimd.BroadcastFloat32x16(lhsVal0)
-		accum_lhs0_rhs0 = lhsVec0.MulAdd(rhsVec0, accum_lhs0_rhs0)
-		accum_lhs0_rhs1 = lhsVec0.MulAdd(rhsVec1, accum_lhs0_rhs1)
+		accum_lhs0_rhs0 = rhsVec0.MulAdd(lhsVec0, accum_lhs0_rhs0)
+		accum_lhs0_rhs1 = rhsVec1.MulAdd(lhsVec0, accum_lhs0_rhs1)
 
 		// Row 1
 		lhsVal1 := ptrLhs[idxLhs+1]
 		lhsVec1 := archsimd.BroadcastFloat32x16(lhsVal1)
-		accum_lhs1_rhs0 = lhsVec1.MulAdd(rhsVec0, accum_lhs1_rhs0)
-		accum_lhs1_rhs1 = lhsVec1.MulAdd(rhsVec1, accum_lhs1_rhs1)
+		accum_lhs1_rhs0 = rhsVec0.MulAdd(lhsVec1, accum_lhs1_rhs0)
+		accum_lhs1_rhs1 = rhsVec1.MulAdd(lhsVec1, accum_lhs1_rhs1)
 
 		// Row 2
 		lhsVal2 := ptrLhs[idxLhs+2]
 		lhsVec2 := archsimd.BroadcastFloat32x16(lhsVal2)
-		accum_lhs2_rhs0 = lhsVec2.MulAdd(rhsVec0, accum_lhs2_rhs0)
-		accum_lhs2_rhs1 = lhsVec2.MulAdd(rhsVec1, accum_lhs2_rhs1)
+		accum_lhs2_rhs0 = rhsVec0.MulAdd(lhsVec2, accum_lhs2_rhs0)
+		accum_lhs2_rhs1 = rhsVec1.MulAdd(lhsVec2, accum_lhs2_rhs1)
 
 		// Row 3
 		lhsVal3 := ptrLhs[idxLhs+3]
 		lhsVec3 := archsimd.BroadcastFloat32x16(lhsVal3)
-		accum_lhs3_rhs0 = lhsVec3.MulAdd(rhsVec0, accum_lhs3_rhs0)
-		accum_lhs3_rhs1 = lhsVec3.MulAdd(rhsVec1, accum_lhs3_rhs1)
+		accum_lhs3_rhs0 = rhsVec0.MulAdd(lhsVec3, accum_lhs3_rhs0)
+		accum_lhs3_rhs1 = rhsVec1.MulAdd(lhsVec3, accum_lhs3_rhs1)
 
 		// Row 4
 		lhsVal4 := ptrLhs[idxLhs+4]
 		lhsVec4 := archsimd.BroadcastFloat32x16(lhsVal4)
-		accum_lhs4_rhs0 = lhsVec4.MulAdd(rhsVec0, accum_lhs4_rhs0)
-		accum_lhs4_rhs1 = lhsVec4.MulAdd(rhsVec1, accum_lhs4_rhs1)
+		accum_lhs4_rhs0 = rhsVec0.MulAdd(lhsVec4, accum_lhs4_rhs0)
+		accum_lhs4_rhs1 = rhsVec1.MulAdd(lhsVec4, accum_lhs4_rhs1)
 
 		// Row 5
 		lhsVal5 := ptrLhs[idxLhs+5]
 		lhsVec5 := archsimd.BroadcastFloat32x16(lhsVal5)
-		accum_lhs5_rhs0 = lhsVec5.MulAdd(rhsVec0, accum_lhs5_rhs0)
-		accum_lhs5_rhs1 = lhsVec5.MulAdd(rhsVec1, accum_lhs5_rhs1)
+		accum_lhs5_rhs0 = rhsVec0.MulAdd(lhsVec5, accum_lhs5_rhs0)
+		accum_lhs5_rhs1 = rhsVec1.MulAdd(lhsVec5, accum_lhs5_rhs1)
 
 		idxLhs += 6 // Skips to the next contracting strip in lhs kernel.
 	}
