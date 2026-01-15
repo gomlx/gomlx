@@ -14,6 +14,6 @@ EXPERIMENTAL: this is current a straw-man implementation, later we want to rewri
 
 | Test Name | LHS Dims | RHS Dims | DType | BatchSize | Time/Run | Num Ops | GOps/Sec |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `NoBatch-Medium` | {128, 128} | {128, 256} | Float32 | 1 | 8.97µs | 8,388,608 | 934.7 |
-| `NoBatch-Large` | {1536, 1920} | {1920, 1024} | Float32 | 1 | 2.98ms | 6,039,797,760 | 2025.1 |
-| `Batched-Large` | {16, 1536, 1920} | {16, 1920, 1024} | Float32 | 16 | 47.39ms | 96,636,764,160 | 2039.2 |
+| `NoBatch-Medium` | {128, 128} | {128, 256} | Float32 | 1 | 8.50µs | 8,388,608 | 986.4 |
+| `NoBatch-Large` | {1536, 1920} | {1920, 1024} | Float32 | 1 | 3.50ms | 6,039,797,760 | 1726.4 |
+| `Batched-Large` | {16, 1536, 1920} | {16, 1920, 1024} | Float32 | 16 | 58.90ms | 96,636,764,160 | 1640.8 |
