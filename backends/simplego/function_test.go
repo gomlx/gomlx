@@ -431,7 +431,7 @@ func TestCompiledClosureExecute(t *testing.T) {
 
 	// Execute the closure
 	b := backend.(*Backend)
-	outputs, err := cc.Execute(b, []*Buffer{xBuf, yBuf}, nil)
+	outputs, err := cc.Execute(b, []*Buffer{xBuf, yBuf}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1, "Should have one output")
 
@@ -487,7 +487,7 @@ func TestCompiledClosureMultipleExecutions(t *testing.T) {
 			valid: true,
 		}
 
-		outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil)
+		outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil, nil)
 		require.NoError(t, err, "Execution %d failed", i)
 		require.Len(t, outputs, 1)
 
@@ -522,7 +522,7 @@ func TestCompiledClosureWithConstants(t *testing.T) {
 
 	// Execute with no inputs
 	simpleGoBackend := backend.(*Backend)
-	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{}, nil)
+	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)
 
@@ -567,7 +567,7 @@ func TestCompiledClosureMultipleOutputs(t *testing.T) {
 	}
 
 	b := backend.(*Backend)
-	outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil)
+	outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 2)
 
@@ -627,7 +627,7 @@ func TestCompiledClosureChainedOperations(t *testing.T) {
 	}
 
 	simpleGoBackend := backend.(*Backend)
-	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{inputBuf}, nil)
+	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{inputBuf}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)
 
@@ -669,12 +669,12 @@ func TestCompiledClosureInputValidation(t *testing.T) {
 	simpleGoBackend := backend.(*Backend)
 
 	// Too few inputs
-	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf}, nil)
+	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf}, nil, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expects 2 inputs, got 1")
 
 	// Too many inputs
-	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf, xBuf, xBuf}, nil)
+	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf, xBuf, xBuf}, nil, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expects 2 inputs, got 3")
 }
@@ -696,10 +696,10 @@ func TestMainFunctionNotCompiled(t *testing.T) {
 	require.Nil(t, mainFnImpl.compiled, "Main function should not be pre-compiled")
 }
 
-// TestClosureCapturingParentNodeError tests that using a node from a parent function
-// (closure capturing) produces an error, as this is not yet supported.
-func TestClosureCapturingParentNodeError(t *testing.T) {
-	builder := backend.Builder("test_closure_capture_error")
+// TestClosureCapturingParentNode tests that using a node from a parent function
+// (closure capturing) works correctly.
+func TestClosureCapturingParentNode(t *testing.T) {
+	builder := backend.Builder("test_closure_capture")
 	mainFn := builder.Main()
 
 	// Create a constant in the main function
@@ -714,21 +714,29 @@ func TestClosureCapturingParentNodeError(t *testing.T) {
 	y, err := closure.Parameter("y", shapes.Make(dtypes.Float32, 2), nil)
 	require.NoError(t, err)
 
-	// Try to use the parent node in the closure - this should error
-	_, err = closure.Add(parentNode, y)
-	require.Error(t, err, "Using a parent function's node in a closure should produce an error")
-	require.Contains(t, err.Error(), "parent function scope")
-	require.Contains(t, err.Error(), "closure capturing")
+	// Use the parent node in the closure - this should work now
+	sum, err := closure.Add(parentNode, y)
+	require.NoError(t, err, "Using a parent function's node in a closure should work")
+	require.NotNil(t, sum)
+
+	// Return the sum
+	err = closure.Return([]backends.Value{sum}, nil)
+	require.NoError(t, err)
+
+	// Verify the closure has captured values
+	closureImpl := closure.(*Function)
+	require.Len(t, closureImpl.capturedValues, 1, "Closure should have one captured value")
+	require.Len(t, closureImpl.capturedNodes, 1, "Closure should have one capture node")
 }
 
-// TestClosureCapturingParentNodeErrorNested tests that using a node from a grandparent function
-// (nested closure capturing) also produces an error.
-func TestClosureCapturingParentNodeErrorNested(t *testing.T) {
-	builder := backend.Builder("test_nested_closure_capture_error")
+// TestClosureCapturingGrandparentNode tests that using a node from a grandparent function
+// (nested closure capturing) also works correctly.
+func TestClosureCapturingGrandparentNode(t *testing.T) {
+	builder := backend.Builder("test_nested_closure_capture")
 	mainFn := builder.Main()
 
 	// Create a constant in the main function
-	parentNode, err := mainFn.Constant([]float32{1.0, 2.0}, 2)
+	grandparentNode, err := mainFn.Constant([]float32{1.0, 2.0}, 2)
 	require.NoError(t, err)
 
 	// Create first closure
@@ -743,10 +751,19 @@ func TestClosureCapturingParentNodeErrorNested(t *testing.T) {
 	y, err := closure2.Parameter("y", shapes.Make(dtypes.Float32, 2), nil)
 	require.NoError(t, err)
 
-	// Try to use the grandparent node in the nested closure - this should error
-	_, err = closure2.Add(parentNode, y)
-	require.Error(t, err, "Using a grandparent function's node in a nested closure should produce an error")
-	require.Contains(t, err.Error(), "parent function scope")
+	// Use the grandparent node in the nested closure - this should work
+	sum, err := closure2.Add(grandparentNode, y)
+	require.NoError(t, err, "Using a grandparent function's node in a nested closure should work")
+	require.NotNil(t, sum)
+
+	// Return the sum
+	err = closure2.Return([]backends.Value{sum}, nil)
+	require.NoError(t, err)
+
+	// Verify the nested closure has captured values
+	closureImpl := closure2.(*Function)
+	require.Len(t, closureImpl.capturedValues, 1, "Nested closure should have one captured value")
+	require.Len(t, closureImpl.capturedNodes, 1, "Nested closure should have one capture node")
 }
 
 // TestClosureSameFunctionNodesAllowed tests that using nodes from the same function is allowed.
@@ -773,4 +790,129 @@ func TestClosureSameFunctionNodesAllowed(t *testing.T) {
 	// Return should also work
 	err = closure.Return([]backends.Value{sum}, nil)
 	require.NoError(t, err)
+}
+
+// TestClosureCaptureExecutionWithIf tests that captured values work correctly with If operations.
+func TestClosureCaptureExecutionWithIf(t *testing.T) {
+	builder := backend.Builder("test_closure_capture_if")
+	mainFn := builder.Main()
+
+	// Create a constant in the main function that will be captured
+	capturedConst, err := mainFn.Constant([]float32{10.0, 20.0}, 2)
+	require.NoError(t, err)
+
+	// Create parameter for the predicate
+	pred, err := mainFn.Parameter("pred", shapes.Make(dtypes.Bool), nil)
+	require.NoError(t, err)
+
+	// Create true branch that uses the captured constant
+	trueBranch, err := mainFn.Closure()
+	require.NoError(t, err)
+
+	// In true branch: return capturedConst * 2
+	two, err := trueBranch.Constant([]float32{2.0, 2.0}, 2)
+	require.NoError(t, err)
+	trueResult, err := trueBranch.Mul(capturedConst, two)
+	require.NoError(t, err)
+	err = trueBranch.Return([]backends.Value{trueResult}, nil)
+	require.NoError(t, err)
+
+	// Create false branch that uses the captured constant
+	falseBranch, err := mainFn.Closure()
+	require.NoError(t, err)
+
+	// In false branch: return capturedConst / 2
+	half, err := falseBranch.Constant([]float32{0.5, 0.5}, 2)
+	require.NoError(t, err)
+	falseResult, err := falseBranch.Mul(capturedConst, half)
+	require.NoError(t, err)
+	err = falseBranch.Return([]backends.Value{falseResult}, nil)
+	require.NoError(t, err)
+
+	// Create If operation
+	ifOutputs, err := mainFn.If(pred, trueBranch, falseBranch)
+	require.NoError(t, err)
+
+	// Return the If result
+	err = mainFn.Return(ifOutputs, nil)
+	require.NoError(t, err)
+
+	// Compile and execute
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	// Test with pred = true
+	trueInput := &Buffer{shape: shapes.Make(dtypes.Bool), flat: []bool{true}, valid: true}
+	outputs, err := exec.Execute([]backends.Buffer{trueInput}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	resultFlat := outputs[0].(*Buffer).flat.([]float32)
+	require.Equal(t, []float32{20.0, 40.0}, resultFlat, "True branch should return capturedConst * 2")
+
+	// Test with pred = false
+	falseInput := &Buffer{shape: shapes.Make(dtypes.Bool), flat: []bool{false}, valid: true}
+	outputs, err = exec.Execute([]backends.Buffer{falseInput}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	resultFlat = outputs[0].(*Buffer).flat.([]float32)
+	require.Equal(t, []float32{5.0, 10.0}, resultFlat, "False branch should return capturedConst / 2")
+}
+
+// TestClosureCaptureExecutionWithWhile tests that captured values work correctly with While operations.
+func TestClosureCaptureExecutionWithWhile(t *testing.T) {
+	builder := backend.Builder("test_closure_capture_while")
+	mainFn := builder.Main()
+
+	// Create a constant in the main function that will be captured by the body (scalar)
+	addAmount, err := mainFn.Constant([]float32{1.0})
+	require.NoError(t, err)
+
+	// Create a threshold constant for the condition (scalar)
+	threshold, err := mainFn.Constant([]float32{5.0})
+	require.NoError(t, err)
+
+	// Create parameter for initial counter value (scalar)
+	counter, err := mainFn.Parameter("counter", shapes.Make(dtypes.Float32), nil)
+	require.NoError(t, err)
+
+	// Create condition: counter < threshold (returns scalar boolean)
+	cond, err := mainFn.Closure()
+	require.NoError(t, err)
+	condCounter, err := cond.Parameter("counter", shapes.Make(dtypes.Float32), nil)
+	require.NoError(t, err)
+	condResult, err := cond.LessThan(condCounter, threshold) // Uses captured threshold
+	require.NoError(t, err)
+	err = cond.Return([]backends.Value{condResult}, nil)
+	require.NoError(t, err)
+
+	// Create body: counter + addAmount (uses captured addAmount)
+	body, err := mainFn.Closure()
+	require.NoError(t, err)
+	bodyCounter, err := body.Parameter("counter", shapes.Make(dtypes.Float32), nil)
+	require.NoError(t, err)
+	newCounter, err := body.Add(bodyCounter, addAmount) // Uses captured addAmount
+	require.NoError(t, err)
+	err = body.Return([]backends.Value{newCounter}, nil)
+	require.NoError(t, err)
+
+	// Create While operation
+	whileOutputs, err := mainFn.While(cond, body, counter)
+	require.NoError(t, err)
+
+	// Return the While result
+	err = mainFn.Return(whileOutputs, nil)
+	require.NoError(t, err)
+
+	// Compile and execute
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	// Test with initial counter = 0 (scalar)
+	counterInput := &Buffer{shape: shapes.Make(dtypes.Float32), flat: []float32{0.0}, valid: true}
+	outputs, err := exec.Execute([]backends.Buffer{counterInput}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	resultFlat := outputs[0].(*Buffer).flat.([]float32)
+	// Should loop until counter >= 5.0, so 0+1+1+1+1+1 = 5
+	require.Equal(t, []float32{5.0}, resultFlat, "While should loop until counter >= threshold")
 }

@@ -123,12 +123,19 @@ type funcExecBuffers struct {
 
 // Execute runs the compiled function with the given inputs.
 // The inputs must match the function's parameters in count and shape.
-func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate []bool) ([]*Buffer, error) {
+// capturedInputs are the values captured from parent scopes (for closures).
+func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate []bool, capturedInputs []*Buffer) ([]*Buffer, error) {
 	// Use function's parameters (not builder.inputs) for proper closure support
 	funcParams := fe.function.parameters
 	if len(inputs) != len(funcParams) {
 		return nil, errors.Errorf("function expects %d inputs, got %d",
 			len(funcParams), len(inputs))
+	}
+
+	// Validate captured inputs count
+	if len(capturedInputs) != len(fe.function.capturedNodes) {
+		return nil, errors.Errorf("function expects %d captured values, got %d",
+			len(fe.function.capturedNodes), len(capturedInputs))
 	}
 
 	// donate defaults to false
@@ -150,6 +157,14 @@ func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate
 		inputIdx := inputNode.builderIdx
 		execBuf.results[inputIdx] = inputs[i]
 		execBuf.owned[inputIdx] = donate[i]
+	}
+
+	// Set up captured values from parent scope
+	// These are not owned by the closure - they belong to the parent
+	for i, captureNode := range fe.function.capturedNodes {
+		captureIdx := captureNode.builderIdx
+		execBuf.results[captureIdx] = capturedInputs[i]
+		execBuf.owned[captureIdx] = false // Never donate captured values
 	}
 
 	// Decide execution mode
@@ -341,6 +356,15 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 		return nil
 	}
 
+	// Captured values are already set up in Execute() - nothing to do
+	if node.opType == backends.OpTypeCapturedValue {
+		// Result should already be set from Execute()
+		if execBuf.results[nodeIdx] == nil {
+			return errors.Errorf("captured value not set for node %d", nodeIdx)
+		}
+		return nil
+	}
+
 	// Prepare inputs
 	numInputs := len(node.inputs)
 	var (
@@ -378,7 +402,8 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			return errors.Errorf("no multi-output executor for op %s", node.opType)
 		}
 
-		outputBuffers, err := multiExecutor(backend, node, inputBuffers, inputsOwned)
+		// Pass execBuf to allow control flow ops to look up captured values
+		outputBuffers, err := multiExecutor(backend, node, inputBuffers, inputsOwned, execBuf)
 		if err != nil {
 			return errors.WithMessagef(err, "executing multi-output %s", node.opType)
 		}

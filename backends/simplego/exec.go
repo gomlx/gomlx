@@ -89,7 +89,10 @@ func newExecutable(builder *Builder, mainFn *FunctionExecutable) *Executable {
 type nodeExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error)
 
 // nodeMultiOutputExecutor is a version of a node executor when it returns multiple outputs.
-type nodeMultiOutputExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error)
+// nodeMultiOutputExecutor is the signature for multi-output node executors.
+// The parentExecBuf parameter provides access to the parent function's execution context,
+// which is needed for control flow operations (If, While, Sort) to look up captured values.
+type nodeMultiOutputExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, parentExecBuf *funcExecBuffers) ([]*Buffer, error)
 
 var (
 	// nodeExecutors should be populated during initialization (`init` functions) for the ops implemented.
@@ -187,7 +190,8 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, _ backends
 	}
 
 	// Delegate to FunctionExecutable
-	outputs, err := e.mainFn.Execute(e.backend, bufInputs, donate)
+	// Main function has no captured values
+	outputs, err := e.mainFn.Execute(e.backend, bufInputs, donate, nil)
 	if err != nil {
 		return nil, err
 	}

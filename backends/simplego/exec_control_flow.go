@@ -3,6 +3,7 @@
 package simplego
 
 import (
+	"reflect"
 	"sort"
 
 	"github.com/gomlx/gomlx/backends"
@@ -15,8 +16,24 @@ func init() {
 	multiOutputsNodeExecutors[backends.OpTypeSort] = execSort
 }
 
+// gatherCapturedValues looks up the captured values for a closure from the parent's execution buffers.
+func gatherCapturedValues(fn *Function, parentExecBuf *funcExecBuffers) []*Buffer {
+	if len(fn.capturedValues) == 0 {
+		return nil
+	}
+
+	captured := make([]*Buffer, len(fn.capturedValues))
+	for i, capturedNode := range fn.capturedValues {
+		captured[i] = parentExecBuf.results[capturedNode.builderIdx]
+	}
+	return captured
+}
+
 // execIf executes the If operation by evaluating the predicate and running one branch.
-func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
+// Inputs layout: [pred, trueBranch captured values..., falseBranch captured values...]
+func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, parentExecBuf *funcExecBuffers) ([]*Buffer, error) {
+	_ = parentExecBuf // Captured values are now passed as inputs, not looked up from parent
+
 	predBuffer := inputs[0]
 	predFlat := predBuffer.flat.([]bool)
 	if len(predFlat) != 1 {
@@ -25,15 +42,26 @@ func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) 
 	pred := predFlat[0]
 
 	data := node.data.(*ifNode)
+
+	// Extract captured values from inputs based on which branch we're executing
 	var branchFn *Function
+	var capturedInputs []*Buffer
 	if pred {
 		branchFn = data.trueBranch
+		// True branch captured values are at inputs[1:1+trueCapturedCount]
+		if data.trueCapturedCount > 0 {
+			capturedInputs = inputs[1 : 1+data.trueCapturedCount]
+		}
 	} else {
 		branchFn = data.falseBranch
+		// False branch captured values are at inputs[1+trueCapturedCount:]
+		if data.falseCapturedCount > 0 {
+			capturedInputs = inputs[1+data.trueCapturedCount:]
+		}
 	}
 
-	// Execute the branch (no inputs since branches have no parameters)
-	outputs, err := branchFn.compiled.Execute(backend, nil, nil)
+	// Execute the branch (no parameters, but may have captured values)
+	outputs, err := branchFn.compiled.Execute(backend, nil, nil, capturedInputs)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "If: executing branch")
 	}
@@ -42,31 +70,55 @@ func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) 
 }
 
 // execWhile executes the While operation by looping until condition returns false.
-func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
-	data := node.data.(*whileNode)
-	condFn := data.cond.compiled
-	bodyFn := data.body.compiled
+// Inputs layout: [state values..., cond captured values..., body captured values...]
+func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, parentExecBuf *funcExecBuffers) ([]*Buffer, error) {
+	_ = parentExecBuf // Captured values are now passed as inputs, not looked up from parent
 
-	// Clone inputs for state (we don't want to modify the original inputs)
-	state := make([]*Buffer, len(inputs))
-	for i, input := range inputs {
-		if inputsOwned[i] {
-			state[i] = input
-			inputs[i] = nil
-		} else {
-			state[i] = backend.cloneBuffer(input)
+	data := node.data.(*whileNode)
+	condFn := data.cond
+	bodyFn := data.body
+
+	// Extract state values and captured values from inputs
+	stateCount := data.stateCount
+	stateInputs := inputs[:stateCount]
+	stateOwned := inputsOwned[:stateCount]
+
+	// Extract captured values for cond and body
+	var condCaptured, bodyCaptured []*Buffer
+	if data.condCapturedCount > 0 {
+		condCaptured = inputs[stateCount : stateCount+data.condCapturedCount]
+	}
+	if data.bodyCapturedCount > 0 {
+		bodyCaptured = inputs[stateCount+data.condCapturedCount:]
+	}
+
+	// Set up state buffers and ownership tracking
+	// Per review: if we own the input buffer, take ownership and donate it
+	// Otherwise, use it directly but don't donate
+	state := make([]*Buffer, stateCount)
+	copy(state, stateInputs)
+	donateState := make([]bool, stateCount)
+	donateAll := make([]bool, stateCount)
+	for i := range donateAll {
+		donateAll[i] = true
+	}
+
+	for i := range stateCount {
+		if stateOwned[i] {
+			stateInputs[i] = nil   // Take ownership of buffer
+			donateState[i] = true  // Ownership will be transferred to condFn
 		}
 	}
 
-	// Loop while condition is true
-	const maxIterations = 1_000_000 // Safety limit
-	for iter := range maxIterations {
-		// Evaluate condition
-		condOutputs, err := condFn.Execute(backend, state, nil)
+	// Loop while condition is true (no iteration limit)
+	for iter := 0; ; iter++ {
+		// Evaluate condition - donate state buffers we own
+		condOutputs, err := condFn.compiled.Execute(backend, state, donateState, condCaptured)
+		// After condFn, all donated buffers have been consumed - we no longer own them
+		// But condFn returns new buffers that we now own implicitly (captured in condOutputs for single bool)
+
 		if err != nil {
-			for _, buf := range state {
-				backend.putBuffer(buf)
-			}
+			// On error, we don't own any state buffers anymore (they were donated or never owned)
 			return nil, errors.WithMessagef(err, "While: evaluating condition at iteration %d", iter)
 		}
 
@@ -76,45 +128,59 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 
 		if !condResult {
 			// Condition is false, exit loop
+			// We need to return owned buffers. After first iteration, donateState = donateAll
+			// so we own all state buffers. On first iteration, we need to clone non-owned ones.
+			for i, owned := range donateState {
+				if !owned {
+					state[i] = backend.cloneBuffer(state[i])
+				}
+			}
 			return state, nil
 		}
 
 		// Execute body to get new state
-		newState, err := bodyFn.Execute(backend, state, nil)
+		// Pass state and donate - after this call, state buffers are consumed
+		newState, err := bodyFn.compiled.Execute(backend, state, donateState, bodyCaptured)
+		// After bodyFn, all donated state is consumed. If error, we own nothing.
+		// If success, we own all of newState.
+		donateState = donateAll // After first iteration, we always own everything
+
 		if err != nil {
-			for _, buf := range state {
-				backend.putBuffer(buf)
-			}
+			// On error, we no longer own state (donated), and newState is empty
 			return nil, errors.WithMessagef(err, "While: executing body at iteration %d", iter)
 		}
 
-		// Free old state and use new state
-		for _, buf := range state {
-			backend.putBuffer(buf)
-		}
 		state = newState
 	}
-
-	// Cleanup on max iterations reached
-	for _, buf := range state {
-		backend.putBuffer(buf)
-	}
-	return nil, errors.Errorf("While: exceeded maximum iterations (%d)", maxIterations)
 }
 
 // execSort sorts tensors along the specified axis using the comparator closure.
-func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
+// Inputs layout: [input tensors..., comparator captured values...]
+func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, parentExecBuf *funcExecBuffers) ([]*Buffer, error) {
+	_ = parentExecBuf // Captured values are now passed as inputs, not looked up from parent
+
 	data := node.data.(*sortNode)
 	axis := data.axis
 	isStable := data.isStable
-	compFn := data.comparator.compiled
+	compFn := data.comparator
 
-	if len(inputs) == 0 {
+	// Extract input tensors and captured values
+	inputCount := data.inputCount
+	tensorInputs := inputs[:inputCount]
+	tensorOwned := inputsOwned[:inputCount]
+
+	// Extract captured values for comparator
+	var compCaptured []*Buffer
+	if data.compCapturedCount > 0 {
+		compCaptured = inputs[inputCount:]
+	}
+
+	if inputCount == 0 {
 		return nil, errors.Errorf("Sort: requires at least one input")
 	}
 
 	// Get shape info from first input
-	shape := inputs[0].shape
+	shape := tensorInputs[0].shape
 	rank := shape.Rank()
 	axisSize := shape.Dimensions[axis]
 
@@ -129,12 +195,12 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 		innerSize *= shape.Dimensions[i]
 	}
 
-	// Create output buffers (clones of inputs)
-	outputs := make([]*Buffer, len(inputs))
-	for i, input := range inputs {
-		if inputsOwned[i] {
+	// Create output buffers (clones of input tensors)
+	outputs := make([]*Buffer, inputCount)
+	for i, input := range tensorInputs {
+		if tensorOwned[i] {
 			outputs[i] = input
-			inputs[i] = nil
+			tensorInputs[i] = nil
 		} else {
 			outputs[i] = backend.cloneBuffer(input)
 		}
@@ -194,8 +260,8 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 					setScalarFromFlat(compInputs[2*k+1], output.flat, offsetJ)
 				}
 
-				// Execute comparator
-				compOutputs, err := compFn.Execute(backend, compInputs, nil)
+				// Execute comparator (don't donate inputs, pass captured values)
+				compOutputs, err := compFn.compiled.Execute(backend, compInputs, nil, compCaptured)
 				if err != nil {
 					sortErr = err
 					return false
@@ -231,65 +297,21 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 
 // setScalarFromFlat sets a scalar buffer's value from a flat array at the given offset.
 func setScalarFromFlat(scalar *Buffer, flat any, offset int) {
-	switch f := flat.(type) {
-	case []float32:
-		scalar.flat.([]float32)[0] = f[offset]
-	case []float64:
-		scalar.flat.([]float64)[0] = f[offset]
-	case []int32:
-		scalar.flat.([]int32)[0] = f[offset]
-	case []int64:
-		scalar.flat.([]int64)[0] = f[offset]
-	case []int8:
-		scalar.flat.([]int8)[0] = f[offset]
-	case []int16:
-		scalar.flat.([]int16)[0] = f[offset]
-	case []uint8:
-		scalar.flat.([]uint8)[0] = f[offset]
-	case []uint16:
-		scalar.flat.([]uint16)[0] = f[offset]
-	case []uint32:
-		scalar.flat.([]uint32)[0] = f[offset]
-	case []uint64:
-		scalar.flat.([]uint64)[0] = f[offset]
-	case []bool:
-		scalar.flat.([]bool)[0] = f[offset]
-	default:
-		panic(errors.Errorf("setScalarFromFlat: unsupported type %T", flat))
-	}
+	value := reflect.ValueOf(flat).Index(offset)
+	reflect.ValueOf(scalar.flat).Index(0).Set(value)
 }
+
+// applyPermutationDTypeMap dispatches applyPermutation by dtype.
+var applyPermutationDTypeMap = NewDTypeMap("ApplyPermutation")
 
 // applyPermutation reorders elements along the sort axis according to the given indices.
 func applyPermutation(buf *Buffer, indices []int, baseOffset, axisStride, axisSize int) {
-	switch flat := buf.flat.(type) {
-	case []float32:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []float64:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []int32:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []int64:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []int8:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []int16:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []uint8:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []uint16:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []uint32:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []uint64:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []bool:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	default:
-		panic(errors.Errorf("applyPermutation: unsupported type %T", buf.flat))
-	}
+	fn := applyPermutationDTypeMap.Get(buf.shape.DType).(func(buf *Buffer, indices []int, baseOffset, axisStride, axisSize int))
+	fn(buf, indices, baseOffset, axisStride, axisSize)
 }
 
-func applyPermutationTyped[T any](flat []T, indices []int, baseOffset, axisStride, axisSize int) {
+func applyPermutationGeneric[T SupportedTypesConstraints](buf *Buffer, indices []int, baseOffset, axisStride, axisSize int) {
+	flat := buf.flat.([]T)
 	// Extract values to temp slice
 	temp := make([]T, axisSize)
 	for i := range axisSize {
