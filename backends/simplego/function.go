@@ -32,9 +32,23 @@ type Function struct {
 	// parameters stores the parameter nodes for this function.
 	parameters []*Node
 
+	// capturedValues stores nodes from parent scopes that are captured by this closure.
+	// The order matches capturedNodes - capturedValues[i] is the parent node for capturedNodes[i].
+	capturedValues []*Node
+
+	// capturedNodes stores the proxy nodes in this closure for captured values.
+	// These are OpTypeCapturedValue nodes that receive their values at execution time.
+	capturedNodes []*Node
+
 	// compiled holds pre-compiled execution info.
 	// This is set during Return() to allow efficient execution.
 	compiled *FunctionExecutable
+}
+
+// capturedValueNode is the data stored in a captured value node.
+type capturedValueNode struct {
+	parentNode *Node // The node from the parent scope being captured
+	captureIdx int   // Index into the capturedValues/capturedNodes arrays
 }
 
 var _ backends.Function = (*Function)(nil)
@@ -78,6 +92,31 @@ func (f *Function) IsAncestorOf(leafFunc *Function) bool {
 	return false
 }
 
+// getOrCreateCaptureNode returns a capture node for the given parent node.
+// If the parent node has already been captured, returns the existing capture node.
+// Otherwise, creates a new capture node and adds it to the captured values list.
+func (f *Function) getOrCreateCaptureNode(parentNode *Node) *Node {
+	// Check if we've already captured this node
+	for i, captured := range f.capturedValues {
+		if captured == parentNode {
+			return f.capturedNodes[i]
+		}
+	}
+
+	// Create a new capture node
+	captureIdx := len(f.capturedValues)
+	captureNode := f.builder.newNode(f, backends.OpTypeCapturedValue, parentNode.shape)
+	captureNode.data = &capturedValueNode{
+		parentNode: parentNode,
+		captureIdx: captureIdx,
+	}
+
+	f.capturedValues = append(f.capturedValues, parentNode)
+	f.capturedNodes = append(f.capturedNodes, captureNode)
+
+	return captureNode
+}
+
 // Closure creates a new closure function within this function.
 // Closures can access values from their parent function's scope.
 func (f *Function) Closure() (backends.Function, error) {
@@ -93,9 +132,8 @@ func (f *Function) Closure() (backends.Function, error) {
 }
 
 // verifyAndCastValues sanity checks that the values (backends.Op) are valid and created with this builder.
-// It also verifies that all input nodes belong to the same function - using nodes from a parent
-// function (closure capturing) is not yet supported.
-// It returns the underlying *Node of the values.
+// If a node belongs to a parent function, it creates a capture node to access the value.
+// It returns the underlying *Node of the values (with capture nodes substituted for parent values).
 func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([]*Node, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
@@ -105,9 +143,7 @@ func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([
 		return nil, err
 	}
 
-	// Check that all input nodes belong to this function.
-	// Capturing nodes from a parent function (closure capture) is not yet supported
-	// because it introduces complexity in tracking node usage for buffer management.
+	// Check each node and handle parent scope references
 	for idx, node := range nodes {
 		if node.function != nil && node.function != f {
 			// Check if the node is from a parent function (closure capture)
@@ -119,17 +155,14 @@ func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([
 				}
 			}
 			if isFromParent {
+				// Create or reuse a capture node for this parent value
+				nodes[idx] = f.getOrCreateCaptureNode(node)
+			} else {
+				// Node from a completely different function (not parent)
 				return nil, errors.Errorf(
-					"%s: input #%d uses a node from a parent function scope (closure capturing parent values). "+
-						"This is not yet supported in the SimpleGo backend. "+
-						"Please pass the value as a closure parameter instead. "+
-						"If you need this feature, please open an issue at github.com/gomlx/gomlx",
+					"%s: input #%d uses a node from a different function scope",
 					name, idx)
 			}
-			// Node from a completely different function (not parent)
-			return nil, errors.Errorf(
-				"%s: input #%d uses a node from a different function scope",
-				name, idx)
 		}
 	}
 

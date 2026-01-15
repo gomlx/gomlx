@@ -305,7 +305,7 @@ func TestCompiledClosureExecute(t *testing.T) {
 
 	// Execute the closure
 	b := backend.(*Backend)
-	outputs, err := cc.Execute(b, []*Buffer{xBuf, yBuf}, nil)
+	outputs, err := cc.Execute(b, []*Buffer{xBuf, yBuf}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1, "Should have one output")
 
@@ -361,7 +361,7 @@ func TestCompiledClosureMultipleExecutions(t *testing.T) {
 			valid: true,
 		}
 
-		outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil)
+		outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil, nil)
 		require.NoError(t, err, "Execution %d failed", i)
 		require.Len(t, outputs, 1)
 
@@ -396,7 +396,7 @@ func TestCompiledClosureWithConstants(t *testing.T) {
 
 	// Execute with no inputs
 	simpleGoBackend := backend.(*Backend)
-	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{}, nil)
+	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)
 
@@ -441,7 +441,7 @@ func TestCompiledClosureMultipleOutputs(t *testing.T) {
 	}
 
 	b := backend.(*Backend)
-	outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil)
+	outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 2)
 
@@ -501,7 +501,7 @@ func TestCompiledClosureChainedOperations(t *testing.T) {
 	}
 
 	simpleGoBackend := backend.(*Backend)
-	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{inputBuf}, nil)
+	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{inputBuf}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)
 
@@ -543,12 +543,12 @@ func TestCompiledClosureInputValidation(t *testing.T) {
 	simpleGoBackend := backend.(*Backend)
 
 	// Too few inputs
-	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf}, nil)
+	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf}, nil, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expects 2 inputs, got 1")
 
 	// Too many inputs
-	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf, xBuf, xBuf}, nil)
+	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf, xBuf, xBuf}, nil, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expects 2 inputs, got 3")
 }
@@ -570,10 +570,10 @@ func TestMainFunctionNotCompiled(t *testing.T) {
 	require.Nil(t, mainFnImpl.compiled, "Main function should not be pre-compiled")
 }
 
-// TestClosureCapturingParentNodeError tests that using a node from a parent function
-// (closure capturing) produces an error, as this is not yet supported.
-func TestClosureCapturingParentNodeError(t *testing.T) {
-	builder := backend.Builder("test_closure_capture_error")
+// TestClosureCapturingParentNode tests that using a node from a parent function
+// (closure capturing) works correctly by creating capture nodes.
+func TestClosureCapturingParentNode(t *testing.T) {
+	builder := backend.Builder("test_closure_capture")
 	mainFn := builder.Main()
 
 	// Create a constant in the main function
@@ -588,17 +588,25 @@ func TestClosureCapturingParentNodeError(t *testing.T) {
 	y, err := closure.Parameter("y", shapes.Make(dtypes.Float32, 2), nil)
 	require.NoError(t, err)
 
-	// Try to use the parent node in the closure - this should error
-	_, err = closure.Add(parentNode, y)
-	require.Error(t, err, "Using a parent function's node in a closure should produce an error")
-	require.Contains(t, err.Error(), "parent function scope")
-	require.Contains(t, err.Error(), "closure capturing")
+	// Use the parent node in the closure - this should create a capture node
+	sum, err := closure.Add(parentNode, y)
+	require.NoError(t, err, "Using a parent function's node in a closure should work")
+	require.NotNil(t, sum)
+
+	// Return the sum
+	err = closure.Return([]backends.Value{sum}, nil)
+	require.NoError(t, err)
+
+	// Verify the closure has captured the parent node
+	closureFn := closure.(*Function)
+	require.Len(t, closureFn.capturedValues, 1, "Should have captured one parent node")
+	require.Len(t, closureFn.capturedNodes, 1, "Should have one capture node")
 }
 
-// TestClosureCapturingParentNodeErrorNested tests that using a node from a grandparent function
-// (nested closure capturing) also produces an error.
-func TestClosureCapturingParentNodeErrorNested(t *testing.T) {
-	builder := backend.Builder("test_nested_closure_capture_error")
+// TestClosureCapturingGrandparentNode tests that using a node from a grandparent function
+// (nested closure capturing) works correctly by creating capture nodes.
+func TestClosureCapturingGrandparentNode(t *testing.T) {
+	builder := backend.Builder("test_nested_closure_capture")
 	mainFn := builder.Main()
 
 	// Create a constant in the main function
@@ -617,10 +625,19 @@ func TestClosureCapturingParentNodeErrorNested(t *testing.T) {
 	y, err := closure2.Parameter("y", shapes.Make(dtypes.Float32, 2), nil)
 	require.NoError(t, err)
 
-	// Try to use the grandparent node in the nested closure - this should error
-	_, err = closure2.Add(parentNode, y)
-	require.Error(t, err, "Using a grandparent function's node in a nested closure should produce an error")
-	require.Contains(t, err.Error(), "parent function scope")
+	// Use the grandparent node in the nested closure - this should create a capture node
+	sum, err := closure2.Add(parentNode, y)
+	require.NoError(t, err, "Using a grandparent function's node in a nested closure should work")
+	require.NotNil(t, sum)
+
+	// Return from closure2
+	err = closure2.Return([]backends.Value{sum}, nil)
+	require.NoError(t, err)
+
+	// Verify the nested closure has captured the grandparent node
+	closure2Fn := closure2.(*Function)
+	require.Len(t, closure2Fn.capturedValues, 1, "Should have captured one parent node")
+	require.Len(t, closure2Fn.capturedNodes, 1, "Should have one capture node")
 }
 
 // TestClosureSameFunctionNodesAllowed tests that using nodes from the same function is allowed.
