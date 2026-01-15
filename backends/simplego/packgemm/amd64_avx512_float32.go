@@ -157,7 +157,7 @@ func avx512Float32GemmChunk(
 				// We pack a [lhsPanelHeight, contractingPanelWidth] block of LHS into contiguous memory.
 				// Format: Horizontal strips of height lhsL1KernelRows (Mr).
 				// -----------------------------------------------------
-				packLhs(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, lhsCrossSize, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
+				packLhs(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
 
 				// Loop 2 (jr): Micro-Kernel Columns (Nr == rhsL1BlockCols)
 				for microColIdx := 0; microColIdx < rhsPanelWidth; microColIdx += params.RHSL1KernelCols {
@@ -209,6 +209,9 @@ func avx512Float32GemmChunk(
 //
 // lhsActiveRows and rhsActiveCols are the number of rows/cols that should be
 // written back to the output. Notice the input is padded.
+//
+// It uses 4x2 Float32x16 AVX512 accumulate registers to compute the output tile -- Go only
+// seems to make use of the first 16 registers.
 func avx512Float32MicroKernel(
 	contractingLen int,
 	alpha, beta float32,
@@ -383,7 +386,7 @@ func packRhs(src, dst []float32, rowStart, colStart, strideCol, depth, width, nr
 
 // packLhs packs a [height, depth] block from LHS into packedLhs.
 // It rearranges data into horizontal strips of height Mr (lhsL1BlockRows).
-func packLhs(src, dst []float32, rowStart, colStart, strideRow, strideCol, height, depth, lhsL1KernelRows int) {
+func packLhs(src, dst []float32, rowStart, colStart, strideCol, height, depth, lhsL1KernelRows int) {
 	dstIdx := 0
 	// Iterate over strips of height mr
 	for stripRowIdx := 0; stripRowIdx < height; stripRowIdx += lhsL1KernelRows {
