@@ -330,7 +330,7 @@ func microKernelFloat32(
 			// Store first strip of columns.
 			outSlice := output[outputIdx : outputIdx+16]
 			curValue := archsimd.LoadFloat32x16Slice(outSlice)
-			// curValue = curValue.Mul(betaBroadcast)
+			curValue = curValue.Mul(betaBroadcast)
 			curValue = curValue.Add(acc0)
 			curValue.StoreSlice(outSlice)
 
@@ -340,14 +340,14 @@ func microKernelFloat32(
 					// Full second strip of columns.
 					outSlice = output[outputIdx+16 : outputIdx+32]
 					curValue = archsimd.LoadFloat32x16Slice(outSlice)
-					// curValue = curValue.Mul(betaBroadcast)
+					curValue = curValue.Mul(betaBroadcast)
 					curValue = curValue.Add(acc1)
 					curValue.StoreSlice(outSlice)
 				} else {
 					// Partial second strip of columns.
 					outSlice := output[outputIdx+16 : outputIdx+rhsActiveCols]
 					curValue = archsimd.LoadFloat32x16SlicePart(outSlice)
-					// curValue = curValue.Mul(betaBroadcast)
+					curValue = curValue.Mul(betaBroadcast)
 					curValue = curValue.Add(acc1)
 					curValue.StoreMasked(castToArray16(&outSlice[0]), maskForCols1)
 				}
