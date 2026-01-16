@@ -10,11 +10,11 @@ var (
 	// These values are somewhat arbitrary, assuming "standard" modern cache sizes.
 	// They are parameterized so they can be tuned or determined dynamically later.
 	GenericFloat32Params = CacheParams{
-		LHSL1KernelRows:      4,    // Mr: Rows of LHS in registers.
-		RHSL1KernelCols:      16,   // Nr: Cols of RHS in registers.
-		ContractingPanelSize: 256,  // Kc: L1 Block Depth.
-		LHSL2PanelCrossSize:  256,  // Mc: L2 Block Height.
-		RHSL3PanelCrossSize:  2048, // Nc: L3 Block Width.
+		LHSL1KernelRows:      8,    // Mr: Rows of LHS in registers.
+		RHSL1KernelCols:      8,    // Nr: Cols of RHS in registers.
+		ContractingPanelSize: 2048, // Kc: L1 Block Depth.
+		LHSL2PanelCrossSize:  32,   // Mc: L2 Block Height.
+		RHSL3PanelCrossSize:  256,  // Nc: L3 Block Width.
 	}
 )
 
