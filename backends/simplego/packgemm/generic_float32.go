@@ -14,7 +14,7 @@ var (
 		RHSL1KernelCols:      8,    // Nr: Cols of RHS in registers.
 		ContractingPanelSize: 2048, // Kc: L1 Block Depth.
 		LHSL2PanelCrossSize:  32,   // Mc: L2 Block Height.
-		RHSL3PanelCrossSize:  256,  // Nc: L3 Block Width.
+		RHSL3PanelCrossSize:  64,  // Nc: L3 Block Width.
 	}
 )
 
