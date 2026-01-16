@@ -10,8 +10,8 @@ var (
 	// These values are somewhat arbitrary, assuming "standard" modern cache sizes.
 	// They are parameterized so they can be tuned or determined dynamically later.
 	GenericFloat32Params = CacheParams{
-		LHSL1KernelRows:      8,    // Mr: Rows of LHS in registers.
-		RHSL1KernelCols:      8,    // Nr: Cols of RHS in registers.
+		LHSL1KernelRows:      4,    // Mr: Rows of LHS in registers.
+		RHSL1KernelCols:      16,   // Nr: Cols of RHS in registers.
 		ContractingPanelSize: 256,  // Kc: L1 Block Depth.
 		LHSL2PanelCrossSize:  256,  // Mc: L2 Block Height.
 		RHSL3PanelCrossSize:  2048, // Nc: L3 Block Width.
@@ -92,9 +92,7 @@ func genericFloat32GemmChunk(
 ) {
 	packedLhsRef, packedLhs := bufAllocFn(params.LHSL2PanelCrossSize * params.ContractingPanelSize)
 	packedRhsRef, packedRhs := bufAllocFn(params.ContractingPanelSize * params.RHSL3PanelCrossSize)
-
-	// Accumulator buffer for the micro-kernel.
-	accum := make([]float32, params.LHSL1KernelRows*params.RHSL1KernelCols)
+	var accum [64]float32
 
 	defer func() {
 		bufReleaseFn(packedLhsRef)
@@ -142,8 +140,8 @@ func genericFloat32GemmChunk(
 							alpha, effectiveBeta,
 							packedLhs[offsetLhs:],
 							packedRhs[offsetRhs:],
+							&accum,
 							output,
-							accum,
 							outputRow, outputCol,
 							rhsCrossSize,
 							params.LHSL1KernelRows,
@@ -162,15 +160,16 @@ func genericFloat32MicroKernel(
 	contractingLen int,
 	alpha, beta float32,
 	ptrLhs, ptrRhs []float32,
-	output, accum []float32,
+	accum *[64]float32,
+	output []float32,
 	outputRowStart, outputColStart int,
 	outputStride int,
 	lhsKernelRows, rhsKernelCols int,
 	lhsActiveRows, rhsActiveCols int,
 ) {
 	// 1. Initialize Accumulators
-	for i := range accum {
-		accum[i] = 0
+	for i := range *accum {
+		(*accum)[i] = 0
 	}
 
 	// 2. The K-Loop (Dot Product)
@@ -180,11 +179,31 @@ func genericFloat32MicroKernel(
 	idxRhs := 0
 
 	for range contractingLen {
-		for r := 0; r < lhsKernelRows; r++ {
-			valA := ptrLhs[idxLhs+r]
-			for c := 0; c < rhsKernelCols; c++ {
-				valB := ptrRhs[idxRhs+c]
-				accum[r*rhsKernelCols+c] += valA * valB
+		// Force early bound-check to eliminate bounds checks in the inner loops.
+		lhsWindow := ptrLhs[idxLhs : idxLhs+lhsKernelRows]
+		_ = lhsWindow[lhsKernelRows-1]
+		rhsWindow := ptrRhs[idxRhs : idxRhs+rhsKernelCols]
+		_ = rhsWindow[rhsKernelCols-1]
+		for r := 0; r+3 < lhsKernelRows; r += 4 {
+			valA0 := lhsWindow[r]
+			valA1 := lhsWindow[r+1]
+			valA2 := lhsWindow[r+2]
+			valA3 := lhsWindow[r+3]
+
+			for c := 0; c+1 < rhsKernelCols; c += 2 {
+				valB0 := rhsWindow[c]
+				valB1 := rhsWindow[c+1]
+
+				// BCE (bound check elimination)
+				(*accum)[r*rhsKernelCols+c] += valA0 * valB0
+				(*accum)[(r+1)*rhsKernelCols+c] += valA1 * valB0
+				(*accum)[(r+2)*rhsKernelCols+c] += valA2 * valB0
+				(*accum)[(r+3)*rhsKernelCols+c] += valA3 * valB0
+
+				(*accum)[r*rhsKernelCols+c+1] += valA0 * valB1
+				(*accum)[(r+1)*rhsKernelCols+c+1] += valA1 * valB1
+				(*accum)[(r+2)*rhsKernelCols+c+1] += valA2 * valB1
+				(*accum)[(r+3)*rhsKernelCols+c+1] += valA3 * valB1
 			}
 		}
 		idxLhs += lhsKernelRows
@@ -192,14 +211,23 @@ func genericFloat32MicroKernel(
 	}
 
 	// 3. Write Back to Output
-	for r := 0; r < lhsActiveRows; r++ {
-		for c := 0; c < rhsActiveCols; c++ {
-			res := accum[r*rhsKernelCols+c]
-			outIdx := (outputRowStart+r)*outputStride + (outputColStart + c)
-			if beta == 0 {
-				output[outIdx] = alpha * res
-			} else {
-				output[outIdx] = alpha*res + beta*output[outIdx]
+	if alpha == 1 && beta == 0 {
+		_ = (*accum)[(lhsActiveRows-1)*rhsKernelCols+rhsActiveCols-1]
+		for r := range lhsActiveRows {
+			res := (*accum)[r*rhsKernelCols : r*rhsKernelCols+rhsActiveCols]
+			outIdx := (outputRowStart+r)*outputStride + outputColStart
+			copy(output[outIdx:outIdx+rhsActiveCols], res)
+		}
+	} else {
+		for r := range lhsActiveRows {
+			for c := range rhsActiveCols {
+				res := (*accum)[r*rhsKernelCols+c]
+				outIdx := (outputRowStart+r)*outputStride + (outputColStart + c)
+				if beta == 0 {
+					output[outIdx] = alpha * res
+				} else {
+					output[outIdx] = alpha*res + beta*output[outIdx]
+				}
 			}
 		}
 	}
