@@ -305,7 +305,7 @@ func TestCompiledClosureExecute(t *testing.T) {
 
 	// Execute the closure
 	b := backend.(*Backend)
-	outputs, err := cc.Execute(b, []*Buffer{xBuf, yBuf}, nil, nil)
+	outputs, err := cc.Execute(b, []*Buffer{xBuf, yBuf}, nil, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1, "Should have one output")
 
@@ -361,7 +361,7 @@ func TestCompiledClosureMultipleExecutions(t *testing.T) {
 			valid: true,
 		}
 
-		outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil, nil)
+		outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil, nil, nil)
 		require.NoError(t, err, "Execution %d failed", i)
 		require.Len(t, outputs, 1)
 
@@ -396,7 +396,7 @@ func TestCompiledClosureWithConstants(t *testing.T) {
 
 	// Execute with no inputs
 	simpleGoBackend := backend.(*Backend)
-	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{}, nil, nil)
+	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{}, nil, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)
 
@@ -441,7 +441,7 @@ func TestCompiledClosureMultipleOutputs(t *testing.T) {
 	}
 
 	b := backend.(*Backend)
-	outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil, nil)
+	outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 2)
 
@@ -501,7 +501,7 @@ func TestCompiledClosureChainedOperations(t *testing.T) {
 	}
 
 	simpleGoBackend := backend.(*Backend)
-	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{inputBuf}, nil, nil)
+	outputs, err := cc.Execute(simpleGoBackend, []*Buffer{inputBuf}, nil, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)
 
@@ -543,12 +543,12 @@ func TestCompiledClosureInputValidation(t *testing.T) {
 	simpleGoBackend := backend.(*Backend)
 
 	// Too few inputs
-	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf}, nil, nil)
+	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf}, nil, nil, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expects 2 inputs, got 1")
 
 	// Too many inputs
-	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf, xBuf, xBuf}, nil, nil)
+	_, err = cc.Execute(simpleGoBackend, []*Buffer{xBuf, xBuf, xBuf}, nil, nil, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expects 2 inputs, got 3")
 }
@@ -664,4 +664,125 @@ func TestClosureSameFunctionNodesAllowed(t *testing.T) {
 	// Return should also work
 	err = closure.Return([]backends.Value{sum}, nil)
 	require.NoError(t, err)
+}
+
+// TestCapturedValuesPropagation tests that captured values are properly tracked
+// for DAG dependency and lifetime management.
+func TestCapturedValuesPropagation(t *testing.T) {
+	builder := backend.Builder("test_captured_values_propagation")
+	mainFn := builder.Main()
+
+	// Create a constant in the main function
+	parentValue, err := mainFn.Constant([]float32{1.0, 2.0}, 2)
+	require.NoError(t, err)
+
+	// Create a closure that captures the parent value
+	closure, err := mainFn.Closure()
+	require.NoError(t, err)
+
+	// Create a parameter in the closure
+	y, err := closure.Parameter("y", shapes.Make(dtypes.Float32, 2), nil)
+	require.NoError(t, err)
+
+	// Use the parent value in the closure
+	sum, err := closure.Add(parentValue, y)
+	require.NoError(t, err)
+
+	err = closure.Return([]backends.Value{sum}, nil)
+	require.NoError(t, err)
+
+	// Verify the closure's captured values
+	closureFn := closure.(*Function)
+	require.Len(t, closureFn.capturedValues, 1)
+	require.Equal(t, parentValue.(*Node), closureFn.capturedValues[0])
+
+	// Verify that CapturedValues() returns the list
+	captured := closureFn.CapturedValues()
+	require.Len(t, captured, 1)
+	require.Equal(t, parentValue.(*Node), captured[0])
+}
+
+// TestSetNodeCapturedInputs tests that SetNodeCapturedInputs properly sets up
+// captured inputs on a node for DAG tracking.
+func TestSetNodeCapturedInputs(t *testing.T) {
+	builder := backend.Builder("test_set_node_captured_inputs")
+	mainFnImpl := builder.Main().(*Function)
+
+	// Create a value in the main function
+	parentValue, err := mainFnImpl.Constant([]float32{1.0, 2.0}, 2)
+	require.NoError(t, err)
+
+	// Create a closure that captures the parent value
+	closure, err := mainFnImpl.Closure()
+	require.NoError(t, err)
+
+	y, err := closure.Parameter("y", shapes.Make(dtypes.Float32, 2), nil)
+	require.NoError(t, err)
+
+	sum, err := closure.Add(parentValue, y)
+	require.NoError(t, err)
+
+	err = closure.Return([]backends.Value{sum}, nil)
+	require.NoError(t, err)
+
+	closureFn := closure.(*Function)
+
+	// Create a dummy node (simulating an If/While op that uses the closure)
+	dummyNode := &Node{
+		builderIdx: 999,
+		opType:     backends.OpTypeIdentity,
+		function:   mainFnImpl,
+	}
+
+	// Set up captured inputs on the node
+	mainFnImpl.SetNodeCapturedInputs(dummyNode, closureFn)
+
+	// Verify the node has captured inputs
+	require.Len(t, dummyNode.capturedInputs, 1)
+	require.Equal(t, parentValue.(*Node), dummyNode.capturedInputs[0])
+	require.Len(t, dummyNode.donateCaptures, 1)
+	require.False(t, dummyNode.donateCaptures[0]) // Default is no donation
+}
+
+// TestNestedClosureCaptureChain tests that nested closures properly propagate
+// captures through intermediate closures.
+func TestNestedClosureCaptureChain(t *testing.T) {
+	builder := backend.Builder("test_nested_closure_chain")
+	mainFn := builder.Main()
+
+	// Create a value in the main function (grandparent)
+	grandparentValue, err := mainFn.Constant([]float32{10.0, 20.0}, 2)
+	require.NoError(t, err)
+
+	// Create first closure (parent)
+	closure1, err := mainFn.Closure()
+	require.NoError(t, err)
+
+	// Create second closure (child) - nested
+	closure2, err := closure1.Closure()
+	require.NoError(t, err)
+
+	// Create a parameter in the nested closure
+	y, err := closure2.Parameter("y", shapes.Make(dtypes.Float32, 2), nil)
+	require.NoError(t, err)
+
+	// Use the grandparent value in the nested closure
+	// This should trigger capture propagation: grandparent -> parent -> child
+	sum, err := closure2.Add(grandparentValue, y)
+	require.NoError(t, err)
+
+	err = closure2.Return([]backends.Value{sum}, nil)
+	require.NoError(t, err)
+
+	// Verify the chain:
+	// 1. Parent closure (closure1) should capture the grandparent value
+	closure1Fn := closure1.(*Function)
+	require.Len(t, closure1Fn.capturedValues, 1)
+	require.Equal(t, grandparentValue.(*Node), closure1Fn.capturedValues[0])
+
+	// 2. Child closure (closure2) should capture the parent's capture node
+	closure2Fn := closure2.(*Function)
+	require.Len(t, closure2Fn.capturedValues, 1)
+	// The captured value should be the parent's capture node, not the original
+	require.Equal(t, closure1Fn.capturedNodes[0], closure2Fn.capturedValues[0])
 }

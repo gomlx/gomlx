@@ -56,9 +56,12 @@ func newFunctionExecutable(f *Function) (*FunctionExecutable, error) {
 		dependents:        make([][]int, numNodesToProcess),
 	}
 
-	// Find max inputs and count uses/dependents
+	// Find max inputs (including captured inputs) and count uses/dependents
 	for nodeIdx := range numNodesToProcess {
-		fe.maxInputs = max(fe.maxInputs, len(f.builder.nodes[nodeIdx].inputs))
+		node := f.builder.nodes[nodeIdx]
+		// Total inputs = regular inputs + captured inputs
+		totalInputs := len(node.inputs) + len(node.capturedInputs)
+		fe.maxInputs = max(fe.maxInputs, totalInputs)
 	}
 
 	// Count uses for each node starting from outputs
@@ -82,6 +85,7 @@ func newFunctionExecutable(f *Function) (*FunctionExecutable, error) {
 }
 
 // countNodeUsesAndDependents recursively counts how many times a node is used.
+// It tracks both regular inputs and captured inputs (for closure-calling ops).
 func (fe *FunctionExecutable) countNodeUsesAndDependents(node *Node) {
 	nodeIdx := node.builderIdx
 	fe.numUses[nodeIdx]++
@@ -90,6 +94,13 @@ func (fe *FunctionExecutable) countNodeUsesAndDependents(node *Node) {
 		for _, input := range node.inputs {
 			fe.dependents[input.builderIdx] = append(fe.dependents[input.builderIdx], nodeIdx)
 			fe.countNodeUsesAndDependents(input)
+		}
+		// Also track captured inputs for closure-calling ops (If, While, Sort, etc.).
+		// This ensures captured values are properly tracked in the dependency graph
+		// so they can be freed when no longer needed.
+		for _, capturedInput := range node.capturedInputs {
+			fe.dependents[capturedInput.builderIdx] = append(fe.dependents[capturedInput.builderIdx], nodeIdx)
+			fe.countNodeUsesAndDependents(capturedInput)
 		}
 	}
 }
@@ -123,7 +134,9 @@ type funcExecBuffers struct {
 // Execute runs the compiled function with the given inputs.
 // The inputs must match the function's parameters in count and shape.
 // capturedInputs are the values captured from parent scopes (for closures).
-func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate []bool, capturedInputs []*Buffer) ([]*Buffer, error) {
+// donateCaptures indicates which captured inputs can be donated to the closure.
+// If donateCaptures is nil, no captured inputs will be donated.
+func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate []bool, capturedInputs []*Buffer, donateCaptures []bool) ([]*Buffer, error) {
 	// Use function's parameters (not builder.inputs) for proper function/closure support
 	funcParams := fe.function.parameters
 	if len(inputs) != len(funcParams) {
@@ -142,6 +155,11 @@ func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate
 		donate = make([]bool, len(inputs))
 	}
 
+	// donateCaptures defaults to false (no donation)
+	if len(donateCaptures) == 0 {
+		donateCaptures = make([]bool, len(capturedInputs))
+	}
+
 	// Get execution buffers from pool and reset
 	execBuf := fe.executionBuffersPool.Get().(*funcExecBuffers)
 	for i := range fe.numNodesToProcess {
@@ -158,12 +176,12 @@ func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate
 		execBuf.owned[inputIdx] = donate[i]
 	}
 
-	// Set up captured values from parent scope
-	// These are not owned by the closure - they belong to the parent
+	// Set up captured values from parent scope.
+	// If donateCaptures[i] is true, the closure takes ownership of the buffer.
 	for i, captureNode := range fe.function.capturedNodes {
 		captureIdx := captureNode.builderIdx
 		execBuf.results[captureIdx] = capturedInputs[i]
-		execBuf.owned[captureIdx] = false // Never donate captured values
+		execBuf.owned[captureIdx] = donateCaptures[i]
 	}
 
 	// Decide execution mode
@@ -258,12 +276,14 @@ func (fe *FunctionExecutable) executeParallel(backend *Backend, execBuf *funcExe
 	completed := 0
 
 	// Count expected nodes and initialize dependencies
+	// Dependencies include both regular inputs and captured inputs
 	for nodeIdx := range fe.numNodesToProcess {
 		if fe.numUses[nodeIdx] > 0 {
 			expected++
 			node := fe.function.builder.nodes[nodeIdx]
-			execBuf.remainingDeps[nodeIdx] = len(node.inputs)
-			if len(node.inputs) == 0 {
+			// Total dependencies = regular inputs + captured inputs
+			execBuf.remainingDeps[nodeIdx] = len(node.inputs) + len(node.capturedInputs)
+			if execBuf.remainingDeps[nodeIdx] == 0 {
 				readyToExecute <- nodeIdx
 			}
 		}
@@ -446,6 +466,21 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			// Release the input buffer - all users have finished.
 			backend.putBuffer(inputBuffers[i])
 			execBuf.results[inputIdx] = nil
+		}
+	}
+	// Also update usage counts for captured inputs.
+	// These are treated as additional inputs for lifetime tracking.
+	for _, capturedInput := range node.capturedInputs {
+		capturedIdx := capturedInput.builderIdx
+		newCount := execBuf.numUsed[capturedIdx].Add(1)
+		capturedBuf := execBuf.results[capturedIdx]
+		if capturedBuf == nil {
+			continue
+		}
+		if int(newCount) == fe.numUses[capturedIdx] && execBuf.owned[capturedIdx] {
+			// Release the captured buffer - all users have finished.
+			backend.putBuffer(capturedBuf)
+			execBuf.results[capturedIdx] = nil
 		}
 	}
 	if execBuf.opsExecutionType == opsExecutionParallel {

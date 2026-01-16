@@ -95,6 +95,15 @@ func (f *Function) IsAncestorOf(leafFunc *Function) bool {
 // getOrCreateCaptureNode returns a capture node for the given parent node.
 // If the parent node has already been captured, returns the existing capture node.
 // Otherwise, creates a new capture node and adds it to the captured values list.
+//
+// For nested closures (grandparent captures), this recursively propagates the
+// capture through intermediate closures. For example, if closure C (child of B,
+// child of A) wants to capture a value from A, this will:
+// 1. Have B capture the value from A
+// 2. Have C capture B's capture node
+//
+// This ensures that when If/While/Sort ops are built, they can properly set up
+// their capturedInputs by looking at the closure's capturedValues.
 func (f *Function) getOrCreateCaptureNode(parentNode *Node) *Node {
 	// Check if we've already captured this node
 	for i, captured := range f.capturedValues {
@@ -103,15 +112,26 @@ func (f *Function) getOrCreateCaptureNode(parentNode *Node) *Node {
 		}
 	}
 
+	// Determine the actual node to capture.
+	// If parentNode is not from our direct parent, we need to propagate through
+	// intermediate closures.
+	nodeToCapture := parentNode
+	if f.parent != nil && parentNode.function != f.parent {
+		// The node is from a grandparent or further ancestor.
+		// First, have our parent capture it, then we capture the parent's capture node.
+		parentCaptureNode := f.parent.getOrCreateCaptureNode(parentNode)
+		nodeToCapture = parentCaptureNode
+	}
+
 	// Create a new capture node
 	captureIdx := len(f.capturedValues)
 	captureNode := f.builder.newNode(f, backends.OpTypeCapturedValue, parentNode.shape)
 	captureNode.data = &capturedValueNode{
-		parentNode: parentNode,
+		parentNode: nodeToCapture,
 		captureIdx: captureIdx,
 	}
 
-	f.capturedValues = append(f.capturedValues, parentNode)
+	f.capturedValues = append(f.capturedValues, nodeToCapture)
 	f.capturedNodes = append(f.capturedNodes, captureNode)
 
 	return captureNode
@@ -272,6 +292,35 @@ func (f *Function) Return(outputs []backends.Value, shardings []*backends.Shardi
 // Compiled returns the pre-compiled function executable, or nil if not yet compiled.
 func (f *Function) Compiled() *FunctionExecutable {
 	return f.compiled
+}
+
+// CapturedValues returns the list of parent nodes that this closure captures.
+// Each entry corresponds to a value from a parent function that this closure uses.
+// Returns nil for non-closures or closures that don't capture any values.
+func (f *Function) CapturedValues() []*Node {
+	return f.capturedValues
+}
+
+// SetNodeCapturedInputs sets up the captured inputs for a node that calls a closure.
+// This should be called when building ops like If, While, Sort that use closures.
+// It copies the closure's required captured values to the node's capturedInputs field
+// so they are properly tracked in the parent function's dependency graph.
+//
+// For nested closures, if the closure captures values from a grandparent,
+// those values are propagated to the parent closure's required captures.
+func (f *Function) SetNodeCapturedInputs(node *Node, closure *Function) {
+	if closure == nil || len(closure.capturedValues) == 0 {
+		return
+	}
+
+	// Copy the closure's captured values to the node's capturedInputs.
+	// These become dependencies of the node in the parent function's DAG.
+	node.capturedInputs = make([]*Node, len(closure.capturedValues))
+	copy(node.capturedInputs, closure.capturedValues)
+
+	// Initialize donateCaptures to false by default (no donation).
+	// The caller can set specific values to true if donation is desired.
+	node.donateCaptures = make([]bool, len(closure.capturedValues))
 }
 
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
