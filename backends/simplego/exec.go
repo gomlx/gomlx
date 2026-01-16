@@ -187,7 +187,8 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, _ backends
 	}
 
 	// Delegate to FunctionExecutable
-	outputs, err := e.mainFn.Execute(e.backend, bufInputs, donate)
+	// Main function doesn't have captured values, so pass nil for both
+	outputs, err := e.mainFn.Execute(e.backend, bufInputs, donate, nil, nil)
 	if err != nil {
 		return nil, err
 	}

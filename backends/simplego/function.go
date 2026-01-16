@@ -32,9 +32,23 @@ type Function struct {
 	// parameters stores the parameter nodes for this function.
 	parameters []*Node
 
+	// capturedValues stores nodes from parent scopes that are captured by this closure.
+	// The order matches capturedNodes - capturedValues[i] is the parent node for capturedNodes[i].
+	capturedValues []*Node
+
+	// capturedNodes stores the proxy nodes in this closure for captured values.
+	// These are OpTypeCapturedValue nodes that receive their values at execution time.
+	capturedNodes []*Node
+
 	// compiled holds pre-compiled execution info.
 	// This is set during Return() to allow efficient execution.
 	compiled *FunctionExecutable
+}
+
+// capturedValueNode is the data stored in a captured value node.
+type capturedValueNode struct {
+	parentNode *Node // The node from the parent scope being captured
+	captureIdx int   // Index into the capturedValues/capturedNodes arrays
 }
 
 var _ backends.Function = (*Function)(nil)
@@ -78,6 +92,51 @@ func (f *Function) IsAncestorOf(leafFunc *Function) bool {
 	return false
 }
 
+// getOrCreateCaptureNode returns a capture node for the given parent node.
+// If the parent node has already been captured, returns the existing capture node.
+// Otherwise, creates a new capture node and adds it to the captured values list.
+//
+// For nested closures (grandparent captures), this recursively propagates the
+// capture through intermediate closures. For example, if closure C (child of B,
+// child of A) wants to capture a value from A, this will:
+// 1. Have B capture the value from A
+// 2. Have C capture B's capture node
+//
+// This ensures that when If/While/Sort ops are built, they can properly set up
+// their capturedInputs by looking at the closure's capturedValues.
+func (f *Function) getOrCreateCaptureNode(parentNode *Node) *Node {
+	// Check if we've already captured this node
+	for i, captured := range f.capturedValues {
+		if captured == parentNode {
+			return f.capturedNodes[i]
+		}
+	}
+
+	// Determine the actual node to capture.
+	// If parentNode is not from our direct parent, we need to propagate through
+	// intermediate closures.
+	nodeToCapture := parentNode
+	if f.parent != nil && parentNode.function != f.parent {
+		// The node is from a grandparent or further ancestor.
+		// First, have our parent capture it, then we capture the parent's capture node.
+		parentCaptureNode := f.parent.getOrCreateCaptureNode(parentNode)
+		nodeToCapture = parentCaptureNode
+	}
+
+	// Create a new capture node
+	captureIdx := len(f.capturedValues)
+	captureNode := f.builder.newNode(f, backends.OpTypeCapturedValue, parentNode.shape)
+	captureNode.data = &capturedValueNode{
+		parentNode: nodeToCapture,
+		captureIdx: captureIdx,
+	}
+
+	f.capturedValues = append(f.capturedValues, nodeToCapture)
+	f.capturedNodes = append(f.capturedNodes, captureNode)
+
+	return captureNode
+}
+
 // Closure creates a new closure function within this function.
 // Closures can access values from their parent function's scope.
 func (f *Function) Closure() (backends.Function, error) {
@@ -93,9 +152,8 @@ func (f *Function) Closure() (backends.Function, error) {
 }
 
 // verifyAndCastValues sanity checks that the values (backends.Op) are valid and created with this builder.
-// It also verifies that all input nodes belong to the same function - using nodes from a parent
-// function (closure capturing) is not yet supported.
-// It returns the underlying *Node of the values.
+// If a node belongs to a parent function, it creates a capture node to access the value.
+// It returns the underlying *Node of the values (with capture nodes substituted for parent values).
 func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([]*Node, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
@@ -105,9 +163,7 @@ func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([
 		return nil, err
 	}
 
-	// Check that all input nodes belong to this function.
-	// Capturing nodes from a parent function (closure capture) is not yet supported
-	// because it introduces complexity in tracking node usage for buffer management.
+	// Check each node and handle parent scope references
 	for idx, node := range nodes {
 		if node.function != nil && node.function != f {
 			// Check if the node is from a parent function (closure capture)
@@ -119,17 +175,14 @@ func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([
 				}
 			}
 			if isFromParent {
+				// Create or reuse a capture node for this parent value
+				nodes[idx] = f.getOrCreateCaptureNode(node)
+			} else {
+				// Node from a completely different function (not parent)
 				return nil, errors.Errorf(
-					"%s: input #%d uses a node from a parent function scope (closure capturing parent values). "+
-						"This is not yet supported in the SimpleGo backend. "+
-						"Please pass the value as a closure parameter instead. "+
-						"If you need this feature, please open an issue at github.com/gomlx/gomlx",
+					"%s: input #%d uses a node from a different function scope",
 					name, idx)
 			}
-			// Node from a completely different function (not parent)
-			return nil, errors.Errorf(
-				"%s: input #%d uses a node from a different function scope",
-				name, idx)
 		}
 	}
 
@@ -239,6 +292,35 @@ func (f *Function) Return(outputs []backends.Value, shardings []*backends.Shardi
 // Compiled returns the pre-compiled function executable, or nil if not yet compiled.
 func (f *Function) Compiled() *FunctionExecutable {
 	return f.compiled
+}
+
+// CapturedValues returns the list of parent nodes that this closure captures.
+// Each entry corresponds to a value from a parent function that this closure uses.
+// Returns nil for non-closures or closures that don't capture any values.
+func (f *Function) CapturedValues() []*Node {
+	return f.capturedValues
+}
+
+// SetNodeCapturedInputs sets up the captured inputs for a node that calls a closure.
+// This should be called when building ops like If, While, Sort that use closures.
+// It copies the closure's required captured values to the node's capturedInputs field
+// so they are properly tracked in the parent function's dependency graph.
+//
+// For nested closures, if the closure captures values from a grandparent,
+// those values are propagated to the parent closure's required captures.
+func (f *Function) SetNodeCapturedInputs(node *Node, closure *Function) {
+	if closure == nil || len(closure.capturedValues) == 0 {
+		return
+	}
+
+	// Copy the closure's captured values to the node's capturedInputs.
+	// These become dependencies of the node in the parent function's DAG.
+	node.capturedInputs = make([]*Node, len(closure.capturedValues))
+	copy(node.capturedInputs, closure.capturedValues)
+
+	// Initialize donateCaptures to false by default (no donation).
+	// The caller can set specific values to true if donation is desired.
+	node.donateCaptures = make([]bool, len(closure.capturedValues))
 }
 
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)

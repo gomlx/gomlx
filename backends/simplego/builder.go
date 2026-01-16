@@ -137,6 +137,17 @@ type Node struct {
 	builderIdx int
 	inputs     []*Node
 
+	// capturedInputs holds nodes from parent scopes that are used by a closure
+	// called by this node (for ops like If, While, Sort that use closures).
+	// These are treated as additional inputs for dependency tracking and lifetime management.
+	// The parent function can optionally donate these values to the closure.
+	capturedInputs []*Node
+
+	// donateCaptures indicates whether each captured input can be donated to the closure.
+	// If true, the captured value will be owned by the closure after execution.
+	// Must be same length as capturedInputs, or nil (meaning no donation).
+	donateCaptures []bool
+
 	// shape of the output.
 	opType  backends.OpType
 	shape   shapes.Shape
