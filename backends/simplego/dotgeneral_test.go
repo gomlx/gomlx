@@ -13,8 +13,8 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
-	"github.com/x448/float16"
 	"github.com/stretchr/testify/require"
+	"github.com/x448/float16"
 
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -371,7 +371,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 	}()
 
 	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, smallMatMulPath, packgemmPath, checkPath} {
-		if execPath == packgemmPath && packgemm.Float32 == nil {
+		if execPath == packgemmPath && !packgemm.HasDTypeSupport(dtypes.Float32, dtypes.Float32) {
 			continue
 		}
 

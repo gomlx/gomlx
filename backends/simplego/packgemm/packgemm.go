@@ -9,8 +9,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-// BufAllocFn is a function that allocates a buffer of type T, of the given size.
+// Generate the GEMMDynamic dispatcher.
+//go:generate go run ../../../internal/cmd/packgemm_generator
+
+// BufAllocFn is a function that allocates a buffer (a slice) of type T, of the given size.
 type BufAllocFn[T any] func(size int) (ref any, data []T)
+
+// BufAllocAnyFn is a function that allocates a buffer (a slice) of some pre-agreed type.
+type BufAllocAnyFn func(size int) (ref any, data any)
 
 // BufReleaseFn is a function that releases a buffer allocated with BufAllocFn.
 type BufReleaseFn func(ref any)
@@ -101,7 +107,6 @@ func RegisterGEMM[TInput, TOutput dtypes.Supported](
 func GEMM[TInput, TOutput dtypes.Supported](alpha, beta TOutput, lhsFlat, rhsFlat []TInput, batchSize,
 	lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []TOutput,
 	bufAllocFn BufAllocFn[TInput], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error {
-
 	dtypePair := GetDTypePair[TInput, TOutput]()
 	gemmRegs := DTypeToGEMM[dtypePair]
 	if len(gemmRegs) == 0 {

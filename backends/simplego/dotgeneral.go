@@ -226,7 +226,10 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	return result, nil
 }
 
-func dgFindSizes(shape shapes.Shape, contractingAxes, batchAxes []int) (batchSize, crossSize, contractingSize int, crossDims []int) {
+// dgFindSizes finds the combined sizes of the 3 types of axes that mather:
+// batch, cross, and contracting dimensions for a DotGeneral operation
+func dgFindSizes(shape shapes.Shape, contractingAxes, batchAxes []int) (
+	batchSize, crossSize, contractingSize int, crossDims []int) {
 	rank := shape.Rank()
 	axesTypes := make([]int, rank)
 
@@ -283,6 +286,12 @@ const (
 // Called at graph-build time from DotGeneral().
 func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params *dotGeneralNodeData) dotGeneralExecutionPath {
 	dtype := lhsShape.DType
+	outputDType := dtype
+	if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
+		// For 16 bits, store the intermediary results as float32 to minimize numerical errors during accumulation.
+		// Notice the blockLog2Dim must be the same, because the block dimensions much match the inputs.
+		outputDType = dtypes.Float32
+	}
 
 	// If a specific path is forced via backend config, use that.
 	if backend.dotGeneralForceExecutionPath != autoSelectPath {
@@ -293,7 +302,7 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 			valid = isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
 				params.lhsBatchAxes, params.rhsBatchAxes)
 		case packgemmPath:
-			valid = dtype == dtypes.Float32 && packgemm.Float32 != nil &&
+			valid = packgemm.HasDTypeSupport(dtype, outputDType) &&
 				isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes, params.lhsBatchAxes, params.rhsBatchAxes)
 		default:
 			valid = true
@@ -311,8 +320,9 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 	}
 
 	// GEMM path:
-	if dtype == dtypes.Float32 && isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
-		params.lhsBatchAxes, params.rhsBatchAxes) && packgemm.Float32 != nil {
+	if packgemm.HasDTypeSupport(dtype, outputDType) &&
+		isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
+			params.lhsBatchAxes, params.rhsBatchAxes) {
 		return packgemmPath
 	}
 
@@ -395,14 +405,16 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			}
 
 			// GEMM specialized executor.
-			if inputDType == dtypes.Float32 && isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
+			if isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
 				params.lhsContractingAxes, params.rhsContractingAxes,
-				params.lhsBatchAxes, params.rhsBatchAxes) && packgemm.Float32 != nil {
-				packgemm.Float32(1, 0, lhsRaw.flat.([]float32), rhsRaw.flat.([]float32),
+				params.lhsBatchAxes, params.rhsBatchAxes) && packgemm.HasDTypeSupport(inputDType, inputDType) {
+				err = packgemm.GEMM(float32(1), float32(0), lhsRaw.flat.([]float32), rhsRaw.flat.([]float32),
 					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 					output2.flat.([]float32),
 					getBufAllocator[float32](backend), getBufReleaser(backend), getGoroutineStarter(backend))
-				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+				if err != nil {
+					err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+				}
 				if err != nil {
 					backend.putBuffer(output2)
 					backend.putBuffer(output)
@@ -429,10 +441,12 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 
 	case packgemmPath:
 		// Custom GEMM path for large "malmul" order.
-		packgemm.Float32(1, 0, lhs.flat.([]float32), rhs.flat.([]float32),
+		inputDType := lhs.shape.DType
+		outputDType := output.shape.DType
+		packgemm.GEMMDynamic(inputDType, outputDType, 1, 0, lhs.flat.([]float32), rhs.flat.([]float32),
 			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 			output.flat.([]float32),
-			getBufAllocator[float32](backend), getBufReleaser(backend), getGoroutineStarter(backend))
+			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), getGoroutineStarter(backend))
 		return output, nil
 
 	default:
@@ -572,6 +586,14 @@ func getBufAllocator[T dtypes.NumberNotComplex](backend *Backend) packgemm.BufAl
 	return func(size int) (ref any, data []T) {
 		buf := backend.getBuffer(dtype, size)
 		return buf, buf.flat.([]T)
+	}
+}
+
+// getAnyBufAllocator returns a buffer allocator for the given dtype.
+func getAnyBufAllocator(backend *Backend, dtype dtypes.DType) packgemm.BufAllocAnyFn {
+	return func(size int) (ref any, data any) {
+		buf := backend.getBuffer(dtype, size)
+		return buf, buf.flat
 	}
 }
 
