@@ -10,13 +10,6 @@ import (
 	"unsafe"
 )
 
-func init() {
-	if archsimd.X86.AVX512() {
-		Float32 = avx512Float32
-		Float32Params = avx512Float32Params
-	}
-}
-
 var avx512Float32Params = CacheParams{
 	LHSL1KernelRows:      16,   // Mr: Uses 4 ZMM registers for accumulation rows, this number must be a multiple of 4
 	RHSL1KernelCols:      32,   // Nr: Uses 2 ZMM registers for accumulation cols
@@ -25,10 +18,16 @@ var avx512Float32Params = CacheParams{
 	RHSL3PanelCrossSize:  4096, // Nc: Fits in L3 cache (multiple of RHSL1KernelCols)
 }
 
+func init() {
+	if archsimd.X86.AVX512() {
+		RegisterGEMM("AVX512", avx512Float32, &avx512Float32Params, PriorityDTypeSIMD)
+	}
+}
+
 // avx512Float32 implements generic matrix multiplication for float32 inputs and outputs.
 // output = alpha * (lhs x rhs) + beta * output
 func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []float32,
-	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, starter GoroutineStarter) {
+	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error {
 
 	// 1. Resolve Strides
 	lhsBatchStride := lhsCrossSize * contractingSize
@@ -102,6 +101,7 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 			}
 		}
 	}
+	return nil
 }
 
 // avx512Float32GemmChunk performs the 5-loop GotoBLAS algorithm on a slice of a single batch matrix.

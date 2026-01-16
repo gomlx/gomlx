@@ -4,13 +4,6 @@ package packgemm
 
 import "runtime"
 
-func init() {
-	if Float32 == nil {
-		Float32 = genericFloat32
-		Float32Params = GenericFloat32Params
-	}
-}
-
 var (
 	// GenericFloat32Params are generic assumptions for L1/L2/L3 cache sizes.
 	//
@@ -25,10 +18,14 @@ var (
 	}
 )
 
+func init() {
+	RegisterGEMM("GenericScalar", genericFloat32, &GenericFloat32Params, PriorityBase)
+}
+
 // genericFloat32 implements generic matrix multiplication for float32 inputs and outputs.
 // It is used when no SIMD-optimized implementation is available.
 func genericFloat32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []float32,
-	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, starter GoroutineStarter) {
+	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error {
 
 	// 1. Resolve Strides
 	lhsBatchStride := lhsCrossSize * contractingSize
@@ -82,6 +79,7 @@ func genericFloat32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, 
 			}
 		}
 	}
+	return nil
 }
 
 // genericFloat32GemmChunk performs the matrix multiplication on a chunk of columns.
@@ -201,7 +199,7 @@ func genericFloat32MicroKernel(
 			if beta == 0 {
 				output[outIdx] = alpha * res
 			} else {
-				output[outIdx] = alpha * res + beta * output[outIdx]
+				output[outIdx] = alpha*res + beta*output[outIdx]
 			}
 		}
 	}
