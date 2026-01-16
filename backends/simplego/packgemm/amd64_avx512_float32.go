@@ -363,63 +363,6 @@ func avx512Float32MicroKernel(
 	}
 }
 
-// packRhs packs a [depth, width] block from RHS into packedRhs.
-// It rearranges data into vertical strips of width Nr (rhsL1BlockCols).
-// If the block is smaller than Nr, it ZERO-PADS.
-func packRhs(src, dst []float32, rowStart, colStart, strideCol, depth, width, nr int) {
-	dstIdx := 0
-	// Iterate over strips of width nr
-	for stripColIdx := 0; stripColIdx < width; stripColIdx += nr {
-		// How many columns valid in this strip?
-		validCols := min(nr, width-stripColIdx)
-
-		// Iterate over rows (k)
-		for row := range depth {
-			srcRow := rowStart + row
-			srcColBase := colStart + stripColIdx
-			// Copy valid columns
-			srcIdx := (srcRow * strideCol) + srcColBase
-			copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
-			dstIdx += validCols
-			// Zero-pad if strip is incomplete (edge of matrix)
-			for c := validCols; c < nr; c++ {
-				dst[dstIdx] = 0.0
-				dstIdx++
-			}
-		}
-	}
-}
-
-// packLhs packs a [lhsPanelHeight/lhsL1KernelRows, contractingPanelWidth, lhsL1KernelRows] "panel" (a block of size Mr x Kc) from LHS.
-// It rearranges data into horizontal strips of height Mr (lhsL1BlockRows).
-// packLhs(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
-func packLhs(src, dst []float32, rowStart, colStart, rowStride, lhsPanelHeight, contractingPanelWidth, lhsL1KernelRows int) {
-	dstIdx := 0
-	// Iterate over strips of height mr
-	for stripRowIdx := 0; stripRowIdx < lhsPanelHeight; stripRowIdx += lhsL1KernelRows {
-		validRows := min(lhsL1KernelRows, lhsPanelHeight-stripRowIdx)
-
-		// Iterate over columns (contracting size k), we want LHS to be traversed K-first in the kernel
-		for col := range contractingPanelWidth {
-			srcCol := colStart + col
-			srcRowBase := rowStart + stripRowIdx
-
-			// Copy valid "rows" (they are the last axis in the returned panel)
-			for row := range validRows {
-				srcIdx := ((srcRowBase + row) * rowStride) + srcCol
-				dst[dstIdx] = src[srcIdx]
-				dstIdx++
-			}
-
-			// Zero-pad
-			for r := validRows; r < lhsL1KernelRows; r++ {
-				dst[dstIdx] = 0.0
-				dstIdx++
-			}
-		}
-	}
-}
-
 func castToArray16[T float32](ptr *T) *[16]T {
 	return (*[16]T)(unsafe.Pointer(ptr))
 }

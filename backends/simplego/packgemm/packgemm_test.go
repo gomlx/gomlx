@@ -33,7 +33,7 @@ var (
 
 func TestPackGemmFloat32(t *testing.T) {
 	if packgemm.Float32 == nil {
-		t.Skip("packgemm.Float32 not implemented for this architecture")
+		t.Fatal("packgemm.Float32 not implemented")
 	}
 
 	t.Run("large-contracting-size", func(t *testing.T) {
