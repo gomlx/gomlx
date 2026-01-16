@@ -43,11 +43,10 @@ func newFunctionExecutable(f *Function) (*FunctionExecutable, error) {
 		return nil, errors.Errorf("function must have Return() called before compilation")
 	}
 
-	// Calculate numNodesToProcess from outputs
-	var numNodesToProcess int
-	for _, output := range f.outputs {
-		numNodesToProcess = max(numNodesToProcess, output.builderIdx+1)
-	}
+	// Use total node count to handle graphs with unused nodes (dead code).
+	// Previously this only considered output nodes, which caused index out of range
+	// errors when the graph contained nodes with higher builderIdx than outputs.
+	numNodesToProcess := len(f.builder.nodes)
 
 	fe := &FunctionExecutable{
 		function:          f,
