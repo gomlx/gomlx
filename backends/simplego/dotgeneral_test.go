@@ -5,16 +5,17 @@ package simplego
 import (
 	"fmt"
 	"math"
-	"sync"
-	"sync/atomic"
 	"testing"
 
+	"github.com/gomlx/gomlx/backends/simplego/highway"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/x448/float16"
+	"k8s.io/klog/v2"
 
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -370,8 +371,11 @@ func TestDotGeneral_Exec(t *testing.T) {
 		goBackend.dotGeneralForceExecutionPath = autoSelectPath
 	}()
 
-	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, smallMatMulPath, packgemmPath, checkPath} {
-		if execPath == packgemmPath && !packgemm.HasDTypeSupport(dtypes.Float32, dtypes.Float32) {
+	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, smallMatMulPath, packgemmPath, highwayPath, checkPath} {
+		if execPath == packgemmPath && (!goBackend.enablePackgemm || !packgemm.HasDTypeSupport(dtypes.Float32, dtypes.Float32)) {
+			continue
+		}
+		if execPath == highwayPath && (!goBackend.enableHighway || !highway.HasDTypeSupport(dtypes.Float32, dtypes.Float32)) {
 			continue
 		}
 
@@ -488,23 +492,41 @@ func TestDotGeneral_Exec(t *testing.T) {
 				fmt.Printf("\twant=%s\n", want.Shape())
 
 				// Run 8 workers in parallel to see if concurrency is a problem:
-				var wg sync.WaitGroup
-				var numCalls atomic.Uint32
-				for runnerIdx := range 16 {
-					wg.Add(1)
+				const numConcurrent = 16
+				errChan := make(chan error, numConcurrent)
+				for runnerIdx := range numConcurrent {
 					go func(_ int) {
-						defer wg.Done()
+						var err error
+						defer func() {
+							errChan <- err
+						}()
 						const numRepeats = 1000
+						var got []*tensors.Tensor
 						for range numRepeats {
-							got := exec.MustExec(lhs, rhs)[0]
-							numCalls.Add(1)
-							requireSameTensorsFloat32(t, want, got, 1e-3)
+							got, err = exec.Exec(lhs, rhs)
+							if err != nil {
+								return
+							}
+							if !got[0].InDelta(want, 1e-3) {
+								err = errors.Errorf("got=%s, want=%s", got[0], want)
+							}
 						}
 					}(runnerIdx)
 				}
-				wg.Wait()
-				n := numCalls.Load()
-				fmt.Printf("\tnumCalls=%d\n", n)
+				var firstError error
+				for range numConcurrent {
+					err := <-errChan
+					if err != nil {
+						if firstError == nil {
+							firstError = err
+						} else {
+							klog.Errorf("Error while running in parallel: %v", err)
+						}
+					}
+				}
+				if firstError != nil {
+					require.NoError(t, firstError)
+				}
 			})
 			t.Run("LLM_2", func(t *testing.T) {
 				lhs, err := tensors.Load("dotgeneral_test_lhs_2.bin")
