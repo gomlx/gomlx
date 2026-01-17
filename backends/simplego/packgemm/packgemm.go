@@ -165,26 +165,32 @@ func packRHS[T dtypes.Number](src, dst []T, srcRowStart, srcColStart, srcStrideC
 	}
 }
 
-// packLHS packs a [lhsPanelHeight/lhsL1KernelRows, contractingPanelWidth, lhsL1KernelRows] "panel"
+// packLHS packs a slice of size [lhsRows, contractingCols] block from LHS into
+// a [ceil(lhsRows/lhsL1KernelRows), contractingCols, lhsL1KernelRows] "panel"
 // (a block of size Mr x Kc) from LHS.
 // It rearranges data into horizontal strips of height Mr (lhsL1BlockRows).
-// packLHS(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth,
-// params.LHSL1KernelRows)
-func packLHS[T dtypes.Number](src, dst []T, rowStart,
-	colStart, rowStride, lhsPanelHeight, contractingPanelWidth, lhsL1KernelRows int) {
+//
+// How it is called:
+//
+//	packLHS(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize,
+//		lhsPanelHeight, contractingPanelWidth,
+//		params.LHSL1KernelRows)
+func packLHS[T dtypes.Number](src, dst []T,
+	srcRowStart, srcColStart, srcRowStride,
+	lhsRows, contractingCols, lhsL1KernelRows int) {
 	dstIdx := 0
 	// Iterate over strips of height mr
-	for stripRowIdx := 0; stripRowIdx < lhsPanelHeight; stripRowIdx += lhsL1KernelRows {
-		validRows := min(lhsL1KernelRows, lhsPanelHeight-stripRowIdx)
+	for stripRowIdx := 0; stripRowIdx < lhsRows; stripRowIdx += lhsL1KernelRows {
+		validRows := min(lhsL1KernelRows, lhsRows-stripRowIdx)
 
 		// Iterate over columns (contracting size k), we want LHS to be traversed K-first in the kernel
-		for col := range contractingPanelWidth {
-			srcCol := colStart + col
-			srcRowBase := rowStart + stripRowIdx
+		for col := range contractingCols {
+			srcCol := srcColStart + col
+			srcRowBase := srcRowStart + stripRowIdx
 
 			// Copy valid "rows" (they are the last axis in the returned panel)
 			for row := range validRows {
-				srcIdx := ((srcRowBase + row) * rowStride) + srcCol
+				srcIdx := ((srcRowBase + row) * srcRowStride) + srcCol
 				dst[dstIdx] = src[srcIdx]
 				dstIdx++
 			}
