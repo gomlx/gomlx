@@ -436,12 +436,11 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 					return nil, err
 				}
 			}
-			backend.putBuffer(output2) // Discard second output, no longer needed
-
 			// Highway MatMul specialized executor.
 			if backend.enableHighway && isMatMulOrder(lhsRaw.shape, params.lhsContractingAxes, params.lhsBatchAxes,
 				rhsRaw.shape, params.rhsContractingAxes, params.rhsBatchAxes) &&
 				highway.HasDTypeSupport(inputDType, inputDType) {
+				output2.Zeros()
 				err = highway.MatMulDynamic(inputDType, outputShape.DType, lhsRaw.flat, rhsRaw.flat,
 					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 					output2.flat,
