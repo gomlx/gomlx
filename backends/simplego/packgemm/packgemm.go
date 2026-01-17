@@ -19,6 +19,7 @@ type BufAllocFn[T any] func(size int) (ref any, data []T)
 type BufAllocAnyFn func(size int) (ref any, data any)
 
 // BufReleaseFn is a function that releases a buffer allocated with BufAllocFn.
+
 type BufReleaseFn func(ref any)
 
 // GoroutineStarter is a function that starts a goroutine, if available from the global pool.
@@ -30,9 +31,9 @@ type CacheParams struct {
 	LHSL1KernelRows int // or Mr: number of lhs kernel rows going to registers.
 	RHSL1KernelCols int // or Nr: Register Block Width
 
-	ContractingPanelSize int // Kc: L1 Block Depth
-	LHSL2PanelCrossSize  int // Mc: L2 Block Height
-	RHSL3PanelCrossSize  int // Nc: L3 Block Width
+	PanelContractingSize int // Kc: LHS cols or RHS rows to fit in L2/L3
+	LHSL2PanelCrossSize  int // Mc: L2 rows
+	RHSL3PanelCrossSize  int // Nc: L3 cols
 }
 
 // Priority is used to determine the priority of a gemm version, when setting the
@@ -126,26 +127,37 @@ func GEMM[TInput, TOutput dtypes.Supported](alpha, beta TOutput, lhsFlat, rhsFla
 		bufAllocFn, bufReleaseFn, starter)
 }
 
-// packRhs packs a [depth, width] block from RHS into packedRhs.
-// It rearranges data into vertical strips of width Nr (rhsL1BlockCols).
-// If the block is smaller than Nr, it ZERO-PADS.
-func packRhs(src, dst []float32, rowStart, colStart, strideCol, depth, width, nr int) {
+// packRhs packs a slice of size [contractingRows, rhsCols] block from RHS into
+// the panel reshaped+transposed to [ceil(rhsCols/RHSL1KernelCols), contractingRows, RHSL1KernelCols],
+// padding the cols of the last strip with zeros if necessary.
+//
+//   - src: [contractingSize, rhsCrossSize]
+//   - dst: a slice with enough size to hold the panel
+//   - srcRowStart: start row in src
+//   - srcColStart: start col in src
+//   - srcStrideCol: stride of src
+//   - contractingRows: number of rows to be copied in the panel (must fit total panel allocated size)
+//   - rhsCols: number of columns to be copied in the panel (excluding padding), will be padded to a RHSL1KernelCols
+//     multiple with zeros.
+//   - RHSL1KernelCols: number of columns in each "L1 kernel"
+func packRhs(src, dst []float32, srcRowStart, srcColStart, srcStrideCol,
+	contractingRows, rhsCols, RHSL1KernelCols int) {
 	dstIdx := 0
 	// Iterate over strips of width nr
-	for stripColIdx := 0; stripColIdx < width; stripColIdx += nr {
+	for stripColIdx := 0; stripColIdx < rhsCols; stripColIdx += RHSL1KernelCols {
 		// How many columns valid in this strip?
-		validCols := min(nr, width-stripColIdx)
+		validCols := min(RHSL1KernelCols, rhsCols-stripColIdx)
 
 		// Iterate over rows (k)
-		for row := range depth {
-			srcRow := rowStart + row
-			srcColBase := colStart + stripColIdx
+		for row := range contractingRows {
+			srcRow := srcRowStart + row
+			srcColBase := srcColStart + stripColIdx
+			srcIdx := (srcRow * srcStrideCol) + srcColBase
 			// Copy valid columns
-			srcIdx := (srcRow * strideCol) + srcColBase
 			copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
 			dstIdx += validCols
 			// Zero-pad if strip is incomplete (edge of matrix)
-			for c := validCols; c < nr; c++ {
+			for c := validCols; c < RHSL1KernelCols; c++ {
 				dst[dstIdx] = 0.0
 				dstIdx++
 			}

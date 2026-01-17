@@ -12,9 +12,9 @@ var (
 	GenericFloat32Params = CacheParams{
 		LHSL1KernelRows:      8,    // Mr: Rows of LHS in registers.
 		RHSL1KernelCols:      8,    // Nr: Cols of RHS in registers.
-		ContractingPanelSize: 2048, // Kc: L1 Block Depth.
+		PanelContractingSize: 2048, // Kc: L1 Block Depth.
 		LHSL2PanelCrossSize:  32,   // Mc: L2 Block Height.
-		RHSL3PanelCrossSize:  64,  // Nc: L3 Block Width.
+		RHSL3PanelCrossSize:  64,   // Nc: L3 Block Width.
 	}
 )
 
@@ -90,8 +90,8 @@ func genericFloat32GemmChunk(
 	params CacheParams, colStart, colEnd int,
 	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn,
 ) {
-	packedLhsRef, packedLhs := bufAllocFn(params.LHSL2PanelCrossSize * params.ContractingPanelSize)
-	packedRhsRef, packedRhs := bufAllocFn(params.ContractingPanelSize * params.RHSL3PanelCrossSize)
+	packedLhsRef, packedLhs := bufAllocFn(params.LHSL2PanelCrossSize * params.PanelContractingSize)
+	packedRhsRef, packedRhs := bufAllocFn(params.PanelContractingSize * params.RHSL3PanelCrossSize)
 	var accum [64]float32
 
 	defer func() {
@@ -104,12 +104,12 @@ func genericFloat32GemmChunk(
 		rhsPanelWidth := min(params.RHSL3PanelCrossSize, colEnd-rhsPanelColIdx)
 
 		// Loop 4 (p): Tiling K (Depth)
-		for contractingPanelIdx := 0; contractingPanelIdx < contractingSize; contractingPanelIdx += params.ContractingPanelSize {
+		for contractingPanelIdx := 0; contractingPanelIdx < contractingSize; contractingPanelIdx += params.PanelContractingSize {
 			effectiveBeta := beta
 			if contractingPanelIdx > 0 {
 				effectiveBeta = 1
 			}
-			contractingPanelWidth := min(params.ContractingPanelSize, contractingSize-contractingPanelIdx)
+			contractingPanelWidth := min(params.PanelContractingSize, contractingSize-contractingPanelIdx)
 
 			// PACK RHS
 			packRhs(rhs, packedRhs, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)

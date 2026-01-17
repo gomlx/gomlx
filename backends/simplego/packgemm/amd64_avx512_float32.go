@@ -13,7 +13,7 @@ import (
 var avx512Float32Params = CacheParams{
 	LHSL1KernelRows:      16,   // Mr: Uses 4 ZMM registers for accumulation rows, this number must be a multiple of 4
 	RHSL1KernelCols:      32,   // Nr: Uses 2 ZMM registers for accumulation cols
-	ContractingPanelSize: 512,  // Kc: A strip fits in L1 cache
+	PanelContractingSize: 512,  // Kc: A strip fits in L1 cache
 	LHSL2PanelCrossSize:  512,  // Mc: Fits in L2 cache (multiple of LHSL1KernelRows)
 	RHSL3PanelCrossSize:  4096, // Nc: Fits in L3 cache (multiple of RHSL1KernelCols)
 }
@@ -113,8 +113,8 @@ func avx512Float32GemmChunk(
 	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn,
 ) {
 	// fmt.Printf("gemmChunk(colStart=%d, colEnd=%d)\n", colStart, colEnd)
-	packedLhsRef, packedLhs := bufAllocFn(params.LHSL2PanelCrossSize * params.ContractingPanelSize)
-	packedRhsRef, packedRhs := bufAllocFn(params.ContractingPanelSize * params.RHSL3PanelCrossSize)
+	packedLhsRef, packedLhs := bufAllocFn(params.LHSL2PanelCrossSize * params.PanelContractingSize)
+	packedRhsRef, packedRhs := bufAllocFn(params.PanelContractingSize * params.RHSL3PanelCrossSize)
 	defer func() {
 		bufReleaseFn(packedLhsRef)
 		bufReleaseFn(packedRhsRef)
@@ -130,7 +130,7 @@ func avx512Float32GemmChunk(
 
 		// Loop 4 (p): Tiling K (Depth) - Fits in L1
 		// Iterates over the contracting dimension in chunks of contractingPanelSize
-		for contractingPanelIdx := 0; contractingPanelIdx < contractingSize; contractingPanelIdx += params.ContractingPanelSize {
+		for contractingPanelIdx := 0; contractingPanelIdx < contractingSize; contractingPanelIdx += params.PanelContractingSize {
 			// fmt.Printf("- contractingPanelIdx=%d\n", contractingPanelIdx)
 			effectiveBeta := beta
 			if contractingPanelIdx > 0 {
@@ -138,7 +138,7 @@ func avx512Float32GemmChunk(
 				// at this panel, after that the output is already accumulating the results of the matmul.
 				effectiveBeta = 1
 			}
-			contractingPanelWidth := min(params.ContractingPanelSize, contractingSize-contractingPanelIdx)
+			contractingPanelWidth := min(params.PanelContractingSize, contractingSize-contractingPanelIdx)
 
 			// ---------------------------------------------------------
 			// PACK RHS (Bit) -> ~B
