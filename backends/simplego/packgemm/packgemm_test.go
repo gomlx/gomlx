@@ -50,7 +50,7 @@ func TestPackGemm(t *testing.T) {
 				params := reg.Params
 
 				t.Run("large-contracting-size", func(t *testing.T) {
-					contractingSize := params.ContractingPanelSize + 1 // Make it larger than contracting panel size.
+					contractingSize := params.PanelContractingSize + 1 // Make it larger than contracting panel size.
 					batchSize, lhsCrossSize, rhsCrossSize := 1, 1, 1
 					fmt.Printf("- C=AxB, shapes [1, 1, %d] x [1, %d, 1] -> [1, 1, 1]\n", contractingSize, contractingSize)
 
@@ -69,7 +69,7 @@ func TestPackGemm(t *testing.T) {
 				})
 
 				t.Run("kernel-rows-p1", func(t *testing.T) {
-					contractingSize := params.ContractingPanelSize + 1 // Make it larger than contracting panel size.
+					contractingSize := params.PanelContractingSize + 1 // Make it larger than contracting panel size.
 					lhsCrossSize := params.LHSL1KernelRows + 1
 					rhsCrossSize := 1
 					batchSize := 1
@@ -98,7 +98,7 @@ func TestPackGemm(t *testing.T) {
 				})
 
 				t.Run("kernel-cols-p1", func(t *testing.T) {
-					contractingSize := params.ContractingPanelSize + 1 // Make it larger than contracting panel size.
+					contractingSize := params.PanelContractingSize + 1 // Make it larger than contracting panel size.
 					lhsCrossSize := params.LHSL1KernelRows + 1
 					rhsCrossSize := params.RHSL1KernelCols + 1
 					batchSize := 1
