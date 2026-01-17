@@ -2,11 +2,7 @@
 
 package packgemm
 
-import (
-	"runtime"
-
-	"github.com/pkg/errors"
-)
+import "runtime"
 
 var (
 	// GenericFloat32Params are generic assumptions for L1/L2/L3 cache sizes.
@@ -16,9 +12,9 @@ var (
 	GenericFloat32Params = CacheParams{
 		LHSL1KernelRows:      8,    // Mr: Rows of LHS in registers.
 		RHSL1KernelCols:      8,    // Nr: Cols of RHS in registers.
-		PanelContractingSize: 2048, // Kc: L1 Block Depth.
-		LHSL2PanelCrossSize:  32,   // Mc: L2 Block Height.
-		RHSL3PanelCrossSize:  64,   // Nc: L3 Block Width.
+		PanelContractingSize: 2048, // 2048, // Kc: L1 Block Depth.
+		LHSL2PanelCrossSize:  32,   //32,   // Mc: L2 Block Height.
+		RHSL3PanelCrossSize:  64,   // 64,   // Nc: L3 Block Width.
 	}
 )
 
@@ -26,33 +22,10 @@ func init() {
 	RegisterGEMM("GenericScalar", genericFloat32, &GenericFloat32Params, PriorityBase)
 }
 
-const (
-	genericLHSLoopUnroll = 4 // Values kept in registers.
-	genericRHSLoopUnroll = 2 // Values kept in registers.
-)
-
 // genericFloat32 implements generic matrix multiplication for float32 inputs and outputs.
 // It is used when no SIMD-optimized implementation is available.
 func genericFloat32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []float32,
 	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error {
-
-	// 0. Validate Parameters
-	if alpha == 0 {
-		// Trivial case, no matmul needed:
-		if beta != 1 {
-			for outputIdx := range outputFlat {
-				outputFlat[outputIdx] *= beta
-			}
-		}
-		return nil
-	}
-	if GenericFloat32Params.LHSL1KernelRows%genericLHSLoopUnroll != 0 ||
-		GenericFloat32Params.RHSL1KernelCols%genericRHSLoopUnroll != 0 {
-		return errors.Errorf("GenericFloat32Params.LHSL1KernelRows %d must be a multiple of %d and "+
-			"GenericFloat32Params.RHSL1KernelCols %d must be a multiple of %d",
-			GenericFloat32Params.LHSL1KernelRows, genericLHSLoopUnroll,
-			GenericFloat32Params.RHSL1KernelCols, genericRHSLoopUnroll)
-	}
 
 	// 1. Resolve Strides
 	lhsBatchStride := lhsCrossSize * contractingSize

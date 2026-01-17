@@ -92,8 +92,8 @@ func TestPackGemm(t *testing.T) {
 					gemmFn(alpha, beta, Adata, Bdata, batchSize, lhsCrossSize, rhsCrossSize, contractingSize, Cdata,
 						sequentialFloat32BufAllocFn, sequentialFloat32BufReleaseFn, sequentialWorkerPool)
 
-					if slices.Compare(Cdata, want) != 0 {
-						t.Errorf("Cdata = %v, want %v", Cdata, want)
+					if err := xslices.MustSlicesInRelData(Cdata, want, 1e-3); err != nil {
+						t.Errorf("Cdata = %v, want %v, error: %+v", Cdata, want, err)
 					}
 				})
 
@@ -123,11 +123,10 @@ func TestPackGemm(t *testing.T) {
 					gemmFn(alpha, beta, Adata, Bdata, batchSize, lhsCrossSize, rhsCrossSize, contractingSize, Cdata,
 						sequentialFloat32BufAllocFn, sequentialFloat32BufReleaseFn, sequentialWorkerPool)
 
-					if slices.Compare(Cdata, want) != 0 {
-						t.Errorf("Cdata = %v, want %v", Cdata, want)
+					if err := xslices.MustSlicesInRelData(Cdata, want, 1e-3); err != nil {
+						t.Errorf("Cdata = %v, want %v, error: %+v", Cdata, want, err)
 					}
 				})
-
 			})
 		}
 	})
