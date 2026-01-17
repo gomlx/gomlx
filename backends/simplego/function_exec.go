@@ -421,6 +421,21 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			continue
 		}
 		if int(newCount) == fe.numUses[inputIdx] && execBuf.owned[inputIdx] {
+			// Check if it is reused as one of the outputs -- common for in-place operations, like in exec_binary.go.
+			// The contract is that if the input is reused, the operator must set the input buffer to nil in the input slice.
+			// If we find the input buffer reused as an output but it is not nil here, it is a bug in the operator implementation.
+			if node.IsMultiOutputs() {
+				for outIdx, outputNode := range node.multiOutputsNodes {
+					if execBuf.results[outputNode.builderIdx] == inputBuffers[i] {
+						return errors.Errorf("op %s (output %d) reused input %d as output but didn't set input to nil in buffer slice", node.opType, outIdx, i)
+					}
+				}
+			} else {
+				if execBuf.results[nodeIdx] == inputBuffers[i] {
+					return errors.Errorf("op %s reused input %d as output but didn't set input to nil in buffer slice", node.opType, i)
+				}
+			}
+
 			// Release the input buffer - all users have finished.
 			backend.putBuffer(inputBuffers[i])
 			execBuf.results[inputIdx] = nil
