@@ -2,16 +2,22 @@
 
 //go:build amd64 && goexperiment.simd
 
-// EXPERIMENTAL: AVX512 implementation of DotGeneralBlocked for float32.
-// It gets a ~2.5x speedup on an AMD9550X3D processor.
+// AVX512 implementation of DotGeneralBlocked for float32.
 //
-// This should change to a generic implementation once we get a go-highway version working,
-// and it is expected to change in the future.
+// This uses the "broadcast A, stream B" algorithm which avoids expensive
+// horizontal SIMD reductions. Instead of computing dot products that require
+// reducing across lanes, we broadcast each LHS element and stream through
+// output columns, accumulating with FMA instructions.
+//
+// The RHS block is transposed in-kernel to enable sequential memory access
+// when streaming through output columns. The transpose is O(n²) while the
+// matmul is O(n³), so this overhead is negligible for reasonable block sizes.
 
 package simplego
 
 import (
 	"simd/archsimd"
+	"sync"
 	"unsafe"
 
 	"github.com/gomlx/gomlx/internal/exceptions"
@@ -27,22 +33,30 @@ func init() {
 	}
 }
 
-func castToArray16[T float32](ptr *T) *[16]T {
-	return (*[16]T)(unsafe.Pointer(ptr))
+func castToArray16(ptr *float32) *[16]float32 {
+	return (*[16]float32)(unsafe.Pointer(ptr))
 }
 
-// reduceSumFloat32x16 reduces a Float32x16 to a float32.
-func reduceSumFloat32x16(x16 archsimd.Float32x16) float32 {
-	x8 := x16.GetHi().Add(x16.GetLo())
-	x4 := x8.GetHi().Add(x8.GetLo())
-	x4sum := x4.AddPairs(x4)
-	return x4sum.GetElem(0) + x4sum.GetElem(1)
+// rhsTransposeBufferPool provides per-goroutine buffers for transposing RHS blocks.
+// Using sync.Pool avoids allocation overhead in the hot path.
+var rhsTransposeBufferPool = sync.Pool{
+	New: func() any {
+		// Allocate buffer for max expected block size (128x128 = 16384 elements)
+		buf := make([]float32, 128*128)
+		return &buf
+	},
 }
 
 // buildDotGeneralBlockKernel_avx512_float32 returns a kernel function that does a DotGeneral (matrix multiplication)
 // of the lhs/rhs block to the corresponding output buffer block.
 //
-// It uses AVX512 instructions to perform the multiplication.
+// It uses the "broadcast A, stream B" algorithm with AVX512 instructions:
+// - For each LHS row i, for each element k in the contracting dimension:
+//   - Broadcast lhs[i][k] to all 16 SIMD lanes
+//   - Stream through RHS row k (after transpose), loading 16 consecutive output columns
+//   - FMA: output[i][j:j+16] += broadcast(lhs[i][k]) * rhs_transposed[k][j:j+16]
+//
+// This avoids expensive horizontal reductions entirely.
 func buildDotGeneralBlockKernel_avx512_float32(
 	lhs, rhs, output *Buffer, blockDim int) kernelFuncType {
 	lhsFlat := lhs.flat.([]float32)
@@ -52,70 +66,56 @@ func buildDotGeneralBlockKernel_avx512_float32(
 	blockSize := blockDim * blockDim
 
 	return func(lhsBlockIdx, rhsBlockIdx, outputBlockIdx int) {
-		baseLhsIdx := lhsBlockIdx * blockSize
-		baseRhsIdx := rhsBlockIdx * blockSize
-		outputIdx := outputBlockIdx * blockSize
 		if blockDim%16 != 0 {
 			exceptions.Panicf("blockDim must be a multiple of 16, got %d", blockDim)
 		}
-		for range blockDim { // Loop over lhs rows:
-			rhsIdx := baseRhsIdx
-			// Loop 8 rows at a time.
-			for rhsRow := 0; rhsRow < blockDim; rhsRow += 8 { // loop over rhs rows:
-				lhsIdx := baseLhsIdx
-				contractingIdx := 0
 
-				// Loop unrolled 16 at a time.
-				var sumRow0x16, sumRow1x16, sumRow2x16, sumRow3x16 archsimd.Float32x16
-				var sumRow4x16, sumRow5x16, sumRow6x16, sumRow7x16 archsimd.Float32x16
-				for ; contractingIdx+15 < blockDim; contractingIdx += 16 {
-					lhsRow0 := archsimd.LoadFloat32x16(castToArray16(&lhsFlat[lhsIdx]))
+		baseLhsIdx := lhsBlockIdx * blockSize
+		baseRhsIdx := rhsBlockIdx * blockSize
+		baseOutputIdx := outputBlockIdx * blockSize
 
-					rhsRow0 := archsimd.LoadFloat32x16(castToArray16(&rhsFlat[rhsIdx]))
-					sumRow0x16 = lhsRow0.MulAdd(rhsRow0, sumRow0x16)
-					rhsRow1 := archsimd.LoadFloat32x16(castToArray16(&rhsFlat[rhsIdx+blockDim]))
-					sumRow1x16 = lhsRow0.MulAdd(rhsRow1, sumRow1x16)
-					rhsRow2 := archsimd.LoadFloat32x16(castToArray16(&rhsFlat[rhsIdx+2*blockDim]))
-					sumRow2x16 = lhsRow0.MulAdd(rhsRow2, sumRow2x16)
-					rhsRow3 := archsimd.LoadFloat32x16(castToArray16(&rhsFlat[rhsIdx+3*blockDim]))
-					sumRow3x16 = lhsRow0.MulAdd(rhsRow3, sumRow3x16)
-					rhsRow4 := archsimd.LoadFloat32x16(castToArray16(&rhsFlat[rhsIdx+4*blockDim]))
-					sumRow4x16 = lhsRow0.MulAdd(rhsRow4, sumRow4x16)
-					rhsRow5 := archsimd.LoadFloat32x16(castToArray16(&rhsFlat[rhsIdx+5*blockDim]))
-					sumRow5x16 = lhsRow0.MulAdd(rhsRow5, sumRow5x16)
-					rhsRow6 := archsimd.LoadFloat32x16(castToArray16(&rhsFlat[rhsIdx+6*blockDim]))
-					sumRow6x16 = lhsRow0.MulAdd(rhsRow6, sumRow6x16)
-					rhsRow7 := archsimd.LoadFloat32x16(castToArray16(&rhsFlat[rhsIdx+7*blockDim]))
-					sumRow7x16 = lhsRow0.MulAdd(rhsRow7, sumRow7x16)
+		// Get a buffer from the pool for transposing RHS
+		bufPtr := rhsTransposeBufferPool.Get().(*[]float32)
+		rhsT := (*bufPtr)[:blockSize]
+		defer rhsTransposeBufferPool.Put(bufPtr)
 
-					lhsIdx += 16
-					rhsIdx += 16
+		// Transpose RHS block: rhsT[k][j] = rhs[j][k]
+		// Original layout: rhs[j*blockDim + k] (row j, col k)
+		// Transposed layout: rhsT[k*blockDim + j] (row k, col j)
+		// This enables sequential access when streaming through j for fixed k.
+		for j := 0; j < blockDim; j++ {
+			srcRowStart := baseRhsIdx + j*blockDim
+			for k := 0; k < blockDim; k++ {
+				rhsT[k*blockDim+j] = rhsFlat[srcRowStart+k]
+			}
+		}
+
+		// Process each output row (from LHS row)
+		for i := 0; i < blockDim; i++ {
+			lhsRowStart := baseLhsIdx + i*blockDim
+			outputRowStart := baseOutputIdx + i*blockDim
+
+			// Process output row in chunks of 16 columns
+			for j := 0; j < blockDim; j += 16 {
+				// Load current output accumulator
+				accum := archsimd.LoadFloat32x16(castToArray16(&outputFlat[outputRowStart+j]))
+
+				// Accumulate contributions from all elements in contracting dimension
+				for k := 0; k < blockDim; k++ {
+					// Broadcast lhs[i][k] to all 16 lanes
+					aik := lhsFlat[lhsRowStart+k]
+					vA := archsimd.BroadcastFloat32x16(aik)
+
+					// Load 16 consecutive elements from transposed RHS row k
+					vB := archsimd.LoadFloat32x16(castToArray16(&rhsT[k*blockDim+j]))
+
+					// FMA: accum += vA * vB
+					accum = vA.MulAdd(vB, accum)
 				}
 
-				sum0 := reduceSumFloat32x16(sumRow0x16)
-				sum1 := reduceSumFloat32x16(sumRow1x16)
-				sum2 := reduceSumFloat32x16(sumRow2x16)
-				sum3 := reduceSumFloat32x16(sumRow3x16)
-				sum4 := reduceSumFloat32x16(sumRow4x16)
-				sum5 := reduceSumFloat32x16(sumRow5x16)
-				sum6 := reduceSumFloat32x16(sumRow6x16)
-				sum7 := reduceSumFloat32x16(sumRow7x16)
-				outputFlat[outputIdx] += sum0
-				outputFlat[outputIdx+1] += sum1
-				outputFlat[outputIdx+2] += sum2
-				outputFlat[outputIdx+3] += sum3
-				outputFlat[outputIdx+4] += sum4
-				outputFlat[outputIdx+5] += sum5
-				outputFlat[outputIdx+6] += sum6
-				outputFlat[outputIdx+7] += sum7
-				outputIdx += 8
-
-				// We unrolled 8 rows of RHS, so we need to skip the remaining 7 rows:
-				rhsIdx += 7 * blockDim
-			} // loop over rhs rows
-
-			// Start next lhs row.
-			baseLhsIdx += blockDim
+				// Store result
+				accum.Store(castToArray16(&outputFlat[outputRowStart+j]))
+			}
 		}
 	}
 }
