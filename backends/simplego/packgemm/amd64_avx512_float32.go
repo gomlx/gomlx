@@ -7,7 +7,11 @@ package packgemm
 import (
 	"runtime"
 	"simd/archsimd"
+	"sync"
 	"unsafe"
+
+	"github.com/gomlx/gomlx/pkg/support/xsync"
+	"k8s.io/klog/v2"
 )
 
 var avx512Float32Params = CacheParams{
@@ -24,10 +28,16 @@ func init() {
 	}
 }
 
+var avx512WarningOnce sync.Once
+
 // avx512Float32 implements generic matrix multiplication for float32 inputs and outputs.
 // output = alpha * (lhs x rhs) + beta * output
 func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []float32,
 	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error {
+
+	avx512WarningOnce.Do(func() {
+		klog.Infof("AVX512 GEMM (General Matrix Multiplication) algorithm still experimental!")
+	})
 
 	// 1. Resolve Strides
 	lhsBatchStride := lhsCrossSize * contractingSize
@@ -69,6 +79,7 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 
 	// 3. The Work Loop
 	// We iterate sequentially. If the pool is full, we do the work ourselves.
+	wg := xsync.NewDynamicWaitGroup() // Control workers started.
 	for batchIdx := range batchSize {
 		// Capture batch offsets once per batch
 		batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
@@ -83,6 +94,7 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 			}
 
 			// Define the task closure
+			wg.Add(1)
 			task := func() {
 				avx512Float32GemmChunk(
 					alpha, beta,
@@ -91,6 +103,7 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 					avx512Float32Params, colStart, colEnd,
 					bufAllocFn, bufReleaseFn,
 				)
+				wg.Done()
 			}
 
 			// 4. Try to Offload
@@ -101,6 +114,7 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 			}
 		}
 	}
+	wg.Wait()
 	return nil
 }
 
