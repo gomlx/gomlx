@@ -90,8 +90,8 @@ func genericFloat32GemmChunk(
 	params CacheParams, colStart, colEnd int,
 	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn,
 ) {
-	packedLhsRef, packedLhs := bufAllocFn(params.LHSL2PanelCrossSize * params.PanelContractingSize)
-	packedRhsRef, packedRhs := bufAllocFn(params.PanelContractingSize * params.RHSL3PanelCrossSize)
+	packedLhsRef, packedLHS := bufAllocFn(params.LHSL2PanelCrossSize * params.PanelContractingSize)
+	packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSL3PanelCrossSize)
 	var accum [64]float32
 
 	defer func() {
@@ -112,22 +112,22 @@ func genericFloat32GemmChunk(
 			contractingPanelWidth := min(params.PanelContractingSize, contractingSize-contractingPanelIdx)
 
 			// PACK RHS
-			packRHS(rhs, packedRhs, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
+			packRHS(rhs, packedRHS, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
 
 			// Loop 3 (ic): Tiling M (Output Rows)
 			for lhsPanelRowIdx := 0; lhsPanelRowIdx < lhsCrossSize; lhsPanelRowIdx += params.LHSL2PanelCrossSize {
 				lhsPanelHeight := min(params.LHSL2PanelCrossSize, lhsCrossSize-lhsPanelRowIdx)
 
 				// PACK LHS
-				packLHS(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
+				packLHS(lhs, packedLHS, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
 
 				// Loop 2 (jr): Micro-Kernel Columns
 				for microColIdx := 0; microColIdx < rhsPanelWidth; microColIdx += params.RHSL1KernelCols {
-					microKernelActualWidth := min(params.RHSL1KernelCols, rhsPanelWidth-microColIdx)
+					microKernelActiveWidth := min(params.RHSL1KernelCols, rhsPanelWidth-microColIdx)
 
 					// Loop 1 (ir): Micro-Kernel Rows
 					for microRowIdx := 0; microRowIdx < lhsPanelHeight; microRowIdx += params.LHSL1KernelRows {
-						microKernelActualHeight := min(params.LHSL1KernelRows, lhsPanelHeight-microRowIdx)
+						microKernelActiveHeight := min(params.LHSL1KernelRows, lhsPanelHeight-microRowIdx)
 
 						offsetRhs := (microColIdx / params.RHSL1KernelCols) * (contractingPanelWidth * params.RHSL1KernelCols)
 						offsetLhs := (microRowIdx / params.LHSL1KernelRows) * (contractingPanelWidth * params.LHSL1KernelRows)
@@ -136,17 +136,17 @@ func genericFloat32GemmChunk(
 						outputCol := rhsPanelColIdx + microColIdx
 
 						genericFloat32MicroKernel(
-							contractingPanelWidth,
 							alpha, effectiveBeta,
-							packedLhs[offsetLhs:],
-							packedRhs[offsetRhs:],
+							packedLHS[offsetLhs:],
+							packedRHS[offsetRhs:],
 							&accum,
 							output,
 							outputRow, outputCol,
 							rhsCrossSize,
 							params.LHSL1KernelRows,
 							params.RHSL1KernelCols,
-							microKernelActualHeight, microKernelActualWidth,
+							contractingPanelWidth,
+							microKernelActiveHeight, microKernelActiveWidth,
 						)
 					}
 				}
@@ -155,16 +155,23 @@ func genericFloat32GemmChunk(
 	}
 }
 
-// genericFloat32MicroKernel computes a [lhsKernelRows, rhsKernelCols] tile.
+// genericFloat32MicroKernel updates one [lhsKernelRows, rhsKernelCols] tile
+// from the panels in lhsPack and rhsPack, along a contractingLen elements
+// of the contracting dimensions.
+//
+// - lhsPackSlice: the slice of the packed panel for this kernel, shaped [contractingCols, lhsL1KernelRows]
+// - rhsPackSlice: the slice of the package panel for this kernel, shaped [contractingRows, rhsL1KernelCols]
+// - accum: array of accumulators in stack, with enough space to fit [lhsL1KernelRows, rhsL1KernelCols]
+// - output: output buffer, organized as [lhsCrossSize, rhsCrossSize]
 func genericFloat32MicroKernel(
-	contractingLen int,
 	alpha, beta float32,
-	ptrLhs, ptrRhs []float32,
+	lhsPackSlice, rhsPackSlice []float32,
 	accum *[64]float32,
 	output []float32,
 	outputRowStart, outputColStart int,
-	outputStride int,
-	lhsKernelRows, rhsKernelCols int,
+	outputRowStride int,
+	lhsL1KernelRows, rhsL1KernelCols int,
+	contractingLen int,
 	lhsActiveRows, rhsActiveCols int,
 ) {
 	// 1. Initialize Accumulators
@@ -180,49 +187,49 @@ func genericFloat32MicroKernel(
 
 	for range contractingLen {
 		// Force early bound-check to eliminate bounds checks in the inner loops.
-		lhsWindow := ptrLhs[idxLhs : idxLhs+lhsKernelRows]
-		_ = lhsWindow[lhsKernelRows-1]
-		rhsWindow := ptrRhs[idxRhs : idxRhs+rhsKernelCols]
-		_ = rhsWindow[rhsKernelCols-1]
-		for r := 0; r+3 < lhsKernelRows; r += 4 {
-			valA0 := lhsWindow[r]
-			valA1 := lhsWindow[r+1]
-			valA2 := lhsWindow[r+2]
-			valA3 := lhsWindow[r+3]
+		lhsWindow := lhsPackSlice[idxLhs : idxLhs+lhsL1KernelRows]
+		_ = lhsWindow[lhsL1KernelRows-1]
+		rhsWindow := rhsPackSlice[idxRhs : idxRhs+rhsL1KernelCols]
+		_ = rhsWindow[rhsL1KernelCols-1]
+		for lhsRow := 0; lhsRow < lhsL1KernelRows; lhsRow += 4 {
+			lhsV0 := lhsWindow[lhsRow]
+			lhsV1 := lhsWindow[lhsRow+1]
+			lhsV2 := lhsWindow[lhsRow+2]
+			lhsV3 := lhsWindow[lhsRow+3]
 
-			for c := 0; c+1 < rhsKernelCols; c += 2 {
-				valB0 := rhsWindow[c]
-				valB1 := rhsWindow[c+1]
+			for rhsCol := 0; rhsCol+1 < rhsL1KernelCols; rhsCol += 2 {
+				rhsV0 := rhsWindow[rhsCol]
+				rhsV1 := rhsWindow[rhsCol+1]
 
 				// BCE (bound check elimination)
-				(*accum)[r*rhsKernelCols+c] += valA0 * valB0
-				(*accum)[(r+1)*rhsKernelCols+c] += valA1 * valB0
-				(*accum)[(r+2)*rhsKernelCols+c] += valA2 * valB0
-				(*accum)[(r+3)*rhsKernelCols+c] += valA3 * valB0
+				(*accum)[lhsRow*rhsL1KernelCols+rhsCol] += lhsV0 * rhsV0
+				(*accum)[(lhsRow+1)*rhsL1KernelCols+rhsCol] += lhsV1 * rhsV0
+				(*accum)[(lhsRow+2)*rhsL1KernelCols+rhsCol] += lhsV2 * rhsV0
+				(*accum)[(lhsRow+3)*rhsL1KernelCols+rhsCol] += lhsV3 * rhsV0
 
-				(*accum)[r*rhsKernelCols+c+1] += valA0 * valB1
-				(*accum)[(r+1)*rhsKernelCols+c+1] += valA1 * valB1
-				(*accum)[(r+2)*rhsKernelCols+c+1] += valA2 * valB1
-				(*accum)[(r+3)*rhsKernelCols+c+1] += valA3 * valB1
+				(*accum)[lhsRow*rhsL1KernelCols+rhsCol+1] += lhsV0 * rhsV1
+				(*accum)[(lhsRow+1)*rhsL1KernelCols+rhsCol+1] += lhsV1 * rhsV1
+				(*accum)[(lhsRow+2)*rhsL1KernelCols+rhsCol+1] += lhsV2 * rhsV1
+				(*accum)[(lhsRow+3)*rhsL1KernelCols+rhsCol+1] += lhsV3 * rhsV1
 			}
 		}
-		idxLhs += lhsKernelRows
-		idxRhs += rhsKernelCols
+		idxLhs += lhsL1KernelRows
+		idxRhs += rhsL1KernelCols
 	}
 
 	// 3. Write Back to Output
 	if alpha == 1 && beta == 0 {
-		_ = (*accum)[(lhsActiveRows-1)*rhsKernelCols+rhsActiveCols-1]
+		_ = (*accum)[(lhsActiveRows-1)*rhsL1KernelCols+rhsActiveCols-1]
 		for r := range lhsActiveRows {
-			res := (*accum)[r*rhsKernelCols : r*rhsKernelCols+rhsActiveCols]
-			outIdx := (outputRowStart+r)*outputStride + outputColStart
+			res := (*accum)[r*rhsL1KernelCols : r*rhsL1KernelCols+rhsActiveCols]
+			outIdx := (outputRowStart+r)*outputRowStride + outputColStart
 			copy(output[outIdx:outIdx+rhsActiveCols], res)
 		}
 	} else {
 		for r := range lhsActiveRows {
 			for c := range rhsActiveCols {
-				res := (*accum)[r*rhsKernelCols+c]
-				outIdx := (outputRowStart+r)*outputStride + (outputColStart + c)
+				res := (*accum)[r*rhsL1KernelCols+c]
+				outIdx := (outputRowStart+r)*outputRowStride + (outputColStart + c)
 				if beta == 0 {
 					output[outIdx] = alpha * res
 				} else {
