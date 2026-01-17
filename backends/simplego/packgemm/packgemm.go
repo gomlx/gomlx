@@ -203,3 +203,45 @@ func packLHS[T dtypes.Number](src, dst []T,
 		}
 	}
 }
+
+// maxRecursiveSplitting for recursive splitting of work chunks
+const maxRecursiveSplitting = 16 // Max depth for recursive splitting.
+
+// splitType for recursive splitting of work chunks
+type splitType int
+
+const (
+	noSplit splitType = iota
+	splitBatch
+	splitRHSCol
+)
+
+// splitStrategy for recursive parallelization.
+func splitStrategy(depth, batchCount, rhsColCount, lhsCrossSize, contractingSize int, params *CacheParams) splitType {
+	if depth >= maxRecursiveSplitting {
+		// Only try splitting up to a certain depth.
+		return noSplit
+	}
+
+	if batchCount > 1 {
+		// We always try to split batch elements, if they are large enough.
+		if batchCount*lhsCrossSize*rhsColCount >
+			max(params.PanelContractingSize*params.LHSL2PanelCrossSize,
+				params.PanelContractingSize*params.RHSL3PanelCrossSize) {
+			return splitBatch
+		}
+		return noSplit
+	}
+
+	if rhsColCount <= params.RHSL1KernelCols {
+		return noSplit
+	}
+
+	if lhsCrossSize*rhsColCount >
+		max(params.PanelContractingSize*params.LHSL2PanelCrossSize,
+			params.PanelContractingSize*params.RHSL3PanelCrossSize) {
+		return splitRHSCol
+	}
+
+	return noSplit
+}

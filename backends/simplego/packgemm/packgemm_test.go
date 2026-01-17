@@ -127,6 +127,28 @@ func TestPackGemm(t *testing.T) {
 						t.Errorf("Cdata = %v, want %v, error: %+v", Cdata, want, err)
 					}
 				})
+
+				t.Run("large-batch", func(t *testing.T) {
+					contractingSize := 8
+					lhsCrossSize := 8
+					rhsCrossSize := 8
+					batchSize := 4096 * 4
+					fmt.Printf("- C=AxB, large batch %d\n", batchSize)
+
+					alpha := float32(1)
+					beta := float32(0)
+
+					totalElementsLHS := batchSize * lhsCrossSize * contractingSize
+					totalElementsRHS := batchSize * contractingSize * rhsCrossSize
+					totalElementsOut := batchSize * lhsCrossSize * rhsCrossSize
+
+					Adata := make([]float32, totalElementsLHS)
+					Bdata := make([]float32, totalElementsRHS)
+					Cdata := make([]float32, totalElementsOut)
+
+					gemmFn(alpha, beta, Adata, Bdata, batchSize, lhsCrossSize, rhsCrossSize, contractingSize, Cdata,
+						sequentialFloat32BufAllocFn, sequentialFloat32BufReleaseFn, sequentialWorkerPool)
+				})
 			})
 		}
 	})

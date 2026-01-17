@@ -2,7 +2,7 @@
 
 package packgemm
 
-import "runtime"
+import "github.com/gomlx/gomlx/pkg/support/xsync"
 
 var (
 	// GenericFloat32Params are generic assumptions for L1/L2/L3 cache sizes.
@@ -24,7 +24,9 @@ func init() {
 
 // genericFloat32 implements generic matrix multiplication for float32 inputs and outputs.
 // It is used when no SIMD-optimized implementation is available.
-func genericFloat32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []float32,
+func genericFloat32(alpha, beta float32, lhsFlat, rhsFlat []float32,
+	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
+	outputFlat []float32,
 	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error {
 
 	// 1. Resolve Strides
@@ -32,53 +34,57 @@ func genericFloat32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, 
 	rhsBatchStride := contractingSize * rhsCrossSize
 	outputBatchStride := lhsCrossSize * rhsCrossSize
 
-	// 2. Determine "Quantum" Size (Splitting Strategy)
-	targetParallelism := runtime.GOMAXPROCS(0)
-	rhsColSplitSize := rhsCrossSize
-
-	if batchSize < targetParallelism {
-		// Minimum strip size.
-		minSplit := 16
-		if rhsColSplitSize > minSplit {
-			neededSplits := (targetParallelism + batchSize - 1) / batchSize
-			calculatedSplit := rhsCrossSize / neededSplits
-
-			if calculatedSplit < minSplit {
-				calculatedSplit = minSplit
-			}
-
-			// Align to Nr (8)
-			rhsColSplitSize = (calculatedSplit + 7) &^ 7
-		}
-	}
-
-	// 3. The Work Loop
-	for batchIdx := range batchSize {
-		batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
-		batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
-		batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
-
-		for colStart := 0; colStart < rhsCrossSize; colStart += rhsColSplitSize {
-			colEnd := colStart + rhsColSplitSize
+	// 3. Recursive work loop
+	wg := xsync.NewDynamicWaitGroup() // Control workers started.
+	var process func(batchStart, batchCount, rhsColStart, rhsColCount, depth int)
+	process = func(batchStart, batchCount, rhsColStart, rhsColCount, depth int) {
+		switch splitStrategy(depth, batchCount, rhsColCount, lhsCrossSize, contractingSize, &GenericFloat32Params) {
+		case noSplit:
+			colEnd := rhsColStart + rhsColCount
 			if colEnd > rhsCrossSize {
 				colEnd = rhsCrossSize
 			}
-
-			task := func() {
+			for b := range batchCount {
+				batchIdx := batchStart + b
+				batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
+				batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
+				batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
 				genericFloat32GemmChunk(
 					alpha, beta,
 					batchLhs, batchRhs, batchOutput,
 					lhsCrossSize, rhsCrossSize, contractingSize,
-					GenericFloat32Params, colStart, colEnd,
+					GenericFloat32Params, rhsColStart, colEnd,
 					bufAllocFn, bufReleaseFn,
 				)
 			}
-
-			if !starter(task) {
-				task()
+			return
+		case splitBatch:
+			split := batchCount / 2
+			firstHalf := func() {
+				process(batchStart, split, rhsColStart, rhsColCount, depth+1)
+				wg.Done()
 			}
+			if wg.Add(1); !starter(firstHalf) {
+				firstHalf() // Execute first-half sequentially otherwise.
+			}
+			// Execute second-half on current goroutine.
+			process(batchStart+split, batchCount-split, rhsColStart, rhsColCount, depth+1)
+		case splitRHSCol:
+			split := rhsColCount / 2
+			firstHalf := func() {
+				process(batchStart, batchCount, rhsColStart, split, depth+1)
+				wg.Done()
+			}
+			if wg.Add(1); !starter(firstHalf) {
+				firstHalf() // Execute first-half sequentially otherwise.
+			}
+			// Execute second-half on current goroutine.
+			process(batchStart, batchCount, rhsColStart+split, rhsColCount-split, depth+1)
 		}
 	}
+
+	// Start recursion.
+	process(0, batchSize, 0, rhsCrossSize, 0)
 	return nil
 }
 
