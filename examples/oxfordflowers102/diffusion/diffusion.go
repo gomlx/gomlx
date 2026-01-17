@@ -30,6 +30,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
+	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
@@ -519,7 +520,7 @@ func TransformerBlock(ctx *context.Context, nanLogger *nanlogger.NanLogger, x *N
 		scopedCtx := ctx.In(fmt.Sprintf("AttLayer_%d", ii))
 		residual := embed
 		embed = Concatenate([]*Node{embed, posEmbed}, -1)
-		embed = layers.MultiHeadAttention(scopedCtx, embed, embed, embed, numHeads, keyQueryDim).
+		embed = attention.MultiHeadAttention(scopedCtx, embed, embed, embed, numHeads, keyQueryDim).
 			SetOutputDim(embedDim).
 			SetValueHeadDim(embedDim).Done()
 		nanLogger.TraceFirstNaN(embed)
