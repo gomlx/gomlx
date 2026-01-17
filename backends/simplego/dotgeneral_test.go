@@ -824,9 +824,8 @@ func TestIsMatMulOrder(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := isMatMulOrder(tc.lhsShape, tc.rhsShape,
-				tc.lhsContractingAxes, tc.rhsContractingAxes,
-				tc.lhsBatchAxes, tc.rhsBatchAxes)
+			got := isMatMulOrder(tc.lhsShape, tc.lhsContractingAxes, tc.lhsBatchAxes,
+				tc.rhsShape, tc.rhsContractingAxes, tc.rhsBatchAxes)
 			assert.Equal(t, tc.want, got)
 		})
 	}

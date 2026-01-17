@@ -299,11 +299,12 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 		var valid bool
 		switch backend.dotGeneralForceExecutionPath {
 		case smallMatMulPath:
-			valid = isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
-				params.lhsBatchAxes, params.rhsBatchAxes)
+			valid = isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
+				rhsShape, params.rhsContractingAxes, params.rhsBatchAxes)
 		case packgemmPath:
 			valid = packgemm.HasDTypeSupport(dtype, outputDType) &&
-				isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes, params.lhsBatchAxes, params.rhsBatchAxes)
+				isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
+					rhsShape, params.rhsContractingAxes, params.rhsBatchAxes)
 		default:
 			valid = true
 		}
@@ -320,9 +321,14 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 	}
 
 	// GEMM path:
+	// fmt.Printf("DotGeneral: GEMM path for %s×%s, lhsContractingAxes=%v, rhsContractingAxes=%v, lhsBatchAxes=%v, rhsBatchAxes=%v\n",
+	// 	lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes, params.lhsBatchAxes, params.rhsBatchAxes)
+	// fmt.Printf("- IsMatMulOrder: %v\n", isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
+	// 	rhsShape, params.rhsContractingAxes, params.rhsBatchAxes))
+	// fmt.Printf("- packgemm.HasDTypeSupport: %v\n", packgemm.HasDTypeSupport(dtype, outputDType))
 	if packgemm.HasDTypeSupport(dtype, outputDType) &&
-		isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
-			params.lhsBatchAxes, params.rhsBatchAxes) {
+		isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
+			rhsShape, params.rhsContractingAxes, params.rhsBatchAxes) {
 		return packgemmPath
 	}
 
@@ -389,9 +395,8 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			// Also verify SmallMatMul path for matrices in matmul order
 			rawDType := lhsRaw.shape.DType
 			if rawDType < MaxDTypes && dotGeneralSmallMatMulDTypeMap.Map[rawDType] != nil &&
-				isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
-					params.lhsContractingAxes, params.rhsContractingAxes,
-					params.lhsBatchAxes, params.rhsBatchAxes) {
+				isMatMulOrder(lhsRaw.shape, params.lhsContractingAxes, params.lhsBatchAxes,
+					rhsRaw.shape, params.rhsContractingAxes, params.rhsBatchAxes) {
 				output2.Zeros()
 				execSmallMatMulFn := dotGeneralSmallMatMulDTypeMap.Get(rawDType).(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
 				// BFloat16/Float16 implementations accumulate in float32 internally but write to native output
@@ -405,9 +410,9 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			}
 
 			// GEMM specialized executor.
-			if isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
-				params.lhsContractingAxes, params.rhsContractingAxes,
-				params.lhsBatchAxes, params.rhsBatchAxes) && packgemm.HasDTypeSupport(inputDType, inputDType) {
+			if isMatMulOrder(lhsRaw.shape, params.lhsContractingAxes, params.lhsBatchAxes,
+				rhsRaw.shape, params.rhsContractingAxes, params.rhsBatchAxes) &&
+				packgemm.HasDTypeSupport(inputDType, inputDType) {
 				err = packgemm.GEMM(float32(1), float32(0), lhsRaw.flat.([]float32), rhsRaw.flat.([]float32),
 					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 					output2.flat.([]float32),
