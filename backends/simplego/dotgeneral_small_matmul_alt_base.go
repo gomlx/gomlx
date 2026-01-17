@@ -2,8 +2,6 @@
 
 package simplego
 
-//go:generate go run ../../internal/cmd/alternates_generator -base=dotgeneral_small_matmul_alt_base.go -tags=bf16,f16
-
 import ( //alt:base
 	_ "github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16" //alt:base
 	_ "github.com/x448/float16"                         //alt:base
@@ -37,9 +35,9 @@ func execDotGeneralSmallMatMulGeneric[T PODNumericConstraints]( //alt:base
 	//alt:f16 func execDotGeneralSmallMatMulFloat16(
 	_ *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) {
 
-	lhsFlat := lhs.flat.([]T)             //alt:base
-	rhsFlat := rhs.flat.([]T)             //alt:base
-	outputFlat := output.flat.([]T)       //alt:base
+	lhsFlat := lhs.flat.([]T)       //alt:base
+	rhsFlat := rhs.flat.([]T)       //alt:base
+	outputFlat := output.flat.([]T) //alt:base
 	//alt:bf16 lhsFlat := lhs.flat.([]bfloat16.BFloat16)
 	//alt:bf16 rhsFlat := rhs.flat.([]bfloat16.BFloat16)
 	//alt:bf16 outputFlat := output.flat.([]bfloat16.BFloat16)
@@ -71,7 +69,7 @@ func execDotGeneralSmallMatMulGeneric[T PODNumericConstraints]( //alt:base
 			for n := range rhsCrossSize {
 				// For column n in row-major [K,N], element [k,n] is at k*N + n
 				rhsColStart := rhsBaseIdx + n
-				var sum T       //alt:base
+				var sum T //alt:base
 				//alt:bf16|f16 var sum float32
 
 				// Scalar loop with strided RHS access

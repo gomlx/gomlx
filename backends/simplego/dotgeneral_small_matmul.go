@@ -5,6 +5,8 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
+//go:generate go run ../../internal/cmd/alternates_generator -base=dotgeneral_small_matmul_alt_base.go -tags=bf16,f16
+
 // isMatMulOrder checks if the DotGeneral operands are in standard matrix multiplication order:
 // LHS: [Batch..., M, K] (contracting dimension last)
 // RHS: [Batch..., K, N] (contracting dimension first after batch)
@@ -35,7 +37,8 @@ import (
 //
 // See also: execDotGeneralSmallNormalized which transposes to [Batch, Cross, Contract] form
 // where BOTH operands have the contracting dimension last (sequential access for both).
-func isMatMulOrder(lhsShape, rhsShape shapes.Shape, lhsContractingAxes, rhsContractingAxes, lhsBatchAxes, rhsBatchAxes []int) bool {
+func isMatMulOrder(lhsShape shapes.Shape, lhsContractingAxes, lhsBatchAxes []int,
+	rhsShape shapes.Shape, rhsContractingAxes, rhsBatchAxes []int) bool {
 	lhsRank := lhsShape.Rank()
 	rhsRank := rhsShape.Rank()
 
@@ -141,9 +144,8 @@ func dgUseSmallMatMul(dtype dtypes.DType, lhsShape, rhsShape shapes.Shape, param
 	}
 
 	// Check if axes are in standard matmul order
-	if !isMatMulOrder(lhsShape, rhsShape,
-		params.lhsContractingAxes, params.rhsContractingAxes,
-		params.lhsBatchAxes, params.rhsBatchAxes) {
+	if !isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
+		rhsShape, params.rhsContractingAxes, params.rhsBatchAxes) {
 		return false
 	}
 

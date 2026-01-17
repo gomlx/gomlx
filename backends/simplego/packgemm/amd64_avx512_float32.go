@@ -7,28 +7,37 @@ package packgemm
 import (
 	"runtime"
 	"simd/archsimd"
+	"sync"
 	"unsafe"
-)
 
-func init() {
-	if archsimd.X86.AVX512() {
-		Float32 = avx512Float32
-		Float32Params = avx512Float32Params
-	}
-}
+	"github.com/gomlx/gomlx/pkg/support/xsync"
+	"k8s.io/klog/v2"
+)
 
 var avx512Float32Params = CacheParams{
 	LHSL1KernelRows:      16,   // Mr: Uses 4 ZMM registers for accumulation rows, this number must be a multiple of 4
 	RHSL1KernelCols:      32,   // Nr: Uses 2 ZMM registers for accumulation cols
-	ContractingPanelSize: 512,  // Kc: A strip fits in L1 cache
+	PanelContractingSize: 512,  // Kc: A strip fits in L1 cache
 	LHSL2PanelCrossSize:  512,  // Mc: Fits in L2 cache (multiple of LHSL1KernelRows)
 	RHSL3PanelCrossSize:  4096, // Nc: Fits in L3 cache (multiple of RHSL1KernelCols)
 }
 
+func init() {
+	if archsimd.X86.AVX512() {
+		RegisterGEMM("AVX512", avx512Float32, &avx512Float32Params, PriorityDTypeSIMD)
+	}
+}
+
+var avx512WarningOnce sync.Once
+
 // avx512Float32 implements generic matrix multiplication for float32 inputs and outputs.
 // output = alpha * (lhs x rhs) + beta * output
 func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []float32,
-	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, starter GoroutineStarter) {
+	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error {
+
+	avx512WarningOnce.Do(func() {
+		klog.Infof("AVX512 GEMM (General Matrix Multiplication) algorithm still experimental!")
+	})
 
 	// 1. Resolve Strides
 	lhsBatchStride := lhsCrossSize * contractingSize
@@ -70,6 +79,7 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 
 	// 3. The Work Loop
 	// We iterate sequentially. If the pool is full, we do the work ourselves.
+	wg := xsync.NewDynamicWaitGroup() // Control workers started.
 	for batchIdx := range batchSize {
 		// Capture batch offsets once per batch
 		batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
@@ -84,6 +94,7 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 			}
 
 			// Define the task closure
+			wg.Add(1)
 			task := func() {
 				avx512Float32GemmChunk(
 					alpha, beta,
@@ -92,6 +103,7 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 					avx512Float32Params, colStart, colEnd,
 					bufAllocFn, bufReleaseFn,
 				)
+				wg.Done()
 			}
 
 			// 4. Try to Offload
@@ -102,6 +114,8 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 			}
 		}
 	}
+	wg.Wait()
+	return nil
 }
 
 // avx512Float32GemmChunk performs the 5-loop GotoBLAS algorithm on a slice of a single batch matrix.
@@ -113,8 +127,8 @@ func avx512Float32GemmChunk(
 	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn,
 ) {
 	// fmt.Printf("gemmChunk(colStart=%d, colEnd=%d)\n", colStart, colEnd)
-	packedLhsRef, packedLhs := bufAllocFn(params.LHSL2PanelCrossSize * params.ContractingPanelSize)
-	packedRhsRef, packedRhs := bufAllocFn(params.ContractingPanelSize * params.RHSL3PanelCrossSize)
+	packedLhsRef, packedLhs := bufAllocFn(params.LHSL2PanelCrossSize * params.PanelContractingSize)
+	packedRhsRef, packedRhs := bufAllocFn(params.PanelContractingSize * params.RHSL3PanelCrossSize)
 	defer func() {
 		bufReleaseFn(packedLhsRef)
 		bufReleaseFn(packedRhsRef)
@@ -130,7 +144,7 @@ func avx512Float32GemmChunk(
 
 		// Loop 4 (p): Tiling K (Depth) - Fits in L1
 		// Iterates over the contracting dimension in chunks of contractingPanelSize
-		for contractingPanelIdx := 0; contractingPanelIdx < contractingSize; contractingPanelIdx += params.ContractingPanelSize {
+		for contractingPanelIdx := 0; contractingPanelIdx < contractingSize; contractingPanelIdx += params.PanelContractingSize {
 			// fmt.Printf("- contractingPanelIdx=%d\n", contractingPanelIdx)
 			effectiveBeta := beta
 			if contractingPanelIdx > 0 {
@@ -138,14 +152,14 @@ func avx512Float32GemmChunk(
 				// at this panel, after that the output is already accumulating the results of the matmul.
 				effectiveBeta = 1
 			}
-			contractingPanelWidth := min(params.ContractingPanelSize, contractingSize-contractingPanelIdx)
+			contractingPanelWidth := min(params.PanelContractingSize, contractingSize-contractingPanelIdx)
 
 			// ---------------------------------------------------------
 			// PACK RHS (Bit) -> ~B
 			// We pack a [contractingPanelWidth, rhsPanelWidth] block of RHS into contiguous memory.
 			// Format: Vertical strips of width rhsL1KernelCols (Nr).
 			// ---------------------------------------------------------
-			packRhs(rhs, packedRhs, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
+			packRHS(rhs, packedRhs, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
 
 			// Loop 3 (ic): Tiling M (Output Rows) - Fits in L2
 			// Iterates over the LHS height in chunks of lhsL2PanelCrossSize
@@ -157,7 +171,7 @@ func avx512Float32GemmChunk(
 				// We pack a [lhsPanelHeight, contractingPanelWidth] block of LHS into contiguous memory.
 				// Format: Horizontal strips of height lhsL1KernelRows (Mr).
 				// -----------------------------------------------------
-				packLhs(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
+				packLHS(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
 
 				// Loop 2 (jr): Micro-Kernel Columns (Nr == rhsL1BlockCols)
 				for microColIdx := 0; microColIdx < rhsPanelWidth; microColIdx += params.RHSL1KernelCols {
@@ -359,63 +373,6 @@ func avx512Float32MicroKernel(
 			fallthrough
 		case remainingRows > 0:
 			writeRow(rowOffset+0, accum_lhs0_rhs0, accum_lhs0_rhs1)
-		}
-	}
-}
-
-// packRhs packs a [depth, width] block from RHS into packedRhs.
-// It rearranges data into vertical strips of width Nr (rhsL1BlockCols).
-// If the block is smaller than Nr, it ZERO-PADS.
-func packRhs(src, dst []float32, rowStart, colStart, strideCol, depth, width, nr int) {
-	dstIdx := 0
-	// Iterate over strips of width nr
-	for stripColIdx := 0; stripColIdx < width; stripColIdx += nr {
-		// How many columns valid in this strip?
-		validCols := min(nr, width-stripColIdx)
-
-		// Iterate over rows (k)
-		for row := range depth {
-			srcRow := rowStart + row
-			srcColBase := colStart + stripColIdx
-			// Copy valid columns
-			srcIdx := (srcRow * strideCol) + srcColBase
-			copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
-			dstIdx += validCols
-			// Zero-pad if strip is incomplete (edge of matrix)
-			for c := validCols; c < nr; c++ {
-				dst[dstIdx] = 0.0
-				dstIdx++
-			}
-		}
-	}
-}
-
-// packLhs packs a [lhsPanelHeight/lhsL1KernelRows, contractingPanelWidth, lhsL1KernelRows] "panel" (a block of size Mr x Kc) from LHS.
-// It rearranges data into horizontal strips of height Mr (lhsL1BlockRows).
-// packLhs(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
-func packLhs(src, dst []float32, rowStart, colStart, rowStride, lhsPanelHeight, contractingPanelWidth, lhsL1KernelRows int) {
-	dstIdx := 0
-	// Iterate over strips of height mr
-	for stripRowIdx := 0; stripRowIdx < lhsPanelHeight; stripRowIdx += lhsL1KernelRows {
-		validRows := min(lhsL1KernelRows, lhsPanelHeight-stripRowIdx)
-
-		// Iterate over columns (contracting size k), we want LHS to be traversed K-first in the kernel
-		for col := range contractingPanelWidth {
-			srcCol := colStart + col
-			srcRowBase := rowStart + stripRowIdx
-
-			// Copy valid "rows" (they are the last axis in the returned panel)
-			for row := range validRows {
-				srcIdx := ((srcRowBase + row) * rowStride) + srcCol
-				dst[dstIdx] = src[srcIdx]
-				dstIdx++
-			}
-
-			// Zero-pad
-			for r := validRows; r < lhsL1KernelRows; r++ {
-				dst[dstIdx] = 0.0
-				dstIdx++
-			}
 		}
 	}
 }

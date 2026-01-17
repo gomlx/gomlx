@@ -6,8 +6,6 @@
 
 package simplego
 
-//go:generate go run ../../internal/cmd/alternates_generator -base=dotgeneral_small_matmul_alt_base.go -tags=bf16,f16
-
 //alt:base import (
 //alt:base _ "github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 //alt:base _ "github.com/x448/float16"
