@@ -127,7 +127,7 @@ func GEMM[TInput, TOutput dtypes.Supported](alpha, beta TOutput, lhsFlat, rhsFla
 		bufAllocFn, bufReleaseFn, starter)
 }
 
-// packRhs packs a slice of size [contractingRows, rhsCols] block from RHS into
+// packRHS packs a slice of size [contractingRows, rhsCols] block from RHS into
 // the panel reshaped+transposed to [ceil(rhsCols/RHSL1KernelCols), contractingRows, RHSL1KernelCols],
 // padding the cols of the last strip with zeros if necessary.
 //
@@ -140,7 +140,7 @@ func GEMM[TInput, TOutput dtypes.Supported](alpha, beta TOutput, lhsFlat, rhsFla
 //   - rhsCols: number of columns to be copied in the panel (excluding padding), will be padded to a RHSL1KernelCols
 //     multiple with zeros.
 //   - RHSL1KernelCols: number of columns in each "L1 kernel"
-func packRhs(src, dst []float32, srcRowStart, srcColStart, srcStrideCol,
+func packRHS[T dtypes.Number](src, dst []T, srcRowStart, srcColStart, srcStrideCol,
 	contractingRows, rhsCols, RHSL1KernelCols int) {
 	dstIdx := 0
 	// Iterate over strips of width nr
@@ -158,19 +158,19 @@ func packRhs(src, dst []float32, srcRowStart, srcColStart, srcStrideCol,
 			dstIdx += validCols
 			// Zero-pad if strip is incomplete (edge of matrix)
 			for c := validCols; c < RHSL1KernelCols; c++ {
-				dst[dstIdx] = 0.0
+				dst[dstIdx] = T(0)
 				dstIdx++
 			}
 		}
 	}
 }
 
-// packLhs packs a [lhsPanelHeight/lhsL1KernelRows, contractingPanelWidth, lhsL1KernelRows] "panel"
+// packLHS packs a [lhsPanelHeight/lhsL1KernelRows, contractingPanelWidth, lhsL1KernelRows] "panel"
 // (a block of size Mr x Kc) from LHS.
 // It rearranges data into horizontal strips of height Mr (lhsL1BlockRows).
-// packLhs(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth,
+// packLHS(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth,
 // params.LHSL1KernelRows)
-func packLhs(src, dst []float32, rowStart,
+func packLHS[T dtypes.Number](src, dst []T, rowStart,
 	colStart, rowStride, lhsPanelHeight, contractingPanelWidth, lhsL1KernelRows int) {
 	dstIdx := 0
 	// Iterate over strips of height mr
@@ -191,7 +191,7 @@ func packLhs(src, dst []float32, rowStart,
 
 			// Zero-pad
 			for r := validRows; r < lhsL1KernelRows; r++ {
-				dst[dstIdx] = 0.0
+				dst[dstIdx] = T(0)
 				dstIdx++
 			}
 		}

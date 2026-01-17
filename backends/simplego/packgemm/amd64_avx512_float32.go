@@ -145,7 +145,7 @@ func avx512Float32GemmChunk(
 			// We pack a [contractingPanelWidth, rhsPanelWidth] block of RHS into contiguous memory.
 			// Format: Vertical strips of width rhsL1KernelCols (Nr).
 			// ---------------------------------------------------------
-			packRhs(rhs, packedRhs, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
+			packRHS(rhs, packedRhs, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
 
 			// Loop 3 (ic): Tiling M (Output Rows) - Fits in L2
 			// Iterates over the LHS height in chunks of lhsL2PanelCrossSize
@@ -157,7 +157,7 @@ func avx512Float32GemmChunk(
 				// We pack a [lhsPanelHeight, contractingPanelWidth] block of LHS into contiguous memory.
 				// Format: Horizontal strips of height lhsL1KernelRows (Mr).
 				// -----------------------------------------------------
-				packLhs(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
+				packLHS(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
 
 				// Loop 2 (jr): Micro-Kernel Columns (Nr == rhsL1BlockCols)
 				for microColIdx := 0; microColIdx < rhsPanelWidth; microColIdx += params.RHSL1KernelCols {
