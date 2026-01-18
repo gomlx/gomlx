@@ -295,12 +295,12 @@ func TestCompiledClosureExecute(t *testing.T) {
 	xBuf := &Buffer{
 		shape: shapes.Make(dtypes.Float32, 3),
 		flat:  []float32{1.0, 2.0, 3.0},
-		valid: true,
+		inUse: true,
 	}
 	yBuf := &Buffer{
 		shape: shapes.Make(dtypes.Float32, 3),
 		flat:  []float32{10.0, 20.0, 30.0},
-		valid: true,
+		inUse: true,
 	}
 
 	// Execute the closure
@@ -358,7 +358,7 @@ func TestCompiledClosureMultipleExecutions(t *testing.T) {
 		inputBuf := &Buffer{
 			shape: shapes.Make(dtypes.Float32, 2),
 			flat:  tc.input,
-			valid: true,
+			inUse: true,
 		}
 
 		outputs, err := cc.Execute(b, []*Buffer{inputBuf}, nil)
@@ -437,7 +437,7 @@ func TestCompiledClosureMultipleOutputs(t *testing.T) {
 	inputBuf := &Buffer{
 		shape: shapes.Make(dtypes.Float32, 2),
 		flat:  []float32{5.0, 10.0},
-		valid: true,
+		inUse: true,
 	}
 
 	b := backend.(*Backend)
@@ -497,7 +497,7 @@ func TestCompiledClosureChainedOperations(t *testing.T) {
 	inputBuf := &Buffer{
 		shape: shapes.Make(dtypes.Float32, 2),
 		flat:  []float32{1.0, 2.0},
-		valid: true,
+		inUse: true,
 	}
 
 	simpleGoBackend := backend.(*Backend)
@@ -537,7 +537,7 @@ func TestCompiledClosureInputValidation(t *testing.T) {
 	xBuf := &Buffer{
 		shape: shapes.Make(dtypes.Float32, 2),
 		flat:  []float32{1.0, 2.0},
-		valid: true,
+		inUse: true,
 	}
 
 	simpleGoBackend := backend.(*Backend)

@@ -7,11 +7,11 @@ import (
 	"strings"
 )
 
-const _dotGeneralExecutionPathName = "autoSelectPathnormalizedPathblockedPathsmallMatMulPathpackgemmPathcheckPath"
+const _dotGeneralExecutionPathName = "autoSelectPathnormalizedPathblockedPathsmallMatMulPathpackgemmPathhighwayPathcheckPath"
 
-var _dotGeneralExecutionPathIndex = [...]uint8{0, 14, 28, 39, 54, 66, 75}
+var _dotGeneralExecutionPathIndex = [...]uint8{0, 14, 28, 39, 54, 66, 77, 86}
 
-const _dotGeneralExecutionPathLowerName = "autoselectpathnormalizedpathblockedpathsmallmatmulpathpackgemmpathcheckpath"
+const _dotGeneralExecutionPathLowerName = "autoselectpathnormalizedpathblockedpathsmallmatmulpathpackgemmpathhighwaypathcheckpath"
 
 func (i dotGeneralExecutionPath) String() string {
 	if i < 0 || i >= dotGeneralExecutionPath(len(_dotGeneralExecutionPathIndex)-1) {
@@ -29,10 +29,11 @@ func _dotGeneralExecutionPathNoOp() {
 	_ = x[blockedPath-(2)]
 	_ = x[smallMatMulPath-(3)]
 	_ = x[packgemmPath-(4)]
-	_ = x[checkPath-(5)]
+	_ = x[highwayPath-(5)]
+	_ = x[checkPath-(6)]
 }
 
-var _dotGeneralExecutionPathValues = []dotGeneralExecutionPath{autoSelectPath, normalizedPath, blockedPath, smallMatMulPath, packgemmPath, checkPath}
+var _dotGeneralExecutionPathValues = []dotGeneralExecutionPath{autoSelectPath, normalizedPath, blockedPath, smallMatMulPath, packgemmPath, highwayPath, checkPath}
 
 var _dotGeneralExecutionPathNameToValueMap = map[string]dotGeneralExecutionPath{
 	_dotGeneralExecutionPathName[0:14]:       autoSelectPath,
@@ -45,8 +46,10 @@ var _dotGeneralExecutionPathNameToValueMap = map[string]dotGeneralExecutionPath{
 	_dotGeneralExecutionPathLowerName[39:54]: smallMatMulPath,
 	_dotGeneralExecutionPathName[54:66]:      packgemmPath,
 	_dotGeneralExecutionPathLowerName[54:66]: packgemmPath,
-	_dotGeneralExecutionPathName[66:75]:      checkPath,
-	_dotGeneralExecutionPathLowerName[66:75]: checkPath,
+	_dotGeneralExecutionPathName[66:77]:      highwayPath,
+	_dotGeneralExecutionPathLowerName[66:77]: highwayPath,
+	_dotGeneralExecutionPathName[77:86]:      checkPath,
+	_dotGeneralExecutionPathLowerName[77:86]: checkPath,
 }
 
 var _dotGeneralExecutionPathNames = []string{
@@ -55,7 +58,8 @@ var _dotGeneralExecutionPathNames = []string{
 	_dotGeneralExecutionPathName[28:39],
 	_dotGeneralExecutionPathName[39:54],
 	_dotGeneralExecutionPathName[54:66],
-	_dotGeneralExecutionPathName[66:75],
+	_dotGeneralExecutionPathName[66:77],
+	_dotGeneralExecutionPathName[77:86],
 }
 
 // dotGeneralExecutionPathString retrieves an enum value from the enum constants string name.

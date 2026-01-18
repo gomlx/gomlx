@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pkg/errors"
 	"golang.org/x/exp/constraints"
 )
 
@@ -445,6 +446,29 @@ func (f *genericSliceFlagImpl[T]) Set(listStr string) error {
 		f.parsedSlice[ii], err = f.parserFn(part)
 		if err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// MustSlicesInRelData checks whether multidimensional slices s0 and s1 have the same shape and types,
+// and that each of their values is within the given delta.
+// It works with any float32 and float64 types.
+//
+// A value pair from s0 and s1 is considered to be within the delta if
+// abs(v0 - v1) / max(abs(v0), abs(v1)) <= relDelta.
+//
+// An error is returned if values don't match, indicating the index of the error.
+func MustSlicesInRelData[T float32 | float64](s0, s1 []T, relDelta float64) error {
+	if len(s0) != len(s1) {
+		return errors.Errorf("len(s0)==%d != len(s1)==%d", len(s0), len(s1))
+	}
+	for i, v0T := range s0 {
+		v0 := float64(v0T)
+		v1 := float64(s1[i])
+		if math.Abs(v0-v1)/math.Abs(max(v0, v1)) > relDelta {
+			return errors.Errorf("s0[%d]==%g != s1[%d]==%g (relDelta=%g > %g)",
+				i, v0, i, v1, math.Abs(v0-v1)/math.Abs(max(v0, v1)), relDelta)
 		}
 	}
 	return nil
