@@ -62,7 +62,7 @@ var (
 	// Used for registration, use the generic GEMM[TInput, TOutput] to actually call it.
 	DTypeToGEMM = make(map[DTypePair][]GEMMRegistration, 100)
 
-	forceVariant Variant
+	forceVariant Variant = VariantNone
 )
 
 // Variant of algorithms: usually just one for small matrices and the other for large matrices.
