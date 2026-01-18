@@ -320,12 +320,6 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 		klog.V(1).Infof("DotGeneral: forced path %s is invalid for problem size %s×%s\n", backend.dotGeneralForceExecutionPath, lhsShape, rhsShape)
 	}
 
-	// Check for SmallMatMul fast path first.
-	// SmallMatMul is beneficial for small float32 matrices in standard [M,K]×[K,N] order.
-	if dgUseSmallMatMul(dtype, lhsShape, rhsShape, params) {
-		return smallMatMulPath
-	}
-
 	// GEMM path:
 	if backend.enablePackgemm && packgemm.HasDTypeSupport(dtype, outputDType) &&
 		isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
@@ -338,6 +332,12 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 		isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
 			rhsShape, params.rhsContractingAxes, params.rhsBatchAxes) {
 		return highwayPath
+	}
+
+	// Check for SmallMatMul fast path first.
+	// SmallMatMul is beneficial for small float32 matrices in standard [M,K]×[K,N] order.
+	if dgUseSmallMatMul(dtype, lhsShape, rhsShape, params) {
+		return smallMatMulPath
 	}
 
 	// Default selection based on problem size.
