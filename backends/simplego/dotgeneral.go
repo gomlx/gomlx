@@ -383,9 +383,9 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		inputDType := lhs.shape.DType
 
 		// Now run checks against other algorithms.
-
 		if err == nil && params.execPath == checkPath {
-			// Debug path: run all paths where possible and compare results.
+			// The "checkPath" is the debug path: it uses the blocked path as a reference and runs all other possible paths
+			// comparing the results.
 			lhsRaw, rhsRaw := inputs[2], inputs[3]
 			output2 := backend.getBufferForShape(outputShape)
 			output2.Zeros()
@@ -436,7 +436,6 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 					return nil, err
 				}
 			}
-			backend.putBuffer(output2) // Discard second output, no longer needed
 
 			// Highway MatMul specialized executor.
 			if backend.enableHighway && isMatMulOrder(lhsRaw.shape, params.lhsContractingAxes, params.lhsBatchAxes,
@@ -455,8 +454,9 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 					return nil, err
 				}
 			}
-			backend.putBuffer(output2) // Discard second output, no longer needed
 
+			backend.putBuffer(output2) // Discard second output, no longer needed
+			return output, nil
 		}
 
 	case smallMatMulPath:

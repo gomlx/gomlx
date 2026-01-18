@@ -476,9 +476,6 @@ func TestDotGeneral_Exec(t *testing.T) {
 
 			// From DotGeneral parameters taken from LLM models that not working during development:
 			t.Run("LLM_1-parallel-requests", func(t *testing.T) {
-				if execPath == checkPath {
-					t.Skip("Skipping LLM_1-parallel-requests in check mode: parallel execution with buffer conflicts.")
-				}
 				lhs, err := tensors.Load("dotgeneral_test_lhs.bin")
 				require.NoError(t, err)
 				rhs, err := tensors.Load("dotgeneral_test_rhs.bin")
