@@ -187,46 +187,121 @@ func basicSymmetricGenericSmallGEMM[T dtypes.Number](
 	lhsStride := contractingSize * lhsCrossSize
 	rhsStride := rhsCrossSize * contractingSize
 	outputStride := rhsCrossSize * lhsCrossSize
-	_ = lhs[lhsStride*batchCount-1]
-	_ = rhs[rhsStride*batchCount-1]
-	_ = output[outputStride*batchCount-1]
-	for b := range batchCount {
-		lhsBase := b * lhsStride
-		rhsBase := b * rhsStride
-		outputBase := b * outputStride
-		for row := range lhsCrossSize {
-			lhsRowStart := lhsBase + row*contractingSize
-			for col := range rhsCrossSize {
-				acc := T(0)
-				var rhsColStart = rhsBase + col
-				var rhsColContracting0 = rhsColStart
-				var rhsColContracting1 = rhsColStart + rhsCrossSize
-				var rhsColContracting2 = rhsColStart + 2*rhsCrossSize
-				var rhsColContracting3 = rhsColStart + 3*rhsCrossSize
-				var rhsStep = 4 * rhsCrossSize
-				var contractingIdx int
-				for ; contractingIdx+3 < contractingSize; contractingIdx += 4 {
-					v0 := lhs[lhsRowStart+contractingIdx] * rhs[rhsColContracting0]
-					v1 := lhs[lhsRowStart+contractingIdx+1] * rhs[rhsColContracting1]
-					v2 := lhs[lhsRowStart+contractingIdx+2] * rhs[rhsColContracting2]
-					v3 := lhs[lhsRowStart+contractingIdx+3] * rhs[rhsColContracting3]
-					acc += v0 + v1 + v2 + v3
-					rhsColContracting0 += rhsStep
-					rhsColContracting1 += rhsStep
-					rhsColContracting2 += rhsStep
-					rhsColContracting3 += rhsStep
+
+	// Bounds check hint for the compiler
+	if len(lhs) < lhsStride*batchCount || len(rhs) < rhsStride*batchCount || len(output) < outputStride*batchCount {
+		return
+	}
+
+	for b := 0; b < batchCount; b++ {
+		lBase := b * lhsStride
+		rBase := b * rhsStride
+		oBase := b * outputStride
+
+		row := 0
+		// Main Loop: Process 3 rows at a time
+		for ; row+2 < lhsCrossSize; row += 3 {
+			// Pre-calculate base indices for the 3 LHS rows
+			lRow0Base := lBase + row*contractingSize
+			lRow1Base := lRow0Base + contractingSize
+			lRow2Base := lRow1Base + contractingSize
+
+			col := 0
+			// Main Tile: Process 4 columns at a time
+			for ; col+3 < rhsCrossSize; col += 4 {
+				var c00, c01, c02, c03 T
+				var c10, c11, c12, c13 T
+				var c20, c21, c22, c23 T
+
+				// rIdx tracks the current row in the RHS for these 4 columns
+				rIdx := rBase + col
+
+				for k := 0; k < contractingSize; k++ {
+					// Load RHS row segment
+					r0, r1, r2, r3 := rhs[rIdx], rhs[rIdx+1], rhs[rIdx+2], rhs[rIdx+3]
+
+					// Row 0
+					l0 := lhs[lRow0Base+k]
+					c00 += l0 * r0
+					c01 += l0 * r1
+					c02 += l0 * r2
+					c03 += l0 * r3
+					// Row 1
+					l1 := lhs[lRow1Base+k]
+					c10 += l1 * r0
+					c11 += l1 * r1
+					c12 += l1 * r2
+					c13 += l1 * r3
+					// Row 2
+					l2 := lhs[lRow2Base+k]
+					c20 += l2 * r0
+					c21 += l2 * r1
+					c22 += l2 * r2
+					c23 += l2 * r3
+
+					rIdx += rhsCrossSize
 				}
-				for ; contractingIdx < contractingSize; contractingIdx++ {
-					v := lhs[lhsBase+row*contractingSize+contractingIdx] * rhs[rhsBase+contractingIdx*rhsCrossSize+col]
-					acc += v
+
+				// Write 3x4 tile results
+				writeCol4(output, oBase+row*rhsCrossSize+col, alpha, beta, c00, c01, c02, c03)
+				writeCol4(output, oBase+(row+1)*rhsCrossSize+col, alpha, beta, c10, c11, c12, c13)
+				writeCol4(output, oBase+(row+2)*rhsCrossSize+col, alpha, beta, c20, c21, c22, c23)
+			}
+
+			// N-Fringe: Handle remaining columns for the current 3 rows
+			for ; col < rhsCrossSize; col++ {
+				var c0, c1, c2 T
+				rIdx := rBase + col
+				for k := 0; k < contractingSize; k++ {
+					rk := rhs[rIdx]
+					c0 += lhs[lRow0Base+k] * rk
+					c1 += lhs[lRow1Base+k] * rk
+					c2 += lhs[lRow2Base+k] * rk
+					rIdx += rhsCrossSize
 				}
-				if beta != 0 {
-					output[outputBase+row*rhsCrossSize+col] = beta*output[outputBase+row*rhsCrossSize+col] + alpha*acc
-				} else {
-					output[outputBase+row*rhsCrossSize+col] = alpha * acc
-				}
+				writeScalar(output, oBase, row, col, rhsCrossSize, alpha, beta, c0)
+				writeScalar(output, oBase, row+1, col, rhsCrossSize, alpha, beta, c1)
+				writeScalar(output, oBase, row+2, col, rhsCrossSize, alpha, beta, c2)
 			}
 		}
+
+		// M-Fringe: Handle remaining rows (fewer than 3)
+		for ; row < lhsCrossSize; row++ {
+			lRowBase := lBase + row*contractingSize
+			for col := 0; col < rhsCrossSize; col++ {
+				var acc T
+				rIdx := rBase + col
+				for k := 0; k < contractingSize; k++ {
+					acc += lhs[lRowBase+k] * rhs[rIdx]
+					rIdx += rhsCrossSize
+				}
+				writeScalar(output, oBase, row, col, rhsCrossSize, alpha, beta, acc)
+			}
+		}
+	}
+}
+
+// writeCol4 handles a single row of 4 columns to maximize store-throughput
+func writeCol4[T dtypes.Number](out []T, offset int, alpha, beta T, v0, v1, v2, v3 T) {
+	if beta != 0 {
+		out[offset+0] = beta*out[offset+0] + alpha*v0
+		out[offset+1] = beta*out[offset+1] + alpha*v1
+		out[offset+2] = beta*out[offset+2] + alpha*v2
+		out[offset+3] = beta*out[offset+3] + alpha*v3
+	} else {
+		out[offset+0] = alpha * v0
+		out[offset+1] = alpha * v1
+		out[offset+2] = alpha * v2
+		out[offset+3] = alpha * v3
+	}
+}
+
+func writeScalar[T dtypes.Number](out []T, base, r, c, stride int, alpha, beta T, val T) {
+	idx := base + r*stride + c
+	if beta != 0 {
+		out[idx] = beta*out[idx] + alpha*val
+	} else {
+		out[idx] = alpha * val
 	}
 }
 
