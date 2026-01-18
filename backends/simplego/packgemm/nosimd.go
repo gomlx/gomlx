@@ -190,15 +190,33 @@ func basicSymmetricGenericSmallGEMM[T dtypes.Number](
 	_ = lhs[lhsStride*batchCount-1]
 	_ = rhs[rhsStride*batchCount-1]
 	_ = output[outputStride*batchCount-1]
-
 	for b := range batchCount {
 		lhsBase := b * lhsStride
 		rhsBase := b * rhsStride
 		outputBase := b * outputStride
 		for row := range lhsCrossSize {
+			lhsRowStart := lhsBase + row*contractingSize
 			for col := range rhsCrossSize {
 				acc := T(0)
-				for contractingIdx := range contractingSize {
+				var rhsColStart = rhsBase + col
+				var rhsColContracting0 = rhsColStart
+				var rhsColContracting1 = rhsColStart + rhsCrossSize
+				var rhsColContracting2 = rhsColStart + 2*rhsCrossSize
+				var rhsColContracting3 = rhsColStart + 3*rhsCrossSize
+				var rhsStep = 4 * rhsCrossSize
+				var contractingIdx int
+				for ; contractingIdx+3 < contractingSize; contractingIdx += 4 {
+					v0 := lhs[lhsRowStart+contractingIdx] * rhs[rhsColContracting0]
+					v1 := lhs[lhsRowStart+contractingIdx+1] * rhs[rhsColContracting1]
+					v2 := lhs[lhsRowStart+contractingIdx+2] * rhs[rhsColContracting2]
+					v3 := lhs[lhsRowStart+contractingIdx+3] * rhs[rhsColContracting3]
+					acc += v0 + v1 + v2 + v3
+					rhsColContracting0 += rhsStep
+					rhsColContracting1 += rhsStep
+					rhsColContracting2 += rhsStep
+					rhsColContracting3 += rhsStep
+				}
+				for ; contractingIdx < contractingSize; contractingIdx++ {
 					v := lhs[lhsBase+row*contractingSize+contractingIdx] * rhs[rhsBase+contractingIdx*rhsCrossSize+col]
 					acc += v
 				}
