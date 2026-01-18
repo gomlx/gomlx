@@ -3,7 +3,6 @@
 package packgemm
 
 import (
-	"fmt"
 	"runtime"
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
@@ -23,12 +22,16 @@ var (
 		RHSL3PanelCrossSize:  64,   // 64,   // Nc: L3 Block Width.
 	}
 
-	// Threshold for switching to the small matrix multiplication kernel.
+	// Threshold in byte size for switching to the small matrix multiplication kernel.
 	// If the total number of operations is below this threshold, the small
 	// matrix multiplication kernel is used instead of the tiled implementation.
 	// This is a heuristic and may need to be tuned for different architectures.
 	// Expressed in number of bytes.
-	nosimdSmallMatMulThreshold = 4 * 1024 * 1024
+	nosimdSmallMatMulSizeThreshold = 4 * 1024 * 1024
+
+	// Minimum number of flops per worker: above this number, if possible we should
+	// parallelize computation on separate goroutines.
+	nosimdMinMatMulFlopsPerWorker = 1024
 )
 
 func init() {
@@ -51,50 +54,17 @@ func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 	rhsBatchStride := contractingSize * rhsCrossSize
 	outputBatchStride := lhsCrossSize * rhsCrossSize
 	dtype := dtypes.FromGenericsType[T]()
-	// matmulSize := lhsCrossSize * rhsCrossSize * contractingSize
-	matmulSizeBytes := (lhsBatchStride + rhsBatchStride + outputBatchStride) * dtype.Size()
+	gemmSize := (lhsBatchStride + rhsBatchStride + outputBatchStride) * dtype.Size()
+	// gemmFlops := lhsCrossSize * rhsCrossSize * contractingSize
 
 	// 2. Check if small matrix multiplication kernel can be used.
-	if matmulSizeBytes < nosimdSmallMatMulThreshold {
-		if false && (batchSize*matmulSizeBytes < nosimdSmallMatMulThreshold || starter == nil) {
-			fmt.Printf("\t- Serialized small GEMM\n")
-			// Not worth parallelizing: just run the small matmul kernel.
-			basicSymmetricGenericSmallGEMM(
-				alpha, beta,
-				lhsFlat, rhsFlat, outputFlat,
-				lhsCrossSize, rhsCrossSize, contractingSize, batchSize,
-			)
-		} else {
-			// Parallelize on the batch dimension:
-			wg := xsync.NewDynamicWaitGroup() // Control workers started.
-			maxWorkers := runtime.GOMAXPROCS(0)
-			minChunk := 1 // nosimdSmallMatMulThreshold / matmulSize
-			batchCountPerTask := max(minChunk, batchSize/maxWorkers)
-			for b := 0; b < batchSize; b += batchCountPerTask {
-				batchCount := min(batchCountPerTask, batchSize-b)
-				batchLhs := lhsFlat[b*lhsBatchStride : (b+batchCount)*lhsBatchStride]
-				batchRhs := rhsFlat[b*rhsBatchStride : (b+batchCount)*rhsBatchStride]
-				batchOutput := outputFlat[b*outputBatchStride : (b+batchCount)*outputBatchStride]
-				if b+batchCount == batchSize || !starter(func() {
-					// Started on a separate worker.
-					wg.Add(1)
-					defer wg.Done()
-					basicSymmetricGenericSmallGEMM(
-						alpha, beta,
-						batchLhs, batchRhs, batchOutput,
-						lhsCrossSize, rhsCrossSize, contractingSize, batchCount,
-					)
-				}) {
-					// Last chunk or if no more workers available, run in the current goroutine.
-					basicSymmetricGenericSmallGEMM(
-						alpha, beta,
-						batchLhs, batchRhs, batchOutput,
-						lhsCrossSize, rhsCrossSize, contractingSize, batchCount,
-					)
-				}
-			}
-			wg.Wait()
-		}
+	if (forceVariant == VariantNone && gemmSize < nosimdSmallMatMulSizeThreshold) || forceVariant == VariantSmall {
+		basicSymmetricGenericSmallGEMMParallel(
+			alpha, beta,
+			lhsFlat, rhsFlat, outputFlat,
+			batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+			lhsBatchStride, rhsBatchStride, outputBatchStride,
+			starter)
 		return nil
 	}
 
@@ -152,9 +122,67 @@ func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 	return nil
 }
 
-func basicSymmetricGenericSmallGEMM[T dtypes.Number](alpha, beta T,
+// basicSymmetricGenericSmallGEMMParallel implements basic symmetric (input and output dtypes are the same) non-SIMD
+// GEMM for various types of inputs and outputs for **small matrices** (not counting the batch size).
+//
+// This function will attempt to parallelize the computation on the batch dimension, if it evaluate it as
+// worth parallelizing.
+//
+// It is used when no SIMD-optimized implementation is available.
+func basicSymmetricGenericSmallGEMMParallel[T dtypes.Number](
+	alpha, beta T,
+	lhsFlat, rhsFlat []T, outputFlat []T,
+	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
+	lhsBatchStride, rhsBatchStride, outputBatchStride int,
+	starter GoroutineStarter) error {
+
+	gemmFlops := lhsCrossSize * rhsCrossSize * contractingSize
+	if starter == nil || batchSize == 1 || batchSize*gemmFlops < nosimdMinMatMulFlopsPerWorker {
+		// Not worth parallelizing: just run the small matmul kernel sequentially.
+		basicSymmetricGenericSmallGEMM(
+			alpha, beta,
+			lhsFlat, rhsFlat, outputFlat,
+			batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+		)
+		return nil
+	}
+
+	// Parallelize on the batch dimension:
+	wg := xsync.NewDynamicWaitGroup() // Control workers started.
+	maxWorkers := runtime.GOMAXPROCS(0)
+	minChunk := 1 // nosimdSmallMatMulThreshold / matmulSize
+	batchCountPerTask := max(minChunk, batchSize/maxWorkers)
+	for b := 0; b < batchSize; b += batchCountPerTask {
+		batchCount := min(batchCountPerTask, batchSize-b)
+		batchLhs := lhsFlat[b*lhsBatchStride : (b+batchCount)*lhsBatchStride]
+		batchRhs := rhsFlat[b*rhsBatchStride : (b+batchCount)*rhsBatchStride]
+		batchOutput := outputFlat[b*outputBatchStride : (b+batchCount)*outputBatchStride]
+		if b+batchCount == batchSize || !starter(func() {
+			// Started on a separate worker.
+			wg.Add(1)
+			defer wg.Done()
+			basicSymmetricGenericSmallGEMM(
+				alpha, beta,
+				batchLhs, batchRhs, batchOutput,
+				batchCount, lhsCrossSize, rhsCrossSize, contractingSize,
+			)
+		}) {
+			// Last chunk or if no more workers available, run in the current goroutine.
+			basicSymmetricGenericSmallGEMM(
+				alpha, beta,
+				batchLhs, batchRhs, batchOutput,
+				batchCount, lhsCrossSize, rhsCrossSize, contractingSize,
+			)
+		}
+	}
+	wg.Wait()
+	return nil
+}
+
+func basicSymmetricGenericSmallGEMM[T dtypes.Number](
+	alpha, beta T,
 	lhs, rhs, output []T,
-	lhsCrossSize, rhsCrossSize, contractingSize, batchCount int,
+	batchCount, lhsCrossSize, rhsCrossSize, contractingSize int,
 ) {
 	lhsStride := contractingSize * lhsCrossSize
 	rhsStride := rhsCrossSize * contractingSize
@@ -171,9 +199,14 @@ func basicSymmetricGenericSmallGEMM[T dtypes.Number](alpha, beta T,
 			for col := range rhsCrossSize {
 				acc := T(0)
 				for contractingIdx := range contractingSize {
-					acc += lhs[lhsBase+row*contractingSize+contractingIdx] * rhs[rhsBase+contractingIdx*rhsCrossSize+col]
+					v := lhs[lhsBase+row*contractingSize+contractingIdx] * rhs[rhsBase+contractingIdx*rhsCrossSize+col]
+					acc += v
 				}
-				output[outputBase+row*rhsCrossSize+col] = alpha*acc + beta*output[outputBase+row*rhsCrossSize+col]
+				if beta != 0 {
+					output[outputBase+row*rhsCrossSize+col] = beta*output[outputBase+row*rhsCrossSize+col] + alpha*acc
+				} else {
+					output[outputBase+row*rhsCrossSize+col] = alpha * acc
+				}
 			}
 		}
 	}
