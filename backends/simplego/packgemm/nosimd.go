@@ -193,16 +193,16 @@ func basicSymmetricGenericSmallGEMM[T dtypes.Number](
 		return
 	}
 
-	for b := 0; b < batchCount; b++ {
-		lBase := b * lhsStride
-		rBase := b * rhsStride
-		oBase := b * outputStride
+	for batchIdx := 0; batchIdx < batchCount; batchIdx++ {
+		lhsBase := batchIdx * lhsStride
+		rhsBase := batchIdx * rhsStride
+		outputBase := batchIdx * outputStride
 
 		row := 0
 		// Main Loop: Process 3 rows at a time
 		for ; row+2 < lhsCrossSize; row += 3 {
 			// Pre-calculate base indices for the 3 LHS rows
-			lRow0Base := lBase + row*contractingSize
+			lRow0Base := lhsBase + row*contractingSize
 			lRow1Base := lRow0Base + contractingSize
 			lRow2Base := lRow1Base + contractingSize
 
@@ -214,7 +214,7 @@ func basicSymmetricGenericSmallGEMM[T dtypes.Number](
 				var c20, c21, c22, c23 T
 
 				// rIdx tracks the current row in the RHS for these 4 columns
-				rIdx := rBase + col
+				rIdx := rhsBase + col
 
 				for k := 0; k < contractingSize; k++ {
 					// Load RHS row segment
@@ -243,15 +243,15 @@ func basicSymmetricGenericSmallGEMM[T dtypes.Number](
 				}
 
 				// Write 3x4 tile results
-				writeCol4(output, oBase+row*rhsCrossSize+col, alpha, beta, c00, c01, c02, c03)
-				writeCol4(output, oBase+(row+1)*rhsCrossSize+col, alpha, beta, c10, c11, c12, c13)
-				writeCol4(output, oBase+(row+2)*rhsCrossSize+col, alpha, beta, c20, c21, c22, c23)
+				basicWriteCol4(output, outputBase+row*rhsCrossSize+col, alpha, beta, c00, c01, c02, c03)
+				basicWriteCol4(output, outputBase+(row+1)*rhsCrossSize+col, alpha, beta, c10, c11, c12, c13)
+				basicWriteCol4(output, outputBase+(row+2)*rhsCrossSize+col, alpha, beta, c20, c21, c22, c23)
 			}
 
-			// N-Fringe: Handle remaining columns for the current 3 rows
+			// Columns-fringe: handle remaining columns for the current 3 rows
 			for ; col < rhsCrossSize; col++ {
 				var c0, c1, c2 T
-				rIdx := rBase + col
+				rIdx := rhsBase + col
 				for k := 0; k < contractingSize; k++ {
 					rk := rhs[rIdx]
 					c0 += lhs[lRow0Base+k] * rk
@@ -259,30 +259,52 @@ func basicSymmetricGenericSmallGEMM[T dtypes.Number](
 					c2 += lhs[lRow2Base+k] * rk
 					rIdx += rhsCrossSize
 				}
-				writeScalar(output, oBase, row, col, rhsCrossSize, alpha, beta, c0)
-				writeScalar(output, oBase, row+1, col, rhsCrossSize, alpha, beta, c1)
-				writeScalar(output, oBase, row+2, col, rhsCrossSize, alpha, beta, c2)
+				outputIdx := outputBase + row*rhsCrossSize + col
+				basicWriteScalar(output, outputIdx, alpha, beta, c0)
+				basicWriteScalar(output, outputIdx+rhsCrossSize, alpha, beta, c1)
+				basicWriteScalar(output, outputIdx+2*rhsCrossSize, alpha, beta, c2)
 			}
 		}
 
-		// M-Fringe: Handle remaining rows (fewer than 3)
+		// Row-Fringe: Handle remaining rows (fewer than 3)
+		outputIdx := outputBase + row*rhsCrossSize
 		for ; row < lhsCrossSize; row++ {
-			lRowBase := lBase + row*contractingSize
-			for col := 0; col < rhsCrossSize; col++ {
+			for col := range rhsCrossSize {
 				var acc T
-				rIdx := rBase + col
-				for k := 0; k < contractingSize; k++ {
-					acc += lhs[lRowBase+k] * rhs[rIdx]
-					rIdx += rhsCrossSize
+				lhsIdx := lhsBase + row*contractingSize
+				rhsIdx0 := rhsBase + col
+				rhsIdx1 := rhsBase + col + rhsCrossSize
+				rhsIdx2 := rhsBase + col + 2*rhsCrossSize
+				rhsIdx3 := rhsBase + col + 3*rhsCrossSize
+				rhsStride := rhsCrossSize * 4
+				var contractingIdx int
+				for ; contractingIdx+3 < contractingSize; contractingIdx += 4 {
+					v0 := lhs[lhsIdx] *
+						rhs[rhsIdx0]
+					v1 := lhs[lhsIdx+1] * rhs[rhsIdx1]
+					v2 := lhs[lhsIdx+2] * rhs[rhsIdx2]
+					v3 := lhs[lhsIdx+3] * rhs[rhsIdx3]
+					acc += v0 + v1 + v2 + v3
+					lhsIdx += 4
+					rhsIdx0 += rhsStride
+					rhsIdx1 += rhsStride
+					rhsIdx2 += rhsStride
+					rhsIdx3 += rhsStride
 				}
-				writeScalar(output, oBase, row, col, rhsCrossSize, alpha, beta, acc)
+				for ; contractingIdx < contractingSize; contractingIdx++ {
+					acc += lhs[lhsIdx] * rhs[rhsIdx0]
+					lhsIdx++
+					rhsIdx0 += rhsCrossSize
+				}
+				basicWriteScalar(output, outputIdx, alpha, beta, acc)
+				outputIdx++
 			}
 		}
 	}
 }
 
-// writeCol4 handles a single row of 4 columns to maximize store-throughput
-func writeCol4[T dtypes.Number](out []T, offset int, alpha, beta T, v0, v1, v2, v3 T) {
+// basicWriteCol4 handles a single row of 4 columns to maximize store-throughput
+func basicWriteCol4[T dtypes.Number](out []T, offset int, alpha, beta T, v0, v1, v2, v3 T) {
 	if beta != 0 {
 		out[offset+0] = beta*out[offset+0] + alpha*v0
 		out[offset+1] = beta*out[offset+1] + alpha*v1
@@ -296,12 +318,12 @@ func writeCol4[T dtypes.Number](out []T, offset int, alpha, beta T, v0, v1, v2, 
 	}
 }
 
-func writeScalar[T dtypes.Number](out []T, base, r, c, stride int, alpha, beta T, val T) {
-	idx := base + r*stride + c
+// basicWriteScalar handles a single scalar write to maximize store-throughput
+func basicWriteScalar[T dtypes.Number](out []T, idx int, alpha, beta T, value T) {
 	if beta != 0 {
-		out[idx] = beta*out[idx] + alpha*val
+		out[idx] = beta*out[idx] + alpha*value
 	} else {
-		out[idx] = alpha * val
+		out[idx] = alpha * value
 	}
 }
 
