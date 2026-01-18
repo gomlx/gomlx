@@ -2,43 +2,107 @@
 
 package packgemm
 
-import "github.com/gomlx/gomlx/pkg/support/xsync"
+import (
+	"fmt"
+	"runtime"
+
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/support/xsync"
+)
 
 var (
-	// GenericFloat32Params are generic assumptions for L1/L2/L3 cache sizes.
+	// NoSIMD32Params are generic assumptions for L1/L2/L3 cache sizes for 32 bits dtypes (float32, int32, uint32)
 	//
 	// These values are somewhat arbitrary, assuming "standard" modern cache sizes.
 	// They are parameterized so they can be tuned or determined dynamically later.
-	GenericFloat32Params = CacheParams{
+	NoSIMD32Params = CacheParams{
 		LHSL1KernelRows:      8,    // Mr: Rows of LHS in registers.
 		RHSL1KernelCols:      8,    // Nr: Cols of RHS in registers.
 		PanelContractingSize: 2048, // 2048, // Kc: L1 Block Depth.
 		LHSL2PanelCrossSize:  32,   //32,   // Mc: L2 Block Height.
 		RHSL3PanelCrossSize:  64,   // 64,   // Nc: L3 Block Width.
 	}
+
+	// Threshold for switching to the small matrix multiplication kernel.
+	// If the total number of operations is below this threshold, the small
+	// matrix multiplication kernel is used instead of the tiled implementation.
+	// This is a heuristic and may need to be tuned for different architectures.
+	// Expressed in number of bytes.
+	nosimdSmallMatMulThreshold = 4 * 1024 * 1024
 )
 
 func init() {
-	RegisterGEMM("GenericScalar", genericFloat32, &GenericFloat32Params, PriorityBase)
+	RegisterGEMM("Basic(non-SIMD)", basicSymmetricGeneric[float32], &NoSIMD32Params, PriorityBase)
+	RegisterGEMM("Basic(non-SIMD)", basicSymmetricGeneric[int32], &NoSIMD32Params, PriorityBase)
+	RegisterGEMM("Basic(non-SIMD)", basicSymmetricGeneric[uint32], &NoSIMD32Params, PriorityBase)
 }
 
-// genericFloat32 implements generic matrix multiplication for float32 inputs and outputs.
+// basicSymmetricGeneric implements basic symmetric (input and output dtypes are the same) non-SIMD
+// GEMM for various types of inputs and outputs.
+//
 // It is used when no SIMD-optimized implementation is available.
-func genericFloat32(alpha, beta float32, lhsFlat, rhsFlat []float32,
+func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
-	outputFlat []float32,
-	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error {
+	outputFlat []T,
+	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error {
 
 	// 1. Resolve Strides
 	lhsBatchStride := lhsCrossSize * contractingSize
 	rhsBatchStride := contractingSize * rhsCrossSize
 	outputBatchStride := lhsCrossSize * rhsCrossSize
+	dtype := dtypes.FromGenericsType[T]()
+	// matmulSize := lhsCrossSize * rhsCrossSize * contractingSize
+	matmulSizeBytes := (lhsBatchStride + rhsBatchStride + outputBatchStride) * dtype.Size()
+
+	// 2. Check if small matrix multiplication kernel can be used.
+	if matmulSizeBytes < nosimdSmallMatMulThreshold {
+		if false && (batchSize*matmulSizeBytes < nosimdSmallMatMulThreshold || starter == nil) {
+			fmt.Printf("\t- Serialized small GEMM\n")
+			// Not worth parallelizing: just run the small matmul kernel.
+			basicSymmetricGenericSmallGEMM(
+				alpha, beta,
+				lhsFlat, rhsFlat, outputFlat,
+				lhsCrossSize, rhsCrossSize, contractingSize, batchSize,
+			)
+		} else {
+			// Parallelize on the batch dimension:
+			wg := xsync.NewDynamicWaitGroup() // Control workers started.
+			maxWorkers := runtime.GOMAXPROCS(0)
+			minChunk := 1 // nosimdSmallMatMulThreshold / matmulSize
+			batchCountPerTask := max(minChunk, batchSize/maxWorkers)
+			for b := 0; b < batchSize; b += batchCountPerTask {
+				batchCount := min(batchCountPerTask, batchSize-b)
+				batchLhs := lhsFlat[b*lhsBatchStride : (b+batchCount)*lhsBatchStride]
+				batchRhs := rhsFlat[b*rhsBatchStride : (b+batchCount)*rhsBatchStride]
+				batchOutput := outputFlat[b*outputBatchStride : (b+batchCount)*outputBatchStride]
+				if b+batchCount == batchSize || !starter(func() {
+					// Started on a separate worker.
+					wg.Add(1)
+					defer wg.Done()
+					basicSymmetricGenericSmallGEMM(
+						alpha, beta,
+						batchLhs, batchRhs, batchOutput,
+						lhsCrossSize, rhsCrossSize, contractingSize, batchCount,
+					)
+				}) {
+					// Last chunk or if no more workers available, run in the current goroutine.
+					basicSymmetricGenericSmallGEMM(
+						alpha, beta,
+						batchLhs, batchRhs, batchOutput,
+						lhsCrossSize, rhsCrossSize, contractingSize, batchCount,
+					)
+				}
+			}
+			wg.Wait()
+		}
+		return nil
+	}
 
 	// 3. Recursive work loop
 	wg := xsync.NewDynamicWaitGroup() // Control workers started.
 	var process func(batchStart, batchCount, rhsColStart, rhsColCount, depth int)
 	process = func(batchStart, batchCount, rhsColStart, rhsColCount, depth int) {
-		switch splitStrategy(depth, batchCount, rhsColCount, lhsCrossSize, contractingSize, &GenericFloat32Params) {
+		switch splitStrategy(depth, batchCount, rhsColCount, lhsCrossSize, contractingSize, &NoSIMD32Params) {
 		case noSplit:
 			colEnd := rhsColStart + rhsColCount
 			if colEnd > rhsCrossSize {
@@ -49,11 +113,11 @@ func genericFloat32(alpha, beta float32, lhsFlat, rhsFlat []float32,
 				batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
 				batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
 				batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
-				genericFloat32GemmChunk(
+				basicSymmetricGemmChunk(
 					alpha, beta,
 					batchLhs, batchRhs, batchOutput,
 					lhsCrossSize, rhsCrossSize, contractingSize,
-					GenericFloat32Params, rhsColStart, colEnd,
+					NoSIMD32Params, rhsColStart, colEnd,
 					bufAllocFn, bufReleaseFn,
 				)
 			}
@@ -88,17 +152,44 @@ func genericFloat32(alpha, beta float32, lhsFlat, rhsFlat []float32,
 	return nil
 }
 
-// genericFloat32GemmChunk performs the matrix multiplication on a chunk of columns.
-func genericFloat32GemmChunk(
-	alpha, beta float32,
-	lhs, rhs, output []float32,
+func basicSymmetricGenericSmallGEMM[T dtypes.Number](alpha, beta T,
+	lhs, rhs, output []T,
+	lhsCrossSize, rhsCrossSize, contractingSize, batchCount int,
+) {
+	lhsStride := contractingSize * lhsCrossSize
+	rhsStride := rhsCrossSize * contractingSize
+	outputStride := rhsCrossSize * lhsCrossSize
+	_ = lhs[lhsStride*batchCount-1]
+	_ = rhs[rhsStride*batchCount-1]
+	_ = output[outputStride*batchCount-1]
+
+	for b := range batchCount {
+		lhsBase := b * lhsStride
+		rhsBase := b * rhsStride
+		outputBase := b * outputStride
+		for row := range lhsCrossSize {
+			for col := range rhsCrossSize {
+				acc := T(0)
+				for contractingIdx := range contractingSize {
+					acc += lhs[lhsBase+row*contractingSize+contractingIdx] * rhs[rhsBase+contractingIdx*rhsCrossSize+col]
+				}
+				output[outputBase+row*rhsCrossSize+col] = alpha*acc + beta*output[outputBase+row*rhsCrossSize+col]
+			}
+		}
+	}
+}
+
+// basicSymmetricGemmChunk performs the matrix multiplication on a chunk of columns.
+func basicSymmetricGemmChunk[T dtypes.Number](
+	alpha, beta T,
+	lhs, rhs, output []T,
 	lhsCrossSize, rhsCrossSize, contractingSize int,
 	params CacheParams, colStart, colEnd int,
-	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn,
+	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn,
 ) {
 	packedLhsRef, packedLHS := bufAllocFn(params.LHSL2PanelCrossSize * params.PanelContractingSize)
 	packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSL3PanelCrossSize)
-	var accum [64]float32
+	var accum [64]T
 
 	defer func() {
 		bufReleaseFn(packedLhsRef)
@@ -141,7 +232,7 @@ func genericFloat32GemmChunk(
 						outputRow := lhsPanelRowIdx + microRowIdx
 						outputCol := rhsPanelColIdx + microColIdx
 
-						genericFloat32MicroKernel(
+						basicSymmetricMicroKernel(
 							alpha, effectiveBeta,
 							packedLHS[offsetLhs:],
 							packedRHS[offsetRhs:],
@@ -161,7 +252,7 @@ func genericFloat32GemmChunk(
 	}
 }
 
-// genericFloat32MicroKernel updates one [lhsKernelRows, rhsKernelCols] tile
+// basicSymmetricMicroKernel updates one [lhsKernelRows, rhsKernelCols] tile
 // from the panels in lhsPack and rhsPack, along a contractingLen elements
 // of the contracting dimensions.
 //
@@ -169,11 +260,11 @@ func genericFloat32GemmChunk(
 // - rhsPackSlice: the slice of the package panel for this kernel, shaped [contractingRows, rhsL1KernelCols]
 // - accum: array of accumulators in stack, with enough space to fit [lhsL1KernelRows, rhsL1KernelCols]
 // - output: output buffer, organized as [lhsCrossSize, rhsCrossSize]
-func genericFloat32MicroKernel(
-	alpha, beta float32,
-	lhsPackSlice, rhsPackSlice []float32,
-	accum *[64]float32,
-	output []float32,
+func basicSymmetricMicroKernel[T dtypes.Number](
+	alpha, beta T,
+	lhsPackSlice, rhsPackSlice []T,
+	accum *[64]T,
+	output []T,
 	outputRowStart, outputColStart int,
 	outputRowStride int,
 	lhsL1KernelRows, rhsL1KernelCols int,
