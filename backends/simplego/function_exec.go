@@ -364,6 +364,9 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 		if inputBuffers[i] == nil {
 			return errors.Errorf("input %d for node %s not computed yet", i, node.opType)
 		}
+		if !inputBuffers[i].inUse {
+			return errors.Errorf("input %d for node %s has been released already!?", i, node.opType)
+		}
 		// Only "own" the input if this is the last use of it.
 		// The atomic Load is safe for concurrent access - if we miss ownership,
 		// the buffer just won't be reused in-place. The important thing
@@ -388,6 +391,7 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			outputNode := node.multiOutputsNodes[outputIdx]
 			outputNodeIdx := outputNode.builderIdx
 			if outputNodeIdx >= fe.numNodesToProcess || fe.numUses[outputNodeIdx] == 0 {
+				// Output of node is not used by any other node, we can immediately release it.
 				backend.putBuffer(outputBuf)
 				continue
 			}
@@ -417,8 +421,14 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 		inputIdx := input.builderIdx
 		newCount := execBuf.numUsed[inputIdx].Add(1) // Mark this input as used.
 		if inputBuffers[i] == nil {
+			// Input buffer is nil, means it has been consumed by the operation.
+			// Mark that the associated results is no longer available.
 			execBuf.results[inputIdx] = nil
 			continue
+		}
+		if !inputBuffers[i].inUse {
+			return errors.Errorf("input #%d for node %s has been released, but not marked as consumed!?",
+				i, node.opType)
 		}
 		if int(newCount) == fe.numUses[inputIdx] && execBuf.owned[inputIdx] {
 			// Check if it is reused as one of the outputs -- common for in-place operations, like in exec_binary.go.
