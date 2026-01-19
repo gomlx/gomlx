@@ -477,7 +477,7 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			// If we find the input buffer reused as an output but it is not nil here, it is a bug in the operator implementation.
 			if node.IsMultiOutputs() {
 				for outIdx, outputNode := range node.multiOutputsNodes {
-					if execBuf.results[outputNode.builderIdx] == inputBuffers[i] {
+					if execBuf.results[outputNode.idx] == inputBuffers[i] {
 						return errors.Errorf("op %s (output %d) reused input %d as output but didn't set input to nil in buffer slice", node.opType, outIdx, i)
 					}
 				}
