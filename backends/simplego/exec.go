@@ -172,9 +172,9 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, _ backends
 		if !ok {
 			return nil, errors.Errorf("Execute: input buffer #%d is not from SimpleGo backend", ii)
 		}
-		if !inputBuffer.valid {
+		if !inputBuffer.inUse {
 			return nil, errors.Errorf(
-				"Execute: input buffer (%p) #%d is not valid, likely it is being used after being isFinalized",
+				"Execute: input buffer (%p) #%d is not valid, likely it is being used after being released",
 				inputBuffer, ii)
 		}
 		if inputBuffer.flat == nil {

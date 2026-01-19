@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gomlx/gomlx/backends/simplego/highway"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
@@ -226,7 +227,10 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	return result, nil
 }
 
-func dgFindSizes(shape shapes.Shape, contractingAxes, batchAxes []int) (batchSize, crossSize, contractingSize int, crossDims []int) {
+// dgFindSizes finds the combined sizes of the 3 types of axes that mather:
+// batch, cross, and contracting dimensions for a DotGeneral operation
+func dgFindSizes(shape shapes.Shape, contractingAxes, batchAxes []int) (
+	batchSize, crossSize, contractingSize int, crossDims []int) {
 	rank := shape.Rank()
 	axesTypes := make([]int, rank)
 
@@ -271,8 +275,9 @@ const (
 	// smallMatMulPath uses the SmallMatMul fast path (small float32 matrices in standard order)
 	smallMatMulPath
 	// packgemmPath uses the packgemm package with a fast matmul algorithm with continuous packing of the matrices.
-	// For now, only for large float32 matrices in standard order, for AVX512 only.
 	packgemmPath
+	// highwayPath uses the highway package (uses go-highway) with a fast matmul algorithm with continuous packing of the matrices.
+	highwayPath
 	// checkPath runs both paths and compares outputs (for debugging)
 	checkPath
 )
@@ -283,6 +288,12 @@ const (
 // Called at graph-build time from DotGeneral().
 func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params *dotGeneralNodeData) dotGeneralExecutionPath {
 	dtype := lhsShape.DType
+	outputDType := dtype
+	if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
+		// For 16 bits, store the intermediary results as float32 to minimize numerical errors during accumulation.
+		// Notice the blockLog2Dim must be the same, because the block dimensions much match the inputs.
+		outputDType = dtypes.Float32
+	}
 
 	// If a specific path is forced via backend config, use that.
 	if backend.dotGeneralForceExecutionPath != autoSelectPath {
@@ -290,11 +301,16 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 		var valid bool
 		switch backend.dotGeneralForceExecutionPath {
 		case smallMatMulPath:
-			valid = isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
-				params.lhsBatchAxes, params.rhsBatchAxes)
+			valid = isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
+				rhsShape, params.rhsContractingAxes, params.rhsBatchAxes)
 		case packgemmPath:
-			valid = dtype == dtypes.Float32 && packgemm.Float32 != nil &&
-				isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes, params.lhsBatchAxes, params.rhsBatchAxes)
+			valid = backend.enablePackgemm && packgemm.HasDTypeSupport(dtype, outputDType) &&
+				isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
+					rhsShape, params.rhsContractingAxes, params.rhsBatchAxes)
+		case highwayPath:
+			valid = backend.enableHighway && highway.HasDTypeSupport(dtype, outputDType) &&
+				isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
+					rhsShape, params.rhsContractingAxes, params.rhsBatchAxes)
 		default:
 			valid = true
 		}
@@ -304,16 +320,24 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 		klog.V(1).Infof("DotGeneral: forced path %s is invalid for problem size %s×%s\n", backend.dotGeneralForceExecutionPath, lhsShape, rhsShape)
 	}
 
+	// GEMM path:
+	if backend.enablePackgemm && packgemm.HasDTypeSupport(dtype, outputDType) &&
+		isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
+			rhsShape, params.rhsContractingAxes, params.rhsBatchAxes) {
+		return packgemmPath
+	}
+
+	// Highway path:
+	if backend.enableHighway && highway.HasDTypeSupport(dtype, outputDType) &&
+		isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
+			rhsShape, params.rhsContractingAxes, params.rhsBatchAxes) {
+		return highwayPath
+	}
+
 	// Check for SmallMatMul fast path first.
 	// SmallMatMul is beneficial for small float32 matrices in standard [M,K]×[K,N] order.
 	if dgUseSmallMatMul(dtype, lhsShape, rhsShape, params) {
 		return smallMatMulPath
-	}
-
-	// GEMM path:
-	if dtype == dtypes.Float32 && isMatMulOrder(lhsShape, rhsShape, params.lhsContractingAxes, params.rhsContractingAxes,
-		params.lhsBatchAxes, params.rhsBatchAxes) && packgemm.Float32 != nil {
-		return packgemmPath
 	}
 
 	// Default selection based on problem size.
@@ -358,8 +382,10 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		err = execDotGeneralBlocked(backend, lhs, rhs, hasBatch, params, output)
 		inputDType := lhs.shape.DType
 
+		// Now run checks against other algorithms.
 		if err == nil && params.execPath == checkPath {
-			// Debug path: run all paths where possible and compare results.
+			// The "checkPath" is the debug path: it uses the blocked path as a reference and runs all other possible paths
+			// comparing the results.
 			lhsRaw, rhsRaw := inputs[2], inputs[3]
 			output2 := backend.getBufferForShape(outputShape)
 			output2.Zeros()
@@ -379,9 +405,8 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			// Also verify SmallMatMul path for matrices in matmul order
 			rawDType := lhsRaw.shape.DType
 			if rawDType < MaxDTypes && dotGeneralSmallMatMulDTypeMap.Map[rawDType] != nil &&
-				isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
-					params.lhsContractingAxes, params.rhsContractingAxes,
-					params.lhsBatchAxes, params.rhsBatchAxes) {
+				isMatMulOrder(lhsRaw.shape, params.lhsContractingAxes, params.lhsBatchAxes,
+					rhsRaw.shape, params.rhsContractingAxes, params.rhsBatchAxes) {
 				output2.Zeros()
 				execSmallMatMulFn := dotGeneralSmallMatMulDTypeMap.Get(rawDType).(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
 				// BFloat16/Float16 implementations accumulate in float32 internally but write to native output
@@ -395,21 +420,43 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			}
 
 			// GEMM specialized executor.
-			if inputDType == dtypes.Float32 && isMatMulOrder(lhsRaw.shape, rhsRaw.shape,
-				params.lhsContractingAxes, params.rhsContractingAxes,
-				params.lhsBatchAxes, params.rhsBatchAxes) && packgemm.Float32 != nil {
-				packgemm.Float32(1, 0, lhsRaw.flat.([]float32), rhsRaw.flat.([]float32),
+			if backend.enablePackgemm && isMatMulOrder(lhsRaw.shape, params.lhsContractingAxes, params.lhsBatchAxes,
+				rhsRaw.shape, params.rhsContractingAxes, params.rhsBatchAxes) &&
+				packgemm.HasDTypeSupport(inputDType, inputDType) {
+				err = packgemm.GEMM(float32(1), float32(0), lhsRaw.flat.([]float32), rhsRaw.flat.([]float32),
 					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 					output2.flat.([]float32),
 					getBufAllocator[float32](backend), getBufReleaser(backend), getGoroutineStarter(backend))
-				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+				if err == nil {
+					err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+				}
 				if err != nil {
 					backend.putBuffer(output2)
 					backend.putBuffer(output)
 					return nil, err
 				}
 			}
+
+			// Highway MatMul specialized executor.
+			if backend.enableHighway && isMatMulOrder(lhsRaw.shape, params.lhsContractingAxes, params.lhsBatchAxes,
+				rhsRaw.shape, params.rhsContractingAxes, params.rhsBatchAxes) &&
+				highway.HasDTypeSupport(inputDType, inputDType) {
+				err = highway.MatMulDynamic(inputDType, outputShape.DType, lhsRaw.flat, rhsRaw.flat,
+					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
+					output2.flat,
+					getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), getGoroutineStarter(backend))
+				if err == nil {
+					err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+				}
+				if err != nil {
+					backend.putBuffer(output2)
+					backend.putBuffer(output)
+					return nil, err
+				}
+			}
+
 			backend.putBuffer(output2) // Discard second output, no longer needed
+			return output, nil
 		}
 
 	case smallMatMulPath:
@@ -429,10 +476,22 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 
 	case packgemmPath:
 		// Custom GEMM path for large "malmul" order.
-		packgemm.Float32(1, 0, lhs.flat.([]float32), rhs.flat.([]float32),
+		inputDType := lhs.shape.DType
+		outputDType := output.shape.DType
+		packgemm.GEMMDynamic(inputDType, outputDType, 1, 0, lhs.flat.([]float32), rhs.flat.([]float32),
 			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 			output.flat.([]float32),
-			getBufAllocator[float32](backend), getBufReleaser(backend), getGoroutineStarter(backend))
+			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), getGoroutineStarter(backend))
+		return output, nil
+
+	case highwayPath:
+		// Highway MatMul path for large "malmul" order.
+		inputDType := lhs.shape.DType
+		outputDType := output.shape.DType
+		err = highway.MatMulDynamic(inputDType, outputDType, lhs.flat, rhs.flat,
+			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
+			output.flat,
+			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), getGoroutineStarter(backend))
 		return output, nil
 
 	default:
@@ -572,6 +631,14 @@ func getBufAllocator[T dtypes.NumberNotComplex](backend *Backend) packgemm.BufAl
 	return func(size int) (ref any, data []T) {
 		buf := backend.getBuffer(dtype, size)
 		return buf, buf.flat.([]T)
+	}
+}
+
+// getAnyBufAllocator returns a buffer allocator for the given dtype.
+func getAnyBufAllocator(backend *Backend, dtype dtypes.DType) packgemm.BufAllocAnyFn {
+	return func(size int) (ref any, data any) {
+		buf := backend.getBuffer(dtype, size)
+		return buf, buf.flat
 	}
 }
 

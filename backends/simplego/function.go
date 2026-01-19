@@ -238,7 +238,7 @@ func (f *Function) Constant(flat any, dims ...int) (backends.Value, error) {
 	data := &Buffer{
 		shape: shape,
 		flat:  flat,
-		valid: true,
+		inUse: true,
 	}
 	n, _ := f.getOrCreateNode(backends.OpTypeConstant, shape, nil, data)
 	return n, nil
