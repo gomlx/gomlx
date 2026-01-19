@@ -32,24 +32,23 @@ type Function struct {
 	// parameters stores the parameter nodes for this function.
 	parameters []*Node
 
-	// capturedValues stores nodes from parent scopes that are captured by this closure.
-	// The order matches capturedNodes - capturedValues[i] is the parent node for capturedNodes[i].
-	capturedValues []*Node
+	// capturedParentNodes stores nodes from parent scopes that are captured by this closure.
+	// The order matches capturedLocalNodes - capturedParentNodes[i] is the parent node for capturedLocalNodes[i].
+	capturedParentNodes []*Node
 
-	// capturedNodes stores the proxy nodes in this closure for captured values.
+	// capturedLocalNodes stores the proxy nodes in this closure for captured values.
 	// These are OpTypeCapturedValue nodes that receive their values at execution time.
-	capturedNodes []*Node
+	capturedLocalNodes []*Node
 
 	// compiled holds pre-compiled execution info.
 	// This is set during Return() to allow efficient execution.
 	compiled *FunctionExecutable
 }
 
-// capturedValueNode is the data stored in a captured value node.
-type capturedValueNode struct {
-	parentNode *Node // The node from the parent scope being captured
-	captureIdx int   // Index into the capturedValues/capturedNodes arrays
-}
+// capturedNodeData is the data stored in a captured value node.
+// It just stores the capture index since the parent node is available
+// via f.capturedParentNodes[captureIdx].
+type capturedNodeData int
 
 var _ backends.Function = (*Function)(nil)
 
@@ -103,12 +102,12 @@ func (f *Function) IsAncestorOf(leafFunc *Function) bool {
 // 2. Have C capture B's capture node
 //
 // This ensures that when If/While/Sort ops are built, they can properly set up
-// their capturedInputs by looking at the closure's capturedValues.
+// their capturedInputs by looking at the closure's capturedParentNodes.
 func (f *Function) getOrCreateCaptureNode(parentNode *Node) *Node {
 	// Check if we've already captured this node
-	for i, captured := range f.capturedValues {
+	for i, captured := range f.capturedParentNodes {
 		if captured == parentNode {
-			return f.capturedNodes[i]
+			return f.capturedLocalNodes[i]
 		}
 	}
 
@@ -124,15 +123,12 @@ func (f *Function) getOrCreateCaptureNode(parentNode *Node) *Node {
 	}
 
 	// Create a new capture node
-	captureIdx := len(f.capturedValues)
+	captureIdx := len(f.capturedParentNodes)
 	captureNode := f.builder.newNode(f, backends.OpTypeCapturedValue, parentNode.shape)
-	captureNode.data = &capturedValueNode{
-		parentNode: nodeToCapture,
-		captureIdx: captureIdx,
-	}
+	captureNode.data = capturedNodeData(captureIdx)
 
-	f.capturedValues = append(f.capturedValues, nodeToCapture)
-	f.capturedNodes = append(f.capturedNodes, captureNode)
+	f.capturedParentNodes = append(f.capturedParentNodes, nodeToCapture)
+	f.capturedLocalNodes = append(f.capturedLocalNodes, captureNode)
 
 	return captureNode
 }
@@ -294,11 +290,11 @@ func (f *Function) Compiled() *FunctionExecutable {
 	return f.compiled
 }
 
-// CapturedValues returns the list of parent nodes that this closure captures.
-// Each entry corresponds to a value from a parent function that this closure uses.
+// CapturedParentNodes returns the list of parent nodes that this closure captures.
+// Each entry corresponds to a node from a parent function that this closure uses.
 // Returns nil for non-closures or closures that don't capture any values.
-func (f *Function) CapturedValues() []*Node {
-	return f.capturedValues
+func (f *Function) CapturedParentNodes() []*Node {
+	return f.capturedParentNodes
 }
 
 // SetNodeCapturedInputs sets up the captured inputs for a node that calls a closure.
@@ -309,18 +305,14 @@ func (f *Function) CapturedValues() []*Node {
 // For nested closures, if the closure captures values from a grandparent,
 // those values are propagated to the parent closure's required captures.
 func (f *Function) SetNodeCapturedInputs(node *Node, closure *Function) {
-	if closure == nil || len(closure.capturedValues) == 0 {
+	if closure == nil || len(closure.capturedParentNodes) == 0 {
 		return
 	}
 
 	// Copy the closure's captured values to the node's capturedInputs.
 	// These become dependencies of the node in the parent function's DAG.
-	node.capturedInputs = make([]*Node, len(closure.capturedValues))
-	copy(node.capturedInputs, closure.capturedValues)
-
-	// Initialize donateCaptures to false by default (no donation).
-	// The caller can set specific values to true if donation is desired.
-	node.donateCaptures = make([]bool, len(closure.capturedValues))
+	node.capturedInputs = make([]*Node, len(closure.capturedParentNodes))
+	copy(node.capturedInputs, closure.capturedParentNodes)
 }
 
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)

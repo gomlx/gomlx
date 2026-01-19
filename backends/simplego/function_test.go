@@ -599,8 +599,8 @@ func TestClosureCapturingParentNode(t *testing.T) {
 
 	// Verify the closure has captured the parent node
 	closureFn := closure.(*Function)
-	require.Len(t, closureFn.capturedValues, 1, "Should have captured one parent node")
-	require.Len(t, closureFn.capturedNodes, 1, "Should have one capture node")
+	require.Len(t, closureFn.capturedParentNodes, 1, "Should have captured one parent node")
+	require.Len(t, closureFn.capturedLocalNodes, 1, "Should have one capture node")
 }
 
 // TestClosureCapturingGrandparentNode tests that using a node from a grandparent function
@@ -636,8 +636,8 @@ func TestClosureCapturingGrandparentNode(t *testing.T) {
 
 	// Verify the nested closure has captured the grandparent node
 	closure2Fn := closure2.(*Function)
-	require.Len(t, closure2Fn.capturedValues, 1, "Should have captured one parent node")
-	require.Len(t, closure2Fn.capturedNodes, 1, "Should have one capture node")
+	require.Len(t, closure2Fn.capturedParentNodes, 1, "Should have captured one parent node")
+	require.Len(t, closure2Fn.capturedLocalNodes, 1, "Should have one capture node")
 }
 
 // TestClosureSameFunctionNodesAllowed tests that using nodes from the same function is allowed.
@@ -666,9 +666,9 @@ func TestClosureSameFunctionNodesAllowed(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestCapturedValuesPropagation tests that captured values are properly tracked
+// TestCapturedParentNodesPropagation tests that captured values are properly tracked
 // for DAG dependency and lifetime management.
-func TestCapturedValuesPropagation(t *testing.T) {
+func TestCapturedParentNodesPropagation(t *testing.T) {
 	builder := backend.Builder("test_captured_values_propagation")
 	mainFn := builder.Main()
 
@@ -693,11 +693,11 @@ func TestCapturedValuesPropagation(t *testing.T) {
 
 	// Verify the closure's captured values
 	closureFn := closure.(*Function)
-	require.Len(t, closureFn.capturedValues, 1)
-	require.Equal(t, parentValue.(*Node), closureFn.capturedValues[0])
+	require.Len(t, closureFn.capturedParentNodes, 1)
+	require.Equal(t, parentValue.(*Node), closureFn.capturedParentNodes[0])
 
-	// Verify that CapturedValues() returns the list
-	captured := closureFn.CapturedValues()
+	// Verify that CapturedParentNodes() returns the list
+	captured := closureFn.CapturedParentNodes()
 	require.Len(t, captured, 1)
 	require.Equal(t, parentValue.(*Node), captured[0])
 }
@@ -740,8 +740,6 @@ func TestSetNodeCapturedInputs(t *testing.T) {
 	// Verify the node has captured inputs
 	require.Len(t, dummyNode.capturedInputs, 1)
 	require.Equal(t, parentValue.(*Node), dummyNode.capturedInputs[0])
-	require.Len(t, dummyNode.donateCaptures, 1)
-	require.False(t, dummyNode.donateCaptures[0]) // Default is no donation
 }
 
 // TestNestedClosureCaptureChain tests that nested closures properly propagate
@@ -777,12 +775,12 @@ func TestNestedClosureCaptureChain(t *testing.T) {
 	// Verify the chain:
 	// 1. Parent closure (closure1) should capture the grandparent value
 	closure1Fn := closure1.(*Function)
-	require.Len(t, closure1Fn.capturedValues, 1)
-	require.Equal(t, grandparentValue.(*Node), closure1Fn.capturedValues[0])
+	require.Len(t, closure1Fn.capturedParentNodes, 1)
+	require.Equal(t, grandparentValue.(*Node), closure1Fn.capturedParentNodes[0])
 
 	// 2. Child closure (closure2) should capture the parent's capture node
 	closure2Fn := closure2.(*Function)
-	require.Len(t, closure2Fn.capturedValues, 1)
+	require.Len(t, closure2Fn.capturedParentNodes, 1)
 	// The captured value should be the parent's capture node, not the original
-	require.Equal(t, closure1Fn.capturedNodes[0], closure2Fn.capturedValues[0])
+	require.Equal(t, closure1Fn.capturedLocalNodes[0], closure2Fn.capturedParentNodes[0])
 }

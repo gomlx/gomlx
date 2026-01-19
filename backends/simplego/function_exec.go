@@ -145,9 +145,9 @@ func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate
 	}
 
 	// Validate captured inputs count
-	if len(capturedInputs) != len(fe.function.capturedNodes) {
+	if len(capturedInputs) != len(fe.function.capturedLocalNodes) {
 		return nil, errors.Errorf("function expects %d captured values, got %d",
-			len(fe.function.capturedNodes), len(capturedInputs))
+			len(fe.function.capturedLocalNodes), len(capturedInputs))
 	}
 
 	// donate defaults to false
@@ -178,7 +178,7 @@ func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate
 
 	// Set up captured values from parent scope.
 	// If donateCaptures[i] is true, the closure takes ownership of the buffer.
-	for i, captureNode := range fe.function.capturedNodes {
+	for i, captureNode := range fe.function.capturedLocalNodes {
 		captureIdx := captureNode.builderIdx
 		execBuf.results[captureIdx] = capturedInputs[i]
 		execBuf.owned[captureIdx] = donateCaptures[i]
