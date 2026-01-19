@@ -26,6 +26,10 @@ type Function struct {
 	// returned indicates Return() was called.
 	returned bool
 
+	// nodes are all nodes created within this function, in DAG order.
+	// Each node's idx field is its index in this slice.
+	nodes []*Node
+
 	// outputs stores the return values set by Return().
 	outputs []*Node
 
@@ -39,6 +43,9 @@ type Function struct {
 	// capturedLocalNodes stores the proxy nodes in this closure for captured values.
 	// These are OpTypeCapturedValue nodes that receive their values at execution time.
 	capturedLocalNodes []*Node
+
+	// nodeDedup provides automatic de-duplication for nodes within this function.
+	nodeDedup map[nodeDedupKey][]*Node
 
 	// compiled holds pre-compiled execution info.
 	// This is set during Return() to allow efficient execution.
@@ -202,11 +209,10 @@ func (f *Function) Parameter(name string, shape shapes.Shape, sharding *backends
 	}
 	data := &nodeParameter{
 		name:     name,
-		inputIdx: len(f.builder.inputs),
+		inputIdx: len(f.parameters), // Index within this function's parameters
 	}
 	n, _ := f.getOrCreateNode(backends.OpTypeParameter, shape, nil, data)
-	f.builder.inputs = append(f.builder.inputs, n)
-	f.parameters = append(f.parameters, n) // Track in function for closures
+	f.parameters = append(f.parameters, n)
 	return n, nil
 }
 

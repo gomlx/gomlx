@@ -729,7 +729,7 @@ func TestSetNodeCapturedInputs(t *testing.T) {
 
 	// Create a dummy node (simulating an If/While op that uses the closure)
 	dummyNode := &Node{
-		builderIdx: 999,
+		idx: 999,
 		opType:     backends.OpTypeIdentity,
 		function:   mainFnImpl,
 	}
