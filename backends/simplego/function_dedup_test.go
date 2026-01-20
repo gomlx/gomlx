@@ -34,8 +34,8 @@ func TestMakeNodeDedupKey(t *testing.T) {
 	mainFn := b.Main().(*Function)
 	shape := shapes.Make(dtypes.F32, 2, 3)
 
-	node1 := b.newNode(mainFn, backends.OpTypeAdd, shape)
-	node2 := b.newNode(mainFn, backends.OpTypeMul, shape)
+	node1 := mainFn.newNode(backends.OpTypeAdd, shape)
+	node2 := mainFn.newNode(backends.OpTypeMul, shape)
 
 	tests := []struct {
 		name       string

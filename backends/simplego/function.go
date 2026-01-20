@@ -3,6 +3,8 @@
 package simplego
 
 import (
+	"slices"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/backends/shapeinference"
@@ -122,7 +124,14 @@ func (f *Function) getOrCreateCaptureNode(parentNode *Node) *Node {
 	// If parentNode is not from our direct parent, we need to propagate through
 	// intermediate closures.
 	nodeToCapture := parentNode
-	if f.parent != nil && parentNode.function != f.parent {
+	if f.parent == nil {
+		// This should never happen: if we're capturing a node, f must be a closure
+		// with a parent function. If parent is nil, the node is not from an ancestor.
+		panic(errors.Errorf(
+			"getOrCreateCaptureNode: function %q has no parent but is trying to capture node from function %q",
+			f.name, parentNode.function.name))
+	}
+	if parentNode.function != f.parent {
 		// The node is from a grandparent or further ancestor.
 		// First, have our parent capture it, then we capture the parent's capture node.
 		parentCaptureNode := f.parent.getOrCreateCaptureNode(parentNode)
@@ -131,7 +140,7 @@ func (f *Function) getOrCreateCaptureNode(parentNode *Node) *Node {
 
 	// Create a new capture node
 	captureIdx := len(f.capturedParentNodes)
-	captureNode := f.builder.newNode(f, backends.OpTypeCapturedValue, parentNode.shape)
+	captureNode := f.newNode(backends.OpTypeCapturedValue, parentNode.shape)
 	captureNode.data = capturedNodeData(captureIdx)
 
 	f.capturedParentNodes = append(f.capturedParentNodes, nodeToCapture)
@@ -147,11 +156,60 @@ func (f *Function) Closure() (backends.Function, error) {
 		return nil, err
 	}
 	closure := &Function{
-		builder: f.builder,
-		name:    "", // Closures have empty names
-		parent:  f,
+		builder:   f.builder,
+		name:      "", // Closures have empty names
+		parent:    f,
+		nodeDedup: make(map[nodeDedupKey][]*Node),
 	}
 	return closure, nil
+}
+
+// newNode adds a new node of the given opType and shape to the function's graph.
+// It's used by the other ops when creating new nodes.
+// Nodes are added to the function's nodes slice.
+//
+// Use getOrCreateNode instead for most operations.
+func (f *Function) newNode(opType backends.OpType, shape shapes.Shape, inputs ...*Node) *Node {
+	n := &Node{
+		builder:  f.builder,
+		opType:   opType,
+		idx:      len(f.nodes),
+		shape:    shape,
+		inputs:   slices.Clone(inputs),
+		function: f,
+	}
+	f.nodes = append(f.nodes, n)
+	return n
+}
+
+// newMultiOutputsNode creates the multi-outputs node, and its "select nodes", one per output.
+// The node.multiOutputsNodes will be set with the individual outputs and can be used by the Builder to return
+// to the user.
+// Nodes are added to the function's nodes slice.
+//
+// Note: no de-duplication of multi-output nodes.
+func (f *Function) newMultiOutputsNode(
+	opType backends.OpType,
+	outputShapes []shapes.Shape,
+	inputs ...*Node,
+) (node *Node) {
+	node = f.newNode(opType, shapes.Invalid(), inputs...)
+	node.multiOutputsShapes = outputShapes
+	node.multiOutputsNodes = make([]*Node, len(outputShapes))
+	for i, shape := range outputShapes {
+		node.multiOutputsNodes[i] = &Node{
+			builder:            f.builder,
+			opType:             opType,
+			idx:                len(f.nodes),
+			shape:              shape,
+			inputs:             []*Node{node},
+			isNodeSelectOutput: true,
+			selectOutputIdx:    i,
+			function:           f,
+		}
+		f.nodes = append(f.nodes, node.multiOutputsNodes[i])
+	}
+	return node
 }
 
 // verifyAndCastValues sanity checks that the values (backends.Op) are valid and created with this builder.
@@ -168,24 +226,31 @@ func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([
 
 	// Check each node and handle parent scope references
 	for idx, node := range nodes {
-		if node.function != nil && node.function != f {
-			// Check if the node is from a parent function (closure capture)
-			isFromParent := false
-			for parent := f.parent; parent != nil; parent = parent.parent {
-				if node.function == parent {
-					isFromParent = true
-					break
-				}
+		if node.function == nil {
+			return nil, errors.Errorf(
+				"%s: input #%d has nil function (internal error)",
+				name, idx)
+		}
+		if node.function == f {
+			continue // Same function, OK.
+		}
+
+		// Check if the node is from an ancestor function (closure capture)
+		isFromAncestor := false
+		for ancestor := f.parent; ancestor != nil; ancestor = ancestor.parent {
+			if node.function == ancestor {
+				isFromAncestor = true
+				break
 			}
-			if isFromParent {
-				// Create or reuse a capture node for this parent value
-				nodes[idx] = f.getOrCreateCaptureNode(node)
-			} else {
-				// Node from a completely different function (not parent)
-				return nil, errors.Errorf(
-					"%s: input #%d uses a node from a different function scope",
-					name, idx)
-			}
+		}
+		if isFromAncestor {
+			// Create or reuse a capture node for this parent value
+			nodes[idx] = f.getOrCreateCaptureNode(node)
+		} else {
+			// Node from a completely different function (not an ancestor)
+			return nil, errors.Errorf(
+				"%s: input #%d uses a node from a different function scope",
+				name, idx)
 		}
 	}
 
@@ -303,22 +368,22 @@ func (f *Function) CapturedParentNodes() []*Node {
 	return f.capturedParentNodes
 }
 
-// SetNodeCapturedInputs sets up the captured inputs for a node that calls a closure.
+// AddNodeCapturedInputs adds captured inputs from a closure to this node.
 // This should be called when building ops like If, While, Sort that use closures.
-// It copies the closure's required captured values to the node's capturedInputs field
+// For ops with multiple closures, call this once for each closure.
+// The closure's required captured values are appended to the node's capturedInputs field
 // so they are properly tracked in the parent function's dependency graph.
 //
 // For nested closures, if the closure captures values from a grandparent,
 // those values are propagated to the parent closure's required captures.
-func (f *Function) SetNodeCapturedInputs(node *Node, closure *Function) {
+func (n *Node) AddNodeCapturedInputs(closure *Function) {
 	if closure == nil || len(closure.capturedParentNodes) == 0 {
 		return
 	}
 
-	// Copy the closure's captured values to the node's capturedInputs.
+	// Append the closure's captured values to the node's capturedInputs.
 	// These become dependencies of the node in the parent function's DAG.
-	node.capturedInputs = make([]*Node, len(closure.capturedParentNodes))
-	copy(node.capturedInputs, closure.capturedParentNodes)
+	n.capturedInputs = append(n.capturedInputs, closure.capturedParentNodes...)
 }
 
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
@@ -347,7 +412,7 @@ func (f *Function) Identity(operandOp backends.Value) (backends.Value, error) {
 		return nil, err
 	}
 	operand := inputs[0]
-	node := f.builder.newNode(f, backends.OpTypeIdentity, operand.shape, operand)
+	node := f.newNode(backends.OpTypeIdentity, operand.shape, operand)
 	return node, nil
 }
 
@@ -772,7 +837,7 @@ func (f *Function) RNGBitGenerator(stateOp backends.Value, shape shapes.Shape) (
 		state.shape.Clone(),
 		shape.Clone(),
 	}
-	node := f.builder.newMultiOutputsNode(f, opType, outputShapes, state)
+	node := f.newMultiOutputsNode(opType, outputShapes, state)
 	newState = node.multiOutputsNodes[0]
 	values = node.multiOutputsNodes[1]
 	return

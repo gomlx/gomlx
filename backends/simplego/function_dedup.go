@@ -102,11 +102,8 @@ func (f *Function) getOrCreateNode(
 	}
 
 	// Create new node.
-	n = f.builder.newNode(f, opType, shape, inputs...)
+	n = f.newNode(opType, shape, inputs...)
 	n.data = data
-	if f.nodeDedup == nil {
-		f.nodeDedup = make(map[nodeDedupKey][]*Node)
-	}
 	f.nodeDedup[key] = append(f.nodeDedup[key], n)
 	return n, false
 }

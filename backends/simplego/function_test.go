@@ -832,10 +832,10 @@ func TestCapturedParentNodesPropagation(t *testing.T) {
 	require.Equal(t, parentValue.(*Node), captured[0])
 }
 
-// TestSetNodeCapturedInputs tests that SetNodeCapturedInputs properly sets up
+// TestAddNodeCapturedInputs tests that AddNodeCapturedInputs properly sets up
 // captured inputs on a node for DAG tracking.
-func TestSetNodeCapturedInputs(t *testing.T) {
-	builder := backend.Builder("test_set_node_captured_inputs")
+func TestAddNodeCapturedInputs(t *testing.T) {
+	builder := backend.Builder("test_add_node_captured_inputs")
 	mainFnImpl := builder.Main().(*Function)
 
 	// Create a value in the main function
@@ -859,13 +859,13 @@ func TestSetNodeCapturedInputs(t *testing.T) {
 
 	// Create a dummy node (simulating an If/While op that uses the closure)
 	dummyNode := &Node{
-		idx: 999,
-		opType:     backends.OpTypeIdentity,
-		function:   mainFnImpl,
+		idx:      999,
+		opType:   backends.OpTypeIdentity,
+		function: mainFnImpl,
 	}
 
-	// Set up captured inputs on the node
-	mainFnImpl.SetNodeCapturedInputs(dummyNode, closureFn)
+	// Add captured inputs to the node
+	dummyNode.AddNodeCapturedInputs(closureFn)
 
 	// Verify the node has captured inputs
 	require.Len(t, dummyNode.capturedInputs, 1)

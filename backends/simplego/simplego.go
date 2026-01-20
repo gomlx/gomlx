@@ -183,8 +183,9 @@ func (b *Backend) Builder(name string) backends.Builder {
 	}
 	// Create the main function
 	builder.mainFn = &Function{
-		builder: builder,
-		name:    "main",
+		builder:   builder,
+		name:      "main",
+		nodeDedup: make(map[nodeDedupKey][]*Node),
 	}
 	// Set the "not implemented" custom message:
 	builder.Builder.ErrFn = notImplementedError

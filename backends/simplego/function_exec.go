@@ -43,9 +43,13 @@ func newFunctionExecutable(f *Function) (*FunctionExecutable, error) {
 		return nil, errors.Errorf("function must have Return() called before compilation")
 	}
 
-	// Use function-local node count. Each function has its own nodes slice,
-	// so closures only process their own nodes, not the entire builder's graph.
-	numNodesToProcess := len(f.nodes)
+	// Calculate numNodesToProcess from outputs.
+	// This has the benefit of immediately discarding nodes with idx > max(outputs.idx),
+	// meaning nodes that outputs don't depend on.
+	var numNodesToProcess int
+	for _, output := range f.outputs {
+		numNodesToProcess = max(numNodesToProcess, output.idx+1)
+	}
 
 	fe := &FunctionExecutable{
 		function:          f,
@@ -296,7 +300,6 @@ func (fe *FunctionExecutable) executeParallel(backend *Backend, execBuf *funcExe
 	}
 
 	for nodeIdx := range readyToExecute {
-		nodeIdx := nodeIdx // Capture loop variable
 		nodeExecFn := func() {
 			node := fe.function.nodes[nodeIdx]
 
@@ -374,14 +377,9 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 		return nil
 	}
 
-	// Captured values are already set up in Execute() - nothing to do
-	if node.opType == backends.OpTypeCapturedValue {
-		// Result should already be set from Execute()
-		if execBuf.results[nodeIdx] == nil {
-			return errors.Errorf("captured value not set for node %d", nodeIdx)
-		}
-		return nil
-	}
+	// Note: OpTypeParameter and OpTypeCapturedValue nodes have their results
+	// set up in Execute() and should never reach executeNode.
+	// We don't check for them here for performance (this is the inner execution loop).
 
 	// Prepare inputs
 	numInputs := len(node.inputs)

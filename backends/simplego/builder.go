@@ -4,7 +4,6 @@ package simplego
 
 import (
 	"reflect"
-	"slices"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
@@ -53,9 +52,10 @@ func (b *Builder) NewFunction(name string) (backends.Function, error) {
 		return nil, errors.Errorf("function name cannot be empty")
 	}
 	f := &Function{
-		builder: b,
-		name:    name,
-		parent:  nil, // Top-level functions have no parent
+		builder:   b,
+		name:      name,
+		parent:    nil, // Top-level functions have no parent
+		nodeDedup: make(map[nodeDedupKey][]*Node),
 	}
 	return f, nil
 }
@@ -148,54 +148,6 @@ type Node struct {
 	data any
 }
 
-// newNode adds a new node of the given opType and shape to the function's graph.
-// It's used by the other ops when creating new nodes.
-// Nodes are added to the function's nodes slice, not the builder's.
-//
-// Use getOrCreateNode instead for most operations.
-func (b *Builder) newNode(f *Function, opType backends.OpType, shape shapes.Shape, inputs ...*Node) *Node {
-	n := &Node{
-		builder:  b,
-		opType:   opType,
-		idx:      len(f.nodes),
-		shape:    shape,
-		inputs:   slices.Clone(inputs),
-		function: f,
-	}
-	f.nodes = append(f.nodes, n)
-	return n
-}
-
-// newMultiOutputsNode creates the multi-outputs node, and its "select nodes", one per output.
-// The node.multiOutputsNodes will be set with the individual outputs and can be used by the Builder to return
-// to the user.
-// Nodes are added to the function's nodes slice, not the builder's.
-//
-// Note: no de-duplication of multi-output nodes.
-func (b *Builder) newMultiOutputsNode(
-	f *Function,
-	opType backends.OpType,
-	outputShapes []shapes.Shape,
-	inputs ...*Node,
-) (node *Node) {
-	node = b.newNode(f, opType, shapes.Invalid(), inputs...)
-	node.multiOutputsShapes = outputShapes
-	node.multiOutputsNodes = make([]*Node, len(outputShapes))
-	for i, shape := range outputShapes {
-		node.multiOutputsNodes[i] = &Node{
-			builder:            b,
-			opType:             opType,
-			idx:                len(f.nodes),
-			shape:              shape,
-			inputs:             []*Node{node},
-			isNodeSelectOutput: true,
-			selectOutputIdx:    i,
-			function:           f,
-		}
-		f.nodes = append(f.nodes, node.multiOutputsNodes[i])
-	}
-	return node
-}
 
 // IsMultiOutputs returns whether this node yields multiple outputs.
 func (n *Node) IsMultiOutputs() bool {
