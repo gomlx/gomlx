@@ -5,11 +5,11 @@
 package packgemm
 
 import (
-	"runtime"
 	"simd/archsimd"
 	"sync"
 	"unsafe"
 
+	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"k8s.io/klog/v2"
 )
@@ -33,7 +33,7 @@ var avx512WarningOnce sync.Once
 // avx512Float32 implements generic matrix multiplication for float32 inputs and outputs.
 // output = alpha * (lhs x rhs) + beta * output
 func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []float32,
-	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error {
+	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
 
 	avx512WarningOnce.Do(func() {
 		klog.Infof("AVX512 GEMM (General Matrix Multiplication) algorithm still experimental!")
@@ -47,7 +47,10 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 	// 2. Determine "Quantum" Size (Splitting Strategy)
 	// We want enough tasks to fill the machine, but not so many that we trash the cache/packing.
 	// Target parallelism: Number of physical cores (or default GOMAXPROCS).
-	targetParallelism := runtime.GOMAXPROCS(0)
+	targetParallelism := 1
+	if pool != nil {
+		targetParallelism = pool.MaxParallelism()
+	}
 
 	// Default: Treat the whole N (rhsCrossSize) as one quantum.
 	// This minimizes redundant packing of Matrix A.
@@ -107,7 +110,7 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 			}
 
 			// 4. Try to Offload
-			if !starter(task) {
+			if pool == nil || !pool.StartIfAvailable(task) {
 				// Pool is busy/full.
 				// Execute immediately on this thread to prevent starvation.
 				task()

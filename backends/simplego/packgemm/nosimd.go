@@ -3,8 +3,7 @@
 package packgemm
 
 import (
-	"runtime"
-
+	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
 )
@@ -47,7 +46,7 @@ func init() {
 func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
 	outputFlat []T,
-	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error {
+	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
 
 	// 1. Resolve Strides
 	lhsBatchStride := lhsCrossSize * contractingSize
@@ -64,7 +63,7 @@ func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 			lhsFlat, rhsFlat, outputFlat,
 			batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
 			lhsBatchStride, rhsBatchStride, outputBatchStride,
-			starter)
+			pool)
 		return nil
 	}
 
@@ -98,7 +97,7 @@ func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 				process(batchStart, split, rhsColStart, rhsColCount, depth+1)
 				wg.Done()
 			}
-			if wg.Add(1); !starter(firstHalf) {
+			if wg.Add(1); pool == nil || !pool.StartIfAvailable(firstHalf) {
 				firstHalf() // Execute first-half sequentially otherwise.
 			}
 			// Execute second-half on current goroutine.
@@ -109,7 +108,7 @@ func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 				process(batchStart, batchCount, rhsColStart, split, depth+1)
 				wg.Done()
 			}
-			if wg.Add(1); !starter(firstHalf) {
+			if wg.Add(1); !pool.StartIfAvailable(firstHalf) {
 				firstHalf() // Execute first-half sequentially otherwise.
 			}
 			// Execute second-half on current goroutine.
@@ -134,10 +133,10 @@ func basicSymmetricGenericSmallGEMMParallel[T dtypes.Number](
 	lhsFlat, rhsFlat []T, outputFlat []T,
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
 	lhsBatchStride, rhsBatchStride, outputBatchStride int,
-	starter GoroutineStarter) error {
+	pool *workerspool.Pool) error {
 
 	gemmFlops := lhsCrossSize * rhsCrossSize * contractingSize
-	if starter == nil || batchSize == 1 || batchSize*gemmFlops < nosimdMinMatMulFlopsPerWorker {
+	if pool == nil || batchSize == 1 || batchSize*gemmFlops < nosimdMinMatMulFlopsPerWorker {
 		// Not worth parallelizing: just run the small matmul kernel sequentially.
 		basicSymmetricGenericSmallGEMM(
 			alpha, beta,
@@ -149,7 +148,7 @@ func basicSymmetricGenericSmallGEMMParallel[T dtypes.Number](
 
 	// Parallelize on the batch dimension:
 	wg := xsync.NewDynamicWaitGroup() // Control workers started.
-	maxWorkers := runtime.GOMAXPROCS(0)
+	maxWorkers := pool.MaxParallelism()
 	minChunk := 1 // nosimdSmallMatMulThreshold / matmulSize
 	batchCountPerTask := max(minChunk, batchSize/maxWorkers)
 	for b := 0; b < batchSize; b += batchCountPerTask {
@@ -157,7 +156,7 @@ func basicSymmetricGenericSmallGEMMParallel[T dtypes.Number](
 		batchLhs := lhsFlat[b*lhsBatchStride : (b+batchCount)*lhsBatchStride]
 		batchRhs := rhsFlat[b*rhsBatchStride : (b+batchCount)*rhsBatchStride]
 		batchOutput := outputFlat[b*outputBatchStride : (b+batchCount)*outputBatchStride]
-		if b+batchCount == batchSize || !starter(func() {
+		if b+batchCount == batchSize || !pool.StartIfAvailable(func() {
 			// Started on a separate worker.
 			wg.Add(1)
 			defer wg.Done()

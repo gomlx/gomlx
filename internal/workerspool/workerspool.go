@@ -23,7 +23,7 @@ type Pool struct {
 // New return a new Pool of workers with the default parallelism (runtime.NumCPU()).
 func New() *Pool {
 	w := &Pool{}
-	w.maxParallelism = runtime.NumCPU()
+	w.maxParallelism = runtime.GOMAXPROCS(0)
 	w.cond = sync.Cond{L: &w.mu}
 	return w
 }

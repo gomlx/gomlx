@@ -5,6 +5,7 @@ package packgemm
 import (
 	"slices"
 
+	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 )
@@ -21,10 +22,6 @@ type BufAllocAnyFn func(size int) (ref any, data any)
 // BufReleaseFn is a function that releases a buffer allocated with BufAllocFn.
 
 type BufReleaseFn func(ref any)
-
-// GoroutineStarter is a function that starts a goroutine, if available from the global pool.
-// It returns false if no goroutine was started.
-type GoroutineStarter func(work func()) bool
 
 // Block/packs parameters for current architecture.
 type CacheParams struct {
@@ -100,7 +97,7 @@ func RegisterGEMM[TInput, TOutput dtypes.Supported](
 	name string,
 	gemmFn func(alpha, beta TOutput, lhsFlat, rhsFlat []TInput, batchSize,
 		lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []TOutput,
-		bufAllocFn BufAllocFn[TInput], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error,
+		bufAllocFn BufAllocFn[TInput], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error,
 	params *CacheParams,
 	priority Priority) {
 	dtypePair := GetDTypePair[TInput, TOutput]()
@@ -121,7 +118,7 @@ func RegisterGEMM[TInput, TOutput dtypes.Supported](
 // It returns an error if a GEMM function is not registered for the given dtypes.
 func GEMM[TInput, TOutput dtypes.Supported](alpha, beta TOutput, lhsFlat, rhsFlat []TInput, batchSize,
 	lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []TOutput,
-	bufAllocFn BufAllocFn[TInput], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error {
+	bufAllocFn BufAllocFn[TInput], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
 	dtypePair := GetDTypePair[TInput, TOutput]()
 	gemmRegs := DTypeToGEMM[dtypePair]
 	if len(gemmRegs) == 0 {
@@ -130,7 +127,7 @@ func GEMM[TInput, TOutput dtypes.Supported](alpha, beta TOutput, lhsFlat, rhsFla
 	}
 	gemmFn, ok := gemmRegs[0].GEMMFn.(func(alpha, beta TOutput, lhsFlat, rhsFlat []TInput, batchSize,
 		lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []TOutput,
-		bufAllocFn BufAllocFn[TInput], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error)
+		bufAllocFn BufAllocFn[TInput], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error)
 	if !ok {
 		return errors.Errorf("Registered GEMM function invalid for dtypes input=%s, output=%s!? This is a bug, we got"+
 			"instead %T as the registered function",
@@ -138,7 +135,7 @@ func GEMM[TInput, TOutput dtypes.Supported](alpha, beta TOutput, lhsFlat, rhsFla
 	}
 	return gemmFn(alpha, beta, lhsFlat, rhsFlat, batchSize,
 		lhsCrossSize, rhsCrossSize, contractingSize, outputFlat,
-		bufAllocFn, bufReleaseFn, starter)
+		bufAllocFn, bufReleaseFn, pool)
 }
 
 // packRHS packs a slice of size [contractingRows, rhsCols] block from RHS into
