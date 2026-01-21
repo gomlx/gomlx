@@ -18,13 +18,13 @@ func init() {
 
 // gatherCapturedValues looks up the captured values for a closure from the parent's execution buffers.
 func gatherCapturedValues(fn *Function, parentExecBuf *funcExecBuffers) []*Buffer {
-	if len(fn.capturedValues) == 0 {
+	if len(fn.capturedParentNodes) == 0 {
 		return nil
 	}
 
-	captured := make([]*Buffer, len(fn.capturedValues))
-	for i, capturedNode := range fn.capturedValues {
-		captured[i] = parentExecBuf.results[capturedNode.builderIdx]
+	captured := make([]*Buffer, len(fn.capturedParentNodes))
+	for i, capturedNode := range fn.capturedParentNodes {
+		captured[i] = parentExecBuf.results[capturedNode.idx]
 	}
 	return captured
 }
@@ -61,7 +61,7 @@ func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, 
 	}
 
 	// Execute the branch (no parameters, but may have captured values)
-	outputs, err := branchFn.compiled.Execute(backend, nil, nil, capturedInputs)
+	outputs, err := branchFn.compiled.Execute(backend, nil, nil, capturedInputs, nil)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "If: executing branch")
 	}
@@ -113,7 +113,7 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	// Loop while condition is true (no iteration limit)
 	for iter := 0; ; iter++ {
 		// Evaluate condition - donate state buffers we own
-		condOutputs, err := condFn.compiled.Execute(backend, state, donateState, condCaptured)
+		condOutputs, err := condFn.compiled.Execute(backend, state, donateState, condCaptured, nil)
 		// After condFn, all donated buffers have been consumed - we no longer own them
 		// But condFn returns new buffers that we now own implicitly (captured in condOutputs for single bool)
 
@@ -140,7 +140,7 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 
 		// Execute body to get new state
 		// Pass state and donate - after this call, state buffers are consumed
-		newState, err := bodyFn.compiled.Execute(backend, state, donateState, bodyCaptured)
+		newState, err := bodyFn.compiled.Execute(backend, state, donateState, bodyCaptured, nil)
 		// After bodyFn, all donated state is consumed. If error, we own nothing.
 		// If success, we own all of newState.
 		donateState = donateAll // After first iteration, we always own everything
@@ -261,7 +261,7 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 				}
 
 				// Execute comparator (don't donate inputs, pass captured values)
-				compOutputs, err := compFn.compiled.Execute(backend, compInputs, nil, compCaptured)
+				compOutputs, err := compFn.compiled.Execute(backend, compInputs, nil, compCaptured, nil)
 				if err != nil {
 					sortErr = err
 					return false

@@ -421,7 +421,8 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			return errors.Errorf("no multi-output executor for op %s", node.opType)
 		}
 
-		outputBuffers, err := multiExecutor(backend, node, inputBuffers, inputsOwned)
+		// Pass execBuf to allow control flow ops to look up captured values
+		outputBuffers, err := multiExecutor(backend, node, inputBuffers, inputsOwned, execBuf)
 		if err != nil {
 			return errors.WithMessagef(err, "executing multi-output %s", node.opType)
 		}
