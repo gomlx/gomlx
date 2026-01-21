@@ -85,10 +85,9 @@ func (f *Function) getOrCreateNode(
 			opType, i, node.function.name, f.name))
 	}
 
-	// Try to find existing node.
-	b := f.builder
+	// Try to find existing node using function-local dedup.
 	key := makeNodeDedupKey(opType, inputs)
-	candidates := b.nodeDedup[key]
+	candidates := f.nodeDedup[key]
 	for _, candidate := range candidates {
 		if !slices.Equal(candidate.inputs, inputs) {
 			continue
@@ -103,9 +102,9 @@ func (f *Function) getOrCreateNode(
 	}
 
 	// Create new node.
-	n = b.newNode(f, opType, shape, inputs...)
+	n = f.newNode(opType, shape, inputs...)
 	n.data = data
-	b.nodeDedup[key] = append(b.nodeDedup[key], n)
+	f.nodeDedup[key] = append(f.nodeDedup[key], n)
 	return n, false
 }
 
