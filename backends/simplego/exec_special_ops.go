@@ -1406,8 +1406,7 @@ func execSliceGeneric[T SupportedTypesConstraints](operand, output *Buffer, para
 // RNGBitGenerator ====================================================================================================
 
 // execRNGBitGenerator is the executor function registered for backends.OpTypeRngBitGenerator.
-func execRNGBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, parentExecBuf *funcExecBuffers) ([]*Buffer, error) {
-	_ = parentExecBuf // Not used - RNGBitGenerator doesn't call nested closures
+func execRNGBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
 	state := inputs[0]
 	stateFlat := state.flat.([]uint64)
 

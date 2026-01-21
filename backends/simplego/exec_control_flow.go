@@ -16,24 +16,9 @@ func init() {
 	multiOutputsNodeExecutors[backends.OpTypeSort] = execSort
 }
 
-// gatherCapturedValues looks up the captured values for a closure from the parent's execution buffers.
-func gatherCapturedValues(fn *Function, parentExecBuf *funcExecBuffers) []*Buffer {
-	if len(fn.capturedParentNodes) == 0 {
-		return nil
-	}
-
-	captured := make([]*Buffer, len(fn.capturedParentNodes))
-	for i, capturedNode := range fn.capturedParentNodes {
-		captured[i] = parentExecBuf.results[capturedNode.idx]
-	}
-	return captured
-}
-
 // execIf executes the If operation by evaluating the predicate and running one branch.
 // Inputs layout: [pred, trueBranch captured values..., falseBranch captured values...]
-func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, parentExecBuf *funcExecBuffers) ([]*Buffer, error) {
-	_ = parentExecBuf // Captured values are now passed as inputs, not looked up from parent
-
+func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
 	predBuffer := inputs[0]
 	predFlat := predBuffer.flat.([]bool)
 	if len(predFlat) != 1 {
@@ -71,9 +56,7 @@ func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, 
 
 // execWhile executes the While operation by looping until condition returns false.
 // Inputs layout: [state values..., cond captured values..., body captured values...]
-func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, parentExecBuf *funcExecBuffers) ([]*Buffer, error) {
-	_ = parentExecBuf // Captured values are now passed as inputs, not looked up from parent
-
+func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
 	data := node.data.(*whileNode)
 	condFn := data.cond
 	bodyFn := data.body
@@ -159,9 +142,7 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 
 // execSort sorts tensors along the specified axis using the comparator closure.
 // Inputs layout: [input tensors..., comparator captured values...]
-func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, parentExecBuf *funcExecBuffers) ([]*Buffer, error) {
-	_ = parentExecBuf // Captured values are now passed as inputs, not looked up from parent
-
+func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
 	data := node.data.(*sortNode)
 	axis := data.axis
 	isStable := data.isStable
