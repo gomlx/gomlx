@@ -189,27 +189,42 @@ func TestClosureFromNamedFunction(t *testing.T) {
 	require.Equal(t, namedFn, closure.Parent())
 }
 
-// TestControlFlowOpsNotImplemented tests that control flow ops return not implemented errors.
-func TestControlFlowOpsNotImplemented(t *testing.T) {
+// TestControlFlowOpsValidationErrors tests that control flow ops properly validate their inputs.
+func TestControlFlowOpsValidationErrors(t *testing.T) {
 	builder := backend.Builder("test_control_flow")
 	mainFn := builder.Main()
 
-	// Create a simple closure for testing
+	// Create a closure without calling Return() - this should be rejected
 	closure, err := mainFn.Closure()
 	require.NoError(t, err)
 
-	// Sort should return not implemented
+	// Sort requires at least one input tensor (validated before closure)
 	_, err = mainFn.Sort(closure, 0, true)
 	require.Error(t, err)
+	require.Contains(t, err.Error(), "requires at least one input tensor")
 
-	// While should return not implemented
+	// Sort with input should error: closure has no Return() called
+	input, _ := mainFn.Constant([]float32{1.0, 2.0}, 2)
+	_, err = mainFn.Sort(closure, 0, true, input)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must have Return() called")
+
+	// While requires at least one initial state value (validated before closure)
 	_, err = mainFn.While(closure, closure)
 	require.Error(t, err)
+	require.Contains(t, err.Error(), "requires at least one initial state value")
 
-	// If should return not implemented (need a predicate)
+	// While with state should error: closure has no Return() called
+	state, _ := mainFn.Constant([]int32{0})
+	_, err = mainFn.While(closure, closure, state)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must have Return() called")
+
+	// If should error: closure has no Return() called
 	pred, _ := mainFn.Constant([]bool{true})
 	_, err = mainFn.If(pred, closure, closure)
 	require.Error(t, err)
+	require.Contains(t, err.Error(), "must have Return() called")
 }
 
 // TestCallNotImplemented tests that Call returns not implemented error.

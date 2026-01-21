@@ -246,40 +246,48 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 			}
 
 			// Sort indices using comparator
-			var sortErr error
-			lessFunc := func(i, j int) bool {
-				if sortErr != nil {
-					return false
+			// Use panic/recover to abort sort immediately on comparator error
+			sortErr := func() (sortErr error) {
+				defer func() {
+					if r := recover(); r != nil {
+						if err, ok := r.(error); ok {
+							sortErr = err
+						} else {
+							panic(r) // Re-panic if not our error
+						}
+					}
+				}()
+
+				lessFunc := func(i, j int) bool {
+					idxI := indices[i]
+					idxJ := indices[j]
+					offsetI := baseOffset + idxI*axisStride
+					offsetJ := baseOffset + idxJ*axisStride
+
+					// Set comparator inputs
+					for k, output := range outputs {
+						setScalarFromFlat(compInputs[2*k], output.flat, offsetI)
+						setScalarFromFlat(compInputs[2*k+1], output.flat, offsetJ)
+					}
+
+					// Execute comparator (don't donate inputs, pass captured values)
+					compOutputs, err := compFn.compiled.Execute(backend, compInputs, nil, compCaptured, nil)
+					if err != nil {
+						panic(err) // Abort sort immediately
+					}
+
+					result := compOutputs[0].flat.([]bool)[0]
+					backend.putBuffer(compOutputs[0])
+					return result
 				}
 
-				idxI := indices[i]
-				idxJ := indices[j]
-				offsetI := baseOffset + idxI*axisStride
-				offsetJ := baseOffset + idxJ*axisStride
-
-				// Set comparator inputs
-				for k, output := range outputs {
-					setScalarFromFlat(compInputs[2*k], output.flat, offsetI)
-					setScalarFromFlat(compInputs[2*k+1], output.flat, offsetJ)
+				if isStable {
+					sort.SliceStable(indices, lessFunc)
+				} else {
+					sort.Slice(indices, lessFunc)
 				}
-
-				// Execute comparator (don't donate inputs, pass captured values)
-				compOutputs, err := compFn.compiled.Execute(backend, compInputs, nil, compCaptured, nil)
-				if err != nil {
-					sortErr = err
-					return false
-				}
-
-				result := compOutputs[0].flat.([]bool)[0]
-				backend.putBuffer(compOutputs[0])
-				return result
-			}
-
-			if isStable {
-				sort.SliceStable(indices, lessFunc)
-			} else {
-				sort.Slice(indices, lessFunc)
-			}
+				return nil
+			}()
 
 			if sortErr != nil {
 				for _, buf := range outputs {
