@@ -58,67 +58,21 @@ func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 
 	// 2. Check if small matrix multiplication kernel can be used.
 	if (forceVariant == VariantNone && gemmSize < nosimdSmallMatMulSizeThreshold) || forceVariant == VariantSmall {
-		basicSymmetricGenericSmallGEMMParallel(
+		return basicSymmetricGenericSmallGEMMParallel(
 			alpha, beta,
 			lhsFlat, rhsFlat, outputFlat,
 			batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
 			lhsBatchStride, rhsBatchStride, outputBatchStride,
 			pool)
-		return nil
 	}
 
-	// 3. Recursive work loop
-	wg := xsync.NewDynamicWaitGroup() // Control workers started.
-	var process func(batchStart, batchCount, rhsColStart, rhsColCount, depth int)
-	process = func(batchStart, batchCount, rhsColStart, rhsColCount, depth int) {
-		switch splitStrategy(depth, batchCount, rhsColCount, lhsCrossSize, contractingSize, &NoSIMD32Params) {
-		case noSplit:
-			colEnd := rhsColStart + rhsColCount
-			if colEnd > rhsCrossSize {
-				colEnd = rhsCrossSize
-			}
-			for b := range batchCount {
-				batchIdx := batchStart + b
-				batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
-				batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
-				batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
-				basicSymmetricGemmChunk(
-					alpha, beta,
-					batchLhs, batchRhs, batchOutput,
-					lhsCrossSize, rhsCrossSize, contractingSize,
-					NoSIMD32Params, rhsColStart, colEnd,
-					bufAllocFn, bufReleaseFn,
-				)
-			}
-			return
-		case splitBatch:
-			split := batchCount / 2
-			firstHalf := func() {
-				process(batchStart, split, rhsColStart, rhsColCount, depth+1)
-				wg.Done()
-			}
-			if wg.Add(1); pool == nil || !pool.StartIfAvailable(firstHalf) {
-				firstHalf() // Execute first-half sequentially otherwise.
-			}
-			// Execute second-half on current goroutine.
-			process(batchStart+split, batchCount-split, rhsColStart, rhsColCount, depth+1)
-		case splitRHSCol:
-			split := rhsColCount / 2
-			firstHalf := func() {
-				process(batchStart, batchCount, rhsColStart, split, depth+1)
-				wg.Done()
-			}
-			if wg.Add(1); !pool.StartIfAvailable(firstHalf) {
-				firstHalf() // Execute first-half sequentially otherwise.
-			}
-			// Execute second-half on current goroutine.
-			process(batchStart, batchCount, rhsColStart+split, rhsColCount-split, depth+1)
-		}
-	}
-
-	// Start recursion.
-	process(0, batchSize, 0, rhsCrossSize, 0)
-	return nil
+	return basicSymmetricGenericLargeGEMMParallel(
+		alpha, beta,
+		lhsFlat, rhsFlat, outputFlat,
+		batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+		lhsBatchStride, rhsBatchStride, outputBatchStride,
+		bufAllocFn, bufReleaseFn,
+		pool)
 }
 
 // basicSymmetricGenericSmallGEMMParallel implements basic symmetric (input and output dtypes are the same) non-SIMD
@@ -332,6 +286,68 @@ func basicWriteScalar[T dtypes.Number](out []T, idx int, alpha, beta T, value T)
 	} else {
 		out[idx] = alpha * value
 	}
+}
+
+func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
+	alpha, beta T,
+	lhsFlat, rhsFlat []T, outputFlat []T,
+	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
+	lhsBatchStride, rhsBatchStride, outputBatchStride int,
+	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn,
+	pool *workerspool.Pool) error {
+
+	// 3. Recursive work loop
+	wg := xsync.NewDynamicWaitGroup() // Control workers started.
+	var process func(batchStart, batchCount, rhsColStart, rhsColCount, depth int)
+	process = func(batchStart, batchCount, rhsColStart, rhsColCount, depth int) {
+		switch splitStrategy(depth, batchCount, rhsColCount, lhsCrossSize, contractingSize, &NoSIMD32Params) {
+		case noSplit:
+			colEnd := rhsColStart + rhsColCount
+			if colEnd > rhsCrossSize {
+				colEnd = rhsCrossSize
+			}
+			for b := range batchCount {
+				batchIdx := batchStart + b
+				batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
+				batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
+				batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
+				basicSymmetricGemmChunk(
+					alpha, beta,
+					batchLhs, batchRhs, batchOutput,
+					lhsCrossSize, rhsCrossSize, contractingSize,
+					NoSIMD32Params, rhsColStart, colEnd,
+					bufAllocFn, bufReleaseFn,
+				)
+			}
+			return
+		case splitBatch:
+			split := batchCount / 2
+			firstHalf := func() {
+				process(batchStart, split, rhsColStart, rhsColCount, depth+1)
+				wg.Done()
+			}
+			if wg.Add(1); pool == nil || !pool.StartIfAvailable(firstHalf) {
+				firstHalf() // Execute first-half sequentially otherwise.
+			}
+			// Execute second-half on current goroutine.
+			process(batchStart+split, batchCount-split, rhsColStart, rhsColCount, depth+1)
+		case splitRHSCol:
+			split := rhsColCount / 2
+			firstHalf := func() {
+				process(batchStart, batchCount, rhsColStart, split, depth+1)
+				wg.Done()
+			}
+			if wg.Add(1); !pool.StartIfAvailable(firstHalf) {
+				firstHalf() // Execute first-half sequentially otherwise.
+			}
+			// Execute second-half on current goroutine.
+			process(batchStart, batchCount, rhsColStart+split, rhsColCount-split, depth+1)
+		}
+	}
+
+	// Start recursion.
+	process(0, batchSize, 0, rhsCrossSize, 0)
+	return nil
 }
 
 // basicSymmetricGemmChunk performs the matrix multiplication on a chunk of columns.
