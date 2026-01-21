@@ -1,5 +1,12 @@
-# GoLand IDE
+# IDEs and AI coders
 .idea
+.cursor
+.crush
+.Trash*
+gomlx.code-workspace
+.vscode/launch.json
+.vscode/settings.json
+codebook.toml
 
 # Python tests
 venv
@@ -12,18 +19,3 @@ go.work.sum
 # Jupyter tmp files
 .ipynb_checkpoints
 Untitled.ipynb
-
-# Links to C-generated code.
-bazel-bin
-bazel-c
-bazel-out
-bazel-mnt
-bazel-testlogs
-gomlx_xla.tar.gz
-
-# VSCode files
-.Trash*
-gomlx.code-workspace
-.vscode/launch.json
-.vscode/settings.json
-codebook.toml
