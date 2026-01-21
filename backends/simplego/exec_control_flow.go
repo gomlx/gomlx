@@ -112,13 +112,17 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 
 	// Loop while condition is true (no iteration limit)
 	for iter := 0; ; iter++ {
-		// Evaluate condition - donate state buffers we own
-		condOutputs, err := condFn.compiled.Execute(backend, state, donateState, condCaptured, nil)
-		// After condFn, all donated buffers have been consumed - we no longer own them
-		// But condFn returns new buffers that we now own implicitly (captured in condOutputs for single bool)
+		// Evaluate condition - DON'T donate state buffers since we need them for the body
+		// The condition function only reads the state to produce a boolean result
+		condOutputs, err := condFn.compiled.Execute(backend, state, nil, condCaptured, nil)
 
 		if err != nil {
-			// On error, we don't own any state buffers anymore (they were donated or never owned)
+			// On error, clean up owned state buffers
+			for i, owned := range donateState {
+				if owned && state[i] != nil {
+					backend.putBuffer(state[i])
+				}
+			}
 			return nil, errors.WithMessagef(err, "While: evaluating condition at iteration %d", iter)
 		}
 
@@ -128,8 +132,7 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 
 		if !condResult {
 			// Condition is false, exit loop
-			// We need to return owned buffers. After first iteration, donateState = donateAll
-			// so we own all state buffers. On first iteration, we need to clone non-owned ones.
+			// Return state buffers. Clone any we don't own.
 			for i, owned := range donateState {
 				if !owned {
 					state[i] = backend.cloneBuffer(state[i])

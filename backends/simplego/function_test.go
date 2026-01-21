@@ -914,3 +914,277 @@ func TestNestedClosureCaptureChain(t *testing.T) {
 	// The captured value should be the parent's capture node, not the original
 	require.Equal(t, closure1Fn.capturedLocalNodes[0], closure2Fn.capturedParentNodes[0])
 }
+
+// TestIfOperation tests the If control flow operation.
+func TestIfOperation(t *testing.T) {
+	builder := backend.Builder("test_if")
+	mainFn := builder.Main()
+
+	// Create true branch: returns constant 10
+	trueBranch, err := mainFn.Closure()
+	require.NoError(t, err)
+	trueConst, err := trueBranch.Constant([]int32{10})
+	require.NoError(t, err)
+	err = trueBranch.Return([]backends.Value{trueConst}, nil)
+	require.NoError(t, err)
+
+	// Create false branch: returns constant 20
+	falseBranch, err := mainFn.Closure()
+	require.NoError(t, err)
+	falseConst, err := falseBranch.Constant([]int32{20})
+	require.NoError(t, err)
+	err = falseBranch.Return([]backends.Value{falseConst}, nil)
+	require.NoError(t, err)
+
+	// Create predicate parameter
+	pred, err := mainFn.Parameter("pred", shapes.Make(dtypes.Bool), nil)
+	require.NoError(t, err)
+
+	// Create If operation
+	results, err := mainFn.If(pred, trueBranch, falseBranch)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	// Return the result
+	err = mainFn.Return(results, nil)
+	require.NoError(t, err)
+
+	// Compile and execute with true
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	trueInput := &Buffer{shape: shapes.Make(dtypes.Bool), flat: []bool{true}, inUse: true}
+	outputs, err := exec.Execute([]backends.Buffer{trueInput}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	require.Equal(t, []int32{10}, outputs[0].(*Buffer).flat)
+
+	// Execute with false
+	falseInput := &Buffer{shape: shapes.Make(dtypes.Bool), flat: []bool{false}, inUse: true}
+	outputs, err = exec.Execute([]backends.Buffer{falseInput}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	require.Equal(t, []int32{20}, outputs[0].(*Buffer).flat)
+}
+
+// TestWhileOperation tests the While control flow operation.
+func TestWhileOperation(t *testing.T) {
+	builder := backend.Builder("test_while")
+	mainFn := builder.Main()
+
+	// Create condition closure: counter < 5
+	cond, err := mainFn.Closure()
+	require.NoError(t, err)
+	condCounter, err := cond.Parameter("counter", shapes.Make(dtypes.Int32), nil)
+	require.NoError(t, err)
+	condLimit, err := cond.Constant([]int32{5})
+	require.NoError(t, err)
+	condResult, err := cond.LessThan(condCounter, condLimit)
+	require.NoError(t, err)
+	err = cond.Return([]backends.Value{condResult}, nil)
+	require.NoError(t, err)
+
+	// Create body closure: counter + 1
+	body, err := mainFn.Closure()
+	require.NoError(t, err)
+	bodyCounter, err := body.Parameter("counter", shapes.Make(dtypes.Int32), nil)
+	require.NoError(t, err)
+	bodyOne, err := body.Constant([]int32{1})
+	require.NoError(t, err)
+	bodyResult, err := body.Add(bodyCounter, bodyOne)
+	require.NoError(t, err)
+	err = body.Return([]backends.Value{bodyResult}, nil)
+	require.NoError(t, err)
+
+	// Create initial state
+	initCounter, err := mainFn.Constant([]int32{0})
+	require.NoError(t, err)
+
+	// Create While operation
+	results, err := mainFn.While(cond, body, initCounter)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	// Return the result
+	err = mainFn.Return(results, nil)
+	require.NoError(t, err)
+
+	// Compile and execute
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	outputs, err := exec.Execute(nil, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	require.Equal(t, []int32{5}, outputs[0].(*Buffer).flat)
+}
+
+// TestSortOperation tests the Sort control flow operation.
+func TestSortOperation(t *testing.T) {
+	builder := backend.Builder("test_sort")
+	mainFn := builder.Main()
+
+	// Create comparator closure: lhs < rhs (ascending sort)
+	comp, err := mainFn.Closure()
+	require.NoError(t, err)
+	lhs, err := comp.Parameter("lhs", shapes.Make(dtypes.Float32), nil)
+	require.NoError(t, err)
+	rhs, err := comp.Parameter("rhs", shapes.Make(dtypes.Float32), nil)
+	require.NoError(t, err)
+	compResult, err := comp.LessThan(lhs, rhs)
+	require.NoError(t, err)
+	err = comp.Return([]backends.Value{compResult}, nil)
+	require.NoError(t, err)
+
+	// Create input parameter
+	input, err := mainFn.Parameter("input", shapes.Make(dtypes.Float32, 5), nil)
+	require.NoError(t, err)
+
+	// Create Sort operation
+	results, err := mainFn.Sort(comp, 0, false, input)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	// Return the result
+	err = mainFn.Return(results, nil)
+	require.NoError(t, err)
+
+	// Compile and execute
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	inputBuf := &Buffer{
+		shape: shapes.Make(dtypes.Float32, 5),
+		flat:  []float32{5.0, 2.0, 8.0, 1.0, 3.0},
+		inUse: true,
+	}
+	outputs, err := exec.Execute([]backends.Buffer{inputBuf}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	require.Equal(t, []float32{1.0, 2.0, 3.0, 5.0, 8.0}, outputs[0].(*Buffer).flat)
+}
+
+// TestClosureCaptureExecutionWithIf tests that captured values work correctly with If operations.
+func TestClosureCaptureExecutionWithIf(t *testing.T) {
+	builder := backend.Builder("test_closure_capture_if")
+	mainFn := builder.Main()
+
+	// Create a constant in the main function that will be captured
+	capturedConst, err := mainFn.Constant([]float32{10.0, 20.0}, 2)
+	require.NoError(t, err)
+
+	// Create parameter for the predicate
+	pred, err := mainFn.Parameter("pred", shapes.Make(dtypes.Bool), nil)
+	require.NoError(t, err)
+
+	// Create true branch that uses the captured constant
+	trueBranch, err := mainFn.Closure()
+	require.NoError(t, err)
+
+	// In true branch: return capturedConst * 2
+	two, err := trueBranch.Constant([]float32{2.0, 2.0}, 2)
+	require.NoError(t, err)
+	trueResult, err := trueBranch.Mul(capturedConst, two)
+	require.NoError(t, err)
+	err = trueBranch.Return([]backends.Value{trueResult}, nil)
+	require.NoError(t, err)
+
+	// Create false branch that uses the captured constant
+	falseBranch, err := mainFn.Closure()
+	require.NoError(t, err)
+
+	// In false branch: return capturedConst / 2
+	half, err := falseBranch.Constant([]float32{0.5, 0.5}, 2)
+	require.NoError(t, err)
+	falseResult, err := falseBranch.Mul(capturedConst, half)
+	require.NoError(t, err)
+	err = falseBranch.Return([]backends.Value{falseResult}, nil)
+	require.NoError(t, err)
+
+	// Create If operation
+	ifOutputs, err := mainFn.If(pred, trueBranch, falseBranch)
+	require.NoError(t, err)
+
+	// Return the If result
+	err = mainFn.Return(ifOutputs, nil)
+	require.NoError(t, err)
+
+	// Compile and execute
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	// Test with pred = true
+	trueInput := &Buffer{shape: shapes.Make(dtypes.Bool), flat: []bool{true}, inUse: true}
+	outputs, err := exec.Execute([]backends.Buffer{trueInput}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	resultFlat := outputs[0].(*Buffer).flat.([]float32)
+	require.Equal(t, []float32{20.0, 40.0}, resultFlat, "True branch should return capturedConst * 2")
+
+	// Test with pred = false
+	falseInput := &Buffer{shape: shapes.Make(dtypes.Bool), flat: []bool{false}, inUse: true}
+	outputs, err = exec.Execute([]backends.Buffer{falseInput}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	resultFlat = outputs[0].(*Buffer).flat.([]float32)
+	require.Equal(t, []float32{5.0, 10.0}, resultFlat, "False branch should return capturedConst / 2")
+}
+
+// TestClosureCaptureExecutionWithWhile tests that captured values work correctly with While operations.
+func TestClosureCaptureExecutionWithWhile(t *testing.T) {
+	builder := backend.Builder("test_closure_capture_while")
+	mainFn := builder.Main()
+
+	// Create a constant in the main function that will be captured by the body (scalar)
+	addAmount, err := mainFn.Constant([]float32{1.0})
+	require.NoError(t, err)
+
+	// Create a threshold constant for the condition (scalar)
+	threshold, err := mainFn.Constant([]float32{5.0})
+	require.NoError(t, err)
+
+	// Create parameter for initial counter value (scalar)
+	counter, err := mainFn.Parameter("counter", shapes.Make(dtypes.Float32), nil)
+	require.NoError(t, err)
+
+	// Create condition: counter < threshold (returns scalar boolean)
+	cond, err := mainFn.Closure()
+	require.NoError(t, err)
+	condCounter, err := cond.Parameter("counter", shapes.Make(dtypes.Float32), nil)
+	require.NoError(t, err)
+	condResult, err := cond.LessThan(condCounter, threshold) // Uses captured threshold
+	require.NoError(t, err)
+	err = cond.Return([]backends.Value{condResult}, nil)
+	require.NoError(t, err)
+
+	// Create body: counter + addAmount (uses captured addAmount)
+	body, err := mainFn.Closure()
+	require.NoError(t, err)
+	bodyCounter, err := body.Parameter("counter", shapes.Make(dtypes.Float32), nil)
+	require.NoError(t, err)
+	newCounter, err := body.Add(bodyCounter, addAmount) // Uses captured addAmount
+	require.NoError(t, err)
+	err = body.Return([]backends.Value{newCounter}, nil)
+	require.NoError(t, err)
+
+	// Create While operation
+	whileOutputs, err := mainFn.While(cond, body, counter)
+	require.NoError(t, err)
+
+	// Return the While result
+	err = mainFn.Return(whileOutputs, nil)
+	require.NoError(t, err)
+
+	// Compile and execute
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	// Test with initial counter = 0 (scalar)
+	counterInput := &Buffer{shape: shapes.Make(dtypes.Float32), flat: []float32{0.0}, inUse: true}
+	outputs, err := exec.Execute([]backends.Buffer{counterInput}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	resultFlat := outputs[0].(*Buffer).flat.([]float32)
+	// Should loop until counter >= 5.0, so 0+1+1+1+1+1 = 5
+	require.Equal(t, []float32{5.0}, resultFlat, "While should loop until counter >= threshold")
+}
