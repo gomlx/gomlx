@@ -238,7 +238,7 @@ func newReduceOutputIterator(dimensions []int, reduceAxes []int) *reduceOutputIt
 	inputRank := len(dimensions)
 	it := &reduceOutputIterator{
 		perAxisIdx: make([]int, inputRank),
-		dimensions: dimensions,
+		dimensions: slices.Clone(dimensions),
 	}
 	it.perAxisStride = slices.Clone(dimensions)
 	stride := 1
@@ -549,7 +549,7 @@ func newTransposeIterator(operand shapes.Shape, permutations []int) *transposeIt
 	it := &transposeIterator{
 		perAxisIdx:     make([]int, rank),
 		perAxisStrides: make([]int, rank),
-		dimensions:     operand.Dimensions,
+		dimensions:     slices.Clone(operand.Dimensions),
 	}
 
 	// First, calculate strides on the output.

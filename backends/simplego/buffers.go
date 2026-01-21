@@ -25,7 +25,8 @@ var _ backends.DataInterface = (*Backend)(nil)
 // taken from larger blobs of bytes allocated in one Go -- or owned by the buffer.
 type Buffer struct {
 	shape shapes.Shape
-	valid bool
+
+	inUse bool
 
 	// flat is always a slice of the underlying data type (shape.DType).
 	flat any
@@ -35,7 +36,7 @@ type Buffer struct {
 // For Constants, this compares the shape and the actual data values.
 func (b *Buffer) EqualNodeData(other nodeDataComparable) bool {
 	o := other.(*Buffer)
-	if !b.shape.Equal(o.shape) || b.valid != o.valid {
+	if !b.shape.Equal(o.shape) || b.inUse != o.inUse {
 		return false
 	}
 	// Compare flat data by comparing the underlying slice values
@@ -99,7 +100,7 @@ func (b *Backend) getBuffer(dtype dtypes.DType, length int) *Buffer {
 	}
 	pool := b.getBufferPool(dtype, length)
 	buf := pool.Get().(*Buffer)
-	buf.valid = true
+	buf.inUse = true
 	// buf.randomize() // Useful to find where zero-initialized is needed but missing.
 	return buf
 }
@@ -132,7 +133,10 @@ func (b *Backend) putBuffer(buffer *Buffer) {
 	if buffer == nil || !buffer.shape.Ok() {
 		return
 	}
-	buffer.valid = false
+	if !buffer.inUse {
+		panic(errors.New("double-freeing simplego buffer"))
+	}
+	buffer.inUse = false
 	pool := b.getBufferPool(buffer.shape.DType, buffer.shape.Size())
 	pool.Put(buffer)
 }
@@ -208,7 +212,7 @@ func (b *Buffer) Ones() *Buffer {
 
 // cloneBuffer using the pool to allocate a new one.
 func (b *Backend) cloneBuffer(buffer *Buffer) *Buffer {
-	if buffer == nil || buffer.flat == nil || !buffer.shape.Ok() || !buffer.valid {
+	if buffer == nil || buffer.flat == nil || !buffer.shape.Ok() || !buffer.inUse {
 		// the buffer is already empty.
 		var issues []string
 		if buffer != nil {
@@ -218,8 +222,8 @@ func (b *Backend) cloneBuffer(buffer *Buffer) *Buffer {
 			if !buffer.shape.Ok() {
 				issues = append(issues, "buffer.shape was invalid")
 			}
-			if !buffer.valid {
-				issues = append(issues, "buffer was marked as invalid")
+			if !buffer.inUse {
+				issues = append(issues, "buffer was marked as not in use (cloning buffer already freed)")
 			}
 		} else {
 			issues = append(issues, "buffer was nil")
@@ -253,7 +257,7 @@ func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) error {
 		buffer.flat = nil // Accelerates GC.
 		return errors.Errorf("BufferFinalize(%p): backend is already finalized", backendBuffer)
 	}
-	if buffer == nil || buffer.flat == nil || !buffer.shape.Ok() || !buffer.valid {
+	if buffer == nil || buffer.flat == nil || !buffer.shape.Ok() || !buffer.inUse {
 		// The buffer is already empty.
 		var issues []string
 		if buffer != nil {
@@ -263,13 +267,13 @@ func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) error {
 			if !buffer.shape.Ok() {
 				issues = append(issues, "buffer.shape was invalid")
 			}
-			if !buffer.valid {
-				issues = append(issues, "buffer was marked as invalid")
+			if !buffer.inUse {
+				issues = append(issues, "buffer was marked as not in use (already back in the pool)")
 			}
 		} else {
 			issues = append(issues, "buffer was nil")
 		}
-		return errors.Errorf("BufferFinalize(%p): %s -- buffer was already isFinalized!?\n", buffer, strings.Join(issues, ", "))
+		return errors.Errorf("BufferFinalize(%p): %s -- buffer was already finalized or back in the pool!?\n", buffer, strings.Join(issues, ", "))
 	}
 	// fmt.Printf("> BufferFinalize(%p): shape=%s\n", buffer, buffer.shape)
 	// fmt.Printf("\tStack trace:\n%s\n", debug.Stack())

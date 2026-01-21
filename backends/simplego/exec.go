@@ -44,14 +44,15 @@ func (e *Executable) Finalize() {
 
 // Inputs returns the list of parameters names and shapes, in order created by the Builder.Parameter calls.
 func (e *Executable) Inputs() (names []string, inputShapes []shapes.Shape) {
-	numInputs := len(e.builder.inputs)
+	params := e.builder.mainFn.parameters
+	numInputs := len(params)
 	if numInputs == 0 {
 		return
 	}
 	names = make([]string, numInputs)
 	inputShapes = make([]shapes.Shape, numInputs)
-	for ii, node := range e.builder.inputs {
-		parameter := e.builder.inputs[ii].data.(*nodeParameter)
+	for ii, node := range params {
+		parameter := node.data.(*nodeParameter)
 		names[ii] = parameter.name
 		inputShapes[ii] = node.shape
 	}
@@ -60,12 +61,13 @@ func (e *Executable) Inputs() (names []string, inputShapes []shapes.Shape) {
 
 // Outputs returns the output shapes of the computation, in order given to the Builder.Compile call.
 func (e *Executable) Outputs() (outputShapes []shapes.Shape) {
-	numOutputs := len(e.builder.outputs)
+	outputs := e.builder.mainFn.outputs
+	numOutputs := len(outputs)
 	if numOutputs == 0 {
 		return
 	}
 	outputShapes = make([]shapes.Shape, numOutputs)
-	for ii, node := range e.builder.outputs {
+	for ii, node := range outputs {
 		outputShapes[ii] = node.shape
 	}
 	return outputShapes
@@ -89,10 +91,7 @@ func newExecutable(builder *Builder, mainFn *FunctionExecutable) *Executable {
 type nodeExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error)
 
 // nodeMultiOutputExecutor is a version of a node executor when it returns multiple outputs.
-// nodeMultiOutputExecutor is the signature for multi-output node executors.
-// The parentExecBuf parameter provides access to the parent function's execution context,
-// which is needed for control flow operations (If, While, Sort) to look up captured values.
-type nodeMultiOutputExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, parentExecBuf *funcExecBuffers) ([]*Buffer, error)
+type nodeMultiOutputExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error)
 
 var (
 	// nodeExecutors should be populated during initialization (`init` functions) for the ops implemented.
@@ -153,8 +152,9 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, _ backends
 	defer e.backend.numLiveExecutions.Add(-1)
 
 	// Check inputs length
-	if len(inputs) != len(e.builder.inputs) {
-		return nil, errors.Errorf("Execute: expected %d inputs, got %d", len(e.builder.inputs), len(inputs))
+	params := e.builder.mainFn.parameters
+	if len(inputs) != len(params) {
+		return nil, errors.Errorf("Execute: expected %d inputs, got %d", len(params), len(inputs))
 	}
 
 	// donate defaults to false for all buffers.
@@ -172,15 +172,15 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, _ backends
 		if !ok {
 			return nil, errors.Errorf("Execute: input buffer #%d is not from SimpleGo backend", ii)
 		}
-		if !inputBuffer.valid {
+		if !inputBuffer.inUse {
 			return nil, errors.Errorf(
-				"Execute: input buffer (%p) #%d is not valid, likely it is being used after being isFinalized",
+				"Execute: input buffer (%p) #%d is not valid, likely it is being used after being released",
 				inputBuffer, ii)
 		}
 		if inputBuffer.flat == nil {
 			return nil, errors.Errorf("Execute: input buffer #%d flat data is set to nil (!?)", ii)
 		}
-		nodeInput := e.builder.inputs[ii]
+		nodeInput := params[ii]
 		if !inputBuffer.shape.Equal(nodeInput.shape) {
 			paramName := nodeInput.data.(*nodeParameter).name
 			return nil, errors.Errorf("Execute: parameter %q (input #%d) for %q: expected shape %s, got %s",
@@ -190,8 +190,8 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, _ backends
 	}
 
 	// Delegate to FunctionExecutable
-	// Main function has no captured values
-	outputs, err := e.mainFn.Execute(e.backend, bufInputs, donate, nil)
+	// Main function doesn't have captured values, so pass nil for both
+	outputs, err := e.mainFn.Execute(e.backend, bufInputs, donate, nil, nil)
 	if err != nil {
 		return nil, err
 	}

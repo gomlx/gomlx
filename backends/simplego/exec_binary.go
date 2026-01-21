@@ -3,6 +3,8 @@
 package simplego
 
 import (
+	"slices"
+
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
@@ -54,7 +56,7 @@ func newBroadcastIterator(fromShape, toShape shapes.Shape) *broadcastIterator {
 	}
 	bi := &broadcastIterator{
 		perAxesIdx:  make([]int, rank),
-		targetDims:  toShape.Dimensions,
+		targetDims:  slices.Clone(toShape.Dimensions),
 		isBroadcast: make([]bool, rank),
 		strides:     make([]int, rank),
 	}

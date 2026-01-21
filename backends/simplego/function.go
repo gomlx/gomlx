@@ -3,6 +3,8 @@
 package simplego
 
 import (
+	"slices"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/backends/shapeinference"
@@ -26,26 +28,36 @@ type Function struct {
 	// returned indicates Return() was called.
 	returned bool
 
+	// nodes are all nodes created within this function, in DAG order.
+	// Each node's idx field is its index in this slice.
+	nodes []*Node
+
 	// outputs stores the return values set by Return().
 	outputs []*Node
 
 	// parameters stores the parameter nodes for this function.
 	parameters []*Node
 
-	// capturedValues are nodes from parent scopes that this closure references.
-	// These need to be passed as additional inputs at execution time.
-	// Only populated for closures.
-	capturedValues []*Node
+	// capturedParentNodes stores nodes from parent scopes that are captured by this closure.
+	// The order matches capturedLocalNodes - capturedParentNodes[i] is the parent node for capturedLocalNodes[i].
+	capturedParentNodes []*Node
 
-	// capturedNodes are the corresponding "capture" nodes within this closure
-	// that act as proxies for the parent values. They have the same shape as
-	// the corresponding capturedValues entry.
-	capturedNodes []*Node
+	// capturedLocalNodes stores the proxy nodes in this closure for captured values.
+	// These are OpTypeCapturedValue nodes that receive their values at execution time.
+	capturedLocalNodes []*Node
+
+	// nodeDedup provides automatic de-duplication for nodes within this function.
+	nodeDedup map[nodeDedupKey][]*Node
 
 	// compiled holds pre-compiled execution info.
 	// This is set during Return() to allow efficient execution.
 	compiled *FunctionExecutable
 }
+
+// capturedNodeData is the data stored in a captured value node.
+// It just stores the capture index since the parent node is available
+// via f.capturedParentNodes[captureIdx].
+type capturedNodeData int
 
 var _ backends.Function = (*Function)(nil)
 
@@ -88,6 +100,55 @@ func (f *Function) IsAncestorOf(leafFunc *Function) bool {
 	return false
 }
 
+// getOrCreateCaptureNode returns a capture node for the given parent node.
+// If the parent node has already been captured, returns the existing capture node.
+// Otherwise, creates a new capture node and adds it to the captured values list.
+//
+// For nested closures (grandparent captures), this recursively propagates the
+// capture through intermediate closures. For example, if closure C (child of B,
+// child of A) wants to capture a value from A, this will:
+// 1. Have B capture the value from A
+// 2. Have C capture B's capture node
+//
+// This ensures that when If/While/Sort ops are built, they can properly set up
+// their capturedInputs by looking at the closure's capturedParentNodes.
+func (f *Function) getOrCreateCaptureNode(parentNode *Node) *Node {
+	// Check if we've already captured this node
+	for i, captured := range f.capturedParentNodes {
+		if captured == parentNode {
+			return f.capturedLocalNodes[i]
+		}
+	}
+
+	// Determine the actual node to capture.
+	// If parentNode is not from our direct parent, we need to propagate through
+	// intermediate closures.
+	nodeToCapture := parentNode
+	if f.parent == nil {
+		// This should never happen: if we're capturing a node, f must be a closure
+		// with a parent function. If parent is nil, the node is not from an ancestor.
+		panic(errors.Errorf(
+			"getOrCreateCaptureNode: function %q has no parent but is trying to capture node from function %q",
+			f.name, parentNode.function.name))
+	}
+	if parentNode.function != f.parent {
+		// The node is from a grandparent or further ancestor.
+		// First, have our parent capture it, then we capture the parent's capture node.
+		parentCaptureNode := f.parent.getOrCreateCaptureNode(parentNode)
+		nodeToCapture = parentCaptureNode
+	}
+
+	// Create a new capture node
+	captureIdx := len(f.capturedParentNodes)
+	captureNode := f.newNode(backends.OpTypeCapturedValue, parentNode.shape)
+	captureNode.data = capturedNodeData(captureIdx)
+
+	f.capturedParentNodes = append(f.capturedParentNodes, nodeToCapture)
+	f.capturedLocalNodes = append(f.capturedLocalNodes, captureNode)
+
+	return captureNode
+}
+
 // Closure creates a new closure function within this function.
 // Closures can access values from their parent function's scope.
 func (f *Function) Closure() (backends.Function, error) {
@@ -95,18 +156,65 @@ func (f *Function) Closure() (backends.Function, error) {
 		return nil, err
 	}
 	closure := &Function{
-		builder: f.builder,
-		name:    "", // Closures have empty names
-		parent:  f,
+		builder:   f.builder,
+		name:      "", // Closures have empty names
+		parent:    f,
+		nodeDedup: make(map[nodeDedupKey][]*Node),
 	}
 	return closure, nil
 }
 
+// newNode adds a new node of the given opType and shape to the function's graph.
+// It's used by the other ops when creating new nodes.
+// Nodes are added to the function's nodes slice.
+//
+// Use getOrCreateNode instead for most operations.
+func (f *Function) newNode(opType backends.OpType, shape shapes.Shape, inputs ...*Node) *Node {
+	n := &Node{
+		builder:  f.builder,
+		opType:   opType,
+		idx:      len(f.nodes),
+		shape:    shape,
+		inputs:   slices.Clone(inputs),
+		function: f,
+	}
+	f.nodes = append(f.nodes, n)
+	return n
+}
+
+// newMultiOutputsNode creates the multi-outputs node, and its "select nodes", one per output.
+// The node.multiOutputsNodes will be set with the individual outputs and can be used by the Builder to return
+// to the user.
+// Nodes are added to the function's nodes slice.
+//
+// Note: no de-duplication of multi-output nodes.
+func (f *Function) newMultiOutputsNode(
+	opType backends.OpType,
+	outputShapes []shapes.Shape,
+	inputs ...*Node,
+) (node *Node) {
+	node = f.newNode(opType, shapes.Invalid(), inputs...)
+	node.multiOutputsShapes = outputShapes
+	node.multiOutputsNodes = make([]*Node, len(outputShapes))
+	for i, shape := range outputShapes {
+		node.multiOutputsNodes[i] = &Node{
+			builder:            f.builder,
+			opType:             opType,
+			idx:                len(f.nodes),
+			shape:              shape,
+			inputs:             []*Node{node},
+			isNodeSelectOutput: true,
+			selectOutputIdx:    i,
+			function:           f,
+		}
+		f.nodes = append(f.nodes, node.multiOutputsNodes[i])
+	}
+	return node
+}
+
 // verifyAndCastValues sanity checks that the values (backends.Op) are valid and created with this builder.
-// It also verifies that all input nodes belong to this function or a parent function.
-// For nodes from parent functions (closure capturing), it creates capture nodes that act as
-// proxies within this closure.
-// It returns the underlying *Node of the values (with captured nodes replaced by their proxies).
+// If a node belongs to a parent function, it creates a capture node to access the value.
+// It returns the underlying *Node of the values (with capture nodes substituted for parent values).
 func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([]*Node, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
@@ -116,25 +224,30 @@ func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([
 		return nil, err
 	}
 
-	// Check that all input nodes belong to this function or a parent.
-	// For nodes from parent functions, create capture nodes.
+	// Check each node and handle parent scope references
 	for idx, node := range nodes {
-		if node.function != nil && node.function != f {
-			// Check if the node is from a parent function (closure capture)
-			isFromParent := false
-			for parent := f.parent; parent != nil; parent = parent.parent {
-				if node.function == parent {
-					isFromParent = true
-					break
-				}
+		if node.function == nil {
+			return nil, errors.Errorf(
+				"%s: input #%d has nil function (internal error)",
+				name, idx)
+		}
+		if node.function == f {
+			continue // Same function, OK.
+		}
+
+		// Check if the node is from an ancestor function (closure capture)
+		isFromAncestor := false
+		for ancestor := f.parent; ancestor != nil; ancestor = ancestor.parent {
+			if node.function == ancestor {
+				isFromAncestor = true
+				break
 			}
-			if isFromParent {
-				// Create or reuse a capture node for this parent value
-				captureNode := f.getOrCreateCaptureNode(node)
-				nodes[idx] = captureNode
-				continue
-			}
-			// Node from a completely different function (not parent)
+		}
+		if isFromAncestor {
+			// Create or reuse a capture node for this parent value
+			nodes[idx] = f.getOrCreateCaptureNode(node)
+		} else {
+			// Node from a completely different function (not an ancestor)
 			return nil, errors.Errorf(
 				"%s: input #%d uses a node from a different function scope",
 				name, idx)
@@ -142,39 +255,6 @@ func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([
 	}
 
 	return nodes, nil
-}
-
-// getOrCreateCaptureNode returns (or creates) a capture node for a value from a parent scope.
-// Capture nodes act as proxies within this closure that will receive their values at execution time.
-func (f *Function) getOrCreateCaptureNode(parentNode *Node) *Node {
-	// Check if already captured
-	for i, captured := range f.capturedValues {
-		if captured == parentNode {
-			return f.capturedNodes[i]
-		}
-	}
-
-	// Create a new capture node - it's like a parameter but for captured values
-	captureIdx := len(f.capturedValues)
-	data := &capturedValueNode{
-		parentNode: parentNode,
-		captureIdx: captureIdx,
-	}
-
-	// Create node with a unique builderIdx (no inputs - like a parameter)
-	captureNode := f.builder.newNode(f, backends.OpTypeCapturedValue, parentNode.shape)
-	captureNode.data = data
-
-	f.capturedValues = append(f.capturedValues, parentNode)
-	f.capturedNodes = append(f.capturedNodes, captureNode)
-
-	return captureNode
-}
-
-// capturedValueNode holds data for a captured value from a parent scope.
-type capturedValueNode struct {
-	parentNode *Node // The node in the parent function being captured
-	captureIdx int   // Index in the Function's capturedValues/capturedNodes slices
 }
 
 // Parameter creates an input parameter for this function.
@@ -194,14 +274,10 @@ func (f *Function) Parameter(name string, shape shapes.Shape, sharding *backends
 	}
 	data := &nodeParameter{
 		name:     name,
-		inputIdx: len(f.parameters), // Use function-specific parameter index
+		inputIdx: len(f.parameters), // Index within this function's parameters
 	}
 	n, _ := f.getOrCreateNode(backends.OpTypeParameter, shape, nil, data)
 	f.parameters = append(f.parameters, n)
-	// Only add to builder.inputs for the main function (non-closures)
-	if f.parent == nil {
-		f.builder.inputs = append(f.builder.inputs, n)
-	}
 	return n, nil
 }
 
@@ -227,7 +303,7 @@ func (f *Function) Constant(flat any, dims ...int) (backends.Value, error) {
 	data := &Buffer{
 		shape: shape,
 		flat:  flat,
-		valid: true,
+		inUse: true,
 	}
 	n, _ := f.getOrCreateNode(backends.OpTypeConstant, shape, nil, data)
 	return n, nil
@@ -285,6 +361,31 @@ func (f *Function) Compiled() *FunctionExecutable {
 	return f.compiled
 }
 
+// CapturedParentNodes returns the list of parent nodes that this closure captures.
+// Each entry corresponds to a node from a parent function that this closure uses.
+// Returns nil for non-closures or closures that don't capture any values.
+func (f *Function) CapturedParentNodes() []*Node {
+	return f.capturedParentNodes
+}
+
+// AddNodeCapturedInputs adds captured inputs from a closure to this node.
+// This should be called when building ops like If, While, Sort that use closures.
+// For ops with multiple closures, call this once for each closure.
+// The closure's required captured values are appended to the node's capturedInputs field
+// so they are properly tracked in the parent function's dependency graph.
+//
+// For nested closures, if the closure captures values from a grandparent,
+// those values are propagated to the parent closure's required captures.
+func (n *Node) AddNodeCapturedInputs(closure *Function) {
+	if closure == nil || len(closure.capturedParentNodes) == 0 {
+		return
+	}
+
+	// Append the closure's captured values to the node's capturedInputs.
+	// These become dependencies of the node in the parent function's DAG.
+	n.capturedInputs = append(n.capturedInputs, closure.capturedParentNodes...)
+}
+
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
 // on the given axis. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
 // returns [[0 0][1 1]].
@@ -311,7 +412,7 @@ func (f *Function) Identity(operandOp backends.Value) (backends.Value, error) {
 		return nil, err
 	}
 	operand := inputs[0]
-	node := f.builder.newNode(f, backends.OpTypeIdentity, operand.shape, operand)
+	node := f.newNode(backends.OpTypeIdentity, operand.shape, operand)
 	return node, nil
 }
 
@@ -736,7 +837,7 @@ func (f *Function) RNGBitGenerator(stateOp backends.Value, shape shapes.Shape) (
 		state.shape.Clone(),
 		shape.Clone(),
 	}
-	node := f.builder.newMultiOutputsNode(f, opType, outputShapes, state)
+	node := f.newMultiOutputsNode(opType, outputShapes, state)
 	newState = node.multiOutputsNodes[0]
 	values = node.multiOutputsNodes[1]
 	return
@@ -1124,349 +1225,4 @@ func (f *Function) AllReduce(operands []backends.Value, reductionType backends.R
 	return nil, errors.Wrapf(
 		notimplemented.NotImplementedError,
 		"AllReduce not supported for %q builder", BackendName)
-}
-
-// validClosure validates that a backends.Function is a compiled closure of the current function.
-func (f *Function) validClosure(opName, closureName string, closure backends.Function) (*Function, error) {
-	fn, ok := closure.(*Function)
-	if !ok {
-		return nil, errors.Errorf("%s: %s must be a *simplego.Function, got %T", opName, closureName, closure)
-	}
-	if fn.parent != f {
-		return nil, errors.Errorf("%s: %s must be a closure of the current function", opName, closureName)
-	}
-	if !fn.returned {
-		return nil, errors.Errorf("%s: %s must have Return() called", opName, closureName)
-	}
-	if fn.compiled == nil {
-		return nil, errors.Errorf("%s: %s must be compiled", opName, closureName)
-	}
-	return fn, nil
-}
-
-// checkClosureParams verifies that a closure's parameters match expected shapes.
-func checkClosureParams(opName, closureName string, fn *Function, expected []*Node) error {
-	if len(fn.parameters) != len(expected) {
-		return errors.Errorf("%s: %s must have %d parameters, got %d",
-			opName, closureName, len(expected), len(fn.parameters))
-	}
-	for i, param := range fn.parameters {
-		if !param.shape.Equal(expected[i].shape) {
-			return errors.Errorf("%s: %s parameter %d shape %s must match expected shape %s",
-				opName, closureName, i, param.shape, expected[i].shape)
-		}
-	}
-	return nil
-}
-
-// If executes one of two branches based on a boolean predicate.
-//
-// The predicate must be a scalar boolean. The true and false branches are closures
-// that take no parameters and return the same number of outputs with matching shapes.
-func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Function) ([]backends.Value, error) {
-	if err := f.CheckValid(); err != nil {
-		return nil, err
-	}
-
-	// Validate predicate
-	predNodes, err := f.verifyAndCastValues("If", pred)
-	if err != nil {
-		return nil, err
-	}
-	predNode := predNodes[0]
-
-	// Verify pred is a scalar boolean
-	if predNode.shape.Rank() != 0 || predNode.shape.DType != dtypes.Bool {
-		return nil, errors.Errorf("If: pred must be a scalar boolean, got %s", predNode.shape)
-	}
-
-	// Validate branches
-	trueFn, err := f.validClosure("If", "trueBranch", trueBranch)
-	if err != nil {
-		return nil, err
-	}
-	falseFn, err := f.validClosure("If", "falseBranch", falseBranch)
-	if err != nil {
-		return nil, err
-	}
-
-	// Verify both branches have no parameters
-	if len(trueFn.parameters) != 0 {
-		return nil, errors.Errorf("If: trueBranch must have no parameters, got %d", len(trueFn.parameters))
-	}
-	if len(falseFn.parameters) != 0 {
-		return nil, errors.Errorf("If: falseBranch must have no parameters, got %d", len(falseFn.parameters))
-	}
-
-	// Verify both branches have the same number of outputs with matching shapes
-	if len(trueFn.outputs) != len(falseFn.outputs) {
-		return nil, errors.Errorf("If: branches must return same number of outputs, trueBranch returns %d, falseBranch returns %d",
-			len(trueFn.outputs), len(falseFn.outputs))
-	}
-	for i := range trueFn.outputs {
-		if !trueFn.outputs[i].shape.Equal(falseFn.outputs[i].shape) {
-			return nil, errors.Errorf("If: output %d shapes must match, trueBranch returns %s, falseBranch returns %s",
-				i, trueFn.outputs[i].shape, falseFn.outputs[i].shape)
-		}
-	}
-
-	// Create the If node - it will be executed at runtime
-	outputShapes := make([]shapes.Shape, len(trueFn.outputs))
-	for i, out := range trueFn.outputs {
-		outputShapes[i] = out.shape.Clone()
-	}
-
-	// Collect captured values from both branches as inputs to ensure they're computed before If
-	// Inputs layout: [pred, trueBranch captured values..., falseBranch captured values...]
-	allInputs := make([]*Node, 1+len(trueFn.capturedValues)+len(falseFn.capturedValues))
-	allInputs[0] = predNode
-	for i, captured := range trueFn.capturedValues {
-		allInputs[1+i] = captured
-	}
-	for i, captured := range falseFn.capturedValues {
-		allInputs[1+len(trueFn.capturedValues)+i] = captured
-	}
-
-	data := &ifNode{
-		trueBranch:          trueFn,
-		falseBranch:         falseFn,
-		trueCapturedCount:   len(trueFn.capturedValues),
-		falseCapturedCount:  len(falseFn.capturedValues),
-	}
-
-	// Create multi-output node for If
-	node := f.builder.newMultiOutputsNode(f, backends.OpTypeIf, outputShapes, allInputs...)
-	node.data = data
-	return node.MultiOutputValues(), nil
-}
-
-// ifNode holds the data for an If operation.
-type ifNode struct {
-	trueBranch         *Function
-	falseBranch        *Function
-	trueCapturedCount  int // Number of captured values for trueBranch
-	falseCapturedCount int // Number of captured values for falseBranch
-}
-
-// While executes a loop while a condition is true.
-//
-// The condition closure takes the current state values and returns a scalar boolean.
-// The body closure takes the current state values and returns new state values.
-// Both must have the same number of parameters matching the initialState count.
-func (f *Function) While(cond, body backends.Function, initialState ...backends.Value) ([]backends.Value, error) {
-	if err := f.CheckValid(); err != nil {
-		return nil, err
-	}
-
-	if len(initialState) == 0 {
-		return nil, errors.Errorf("While: requires at least one initial state value")
-	}
-
-	// Validate initial state
-	stateNodes, err := f.verifyAndCastValues("While", initialState...)
-	if err != nil {
-		return nil, err
-	}
-
-	// Validate closures and their parameters
-	condFn, err := f.validClosure("While", "cond", cond)
-	if err != nil {
-		return nil, err
-	}
-	if err := checkClosureParams("While", "cond", condFn, stateNodes); err != nil {
-		return nil, err
-	}
-
-	bodyFn, err := f.validClosure("While", "body", body)
-	if err != nil {
-		return nil, err
-	}
-	if err := checkClosureParams("While", "body", bodyFn, stateNodes); err != nil {
-		return nil, err
-	}
-
-	// Verify cond returns a scalar boolean
-	if len(condFn.outputs) != 1 {
-		return nil, errors.Errorf("While: cond must return exactly one value, got %d", len(condFn.outputs))
-	}
-	if condFn.outputs[0].shape.Rank() != 0 || condFn.outputs[0].shape.DType != dtypes.Bool {
-		return nil, errors.Errorf("While: cond must return a scalar boolean, got %s", condFn.outputs[0].shape)
-	}
-
-	// Verify body returns same shapes as initialState
-	if len(bodyFn.outputs) != len(stateNodes) {
-		return nil, errors.Errorf("While: body must return %d values matching initialState, got %d",
-			len(stateNodes), len(bodyFn.outputs))
-	}
-	for i, out := range bodyFn.outputs {
-		if !out.shape.Equal(stateNodes[i].shape) {
-			return nil, errors.Errorf("While: body output %d shape %s must match initialState shape %s",
-				i, out.shape, stateNodes[i].shape)
-		}
-	}
-
-	// Create output shapes (same as initial state)
-	outputShapes := make([]shapes.Shape, len(stateNodes))
-	for i, node := range stateNodes {
-		outputShapes[i] = node.shape.Clone()
-	}
-
-	// Collect captured values from both closures as inputs to ensure they're computed before While
-	// Inputs layout: [state values..., cond captured values..., body captured values...]
-	allInputs := make([]*Node, len(stateNodes)+len(condFn.capturedValues)+len(bodyFn.capturedValues))
-	copy(allInputs, stateNodes)
-	for i, captured := range condFn.capturedValues {
-		allInputs[len(stateNodes)+i] = captured
-	}
-	for i, captured := range bodyFn.capturedValues {
-		allInputs[len(stateNodes)+len(condFn.capturedValues)+i] = captured
-	}
-
-	data := &whileNode{
-		cond:               condFn,
-		body:               bodyFn,
-		stateCount:         len(stateNodes),
-		condCapturedCount:  len(condFn.capturedValues),
-		bodyCapturedCount:  len(bodyFn.capturedValues),
-	}
-
-	// Create multi-output node for While
-	node := f.builder.newMultiOutputsNode(f, backends.OpTypeWhile, outputShapes, allInputs...)
-	node.data = data
-	return node.MultiOutputValues(), nil
-}
-
-// whileNode holds the data for a While operation.
-type whileNode struct {
-	cond              *Function
-	body              *Function
-	stateCount        int // Number of state values
-	condCapturedCount int // Number of captured values for cond
-	bodyCapturedCount int // Number of captured values for body
-}
-
-// Sort sorts one or more tensors along the specified axis using a comparator closure.
-//
-// The comparator closure takes 2*N scalar parameters (lhs_0, rhs_0, lhs_1, rhs_1, ...)
-// where N is the number of input tensors, and returns a scalar boolean indicating
-// whether lhs should come before rhs.
-func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, inputs ...backends.Value) ([]backends.Value, error) {
-	if err := f.CheckValid(); err != nil {
-		return nil, err
-	}
-
-	if len(inputs) == 0 {
-		return nil, errors.Errorf("Sort: requires at least one input tensor")
-	}
-
-	// Validate inputs
-	inputNodes, err := f.verifyAndCastValues("Sort", inputs...)
-	if err != nil {
-		return nil, err
-	}
-
-	// Validate comparator closure
-	compFn, err := f.validClosure("Sort", "comparator", comparator)
-	if err != nil {
-		return nil, err
-	}
-
-	// Verify all inputs have the same dimensions
-	firstShape := inputNodes[0].shape
-	for i, node := range inputNodes[1:] {
-		if !shapesEqualDimensions(firstShape, node.shape) {
-			return nil, errors.Errorf("Sort: all inputs must have the same dimensions, input 0 has %s, input %d has %s",
-				firstShape, i+1, node.shape)
-		}
-	}
-
-	// Normalize axis
-	rank := firstShape.Rank()
-	if axis < 0 {
-		axis = rank + axis
-	}
-	if axis < 0 || axis >= rank {
-		return nil, errors.Errorf("Sort: axis %d out of range for rank %d", axis, rank)
-	}
-
-	// Verify comparator has 2*N scalar parameters
-	expectedParams := 2 * len(inputNodes)
-	if len(compFn.parameters) != expectedParams {
-		return nil, errors.Errorf("Sort: comparator must have %d parameters (2 per input), got %d",
-			expectedParams, len(compFn.parameters))
-	}
-
-	// Verify comparator parameters are scalars with correct dtypes
-	for i, node := range inputNodes {
-		expectedDType := node.shape.DType
-		for j, side := range []string{"lhs", "rhs"} {
-			paramIdx := 2*i + j
-			param := compFn.parameters[paramIdx]
-			if param.shape.Rank() != 0 {
-				return nil, errors.Errorf("Sort: comparator parameter %d (%s_%d) must be scalar, got %s",
-					paramIdx, side, i, param.shape)
-			}
-			if param.shape.DType != expectedDType {
-				return nil, errors.Errorf("Sort: comparator parameter %d (%s_%d) must have dtype %s, got %s",
-					paramIdx, side, i, expectedDType, param.shape.DType)
-			}
-		}
-	}
-
-	// Verify comparator returns a scalar boolean
-	if len(compFn.outputs) != 1 {
-		return nil, errors.Errorf("Sort: comparator must return exactly one value, got %d", len(compFn.outputs))
-	}
-	if compFn.outputs[0].shape.Rank() != 0 || compFn.outputs[0].shape.DType != dtypes.Bool {
-		return nil, errors.Errorf("Sort: comparator must return a scalar boolean, got %s", compFn.outputs[0].shape)
-	}
-
-	// Create output shapes (same as inputs)
-	outputShapes := make([]shapes.Shape, len(inputNodes))
-	for i, node := range inputNodes {
-		outputShapes[i] = node.shape.Clone()
-	}
-
-	// Collect captured values from comparator as inputs to ensure they're computed before Sort
-	// Inputs layout: [input tensors..., comparator captured values...]
-	allInputs := make([]*Node, len(inputNodes)+len(compFn.capturedValues))
-	copy(allInputs, inputNodes)
-	for i, captured := range compFn.capturedValues {
-		allInputs[len(inputNodes)+i] = captured
-	}
-
-	data := &sortNode{
-		comparator:          compFn,
-		axis:                axis,
-		isStable:            isStable,
-		inputCount:          len(inputNodes),
-		compCapturedCount:   len(compFn.capturedValues),
-	}
-
-	// Create multi-output node for Sort
-	node := f.builder.newMultiOutputsNode(f, backends.OpTypeSort, outputShapes, allInputs...)
-	node.data = data
-	return node.MultiOutputValues(), nil
-}
-
-// sortNode holds the data for a Sort operation.
-type sortNode struct {
-	comparator        *Function
-	axis              int
-	isStable          bool
-	inputCount        int // Number of input tensors
-	compCapturedCount int // Number of captured values for comparator
-}
-
-// shapesEqualDimensions returns true if two shapes have the same dimensions (ignoring dtype).
-func shapesEqualDimensions(a, b shapes.Shape) bool {
-	if a.Rank() != b.Rank() {
-		return false
-	}
-	for i := range a.Dimensions {
-		if a.Dimensions[i] != b.Dimensions[i] {
-			return false
-		}
-	}
-	return true
 }
