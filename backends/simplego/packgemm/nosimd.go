@@ -136,7 +136,11 @@ func basicSymmetricGenericSmallGEMMParallel[T dtypes.Number](
 	pool *workerspool.Pool) error {
 
 	gemmFlops := lhsCrossSize * rhsCrossSize * contractingSize
-	if pool == nil || batchSize == 1 || batchSize*gemmFlops < nosimdMinMatMulFlopsPerWorker {
+	var maxWorkers int
+	if pool != nil {
+		maxWorkers = pool.MaxParallelism()
+	}
+	if maxWorkers == 0 || maxWorkers == 1 || batchSize == 1 || batchSize*gemmFlops < nosimdMinMatMulFlopsPerWorker {
 		// Not worth parallelizing: just run the small matmul kernel sequentially.
 		basicSymmetricGenericSmallGEMM(
 			alpha, beta,
@@ -147,34 +151,38 @@ func basicSymmetricGenericSmallGEMMParallel[T dtypes.Number](
 	}
 
 	// Parallelize on the batch dimension:
-	wg := xsync.NewDynamicWaitGroup() // Control workers started.
-	maxWorkers := pool.MaxParallelism()
-	minChunk := 1 // nosimdSmallMatMulThreshold / matmulSize
-	batchCountPerTask := max(minChunk, batchSize/maxWorkers)
-	for b := 0; b < batchSize; b += batchCountPerTask {
-		batchCount := min(batchCountPerTask, batchSize-b)
-		batchLhs := lhsFlat[b*lhsBatchStride : (b+batchCount)*lhsBatchStride]
-		batchRhs := rhsFlat[b*rhsBatchStride : (b+batchCount)*rhsBatchStride]
-		batchOutput := outputFlat[b*outputBatchStride : (b+batchCount)*outputBatchStride]
-		if b+batchCount == batchSize || !pool.StartIfAvailable(func() {
-			// Started on a separate worker.
-			wg.Add(1)
-			defer wg.Done()
+	batchCountPerTask := nosimdMinMatMulFlopsPerWorker / gemmFlops
+	if maxWorkers > 0 {
+		// Make parallelization more fine-grained if there are enough workers
+		batchCountPerTask = min(batchCountPerTask, batchSize/maxWorkers)
+	}
+	batchCountPerTask = max(batchCountPerTask, 1)
+
+	// Crate work that needs doing in a buffered channel.
+	type chunkData struct {
+		batchIdx, batchCount int
+	}
+	numChunks := (batchSize + batchCountPerTask - 1) / batchCountPerTask
+	work := make(chan chunkData, numChunks)
+	for batchIdx := 0; batchIdx < batchSize; batchIdx += batchCountPerTask {
+		batchCount := min(batchCountPerTask, batchSize-batchIdx)
+		work <- chunkData{batchIdx, batchCount}
+	}
+	close(work)
+
+	// Execute the work in as many workers as available.
+	pool.Saturate(func() {
+		for w := range work {
+			batchLhs := lhsFlat[w.batchIdx*lhsBatchStride : (w.batchIdx+w.batchCount)*lhsBatchStride]
+			batchRhs := rhsFlat[w.batchIdx*rhsBatchStride : (w.batchIdx+w.batchCount)*rhsBatchStride]
+			batchOutput := outputFlat[w.batchIdx*outputBatchStride : (w.batchIdx+w.batchCount)*outputBatchStride]
 			basicSymmetricGenericSmallGEMM(
 				alpha, beta,
 				batchLhs, batchRhs, batchOutput,
-				batchCount, lhsCrossSize, rhsCrossSize, contractingSize,
-			)
-		}) {
-			// Last chunk or if no more workers available, run in the current goroutine.
-			basicSymmetricGenericSmallGEMM(
-				alpha, beta,
-				batchLhs, batchRhs, batchOutput,
-				batchCount, lhsCrossSize, rhsCrossSize, contractingSize,
+				w.batchCount, lhsCrossSize, rhsCrossSize, contractingSize,
 			)
 		}
-	}
-	wg.Wait()
+	})
 	return nil
 }
 
