@@ -20,10 +20,10 @@ type Pool struct {
 	extraParallelism atomic.Int32
 }
 
-// New return a new Pool of workers with the default parallelism (runtime.NumCPU()).
+// New return a new Pool of workers with the default parallelism (2 * runtime.GOMAXPROCS()).
 func New() *Pool {
 	w := &Pool{}
-	w.maxParallelism = runtime.GOMAXPROCS(0)
+	w.maxParallelism = 2 * runtime.GOMAXPROCS(0)
 	w.cond = sync.Cond{L: &w.mu}
 	return w
 }
@@ -64,7 +64,7 @@ func (w *Pool) lockedIsFull() bool {
 	} else if w.maxParallelism < 0 {
 		return false
 	}
-	return w.numRunning >= goroutineToParallelismRatio*w.maxParallelism+int(w.extraParallelism.Load())
+	return w.numRunning >= w.maxParallelism+int(w.extraParallelism.Load())
 }
 
 // WaitToStart waits until there is a worker available to run the task.
@@ -121,6 +121,54 @@ func (w *Pool) StartIfAvailable(task func()) bool {
 	}
 	w.lockedRunTaskInGoroutine(task)
 	return true
+}
+
+// Saturate fans out as many workers as available, each running the given task.
+// It keeps spawning workers if more workers become available.
+//
+// When the first task finishes, it indicates there is not more work to be done, and it
+// stops spawning new tasks.
+//
+// It returns when all started tasks have finished.
+func (w *Pool) Saturate(task func()) {
+	if w.maxParallelism == 0 {
+		task()
+		return
+	}
+
+	limit := w.maxParallelism
+	if limit < 0 {
+		limit = runtime.GOMAXPROCS(0)
+	}
+
+	var wg sync.WaitGroup
+	var doneFanningOut atomic.Bool
+
+	w.mu.Lock()
+	started := 0
+
+	for !doneFanningOut.Load() {
+		// Check global limits and local limits (for unlimited pool)
+		if (w.IsUnlimited() && started >= limit) || (!w.IsUnlimited() && w.lockedIsFull()) {
+			w.cond.Wait()
+			// If we woke up because a task finished (signaled), we need to check if we are done.
+			if doneFanningOut.Load() {
+				w.cond.Signal() // Propagate signal to other potential waiters
+				break
+			}
+			continue
+		}
+
+		started++
+		wg.Add(1)
+		w.lockedRunTaskInGoroutine(func() {
+			defer wg.Done()
+			task()
+			doneFanningOut.Store(true)
+		})
+	}
+	w.mu.Unlock()
+	wg.Wait()
 }
 
 // WorkerIsAsleep indicates the worker (the one that called the method) is going to sleep waiting
