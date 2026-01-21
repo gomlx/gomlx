@@ -25,11 +25,17 @@ type mockNonComparableData struct {
 }
 
 func TestMakeNodeDedupKey(t *testing.T) {
-	b := &Builder{}
+	be, err := New("")
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer be.Finalize()
+	b := be.Builder("test").(*Builder)
+	mainFn := b.Main().(*Function)
 	shape := shapes.Make(dtypes.F32, 2, 3)
 
-	node1 := b.newNode(nil, backends.OpTypeAdd, shape)
-	node2 := b.newNode(nil, backends.OpTypeMul, shape)
+	node1 := mainFn.newNode(backends.OpTypeAdd, shape)
+	node2 := mainFn.newNode(backends.OpTypeMul, shape)
 
 	tests := []struct {
 		name       string
@@ -115,8 +121,8 @@ func TestDedup(t *testing.T) {
 
 		// Verify the node count hasn't increased unnecessarily
 		// We expect: 2 parameters + 1 Add node = 3 nodes
-		if len(builder.nodes) != 3 {
-			t.Errorf("Expected 3 nodes (2 params + 1 Add), got %d", len(builder.nodes))
+		if len(mainFn.nodes) != 3 {
+			t.Errorf("Expected 3 nodes (2 params + 1 Add), got %d", len(mainFn.nodes))
 		}
 	})
 
@@ -153,8 +159,8 @@ func TestDedup(t *testing.T) {
 
 		// Verify the node count
 		// We expect: 1 parameter + 1 Neg node = 2 nodes
-		if len(builder.nodes) != 2 {
-			t.Errorf("Expected 2 nodes (1 param + 1 Neg), got %d", len(builder.nodes))
+		if len(mainFn.nodes) != 2 {
+			t.Errorf("Expected 2 nodes (1 param + 1 Neg), got %d", len(mainFn.nodes))
 		}
 	})
 
@@ -195,8 +201,8 @@ func TestDedup(t *testing.T) {
 
 		// Verify the node count
 		// We expect: 1 parameter + 1 Slice node = 2 nodes
-		if len(builder.nodes) != 2 {
-			t.Errorf("Expected 2 nodes (1 param + 1 Slice), got %d", len(builder.nodes))
+		if len(mainFn.nodes) != 2 {
+			t.Errorf("Expected 2 nodes (1 param + 1 Slice), got %d", len(mainFn.nodes))
 		}
 
 		// Verify that different slice parameters create different nodes
