@@ -10,7 +10,7 @@ Currently it uses "fixed shapes", like XLA. So a different shape requires a dyna
 
 ## File Structure
 
-- `backednds`: abstract interface, and their concrete implementations (e.g. `backends/simplego`, `backends/xla`).
+- `backends`: abstract interface, and their concrete implementations (e.g. `backends/simplego`, `backends/xla`).
 - `pkg`: public API of the GoMLX library. It is organized in subpackages, e.g. `pkg/nn` for neural networks, `pkg/optx` for optimizers, etc.
   - `core`: core API definitions, to allow building of graphs and their executions.
   - `ml`: ML support libraries, including training, variables handling (with `context`), optimizers, layers, datasets, checkpointing, etc.
