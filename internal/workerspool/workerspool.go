@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package simplego
+package workerspool
 
 import (
 	"runtime"
@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 )
 
-type workersPool struct {
+type Pool struct {
 	// maxParallelism is a soft target on the limit of parallel work to do.
 	// The actual number of goroutines is higher than that -- because of waits and such.
 	maxParallelism int
@@ -20,26 +20,28 @@ type workersPool struct {
 	extraParallelism atomic.Int32
 }
 
-// Initialize should be called before use.
-func (w *workersPool) Initialize() {
+// New return a new Pool of workers with the default parallelism (runtime.NumCPU()).
+func New() *Pool {
+	w := &Pool{}
 	w.maxParallelism = runtime.NumCPU()
 	w.cond = sync.Cond{L: &w.mu}
+	return w
 }
 
 // IsEnabled returns whether parallelism is enabled (maxParallelism is != 0)
-func (w *workersPool) IsEnabled() bool {
+func (w *Pool) IsEnabled() bool {
 	return w.maxParallelism != 0
 }
 
 // IsUnlimited returns whether parallelism is unlimited (maxParallelism < 0)
-func (w *workersPool) IsUnlimited() bool {
+func (w *Pool) IsUnlimited() bool {
 	return w.maxParallelism < 0
 }
 
 // MaxParallelism is a soft-target for parallelism (the limit of goroutines is higher that this).
 // If set to 0 parallelism is disabled.
 // If set to -1 parallelism is unlimited.
-func (w *workersPool) MaxParallelism() int {
+func (w *Pool) MaxParallelism() int {
 	return w.maxParallelism
 }
 
@@ -47,7 +49,7 @@ func (w *workersPool) MaxParallelism() int {
 //
 // You should only change the parallelism before any workers start running. If changed during the execution
 // the behavior is undefined.
-func (w *workersPool) SetMaxParallelism(maxParallelism int) {
+func (w *Pool) SetMaxParallelism(maxParallelism int) {
 	w.maxParallelism = maxParallelism
 }
 
@@ -56,7 +58,7 @@ const goroutineToParallelismRatio = 2
 // lockedIsFull returns whether all available workers are in use.
 //
 // It must be called with workerPool.mu acquired.
-func (w *workersPool) lockedIsFull() bool {
+func (w *Pool) lockedIsFull() bool {
 	if w.maxParallelism == 0 {
 		return true
 	} else if w.maxParallelism < 0 {
@@ -70,7 +72,7 @@ func (w *workersPool) lockedIsFull() bool {
 // If parallelism is disabled (maxParallelism is 0), it runs the task inline and returns when it is finished.
 // This is risky if one is relying on concurrency, and it can lead to deadlocks.
 // Avoid using this function if the parallelism is disabled.
-func (w *workersPool) WaitToStart(task func()) {
+func (w *Pool) WaitToStart(task func()) {
 	if w.IsUnlimited() {
 		go task()
 		return
@@ -92,7 +94,7 @@ func (w *workersPool) WaitToStart(task func()) {
 // lockedRunTaskInGoroutine and keep tabs on w.numRunning.
 //
 // It must be called with workerPool.mu acquired.
-func (w *workersPool) lockedRunTaskInGoroutine(task func()) {
+func (w *Pool) lockedRunTaskInGoroutine(task func()) {
 	w.numRunning++
 	go func() {
 		task()
@@ -107,7 +109,7 @@ func (w *workersPool) lockedRunTaskInGoroutine(task func()) {
 // It returns true if it found workers to run the function, false otherwise.
 //
 // It's up to the client to synchronize the end of the function execution.
-func (w *workersPool) StartIfAvailable(task func()) bool {
+func (w *Pool) StartIfAvailable(task func()) bool {
 	if w.IsUnlimited() {
 		go task()
 		return true
@@ -124,8 +126,8 @@ func (w *workersPool) StartIfAvailable(task func()) bool {
 // WorkerIsAsleep indicates the worker (the one that called the method) is going to sleep waiting
 // for other workers, and temporarily increases the available number of workers.
 //
-// CallWorkerRestarted when the worker is ready to run again.
-func (w *workersPool) WorkerIsAsleep() {
+// Call WorkerRestarted when the worker is ready to run again.
+func (w *Pool) WorkerIsAsleep() {
 	w.extraParallelism.Add(1)
 }
 
@@ -133,6 +135,6 @@ func (w *workersPool) WorkerIsAsleep() {
 // It should only be called after WorkerIsAsleep.
 //
 // It returns the temporary number of extra available workers.
-func (w *workersPool) WorkerRestarted() {
+func (w *Pool) WorkerRestarted() {
 	w.extraParallelism.Add(-1)
 }
