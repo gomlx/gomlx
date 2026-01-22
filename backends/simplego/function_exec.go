@@ -414,8 +414,47 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			fe.numUses[inputIdx]-int(execBuf.numUsed[inputIdx].Load()) == 1
 	}
 
-	// Execute the node
-	if node.IsMultiOutputs() {
+	// Check for closure executor first (If, While, Sort).
+	// Closure executors receive captured inputs separately with explicit ownership tracking.
+	closureExecutor := nodeClosureExecutors[node.opType]
+	if closureExecutor != nil {
+		// Prepare captured inputs with ownership tracking.
+		// Captured inputs are stored in node.capturedInputs during graph building.
+		numCaptured := len(node.capturedInputs)
+		closureInputs := ClosureInputs{
+			Buffers: make([]*Buffer, numCaptured),
+			Owned:   make([]bool, numCaptured),
+		}
+
+		for i, capturedNode := range node.capturedInputs {
+			capturedIdx := capturedNode.idx
+			closureInputs.Buffers[i] = execBuf.results[capturedIdx]
+			if closureInputs.Buffers[i] == nil {
+				return errors.Errorf("captured input %d for node %s not computed yet", i, node.opType)
+			}
+			// Only "own" the captured input if this is the last use of it.
+			closureInputs.Owned[i] = execBuf.owned[capturedIdx] &&
+				fe.numUses[capturedIdx]-int(execBuf.numUsed[capturedIdx].Load()) == 1
+		}
+
+		outputBuffers, err := closureExecutor(backend, node, inputBuffers, inputsOwned, closureInputs)
+		if err != nil {
+			return errors.WithMessagef(err, "executing closure op %s", node.opType)
+		}
+
+		// Handle outputs (closure ops are always multi-output style)
+		for outputIdx, outputBuf := range outputBuffers {
+			outputNode := node.multiOutputsNodes[outputIdx]
+			outputNodeIdx := outputNode.idx
+			if outputNodeIdx >= fe.numNodesToProcess || fe.numUses[outputNodeIdx] == 0 {
+				backend.putBuffer(outputBuf)
+				continue
+			}
+			execBuf.results[outputNodeIdx] = outputBuf
+			execBuf.owned[outputNodeIdx] = true
+		}
+	} else if node.IsMultiOutputs() {
+		// Execute the node
 		multiExecutor := multiOutputsNodeExecutors[node.opType]
 		if multiExecutor == nil {
 			return errors.Errorf("no multi-output executor for op %s", node.opType)

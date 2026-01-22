@@ -93,6 +93,21 @@ type nodeExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwn
 // nodeMultiOutputExecutor is a version of a node executor when it returns multiple outputs.
 type nodeMultiOutputExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error)
 
+// ClosureInputs holds the captured inputs and their ownership for a single closure.
+// This is used to pass captured values to closure-calling operations (If, While, Sort).
+type ClosureInputs struct {
+	// Buffers are the captured input buffers for the closure.
+	Buffers []*Buffer
+	// Owned indicates which captured inputs can be donated to the closure.
+	// If Owned[i] is true, the closure takes ownership of Buffers[i].
+	Owned []bool
+}
+
+// nodeClosureExecutor is an executor for operations that call closures (If, While, Sort).
+// It receives captured inputs separately from regular inputs with explicit ownership tracking.
+// This allows proper buffer donation for captured values.
+type nodeClosureExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs ClosureInputs) ([]*Buffer, error)
+
 var (
 	// nodeExecutors should be populated during initialization (`init` functions) for the ops implemented.
 	// For the nodes not implemented, leave it as nil, and it will return an error.
@@ -105,6 +120,11 @@ var (
 	// multiOutputsNodeExecutors should be populated during initialization for the multi-output ops
 	// implemented. E.g.: RNGBitGenerator.
 	multiOutputsNodeExecutors [backends.OpTypeLast]nodeMultiOutputExecutor
+
+	// nodeClosureExecutors should be populated during initialization for ops that call closures.
+	// E.g.: If, While, Sort.
+	// These executors receive captured inputs separately with explicit ownership tracking.
+	nodeClosureExecutors [backends.OpTypeLast]nodeClosureExecutor
 )
 
 // registerPriority defines the priority of a node executor. Highest priority takes precedence.

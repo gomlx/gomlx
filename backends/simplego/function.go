@@ -1317,17 +1317,6 @@ func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Func
 		outputShapes[i] = out.shape.Clone()
 	}
 
-	// Collect captured values from both branches as inputs to ensure they're computed before If
-	// Inputs layout: [pred, trueBranch captured values..., falseBranch captured values...]
-	allInputs := make([]*Node, 1+len(trueFn.capturedParentNodes)+len(falseFn.capturedParentNodes))
-	allInputs[0] = predNode
-	for i, captured := range trueFn.capturedParentNodes {
-		allInputs[1+i] = captured
-	}
-	for i, captured := range falseFn.capturedParentNodes {
-		allInputs[1+len(trueFn.capturedParentNodes)+i] = captured
-	}
-
 	data := &ifNode{
 		trueBranch:         trueFn,
 		falseBranch:        falseFn,
@@ -1335,9 +1324,17 @@ func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Func
 		falseCapturedCount: len(falseFn.capturedParentNodes),
 	}
 
-	// Create multi-output node for If
-	node := f.newMultiOutputsNode(backends.OpTypeIf, outputShapes, allInputs...)
+	// Create multi-output node for If with only the predicate as regular input.
+	// Captured values are tracked separately via AddNodeCapturedInputs.
+	node := f.newMultiOutputsNode(backends.OpTypeIf, outputShapes, predNode)
 	node.data = data
+
+	// Add captured values from both branches to node.capturedInputs.
+	// Layout: [trueBranch captured values..., falseBranch captured values...]
+	// This ensures proper dependency tracking and enables buffer donation.
+	node.AddNodeCapturedInputs(trueFn)
+	node.AddNodeCapturedInputs(falseFn)
+
 	return node.MultiOutputValues(), nil
 }
 
@@ -1412,17 +1409,6 @@ func (f *Function) While(cond, body backends.Function, initialState ...backends.
 		outputShapes[i] = node.shape.Clone()
 	}
 
-	// Collect captured values from both closures as inputs to ensure they're computed before While
-	// Inputs layout: [state values..., cond captured values..., body captured values...]
-	allInputs := make([]*Node, len(stateNodes)+len(condFn.capturedParentNodes)+len(bodyFn.capturedParentNodes))
-	copy(allInputs, stateNodes)
-	for i, captured := range condFn.capturedParentNodes {
-		allInputs[len(stateNodes)+i] = captured
-	}
-	for i, captured := range bodyFn.capturedParentNodes {
-		allInputs[len(stateNodes)+len(condFn.capturedParentNodes)+i] = captured
-	}
-
 	data := &whileNode{
 		cond:              condFn,
 		body:              bodyFn,
@@ -1431,9 +1417,17 @@ func (f *Function) While(cond, body backends.Function, initialState ...backends.
 		bodyCapturedCount: len(bodyFn.capturedParentNodes),
 	}
 
-	// Create multi-output node for While
-	node := f.newMultiOutputsNode(backends.OpTypeWhile, outputShapes, allInputs...)
+	// Create multi-output node for While with only state values as regular inputs.
+	// Captured values are tracked separately via AddNodeCapturedInputs.
+	node := f.newMultiOutputsNode(backends.OpTypeWhile, outputShapes, stateNodes...)
 	node.data = data
+
+	// Add captured values from both closures to node.capturedInputs.
+	// Layout: [cond captured values..., body captured values...]
+	// This ensures proper dependency tracking and enables buffer donation.
+	node.AddNodeCapturedInputs(condFn)
+	node.AddNodeCapturedInputs(bodyFn)
+
 	return node.MultiOutputValues(), nil
 }
 
@@ -1528,14 +1522,6 @@ func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, i
 		outputShapes[i] = node.shape.Clone()
 	}
 
-	// Collect captured values from comparator as inputs to ensure they're computed before Sort
-	// Inputs layout: [input tensors..., comparator captured values...]
-	allInputs := make([]*Node, len(inputNodes)+len(compFn.capturedParentNodes))
-	copy(allInputs, inputNodes)
-	for i, captured := range compFn.capturedParentNodes {
-		allInputs[len(inputNodes)+i] = captured
-	}
-
 	data := &sortNode{
 		comparator:        compFn,
 		axis:              axis,
@@ -1544,9 +1530,15 @@ func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, i
 		compCapturedCount: len(compFn.capturedParentNodes),
 	}
 
-	// Create multi-output node for Sort
-	node := f.newMultiOutputsNode(backends.OpTypeSort, outputShapes, allInputs...)
+	// Create multi-output node for Sort with only input tensors as regular inputs.
+	// Captured values are tracked separately via AddNodeCapturedInputs.
+	node := f.newMultiOutputsNode(backends.OpTypeSort, outputShapes, inputNodes...)
 	node.data = data
+
+	// Add captured values from comparator to node.capturedInputs.
+	// This ensures proper dependency tracking and enables buffer donation.
+	node.AddNodeCapturedInputs(compFn)
+
 	return node.MultiOutputValues(), nil
 }
 
