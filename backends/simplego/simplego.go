@@ -67,9 +67,6 @@ func New(config string) (backends.Backend, error) {
 		case "packgemm":
 			// Enable packgemm algorithm choice.
 			b.enablePackgemm = true
-		case "highway":
-			// Enable highway algorithm choice.
-			b.enableHighway = true
 		case "dotgeneral_normalized":
 			// Force DotGeneral to use the normalized path (transpose to [B,Cross,Contract] form).
 			b.dotGeneralForceExecutionPath = normalizedPath
@@ -88,7 +85,7 @@ func New(config string) (backends.Backend, error) {
 			b.dotGeneralForceExecutionPath = packgemmPath
 		case "dotgeneral_highway":
 			// Force DotGeneral to use the highway for large matmuls.
-			b.enableHighway = true
+			// Requires importing the highway submodule.
 			b.dotGeneralForceExecutionPath = highwayPath
 		case "ops_sequential":
 			// This will force the ops to be executed sequentially.
@@ -103,9 +100,6 @@ func New(config string) (backends.Backend, error) {
 		default:
 			return nil, errors.Errorf("unknown configuration option %q for SimpleGo (go) backend -- valid configuration options are: "+
 				"parallelism=#workers, dotgeneral_normalized, dotgeneral_blocked, dotgeneral_smallmatmul, dotgeneral_check, ops_sequential, ops_parallel; see code for documentation", key)
-		}
-		if b.enablePackgemm && b.enableHighway {
-			return nil, errors.Errorf("cannot enable both packgemm and highway, choose one or the other")
 		}
 	}
 	return b, nil
@@ -136,9 +130,6 @@ type Backend struct {
 
 	// enablePackgemm is true if packgemm is enabled.
 	enablePackgemm bool
-
-	// enableHighway is true if highway algorithm is enabled.
-	enableHighway bool
 
 	// isFinalized is true if the backend has been isFinalized.
 	isFinalized bool

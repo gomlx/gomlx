@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/gomlx/backends/simplego/highway"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
@@ -308,7 +307,8 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 				isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
 					rhsShape, params.rhsContractingAxes, params.rhsBatchAxes)
 		case highwayPath:
-			valid = backend.enableHighway && highway.HasDTypeSupport(dtype, outputDType) &&
+			// Highway internally accumulates in f32 for Float16/BFloat16, so check with matching input/output dtypes
+			valid = Highway.HasDTypeSupport(dtype, dtype) &&
 				isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
 					rhsShape, params.rhsContractingAxes, params.rhsBatchAxes)
 		default:
@@ -327,8 +327,9 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 		return packgemmPath
 	}
 
-	// Highway path:
-	if backend.enableHighway && highway.HasDTypeSupport(dtype, outputDType) &&
+	// Highway path (auto-enabled when highway submodule is imported):
+	// Highway internally accumulates in f32 for Float16/BFloat16, so check with matching input/output dtypes
+	if Highway.HasDTypeSupport(dtype, dtype) &&
 		isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
 			rhsShape, params.rhsContractingAxes, params.rhsBatchAxes) {
 		return highwayPath
@@ -438,10 +439,10 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			}
 
 			// Highway MatMul specialized executor.
-			if backend.enableHighway && isMatMulOrder(lhsRaw.shape, params.lhsContractingAxes, params.lhsBatchAxes,
+			if isMatMulOrder(lhsRaw.shape, params.lhsContractingAxes, params.lhsBatchAxes,
 				rhsRaw.shape, params.rhsContractingAxes, params.rhsBatchAxes) &&
-				highway.HasDTypeSupport(inputDType, inputDType) {
-				err = highway.MatMulDynamic(inputDType, outputShape.DType, lhsRaw.flat, rhsRaw.flat,
+				Highway.HasDTypeSupport(inputDType, inputDType) {
+				err = Highway.MatMulDynamic(inputDType, outputShape.DType, lhsRaw.flat, rhsRaw.flat,
 					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 					output2.flat,
 					getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), getGoroutineStarter(backend))
@@ -488,7 +489,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		// Highway MatMul path for large "malmul" order.
 		inputDType := lhs.shape.DType
 		outputDType := output.shape.DType
-		err = highway.MatMulDynamic(inputDType, outputDType, lhs.flat, rhs.flat,
+		err = Highway.MatMulDynamic(inputDType, outputDType, lhs.flat, rhs.flat,
 			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 			output.flat,
 			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), getGoroutineStarter(backend))

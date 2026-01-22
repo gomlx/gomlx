@@ -7,7 +7,6 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gomlx/gomlx/backends/simplego/highway"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
@@ -375,7 +374,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 		if execPath == packgemmPath && (!goBackend.enablePackgemm || !packgemm.HasDTypeSupport(dtypes.Float32, dtypes.Float32)) {
 			continue
 		}
-		if execPath == highwayPath && (!goBackend.enableHighway || !highway.HasDTypeSupport(dtypes.Float32, dtypes.Float32)) {
+		if execPath == highwayPath && !Highway.HasDTypeSupport(dtypes.Float32, dtypes.Float32) {
 			continue
 		}
 
