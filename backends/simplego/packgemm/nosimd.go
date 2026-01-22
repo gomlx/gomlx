@@ -14,8 +14,10 @@ var (
 	// These values are somewhat arbitrary, assuming "standard" modern cache sizes.
 	// They are parameterized so they can be tuned or determined dynamically later.
 	NoSIMD32Params = CacheParams{
-		LHSL1KernelRows:      8,   // Mr: Rows of LHS in local stack.
-		RHSL1KernelCols:      8,   // Nr: Cols of RHS in local stack.
+		// Do not change these 2 values: they are hard-coded by the allocated registers in basicSymmetricMicroKernel8x8.
+		LHSL1KernelRows: 8, // Mr: Rows of LHS in local registers.
+		RHSL1KernelCols: 8, // Nr: Cols of RHS in local registers.
+
 		PanelContractingSize: 256, // Kc: L1 Block contracting "depth".
 		LHSPanelCrossSize:    8,   // Mc: Block Height fitting L2/L3 cache.
 		RHSPanelCrossSize:    256, // Nc: Block Width fitting L2/L3 cache.
@@ -377,8 +379,6 @@ func basicSymmetricLargeGemmSlice[T dtypes.Number](
 	rowStart, rowEnd, colStart, colEnd int,
 	packedLHS, packedRHS []T,
 ) {
-	var accum [64]T
-
 	// Loop 5 (jc): Tiling N (Output Columns)
 	for rhsPanelColIdx := colStart; rhsPanelColIdx < colEnd; rhsPanelColIdx += params.RHSPanelCrossSize {
 		rhsPanelWidth := min(params.RHSPanelCrossSize, colEnd-rhsPanelColIdx)
@@ -413,32 +413,16 @@ func basicSymmetricLargeGemmSlice[T dtypes.Number](
 						outputRow := lhsPanelRowIdx + microRowIdx
 						outputCol := rhsPanelColIdx + microColIdx
 
-						if params.LHSL1KernelRows == 8 && params.RHSL1KernelCols == 8 {
-							basicSymmetricMicroKernel8x8(
-								alpha, effectiveBeta,
-								packedLHS[offsetLhs:],
-								packedRHS[offsetRhs:],
-								output,
-								outputRow, outputCol,
-								rhsCrossSize,
-								contractingPanelWidth,
-								microKernelActiveHeight, microKernelActiveWidth,
-							)
-						} else {
-							basicSymmetricMicroKernel(
-								alpha, effectiveBeta,
-								packedLHS[offsetLhs:],
-								packedRHS[offsetRhs:],
-								&accum,
-								output,
-								outputRow, outputCol,
-								rhsCrossSize,
-								params.LHSL1KernelRows,
-								params.RHSL1KernelCols,
-								contractingPanelWidth,
-								microKernelActiveHeight, microKernelActiveWidth,
-							)
-						}
+						basicSymmetricMicroKernel8x8(
+							alpha, effectiveBeta,
+							packedLHS[offsetLhs:],
+							packedRHS[offsetRhs:],
+							output,
+							outputRow, outputCol,
+							rhsCrossSize,
+							contractingPanelWidth,
+							microKernelActiveHeight, microKernelActiveWidth,
+						)
 					}
 				}
 			}
@@ -684,103 +668,6 @@ func basicSymmetricMicroKernel8x8[T dtypes.Number](
 			writeRow(1, c10, c11, c12, c13)
 			writeRow(2, c20, c21, c22, c23)
 			writeRow(3, c30, c31, c32, c33)
-		}
-	}
-}
-
-// basicSymmetricMicroKernel updates one [lhsKernelRows, rhsKernelCols] tile
-// from the panels in lhsPack and rhsPack, along a contractingLen elements
-// of the contracting dimensions.
-//
-// - lhsPackSlice: the slice of the packed panel for this kernel, shaped [contractingCols, lhsL1KernelRows]
-// - rhsPackSlice: the slice of the package panel for this kernel, shaped [contractingRows, rhsL1KernelCols]
-// - accum: array of accumulators in stack, with enough space to fit [lhsL1KernelRows, rhsL1KernelCols]
-// - output: output buffer, organized as [lhsCrossSize, rhsCrossSize]
-func basicSymmetricMicroKernel[T dtypes.Number](
-	alpha, beta T,
-	lhsPackSlice, rhsPackSlice []T,
-	accum *[64]T,
-	output []T,
-	outputRowStart, outputColStart int,
-	outputRowStride int,
-	lhsL1KernelRows, rhsL1KernelCols int,
-	contractingLen int,
-	lhsActiveRows, rhsActiveCols int,
-) {
-	// 1. Initialize Accumulators
-	for i := range *accum {
-		(*accum)[i] = 0
-	}
-
-	// 2. The K-Loop (Dot Product)
-	// ptrLhs is stored as [k][r] (where r is inner dimension of the packed strip)
-	// ptrRhs is stored as [k][c] (where c is inner dimension of the packed strip)
-	idxLhs := 0
-	idxRhs := 0
-
-	for range contractingLen {
-		// Force early bound-check to eliminate bounds checks in the inner loops.
-		lhsWindow := lhsPackSlice[idxLhs : idxLhs+lhsL1KernelRows]
-		_ = lhsWindow[lhsL1KernelRows-1]
-		rhsWindow := rhsPackSlice[idxRhs : idxRhs+rhsL1KernelCols]
-		_ = rhsWindow[rhsL1KernelCols-1]
-		for lhsRow := 0; lhsRow < lhsL1KernelRows; lhsRow += 4 {
-			lhsV0 := lhsWindow[lhsRow]
-			lhsV1 := lhsWindow[lhsRow+1]
-			lhsV2 := lhsWindow[lhsRow+2]
-			lhsV3 := lhsWindow[lhsRow+3]
-
-			for rhsCol := 0; rhsCol+3 < rhsL1KernelCols; rhsCol += 4 {
-				rhsV0 := rhsWindow[rhsCol]
-				rhsV1 := rhsWindow[rhsCol+1]
-				rhsV2 := rhsWindow[rhsCol+2]
-				rhsV3 := rhsWindow[rhsCol+3]
-
-				// BCE (bound check elimination)
-				(*accum)[lhsRow*rhsL1KernelCols+rhsCol] += lhsV0 * rhsV0
-				(*accum)[(lhsRow+1)*rhsL1KernelCols+rhsCol] += lhsV1 * rhsV0
-				(*accum)[(lhsRow+2)*rhsL1KernelCols+rhsCol] += lhsV2 * rhsV0
-				(*accum)[(lhsRow+3)*rhsL1KernelCols+rhsCol] += lhsV3 * rhsV0
-
-				(*accum)[lhsRow*rhsL1KernelCols+rhsCol+1] += lhsV0 * rhsV1
-				(*accum)[(lhsRow+1)*rhsL1KernelCols+rhsCol+1] += lhsV1 * rhsV1
-				(*accum)[(lhsRow+2)*rhsL1KernelCols+rhsCol+1] += lhsV2 * rhsV1
-				(*accum)[(lhsRow+3)*rhsL1KernelCols+rhsCol+1] += lhsV3 * rhsV1
-
-				(*accum)[lhsRow*rhsL1KernelCols+rhsCol+2] += lhsV0 * rhsV2
-				(*accum)[(lhsRow+1)*rhsL1KernelCols+rhsCol+2] += lhsV1 * rhsV2
-				(*accum)[(lhsRow+2)*rhsL1KernelCols+rhsCol+2] += lhsV2 * rhsV2
-				(*accum)[(lhsRow+3)*rhsL1KernelCols+rhsCol+2] += lhsV3 * rhsV2
-
-				(*accum)[lhsRow*rhsL1KernelCols+rhsCol+3] += lhsV0 * rhsV3
-				(*accum)[(lhsRow+1)*rhsL1KernelCols+rhsCol+3] += lhsV1 * rhsV3
-				(*accum)[(lhsRow+2)*rhsL1KernelCols+rhsCol+3] += lhsV2 * rhsV3
-				(*accum)[(lhsRow+3)*rhsL1KernelCols+rhsCol+3] += lhsV3 * rhsV3
-			}
-		}
-		idxLhs += lhsL1KernelRows
-		idxRhs += rhsL1KernelCols
-	}
-
-	// 3. Write Back to Output
-	if alpha == 1 && beta == 0 {
-		_ = (*accum)[(lhsActiveRows-1)*rhsL1KernelCols+rhsActiveCols-1]
-		for r := range lhsActiveRows {
-			res := (*accum)[r*rhsL1KernelCols : r*rhsL1KernelCols+rhsActiveCols]
-			outIdx := (outputRowStart+r)*outputRowStride + outputColStart
-			copy(output[outIdx:outIdx+rhsActiveCols], res)
-		}
-	} else {
-		for r := range lhsActiveRows {
-			for c := range rhsActiveCols {
-				res := (*accum)[r*rhsL1KernelCols+c]
-				outIdx := (outputRowStart+r)*outputRowStride + (outputColStart + c)
-				if beta == 0 {
-					output[outIdx] = alpha * res
-				} else {
-					output[outIdx] = alpha*res + beta*output[outIdx]
-				}
-			}
 		}
 	}
 }
