@@ -296,7 +296,26 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn,
 	pool *workerspool.Pool) error {
 
-	// 3. Recursive work loop
+	// Split work in reasonable number of "chunks".
+	var maxWorkers int
+	if pool != nil {
+		maxWorkers = pool.MaxParallelism()
+	}
+	if maxWorkers == 0 || maxWorkers == 1 {
+		// Do everything sequentially.
+		basicSymmetricGemmChunk(
+			alpha, beta,
+			lhsFlat, rhsFlat, outputFlat,
+			lhsCrossSize, rhsCrossSize, contractingSize,
+			NoSIMD32Params, 0, rhsCrossSize,
+			bufAllocFn, bufReleaseFn,
+		)
+		return nil
+	}
+
+	// 1. Split work in chunks.
+
+	// 2. Recursive work loop
 	wg := xsync.NewDynamicWaitGroup() // Control workers started.
 	var process func(batchStart, batchCount, rhsColStart, rhsColCount, depth int)
 	process = func(batchStart, batchCount, rhsColStart, rhsColCount, depth int) {
