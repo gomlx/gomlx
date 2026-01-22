@@ -17,7 +17,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/x448/float16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/sets"
@@ -26,6 +25,7 @@ import (
 	"github.com/janpfeifer/must"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
+	"github.com/x448/float16"
 
 	_ "github.com/gomlx/gomlx/backends/xla" // We also want xla backend included for tests.
 )
@@ -49,7 +49,9 @@ var (
 	flagPerfDTypes = flag.String("perf_dtypes", "",
 		"Comma-separated list of dtypes to run performance test (part of TestDotGeneral_PerformanceTable). "+
 			"If empty, it will run for all supported dtypes.")
-	flagMarkdown = flag.Bool("markdown", false, "If true, it will print the performance table in markdown format.")
+	flagPerfDuration = flag.Duration("perf_duration", time.Second, "Duration to run each performance test.")
+	flagPerfMinRuns  = flag.Int("perf_min_runs", 10, "Minimum number of runs for each performance test.")
+	flagMarkdown     = flag.Bool("markdown", false, "If true, it will print the performance table in markdown format.")
 )
 
 // TestDotGeneral_PerformanceTable generates a performance table for differently
@@ -201,7 +203,6 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 	// Adjust for desired precision vs. test duration
 	const numWarmupRuns = 2
 	const minNumTimedRuns = 10
-	const minTestTime = time.Second
 
 	// Colors: tests usually run in batch and that disallows colors. We temporarily force a different profile:
 	originalProfile := lipgloss.ColorProfile()      // Optional: store original
@@ -335,7 +336,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			// Timed runs
 			startTime := time.Now()
 			var numRuns int
-			for numRuns < minNumTimedRuns || time.Since(startTime) < minTestTime {
+			for numRuns < *flagPerfMinRuns || time.Since(startTime) < *flagPerfDuration {
 				output := testExec.MustExec(lhsTensor, rhsTensor)[0]
 				output.MustFinalizeAll()
 				numRuns++

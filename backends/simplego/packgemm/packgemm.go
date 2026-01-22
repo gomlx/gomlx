@@ -5,6 +5,7 @@ package packgemm
 import (
 	"slices"
 
+	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 )
@@ -22,18 +23,14 @@ type BufAllocAnyFn func(size int) (ref any, data any)
 
 type BufReleaseFn func(ref any)
 
-// GoroutineStarter is a function that starts a goroutine, if available from the global pool.
-// It returns false if no goroutine was started.
-type GoroutineStarter func(work func()) bool
-
 // Block/packs parameters for current architecture.
 type CacheParams struct {
 	LHSL1KernelRows int // or Mr: number of lhs kernel rows going to registers.
 	RHSL1KernelCols int // or Nr: Register Block Width
 
 	PanelContractingSize int // Kc: LHS cols or RHS rows to fit in L2/L3
-	LHSL2PanelCrossSize  int // Mc: L2 rows
-	RHSL3PanelCrossSize  int // Nc: L3 cols
+	LHSPanelCrossSize    int // Mc: L2 rows
+	RHSPanelCrossSize    int // Nc: L3 cols
 }
 
 // Priority is used to determine the priority of a gemm version, when setting the
@@ -100,7 +97,7 @@ func RegisterGEMM[TInput, TOutput dtypes.Supported](
 	name string,
 	gemmFn func(alpha, beta TOutput, lhsFlat, rhsFlat []TInput, batchSize,
 		lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []TOutput,
-		bufAllocFn BufAllocFn[TInput], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error,
+		bufAllocFn BufAllocFn[TInput], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error,
 	params *CacheParams,
 	priority Priority) {
 	dtypePair := GetDTypePair[TInput, TOutput]()
@@ -121,7 +118,7 @@ func RegisterGEMM[TInput, TOutput dtypes.Supported](
 // It returns an error if a GEMM function is not registered for the given dtypes.
 func GEMM[TInput, TOutput dtypes.Supported](alpha, beta TOutput, lhsFlat, rhsFlat []TInput, batchSize,
 	lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []TOutput,
-	bufAllocFn BufAllocFn[TInput], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error {
+	bufAllocFn BufAllocFn[TInput], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
 	dtypePair := GetDTypePair[TInput, TOutput]()
 	gemmRegs := DTypeToGEMM[dtypePair]
 	if len(gemmRegs) == 0 {
@@ -130,7 +127,7 @@ func GEMM[TInput, TOutput dtypes.Supported](alpha, beta TOutput, lhsFlat, rhsFla
 	}
 	gemmFn, ok := gemmRegs[0].GEMMFn.(func(alpha, beta TOutput, lhsFlat, rhsFlat []TInput, batchSize,
 		lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []TOutput,
-		bufAllocFn BufAllocFn[TInput], bufReleaseFn BufReleaseFn, starter GoroutineStarter) error)
+		bufAllocFn BufAllocFn[TInput], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error)
 	if !ok {
 		return errors.Errorf("Registered GEMM function invalid for dtypes input=%s, output=%s!? This is a bug, we got"+
 			"instead %T as the registered function",
@@ -138,7 +135,7 @@ func GEMM[TInput, TOutput dtypes.Supported](alpha, beta TOutput, lhsFlat, rhsFla
 	}
 	return gemmFn(alpha, beta, lhsFlat, rhsFlat, batchSize,
 		lhsCrossSize, rhsCrossSize, contractingSize, outputFlat,
-		bufAllocFn, bufReleaseFn, starter)
+		bufAllocFn, bufReleaseFn, pool)
 }
 
 // packRHS packs a slice of size [contractingRows, rhsCols] block from RHS into
@@ -218,44 +215,79 @@ func packLHS[T dtypes.Number](src, dst []T,
 	}
 }
 
-// maxRecursiveSplitting for recursive splitting of work chunks
-const maxRecursiveSplitting = 16 // Max depth for recursive splitting.
+// workItem is used when parallelizing the GEMM into batch/lhs/rhs slices.
+type workItem struct {
+	batchStart, batchEnd,
+	lhsRowStart, lhsRowEnd,
+	rhsColStart, rhsColEnd int
+}
 
-// splitType for recursive splitting of work chunks
-type splitType int
-
-const (
-	noSplit splitType = iota
-	splitBatch
-	splitRHSCol
-)
-
-// splitStrategy for recursive parallelization.
-func splitStrategy(depth, batchCount, rhsColCount, lhsCrossSize, contractingSize int, params *CacheParams) splitType {
-	if depth >= maxRecursiveSplitting {
-		// Only try splitting up to a certain depth.
-		return noSplit
-	}
-
-	if batchCount > 1 {
-		// We always try to split batch elements, if they are large enough.
-		if batchCount*lhsCrossSize*rhsColCount >
-			max(params.PanelContractingSize*params.LHSL2PanelCrossSize,
-				params.PanelContractingSize*params.RHSL3PanelCrossSize) {
-			return splitBatch
+// feedWorkItems split the GEMM tasks is "workItems" optimized (as large as possible, prioritizing whole batch items)
+// for maxWokers (>=1).
+// It closes workChan on exit.
+//
+// feedWorkItems is typically called on a separate goroutine, and it uses almost no CPU.
+func feedWorkItems(
+	batchSize, lhsCrossSize, rhsCrossSize int,
+	params *CacheParams,
+	maxWorkers int,
+	workChan chan<- workItem) {
+	defer func() {
+		// Invariant: it closes the channel on exit.
+		close(workChan)
+	}()
+	if batchSize >= 2*maxWorkers {
+		// Split the work on the batch dimension only.
+		batchStep := batchSize / maxWorkers
+		for batchIdx := 0; batchIdx < batchSize; batchIdx += batchStep {
+			workChan <- workItem{
+				batchIdx, batchIdx + min(batchStep, batchSize-batchIdx),
+				0, lhsCrossSize,
+				0, rhsCrossSize}
 		}
-		return noSplit
+		return
 	}
 
-	if rhsColCount <= params.RHSL1KernelCols {
-		return noSplit
+	// First maxWorkers batch examples are handled as one at a time:
+	batchIdx := 0
+	if batchSize >= maxWorkers {
+		for ; batchIdx < maxWorkers; batchIdx++ {
+			workChan <- workItem{
+				batchIdx, batchIdx + 1,
+				0, lhsCrossSize,
+				0, rhsCrossSize}
+		}
 	}
 
-	if lhsCrossSize*rhsColCount >
-		max(params.PanelContractingSize*params.LHSL2PanelCrossSize,
-			params.PanelContractingSize*params.RHSL3PanelCrossSize) {
-		return splitRHSCol
+	// The remaining work is split into RHS or LHS slices.
+	batchCountRemaining := batchSize - batchIdx
+	if batchCountRemaining == 0 {
+		return // We are finished.
 	}
-
-	return noSplit
+	splitFactor := (maxWorkers + batchCountRemaining - 1) / batchCountRemaining
+	if lhsCrossSize > rhsCrossSize {
+		// Split on the LHS dimension, in multiples of LHSPanelCrossSize.
+		lhsSplitSize := (lhsCrossSize + splitFactor - 1) / splitFactor
+		lhsSplitSize = max(1, lhsSplitSize/params.LHSPanelCrossSize) * params.LHSPanelCrossSize
+		for ; batchIdx < batchSize; batchIdx++ {
+			for lhsRowIdx := 0; lhsRowIdx < lhsCrossSize; lhsRowIdx += lhsSplitSize {
+				workChan <- workItem{
+					batchIdx, batchIdx + 1,
+					lhsRowIdx, lhsRowIdx + min(lhsSplitSize, lhsCrossSize-lhsRowIdx),
+					0, rhsCrossSize}
+			}
+		}
+	} else {
+		// Split on the RHS dimension, in multiples of RHSPanelCrossSize.
+		rhsSplitSize := (rhsCrossSize + splitFactor - 1) / splitFactor
+		rhsSplitSize = max(1, rhsSplitSize/params.RHSPanelCrossSize) * params.RHSPanelCrossSize
+		for ; batchIdx < batchSize; batchIdx++ {
+			for rhsColIdx := 0; rhsColIdx < rhsCrossSize; rhsColIdx += rhsSplitSize {
+				workChan <- workItem{
+					batchIdx, batchIdx + 1,
+					0, lhsCrossSize,
+					rhsColIdx, rhsColIdx + min(rhsSplitSize, rhsCrossSize-rhsColIdx)}
+			}
+		}
+	}
 }
