@@ -427,7 +427,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 				err = packgemm.GEMM(float32(1), float32(0), lhsRaw.flat.([]float32), rhsRaw.flat.([]float32),
 					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 					output2.flat.([]float32),
-					getBufAllocator[float32](backend), getBufReleaser(backend), getGoroutineStarter(backend))
+					getBufAllocator[float32](backend), getBufReleaser(backend), backend.workers)
 				if err == nil {
 					err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
 				}
@@ -445,7 +445,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 				err = Highway.MatMulDynamic(inputDType, outputShape.DType, lhsRaw.flat, rhsRaw.flat,
 					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 					output2.flat,
-					getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), getGoroutineStarter(backend))
+					getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), backend.workers)
 				if err == nil {
 					err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
 				}
@@ -482,7 +482,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		packgemm.GEMMDynamic(inputDType, outputDType, 1, 0, lhs.flat.([]float32), rhs.flat.([]float32),
 			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 			output.flat.([]float32),
-			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), getGoroutineStarter(backend))
+			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), backend.workers)
 		return output, nil
 
 	case highwayPath:
@@ -492,7 +492,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		err = Highway.MatMulDynamic(inputDType, outputDType, lhs.flat, rhs.flat,
 			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 			output.flat,
-			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), getGoroutineStarter(backend))
+			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), backend.workers)
 		return output, nil
 
 	default:
@@ -647,12 +647,5 @@ func getAnyBufAllocator(backend *Backend, dtype dtypes.DType) packgemm.BufAllocA
 func getBufReleaser(backend *Backend) packgemm.BufReleaseFn {
 	return func(ref any) {
 		backend.putBuffer(ref.(*Buffer))
-	}
-}
-
-// getGoroutineStarter returns a function that can be used to start a goroutines in the backend worker pool.
-func getGoroutineStarter(backend *Backend) packgemm.GoroutineStarter {
-	return func(work func()) bool {
-		return backend.workers.StartIfAvailable(work)
 	}
 }

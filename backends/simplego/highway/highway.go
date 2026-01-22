@@ -15,6 +15,7 @@ import (
 	"github.com/ajroetker/go-highway/hwy/contrib/matmul"
 	"github.com/gomlx/gomlx/backends/simplego"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
+	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/pkg/errors"
@@ -36,10 +37,10 @@ func (impl) MatMulDynamic(inputDType, outputDType dtypes.DType,
 	lhsFlat, rhsFlat any, batchSize,
 	lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat any,
 	bufAllocAnyFn packgemm.BufAllocAnyFn, bufReleaseFn packgemm.BufReleaseFn,
-	starter packgemm.GoroutineStarter) error {
+	pool *workerspool.Pool) error {
 	return MatMulDynamic(inputDType, outputDType, lhsFlat, rhsFlat, batchSize,
 		lhsCrossSize, rhsCrossSize, contractingSize, outputFlat,
-		bufAllocAnyFn, bufReleaseFn, starter)
+		bufAllocAnyFn, bufReleaseFn, pool)
 }
 
 // HasDTypeSupport returns true if a MatMulDynamic function is registered for the given dtypes.
@@ -66,7 +67,7 @@ func HasDTypeSupport(input, output dtypes.DType) bool {
 func MatMulDynamic(inputDType, outputDType dtypes.DType,
 	lhsFlat, rhsFlat any, batchSize,
 	lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat any,
-	bufAllocAnyFn packgemm.BufAllocAnyFn, bufReleaseFn packgemm.BufReleaseFn, starter packgemm.GoroutineStarter) error {
+	bufAllocAnyFn packgemm.BufAllocAnyFn, bufReleaseFn packgemm.BufReleaseFn, pool *workerspool.Pool) error {
 
 	switch inputDType {
 	case dtypes.Float32:
@@ -76,7 +77,7 @@ func MatMulDynamic(inputDType, outputDType dtypes.DType,
 		return matMulFloat32(
 			lhsFlat.([]float32), rhsFlat.([]float32), outputFlat.([]float32),
 			batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
-			starter)
+			pool)
 
 	case dtypes.Float64:
 		if outputDType != dtypes.Float64 {
@@ -85,7 +86,7 @@ func MatMulDynamic(inputDType, outputDType dtypes.DType,
 		return matMulFloat64(
 			lhsFlat.([]float64), rhsFlat.([]float64), outputFlat.([]float64),
 			batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
-			starter)
+			pool)
 
 	case dtypes.Float16:
 		if outputDType != dtypes.Float16 {
@@ -94,7 +95,7 @@ func MatMulDynamic(inputDType, outputDType dtypes.DType,
 		return matMulFloat16(
 			lhsFlat.([]float16.Float16), rhsFlat.([]float16.Float16), outputFlat.([]float16.Float16),
 			batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
-			starter)
+			pool)
 
 	case dtypes.BFloat16:
 		if outputDType != dtypes.BFloat16 {
@@ -103,7 +104,7 @@ func MatMulDynamic(inputDType, outputDType dtypes.DType,
 		return matMulBFloat16(
 			lhsFlat.([]bfloat16.BFloat16), rhsFlat.([]bfloat16.BFloat16), outputFlat.([]bfloat16.BFloat16),
 			batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
-			starter)
+			pool)
 
 	default:
 		return errors.Errorf("highway: unsupported input dtype %s", inputDType)
@@ -111,7 +112,7 @@ func MatMulDynamic(inputDType, outputDType dtypes.DType,
 }
 
 // matMulFloat32 performs batched matrix multiplication for float32.
-func matMulFloat32(lhs, rhs, output []float32, batchSize, m, n, k int, starter packgemm.GoroutineStarter) error {
+func matMulFloat32(lhs, rhs, output []float32, batchSize, m, n, k int, pool *workerspool.Pool) error {
 	lhsBatchStride := m * k
 	rhsBatchStride := k * n
 	outBatchStride := m * n
@@ -128,7 +129,7 @@ func matMulFloat32(lhs, rhs, output []float32, batchSize, m, n, k int, starter p
 
 	for remaining > 0 {
 		batchIdx := started
-		if starter != nil && starter(func() {
+		if pool != nil && pool.StartIfAvailable(func() {
 			lhsStart := batchIdx * lhsBatchStride
 			rhsStart := batchIdx * rhsBatchStride
 			outStart := batchIdx * outBatchStride
@@ -163,7 +164,7 @@ func matMulFloat32(lhs, rhs, output []float32, batchSize, m, n, k int, starter p
 }
 
 // matMulFloat64 performs batched matrix multiplication for float64.
-func matMulFloat64(lhs, rhs, output []float64, batchSize, m, n, k int, starter packgemm.GoroutineStarter) error {
+func matMulFloat64(lhs, rhs, output []float64, batchSize, m, n, k int, pool *workerspool.Pool) error {
 	lhsBatchStride := m * k
 	rhsBatchStride := k * n
 	outBatchStride := m * n
@@ -180,7 +181,7 @@ func matMulFloat64(lhs, rhs, output []float64, batchSize, m, n, k int, starter p
 
 	for remaining > 0 {
 		batchIdx := started
-		if starter != nil && starter(func() {
+		if pool != nil && pool.StartIfAvailable(func() {
 			lhsStart := batchIdx * lhsBatchStride
 			rhsStart := batchIdx * rhsBatchStride
 			outStart := batchIdx * outBatchStride
@@ -217,7 +218,7 @@ func matMulFloat64(lhs, rhs, output []float64, batchSize, m, n, k int, starter p
 // matMulFloat16 performs batched matrix multiplication for float16.
 // It converts between x448/float16.Float16 and hwy.Float16 using unsafe pointer casting
 // since both are uint16 under the hood.
-func matMulFloat16(lhs, rhs, output []float16.Float16, batchSize, m, n, k int, starter packgemm.GoroutineStarter) error {
+func matMulFloat16(lhs, rhs, output []float16.Float16, batchSize, m, n, k int, pool *workerspool.Pool) error {
 	// Convert slices using unsafe - both types are uint16 underneath
 	lhsHwy := unsafe.Slice((*hwy.Float16)(unsafe.Pointer(unsafe.SliceData(lhs))), len(lhs))
 	rhsHwy := unsafe.Slice((*hwy.Float16)(unsafe.Pointer(unsafe.SliceData(rhs))), len(rhs))
@@ -239,7 +240,7 @@ func matMulFloat16(lhs, rhs, output []float16.Float16, batchSize, m, n, k int, s
 
 	for remaining > 0 {
 		batchIdx := started
-		if starter != nil && starter(func() {
+		if pool != nil && pool.StartIfAvailable(func() {
 			lhsStart := batchIdx * lhsBatchStride
 			rhsStart := batchIdx * rhsBatchStride
 			outStart := batchIdx * outBatchStride
@@ -276,7 +277,7 @@ func matMulFloat16(lhs, rhs, output []float16.Float16, batchSize, m, n, k int, s
 // matMulBFloat16 performs batched matrix multiplication for bfloat16.
 // It converts between bfloat16.BFloat16 and hwy.BFloat16 using unsafe pointer casting
 // since both are uint16 under the hood.
-func matMulBFloat16(lhs, rhs, output []bfloat16.BFloat16, batchSize, m, n, k int, starter packgemm.GoroutineStarter) error {
+func matMulBFloat16(lhs, rhs, output []bfloat16.BFloat16, batchSize, m, n, k int, pool *workerspool.Pool) error {
 	// Convert slices using unsafe - both types are uint16 underneath
 	lhsHwy := unsafe.Slice((*hwy.BFloat16)(unsafe.Pointer(unsafe.SliceData(lhs))), len(lhs))
 	rhsHwy := unsafe.Slice((*hwy.BFloat16)(unsafe.Pointer(unsafe.SliceData(rhs))), len(rhs))
@@ -298,7 +299,7 @@ func matMulBFloat16(lhs, rhs, output []bfloat16.BFloat16, batchSize, m, n, k int
 
 	for remaining > 0 {
 		batchIdx := started
-		if starter != nil && starter(func() {
+		if pool != nil && pool.StartIfAvailable(func() {
 			lhsStart := batchIdx * lhsBatchStride
 			rhsStart := batchIdx * rhsBatchStride
 			outStart := batchIdx * outBatchStride

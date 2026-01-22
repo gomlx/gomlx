@@ -4,6 +4,7 @@ package simplego
 
 import (
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
+	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 )
@@ -26,7 +27,7 @@ type HighwayMatMul interface {
 		lhsFlat, rhsFlat any, batchSize,
 		lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat any,
 		bufAllocAnyFn packgemm.BufAllocAnyFn, bufReleaseFn packgemm.BufReleaseFn,
-		starter packgemm.GoroutineStarter) error
+		pool *workerspool.Pool) error
 }
 
 // Highway is the registered highway implementation.
@@ -51,6 +52,6 @@ func (stubHighway) MatMulDynamic(inputDType, outputDType dtypes.DType,
 	lhsFlat, rhsFlat any, batchSize,
 	lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat any,
 	bufAllocAnyFn packgemm.BufAllocAnyFn, bufReleaseFn packgemm.BufReleaseFn,
-	starter packgemm.GoroutineStarter) error {
+	pool *workerspool.Pool) error {
 	return errors.New("highway matmul not available: requires Go 1.26+ and importing the highway submodule")
 }

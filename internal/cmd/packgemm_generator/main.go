@@ -102,6 +102,7 @@ func main() {
 package packgemm
 
 import (
+	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
@@ -116,7 +117,7 @@ import (
 func GEMMDynamic(inputDType, outputDType dtypes.DType,
 	alpha, beta float64, lhsFlat, rhsFlat any, batchSize,
 	lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat any,
-	bufAllocAnyFn BufAllocAnyFn, bufReleaseFn BufReleaseFn, starter GoroutineStarter) error {
+	bufAllocAnyFn BufAllocAnyFn, bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
 
 	pair := DTypePair{Input: inputDType, Output: outputDType}
 	switch pair {
@@ -129,7 +130,7 @@ func GEMMDynamic(inputDType, outputDType dtypes.DType,
 		return GEMM({{cast .CastFormat "alpha"}}, {{cast .CastFormat "beta"}}, 
 			lhsFlat.([]{{.InputGoType}}), rhsFlat.([]{{.InputGoType}}), batchSize,
 			lhsCrossSize, rhsCrossSize, contractingSize, outputFlat.([]{{.OutputGoType}}),
-			bufAllocFn, bufReleaseFn, starter)
+			bufAllocFn, bufReleaseFn, pool)
 {{- end}}
 	default:
 		return errors.Errorf("Input/Output dtypes %s%s not configured in GEMM functions dispatcher",
