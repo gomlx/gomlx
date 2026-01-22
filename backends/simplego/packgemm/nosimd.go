@@ -14,11 +14,11 @@ var (
 	// These values are somewhat arbitrary, assuming "standard" modern cache sizes.
 	// They are parameterized so they can be tuned or determined dynamically later.
 	NoSIMD32Params = CacheParams{
-		LHSL1KernelRows:      8,    // Mr: Rows of LHS in registers.
-		RHSL1KernelCols:      8,    // Nr: Cols of RHS in registers.
-		PanelContractingSize: 2048, // Kc: L1 Block contracting "depth".
-		LHSPanelCrossSize:    32,   // Mc: Block Height fitting L2/L3 cache.
-		RHSPanelCrossSize:    64,   // Nc: Block Width fitting L2/L3 cache.
+		LHSL1KernelRows:      8,   // Mr: Rows of LHS in local stack.
+		RHSL1KernelCols:      8,   // Nr: Cols of RHS in local stack.
+		PanelContractingSize: 256, // Kc: L1 Block contracting "depth".
+		LHSPanelCrossSize:    8,   // Mc: Block Height fitting L2/L3 cache.
+		RHSPanelCrossSize:    256, // Nc: Block Width fitting L2/L3 cache.
 	}
 
 	// Threshold in byte size for switching to the small matrix multiplication kernel.
@@ -298,14 +298,21 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn,
 	pool *workerspool.Pool) error {
 
+	params := &NoSIMD32Params
+
 	// Split work in reasonable number of "chunks".
 	maxWorkers := 1
 	if pool != nil {
 		maxWorkers = pool.AdjustedMaxParallelism()
 	}
-	klog.V(1).Infof("maxWorkers: %d, pool.MaxParallelism=%d", maxWorkers, pool.MaxParallelism())
 	if maxWorkers <= 1 {
 		// Do everything sequentially.
+		packedLhsRef, packedLHS := bufAllocFn(params.LHSPanelCrossSize * params.PanelContractingSize)
+		packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSPanelCrossSize)
+		defer func() {
+			bufReleaseFn(packedLhsRef)
+			bufReleaseFn(packedRhsRef)
+		}()
 		for batchIdx := range batchSize {
 			batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
 			batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
@@ -316,28 +323,30 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 				lhsCrossSize, rhsCrossSize, contractingSize,
 				NoSIMD32Params,
 				0, lhsCrossSize, 0, rhsCrossSize,
-				bufAllocFn, bufReleaseFn,
+				packedLHS, packedRHS,
 			)
 		}
 		return nil
 	}
 
 	// 1. Split work in workItems.
-	params := &NoSIMD32Params
-	workChan := make(chan workItem, max(10, 2*maxWorkers))
+	workChan := make(chan workItem, max(2000, 2*maxWorkers))
 	go feedWorkItems(
 		batchSize, lhsCrossSize, rhsCrossSize,
 		params, maxWorkers, workChan)
 
 	// 2. Saturate (fan-out workers) on workItems.
 	// var workerIdx atomic.Int32
+	// 2. Saturate (fan-out workers) on workItems.
 	pool.Saturate(func() {
-		// thisWorkerIdx := workerIdx.Add(1) - 1
+		packedLhsRef, packedLHS := bufAllocFn(params.LHSPanelCrossSize * params.PanelContractingSize)
+		packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSPanelCrossSize)
+		defer func() {
+			bufReleaseFn(packedLhsRef)
+			bufReleaseFn(packedRhsRef)
+		}()
+
 		for item := range workChan {
-			// fmt.Printf("\t- Worker #%d: got %+v\n", thisWorkerIdx, item)
-			// if item.rhsColStart >= rhsCrossSize || item.rhsColEnd > rhsCrossSize || item.lhsRowStart >= lhsCrossSize || item.lhsRowEnd > lhsCrossSize {
-			// 	klog.Fatalf("Invalid item: %+v, rhsCrossSize=%d, lhsCrossSize=%d", item, rhsCrossSize, lhsCrossSize)
-			// }
 			for batchIdx := item.batchStart; batchIdx < item.batchEnd; batchIdx++ {
 				batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
 				batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
@@ -348,7 +357,7 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 					lhsCrossSize, rhsCrossSize, contractingSize,
 					NoSIMD32Params,
 					item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd,
-					bufAllocFn, bufReleaseFn,
+					packedLHS, packedRHS,
 				)
 			}
 		}
@@ -358,22 +367,17 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 
 // basicSymmetricLargeGemmSlice performs a slice of the matrix multiplication on one example: lhs, rhs an output
 // must already have sliced one example of the batch dimension.
+//
+// packedLHS and packedRHS must be pre-allocated buffers of appropriate size.
 func basicSymmetricLargeGemmSlice[T dtypes.Number](
 	alpha, beta T,
 	lhs, rhs, output []T,
 	lhsCrossSize, rhsCrossSize, contractingSize int,
 	params CacheParams,
 	rowStart, rowEnd, colStart, colEnd int,
-	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn,
+	packedLHS, packedRHS []T,
 ) {
-	packedLhsRef, packedLHS := bufAllocFn(params.LHSPanelCrossSize * params.PanelContractingSize)
-	packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSPanelCrossSize)
 	var accum [64]T
-
-	defer func() {
-		bufReleaseFn(packedLhsRef)
-		bufReleaseFn(packedRhsRef)
-	}()
 
 	// Loop 5 (jc): Tiling N (Output Columns)
 	for rhsPanelColIdx := colStart; rhsPanelColIdx < colEnd; rhsPanelColIdx += params.RHSPanelCrossSize {
@@ -386,15 +390,6 @@ func basicSymmetricLargeGemmSlice[T dtypes.Number](
 				effectiveBeta = 1
 			}
 			contractingPanelWidth := min(params.PanelContractingSize, contractingSize-contractingPanelIdx)
-
-			// PACK RHS
-			// rhsLastIdx := (contractingPanelIdx+contractingPanelWidth-1)*rhsCrossSize + rhsPanelColIdx + rhsPanelWidth - 1
-			// if rhsLastIdx >= len(rhs) {
-			// 	klog.Fatalf("\t* Invalid rhsLastIdx: Packing should go up to rhs[%d] (len(rhs)=%d, rhsPanelColIdx=%d, rhsCrossSize=%d, rhsPanelWidth=%d, rhsSliceSize=%d, "+
-			// 		"contractingIdx=%d, contractingPanelWidth=%d)\n",
-			// 		rhsLastIdx, len(rhs), rhsPanelColIdx, rhsCrossSize, rhsPanelWidth, rhsCrossSize*contractingSize,
-			// 		contractingPanelIdx, contractingPanelWidth)
-			// }
 			packRHS(rhs, packedRHS, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
 
 			// Loop 3 (ic): Tiling M (Output Rows)
@@ -418,22 +413,277 @@ func basicSymmetricLargeGemmSlice[T dtypes.Number](
 						outputRow := lhsPanelRowIdx + microRowIdx
 						outputCol := rhsPanelColIdx + microColIdx
 
-						basicSymmetricMicroKernel(
-							alpha, effectiveBeta,
-							packedLHS[offsetLhs:],
-							packedRHS[offsetRhs:],
-							&accum,
-							output,
-							outputRow, outputCol,
-							rhsCrossSize,
-							params.LHSL1KernelRows,
-							params.RHSL1KernelCols,
-							contractingPanelWidth,
-							microKernelActiveHeight, microKernelActiveWidth,
-						)
+						if params.LHSL1KernelRows == 8 && params.RHSL1KernelCols == 8 {
+							basicSymmetricMicroKernel8x8(
+								alpha, effectiveBeta,
+								packedLHS[offsetLhs:],
+								packedRHS[offsetRhs:],
+								output,
+								outputRow, outputCol,
+								rhsCrossSize,
+								contractingPanelWidth,
+								microKernelActiveHeight, microKernelActiveWidth,
+							)
+						} else {
+							basicSymmetricMicroKernel(
+								alpha, effectiveBeta,
+								packedLHS[offsetLhs:],
+								packedRHS[offsetRhs:],
+								&accum,
+								output,
+								outputRow, outputCol,
+								rhsCrossSize,
+								params.LHSL1KernelRows,
+								params.RHSL1KernelCols,
+								contractingPanelWidth,
+								microKernelActiveHeight, microKernelActiveWidth,
+							)
+						}
 					}
 				}
 			}
+		}
+	}
+}
+
+// basicSymmetricMicroKernel8x8 is a specialized versions of basicSymmetricMicroKernel for 8x8 kernel.
+//
+// It uses register blocking: it divides the 8x8 matrix in 4 4x4 sub-matrices.
+// For each sub-matrix it iterates over k (contracting dim), accumulating the results
+// in local variables (registers).
+// finally it writes the results to output.
+//
+// It assumes lhsL1KernelRows=8 and rhsL1KernelCols=8.
+//
+// See basicSymmetricMicroKernel for documentation on arguments.
+func basicSymmetricMicroKernel8x8[T dtypes.Number](
+	alpha, beta T,
+	lhsPackSlice, rhsPackSlice []T,
+	output []T,
+	outputRowStart, outputColStart int,
+	outputRowStride int,
+	contractingLen int,
+	lhsActiveRows, rhsActiveCols int,
+) {
+	// Loop over 4 quadrants (2x2 of 4x4 blocks)
+	for qRow := 0; qRow < 2; qRow++ {
+		rowStart := qRow * 4
+		if rowStart >= lhsActiveRows {
+			continue
+		}
+		for qCol := 0; qCol < 2; qCol++ {
+			colStart := qCol * 4
+			if colStart >= rhsActiveCols {
+				continue
+			}
+
+			// Accumulators for 4x4 block
+			var c00, c01, c02, c03 T
+			var c10, c11, c12, c13 T
+			var c20, c21, c22, c23 T
+			var c30, c31, c32, c33 T
+
+			idxLhs := 0
+			idxRhs := 0
+
+			// K-Loop unrolled by 4
+			k := 0
+			for ; k+3 < contractingLen; k += 4 {
+				// We need 4 steps.
+				// For each step (l is k offset):
+				//   load lhs (4 vals), load rhs (4 vals), fma.
+
+				// --- Step 0 ---
+				// BCE hint
+				_ = lhsPackSlice[idxLhs+rowStart+3]
+				_ = rhsPackSlice[idxRhs+colStart+3]
+				l0 := lhsPackSlice[idxLhs+rowStart]
+				l1 := lhsPackSlice[idxLhs+rowStart+1]
+				l2 := lhsPackSlice[idxLhs+rowStart+2]
+				l3 := lhsPackSlice[idxLhs+rowStart+3]
+				r0 := rhsPackSlice[idxRhs+colStart]
+				r1 := rhsPackSlice[idxRhs+colStart+1]
+				r2 := rhsPackSlice[idxRhs+colStart+2]
+				r3 := rhsPackSlice[idxRhs+colStart+3]
+				c00 += l0 * r0
+				c01 += l0 * r1
+				c02 += l0 * r2
+				c03 += l0 * r3
+				c10 += l1 * r0
+				c11 += l1 * r1
+				c12 += l1 * r2
+				c13 += l1 * r3
+				c20 += l2 * r0
+				c21 += l2 * r1
+				c22 += l2 * r2
+				c23 += l2 * r3
+				c30 += l3 * r0
+				c31 += l3 * r1
+				c32 += l3 * r2
+				c33 += l3 * r3
+				idxLhs += 8
+				idxRhs += 8
+
+				// --- Step 1 ---
+				_ = lhsPackSlice[idxLhs+rowStart+3]
+				_ = rhsPackSlice[idxRhs+colStart+3]
+				l0 = lhsPackSlice[idxLhs+rowStart]
+				l1 = lhsPackSlice[idxLhs+rowStart+1]
+				l2 = lhsPackSlice[idxLhs+rowStart+2]
+				l3 = lhsPackSlice[idxLhs+rowStart+3]
+				r0 = rhsPackSlice[idxRhs+colStart]
+				r1 = rhsPackSlice[idxRhs+colStart+1]
+				r2 = rhsPackSlice[idxRhs+colStart+2]
+				r3 = rhsPackSlice[idxRhs+colStart+3]
+				c00 += l0 * r0
+				c01 += l0 * r1
+				c02 += l0 * r2
+				c03 += l0 * r3
+				c10 += l1 * r0
+				c11 += l1 * r1
+				c12 += l1 * r2
+				c13 += l1 * r3
+				c20 += l2 * r0
+				c21 += l2 * r1
+				c22 += l2 * r2
+				c23 += l2 * r3
+				c30 += l3 * r0
+				c31 += l3 * r1
+				c32 += l3 * r2
+				c33 += l3 * r3
+				idxLhs += 8
+				idxRhs += 8
+
+				// --- Step 2 ---
+				_ = lhsPackSlice[idxLhs+rowStart+3]
+				_ = rhsPackSlice[idxRhs+colStart+3]
+				l0 = lhsPackSlice[idxLhs+rowStart]
+				l1 = lhsPackSlice[idxLhs+rowStart+1]
+				l2 = lhsPackSlice[idxLhs+rowStart+2]
+				l3 = lhsPackSlice[idxLhs+rowStart+3]
+				r0 = rhsPackSlice[idxRhs+colStart]
+				r1 = rhsPackSlice[idxRhs+colStart+1]
+				r2 = rhsPackSlice[idxRhs+colStart+2]
+				r3 = rhsPackSlice[idxRhs+colStart+3]
+				c00 += l0 * r0
+				c01 += l0 * r1
+				c02 += l0 * r2
+				c03 += l0 * r3
+				c10 += l1 * r0
+				c11 += l1 * r1
+				c12 += l1 * r2
+				c13 += l1 * r3
+				c20 += l2 * r0
+				c21 += l2 * r1
+				c22 += l2 * r2
+				c23 += l2 * r3
+				c30 += l3 * r0
+				c31 += l3 * r1
+				c32 += l3 * r2
+				c33 += l3 * r3
+				idxLhs += 8
+				idxRhs += 8
+
+				// --- Step 3 ---
+				_ = lhsPackSlice[idxLhs+rowStart+3]
+				_ = rhsPackSlice[idxRhs+colStart+3]
+				l0 = lhsPackSlice[idxLhs+rowStart]
+				l1 = lhsPackSlice[idxLhs+rowStart+1]
+				l2 = lhsPackSlice[idxLhs+rowStart+2]
+				l3 = lhsPackSlice[idxLhs+rowStart+3]
+				r0 = rhsPackSlice[idxRhs+colStart]
+				r1 = rhsPackSlice[idxRhs+colStart+1]
+				r2 = rhsPackSlice[idxRhs+colStart+2]
+				r3 = rhsPackSlice[idxRhs+colStart+3]
+				c00 += l0 * r0
+				c01 += l0 * r1
+				c02 += l0 * r2
+				c03 += l0 * r3
+				c10 += l1 * r0
+				c11 += l1 * r1
+				c12 += l1 * r2
+				c13 += l1 * r3
+				c20 += l2 * r0
+				c21 += l2 * r1
+				c22 += l2 * r2
+				c23 += l2 * r3
+				c30 += l3 * r0
+				c31 += l3 * r1
+				c32 += l3 * r2
+				c33 += l3 * r3
+				idxLhs += 8
+				idxRhs += 8
+			}
+
+			// K-Loop Tail
+			for ; k < contractingLen; k++ {
+				_ = lhsPackSlice[idxLhs+rowStart+3]
+				_ = rhsPackSlice[idxRhs+colStart+3]
+				l0 := lhsPackSlice[idxLhs+rowStart]
+				l1 := lhsPackSlice[idxLhs+rowStart+1]
+				l2 := lhsPackSlice[idxLhs+rowStart+2]
+				l3 := lhsPackSlice[idxLhs+rowStart+3]
+
+				r0 := rhsPackSlice[idxRhs+colStart]
+				r1 := rhsPackSlice[idxRhs+colStart+1]
+				r2 := rhsPackSlice[idxRhs+colStart+2]
+				r3 := rhsPackSlice[idxRhs+colStart+3]
+
+				c00 += l0 * r0
+				c01 += l0 * r1
+				c02 += l0 * r2
+				c03 += l0 * r3
+				c10 += l1 * r0
+				c11 += l1 * r1
+				c12 += l1 * r2
+				c13 += l1 * r3
+				c20 += l2 * r0
+				c21 += l2 * r1
+				c22 += l2 * r2
+				c23 += l2 * r3
+				c30 += l3 * r0
+				c31 += l3 * r1
+				c32 += l3 * r2
+				c33 += l3 * r3
+
+				idxLhs += 8 // stride is 8 (LHS kernel rows)
+				idxRhs += 8 // stride is 8 (RHS kernel cols)
+			}
+
+			// Write active part of 4x4 block to output
+			// Helper to write a row
+			writeRow := func(rLocal int, v0, v1, v2, v3 T) {
+				r := rowStart + rLocal
+				if r >= lhsActiveRows {
+					return
+				}
+				rowOffset := (outputRowStart+r)*outputRowStride + outputColStart + colStart
+
+				// Optimization: check if we can write full 4 coeffs
+				if colStart+4 <= rhsActiveCols {
+					basicWriteCol4(output, rowOffset, alpha, beta, v0, v1, v2, v3)
+					return
+				}
+
+				// Partial columns
+				if colStart < rhsActiveCols {
+					basicWriteScalar(output, rowOffset, alpha, beta, v0)
+				}
+				if colStart+1 < rhsActiveCols {
+					basicWriteScalar(output, rowOffset+1, alpha, beta, v1)
+				}
+				if colStart+2 < rhsActiveCols {
+					basicWriteScalar(output, rowOffset+2, alpha, beta, v2)
+				}
+				if colStart+3 < rhsActiveCols {
+					basicWriteScalar(output, rowOffset+3, alpha, beta, v3)
+				}
+			}
+
+			writeRow(0, c00, c01, c02, c03)
+			writeRow(1, c10, c11, c12, c13)
+			writeRow(2, c20, c21, c22, c23)
+			writeRow(3, c30, c31, c32, c33)
 		}
 	}
 }
@@ -480,9 +730,11 @@ func basicSymmetricMicroKernel[T dtypes.Number](
 			lhsV2 := lhsWindow[lhsRow+2]
 			lhsV3 := lhsWindow[lhsRow+3]
 
-			for rhsCol := 0; rhsCol+1 < rhsL1KernelCols; rhsCol += 2 {
+			for rhsCol := 0; rhsCol+3 < rhsL1KernelCols; rhsCol += 4 {
 				rhsV0 := rhsWindow[rhsCol]
 				rhsV1 := rhsWindow[rhsCol+1]
+				rhsV2 := rhsWindow[rhsCol+2]
+				rhsV3 := rhsWindow[rhsCol+3]
 
 				// BCE (bound check elimination)
 				(*accum)[lhsRow*rhsL1KernelCols+rhsCol] += lhsV0 * rhsV0
@@ -494,6 +746,16 @@ func basicSymmetricMicroKernel[T dtypes.Number](
 				(*accum)[(lhsRow+1)*rhsL1KernelCols+rhsCol+1] += lhsV1 * rhsV1
 				(*accum)[(lhsRow+2)*rhsL1KernelCols+rhsCol+1] += lhsV2 * rhsV1
 				(*accum)[(lhsRow+3)*rhsL1KernelCols+rhsCol+1] += lhsV3 * rhsV1
+
+				(*accum)[lhsRow*rhsL1KernelCols+rhsCol+2] += lhsV0 * rhsV2
+				(*accum)[(lhsRow+1)*rhsL1KernelCols+rhsCol+2] += lhsV1 * rhsV2
+				(*accum)[(lhsRow+2)*rhsL1KernelCols+rhsCol+2] += lhsV2 * rhsV2
+				(*accum)[(lhsRow+3)*rhsL1KernelCols+rhsCol+2] += lhsV3 * rhsV2
+
+				(*accum)[lhsRow*rhsL1KernelCols+rhsCol+3] += lhsV0 * rhsV3
+				(*accum)[(lhsRow+1)*rhsL1KernelCols+rhsCol+3] += lhsV1 * rhsV3
+				(*accum)[(lhsRow+2)*rhsL1KernelCols+rhsCol+3] += lhsV2 * rhsV3
+				(*accum)[(lhsRow+3)*rhsL1KernelCols+rhsCol+3] += lhsV3 * rhsV3
 			}
 		}
 		idxLhs += lhsL1KernelRows
