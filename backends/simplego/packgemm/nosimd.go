@@ -5,6 +5,7 @@ package packgemm
 import (
 	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -57,6 +58,7 @@ func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 
 	// 2. Check if small matrix multiplication kernel can be used.
 	if (forceVariant == VariantNone && gemmSize < nosimdSmallMatMulSizeThreshold) || forceVariant == VariantSmall {
+		klog.V(1).Infof("Using small variant for GEMM kernel")
 		return basicSymmetricGenericSmallGEMMParallel(
 			alpha, beta,
 			lhsFlat, rhsFlat, outputFlat,
@@ -65,6 +67,7 @@ func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 			pool)
 	}
 
+	klog.V(1).Infof("Using large variant for GEMM kernel")
 	return basicSymmetricGenericLargeGEMMParallel(
 		alpha, beta,
 		lhsFlat, rhsFlat, outputFlat,
@@ -300,6 +303,7 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 	if pool != nil {
 		maxWorkers = pool.AdjustedMaxParallelism()
 	}
+	klog.V(1).Infof("maxWorkers: %d, pool.MaxParallelism=%d", maxWorkers, pool.MaxParallelism())
 	if maxWorkers <= 1 {
 		// Do everything sequentially.
 		for batchIdx := range batchSize {
@@ -322,12 +326,18 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 	params := &NoSIMD32Params
 	workChan := make(chan workItem, max(10, 2*maxWorkers))
 	go feedWorkItems(
-		batchSize, rhsCrossSize, lhsCrossSize,
+		batchSize, lhsCrossSize, rhsCrossSize,
 		params, maxWorkers, workChan)
 
 	// 2. Saturate (fan-out workers) on workItems.
+	// var workerIdx atomic.Int32
 	pool.Saturate(func() {
+		// thisWorkerIdx := workerIdx.Add(1) - 1
 		for item := range workChan {
+			// fmt.Printf("\t- Worker #%d: got %+v\n", thisWorkerIdx, item)
+			// if item.rhsColStart >= rhsCrossSize || item.rhsColEnd > rhsCrossSize || item.lhsRowStart >= lhsCrossSize || item.lhsRowEnd > lhsCrossSize {
+			// 	klog.Fatalf("Invalid item: %+v, rhsCrossSize=%d, lhsCrossSize=%d", item, rhsCrossSize, lhsCrossSize)
+			// }
 			for batchIdx := item.batchStart; batchIdx < item.batchEnd; batchIdx++ {
 				batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
 				batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
@@ -378,11 +388,18 @@ func basicSymmetricLargeGemmSlice[T dtypes.Number](
 			contractingPanelWidth := min(params.PanelContractingSize, contractingSize-contractingPanelIdx)
 
 			// PACK RHS
+			// rhsLastIdx := (contractingPanelIdx+contractingPanelWidth-1)*rhsCrossSize + rhsPanelColIdx + rhsPanelWidth - 1
+			// if rhsLastIdx >= len(rhs) {
+			// 	klog.Fatalf("\t* Invalid rhsLastIdx: Packing should go up to rhs[%d] (len(rhs)=%d, rhsPanelColIdx=%d, rhsCrossSize=%d, rhsPanelWidth=%d, rhsSliceSize=%d, "+
+			// 		"contractingIdx=%d, contractingPanelWidth=%d)\n",
+			// 		rhsLastIdx, len(rhs), rhsPanelColIdx, rhsCrossSize, rhsPanelWidth, rhsCrossSize*contractingSize,
+			// 		contractingPanelIdx, contractingPanelWidth)
+			// }
 			packRHS(rhs, packedRHS, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
 
 			// Loop 3 (ic): Tiling M (Output Rows)
-			for lhsPanelRowIdx := 0; lhsPanelRowIdx < lhsCrossSize; lhsPanelRowIdx += params.LHSPanelCrossSize {
-				lhsPanelHeight := min(params.LHSPanelCrossSize, lhsCrossSize-lhsPanelRowIdx)
+			for lhsPanelRowIdx := rowStart; lhsPanelRowIdx < rowEnd; lhsPanelRowIdx += params.LHSPanelCrossSize {
+				lhsPanelHeight := min(params.LHSPanelCrossSize, rowEnd-lhsPanelRowIdx)
 
 				// PACK LHS
 				packLHS(lhs, packedLHS, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)

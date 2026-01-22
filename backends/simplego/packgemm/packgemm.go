@@ -165,6 +165,7 @@ func packRHS[T dtypes.Number](src, dst []T, srcRowStart, srcColStart, srcStrideC
 			srcColBase := srcColStart + stripColIdx
 			srcIdx := (srcRow * srcStrideCol) + srcColBase
 			// Copy valid columns
+			_ = dst[dstIdx+validCols-1]
 			copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
 			dstIdx += validCols
 			// Zero-pad if strip is incomplete (edge of matrix)

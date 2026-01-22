@@ -49,11 +49,13 @@ func (w *Pool) MaxParallelism() int {
 //
 // If the target is set to -1 (unlimited parallelism) it returns runtime.GOMAXPROCS.
 // If the target is 0 (no parallelism) it returns 1.
+//
+// Also, it limits the number of workers to runtime.GOMAXPROCS.
 func (w *Pool) AdjustedMaxParallelism() int {
 	if w.maxParallelism < 0 {
 		return runtime.GOMAXPROCS(0)
 	}
-	return min(w.maxParallelism, 1)
+	return min(max(w.maxParallelism, 1), runtime.GOMAXPROCS(0))
 }
 
 // SetMaxParallelism sets the maxParallelism.
