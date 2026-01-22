@@ -5,7 +5,6 @@ package packgemm
 import (
 	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/support/xsync"
 )
 
 var (
@@ -16,9 +15,9 @@ var (
 	NoSIMD32Params = CacheParams{
 		LHSL1KernelRows:      8,    // Mr: Rows of LHS in registers.
 		RHSL1KernelCols:      8,    // Nr: Cols of RHS in registers.
-		PanelContractingSize: 2048, // 2048, // Kc: L1 Block Depth.
-		LHSL2PanelCrossSize:  32,   //32,   // Mc: L2 Block Height.
-		RHSL3PanelCrossSize:  64,   // 64,   // Nc: L3 Block Width.
+		PanelContractingSize: 2048, // Kc: L1 Block contracting "depth".
+		LHSPanelCrossSize:    32,   // Mc: Block Height fitting L2/L3 cache.
+		RHSPanelCrossSize:    64,   // Nc: Block Width fitting L2/L3 cache.
 	}
 
 	// Threshold in byte size for switching to the small matrix multiplication kernel.
@@ -92,9 +91,9 @@ func basicSymmetricGenericSmallGEMMParallel[T dtypes.Number](
 	gemmFlops := lhsCrossSize * rhsCrossSize * contractingSize
 	var maxWorkers int
 	if pool != nil {
-		maxWorkers = pool.MaxParallelism()
+		maxWorkers = pool.AdjustedMaxParallelism()
 	}
-	if maxWorkers == 0 || maxWorkers == 1 || batchSize == 1 || batchSize*gemmFlops < nosimdMinMatMulFlopsPerWorker {
+	if maxWorkers <= 1 || batchSize == 1 || batchSize*gemmFlops < nosimdMinMatMulFlopsPerWorker {
 		// Not worth parallelizing: just run the small matmul kernel sequentially.
 		basicSymmetricGenericSmallGEMM(
 			alpha, beta,
@@ -177,7 +176,7 @@ func basicSymmetricGenericSmallGEMM[T dtypes.Number](
 				// rIdx tracks the current row in the RHS for these 4 columns
 				rIdx := rhsBase + col
 
-				for k := 0; k < contractingSize; k++ {
+				for k := range contractingSize {
 					// Load RHS row segment
 					r0, r1, r2, r3 := rhs[rIdx], rhs[rIdx+1], rhs[rIdx+2], rhs[rIdx+3]
 
@@ -213,7 +212,7 @@ func basicSymmetricGenericSmallGEMM[T dtypes.Number](
 			for ; col < rhsCrossSize; col++ {
 				var c0, c1, c2 T
 				rIdx := rhsBase + col
-				for k := 0; k < contractingSize; k++ {
+				for k := range contractingSize {
 					rk := rhs[rIdx]
 					c0 += lhs[lRow0Base+k] * rk
 					c1 += lhs[lRow1Base+k] * rk
@@ -297,88 +296,68 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 	pool *workerspool.Pool) error {
 
 	// Split work in reasonable number of "chunks".
-	var maxWorkers int
+	maxWorkers := 1
 	if pool != nil {
-		maxWorkers = pool.MaxParallelism()
+		maxWorkers = pool.AdjustedMaxParallelism()
 	}
-	if maxWorkers == 0 || maxWorkers == 1 {
+	if maxWorkers <= 1 {
 		// Do everything sequentially.
-		basicSymmetricGemmChunk(
-			alpha, beta,
-			lhsFlat, rhsFlat, outputFlat,
-			lhsCrossSize, rhsCrossSize, contractingSize,
-			NoSIMD32Params, 0, rhsCrossSize,
-			bufAllocFn, bufReleaseFn,
-		)
+		for batchIdx := range batchSize {
+			batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
+			batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
+			batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
+			basicSymmetricLargeGemmSlice(
+				alpha, beta,
+				batchLhs, batchRhs, batchOutput,
+				lhsCrossSize, rhsCrossSize, contractingSize,
+				NoSIMD32Params,
+				0, lhsCrossSize, 0, rhsCrossSize,
+				bufAllocFn, bufReleaseFn,
+			)
+		}
 		return nil
 	}
 
-	// 1. Split work in chunks.
+	// 1. Split work in workItems.
+	params := &NoSIMD32Params
+	workChan := make(chan workItem, max(10, 2*maxWorkers))
+	go feedWorkItems(
+		batchSize, rhsCrossSize, lhsCrossSize,
+		params, maxWorkers, workChan)
 
-	// 2. Recursive work loop
-	wg := xsync.NewDynamicWaitGroup() // Control workers started.
-	var process func(batchStart, batchCount, rhsColStart, rhsColCount, depth int)
-	process = func(batchStart, batchCount, rhsColStart, rhsColCount, depth int) {
-		switch splitStrategy(depth, batchCount, rhsColCount, lhsCrossSize, contractingSize, &NoSIMD32Params) {
-		case noSplit:
-			colEnd := rhsColStart + rhsColCount
-			if colEnd > rhsCrossSize {
-				colEnd = rhsCrossSize
-			}
-			for b := range batchCount {
-				batchIdx := batchStart + b
+	// 2. Saturate (fan-out workers) on workItems.
+	pool.Saturate(func() {
+		for item := range workChan {
+			for batchIdx := item.batchStart; batchIdx < item.batchEnd; batchIdx++ {
 				batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
 				batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
 				batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
-				basicSymmetricGemmChunk(
+				basicSymmetricLargeGemmSlice(
 					alpha, beta,
 					batchLhs, batchRhs, batchOutput,
 					lhsCrossSize, rhsCrossSize, contractingSize,
-					NoSIMD32Params, rhsColStart, colEnd,
+					NoSIMD32Params,
+					item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd,
 					bufAllocFn, bufReleaseFn,
 				)
 			}
-			return
-		case splitBatch:
-			split := batchCount / 2
-			firstHalf := func() {
-				process(batchStart, split, rhsColStart, rhsColCount, depth+1)
-				wg.Done()
-			}
-			if wg.Add(1); pool == nil || !pool.StartIfAvailable(firstHalf) {
-				firstHalf() // Execute first-half sequentially otherwise.
-			}
-			// Execute second-half on current goroutine.
-			process(batchStart+split, batchCount-split, rhsColStart, rhsColCount, depth+1)
-		case splitRHSCol:
-			split := rhsColCount / 2
-			firstHalf := func() {
-				process(batchStart, batchCount, rhsColStart, split, depth+1)
-				wg.Done()
-			}
-			if wg.Add(1); !pool.StartIfAvailable(firstHalf) {
-				firstHalf() // Execute first-half sequentially otherwise.
-			}
-			// Execute second-half on current goroutine.
-			process(batchStart, batchCount, rhsColStart+split, rhsColCount-split, depth+1)
 		}
-	}
-
-	// Start recursion.
-	process(0, batchSize, 0, rhsCrossSize, 0)
+	})
 	return nil
 }
 
-// basicSymmetricGemmChunk performs the matrix multiplication on a chunk of columns.
-func basicSymmetricGemmChunk[T dtypes.Number](
+// basicSymmetricLargeGemmSlice performs a slice of the matrix multiplication on one example: lhs, rhs an output
+// must already have sliced one example of the batch dimension.
+func basicSymmetricLargeGemmSlice[T dtypes.Number](
 	alpha, beta T,
 	lhs, rhs, output []T,
 	lhsCrossSize, rhsCrossSize, contractingSize int,
-	params CacheParams, colStart, colEnd int,
+	params CacheParams,
+	rowStart, rowEnd, colStart, colEnd int,
 	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn,
 ) {
-	packedLhsRef, packedLHS := bufAllocFn(params.LHSL2PanelCrossSize * params.PanelContractingSize)
-	packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSL3PanelCrossSize)
+	packedLhsRef, packedLHS := bufAllocFn(params.LHSPanelCrossSize * params.PanelContractingSize)
+	packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSPanelCrossSize)
 	var accum [64]T
 
 	defer func() {
@@ -387,8 +366,8 @@ func basicSymmetricGemmChunk[T dtypes.Number](
 	}()
 
 	// Loop 5 (jc): Tiling N (Output Columns)
-	for rhsPanelColIdx := colStart; rhsPanelColIdx < colEnd; rhsPanelColIdx += params.RHSL3PanelCrossSize {
-		rhsPanelWidth := min(params.RHSL3PanelCrossSize, colEnd-rhsPanelColIdx)
+	for rhsPanelColIdx := colStart; rhsPanelColIdx < colEnd; rhsPanelColIdx += params.RHSPanelCrossSize {
+		rhsPanelWidth := min(params.RHSPanelCrossSize, colEnd-rhsPanelColIdx)
 
 		// Loop 4 (p): Tiling K (Depth)
 		for contractingPanelIdx := 0; contractingPanelIdx < contractingSize; contractingPanelIdx += params.PanelContractingSize {
@@ -402,8 +381,8 @@ func basicSymmetricGemmChunk[T dtypes.Number](
 			packRHS(rhs, packedRHS, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
 
 			// Loop 3 (ic): Tiling M (Output Rows)
-			for lhsPanelRowIdx := 0; lhsPanelRowIdx < lhsCrossSize; lhsPanelRowIdx += params.LHSL2PanelCrossSize {
-				lhsPanelHeight := min(params.LHSL2PanelCrossSize, lhsCrossSize-lhsPanelRowIdx)
+			for lhsPanelRowIdx := 0; lhsPanelRowIdx < lhsCrossSize; lhsPanelRowIdx += params.LHSPanelCrossSize {
+				lhsPanelHeight := min(params.LHSPanelCrossSize, lhsCrossSize-lhsPanelRowIdx)
 
 				// PACK LHS
 				packLHS(lhs, packedLHS, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)

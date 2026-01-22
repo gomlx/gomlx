@@ -38,11 +38,22 @@ func (w *Pool) IsUnlimited() bool {
 	return w.maxParallelism < 0
 }
 
-// MaxParallelism is a soft-target for parallelism (the limit of goroutines is higher that this).
+// MaxParallelism returns the soft-target for parallelism.
 // If set to 0 parallelism is disabled.
 // If set to -1 parallelism is unlimited.
 func (w *Pool) MaxParallelism() int {
 	return w.maxParallelism
+}
+
+// AdjustedMaxParallelism returns the adjusted soft-target for parallelism (>= 1).
+//
+// If the target is set to -1 (unlimited parallelism) it returns runtime.GOMAXPROCS.
+// If the target is 0 (no parallelism) it returns 1.
+func (w *Pool) AdjustedMaxParallelism() int {
+	if w.maxParallelism < 0 {
+		return runtime.GOMAXPROCS(0)
+	}
+	return min(w.maxParallelism, 1)
 }
 
 // SetMaxParallelism sets the maxParallelism.

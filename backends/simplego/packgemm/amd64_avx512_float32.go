@@ -18,8 +18,8 @@ var avx512Float32Params = CacheParams{
 	LHSL1KernelRows:      16,   // Mr: Uses 4 ZMM registers for accumulation rows, this number must be a multiple of 4
 	RHSL1KernelCols:      32,   // Nr: Uses 2 ZMM registers for accumulation cols
 	PanelContractingSize: 512,  // Kc: A strip fits in L1 cache
-	LHSL2PanelCrossSize:  512,  // Mc: Fits in L2 cache (multiple of LHSL1KernelRows)
-	RHSL3PanelCrossSize:  4096, // Nc: Fits in L3 cache (multiple of RHSL1KernelCols)
+	LHSPanelCrossSize:    512,  // Mc: Fits in L2 cache (multiple of LHSL1KernelRows)
+	RHSPanelCrossSize:    4096, // Nc: Fits in L3 cache (multiple of RHSL1KernelCols)
 }
 
 func init() {
@@ -130,8 +130,8 @@ func avx512Float32GemmChunk(
 	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn,
 ) {
 	// fmt.Printf("gemmChunk(colStart=%d, colEnd=%d)\n", colStart, colEnd)
-	packedLhsRef, packedLhs := bufAllocFn(params.LHSL2PanelCrossSize * params.PanelContractingSize)
-	packedRhsRef, packedRhs := bufAllocFn(params.PanelContractingSize * params.RHSL3PanelCrossSize)
+	packedLhsRef, packedLhs := bufAllocFn(params.LHSPanelCrossSize * params.PanelContractingSize)
+	packedRhsRef, packedRhs := bufAllocFn(params.PanelContractingSize * params.RHSPanelCrossSize)
 	defer func() {
 		bufReleaseFn(packedLhsRef)
 		bufReleaseFn(packedRhsRef)
@@ -139,11 +139,11 @@ func avx512Float32GemmChunk(
 
 	// Loop 5 (jc): Tiling N (Output Columns) - Fits in L3
 	// Iterates over the assigned strip [colStart, colEnd) in chunks of rhsL3PanelCrossSize.
-	for rhsPanelColIdx := colStart; rhsPanelColIdx < colEnd; rhsPanelColIdx += params.RHSL3PanelCrossSize {
+	for rhsPanelColIdx := colStart; rhsPanelColIdx < colEnd; rhsPanelColIdx += params.RHSPanelCrossSize {
 
 		// The width of the current panel is limited by the L3 block size (Nc)
 		// AND the end of our assigned chunk (colEnd).
-		rhsPanelWidth := min(params.RHSL3PanelCrossSize, colEnd-rhsPanelColIdx)
+		rhsPanelWidth := min(params.RHSPanelCrossSize, colEnd-rhsPanelColIdx)
 
 		// Loop 4 (p): Tiling K (Depth) - Fits in L1
 		// Iterates over the contracting dimension in chunks of contractingPanelSize
@@ -166,8 +166,8 @@ func avx512Float32GemmChunk(
 
 			// Loop 3 (ic): Tiling M (Output Rows) - Fits in L2
 			// Iterates over the LHS height in chunks of lhsL2PanelCrossSize
-			for lhsPanelRowIdx := 0; lhsPanelRowIdx < lhsCrossSize; lhsPanelRowIdx += params.LHSL2PanelCrossSize {
-				lhsPanelHeight := min(params.LHSL2PanelCrossSize, lhsCrossSize-lhsPanelRowIdx)
+			for lhsPanelRowIdx := 0; lhsPanelRowIdx < lhsCrossSize; lhsPanelRowIdx += params.LHSPanelCrossSize {
+				lhsPanelHeight := min(params.LHSPanelCrossSize, lhsCrossSize-lhsPanelRowIdx)
 
 				// -----------------------------------------------------
 				// PACK LHS (Ait) -> ~A
