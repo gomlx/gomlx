@@ -340,8 +340,6 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 		params, maxWorkers, workChan)
 
 	// 2. Saturate (fan-out workers) on workItems.
-	// var workerIdx atomic.Int32
-	// 2. Saturate (fan-out workers) on workItems.
 	pool.Saturate(func() {
 		packedLhsRef, packedLHS := bufAllocFn(params.LHSPanelCrossSize * params.PanelContractingSize)
 		packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSPanelCrossSize)

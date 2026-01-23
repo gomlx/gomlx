@@ -10,7 +10,6 @@ import (
 	"unsafe"
 
 	"github.com/gomlx/gomlx/internal/workerspool"
-	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"k8s.io/klog/v2"
 )
 
@@ -34,90 +33,78 @@ var avx512WarningOnce sync.Once
 // output = alpha * (lhs x rhs) + beta * output
 func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []float32,
 	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
-
 	avx512WarningOnce.Do(func() {
 		klog.Infof("AVX512 GEMM (General Matrix Multiplication) algorithm still experimental!")
 	})
 
 	// 1. Resolve Strides
+	params := &avx512Float32Params
 	lhsBatchStride := lhsCrossSize * contractingSize
 	rhsBatchStride := contractingSize * rhsCrossSize
 	outputBatchStride := lhsCrossSize * rhsCrossSize
 
-	// 2. Determine "Quantum" Size (Splitting Strategy)
-	// We want enough tasks to fill the machine, but not so many that we trash the cache/packing.
-	// Target parallelism: Number of physical cores (or default GOMAXPROCS).
-	targetParallelism := 1
+	// Split work in reasonable number of "chunks".
+	maxWorkers := 1
 	if pool != nil {
-		targetParallelism = pool.MaxParallelism()
+		maxWorkers = pool.AdjustedMaxParallelism()
 	}
-
-	// Default: Treat the whole N (rhsCrossSize) as one quantum.
-	// This minimizes redundant packing of Matrix A.
-	rhsColSplitSize := rhsCrossSize
-
-	// Heuristic: If we don't have enough batches to saturate the cores,
-	// we MUST split the columns to get parallelism.
-	if batchSize < targetParallelism {
-		// Example: 16 cores, Batch=2. We want ~8 tasks per batch.
-		// tasksPerBatch := targetParallelism / batchSize
-		// This is a rough estimate.
-
-		// Ensure we don't split too small (avoid overhead for tiny strips).
-		// Minimum strip size e.g., 256 columns or the L1 Block Size.
-		minSplit := 256
-		if rhsColSplitSize > minSplit {
-			neededSplits := (targetParallelism + batchSize - 1) / batchSize
-			calculatedSplit := rhsCrossSize / neededSplits
-
-			// Clamp to valid range
-			if calculatedSplit < minSplit {
-				calculatedSplit = minSplit
-			}
-
-			// Align to 32 (Nr) for SIMD efficiency
-			rhsColSplitSize = (calculatedSplit + 31) &^ 31
+	if maxWorkers <= 1 {
+		// Do everything sequentially.
+		packedLhsRef, packedLHS := bufAllocFn(params.LHSPanelCrossSize * params.PanelContractingSize)
+		packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSPanelCrossSize)
+		// packedOutRef, packedOutput := bufAllocFn(params.LHSPanelCrossSize * params.RHSPanelCrossSize)
+		defer func() {
+			bufReleaseFn(packedLhsRef)
+			bufReleaseFn(packedRhsRef)
+			// bufReleaseFn(packedOutRef)
+		}()
+		for batchIdx := range batchSize {
+			batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
+			batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
+			batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
+			avx512Float32GemmChunk(
+				alpha, beta,
+				batchLhs, batchRhs, batchOutput,
+				lhsCrossSize, rhsCrossSize, contractingSize,
+				params, 0, lhsCrossSize, 0, rhsCrossSize,
+				packedLHS, packedRHS,
+			)
 		}
+		return nil
 	}
 
-	// 3. The Work Loop
-	// We iterate sequentially. If the pool is full, we do the work ourselves.
-	wg := xsync.NewDynamicWaitGroup() // Control workers started.
-	for batchIdx := range batchSize {
-		// Capture batch offsets once per batch
-		batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
-		batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
-		batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
+	// 1. Split work in workItems.
+	workChan := make(chan workItem, max(2000, 2*maxWorkers))
+	go feedWorkItems(
+		batchSize, lhsCrossSize, rhsCrossSize,
+		params, maxWorkers, workChan)
 
-		// Iterate over Column Strips -- a "chunk" of work that can be parallelized.
-		for colStart := 0; colStart < rhsCrossSize; colStart += rhsColSplitSize {
-			colEnd := colStart + rhsColSplitSize
-			if colEnd > rhsCrossSize {
-				colEnd = rhsCrossSize
-			}
+	// 2. Saturate (fan-out workers) on workItems.
+	pool.Saturate(func() {
+		packedLhsRef, packedLHS := bufAllocFn(params.LHSPanelCrossSize * params.PanelContractingSize)
+		packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSPanelCrossSize)
+		// packedOutRef, packedOutput := bufAllocFn(params.LHSPanelCrossSize * params.RHSPanelCrossSize)
+		defer func() {
+			bufReleaseFn(packedLhsRef)
+			bufReleaseFn(packedRhsRef)
+			// bufReleaseFn(packedOutRef)
+		}()
 
-			// Define the task closure
-			wg.Add(1)
-			task := func() {
+		for item := range workChan {
+			for batchIdx := item.batchStart; batchIdx < item.batchEnd; batchIdx++ {
+				batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
+				batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
+				batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
 				avx512Float32GemmChunk(
 					alpha, beta,
 					batchLhs, batchRhs, batchOutput,
 					lhsCrossSize, rhsCrossSize, contractingSize,
-					avx512Float32Params, colStart, colEnd,
-					bufAllocFn, bufReleaseFn,
+					params, item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd,
+					packedLHS, packedRHS,
 				)
-				wg.Done()
-			}
-
-			// 4. Try to Offload
-			if pool == nil || !pool.StartIfAvailable(task) {
-				// Pool is busy/full.
-				// Execute immediately on this thread to prevent starvation.
-				task()
 			}
 		}
-	}
-	wg.Wait()
+	})
 	return nil
 }
 
@@ -126,24 +113,18 @@ func avx512Float32GemmChunk(
 	alpha, beta float32,
 	lhs, rhs, output []float32,
 	lhsCrossSize, rhsCrossSize, contractingSize int,
-	params CacheParams, colStart, colEnd int,
-	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn,
+	params *CacheParams, lhsRowStart, lhsRowEnd, rhsColStart, rhsColEnd int,
+	packedLhs, packedRhs []float32,
 ) {
 	// fmt.Printf("gemmChunk(colStart=%d, colEnd=%d)\n", colStart, colEnd)
-	packedLhsRef, packedLhs := bufAllocFn(params.LHSPanelCrossSize * params.PanelContractingSize)
-	packedRhsRef, packedRhs := bufAllocFn(params.PanelContractingSize * params.RHSPanelCrossSize)
-	defer func() {
-		bufReleaseFn(packedLhsRef)
-		bufReleaseFn(packedRhsRef)
-	}()
 
 	// Loop 5 (jc): Tiling N (Output Columns) - Fits in L3
 	// Iterates over the assigned strip [colStart, colEnd) in chunks of rhsL3PanelCrossSize.
-	for rhsPanelColIdx := colStart; rhsPanelColIdx < colEnd; rhsPanelColIdx += params.RHSPanelCrossSize {
+	for rhsPanelColIdx := rhsColStart; rhsPanelColIdx < rhsColEnd; rhsPanelColIdx += params.RHSPanelCrossSize {
 
 		// The width of the current panel is limited by the L3 block size (Nc)
 		// AND the end of our assigned chunk (colEnd).
-		rhsPanelWidth := min(params.RHSPanelCrossSize, colEnd-rhsPanelColIdx)
+		rhsPanelWidth := min(params.RHSPanelCrossSize, rhsColEnd-rhsPanelColIdx)
 
 		// Loop 4 (p): Tiling K (Depth) - Fits in L1
 		// Iterates over the contracting dimension in chunks of contractingPanelSize
@@ -162,19 +143,21 @@ func avx512Float32GemmChunk(
 			// We pack a [contractingPanelWidth, rhsPanelWidth] block of RHS into contiguous memory.
 			// Format: Vertical strips of width rhsL1KernelCols (Nr).
 			// ---------------------------------------------------------
-			packRHS(rhs, packedRhs, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
+			packRHS(rhs, packedRhs, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth,
+				rhsPanelWidth, params.RHSL1KernelCols)
 
 			// Loop 3 (ic): Tiling M (Output Rows) - Fits in L2
 			// Iterates over the LHS height in chunks of lhsL2PanelCrossSize
-			for lhsPanelRowIdx := 0; lhsPanelRowIdx < lhsCrossSize; lhsPanelRowIdx += params.LHSPanelCrossSize {
-				lhsPanelHeight := min(params.LHSPanelCrossSize, lhsCrossSize-lhsPanelRowIdx)
+			for lhsPanelRowIdx := lhsRowStart; lhsPanelRowIdx < lhsRowEnd; lhsPanelRowIdx += params.LHSPanelCrossSize {
+				lhsPanelHeight := min(params.LHSPanelCrossSize, lhsRowEnd-lhsPanelRowIdx)
 
 				// -----------------------------------------------------
 				// PACK LHS (Ait) -> ~A
 				// We pack a [lhsPanelHeight, contractingPanelWidth] block of LHS into contiguous memory.
 				// Format: Horizontal strips of height lhsL1KernelRows (Mr).
 				// -----------------------------------------------------
-				packLHS(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
+				packLHS(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight,
+					contractingPanelWidth, params.LHSL1KernelRows)
 
 				// Loop 2 (jr): Micro-Kernel Columns (Nr == rhsL1BlockCols)
 				for microColIdx := 0; microColIdx < rhsPanelWidth; microColIdx += params.RHSL1KernelCols {
