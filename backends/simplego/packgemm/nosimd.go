@@ -15,12 +15,12 @@ var (
 	// They are parameterized so they can be tuned or determined dynamically later.
 	NoSIMD32Params = CacheParams{
 		// Do not change these 2 values: they are hard-coded by the allocated registers in basicSymmetricMicroKernel8x8.
-		LHSL1KernelRows: 8, // Mr: Rows of LHS in local registers.
+		LHSL1KernelRows: 2, // Mr: Rows of LHS in local registers.
 		RHSL1KernelCols: 4, // Nr: Cols of RHS in local registers.
 
-		PanelContractingSize: 256, // Kc: L1 Block contracting "depth".
-		LHSPanelCrossSize:    8,   // Mc: Block Height fitting L2/L3 cache.
-		RHSPanelCrossSize:    256, // Nc: Block Width fitting L2/L3 cache.
+		PanelContractingSize: 512, // Kc: L1 Block contracting "depth".
+		LHSPanelCrossSize:    2,   // Mc: Block Height fitting L2/L3 cache.
+		RHSPanelCrossSize:    512, // Nc: Block Width fitting L2/L3 cache.
 	}
 
 	// Threshold in byte size for switching to the small matrix multiplication kernel.
@@ -311,9 +311,11 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 		// Do everything sequentially.
 		packedLhsRef, packedLHS := bufAllocFn(params.LHSPanelCrossSize * params.PanelContractingSize)
 		packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSPanelCrossSize)
+		packedOutRef, packedOutput := bufAllocFn(params.LHSPanelCrossSize * params.RHSPanelCrossSize)
 		defer func() {
 			bufReleaseFn(packedLhsRef)
 			bufReleaseFn(packedRhsRef)
+			bufReleaseFn(packedOutRef)
 		}()
 		for batchIdx := range batchSize {
 			batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
@@ -325,7 +327,7 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 				lhsCrossSize, rhsCrossSize, contractingSize,
 				NoSIMD32Params,
 				0, lhsCrossSize, 0, rhsCrossSize,
-				packedLHS, packedRHS,
+				packedLHS, packedRHS, packedOutput,
 			)
 		}
 		return nil
@@ -343,9 +345,11 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 	pool.Saturate(func() {
 		packedLhsRef, packedLHS := bufAllocFn(params.LHSPanelCrossSize * params.PanelContractingSize)
 		packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSPanelCrossSize)
+		packedOutRef, packedOutput := bufAllocFn(params.LHSPanelCrossSize * params.RHSPanelCrossSize)
 		defer func() {
 			bufReleaseFn(packedLhsRef)
 			bufReleaseFn(packedRhsRef)
+			bufReleaseFn(packedOutRef)
 		}()
 
 		for item := range workChan {
@@ -359,7 +363,7 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 					lhsCrossSize, rhsCrossSize, contractingSize,
 					NoSIMD32Params,
 					item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd,
-					packedLHS, packedRHS,
+					packedLHS, packedRHS, packedOutput,
 				)
 			}
 		}
@@ -377,7 +381,7 @@ func basicSymmetricLargeGemmSlice[T dtypes.Number](
 	lhsCrossSize, rhsCrossSize, contractingSize int,
 	params CacheParams,
 	rowStart, rowEnd, colStart, colEnd int,
-	packedLHS, packedRHS []T,
+	packedLHS, packedRHS, packedOutput []T,
 ) {
 	// Loop 5 (jc): Tiling N (Output Columns)
 	for rhsPanelColIdx := colStart; rhsPanelColIdx < colEnd; rhsPanelColIdx += params.RHSPanelCrossSize {
@@ -385,10 +389,6 @@ func basicSymmetricLargeGemmSlice[T dtypes.Number](
 
 		// Loop 4 (p): Tiling K (Depth)
 		for contractingPanelIdx := 0; contractingPanelIdx < contractingSize; contractingPanelIdx += params.PanelContractingSize {
-			effectiveBeta := beta
-			if contractingPanelIdx > 0 {
-				effectiveBeta = 1
-			}
 			contractingPanelWidth := min(params.PanelContractingSize, contractingSize-contractingPanelIdx)
 			packRHS(rhs, packedRHS, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
 
@@ -399,273 +399,236 @@ func basicSymmetricLargeGemmSlice[T dtypes.Number](
 				// PACK LHS
 				packLHS(lhs, packedLHS, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
 
-				// Loop 2 (jr): Micro-Kernel Columns
-				for microColIdx := 0; microColIdx < rhsPanelWidth; microColIdx += params.RHSL1KernelCols {
-					microKernelActiveWidth := min(params.RHSL1KernelCols, rhsPanelWidth-microColIdx)
+				basicSymmetricPanel(
+					packedLHS, packedRHS, packedOutput,
+					params.LHSPanelCrossSize, params.RHSPanelCrossSize,
+					contractingPanelWidth,
+					lhsPanelHeight, rhsPanelWidth,
+				)
 
-					// Loop 1 (ir): Micro-Kernel Rows
-					for microRowIdx := 0; microRowIdx < lhsPanelHeight; microRowIdx += params.LHSL1KernelRows {
-						microKernelActiveHeight := min(params.LHSL1KernelRows, lhsPanelHeight-microRowIdx)
-
-						offsetRhs := (microColIdx / params.RHSL1KernelCols) * (contractingPanelWidth * params.RHSL1KernelCols)
-						offsetLhs := (microRowIdx / params.LHSL1KernelRows) * (contractingPanelWidth * params.LHSL1KernelRows)
-
-						outputRow := lhsPanelRowIdx + microRowIdx
-						outputCol := rhsPanelColIdx + microColIdx
-
-						basicSymmetricMicroKernel8x4(
-							alpha, effectiveBeta,
-							packedLHS[offsetLhs:],
-							packedRHS[offsetRhs:],
-							output,
-							outputRow, outputCol,
-							rhsCrossSize,
-							contractingPanelWidth,
-							microKernelActiveHeight, microKernelActiveWidth,
-						)
-					}
+				// Accumulate (or write) packedOutput to output.
+				effectiveBeta := beta
+				if contractingPanelIdx > 0 {
+					effectiveBeta = 1
 				}
+				applyPackedOutput(
+					packedOutput, output,
+					alpha, effectiveBeta,
+					params.RHSPanelCrossSize,
+					lhsPanelRowIdx, rhsPanelColIdx,
+					rhsCrossSize,
+					lhsPanelHeight, rhsPanelWidth)
 			}
 		}
 	}
 }
 
-// basicSymmetricMicroKernel8x4 is a specialized versions of basicSymmetricMicroKernel for 8x8 kernel.
+// basicSymmetricPanel implements the gemm for a lhs and rhs packed panels
+// into an output panel, using packedOutput as intermediate.
 //
-// It uses register blocking: it divides the 8x8 matrix in 4 4x4 sub-matrices.
+// It uses register blocking: it divides the 4x4 matrix in 4 4x4 sub-matrices.
 // For each sub-matrix it iterates over k (contracting dim), accumulating the results
 // in local variables (registers).
 // finally it writes the results to output.
 //
-// It assumes lhsL1KernelRows=8 and rhsL1KernelCols=4.
+// It assumes lhsL1KernelRows=4 and rhsL1KernelCols=4.
 //
 // See basicSymmetricMicroKernel for documentation on arguments.
-func basicSymmetricMicroKernel8x4[T dtypes.Number](
-	alpha, beta T,
-	lhsPackSlice, rhsPackSlice []T,
-	output []T,
-	outputRowStart, outputColStart int,
-	outputRowStride int,
+func basicSymmetricPanel[T dtypes.Number](
+	packedLHS, packedRHS []T,
+	packedOutput []T,
+	lhsPanelRows, rhsPanelCols int,
 	contractingLen int,
 	lhsActiveRows, rhsActiveCols int,
 ) {
-	const kernelRows = 8
+	const kernelRows = 2
 	const kernelCols = 4
 
-	// Loop over 4 quadrants (2x2 of 4x4 blocks)
-	for qRow := 0; qRow < 2; qRow++ {
-		rowStart := qRow * 4
-		if rowStart >= lhsActiveRows {
-			continue
+	// BCE hints
+	_ = packedLHS[contractingLen]
+	_ = packedRHS[contractingLen]
+	_ = packedOutput[lhsPanelRows*rhsPanelCols-1]
+
+	// Strides in the packed buffers for one block.
+	lhsBlockStride := kernelRows * contractingLen
+	rhsBlockStride := kernelCols * contractingLen
+	lhsOffset := 0
+
+	// Write active part of 4x4 block to output
+	// Helper to write a row
+	// Write active part of 4x4 block to output
+	// Bounds check is not needed as packedOutput is allocated to panel size, and we will discard
+	// whatever is written beyond the active part.
+
+	for rowIdx := 0; rowIdx < lhsActiveRows; rowIdx += kernelRows {
+		rhsOffset := 0
+		for colIdx := 0; colIdx < rhsActiveCols; colIdx += kernelCols {
+			// Process 2x4 block at (r, c)
+			// Accumulators for 2x4 block
+			var c00, c01, c02, c03 T
+			var c10, c11, c12, c13 T
+
+			idxLhs := lhsOffset
+			idxRhs := rhsOffset
+
+			// K-Loop unrolled by 4
+			k := 0
+			for ; k+3 < contractingLen; k += 4 {
+				// We need 4 steps.
+				// For each step (l is k offset):
+				//   load lhs (2 vals), load rhs (4 vals), fma.
+
+				// --- Step 0 ---
+				// BCE hint
+				_ = packedLHS[idxLhs+1]
+				_ = packedRHS[idxRhs+3]
+				l0 := packedLHS[idxLhs]
+				l1 := packedLHS[idxLhs+1]
+
+				r0 := packedRHS[idxRhs]
+				r1 := packedRHS[idxRhs+1]
+				r2 := packedRHS[idxRhs+2]
+				r3 := packedRHS[idxRhs+3]
+
+				c00 += l0 * r0
+				c01 += l0 * r1
+				c02 += l0 * r2
+				c03 += l0 * r3
+				c10 += l1 * r0
+				c11 += l1 * r1
+				c12 += l1 * r2
+				c13 += l1 * r3
+
+				idxLhs += kernelRows
+				idxRhs += kernelCols
+
+				// --- Step 1 ---
+				_ = packedLHS[idxLhs+1]
+				_ = packedRHS[idxRhs+3]
+				l0 = packedLHS[idxLhs]
+				l1 = packedLHS[idxLhs+1]
+				r0 = packedRHS[idxRhs]
+				r1 = packedRHS[idxRhs+1]
+				r2 = packedRHS[idxRhs+2]
+				r3 = packedRHS[idxRhs+3]
+
+				c00 += l0 * r0
+				c01 += l0 * r1
+				c02 += l0 * r2
+				c03 += l0 * r3
+				c10 += l1 * r0
+				c11 += l1 * r1
+				c12 += l1 * r2
+				c13 += l1 * r3
+
+				idxLhs += kernelRows
+				idxRhs += kernelCols
+
+				// --- Step 2 ---
+				_ = packedLHS[idxLhs+1]
+				_ = packedRHS[idxRhs+3]
+				l0 = packedLHS[idxLhs]
+				l1 = packedLHS[idxLhs+1]
+				r0 = packedRHS[idxRhs]
+				r1 = packedRHS[idxRhs+1]
+				r2 = packedRHS[idxRhs+2]
+				r3 = packedRHS[idxRhs+3]
+
+				c00 += l0 * r0
+				c01 += l0 * r1
+				c02 += l0 * r2
+				c03 += l0 * r3
+				c10 += l1 * r0
+				c11 += l1 * r1
+				c12 += l1 * r2
+				c13 += l1 * r3
+
+				idxLhs += kernelRows
+				idxRhs += kernelCols
+
+				// --- Step 3 ---
+				_ = packedLHS[idxLhs+1]
+				_ = packedRHS[idxRhs+3]
+				l0 = packedLHS[idxLhs]
+				l1 = packedLHS[idxLhs+1]
+				r0 = packedRHS[idxRhs]
+				r1 = packedRHS[idxRhs+1]
+				r2 = packedRHS[idxRhs+2]
+				r3 = packedRHS[idxRhs+3]
+
+				c00 += l0 * r0
+				c01 += l0 * r1
+				c02 += l0 * r2
+				c03 += l0 * r3
+				c10 += l1 * r0
+				c11 += l1 * r1
+				c12 += l1 * r2
+				c13 += l1 * r3
+
+				idxLhs += kernelRows
+				idxRhs += kernelCols
+			}
+
+			// K-Loop Tail
+			for ; k < contractingLen; k++ {
+				l0 := packedLHS[idxLhs]
+				l1 := packedLHS[idxLhs+1]
+
+				r0 := packedRHS[idxRhs]
+				r1 := packedRHS[idxRhs+1]
+				r2 := packedRHS[idxRhs+2]
+				r3 := packedRHS[idxRhs+3]
+
+				c00 += l0 * r0
+				c01 += l0 * r1
+				c02 += l0 * r2
+				c03 += l0 * r3
+				c10 += l1 * r0
+				c11 += l1 * r1
+				c12 += l1 * r2
+				c13 += l1 * r3
+
+				idxLhs += kernelRows
+				idxRhs += kernelCols
+			}
+
+			// Optimization: write full 2x4 block directly to packedOutput.
+			// The buffer is large enough even for fringe blocks.
+			// Row 0
+			rowOffset := rowIdx*rhsPanelCols + colIdx
+			packedOutput[rowOffset] = c00
+			packedOutput[rowOffset+1] = c01
+			packedOutput[rowOffset+2] = c02
+			packedOutput[rowOffset+3] = c03
+
+			// Row 1
+			rowOffset1 := rowOffset + rhsPanelCols
+			packedOutput[rowOffset1] = c10
+			packedOutput[rowOffset1+1] = c11
+			packedOutput[rowOffset1+2] = c12
+			packedOutput[rowOffset1+3] = c13
+
+			rhsOffset += rhsBlockStride
 		}
-		colStart := 0
+		lhsOffset += lhsBlockStride
+	}
+}
 
-		// Accumulators for 4x4 block
-		var c00, c01, c02, c03 T
-		var c10, c11, c12, c13 T
-		var c20, c21, c22, c23 T
-		var c30, c31, c32, c33 T
-
-		idxLhs := 0
-		idxRhs := 0
-
-		// K-Loop unrolled by 4
-		k := 0
-		for ; k+3 < contractingLen; k += 4 {
-			// We need 4 steps.
-			// For each step (l is k offset):
-			//   load lhs (4 vals), load rhs (4 vals), fma.
-
-			// --- Step 0 ---
-			// BCE hint
-			_ = lhsPackSlice[idxLhs+rowStart+3]
-			_ = rhsPackSlice[idxRhs+colStart+3]
-			l0 := lhsPackSlice[idxLhs+rowStart]
-			l1 := lhsPackSlice[idxLhs+rowStart+1]
-			l2 := lhsPackSlice[idxLhs+rowStart+2]
-			l3 := lhsPackSlice[idxLhs+rowStart+3]
-			r0 := rhsPackSlice[idxRhs+colStart]
-			r1 := rhsPackSlice[idxRhs+colStart+1]
-			r2 := rhsPackSlice[idxRhs+colStart+2]
-			r3 := rhsPackSlice[idxRhs+colStart+3]
-			c00 += l0 * r0
-			c01 += l0 * r1
-			c02 += l0 * r2
-			c03 += l0 * r3
-			c10 += l1 * r0
-			c11 += l1 * r1
-			c12 += l1 * r2
-			c13 += l1 * r3
-			c20 += l2 * r0
-			c21 += l2 * r1
-			c22 += l2 * r2
-			c23 += l2 * r3
-			c30 += l3 * r0
-			c31 += l3 * r1
-			c32 += l3 * r2
-			c33 += l3 * r3
-			idxLhs += kernelRows
-			idxRhs += kernelCols
-
-			// --- Step 1 ---
-			_ = lhsPackSlice[idxLhs+rowStart+3]
-			_ = rhsPackSlice[idxRhs+colStart+3]
-			l0 = lhsPackSlice[idxLhs+rowStart]
-			l1 = lhsPackSlice[idxLhs+rowStart+1]
-			l2 = lhsPackSlice[idxLhs+rowStart+2]
-			l3 = lhsPackSlice[idxLhs+rowStart+3]
-			r0 = rhsPackSlice[idxRhs+colStart]
-			r1 = rhsPackSlice[idxRhs+colStart+1]
-			r2 = rhsPackSlice[idxRhs+colStart+2]
-			r3 = rhsPackSlice[idxRhs+colStart+3]
-			c00 += l0 * r0
-			c01 += l0 * r1
-			c02 += l0 * r2
-			c03 += l0 * r3
-			c10 += l1 * r0
-			c11 += l1 * r1
-			c12 += l1 * r2
-			c13 += l1 * r3
-			c20 += l2 * r0
-			c21 += l2 * r1
-			c22 += l2 * r2
-			c23 += l2 * r3
-			c30 += l3 * r0
-			c31 += l3 * r1
-			c32 += l3 * r2
-			c33 += l3 * r3
-			idxLhs += kernelRows
-			idxRhs += kernelCols
-
-			// --- Step 2 ---
-			_ = lhsPackSlice[idxLhs+rowStart+3]
-			_ = rhsPackSlice[idxRhs+colStart+3]
-			l0 = lhsPackSlice[idxLhs+rowStart]
-			l1 = lhsPackSlice[idxLhs+rowStart+1]
-			l2 = lhsPackSlice[idxLhs+rowStart+2]
-			l3 = lhsPackSlice[idxLhs+rowStart+3]
-			r0 = rhsPackSlice[idxRhs+colStart]
-			r1 = rhsPackSlice[idxRhs+colStart+1]
-			r2 = rhsPackSlice[idxRhs+colStart+2]
-			r3 = rhsPackSlice[idxRhs+colStart+3]
-			c00 += l0 * r0
-			c01 += l0 * r1
-			c02 += l0 * r2
-			c03 += l0 * r3
-			c10 += l1 * r0
-			c11 += l1 * r1
-			c12 += l1 * r2
-			c13 += l1 * r3
-			c20 += l2 * r0
-			c21 += l2 * r1
-			c22 += l2 * r2
-			c23 += l2 * r3
-			c30 += l3 * r0
-			c31 += l3 * r1
-			c32 += l3 * r2
-			c33 += l3 * r3
-			idxLhs += kernelRows
-			idxRhs += kernelCols
-
-			// --- Step 3 ---
-			_ = lhsPackSlice[idxLhs+rowStart+3]
-			_ = rhsPackSlice[idxRhs+colStart+3]
-			l0 = lhsPackSlice[idxLhs+rowStart]
-			l1 = lhsPackSlice[idxLhs+rowStart+1]
-			l2 = lhsPackSlice[idxLhs+rowStart+2]
-			l3 = lhsPackSlice[idxLhs+rowStart+3]
-			r0 = rhsPackSlice[idxRhs+colStart]
-			r1 = rhsPackSlice[idxRhs+colStart+1]
-			r2 = rhsPackSlice[idxRhs+colStart+2]
-			r3 = rhsPackSlice[idxRhs+colStart+3]
-			c00 += l0 * r0
-			c01 += l0 * r1
-			c02 += l0 * r2
-			c03 += l0 * r3
-			c10 += l1 * r0
-			c11 += l1 * r1
-			c12 += l1 * r2
-			c13 += l1 * r3
-			c20 += l2 * r0
-			c21 += l2 * r1
-			c22 += l2 * r2
-			c23 += l2 * r3
-			c30 += l3 * r0
-			c31 += l3 * r1
-			c32 += l3 * r2
-			c33 += l3 * r3
-			idxLhs += kernelRows
-			idxRhs += kernelCols
+// applyPackedOutput applies the computed packedOutput to the final output.
+func applyPackedOutput[T dtypes.Number](
+	packedOutput, output []T,
+	alpha, beta T,
+	packedOutputRowStride int,
+	lhsRowOffset, rhsColOffset int, // Global output offsets
+	outputRowStride int,
+	height, width int, // actual amount of data to copy
+) {
+	for r := 0; r < height; r++ {
+		packedRowOffset := r * packedOutputRowStride
+		outRowOffset := (lhsRowOffset+r)*outputRowStride + rhsColOffset
+		for c := 0; c < width; c++ {
+			val := packedOutput[packedRowOffset+c]
+			basicWriteScalar(output, outRowOffset+c, alpha, beta, val)
 		}
-
-		// K-Loop Tail
-		for ; k < contractingLen; k++ {
-			_ = lhsPackSlice[idxLhs+rowStart+3]
-			_ = rhsPackSlice[idxRhs+colStart+3]
-			l0 := lhsPackSlice[idxLhs+rowStart]
-			l1 := lhsPackSlice[idxLhs+rowStart+1]
-			l2 := lhsPackSlice[idxLhs+rowStart+2]
-			l3 := lhsPackSlice[idxLhs+rowStart+3]
-
-			r0 := rhsPackSlice[idxRhs+colStart]
-			r1 := rhsPackSlice[idxRhs+colStart+1]
-			r2 := rhsPackSlice[idxRhs+colStart+2]
-			r3 := rhsPackSlice[idxRhs+colStart+3]
-
-			c00 += l0 * r0
-			c01 += l0 * r1
-			c02 += l0 * r2
-			c03 += l0 * r3
-			c10 += l1 * r0
-			c11 += l1 * r1
-			c12 += l1 * r2
-			c13 += l1 * r3
-			c20 += l2 * r0
-			c21 += l2 * r1
-			c22 += l2 * r2
-			c23 += l2 * r3
-			c30 += l3 * r0
-			c31 += l3 * r1
-			c32 += l3 * r2
-			c33 += l3 * r3
-
-			idxLhs += kernelRows
-			idxRhs += kernelCols
-		}
-
-		// Write active part of 4x4 block to output
-		// Helper to write a row
-		writeRow := func(rLocal int, v0, v1, v2, v3 T) {
-			r := rowStart + rLocal
-			if r >= lhsActiveRows {
-				return
-			}
-			rowOffset := (outputRowStart+r)*outputRowStride + outputColStart + colStart
-
-			// Optimization: check if we can write full 4 coeffs
-			if colStart+4 <= rhsActiveCols {
-				basicWriteCol4(output, rowOffset, alpha, beta, v0, v1, v2, v3)
-				return
-			}
-
-			// Partial columns
-			if colStart < rhsActiveCols {
-				basicWriteScalar(output, rowOffset, alpha, beta, v0)
-			}
-			if colStart+1 < rhsActiveCols {
-				basicWriteScalar(output, rowOffset+1, alpha, beta, v1)
-			}
-			if colStart+2 < rhsActiveCols {
-				basicWriteScalar(output, rowOffset+2, alpha, beta, v2)
-			}
-			if colStart+3 < rhsActiveCols {
-				basicWriteScalar(output, rowOffset+3, alpha, beta, v3)
-			}
-		}
-
-		writeRow(0, c00, c01, c02, c03)
-		writeRow(1, c10, c11, c12, c13)
-		writeRow(2, c20, c21, c22, c23)
-		writeRow(3, c30, c31, c32, c33)
 	}
 }
