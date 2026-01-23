@@ -14,11 +14,11 @@ import (
 )
 
 var avx512Float32Params = CacheParams{
-	LHSL1KernelRows:      16,   // Mr: Uses 4 ZMM registers for accumulation rows, this number must be a multiple of 4
-	RHSL1KernelCols:      32,   // Nr: Uses 2 ZMM registers for accumulation cols
-	PanelContractingSize: 512,  // Kc: A strip fits in L1 cache
-	LHSPanelCrossSize:    512,  // Mc: Fits in L2 cache (multiple of LHSL1KernelRows)
-	RHSPanelCrossSize:    4096, // Nc: Fits in L3 cache (multiple of RHSL1KernelCols)
+	LHSL1KernelRows:      4,   // Mr: Uses 4 ZMM registers for accumulation rows, this number must be a multiple of 4
+	RHSL1KernelCols:      32,  // Nr: Uses 2 ZMM registers for accumulation cols, each holds 16 values
+	PanelContractingSize: 512, // Kc: A strip fits in L1 cache
+	LHSPanelCrossSize:    4,   // Mc: Fits in L2 cache (multiple of LHSL1KernelRows)
+	RHSPanelCrossSize:    512, // Nc: Fits in L3 cache (multiple of RHSL1KernelCols)
 }
 
 func init() {
@@ -52,11 +52,11 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 		// Do everything sequentially.
 		packedLhsRef, packedLHS := bufAllocFn(params.LHSPanelCrossSize * params.PanelContractingSize)
 		packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSPanelCrossSize)
-		// packedOutRef, packedOutput := bufAllocFn(params.LHSPanelCrossSize * params.RHSPanelCrossSize)
+		packedOutRef, packedOutput := bufAllocFn(params.LHSPanelCrossSize * params.RHSPanelCrossSize)
 		defer func() {
 			bufReleaseFn(packedLhsRef)
 			bufReleaseFn(packedRhsRef)
-			// bufReleaseFn(packedOutRef)
+			bufReleaseFn(packedOutRef)
 		}()
 		for batchIdx := range batchSize {
 			batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
@@ -67,7 +67,7 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 				batchLhs, batchRhs, batchOutput,
 				lhsCrossSize, rhsCrossSize, contractingSize,
 				params, 0, lhsCrossSize, 0, rhsCrossSize,
-				packedLHS, packedRHS,
+				packedLHS, packedRHS, packedOutput,
 			)
 		}
 		return nil
@@ -83,11 +83,11 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 	pool.Saturate(func() {
 		packedLhsRef, packedLHS := bufAllocFn(params.LHSPanelCrossSize * params.PanelContractingSize)
 		packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSPanelCrossSize)
-		// packedOutRef, packedOutput := bufAllocFn(params.LHSPanelCrossSize * params.RHSPanelCrossSize)
+		packedOutRef, packedOutput := bufAllocFn(params.LHSPanelCrossSize * params.RHSPanelCrossSize)
 		defer func() {
 			bufReleaseFn(packedLhsRef)
 			bufReleaseFn(packedRhsRef)
-			// bufReleaseFn(packedOutRef)
+			bufReleaseFn(packedOutRef)
 		}()
 
 		for item := range workChan {
@@ -99,8 +99,9 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 					alpha, beta,
 					batchLhs, batchRhs, batchOutput,
 					lhsCrossSize, rhsCrossSize, contractingSize,
+
 					params, item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd,
-					packedLHS, packedRHS,
+					packedLHS, packedRHS, packedOutput,
 				)
 			}
 		}
@@ -114,7 +115,7 @@ func avx512Float32GemmChunk(
 	lhs, rhs, output []float32,
 	lhsCrossSize, rhsCrossSize, contractingSize int,
 	params *CacheParams, lhsRowStart, lhsRowEnd, rhsColStart, rhsColEnd int,
-	packedLhs, packedRhs []float32,
+	packedLhs, packedRhs, packedOutput []float32,
 ) {
 	// fmt.Printf("gemmChunk(colStart=%d, colEnd=%d)\n", colStart, colEnd)
 
@@ -130,12 +131,7 @@ func avx512Float32GemmChunk(
 		// Iterates over the contracting dimension in chunks of contractingPanelSize
 		for contractingPanelIdx := 0; contractingPanelIdx < contractingSize; contractingPanelIdx += params.PanelContractingSize {
 			// fmt.Printf("- contractingPanelIdx=%d\n", contractingPanelIdx)
-			effectiveBeta := beta
-			if contractingPanelIdx > 0 {
-				// We only apply (multiply) the current output by beta the first time we touch the output buffer
-				// at this panel, after that the output is already accumulating the results of the matmul.
-				effectiveBeta = 1
-			}
+
 			contractingPanelWidth := min(params.PanelContractingSize, contractingSize-contractingPanelIdx)
 
 			// ---------------------------------------------------------
@@ -159,206 +155,131 @@ func avx512Float32GemmChunk(
 				packLHS(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight,
 					contractingPanelWidth, params.LHSL1KernelRows)
 
-				// Loop 2 (jr): Micro-Kernel Columns (Nr == rhsL1BlockCols)
-				for microColIdx := 0; microColIdx < rhsPanelWidth; microColIdx += params.RHSL1KernelCols {
-					// Actual width to process (might be < Nr at matrix edge)
-					microKernelActualWidth := min(params.RHSL1KernelCols, rhsPanelWidth-microColIdx)
+				// ---------------------------------------------
+				// PANEL KERNEL
+				// Computes a [lhsPanelHeight, rhsPanelWidth] block of Output
+				// by iterating over micro-kernels.
+				// ---------------------------------------------
 
-					// Loop 1 (ir): Micro-Kernel Rows (Mr == lhsL1BlockRows)
-					for microRowIdx := 0; microRowIdx < lhsPanelHeight; microRowIdx += params.LHSL1KernelRows {
-						microKernelActualHeight := min(params.LHSL1KernelRows, lhsPanelHeight-microRowIdx)
+				avx512Float32Panel(
+					contractingPanelWidth,
+					packedLhs, packedRhs, packedOutput,
+					params,
+					lhsPanelHeight, rhsPanelWidth,
+				)
 
-						// ---------------------------------------------
-						// MICRO KERNEL
-						// Computes a [Mr, Nr] tile of Output
-						// ---------------------------------------------
-
-						// Calculate pointers into packed buffers.
-						// PackRhs is organized in strips of Nr. We need the current strip (microColIdx / Nr).
-						// Each strip has size (contractingPanelWidth * Nr).
-						offsetRhs := (microColIdx / params.RHSL1KernelCols) * (contractingPanelWidth * params.RHSL1KernelCols)
-
-						// PackLhs is organized in strips of Mr. We need the current strip (microRowIdx / Mr).
-						// Each strip has size (contractingPanelWidth * Mr).
-						offsetLhs := (microRowIdx / params.LHSL1KernelRows) * (contractingPanelWidth * params.LHSL1KernelRows)
-
-						// Output index calculation (Absolute coordinates)
-						outputRow := lhsPanelRowIdx + microRowIdx
-						outputCol := rhsPanelColIdx + microColIdx
-
-						avx512Float32MicroKernel(
-							contractingPanelWidth,
-							alpha, effectiveBeta,
-							packedLhs[offsetLhs:],
-							packedRhs[offsetRhs:],
-							output,
-							outputRow, outputCol,
-							rhsCrossSize,           // Stride of Output
-							params.LHSL1KernelRows, // Kernel size.
-							microKernelActualHeight, microKernelActualWidth,
-						)
-					}
+				// Accumulate (or write) packedOutput to output.
+				effectiveBeta := beta
+				if contractingPanelIdx > 0 {
+					effectiveBeta = 1
 				}
+				applyPackedOutput(
+					packedOutput, output,
+					alpha, effectiveBeta,
+					params.RHSPanelCrossSize,
+					lhsPanelRowIdx, rhsPanelColIdx,
+					rhsCrossSize,
+					lhsPanelHeight, rhsPanelWidth)
 			}
 		}
 	}
 }
 
-// avx512Float32MicroKernel computes a [lhaL1KernelRows, rhsKernelCols] tile.
-//
-// It uses simulated SIMD logic based on the user's pseudo-code.
-// This assumes lhsCrossSize multiple of 4 (4 registers) and rhsKernelCols=32 (2 registers),
-// so it uses 4x2 = 8 total accumulator registers.
-// Go only seems to make use of the first 16 registers (AVX512 has 32 in total though).
-//
-// lhsActiveRows and rhsActiveCols are the number of rows/cols that should be
-// written back to the output. Notice the inputs (ptrLhs and ptrRhs) are padded.
-//
-// -ptrLhs: is the slice of the packed LHS, organized as [contractingPanelSize, lhsL1KernelRows], zero padded.
-// -ptrRhs: is the slice of the packed RHS, organized as [contractingPanelSize, rhsL1KernelCols==32], zero padded.
-func avx512Float32MicroKernel(
+// avx512Float32Panel computes a [lhsPanelHeight, rhsPanelWidth] block of the output matrix.
+// It iterates over micro-kernels of size [params.LHSL1KernelRows, params.RHSL1KernelCols].
+func avx512Float32Panel(
 	contractingLen int,
-	alpha, beta float32,
-	ptrLhs, ptrRhs []float32, // Packed Buffers
-	output []float32, // Output Matrix
-	outputRowStart, outputColStart int, // Coordinates
-	outputStride int,
-	lhsKernelRows int,
-	lhsActiveRows, rhsActiveCols int, // Active rows/cols (for edge handling)
+	packedLHS, packedRHS, packedOutput []float32, // Packed Buffers
+	params *CacheParams,
+	lhsPanelHeight, rhsPanelWidth int,
 ) {
-	// fmt.Printf("\t- microKernelFloat32(beta=%g, contractingLen=%d, lhsActiveRows=%d, rhsActiveCols=%d)\n",
-	// 	beta, contractingLen, lhsActiveRows, rhsActiveCols)
+	// BCE hints
+	_ = packedLHS[contractingLen*lhsPanelHeight-1]
+	_ = packedRHS[contractingLen*rhsPanelWidth-1]
+	_ = packedOutput[lhsPanelHeight*rhsPanelWidth-1]
 
-	// ---------------------------------------------------------
-	// 1. Write Back Setup
-	// ---------------------------------------------------------
-	betaBroadcast := archsimd.BroadcastFloat32x16(beta)
-	cols0Bits := min(16, rhsActiveCols)
-	cols1Bits := min(16, max(0, rhsActiveCols-16))
-	maskForCols0 := archsimd.Mask32x16FromBits(uint16(uint64(1<<cols0Bits) - 1))
-	maskForCols1 := archsimd.Mask32x16FromBits(uint16(uint64(1<<cols1Bits) - 1))
+	// Loop 1 (ir): Micro-Kernel Rows (Mr == lhsL1BlockRows)
+	for lhsRowIdx := 0; lhsRowIdx < lhsPanelHeight; lhsRowIdx += params.LHSL1KernelRows {
+		// Loop 2 (jr): Micro-Kernel Columns (Nr == rhsL1BlockCols)
+		idxRHS := 0
+		for rhsColIdx := 0; rhsColIdx < rhsPanelWidth; rhsColIdx += params.RHSL1KernelCols {
+			// Output index calculation (relative to panel)
+			outputRowStart := lhsRowIdx
+			outputColStart := rhsColIdx
+			outputStride := params.RHSPanelCrossSize
 
-	// writeRow is used in the end to store the accumulator registers back into the output.
-	writeRow := func(row int, acc0, acc1 archsimd.Float32x16) {
-		outputIdx := (outputRowStart+row)*outputStride + outputColStart
-		if rhsActiveCols >= 16 {
-			// Store first strip of columns.
-			outSlice := output[outputIdx : outputIdx+16]
-			curValue := archsimd.LoadFloat32x16Slice(outSlice)
-			curValue = curValue.Mul(betaBroadcast)
-			curValue = curValue.Add(acc0)
-			curValue.StoreSlice(outSlice)
+			// ---------------------------------------------------------
+			// MICRO KERNEL BODY
+			// ---------------------------------------------------------
 
-			// Store second strip of columns.
-			if rhsActiveCols > 16 {
-				if rhsActiveCols == 32 {
-					// Full second strip of columns.
-					outSlice = output[outputIdx+16 : outputIdx+32]
-					curValue = archsimd.LoadFloat32x16Slice(outSlice)
-					curValue = curValue.Mul(betaBroadcast)
-					curValue = curValue.Add(acc1)
-					curValue.StoreSlice(outSlice)
-				} else {
-					// Partial second strip of columns.
-					outSlice := output[outputIdx+16 : outputIdx+rhsActiveCols]
-					curValue = archsimd.LoadFloat32x16SlicePart(outSlice)
-					curValue = curValue.Mul(betaBroadcast)
-					curValue = curValue.Add(acc1)
-					curValue.StoreMasked(castToArray16(&outSlice[0]), maskForCols1)
-				}
+			lhsKernelRows := params.LHSL1KernelRows // Alias for clarity/compatibility with old code structure
+
+			// ---------------------------------------------------------
+			// 2. Initialize Accumulators (Registers) to 0.0
+			// ---------------------------------------------------------
+			// We use 4 rows (Mr) worth of registers at a time.
+			accum_lhs0_rhs0 := archsimd.BroadcastFloat32x16(0.0)
+			accum_lhs0_rhs1 := archsimd.BroadcastFloat32x16(0.0)
+			accum_lhs1_rhs0 := archsimd.BroadcastFloat32x16(0.0)
+			accum_lhs1_rhs1 := archsimd.BroadcastFloat32x16(0.0)
+			accum_lhs2_rhs0 := archsimd.BroadcastFloat32x16(0.0)
+			accum_lhs2_rhs1 := archsimd.BroadcastFloat32x16(0.0)
+			accum_lhs3_rhs0 := archsimd.BroadcastFloat32x16(0.0)
+			accum_lhs3_rhs1 := archsimd.BroadcastFloat32x16(0.0)
+
+			// ---------------------------------------------------------
+			// 3. The K-Loop (Dot Product)
+			// ---------------------------------------------------------
+			idxLHS := lhsRowIdx * contractingLen * params.LHSL1KernelRows
+			for range contractingLen {
+				// Load RHS (Broadcasting/Streaming)
+				rhsVec0 := archsimd.LoadFloat32x16(castToArray16(&packedRHS[idxRHS]))
+				rhsVec1 := archsimd.LoadFloat32x16(castToArray16(&packedRHS[idxRHS+16]))
+				idxRHS += 32
+
+				// Row 0
+				lhsVal0 := packedLHS[idxLHS+0]
+				lhsVec0 := archsimd.BroadcastFloat32x16(lhsVal0)
+				accum_lhs0_rhs0 = rhsVec0.MulAdd(lhsVec0, accum_lhs0_rhs0)
+				accum_lhs0_rhs1 = rhsVec1.MulAdd(lhsVec0, accum_lhs0_rhs1)
+
+				// Row 1
+				lhsVal1 := packedLHS[idxLHS+1]
+				lhsVec1 := archsimd.BroadcastFloat32x16(lhsVal1)
+				accum_lhs1_rhs0 = rhsVec0.MulAdd(lhsVec1, accum_lhs1_rhs0)
+				accum_lhs1_rhs1 = rhsVec1.MulAdd(lhsVec1, accum_lhs1_rhs1)
+
+				// Row 2
+				lhsVal2 := packedLHS[idxLHS+2]
+				lhsVec2 := archsimd.BroadcastFloat32x16(lhsVal2)
+				accum_lhs2_rhs0 = rhsVec0.MulAdd(lhsVec2, accum_lhs2_rhs0)
+				accum_lhs2_rhs1 = rhsVec1.MulAdd(lhsVec2, accum_lhs2_rhs1)
+
+				// Row 3
+				lhsVal3 := packedLHS[idxLHS+3]
+				lhsVec3 := archsimd.BroadcastFloat32x16(lhsVal3)
+				accum_lhs3_rhs0 = rhsVec0.MulAdd(lhsVec3, accum_lhs3_rhs0)
+				accum_lhs3_rhs1 = rhsVec1.MulAdd(lhsVec3, accum_lhs3_rhs1)
+
+				idxLHS += lhsKernelRows
 			}
 
-		} else {
-			// Store partial first strip of columns.
-			outSlice := output[outputIdx : outputIdx+rhsActiveCols]
-			curValue := archsimd.LoadFloat32x16SlicePart(outSlice)
-			curValue = curValue.Mul(betaBroadcast)
-			curValue = curValue.Add(acc0)
-			curValue.StoreMasked(castToArray16(&outSlice[0]), maskForCols0)
-		}
-	}
+			// ---------------------------------------------------------
+			// 4. Write Back to Output
+			// ---------------------------------------------------------
+			outputIdx0 := outputRowStart*outputStride + outputColStart
+			outputIdx1 := outputIdx0 + params.RHSPanelCrossSize
+			outputIdx2 := outputIdx0 + 2*params.RHSPanelCrossSize
+			outputIdx3 := outputIdx0 + 3*params.RHSPanelCrossSize
 
-	for rowOffset := 0; rowOffset < lhsActiveRows; rowOffset += 4 {
-		// ---------------------------------------------------------
-		// 2. Initialize Accumulators (Registers) to 0.0
-		// ---------------------------------------------------------
-		// We use 4 rows (Mr) worth of registers at a time.
-		accum_lhs0_rhs0 := archsimd.BroadcastFloat32x16(0.0)
-		accum_lhs0_rhs1 := archsimd.BroadcastFloat32x16(0.0)
-		accum_lhs1_rhs0 := archsimd.BroadcastFloat32x16(0.0)
-		accum_lhs1_rhs1 := archsimd.BroadcastFloat32x16(0.0)
-		accum_lhs2_rhs0 := archsimd.BroadcastFloat32x16(0.0)
-		accum_lhs2_rhs1 := archsimd.BroadcastFloat32x16(0.0)
-		accum_lhs3_rhs0 := archsimd.BroadcastFloat32x16(0.0)
-		accum_lhs3_rhs1 := archsimd.BroadcastFloat32x16(0.0)
-
-		// ---------------------------------------------------------
-		// 3. The K-Loop (Dot Product)
-		// ---------------------------------------------------------
-		idxLhs := rowOffset
-		idxRhs := 0
-		for range contractingLen {
-			// Load RHS (Broadcasting/Streaming)
-			rhsVec0 := archsimd.LoadFloat32x16Slice(ptrRhs[idxRhs : idxRhs+16])
-			rhsVec1 := archsimd.LoadFloat32x16Slice(ptrRhs[idxRhs+16 : idxRhs+32])
-			idxRhs += 32
-
-			// Row rowOffset+0
-			lhsVal0 := ptrLhs[idxLhs+0]
-			lhsVec0 := archsimd.BroadcastFloat32x16(lhsVal0)
-			accum_lhs0_rhs0 = rhsVec0.MulAdd(lhsVec0, accum_lhs0_rhs0)
-			accum_lhs0_rhs1 = rhsVec1.MulAdd(lhsVec0, accum_lhs0_rhs1)
-
-			// Row rowOffset+1
-			lhsVal1 := ptrLhs[idxLhs+1]
-			lhsVec1 := archsimd.BroadcastFloat32x16(lhsVal1)
-			accum_lhs1_rhs0 = rhsVec0.MulAdd(lhsVec1, accum_lhs1_rhs0)
-			accum_lhs1_rhs1 = rhsVec1.MulAdd(lhsVec1, accum_lhs1_rhs1)
-
-			// Row rowOffset+2
-			lhsVal2 := ptrLhs[idxLhs+2]
-			lhsVec2 := archsimd.BroadcastFloat32x16(lhsVal2)
-			accum_lhs2_rhs0 = rhsVec0.MulAdd(lhsVec2, accum_lhs2_rhs0)
-			accum_lhs2_rhs1 = rhsVec1.MulAdd(lhsVec2, accum_lhs2_rhs1)
-
-			// Row rowOffset+3
-			lhsVal3 := ptrLhs[idxLhs+3]
-			lhsVec3 := archsimd.BroadcastFloat32x16(lhsVal3)
-			accum_lhs3_rhs0 = rhsVec0.MulAdd(lhsVec3, accum_lhs3_rhs0)
-			accum_lhs3_rhs1 = rhsVec1.MulAdd(lhsVec3, accum_lhs3_rhs1)
-
-			idxLhs += lhsKernelRows
-		}
-
-		// Apply alpha factor.
-		if alpha != 1 {
-			alphaBroadcast := archsimd.BroadcastFloat32x16(alpha)
-			accum_lhs0_rhs0 = accum_lhs0_rhs0.Mul(alphaBroadcast)
-			accum_lhs0_rhs1 = accum_lhs0_rhs1.Mul(alphaBroadcast)
-			accum_lhs1_rhs0 = accum_lhs1_rhs0.Mul(alphaBroadcast)
-			accum_lhs1_rhs1 = accum_lhs1_rhs1.Mul(alphaBroadcast)
-			accum_lhs2_rhs0 = accum_lhs2_rhs0.Mul(alphaBroadcast)
-			accum_lhs2_rhs1 = accum_lhs2_rhs1.Mul(alphaBroadcast)
-			accum_lhs3_rhs0 = accum_lhs3_rhs0.Mul(alphaBroadcast)
-			accum_lhs3_rhs1 = accum_lhs3_rhs1.Mul(alphaBroadcast)
-		}
-
-		// ---------------------------------------------------------
-		// 4. Write Back to Output
-		// ---------------------------------------------------------
-		remainingRows := lhsActiveRows - rowOffset
-		switch {
-		case remainingRows > 3:
-			writeRow(rowOffset+3, accum_lhs3_rhs0, accum_lhs3_rhs1)
-			fallthrough
-		case remainingRows > 2:
-			writeRow(rowOffset+2, accum_lhs2_rhs0, accum_lhs2_rhs1)
-			fallthrough
-		case remainingRows > 1:
-			writeRow(rowOffset+1, accum_lhs1_rhs0, accum_lhs1_rhs1)
-			fallthrough
-		case remainingRows > 0:
-			writeRow(rowOffset+0, accum_lhs0_rhs0, accum_lhs0_rhs1)
+			accum_lhs0_rhs0.Store(castToArray16(&packedOutput[outputIdx0]))
+			accum_lhs0_rhs1.Store(castToArray16(&packedOutput[outputIdx0+16]))
+			accum_lhs1_rhs0.Store(castToArray16(&packedOutput[outputIdx1]))
+			accum_lhs1_rhs1.Store(castToArray16(&packedOutput[outputIdx1+16]))
+			accum_lhs2_rhs0.Store(castToArray16(&packedOutput[outputIdx2]))
+			accum_lhs2_rhs1.Store(castToArray16(&packedOutput[outputIdx2+16]))
+			accum_lhs3_rhs0.Store(castToArray16(&packedOutput[outputIdx3]))
+			accum_lhs3_rhs1.Store(castToArray16(&packedOutput[outputIdx3+16]))
 		}
 	}
 }
