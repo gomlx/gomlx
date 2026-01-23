@@ -160,7 +160,6 @@ func avx512Float32GemmChunk(
 				// Computes a [lhsPanelHeight, rhsPanelWidth] block of Output
 				// by iterating over micro-kernels.
 				// ---------------------------------------------
-
 				avx512Float32Panel(
 					contractingPanelWidth,
 					packedLhs, packedRhs, packedOutput,
@@ -173,7 +172,7 @@ func avx512Float32GemmChunk(
 				if contractingPanelIdx > 0 {
 					effectiveBeta = 1
 				}
-				applyPackedOutput(
+				avx512Float32ApplyPackedOutput(
 					packedOutput, output,
 					alpha, effectiveBeta,
 					params.RHSPanelCrossSize,
@@ -286,4 +285,46 @@ func avx512Float32Panel(
 
 func castToArray16[T float32](ptr *T) *[16]T {
 	return (*[16]T)(unsafe.Pointer(ptr))
+}
+
+// applyPackedOutput applies the computed packedOutput to the final output.
+func avx512Float32ApplyPackedOutput(
+	packedOutput, output []float32,
+	alpha, beta float32,
+	packedOutputRowStride int,
+	lhsRowOffset, rhsColOffset int, // Global output offsets
+	outputRowStride int,
+	height, width int, // actual amount of data to copy
+) {
+	// Vectorized constants
+	alphaVec := archsimd.BroadcastFloat32x16(alpha)
+	betaVec := archsimd.BroadcastFloat32x16(beta)
+
+	for r := range height {
+		packedIdx := r * packedOutputRowStride
+		outputIdx := (lhsRowOffset+r)*outputRowStride + rhsColOffset
+
+		c := 0
+		// Vectorized loop
+		for ; c+16 <= width; c += 16 {
+			packedVal := archsimd.LoadFloat32x16(castToArray16(&packedOutput[packedIdx]))
+			outputVal := archsimd.LoadFloat32x16(castToArray16(&output[outputIdx]))
+
+			// output = alpha * packed + beta * output
+			newVal := alphaVec.MulAdd(packedVal, betaVec.Mul(outputVal))
+
+			newVal.Store(castToArray16(&output[outputIdx]))
+
+			packedIdx += 16
+			outputIdx += 16
+		}
+
+		// Scalar tail
+		for ; c < width; c++ {
+			val := packedOutput[packedIdx]
+			output[outputIdx] = beta*output[outputIdx] + alpha*val
+			packedIdx++
+			outputIdx++
+		}
+	}
 }
