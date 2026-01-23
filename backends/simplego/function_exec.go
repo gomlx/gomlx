@@ -418,28 +418,57 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 	// Closure executors receive captured inputs separately with explicit ownership tracking.
 	closureExecutor := nodeClosureExecutors[node.opType]
 	if closureExecutor != nil {
-		// Prepare captured inputs with ownership tracking.
-		// Captured inputs are stored in node.capturedInputs during graph building.
-		numCaptured := len(node.capturedInputs)
-		closureInputs := ClosureInputs{
-			Buffers: make([]*Buffer, numCaptured),
-			Owned:   make([]bool, numCaptured),
+		// Determine the split counts for each closure based on node type.
+		var closureCounts []int
+		switch data := node.data.(type) {
+		case *ifNode:
+			closureCounts = []int{data.trueCapturedCount, data.falseCapturedCount}
+		case *whileNode:
+			closureCounts = []int{data.condCapturedCount, data.bodyCapturedCount}
+		case *sortNode:
+			closureCounts = []int{data.compCapturedCount}
+		default:
+			return errors.Errorf("unknown closure node data type for op %s", node.opType)
 		}
 
-		for i, capturedNode := range node.capturedInputs {
-			capturedIdx := capturedNode.idx
-			closureInputs.Buffers[i] = execBuf.results[capturedIdx]
-			if closureInputs.Buffers[i] == nil {
-				return errors.Errorf("captured input %d for node %s not computed yet", i, node.opType)
+		// Build []ClosureInputs by splitting node.capturedInputs according to closureCounts.
+		closureInputs := make([]ClosureInputs, len(closureCounts))
+		capturedOffset := 0
+		for closureIdx, count := range closureCounts {
+			closureInputs[closureIdx] = ClosureInputs{
+				Buffers: make([]*Buffer, count),
+				Owned:   make([]bool, count),
 			}
-			// Only "own" the captured input if this is the last use of it.
-			closureInputs.Owned[i] = execBuf.owned[capturedIdx] &&
-				fe.numUses[capturedIdx]-int(execBuf.numUsed[capturedIdx].Load()) == 1
+			for i := 0; i < count; i++ {
+				capturedNode := node.capturedInputs[capturedOffset+i]
+				capturedIdx := capturedNode.idx
+				closureInputs[closureIdx].Buffers[i] = execBuf.results[capturedIdx]
+				if closureInputs[closureIdx].Buffers[i] == nil {
+					return errors.Errorf("captured input %d for closure %d of node %s not computed yet", i, closureIdx, node.opType)
+				}
+				// Only "own" the captured input if this is the last use of it.
+				closureInputs[closureIdx].Owned[i] = execBuf.owned[capturedIdx] &&
+					fe.numUses[capturedIdx]-int(execBuf.numUsed[capturedIdx].Load()) == 1
+			}
+			capturedOffset += count
 		}
 
 		outputBuffers, err := closureExecutor(backend, node, inputBuffers, inputsOwned, closureInputs)
 		if err != nil {
 			return errors.WithMessagef(err, "executing closure op %s", node.opType)
+		}
+
+		// Check if any captured inputs were consumed (set to nil by the executor).
+		// If so, mark execBuf.results as nil to indicate they're no longer available.
+		capturedOffset = 0
+		for closureIdx, count := range closureCounts {
+			for i := 0; i < count; i++ {
+				if closureInputs[closureIdx].Buffers[i] == nil {
+					capturedIdx := node.capturedInputs[capturedOffset+i].idx
+					execBuf.results[capturedIdx] = nil
+				}
+			}
+			capturedOffset += count
 		}
 
 		// Handle outputs (closure ops are always multi-output style)

@@ -4,9 +4,7 @@ package imdb
 
 import (
 	"fmt"
-	"maps"
 	"os"
-	"slices"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -29,6 +27,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 )
@@ -195,7 +194,7 @@ func TrainModel(
 	modelType := context.GetParamOr(ctx, "model", "bow")
 	modelFn, found := ValidModels[modelType]
 	if !found {
-		exceptions.Panicf("Parameter \"model\" must take one value from %v, got %q", slices.Collect(maps.Keys(ValidModels)), modelType)
+		exceptions.Panicf("Parameter \"model\" must take one value from %v, got %q", xslices.Keys(ValidModels), modelType)
 	}
 	fmt.Printf("Model: %s\n", modelType)
 

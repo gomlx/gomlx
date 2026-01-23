@@ -11,14 +11,13 @@
 package dtypes
 
 import (
-	"maps"
 	"math"
 	"reflect"
-	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 	"github.com/x448/float16"
 )
@@ -39,7 +38,7 @@ func init() {
 	}
 
 	// Add a mapping to the lower-case version of dtypes.
-	keys := slices.Collect(maps.Keys(MapOfNames))
+	keys := xslices.Keys(MapOfNames)
 	for _, key := range keys {
 		lowerKey := strings.ToLower(key)
 		if lowerKey == key {

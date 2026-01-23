@@ -106,7 +106,8 @@ type ClosureInputs struct {
 // nodeClosureExecutor is an executor for operations that call closures (If, While, Sort).
 // It receives captured inputs separately from regular inputs with explicit ownership tracking.
 // This allows proper buffer donation for captured values.
-type nodeClosureExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs ClosureInputs) ([]*Buffer, error)
+// closureInputs is a slice with one entry per closure the operation uses.
+type nodeClosureExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs []ClosureInputs) ([]*Buffer, error)
 
 var (
 	// nodeExecutors should be populated during initialization (`init` functions) for the ops implemented.

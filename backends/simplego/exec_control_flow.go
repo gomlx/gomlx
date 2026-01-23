@@ -16,20 +16,9 @@ func init() {
 	nodeClosureExecutors[backends.OpTypeSort] = execSort
 }
 
-// freeOwnedBuffers releases buffers that are owned, setting them to nil to prevent double-free.
-// This is used to clean up captured inputs when they're no longer needed.
-func freeOwnedBuffers(backend *Backend, buffers []*Buffer, owned []bool) {
-	for i, isOwned := range owned {
-		if isOwned && buffers[i] != nil {
-			backend.putBuffer(buffers[i])
-			buffers[i] = nil
-		}
-	}
-}
-
 // execIf executes the If operation by evaluating the predicate and running one branch.
-// Captured inputs layout: [trueBranch captured values..., falseBranch captured values...]
-func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs ClosureInputs) ([]*Buffer, error) {
+// closureInputs[0] = true branch captured values, closureInputs[1] = false branch captured values.
+func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs []ClosureInputs) ([]*Buffer, error) {
 	predBuffer := inputs[0]
 	predFlat := predBuffer.flat.([]bool)
 	if len(predFlat) != 1 {
@@ -38,33 +27,19 @@ func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, 
 	pred := predFlat[0]
 
 	data := node.data.(*ifNode)
-	allCaptured := closureInputs.Buffers
-	allCapturedOwned := closureInputs.Owned
 
-	// Split captured values based on which branch we're executing
+	// Select the branch to execute based on predicate
 	var branchFn *Function
 	var capturedInputs []*Buffer
 	var donateCaptures []bool
 	if pred {
 		branchFn = data.trueBranch
-		if data.trueCapturedCount > 0 {
-			capturedInputs = allCaptured[:data.trueCapturedCount]
-			donateCaptures = allCapturedOwned[:data.trueCapturedCount]
-		}
-		// Free the false branch captured inputs we own (they won't be used)
-		if data.falseCapturedCount > 0 {
-			freeOwnedBuffers(backend, allCaptured[data.trueCapturedCount:], allCapturedOwned[data.trueCapturedCount:])
-		}
+		capturedInputs = closureInputs[0].Buffers
+		donateCaptures = closureInputs[0].Owned
 	} else {
 		branchFn = data.falseBranch
-		if data.falseCapturedCount > 0 {
-			capturedInputs = allCaptured[data.trueCapturedCount:]
-			donateCaptures = allCapturedOwned[data.trueCapturedCount:]
-		}
-		// Free the true branch captured inputs we own (they won't be used)
-		if data.trueCapturedCount > 0 {
-			freeOwnedBuffers(backend, allCaptured[:data.trueCapturedCount], allCapturedOwned[:data.trueCapturedCount])
-		}
+		capturedInputs = closureInputs[1].Buffers
+		donateCaptures = closureInputs[1].Owned
 	}
 
 	// Execute the branch with proper donation of captured values
@@ -78,12 +53,11 @@ func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, 
 
 // execWhile executes the While operation by looping until condition returns false.
 // Regular inputs: [state values...]
-// Captured inputs layout: [cond captured values..., body captured values...]
+// closureInputs[0] = cond captured values, closureInputs[1] = body captured values.
 //
 // Note on captured input donation: Captured values are reused across all iterations,
-// so we cannot donate them until the loop exits. On the final iteration (when condition
-// returns false), we free the owned captured inputs since they won't be used again.
-func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs ClosureInputs) ([]*Buffer, error) {
+// so we never donate them to the closure calls. The executor handles freeing them.
+func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs []ClosureInputs) ([]*Buffer, error) {
 	data := node.data.(*whileNode)
 	condFn := data.cond
 	bodyFn := data.body
@@ -93,21 +67,9 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	stateInputs := inputs[:stateCount]
 	stateOwned := inputsOwned[:stateCount]
 
-	// Get captured inputs and their ownership
-	allCaptured := closureInputs.Buffers
-	allCapturedOwned := closureInputs.Owned
-
-	// Split captured values for cond and body
-	var condCaptured, bodyCaptured []*Buffer
-	var condCapturedOwned, bodyCapturedOwned []bool
-	if data.condCapturedCount > 0 {
-		condCaptured = allCaptured[:data.condCapturedCount]
-		condCapturedOwned = allCapturedOwned[:data.condCapturedCount]
-	}
-	if data.bodyCapturedCount > 0 {
-		bodyCaptured = allCaptured[data.condCapturedCount:]
-		bodyCapturedOwned = allCapturedOwned[data.condCapturedCount:]
-	}
+	// Get captured inputs for cond and body
+	condCaptured := closureInputs[0].Buffers
+	bodyCaptured := closureInputs[1].Buffers
 
 	// Set up state buffers and ownership tracking
 	state := make([]*Buffer, stateCount)
@@ -125,25 +87,11 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 		}
 	}
 
-	// Helper to free all owned captured inputs
-	freeAllCaptures := func() {
-		freeOwnedBuffers(backend, condCaptured, condCapturedOwned)
-		freeOwnedBuffers(backend, bodyCaptured, bodyCapturedOwned)
-	}
-
 	// Loop while condition is true
 	for iter := 0; ; iter++ {
 		// Evaluate condition - DON'T donate state or captured buffers since we may need them
 		condOutputs, err := condFn.compiled.Execute(backend, state, nil, condCaptured, nil)
-
 		if err != nil {
-			// On error, clean up owned state and captured buffers
-			for i, owned := range donateState {
-				if owned && state[i] != nil {
-					backend.putBuffer(state[i])
-				}
-			}
-			freeAllCaptures()
 			return nil, errors.WithMessagef(err, "While: evaluating condition at iteration %d", iter)
 		}
 
@@ -152,9 +100,7 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 		backend.putBuffer(condOutputs[0])
 
 		if !condResult {
-			// Condition is false, exit loop. Free owned captured inputs.
-			freeAllCaptures()
-
+			// Condition is false, exit loop.
 			// Return state buffers. Clone any we don't own.
 			for i, owned := range donateState {
 				if !owned {
@@ -171,8 +117,6 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 		donateState = donateAll // After first iteration, we always own everything
 
 		if err != nil {
-			// On error, we no longer own state (donated), but we still own captured buffers
-			freeAllCaptures()
 			return nil, errors.WithMessagef(err, "While: executing body at iteration %d", iter)
 		}
 
@@ -182,11 +126,11 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 
 // execSort sorts tensors along the specified axis using the comparator closure.
 // Regular inputs: [input tensors...]
-// Captured inputs: [comparator captured values...]
+// closureInputs[0] = comparator captured values.
 //
 // Note on captured input donation: The comparator is called O(n log n) times during
-// sorting, so we cannot donate captured inputs until after the sort completes.
-func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs ClosureInputs) ([]*Buffer, error) {
+// sorting, so we never donate captured inputs. The executor handles freeing them.
+func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs []ClosureInputs) ([]*Buffer, error) {
 	data := node.data.(*sortNode)
 	axis := data.axis
 	isStable := data.isStable
@@ -197,12 +141,10 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 	tensorInputs := inputs[:inputCount]
 	tensorOwned := inputsOwned[:inputCount]
 
-	// Get captured inputs and their ownership
-	compCaptured := closureInputs.Buffers
-	compCapturedOwned := closureInputs.Owned
+	// Get captured inputs
+	compCaptured := closureInputs[0].Buffers
 
 	if inputCount == 0 {
-		freeOwnedBuffers(backend, compCaptured, compCapturedOwned)
 		return nil, errors.Errorf("Sort: requires at least one input")
 	}
 
@@ -317,7 +259,6 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 				for _, buf := range outputs {
 					backend.putBuffer(buf)
 				}
-				freeOwnedBuffers(backend, compCaptured, compCapturedOwned)
 				return nil, errors.WithMessagef(sortErr, "Sort: comparator failed")
 			}
 
@@ -327,9 +268,6 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 			}
 		}
 	}
-
-	// Sort complete, free owned captured inputs
-	freeOwnedBuffers(backend, compCaptured, compCapturedOwned)
 
 	return outputs, nil
 }

@@ -1227,8 +1227,8 @@ func (f *Function) AllReduce(operands []backends.Value, reductionType backends.R
 		"AllReduce not supported for %q builder", BackendName)
 }
 
-// validClosure validates that a backends.Function is a compiled closure of the current function.
-func (f *Function) validClosure(opName, closureName string, closure backends.Function) (*Function, error) {
+// validateClosure validates that a backends.Function is a compiled closure of the current function.
+func (f *Function) validateClosure(opName, closureName string, closure backends.Function) (*Function, error) {
 	fn, ok := closure.(*Function)
 	if !ok {
 		return nil, errors.Errorf("%s: %s must be a *simplego.Function, got %T", opName, closureName, closure)
@@ -1282,11 +1282,11 @@ func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Func
 	}
 
 	// Validate branches
-	trueFn, err := f.validClosure("If", "trueBranch", trueBranch)
+	trueFn, err := f.validateClosure("If", "trueBranch", trueBranch)
 	if err != nil {
 		return nil, err
 	}
-	falseFn, err := f.validClosure("If", "falseBranch", falseBranch)
+	falseFn, err := f.validateClosure("If", "falseBranch", falseBranch)
 	if err != nil {
 		return nil, err
 	}
@@ -1367,7 +1367,7 @@ func (f *Function) While(cond, body backends.Function, initialState ...backends.
 	}
 
 	// Validate closures and their parameters
-	condFn, err := f.validClosure("While", "cond", cond)
+	condFn, err := f.validateClosure("While", "cond", cond)
 	if err != nil {
 		return nil, err
 	}
@@ -1375,7 +1375,7 @@ func (f *Function) While(cond, body backends.Function, initialState ...backends.
 		return nil, err
 	}
 
-	bodyFn, err := f.validClosure("While", "body", body)
+	bodyFn, err := f.validateClosure("While", "body", body)
 	if err != nil {
 		return nil, err
 	}
@@ -1461,7 +1461,7 @@ func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, i
 	}
 
 	// Validate comparator closure
-	compFn, err := f.validClosure("Sort", "comparator", comparator)
+	compFn, err := f.validateClosure("Sort", "comparator", comparator)
 	if err != nil {
 		return nil, err
 	}
