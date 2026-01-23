@@ -19,8 +19,8 @@ var (
 		RHSL1KernelCols: 4, // Nr: Cols of RHS in local registers.
 
 		PanelContractingSize: 512, // Kc: L1 Block contracting "depth".
-		LHSPanelCrossSize:    4,   // Mc: Block Height fitting L2/L3 cache.
-		RHSPanelCrossSize:    64,  // Nc: Block Width fitting L2/L3 cache.
+		LHSPanelCrossSize:    2,   // Mc: Block Height fitting L2/L3 cache.
+		RHSPanelCrossSize:    512, // Nc: Block Width fitting L2/L3 cache.
 	}
 
 	// Threshold in byte size for switching to the small matrix multiplication kernel.
