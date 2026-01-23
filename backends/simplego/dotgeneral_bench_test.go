@@ -23,7 +23,7 @@ func BenchmarkDotGeneralPaths(b *testing.B) {
 
 	// Matrix sizes typical for LLM inference
 	sizes := []struct {
-		name string
+		name    string
 		M, K, N int
 	}{
 		{"Small_64x128x64", 64, 128, 64},
