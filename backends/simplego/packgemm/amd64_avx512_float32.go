@@ -16,7 +16,7 @@ import (
 var avx512Float32Params = CacheParams{
 	LHSL1KernelRows:      4,   // Mr: Uses 4 ZMM registers for accumulation rows, this number must be a multiple of 4
 	RHSL1KernelCols:      32,  // Nr: Uses 2 ZMM registers for accumulation cols, each holds 16 values
-	PanelContractingSize: 512, // Kc: A strip fits in L1 cache
+	PanelContractingSize: 128, // Kc: A strip fits in L1 cache
 	LHSPanelCrossSize:    4,   // Mc: Fits in L2 cache (multiple of LHSL1KernelRows)
 	RHSPanelCrossSize:    512, // Nc: Fits in L3 cache (multiple of RHSL1KernelCols)
 }
@@ -187,21 +187,21 @@ func avx512Float32GemmChunk(
 // avx512Float32Panel computes a [lhsPanelHeight, rhsPanelWidth] block of the output matrix.
 // It iterates over micro-kernels of size [params.LHSL1KernelRows, params.RHSL1KernelCols].
 func avx512Float32Panel(
-	contractingLen int,
+	activeContractingLen int,
 	packedLHS, packedRHS, packedOutput []float32, // Packed Buffers
 	params *CacheParams,
-	lhsPanelHeight, rhsPanelWidth int,
+	lhsActivePanelHeight, rhsActivePanelWidth int,
 ) {
 	// BCE hints
-	_ = packedLHS[contractingLen*lhsPanelHeight-1]
-	_ = packedRHS[contractingLen*rhsPanelWidth-1]
-	_ = packedOutput[lhsPanelHeight*rhsPanelWidth-1]
+	_ = packedLHS[activeContractingLen*lhsActivePanelHeight-1]
+	_ = packedRHS[activeContractingLen*rhsActivePanelWidth-1]
+	_ = packedOutput[lhsActivePanelHeight*rhsActivePanelWidth-1]
 
 	// Loop 1 (ir): Micro-Kernel Rows (Mr == lhsL1BlockRows)
-	for lhsRowIdx := 0; lhsRowIdx < lhsPanelHeight; lhsRowIdx += params.LHSL1KernelRows {
+	for lhsRowIdx := 0; lhsRowIdx < lhsActivePanelHeight; lhsRowIdx += params.LHSL1KernelRows {
 		// Loop 2 (jr): Micro-Kernel Columns (Nr == rhsL1BlockCols)
 		idxRHS := 0
-		for rhsColIdx := 0; rhsColIdx < rhsPanelWidth; rhsColIdx += params.RHSL1KernelCols {
+		for rhsColIdx := 0; rhsColIdx < rhsActivePanelWidth; rhsColIdx += params.RHSL1KernelCols {
 			// Output index calculation (relative to panel)
 			outputRowStart := lhsRowIdx
 			outputColStart := rhsColIdx
@@ -229,8 +229,8 @@ func avx512Float32Panel(
 			// ---------------------------------------------------------
 			// 3. The K-Loop (Dot Product)
 			// ---------------------------------------------------------
-			idxLHS := lhsRowIdx * contractingLen * params.LHSL1KernelRows
-			for range contractingLen {
+			idxLHS := lhsRowIdx * activeContractingLen
+			for range activeContractingLen {
 				// Load RHS (Broadcasting/Streaming)
 				rhsVec0 := archsimd.LoadFloat32x16(castToArray16(&packedRHS[idxRHS]))
 				rhsVec1 := archsimd.LoadFloat32x16(castToArray16(&packedRHS[idxRHS+16]))
