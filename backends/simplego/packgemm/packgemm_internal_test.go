@@ -1,6 +1,7 @@
 package packgemm
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 
@@ -72,8 +73,8 @@ func TestFeedWorkItems(t *testing.T) {
 			//      batch 1: lhs 0..8, 8..16
 			want: []workItem{
 				{0, 1, 0, 8, 0, 4},
-				{0, 1, 8, 16, 0, 4},
 				{1, 2, 0, 8, 0, 4},
+				{0, 1, 8, 16, 0, 4},
 				{1, 2, 8, 16, 0, 4},
 			},
 		},
@@ -85,8 +86,8 @@ func TestFeedWorkItems(t *testing.T) {
 			// Same logic but RHS split.
 			want: []workItem{
 				{0, 1, 0, 4, 0, 8},
-				{0, 1, 0, 4, 8, 16},
 				{1, 2, 0, 4, 0, 8},
+				{0, 1, 0, 4, 8, 16},
 				{1, 2, 0, 4, 8, 16},
 			},
 		},
@@ -144,8 +145,9 @@ func TestFeedWorkItems(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := collectWorkItems(tc.batchSize, tc.lhsCrossSize, tc.rhsCrossSize, params, tc.maxWorkers)
 			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(workItem{})); diff != "" {
+				fmt.Printf("- Got: %+v\n", got)
+				fmt.Printf("- Want: %+v\n", tc.want)
 				t.Errorf("feedWorkItems() mismatch (-want +got):\n%s", diff)
-				t.Logf("Got: %+v", got)
 			}
 		})
 	}

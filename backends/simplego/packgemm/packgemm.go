@@ -269,8 +269,9 @@ func feedWorkItems(
 		// Split on the LHS dimension, in multiples of LHSPanelCrossSize.
 		lhsSplitSize := (lhsCrossSize + splitFactor - 1) / splitFactor
 		lhsSplitSize = max(1, lhsSplitSize/params.LHSPanelCrossSize) * params.LHSPanelCrossSize
-		for ; batchIdx < batchSize; batchIdx++ {
-			for lhsRowIdx := 0; lhsRowIdx < lhsCrossSize; lhsRowIdx += lhsSplitSize {
+		batchStart := batchIdx
+		for lhsRowIdx := 0; lhsRowIdx < lhsCrossSize; lhsRowIdx += lhsSplitSize {
+			for batchIdx = batchStart; batchIdx < batchSize; batchIdx++ {
 				workChan <- workItem{
 					batchIdx, batchIdx + 1,
 					lhsRowIdx, lhsRowIdx + min(lhsSplitSize, lhsCrossSize-lhsRowIdx),
@@ -281,8 +282,9 @@ func feedWorkItems(
 		// Split on the RHS dimension, in multiples of RHSPanelCrossSize.
 		rhsSplitSize := (rhsCrossSize + splitFactor - 1) / splitFactor
 		rhsSplitSize = max(1, rhsSplitSize/params.RHSPanelCrossSize) * params.RHSPanelCrossSize
-		for ; batchIdx < batchSize; batchIdx++ {
-			for rhsColIdx := 0; rhsColIdx < rhsCrossSize; rhsColIdx += rhsSplitSize {
+		batchStart := batchIdx
+		for rhsColIdx := 0; rhsColIdx < rhsCrossSize; rhsColIdx += rhsSplitSize {
+			for batchIdx = batchStart; batchIdx < batchSize; batchIdx++ {
 				workChan <- workItem{
 					batchIdx, batchIdx + 1,
 					0, lhsCrossSize,
