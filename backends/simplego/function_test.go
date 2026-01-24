@@ -882,9 +882,10 @@ func TestAddNodeCapturedInputs(t *testing.T) {
 	// Add captured inputs to the node
 	dummyNode.AddNodeCapturedInputs(closureFn)
 
-	// Verify the node has captured inputs
+	// Verify the node has captured inputs (one closure with one captured value)
 	require.Len(t, dummyNode.capturedInputs, 1)
-	require.Equal(t, parentValue.(*Node), dummyNode.capturedInputs[0])
+	require.Len(t, dummyNode.capturedInputs[0], 1)
+	require.Equal(t, parentValue.(*Node), dummyNode.capturedInputs[0][0])
 }
 
 // TestNestedClosureCaptureChain tests that nested closures properly propagate

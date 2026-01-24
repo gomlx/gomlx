@@ -371,19 +371,23 @@ func (f *Function) CapturedParentNodes() []*Node {
 // AddNodeCapturedInputs adds captured inputs from a closure to this node.
 // This should be called when building ops like If, While, Sort that use closures.
 // For ops with multiple closures, call this once for each closure.
-// The closure's required captured values are appended to the node's capturedInputs field
-// so they are properly tracked in the parent function's dependency graph.
+// Each closure's captured values are stored as a separate slice in node.capturedInputs,
+// preserving the per-closure grouping for execution.
 //
 // For nested closures, if the closure captures values from a grandparent,
 // those values are propagated to the parent closure's required captures.
 func (n *Node) AddNodeCapturedInputs(closure *Function) {
-	if closure == nil || len(closure.capturedParentNodes) == 0 {
+	if closure == nil {
+		// Add empty slice to maintain closure index alignment.
+		n.capturedInputs = append(n.capturedInputs, nil)
 		return
 	}
 
-	// Append the closure's captured values to the node's capturedInputs.
+	// Append the closure's captured values as a new slice.
 	// These become dependencies of the node in the parent function's DAG.
-	n.capturedInputs = append(n.capturedInputs, closure.capturedParentNodes...)
+	capturedNodes := make([]*Node, len(closure.capturedParentNodes))
+	copy(capturedNodes, closure.capturedParentNodes)
+	n.capturedInputs = append(n.capturedInputs, capturedNodes)
 }
 
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
@@ -1318,10 +1322,8 @@ func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Func
 	}
 
 	data := &ifNode{
-		trueBranch:         trueFn,
-		falseBranch:        falseFn,
-		trueCapturedCount:  len(trueFn.capturedParentNodes),
-		falseCapturedCount: len(falseFn.capturedParentNodes),
+		trueBranch:  trueFn,
+		falseBranch: falseFn,
 	}
 
 	// Create multi-output node for If with only the predicate as regular input.
@@ -1330,8 +1332,7 @@ func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Func
 	node.data = data
 
 	// Add captured values from both branches to node.capturedInputs.
-	// Layout: [trueBranch captured values..., falseBranch captured values...]
-	// This ensures proper dependency tracking and enables buffer donation.
+	// Each closure's captures are stored as a separate slice.
 	node.AddNodeCapturedInputs(trueFn)
 	node.AddNodeCapturedInputs(falseFn)
 
@@ -1340,10 +1341,8 @@ func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Func
 
 // ifNode holds the data for an If operation.
 type ifNode struct {
-	trueBranch         *Function
-	falseBranch        *Function
-	trueCapturedCount  int // Number of captured values for trueBranch
-	falseCapturedCount int // Number of captured values for falseBranch
+	trueBranch  *Function
+	falseBranch *Function
 }
 
 // While executes a loop while a condition is true.
@@ -1410,11 +1409,9 @@ func (f *Function) While(cond, body backends.Function, initialState ...backends.
 	}
 
 	data := &whileNode{
-		cond:              condFn,
-		body:              bodyFn,
-		stateCount:        len(stateNodes),
-		condCapturedCount: len(condFn.capturedParentNodes),
-		bodyCapturedCount: len(bodyFn.capturedParentNodes),
+		cond:       condFn,
+		body:       bodyFn,
+		stateCount: len(stateNodes),
 	}
 
 	// Create multi-output node for While with only state values as regular inputs.
@@ -1423,8 +1420,7 @@ func (f *Function) While(cond, body backends.Function, initialState ...backends.
 	node.data = data
 
 	// Add captured values from both closures to node.capturedInputs.
-	// Layout: [cond captured values..., body captured values...]
-	// This ensures proper dependency tracking and enables buffer donation.
+	// Each closure's captures are stored as a separate slice.
 	node.AddNodeCapturedInputs(condFn)
 	node.AddNodeCapturedInputs(bodyFn)
 
@@ -1433,11 +1429,9 @@ func (f *Function) While(cond, body backends.Function, initialState ...backends.
 
 // whileNode holds the data for a While operation.
 type whileNode struct {
-	cond              *Function
-	body              *Function
-	stateCount        int // Number of state values
-	condCapturedCount int // Number of captured values for cond
-	bodyCapturedCount int // Number of captured values for body
+	cond       *Function
+	body       *Function
+	stateCount int // Number of state values
 }
 
 // Sort sorts one or more tensors along the specified axis using a comparator closure.
@@ -1523,11 +1517,10 @@ func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, i
 	}
 
 	data := &sortNode{
-		comparator:        compFn,
-		axis:              axis,
-		isStable:          isStable,
-		inputCount:        len(inputNodes),
-		compCapturedCount: len(compFn.capturedParentNodes),
+		comparator: compFn,
+		axis:       axis,
+		isStable:   isStable,
+		inputCount: len(inputNodes),
 	}
 
 	// Create multi-output node for Sort with only input tensors as regular inputs.
@@ -1536,7 +1529,6 @@ func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, i
 	node.data = data
 
 	// Add captured values from comparator to node.capturedInputs.
-	// This ensures proper dependency tracking and enables buffer donation.
 	node.AddNodeCapturedInputs(compFn)
 
 	return node.MultiOutputValues(), nil
@@ -1544,11 +1536,10 @@ func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, i
 
 // sortNode holds the data for a Sort operation.
 type sortNode struct {
-	comparator        *Function
-	axis              int
-	isStable          bool
-	inputCount        int // Number of input tensors
-	compCapturedCount int // Number of captured values for comparator
+	comparator *Function
+	axis       int
+	isStable   bool
+	inputCount int // Number of input tensors
 }
 
 // shapesEqualDimensions returns true if two shapes have the same dimensions (ignoring dtype).
