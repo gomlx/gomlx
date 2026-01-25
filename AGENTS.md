@@ -22,12 +22,47 @@ Currently it uses "fixed shapes", like XLA. So a different shape requires a dyna
   It is separated in its own top-level directory, to prevend UI packages dependencies to pure GoMLX.
 - `.github/workflows`: continuous integration, one file per platform. 
 
-Normal code files are prefixed with the following copyright line:
+## Coding Style In GoMLX
 
-// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+### Auto-generated code
 
 Files that start with `gen_` are auto-generated and don't include a copyright line
 directly -- the copyright line is in their generators.
 Many are created with generators included under `internal/cmd/...`, and the generated file 
 includes a comment stating which tool was used to generate them.
 
+### Graph Building Functions
+
+GoMLX works by building computation graphs and then JIT-compiling and executing them in a backend.
+
+The graph building functions (they take `*Node` and `*Context` as arguments, and return updated `*Node` of the graph)
+are assumed to be executed sequentially (no concurrency between graph building functions), so no need for mutexes, etc.
+
+Also, different than standard Go, graph building functions return errors by throwing (panicking) instead of returning 
+an error, to simplify the code. But everywhere else, use standard Go error handling (by returning an error).
+
+The compiled and execution of the graphs later is parallelized and can be executed in concurrently as one wishes.
+
+### Error Handling
+
+All errors should include a stack-trace, using the `github.com/pkg/errors` package.
+Whenever printing an error, use `"%+v"` format so the full stack is printed.
+
+Graph building functions return errors by throwing (panicking) instead of returning 
+an error, to simplify the code. But everywhere else, use standard Go error handling (by returning an error).
+
+### Modern Go Style
+
+- Use generics where possible.
+- Use `slices` and `maps` package for slice operations.
+- Use iterators (package `iter`) where it makes sense.
+- Use the `for range` construct for loops over slices, maps, etc.
+
+### Copyright Notes
+Normal code files are prefixed with the following copyright line:
+
+```
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+```
+
+Auto-generated files don't need a copyright, but should include a comment with the tool use to generate them.
