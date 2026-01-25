@@ -1,5 +1,12 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
+// packgemm implements General Matrix Multiplication (GEMM) using a tuned/slightly
+// changed GotoBLAS' GEMM algorithm, using packing of slices of the input matrices
+// into temporary panels
+//
+// It also include parallelization and it uses temporary packed output buffers.
+//
+// Finally, it uses go-highway to generate versions for the different SIMD architectures.
 package packgemm
 
 import (
