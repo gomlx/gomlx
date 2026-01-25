@@ -8,10 +8,12 @@
   - Renamed `backends.Op` -> `backends.Value`.
 - Package `simplego`:
   - Added `Float16` support (thx @timkaye11) 
-  - Added dedup of computation nodes (aka. "common subexpression elimination" CSE) (thx @timkaye11)
+  - Added dedup of computation nodes (aka. "common subexpression elimination" CSE) (thx @timkaye11, @janpfeifer)
     - ~6% speedup for CSI-Adult demo training. 
-  - DotGeneral: Pre-blocking of the blocked path, which may lead to deduplication of blocking nodes.
+  - DotGeneral: Pre-blocking of the blocked path, which may lead to deduplication of blocking nodes (@timekaye11).
   - DotGeneral: Added smallMatMul execution path, optimized for small matrix multiplications (thx @timkaye11)
+  - Experimental `packgemm` support leveraging simd operations (@ajroetker, @janpfeifer)
+  - Funtions/closures support (thx @ajroetker)
 - New package `bucketing`:
   - Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
 - Package `dtypes`:

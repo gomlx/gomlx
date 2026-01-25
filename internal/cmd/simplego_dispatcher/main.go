@@ -79,6 +79,7 @@ var (
 			{"reduceWindowProductDTypeMap", "reduceWindowProductBuildUpdateFn", makeDTypes(true, true, true, false, false)},
 			{"convNoDilationDTypeMap", "execConvNoDilationGeneric", makeDTypes(true, true, true, false, false)},
 			{"convDTypeMap", "execConvGeneric", makeDTypes(true, true, true, false, false)},
+			{"dotGeneralSmallMatMulDTypeMap", "execDotGeneralSmallMatMulGeneric", makeDTypes(true, true, true, false, false)},
 		},
 		PairMaps: []MapPairInfo{
 			// Various ConvertDType instantiations.

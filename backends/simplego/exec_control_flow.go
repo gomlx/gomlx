@@ -16,7 +16,7 @@ func init() {
 }
 
 // execIf executes the If operation by evaluating the predicate and running one branch.
-func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
+func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, capturedInputs []*Buffer, capturedOwned []bool) ([]*Buffer, error) {
 	predBuffer := inputs[0]
 	predFlat := predBuffer.flat.([]bool)
 	if len(predFlat) != 1 {
@@ -32,8 +32,24 @@ func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) 
 		branchFn = data.falseBranch
 	}
 
+	// Get the captured inputs for this branch.
+	// The capturedInputs passed to us are ordered by how they were added via AddNodeCapturedInputs:
+	// first trueBranch's captures, then falseBranch's captures.
+	var branchCapturedInputs []*Buffer
+	var branchDonateCaptures []bool
+	if pred {
+		// True branch uses the first set of captured inputs
+		branchCapturedInputs = capturedInputs[:len(data.trueBranch.capturedParentNodes)]
+		branchDonateCaptures = capturedOwned[:len(data.trueBranch.capturedParentNodes)]
+	} else {
+		// False branch uses captures starting after trueBranch's captures
+		offset := len(data.trueBranch.capturedParentNodes)
+		branchCapturedInputs = capturedInputs[offset : offset+len(data.falseBranch.capturedParentNodes)]
+		branchDonateCaptures = capturedOwned[offset : offset+len(data.falseBranch.capturedParentNodes)]
+	}
+
 	// Execute the branch (no inputs since branches have no parameters)
-	outputs, err := branchFn.compiled.Execute(backend, nil, nil)
+	outputs, err := branchFn.compiled.Execute(backend, nil, nil, branchCapturedInputs, branchDonateCaptures)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "If: executing branch")
 	}
@@ -42,10 +58,18 @@ func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) 
 }
 
 // execWhile executes the While operation by looping until condition returns false.
-func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
+func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, capturedInputs []*Buffer, capturedOwned []bool) ([]*Buffer, error) {
 	data := node.data.(*whileNode)
 	condFn := data.cond.compiled
 	bodyFn := data.body.compiled
+
+	// Split captured inputs between cond and body closures.
+	// The capturedInputs are ordered: first cond's captures, then body's captures.
+	condCapturedInputs := capturedInputs[:len(data.cond.capturedParentNodes)]
+	condDonateCaptures := capturedOwned[:len(data.cond.capturedParentNodes)]
+	bodyOffset := len(data.cond.capturedParentNodes)
+	bodyCapturedInputs := capturedInputs[bodyOffset : bodyOffset+len(data.body.capturedParentNodes)]
+	bodyDonateCaptures := capturedOwned[bodyOffset : bodyOffset+len(data.body.capturedParentNodes)]
 
 	// Clone inputs for state (we don't want to modify the original inputs)
 	state := make([]*Buffer, len(inputs))
@@ -62,7 +86,7 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	const maxIterations = 1_000_000 // Safety limit
 	for iter := range maxIterations {
 		// Evaluate condition
-		condOutputs, err := condFn.Execute(backend, state, nil)
+		condOutputs, err := condFn.Execute(backend, state, nil, condCapturedInputs, condDonateCaptures)
 		if err != nil {
 			for _, buf := range state {
 				backend.putBuffer(buf)
@@ -80,7 +104,7 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 		}
 
 		// Execute body to get new state
-		newState, err := bodyFn.Execute(backend, state, nil)
+		newState, err := bodyFn.Execute(backend, state, nil, bodyCapturedInputs, bodyDonateCaptures)
 		if err != nil {
 			for _, buf := range state {
 				backend.putBuffer(buf)
@@ -103,11 +127,15 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 }
 
 // execSort sorts tensors along the specified axis using the comparator closure.
-func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
+func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, capturedInputs []*Buffer, capturedOwned []bool) ([]*Buffer, error) {
 	data := node.data.(*sortNode)
 	axis := data.axis
 	isStable := data.isStable
 	compFn := data.comparator.compiled
+
+	// Get captured inputs for the comparator
+	compCapturedInputs := capturedInputs[:len(data.comparator.capturedParentNodes)]
+	compDonateCaptures := capturedOwned[:len(data.comparator.capturedParentNodes)]
 
 	if len(inputs) == 0 {
 		return nil, errors.Errorf("Sort: requires at least one input")
@@ -195,7 +223,7 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 				}
 
 				// Execute comparator
-				compOutputs, err := compFn.Execute(backend, compInputs, nil)
+				compOutputs, err := compFn.Execute(backend, compInputs, nil, compCapturedInputs, compDonateCaptures)
 				if err != nil {
 					sortErr = err
 					return false

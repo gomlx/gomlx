@@ -64,6 +64,12 @@ func New(config string) (backends.Backend, error) {
 			}
 			b.workers.SetMaxParallelism(vInt)
 			fmt.Printf("SimpleGo backend: parallelism set to %d\n", vInt)
+		case "packgemm":
+			// Enable packgemm algorithm choice.
+			b.enablePackgemm = true
+		case "highway":
+			// Enable highway algorithm choice.
+			b.enableHighway = true
 		case "dotgeneral_normalized":
 			// Force DotGeneral to use the normalized path (transpose to [B,Cross,Contract] form).
 			b.dotGeneralForceExecutionPath = normalizedPath
@@ -76,6 +82,14 @@ func New(config string) (backends.Backend, error) {
 		case "dotgeneral_smallmatmul":
 			// Force DotGeneral to use the SmallMatMul fast path (for small float32 matrices).
 			b.dotGeneralForceExecutionPath = smallMatMulPath
+		case "dotgeneral_packgemm":
+			// Force DotGeneral to use the packgemm for large matmuls.
+			b.enablePackgemm = true
+			b.dotGeneralForceExecutionPath = packgemmPath
+		case "dotgeneral_highway":
+			// Force DotGeneral to use the highway for large matmuls.
+			b.enableHighway = true
+			b.dotGeneralForceExecutionPath = highwayPath
 		case "ops_sequential":
 			// This will force the ops to be executed sequentially.
 			// The default is running parallel if it's the only thing executing, otherwise sequentially.
@@ -89,6 +103,9 @@ func New(config string) (backends.Backend, error) {
 		default:
 			return nil, errors.Errorf("unknown configuration option %q for SimpleGo (go) backend -- valid configuration options are: "+
 				"parallelism=#workers, dotgeneral_normalized, dotgeneral_blocked, dotgeneral_smallmatmul, dotgeneral_check, ops_sequential, ops_parallel; see code for documentation", key)
+		}
+		if b.enablePackgemm && b.enableHighway {
+			return nil, errors.Errorf("cannot enable both packgemm and highway, choose one or the other")
 		}
 	}
 	return b, nil
@@ -116,6 +133,12 @@ type Backend struct {
 
 	// opsExecutionType defines how to execute the ops of a computation.
 	opsExecutionType opsExecutionType
+
+	// enablePackgemm is true if packgemm is enabled.
+	enablePackgemm bool
+
+	// enableHighway is true if highway algorithm is enabled.
+	enableHighway bool
 
 	// isFinalized is true if the backend has been isFinalized.
 	isFinalized bool
@@ -155,14 +178,14 @@ func (b *Backend) Capabilities() backends.Capabilities {
 // Builder creates a new builder used to construct a named computation.
 func (b *Backend) Builder(name string) backends.Builder {
 	builder := &Builder{
-		backend:   b,
-		name:      name,
-		nodeDedup: make(map[nodeDedupKey][]*Node),
+		backend: b,
+		name:    name,
 	}
 	// Create the main function
 	builder.mainFn = &Function{
-		builder: builder,
-		name:    "main",
+		builder:   builder,
+		name:      "main",
+		nodeDedup: make(map[nodeDedupKey][]*Node),
 	}
 	// Set the "not implemented" custom message:
 	builder.Builder.ErrFn = notImplementedError

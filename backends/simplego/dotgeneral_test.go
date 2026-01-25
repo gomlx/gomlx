@@ -5,15 +5,17 @@ package simplego
 import (
 	"fmt"
 	"math"
-	"sync"
-	"sync/atomic"
 	"testing"
 
+	"github.com/gomlx/gomlx/backends/simplego/highway"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/x448/float16"
+	"k8s.io/klog/v2"
 
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -369,8 +371,11 @@ func TestDotGeneral_Exec(t *testing.T) {
 		goBackend.dotGeneralForceExecutionPath = autoSelectPath
 	}()
 
-	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, smallMatMulPath, packgemmPath, checkPath} {
-		if execPath == packgemmPath && packgemm.Float32 == nil {
+	for _, execPath := range []dotGeneralExecutionPath{normalizedPath, blockedPath, smallMatMulPath, packgemmPath, highwayPath, checkPath} {
+		if execPath == packgemmPath && (!goBackend.enablePackgemm || !packgemm.HasDTypeSupport(dtypes.Float32, dtypes.Float32)) {
+			continue
+		}
+		if execPath == highwayPath && (!goBackend.enableHighway || !highway.HasDTypeSupport(dtypes.Float32, dtypes.Float32)) {
 			continue
 		}
 
@@ -448,6 +453,20 @@ func TestDotGeneral_Exec(t *testing.T) {
 				require.Equal(t, float32(10+22+36), tensors.MustCopyFlatData[bfloat16.BFloat16](y2)[0].Float32())
 			})
 
+			// Float16 example.
+			t.Run("Float16", func(t *testing.T) {
+				f16 := float16.Fromfloat32
+				y2 := graph.MustExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+					return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+				},
+					[][]float16.Float16{{f16(1), f16(2), f16(3)}},
+					[][]float16.Float16{{f16(10)}, {f16(11)}, {f16(12)}},
+				)
+				fmt.Printf("\ty2=%s\n", y2)
+				require.NoError(t, y2.Shape().Check(dtypes.Float16, 1, 1))
+				require.Equal(t, float32(10+22+36), tensors.MustCopyFlatData[float16.Float16](y2)[0].Float32())
+			})
+
 			// Do not run the larger tests if running -test.short: they will break Github
 			// tests:
 			if testing.Short() {
@@ -473,24 +492,43 @@ func TestDotGeneral_Exec(t *testing.T) {
 				fmt.Printf("\twant=%s\n", want.Shape())
 
 				// Run 8 workers in parallel to see if concurrency is a problem:
-				var wg sync.WaitGroup
-				var numCalls atomic.Uint32
-				for runnerIdx := range 16 {
-					wg.Add(1)
+				const numConcurrent = 16
+				errChan := make(chan error, numConcurrent)
+				for runnerIdx := range numConcurrent {
 					go func(_ int) {
-						defer wg.Done()
+						var err error
+						defer func() {
+							errChan <- err
+						}()
 						const numRepeats = 1000
+						var got []*tensors.Tensor
 						for range numRepeats {
-							got := exec.MustExec(lhs, rhs)[0]
-							numCalls.Add(1)
-							requireSameTensorsFloat32(t, want, got, 1e-3)
+							got, err = exec.Exec(lhs, rhs)
+							if err != nil {
+								return
+							}
+							if !got[0].InDelta(want, 1e-3) {
+								err = errors.Errorf("got=%s, want=%s", got[0], want)
+							}
 						}
 					}(runnerIdx)
 				}
-				wg.Wait()
-				n := numCalls.Load()
-				fmt.Printf("\tnumCalls=%d\n", n)
+				var firstError error
+				for range numConcurrent {
+					err := <-errChan
+					if err != nil {
+						if firstError == nil {
+							firstError = err
+						} else {
+							klog.Errorf("Error while running in parallel: %v", err)
+						}
+					}
+				}
+				if firstError != nil {
+					require.NoError(t, firstError)
+				}
 			})
+
 			t.Run("LLM_2", func(t *testing.T) {
 				lhs, err := tensors.Load("dotgeneral_test_lhs_2.bin")
 				require.NoError(t, err)
@@ -506,6 +544,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 				fmt.Printf("\twant=%s\n", want.Shape())
 				requireSameTensorsFloat32(t, want, got, 1e-3)
 			})
+
 			t.Run("LLM_2_bfloat16", func(t *testing.T) {
 				lhs, err := tensors.Load("dotgeneral_test_lhs_2.bin")
 				require.NoError(t, err)
@@ -565,8 +604,8 @@ func TestBlockForDotGeneral_Deduplication(t *testing.T) {
 
 	// Get blocked input twice - should return the same node due to deduplication
 	// Using blockForDotGeneral with explicit parameters for a 2D weight matrix
-	blocked1 := builder.blockForDotGeneral(mainFn, weightsNode, []int{0}, []int{}, 1, N, K)
-	blocked2 := builder.blockForDotGeneral(mainFn, weightsNode, []int{0}, []int{}, 1, N, K)
+	blocked1 := mainFn.blockForDotGeneral(weightsNode, []int{0}, []int{}, 1, N, K)
+	blocked2 := mainFn.blockForDotGeneral(weightsNode, []int{0}, []int{}, 1, N, K)
 
 	// Should be the exact same node (pointer equality)
 	assert.Same(t, blocked1, blocked2, "Deduplication should return the same blocked node")
@@ -809,9 +848,8 @@ func TestIsMatMulOrder(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := isMatMulOrder(tc.lhsShape, tc.rhsShape,
-				tc.lhsContractingAxes, tc.rhsContractingAxes,
-				tc.lhsBatchAxes, tc.rhsBatchAxes)
+			got := isMatMulOrder(tc.lhsShape, tc.lhsContractingAxes, tc.lhsBatchAxes,
+				tc.rhsShape, tc.rhsContractingAxes, tc.rhsBatchAxes)
 			assert.Equal(t, tc.want, got)
 		})
 	}
@@ -890,7 +928,7 @@ func TestDgUseSmallMatMul(t *testing.T) {
 		}
 	})
 
-	t.Run("NonFloat32Rejected", func(t *testing.T) {
+	t.Run("DTypeSupport", func(t *testing.T) {
 		params := &dotGeneralNodeData{
 			lhsContractingAxes: []int{1},
 			lhsBatchAxes:       []int{},
@@ -902,17 +940,40 @@ func TestDgUseSmallMatMul(t *testing.T) {
 			contractingSize:    8,
 		}
 
-		// Float64 should be rejected
-		lhsF64 := shapes.Make(dtypes.Float64, 4, 8)
-		rhsF64 := shapes.Make(dtypes.Float64, 8, 6)
-		assert.False(t, dgUseSmallMatMul(dtypes.Float64, lhsF64, rhsF64, params),
-			"Should not use SmallMatMul for Float64")
+		// All numeric dtypes should be accepted by SmallMatMul
+		supportedDTypes := []dtypes.DType{
+			dtypes.Float32,
+			dtypes.Float64,
+			dtypes.BFloat16,
+			dtypes.Float16,
+			dtypes.Int8,
+			dtypes.Int16,
+			dtypes.Int32,
+			dtypes.Int64,
+			dtypes.Uint8,
+			dtypes.Uint16,
+			dtypes.Uint32,
+			dtypes.Uint64,
+		}
+		for _, dtype := range supportedDTypes {
+			lhs := shapes.Make(dtype, 4, 8)
+			rhs := shapes.Make(dtype, 8, 6)
+			assert.True(t, dgUseSmallMatMul(dtype, lhs, rhs, params),
+				"Should use SmallMatMul for %s", dtype)
+		}
 
-		// BFloat16 should also be rejected
-		lhsBF16 := shapes.Make(dtypes.BFloat16, 4, 8)
-		rhsBF16 := shapes.Make(dtypes.BFloat16, 8, 6)
-		assert.False(t, dgUseSmallMatMul(dtypes.BFloat16, lhsBF16, rhsBF16, params),
-			"Should not use SmallMatMul for BFloat16")
+		// Non-numeric dtypes should be rejected
+		unsupportedDTypes := []dtypes.DType{
+			dtypes.Bool,
+			dtypes.Complex64,
+			dtypes.Complex128,
+		}
+		for _, dtype := range unsupportedDTypes {
+			lhs := shapes.Make(dtype, 4, 8)
+			rhs := shapes.Make(dtype, 8, 6)
+			assert.False(t, dgUseSmallMatMul(dtype, lhs, rhs, params),
+				"Should not use SmallMatMul for %s", dtype)
+		}
 	})
 
 	t.Run("NonMatMulOrderRejected", func(t *testing.T) {
@@ -1005,4 +1066,77 @@ func TestSmallMatMulCorrectness(t *testing.T) {
 			requireSameTensorsFloat32(t, resultNormalized, resultAuto, 1e-3)
 		})
 	}
+
+	// Test BFloat16 and Float16 SmallMatMul correctness
+	t.Run("BFloat16", func(t *testing.T) {
+		// Simple 4x8 × 8x6 matrix multiplication with BFloat16
+		bf16 := bfloat16.FromFloat32
+		lhsData := make([]bfloat16.BFloat16, 4*8)
+		for i := range lhsData {
+			lhsData[i] = bf16(float32(i+1) * 0.1)
+		}
+		rhsData := make([]bfloat16.BFloat16, 8*6)
+		for i := range rhsData {
+			rhsData[i] = bf16(float32(i+1) * 0.1)
+		}
+		lhsTensor := tensors.FromFlatDataAndDimensions(lhsData, 4, 8)
+		rhsTensor := tensors.FromFlatDataAndDimensions(rhsData, 8, 6)
+
+		// Force SmallMatMul path
+		goBackend.dotGeneralForceExecutionPath = smallMatMulPath
+		resultSmallMatMul := graph.MustExecOnce(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+			return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+		}, lhsTensor, rhsTensor)
+
+		// Use normalized path as reference
+		goBackend.dotGeneralForceExecutionPath = normalizedPath
+		resultNormalized := graph.MustExecOnce(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+			return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+		}, lhsTensor, rhsTensor)
+
+		require.True(t, resultSmallMatMul.Shape().Equal(resultNormalized.Shape()), "Shapes should match")
+		// BFloat16 has limited precision, allow 1% relative error
+		smallMatMulData := tensors.MustCopyFlatData[bfloat16.BFloat16](resultSmallMatMul)
+		normalizedData := tensors.MustCopyFlatData[bfloat16.BFloat16](resultNormalized)
+		for i := range smallMatMulData {
+			require.InDelta(t, normalizedData[i].Float32(), smallMatMulData[i].Float32(), 0.01,
+				"Mismatch at index %d", i)
+		}
+	})
+
+	t.Run("Float16", func(t *testing.T) {
+		// Simple 4x8 × 8x6 matrix multiplication with Float16
+		f16 := float16.Fromfloat32
+		lhsData := make([]float16.Float16, 4*8)
+		for i := range lhsData {
+			lhsData[i] = f16(float32(i+1) * 0.1)
+		}
+		rhsData := make([]float16.Float16, 8*6)
+		for i := range rhsData {
+			rhsData[i] = f16(float32(i+1) * 0.1)
+		}
+		lhsTensor := tensors.FromFlatDataAndDimensions(lhsData, 4, 8)
+		rhsTensor := tensors.FromFlatDataAndDimensions(rhsData, 8, 6)
+
+		// Force SmallMatMul path
+		goBackend.dotGeneralForceExecutionPath = smallMatMulPath
+		resultSmallMatMul := graph.MustExecOnce(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+			return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+		}, lhsTensor, rhsTensor)
+
+		// Use normalized path as reference
+		goBackend.dotGeneralForceExecutionPath = normalizedPath
+		resultNormalized := graph.MustExecOnce(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+			return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+		}, lhsTensor, rhsTensor)
+
+		require.True(t, resultSmallMatMul.Shape().Equal(resultNormalized.Shape()), "Shapes should match")
+		// Float16 has better precision than BFloat16, allow 0.1% relative error
+		smallMatMulData := tensors.MustCopyFlatData[float16.Float16](resultSmallMatMul)
+		normalizedData := tensors.MustCopyFlatData[float16.Float16](resultNormalized)
+		for i := range smallMatMulData {
+			require.InDelta(t, normalizedData[i].Float32(), smallMatMulData[i].Float32(), 0.001,
+				"Mismatch at index %d", i)
+		}
+	})
 }
