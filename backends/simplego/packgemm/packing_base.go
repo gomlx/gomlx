@@ -6,7 +6,7 @@ import (
 
 //go:generate go tool github.com/ajroetker/go-highway/cmd/hwygen -input packing_base.go -output_prefix=gen_packing_impl -dispatch gen_packing_dispatch -targets avx2,avx512,fallback
 
-// packRHS packs a slice of size [contractingRows, numCols] block from RHS into
+// BasePackRHS packs a slice of size [contractingRows, numCols] block from RHS into
 // the panel reshaped+transposed to [ceil(numCols/kernelCols), contractingRows, kernelCols],
 // padding the cols of the last strip with zeros if necessary.
 //
