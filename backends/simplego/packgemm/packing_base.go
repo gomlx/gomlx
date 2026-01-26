@@ -1,8 +1,6 @@
 package packgemm
 
 import (
-	"fmt"
-
 	"github.com/ajroetker/go-highway/hwy"
 )
 
@@ -28,11 +26,11 @@ func BasePackRHS[T hwy.Floats](src, dst []T, srcRowStart, srcColStart, srcRowStr
 	fullStripsCol := numFullStrips * kernelCols
 	srcStartRowIdx := srcRowStart * srcRowStride
 
-	var v0 hwy.Vec[T]
-	fmt.Printf("- kernelCols=%d, lanes=%d\n", kernelCols, v0.NumLanes())
+	numLanes := hwy.MaxLanes[T]()
 	switch {
-	case v0.NumLanes() == kernelCols:
+	case kernelCols == numLanes:
 		// Use highway intrinsics, with one register.
+		var v0 hwy.Vec[T]
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			// Iterate over rows (k)
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
@@ -43,16 +41,34 @@ func BasePackRHS[T hwy.Floats](src, dst []T, srcRowStart, srcColStart, srcRowStr
 				srcIdx += srcRowStride
 			}
 		}
-	case v0.NumLanes()*2 == kernelCols:
-		var v1 hwy.Vec[T]
+	case kernelCols == numLanes*2:
+		var v0, v1 hwy.Vec[T]
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			// Iterate over rows (k)
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
 				v0 = hwy.Load(src[srcIdx:])
-				v1 = hwy.Load(src[srcIdx+v0.NumLanes():])
+				v1 = hwy.Load(src[srcIdx+numLanes:])
 				hwy.Store(v0, dst[dstIdx:])
-				hwy.Store(v1, dst[dstIdx+v0.NumLanes():])
+				hwy.Store(v1, dst[dstIdx+numLanes:])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
+		}
+	case kernelCols == numLanes*4:
+		var v0, v1, v2, v3 hwy.Vec[T]
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			// Iterate over rows (k)
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				v0 = hwy.Load(src[srcIdx:])
+				v1 = hwy.Load(src[srcIdx+numLanes:])
+				v2 = hwy.Load(src[srcIdx+numLanes*2:])
+				v3 = hwy.Load(src[srcIdx+numLanes*3:])
+				hwy.Store(v0, dst[dstIdx:])
+				hwy.Store(v1, dst[dstIdx+numLanes:])
+				hwy.Store(v2, dst[dstIdx+numLanes*2:])
+				hwy.Store(v3, dst[dstIdx+numLanes*3:])
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
