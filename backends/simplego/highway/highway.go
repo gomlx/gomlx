@@ -18,6 +18,7 @@ import (
 	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/pkg/errors"
 	"github.com/x448/float16"
 )
@@ -117,19 +118,18 @@ func matMulFloat32(lhs, rhs, output []float32, batchSize, m, n, k int, pool *wor
 	rhsBatchStride := k * n
 	outBatchStride := m * n
 
-	// For small batch sizes or when parallelization fails, process sequentially
+	// For single batch, process sequentially
 	if batchSize == 1 {
 		matmul.MatMulAuto(lhs, rhs, output, m, n, k)
 		return nil
 	}
 
-	// Try to parallelize across batches
-	remaining := batchSize
-	started := 0
+	// Use WaitGroup to synchronize parallel batch processing
+	wg := xsync.NewDynamicWaitGroup()
 
-	for remaining > 0 {
-		batchIdx := started
-		if pool != nil && pool.StartIfAvailable(func() {
+	for batchIdx := range batchSize {
+		wg.Add(1)
+		task := func() {
 			lhsStart := batchIdx * lhsBatchStride
 			rhsStart := batchIdx * rhsBatchStride
 			outStart := batchIdx * outBatchStride
@@ -138,28 +138,16 @@ func matMulFloat32(lhs, rhs, output []float32, batchSize, m, n, k int, pool *wor
 				rhs[rhsStart:rhsStart+rhsBatchStride],
 				output[outStart:outStart+outBatchStride],
 				m, n, k)
-		}) {
-			// Successfully started a goroutine
-			started++
-			remaining--
-		} else {
-			// No goroutine available, process remaining sequentially
-			break
+			wg.Done()
+		}
+
+		// Try to offload to worker pool, otherwise run inline
+		if pool == nil || !pool.StartIfAvailable(task) {
+			task()
 		}
 	}
 
-	// Process remaining batches in current goroutine
-	for b := started; b < batchSize; b++ {
-		lhsStart := b * lhsBatchStride
-		rhsStart := b * rhsBatchStride
-		outStart := b * outBatchStride
-		matmul.MatMulAuto(
-			lhs[lhsStart:lhsStart+lhsBatchStride],
-			rhs[rhsStart:rhsStart+rhsBatchStride],
-			output[outStart:outStart+outBatchStride],
-			m, n, k)
-	}
-
+	wg.Wait()
 	return nil
 }
 
@@ -169,19 +157,18 @@ func matMulFloat64(lhs, rhs, output []float64, batchSize, m, n, k int, pool *wor
 	rhsBatchStride := k * n
 	outBatchStride := m * n
 
-	// For small batch sizes or when parallelization fails, process sequentially
+	// For single batch, process sequentially
 	if batchSize == 1 {
 		matmul.MatMulAuto(lhs, rhs, output, m, n, k)
 		return nil
 	}
 
-	// Try to parallelize across batches
-	remaining := batchSize
-	started := 0
+	// Use WaitGroup to synchronize parallel batch processing
+	wg := xsync.NewDynamicWaitGroup()
 
-	for remaining > 0 {
-		batchIdx := started
-		if pool != nil && pool.StartIfAvailable(func() {
+	for batchIdx := range batchSize {
+		wg.Add(1)
+		task := func() {
 			lhsStart := batchIdx * lhsBatchStride
 			rhsStart := batchIdx * rhsBatchStride
 			outStart := batchIdx * outBatchStride
@@ -190,28 +177,16 @@ func matMulFloat64(lhs, rhs, output []float64, batchSize, m, n, k int, pool *wor
 				rhs[rhsStart:rhsStart+rhsBatchStride],
 				output[outStart:outStart+outBatchStride],
 				m, n, k)
-		}) {
-			// Successfully started a goroutine
-			started++
-			remaining--
-		} else {
-			// No goroutine available, process remaining sequentially
-			break
+			wg.Done()
+		}
+
+		// Try to offload to worker pool, otherwise run inline
+		if pool == nil || !pool.StartIfAvailable(task) {
+			task()
 		}
 	}
 
-	// Process remaining batches in current goroutine
-	for b := started; b < batchSize; b++ {
-		lhsStart := b * lhsBatchStride
-		rhsStart := b * rhsBatchStride
-		outStart := b * outBatchStride
-		matmul.MatMulAuto(
-			lhs[lhsStart:lhsStart+lhsBatchStride],
-			rhs[rhsStart:rhsStart+rhsBatchStride],
-			output[outStart:outStart+outBatchStride],
-			m, n, k)
-	}
-
+	wg.Wait()
 	return nil
 }
 
@@ -228,19 +203,18 @@ func matMulFloat16(lhs, rhs, output []float16.Float16, batchSize, m, n, k int, p
 	rhsBatchStride := k * n
 	outBatchStride := m * n
 
-	// For small batch sizes or when parallelization fails, process sequentially
+	// For single batch, process sequentially
 	if batchSize == 1 {
 		matmul.MatMulAuto(lhsHwy, rhsHwy, outputHwy, m, n, k)
 		return nil
 	}
 
-	// Try to parallelize across batches
-	remaining := batchSize
-	started := 0
+	// Use WaitGroup to synchronize parallel batch processing
+	wg := xsync.NewDynamicWaitGroup()
 
-	for remaining > 0 {
-		batchIdx := started
-		if pool != nil && pool.StartIfAvailable(func() {
+	for batchIdx := range batchSize {
+		wg.Add(1)
+		task := func() {
 			lhsStart := batchIdx * lhsBatchStride
 			rhsStart := batchIdx * rhsBatchStride
 			outStart := batchIdx * outBatchStride
@@ -249,28 +223,16 @@ func matMulFloat16(lhs, rhs, output []float16.Float16, batchSize, m, n, k int, p
 				rhsHwy[rhsStart:rhsStart+rhsBatchStride],
 				outputHwy[outStart:outStart+outBatchStride],
 				m, n, k)
-		}) {
-			// Successfully started a goroutine
-			started++
-			remaining--
-		} else {
-			// No goroutine available, process remaining sequentially
-			break
+			wg.Done()
+		}
+
+		// Try to offload to worker pool, otherwise run inline
+		if pool == nil || !pool.StartIfAvailable(task) {
+			task()
 		}
 	}
 
-	// Process remaining batches in current goroutine
-	for b := started; b < batchSize; b++ {
-		lhsStart := b * lhsBatchStride
-		rhsStart := b * rhsBatchStride
-		outStart := b * outBatchStride
-		matmul.MatMulAuto(
-			lhsHwy[lhsStart:lhsStart+lhsBatchStride],
-			rhsHwy[rhsStart:rhsStart+rhsBatchStride],
-			outputHwy[outStart:outStart+outBatchStride],
-			m, n, k)
-	}
-
+	wg.Wait()
 	return nil
 }
 
@@ -287,19 +249,18 @@ func matMulBFloat16(lhs, rhs, output []bfloat16.BFloat16, batchSize, m, n, k int
 	rhsBatchStride := k * n
 	outBatchStride := m * n
 
-	// For small batch sizes or when parallelization fails, process sequentially
+	// For single batch, process sequentially
 	if batchSize == 1 {
 		matmul.MatMulAuto(lhsHwy, rhsHwy, outputHwy, m, n, k)
 		return nil
 	}
 
-	// Try to parallelize across batches
-	remaining := batchSize
-	started := 0
+	// Use WaitGroup to synchronize parallel batch processing
+	wg := xsync.NewDynamicWaitGroup()
 
-	for remaining > 0 {
-		batchIdx := started
-		if pool != nil && pool.StartIfAvailable(func() {
+	for batchIdx := range batchSize {
+		wg.Add(1)
+		task := func() {
 			lhsStart := batchIdx * lhsBatchStride
 			rhsStart := batchIdx * rhsBatchStride
 			outStart := batchIdx * outBatchStride
@@ -308,27 +269,15 @@ func matMulBFloat16(lhs, rhs, output []bfloat16.BFloat16, batchSize, m, n, k int
 				rhsHwy[rhsStart:rhsStart+rhsBatchStride],
 				outputHwy[outStart:outStart+outBatchStride],
 				m, n, k)
-		}) {
-			// Successfully started a goroutine
-			started++
-			remaining--
-		} else {
-			// No goroutine available, process remaining sequentially
-			break
+			wg.Done()
+		}
+
+		// Try to offload to worker pool, otherwise run inline
+		if pool == nil || !pool.StartIfAvailable(task) {
+			task()
 		}
 	}
 
-	// Process remaining batches in current goroutine
-	for b := started; b < batchSize; b++ {
-		lhsStart := b * lhsBatchStride
-		rhsStart := b * rhsBatchStride
-		outStart := b * outBatchStride
-		matmul.MatMulAuto(
-			lhsHwy[lhsStart:lhsStart+lhsBatchStride],
-			rhsHwy[rhsStart:rhsStart+rhsBatchStride],
-			outputHwy[outStart:outStart+outBatchStride],
-			m, n, k)
-	}
-
+	wg.Wait()
 	return nil
 }
