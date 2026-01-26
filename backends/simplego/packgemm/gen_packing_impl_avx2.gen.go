@@ -7,74 +7,114 @@ import (
 	"github.com/ajroetker/go-highway/hwy"
 )
 
-func BasePackRHS_avx2_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowStart int, srcColStart int, srcStrideCol int, contractingRows int, rhsCols int, RHSL1KernelCols int) {
+func BasePackRHS_avx2_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int) {
 	dstIdx := 0
-	for stripColIdx := 0; stripColIdx < rhsCols; stripColIdx += RHSL1KernelCols {
-		validCols := min(RHSL1KernelCols, rhsCols-stripColIdx)
-		for row := range contractingRows {
-			srcRow := srcRowStart + row
-			srcColBase := srcColStart + stripColIdx
-			srcIdx := (srcRow * srcStrideCol) + srcColBase
-			copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
-			dstIdx += validCols
-			for c := validCols; c < RHSL1KernelCols; c++ {
-				dst[dstIdx] = hwy.Float32ToFloat16(float32(0))
-				dstIdx++
-			}
+	numFullStrips := numCols / kernelCols
+	fullStripsCol := numFullStrips * kernelCols
+	srcStartRowIdx := srcRowStart * srcRowStride
+	for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+		srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+		for range contractingRows {
+			copy(dst[dstIdx:], src[srcIdx:srcIdx+kernelCols])
+			dstIdx += kernelCols
+			srcIdx += srcRowStride
+		}
+	}
+	validCols := numCols - fullStripsCol
+	if validCols == 0 {
+		return
+	}
+	srcIdx := srcStartRowIdx + srcColStart + fullStripsCol
+	for range contractingRows {
+		copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
+		dstIdx += validCols
+		for c := validCols; c < kernelCols; c++ {
+			dst[dstIdx] = hwy.Float32ToFloat16(float32(0))
+			dstIdx++
 		}
 	}
 }
 
-func BasePackRHS_avx2_BFloat16(src []hwy.BFloat16, dst []hwy.BFloat16, srcRowStart int, srcColStart int, srcStrideCol int, contractingRows int, rhsCols int, RHSL1KernelCols int) {
+func BasePackRHS_avx2_BFloat16(src []hwy.BFloat16, dst []hwy.BFloat16, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int) {
 	dstIdx := 0
-	for stripColIdx := 0; stripColIdx < rhsCols; stripColIdx += RHSL1KernelCols {
-		validCols := min(RHSL1KernelCols, rhsCols-stripColIdx)
-		for row := range contractingRows {
-			srcRow := srcRowStart + row
-			srcColBase := srcColStart + stripColIdx
-			srcIdx := (srcRow * srcStrideCol) + srcColBase
-			copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
-			dstIdx += validCols
-			for c := validCols; c < RHSL1KernelCols; c++ {
-				dst[dstIdx] = hwy.Float32ToBFloat16(float32(0))
-				dstIdx++
-			}
+	numFullStrips := numCols / kernelCols
+	fullStripsCol := numFullStrips * kernelCols
+	srcStartRowIdx := srcRowStart * srcRowStride
+	for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+		srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+		for range contractingRows {
+			copy(dst[dstIdx:], src[srcIdx:srcIdx+kernelCols])
+			dstIdx += kernelCols
+			srcIdx += srcRowStride
+		}
+	}
+	validCols := numCols - fullStripsCol
+	if validCols == 0 {
+		return
+	}
+	srcIdx := srcStartRowIdx + srcColStart + fullStripsCol
+	for range contractingRows {
+		copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
+		dstIdx += validCols
+		for c := validCols; c < kernelCols; c++ {
+			dst[dstIdx] = hwy.Float32ToBFloat16(float32(0))
+			dstIdx++
 		}
 	}
 }
 
-func BasePackRHS_avx2(src []float32, dst []float32, srcRowStart int, srcColStart int, srcStrideCol int, contractingRows int, rhsCols int, RHSL1KernelCols int) {
+func BasePackRHS_avx2(src []float32, dst []float32, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int) {
 	dstIdx := 0
-	for stripColIdx := 0; stripColIdx < rhsCols; stripColIdx += RHSL1KernelCols {
-		validCols := min(RHSL1KernelCols, rhsCols-stripColIdx)
-		for row := range contractingRows {
-			srcRow := srcRowStart + row
-			srcColBase := srcColStart + stripColIdx
-			srcIdx := (srcRow * srcStrideCol) + srcColBase
-			copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
-			dstIdx += validCols
-			for c := validCols; c < RHSL1KernelCols; c++ {
-				dst[dstIdx] = float32(0)
-				dstIdx++
-			}
+	numFullStrips := numCols / kernelCols
+	fullStripsCol := numFullStrips * kernelCols
+	srcStartRowIdx := srcRowStart * srcRowStride
+	for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+		srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+		for range contractingRows {
+			copy(dst[dstIdx:], src[srcIdx:srcIdx+kernelCols])
+			dstIdx += kernelCols
+			srcIdx += srcRowStride
+		}
+	}
+	validCols := numCols - fullStripsCol
+	if validCols == 0 {
+		return
+	}
+	srcIdx := srcStartRowIdx + srcColStart + fullStripsCol
+	for range contractingRows {
+		copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
+		dstIdx += validCols
+		for c := validCols; c < kernelCols; c++ {
+			dst[dstIdx] = float32(0)
+			dstIdx++
 		}
 	}
 }
 
-func BasePackRHS_avx2_Float64(src []float64, dst []float64, srcRowStart int, srcColStart int, srcStrideCol int, contractingRows int, rhsCols int, RHSL1KernelCols int) {
+func BasePackRHS_avx2_Float64(src []float64, dst []float64, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int) {
 	dstIdx := 0
-	for stripColIdx := 0; stripColIdx < rhsCols; stripColIdx += RHSL1KernelCols {
-		validCols := min(RHSL1KernelCols, rhsCols-stripColIdx)
-		for row := range contractingRows {
-			srcRow := srcRowStart + row
-			srcColBase := srcColStart + stripColIdx
-			srcIdx := (srcRow * srcStrideCol) + srcColBase
-			copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
-			dstIdx += validCols
-			for c := validCols; c < RHSL1KernelCols; c++ {
-				dst[dstIdx] = float64(0)
-				dstIdx++
-			}
+	numFullStrips := numCols / kernelCols
+	fullStripsCol := numFullStrips * kernelCols
+	srcStartRowIdx := srcRowStart * srcRowStride
+	for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+		srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+		for range contractingRows {
+			copy(dst[dstIdx:], src[srcIdx:srcIdx+kernelCols])
+			dstIdx += kernelCols
+			srcIdx += srcRowStride
+		}
+	}
+	validCols := numCols - fullStripsCol
+	if validCols == 0 {
+		return
+	}
+	srcIdx := srcStartRowIdx + srcColStart + fullStripsCol
+	for range contractingRows {
+		copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
+		dstIdx += validCols
+		for c := validCols; c < kernelCols; c++ {
+			dst[dstIdx] = float64(0)
+			dstIdx++
 		}
 	}
 }

@@ -168,9 +168,9 @@ func packRHS[T hwy.Floats](src, dst []T, srcRowStart, srcColStart, srcStrideCol,
 		validCols := min(RHSL1KernelCols, rhsCols-stripColIdx)
 
 		// Iterate over rows (k)
+		srcColBase := srcColStart + stripColIdx
 		for row := range contractingRows {
 			srcRow := srcRowStart + row
-			srcColBase := srcColStart + stripColIdx
 			srcIdx := (srcRow * srcStrideCol) + srcColBase
 			// Copy valid columns
 			copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])

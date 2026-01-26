@@ -10,22 +10,22 @@ import (
 	"simd/archsimd"
 )
 
-var PackRHSFloat16 func(src []hwy.Float16, dst []hwy.Float16, srcRowStart int, srcColStart int, srcStrideCol int, contractingRows int, rhsCols int, RHSL1KernelCols int)
-var PackRHSBFloat16 func(src []hwy.BFloat16, dst []hwy.BFloat16, srcRowStart int, srcColStart int, srcStrideCol int, contractingRows int, rhsCols int, RHSL1KernelCols int)
-var PackRHSFloat32 func(src []float32, dst []float32, srcRowStart int, srcColStart int, srcStrideCol int, contractingRows int, rhsCols int, RHSL1KernelCols int)
-var PackRHSFloat64 func(src []float64, dst []float64, srcRowStart int, srcColStart int, srcStrideCol int, contractingRows int, rhsCols int, RHSL1KernelCols int)
+var PackRHSFloat16 func(src []hwy.Float16, dst []hwy.Float16, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int)
+var PackRHSBFloat16 func(src []hwy.BFloat16, dst []hwy.BFloat16, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int)
+var PackRHSFloat32 func(src []float32, dst []float32, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int)
+var PackRHSFloat64 func(src []float64, dst []float64, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int)
 
 // PackRHS is the generic API that dispatches to the appropriate SIMD implementation.
-func PackRHS[T hwy.Floats](src []T, dst []T, srcRowStart int, srcColStart int, srcStrideCol int, contractingRows int, rhsCols int, RHSL1KernelCols int) {
+func PackRHS[T hwy.Floats](src []T, dst []T, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int) {
 	switch any(src).(type) {
 	case []hwy.Float16:
-		PackRHSFloat16(any(src).([]hwy.Float16), any(dst).([]hwy.Float16), srcRowStart, srcColStart, srcStrideCol, contractingRows, rhsCols, RHSL1KernelCols)
+		PackRHSFloat16(any(src).([]hwy.Float16), any(dst).([]hwy.Float16), srcRowStart, srcColStart, srcRowStride, contractingRows, numCols, kernelCols)
 	case []hwy.BFloat16:
-		PackRHSBFloat16(any(src).([]hwy.BFloat16), any(dst).([]hwy.BFloat16), srcRowStart, srcColStart, srcStrideCol, contractingRows, rhsCols, RHSL1KernelCols)
+		PackRHSBFloat16(any(src).([]hwy.BFloat16), any(dst).([]hwy.BFloat16), srcRowStart, srcColStart, srcRowStride, contractingRows, numCols, kernelCols)
 	case []float32:
-		PackRHSFloat32(any(src).([]float32), any(dst).([]float32), srcRowStart, srcColStart, srcStrideCol, contractingRows, rhsCols, RHSL1KernelCols)
+		PackRHSFloat32(any(src).([]float32), any(dst).([]float32), srcRowStart, srcColStart, srcRowStride, contractingRows, numCols, kernelCols)
 	case []float64:
-		PackRHSFloat64(any(src).([]float64), any(dst).([]float64), srcRowStart, srcColStart, srcStrideCol, contractingRows, rhsCols, RHSL1KernelCols)
+		PackRHSFloat64(any(src).([]float64), any(dst).([]float64), srcRowStart, srcColStart, srcRowStride, contractingRows, numCols, kernelCols)
 	}
 }
 
