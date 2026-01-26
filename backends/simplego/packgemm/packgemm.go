@@ -12,6 +12,7 @@ package packgemm
 import (
 	"slices"
 
+	"github.com/ajroetker/go-highway/hwy"
 	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
@@ -158,7 +159,7 @@ func GEMM[TInput, TOutput dtypes.Supported](alpha, beta TOutput, lhsFlat, rhsFla
 //   - rhsCols: number of columns to be copied in the panel (excluding padding), will be padded to a RHSL1KernelCols
 //     multiple with zeros.
 //   - RHSL1KernelCols: number of columns in each "L1 kernel"
-func packRHS[T dtypes.Number](src, dst []T, srcRowStart, srcColStart, srcStrideCol,
+func packRHS[T hwy.Floats](src, dst []T, srcRowStart, srcColStart, srcStrideCol,
 	contractingRows, rhsCols, RHSL1KernelCols int) {
 	dstIdx := 0
 	// Iterate over strips of width nr
@@ -193,7 +194,7 @@ func packRHS[T dtypes.Number](src, dst []T, srcRowStart, srcColStart, srcStrideC
 //	packLHS(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize,
 //		lhsPanelHeight, contractingPanelWidth,
 //		params.LHSL1KernelRows)
-func packLHS[T dtypes.Number](src, dst []T,
+func packLHS[T hwy.Floats](src, dst []T,
 	srcRowStart, srcColStart, srcRowStride,
 	lhsRows, contractingCols, lhsL1KernelRows int) {
 	dstIdx := 0

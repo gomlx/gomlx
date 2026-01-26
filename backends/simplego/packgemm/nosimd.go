@@ -3,8 +3,13 @@
 package packgemm
 
 import (
+	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy"
 	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/x448/float16"
 	"k8s.io/klog/v2"
 )
 
@@ -37,15 +42,60 @@ var (
 
 func init() {
 	RegisterGEMM("Basic(non-SIMD)", basicSymmetricGeneric[float32], &NoSIMD32Params, PriorityBase)
-	RegisterGEMM("Basic(non-SIMD)", basicSymmetricGeneric[int32], &NoSIMD32Params, PriorityBase)
-	RegisterGEMM("Basic(non-SIMD)", basicSymmetricGeneric[uint32], &NoSIMD32Params, PriorityBase)
+	RegisterGEMM("Basic(non-SIMD)", basicSymmetricGeneric[float64], &NoSIMD32Params, PriorityBase)
+	RegisterGEMM("Basic(non-SIMD)", basicSymmetricFloat16, &NoSIMD32Params, PriorityBase)
+}
+
+func convertFloat16ToHighway(src []float16.Float16) []hwy.Float16 {
+	if len(src) == 0 {
+		return nil
+	}
+	// SliceData returns a pointer to the first element
+	// Slice creates a new slice header pointing to that data
+	return unsafe.Slice((*hwy.Float16)(unsafe.Pointer(unsafe.SliceData(src))), len(src))
+}
+
+func convertBFloat16ToHighway(src []bfloat16.BFloat16) []hwy.BFloat16 {
+	if len(src) == 0 {
+		return nil
+	}
+	// SliceData returns a pointer to the first element
+	// Slice creates a new slice header pointing to that data
+	return unsafe.Slice((*hwy.BFloat16)(unsafe.Pointer(unsafe.SliceData(src))), len(src))
+}
+
+// Wrapper to be able to use go-highway types.
+func basicSymmetricFloat16(alpha, beta float16.Float16, lhsFlat, rhsFlat []float16.Float16,
+	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
+	outputFlat []float16.Float16,
+	bufAllocFn BufAllocFn[float16.Float16], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
+	convertedBufAllocFn := func(size int) (any, []hwy.Float16) {
+		ref, data := bufAllocFn(size)
+		return ref, convertFloat16ToHighway(data)
+	}
+	return basicSymmetricGeneric(hwy.Float16(alpha), hwy.Float16(beta),
+		convertFloat16ToHighway(lhsFlat), convertFloat16ToHighway(rhsFlat),
+		batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+		convertFloat16ToHighway(outputFlat), convertedBufAllocFn, bufReleaseFn, pool)
+}
+
+// highwayToDType converts a go-highway type to a dtypes.DType.
+func highwayToDType[T hwy.Floats]() dtypes.DType {
+	switch any(T(0)) {
+	case hwy.Float16(0):
+		return dtypes.Float16
+	case hwy.BFloat16(0):
+		return dtypes.BFloat16
+	default:
+		return dtypes.Float32
+	}
 }
 
 // basicSymmetricGeneric implements basic symmetric (input and output dtypes are the same) non-SIMD
 // GEMM for various types of inputs and outputs.
 //
 // It is used when no SIMD-optimized implementation is available.
-func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
+func basicSymmetricGeneric[T hwy.Floats](alpha, beta T, lhsFlat, rhsFlat []T,
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
 	outputFlat []T,
 	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
@@ -54,7 +104,7 @@ func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 	lhsBatchStride := lhsCrossSize * contractingSize
 	rhsBatchStride := contractingSize * rhsCrossSize
 	outputBatchStride := lhsCrossSize * rhsCrossSize
-	dtype := dtypes.FromGenericsType[T]()
+	dtype := highwayToDType[T]()
 	gemmSize := (lhsBatchStride + rhsBatchStride + outputBatchStride) * dtype.Size()
 	// gemmFlops := lhsCrossSize * rhsCrossSize * contractingSize
 
@@ -86,7 +136,7 @@ func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 // worth parallelizing.
 //
 // It is used when no SIMD-optimized implementation is available.
-func basicSymmetricGenericSmallGEMMParallel[T dtypes.Number](
+func basicSymmetricGenericSmallGEMMParallel[T hwy.Floats](
 	alpha, beta T,
 	lhsFlat, rhsFlat []T, outputFlat []T,
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
@@ -144,7 +194,7 @@ func basicSymmetricGenericSmallGEMMParallel[T dtypes.Number](
 	return nil
 }
 
-func basicSymmetricGenericSmallGEMM[T dtypes.Number](
+func basicSymmetricGenericSmallGEMM[T hwy.Floats](
 	alpha, beta T,
 	lhs, rhs, output []T,
 	batchCount, lhsCrossSize, rhsCrossSize, contractingSize int,
@@ -158,7 +208,7 @@ func basicSymmetricGenericSmallGEMM[T dtypes.Number](
 		return
 	}
 
-	for batchIdx := 0; batchIdx < batchCount; batchIdx++ {
+	for batchIdx := range batchCount {
 		lhsBase := batchIdx * lhsStride
 		rhsBase := batchIdx * rhsStride
 		outputBase := batchIdx * outputStride
@@ -269,7 +319,7 @@ func basicSymmetricGenericSmallGEMM[T dtypes.Number](
 }
 
 // basicWriteCol4 handles a single row of 4 columns to maximize store-throughput
-func basicWriteCol4[T dtypes.Number](out []T, offset int, alpha, beta T, v0, v1, v2, v3 T) {
+func basicWriteCol4[T hwy.Floats](out []T, offset int, alpha, beta T, v0, v1, v2, v3 T) {
 	if beta != 0 {
 		out[offset+0] = beta*out[offset+0] + alpha*v0
 		out[offset+1] = beta*out[offset+1] + alpha*v1
@@ -284,7 +334,7 @@ func basicWriteCol4[T dtypes.Number](out []T, offset int, alpha, beta T, v0, v1,
 }
 
 // basicWriteScalar handles a single scalar write to maximize store-throughput
-func basicWriteScalar[T dtypes.Number](out []T, idx int, alpha, beta T, value T) {
+func basicWriteScalar[T hwy.Floats](out []T, idx int, alpha, beta T, value T) {
 	if beta != 0 {
 		out[idx] = beta*out[idx] + alpha*value
 	} else {
@@ -292,7 +342,7 @@ func basicWriteScalar[T dtypes.Number](out []T, idx int, alpha, beta T, value T)
 	}
 }
 
-func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
+func basicSymmetricGenericLargeGEMMParallel[T hwy.Floats](
 	alpha, beta T,
 	lhsFlat, rhsFlat []T, outputFlat []T,
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
@@ -324,7 +374,7 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 			basicSymmetricLargeGemmSlice(
 				alpha, beta,
 				batchLhs, batchRhs, batchOutput,
-				lhsCrossSize, rhsCrossSize, contractingSize,
+				/*lhsCrossSize,*/ rhsCrossSize, contractingSize,
 				NoSIMD32Params,
 				0, lhsCrossSize, 0, rhsCrossSize,
 				packedLHS, packedRHS, packedOutput,
@@ -358,7 +408,7 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 				basicSymmetricLargeGemmSlice(
 					alpha, beta,
 					batchLhs, batchRhs, batchOutput,
-					lhsCrossSize, rhsCrossSize, contractingSize,
+					/*lhsCrossSize,*/ rhsCrossSize, contractingSize,
 					NoSIMD32Params,
 					item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd,
 					packedLHS, packedRHS, packedOutput,
@@ -373,10 +423,10 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 // must already have sliced one example of the batch dimension.
 //
 // packedLHS and packedRHS must be pre-allocated buffers of appropriate size.
-func basicSymmetricLargeGemmSlice[T dtypes.Number](
+func basicSymmetricLargeGemmSlice[T hwy.Floats](
 	alpha, beta T,
 	lhs, rhs, output []T,
-	lhsCrossSize, rhsCrossSize, contractingSize int,
+	/*lhsCrossSize,*/ rhsCrossSize, contractingSize int,
 	params CacheParams,
 	rowStart, rowEnd, colStart, colEnd int,
 	packedLHS, packedRHS, packedOutput []T,
@@ -388,7 +438,7 @@ func basicSymmetricLargeGemmSlice[T dtypes.Number](
 		// Loop 4 (p): Tiling K (Depth)
 		for contractingPanelIdx := 0; contractingPanelIdx < contractingSize; contractingPanelIdx += params.PanelContractingSize {
 			contractingPanelWidth := min(params.PanelContractingSize, contractingSize-contractingPanelIdx)
-			packRHS(rhs, packedRHS, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
+			PackRHS(rhs, packedRHS, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
 
 			// Loop 3 (ic): Tiling M (Output Rows)
 			for lhsPanelRowIdx := rowStart; lhsPanelRowIdx < rowEnd; lhsPanelRowIdx += params.LHSPanelCrossSize {
@@ -432,7 +482,7 @@ func basicSymmetricLargeGemmSlice[T dtypes.Number](
 // It assumes lhsL1KernelRows=4 and rhsL1KernelCols=4.
 //
 // See basicSymmetricMicroKernel for documentation on arguments.
-func basicSymmetricPanel[T dtypes.Number](
+func basicSymmetricPanel[T hwy.Floats](
 	packedLHS, packedRHS []T,
 	packedOutput []T,
 	lhsPanelRows, rhsPanelCols int,
@@ -613,7 +663,7 @@ func basicSymmetricPanel[T dtypes.Number](
 }
 
 // applyPackedOutput applies the computed packedOutput to the final output.
-func applyPackedOutput[T dtypes.Number](
+func applyPackedOutput[T hwy.Floats](
 	packedOutput, output []T,
 	alpha, beta T,
 	packedOutputRowStride int,
