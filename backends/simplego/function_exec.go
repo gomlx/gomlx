@@ -458,17 +458,31 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 	// Closure executors receive captured inputs separately with explicit ownership tracking.
 	closureExecutor := nodeClosureExecutors[node.opType]
 	if closureExecutor != nil {
-		// Build []ClosureInputs from node.capturedInputs (already grouped per closure).
-		closureInputs := make([]ClosureInputs, len(node.capturedInputs))
+		// Build capture counts for workspace allocation.
+		// Use stack-allocated array for common cases (If/While have 2 closures, Sort has 1).
+		numClosures := len(node.capturedInputs)
+		var captureCountsBuf [4]int
+		var captureCounts []int
+		if numClosures <= len(captureCountsBuf) {
+			captureCounts = captureCountsBuf[:numClosures]
+		} else {
+			captureCounts = make([]int, numClosures)
+		}
 		for closureIdx, closureCaptures := range node.capturedInputs {
-			closureInputs[closureIdx] = ClosureInputs{
-				Buffers: make([]*Buffer, len(closureCaptures)),
-				Owned:   make([]bool, len(closureCaptures)),
-			}
+			captureCounts[closureIdx] = len(closureCaptures)
+		}
+
+		// Get pooled workspace for ClosureInputs
+		ciWorkspace := getClosureInputsWorkspace(captureCounts)
+		closureInputs := ciWorkspace.closureInputs
+
+		// Fill in the buffer pointers and ownership flags
+		for closureIdx, closureCaptures := range node.capturedInputs {
 			for i, capturedNode := range closureCaptures {
 				capturedIdx := capturedNode.idx
 				closureInputs[closureIdx].Buffers[i] = execBuf.results[capturedIdx]
 				if closureInputs[closureIdx].Buffers[i] == nil {
+					putClosureInputsWorkspace(ciWorkspace)
 					return errors.Errorf("captured input %d for closure %d of node %s not computed yet", i, closureIdx, node.opType)
 				}
 				// Only "own" the captured input if this is the last use of it.
@@ -479,6 +493,7 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 
 		outputBuffers, err := closureExecutor(backend, node, inputBuffers, inputsOwned, closureInputs)
 		if err != nil {
+			putClosureInputsWorkspace(ciWorkspace)
 			return errors.WithMessagef(err, "executing closure op %s", node.opType)
 		}
 
@@ -491,6 +506,9 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 				}
 			}
 		}
+
+		// Return workspace to pool
+		putClosureInputsWorkspace(ciWorkspace)
 
 		// Handle outputs (closure ops are always multi-output style)
 		for outputIdx, outputBuf := range outputBuffers {

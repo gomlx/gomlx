@@ -147,3 +147,161 @@ func putReduceIterator(it *reduceOutputIterator) {
 		reduceIteratorPools[rank].Put(it)
 	}
 }
+
+// whileStateWorkspace holds reusable slices for while loop execution.
+type whileStateWorkspace struct {
+	state       []*Buffer
+	donateState []bool
+}
+
+// whileStateWorkspacePools pools whileStateWorkspace structs by state count.
+var whileStateWorkspacePools [maxPooledRank + 1]sync.Pool
+
+// getWhileStateWorkspace gets a whileStateWorkspace from the pool or allocates a new one.
+func getWhileStateWorkspace(stateCount int) *whileStateWorkspace {
+	if stateCount > maxPooledRank {
+		return &whileStateWorkspace{
+			state:       make([]*Buffer, stateCount),
+			donateState: make([]bool, stateCount),
+		}
+	}
+	if v := whileStateWorkspacePools[stateCount].Get(); v != nil {
+		return v.(*whileStateWorkspace)
+	}
+	return &whileStateWorkspace{
+		state:       make([]*Buffer, stateCount),
+		donateState: make([]bool, stateCount),
+	}
+}
+
+// putWhileStateWorkspace returns a whileStateWorkspace to the pool.
+func putWhileStateWorkspace(ws *whileStateWorkspace) {
+	stateCount := len(ws.state)
+	if stateCount <= maxPooledRank {
+		// Clear pointer slices to avoid holding references that prevent GC
+		clear(ws.state)
+		clear(ws.donateState)
+		whileStateWorkspacePools[stateCount].Put(ws)
+	}
+}
+
+// sortWorkspace holds reusable slices for sort execution.
+type sortWorkspace struct {
+	outputs    []*Buffer
+	indices    []int
+	compInputs []*Buffer
+}
+
+// sortWorkspacePools pools sortWorkspace structs by input count.
+// Key is inputCount; indices size varies but we size to max seen.
+var sortWorkspacePools [maxPooledRank + 1]sync.Pool
+
+// getSortWorkspace gets a sortWorkspace from the pool or allocates a new one.
+func getSortWorkspace(inputCount, axisSize int) *sortWorkspace {
+	if inputCount > maxPooledRank {
+		return &sortWorkspace{
+			outputs:    make([]*Buffer, inputCount),
+			indices:    make([]int, axisSize),
+			compInputs: make([]*Buffer, 2*inputCount),
+		}
+	}
+	if v := sortWorkspacePools[inputCount].Get(); v != nil {
+		ws := v.(*sortWorkspace)
+		// Resize indices if needed
+		if cap(ws.indices) < axisSize {
+			ws.indices = make([]int, axisSize)
+		} else {
+			ws.indices = ws.indices[:axisSize]
+		}
+		return ws
+	}
+	return &sortWorkspace{
+		outputs:    make([]*Buffer, inputCount),
+		indices:    make([]int, axisSize),
+		compInputs: make([]*Buffer, 2*inputCount),
+	}
+}
+
+// putSortWorkspace returns a sortWorkspace to the pool.
+func putSortWorkspace(ws *sortWorkspace) {
+	inputCount := len(ws.outputs)
+	if inputCount <= maxPooledRank {
+		// Clear pointer slices to avoid holding references that prevent GC
+		clear(ws.outputs)
+		clear(ws.compInputs)
+		sortWorkspacePools[inputCount].Put(ws)
+	}
+}
+
+// closureInputsWorkspace holds reusable slices for closure input construction.
+// It provides flattened Buffers and Owned slices that can be sliced into for each closure.
+type closureInputsWorkspace struct {
+	// closureInputs is the slice of ClosureInputs structs (one per closure)
+	closureInputs []ClosureInputs
+	// buffers is a flat backing slice for all Buffers across closures
+	buffers []*Buffer
+	// owned is a flat backing slice for all Owned flags across closures
+	owned []bool
+}
+
+// closureInputsWorkspacePools pools closureInputsWorkspace by number of closures.
+var closureInputsWorkspacePools [4]sync.Pool // 0-3 closures (If/While have 2, Sort has 1)
+
+// getClosureInputsWorkspace gets a workspace from the pool or allocates a new one.
+// captureCounts is the number of captured inputs for each closure.
+func getClosureInputsWorkspace(captureCounts []int) *closureInputsWorkspace {
+	numClosures := len(captureCounts)
+	totalCaptures := 0
+	for _, c := range captureCounts {
+		totalCaptures += c
+	}
+
+	var ws *closureInputsWorkspace
+	if numClosures < len(closureInputsWorkspacePools) {
+		if v := closureInputsWorkspacePools[numClosures].Get(); v != nil {
+			ws = v.(*closureInputsWorkspace)
+			// Resize backing slices if needed
+			if cap(ws.buffers) < totalCaptures {
+				ws.buffers = make([]*Buffer, totalCaptures)
+			} else {
+				ws.buffers = ws.buffers[:totalCaptures]
+			}
+			if cap(ws.owned) < totalCaptures {
+				ws.owned = make([]bool, totalCaptures)
+			} else {
+				ws.owned = ws.owned[:totalCaptures]
+				clear(ws.owned)
+			}
+		}
+	}
+
+	if ws == nil {
+		ws = &closureInputsWorkspace{
+			closureInputs: make([]ClosureInputs, numClosures),
+			buffers:       make([]*Buffer, totalCaptures),
+			owned:         make([]bool, totalCaptures),
+		}
+	}
+
+	// Set up closureInputs to point into backing slices
+	offset := 0
+	for i, count := range captureCounts {
+		ws.closureInputs[i] = ClosureInputs{
+			Buffers: ws.buffers[offset : offset+count],
+			Owned:   ws.owned[offset : offset+count],
+		}
+		offset += count
+	}
+
+	return ws
+}
+
+// putClosureInputsWorkspace returns a workspace to the pool.
+func putClosureInputsWorkspace(ws *closureInputsWorkspace) {
+	numClosures := len(ws.closureInputs)
+	if numClosures < len(closureInputsWorkspacePools) {
+		// Clear pointer slices to avoid holding references
+		clear(ws.buffers)
+		closureInputsWorkspacePools[numClosures].Put(ws)
+	}
+}

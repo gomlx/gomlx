@@ -237,3 +237,126 @@ func BenchmarkReduceIterator_Alloc_Escape(b *testing.B) {
 		sink = it // force escape
 	}
 }
+
+// While state workspace benchmarks
+
+func BenchmarkWhileStateWorkspace_Pooled(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ws := getWhileStateWorkspace(4)
+		putWhileStateWorkspace(ws)
+	}
+}
+
+func BenchmarkWhileStateWorkspace_Alloc(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_ = &whileStateWorkspace{
+			state:       make([]*Buffer, 4),
+			donateState: make([]bool, 4),
+		}
+	}
+}
+
+func BenchmarkWhileStateWorkspace_Pooled_Escape(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ws := getWhileStateWorkspace(4)
+		sink = ws // force escape
+		putWhileStateWorkspace(ws)
+	}
+}
+
+func BenchmarkWhileStateWorkspace_Alloc_Escape(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ws := &whileStateWorkspace{
+			state:       make([]*Buffer, 4),
+			donateState: make([]bool, 4),
+		}
+		sink = ws // force escape
+	}
+}
+
+// Sort workspace benchmarks
+
+func BenchmarkSortWorkspace_Pooled(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ws := getSortWorkspace(2, 100)
+		putSortWorkspace(ws)
+	}
+}
+
+func BenchmarkSortWorkspace_Alloc(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_ = &sortWorkspace{
+			outputs:    make([]*Buffer, 2),
+			indices:    make([]int, 100),
+			compInputs: make([]*Buffer, 4),
+		}
+	}
+}
+
+func BenchmarkSortWorkspace_Pooled_Escape(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ws := getSortWorkspace(2, 100)
+		sink = ws // force escape
+		putSortWorkspace(ws)
+	}
+}
+
+func BenchmarkSortWorkspace_Alloc_Escape(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ws := &sortWorkspace{
+			outputs:    make([]*Buffer, 2),
+			indices:    make([]int, 100),
+			compInputs: make([]*Buffer, 4),
+		}
+		sink = ws // force escape
+	}
+}
+
+// Closure inputs workspace benchmarks
+
+func BenchmarkClosureInputsWorkspace_Pooled(b *testing.B) {
+	captureCounts := []int{3, 5}
+	for i := 0; i < b.N; i++ {
+		ws := getClosureInputsWorkspace(captureCounts)
+		putClosureInputsWorkspace(ws)
+	}
+}
+
+func BenchmarkClosureInputsWorkspace_Alloc(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		closureInputs := make([]ClosureInputs, 2)
+		closureInputs[0] = ClosureInputs{
+			Buffers: make([]*Buffer, 3),
+			Owned:   make([]bool, 3),
+		}
+		closureInputs[1] = ClosureInputs{
+			Buffers: make([]*Buffer, 5),
+			Owned:   make([]bool, 5),
+		}
+		sink = closureInputs
+	}
+}
+
+func BenchmarkClosureInputsWorkspace_Pooled_Escape(b *testing.B) {
+	captureCounts := []int{3, 5}
+	for i := 0; i < b.N; i++ {
+		ws := getClosureInputsWorkspace(captureCounts)
+		sink = ws // force escape
+		putClosureInputsWorkspace(ws)
+	}
+}
+
+func BenchmarkClosureInputsWorkspace_Alloc_Escape(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		closureInputs := make([]ClosureInputs, 2)
+		closureInputs[0] = ClosureInputs{
+			Buffers: make([]*Buffer, 3),
+			Owned:   make([]bool, 3),
+		}
+		closureInputs[1] = ClosureInputs{
+			Buffers: make([]*Buffer, 5),
+			Owned:   make([]bool, 5),
+		}
+		sink = closureInputs // force escape
+	}
+}
