@@ -3,6 +3,7 @@
 package simplego
 
 import (
+	"reflect"
 	"sort"
 
 	"github.com/gomlx/gomlx/backends"
@@ -10,13 +11,14 @@ import (
 )
 
 func init() {
-	multiOutputsNodeExecutors[backends.OpTypeIf] = execIf
-	multiOutputsNodeExecutors[backends.OpTypeWhile] = execWhile
-	multiOutputsNodeExecutors[backends.OpTypeSort] = execSort
+	nodeClosureExecutors[backends.OpTypeIf] = execIf
+	nodeClosureExecutors[backends.OpTypeWhile] = execWhile
+	nodeClosureExecutors[backends.OpTypeSort] = execSort
 }
 
 // execIf executes the If operation by evaluating the predicate and running one branch.
-func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, capturedInputs []*Buffer, capturedOwned []bool) ([]*Buffer, error) {
+// closureInputs[0] = true branch captured values, closureInputs[1] = false branch captured values.
+func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs []ClosureInputs) ([]*Buffer, error) {
 	predBuffer := inputs[0]
 	predFlat := predBuffer.flat.([]bool)
 	if len(predFlat) != 1 {
@@ -25,31 +27,23 @@ func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, 
 	pred := predFlat[0]
 
 	data := node.data.(*ifNode)
+
+	// Select the branch to execute based on predicate
 	var branchFn *Function
+	var capturedInputs []*Buffer
+	var donateCaptures []bool
 	if pred {
 		branchFn = data.trueBranch
+		capturedInputs = closureInputs[0].Buffers
+		donateCaptures = closureInputs[0].Owned
 	} else {
 		branchFn = data.falseBranch
+		capturedInputs = closureInputs[1].Buffers
+		donateCaptures = closureInputs[1].Owned
 	}
 
-	// Get the captured inputs for this branch.
-	// The capturedInputs passed to us are ordered by how they were added via AddNodeCapturedInputs:
-	// first trueBranch's captures, then falseBranch's captures.
-	var branchCapturedInputs []*Buffer
-	var branchDonateCaptures []bool
-	if pred {
-		// True branch uses the first set of captured inputs
-		branchCapturedInputs = capturedInputs[:len(data.trueBranch.capturedParentNodes)]
-		branchDonateCaptures = capturedOwned[:len(data.trueBranch.capturedParentNodes)]
-	} else {
-		// False branch uses captures starting after trueBranch's captures
-		offset := len(data.trueBranch.capturedParentNodes)
-		branchCapturedInputs = capturedInputs[offset : offset+len(data.falseBranch.capturedParentNodes)]
-		branchDonateCaptures = capturedOwned[offset : offset+len(data.falseBranch.capturedParentNodes)]
-	}
-
-	// Execute the branch (no inputs since branches have no parameters)
-	outputs, err := branchFn.compiled.Execute(backend, nil, nil, branchCapturedInputs, branchDonateCaptures)
+	// Execute the branch with proper donation of captured values
+	outputs, err := branchFn.compiled.Execute(backend, nil, nil, capturedInputs, donateCaptures)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "If: executing branch")
 	}
@@ -58,39 +52,46 @@ func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, 
 }
 
 // execWhile executes the While operation by looping until condition returns false.
-func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, capturedInputs []*Buffer, capturedOwned []bool) ([]*Buffer, error) {
+// Regular inputs: [state values...]
+// closureInputs[0] = cond captured values, closureInputs[1] = body captured values.
+//
+// Note on captured input donation: Captured values are reused across all iterations,
+// so we never donate them to the closure calls. The executor handles freeing them.
+func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs []ClosureInputs) ([]*Buffer, error) {
 	data := node.data.(*whileNode)
-	condFn := data.cond.compiled
-	bodyFn := data.body.compiled
+	condFn := data.cond
+	bodyFn := data.body
 
-	// Split captured inputs between cond and body closures.
-	// The capturedInputs are ordered: first cond's captures, then body's captures.
-	condCapturedInputs := capturedInputs[:len(data.cond.capturedParentNodes)]
-	condDonateCaptures := capturedOwned[:len(data.cond.capturedParentNodes)]
-	bodyOffset := len(data.cond.capturedParentNodes)
-	bodyCapturedInputs := capturedInputs[bodyOffset : bodyOffset+len(data.body.capturedParentNodes)]
-	bodyDonateCaptures := capturedOwned[bodyOffset : bodyOffset+len(data.body.capturedParentNodes)]
+	// State values come from regular inputs
+	stateCount := data.stateCount
+	stateInputs := inputs[:stateCount]
+	stateOwned := inputsOwned[:stateCount]
 
-	// Clone inputs for state (we don't want to modify the original inputs)
-	state := make([]*Buffer, len(inputs))
-	for i, input := range inputs {
-		if inputsOwned[i] {
-			state[i] = input
-			inputs[i] = nil
-		} else {
-			state[i] = backend.cloneBuffer(input)
+	// Get captured inputs for cond and body
+	condCaptured := closureInputs[0].Buffers
+	bodyCaptured := closureInputs[1].Buffers
+
+	// Set up state buffers and ownership tracking
+	state := make([]*Buffer, stateCount)
+	copy(state, stateInputs)
+	donateState := make([]bool, stateCount)
+	donateAll := make([]bool, stateCount)
+	for i := range donateAll {
+		donateAll[i] = true
+	}
+
+	for i := range stateCount {
+		if stateOwned[i] {
+			stateInputs[i] = nil  // Take ownership of buffer
+			donateState[i] = true // Ownership will be transferred to condFn
 		}
 	}
 
 	// Loop while condition is true
-	const maxIterations = 1_000_000 // Safety limit
-	for iter := range maxIterations {
-		// Evaluate condition
-		condOutputs, err := condFn.Execute(backend, state, nil, condCapturedInputs, condDonateCaptures)
+	for iter := 0; ; iter++ {
+		// Evaluate condition - DON'T donate state or captured buffers since we may need them
+		condOutputs, err := condFn.compiled.Execute(backend, state, nil, condCaptured, nil)
 		if err != nil {
-			for _, buf := range state {
-				backend.putBuffer(buf)
-			}
 			return nil, errors.WithMessagef(err, "While: evaluating condition at iteration %d", iter)
 		}
 
@@ -99,50 +100,56 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 		backend.putBuffer(condOutputs[0])
 
 		if !condResult {
-			// Condition is false, exit loop
+			// Condition is false, exit loop.
+			// Return state buffers. Clone any we don't own.
+			for i, owned := range donateState {
+				if !owned {
+					state[i] = backend.cloneBuffer(state[i])
+				}
+			}
 			return state, nil
 		}
 
 		// Execute body to get new state
-		newState, err := bodyFn.Execute(backend, state, nil, bodyCapturedInputs, bodyDonateCaptures)
+		// DON'T donate captured buffers - they're reused across iterations
+		newState, err := bodyFn.compiled.Execute(backend, state, donateState, bodyCaptured, nil)
+		// After bodyFn, all donated state is consumed.
+		donateState = donateAll // After first iteration, we always own everything
+
 		if err != nil {
-			for _, buf := range state {
-				backend.putBuffer(buf)
-			}
 			return nil, errors.WithMessagef(err, "While: executing body at iteration %d", iter)
 		}
 
-		// Free old state and use new state
-		for _, buf := range state {
-			backend.putBuffer(buf)
-		}
 		state = newState
 	}
-
-	// Cleanup on max iterations reached
-	for _, buf := range state {
-		backend.putBuffer(buf)
-	}
-	return nil, errors.Errorf("While: exceeded maximum iterations (%d)", maxIterations)
 }
 
 // execSort sorts tensors along the specified axis using the comparator closure.
-func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, capturedInputs []*Buffer, capturedOwned []bool) ([]*Buffer, error) {
+// Regular inputs: [input tensors...]
+// closureInputs[0] = comparator captured values.
+//
+// Note on captured input donation: The comparator is called O(n log n) times during
+// sorting, so we never donate captured inputs. The executor handles freeing them.
+func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs []ClosureInputs) ([]*Buffer, error) {
 	data := node.data.(*sortNode)
 	axis := data.axis
 	isStable := data.isStable
-	compFn := data.comparator.compiled
+	compFn := data.comparator
 
-	// Get captured inputs for the comparator
-	compCapturedInputs := capturedInputs[:len(data.comparator.capturedParentNodes)]
-	compDonateCaptures := capturedOwned[:len(data.comparator.capturedParentNodes)]
+	// Input tensors come from regular inputs
+	inputCount := data.inputCount
+	tensorInputs := inputs[:inputCount]
+	tensorOwned := inputsOwned[:inputCount]
 
-	if len(inputs) == 0 {
+	// Get captured inputs
+	compCaptured := closureInputs[0].Buffers
+
+	if inputCount == 0 {
 		return nil, errors.Errorf("Sort: requires at least one input")
 	}
 
 	// Get shape info from first input
-	shape := inputs[0].shape
+	shape := tensorInputs[0].shape
 	rank := shape.Rank()
 	axisSize := shape.Dimensions[axis]
 
@@ -157,12 +164,12 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 		innerSize *= shape.Dimensions[i]
 	}
 
-	// Create output buffers (clones of inputs)
-	outputs := make([]*Buffer, len(inputs))
-	for i, input := range inputs {
-		if inputsOwned[i] {
+	// Create output buffers (clones of input tensors)
+	outputs := make([]*Buffer, inputCount)
+	for i, input := range tensorInputs {
+		if tensorOwned[i] {
 			outputs[i] = input
-			inputs[i] = nil
+			tensorInputs[i] = nil
 		} else {
 			outputs[i] = backend.cloneBuffer(input)
 		}
@@ -205,40 +212,48 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 			}
 
 			// Sort indices using comparator
-			var sortErr error
-			lessFunc := func(i, j int) bool {
-				if sortErr != nil {
-					return false
+			// Use panic/recover to abort sort immediately on comparator error
+			sortErr := func() (sortErr error) {
+				defer func() {
+					if r := recover(); r != nil {
+						if err, ok := r.(error); ok {
+							sortErr = err
+						} else {
+							panic(r) // Re-panic if not our error
+						}
+					}
+				}()
+
+				lessFunc := func(i, j int) bool {
+					idxI := indices[i]
+					idxJ := indices[j]
+					offsetI := baseOffset + idxI*axisStride
+					offsetJ := baseOffset + idxJ*axisStride
+
+					// Set comparator inputs
+					for k, output := range outputs {
+						setScalarFromFlat(compInputs[2*k], output.flat, offsetI)
+						setScalarFromFlat(compInputs[2*k+1], output.flat, offsetJ)
+					}
+
+					// Execute comparator - DON'T donate captured inputs, they're reused
+					compOutputs, err := compFn.compiled.Execute(backend, compInputs, nil, compCaptured, nil)
+					if err != nil {
+						panic(err) // Abort sort immediately
+					}
+
+					result := compOutputs[0].flat.([]bool)[0]
+					backend.putBuffer(compOutputs[0])
+					return result
 				}
 
-				idxI := indices[i]
-				idxJ := indices[j]
-				offsetI := baseOffset + idxI*axisStride
-				offsetJ := baseOffset + idxJ*axisStride
-
-				// Set comparator inputs
-				for k, output := range outputs {
-					setScalarFromFlat(compInputs[2*k], output.flat, offsetI)
-					setScalarFromFlat(compInputs[2*k+1], output.flat, offsetJ)
+				if isStable {
+					sort.SliceStable(indices, lessFunc)
+				} else {
+					sort.Slice(indices, lessFunc)
 				}
-
-				// Execute comparator
-				compOutputs, err := compFn.Execute(backend, compInputs, nil, compCapturedInputs, compDonateCaptures)
-				if err != nil {
-					sortErr = err
-					return false
-				}
-
-				result := compOutputs[0].flat.([]bool)[0]
-				backend.putBuffer(compOutputs[0])
-				return result
-			}
-
-			if isStable {
-				sort.SliceStable(indices, lessFunc)
-			} else {
-				sort.Slice(indices, lessFunc)
-			}
+				return nil
+			}()
 
 			if sortErr != nil {
 				for _, buf := range outputs {
@@ -259,65 +274,21 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 
 // setScalarFromFlat sets a scalar buffer's value from a flat array at the given offset.
 func setScalarFromFlat(scalar *Buffer, flat any, offset int) {
-	switch f := flat.(type) {
-	case []float32:
-		scalar.flat.([]float32)[0] = f[offset]
-	case []float64:
-		scalar.flat.([]float64)[0] = f[offset]
-	case []int32:
-		scalar.flat.([]int32)[0] = f[offset]
-	case []int64:
-		scalar.flat.([]int64)[0] = f[offset]
-	case []int8:
-		scalar.flat.([]int8)[0] = f[offset]
-	case []int16:
-		scalar.flat.([]int16)[0] = f[offset]
-	case []uint8:
-		scalar.flat.([]uint8)[0] = f[offset]
-	case []uint16:
-		scalar.flat.([]uint16)[0] = f[offset]
-	case []uint32:
-		scalar.flat.([]uint32)[0] = f[offset]
-	case []uint64:
-		scalar.flat.([]uint64)[0] = f[offset]
-	case []bool:
-		scalar.flat.([]bool)[0] = f[offset]
-	default:
-		panic(errors.Errorf("setScalarFromFlat: unsupported type %T", flat))
-	}
+	value := reflect.ValueOf(flat).Index(offset)
+	reflect.ValueOf(scalar.flat).Index(0).Set(value)
 }
+
+// applyPermutationDTypeMap dispatches applyPermutation by dtype.
+var applyPermutationDTypeMap = NewDTypeMap("ApplyPermutation")
 
 // applyPermutation reorders elements along the sort axis according to the given indices.
 func applyPermutation(buf *Buffer, indices []int, baseOffset, axisStride, axisSize int) {
-	switch flat := buf.flat.(type) {
-	case []float32:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []float64:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []int32:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []int64:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []int8:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []int16:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []uint8:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []uint16:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []uint32:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []uint64:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	case []bool:
-		applyPermutationTyped(flat, indices, baseOffset, axisStride, axisSize)
-	default:
-		panic(errors.Errorf("applyPermutation: unsupported type %T", buf.flat))
-	}
+	fn := applyPermutationDTypeMap.Get(buf.shape.DType).(func(buf *Buffer, indices []int, baseOffset, axisStride, axisSize int))
+	fn(buf, indices, baseOffset, axisStride, axisSize)
 }
 
-func applyPermutationTyped[T any](flat []T, indices []int, baseOffset, axisStride, axisSize int) {
+func applyPermutationGeneric[T SupportedTypesConstraints](buf *Buffer, indices []int, baseOffset, axisStride, axisSize int) {
+	flat := buf.flat.([]T)
 	// Extract values to temp slice
 	temp := make([]T, axisSize)
 	for i := range axisSize {

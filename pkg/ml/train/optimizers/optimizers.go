@@ -5,20 +5,13 @@
 package optimizers
 
 import (
-	"maps"
-	"slices"
-
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
-
-// keysSlice returns a slice of keys from a map (helper for maps.Keys which returns an iterator).
-func keysSlice[K comparable, V any](m map[K]V) []K {
-	return slices.Collect(maps.Keys(m))
-}
 
 // Interface implemented by optimizer implementations.
 //
@@ -147,7 +140,7 @@ func FromContext(ctx *context.Context) Interface {
 func ByName(ctx *context.Context, optName string) Interface {
 	optBuilder, found := KnownOptimizers[optName]
 	if !found {
-		Panicf("Unknown optimizer %q, valid values are %v.", optName, keysSlice(KnownOptimizers))
+		Panicf("Unknown optimizer %q, valid values are %v.", optName, xslices.Keys(KnownOptimizers))
 	}
 	return optBuilder(ctx)
 }

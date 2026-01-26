@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
+	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
@@ -29,13 +30,15 @@ var (
 		data := ref.([]float32)
 		float32PerSizeBufferPool[len(data)] = data
 	}
-	sequentialWorkerPool = func(work func()) bool { return false }
+
+	// sequentialWorkerPool is nil for now, which means no parallelism.
+	sequentialWorkerPool *workerspool.Pool
 )
 
 type float32GemmFn func(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize,
 	lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []float32,
 	bufAllocFn packgemm.BufAllocFn[float32], bufReleaseFn packgemm.BufReleaseFn,
-	starter packgemm.GoroutineStarter) error
+	pool *workerspool.Pool) error
 
 func TestPackGemm(t *testing.T) {
 	t.Run("Float32", func(t *testing.T) {
@@ -48,7 +51,7 @@ func TestPackGemm(t *testing.T) {
 				gemmFn, ok := reg.GEMMFn.(func(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize,
 					lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []float32,
 					bufAllocFn packgemm.BufAllocFn[float32], bufReleaseFn packgemm.BufReleaseFn,
-					starter packgemm.GoroutineStarter) error)
+					pool *workerspool.Pool) error)
 				if !ok {
 					t.Fatalf("Registered GEMM function invalid for Float32!? This is a bug, we got "+
 						"instead %T as the registered function as %q", reg.GEMMFn, reg.Name)

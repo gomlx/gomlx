@@ -371,19 +371,23 @@ func (f *Function) CapturedParentNodes() []*Node {
 // AddNodeCapturedInputs adds captured inputs from a closure to this node.
 // This should be called when building ops like If, While, Sort that use closures.
 // For ops with multiple closures, call this once for each closure.
-// The closure's required captured values are appended to the node's capturedInputs field
-// so they are properly tracked in the parent function's dependency graph.
+// Each closure's captured values are stored as a separate slice in node.capturedInputs,
+// preserving the per-closure grouping for execution.
 //
 // For nested closures, if the closure captures values from a grandparent,
 // those values are propagated to the parent closure's required captures.
 func (n *Node) AddNodeCapturedInputs(closure *Function) {
-	if closure == nil || len(closure.capturedParentNodes) == 0 {
+	if closure == nil {
+		// Add empty slice to maintain closure index alignment.
+		n.capturedInputs = append(n.capturedInputs, nil)
 		return
 	}
 
-	// Append the closure's captured values to the node's capturedInputs.
+	// Append the closure's captured values as a new slice.
 	// These become dependencies of the node in the parent function's DAG.
-	n.capturedInputs = append(n.capturedInputs, closure.capturedParentNodes...)
+	capturedNodes := make([]*Node, len(closure.capturedParentNodes))
+	copy(capturedNodes, closure.capturedParentNodes)
+	n.capturedInputs = append(n.capturedInputs, capturedNodes)
 }
 
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
@@ -1227,8 +1231,8 @@ func (f *Function) AllReduce(operands []backends.Value, reductionType backends.R
 		"AllReduce not supported for %q builder", BackendName)
 }
 
-// validClosure validates that a backends.Function is a compiled closure of the current function.
-func (f *Function) validClosure(opName, closureName string, closure backends.Function) (*Function, error) {
+// validateClosure validates that a backends.Function is a compiled closure of the current function.
+func (f *Function) validateClosure(opName, closureName string, closure backends.Function) (*Function, error) {
 	fn, ok := closure.(*Function)
 	if !ok {
 		return nil, errors.Errorf("%s: %s must be a *simplego.Function, got %T", opName, closureName, closure)
@@ -1282,11 +1286,11 @@ func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Func
 	}
 
 	// Validate branches
-	trueFn, err := f.validClosure("If", "trueBranch", trueBranch)
+	trueFn, err := f.validateClosure("If", "trueBranch", trueBranch)
 	if err != nil {
 		return nil, err
 	}
-	falseFn, err := f.validClosure("If", "falseBranch", falseBranch)
+	falseFn, err := f.validateClosure("If", "falseBranch", falseBranch)
 	if err != nil {
 		return nil, err
 	}
@@ -1322,11 +1326,16 @@ func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Func
 		falseBranch: falseFn,
 	}
 
-	// Create multi-output node for If
+	// Create multi-output node for If with only the predicate as regular input.
+	// Captured values are tracked separately via AddNodeCapturedInputs.
 	node := f.newMultiOutputsNode(backends.OpTypeIf, outputShapes, predNode)
 	node.data = data
+
+	// Add captured values from both branches to node.capturedInputs.
+	// Each closure's captures are stored as a separate slice.
 	node.AddNodeCapturedInputs(trueFn)
 	node.AddNodeCapturedInputs(falseFn)
+
 	return node.MultiOutputValues(), nil
 }
 
@@ -1357,7 +1366,7 @@ func (f *Function) While(cond, body backends.Function, initialState ...backends.
 	}
 
 	// Validate closures and their parameters
-	condFn, err := f.validClosure("While", "cond", cond)
+	condFn, err := f.validateClosure("While", "cond", cond)
 	if err != nil {
 		return nil, err
 	}
@@ -1365,7 +1374,7 @@ func (f *Function) While(cond, body backends.Function, initialState ...backends.
 		return nil, err
 	}
 
-	bodyFn, err := f.validClosure("While", "body", body)
+	bodyFn, err := f.validateClosure("While", "body", body)
 	if err != nil {
 		return nil, err
 	}
@@ -1400,22 +1409,29 @@ func (f *Function) While(cond, body backends.Function, initialState ...backends.
 	}
 
 	data := &whileNode{
-		cond: condFn,
-		body: bodyFn,
+		cond:       condFn,
+		body:       bodyFn,
+		stateCount: len(stateNodes),
 	}
 
-	// Create multi-output node for While
+	// Create multi-output node for While with only state values as regular inputs.
+	// Captured values are tracked separately via AddNodeCapturedInputs.
 	node := f.newMultiOutputsNode(backends.OpTypeWhile, outputShapes, stateNodes...)
 	node.data = data
+
+	// Add captured values from both closures to node.capturedInputs.
+	// Each closure's captures are stored as a separate slice.
 	node.AddNodeCapturedInputs(condFn)
 	node.AddNodeCapturedInputs(bodyFn)
+
 	return node.MultiOutputValues(), nil
 }
 
 // whileNode holds the data for a While operation.
 type whileNode struct {
-	cond *Function
-	body *Function
+	cond       *Function
+	body       *Function
+	stateCount int // Number of state values
 }
 
 // Sort sorts one or more tensors along the specified axis using a comparator closure.
@@ -1439,7 +1455,7 @@ func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, i
 	}
 
 	// Validate comparator closure
-	compFn, err := f.validClosure("Sort", "comparator", comparator)
+	compFn, err := f.validateClosure("Sort", "comparator", comparator)
 	if err != nil {
 		return nil, err
 	}
@@ -1504,12 +1520,17 @@ func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, i
 		comparator: compFn,
 		axis:       axis,
 		isStable:   isStable,
+		inputCount: len(inputNodes),
 	}
 
-	// Create multi-output node for Sort
+	// Create multi-output node for Sort with only input tensors as regular inputs.
+	// Captured values are tracked separately via AddNodeCapturedInputs.
 	node := f.newMultiOutputsNode(backends.OpTypeSort, outputShapes, inputNodes...)
 	node.data = data
+
+	// Add captured values from comparator to node.capturedInputs.
 	node.AddNodeCapturedInputs(compFn)
+
 	return node.MultiOutputValues(), nil
 }
 
@@ -1518,6 +1539,7 @@ type sortNode struct {
 	comparator *Function
 	axis       int
 	isStable   bool
+	inputCount int // Number of input tensors
 }
 
 // shapesEqualDimensions returns true if two shapes have the same dimensions (ignoring dtype).

@@ -21,12 +21,11 @@
 package backends
 
 import (
-	"maps"
 	"os"
-	"slices"
 	"strings"
 
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 // DeviceNum represents which device holds a buffer or should execute a computation.
@@ -193,5 +192,5 @@ func NewWithConfig(config string) (Backend, error) {
 
 // List the registered (compiled-in) backends.
 func List() []string {
-	return slices.Collect(maps.Keys(registeredConstructors))
+	return xslices.Keys(registeredConstructors)
 }
