@@ -120,3 +120,120 @@ func BenchmarkMakeSliceReflect_Int64_Small(b *testing.B) {
 		_ = makeSliceReflect(dtypes.Int64, 64)
 	}
 }
+
+// Iterator pooling benchmarks
+
+func BenchmarkBroadcastIterator_Pooled(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		it := getBroadcastIterator(4)
+		putBroadcastIterator(it)
+	}
+}
+
+func BenchmarkBroadcastIterator_Alloc(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_ = &broadcastIterator{
+			perAxesIdx:  make([]int, 4),
+			targetDims:  make([]int, 4),
+			isBroadcast: make([]bool, 4),
+			strides:     make([]int, 4),
+		}
+	}
+}
+
+func BenchmarkTransposeIterator_Pooled(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		it := getTransposeIterator(4)
+		putTransposeIterator(it)
+	}
+}
+
+func BenchmarkTransposeIterator_Alloc(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_ = &transposeIterator{
+			perAxisIdx:     make([]int, 4),
+			perAxisStrides: make([]int, 4),
+			dimensions:     make([]int, 4),
+		}
+	}
+}
+
+func BenchmarkReduceIterator_Pooled(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		it := getReduceIterator(4)
+		putReduceIterator(it)
+	}
+}
+
+func BenchmarkReduceIterator_Alloc(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_ = &reduceOutputIterator{
+			perAxisIdx:    make([]int, 4),
+			dimensions:    make([]int, 4),
+			perAxisStride: make([]int, 4),
+		}
+	}
+}
+
+// sink prevents compiler from optimizing away allocations
+var sink any
+
+// These benchmarks force heap escape to simulate real usage
+
+func BenchmarkBroadcastIterator_Pooled_Escape(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		it := getBroadcastIterator(4)
+		sink = it // force escape
+		putBroadcastIterator(it)
+	}
+}
+
+func BenchmarkBroadcastIterator_Alloc_Escape(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		it := &broadcastIterator{
+			perAxesIdx:  make([]int, 4),
+			targetDims:  make([]int, 4),
+			isBroadcast: make([]bool, 4),
+			strides:     make([]int, 4),
+		}
+		sink = it // force escape
+	}
+}
+
+func BenchmarkTransposeIterator_Pooled_Escape(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		it := getTransposeIterator(4)
+		sink = it // force escape
+		putTransposeIterator(it)
+	}
+}
+
+func BenchmarkTransposeIterator_Alloc_Escape(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		it := &transposeIterator{
+			perAxisIdx:     make([]int, 4),
+			perAxisStrides: make([]int, 4),
+			dimensions:     make([]int, 4),
+		}
+		sink = it // force escape
+	}
+}
+
+func BenchmarkReduceIterator_Pooled_Escape(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		it := getReduceIterator(4)
+		sink = it // force escape
+		putReduceIterator(it)
+	}
+}
+
+func BenchmarkReduceIterator_Alloc_Escape(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		it := &reduceOutputIterator{
+			perAxisIdx:    make([]int, 4),
+			dimensions:    make([]int, 4),
+			perAxisStride: make([]int, 4),
+		}
+		sink = it // force escape
+	}
+}

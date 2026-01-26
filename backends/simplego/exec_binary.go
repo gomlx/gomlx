@@ -3,8 +3,6 @@
 package simplego
 
 import (
-	"slices"
-
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
@@ -49,17 +47,14 @@ type broadcastIterator struct {
 // Pre-requisite: fromShape.Rank() == toShape.Rank().
 //
 // It is used by implicit broadcasting in binaryOps as well as by the the execBroadcastInDim.
+// The caller must call putBroadcastIterator when done to return the iterator to the pool.
 func newBroadcastIterator(fromShape, toShape shapes.Shape) *broadcastIterator {
 	rank := fromShape.Rank() // == toShape.Rank()
 	if rank != toShape.Rank() {
 		exceptions.Panicf("broadcastIterator: rank mismatch fromShape=%s, toShape=%s", fromShape, toShape)
 	}
-	bi := &broadcastIterator{
-		perAxesIdx:  make([]int, rank),
-		targetDims:  slices.Clone(toShape.Dimensions),
-		isBroadcast: make([]bool, rank),
-		strides:     make([]int, rank),
-	}
+	bi := getBroadcastIterator(rank)
+	copy(bi.targetDims, toShape.Dimensions)
 	stride := 1
 	for axis := rank - 1; axis >= 0; axis-- {
 		bi.strides[axis] = stride
