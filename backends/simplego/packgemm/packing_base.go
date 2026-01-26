@@ -27,6 +27,7 @@ func BasePackRHS[T hwy.Floats](src, dst []T, srcRowStart, srcColStart, srcRowStr
 	srcStartRowIdx := srcRowStart * srcRowStride
 
 	numLanes := hwy.MaxLanes[T]()
+
 	switch {
 	case kernelCols == numLanes:
 		// Use highway intrinsics, with one register.

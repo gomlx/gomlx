@@ -155,3 +155,77 @@ func TestFeedWorkItems(t *testing.T) {
 
 // Ensure slices package is used (it might be already imported in packgemm.go but this file is separate compilation unit if internal test? No, same package).
 var _ = slices.Clone[[]int]
+
+func BenchmarkPackRHS(b *testing.B) {
+	sizes := []struct{ contractingRows, rhsCols int }{
+		{1920, 1024},
+		{1920, 1536},
+	}
+	paramsVariations := []struct {
+		name   string
+		params CacheParams
+	}{
+		{"AVX512", avx512Float32Params},
+		{"NoSIMD", NoSIMD32Params},
+	}
+
+	for _, size := range sizes {
+		for _, variant := range paramsVariations {
+			params := variant.params
+			testName := fmt.Sprintf("params=%s: K=%d,Kc=%d,N=%d,Nc=%d,Nr=%d",
+				variant.name,
+				size.contractingRows, params.PanelContractingSize,
+				size.rhsCols, params.RHSPanelCrossSize, params.RHSL1KernelCols)
+			b.Run(testName, func(b *testing.B) {
+				panelContractingRows := variant.params.PanelContractingSize
+				panelRhsCols := variant.params.RHSPanelCrossSize
+				p := &variant.params
+
+				// Allocate buffers
+				// src: [contractingRows, rhsCols] full size
+				src := make([]float32, size.contractingRows*size.rhsCols)
+				// Fill src with random data if needed, or just zeros. Zeros is fine for speed test.
+
+				// dst: size depends on packing.
+				// [ceil(rhsCols/RHSL1KernelCols), contractingRows, RHSL1KernelCols]
+				numStrips := (panelRhsCols + p.RHSL1KernelCols - 1) / p.RHSL1KernelCols
+				dstSize := numStrips * panelContractingRows * p.RHSL1KernelCols
+				dst := make([]float32, dstSize)
+
+				// Calculate number of panels in each dimension
+				numRowPanels := size.contractingRows / panelContractingRows
+				if numRowPanels == 0 {
+					numRowPanels = 1
+				}
+				numColPanels := size.rhsCols / panelRhsCols
+				if numColPanels == 0 {
+					numColPanels = 1
+				}
+				totalPanels := numRowPanels * numColPanels
+
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					panelIdx := i % totalPanels
+					// Simple row-major iteration of panels
+					rowPanelIdx := panelIdx / numColPanels
+					colPanelIdx := panelIdx % numColPanels
+
+					// Make sure we don't go out of bounds if the size is not explicitly large enough for the default panel layout
+					// though the sizes provided seem large enough.
+					// Handle edge cases where size < panel size by clamping to 0.
+					rowStart := rowPanelIdx * panelContractingRows
+					if rowStart+panelContractingRows > size.contractingRows {
+						rowStart = 0
+					}
+					colStart := colPanelIdx * panelRhsCols
+					if colStart+panelRhsCols > size.rhsCols {
+						colStart = 0
+					}
+
+					PackRHS(src, dst, rowStart, colStart, size.rhsCols, panelContractingRows, panelRhsCols, p.RHSL1KernelCols)
+					// avx512Float32PackRHS(src, dst, rowStart, colStart, size.rhsCols, panelContractingRows, panelRhsCols, p.RHSL1KernelCols)
+				}
+			})
+		}
+	}
+}

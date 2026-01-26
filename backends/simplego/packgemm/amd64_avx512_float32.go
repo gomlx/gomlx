@@ -141,6 +141,8 @@ func avx512Float32GemmChunk(
 			// ---------------------------------------------------------
 			avx512Float32PackRHS(rhs, packedRhs, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth,
 				rhsPanelWidth, params.RHSL1KernelCols)
+			// PackRHS(rhs, packedRhs, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth,
+			// 	rhsPanelWidth, params.RHSL1KernelCols)
 
 			// Loop 3 (ic): Tiling M (Output Rows) - Fits in L2
 			// Iterates over the LHS height in chunks of lhsL2PanelCrossSize
