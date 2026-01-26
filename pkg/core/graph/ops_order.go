@@ -178,6 +178,9 @@ func SortFunc(comparator *Function, axis int, isStable bool, inputs ...*Node) []
 //
 // The output shapes have the same rank as input, with the specified axis having size K.
 //
+// Tie-breaking: When multiple elements have equal values, stable sort is used,
+// meaning elements that appear earlier in the original order along the axis are selected first.
+//
 // Example:
 //
 //	x := Const(g, []float32{3, 1, 4, 1, 5, 9, 2, 6})
@@ -200,6 +203,9 @@ func TopK(x *Node, k int, axis int) (values, indices *Node) {
 //   - indices: The indices of the K smallest values in the original tensor (dtype Int32).
 //
 // The output shapes have the same rank as input, with the specified axis having size K.
+//
+// Tie-breaking: When multiple elements have equal values, stable sort is used,
+// meaning elements that appear earlier in the original order along the axis are selected first.
 //
 // Example:
 //
@@ -282,6 +288,10 @@ func topKImpl(x *Node, k int, axis int, ascending bool) (values, indices *Node) 
 // Returns:
 //   - mask: Boolean mask with same shape as x, true for top-k elements
 //
+// Tie-breaking: When multiple elements have equal values, stable sort is used,
+// meaning elements that appear earlier in the original order along the axis are selected first.
+// This ensures exactly k elements are marked as true in the mask.
+//
 // Example:
 //
 //	x := Const(g, []float32{3, 1, 4, 1, 5, 9, 2, 6})
@@ -308,11 +318,21 @@ func TopKMask(x *Node, k int, axis int) *Node {
 		return Ones(g, boolShape)
 	}
 
-	// Get the k-th largest value (the smallest value in the top-k)
-	values, _ := TopK(x, k, axis)
-	// Get the minimum value from the top-k (which is the threshold)
-	threshold := ReduceAndKeep(values, ReduceMin, axis)
+	// Get the indices of the top-k elements
+	// Using stable sort ensures deterministic tie-breaking
+	_, topIndices := TopK(x, k, axis)
 
-	// Elements >= threshold are in the top-k
-	return GreaterOrEqual(x, threshold)
+	// Create position indices for comparison
+	indicesShape := shape.Clone()
+	indicesShape.DType = dtypes.Int32
+	positionIndices := Iota(g, indicesShape, axis)
+
+	// Create a mask by checking if each position index is in topIndices
+	// We'll expand both tensors to enable broadcasting comparison
+	expandedPos := ExpandDims(positionIndices, axis+1)
+	expandedTop := ExpandDims(topIndices, axis)
+	matches := Equal(expandedPos, expandedTop)
+	mask := ReduceLogicalOr(matches, axis+1)
+
+	return mask
 }

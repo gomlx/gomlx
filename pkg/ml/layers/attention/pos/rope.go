@@ -52,8 +52,9 @@ func NewRoPEWithDimRange(baseFreq float64, dimStart, dimEnd int) *RoPE {
 
 // Apply implements the PositionalEmbedding interface.
 // It applies rotary position embeddings to x starting at position startPos.
-// startPos must be a *Node (scalar int32) for dynamic positioning.
-// Shapes: x [..., seq_len, head_dim|embed_dim]
+//
+// - x: shaped [..., seq_len, head_dim|embed_dim]
+// - startPos: scalar value added to the x indices when rotating, for dynamic positioning. It is converted to x dtype.
 func (r *RoPE) Apply(x *Node, startPos *Node) *Node {
 	if r.DimStart == 0 && r.DimEnd == -1 {
 		// Apply to entire dimension
@@ -89,10 +90,13 @@ func applyRoPE(x *Node, startPos *Node, baseFreq float64) *Node {
 	// Shape: [seqLen]
 	positions := Iota(g, shapes.Make(dtype, seqLen), 0)
 
-	// Convert startPos to dtype and broadcast
+	// Convert startPos to dtype and ensure it's scalar
 	posNode := ConvertDType(startPos, dtype)
 	if posNode.Rank() > 0 {
-		posNode = Squeeze(posNode) // Ensure scalar
+		posNode = Squeeze(posNode)
+		if posNode.Rank() > 0 {
+			Panicf("RoPE startPos must be scalar or squeeze to scalar, got shape %s after squeeze", posNode.Shape())
+		}
 	}
 	posNode = BroadcastToShape(posNode, positions.Shape())
 	positions = Add(positions, posNode)
@@ -161,8 +165,8 @@ func applyRoPE(x *Node, startPos *Node, baseFreq float64) *Node {
 func applyRoPEWithCustomDim(x *Node, startPos *Node, baseFreq float64, dimStart, dimEnd int) *Node {
 	rank := x.Shape().Rank()
 
-	// Extract the part to apply RoPE
-	part := Slice(x, AxisRange(), AxisRange(dimStart, dimEnd))
+	// Extract the part to apply RoPE (slice the last axis)
+	part := Slice(x, AxisRange().Spacer(), AxisRange(dimStart, dimEnd))
 
 	// Apply RoPE
 	rotatedPart := applyRoPE(part, startPos, baseFreq)
@@ -175,11 +179,11 @@ func applyRoPEWithCustomDim(x *Node, startPos *Node, baseFreq float64, dimStart,
 
 	parts := make([]*Node, 0, 3)
 	if dimStart > 0 {
-		parts = append(parts, Slice(x, AxisRange(), AxisRange(0, dimStart)))
+		parts = append(parts, Slice(x, AxisRange().Spacer(), AxisRange(0, dimStart)))
 	}
 	parts = append(parts, rotatedPart)
 	if dimEnd < x.Shape().Dimensions[rank-1] {
-		parts = append(parts, Slice(x, AxisRange(), AxisRange(dimEnd, x.Shape().Dimensions[rank-1])))
+		parts = append(parts, Slice(x, AxisRange().Spacer(), AxisRange(dimEnd, x.Shape().Dimensions[rank-1])))
 	}
 
 	return Concatenate(parts, -1)

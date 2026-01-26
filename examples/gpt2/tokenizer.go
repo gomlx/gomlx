@@ -83,47 +83,26 @@ func LoadTokenizer(repo *hub.Repo) (*Tokenizer, error) {
 
 // bytesToUnicode creates a mapping from bytes to unicode characters
 func bytesToUnicode() (map[byte]rune, map[rune]byte) {
-	// GPT-2 uses a clever byte encoding to handle all 256 byte values
-	// Build list of printable ASCII bytes
-	bs := make([]byte, 0, 256)
-	// ASCII printable: !, ", #, ..., ~
-	for i := 33; i <= 126; i++ { // '!' to '~'
-		bs = append(bs, byte(i))
-	}
-	// Extended ASCII: ¡ to ¬ (bytes 161-172)
-	for i := 161; i <= 172; i++ {
-		bs = append(bs, byte(i))
-	}
-	// Extended ASCII: ® to ÿ (bytes 174-255)
-	for i := 174; i <= 255; i++ {
-		bs = append(bs, byte(i))
-	}
-
-	cs := make([]rune, len(bs))
-	for i, b := range bs {
-		cs[i] = rune(b)
-	}
-
-	// Use a map for O(1) lookup instead of O(n) contains check
-	bsSet := make(map[byte]bool, len(bs))
-	for _, b := range bs {
-		bsSet[b] = true
-	}
-
-	n := 0
-	for b := 0; b < 256; b++ {
-		if !bsSet[byte(b)] {
-			bs = append(bs, byte(b))
-			cs = append(cs, rune(256+n))
-			n++
-		}
-	}
-
+	// GPT-2 maps printable bytes to themselves, non-printable to 256+offset
 	encoder := make(map[byte]rune, 256)
 	decoder := make(map[rune]byte, 256)
-	for i := 0; i < 256; i++ {
-		encoder[bs[i]] = cs[i]
-		decoder[cs[i]] = bs[i]
+
+	// Helper to check if byte should map to itself
+	isPrintable := func(b byte) bool {
+		return (b >= 33 && b <= 126) || (b >= 161 && b <= 172) || (b >= 174)
+	}
+
+	offset := 0
+	for b := 0; b < 256; b++ {
+		var r rune
+		if isPrintable(byte(b)) {
+			r = rune(b)
+		} else {
+			r = rune(256 + offset)
+			offset++
+		}
+		encoder[byte(b)] = r
+		decoder[r] = byte(b)
 	}
 
 	return encoder, decoder
@@ -135,67 +114,35 @@ func (t *Tokenizer) bpe(token string) string {
 		return token
 	}
 
-	// Split into characters
-	word := []string{}
+	// Start with individual characters
+	word := make([]string, 0, len(token))
 	for _, r := range token {
 		word = append(word, string(r))
 	}
 
-	pairs := getPairs(word)
-	if len(pairs) == 0 {
-		return token
-	}
+	for len(word) > 1 {
+		// Find best pair to merge
+		bestIdx := -1
+		bestRank := int(^uint(0) >> 1)
 
-	for {
-		// Find the pair with the lowest rank
-		minPair := ""
-		minRank := int(^uint(0) >> 1) // max int
-
-		for _, pair := range pairs {
-			if rank, ok := t.bpeRanks[pair]; ok {
-				if rank < minRank {
-					minRank = rank
-					minPair = pair
-				}
+		for i := 0; i < len(word)-1; i++ {
+			pair := word[i] + " " + word[i+1]
+			if rank, ok := t.bpeRanks[pair]; ok && rank < bestRank {
+				bestRank = rank
+				bestIdx = i
 			}
 		}
 
-		if minPair == "" {
+		if bestIdx == -1 {
 			break
 		}
 
-		// Merge the pair
-		first := strings.Split(minPair, " ")[0]
-		second := strings.Split(minPair, " ")[1]
-
-		newWord := []string{}
-		i := 0
-		for i < len(word) {
-			if i < len(word)-1 && word[i] == first && word[i+1] == second {
-				newWord = append(newWord, first+second)
-				i += 2
-			} else {
-				newWord = append(newWord, word[i])
-				i++
-			}
-		}
-
-		word = newWord
-		if len(word) == 1 {
-			break
-		}
-		pairs = getPairs(word)
+		// Merge the best pair in place
+		word[bestIdx] = word[bestIdx] + word[bestIdx+1]
+		word = append(word[:bestIdx+1], word[bestIdx+2:]...)
 	}
 
 	return strings.Join(word, " ")
-}
-
-func getPairs(word []string) []string {
-	pairs := []string{}
-	for i := 0; i < len(word)-1; i++ {
-		pairs = append(pairs, word[i]+" "+word[i+1])
-	}
-	return pairs
 }
 
 // Encode converts text to token IDs
