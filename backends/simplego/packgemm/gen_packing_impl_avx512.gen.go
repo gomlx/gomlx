@@ -5,6 +5,7 @@ package packgemm
 
 import (
 	"github.com/ajroetker/go-highway/hwy"
+	"simd/archsimd"
 )
 
 func BasePackRHS_avx512_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int) {
@@ -12,12 +13,40 @@ func BasePackRHS_avx512_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowStar
 	numFullStrips := numCols / kernelCols
 	fullStripsCol := numFullStrips * kernelCols
 	srcStartRowIdx := srcRowStart * srcRowStride
-	for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-		srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-		for range contractingRows {
-			copy(dst[dstIdx:], src[srcIdx:srcIdx+kernelCols])
-			dstIdx += kernelCols
-			srcIdx += srcRowStride
+	var v0 hwy.Vec[hwy.Float16]
+	fmt.Printf("- kernelCols=%d, lanes=%d\n", kernelCols, v0.NumLanes())
+	switch {
+	case v0.NumLanes() == kernelCols:
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				v0 = hwy.Load(src[srcIdx:])
+				hwy.Store(v0, dst[dstIdx:])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
+		}
+	case v0.NumLanes()*2 == kernelCols:
+		var v1 hwy.Vec[hwy.Float16]
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				v0 = hwy.Load(src[srcIdx:])
+				v1 = hwy.Load(src[srcIdx+v0.NumLanes():])
+				hwy.Store(v0, dst[dstIdx:])
+				hwy.Store(v1, dst[dstIdx+v0.NumLanes():])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
+		}
+	default:
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				copy(dst[dstIdx:], src[srcIdx:srcIdx+kernelCols])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
 		}
 	}
 	validCols := numCols - fullStripsCol
@@ -40,12 +69,40 @@ func BasePackRHS_avx512_BFloat16(src []hwy.BFloat16, dst []hwy.BFloat16, srcRowS
 	numFullStrips := numCols / kernelCols
 	fullStripsCol := numFullStrips * kernelCols
 	srcStartRowIdx := srcRowStart * srcRowStride
-	for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-		srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-		for range contractingRows {
-			copy(dst[dstIdx:], src[srcIdx:srcIdx+kernelCols])
-			dstIdx += kernelCols
-			srcIdx += srcRowStride
+	var v0 hwy.Vec[hwy.BFloat16]
+	fmt.Printf("- kernelCols=%d, lanes=%d\n", kernelCols, v0.NumLanes())
+	switch {
+	case v0.NumLanes() == kernelCols:
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				v0 = hwy.Load(src[srcIdx:])
+				hwy.Store(v0, dst[dstIdx:])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
+		}
+	case v0.NumLanes()*2 == kernelCols:
+		var v1 hwy.Vec[hwy.BFloat16]
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				v0 = hwy.Load(src[srcIdx:])
+				v1 = hwy.Load(src[srcIdx+v0.NumLanes():])
+				hwy.Store(v0, dst[dstIdx:])
+				hwy.Store(v1, dst[dstIdx+v0.NumLanes():])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
+		}
+	default:
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				copy(dst[dstIdx:], src[srcIdx:srcIdx+kernelCols])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
 		}
 	}
 	validCols := numCols - fullStripsCol
@@ -68,12 +125,40 @@ func BasePackRHS_avx512(src []float32, dst []float32, srcRowStart int, srcColSta
 	numFullStrips := numCols / kernelCols
 	fullStripsCol := numFullStrips * kernelCols
 	srcStartRowIdx := srcRowStart * srcRowStride
-	for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-		srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-		for range contractingRows {
-			copy(dst[dstIdx:], src[srcIdx:srcIdx+kernelCols])
-			dstIdx += kernelCols
-			srcIdx += srcRowStride
+	var v0 archsimd.Float32x16
+	fmt.Printf("- kernelCols=%d, lanes=%d\n", kernelCols, v0.NumLanes())
+	switch {
+	case v0.NumLanes() == kernelCols:
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				v0 = archsimd.LoadFloat32x16Slice(src[srcIdx:])
+				v0.StoreSlice(dst[dstIdx:])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
+		}
+	case v0.NumLanes()*2 == kernelCols:
+		var v1 archsimd.Float32x16
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				v0 = archsimd.LoadFloat32x16Slice(src[srcIdx:])
+				v1 = archsimd.LoadFloat32x16Slice(src[srcIdx+v0.NumLanes():])
+				v0.StoreSlice(dst[dstIdx:])
+				v1.StoreSlice(dst[dstIdx+v0.NumLanes():])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
+		}
+	default:
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				copy(dst[dstIdx:], src[srcIdx:srcIdx+kernelCols])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
 		}
 	}
 	validCols := numCols - fullStripsCol
@@ -96,12 +181,40 @@ func BasePackRHS_avx512_Float64(src []float64, dst []float64, srcRowStart int, s
 	numFullStrips := numCols / kernelCols
 	fullStripsCol := numFullStrips * kernelCols
 	srcStartRowIdx := srcRowStart * srcRowStride
-	for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-		srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-		for range contractingRows {
-			copy(dst[dstIdx:], src[srcIdx:srcIdx+kernelCols])
-			dstIdx += kernelCols
-			srcIdx += srcRowStride
+	var v0 archsimd.Float64x8
+	fmt.Printf("- kernelCols=%d, lanes=%d\n", kernelCols, v0.NumLanes())
+	switch {
+	case v0.NumLanes() == kernelCols:
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				v0 = archsimd.LoadFloat64x8Slice(src[srcIdx:])
+				v0.StoreSlice(dst[dstIdx:])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
+		}
+	case v0.NumLanes()*2 == kernelCols:
+		var v1 archsimd.Float64x8
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				v0 = archsimd.LoadFloat64x8Slice(src[srcIdx:])
+				v1 = archsimd.LoadFloat64x8Slice(src[srcIdx+v0.NumLanes():])
+				v0.StoreSlice(dst[dstIdx:])
+				v1.StoreSlice(dst[dstIdx+v0.NumLanes():])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
+		}
+	default:
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				copy(dst[dstIdx:], src[srcIdx:srcIdx+kernelCols])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
 		}
 	}
 	validCols := numCols - fullStripsCol

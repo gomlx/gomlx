@@ -1,6 +1,8 @@
 package packgemm
 
 import (
+	"fmt"
+
 	"github.com/ajroetker/go-highway/hwy"
 )
 
@@ -25,14 +27,47 @@ func BasePackRHS[T hwy.Floats](src, dst []T, srcRowStart, srcColStart, srcRowStr
 	numFullStrips := numCols / kernelCols
 	fullStripsCol := numFullStrips * kernelCols
 	srcStartRowIdx := srcRowStart * srcRowStride
-	// Iterate over strips of width kernelCols (nr)
-	for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-		// Iterate over rows (k)
-		srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-		for range contractingRows {
-			copy(dst[dstIdx:], src[srcIdx:srcIdx+kernelCols])
-			dstIdx += kernelCols
-			srcIdx += srcRowStride
+
+	var v0 hwy.Vec[T]
+	fmt.Printf("- kernelCols=%d, lanes=%d\n", kernelCols, v0.NumLanes())
+	switch {
+	case v0.NumLanes() == kernelCols:
+		// Use highway intrinsics, with one register.
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			// Iterate over rows (k)
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				v0 = hwy.Load(src[srcIdx:])
+				hwy.Store(v0, dst[dstIdx:])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
+		}
+	case v0.NumLanes()*2 == kernelCols:
+		var v1 hwy.Vec[T]
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			// Iterate over rows (k)
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				v0 = hwy.Load(src[srcIdx:])
+				v1 = hwy.Load(src[srcIdx+v0.NumLanes():])
+				hwy.Store(v0, dst[dstIdx:])
+				hwy.Store(v1, dst[dstIdx+v0.NumLanes():])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
+		}
+
+	default:
+		// Use copy() instead:
+		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+			// Iterate over rows (k)
+			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+			for range contractingRows {
+				copy(dst[dstIdx:], src[srcIdx:srcIdx+kernelCols])
+				dstIdx += kernelCols
+				srcIdx += srcRowStride
+			}
 		}
 	}
 
