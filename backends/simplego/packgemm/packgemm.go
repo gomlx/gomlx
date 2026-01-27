@@ -188,7 +188,7 @@ func packRHS[T hwy.Floats](src, dst []T, srcRowStart, srcColStart, srcStrideCol,
 }
 
 // packLHS packs a slice of size [lhsRows, contractingCols] block from LHS into
-// a [ceil(lhsRows/lhsL1KernelRows), contractingCols, lhsL1KernelRows] "panel"
+// a [ceil(lhsRows/lhsL1KernelRows), contractingCols, kernelRows] "panel"
 // (a block of size Mr x Kc) from LHS.
 // It rearranges data into horizontal strips of height Mr (lhsL1BlockRows).
 //
@@ -199,30 +199,51 @@ func packRHS[T hwy.Floats](src, dst []T, srcRowStart, srcColStart, srcStrideCol,
 //		params.LHSL1KernelRows)
 func packLHS[T hwy.Floats](src, dst []T,
 	srcRowStart, srcColStart, srcRowStride,
-	lhsRows, contractingCols, lhsL1KernelRows int) {
+	numRows, contractingCols, kernelRows int) {
+
 	dstIdx := 0
+	numFullStrips := numRows / kernelRows
+	numStrips := (numRows + kernelRows - 1) / kernelRows
+	fullStripsRow := numFullStrips * kernelRows
+	srcRowBaseIdx := srcRowStart*srcRowStride + srcColStart
+
+	// Bound check elimination (BCE) attempt.
+	_ = src[srcRowBaseIdx+(numRows-1)*srcRowStride+contractingCols-1]
+	_ = dst[numStrips*contractingCols*kernelRows-1]
+
 	// Iterate over strips of height mr
-	for stripRowIdx := 0; stripRowIdx < lhsRows; stripRowIdx += lhsL1KernelRows {
-		validRows := min(lhsL1KernelRows, lhsRows-stripRowIdx)
-
+	for range numFullStrips {
 		// Iterate over columns (contracting size k), we want LHS to be traversed K-first in the kernel
-		for col := range contractingCols {
-			srcCol := srcColStart + col
-			srcRowBase := srcRowStart + stripRowIdx
-
+		srcColBaseIdx := srcRowBaseIdx
+		for range contractingCols {
 			// Copy valid "rows" (they are the last axis in the returned panel)
-			for row := range validRows {
-				srcIdx := ((srcRowBase + row) * srcRowStride) + srcCol
-				dst[dstIdx] = src[srcIdx]
+			for row := range kernelRows {
+				dst[dstIdx] = src[row*srcRowStride+srcColBaseIdx]
 				dstIdx++
 			}
-
-			// Zero-pad
-			for r := validRows; r < lhsL1KernelRows; r++ {
-				dst[dstIdx] = T(0)
-				dstIdx++
-			}
+			srcColBaseIdx++
 		}
+		srcRowBaseIdx += srcRowStride * kernelRows
+	}
+
+	remainingRows := numRows - fullStripsRow
+	if remainingRows == 0 {
+		return
+	}
+
+	// Iterate over columns (contracting size k), we want LHS to be traversed K-first in the kernel
+	for range contractingCols {
+		srcColBaseIdx := srcRowBaseIdx
+		for row := range remainingRows {
+			dst[dstIdx] = src[row*srcRowStride+srcColBaseIdx]
+			dstIdx++
+		}
+		// Zero-pad
+		for range kernelRows - remainingRows {
+			dst[dstIdx] = T(0)
+			dstIdx++
+		}
+		srcColBaseIdx++
 	}
 }
 
