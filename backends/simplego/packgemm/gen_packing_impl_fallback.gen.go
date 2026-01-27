@@ -11,49 +11,56 @@ func BasePackRHS_fallback_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowSt
 	numFullStrips := numCols / kernelCols
 	fullStripsCol := numFullStrips * kernelCols
 	srcStartRowIdx := srcRowStart * srcRowStride
-	numLanes := hwy.MaxLanes[hwy.Float16]()
-	switch {
-	case kernelCols == numLanes:
-		var v0 hwy.Vec[hwy.Float16]
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = hwy.Load(src[srcIdx:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
+	useScalar := true
+	if hwy.CurrentLevel() != hwy.DispatchScalar {
+		numLanes := hwy.NumLanes[hwy.Float16]()
+		switch {
+		case kernelCols == numLanes:
+			useScalar = false
+			var v0 hwy.Vec[hwy.Float16]
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = hwy.LoadFull(src[srcIdx:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*2:
+			useScalar = false
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 := hwy.LoadFull(src[srcIdx:])
+					v1 := hwy.LoadFull(src[srcIdx+numLanes:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*4:
+			useScalar = false
+			var v0, v1, v2, v3 hwy.Vec[hwy.Float16]
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = hwy.LoadFull(src[srcIdx:])
+					v1 = hwy.LoadFull(src[srcIdx+numLanes:])
+					v2 = hwy.LoadFull(src[srcIdx+numLanes*2:])
+					v3 = hwy.LoadFull(src[srcIdx+numLanes*3:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
+					hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
 			}
 		}
-	case kernelCols == numLanes*2:
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 := hwy.LoadFull(src[srcIdx:])
-				v1 := hwy.LoadFull(src[srcIdx+numLanes:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	case kernelCols == numLanes*4:
-		var v0, v1, v2, v3 hwy.Vec[hwy.Float16]
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = hwy.LoadFull(src[srcIdx:])
-				v1 = hwy.LoadFull(src[srcIdx+numLanes:])
-				v2 = hwy.LoadFull(src[srcIdx+numLanes*2:])
-				v3 = hwy.LoadFull(src[srcIdx+numLanes*3:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-				hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
-				hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	default:
+	}
+	if useScalar {
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
@@ -83,49 +90,56 @@ func BasePackRHS_fallback_BFloat16(src []hwy.BFloat16, dst []hwy.BFloat16, srcRo
 	numFullStrips := numCols / kernelCols
 	fullStripsCol := numFullStrips * kernelCols
 	srcStartRowIdx := srcRowStart * srcRowStride
-	numLanes := hwy.MaxLanes[hwy.BFloat16]()
-	switch {
-	case kernelCols == numLanes:
-		var v0 hwy.Vec[hwy.BFloat16]
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = hwy.Load(src[srcIdx:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
+	useScalar := true
+	if hwy.CurrentLevel() != hwy.DispatchScalar {
+		numLanes := hwy.NumLanes[hwy.BFloat16]()
+		switch {
+		case kernelCols == numLanes:
+			useScalar = false
+			var v0 hwy.Vec[hwy.BFloat16]
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = hwy.LoadFull(src[srcIdx:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*2:
+			useScalar = false
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 := hwy.LoadFull(src[srcIdx:])
+					v1 := hwy.LoadFull(src[srcIdx+numLanes:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*4:
+			useScalar = false
+			var v0, v1, v2, v3 hwy.Vec[hwy.BFloat16]
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = hwy.LoadFull(src[srcIdx:])
+					v1 = hwy.LoadFull(src[srcIdx+numLanes:])
+					v2 = hwy.LoadFull(src[srcIdx+numLanes*2:])
+					v3 = hwy.LoadFull(src[srcIdx+numLanes*3:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
+					hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
 			}
 		}
-	case kernelCols == numLanes*2:
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 := hwy.LoadFull(src[srcIdx:])
-				v1 := hwy.LoadFull(src[srcIdx+numLanes:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	case kernelCols == numLanes*4:
-		var v0, v1, v2, v3 hwy.Vec[hwy.BFloat16]
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = hwy.LoadFull(src[srcIdx:])
-				v1 = hwy.LoadFull(src[srcIdx+numLanes:])
-				v2 = hwy.LoadFull(src[srcIdx+numLanes*2:])
-				v3 = hwy.LoadFull(src[srcIdx+numLanes*3:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-				hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
-				hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	default:
+	}
+	if useScalar {
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
@@ -155,49 +169,56 @@ func BasePackRHS_fallback(src []float32, dst []float32, srcRowStart int, srcColS
 	numFullStrips := numCols / kernelCols
 	fullStripsCol := numFullStrips * kernelCols
 	srcStartRowIdx := srcRowStart * srcRowStride
-	numLanes := hwy.MaxLanes[float32]()
-	switch {
-	case kernelCols == numLanes:
-		var v0 hwy.Vec[float32]
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = hwy.Load(src[srcIdx:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
+	useScalar := true
+	if hwy.CurrentLevel() != hwy.DispatchScalar {
+		numLanes := hwy.NumLanes[float32]()
+		switch {
+		case kernelCols == numLanes:
+			useScalar = false
+			var v0 hwy.Vec[float32]
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = hwy.LoadFull(src[srcIdx:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*2:
+			useScalar = false
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 := hwy.LoadFull(src[srcIdx:])
+					v1 := hwy.LoadFull(src[srcIdx+numLanes:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*4:
+			useScalar = false
+			var v0, v1, v2, v3 hwy.Vec[float32]
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = hwy.LoadFull(src[srcIdx:])
+					v1 = hwy.LoadFull(src[srcIdx+numLanes:])
+					v2 = hwy.LoadFull(src[srcIdx+numLanes*2:])
+					v3 = hwy.LoadFull(src[srcIdx+numLanes*3:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
+					hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
 			}
 		}
-	case kernelCols == numLanes*2:
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 := hwy.LoadFull(src[srcIdx:])
-				v1 := hwy.LoadFull(src[srcIdx+numLanes:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	case kernelCols == numLanes*4:
-		var v0, v1, v2, v3 hwy.Vec[float32]
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = hwy.LoadFull(src[srcIdx:])
-				v1 = hwy.LoadFull(src[srcIdx+numLanes:])
-				v2 = hwy.LoadFull(src[srcIdx+numLanes*2:])
-				v3 = hwy.LoadFull(src[srcIdx+numLanes*3:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-				hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
-				hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	default:
+	}
+	if useScalar {
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
@@ -227,49 +248,56 @@ func BasePackRHS_fallback_Float64(src []float64, dst []float64, srcRowStart int,
 	numFullStrips := numCols / kernelCols
 	fullStripsCol := numFullStrips * kernelCols
 	srcStartRowIdx := srcRowStart * srcRowStride
-	numLanes := hwy.MaxLanes[float64]()
-	switch {
-	case kernelCols == numLanes:
-		var v0 hwy.Vec[float64]
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = hwy.Load(src[srcIdx:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
+	useScalar := true
+	if hwy.CurrentLevel() != hwy.DispatchScalar {
+		numLanes := hwy.NumLanes[float64]()
+		switch {
+		case kernelCols == numLanes:
+			useScalar = false
+			var v0 hwy.Vec[float64]
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = hwy.LoadFull(src[srcIdx:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*2:
+			useScalar = false
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 := hwy.LoadFull(src[srcIdx:])
+					v1 := hwy.LoadFull(src[srcIdx+numLanes:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*4:
+			useScalar = false
+			var v0, v1, v2, v3 hwy.Vec[float64]
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = hwy.LoadFull(src[srcIdx:])
+					v1 = hwy.LoadFull(src[srcIdx+numLanes:])
+					v2 = hwy.LoadFull(src[srcIdx+numLanes*2:])
+					v3 = hwy.LoadFull(src[srcIdx+numLanes*3:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
+					hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
 			}
 		}
-	case kernelCols == numLanes*2:
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 := hwy.LoadFull(src[srcIdx:])
-				v1 := hwy.LoadFull(src[srcIdx+numLanes:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	case kernelCols == numLanes*4:
-		var v0, v1, v2, v3 hwy.Vec[float64]
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = hwy.LoadFull(src[srcIdx:])
-				v1 = hwy.LoadFull(src[srcIdx+numLanes:])
-				v2 = hwy.LoadFull(src[srcIdx+numLanes*2:])
-				v3 = hwy.LoadFull(src[srcIdx+numLanes*3:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-				hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
-				hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	default:
+	}
+	if useScalar {
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {

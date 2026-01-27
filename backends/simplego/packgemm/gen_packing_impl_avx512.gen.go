@@ -15,49 +15,56 @@ func BasePackRHS_avx512_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowStar
 	numFullStrips := numCols / kernelCols
 	fullStripsCol := numFullStrips * kernelCols
 	srcStartRowIdx := srcRowStart * srcRowStride
-	numLanes := 32
-	switch {
-	case kernelCols == numLanes:
-		var v0 hwy.Vec[hwy.Float16]
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = hwy.Load(src[srcIdx:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
+	useScalar := true
+	if hwy.CurrentLevel() != hwy.DispatchScalar {
+		numLanes := 32
+		switch {
+		case kernelCols == numLanes:
+			useScalar = false
+			var v0 hwy.Vec[hwy.Float16]
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = hwy.Load(src[srcIdx:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*2:
+			useScalar = false
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 := hwy.Load(src[srcIdx:])
+					v1 := hwy.Load(src[srcIdx+numLanes:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*4:
+			useScalar = false
+			var v0, v1, v2, v3 hwy.Vec[hwy.Float16]
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = hwy.Load(src[srcIdx:])
+					v1 = hwy.Load(src[srcIdx+numLanes:])
+					v2 = hwy.Load(src[srcIdx+numLanes*2:])
+					v3 = hwy.Load(src[srcIdx+numLanes*3:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
+					hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
 			}
 		}
-	case kernelCols == numLanes*2:
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 := hwy.Load(src[srcIdx:])
-				v1 := hwy.Load(src[srcIdx+numLanes:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	case kernelCols == numLanes*4:
-		var v0, v1, v2, v3 hwy.Vec[hwy.Float16]
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = hwy.Load(src[srcIdx:])
-				v1 = hwy.Load(src[srcIdx+numLanes:])
-				v2 = hwy.Load(src[srcIdx+numLanes*2:])
-				v3 = hwy.Load(src[srcIdx+numLanes*3:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-				hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
-				hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	default:
+	}
+	if useScalar {
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
@@ -87,49 +94,56 @@ func BasePackRHS_avx512_BFloat16(src []hwy.BFloat16, dst []hwy.BFloat16, srcRowS
 	numFullStrips := numCols / kernelCols
 	fullStripsCol := numFullStrips * kernelCols
 	srcStartRowIdx := srcRowStart * srcRowStride
-	numLanes := 32
-	switch {
-	case kernelCols == numLanes:
-		var v0 hwy.Vec[hwy.BFloat16]
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = hwy.Load(src[srcIdx:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
+	useScalar := true
+	if hwy.CurrentLevel() != hwy.DispatchScalar {
+		numLanes := 32
+		switch {
+		case kernelCols == numLanes:
+			useScalar = false
+			var v0 hwy.Vec[hwy.BFloat16]
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = hwy.Load(src[srcIdx:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*2:
+			useScalar = false
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 := hwy.Load(src[srcIdx:])
+					v1 := hwy.Load(src[srcIdx+numLanes:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*4:
+			useScalar = false
+			var v0, v1, v2, v3 hwy.Vec[hwy.BFloat16]
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = hwy.Load(src[srcIdx:])
+					v1 = hwy.Load(src[srcIdx+numLanes:])
+					v2 = hwy.Load(src[srcIdx+numLanes*2:])
+					v3 = hwy.Load(src[srcIdx+numLanes*3:])
+					hwy.StoreFull(v0, dst[dstIdx:])
+					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
+					hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
 			}
 		}
-	case kernelCols == numLanes*2:
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 := hwy.Load(src[srcIdx:])
-				v1 := hwy.Load(src[srcIdx+numLanes:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	case kernelCols == numLanes*4:
-		var v0, v1, v2, v3 hwy.Vec[hwy.BFloat16]
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = hwy.Load(src[srcIdx:])
-				v1 = hwy.Load(src[srcIdx+numLanes:])
-				v2 = hwy.Load(src[srcIdx+numLanes*2:])
-				v3 = hwy.Load(src[srcIdx+numLanes*3:])
-				hwy.StoreFull(v0, dst[dstIdx:])
-				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-				hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
-				hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	default:
+	}
+	if useScalar {
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
@@ -159,49 +173,56 @@ func BasePackRHS_avx512(src []float32, dst []float32, srcRowStart int, srcColSta
 	numFullStrips := numCols / kernelCols
 	fullStripsCol := numFullStrips * kernelCols
 	srcStartRowIdx := srcRowStart * srcRowStride
-	numLanes := 16
-	switch {
-	case kernelCols == numLanes:
-		var v0 archsimd.Float32x16
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = archsimd.LoadFloat32x16Slice(src[srcIdx:])
-				v0.Store((*[16]float32)(unsafe.Pointer(&dst[dstIdx])))
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
+	useScalar := true
+	if hwy.CurrentLevel() != hwy.DispatchScalar {
+		numLanes := 16
+		switch {
+		case kernelCols == numLanes:
+			useScalar = false
+			var v0 archsimd.Float32x16
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&src[srcIdx])))
+					v0.Store((*[16]float32)(unsafe.Pointer(&dst[dstIdx])))
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*2:
+			useScalar = false
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&src[srcIdx])))
+					v1 := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&src[srcIdx+numLanes])))
+					v0.Store((*[16]float32)(unsafe.Pointer(&dst[dstIdx])))
+					v1.Store((*[16]float32)(unsafe.Pointer(&dst[dstIdx+numLanes])))
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*4:
+			useScalar = false
+			var v0, v1, v2, v3 archsimd.Float32x16
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&src[srcIdx])))
+					v1 = archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&src[srcIdx+numLanes])))
+					v2 = archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&src[srcIdx+numLanes*2])))
+					v3 = archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&src[srcIdx+numLanes*3])))
+					v0.Store((*[16]float32)(unsafe.Pointer(&dst[dstIdx])))
+					v1.Store((*[16]float32)(unsafe.Pointer(&dst[dstIdx+numLanes])))
+					v2.Store((*[16]float32)(unsafe.Pointer(&dst[dstIdx+numLanes*2])))
+					v3.Store((*[16]float32)(unsafe.Pointer(&dst[dstIdx+numLanes*3])))
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
 			}
 		}
-	case kernelCols == numLanes*2:
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&src[srcIdx])))
-				v1 := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&src[srcIdx+numLanes])))
-				v0.Store((*[16]float32)(unsafe.Pointer(&dst[dstIdx])))
-				v1.Store((*[16]float32)(unsafe.Pointer(&dst[dstIdx+numLanes])))
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	case kernelCols == numLanes*4:
-		var v0, v1, v2, v3 archsimd.Float32x16
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&src[srcIdx])))
-				v1 = archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&src[srcIdx+numLanes])))
-				v2 = archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&src[srcIdx+numLanes*2])))
-				v3 = archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&src[srcIdx+numLanes*3])))
-				v0.Store((*[16]float32)(unsafe.Pointer(&dst[dstIdx])))
-				v1.Store((*[16]float32)(unsafe.Pointer(&dst[dstIdx+numLanes])))
-				v2.Store((*[16]float32)(unsafe.Pointer(&dst[dstIdx+numLanes*2])))
-				v3.Store((*[16]float32)(unsafe.Pointer(&dst[dstIdx+numLanes*3])))
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	default:
+	}
+	if useScalar {
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
@@ -231,49 +252,56 @@ func BasePackRHS_avx512_Float64(src []float64, dst []float64, srcRowStart int, s
 	numFullStrips := numCols / kernelCols
 	fullStripsCol := numFullStrips * kernelCols
 	srcStartRowIdx := srcRowStart * srcRowStride
-	numLanes := 8
-	switch {
-	case kernelCols == numLanes:
-		var v0 archsimd.Float64x8
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = archsimd.LoadFloat64x8Slice(src[srcIdx:])
-				v0.Store((*[8]float64)(unsafe.Pointer(&dst[dstIdx])))
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
+	useScalar := true
+	if hwy.CurrentLevel() != hwy.DispatchScalar {
+		numLanes := 8
+		switch {
+		case kernelCols == numLanes:
+			useScalar = false
+			var v0 archsimd.Float64x8
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&src[srcIdx])))
+					v0.Store((*[8]float64)(unsafe.Pointer(&dst[dstIdx])))
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*2:
+			useScalar = false
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&src[srcIdx])))
+					v1 := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&src[srcIdx+numLanes])))
+					v0.Store((*[8]float64)(unsafe.Pointer(&dst[dstIdx])))
+					v1.Store((*[8]float64)(unsafe.Pointer(&dst[dstIdx+numLanes])))
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
+			}
+		case kernelCols == numLanes*4:
+			useScalar = false
+			var v0, v1, v2, v3 archsimd.Float64x8
+			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
+				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
+				for range contractingRows {
+					v0 = archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&src[srcIdx])))
+					v1 = archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&src[srcIdx+numLanes])))
+					v2 = archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&src[srcIdx+numLanes*2])))
+					v3 = archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&src[srcIdx+numLanes*3])))
+					v0.Store((*[8]float64)(unsafe.Pointer(&dst[dstIdx])))
+					v1.Store((*[8]float64)(unsafe.Pointer(&dst[dstIdx+numLanes])))
+					v2.Store((*[8]float64)(unsafe.Pointer(&dst[dstIdx+numLanes*2])))
+					v3.Store((*[8]float64)(unsafe.Pointer(&dst[dstIdx+numLanes*3])))
+					dstIdx += kernelCols
+					srcIdx += srcRowStride
+				}
 			}
 		}
-	case kernelCols == numLanes*2:
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&src[srcIdx])))
-				v1 := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&src[srcIdx+numLanes])))
-				v0.Store((*[8]float64)(unsafe.Pointer(&dst[dstIdx])))
-				v1.Store((*[8]float64)(unsafe.Pointer(&dst[dstIdx+numLanes])))
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	case kernelCols == numLanes*4:
-		var v0, v1, v2, v3 archsimd.Float64x8
-		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-			for range contractingRows {
-				v0 = archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&src[srcIdx])))
-				v1 = archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&src[srcIdx+numLanes])))
-				v2 = archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&src[srcIdx+numLanes*2])))
-				v3 = archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&src[srcIdx+numLanes*3])))
-				v0.Store((*[8]float64)(unsafe.Pointer(&dst[dstIdx])))
-				v1.Store((*[8]float64)(unsafe.Pointer(&dst[dstIdx+numLanes])))
-				v2.Store((*[8]float64)(unsafe.Pointer(&dst[dstIdx+numLanes*2])))
-				v3.Store((*[8]float64)(unsafe.Pointer(&dst[dstIdx+numLanes*3])))
-				dstIdx += kernelCols
-				srcIdx += srcRowStride
-			}
-		}
-	default:
+	}
+	if useScalar {
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
