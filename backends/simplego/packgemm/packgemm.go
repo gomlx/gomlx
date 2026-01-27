@@ -232,8 +232,9 @@ func packLHS[T hwy.Floats](src, dst []T,
 	}
 
 	// Iterate over columns (contracting size k), we want LHS to be traversed K-first in the kernel
+	// Iterate over columns (contracting size k), we want LHS to be traversed K-first in the kernel
+	srcColBaseIdx := srcRowBaseIdx
 	for range contractingCols {
-		srcColBaseIdx := srcRowBaseIdx
 		for row := range remainingRows {
 			dst[dstIdx] = src[row*srcRowStride+srcColBaseIdx]
 			dstIdx++
