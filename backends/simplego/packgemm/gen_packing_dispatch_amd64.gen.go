@@ -15,6 +15,10 @@ var PackRHSFloat16 func(src []hwy.Float16, dst []hwy.Float16, srcRowStart int, s
 var PackRHSBFloat16 func(src []hwy.BFloat16, dst []hwy.BFloat16, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int)
 var PackRHSFloat32 func(src []float32, dst []float32, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int)
 var PackRHSFloat64 func(src []float64, dst []float64, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int)
+var ApplyPackedOutputFloat16 func(packedOutput []hwy.Float16, output []hwy.Float16, alpha hwy.Float16, beta hwy.Float16, packedOutputRowStride int, rowOffset int, colOffset int, outputRowStride int, height int, width int)
+var ApplyPackedOutputBFloat16 func(packedOutput []hwy.BFloat16, output []hwy.BFloat16, alpha hwy.BFloat16, beta hwy.BFloat16, packedOutputRowStride int, rowOffset int, colOffset int, outputRowStride int, height int, width int)
+var ApplyPackedOutputFloat32 func(packedOutput []float32, output []float32, alpha float32, beta float32, packedOutputRowStride int, rowOffset int, colOffset int, outputRowStride int, height int, width int)
+var ApplyPackedOutputFloat64 func(packedOutput []float64, output []float64, alpha float64, beta float64, packedOutputRowStride int, rowOffset int, colOffset int, outputRowStride int, height int, width int)
 
 // PackRHS is the generic API that dispatches to the appropriate SIMD implementation.
 func PackRHS[T hwy.Floats](src []T, dst []T, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int) {
@@ -27,6 +31,20 @@ func PackRHS[T hwy.Floats](src []T, dst []T, srcRowStart int, srcColStart int, s
 		PackRHSFloat32(any(src).([]float32), any(dst).([]float32), srcRowStart, srcColStart, srcRowStride, contractingRows, numCols, kernelCols)
 	case []float64:
 		PackRHSFloat64(any(src).([]float64), any(dst).([]float64), srcRowStart, srcColStart, srcRowStride, contractingRows, numCols, kernelCols)
+	}
+}
+
+// ApplyPackedOutput is the generic API that dispatches to the appropriate SIMD implementation.
+func ApplyPackedOutput[T hwy.Floats](packedOutput []T, output []T, alpha T, beta T, packedOutputRowStride int, rowOffset int, colOffset int, outputRowStride int, height int, width int) {
+	switch any(packedOutput).(type) {
+	case []hwy.Float16:
+		ApplyPackedOutputFloat16(any(packedOutput).([]hwy.Float16), any(output).([]hwy.Float16), any(alpha).(hwy.Float16), any(beta).(hwy.Float16), packedOutputRowStride, rowOffset, colOffset, outputRowStride, height, width)
+	case []hwy.BFloat16:
+		ApplyPackedOutputBFloat16(any(packedOutput).([]hwy.BFloat16), any(output).([]hwy.BFloat16), any(alpha).(hwy.BFloat16), any(beta).(hwy.BFloat16), packedOutputRowStride, rowOffset, colOffset, outputRowStride, height, width)
+	case []float32:
+		ApplyPackedOutputFloat32(any(packedOutput).([]float32), any(output).([]float32), any(alpha).(float32), any(beta).(float32), packedOutputRowStride, rowOffset, colOffset, outputRowStride, height, width)
+	case []float64:
+		ApplyPackedOutputFloat64(any(packedOutput).([]float64), any(output).([]float64), any(alpha).(float64), any(beta).(float64), packedOutputRowStride, rowOffset, colOffset, outputRowStride, height, width)
 	}
 }
 
@@ -51,6 +69,10 @@ func initGen_packing_dispatchAVX2() {
 	PackRHSBFloat16 = BasePackRHS_avx2_BFloat16
 	PackRHSFloat32 = BasePackRHS_avx2
 	PackRHSFloat64 = BasePackRHS_avx2_Float64
+	ApplyPackedOutputFloat16 = BaseApplyPackedOutput_avx2_Float16
+	ApplyPackedOutputBFloat16 = BaseApplyPackedOutput_avx2_BFloat16
+	ApplyPackedOutputFloat32 = BaseApplyPackedOutput_avx2
+	ApplyPackedOutputFloat64 = BaseApplyPackedOutput_avx2_Float64
 }
 
 func initGen_packing_dispatchAVX512() {
@@ -58,6 +80,10 @@ func initGen_packing_dispatchAVX512() {
 	PackRHSBFloat16 = BasePackRHS_avx512_BFloat16
 	PackRHSFloat32 = BasePackRHS_avx512
 	PackRHSFloat64 = BasePackRHS_avx512_Float64
+	ApplyPackedOutputFloat16 = BaseApplyPackedOutput_avx512_Float16
+	ApplyPackedOutputBFloat16 = BaseApplyPackedOutput_avx512_BFloat16
+	ApplyPackedOutputFloat32 = BaseApplyPackedOutput_avx512
+	ApplyPackedOutputFloat64 = BaseApplyPackedOutput_avx512_Float64
 }
 
 func initGen_packing_dispatchFallback() {
@@ -65,4 +91,8 @@ func initGen_packing_dispatchFallback() {
 	PackRHSBFloat16 = BasePackRHS_fallback_BFloat16
 	PackRHSFloat32 = BasePackRHS_fallback
 	PackRHSFloat64 = BasePackRHS_fallback_Float64
+	ApplyPackedOutputFloat16 = BaseApplyPackedOutput_fallback_Float16
+	ApplyPackedOutputBFloat16 = BaseApplyPackedOutput_fallback_BFloat16
+	ApplyPackedOutputFloat32 = BaseApplyPackedOutput_fallback
+	ApplyPackedOutputFloat64 = BaseApplyPackedOutput_fallback_Float64
 }

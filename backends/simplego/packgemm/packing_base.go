@@ -4,7 +4,7 @@ import (
 	"github.com/ajroetker/go-highway/hwy"
 )
 
-//go:generate go tool github.com/ajroetker/go-highway/cmd/hwygen -input packing_base.go -output_prefix=gen_packing_impl -dispatch gen_packing_dispatch -targets avx2,avx512,fallback
+//go:generate go tool github.com/ajroetker/go-highway/cmd/hwygen -input packing_base.go -output_prefix=gen_packing_impl -dispatch gen_packing_dispatch -targets avx2,avx512,neon,fallback
 
 // BasePackRHS packs a slice of size [contractingRows, numCols] block from RHS into
 // the panel reshaped+transposed to [ceil(numCols/kernelCols), contractingRows, kernelCols],
@@ -109,6 +109,50 @@ func BasePackRHS[T hwy.Floats](src, dst []T, srcRowStart, srcColStart, srcRowStr
 		for range kernelCols - validCols {
 			dst[dstIdx] = 0
 			dstIdx++
+		}
+	}
+}
+
+// BaseApplyPackedOutput apply a packageOutput "panel" back into the output matrix.
+func BaseApplyPackedOutput[T hwy.Floats](
+	packedOutput, output []T,
+	alpha, beta T,
+	packedOutputRowStride int,
+	rowOffset, colOffset int, // Global output offsets
+	outputRowStride int,
+	height, width int, // actual amount of data to copy
+) {
+	// Vectorized constants
+	alphaVec := hwy.Set[T](alpha)
+	betaVec := hwy.Set[T](beta)
+
+	for r := range height {
+		packedIdx := r * packedOutputRowStride
+		outputIdx := (rowOffset+r)*outputRowStride + colOffset
+
+		c := 0
+		// Vectorized loop
+		if hwy.CurrentLevel() != hwy.DispatchScalar {
+			numLanes := hwy.NumLanes[T]()
+			for ; c+numLanes <= width; c += numLanes {
+				packedVal := hwy.LoadFull(packedOutput[packedIdx:])
+				outputVal := hwy.LoadFull(output[outputIdx:])
+
+				// output = alpha * packed + beta * output
+				newVal := hwy.MulAdd(alphaVec, packedVal, hwy.Mul(betaVec, outputVal))
+				hwy.StoreFull(newVal, output[outputIdx:])
+
+				packedIdx += numLanes
+				outputIdx += numLanes
+			}
+		}
+
+		// Scalar tail
+		for ; c < width; c++ {
+			val := packedOutput[packedIdx]
+			output[outputIdx] = beta*output[outputIdx] + alpha*val
+			packedIdx++
+			outputIdx++
 		}
 	}
 }

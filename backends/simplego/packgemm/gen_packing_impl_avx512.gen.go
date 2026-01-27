@@ -325,3 +325,111 @@ func BasePackRHS_avx512_Float64(src []float64, dst []float64, srcRowStart int, s
 		}
 	}
 }
+
+func BaseApplyPackedOutput_avx512_Float16(packedOutput []hwy.Float16, output []hwy.Float16, alpha hwy.Float16, beta hwy.Float16, packedOutputRowStride int, rowOffset int, colOffset int, outputRowStride int, height int, width int) {
+	alphaVec := hwy.Set[hwy.Float16](alpha)
+	betaVec := hwy.Set[hwy.Float16](beta)
+	for r := range height {
+		packedIdx := r * packedOutputRowStride
+		outputIdx := (rowOffset+r)*outputRowStride + colOffset
+		c := 0
+		if hwy.CurrentLevel() != hwy.DispatchScalar {
+			numLanes := 32
+			for ; c+numLanes <= width; c += numLanes {
+				packedVal := hwy.Load(packedOutput[packedIdx:])
+				outputVal := hwy.Load(output[outputIdx:])
+				newVal := hwy.FMAF16(alphaVec, packedVal, hwy.MulF16(betaVec, outputVal))
+				hwy.StoreFull(newVal, output[outputIdx:])
+				packedIdx += numLanes
+				outputIdx += numLanes
+			}
+		}
+		for ; c < width; c++ {
+			val := packedOutput[packedIdx]
+			output[outputIdx] = hwy.Float32ToFloat16(beta.Float32()*output[outputIdx].Float32() + alpha.Float32()*val.Float32())
+			packedIdx++
+			outputIdx++
+		}
+	}
+}
+
+func BaseApplyPackedOutput_avx512_BFloat16(packedOutput []hwy.BFloat16, output []hwy.BFloat16, alpha hwy.BFloat16, beta hwy.BFloat16, packedOutputRowStride int, rowOffset int, colOffset int, outputRowStride int, height int, width int) {
+	alphaVec := hwy.Set[hwy.BFloat16](alpha)
+	betaVec := hwy.Set[hwy.BFloat16](beta)
+	for r := range height {
+		packedIdx := r * packedOutputRowStride
+		outputIdx := (rowOffset+r)*outputRowStride + colOffset
+		c := 0
+		if hwy.CurrentLevel() != hwy.DispatchScalar {
+			numLanes := 32
+			for ; c+numLanes <= width; c += numLanes {
+				packedVal := hwy.Load(packedOutput[packedIdx:])
+				outputVal := hwy.Load(output[outputIdx:])
+				newVal := hwy.FMABF16(alphaVec, packedVal, hwy.MulBF16(betaVec, outputVal))
+				hwy.StoreFull(newVal, output[outputIdx:])
+				packedIdx += numLanes
+				outputIdx += numLanes
+			}
+		}
+		for ; c < width; c++ {
+			val := packedOutput[packedIdx]
+			output[outputIdx] = hwy.Float32ToBFloat16(beta.Float32()*output[outputIdx].Float32() + alpha.Float32()*val.Float32())
+			packedIdx++
+			outputIdx++
+		}
+	}
+}
+
+func BaseApplyPackedOutput_avx512(packedOutput []float32, output []float32, alpha float32, beta float32, packedOutputRowStride int, rowOffset int, colOffset int, outputRowStride int, height int, width int) {
+	alphaVec := archsimd.BroadcastFloat32x16(alpha)
+	betaVec := archsimd.BroadcastFloat32x16(beta)
+	for r := range height {
+		packedIdx := r * packedOutputRowStride
+		outputIdx := (rowOffset+r)*outputRowStride + colOffset
+		c := 0
+		if hwy.CurrentLevel() != hwy.DispatchScalar {
+			numLanes := 16
+			for ; c+numLanes <= width; c += numLanes {
+				packedVal := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&packedOutput[packedIdx])))
+				outputVal := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&output[outputIdx])))
+				newVal := alphaVec.MulAdd(packedVal, betaVec.Mul(outputVal))
+				newVal.Store((*[16]float32)(unsafe.Pointer(&output[outputIdx])))
+				packedIdx += numLanes
+				outputIdx += numLanes
+			}
+		}
+		for ; c < width; c++ {
+			val := packedOutput[packedIdx]
+			output[outputIdx] = beta*output[outputIdx] + alpha*val
+			packedIdx++
+			outputIdx++
+		}
+	}
+}
+
+func BaseApplyPackedOutput_avx512_Float64(packedOutput []float64, output []float64, alpha float64, beta float64, packedOutputRowStride int, rowOffset int, colOffset int, outputRowStride int, height int, width int) {
+	alphaVec := archsimd.BroadcastFloat64x8(alpha)
+	betaVec := archsimd.BroadcastFloat64x8(beta)
+	for r := range height {
+		packedIdx := r * packedOutputRowStride
+		outputIdx := (rowOffset+r)*outputRowStride + colOffset
+		c := 0
+		if hwy.CurrentLevel() != hwy.DispatchScalar {
+			numLanes := 8
+			for ; c+numLanes <= width; c += numLanes {
+				packedVal := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&packedOutput[packedIdx])))
+				outputVal := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&output[outputIdx])))
+				newVal := alphaVec.MulAdd(packedVal, betaVec.Mul(outputVal))
+				newVal.Store((*[8]float64)(unsafe.Pointer(&output[outputIdx])))
+				packedIdx += numLanes
+				outputIdx += numLanes
+			}
+		}
+		for ; c < width; c++ {
+			val := packedOutput[packedIdx]
+			output[outputIdx] = beta*output[outputIdx] + alpha*val
+			packedIdx++
+			outputIdx++
+		}
+	}
+}

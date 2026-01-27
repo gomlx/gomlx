@@ -461,7 +461,7 @@ func basicSymmetricLargeGemmSlice[T hwy.Floats](
 				if contractingPanelIdx > 0 {
 					effectiveBeta = 1
 				}
-				applyPackedOutput(
+				ApplyPackedOutput(
 					packedOutput, output,
 					alpha, effectiveBeta,
 					params.RHSPanelCrossSize,
@@ -661,24 +661,5 @@ func basicSymmetricPanel[T hwy.Floats](
 			rhsOffset += rhsBlockStride
 		}
 		lhsOffset += lhsBlockStride
-	}
-}
-
-// applyPackedOutput applies the computed packedOutput to the final output.
-func applyPackedOutput[T hwy.Floats](
-	packedOutput, output []T,
-	alpha, beta T,
-	packedOutputRowStride int,
-	lhsRowOffset, rhsColOffset int, // Global output offsets
-	outputRowStride int,
-	height, width int, // actual amount of data to copy
-) {
-	for r := range height {
-		packedRowOffset := r * packedOutputRowStride
-		outRowOffset := (lhsRowOffset+r)*outputRowStride + rhsColOffset
-		for c := range width {
-			val := packedOutput[packedRowOffset+c]
-			basicWriteScalar(output, outRowOffset+c, alpha, beta, val)
-		}
 	}
 }
