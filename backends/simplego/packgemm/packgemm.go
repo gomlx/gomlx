@@ -41,6 +41,9 @@ type CacheParams struct {
 	RHSPanelCrossSize    int // Nc: L3 cols
 }
 
+// Register of cache params:
+var knownParams = map[string]*CacheParams{}
+
 // Priority is used to determine the priority of a gemm version, when setting the
 // DTypeToGEMM map.
 type Priority int

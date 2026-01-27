@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -161,25 +162,17 @@ func BenchmarkPackRHS(b *testing.B) {
 		{1920, 1024},
 		{1920, 1536},
 	}
-	paramsVariations := []struct {
-		name   string
-		params CacheParams
-	}{
-		{"AVX512", avx512Float32Params},
-		{"NoSIMD", NoSIMD32Params},
-	}
 
 	for _, size := range sizes {
-		for _, variant := range paramsVariations {
-			params := variant.params
+		for _, paramsName := range xslices.SortedKeys(knownParams) {
+			params := knownParams[paramsName]
 			testName := fmt.Sprintf("params=%s: K=%d,Kc=%d,N=%d,Nc=%d,Nr=%d",
-				variant.name,
+				paramsName,
 				size.contractingRows, params.PanelContractingSize,
 				size.rhsCols, params.RHSPanelCrossSize, params.RHSL1KernelCols)
 			b.Run(testName, func(b *testing.B) {
-				panelContractingRows := variant.params.PanelContractingSize
-				panelRhsCols := variant.params.RHSPanelCrossSize
-				p := &variant.params
+				panelContractingRows := params.PanelContractingSize
+				panelRhsCols := params.RHSPanelCrossSize
 
 				// Allocate buffers
 				// src: [contractingRows, rhsCols] full size
@@ -188,8 +181,8 @@ func BenchmarkPackRHS(b *testing.B) {
 
 				// dst: size depends on packing.
 				// [ceil(rhsCols/RHSL1KernelCols), contractingRows, RHSL1KernelCols]
-				numStrips := (panelRhsCols + p.RHSL1KernelCols - 1) / p.RHSL1KernelCols
-				dstSize := numStrips * panelContractingRows * p.RHSL1KernelCols
+				numStrips := (panelRhsCols + params.RHSL1KernelCols - 1) / params.RHSL1KernelCols
+				dstSize := numStrips * panelContractingRows * params.RHSL1KernelCols
 				dst := make([]float32, dstSize)
 
 				// Calculate number of panels in each dimension
@@ -222,8 +215,8 @@ func BenchmarkPackRHS(b *testing.B) {
 						colStart = 0
 					}
 
-					// PackRHS(src, dst, rowStart, colStart, size.rhsCols, panelContractingRows, panelRhsCols, p.RHSL1KernelCols)
-					BasePackRHS_avx512(src, dst, rowStart, colStart, size.rhsCols, panelContractingRows, panelRhsCols, p.RHSL1KernelCols)
+					PackRHS(src, dst, rowStart, colStart, size.rhsCols, panelContractingRows, panelRhsCols, params.RHSL1KernelCols)
+					// BasePackRHS_avx512(src, dst, rowStart, colStart, size.rhsCols, panelContractingRows, panelRhsCols, p.RHSL1KernelCols)
 					// avx512Float32PackRHS(src, dst, rowStart, colStart, size.rhsCols, panelContractingRows, panelRhsCols, p.RHSL1KernelCols)
 				}
 			})

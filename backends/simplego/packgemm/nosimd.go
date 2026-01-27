@@ -44,6 +44,8 @@ func init() {
 	RegisterGEMM("Basic(non-SIMD)", basicSymmetricGeneric[float32], &NoSIMD32Params, PriorityBase)
 	RegisterGEMM("Basic(non-SIMD)", basicSymmetricGeneric[float64], &NoSIMD32Params, PriorityBase)
 	RegisterGEMM("Basic(non-SIMD)", basicSymmetricFloat16, &NoSIMD32Params, PriorityBase)
+
+	knownParams["no-SIMD"] = &NoSIMD32Params
 }
 
 func convertFloat16ToHighway(src []float16.Float16) []hwy.Float16 {
