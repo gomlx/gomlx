@@ -222,7 +222,8 @@ func BenchmarkPackRHS(b *testing.B) {
 						colStart = 0
 					}
 
-					PackRHS(src, dst, rowStart, colStart, size.rhsCols, panelContractingRows, panelRhsCols, p.RHSL1KernelCols)
+					// PackRHS(src, dst, rowStart, colStart, size.rhsCols, panelContractingRows, panelRhsCols, p.RHSL1KernelCols)
+					BasePackRHS_avx512(src, dst, rowStart, colStart, size.rhsCols, panelContractingRows, panelRhsCols, p.RHSL1KernelCols)
 					// avx512Float32PackRHS(src, dst, rowStart, colStart, size.rhsCols, panelContractingRows, panelRhsCols, p.RHSL1KernelCols)
 				}
 			})

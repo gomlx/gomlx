@@ -37,21 +37,20 @@ func BasePackRHS[T hwy.Floats](src, dst []T, srcRowStart, srcColStart, srcRowStr
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
 				v0 = hwy.Load(src[srcIdx:])
-				hwy.Store(v0, dst[dstIdx:])
+				hwy.StoreFull(v0, dst[dstIdx:])
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
 		}
 	case kernelCols == numLanes*2:
-		var v0, v1 hwy.Vec[T]
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			// Iterate over rows (k)
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
-				v0 = hwy.Load(src[srcIdx:])
-				v1 = hwy.Load(src[srcIdx+numLanes:])
-				hwy.Store(v0, dst[dstIdx:])
-				hwy.Store(v1, dst[dstIdx+numLanes:])
+				v0 := hwy.LoadFull(src[srcIdx:])
+				v1 := hwy.LoadFull(src[srcIdx+numLanes:])
+				hwy.StoreFull(v0, dst[dstIdx:])
+				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
@@ -62,14 +61,14 @@ func BasePackRHS[T hwy.Floats](src, dst []T, srcRowStart, srcColStart, srcRowStr
 			// Iterate over rows (k)
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
-				v0 = hwy.Load(src[srcIdx:])
-				v1 = hwy.Load(src[srcIdx+numLanes:])
-				v2 = hwy.Load(src[srcIdx+numLanes*2:])
-				v3 = hwy.Load(src[srcIdx+numLanes*3:])
-				hwy.Store(v0, dst[dstIdx:])
-				hwy.Store(v1, dst[dstIdx+numLanes:])
-				hwy.Store(v2, dst[dstIdx+numLanes*2:])
-				hwy.Store(v3, dst[dstIdx+numLanes*3:])
+				v0 = hwy.LoadFull(src[srcIdx:])
+				v1 = hwy.LoadFull(src[srcIdx+numLanes:])
+				v2 = hwy.LoadFull(src[srcIdx+numLanes*2:])
+				v3 = hwy.LoadFull(src[srcIdx+numLanes*3:])
+				hwy.StoreFull(v0, dst[dstIdx:])
+				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+				hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
+				hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
@@ -100,8 +99,8 @@ func BasePackRHS[T hwy.Floats](src, dst []T, srcRowStart, srcColStart, srcRowStr
 		copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
 		dstIdx += validCols
 		// Zero-pad if strip is incomplete (edge of matrix)
-		for c := validCols; c < kernelCols; c++ {
-			dst[dstIdx] = T(0)
+		for range kernelCols - validCols {
+			dst[dstIdx] = 0
 			dstIdx++
 		}
 	}

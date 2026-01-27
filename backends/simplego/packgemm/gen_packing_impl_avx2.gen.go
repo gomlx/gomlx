@@ -7,6 +7,7 @@ package packgemm
 import (
 	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+	"unsafe"
 )
 
 func BasePackRHS_avx2_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int) {
@@ -22,20 +23,19 @@ func BasePackRHS_avx2_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowStart 
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
 				v0 = hwy.Load(src[srcIdx:])
-				hwy.Store(v0, dst[dstIdx:])
+				hwy.StoreFull(v0, dst[dstIdx:])
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
 		}
 	case kernelCols == numLanes*2:
-		var v0, v1 hwy.Vec[hwy.Float16]
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
-				v0 = hwy.Load(src[srcIdx:])
-				v1 = hwy.Load(src[srcIdx+numLanes:])
-				hwy.Store(v0, dst[dstIdx:])
-				hwy.Store(v1, dst[dstIdx+numLanes:])
+				v0 := hwy.Load(src[srcIdx:])
+				v1 := hwy.Load(src[srcIdx+numLanes:])
+				hwy.StoreFull(v0, dst[dstIdx:])
+				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
@@ -49,10 +49,10 @@ func BasePackRHS_avx2_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowStart 
 				v1 = hwy.Load(src[srcIdx+numLanes:])
 				v2 = hwy.Load(src[srcIdx+numLanes*2:])
 				v3 = hwy.Load(src[srcIdx+numLanes*3:])
-				hwy.Store(v0, dst[dstIdx:])
-				hwy.Store(v1, dst[dstIdx+numLanes:])
-				hwy.Store(v2, dst[dstIdx+numLanes*2:])
-				hwy.Store(v3, dst[dstIdx+numLanes*3:])
+				hwy.StoreFull(v0, dst[dstIdx:])
+				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+				hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
+				hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
@@ -75,8 +75,8 @@ func BasePackRHS_avx2_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowStart 
 	for range contractingRows {
 		copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
 		dstIdx += validCols
-		for c := validCols; c < kernelCols; c++ {
-			dst[dstIdx] = hwy.Float32ToFloat16(float32(0))
+		for range kernelCols - validCols {
+			dst[dstIdx] = hwy.Float32ToFloat16(0)
 			dstIdx++
 		}
 	}
@@ -95,20 +95,19 @@ func BasePackRHS_avx2_BFloat16(src []hwy.BFloat16, dst []hwy.BFloat16, srcRowSta
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
 				v0 = hwy.Load(src[srcIdx:])
-				hwy.Store(v0, dst[dstIdx:])
+				hwy.StoreFull(v0, dst[dstIdx:])
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
 		}
 	case kernelCols == numLanes*2:
-		var v0, v1 hwy.Vec[hwy.BFloat16]
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
-				v0 = hwy.Load(src[srcIdx:])
-				v1 = hwy.Load(src[srcIdx+numLanes:])
-				hwy.Store(v0, dst[dstIdx:])
-				hwy.Store(v1, dst[dstIdx+numLanes:])
+				v0 := hwy.Load(src[srcIdx:])
+				v1 := hwy.Load(src[srcIdx+numLanes:])
+				hwy.StoreFull(v0, dst[dstIdx:])
+				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
@@ -122,10 +121,10 @@ func BasePackRHS_avx2_BFloat16(src []hwy.BFloat16, dst []hwy.BFloat16, srcRowSta
 				v1 = hwy.Load(src[srcIdx+numLanes:])
 				v2 = hwy.Load(src[srcIdx+numLanes*2:])
 				v3 = hwy.Load(src[srcIdx+numLanes*3:])
-				hwy.Store(v0, dst[dstIdx:])
-				hwy.Store(v1, dst[dstIdx+numLanes:])
-				hwy.Store(v2, dst[dstIdx+numLanes*2:])
-				hwy.Store(v3, dst[dstIdx+numLanes*3:])
+				hwy.StoreFull(v0, dst[dstIdx:])
+				hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+				hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
+				hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
@@ -148,8 +147,8 @@ func BasePackRHS_avx2_BFloat16(src []hwy.BFloat16, dst []hwy.BFloat16, srcRowSta
 	for range contractingRows {
 		copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
 		dstIdx += validCols
-		for c := validCols; c < kernelCols; c++ {
-			dst[dstIdx] = hwy.Float32ToBFloat16(float32(0))
+		for range kernelCols - validCols {
+			dst[dstIdx] = hwy.Float32ToBFloat16(0)
 			dstIdx++
 		}
 	}
@@ -168,20 +167,19 @@ func BasePackRHS_avx2(src []float32, dst []float32, srcRowStart int, srcColStart
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
 				v0 = archsimd.LoadFloat32x8Slice(src[srcIdx:])
-				v0.StoreSlice(dst[dstIdx:])
+				v0.Store((*[8]float32)(unsafe.Pointer(&dst[dstIdx])))
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
 		}
 	case kernelCols == numLanes*2:
-		var v0, v1 archsimd.Float32x8
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
-				v0 = archsimd.LoadFloat32x8Slice(src[srcIdx:])
-				v1 = archsimd.LoadFloat32x8Slice(src[srcIdx+numLanes:])
-				v0.StoreSlice(dst[dstIdx:])
-				v1.StoreSlice(dst[dstIdx+numLanes:])
+				v0 := archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&src[srcIdx])))
+				v1 := archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&src[srcIdx+numLanes])))
+				v0.Store((*[8]float32)(unsafe.Pointer(&dst[dstIdx])))
+				v1.Store((*[8]float32)(unsafe.Pointer(&dst[dstIdx+numLanes])))
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
@@ -191,14 +189,14 @@ func BasePackRHS_avx2(src []float32, dst []float32, srcRowStart int, srcColStart
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
-				v0 = archsimd.LoadFloat32x8Slice(src[srcIdx:])
-				v1 = archsimd.LoadFloat32x8Slice(src[srcIdx+numLanes:])
-				v2 = archsimd.LoadFloat32x8Slice(src[srcIdx+numLanes*2:])
-				v3 = archsimd.LoadFloat32x8Slice(src[srcIdx+numLanes*3:])
-				v0.StoreSlice(dst[dstIdx:])
-				v1.StoreSlice(dst[dstIdx+numLanes:])
-				v2.StoreSlice(dst[dstIdx+numLanes*2:])
-				v3.StoreSlice(dst[dstIdx+numLanes*3:])
+				v0 = archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&src[srcIdx])))
+				v1 = archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&src[srcIdx+numLanes])))
+				v2 = archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&src[srcIdx+numLanes*2])))
+				v3 = archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&src[srcIdx+numLanes*3])))
+				v0.Store((*[8]float32)(unsafe.Pointer(&dst[dstIdx])))
+				v1.Store((*[8]float32)(unsafe.Pointer(&dst[dstIdx+numLanes])))
+				v2.Store((*[8]float32)(unsafe.Pointer(&dst[dstIdx+numLanes*2])))
+				v3.Store((*[8]float32)(unsafe.Pointer(&dst[dstIdx+numLanes*3])))
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
@@ -221,8 +219,8 @@ func BasePackRHS_avx2(src []float32, dst []float32, srcRowStart int, srcColStart
 	for range contractingRows {
 		copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
 		dstIdx += validCols
-		for c := validCols; c < kernelCols; c++ {
-			dst[dstIdx] = float32(0)
+		for range kernelCols - validCols {
+			dst[dstIdx] = 0
 			dstIdx++
 		}
 	}
@@ -241,20 +239,19 @@ func BasePackRHS_avx2_Float64(src []float64, dst []float64, srcRowStart int, src
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
 				v0 = archsimd.LoadFloat64x4Slice(src[srcIdx:])
-				v0.StoreSlice(dst[dstIdx:])
+				v0.Store((*[4]float64)(unsafe.Pointer(&dst[dstIdx])))
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
 		}
 	case kernelCols == numLanes*2:
-		var v0, v1 archsimd.Float64x4
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
-				v0 = archsimd.LoadFloat64x4Slice(src[srcIdx:])
-				v1 = archsimd.LoadFloat64x4Slice(src[srcIdx+numLanes:])
-				v0.StoreSlice(dst[dstIdx:])
-				v1.StoreSlice(dst[dstIdx+numLanes:])
+				v0 := archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&src[srcIdx])))
+				v1 := archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&src[srcIdx+numLanes])))
+				v0.Store((*[4]float64)(unsafe.Pointer(&dst[dstIdx])))
+				v1.Store((*[4]float64)(unsafe.Pointer(&dst[dstIdx+numLanes])))
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
@@ -264,14 +261,14 @@ func BasePackRHS_avx2_Float64(src []float64, dst []float64, srcRowStart int, src
 		for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 			srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 			for range contractingRows {
-				v0 = archsimd.LoadFloat64x4Slice(src[srcIdx:])
-				v1 = archsimd.LoadFloat64x4Slice(src[srcIdx+numLanes:])
-				v2 = archsimd.LoadFloat64x4Slice(src[srcIdx+numLanes*2:])
-				v3 = archsimd.LoadFloat64x4Slice(src[srcIdx+numLanes*3:])
-				v0.StoreSlice(dst[dstIdx:])
-				v1.StoreSlice(dst[dstIdx+numLanes:])
-				v2.StoreSlice(dst[dstIdx+numLanes*2:])
-				v3.StoreSlice(dst[dstIdx+numLanes*3:])
+				v0 = archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&src[srcIdx])))
+				v1 = archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&src[srcIdx+numLanes])))
+				v2 = archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&src[srcIdx+numLanes*2])))
+				v3 = archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&src[srcIdx+numLanes*3])))
+				v0.Store((*[4]float64)(unsafe.Pointer(&dst[dstIdx])))
+				v1.Store((*[4]float64)(unsafe.Pointer(&dst[dstIdx+numLanes])))
+				v2.Store((*[4]float64)(unsafe.Pointer(&dst[dstIdx+numLanes*2])))
+				v3.Store((*[4]float64)(unsafe.Pointer(&dst[dstIdx+numLanes*3])))
 				dstIdx += kernelCols
 				srcIdx += srcRowStride
 			}
@@ -294,8 +291,8 @@ func BasePackRHS_avx2_Float64(src []float64, dst []float64, srcRowStart int, src
 	for range contractingRows {
 		copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
 		dstIdx += validCols
-		for c := validCols; c < kernelCols; c++ {
-			dst[dstIdx] = float64(0)
+		for range kernelCols - validCols {
+			dst[dstIdx] = 0
 			dstIdx++
 		}
 	}
