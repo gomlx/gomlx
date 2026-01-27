@@ -115,6 +115,12 @@ func (b *Backend) getBufferForShape(shape shapes.Shape) *Buffer {
 	return buf
 }
 
+// GetBuffer is the exported version of getBuffer for use by subpackages.
+// It returns an uninitialized buffer from the pool with the given dtype and length.
+func (b *Backend) GetBuffer(dtype dtypes.DType, length int) *Buffer {
+	return b.getBuffer(dtype, length)
+}
+
 // // randomize fills the buffer with random bits -- useful for testing.
 // func (b *Buffer) randomize() {
 // 	bBuf := b.mutableBytes()
@@ -208,6 +214,26 @@ func (b *Buffer) Ones() *Buffer {
 	dtype := b.shape.DType
 	_ = b.Fill(shapes.CastAsDType(1, dtype))
 	return b
+}
+
+// Shape returns the buffer's shape.
+func (b *Buffer) Shape() shapes.Shape {
+	return b.shape
+}
+
+// SetShape sets the buffer's shape.
+func (b *Buffer) SetShape(s shapes.Shape) {
+	b.shape = s
+}
+
+// Flat returns the buffer's underlying flat data slice.
+func (b *Buffer) Flat() any {
+	return b.flat
+}
+
+// DType returns the buffer's data type.
+func (b *Buffer) DType() dtypes.DType {
+	return b.shape.DType
 }
 
 // cloneBuffer using the pool to allocate a new one.

@@ -129,6 +129,20 @@ func setNodeExecutor(opType backends.OpType, priority registerPriority, executor
 	nodeExecutors[opType] = executor
 }
 
+// RegisterPriority values for use by external packages registering executors.
+const (
+	RegisterPriorityArch = priorityArch // For architecture-specific (SIMD) implementations.
+)
+
+// NodeExecutor is the exported type for node executor functions.
+type NodeExecutor = nodeExecutor
+
+// SetNodeExecutor allows external packages (like highway) to register node executors.
+// This is the exported version of setNodeExecutor for use by subpackages.
+func SetNodeExecutor(opType backends.OpType, priority registerPriority, executor NodeExecutor) {
+	setNodeExecutor(opType, priority, executor)
+}
+
 type opsExecutionType int
 
 const (

@@ -52,6 +52,12 @@ func unaryOperandAndOutput(backend *Backend, inputs []*Buffer, inputsOwned []boo
 	return input, output
 }
 
+// UnaryOperandAndOutput is the exported version of unaryOperandAndOutput for use by subpackages.
+// It returns the input buffer and an output buffer (which may be the same as input if inputsOwned[0] is true).
+func UnaryOperandAndOutput(backend *Backend, inputs []*Buffer, inputsOwned []bool) (input, output *Buffer) {
+	return unaryOperandAndOutput(backend, inputs, inputsOwned)
+}
+
 // execNeg executes the unary op Neg.
 func execNeg(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
