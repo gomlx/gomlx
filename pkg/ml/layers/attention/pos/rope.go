@@ -22,8 +22,11 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
-// RoPE implements rotary position embeddings (RoFormer).
-// It rotates pairs of dimensions in the embedding space based on position.
+// RoPE implements rotary position embeddings ("RoFormer", see [1]).
+// It splits the embedding (aka. features) axis into pairs, and rotates
+// them at different frequencies, according to position.
+//
+// [1] "RoFormer: Enhanced Transformer with Rotary Position Embedding", https://arxiv.org/abs/2104.09864
 type RoPE struct {
 	BaseFreq float64
 	DimStart int
@@ -40,7 +43,7 @@ func NewRoPE(baseFreq float64) *RoPE {
 	}
 }
 
-// NewRoPEWithDimRange creates a RoPE that applies only to dimensions [dimStart:dimEnd].
+// NewRoPEWithDimRange creates a RoPE that applies only to [dimStart:dimEnd].
 // This is useful for applying RoPE to only part of the embedding space.
 func NewRoPEWithDimRange(baseFreq float64, dimStart, dimEnd int) *RoPE {
 	return &RoPE{
