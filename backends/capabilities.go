@@ -22,6 +22,14 @@ type Capabilities struct {
 	// DTypes list the data types supported by a backend.
 	// If not listed, it's assumed to be false, hence not supported.
 	DTypes map[dtypes.DType]bool
+
+	// PreferConstantsForVariables indicates that the backend prefers context variables
+	// (model weights) to be embedded as constants in the computation graph rather than
+	// passed as parameters (inputs) at execution time. This enables optimizations like
+	// weight blob storage and eliminates per-inference data transfer overhead.
+	// When true, libraries like onnx-gomlx should use graph.Const() instead of
+	// Variable.ValueGraph() for model weights.
+	PreferConstantsForVariables bool
 }
 
 // Clone makes a deep copy of the Capabilities.
