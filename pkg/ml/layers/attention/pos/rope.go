@@ -33,7 +33,7 @@ type RoPE struct {
 	DimEnd   int
 }
 
-// NewRoPE creates a RoPE positional embedding that applies to the entire embedding dimension.
+// NewRoPE creates a RoPE positional embedding that applies to the entire embedding axis.
 // baseFreq is typically 10000.0 for standard RoPE.
 func NewRoPE(baseFreq float64) *RoPE {
 	return &RoPE{
@@ -44,9 +44,11 @@ func NewRoPE(baseFreq float64) *RoPE {
 }
 
 // NewRoPEWithDimRange creates a RoPE that applies only to [dimStart:dimEnd].
-// This is useful for applying RoPE to only part of the embedding axis.
+// This is useful for applying RoPE to only a slice of the embedding (or feature) axis.
 //
-// Notice, the embedding (feature) axis assumed to be the last axis.
+// It requires that 0 <= dimStart < dimEnd <= x.Shape().Dimensions[x.Rank()-1],
+// except dimEnd may be set to -1 as a shortcut to x.Shape().Dimensions[x.Rank()-1]
+// (meaning to the end of the axis).
 func NewRoPEWithDimRange(baseFreq float64, dimStart, dimEnd int) *RoPE {
 	return &RoPE{
 		BaseFreq: baseFreq,
@@ -58,8 +60,12 @@ func NewRoPEWithDimRange(baseFreq float64, dimStart, dimEnd int) *RoPE {
 // Apply implements the PositionalEmbedding interface.
 // It applies rotary position embeddings to x starting at position startPos.
 //
-// - x: shaped [..., seq_len, head_dim|embed_dim]
-// - startPos: scalar value added to the x indices when rotating, for dynamic positioning. It is converted to x dtype.
+// The rotation is applied on a range of frequencies multiplied by the position
+// of each element. The position is given by x's sequenceLen axis indices, added
+// by startPos.
+//
+// - x: shaped [..., sequenceLen, embedAxis|featuresAxis]
+// - startPos: scalar value added to the x indices when rotating, for dynamic positioning. 
 func (r *RoPE) Apply(x *Node, startPos *Node) *Node {
 	if r.DimStart == 0 && r.DimEnd == -1 {
 		// Apply to entire dimension
