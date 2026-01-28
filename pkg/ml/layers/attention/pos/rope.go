@@ -64,7 +64,7 @@ func NewRoPEWithDimRange(baseFreq float64, dimStart, dimEnd int) *RoPE {
 // of each element. The position is given by x's sequenceLen axis indices, added
 // by startPos.
 //
-// - x: shaped [..., sequenceLen, embedAxis|featuresAxis]
+// - x: shaped [..., sequenceLen, headDim|embedDim].
 // - startPos: scalar value added to the x indices when rotating, for dynamic positioning. 
 func (r *RoPE) Apply(x *Node, startPos *Node) *Node {
 	if r.DimStart == 0 && r.DimEnd == -1 {
@@ -81,7 +81,7 @@ func (r *RoPE) Apply(x *Node, startPos *Node) *Node {
 
 // applyRoPE applies rotary position embeddings to the last dimension (even length).
 // startPos must be a *Node (scalar int32) for dynamic positioning.
-// Shapes: x [..., seq_len, head_dim|embed_dim]. Reference: RoFormer.
+// Shapes: x [..., sequencelen, headDim|embedDim]. Reference: RoFormer.
 func applyRoPE(x *Node, startPos *Node, baseFreq float64) *Node {
 	g := x.Graph()
 	shape := x.Shape()
