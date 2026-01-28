@@ -93,10 +93,7 @@ func applyRoPE(x *Node, startPos *Node, baseFreq float64) *Node {
 	// Convert startPos to dtype and ensure it's scalar
 	posNode := ConvertDType(startPos, dtype)
 	if posNode.Rank() > 0 {
-		posNode = Squeeze(posNode)
-		if posNode.Rank() > 0 {
-			Panicf("RoPE startPos must be scalar or squeeze to scalar, got shape %s after squeeze", posNode.Shape())
-		}
+		posNode = Reshape(posNode) // Reshape to scalar, will error if size != 1
 	}
 	posNode = BroadcastToShape(posNode, positions.Shape())
 	positions = Add(positions, posNode)
