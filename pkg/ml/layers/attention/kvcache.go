@@ -113,9 +113,7 @@ func KVCacheUpdate(ctx *context.Context, g *Graph, cacheShape shapes.Shape, star
 
 	// Convert startPosition to int32 scalar
 	positionInt32 := ConvertDType(startPosition, dtypes.Int32)
-	if positionInt32.Rank() > 0 {
-		positionInt32 = Squeeze(positionInt32)
-	}
+	positionInt32 = Reshape(positionInt32) // Ensure scalar shape
 
 	// Get sequence length and max cache size
 	updateSeqLen := newKeysSlice.Shape().Dimensions[2]
