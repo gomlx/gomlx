@@ -44,7 +44,9 @@ func NewRoPE(baseFreq float64) *RoPE {
 }
 
 // NewRoPEWithDimRange creates a RoPE that applies only to [dimStart:dimEnd].
-// This is useful for applying RoPE to only part of the embedding space.
+// This is useful for applying RoPE to only part of the embedding axis.
+//
+// Notice, the embedding (feature) axis assumed to be the last axis.
 func NewRoPEWithDimRange(baseFreq float64, dimStart, dimEnd int) *RoPE {
 	return &RoPE{
 		BaseFreq: baseFreq,
