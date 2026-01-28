@@ -100,11 +100,13 @@ func (r *RoPE) Apply(x *Node, positionIndices *Node) *Node {
 		// Apply to entire dimension
 		return applyRoPE(x, positionIndices, r.BaseFreq)
 	}
+
 	// Apply to custom dimension range
 	dimEnd := r.DimEnd
 	if dimEnd == -1 {
 		dimEnd = x.Shape().Dimensions[x.Shape().Rank()-1]
 	}
+
 	return applyRoPEWithCustomDim(x, positionIndices, r.BaseFreq, r.DimStart, dimEnd)
 }
 
@@ -182,7 +184,7 @@ func applyRoPE(x *Node, positionIndices *Node, baseFreq float64) *Node {
 
 	// Broadcast cos and sin to match input shape
 	// We need to expand them to match all leading dimensions of x
-	for ii := 0; ii < rank-2; ii++ {
+	for range rank - 2 {
 		cosAngles = ExpandDims(cosAngles, 0)
 		sinAngles = ExpandDims(sinAngles, 0)
 	}
@@ -216,7 +218,6 @@ func applyRoPE(x *Node, positionIndices *Node, baseFreq float64) *Node {
 //   - Tensor with rotary embeddings applied to the specified range, same shape as x
 func applyRoPEWithCustomDim(x *Node, positionIndices *Node, baseFreq float64, dimStart, dimEnd int) *Node {
 	rank := x.Shape().Rank()
-
 	// Extract the part to apply RoPE (slice the last axis)
 	part := Slice(x, AxisRange().Spacer(), AxisRange(dimStart, dimEnd))
 
