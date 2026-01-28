@@ -13,6 +13,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/pkg/errors"
+	"github.com/x448/float16"
 	"k8s.io/klog/v2"
 
 	"github.com/gomlx/gomlx/backends"
@@ -329,8 +330,9 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 
 	// Highway path (auto-enabled when highway submodule is imported):
 	// Highway internally accumulates in f32 for Float16/BFloat16, so check with matching input/output dtypes
+	// Highway can handle both matmul-order and transpose cases (uses SIMD transpose if needed)
 	if Highway.HasDTypeSupport(dtype, dtype) &&
-		isMatMulOrder(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
+		canUseHighwayPath(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
 			rhsShape, params.rhsContractingAxes, params.rhsBatchAxes) {
 		return highwayPath
 	}
@@ -486,13 +488,71 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		return output, nil
 
 	case highwayPath:
-		// Highway MatMul path for large "malmul" order.
+		// Highway MatMul path - supports both matmul-order and transpose cases.
 		inputDType := lhs.shape.DType
 		outputDType := output.shape.DType
-		err = Highway.MatMulDynamic(inputDType, outputDType, lhs.flat, rhs.flat,
+
+		// Check if transpose is needed
+		lhsNeedsTranspose, rhsNeedsTranspose := needsTransposeForMatMul(
+			lhs.shape, params.lhsContractingAxes, params.lhsBatchAxes,
+			rhs.shape, params.rhsContractingAxes, params.rhsBatchAxes)
+
+		lhsFlat := lhs.flat
+		rhsFlat := rhs.flat
+		var lhsTransposed, rhsTransposed *Buffer
+
+		// Transpose LHS if needed: [B, K, M] -> [B, M, K]
+		if lhsNeedsTranspose == needs2DTranspose {
+			// Allocate buffer for transposed LHS
+			// Original shape is [batchSize, contractingSize, lhsCrossSize]
+			// We need [batchSize, lhsCrossSize, contractingSize]
+			lhsTransposed = backend.getBuffer(inputDType, params.batchSize*params.lhsCrossSize*params.contractingSize)
+			// Transpose each batch
+			batchStride := params.lhsCrossSize * params.contractingSize
+			for b := range params.batchSize {
+				srcStart := b * batchStride
+				dstStart := b * batchStride
+				Highway.Transpose2D(inputDType,
+					sliceAt(lhs.flat, srcStart, batchStride),
+					params.contractingSize, params.lhsCrossSize,
+					sliceAt(lhsTransposed.flat, dstStart, batchStride))
+			}
+			lhsFlat = lhsTransposed.flat
+		}
+
+		// Transpose RHS if needed: [B, N, K] -> [B, K, N]
+		if rhsNeedsTranspose == needs2DTranspose {
+			// Allocate buffer for transposed RHS
+			// Original shape is [batchSize, rhsCrossSize, contractingSize]
+			// We need [batchSize, contractingSize, rhsCrossSize]
+			rhsTransposed = backend.getBuffer(inputDType, params.batchSize*params.rhsCrossSize*params.contractingSize)
+			// Transpose each batch
+			batchStride := params.rhsCrossSize * params.contractingSize
+			for b := range params.batchSize {
+				srcStart := b * batchStride
+				dstStart := b * batchStride
+				Highway.Transpose2D(inputDType,
+					sliceAt(rhs.flat, srcStart, batchStride),
+					params.rhsCrossSize, params.contractingSize,
+					sliceAt(rhsTransposed.flat, dstStart, batchStride))
+			}
+			rhsFlat = rhsTransposed.flat
+		}
+
+		// Now do the matmul with properly ordered inputs
+		err = Highway.MatMulDynamic(inputDType, outputDType, lhsFlat, rhsFlat,
 			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 			output.flat,
 			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), backend.workers)
+
+		// Release temporary buffers
+		if lhsTransposed != nil {
+			backend.putBuffer(lhsTransposed)
+		}
+		if rhsTransposed != nil {
+			backend.putBuffer(rhsTransposed)
+		}
+
 		return output, nil
 
 	default:
@@ -510,6 +570,27 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 // Only defined for positive values.
 func log2int(x int) int {
 	return bits.Len(uint(x)) - 1
+}
+
+// sliceAt returns a subslice of the given flat data starting at offset with given length.
+// Works with any slice type used for buffer data.
+func sliceAt(flat any, offset, length int) any {
+	switch s := flat.(type) {
+	case []float32:
+		return s[offset : offset+length]
+	case []float64:
+		return s[offset : offset+length]
+	case []bfloat16.BFloat16:
+		return s[offset : offset+length]
+	case []float16.Float16:
+		return s[offset : offset+length]
+	case []int32:
+		return s[offset : offset+length]
+	case []int64:
+		return s[offset : offset+length]
+	default:
+		panic(fmt.Sprintf("sliceAt: unsupported type %T", flat))
+	}
 }
 
 // Dot ------------------------------------------------------------------------------------------------------

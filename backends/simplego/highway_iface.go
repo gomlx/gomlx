@@ -28,6 +28,10 @@ type HighwayMatMul interface {
 		lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat any,
 		bufAllocAnyFn packgemm.BufAllocAnyFn, bufReleaseFn packgemm.BufReleaseFn,
 		pool *workerspool.Pool) error
+
+	// Transpose2D transposes an M×K row-major matrix to K×M using SIMD.
+	// Returns false if the dtype is not supported.
+	Transpose2D(dtype dtypes.DType, src any, m, k int, dst any) bool
 }
 
 // Highway is the registered highway implementation.
@@ -54,4 +58,8 @@ func (stubHighway) MatMulDynamic(inputDType, outputDType dtypes.DType,
 	bufAllocAnyFn packgemm.BufAllocAnyFn, bufReleaseFn packgemm.BufReleaseFn,
 	pool *workerspool.Pool) error {
 	return errors.New("highway matmul not available: requires Go 1.26+ and importing the highway submodule")
+}
+
+func (stubHighway) Transpose2D(dtype dtypes.DType, src any, m, k int, dst any) bool {
+	return false
 }

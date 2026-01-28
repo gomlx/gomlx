@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/simplego"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/stretchr/testify/assert"
@@ -184,6 +185,192 @@ func TestHighwayUnaryErf(t *testing.T) {
 	// Test float64 (SIMD has ~4 ULP error, so use looser tolerance)
 	y2 := exec.MustExec(1.0)[0]
 	assert.InDelta(t, math.Erf(1.0), y2.Value(), 1e-6)
+}
+
+// TestHighwayTranspose2D tests that SIMD transpose works correctly.
+func TestHighwayTranspose2D(t *testing.T) {
+	// Test float32 transpose
+	m, k := 4, 8
+	src := make([]float32, m*k)
+	for i := range src {
+		src[i] = float32(i)
+	}
+	dst := make([]float32, k*m)
+
+	// Transpose using highway
+	ok := Transpose2D(dtypes.Float32, src, m, k, dst)
+	assert.True(t, ok, "Transpose2D should succeed for float32")
+
+	// Verify: dst[j*m + i] should equal src[i*k + j]
+	for i := 0; i < m; i++ {
+		for j := 0; j < k; j++ {
+			expected := src[i*k+j]
+			got := dst[j*m+i]
+			assert.Equal(t, expected, got, "Mismatch at (%d,%d)", i, j)
+		}
+	}
+}
+
+// TestHighwayDotGeneralWithTranspose tests DotGeneral when matrices need transposing.
+func TestHighwayDotGeneralWithTranspose(t *testing.T) {
+	// Create a DotGeneral where RHS needs transpose:
+	// LHS: [2, 3] (M=2, K=3) - contracting axis is last, OK
+	// RHS: [4, 3] (N=4, K=3) - contracting axis is last, needs transpose to [3, 4]
+	// Result: [2, 4]
+
+	lhsData := []float32{1, 2, 3, 4, 5, 6}          // 2x3
+	rhsData := []float32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} // 4x3
+
+	// Expected result: LHS @ RHS^T
+	// [1,2,3] @ [1,4,7,10]^T = 1*1 + 2*2 + 3*3 = 14
+	//                         1*4 + 2*5 + 3*6 = 32
+	//                         1*7 + 2*8 + 3*9 = 50
+	//                         1*10 + 2*11 + 3*12 = 68
+	// [4,5,6] @ ... = 32, 77, 122, 167
+
+	execFn := func(g *graph.Graph) *graph.Node {
+		lhs := graph.Reshape(graph.Const(g, lhsData), 2, 3)
+		rhs := graph.Reshape(graph.Const(g, rhsData), 4, 3)
+		// DotGeneral with RHS having contracting axis as last (not first)
+		// LHS: contracting=1 (last), batch=[]
+		// RHS: contracting=1 (last, needs transpose), batch=[]
+		return graph.Einsum("mk,nk->mn", lhs, rhs)
+	}
+
+	exec := graph.MustNewExec(backend, execFn)
+	result := exec.MustExec()[0]
+	got := result.Value().([][]float32)
+
+	// Expected result is 2x4 matrix
+	want := [][]float32{
+		{14, 32, 50, 68},
+		{32, 77, 122, 167},
+	}
+	for i := range want {
+		for j := range want[i] {
+			assert.InDelta(t, want[i][j], got[i][j], 1e-4, "Result mismatch at (%d,%d)", i, j)
+		}
+	}
+}
+
+// TestHighwayNormalizedPathWithSIMDTranspose tests that the normalized DotGeneral path
+// uses SIMD transpose when the operand needs a simple 2D transpose.
+// This exercises the dgNormalizeShape SIMD fast path.
+func TestHighwayNormalizedPathWithSIMDTranspose(t *testing.T) {
+	// Test case: LHS needs transpose [K, M] -> [M, K]
+	// LHS: [3, 2] with contracting axis 0 (first)
+	// RHS: [3, 4] with contracting axis 0 (first, standard order)
+	// Result: [2, 4]
+	//
+	// This forces LHS through dgNormalizeShape which should use SIMD transpose.
+
+	lhsData := []float32{1, 2, 3, 4, 5, 6} // [3, 2] = K x M
+	rhsData := []float32{
+		1, 2, 3, 4,
+		5, 6, 7, 8,
+		9, 10, 11, 12,
+	} // [3, 4] = K x N
+
+	execFn := func(g *graph.Graph) *graph.Node {
+		lhs := graph.Reshape(graph.Const(g, lhsData), 3, 2) // [K=3, M=2]
+		rhs := graph.Reshape(graph.Const(g, rhsData), 3, 4) // [K=3, N=4]
+		// Einsum "km,kn->mn" means:
+		//   - LHS contracting axis is 0 (k)
+		//   - RHS contracting axis is 0 (k)
+		//   - Result has dimensions [m, n]
+		// LHS is [K, M] and needs transpose to [M, K] for normalized path.
+		return graph.Einsum("km,kn->mn", lhs, rhs)
+	}
+
+	exec := graph.MustNewExec(backend, execFn)
+	result := exec.MustExec()[0]
+	got := result.Value().([][]float32)
+
+	// Manual calculation: LHS^T @ RHS
+	// LHS^T = [[1, 3, 5], [2, 4, 6]] (2x3)
+	// RHS = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]] (3x4)
+	// Result[i,j] = sum_k LHS^T[i,k] * RHS[k,j]
+	// Result[0,0] = 1*1 + 3*5 + 5*9 = 1 + 15 + 45 = 61
+	// Result[0,1] = 1*2 + 3*6 + 5*10 = 2 + 18 + 50 = 70
+	// Result[0,2] = 1*3 + 3*7 + 5*11 = 3 + 21 + 55 = 79
+	// Result[0,3] = 1*4 + 3*8 + 5*12 = 4 + 24 + 60 = 88
+	// Result[1,0] = 2*1 + 4*5 + 6*9 = 2 + 20 + 54 = 76
+	// Result[1,1] = 2*2 + 4*6 + 6*10 = 4 + 24 + 60 = 88
+	// Result[1,2] = 2*3 + 4*7 + 6*11 = 6 + 28 + 66 = 100
+	// Result[1,3] = 2*4 + 4*8 + 6*12 = 8 + 32 + 72 = 112
+	want := [][]float32{
+		{61, 70, 79, 88},
+		{76, 88, 100, 112},
+	}
+
+	for i := range want {
+		for j := range want[i] {
+			assert.InDelta(t, want[i][j], got[i][j], 1e-4, "Result mismatch at (%d,%d)", i, j)
+		}
+	}
+}
+
+// TestHighwayNormalizedPathBatchedTranspose tests batched SIMD transpose in dgNormalizeShape.
+func TestHighwayNormalizedPathBatchedTranspose(t *testing.T) {
+	// Test case: Batched LHS needs transpose [B, K, M] -> [B, M, K]
+	// LHS: [2, 3, 2] with batch axis 0, contracting axis 1 (first non-batch)
+	// RHS: [2, 3, 4] with batch axis 0, contracting axis 1 (first non-batch, standard)
+	// Result: [2, 2, 4]
+
+	lhsData := []float32{
+		// Batch 0: [3, 2]
+		1, 2, 3, 4, 5, 6,
+		// Batch 1: [3, 2]
+		7, 8, 9, 10, 11, 12,
+	}
+	rhsData := []float32{
+		// Batch 0: [3, 4]
+		1, 2, 3, 4,
+		5, 6, 7, 8,
+		9, 10, 11, 12,
+		// Batch 1: [3, 4]
+		13, 14, 15, 16,
+		17, 18, 19, 20,
+		21, 22, 23, 24,
+	}
+
+	execFn := func(g *graph.Graph) *graph.Node {
+		lhs := graph.Reshape(graph.Const(g, lhsData), 2, 3, 2) // [B=2, K=3, M=2]
+		rhs := graph.Reshape(graph.Const(g, rhsData), 2, 3, 4) // [B=2, K=3, N=4]
+		// Einsum "bkm,bkn->bmn"
+		return graph.Einsum("bkm,bkn->bmn", lhs, rhs)
+	}
+
+	exec := graph.MustNewExec(backend, execFn)
+	result := exec.MustExec()[0]
+	got := result.Value().([][][]float32)
+
+	// Batch 0: same as unbatched test
+	want := [][][]float32{
+		{
+			{61, 70, 79, 88},
+			{76, 88, 100, 112},
+		},
+		{
+			// Batch 1: LHS^T @ RHS
+			// LHS^T = [[7, 9, 11], [8, 10, 12]] (2x3)
+			// RHS = [[13, 14, 15, 16], [17, 18, 19, 20], [21, 22, 23, 24]] (3x4)
+			// Result[0,0] = 7*13 + 9*17 + 11*21 = 91 + 153 + 231 = 475
+			// Result[0,1] = 7*14 + 9*18 + 11*22 = 98 + 162 + 242 = 502
+			// Result[1,0] = 8*13 + 10*17 + 12*21 = 104 + 170 + 252 = 526
+			// etc.
+			{475, 502, 529, 556},
+			{526, 556, 586, 616},
+		},
+	}
+
+	for b := range want {
+		for i := range want[b] {
+			for j := range want[b][i] {
+				assert.InDelta(t, want[b][i][j], got[b][i][j], 1e-4, "Result mismatch at batch %d (%d,%d)", b, i, j)
+			}
+		}
+	}
 }
 
 // TestHighwayUnaryLargeArray tests that SIMD operations work correctly with larger arrays

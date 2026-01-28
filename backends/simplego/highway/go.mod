@@ -22,3 +22,5 @@ require (
 )
 
 replace github.com/gomlx/gomlx => ../../..
+
+replace github.com/ajroetker/go-highway => /Users/ajroetker/go/src/github.com/ajroetker/go-highway

@@ -21,6 +21,10 @@ type dgNormalizationInfo struct {
 	axisToOutputAxis   []int // For each source axis, which output axis (0=batch, 1=cross, 2=contracting) it maps to.
 	sourceStrides      []int
 	sourceRewindAmount []int
+
+	// canUseSIMD2DTranspose is true when the normalization is a simple 2D transpose
+	// that can be accelerated with SIMD (source rank 2, swapping [contract, cross] → [cross, contract]).
+	canUseSIMD2DTranspose bool
 }
 
 // dgNormalizePrepare pre-calculates the information needed for dgNormalizeShape.
@@ -111,6 +115,34 @@ func dgNormalizePrepare(shape shapes.Shape, contractingAxes, batchAxes []int) *d
 		info.sourceRewindAmount[axis] = batchStride * (sourceDims[axis] - 1)
 		batchStride *= sourceDims[axis]
 	}
+
+	// Check if this is a simple 2D transpose that can use SIMD.
+	// This works when the last two axes are [contracting, cross] (need swapping to [cross, contracting])
+	// and batch axes (if any) are at the beginning in order.
+	//
+	// Supported cases:
+	//   - Rank 2, no batch: [K, M] → [M, K]
+	//   - Rank 3+ with batch: [B..., K, M] → [B..., M, K] (batch axes leading and in order)
+	numBatch := len(batchAxes)
+	if rank >= 2 {
+		// Check batch axes are leading and in sequence: [0, 1, 2, ...]
+		batchAxesOK := true
+		for i, axis := range batchAxes {
+			if axis != i {
+				batchAxesOK = false
+				break
+			}
+		}
+		// Check the last two axes: axis[rank-2] should be contracting (2), axis[rank-1] should be cross (1)
+		lastTwoOK := info.axisToOutputAxis[rank-2] == 2 && info.axisToOutputAxis[rank-1] == 1
+		// Check non-batch, non-last-two axes (if any) - there shouldn't be any in the simple case
+		onlyBatchAndLastTwo := rank == numBatch+2
+
+		if batchAxesOK && lastTwoOK && onlyBatchAndLastTwo {
+			info.canUseSIMD2DTranspose = true
+		}
+	}
+
 	return info
 }
 
@@ -124,6 +156,38 @@ func dgNormalizeShape[T interface {
 }](backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) (output *Buffer) {
 	if !info.needsTranspose {
 		return nil
+	}
+
+	// Try SIMD fast path for simple 2D transpose cases.
+	// This handles [B..., K, M] → [B..., M, K] using vectorized transpose per batch.
+	if info.canUseSIMD2DTranspose {
+		// Verify the last two dimensions match contractingSize and crossSize.
+		sourceDims := source.shape.Dimensions
+		rank := source.shape.Rank()
+		if sourceDims[rank-2] == contractingSize && sourceDims[rank-1] == crossSize {
+			outputShape := shapes.Make(source.shape.DType, batchSize, crossSize, contractingSize)
+			output = backend.getBufferForShape(outputShape)
+			matrixSize := contractingSize * crossSize
+
+			// Try to transpose each batch using SIMD.
+			// Transpose2D(m, k) transposes [m, k] to [k, m]
+			// Source per batch is [contractingSize, crossSize], output is [crossSize, contractingSize]
+			success := true
+			for b := range batchSize {
+				srcSlice := sliceAt(source.flat, b*matrixSize, matrixSize)
+				dstSlice := sliceAt(output.flat, b*matrixSize, matrixSize)
+				if !Highway.Transpose2D(source.shape.DType, srcSlice, contractingSize, crossSize, dstSlice) {
+					success = false
+					break
+				}
+			}
+			if success {
+				return output
+			}
+			// SIMD not supported for this dtype, fall through to generic path.
+			// Return the buffer to the pool since we won't use it.
+			backend.putBuffer(output)
+		}
 	}
 
 	// Create the output buffer.

@@ -44,6 +44,39 @@ func (impl) MatMulDynamic(inputDType, outputDType dtypes.DType,
 		bufAllocAnyFn, bufReleaseFn, pool)
 }
 
+func (impl) Transpose2D(dtype dtypes.DType, src any, m, k int, dst any) bool {
+	return Transpose2D(dtype, src, m, k, dst)
+}
+
+// Transpose2D transposes an M×K row-major matrix to K×M using SIMD.
+// Returns false if the dtype is not supported.
+func Transpose2D(dtype dtypes.DType, src any, m, k int, dst any) bool {
+	switch dtype {
+	case dtypes.Float32:
+		matmul.Transpose2DFloat32(src.([]float32), m, k, dst.([]float32))
+		return true
+	case dtypes.Float64:
+		matmul.Transpose2DFloat64(src.([]float64), m, k, dst.([]float64))
+		return true
+	case dtypes.Float16:
+		srcSlice := src.([]float16.Float16)
+		dstSlice := dst.([]float16.Float16)
+		srcHwy := unsafe.Slice((*hwy.Float16)(unsafe.Pointer(unsafe.SliceData(srcSlice))), len(srcSlice))
+		dstHwy := unsafe.Slice((*hwy.Float16)(unsafe.Pointer(unsafe.SliceData(dstSlice))), len(dstSlice))
+		matmul.Transpose2DFloat16(srcHwy, m, k, dstHwy)
+		return true
+	case dtypes.BFloat16:
+		srcSlice := src.([]bfloat16.BFloat16)
+		dstSlice := dst.([]bfloat16.BFloat16)
+		srcHwy := unsafe.Slice((*hwy.BFloat16)(unsafe.Pointer(unsafe.SliceData(srcSlice))), len(srcSlice))
+		dstHwy := unsafe.Slice((*hwy.BFloat16)(unsafe.Pointer(unsafe.SliceData(dstSlice))), len(dstSlice))
+		matmul.Transpose2DBFloat16(srcHwy, m, k, dstHwy)
+		return true
+	default:
+		return false
+	}
+}
+
 // HasDTypeSupport returns true if a MatMulDynamic function is registered for the given dtypes.
 func HasDTypeSupport(input, output dtypes.DType) bool {
 	// Support float types where input and output dtypes match

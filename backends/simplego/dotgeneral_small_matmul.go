@@ -37,50 +37,105 @@ import (
 // where BOTH operands have the contracting dimension last (sequential access for both).
 func isMatMulOrder(lhsShape shapes.Shape, lhsContractingAxes, lhsBatchAxes []int,
 	rhsShape shapes.Shape, rhsContractingAxes, rhsBatchAxes []int) bool {
+	lhs, rhs := needsTransposeForMatMul(lhsShape, lhsContractingAxes, lhsBatchAxes,
+		rhsShape, rhsContractingAxes, rhsBatchAxes)
+	return lhs == noTranspose && rhs == noTranspose
+}
+
+// canUseHighwayPath checks if highway can handle the DotGeneral operation.
+// Highway can handle:
+// 1. Already in matmul order (no transpose needed)
+// 2. Cases where a simple 2D transpose of the last two dimensions fixes the order
+//
+// This includes:
+//   - LHS: [Batch..., K, M] → transpose to [Batch..., M, K]
+//   - RHS: [Batch..., N, K] → transpose to [Batch..., K, N]
+func canUseHighwayPath(lhsShape shapes.Shape, lhsContractingAxes, lhsBatchAxes []int,
+	rhsShape shapes.Shape, rhsContractingAxes, rhsBatchAxes []int) bool {
+	lhsNeedsTranspose, rhsNeedsTranspose := needsTransposeForMatMul(lhsShape, lhsContractingAxes, lhsBatchAxes,
+		rhsShape, rhsContractingAxes, rhsBatchAxes)
+	// If either returns invalid (-1), we can't use highway
+	return lhsNeedsTranspose != invalidTranspose && rhsNeedsTranspose != invalidTranspose
+}
+
+// transposeNeeded indicates whether transpose is needed and if it's valid.
+type transposeNeeded int
+
+const (
+	noTranspose      transposeNeeded = iota // Already in correct order
+	needs2DTranspose                        // Needs 2D transpose of last two dims
+	invalidTranspose                        // Cannot be fixed with simple transpose
+)
+
+// needsTransposeForMatMul checks if LHS and RHS need transposing to be in matmul order.
+// Returns the transpose requirement for each operand.
+//
+// For matmul order we need:
+//   - LHS: [Batch..., M, K] (contracting axis last)
+//   - RHS: [Batch..., K, N] (contracting axis first after batch)
+//
+// Highway can fix these cases with 2D transpose:
+//   - LHS: [Batch..., K, M] → transpose to [Batch..., M, K]
+//   - RHS: [Batch..., N, K] → transpose to [Batch..., K, N]
+func needsTransposeForMatMul(lhsShape shapes.Shape, lhsContractingAxes, lhsBatchAxes []int,
+	rhsShape shapes.Shape, rhsContractingAxes, rhsBatchAxes []int) (lhsTranspose, rhsTranspose transposeNeeded) {
 	lhsRank := lhsShape.Rank()
 	rhsRank := rhsShape.Rank()
 
-	// Only support single contracting axis for SmallMatMul
+	// Only support single contracting axis
 	if len(lhsContractingAxes) != 1 || len(rhsContractingAxes) != 1 {
-		return false
+		return invalidTranspose, invalidTranspose
 	}
 
 	// Batch axes must match in count and must precede other dimensions.
 	numBatchAxes := len(lhsBatchAxes)
 	if len(rhsBatchAxes) != numBatchAxes {
-		return false
+		return invalidTranspose, invalidTranspose
 	}
 	for i := range numBatchAxes {
 		if lhsBatchAxes[i] != i || rhsBatchAxes[i] != i {
-			return false
+			return invalidTranspose, invalidTranspose
 		}
 	}
 
-	// LHS: [Batch..., M, K] - contracting axis must be last
-	if lhsContractingAxes[0] != lhsRank-1 {
-		return false
+	// LHS must have exactly rank = numBatchAxes + 2 for transpose to work
+	// (we need two dims to transpose)
+	if lhsRank != numBatchAxes+2 {
+		return invalidTranspose, invalidTranspose
 	}
 
-	// LHS must have at most one cross dimension "M": [Batch..., M, K] or [Batch..., K]
-	// rank = numBatchAxes + 1/0 (cross) + 1 (contracting) = numBatchAxes + 2
-	if lhsRank > numBatchAxes+2 {
-		return false
+	// RHS must have exactly rank = numBatchAxes + 2 for transpose to work
+	if rhsRank != numBatchAxes+2 {
+		return invalidTranspose, invalidTranspose
 	}
 
-	// RHS: [Batch..., K, N] or [Batch..., K] (vector case)
-	// Contracting axis must be first after batch axes
-	if rhsContractingAxes[0] != numBatchAxes {
-		return false
+	// Check LHS: [Batch..., M, K] - contracting axis should be last
+	lhsContractingAxis := lhsContractingAxes[0]
+	if lhsContractingAxis == lhsRank-1 {
+		// Already in correct order: [Batch..., M, K]
+		lhsTranspose = noTranspose
+	} else if lhsContractingAxis == lhsRank-2 {
+		// Needs transpose: [Batch..., K, M] → [Batch..., M, K]
+		lhsTranspose = needs2DTranspose
+	} else {
+		// Contracting axis is not in last two positions, can't fix with 2D transpose
+		return invalidTranspose, invalidTranspose
 	}
 
-	// RHS can be:
-	// - [Batch..., K, N] where rank = numBatchAxes + 2 (matrix)
-	// - [Batch..., K] where rank = numBatchAxes + 1 (vector, no cross dimension)
-	if rhsRank != numBatchAxes+2 && rhsRank != numBatchAxes+1 {
-		return false
+	// Check RHS: [Batch..., K, N] - contracting axis should be first after batch
+	rhsContractingAxis := rhsContractingAxes[0]
+	if rhsContractingAxis == numBatchAxes {
+		// Already in correct order: [Batch..., K, N]
+		rhsTranspose = noTranspose
+	} else if rhsContractingAxis == rhsRank-1 {
+		// Needs transpose: [Batch..., N, K] → [Batch..., K, N]
+		rhsTranspose = needs2DTranspose
+	} else {
+		// Contracting axis is not in expected positions, can't fix with 2D transpose
+		return invalidTranspose, invalidTranspose
 	}
 
-	return true
+	return lhsTranspose, rhsTranspose
 }
 
 // smallMatMulMaxContractingSize is the maximum contracting dimension size for which
