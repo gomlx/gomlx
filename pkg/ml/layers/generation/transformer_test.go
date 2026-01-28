@@ -10,7 +10,6 @@ import (
 	graphtest "github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -63,7 +62,7 @@ func TestTransformerBuilder(t *testing.T) {
 		require.NotNil(t, transformer)
 		require.NotNil(t, transformer.Config)
 		assert.Equal(t, cfg, transformer.Config)
-		assert.Nil(t, transformer.Caches)
+		assert.False(t, transformer.KVCacheShape.Ok()) // Empty shape initially
 	})
 
 	t.Run("ForTrainingForward", func(t *testing.T) {
@@ -86,11 +85,7 @@ func TestTransformerBuilder(t *testing.T) {
 		ctx := context.New()
 		cfg := NewTransformerConfig(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
 		transformer := BuildCachedTransformer(ctx, cfg)
-		batchSize := 2
-		transformer.Caches = make([]*attention.KVCache, cfg.NumLayers)
-		for i := 0; i < cfg.NumLayers; i++ {
-			transformer.Caches[i] = attention.NewKVCache(ctx.In("layer").In(fmt.Sprint(i)), "attn", batchSize, cfg.NumHeads, cfg.MaxPosEmbed, cfg.HeadDim, cfg.DType)
-		}
+		// KV cache shape is now created automatically within forwardFull based on batch size
 		modelFn := transformer.ForGeneration()
 		g := NewGraph(backend, "ForGenerationPrompt")
 		prompt := IotaFull(g, shapes.Make(dtypes.Int32, 2, 5))
@@ -108,11 +103,7 @@ func TestTransformerVariants(t *testing.T) {
 		ctx := context.New()
 		cfg := NewTransformerConfig(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithRoPE(10000.0)
 		transformer := BuildCachedTransformer(ctx, cfg)
-		batchSize := 1
-		transformer.Caches = make([]*attention.KVCache, cfg.NumLayers)
-		for i := 0; i < cfg.NumLayers; i++ {
-			transformer.Caches[i] = attention.NewKVCache(ctx.In("layer").In(fmt.Sprint(i)), "attn", batchSize, cfg.NumHeads, cfg.MaxPosEmbed, cfg.HeadDim, cfg.DType)
-		}
+		// KV cache shape is now created automatically within forwardFull based on batch size
 		modelFn := transformer.ForGeneration()
 		g := NewGraph(backend, "WithRoPE")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 1, 4))

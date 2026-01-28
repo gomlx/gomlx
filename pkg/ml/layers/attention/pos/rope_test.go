@@ -20,7 +20,10 @@ func TestRoPE(t *testing.T) {
 
 		rope := NewRoPE(10000.0)
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
-			return rope.Apply(x, startPos)
+			// Create position indices using helper function
+			seqLen := x.Shape().Dimensions[0]
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			return rope.Apply(x, posIndices)
 		})
 
 		input := [][]float32{
@@ -42,7 +45,9 @@ func TestRoPE(t *testing.T) {
 
 		rope := NewRoPE(10000.0)
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
-			return rope.Apply(x, startPos)
+			seqLen := x.Shape().Dimensions[0]
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			return rope.Apply(x, posIndices)
 		})
 
 		input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
@@ -58,7 +63,9 @@ func TestRoPE(t *testing.T) {
 
 		rope := NewRoPE(5000.0)
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
-			return rope.Apply(x, startPos)
+			seqLen := x.Shape().Dimensions[x.Rank()-2]
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			return rope.Apply(x, posIndices)
 		})
 
 		input := [][]float32{
@@ -77,7 +84,9 @@ func TestRoPE(t *testing.T) {
 
 		rope := NewRoPE(10000.0)
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
-			rotated := rope.Apply(x, startPos)
+			seqLen := x.Shape().Dimensions[x.Rank()-2]
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			rotated := rope.Apply(x, posIndices)
 			return ReduceAllSum(Abs(rotated))
 		})
 
@@ -100,7 +109,9 @@ func TestRoPE(t *testing.T) {
 		require.Panics(t, func() {
 			rope := NewRoPE(10000.0)
 			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
-				return rope.Apply(x, startPos)
+				seqLen := x.Shape().Dimensions[x.Rank()-2]
+				posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+				return rope.Apply(x, posIndices)
 			})
 
 			input := [][]float32{
@@ -123,7 +134,9 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		rope := NewRoPEWithDimRange(10000.0, 2, 6)
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			// Apply RoPE only to middle dimensions [2:6]
-			return rope.Apply(x, startPos)
+			seqLen := x.Shape().Dimensions[x.Rank()-2]
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			return rope.Apply(x, posIndices)
 		})
 
 		input := [][]float32{
@@ -144,7 +157,9 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		rope := NewRoPEWithDimRange(10000.0, 0, 8)
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			// Apply RoPE to the full embedding range [0:8]
-			return rope.Apply(x, startPos)
+			seqLen := x.Shape().Dimensions[x.Rank()-2]
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			return rope.Apply(x, posIndices)
 		})
 
 		input := [][]float32{
@@ -165,7 +180,9 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		rope := NewRoPEWithDimRange(5000.0, 4, 8)
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			// Apply RoPE to tail half with different startPos and baseFreq
-			return rope.Apply(x, startPos)
+			seqLen := x.Shape().Dimensions[x.Rank()-2]
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			return rope.Apply(x, posIndices)
 		})
 
 		input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
@@ -183,7 +200,9 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		require.Panics(t, func() {
 			rope := NewRoPEWithDimRange(10000.0, 1, 4)
 			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
-				return rope.Apply(x, startPos)
+				seqLen := x.Shape().Dimensions[x.Rank()-2]
+				posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+				return rope.Apply(x, posIndices)
 			})
 
 			input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
@@ -200,7 +219,9 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		require.Panics(t, func() {
 			rope := NewRoPEWithDimRange(10000.0, 0, 10)
 			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
-				return rope.Apply(x, startPos)
+				seqLen := x.Shape().Dimensions[x.Rank()-2]
+				posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+				return rope.Apply(x, posIndices)
 			})
 
 			input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
@@ -218,7 +239,9 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		// Without .Spacer(), it would incorrectly slice the seq_len axis
 		rope := NewRoPEWithDimRange(10000.0, 0, 4)
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
-			return rope.Apply(x, startPos)
+			seqLen := x.Shape().Dimensions[x.Rank()-2]
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			return rope.Apply(x, posIndices)
 		})
 
 		// Input shape: [batch=2, seq_len=3, embed_dim=8]

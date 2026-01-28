@@ -2,14 +2,12 @@ package generation
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
 )
 
 // ModelFn: full-sequence model, inputs [batch, seq], outputs [batch, seq, vocab].
@@ -159,38 +157,6 @@ func (cfg *GenerationConfig) validate() error {
 	}
 
 	return nil
-}
-
-// initializeCaches: create layer KV caches in ctx with batchSize.
-func (cfg *GenerationConfig) initializeCaches(ctx *context.Context, batchSize int) []*attention.KVCache {
-	caches := make([]*attention.KVCache, cfg.NumLayers)
-	for i := range cfg.NumLayers {
-		// Each layer gets its own scoped cache
-		caches[i] = attention.NewKVCache(
-			ctx.In("layer").In(strconv.Itoa(i)),
-			"attn_cache",
-			batchSize,
-			cfg.NumHeads,
-			cfg.MaxCacheLen,
-			cfg.HeadDim,
-			cfg.DType,
-		)
-	}
-	return caches
-}
-
-// resetCaches: set all cache positions to 0.
-func (cfg *GenerationConfig) resetCaches(g *Graph, caches []*attention.KVCache) {
-	for _, cache := range caches {
-		cache.Reset(g)
-	}
-}
-
-// initializeCachesInGraph: create cache variables in graph g.
-func (cfg *GenerationConfig) initializeCachesInGraph(g *Graph, caches []*attention.KVCache) {
-	for _, cache := range caches {
-		cache.Initialize(g)
-	}
 }
 
 // Generate: autoregressive decoding from prompt.
@@ -344,25 +310,10 @@ func (cfg *GenerationConfig) generateSamplingCached(
 	backend backends.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
-	batchSize, promptLen int,
+	_, promptLen int,
 ) (*tensors.Tensor, error) {
-	caches := cfg.initializeCaches(ctx, batchSize)
-
-	initExec, err := context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, dummy *Node) *Node {
-		g := dummy.Graph()
-		cfg.initializeCachesInGraph(g, caches)
-		cfg.resetCaches(g, caches)
-		return dummy
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cache init exec: %w", err)
-	}
-
-	dummyInput := tensors.FromValue(int32(0))
-	_, _, err = initExec.ExecWithGraph(dummyInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize caches: %w", err)
-	}
+	// Note: KV caches are now automatically managed within the context by the attention layers.
+	// Each call to WithKVCache in the model function will create/reuse cache variables in the context.
 
 	promptExec, err := context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, tokens *Node) *Node {
 		logits := cfg.IncrementalModelFn(ctx, tokens, 0)
@@ -569,31 +520,15 @@ func (cfg *GenerationConfig) generateBeamSearchNonCached(
 	currentSequences := replicatedResults[0]
 
 	// Initialize beam scores: first beam 0, others -1e10
-	initScoresExec, err := context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, input *Node) *Node {
-		g := input.Graph()
-		// Create scores: [batch * beam_size]
-		// First beam in each batch: 0, others: -1e10
-		scores := make([]*Node, batchBeamSize)
-		for i := 0; i < batchBeamSize; i++ {
-			if i%beamSize == 0 {
-				scores[i] = Const(g, float32(0.0))
-			} else {
-				scores[i] = Const(g, float32(-1e10))
-			}
+	initialScores := make([]float32, batchBeamSize)
+	for i := 0; i < batchBeamSize; i++ {
+		if i%beamSize == 0 {
+			initialScores[i] = 0.0
+		} else {
+			initialScores[i] = -1e10
 		}
-		return Stack(scores, 0)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create init scores exec: %w", err)
 	}
-
-	dummyInput := tensors.FromValue(int32(0))
-	scoresResults, _, err := initScoresExec.ExecWithGraph(dummyInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize scores: %w", err)
-	}
-
-	beamScores := scoresResults[0]
+	beamScores := tensors.FromValue(initialScores)
 
 	// Beam search configuration
 	beamConfig := NewBeamSearch(beamSize, cfg.EosTokenId).
@@ -690,27 +625,9 @@ func (cfg *GenerationConfig) generateBeamSearchCached(
 	batchSize, promptLen int,
 ) (*tensors.Tensor, error) {
 	beamSize := cfg.BeamSize
-	batchBeamSize := batchSize * beamSize
 
-	// Initialize caches for batch * beam_size
-	caches := cfg.initializeCaches(ctx, batchBeamSize)
-
-	// Initialize and reset caches
-	initExec, err := context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, input *Node) *Node {
-		g := input.Graph()
-		cfg.initializeCachesInGraph(g, caches)
-		cfg.resetCaches(g, caches)
-		return input
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cache init exec: %w", err)
-	}
-
-	dummyInput := tensors.FromValue(int32(0))
-	_, _, err = initExec.ExecWithGraph(dummyInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize caches: %w", err)
-	}
+	// Note: KV caches are now automatically managed within the context by the attention layers.
+	// Each call to WithKVCache in the model function will create/reuse cache variables in the context.
 
 	// Replicate prompt for each beam
 	replicateExec, err := context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, prompt *Node) *Node {
@@ -746,29 +663,18 @@ func (cfg *GenerationConfig) generateBeamSearchCached(
 		return nil, fmt.Errorf("failed to process prompt: %w", err)
 	}
 
-	// Initialize beam scores
-	initScoresExec, err := context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, input *Node) *Node {
-		g := input.Graph()
-		scores := make([]*Node, batchBeamSize)
-		for i := 0; i < batchBeamSize; i++ {
-			if i%beamSize == 0 {
-				scores[i] = Const(g, float32(0.0))
-			} else {
-				scores[i] = Const(g, float32(-1e10))
-			}
+	batchBeamSize := batchSize * beamSize
+
+	// Initialize beam scores: first beam 0, others -1e10
+	initialScores := make([]float32, batchBeamSize)
+	for i := range batchBeamSize {
+		if i%beamSize == 0 {
+			initialScores[i] = 0.0
+		} else {
+			initialScores[i] = -1e10
 		}
-		return Stack(scores, 0)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create init scores exec: %w", err)
 	}
-
-	scoresResults, _, err := initScoresExec.ExecWithGraph(dummyInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize scores: %w", err)
-	}
-
-	beamScores := scoresResults[0]
+	beamScores := tensors.FromValue(initialScores)
 	currentSequences := replicatedPrompt
 
 	// Beam search configuration

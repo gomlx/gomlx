@@ -34,7 +34,17 @@ type RoPE struct {
 }
 
 // NewRoPE creates a RoPE positional embedding that applies to the entire embedding axis.
-// baseFreq is typically 10000.0 for standard RoPE.
+//
+// Parameters:
+//   - baseFreq: Base frequency for rotary embeddings, typically 10000.0
+//
+// Returns:
+//   - A RoPE instance configured to apply to the full embedding dimension
+//
+// Example:
+//
+//	rope := NewRoPE(10000.0)
+//	embedded := rope.Apply(x, positionIndices)
 func NewRoPE(baseFreq float64) *RoPE {
 	return &RoPE{
 		BaseFreq: baseFreq,
@@ -46,9 +56,19 @@ func NewRoPE(baseFreq float64) *RoPE {
 // NewRoPEWithDimRange creates a RoPE that applies only to [dimStart:dimEnd].
 // This is useful for applying RoPE to only a slice of the embedding (or feature) axis.
 //
-// It requires that 0 <= dimStart < dimEnd <= x.Shape().Dimensions[x.Rank()-1],
-// except dimEnd may be set to -1 as a shortcut to x.Shape().Dimensions[x.Rank()-1]
-// (meaning to the end of the axis).
+// Parameters:
+//   - baseFreq: Base frequency for rotary embeddings, typically 10000.0
+//   - dimStart: Start index of the dimension range (inclusive), must be >= 0
+//   - dimEnd: End index of the dimension range (exclusive), or -1 for end of axis
+//
+// Returns:
+//   - A RoPE instance configured to apply to the specified dimension range
+//
+// Example:
+//
+//	// Apply RoPE only to dimensions 0-64 of a 128-dim embedding
+//	rope := NewRoPEWithDimRange(10000.0, 0, 64)
+//	embedded := rope.Apply(x, positionIndices)
 func NewRoPEWithDimRange(baseFreq float64, dimStart, dimEnd int) *RoPE {
 	return &RoPE{
 		BaseFreq: baseFreq,
@@ -58,31 +78,47 @@ func NewRoPEWithDimRange(baseFreq float64, dimStart, dimEnd int) *RoPE {
 }
 
 // Apply implements the PositionalEmbedding interface.
-// It applies rotary position embeddings to x starting at position startPos.
-//
+// It applies rotary position embeddings to x using the provided position indices.
 // The rotation is applied on a range of frequencies multiplied by the position
-// of each element. The position is given by x's sequenceLen axis indices, added
-// by startPos.
+// of each element, as specified by positionIndices.
 //
-// - x: shaped [..., sequenceLen, headDim|embedDim].
-// - startPos: scalar value added to the x indices when rotating, for dynamic positioning. 
-func (r *RoPE) Apply(x *Node, startPos *Node) *Node {
+// Parameters:
+//   - x: Input tensor shaped [..., seq_len, head_dim|embed_dim]
+//   - positionIndices: Position indices shaped [..., seq_len] with position values for each token
+//
+// Returns:
+//   - Tensor with rotary position embeddings applied, same shape as x
+//
+// Example:
+//
+//	rope := NewRoPE(10000.0)
+//	// x has shape [batch, seq_len, embed_dim]
+//	// positions has shape [batch, seq_len] with values like [0, 1, 2, ...]
+//	embedded := rope.Apply(x, positions)
+func (r *RoPE) Apply(x *Node, positionIndices *Node) *Node {
 	if r.DimStart == 0 && r.DimEnd == -1 {
 		// Apply to entire dimension
-		return applyRoPE(x, startPos, r.BaseFreq)
+		return applyRoPE(x, positionIndices, r.BaseFreq)
 	}
 	// Apply to custom dimension range
 	dimEnd := r.DimEnd
 	if dimEnd == -1 {
 		dimEnd = x.Shape().Dimensions[x.Shape().Rank()-1]
 	}
-	return applyRoPEWithCustomDim(x, startPos, r.BaseFreq, r.DimStart, dimEnd)
+	return applyRoPEWithCustomDim(x, positionIndices, r.BaseFreq, r.DimStart, dimEnd)
 }
 
 // applyRoPE applies rotary position embeddings to the last dimension (even length).
-// startPos must be a *Node (scalar int32) for dynamic positioning.
-// Shapes: x [..., sequencelen, headDim|embedDim]. Reference: RoFormer.
-func applyRoPE(x *Node, startPos *Node, baseFreq float64) *Node {
+// Reference: RoFormer (https://arxiv.org/abs/2104.09864).
+//
+// Parameters:
+//   - x: Input tensor shaped [..., seq_len, head_dim|embed_dim], last dim must be even
+//   - positionIndices: Position indices shaped [..., seq_len]
+//   - baseFreq: Base frequency for computing rotation angles
+//
+// Returns:
+//   - Tensor with rotary embeddings applied, same shape as x
+func applyRoPE(x *Node, positionIndices *Node, baseFreq float64) *Node {
 	g := x.Graph()
 	shape := x.Shape()
 	dtype := shape.DType
@@ -97,17 +133,15 @@ func applyRoPE(x *Node, startPos *Node, baseFreq float64) *Node {
 		Panicf("RoPE requires even embedding dimension, got %d", embedDim)
 	}
 
-	// Compute position indices: [startPos, startPos+1, ..., startPos+seqLen-1]
-	// Shape: [seqLen]
-	positions := Iota(g, shapes.Make(dtype, seqLen), 0)
+	// Use provided position indices and convert to appropriate dtype
+	// Position indices should be shaped [..., seq_len]
+	positions := ConvertDType(positionIndices, dtype)
 
-	// Convert startPos to dtype and ensure it's scalar
-	posNode := ConvertDType(startPos, dtype)
-	if posNode.Rank() > 0 {
-		posNode = Reshape(posNode) // Reshape to scalar, will error if size != 1
+	// Validate position indices shape - last dimension must match seqLen
+	posRank := positions.Rank()
+	if posRank == 0 || positions.Shape().Dimensions[posRank-1] != seqLen {
+		Panicf("RoPE positionIndices last dimension must match seq_len=%d, got shape %s", seqLen, positions.Shape())
 	}
-	posNode = BroadcastToShape(posNode, positions.Shape())
-	positions = Add(positions, posNode)
 
 	// Compute frequency for each pair of dimensions
 	// freq_i = 1 / (baseFreq^(2i/embedDim)) for i in [0, embedDim/2)
@@ -169,15 +203,25 @@ func applyRoPE(x *Node, startPos *Node, baseFreq float64) *Node {
 }
 
 // applyRoPEWithCustomDim applies RoPE to x[..., dimStart:dimEnd] (even length).
-// startPos must be a *Node (scalar int32) for dynamic positioning.
-func applyRoPEWithCustomDim(x *Node, startPos *Node, baseFreq float64, dimStart, dimEnd int) *Node {
+// Unchanged dimensions outside [dimStart:dimEnd] are preserved.
+//
+// Parameters:
+//   - x: Input tensor shaped [..., seq_len, embed_dim]
+//   - positionIndices: Position indices shaped [..., seq_len]
+//   - baseFreq: Base frequency for computing rotation angles
+//   - dimStart: Start index of the dimension range (inclusive)
+//   - dimEnd: End index of the dimension range (exclusive)
+//
+// Returns:
+//   - Tensor with rotary embeddings applied to the specified range, same shape as x
+func applyRoPEWithCustomDim(x *Node, positionIndices *Node, baseFreq float64, dimStart, dimEnd int) *Node {
 	rank := x.Shape().Rank()
 
 	// Extract the part to apply RoPE (slice the last axis)
 	part := Slice(x, AxisRange().Spacer(), AxisRange(dimStart, dimEnd))
 
 	// Apply RoPE
-	rotatedPart := applyRoPE(part, startPos, baseFreq)
+	rotatedPart := applyRoPE(part, positionIndices, baseFreq)
 
 	// Concatenate with unchanged parts
 	if dimStart == 0 && dimEnd == x.Shape().Dimensions[rank-1] {

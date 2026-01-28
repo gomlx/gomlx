@@ -18,7 +18,6 @@ package generation
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
@@ -112,15 +111,15 @@ func (cfg *TransformerConfig) WithBias(use bool) *TransformerConfig {
 
 // CachedTransformer wraps a transformer with KV cache support.
 type CachedTransformer struct {
-	Config *TransformerConfig
-	Caches []*attention.KVCache
+	Config       *TransformerConfig
+	KVCacheShape shapes.Shape // Shape for KV cache: [batch, heads, maxSeqLen, headDim]
 }
 
 // BuildCachedTransformer creates a transformer with KV cache support for training and generation.
 func BuildCachedTransformer(ctx *context.Context, config *TransformerConfig) *CachedTransformer {
 	return &CachedTransformer{
-		Config: config,
-		Caches: nil,
+		Config:       config,
+		KVCacheShape: shapes.Shape{}, // Empty shape, set during generation
 	}
 }
 
@@ -180,20 +179,10 @@ func (ct *CachedTransformer) forwardFull(
 
 		if useCache {
 			// Generation mode: use KV cache for efficient incremental decoding
-			cache := attention.NewKVCache(
-				ctx.In("layer").In(strconv.Itoa(layer)),
-				"attn_cache",
-				x.Shape().Dimensions[0],
-				cfg.NumHeads,
-				cfg.MaxPosEmbed,
-				cfg.HeadDim,
-				cfg.DType,
-			)
-
-			// Convert position int to a Node for the new WithKVCache API
+			// Convert position int to a Node for the WithKVCache API
 			positionNode := Const(x.Graph(), int32(position))
 			attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, cfg.NumHeads, cfg.HeadDim).
-				WithKVCache(cache, positionNode)
+				WithKVCache(cfg.MaxPosEmbed, positionNode)
 
 			if cfg.UseRoPE {
 				attnBuilder = attnBuilder.WithRoPE(cfg.RoPEBaseFreq)

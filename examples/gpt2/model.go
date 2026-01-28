@@ -8,6 +8,8 @@ import (
 
 	"github.com/gomlx/go-huggingface/hub"
 	"github.com/gomlx/go-huggingface/models/safetensors"
+	"github.com/gomlx/go-huggingface/tokenizers/api"
+	"github.com/gomlx/go-huggingface/tokenizers/hftokenizer"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
@@ -69,7 +71,7 @@ type GPT2TransformerWrapper struct {
 	config     *generation.TransformerConfig
 	gpt2Config GPT2Config
 	ctx        *context.Context
-	Caches     []*attention.KVCache
+	MaxSeqLen  int // Maximum sequence length for KV cache
 }
 
 // ForGenerationDynamic returns a model function that accepts position as a Node parameter.
@@ -104,7 +106,7 @@ func (w *GPT2TransformerWrapper) ForGenerationDynamic() func(ctx *context.Contex
 
 			// Self-attention with KV cache
 			attn := attention.SelfAttention(layerCtx.In("attn"), attnInput, cfg.NumHeads, cfg.HeadDim).
-				WithKVCache(w.Caches[layer], positionNode).
+				WithKVCache(w.MaxSeqLen, positionNode).
 				UseProjectionBias(true).
 				UseCausalMask().
 				Done()
@@ -131,7 +133,7 @@ func (w *GPT2TransformerWrapper) ForGenerationDynamic() func(ctx *context.Contex
 }
 
 // LoadGPT2 loads the GPT-2 model from the given HuggingFace repository.
-func LoadGPT2(backend backends.Backend, repo *hub.Repo) (*GPT2Model, *Tokenizer, error) {
+func LoadGPT2(backend backends.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenizer, error) {
 	config := DefaultGPT2Config()
 
 	// Create context for model parameters
@@ -174,8 +176,8 @@ func LoadGPT2(backend backends.Backend, repo *hub.Repo) (*GPT2Model, *Tokenizer,
 		transformer: transformer,
 	}
 
-	// Load tokenizer
-	tokenizer, err := LoadTokenizer(repo)
+	// Load tokenizer - distilgpt2 doesn't have tokenizer_class, so use hftokenizer directly
+	tokenizer, err := hftokenizer.New(nil, repo)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load tokenizer: %w", err)
 	}
@@ -204,21 +206,8 @@ func (m *GPT2Model) Generate(
 	m.config.TopK = config.TopK
 	m.config.TopP = config.TopP
 
-	// Initialize KV caches for each layer
-	batchSize := 1
-	headDim := m.config.HiddenSize / m.config.NumHeads
-	m.transformer.Caches = make([]*attention.KVCache, m.config.NumLayers)
-	for i := 0; i < m.config.NumLayers; i++ {
-		m.transformer.Caches[i] = attention.NewKVCache(
-			m.ctx.In(fmt.Sprintf("layer_%d", i)),
-			"attn",
-			batchSize,
-			m.config.NumHeads,
-			m.config.MaxPosEmbed,
-			headDim,
-			m.config.DType,
-		)
-	}
+	// Set max sequence length for KV cache (cache is automatically managed within context)
+	m.transformer.MaxSeqLen = m.config.MaxPosEmbed
 
 	// Convert prompt tokens to int32
 	promptTokens32 := make([]int32, len(promptTokens))
@@ -249,7 +238,7 @@ func (m *GPT2Model) Generate(
 	}
 
 	// Process prompt (position=0)
-	results, _, err := m.tokenExec.ExecWithGraph(
+	results, err := m.tokenExec.Exec(
 		[][]int32{promptTokens32},
 		[]int32{0},
 	)
@@ -271,10 +260,10 @@ func (m *GPT2Model) Generate(
 	currentPosition := len(promptTokens)
 	currentToken := firstToken
 
-	for step := 0; step < config.MaxTokens-1; step++ {
+	for step := range config.MaxTokens - 1 {
 		position := currentPosition + step
 		// Get next token from model (includes sampling)
-		results, _, err := m.tokenExec.ExecWithGraph(
+		results, err := m.tokenExec.Exec(
 			[][]int32{{int32(currentToken)}},
 			[]int32{int32(position)},
 		)

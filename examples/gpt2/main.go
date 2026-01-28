@@ -75,10 +75,7 @@ func main() {
 
 	// Tokenize prompt
 	fmt.Printf("\nPrompt: %q\n", *flagPrompt)
-	tokens, err := tokenizer.Encode(*flagPrompt)
-	if err != nil {
-		log.Fatalf("Failed to tokenize prompt: %v", err)
-	}
+	tokens := tokenizer.Encode(*flagPrompt)
 	fmt.Printf("Tokenized to %d tokens\n", len(tokens))
 
 	// Generate text
@@ -92,11 +89,7 @@ func main() {
 		TopP:        *flagTopP,
 	}
 	err = model.Generate(tokens, config, func(token int) bool {
-		text, err := tokenizer.Decode([]int{token})
-		if err != nil {
-			log.Printf("Warning: failed to decode token %d: %v", token, err)
-			return true
-		}
+		text := tokenizer.Decode([]int{token})
 		fmt.Print(text)
 		return true // Continue generation
 	})

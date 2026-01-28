@@ -17,191 +17,191 @@
 package attention
 
 import (
+	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 )
 
-// KVCache stores past key/value states for autoregressive attention.
-// Buffers: [batch, heads, max_len, head_dim].
-type KVCache struct {
-	ctx         *context.Context
-	reuseCtx    *context.Context // Context in reuse mode for variable access
-	scope       string
-	batchSize   int
-	numHeads    int
-	maxSeqLen   int
-	headDim     int
-	dtype       dtypes.DType
-	initialized bool
-}
+// KVCacheScopeName is the scope name used for KV cache variables in the context.
+const KVCacheScopeName = "kv_cache"
 
-// NewKVCache creates pre-allocated KV buffers.
-func NewKVCache(ctx *context.Context, scope string, batchSize, numHeads, maxSeqLen, headDim int, dtype dtypes.DType) *KVCache {
-	scopedCtx := ctx.In(scope)
-	// CRITICAL FIX: If context is already in reuse mode, don't call Reuse() again!
-	// Calling Reuse() on an already-reused context creates a DIFFERENT reuse scope,
-	// which prevents variables from persisting across graph executions.
-	var reuseCtx *context.Context
-	if scopedCtx.IsReuse() {
-		// Bug fix: Don't call Reuse() on a context that's already in reuse mode.
-		reuseCtx = scopedCtx
-	} else {
-		reuseCtx = scopedCtx.Reuse()
+// KVCacheReset clears the KV cache position for a new generation.
+// Call this outside of graph execution before starting a new prompt.
+// The cache position is reset to 0; old cached values will be overwritten
+// when new keys/values are written starting at position 0.
+//
+// Parameters:
+//   - ctx: Context containing the KV cache variables
+//   - cacheShape: Shape [batchSize, numHeads, maxSeqLen, headDim] from builder.KVCacheShape()
+//
+// Example:
+//
+//	// Before generating a new response, reset each layer's cache:
+//	for _, layerCtx := range layerContexts {
+//	    attention.KVCacheReset(layerCtx, builder.KVCacheShape())
+//	}
+func KVCacheReset(ctx *context.Context, cacheShape shapes.Shape) {
+	if cacheShape.Rank() != 4 {
+		Panicf("KV cache shape must have rank 4, got %s", cacheShape)
 	}
-	return &KVCache{
-		ctx:       scopedCtx,
-		reuseCtx:  reuseCtx,
-		scope:     scope,
-		batchSize: batchSize,
-		numHeads:  numHeads,
-		maxSeqLen: maxSeqLen,
-		headDim:   headDim,
-		dtype:     dtype,
+	_, _, posVar := KVCacheGetVars(ctx, cacheShape)
+
+	batchSize := cacheShape.Dimensions[0]
+	zeroPos := tensors.FromScalarAndDimensions(int32(0), batchSize)
+	if posVar.HasValue() {
+		posVar.SetValue(zeroPos)
 	}
 }
 
-// Initialize creates variables (idempotent).
-func (c *KVCache) Initialize(g *Graph) {
-	if c.initialized {
-		return
+// KVCacheGetVars returns the key, value, and position variables for the KV cache.
+// Variables are created on first access with zero-initialization.
+// This is a low-level function; most users should use WithKVCache on the attention builder.
+//
+// Parameters:
+//   - ctx: Context for storing/retrieving cache variables
+//   - cacheShape: Shape [batchSize, numHeads, maxSeqLen, headDim]
+//
+// Returns:
+//   - keyVar: Variable storing cached key projections
+//   - valueVar: Variable storing cached value projections
+//   - positionVar: Variable storing current cache write position (shape [batchSize])
+func KVCacheGetVars(ctx *context.Context, cacheShape shapes.Shape) (keyVar, valueVar, positionVar *context.Variable) {
+	if cacheShape.Rank() != 4 {
+		Panicf("KV cache shape must have rank 4, got %s", cacheShape)
 	}
+	ctx = ctx.In(KVCacheScopeName)
 
-	cacheShape := shapes.Make(c.dtype, c.batchSize, c.numHeads, c.maxSeqLen, c.headDim)
+	batchSize := cacheShape.Dimensions[0]
+	posShape := shapes.Make(dtypes.Int32, batchSize)
 
-	// BUG FIX: Use reuseCtx consistently! Variables must be created and accessed with the same context.
-	// Previously used c.ctx here but c.reuseCtx in Update/Get, causing scope mismatch!
-	initCtx := c.reuseCtx.Checked(false)
-
-	// Create key and value cache variables, initialized to zeros
-	initCtx.VariableWithShape("key_cache", cacheShape)
-	initCtx.VariableWithShape("value_cache", cacheShape)
-
-	// Create position variable to track how many positions are filled
-	// Shape: [batch_size] - tracks position for each batch element
-	posShape := shapes.Make(dtypes.Int32, c.batchSize)
-	posVar := initCtx.VariableWithShape("cache_position", posShape)
-	// Initialize to zeros
-	posVar.SetValueGraph(ZerosLike(posVar.ValueGraph(g)))
-
-	c.initialized = true
+	keyVar = ctx.VariableWithShape("key", cacheShape)
+	valueVar = ctx.VariableWithShape("value", cacheShape)
+	positionVar = ctx.VariableWithShape("position", posShape)
+	return
 }
 
-// Reset sets all positions to 0.
-func (c *KVCache) Reset(g *Graph) {
-	c.Initialize(g)
-
-	// Reset positions to zero
-	posVar := c.reuseCtx.VariableWithShape("cache_position", shapes.Make(dtypes.Int32, c.batchSize))
-	posVar.SetValueGraph(ZerosLike(posVar.ValueGraph(g)))
-}
-
-// Update appends new keys/values; returns updated position.
-func (c *KVCache) Update(g *Graph, newKeys, newValues *Node) *Node {
-	c.Initialize(g)
+// KVCacheUpdate writes new keys/values to the cache at the specified position.
+// This is used during incremental generation to accumulate key/value projections.
+// Supports circular/rotating cache: when position exceeds maxSeqLen, it wraps around.
+// This is a low-level function; most users should use WithKVCache on the attention builder.
+//
+// Parameters:
+//   - ctx: Context for storing/retrieving cache variables
+//   - g: Graph for building the computation
+//   - cacheShape: Shape [batchSize, numHeads, maxSeqLen, headDim]
+//   - startPosition: Scalar Node (int32) indicating the absolute position in the sequence
+//   - newKeysSlice: New key projections [batchSize, numHeads, seqLen, headDim]
+//   - newValuesSlice: New value projections [batchSize, numHeads, seqLen, headDim]
+//
+// Returns:
+//   - Updated absolute position (startPosition + seqLen) as a scalar int32 Node
+//
+// Example:
+//
+//	// During generation, after computing new key/value projections:
+//	newPos := KVCacheUpdate(ctx, g, cacheShape, position, newKeys, newValues)
+//	// Cache now contains keys/values, with positions wrapping at maxSeqLen
+func KVCacheUpdate(ctx *context.Context, g *Graph, cacheShape shapes.Shape, startPosition *Node, newKeysSlice, newValuesSlice *Node) *Node {
+	keyVar, valueVar, posVar := KVCacheGetVars(ctx, cacheShape)
 
 	// Get current cache state
-	keyCache := c.reuseCtx.VariableWithShape("key_cache", shapes.Make(c.dtype, c.batchSize, c.numHeads, c.maxSeqLen, c.headDim)).ValueGraph(g)
-	valueCache := c.reuseCtx.VariableWithShape("value_cache", shapes.Make(c.dtype, c.batchSize, c.numHeads, c.maxSeqLen, c.headDim)).ValueGraph(g)
-	position := c.reuseCtx.VariableWithShape("cache_position", shapes.Make(dtypes.Int32, c.batchSize)).ValueGraph(g)
+	keyCache := keyVar.ValueGraph(g)
+	valueCache := valueVar.ValueGraph(g)
 
-	// Get sequence length of new keys/values
-	newSeqLen := newKeys.Shape().Dimensions[2]
-
-	// For each position in the new sequence, update the cache
-	// We'll update positions [current_pos : current_pos + newSeqLen]
-	for i := 0; i < newSeqLen; i++ {
-		// Extract single position from new keys/values
-		// Shape: [batch_size, num_heads, head_dim]
-		singleKey := Slice(newKeys, AxisRange(), AxisRange(), AxisRange(i, i+1), AxisRange())
-		singleKey = Squeeze(singleKey, 2) // Remove seq dimension
-		singleValue := Slice(newValues, AxisRange(), AxisRange(), AxisRange(i, i+1), AxisRange())
-		singleValue = Squeeze(singleValue, 2)
-
-		// Expand to match cache shape for dynamic update
-		// We need shape [batch_size, num_heads, 1, head_dim]
-		singleKey = ExpandDims(singleKey, 2)
-		singleValue = ExpandDims(singleValue, 2)
-
-		// Create start indices for dynamic slice update
-		// All indices must be scalars (0D tensors)
-		batchIdx := Const(g, int32(0)) // Always start at batch 0 (updates all batches)
-		headsIdx := Const(g, int32(0)) // Always start at head 0
-		dimIdx := Const(g, int32(0))   // Always start at dim 0
-
-		// Position index varies per batch element - for now, use first batch element's position
-		posIdx := Squeeze(Slice(position, AxisRange(0, 1)), 0) // Get first element and squeeze to scalar
-		posIdx = AddScalar(posIdx, float64(i))
-		posIdx = ConvertDType(posIdx, dtypes.Int32)
-
-		// Update cache using DynamicUpdateSlice
-		keyCache = DynamicUpdateSlice(keyCache, singleKey, []*Node{batchIdx, headsIdx, posIdx, dimIdx})
-		valueCache = DynamicUpdateSlice(valueCache, singleValue, []*Node{batchIdx, headsIdx, posIdx, dimIdx})
+	// Convert startPosition to int32 scalar
+	positionInt32 := ConvertDType(startPosition, dtypes.Int32)
+	if positionInt32.Rank() > 0 {
+		positionInt32 = Squeeze(positionInt32)
 	}
 
-	// Update the cache variables
-	c.reuseCtx.VariableWithShape("key_cache", keyCache.Shape()).SetValueGraph(keyCache)
-	c.reuseCtx.VariableWithShape("value_cache", valueCache.Shape()).SetValueGraph(valueCache)
+	// Get sequence length and max cache size
+	updateSeqLen := newKeysSlice.Shape().Dimensions[2]
+	maxSeqLen := cacheShape.Dimensions[2]
 
-	// Update position
-	updatedPosition := AddScalar(position, float64(newSeqLen))
+	// Apply modulo for circular cache: write position = startPosition % maxSeqLen
+	maxSeqLenNode := Const(g, int32(maxSeqLen))
+	cacheWritePos := Mod(positionInt32, maxSeqLenNode)
+
+	// Update the entire subsequence in one slice operation.
+	// newKeysSlice/newValuesSlice have shape [batchSize, numHeads, updateSeqLen, headDim]
+	// and we insert them at position [0, 0, cacheWritePos, 0] in the cache.
+	batchIdx := Const(g, int32(0))
+	headsIdx := Const(g, int32(0))
+	dimIdx := Const(g, int32(0))
+	keyCache = DynamicUpdateSlice(keyCache, newKeysSlice, []*Node{batchIdx, headsIdx, cacheWritePos, dimIdx})
+	valueCache = DynamicUpdateSlice(valueCache, newValuesSlice, []*Node{batchIdx, headsIdx, cacheWritePos, dimIdx})
+
+	// Update the cache variables
+	keyVar.SetValueGraph(keyCache)
+	valueVar.SetValueGraph(valueCache)
+
+	// Calculate and store updated absolute position (not wrapped)
+	updatedPosition := AddScalar(positionInt32, float64(updateSeqLen))
 	updatedPosition = ConvertDType(updatedPosition, dtypes.Int32)
-	c.reuseCtx.VariableWithShape("cache_position", updatedPosition.Shape()).SetValueGraph(updatedPosition)
+
+	// Store the absolute position (for mask calculation)
+	posShape := posVar.Shape()
+	broadcastedPos := BroadcastToShape(ExpandDims(updatedPosition, 0), posShape)
+	posVar.SetValueGraph(broadcastedPos)
 
 	return updatedPosition
 }
 
-// Get returns key/value caches and current position.
-func (c *KVCache) Get(g *Graph) (keys, values, currentPosition *Node) {
-	c.Initialize(g)
+// getKVCache returns key/value caches and current position from the given context.
+// cacheShape must be [batchSize, numHeads, maxSeqLen, headDim].
+func getKVCache(ctx *context.Context, g *Graph, cacheShape shapes.Shape) (keys, values, currentPosition *Node) {
+	keyVar, valueVar, posVar := KVCacheGetVars(ctx, cacheShape)
 
-	keyCache := c.reuseCtx.VariableWithShape("key_cache", shapes.Make(c.dtype, c.batchSize, c.numHeads, c.maxSeqLen, c.headDim)).ValueGraph(g)
-	valueCache := c.reuseCtx.VariableWithShape("value_cache", shapes.Make(c.dtype, c.batchSize, c.numHeads, c.maxSeqLen, c.headDim)).ValueGraph(g)
-	currentPosition = c.reuseCtx.VariableWithShape("cache_position", shapes.Make(dtypes.Int32, c.batchSize)).ValueGraph(g)
-
-	// For simplicity, we return the full cache
-	// The attention mechanism should mask out positions >= currentPosition
-	// In practice, we could use DynamicSlice to return only filled positions
-	return keyCache, valueCache, currentPosition
+	// Return the full cache; the attention mechanism masks out positions >= currentPosition
+	return keyVar.ValueGraph(g), valueVar.ValueGraph(g), posVar.ValueGraph(g)
 }
 
-// GetWithSlice returns filled portion up to maxPosition.
-func (c *KVCache) GetWithSlice(g *Graph, maxPosition int) (keys, values *Node) {
-	c.Initialize(g)
+// createKVCacheAttentionMask creates a mask for unfilled cache positions.
+// Supports circular/rotating cache: when position >= maxSeqLen, all cache slots are valid.
+//
+// Parameters:
+//   - ctx: Context containing the KV cache variables
+//   - g: Graph for building the computation
+//   - cacheShape: Shape [batchSize, numHeads, maxSeqLen, headDim]
+//   - querySeqLen: Length of the query sequence
+//   - keySeqLen: Length of the key sequence (typically maxSeqLen for cached attention)
+//
+// Returns:
+//   - Boolean mask shaped [batchSize, 1, querySeqLen, keySeqLen] where True = attend, False = mask out
+func createKVCacheAttentionMask(ctx *context.Context, g *Graph, cacheShape shapes.Shape, querySeqLen, keySeqLen int) *Node {
+	_, _, posVar := KVCacheGetVars(ctx, cacheShape)
 
-	keyCache := c.reuseCtx.VariableWithShape("key_cache", shapes.Make(c.dtype, c.batchSize, c.numHeads, c.maxSeqLen, c.headDim)).ValueGraph(g)
-	valueCache := c.reuseCtx.VariableWithShape("value_cache", shapes.Make(c.dtype, c.batchSize, c.numHeads, c.maxSeqLen, c.headDim)).ValueGraph(g)
+	batchSize := cacheShape.Dimensions[0]
+	maxSeqLen := cacheShape.Dimensions[2]
+	dtype := cacheShape.DType
 
-	// Slice to get only filled positions
-	keys = Slice(keyCache, AxisRange(), AxisRange(), AxisRange(0, maxPosition), AxisRange())
-	values = Slice(valueCache, AxisRange(), AxisRange(), AxisRange(0, maxPosition), AxisRange())
-
-	return keys, values
-}
-
-// CreateAttentionMask masks unfilled cache positions: [batch,1,query_len,key_len].
-func (c *KVCache) CreateAttentionMask(g *Graph, querySeqLen, keySeqLen int) *Node {
-	c.Initialize(g)
-
-	currentPosition := c.reuseCtx.VariableWithShape("cache_position", shapes.Make(dtypes.Int32, c.batchSize)).ValueGraph(g)
-	currentPosition = ConvertDType(currentPosition, c.dtype)
+	currentPosition := posVar.ValueGraph(g)
+	currentPosition = ConvertDType(currentPosition, dtype)
 
 	// Create position indices for keys: [0, 1, 2, ..., keySeqLen-1]
 	// Shape: [keySeqLen]
-	keyPositions := Iota(g, shapes.Make(c.dtype, keySeqLen), 0)
+	keyPositions := Iota(g, shapes.Make(dtype, keySeqLen), 0)
+
+	// For rotating cache: if position >= maxSeqLen, all slots are filled
+	// effectivePosition = min(currentPosition, maxSeqLen)
+	maxSeqLenNode := Scalar(g, dtype, maxSeqLen)
+	maxSeqLenNode = BroadcastToShape(maxSeqLenNode, currentPosition.Shape())
+	effectivePosition := Min(currentPosition, maxSeqLenNode)
 
 	// Expand for broadcasting
-	// currentPosition: [batch_size] -> [batch_size, 1, 1, 1]
+	// effectivePosition: [batch_size] -> [batch_size, 1, 1, 1]
 	// keyPositions: [keySeqLen] -> [1, 1, 1, keySeqLen]
-	currentPosition = ExpandDims(ExpandDims(ExpandDims(currentPosition, -1), -1), -1)
+	effectivePosition = ExpandDims(ExpandDims(ExpandDims(effectivePosition, -1), -1), -1)
 	keyPositions = ExpandDims(ExpandDims(ExpandDims(keyPositions, 0), 0), 0)
 
-	// Create mask: True where key position < current position
-	mask := LessThan(keyPositions, currentPosition)
+	// Create mask: True where key position < effectivePosition (i.e., slot is filled)
+	mask := LessThan(keyPositions, effectivePosition)
 
 	// Broadcast to [batch_size, 1, query_seq_len, key_seq_len]
-	maskShape := shapes.Make(dtypes.Bool, c.batchSize, 1, querySeqLen, keySeqLen)
+	maskShape := shapes.Make(dtypes.Bool, batchSize, 1, querySeqLen, keySeqLen)
 	mask = BroadcastToShape(mask, maskShape)
 
 	return mask
