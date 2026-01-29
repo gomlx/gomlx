@@ -127,6 +127,13 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeWhile: true,
 		backends.OpTypeSort:  true,
 
+		// Fused operations:
+		backends.OpTypeSoftmax:          true,
+		backends.OpTypeLayerNorm:        true,
+		backends.OpTypeGelu:             true,
+		backends.OpTypeLinear:           true,
+		backends.OpTypeLinearActivation: true,
+
 		// TODO: not implemented yet:
 		// backends.OpTypePad: true,
 		// backends.OpTypeReverse: true,
@@ -155,14 +162,6 @@ var Capabilities = backends.Capabilities{
 		// backends.OpTypeLessThanTotalOrder: true,
 		// backends.OpTypeNotEqualTotalOrder: true,
 		// backends.OpTypeReal: true,
-	},
-
-	FusedOperations: map[backends.FusedOpType]bool{
-		backends.FusedOpSoftmax:          true,
-		backends.FusedOpLayerNorm:        true,
-		backends.FusedOpGelu:             true,
-		backends.FusedOpLinear:           true,
-		backends.FusedOpLinearActivation: true,
 	},
 
 	DTypes: map[dtypes.DType]bool{

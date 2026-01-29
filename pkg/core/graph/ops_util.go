@@ -3,7 +3,6 @@
 package graph
 
 import (
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -353,7 +352,7 @@ var ReduceAndKeepMasked = MaskedReduceAndKeep
 // If the backend supports fused softmax (single axis), it will use the
 // optimized native implementation instead of decomposing into primitives.
 func Softmax(logits *Node, axes ...int) *Node {
-	g := validateBuildingGraphFromInputs(logits)
+	validateBuildingGraphFromInputs(logits)
 	if !logits.DType().IsFloat() {
 		Panicf("invalid logits dtype (%s), it must be float", logits.DType())
 	}
@@ -361,22 +360,10 @@ func Softmax(logits *Node, axes ...int) *Node {
 		axes = []int{-1}
 	}
 
-	// Try fused softmax for the single-axis case.
-	if len(axes) == 1 && g.backend.Capabilities().FusedOperations[backends.FusedOpSoftmax] {
-		if fusedOps, ok := g.currentFunc.backendFunc.(backends.FusedOps); ok {
-			result, err := fusedOps.Softmax(logits.outputOps[0], axes[0])
-			if err == nil {
-				node := &Node{
-					outputOps:    []backends.Value{result},
-					outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
-					graph:        g,
-					inputs:       &nodeInputsFusedSoftmax{x: logits, axis: axes[0]},
-					inputNodes:   []*Node{logits},
-				}
-				g.registerNode(node)
-				return node
-			}
-			// Fall through to decomposition on error.
+	// Try native softmax for the single-axis case.
+	if len(axes) == 1 {
+		if result, ok := TrySoftmax(logits, axes[0]); ok {
+			return result
 		}
 	}
 

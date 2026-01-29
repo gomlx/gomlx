@@ -171,7 +171,7 @@ func Selu(x *Node) *Node {
 // https://github.com/jax-ml/jax/issues/4428
 func Gelu(x *Node) *Node {
 	// Try fused GELU if backend supports it.
-	if result, ok := TryFusedGelu(x, "exact"); ok {
+	if result, ok := TryGelu(x, "exact"); ok {
 		return result
 	}
 

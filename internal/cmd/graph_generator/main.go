@@ -47,11 +47,16 @@ var (
 		"Sign",
 		"ShiftLeft", "ShiftRightArithmetic", "ShiftRightLogical",
 		"Slice",
-		"Transpose", "Where")
+		"Transpose", "Where",
+
+		// Fused ops with simple signatures (auto-generated wrappers):
+		"Softmax", "Gelu")
 
 	// methodsNotGenerated but for which there is still a NodeType.
+	// These get a NodeType but no auto-generated wrapper (hand-written due to nil-able Value params).
 	methodsNotGenerated = sets.MakeWith(
-		"Constant", "Parameter")
+		"Constant", "Parameter",
+		"LayerNorm", "Linear", "LinearActivation")
 
 	// methodsExcluded from generating and even from having a NodeType.
 	// These are utility methods, not part of building a graph.

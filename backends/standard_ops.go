@@ -7,6 +7,35 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
+// ActivationType specifies the activation function for fused operations.
+type ActivationType int
+
+const (
+	ActivationNone ActivationType = iota
+	ActivationGelu
+	ActivationRelu
+	ActivationSilu
+	ActivationTanh
+)
+
+// String returns the name of the activation type.
+func (a ActivationType) String() string {
+	switch a {
+	case ActivationNone:
+		return "none"
+	case ActivationGelu:
+		return "gelu"
+	case ActivationRelu:
+		return "relu"
+	case ActivationSilu:
+		return "silu"
+	case ActivationTanh:
+		return "tanh"
+	default:
+		return "unknown"
+	}
+}
+
 // StandardOps lists the bulk of the operations that a backends.Builder must support.
 type StandardOps interface {
 
@@ -631,4 +660,24 @@ type StandardOps interface {
 	//
 	// If either condition, onTrue or onFalse is a scalar, it will be broadcasted to the shape of the other operands.
 	Where(condition, onTrue, onFalse Value) (Value, error)
+
+	// Softmax computes softmax along the specified axis.
+	// axis: single axis to compute softmax over (negative indexing supported).
+	Softmax(x Value, axis int) (Value, error)
+
+	// Gelu computes Gaussian Error Linear Unit activation.
+	// mode: "exact" or "tanh_approximation".
+	Gelu(x Value, mode string) (Value, error)
+
+	// LayerNorm applies layer normalization over specified axes.
+	// gamma and beta can be nil if no learned scale/offset.
+	// epsilon: numerical stability constant (typically 1e-5).
+	LayerNorm(x Value, axes []int, epsilon float64, gamma, beta Value) (Value, error)
+
+	// Linear performs fused matmul + bias: y = x @ weight^T + bias.
+	// bias can be nil for no bias addition.
+	Linear(x, weight, bias Value) (Value, error)
+
+	// LinearActivation performs Linear followed by activation in one op.
+	LinearActivation(x, weight, bias Value, activation ActivationType) (Value, error)
 }

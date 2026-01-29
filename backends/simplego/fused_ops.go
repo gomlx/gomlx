@@ -8,9 +8,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Compile-time check that Function implements FusedOps.
-var _ backends.FusedOps = (*Function)(nil)
-
 // Node data types for fused ops.
 
 type nodeFusedSoftmax struct {
@@ -74,7 +71,7 @@ func (f *Function) Softmax(x backends.Value, axis int) (backends.Value, error) {
 
 	// Output shape is the same as input shape.
 	data := &nodeFusedSoftmax{axis: axis}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedSoftmax, xNode.shape.Clone(), []*Node{xNode}, data)
+	node, _ := f.getOrCreateNode(backends.OpTypeSoftmax, xNode.shape.Clone(), []*Node{xNode}, data)
 	return node, nil
 }
 
@@ -107,13 +104,8 @@ func (f *Function) LayerNorm(x backends.Value, axes []int, epsilon float64, gamm
 	}
 
 	data := &nodeFusedLayerNorm{axes: normalizedAxes, epsilon: epsilon}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedLayerNorm, xNode.shape.Clone(), inputs, data)
+	node, _ := f.getOrCreateNode(backends.OpTypeLayerNorm, xNode.shape.Clone(), inputs, data)
 	return node, nil
-}
-
-// Einsum performs Einstein summation.
-func (f *Function) Einsum(equation string, operands ...backends.Value) (backends.Value, error) {
-	return nil, errors.Errorf("Einsum: not yet implemented in simplego backend")
 }
 
 // Gelu computes Gaussian Error Linear Unit activation.
@@ -125,7 +117,7 @@ func (f *Function) Gelu(x backends.Value, mode string) (backends.Value, error) {
 	xNode := inputs[0]
 
 	data := &nodeFusedGelu{mode: mode}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedGelu, xNode.shape.Clone(), []*Node{xNode}, data)
+	node, _ := f.getOrCreateNode(backends.OpTypeGelu, xNode.shape.Clone(), []*Node{xNode}, data)
 	return node, nil
 }
 
@@ -160,7 +152,7 @@ func (f *Function) Linear(x, weight, bias backends.Value) (backends.Value, error
 	outDims[xNode.shape.Rank()-1] = wNode.shape.Dimensions[0]
 	outShape := shapes.Make(xNode.shape.DType, outDims...)
 
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedLinear, outShape, inputs, nil)
+	node, _ := f.getOrCreateNode(backends.OpTypeLinear, outShape, inputs, nil)
 	return node, nil
 }
 
@@ -193,11 +185,6 @@ func (f *Function) LinearActivation(x, weight, bias backends.Value, activation b
 	outShape := shapes.Make(xNode.shape.DType, outDims...)
 
 	data := &nodeFusedLinearActivation{activation: activation}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedLinearActivation, outShape, inputs, data)
+	node, _ := f.getOrCreateNode(backends.OpTypeLinearActivation, outShape, inputs, data)
 	return node, nil
-}
-
-// ScaledDotProductAttention computes: softmax(Q @ K^T / sqrt(d)) @ V.
-func (f *Function) ScaledDotProductAttention(q, k, v, mask backends.Value, scale float64) (backends.Value, error) {
-	return nil, errors.Errorf("ScaledDotProductAttention: not yet implemented in simplego backend")
 }

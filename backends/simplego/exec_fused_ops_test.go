@@ -125,8 +125,7 @@ func TestFusedSoftmax_1D(t *testing.T) {
 	shape := shapes.Make(dtypes.Float32, 4)
 
 	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		fusedFn := f.(backends.FusedOps)
-		return fusedFn.Softmax(param, 0)
+		return f.Softmax(param, 0)
 	})
 
 	got := result.flat.([]float32)
@@ -150,8 +149,7 @@ func TestFusedSoftmax_2D(t *testing.T) {
 	shape := shapes.Make(dtypes.Float32, 2, 3)
 
 	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		fusedFn := f.(backends.FusedOps)
-		return fusedFn.Softmax(param, 1)
+		return f.Softmax(param, 1)
 	})
 
 	got := result.flat.([]float32)
@@ -171,8 +169,7 @@ func TestFusedSoftmax_Axis0(t *testing.T) {
 	shape := shapes.Make(dtypes.Float32, 2, 3)
 
 	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		fusedFn := f.(backends.FusedOps)
-		return fusedFn.Softmax(param, 0)
+		return f.Softmax(param, 0)
 	})
 
 	got := result.flat.([]float32)
@@ -192,8 +189,7 @@ func TestFusedSoftmax_NegativeAxis(t *testing.T) {
 	shape := shapes.Make(dtypes.Float32, 2, 3)
 
 	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		fusedFn := f.(backends.FusedOps)
-		return fusedFn.Softmax(param, -1) // Should be same as axis=1.
+		return f.Softmax(param, -1) // Should be same as axis=1.
 	})
 
 	got := result.flat.([]float32)
@@ -208,8 +204,7 @@ func TestFusedSoftmax_Float64(t *testing.T) {
 	shape := shapes.Make(dtypes.Float64, 3)
 
 	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		fusedFn := f.(backends.FusedOps)
-		return fusedFn.Softmax(param, 0)
+		return f.Softmax(param, 0)
 	})
 
 	got := result.flat.([]float64)
@@ -228,8 +223,7 @@ func TestFusedGelu(t *testing.T) {
 	shape := shapes.Make(dtypes.Float32, 7)
 
 	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		fusedFn := f.(backends.FusedOps)
-		return fusedFn.Gelu(param, "exact")
+		return f.Gelu(param, "exact")
 	})
 
 	got := result.flat.([]float32)
@@ -249,8 +243,7 @@ func TestFusedGelu_Float64(t *testing.T) {
 	shape := shapes.Make(dtypes.Float64, 3)
 
 	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		fusedFn := f.(backends.FusedOps)
-		return fusedFn.Gelu(param, "exact")
+		return f.Gelu(param, "exact")
 	})
 
 	got := result.flat.([]float64)
@@ -268,8 +261,7 @@ func TestFusedLayerNorm_Simple(t *testing.T) {
 	epsilon := 1e-5
 
 	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		fusedFn := f.(backends.FusedOps)
-		return fusedFn.LayerNorm(param, []int{1}, epsilon, nil, nil)
+		return f.LayerNorm(param, []int{1}, epsilon, nil, nil)
 	})
 
 	got := result.flat.([]float32)
@@ -307,8 +299,7 @@ func TestFusedLayerNorm_WithGammaBeta(t *testing.T) {
 		[]shapes.Shape{shape, gammaShape, betaShape},
 		[]interface{}{input, gamma, beta},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			fusedFn := f.(backends.FusedOps)
-			return fusedFn.LayerNorm(params[0], []int{1}, epsilon, params[1], params[2])
+			return f.LayerNorm(params[0], []int{1}, epsilon, params[1], params[2])
 		},
 	)
 
@@ -350,8 +341,7 @@ func TestFusedLinear(t *testing.T) {
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]interface{}{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			fusedFn := f.(backends.FusedOps)
-			return fusedFn.Linear(params[0], params[1], params[2])
+			return f.Linear(params[0], params[1], params[2])
 		},
 	)
 
@@ -383,8 +373,7 @@ func TestFusedLinear_NoBias(t *testing.T) {
 		[]shapes.Shape{xShape, wShape},
 		[]interface{}{x, w},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			fusedFn := f.(backends.FusedOps)
-			return fusedFn.Linear(params[0], params[1], nil)
+			return f.Linear(params[0], params[1], nil)
 		},
 	)
 
@@ -416,8 +405,7 @@ func TestFusedLinearActivation_Relu(t *testing.T) {
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]interface{}{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			fusedFn := f.(backends.FusedOps)
-			return fusedFn.LinearActivation(params[0], params[1], params[2], backends.ActivationRelu)
+			return f.LinearActivation(params[0], params[1], params[2], backends.ActivationRelu)
 		},
 	)
 
@@ -441,8 +429,7 @@ func TestFusedLinearActivation_Gelu(t *testing.T) {
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]interface{}{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			fusedFn := f.(backends.FusedOps)
-			return fusedFn.LinearActivation(params[0], params[1], params[2], backends.ActivationGelu)
+			return f.LinearActivation(params[0], params[1], params[2], backends.ActivationGelu)
 		},
 	)
 
@@ -467,8 +454,7 @@ func TestFusedLinearActivation_Silu(t *testing.T) {
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]interface{}{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			fusedFn := f.(backends.FusedOps)
-			return fusedFn.LinearActivation(params[0], params[1], params[2], backends.ActivationSilu)
+			return f.LinearActivation(params[0], params[1], params[2], backends.ActivationSilu)
 		},
 	)
 
@@ -491,8 +477,7 @@ func TestFusedLinearActivation_Tanh(t *testing.T) {
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]interface{}{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			fusedFn := f.(backends.FusedOps)
-			return fusedFn.LinearActivation(params[0], params[1], params[2], backends.ActivationTanh)
+			return f.LinearActivation(params[0], params[1], params[2], backends.ActivationTanh)
 		},
 	)
 
@@ -507,8 +492,7 @@ func TestFusedSoftmax_LargeValues(t *testing.T) {
 	shape := shapes.Make(dtypes.Float32, 3)
 
 	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		fusedFn := f.(backends.FusedOps)
-		return fusedFn.Softmax(param, 0)
+		return f.Softmax(param, 0)
 	})
 
 	got := result.flat.([]float32)
@@ -534,8 +518,7 @@ func TestFusedSoftmax_3D(t *testing.T) {
 	shape := shapes.Make(dtypes.Float32, 2, 2, 3)
 
 	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		fusedFn := f.(backends.FusedOps)
-		return fusedFn.Softmax(param, 2)
+		return f.Softmax(param, 2)
 	})
 
 	got := result.flat.([]float32)

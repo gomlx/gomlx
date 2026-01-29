@@ -342,6 +342,12 @@ func (f Function) Gather(operand backends.Value, startIndices backends.Value, in
 	return nil, f.baseErrFn(backends.OpTypeGather)
 }
 
+// Gelu computes Gaussian Error Linear Unit activation.
+// mode: "exact" or "tanh_approximation".
+func (f Function) Gelu(x backends.Value, mode string) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeGelu)
+}
+
 // GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 func (f Function) GreaterOrEqual(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeGreaterOrEqual)
@@ -390,6 +396,13 @@ func (f Function) IsNaN(x backends.Value) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeIsNaN)
 }
 
+// LayerNorm applies layer normalization over specified axes.
+// gamma and beta can be nil if no learned scale/offset.
+// epsilon: numerical stability constant (typically 1e-5).
+func (f Function) LayerNorm(x backends.Value, axes []int, epsilon float64, gamma backends.Value, beta backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeLayerNorm)
+}
+
 // LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 func (f Function) LessOrEqual(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeLessOrEqual)
@@ -412,6 +425,17 @@ func (f Function) LessThan(lhs backends.Value, rhs backends.Value) (backends.Val
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 func (f Function) LessThanTotalOrder(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeLessThanTotalOrder)
+}
+
+// Linear performs fused matmul + bias: y = x @ weight^T + bias.
+// bias can be nil for no bias addition.
+func (f Function) Linear(x backends.Value, weight backends.Value, bias backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeLinear)
+}
+
+// LinearActivation performs Linear followed by activation in one op.
+func (f Function) LinearActivation(x backends.Value, weight backends.Value, bias backends.Value, activation backends.ActivationType) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeLinearActivation)
 }
 
 // Log returns the Op that represents the output of the corresponding operation.
@@ -685,6 +709,12 @@ func (f Function) Sin(x backends.Value) (backends.Value, error) {
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={5}, strides={2}) -> {2, 4}
 func (f Function) Slice(x backends.Value, starts []int, limits []int, strides []int) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeSlice)
+}
+
+// Softmax computes softmax along the specified axis.
+// axis: single axis to compute softmax over (negative indexing supported).
+func (f Function) Softmax(x backends.Value, axis int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeSoftmax)
 }
 
 // Sqrt returns the Op that represents the output of the corresponding operation.

@@ -55,6 +55,7 @@ const (
 	NodeTypeFFT
 	NodeTypeFloor
 	NodeTypeGather
+	NodeTypeGelu
 	NodeTypeGreaterOrEqual
 	NodeTypeGreaterOrEqualTotalOrder
 	NodeTypeGreaterThan
@@ -64,10 +65,13 @@ const (
 	NodeTypeIota
 	NodeTypeIsFinite
 	NodeTypeIsNaN
+	NodeTypeLayerNorm
 	NodeTypeLessOrEqual
 	NodeTypeLessOrEqualTotalOrder
 	NodeTypeLessThan
 	NodeTypeLessThanTotalOrder
+	NodeTypeLinear
+	NodeTypeLinearActivation
 	NodeTypeLog
 	NodeTypeLog1p
 	NodeTypeLogicalAnd
@@ -113,6 +117,7 @@ const (
 	NodeTypeSign
 	NodeTypeSin
 	NodeTypeSlice
+	NodeTypeSoftmax
 	NodeTypeSqrt
 	NodeTypeSub
 	NodeTypeTanh
@@ -1838,6 +1843,50 @@ func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offse
 		indicesAreSorted:   indicesAreSorted,
 	}
 	result, err := g.currentFunc.backendFunc.Gather(operand.outputOps[0], startIndices.outputOps[0], inputs.indexVectorAxis, inputs.offsetOutputAxes, inputs.collapsedSliceAxes, inputs.startIndexMap, inputs.sliceSizes, inputs.indicesAreSorted)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsGelu holds the inputs used for the call to backends.Gelu.
+type nodeInputsGelu struct {
+	x    *Node
+	mode string
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsGelu) Type() NodeType {
+	return NodeTypeGelu
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsGelu) String() string {
+	return fmt.Sprintf("%s(x=[#%d], mode=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.mode,
+	)
+}
+
+// backendGelu is a Graph wrapper for the backend.Builder.Gelu method.
+func backendGelu(x *Node, mode string) (
+	node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsGelu{
+		x:    x,
+		mode: mode,
+	}
+	result, err := g.currentFunc.backendFunc.Gelu(x.outputOps[0], inputs.mode)
 	if err != nil {
 		panic(err)
 	}
@@ -4438,6 +4487,50 @@ func backendSlice(x *Node, starts []int, limits []int, strides []int) (
 		strides: slices.Clone(strides),
 	}
 	result, err := g.currentFunc.backendFunc.Slice(x.outputOps[0], inputs.starts, inputs.limits, inputs.strides)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsSoftmax holds the inputs used for the call to backends.Softmax.
+type nodeInputsSoftmax struct {
+	x    *Node
+	axis int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsSoftmax) Type() NodeType {
+	return NodeTypeSoftmax
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsSoftmax) String() string {
+	return fmt.Sprintf("%s(x=[#%d], axis=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.axis,
+	)
+}
+
+// backendSoftmax is a Graph wrapper for the backend.Builder.Softmax method.
+func backendSoftmax(x *Node, axis int) (
+	node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsSoftmax{
+		x:    x,
+		axis: axis,
+	}
+	result, err := g.currentFunc.backendFunc.Softmax(x.outputOps[0], inputs.axis)
 	if err != nil {
 		panic(err)
 	}

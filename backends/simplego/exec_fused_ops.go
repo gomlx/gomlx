@@ -12,11 +12,11 @@ import (
 )
 
 func init() {
-	setNodeExecutor(backends.OpTypeFusedSoftmax, priorityTyped, execFusedSoftmax)
-	setNodeExecutor(backends.OpTypeFusedGelu, priorityTyped, execFusedGelu)
-	setNodeExecutor(backends.OpTypeFusedLayerNorm, priorityTyped, execFusedLayerNorm)
-	setNodeExecutor(backends.OpTypeFusedLinear, priorityTyped, execFusedLinear)
-	setNodeExecutor(backends.OpTypeFusedLinearActivation, priorityTyped, execFusedLinearActivation)
+	setNodeExecutor(backends.OpTypeSoftmax, priorityTyped, execFusedSoftmax)
+	setNodeExecutor(backends.OpTypeGelu, priorityTyped, execFusedGelu)
+	setNodeExecutor(backends.OpTypeLayerNorm, priorityTyped, execFusedLayerNorm)
+	setNodeExecutor(backends.OpTypeLinear, priorityTyped, execFusedLinear)
+	setNodeExecutor(backends.OpTypeLinearActivation, priorityTyped, execFusedLinearActivation)
 }
 
 // computeAxisStrides returns the outer size, axis size, and inner size for iterating
