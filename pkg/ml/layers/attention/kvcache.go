@@ -26,6 +26,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 )
 
 // KVCacheScopeName is the scope name used for KV cache variables in the context.
@@ -87,11 +88,11 @@ func KVCacheGetVars(ctx *context.Context, cacheShape shapes.Shape) (keyVar, valu
 	if cacheShape.Rank() != 4 {
 		Panicf("KV cache shape must have rank 4, got %s", cacheShape)
 	}
-	ctx = ctx.In(KVCacheScopeName)
 
 	batchSize := cacheShape.Dimensions[0]
 	posShape := shapes.Make(dtypes.Int32, batchSize)
 
+	ctx = ctx.In(KVCacheScopeName).WithInitializer(initializers.Zero)
 	keyVar = ctx.VariableWithShape(kvCacheKeyName, cacheShape)
 	valueVar = ctx.VariableWithShape(kvCacheValueName, cacheShape)
 	positionVar = ctx.VariableWithShape(kvCachePositionName, posShape)
