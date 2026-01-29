@@ -28,13 +28,13 @@ func TestKVCacheFunctions(t *testing.T) {
 			g := input.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
-			_, _, pos := getKVCache(cacheCtx, g, cacheShape)
-			return pos
+			keys, _ := getKVCache(cacheCtx, g, cacheShape)
+			return keys
 		})
 
 		input := [][]float32{{1.0}}
 		result := exec.MustExec(input)[0]
-		assert.Equal(t, []int{batchSize}, result.Shape().Dimensions)
+		assert.Equal(t, []int{batchSize, numHeads, maxSeqLen, headDim}, result.Shape().Dimensions)
 	})
 
 	t.Run("SingleUpdateWritesToCache", func(t *testing.T) {
@@ -52,7 +52,7 @@ func TestKVCacheFunctions(t *testing.T) {
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
 			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
-			cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+			cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
 			return cachedKeys
 		})
 
@@ -88,7 +88,7 @@ func TestKVCacheFunctions(t *testing.T) {
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
 			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
-			cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+			cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
 			return cachedKeys
 		})
 
@@ -104,7 +104,7 @@ func TestKVCacheFunctions(t *testing.T) {
 			g := keys.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
-			cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+			cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
 			return cachedKeys
 		})
 
@@ -133,7 +133,7 @@ func TestKVCacheFunctions(t *testing.T) {
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
 			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
-			cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+			cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
 			return cachedKeys
 		})
 
@@ -171,7 +171,7 @@ func TestKVCacheFunctions(t *testing.T) {
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
 			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
-			cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+			cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
 			return cachedKeys
 		})
 
@@ -204,7 +204,7 @@ func TestKVCacheFunctions(t *testing.T) {
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
 			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
-			cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+			cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
 			return cachedKeys
 		})
 
@@ -230,7 +230,7 @@ func TestKVCacheFunctions(t *testing.T) {
 		getExec := context.MustNewExec(backend, ctx.Reuse(), func(testCtx *context.Context, dummy *Node) *Node {
 			g := dummy.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
-			cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+			cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
 			return cachedKeys
 		})
 
@@ -255,7 +255,7 @@ func TestKVCacheFunctions(t *testing.T) {
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
 			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
-			mask := createKVCacheAttentionMask(cacheCtx, g, cacheShape, 1, 1)
+			mask := createKVCacheAttentionMask(g, cacheShape, position, 1, 1)
 			return mask
 		})
 
@@ -289,7 +289,7 @@ func TestKVCachePersistence(t *testing.T) {
 		values := Mul(keys, Const(g, float32(2.0))) // values = 2 * keys
 
 		KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
-		cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+		cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
 		return cachedKeys
 	})
 
@@ -308,7 +308,7 @@ func TestKVCachePersistence(t *testing.T) {
 		values := Mul(keys, Const(g, float32(2.0)))
 
 		KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
-		cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+		cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
 		return cachedKeys
 	})
 
@@ -321,44 +321,80 @@ func TestKVCachePersistence(t *testing.T) {
 }
 
 // TestKVCacheCircular tests the circular/rotating cache functionality.
-// When position exceeds maxSeqLen, the cache should wrap around.
 func TestKVCacheCircular(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	ctx := context.New()
 
-	batchSize := 1
-	numHeads := 1
-	maxSeqLen := 4 // Small cache to test wrapping
-	headDim := 2
-	cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
+	t.Run("SingleTokenWrapAround", func(t *testing.T) {
+		ctx := context.New()
+		batchSize := 1
+		numHeads := 1
+		maxSeqLen := 4 // Small cache to test wrapping
+		headDim := 2
+		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-	exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, position, keys, values *Node) *Node {
-		g := position.Graph()
-		cacheCtx := testCtx.In("cache").Reuse().Checked(false)
+		exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, position, keys, values *Node) *Node {
+			g := position.Graph()
+			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
-		KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
-		cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+			cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
 
-		return cachedKeys
+			return cachedKeys
+		})
+
+		// Helper to create keys with identifiable values
+		makeKeys := func(value float32) [][][][]float32 {
+			return [][][][]float32{{{{value, value}}}}
+		}
+
+		// Fill cache with positions 0-3
+		exec.MustExec(int32(0), makeKeys(1.0), makeKeys(1.0))
+		exec.MustExec(int32(1), makeKeys(2.0), makeKeys(2.0))
+		exec.MustExec(int32(2), makeKeys(3.0), makeKeys(3.0))
+		exec.MustExec(int32(3), makeKeys(4.0), makeKeys(4.0))
+
+		// Position 4 should wrap to slot 0
+		results := exec.MustExec(int32(4), makeKeys(5.0), makeKeys(5.0))
+
+		cachedKeys := results[0].Value().([][][][]float32)
+		assert.InDelta(t, 5.0, cachedKeys[0][0][0][0], 0.01, "Slot 0 should have 5.0 (wrapped)")
+		assert.InDelta(t, 2.0, cachedKeys[0][0][1][0], 0.01, "Slot 1 should still have 2.0")
+		assert.InDelta(t, 3.0, cachedKeys[0][0][2][0], 0.01, "Slot 2 should still have 3.0")
+		assert.InDelta(t, 4.0, cachedKeys[0][0][3][0], 0.01, "Slot 3 should still have 4.0")
 	})
 
-	// Helper to create keys with identifiable values
-	makeKeys := func(value float32) [][][][]float32 {
-		return [][][][]float32{{{{value, value}}}}
-	}
+	t.Run("MultiTokenWrapAround", func(t *testing.T) {
+		ctx := context.New()
+		batchSize := 1
+		numHeads := 1
+		maxSeqLen := 4 // Small cache to test wrapping
+		headDim := 2
+		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-	// Fill cache with positions 0-3
-	exec.MustExec(int32(0), makeKeys(1.0), makeKeys(1.0))
-	exec.MustExec(int32(1), makeKeys(2.0), makeKeys(2.0))
-	exec.MustExec(int32(2), makeKeys(3.0), makeKeys(3.0))
-	exec.MustExec(int32(3), makeKeys(4.0), makeKeys(4.0))
+		exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, position, keys, values *Node) *Node {
+			g := position.Graph()
+			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
-	// Position 4 should wrap to slot 0
-	results := exec.MustExec(int32(4), makeKeys(5.0), makeKeys(5.0))
+			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+			cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
 
-	cachedKeys := results[0].Value().([][][][]float32)
-	assert.InDelta(t, 5.0, cachedKeys[0][0][0][0], 0.01, "Slot 0 should have 5.0 (wrapped)")
-	assert.InDelta(t, 2.0, cachedKeys[0][0][1][0], 0.01, "Slot 1 should still have 2.0")
-	assert.InDelta(t, 3.0, cachedKeys[0][0][2][0], 0.01, "Slot 2 should still have 3.0")
-	assert.InDelta(t, 4.0, cachedKeys[0][0][3][0], 0.01, "Slot 3 should still have 4.0")
+			return cachedKeys
+		})
+
+		// Create 2-token update with identifiable values: token0=10.0, token1=20.0
+		// Shape: [batch=1, heads=1, seq=2, dim=2]
+		twoTokenKeys := [][][][]float32{{{{10.0, 10.0}, {20.0, 20.0}}}}
+		twoTokenValues := [][][][]float32{{{{10.0, 10.0}, {20.0, 20.0}}}}
+
+		// Update at position 3 with 2 tokens:
+		//   - Token 0 (10.0) should go to slot 3
+		//   - Token 1 (20.0) should wrap to slot 0
+		results := exec.MustExec(int32(3), twoTokenKeys, twoTokenValues)
+
+		cachedKeys := results[0].Value().([][][][]float32)
+		assert.InDelta(t, 20.0, cachedKeys[0][0][0][0], 0.01, "Slot 0 should have 20.0 (second token, wrapped)")
+		assert.InDelta(t, 0.0, cachedKeys[0][0][1][0], 0.01, "Slot 1 should be zero (untouched)")
+		assert.InDelta(t, 0.0, cachedKeys[0][0][2][0], 0.01, "Slot 2 should be zero (untouched)")
+		assert.InDelta(t, 10.0, cachedKeys[0][0][3][0], 0.01, "Slot 3 should have 10.0 (first token)")
+	})
 }

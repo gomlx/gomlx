@@ -391,11 +391,10 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 		// Pass b.position so the cache knows where to write the new keys/values
 		cacheCtx := b.ctx.In("kv_cache").Reuse().Checked(false)
 		KVCacheUpdate(cacheCtx, b.g, b.kvCacheShape, b.position, keyForCache, valueForCache)
-		fullKey, fullValue, cachePos := getKVCache(cacheCtx, b.g, b.kvCacheShape)
+		fullKey, fullValue := getKVCache(cacheCtx, b.g, b.kvCacheShape)
 
-		// Store actual cache length for use in causal mask
-		// cachePos is [batch], extract first element as scalar
-		b.actualCacheLen = Squeeze(Slice(cachePos, AxisRange(0, 1)), 0)
+		// b.position holds the current position in the sequence
+		b.actualCacheLen = b.position
 
 		// Transpose back to attention format: (0,2,1,3) -> (0,1,2,3)
 		// Result: [batch, maxSeqLen, numHeads, headDim]
@@ -642,8 +641,7 @@ func (b *MultiHeadAttentionBuilder) buildCausalMask() (mask *Node) {
 
 	// Combine with cache validity mask if using cache
 	if b.kvCacheShape.Ok() {
-		cacheCtx := b.ctx.In("kv_cache").Reuse().Checked(false)
-		cacheValidMask := createKVCacheAttentionMask(cacheCtx, b.g, b.kvCacheShape, queryLen, keyLen)
+		cacheValidMask := createKVCacheAttentionMask(b.g, b.kvCacheShape, b.position, queryLen, keyLen)
 		// cacheValidMask shape: [batch, 1, queryLen, keyLen]
 		// Remove the '1' dimension at position 1 and add numHeads dimension at position 2
 		cacheValidMask = Squeeze(cacheValidMask, 1)    // [batch, queryLen, keyLen]
