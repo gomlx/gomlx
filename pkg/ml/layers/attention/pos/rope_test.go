@@ -296,3 +296,51 @@ func isNaN(f float32) bool {
 func isInf(f float32) bool {
 	return f > 1e38 || f < -1e38
 }
+
+// TestSequentialPositions tests the SequentialPositions helper function.
+func TestSequentialPositions(t *testing.T) {
+	t.Run("ScalarStartPos", func(t *testing.T) {
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, startPos *Node) *Node {
+			return SequentialPositions(startPos.Graph(), startPos, 4)
+		})
+
+		output := exec.MustExec(int32(5))[0]
+		assert.Equal(t, []int{4}, output.Shape().Dimensions)
+		assert.Equal(t, []int32{5, 6, 7, 8}, output.Value().([]int32))
+	})
+
+	t.Run("BatchedStartPos", func(t *testing.T) {
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, startPos *Node) *Node {
+			return SequentialPositions(startPos.Graph(), startPos, 4)
+		})
+
+		// Each batch element at a different position (multi-client serving scenario)
+		output := exec.MustExec([]int32{5, 10, 100})[0]
+		assert.Equal(t, []int{3, 4}, output.Shape().Dimensions)
+
+		result := output.Value().([][]int32)
+		assert.Equal(t, []int32{5, 6, 7, 8}, result[0])
+		assert.Equal(t, []int32{10, 11, 12, 13}, result[1])
+		assert.Equal(t, []int32{100, 101, 102, 103}, result[2])
+	})
+
+	t.Run("SingleElementBatchTreatedAsScalar", func(t *testing.T) {
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, startPos *Node) *Node {
+			return SequentialPositions(startPos.Graph(), startPos, 3)
+		})
+
+		// Single element batch should be treated as scalar (backward compatible)
+		output := exec.MustExec([]int32{7})[0]
+		assert.Equal(t, []int{3}, output.Shape().Dimensions)
+		assert.Equal(t, []int32{7, 8, 9}, output.Value().([]int32))
+	})
+}
