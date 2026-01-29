@@ -139,6 +139,18 @@ const (
 	// This is an internal optimization used by the simplego backend.
 	OpTypeBlockForDotGeneral
 
+	// Fused operations: high-level ops that backends may implement natively.
+	// These correspond to FusedOpType values and are used internally for
+	// node representation and executor dispatch.
+
+	OpTypeFusedSoftmax
+	OpTypeFusedLayerNorm
+	OpTypeFusedEinsum
+	OpTypeFusedGelu
+	OpTypeFusedLinear
+	OpTypeFusedLinearActivation
+	OpTypeFusedScaledDotProductAttention
+
 	// OpTypeLast should always be kept the last, it is used as a counter/marker for OpType.
 	OpTypeLast
 )

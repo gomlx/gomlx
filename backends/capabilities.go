@@ -14,6 +14,12 @@ type Capabilities struct {
 	// If not listed, it's assumed to be false, hence not supported.
 	Operations map[OpType]bool
 
+	// FusedOperations lists supported high-level fused operations.
+	// These are optional — if not supported, GoMLX decomposes them into primitives.
+	// If a backend declares support for a fused op here, its Function should
+	// implement the FusedOps interface.
+	FusedOperations map[FusedOpType]bool
+
 	// Functions indicates whether the backend supports functions (top-level functions or closures).
 	// Without functions, it's not possible to support Call() op or any other
 	// op that takes as input a closure (While, If, etc.)
@@ -38,6 +44,10 @@ func (c Capabilities) Clone() Capabilities {
 	c2 = c
 	c2.Operations = make(map[OpType]bool, len(c.Operations))
 	maps.Copy(c2.Operations, c.Operations)
+	if c.FusedOperations != nil {
+		c2.FusedOperations = make(map[FusedOpType]bool, len(c.FusedOperations))
+		maps.Copy(c2.FusedOperations, c.FusedOperations)
+	}
 	c2.DTypes = make(map[dtypes.DType]bool, len(c.DTypes))
 	maps.Copy(c2.DTypes, c.DTypes)
 	return c2

@@ -157,6 +157,14 @@ var Capabilities = backends.Capabilities{
 		// backends.OpTypeReal: true,
 	},
 
+	FusedOperations: map[backends.FusedOpType]bool{
+		backends.FusedOpSoftmax:          true,
+		backends.FusedOpLayerNorm:        true,
+		backends.FusedOpGelu:             true,
+		backends.FusedOpLinear:           true,
+		backends.FusedOpLinearActivation: true,
+	},
+
 	DTypes: map[dtypes.DType]bool{
 		dtypes.Bool:     true,
 		dtypes.Int8:     true,
