@@ -127,14 +127,14 @@ func KVCacheUpdate(ctx *context.Context, g *Graph, cacheShape shapes.Shape, star
 	valueCache := valueVar.ValueGraph(g)
 
 	// Convert startPosition to int32 scalar
-	positionInt32 := ConvertDType(startPosition, dtypes.Int32)
-	positionInt32 = Reshape(positionInt32) // Ensure scalar shape
+	position := ConvertDType(startPosition, dtypes.Int32)
+	position = Reshape(position) // Ensure scalar shape
 
 	// Get max cache size
 	maxSeqLen := cacheShape.Dimensions[2]
 
 	// Apply modulo for circular cache: write position = startPosition % maxSeqLen
-	cacheWritePos := ModScalar(positionInt32, maxSeqLen)
+	cacheWritePos := ModScalar(position, maxSeqLen)
 
 	// Update the entire subsequence in one slice operation.
 	// newKeysSlice/newValuesSlice have shape [batchSize, numHeads, updateSeqLen, headDim]
