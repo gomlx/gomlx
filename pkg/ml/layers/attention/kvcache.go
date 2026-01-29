@@ -17,6 +17,9 @@
 package attention
 
 import (
+	"fmt"
+	"strings"
+
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
@@ -28,31 +31,43 @@ import (
 // KVCacheScopeName is the scope name used for KV cache variables in the context.
 const KVCacheScopeName = "kv_cache"
 
-// KVCacheReset clears the KV cache position for a new generation.
-// Call this outside of graph execution before starting a new prompt.
-// The cache position is reset to 0; old cached values will be overwritten
-// when new keys/values are written starting at position 0.
+// KV cache variable names
+const (
+	kvCacheKeyName      = "key"
+	kvCacheValueName    = "value"
+	kvCachePositionName = "position"
+)
+
+// KVCacheReset clears all KV caches under the given context scope.
+// Call this outside of graph execution before starting a new generation.
+// This resets the key cache, value cache, and position for all attention layers
+// under the provided context.
 //
 // Parameters:
-//   - ctx: Context containing the KV cache variables
-//   - cacheShape: Shape [batchSize, numHeads, maxSeqLen, headDim] from builder.KVCacheShape()
+//   - ctx: Context scope under which to find and reset KV cache variables.
+//     Pass the root context to reset all caches in the model, or a
+//     layer-specific context to reset only that layer's cache.
 //
 // Example:
 //
-//	// Before generating a new response, reset each layer's cache:
-//	for _, layerCtx := range layerContexts {
-//	    attention.KVCacheReset(layerCtx, builder.KVCacheShape())
-//	}
-func KVCacheReset(ctx *context.Context, cacheShape shapes.Shape) {
-	if cacheShape.Rank() != 4 {
-		Panicf("KV cache shape must have rank 4, got %s", cacheShape)
-	}
-	_, _, posVar := KVCacheGetVars(ctx, cacheShape)
+//	// Reset all KV caches in the model before generating a new response:
+//	attention.KVCacheReset(ctx)
+//
+//	// Or reset only a specific layer's cache:
+//	attention.KVCacheReset(layerCtx)
+func KVCacheReset(ctx *context.Context) {
+	keySuffix := fmt.Sprintf("%s%s%s%s", context.ScopeSeparator, KVCacheScopeName, context.ScopeSeparator, kvCacheKeyName)
+	valueSuffix := fmt.Sprintf("%s%s%s%s", context.ScopeSeparator, KVCacheScopeName, context.ScopeSeparator, kvCacheValueName)
+	positionSuffix := fmt.Sprintf("%s%s%s%s", context.ScopeSeparator, KVCacheScopeName, context.ScopeSeparator, kvCachePositionName)
 
-	batchSize := cacheShape.Dimensions[0]
-	zeroPos := tensors.FromScalarAndDimensions(int32(0), batchSize)
-	if posVar.HasValue() {
-		posVar.SetValue(zeroPos)
+	for v := range ctx.IterVariablesInScope() {
+		scopeAndName := v.ScopeAndName()
+		if strings.HasSuffix(scopeAndName, keySuffix) ||
+			strings.HasSuffix(scopeAndName, valueSuffix) ||
+			strings.HasSuffix(scopeAndName, positionSuffix) {
+			// Reset to zero - tensors.FromShape creates a zero-initialized tensor
+			v.SetValue(tensors.FromShape(v.Shape()))
+		}
 	}
 }
 
@@ -77,9 +92,9 @@ func KVCacheGetVars(ctx *context.Context, cacheShape shapes.Shape) (keyVar, valu
 	batchSize := cacheShape.Dimensions[0]
 	posShape := shapes.Make(dtypes.Int32, batchSize)
 
-	keyVar = ctx.VariableWithShape("key", cacheShape)
-	valueVar = ctx.VariableWithShape("value", cacheShape)
-	positionVar = ctx.VariableWithShape("position", posShape)
+	keyVar = ctx.VariableWithShape(kvCacheKeyName, cacheShape)
+	valueVar = ctx.VariableWithShape(kvCacheValueName, cacheShape)
+	positionVar = ctx.VariableWithShape(kvCachePositionName, posShape)
 	return
 }
 

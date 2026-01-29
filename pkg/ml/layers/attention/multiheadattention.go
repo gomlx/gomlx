@@ -308,9 +308,8 @@ func (b *MultiHeadAttentionBuilder) Dropout(rate float64) *MultiHeadAttentionBui
 //	// 1. First call with full prompt (e.g., 10 tokens), position=0
 //	// 2. Each subsequent call with 1 new token, position=10, 11, 12, ...
 //
-//	// Before generating a new response, reset the cache:
-//	// Use builder.KVCacheShape() to get the cache shape for reset
-//	attention.KVCacheReset(ctx, builder.KVCacheShape())
+//	// Before generating a new response, reset all caches in the model:
+//	attention.KVCacheReset(ctx)
 //
 // The cache supports circular/rotating mode: when position exceeds maxSeqLen,
 // new entries wrap around and overwrite the oldest entries. This allows efficient
@@ -329,7 +328,7 @@ func (b *MultiHeadAttentionBuilder) WithKVCache(maxSeqLen int, position *Node) *
 }
 
 // KVCacheShape returns the shape of the KV cache configured for this attention layer.
-// This can be used with KVCacheReset to reset the cache before generating a new response.
+// Shape is [batchSize, numHeads, maxSeqLen, headDim].
 // Returns an invalid shape if WithKVCache was not called.
 func (b *MultiHeadAttentionBuilder) KVCacheShape() shapes.Shape {
 	return b.kvCacheShape

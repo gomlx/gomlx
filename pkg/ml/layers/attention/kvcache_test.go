@@ -208,7 +208,7 @@ func TestKVCacheFunctions(t *testing.T) {
 
 		// Reset cache outside of graph execution
 		cacheCtx := ctx.In("cache").Reuse().Checked(false)
-		KVCacheReset(cacheCtx, cacheShape)
+		KVCacheReset(cacheCtx)
 
 		// Verify position is now 0 by reading cache
 		getExec := context.MustNewExec(backend, ctx.Reuse(), func(testCtx *context.Context, dummy *Node) *Node {
