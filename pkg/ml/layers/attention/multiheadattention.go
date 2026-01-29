@@ -662,14 +662,14 @@ func (b *MultiHeadAttentionBuilder) buildCausalMask() (mask *Node) {
 //
 // Example usage for training:
 //
-//	output := layers.SelfAttention(ctx, x, numHeads, headDim).
+//	output := attention.SelfAttention(ctx, x, numHeads, headDim).
 //	    UseCausalMask().
 //	    Dropout(0.1).
 //	    Done()
 //
 // Example usage for generation with KV cache:
 //
-//	output := layers.SelfAttention(ctx, x, numHeads, headDim).
+//	output := attention.SelfAttention(ctx, x, numHeads, headDim).
 //	    WithKVCache(cache, position).
 //	    WithRoPE(10000.0).
 //	    Done()
