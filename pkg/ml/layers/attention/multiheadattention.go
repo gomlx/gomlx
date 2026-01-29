@@ -390,7 +390,7 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 		// KV cache variables are stored in the context under "kv_cache" scope
 		// Pass b.position so the cache knows where to write the new keys/values
 		cacheCtx := b.ctx.In("kv_cache").Reuse().Checked(false)
-		_ = KVCacheUpdate(cacheCtx, b.g, b.kvCacheShape, b.position, keyForCache, valueForCache)
+		KVCacheUpdate(cacheCtx, b.g, b.kvCacheShape, b.position, keyForCache, valueForCache)
 		fullKey, fullValue, cachePos := getKVCache(cacheCtx, b.g, b.kvCacheShape)
 
 		// Store actual cache length for use in causal mask

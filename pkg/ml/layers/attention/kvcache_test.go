@@ -37,7 +37,7 @@ func TestKVCacheFunctions(t *testing.T) {
 		assert.Equal(t, []int{batchSize}, result.Shape().Dimensions)
 	})
 
-	t.Run("SingleUpdateIncrementsPosition", func(t *testing.T) {
+	t.Run("SingleUpdateWritesToCache", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 
@@ -51,7 +51,9 @@ func TestKVCacheFunctions(t *testing.T) {
 			g := keys.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
-			return KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+			cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+			return cachedKeys
 		})
 
 		keys := [][][][]float32{{
@@ -64,11 +66,13 @@ func TestKVCacheFunctions(t *testing.T) {
 		}}
 
 		result := exec.MustExec(int32(0), keys, values)[0]
-		position := result.Value().(int32)
-		assert.Equal(t, int32(1), position)
+		// Verify the keys were written at position 0
+		cachedValues := result.Value().([][][][]float32)
+		assert.InDelta(t, 1.0, cachedValues[0][0][0][0], 0.01) // batch 0, head 0, pos 0, dim 0
+		assert.InDelta(t, 5.0, cachedValues[0][1][0][0], 0.01) // batch 0, head 1, pos 0, dim 0
 	})
 
-	t.Run("MultipleUpdatesWithExplicitPosition", func(t *testing.T) {
+	t.Run("MultipleUpdatesAtDifferentPositions", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 
@@ -83,31 +87,38 @@ func TestKVCacheFunctions(t *testing.T) {
 			g := keys.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
-			return KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+			cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+			return cachedKeys
 		})
 
 		keys1 := [][][][]float32{{{{1.0, 2.0, 3.0, 4.0}}, {{5.0, 6.0, 7.0, 8.0}}}}
 		values1 := [][][][]float32{{{{9.0, 10.0, 11.0, 12.0}}, {{13.0, 14.0, 15.0, 16.0}}}}
 		result1 := exec1.MustExec(int32(0), keys1, values1)[0]
-		pos1 := result1.Value().(int32)
-		assert.Equal(t, int32(1), pos1)
+		cached1 := result1.Value().([][][][]float32)
+		assert.InDelta(t, 1.0, cached1[0][0][0][0], 0.01)
 
 		// Second update at position 1
 		ctx2 := ctx.Reuse()
 		exec2 := context.MustNewExec(backend, ctx2, func(testCtx *context.Context, position, keys, values *Node) *Node {
 			g := keys.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
-			return KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+			cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+			return cachedKeys
 		})
 
 		keys2 := [][][][]float32{{{{2.0, 3.0, 4.0, 5.0}}, {{6.0, 7.0, 8.0, 9.0}}}}
 		values2 := [][][][]float32{{{{10.0, 11.0, 12.0, 13.0}}, {{14.0, 15.0, 16.0, 17.0}}}}
 		result2 := exec2.MustExec(int32(1), keys2, values2)[0]
-		pos2 := result2.Value().(int32)
-		assert.Equal(t, int32(2), pos2)
+		cached2 := result2.Value().([][][][]float32)
+		// Position 0 should still have first update
+		assert.InDelta(t, 1.0, cached2[0][0][0][0], 0.01)
+		// Position 1 should have second update
+		assert.InDelta(t, 2.0, cached2[0][0][1][0], 0.01)
 	})
 
-	t.Run("BatchProcessingPositions", func(t *testing.T) {
+	t.Run("BatchProcessing", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 
@@ -121,8 +132,9 @@ func TestKVCacheFunctions(t *testing.T) {
 			g := keys.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
-			updatedPos := KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
-			return BroadcastToShape(ExpandDims(updatedPos, 0), shapes.Make(dtypes.Int32, batchSize))
+			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+			cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+			return cachedKeys
 		})
 
 		keys := [][][][]float32{
@@ -137,10 +149,11 @@ func TestKVCacheFunctions(t *testing.T) {
 		}
 
 		result := exec.MustExec(int32(0), keys, values)[0]
-		positions := result.Value().([]int32)
-		assert.Equal(t, int32(1), positions[0])
-		assert.Equal(t, int32(1), positions[1])
-		assert.Equal(t, int32(1), positions[2])
+		cachedValues := result.Value().([][][][]float32)
+		// Check first element of each batch at position 0
+		assert.InDelta(t, 1.0, cachedValues[0][0][0][0], 0.01) // batch 0
+		assert.InDelta(t, 2.0, cachedValues[1][0][0][0], 0.01) // batch 1
+		assert.InDelta(t, 3.0, cachedValues[2][0][0][0], 0.01) // batch 2
 	})
 
 	t.Run("GetAfterUpdateShape", func(t *testing.T) {
@@ -175,7 +188,7 @@ func TestKVCacheFunctions(t *testing.T) {
 		assert.Equal(t, []int{batchSize, numHeads, maxSeqLen, headDim}, result.Shape().Dimensions)
 	})
 
-	t.Run("ResetPositionToZero", func(t *testing.T) {
+	t.Run("ResetClearsCache", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 
@@ -185,12 +198,14 @@ func TestKVCacheFunctions(t *testing.T) {
 		headDim := 4
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		// First: update the cache
+		// First: update the cache with some values
 		updateExec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, position, keys, values *Node) *Node {
 			g := keys.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
-			return KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+			cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+			return cachedKeys
 		})
 
 		keys := [][][][]float32{
@@ -202,26 +217,27 @@ func TestKVCacheFunctions(t *testing.T) {
 			{{{9.0, 10.0, 11.0, 12.0}}, {{13.0, 14.0, 15.0, 16.0}}},
 		}
 
-		// Update cache - position should be 1 after this
+		// Update cache
 		updateResult := updateExec.MustExec(int32(0), keys, values)[0]
-		assert.Equal(t, int32(1), updateResult.Value().(int32))
+		cached := updateResult.Value().([][][][]float32)
+		assert.InDelta(t, 1.0, cached[0][0][0][0], 0.01)
 
 		// Reset cache outside of graph execution
 		cacheCtx := ctx.In("cache").Reuse().Checked(false)
 		KVCacheReset(cacheCtx)
 
-		// Verify position is now 0 by reading cache
+		// Verify cache is cleared by reading key values
 		getExec := context.MustNewExec(backend, ctx.Reuse(), func(testCtx *context.Context, dummy *Node) *Node {
 			g := dummy.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
-			_, _, pos := getKVCache(cacheCtx, g, cacheShape)
-			return pos
+			cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+			return cachedKeys
 		})
 
 		result := getExec.MustExec(int32(0))[0]
-		positions := result.Value().([]int32)
-		assert.Equal(t, int32(0), positions[0])
-		assert.Equal(t, int32(0), positions[1])
+		cachedAfterReset := result.Value().([][][][]float32)
+		// After reset, the value should be 0 (zero-initialized)
+		assert.InDelta(t, 0.0, cachedAfterReset[0][0][0][0], 0.01)
 	})
 
 	t.Run("CreateAttentionMaskShape", func(t *testing.T) {
@@ -267,21 +283,20 @@ func TestKVCachePersistence(t *testing.T) {
 		g := position.Graph()
 		cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
-		// Initialize cache
-
 		// Create dummy keys/values: [batch=1, heads=2, seq=3, dim=4]
-		keys := IotaFull(g, shapes.Make(dtypes.Float32, 1, 2, 3, 4))
+		// Use specific values we can track
+		keys := AddScalar(IotaFull(g, shapes.Make(dtypes.Float32, 1, 2, 3, 4)), 10)
 		values := Mul(keys, Const(g, float32(2.0))) // values = 2 * keys
 
-		// Update cache and return the updated position
-		return KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+		KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+		cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+		return cachedKeys
 	})
 
 	outputs1 := exec1.MustExec(int32(0))
-	position1 := outputs1[0].Value().(int32)
-	t.Logf("After first update: position = %d", position1)
-
-	assert.Equal(t, int32(3), position1, "Expected position=3 after first update")
+	cached1 := outputs1[0].Value().([][][][]float32)
+	assert.True(t, cached1[0][0][0][0] >= 10.0, "Expected non-zero value at position 0 after first update")
+	assert.True(t, cached1[0][0][2][0] >= 10.0, "Expected non-zero value at position 2 after first update")
 
 	// Second execution: Update with 1 more key/value at position 3
 	exec2 := context.MustNewExec(backend, ctx.Reuse(), func(testCtx *context.Context, position *Node) *Node {
@@ -289,17 +304,20 @@ func TestKVCachePersistence(t *testing.T) {
 		cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
 		// Create dummy keys/values: [batch=1, heads=2, seq=1, dim=4]
-		keys := IotaFull(g, shapes.Make(dtypes.Float32, 1, 2, 1, 4))
+		keys := AddScalar(IotaFull(g, shapes.Make(dtypes.Float32, 1, 2, 1, 4)), 100)
 		values := Mul(keys, Const(g, float32(2.0)))
 
-		return KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+		KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+		cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
+		return cachedKeys
 	})
 
 	outputs2 := exec2.MustExec(int32(3))
-	position2 := outputs2[0].Value().(int32)
-	t.Logf("After second update: position = %d", position2)
-
-	assert.Equal(t, int32(4), position2, "Expected position=4 after second update")
+	cached2 := outputs2[0].Value().([][][][]float32)
+	value2 := cached2[0][0][3][0] // batch=0, head=0, pos=3, dim=0
+	assert.InDelta(t, 100.0, value2, 0.01, "Expected value at position 3 after second update")
+	// Previous positions should still have first update's values
+	assert.True(t, cached2[0][0][0][0] >= 10.0, "Position 0 should still have first update value")
 }
 
 // TestKVCacheCircular tests the circular/rotating cache functionality.
@@ -314,14 +332,14 @@ func TestKVCacheCircular(t *testing.T) {
 	headDim := 2
 	cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-	exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, position, keys, values *Node) []*Node {
+	exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, position, keys, values *Node) *Node {
 		g := position.Graph()
 		cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
-		newPos := KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+		KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
 		cachedKeys, _, _ := getKVCache(cacheCtx, g, cacheShape)
 
-		return []*Node{newPos, cachedKeys}
+		return cachedKeys
 	})
 
 	// Helper to create keys with identifiable values
@@ -337,10 +355,8 @@ func TestKVCacheCircular(t *testing.T) {
 
 	// Position 4 should wrap to slot 0
 	results := exec.MustExec(int32(4), makeKeys(5.0), makeKeys(5.0))
-	newPos := results[0].Value().(int32)
-	assert.Equal(t, int32(5), newPos, "Absolute position should be 5")
 
-	cachedKeys := results[1].Value().([][][][]float32)
+	cachedKeys := results[0].Value().([][][][]float32)
 	assert.InDelta(t, 5.0, cachedKeys[0][0][0][0], 0.01, "Slot 0 should have 5.0 (wrapped)")
 	assert.InDelta(t, 2.0, cachedKeys[0][0][1][0], 0.01, "Slot 1 should still have 2.0")
 	assert.InDelta(t, 3.0, cachedKeys[0][0][2][0], 0.01, "Slot 2 should still have 3.0")

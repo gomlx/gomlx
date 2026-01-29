@@ -112,16 +112,15 @@ func KVCacheGetVars(ctx *context.Context, cacheShape shapes.Shape) (keyVar, valu
 //   - newKeysSlice: New key projections [batchSize, numHeads, seqLen, headDim]
 //   - newValuesSlice: New value projections [batchSize, numHeads, seqLen, headDim]
 //
-// Returns:
-//   - Updated absolute position (startPosition + seqLen) as a scalar int32 Node
-//
 // Example:
 //
-//	// During generation, after computing new key/value projections:
-//	newPos := KVCacheUpdate(ctx, g, cacheShape, position, newKeys, newValues)
-//	// Cache now contains keys/values, with positions wrapping at maxSeqLen
-func KVCacheUpdate(ctx *context.Context, g *Graph, cacheShape shapes.Shape, startPosition *Node, newKeysSlice, newValuesSlice *Node) *Node {
-	keyVar, valueVar, posVar := KVCacheGetVars(ctx, cacheShape)
+//	// During generation, update each layer's cache:
+//	for _, layerCtx := range layerContexts {
+//	    KVCacheUpdate(layerCtx, g, cacheShape, position, newKeys, newValues)
+//	}
+//	// Then increment position for next iteration (managed by caller)
+func KVCacheUpdate(ctx *context.Context, g *Graph, cacheShape shapes.Shape, startPosition *Node, newKeysSlice, newValuesSlice *Node) {
+	keyVar, valueVar, _ := KVCacheGetVars(ctx, cacheShape)
 
 	// Get current cache state
 	keyCache := keyVar.ValueGraph(g)
@@ -131,8 +130,7 @@ func KVCacheUpdate(ctx *context.Context, g *Graph, cacheShape shapes.Shape, star
 	positionInt32 := ConvertDType(startPosition, dtypes.Int32)
 	positionInt32 = Reshape(positionInt32) // Ensure scalar shape
 
-	// Get sequence length and max cache size
-	updateSeqLen := newKeysSlice.Shape().Dimensions[2]
+	// Get max cache size
 	maxSeqLen := cacheShape.Dimensions[2]
 
 	// Apply modulo for circular cache: write position = startPosition % maxSeqLen
@@ -151,17 +149,6 @@ func KVCacheUpdate(ctx *context.Context, g *Graph, cacheShape shapes.Shape, star
 	// Update the cache variables
 	keyVar.SetValueGraph(keyCache)
 	valueVar.SetValueGraph(valueCache)
-
-	// Calculate and store updated absolute position (not wrapped)
-	updatedPosition := AddScalar(positionInt32, float64(updateSeqLen))
-	updatedPosition = ConvertDType(updatedPosition, dtypes.Int32)
-
-	// Store the absolute position (for mask calculation)
-	posShape := posVar.Shape()
-	broadcastedPos := BroadcastToShape(ExpandDims(updatedPosition, 0), posShape)
-	posVar.SetValueGraph(broadcastedPos)
-
-	return updatedPosition
 }
 
 // getKVCache returns key/value caches and current position from the given context.
