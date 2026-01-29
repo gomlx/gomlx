@@ -13,6 +13,7 @@ import (
 
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/contrib/matmul"
+	"github.com/ajroetker/go-highway/hwy/contrib/workerpool"
 	"github.com/gomlx/gomlx/backends/simplego"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/internal/workerspool"
@@ -23,8 +24,15 @@ import (
 	"github.com/x448/float16"
 )
 
+// hwyPool is the shared go-highway worker pool for intra-matrix parallelism.
+// Created lazily on first use.
+var hwyPool *workerpool.Pool
+
 func init() {
 	simplego.RegisterHighway(impl{})
+	// Create a shared highway worker pool for intra-matrix parallelism
+	// Pass 0 to use GOMAXPROCS workers
+	hwyPool = workerpool.New(0)
 }
 
 // impl implements simplego.HighwayMatMul interface.
@@ -42,6 +50,14 @@ func (impl) MatMulDynamic(inputDType, outputDType dtypes.DType,
 	return MatMulDynamic(inputDType, outputDType, lhsFlat, rhsFlat, batchSize,
 		lhsCrossSize, rhsCrossSize, contractingSize, outputFlat,
 		bufAllocAnyFn, bufReleaseFn, pool)
+}
+
+func (impl) MatMulKLast(inputDType, outputDType dtypes.DType,
+	lhsFlat, rhsFlat any, batchSize,
+	lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat any,
+	pool *workerspool.Pool) error {
+	return MatMulKLast(inputDType, outputDType, lhsFlat, rhsFlat, batchSize,
+		lhsCrossSize, rhsCrossSize, contractingSize, outputFlat, pool)
 }
 
 func (impl) Transpose2D(dtype dtypes.DType, src any, m, k int, dst any) bool {
@@ -151,9 +167,9 @@ func matMulFloat32(lhs, rhs, output []float32, batchSize, m, n, k int, pool *wor
 	rhsBatchStride := k * n
 	outBatchStride := m * n
 
-	// For single batch, process sequentially
+	// For single batch, use highway pool for intra-matrix parallelism
 	if batchSize == 1 {
-		matmul.MatMulAuto(lhs, rhs, output, m, n, k)
+		matmul.MatMulAutoWithPool(hwyPool, lhs, rhs, output, m, n, k)
 		return nil
 	}
 
@@ -190,9 +206,9 @@ func matMulFloat64(lhs, rhs, output []float64, batchSize, m, n, k int, pool *wor
 	rhsBatchStride := k * n
 	outBatchStride := m * n
 
-	// For single batch, process sequentially
+	// For single batch, use highway pool for intra-matrix parallelism
 	if batchSize == 1 {
-		matmul.MatMulAuto(lhs, rhs, output, m, n, k)
+		matmul.MatMulAutoWithPool(hwyPool, lhs, rhs, output, m, n, k)
 		return nil
 	}
 
@@ -236,9 +252,9 @@ func matMulFloat16(lhs, rhs, output []float16.Float16, batchSize, m, n, k int, p
 	rhsBatchStride := k * n
 	outBatchStride := m * n
 
-	// For single batch, process sequentially
+	// For single batch, use highway pool for intra-matrix parallelism
 	if batchSize == 1 {
-		matmul.MatMulAuto(lhsHwy, rhsHwy, outputHwy, m, n, k)
+		matmul.MatMulAutoWithPool(hwyPool, lhsHwy, rhsHwy, outputHwy, m, n, k)
 		return nil
 	}
 
@@ -282,9 +298,9 @@ func matMulBFloat16(lhs, rhs, output []bfloat16.BFloat16, batchSize, m, n, k int
 	rhsBatchStride := k * n
 	outBatchStride := m * n
 
-	// For single batch, process sequentially
+	// For single batch, use highway pool for intra-matrix parallelism
 	if batchSize == 1 {
-		matmul.MatMulAuto(lhsHwy, rhsHwy, outputHwy, m, n, k)
+		matmul.MatMulAutoWithPool(hwyPool, lhsHwy, rhsHwy, outputHwy, m, n, k)
 		return nil
 	}
 
@@ -298,6 +314,227 @@ func matMulBFloat16(lhs, rhs, output []bfloat16.BFloat16, batchSize, m, n, k int
 			rhsStart := batchIdx * rhsBatchStride
 			outStart := batchIdx * outBatchStride
 			matmul.MatMulAuto(
+				lhsHwy[lhsStart:lhsStart+lhsBatchStride],
+				rhsHwy[rhsStart:rhsStart+rhsBatchStride],
+				outputHwy[outStart:outStart+outBatchStride],
+				m, n, k)
+			wg.Done()
+		}
+
+		// Try to offload to worker pool, otherwise run inline
+		if pool == nil || !pool.StartIfAvailable(task) {
+			task()
+		}
+	}
+
+	wg.Wait()
+	return nil
+}
+
+// MatMulKLast dispatches the MatMulKLast function for the given dtypes.
+// It computes C = A * B^T for matrices where both have K as the last dimension:
+//   - A is [batchSize, lhsCrossSize, contractingSize] (M x K per batch)
+//   - B is [batchSize, rhsCrossSize, contractingSize] (N x K per batch) - note K last!
+//   - C is [batchSize, lhsCrossSize, rhsCrossSize] (M x N per batch)
+//
+// This is the natural format for PyTorch weights and enables efficient SIMD
+// since both A rows and B rows have sequential memory access.
+func MatMulKLast(inputDType, outputDType dtypes.DType,
+	lhsFlat, rhsFlat any, batchSize,
+	lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat any,
+	pool *workerspool.Pool) error {
+
+	switch inputDType {
+	case dtypes.Float32:
+		if outputDType != dtypes.Float32 {
+			return errors.Errorf("highway: input dtype Float32 requires output dtype Float32, got %s", outputDType)
+		}
+		return matMulKLastFloat32(
+			lhsFlat.([]float32), rhsFlat.([]float32), outputFlat.([]float32),
+			batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+			pool)
+
+	case dtypes.Float64:
+		if outputDType != dtypes.Float64 {
+			return errors.Errorf("highway: input dtype Float64 requires output dtype Float64, got %s", outputDType)
+		}
+		return matMulKLastFloat64(
+			lhsFlat.([]float64), rhsFlat.([]float64), outputFlat.([]float64),
+			batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+			pool)
+
+	case dtypes.Float16:
+		if outputDType != dtypes.Float16 {
+			return errors.Errorf("highway: input dtype Float16 requires output dtype Float16, got %s", outputDType)
+		}
+		return matMulKLastFloat16(
+			lhsFlat.([]float16.Float16), rhsFlat.([]float16.Float16), outputFlat.([]float16.Float16),
+			batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+			pool)
+
+	case dtypes.BFloat16:
+		if outputDType != dtypes.BFloat16 {
+			return errors.Errorf("highway: input dtype BFloat16 requires output dtype BFloat16, got %s", outputDType)
+		}
+		return matMulKLastBFloat16(
+			lhsFlat.([]bfloat16.BFloat16), rhsFlat.([]bfloat16.BFloat16), outputFlat.([]bfloat16.BFloat16),
+			batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+			pool)
+
+	default:
+		return errors.Errorf("highway: unsupported input dtype %s", inputDType)
+	}
+}
+
+// matMulKLastFloat32 performs batched K-last matrix multiplication for float32.
+func matMulKLastFloat32(lhs, rhs, output []float32, batchSize, m, n, k int, pool *workerspool.Pool) error {
+	lhsBatchStride := m * k
+	rhsBatchStride := n * k // Note: n*k not k*n since RHS is [N, K]
+	outBatchStride := m * n
+
+	// For single batch, use highway pool for intra-matrix parallelism
+	if batchSize == 1 {
+		matmul.MatMulKLastAutoWithPool(hwyPool, lhs, rhs, output, m, n, k)
+		return nil
+	}
+
+	// Use WaitGroup to synchronize parallel batch processing
+	wg := xsync.NewDynamicWaitGroup()
+
+	for batchIdx := range batchSize {
+		wg.Add(1)
+		task := func() {
+			lhsStart := batchIdx * lhsBatchStride
+			rhsStart := batchIdx * rhsBatchStride
+			outStart := batchIdx * outBatchStride
+			matmul.MatMulKLastAuto(
+				lhs[lhsStart:lhsStart+lhsBatchStride],
+				rhs[rhsStart:rhsStart+rhsBatchStride],
+				output[outStart:outStart+outBatchStride],
+				m, n, k)
+			wg.Done()
+		}
+
+		// Try to offload to worker pool, otherwise run inline
+		if pool == nil || !pool.StartIfAvailable(task) {
+			task()
+		}
+	}
+
+	wg.Wait()
+	return nil
+}
+
+// matMulKLastFloat64 performs batched K-last matrix multiplication for float64.
+func matMulKLastFloat64(lhs, rhs, output []float64, batchSize, m, n, k int, pool *workerspool.Pool) error {
+	lhsBatchStride := m * k
+	rhsBatchStride := n * k // Note: n*k not k*n since RHS is [N, K]
+	outBatchStride := m * n
+
+	// For single batch, use highway pool for intra-matrix parallelism
+	if batchSize == 1 {
+		matmul.MatMulKLastAutoWithPool(hwyPool, lhs, rhs, output, m, n, k)
+		return nil
+	}
+
+	// Use WaitGroup to synchronize parallel batch processing
+	wg := xsync.NewDynamicWaitGroup()
+
+	for batchIdx := range batchSize {
+		wg.Add(1)
+		task := func() {
+			lhsStart := batchIdx * lhsBatchStride
+			rhsStart := batchIdx * rhsBatchStride
+			outStart := batchIdx * outBatchStride
+			matmul.MatMulKLastAuto(
+				lhs[lhsStart:lhsStart+lhsBatchStride],
+				rhs[rhsStart:rhsStart+rhsBatchStride],
+				output[outStart:outStart+outBatchStride],
+				m, n, k)
+			wg.Done()
+		}
+
+		// Try to offload to worker pool, otherwise run inline
+		if pool == nil || !pool.StartIfAvailable(task) {
+			task()
+		}
+	}
+
+	wg.Wait()
+	return nil
+}
+
+// matMulKLastFloat16 performs batched K-last matrix multiplication for float16.
+func matMulKLastFloat16(lhs, rhs, output []float16.Float16, batchSize, m, n, k int, pool *workerspool.Pool) error {
+	// Convert slices using unsafe - both types are uint16 underneath
+	lhsHwy := unsafe.Slice((*hwy.Float16)(unsafe.Pointer(unsafe.SliceData(lhs))), len(lhs))
+	rhsHwy := unsafe.Slice((*hwy.Float16)(unsafe.Pointer(unsafe.SliceData(rhs))), len(rhs))
+	outputHwy := unsafe.Slice((*hwy.Float16)(unsafe.Pointer(unsafe.SliceData(output))), len(output))
+
+	lhsBatchStride := m * k
+	rhsBatchStride := n * k // Note: n*k not k*n since RHS is [N, K]
+	outBatchStride := m * n
+
+	// For single batch, use highway pool for intra-matrix parallelism
+	if batchSize == 1 {
+		matmul.MatMulKLastAutoWithPool(hwyPool, lhsHwy, rhsHwy, outputHwy, m, n, k)
+		return nil
+	}
+
+	// Use WaitGroup to synchronize parallel batch processing
+	wg := xsync.NewDynamicWaitGroup()
+
+	for batchIdx := range batchSize {
+		wg.Add(1)
+		task := func() {
+			lhsStart := batchIdx * lhsBatchStride
+			rhsStart := batchIdx * rhsBatchStride
+			outStart := batchIdx * outBatchStride
+			matmul.MatMulKLastAuto(
+				lhsHwy[lhsStart:lhsStart+lhsBatchStride],
+				rhsHwy[rhsStart:rhsStart+rhsBatchStride],
+				outputHwy[outStart:outStart+outBatchStride],
+				m, n, k)
+			wg.Done()
+		}
+
+		// Try to offload to worker pool, otherwise run inline
+		if pool == nil || !pool.StartIfAvailable(task) {
+			task()
+		}
+	}
+
+	wg.Wait()
+	return nil
+}
+
+// matMulKLastBFloat16 performs batched K-last matrix multiplication for bfloat16.
+func matMulKLastBFloat16(lhs, rhs, output []bfloat16.BFloat16, batchSize, m, n, k int, pool *workerspool.Pool) error {
+	// Convert slices using unsafe - both types are uint16 underneath
+	lhsHwy := unsafe.Slice((*hwy.BFloat16)(unsafe.Pointer(unsafe.SliceData(lhs))), len(lhs))
+	rhsHwy := unsafe.Slice((*hwy.BFloat16)(unsafe.Pointer(unsafe.SliceData(rhs))), len(rhs))
+	outputHwy := unsafe.Slice((*hwy.BFloat16)(unsafe.Pointer(unsafe.SliceData(output))), len(output))
+
+	lhsBatchStride := m * k
+	rhsBatchStride := n * k // Note: n*k not k*n since RHS is [N, K]
+	outBatchStride := m * n
+
+	// For single batch, use highway pool for intra-matrix parallelism
+	if batchSize == 1 {
+		matmul.MatMulKLastAutoWithPool(hwyPool, lhsHwy, rhsHwy, outputHwy, m, n, k)
+		return nil
+	}
+
+	// Use WaitGroup to synchronize parallel batch processing
+	wg := xsync.NewDynamicWaitGroup()
+
+	for batchIdx := range batchSize {
+		wg.Add(1)
+		task := func() {
+			lhsStart := batchIdx * lhsBatchStride
+			rhsStart := batchIdx * rhsBatchStride
+			outStart := batchIdx * outBatchStride
+			matmul.MatMulKLastAuto(
 				lhsHwy[lhsStart:lhsStart+lhsBatchStride],
 				rhsHwy[rhsStart:rhsStart+rhsBatchStride],
 				outputHwy[outStart:outStart+outBatchStride],

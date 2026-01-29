@@ -71,12 +71,18 @@ const (
 // Returns the transpose requirement for each operand.
 //
 // For matmul order we need:
-//   - LHS: [Batch..., M, K] (contracting axis last)
-//   - RHS: [Batch..., K, N] (contracting axis first after batch)
+//   - LHS: [Batch..., Cross..., K] (contracting axis last)
+//   - RHS: [Batch..., K, N] or [Batch..., N, K] (K-last uses MatMulKLast)
 //
-// Highway can fix these cases with 2D transpose:
-//   - LHS: [Batch..., K, M] → transpose to [Batch..., M, K]
-//   - RHS: [Batch..., N, K] → transpose to [Batch..., K, N]
+// Supports multi-cross-dimension patterns like "bsi,oi->bso" where LHS has multiple
+// cross dimensions (batch, seq). The cross dimensions get flattened by the caller
+// into a single M dimension for the matmul.
+//
+// Highway can handle:
+//   - LHS with K last (any number of cross dims) → noTranspose
+//   - LHS with K second-to-last (2D only) → needs2DTranspose
+//   - RHS with K first after batch → noTranspose (standard matmul)
+//   - RHS with K last → needs2DTranspose (uses MatMulKLast optimization)
 func needsTransposeForMatMul(lhsShape shapes.Shape, lhsContractingAxes, lhsBatchAxes []int,
 	rhsShape shapes.Shape, rhsContractingAxes, rhsBatchAxes []int) (lhsTranspose, rhsTranspose transposeNeeded) {
 	lhsRank := lhsShape.Rank()
@@ -98,40 +104,39 @@ func needsTransposeForMatMul(lhsShape shapes.Shape, lhsContractingAxes, lhsBatch
 		}
 	}
 
-	// LHS must have exactly rank = numBatchAxes + 2 for transpose to work
-	// (we need two dims to transpose)
-	if lhsRank != numBatchAxes+2 {
+	// Both LHS and RHS must have at least 2 non-batch dimensions for matmul.
+	// This excludes vector cases like [M, K] x [K] which can't be handled by highway matmul.
+	if lhsRank < numBatchAxes+2 || rhsRank < numBatchAxes+2 {
 		return invalidTranspose, invalidTranspose
 	}
 
-	// RHS must have exactly rank = numBatchAxes + 2 for transpose to work
-	if rhsRank != numBatchAxes+2 {
-		return invalidTranspose, invalidTranspose
-	}
-
-	// Check LHS: [Batch..., M, K] - contracting axis should be last
+	// Check LHS: contracting axis should be last for matmul order.
+	// Supports multi-cross-dimension cases like [Batch, Seq, Features] when K is last.
 	lhsContractingAxis := lhsContractingAxes[0]
 	if lhsContractingAxis == lhsRank-1 {
-		// Already in correct order: [Batch..., M, K]
+		// K is last, no transpose needed (works for any number of cross dims)
+		// e.g., [B, M, K] or [B, S, M, K] - cross dims get flattened by caller
 		lhsTranspose = noTranspose
-	} else if lhsContractingAxis == lhsRank-2 {
-		// Needs transpose: [Batch..., K, M] → [Batch..., M, K]
+	} else if lhsRank == numBatchAxes+2 && lhsContractingAxis == lhsRank-2 {
+		// Simple 2D case: [Batch..., K, M] → can transpose to [Batch..., M, K]
 		lhsTranspose = needs2DTranspose
 	} else {
-		// Contracting axis is not in last two positions, can't fix with 2D transpose
+		// Multi-cross with K not last, or K in unexpected position - can't handle
 		return invalidTranspose, invalidTranspose
 	}
 
-	// Check RHS: [Batch..., K, N] - contracting axis should be first after batch
+	// Check RHS: contracting axis should be first after batch (standard) or last (K-last).
+	// K-last format is common for PyTorch weights: [out, in] where 'in' is the contracting dim.
 	rhsContractingAxis := rhsContractingAxes[0]
 	if rhsContractingAxis == numBatchAxes {
-		// Already in correct order: [Batch..., K, N]
+		// Standard matmul order: [Batch..., K, N] - K is first after batch
 		rhsTranspose = noTranspose
 	} else if rhsContractingAxis == rhsRank-1 {
-		// Needs transpose: [Batch..., N, K] → [Batch..., K, N]
+		// K-last order: [Batch..., N, K] - can use MatMulKLast (or transpose if 2D)
+		// This works for both 2D case [N, K] and multi-cross [N1, N2, K]
 		rhsTranspose = needs2DTranspose
 	} else {
-		// Contracting axis is not in expected positions, can't fix with 2D transpose
+		// K is not in first or last position - can't handle
 		return invalidTranspose, invalidTranspose
 	}
 

@@ -837,8 +837,8 @@ func TestIsMatMulOrder(t *testing.T) {
 		{"2D_transposed_lhs", shapes.Make(dtypes.Float32, 4, 3), shapes.Make(dtypes.Float32, 4, 5), []int{0}, []int{0}, []int{}, []int{}, false},
 		// Transposed RHS: [M, K] x [N, K] - not matmul order
 		{"2D_transposed_rhs", shapes.Make(dtypes.Float32, 3, 4), shapes.Make(dtypes.Float32, 5, 4), []int{1}, []int{1}, []int{}, []int{}, false},
-		// Matrix x Vector: [M, K] x [K]
-		{"matrix_vector", shapes.Make(dtypes.Float32, 3, 4), shapes.Make(dtypes.Float32, 4), []int{1}, []int{0}, []int{}, []int{}, true},
+		// Matrix x Vector: [M, K] x [K] - not supported (RHS must be 2D for highway path)
+		{"matrix_vector", shapes.Make(dtypes.Float32, 3, 4), shapes.Make(dtypes.Float32, 4), []int{1}, []int{0}, []int{}, []int{}, false},
 		// Batched matrix multiplication: [B, M, K] x [B, K, N]
 		{"batched_matmul", shapes.Make(dtypes.Float32, 2, 3, 4), shapes.Make(dtypes.Float32, 2, 4, 5), []int{2}, []int{1}, []int{0}, []int{0}, true},
 		// Multiple contracting axes - not supported by SmallMatMul

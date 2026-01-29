@@ -373,6 +373,130 @@ func TestHighwayNormalizedPathBatchedTranspose(t *testing.T) {
 	}
 }
 
+// TestHighwayLinearLayerPattern tests the common linear layer pattern:
+// [batch, seq, features] @ [features, hidden] → [batch, seq, hidden]
+// This has LHS with 3 dims (multi-cross) and RHS with 2 dims.
+func TestHighwayLinearLayerPattern(t *testing.T) {
+	// Linear layer: input [1, 11, 1024] @ weights [1024, 1024] → output [1, 11, 1024]
+	// This is the pattern that was failing before the fix.
+
+	inputData := make([]float32, 1*11*1024)
+	weightsData := make([]float32, 1024*1024)
+	for i := range inputData {
+		inputData[i] = float32(i%100) * 0.01
+	}
+	for i := range weightsData {
+		weightsData[i] = float32(i%100) * 0.001
+	}
+
+	execFn := func(g *graph.Graph) *graph.Node {
+		input := graph.Reshape(graph.Const(g, inputData), 1, 11, 1024)
+		weights := graph.Reshape(graph.Const(g, weightsData), 1024, 1024)
+		// This is: input @ weights, contracting on last dim of input and first dim of weights
+		return graph.Einsum("bsk,kh->bsh", input, weights)
+	}
+
+	exec := graph.MustNewExec(backend, execFn)
+	result := exec.MustExec()[0]
+	got := result.Value().([][][]float32)
+
+	// Verify shape
+	assert.Equal(t, 1, len(got), "batch dim")
+	assert.Equal(t, 11, len(got[0]), "seq dim")
+	assert.Equal(t, 1024, len(got[0][0]), "hidden dim")
+
+	// Verify the result is non-zero (basic sanity check)
+	assert.NotEqual(t, float32(0), got[0][0][0], "result should be non-zero")
+}
+
+// TestHighwayDenseLayerPyTorchWeights tests the dense layer pattern with PyTorch-style weights:
+// "bsi,oi->bso" - LHS has contracting axis last, RHS has contracting axis last (not first!)
+// This is the pattern that caused the original regression when highway needed to transpose RHS.
+// With MatMulKLast, we can handle this directly without transpose.
+func TestHighwayDenseLayerPyTorchWeights(t *testing.T) {
+	// Dense layer: input [batch, seq, in] @ weights [out, in] → output [batch, seq, out]
+	// Note: PyTorch stores weights as [out, in], not [in, out]
+	// This means the Einsum is "bsi,oi->bso" where contracting axis is last in both!
+	batch, seq, inFeatures, outFeatures := 4, 128, 768, 3072 // Realistic transformer MLP sizes
+
+	inputData := make([]float32, batch*seq*inFeatures)
+	weightsData := make([]float32, outFeatures*inFeatures) // [out, in] PyTorch format
+	for i := range inputData {
+		inputData[i] = float32(i%100) * 0.01
+	}
+	for i := range weightsData {
+		weightsData[i] = float32(i%100) * 0.001
+	}
+
+	execFn := func(g *graph.Graph) *graph.Node {
+		input := graph.Reshape(graph.Const(g, inputData), batch, seq, inFeatures)
+		weights := graph.Reshape(graph.Const(g, weightsData), outFeatures, inFeatures)
+		// Einsum "bsi,oi->bso": contract on 'i' (last dim of both)
+		return graph.Einsum("bsi,oi->bso", input, weights)
+	}
+
+	exec := graph.MustNewExec(backend, execFn)
+	result := exec.MustExec()[0]
+	got := result.Value().([][][]float32)
+
+	// Verify shape
+	assert.Equal(t, batch, len(got), "batch dim")
+	assert.Equal(t, seq, len(got[0]), "seq dim")
+	assert.Equal(t, outFeatures, len(got[0][0]), "out dim")
+
+	// Verify the result is non-zero (basic sanity check)
+	assert.NotEqual(t, float32(0), got[0][0][0], "result should be non-zero")
+}
+
+// TestHighwayBERTAttentionPattern tests the exact pattern used in BERT attention:
+// "bhqd,bhkd->bhqk" - both LHS and RHS have contracting axis as last dimension.
+func TestHighwayBERTAttentionPattern(t *testing.T) {
+	// BERT attention scores: query @ key^T
+	// query: [batch, heads, query_len, depth] = [1, 2, 3, 4]
+	// key:   [batch, heads, key_len, depth] = [1, 2, 5, 4]
+	// result: [batch, heads, query_len, key_len] = [1, 2, 3, 5]
+	//
+	// Einsum "bhqd,bhkd->bhqk" means:
+	//   - batch axes: [0, 1] (b, h)
+	//   - LHS contracting: 3 (d)
+	//   - RHS contracting: 3 (d)
+
+	// Simple values for verification
+	queryData := make([]float32, 1*2*3*4) // [1, 2, 3, 4]
+	keyData := make([]float32, 1*2*5*4)   // [1, 2, 5, 4]
+	for i := range queryData {
+		queryData[i] = float32(i + 1)
+	}
+	for i := range keyData {
+		keyData[i] = float32(i + 1)
+	}
+
+	execFn := func(g *graph.Graph) *graph.Node {
+		query := graph.Reshape(graph.Const(g, queryData), 1, 2, 3, 4)
+		key := graph.Reshape(graph.Const(g, keyData), 1, 2, 5, 4)
+		// This is BERT's attention score pattern
+		return graph.Einsum("bhqd,bhkd->bhqk", query, key)
+	}
+
+	exec := graph.MustNewExec(backend, execFn)
+	result := exec.MustExec()[0]
+	got := result.Value().([][][][]float32)
+
+	// Verify shape
+	assert.Equal(t, 1, len(got), "batch dim")
+	assert.Equal(t, 2, len(got[0]), "heads dim")
+	assert.Equal(t, 3, len(got[0][0]), "query_len dim")
+	assert.Equal(t, 5, len(got[0][0][0]), "key_len dim")
+
+	// Verify a few values manually
+	// For batch=0, head=0, query[0] @ key[0..4]^T
+	// query[0,0,0,:] = [1, 2, 3, 4]
+	// key[0,0,0,:] = [1, 2, 3, 4] → dot = 1+4+9+16 = 30
+	// key[0,0,1,:] = [5, 6, 7, 8] → dot = 5+12+21+32 = 70
+	assert.InDelta(t, float32(30), got[0][0][0][0], 1e-4, "score[0,0,0,0]")
+	assert.InDelta(t, float32(70), got[0][0][0][1], 1e-4, "score[0,0,0,1]")
+}
+
 // TestHighwayUnaryLargeArray tests that SIMD operations work correctly with larger arrays
 // where vectorization provides real benefits.
 func TestHighwayUnaryLargeArray(t *testing.T) {

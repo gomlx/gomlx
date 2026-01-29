@@ -331,9 +331,9 @@ func dgSelectExecPath(backend *Backend, lhsShape, rhsShape shapes.Shape, params 
 	// Highway path (auto-enabled when highway submodule is imported):
 	// Highway internally accumulates in f32 for Float16/BFloat16, so check with matching input/output dtypes
 	// Highway can handle both matmul-order and transpose cases (uses SIMD transpose if needed)
-	if Highway.HasDTypeSupport(dtype, dtype) &&
-		canUseHighwayPath(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
-			rhsShape, params.rhsContractingAxes, params.rhsBatchAxes) {
+	canHighway := canUseHighwayPath(lhsShape, params.lhsContractingAxes, params.lhsBatchAxes,
+		rhsShape, params.rhsContractingAxes, params.rhsBatchAxes)
+	if Highway.HasDTypeSupport(dtype, dtype) && canHighway {
 		return highwayPath
 	}
 
@@ -496,6 +496,19 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		lhsNeedsTranspose, rhsNeedsTranspose := needsTransposeForMatMul(
 			lhs.shape, params.lhsContractingAxes, params.lhsBatchAxes,
 			rhs.shape, params.rhsContractingAxes, params.rhsBatchAxes)
+
+		// Optimize: Use MatMulKLast when LHS has K last and RHS has K last (PyTorch weight format).
+		// This avoids the expensive RHS transpose for dense layers like Einsum "bsi,oi->bso".
+		// MatMulKLast computes C = A * B^T where:
+		//   - A is [batchSize, M, K] (LHS with K last)
+		//   - B is [batchSize, N, K] (RHS with K last - no transpose needed!)
+		//   - C is [batchSize, M, N]
+		if lhsNeedsTranspose == noTranspose && rhsNeedsTranspose == needs2DTranspose {
+			err = Highway.MatMulKLast(inputDType, outputDType, lhs.flat, rhs.flat,
+				params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
+				output.flat, backend.workers)
+			return output, err
+		}
 
 		lhsFlat := lhs.flat
 		rhsFlat := rhs.flat
