@@ -85,7 +85,7 @@ func KVCacheGetVars(ctx *context.Context, cacheShape shapes.Shape) (keyVar, valu
 
 // KVCacheUpdate writes new keys/values to the cache at the specified position.
 // This is used during incremental generation to accumulate key/value projections.
-// Supports circular/rotating cache: when position exceeds maxSeqLen, it wraps around.
+// Supports rolling (circular) cache: when position exceeds maxSeqLen, it wraps around.
 // This is a low-level function; most users should use WithKVCache on the attention builder.
 //
 // Parameters:
