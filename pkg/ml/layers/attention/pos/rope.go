@@ -77,7 +77,7 @@ func NewRoPEWithDimRange(baseFreq float64, dimStart, dimEnd int) *RoPE {
 	}
 }
 
-// Apply implements the PositionalEmbedding interface.
+// Apply implements the PositionalEncoder interface.
 // It applies rotary position embeddings to x using the provided position indices.
 // The rotation is applied on a range of frequencies multiplied by the position
 // of each element, as specified by positionIndices.

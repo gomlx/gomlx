@@ -14,9 +14,9 @@
  *	limitations under the License.
  */
 
-// Package pos provides positional embedding implementations for attention mechanisms.
-// Different positional embedding strategies (RoPE, ALiBi, learned embeddings, etc.)
-// can be implemented using the common PositionalEmbedding interface.
+// Package pos provides positional encoding implementations for attention mechanisms.
+// Different positional encoding strategies (RoPE, learned embeddings, etc.)
+// can be implemented using the common PositionalEncoder interface.
 package pos
 
 import (
@@ -25,13 +25,13 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
-// PositionalEmbedding is the interface for applying positional information to attention inputs.
+// PositionalEncoder is the interface for applying positional information to attention inputs.
 // Different implementations can provide various positional encoding strategies like RoPE,
 // ALiBi (Attention with Linear Biases), learned positional embeddings, or sinusoidal embeddings.
 //
 // The interface is designed to work with attention mechanisms where position information
 // needs to be incorporated into query and key projections.
-type PositionalEmbedding interface {
+type PositionalEncoder interface {
 	// Apply applies the positional embedding to the input tensor.
 	//
 	// Parameters:
@@ -67,7 +67,7 @@ type PositionalEmbedding interface {
 // Returns:
 //   - Position indices with values [startPos, startPos+1, ..., startPos+seqLen-1]
 //     Shape is [seqLen] for scalar startPos, or [batchSize, seqLen] for batched startPos.
-//     Returns Int32 dtype; the PositionalEmbedding will convert to the appropriate dtype.
+//     Returns Int32 dtype; the PositionalEncoder will convert to the appropriate dtype.
 //
 // Example:
 //
