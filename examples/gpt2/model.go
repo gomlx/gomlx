@@ -74,11 +74,9 @@ type GPT2TransformerWrapper struct {
 	MaxSeqLen  int // Maximum sequence length for KV cache
 }
 
-// ForGenerationDynamic returns a model function that accepts position as a Node parameter.
-// This enables graph caching by making position a graph input rather than a captured variable.
-// The same compiled graph can be reused for all positions, dramatically improving performance.
-func (w *GPT2TransformerWrapper) ForGenerationDynamic() func(ctx *context.Context, tokens *Node, positionNode *Node) *Node {
-	return func(ctx *context.Context, tokens *Node, positionNode *Node) *Node {
+// ForGenerationDynamic returns a model function that takes the position as input and uses a KVCache.
+func (w *GPT2TransformerWrapper) ForGenerationDynamic() func(ctx *context.Context, tokens *Node, position *Node) *Node {
+	return func(ctx *context.Context, tokens *Node, position *Node) *Node {
 		cfg := w.config
 		g := tokens.Graph()
 		currentSeqLen := tokens.Shape().Dimensions[1]
@@ -91,7 +89,7 @@ func (w *GPT2TransformerWrapper) ForGenerationDynamic() func(ctx *context.Contex
 
 		posEmbedFull := ctx.In("pos_embed").VariableWithShape("embeddings",
 			shapes.Make(cfg.DType, cfg.MaxPosEmbed, cfg.EmbedDim)).ValueGraph(g)
-		posScalar := Squeeze(ConvertDType(positionNode, dtypes.Int32))
+		posScalar := Squeeze(ConvertDType(position, dtypes.Int32))
 		posEmbed := DynamicSlice(posEmbedFull, []*Node{posScalar, Const(g, int32(0))}, []int{currentSeqLen, cfg.EmbedDim})
 		posEmbed = BroadcastToShape(ExpandDims(posEmbed, 0), embedded.Shape())
 		x := Add(embedded, posEmbed)
@@ -106,7 +104,7 @@ func (w *GPT2TransformerWrapper) ForGenerationDynamic() func(ctx *context.Contex
 
 			// Self-attention with KV cache
 			attn := attention.SelfAttention(layerCtx.In("attn"), attnInput, cfg.NumHeads, cfg.HeadDim).
-				WithKVCache(w.MaxSeqLen, positionNode).
+				WithKVCache(w.MaxSeqLen, position).
 				UseProjectionBias(true).
 				UseCausalMask().
 				Done()
@@ -158,6 +156,7 @@ func LoadGPT2(backend backends.Backend, repo *hub.Repo) (*GPT2Model, api.Tokeniz
 		config:     transformerConfig,
 		gpt2Config: config,
 		ctx:        ctx,
+		MaxSeqLen:  config.MaxPosEmbed,
 	}
 
 	// Load checkpoint weights
@@ -174,6 +173,25 @@ func LoadGPT2(backend backends.Backend, repo *hub.Repo) (*GPT2Model, api.Tokeniz
 		ctx:         ctx,
 		config:      config,
 		transformer: transformer,
+	}
+
+	// Create the generation exec once during loading (saves JIT compilation on first Generate call)
+	var err error
+	model.tokenExec, err = context.NewExec(backend, ctx.Reuse(),
+		func(ctx *context.Context, tokens *Node, position *Node) *Node {
+			logits := transformer.ForGenerationDynamic()(ctx, tokens, position)
+			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
+			lastLogits = Squeeze(lastLogits, 1)
+			return generation.SampleWithStrategy(
+				ctx, lastLogits,
+				model.config.Strategy,
+				model.config.Temperature,
+				model.config.TopK,
+				model.config.TopP,
+			)
+		})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create generation exec: %w", err)
 	}
 
 	// Load tokenizer - distilgpt2 doesn't have tokenizer_class, so use hftokenizer directly
@@ -206,35 +224,10 @@ func (m *GPT2Model) Generate(
 	m.config.TopK = config.TopK
 	m.config.TopP = config.TopP
 
-	// Set max sequence length for KV cache (cache is automatically managed within context)
-	m.transformer.MaxSeqLen = m.config.MaxPosEmbed
-
 	// Convert prompt tokens to int32
 	promptTokens32 := make([]int32, len(promptTokens))
 	for i, token := range promptTokens {
 		promptTokens32[i] = int32(token)
-	}
-
-	// Create single exec that handles both prompt and generation
-	// Accepts tokens (2D: [batch, seq_len]) and position as graph parameters
-	var err error
-	m.tokenExec, err = context.NewExec(m.backend, m.ctx.Reuse(),
-		func(ctx *context.Context, tokens *Node, position *Node) *Node {
-			logits := m.transformer.ForGenerationDynamic()(ctx, tokens, position)
-			// Get logits for last token: [batch, seq_len, vocab_size] -> [batch, vocab_size]
-			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
-			lastLogits = Squeeze(lastLogits, 1)
-			// Use SampleWithStrategy for proper sampling control
-			return generation.SampleWithStrategy(
-				ctx, lastLogits,
-				m.config.Strategy,
-				m.config.Temperature,
-				m.config.TopK,
-				m.config.TopP,
-			)
-		})
-	if err != nil {
-		return fmt.Errorf("failed to create generation exec: %w", err)
 	}
 
 	// Process prompt (position=0)

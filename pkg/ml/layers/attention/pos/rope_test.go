@@ -22,7 +22,7 @@ func TestRoPE(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			// Create position indices using helper function
 			seqLen := x.Shape().Dimensions[0]
-			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 			return rope.Apply(x, posIndices)
 		})
 
@@ -46,7 +46,7 @@ func TestRoPE(t *testing.T) {
 		rope := NewRoPE(10000.0)
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[0]
-			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 			return rope.Apply(x, posIndices)
 		})
 
@@ -64,7 +64,7 @@ func TestRoPE(t *testing.T) {
 		rope := NewRoPE(5000.0)
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
-			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 			return rope.Apply(x, posIndices)
 		})
 
@@ -85,7 +85,7 @@ func TestRoPE(t *testing.T) {
 		rope := NewRoPE(10000.0)
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
-			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 			rotated := rope.Apply(x, posIndices)
 			return ReduceAllSum(Abs(rotated))
 		})
@@ -110,7 +110,7 @@ func TestRoPE(t *testing.T) {
 			rope := NewRoPE(10000.0)
 			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 				seqLen := x.Shape().Dimensions[x.Rank()-2]
-				posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+				posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 				return rope.Apply(x, posIndices)
 			})
 
@@ -135,7 +135,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			// Apply RoPE only to middle dimensions [2:6]
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
-			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 			return rope.Apply(x, posIndices)
 		})
 
@@ -158,7 +158,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			// Apply RoPE to the full embedding range [0:8]
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
-			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 			return rope.Apply(x, posIndices)
 		})
 
@@ -181,7 +181,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			// Apply RoPE to tail half with different startPos and baseFreq
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
-			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 			return rope.Apply(x, posIndices)
 		})
 
@@ -201,7 +201,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 			rope := NewRoPEWithDimRange(10000.0, 1, 4)
 			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 				seqLen := x.Shape().Dimensions[x.Rank()-2]
-				posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+				posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 				return rope.Apply(x, posIndices)
 			})
 
@@ -220,7 +220,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 			rope := NewRoPEWithDimRange(10000.0, 0, 10)
 			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 				seqLen := x.Shape().Dimensions[x.Rank()-2]
-				posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+				posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 				return rope.Apply(x, posIndices)
 			})
 
@@ -240,7 +240,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		rope := NewRoPEWithDimRange(10000.0, 0, 4)
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
-			posIndices := SequentialPositions(x.Graph(), startPos, seqLen, x.DType())
+			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 			return rope.Apply(x, posIndices)
 		})
 

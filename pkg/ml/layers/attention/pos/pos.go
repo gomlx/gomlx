@@ -50,34 +50,32 @@ type PositionalEmbedding interface {
 	//
 	// The exact behavior depends on the implementation:
 	//   - RoPE: Rotates pairs of dimensions based on position (preserves shape)
-	//   - ALiBi: Would modify attention logits (different interface needed)
 	//   - Learned: Adds learned position vectors (may change shape)
 	//   - Sinusoidal: Adds fixed sinusoidal position encodings (may change shape)
 	Apply(x *Node, positionIndices *Node) *Node
 }
 
 // SequentialPositions creates position indices for sequential positions starting from startPos.
-// This is the most common case and provides backwards compatibility with the previous API.
 //
 // Parameters:
 //   - g: Graph to create the computation in
-//   - startPos: Starting position as a scalar *Node (will be converted to appropriate dtype)
+//   - startPos: Starting position as a scalar *Node
 //   - seqLen: Sequence length
-//   - dtype: Data type for the position indices
 //
 // Returns:
 //   - Position indices shaped [seqLen] with values [startPos, startPos+1, ..., startPos+seqLen-1]
+//     Returns Int32 dtype; the PositionalEmbedding will convert to the appropriate dtype.
 //
 // Example:
 //
-//	posIndices := SequentialPositions(g, Const(g, int32(5)), 4, dtypes.Float32)
-//	// Result: [5, 6, 7, 8] with dtype Float32
-func SequentialPositions(g *Graph, startPos *Node, seqLen int, dtype dtypes.DType) *Node {
+//	posIndices := SequentialPositions(g, Const(g, int32(5)), 4)
+//	// Result: [5, 6, 7, 8] with dtype Int32
+func SequentialPositions(g *Graph, startPos *Node, seqLen int) *Node {
 	// Create [0, 1, 2, ..., seqLen-1]
-	positions := Iota(g, shapes.Make(dtype, seqLen), 0)
+	positions := Iota(g, shapes.Make(dtypes.Int32, seqLen), 0)
 
-	// Convert startPos to target dtype and ensure it's scalar
-	posNode := ConvertDType(Reshape(startPos), dtype) // Reshape startPos to scalar, if not already.
+	// Convert startPos to Int32 and ensure it's scalar
+	posNode := ConvertDType(Reshape(startPos), dtypes.Int32) // Reshape startPos to scalar, if not already.
 
 	// Broadcast and add: [0, 1, 2, ...] + startPos
 	posNode = BroadcastToShape(posNode, positions.Shape())
@@ -92,29 +90,29 @@ func SequentialPositions(g *Graph, startPos *Node, seqLen int, dtype dtypes.DTyp
 //   - cachePos: Current position in the rotating cache as a scalar *Node
 //   - seqLen: Sequence length
 //   - maxCacheSize: Maximum size of the rotating cache
-//   - dtype: Data type for the position indices
 //
 // Returns:
-//   - Position indices shaped [seqLen] with values wrapping at maxCacheSize
+//   - Position indices shaped [seqLen] with values wrapping at maxCacheSize.
+//     Returns Int32 dtype; the PositionalEmbedding will convert to the appropriate dtype.
 //
 // Example:
 //
 //	// Cache position 1022, adding 5 tokens with max cache 1024:
-//	posIndices := RotatingPositions(g, Const(g, int32(1022)), 5, 1024, dtypes.Float32)
+//	posIndices := RotatingPositions(g, Const(g, int32(1022)), 5, 1024)
 //	// Result: [1022, 1023, 0, 1, 2] (wraps around at 1024)
-func RotatingPositions(g *Graph, cachePos *Node, seqLen int, maxCacheSize int, dtype dtypes.DType) *Node {
+func RotatingPositions(g *Graph, cachePos *Node, seqLen int, maxCacheSize int) *Node {
 	// Create [0, 1, 2, ..., seqLen-1]
-	offsets := Iota(g, shapes.Make(dtype, seqLen), 0)
+	offsets := Iota(g, shapes.Make(dtypes.Int32, seqLen), 0)
 
-	// Convert cachePos to target dtype and ensure it's scalar
-	posNode := ConvertDType(Reshape(cachePos), dtype) // Reshape cachePos to scalar, if not already.
+	// Convert cachePos to Int32 and ensure it's scalar
+	posNode := ConvertDType(Reshape(cachePos), dtypes.Int32) // Reshape cachePos to scalar, if not already.
 
 	// Add current cache position: [cachePos, cachePos+1, cachePos+2, ...]
 	posNode = BroadcastToShape(posNode, offsets.Shape())
 	positions := Add(offsets, posNode)
 
 	// Apply modulo to wrap around: positions % maxCacheSize
-	maxSize := Scalar(g, dtype, maxCacheSize)
+	maxSize := Scalar(g, dtypes.Int32, maxCacheSize)
 	maxSize = BroadcastToShape(maxSize, positions.Shape())
 	return Mod(positions, maxSize)
 }

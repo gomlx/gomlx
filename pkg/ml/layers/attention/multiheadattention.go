@@ -374,7 +374,7 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 		// Create sequential position indices from the position node
 		// projectedQuery shape: [..., seqLen, numHeads, headDim]
 		seqLen := projectedQuery.Shape().Dimensions[projectedQuery.Rank()-2]
-		posIndices := pos.SequentialPositions(b.g, b.position, seqLen, projectedQuery.DType())
+		posIndices := pos.SequentialPositions(b.g, b.position, seqLen)
 		projectedQuery = rope.Apply(projectedQuery, posIndices)
 		projectedKey = rope.Apply(projectedKey, posIndices)
 	}
