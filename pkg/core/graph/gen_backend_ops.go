@@ -1795,6 +1795,129 @@ func Floor(x *Node) (
 	return
 }
 
+// nodeInputsFusedDense holds the inputs used for the call to backends.FusedDense.
+type nodeInputsFusedDense struct {
+	x      *Node
+	weight *Node
+	bias   *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedDense) Type() NodeType {
+	return NodeTypeFusedDense
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedDense) String() string {
+	return fmt.Sprintf("%s(x=[#%d], weight=[#%d], bias=%s)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.weight.Id(),
+		func() string {
+			if ni.bias != nil {
+				return fmt.Sprintf("[#%d]", ni.bias.Id())
+			}
+			return "nil"
+		}(),
+	)
+}
+
+// FusedDense performs fused matmul + bias: y = x @ W + bias.
+// x: [batch..., in_features], weight: [in_features, out_features...], bias: [out_features...] (nil-able).
+// Contracts x's last axis with weight's first axis.
+func FusedDense(x *Node, weight *Node, bias *Node) (
+	node *Node) {
+	inputNodes := []*Node{x, weight}
+	if bias != nil {
+		inputNodes = append(inputNodes, bias)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedDense{
+		x:      x,
+		weight: weight,
+		bias:   bias,
+	}
+	var biasVal backends.Value
+	if bias != nil {
+		biasVal = bias.outputOps[0]
+	}
+	result, err := g.currentFunc.backendFunc.FusedDense(x.outputOps[0], weight.outputOps[0], biasVal)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsFusedDenseActivation holds the inputs used for the call to backends.FusedDenseActivation.
+type nodeInputsFusedDenseActivation struct {
+	x          *Node
+	weight     *Node
+	bias       *Node
+	activation backends.ActivationType
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedDenseActivation) Type() NodeType {
+	return NodeTypeFusedDenseActivation
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedDenseActivation) String() string {
+	return fmt.Sprintf("%s(x=[#%d], weight=[#%d], bias=%s, activation=%s)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.weight.Id(),
+		func() string {
+			if ni.bias != nil {
+				return fmt.Sprintf("[#%d]", ni.bias.Id())
+			}
+			return "nil"
+		}(),
+		ni.activation,
+	)
+}
+
+// FusedDenseActivation performs FusedDense followed by activation in one op.
+func FusedDenseActivation(x *Node, weight *Node, bias *Node, activation backends.ActivationType) (
+	node *Node) {
+	inputNodes := []*Node{x, weight}
+	if bias != nil {
+		inputNodes = append(inputNodes, bias)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedDenseActivation{
+		x:          x,
+		weight:     weight,
+		bias:       bias,
+		activation: activation,
+	}
+	var biasVal backends.Value
+	if bias != nil {
+		biasVal = bias.outputOps[0]
+	}
+	result, err := g.currentFunc.backendFunc.FusedDenseActivation(x.outputOps[0], weight.outputOps[0], biasVal, inputs.activation)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
 // nodeInputsFusedGelu holds the inputs used for the call to backends.FusedGelu.
 type nodeInputsFusedGelu struct {
 	x    *Node
@@ -1826,6 +1949,85 @@ func FusedGelu(x *Node, mode string) (
 		mode: mode,
 	}
 	result, err := g.currentFunc.backendFunc.FusedGelu(x.outputOps[0], inputs.mode)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsFusedLayerNorm holds the inputs used for the call to backends.FusedLayerNorm.
+type nodeInputsFusedLayerNorm struct {
+	x       *Node
+	axes    []int
+	epsilon float64
+	gamma   *Node
+	beta    *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedLayerNorm) Type() NodeType {
+	return NodeTypeFusedLayerNorm
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedLayerNorm) String() string {
+	return fmt.Sprintf("%s(x=[#%d], axes=%v, epsilon=%v, gamma=%s, beta=%s)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.axes,
+		ni.epsilon,
+		func() string {
+			if ni.gamma != nil {
+				return fmt.Sprintf("[#%d]", ni.gamma.Id())
+			}
+			return "nil"
+		}(),
+		func() string {
+			if ni.beta != nil {
+				return fmt.Sprintf("[#%d]", ni.beta.Id())
+			}
+			return "nil"
+		}(),
+	)
+}
+
+// FusedLayerNorm applies layer normalization over specified axes.
+// gamma and beta can be nil if no learned scale/offset.
+// epsilon: numerical stability constant (typically 1e-5).
+func FusedLayerNorm(x *Node, axes []int, epsilon float64, gamma *Node, beta *Node) (
+	node *Node) {
+	inputNodes := []*Node{x}
+	if gamma != nil {
+		inputNodes = append(inputNodes, gamma)
+	}
+	if beta != nil {
+		inputNodes = append(inputNodes, beta)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedLayerNorm{
+		x:       x,
+		axes:    slices.Clone(axes),
+		epsilon: epsilon,
+		gamma:   gamma,
+		beta:    beta,
+	}
+	var gammaVal backends.Value
+	if gamma != nil {
+		gammaVal = gamma.outputOps[0]
+	}
+	var betaVal backends.Value
+	if beta != nil {
+		betaVal = beta.outputOps[0]
+	}
+	result, err := g.currentFunc.backendFunc.FusedLayerNorm(x.outputOps[0], inputs.axes, inputs.epsilon, gammaVal, betaVal)
 	if err != nil {
 		panic(err)
 	}

@@ -50,10 +50,17 @@ var (
 		"Transpose", "Where")
 
 	// methodsNotGenerated but for which there is still a NodeType.
-	// These get a NodeType but no auto-generated wrapper (hand-written due to nil-able Value params).
+	// These get a NodeType but no auto-generated wrapper.
 	methodsNotGenerated = sets.MakeWith(
-		"Constant", "Parameter",
-		"FusedLayerNorm", "FusedDense", "FusedDenseActivation")
+		"Constant", "Parameter")
+
+	// nillableParams lists Value parameters that can be nil (passed as *Node).
+	// Key format: "MethodName.paramName"
+	nillableParams = sets.MakeWith(
+		"FusedLayerNorm.gamma", "FusedLayerNorm.beta",
+		"FusedDense.bias",
+		"FusedDenseActivation.bias",
+	)
 
 	// methodsExcluded from generating and even from having a NodeType.
 	// These are utility methods, not part of building a graph.
@@ -100,10 +107,20 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			case "Value":
 				pi.BackendType = "backends.Value"
 				pi.GraphType = "*Node"
-				pi.ConvertStatement = fmt.Sprintf("%s.outputOps[0]", param.Name)
-				mi.OpInputs = append(mi.OpInputs, param.Name)
-				pi.Format = "[#%d]"
-				pi.FormatValue = fmt.Sprintf("ni.%s.Id()", param.Name)
+				if nillableParams.Has(name + "." + param.Name) {
+					pi.IsNillable = true
+					mi.NillableInputs = append(mi.NillableInputs, param.Name)
+					pi.ConvertStatement = fmt.Sprintf("%sVal", param.Name)
+					pi.Format = "%s"
+					pi.FormatValue = fmt.Sprintf(
+						`func() string { if ni.%s != nil { return fmt.Sprintf("[#%%d]", ni.%s.Id()) }; return "nil" }()`,
+						param.Name, param.Name)
+				} else {
+					pi.ConvertStatement = fmt.Sprintf("%s.outputOps[0]", param.Name)
+					mi.OpInputs = append(mi.OpInputs, param.Name)
+					pi.Format = "[#%d]"
+					pi.FormatValue = fmt.Sprintf("ni.%s.Id()", param.Name)
+				}
 			case "...Value":
 				pi.BackendType = "...backends.Value"
 				pi.GraphType = "...*Node"
@@ -146,6 +163,9 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			case "FFTType":
 				pi.BackendType = "backends." + pi.BackendType
 				pi.Format = "%s"
+			case "ActivationType":
+				pi.BackendType = "backends." + pi.BackendType
+				pi.Format = "%s"
 			default:
 				switch {
 				case strings.HasPrefix(pi.BackendType, "..."):
@@ -178,7 +198,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			if pi.FormatValue == "" {
 				pi.FormatValue = "ni." + pi.Name
 			}
-			mi.HasGraph = len(mi.OpInputSlices) == 0 && len(mi.OpInputs) == 0
+			mi.HasGraph = len(mi.OpInputSlices) == 0 && len(mi.OpInputs) == 0 && len(mi.NillableInputs) == 0
 		}
 		for outputIdx, output := range raw.Outputs[:len(raw.Outputs)-1] { // Skip the error.
 			switch output.Type {
@@ -203,6 +223,7 @@ type MethodInfo struct {
 	HasGraph               bool
 	OpInputs               []string
 	OpInputSlices          []string
+	NillableInputs         []string
 	Inputs                 []*ParameterInfo
 	Exported, Excluded     bool
 	Comments               []string
@@ -220,6 +241,7 @@ type ParameterInfo struct {
 	CopyStatement, ConvertStatement       string
 	Format, FormatValue                   string
 	Printable                             bool
+	IsNillable                            bool
 }
 
 const (
@@ -315,6 +337,11 @@ Body: */}}{
 {{- range .OpInputSlices}}
 	inputNodes = append(inputNodes, {{.}}...)
 {{- end}}
+{{- range .NillableInputs}}
+	if {{.}} != nil {
+		inputNodes = append(inputNodes, {{.}})
+	}
+{{- end}}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 {{- end}}
 	inputs := &nodeInputs{{.BackendName}}{
@@ -322,6 +349,12 @@ Body: */}}{
 		{{.Name}}: {{.CopyStatement}},
 {{- end}}
 	}
+{{- range .Inputs}}{{- if .IsNillable}}
+	var {{.Name}}Val backends.Value
+	if {{.Name}} != nil {
+		{{.Name}}Val = {{.Name}}.outputOps[0]
+	}
+{{- end}}{{- end}}
 {{- /*
 
 Convert result(s) to node(s):
