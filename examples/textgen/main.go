@@ -35,6 +35,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 var (
@@ -252,7 +253,7 @@ func generateText(backend backends.Backend, ctx *context.Context, prompt string)
 			WithMaxLength(*flagMaxLength)
 	}
 
-	promptTensor := tensors.FromValue([][]int32{convertToInt32(promptTokens)})
+	promptTensor := tensors.FromValue([][]int32{xslices.Map(promptTokens, func(t int) int32 { return int32(t) })})
 	generated, err := genCfg.Generate(backend, ctx, promptTensor)
 	if err != nil {
 		log.Fatalf("Generation failed: %v", err)
@@ -283,14 +284,6 @@ func extractTokens(generated *tensors.Tensor) []int {
 		return tokens
 	}
 	return nil
-}
-
-func convertToInt32(tokens []int) []int32 {
-	result := make([]int32, len(tokens))
-	for i, t := range tokens {
-		result[i] = int32(t)
-	}
-	return result
 }
 
 func main() {
