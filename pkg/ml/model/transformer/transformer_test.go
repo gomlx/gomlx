@@ -1,4 +1,6 @@
-package generation
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
+package transformer
 
 import (
 	"fmt"
@@ -14,10 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestTransformerConfig groups transformer config tests.
-func TestTransformerConfig(t *testing.T) {
+// TestModel groups transformer model tests.
+func TestModel(t *testing.T) {
 	t.Run("Defaults", func(t *testing.T) {
-		cfg := NewTransformerConfig(1000, 128, 4, 8, 16)
+		cfg := New(1000, 128, 4, 8, 16)
 		assert.Equal(t, 1000, cfg.VocabSize)
 		assert.Equal(t, 128, cfg.EmbedDim)
 		assert.Equal(t, 4, cfg.NumLayers)
@@ -34,7 +36,7 @@ func TestTransformerConfig(t *testing.T) {
 	})
 
 	t.Run("Builders", func(t *testing.T) {
-		cfg := NewTransformerConfig(1000, 128, 4, 8, 16).
+		cfg := New(1000, 128, 4, 8, 16).
 			WithFFNDim(256).
 			WithMaxPosEmbed(1024).
 			WithDType(dtypes.Float16).
@@ -51,26 +53,73 @@ func TestTransformerConfig(t *testing.T) {
 		assert.False(t, cfg.UseLayerNorm)
 		assert.False(t, cfg.UseBias)
 	})
+
+	t.Run("NewFromContext", func(t *testing.T) {
+		ctx := context.New()
+		ctx.SetParams(map[string]any{
+			ParamVocabSize:    1000,
+			ParamEmbedDim:     128,
+			ParamNumLayers:    4,
+			ParamNumHeads:     8,
+			ParamHeadDim:      16,
+			ParamFFNDim:       256,
+			ParamMaxPosEmbed:  1024,
+			ParamDType:        "float16",
+			ParamDropout:      0.1,
+			ParamUseRoPE:      true,
+			ParamRoPEBaseFreq: 5000.0,
+			ParamUseLayerNorm: false,
+			ParamUseBias:      false,
+		})
+
+		cfg := NewFromContext(ctx)
+		assert.Equal(t, 1000, cfg.VocabSize)
+		assert.Equal(t, 128, cfg.EmbedDim)
+		assert.Equal(t, 4, cfg.NumLayers)
+		assert.Equal(t, 8, cfg.NumHeads)
+		assert.Equal(t, 16, cfg.HeadDim)
+		assert.Equal(t, 256, cfg.FFNDim)
+		assert.Equal(t, 1024, cfg.MaxPosEmbed)
+		assert.Equal(t, dtypes.Float16, cfg.DType)
+		assert.Equal(t, 0.1, cfg.Dropout)
+		assert.True(t, cfg.UseRoPE)
+		assert.Equal(t, 5000.0, cfg.RoPEBaseFreq)
+		assert.False(t, cfg.UseLayerNorm)
+		assert.False(t, cfg.UseBias)
+	})
+
+	t.Run("FromContext", func(t *testing.T) {
+		ctx := context.New()
+		ctx.SetParams(map[string]any{
+			ParamFFNDim:       256,
+			ParamMaxPosEmbed:  1024,
+			ParamDType:        "float16",
+			ParamDropout:      0.1,
+			ParamUseRoPE:      true,
+			ParamRoPEBaseFreq: 5000.0,
+			ParamUseLayerNorm: false,
+			ParamUseBias:      false,
+		})
+
+		cfg := New(1000, 128, 4, 8, 16).FromContext(ctx)
+		assert.Equal(t, 256, cfg.FFNDim)
+		assert.Equal(t, 1024, cfg.MaxPosEmbed)
+		assert.Equal(t, dtypes.Float16, cfg.DType)
+		assert.Equal(t, 0.1, cfg.Dropout)
+		assert.True(t, cfg.UseRoPE)
+		assert.Equal(t, 5000.0, cfg.RoPEBaseFreq)
+		assert.False(t, cfg.UseLayerNorm)
+		assert.False(t, cfg.UseBias)
+	})
 }
 
 // TestTransformerBuilder groups transformer builder/exposed functions tests.
 func TestTransformerBuilder(t *testing.T) {
-	t.Run("BuildCachedTransformer", func(t *testing.T) {
-		ctx := context.New()
-		cfg := NewTransformerConfig(100, 64, 2, 4, 16)
-		transformer := BuildCachedTransformer(ctx, cfg)
-		require.NotNil(t, transformer)
-		require.NotNil(t, transformer.Config)
-		assert.Equal(t, cfg, transformer.Config)
-		assert.False(t, transformer.KVCacheShape.Ok()) // Empty shape initially
-	})
-
 	t.Run("ForTrainingForward", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		cfg := NewTransformerConfig(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
-		transformer := BuildCachedTransformer(ctx, cfg)
-		modelFn := transformer.ForTraining()
+		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
+		modelFn := cfg.ForTraining()
 		g := NewGraph(backend, "ForTrainingForward")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 2, 8))
 		tokens = Mod(tokens, Const(g, int32(cfg.VocabSize)))
@@ -83,10 +132,8 @@ func TestTransformerBuilder(t *testing.T) {
 	t.Run("ForGenerationPrompt", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		cfg := NewTransformerConfig(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
-		transformer := BuildCachedTransformer(ctx, cfg)
-		// KV cache shape is now created automatically within forwardFull based on batch size
-		modelFn := transformer.ForGeneration()
+		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
+		modelFn := cfg.ForGeneration()
 		g := NewGraph(backend, "ForGenerationPrompt")
 		prompt := IotaFull(g, shapes.Make(dtypes.Int32, 2, 5))
 		prompt = Mod(prompt, Const(g, int32(cfg.VocabSize)))
@@ -101,10 +148,8 @@ func TestTransformerVariants(t *testing.T) {
 	t.Run("WithRoPE", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		cfg := NewTransformerConfig(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithRoPE(10000.0)
-		transformer := BuildCachedTransformer(ctx, cfg)
-		// KV cache shape is now created automatically within forwardFull based on batch size
-		modelFn := transformer.ForGeneration()
+		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithRoPE(10000.0)
+		modelFn := cfg.ForGeneration()
 		g := NewGraph(backend, "WithRoPE")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 1, 4))
 		tokens = Mod(tokens, Const(g, int32(cfg.VocabSize)))
@@ -116,9 +161,8 @@ func TestTransformerVariants(t *testing.T) {
 	t.Run("WithoutLayerNorm", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		cfg := NewTransformerConfig(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithLayerNorm(false)
-		transformer := BuildCachedTransformer(ctx, cfg)
-		modelFn := transformer.ForTraining()
+		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithLayerNorm(false)
+		modelFn := cfg.ForTraining()
 		g := NewGraph(backend, "WithoutLayerNorm")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 2, 8))
 		tokens = Mod(tokens, Const(g, int32(cfg.VocabSize)))
@@ -130,9 +174,8 @@ func TestTransformerVariants(t *testing.T) {
 	t.Run("WithoutBias", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		cfg := NewTransformerConfig(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithBias(false)
-		transformer := BuildCachedTransformer(ctx, cfg)
-		modelFn := transformer.ForTraining()
+		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithBias(false)
+		modelFn := cfg.ForTraining()
 		g := NewGraph(backend, "WithoutBias")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 2, 8))
 		tokens = Mod(tokens, Const(g, int32(cfg.VocabSize)))
@@ -144,9 +187,8 @@ func TestTransformerVariants(t *testing.T) {
 	t.Run("WithDropout", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		cfg := NewTransformerConfig(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithDropout(0.1)
-		transformer := BuildCachedTransformer(ctx, cfg)
-		modelFn := transformer.ForTraining()
+		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithDropout(0.1)
+		modelFn := cfg.ForTraining()
 		g := NewGraph(backend, "WithDropout")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 2, 8))
 		tokens = Mod(tokens, Const(g, int32(cfg.VocabSize)))
@@ -165,12 +207,11 @@ func TestTransformerBatchSizes(t *testing.T) {
 		t.Run(fmt.Sprintf("BatchSize%d", batchSize), func(t *testing.T) {
 			ctx := context.New()
 
-			cfg := NewTransformerConfig(100, 64, 2, 4, 16).
+			cfg := New(100, 64, 2, 4, 16).
 				WithFFNDim(128).
 				WithMaxPosEmbed(128)
 
-			transformer := BuildCachedTransformer(ctx, cfg)
-			modelFn := transformer.ForTraining()
+			modelFn := cfg.ForTraining()
 
 			seqLen := 8
 
