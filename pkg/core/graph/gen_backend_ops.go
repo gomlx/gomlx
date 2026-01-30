@@ -1877,8 +1877,9 @@ func (ni *nodeInputsGelu) String() string {
 	)
 }
 
-// backendGelu is a Graph wrapper for the backend.Builder.Gelu method.
-func backendGelu(x *Node, mode string) (
+// Gelu computes Gaussian Error Linear Unit activation.
+// mode: "exact" or "tanh_approximation".
+func Gelu(x *Node, mode string) (
 	node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4521,8 +4522,9 @@ func (ni *nodeInputsSoftmax) String() string {
 	)
 }
 
-// backendSoftmax is a Graph wrapper for the backend.Builder.Softmax method.
-func backendSoftmax(x *Node, axis int) (
+// Softmax computes softmax along the specified axis.
+// axis: single axis to compute softmax over (negative indexing supported).
+func Softmax(x *Node, axis int) (
 	node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)

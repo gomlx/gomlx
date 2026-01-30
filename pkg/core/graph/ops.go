@@ -895,14 +895,19 @@ func adjustAxesToRank(rank int, axesWithNegatives []int, paramName string) []int
 	return axes
 }
 
-// adjustAxesToRankAndSort not-inplace, it returns an adjusted copy of the given `axesWithNegatives`.
+// AdjustAxesToRankAndSort not-inplace, it returns an adjusted copy of the given `axesWithNegatives`.
 // Finally, it sorts the axes -- careful not to use it where the order matters.
 // An axis set to -1 is converted to `rank - 1`.
 // It panics if any of the axes is out-of-range for given rank.
-func adjustAxesToRankAndSort(rank int, axesWithNegatives []int, paramName string) []int {
+func AdjustAxesToRankAndSort(rank int, axesWithNegatives []int, paramName string) []int {
 	axes := adjustAxesToRank(rank, axesWithNegatives, paramName)
 	slices.Sort(axes)
 	return axes
+}
+
+// adjustAxesToRankAndSort is an unexported wrapper for internal callers.
+func adjustAxesToRankAndSort(rank int, axesWithNegatives []int, paramName string) []int {
+	return AdjustAxesToRankAndSort(rank, axesWithNegatives, paramName)
 }
 
 // ReduceSum reduces by summing over X elements over the selected axes.

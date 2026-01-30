@@ -10,8 +10,10 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
-// Hand-written wrappers for fused ops with nil-able Value parameters.
-// Softmax and Gelu wrappers are auto-generated in gen_backend_ops.go.
+// Hand-written wrappers for fused ops with nil-able Value parameters
+// (LayerNorm, Linear, LinearActivation).
+// Softmax and Gelu have simple signatures and are auto-generated as
+// exported wrappers in gen_backend_ops.go.
 
 // nodeInputsLayerNorm holds the inputs for a LayerNorm node.
 type nodeInputsLayerNorm struct {
@@ -79,10 +81,10 @@ func (ni *nodeInputsLinearActivation) String() string {
 		ni.x.Id(), ni.weight.Id(), biasStr, ni.activation)
 }
 
-// BackendLayerNorm wraps the backend LayerNorm call, handling nil gamma/beta.
+// LayerNorm wraps the backend LayerNorm call, handling nil gamma/beta.
 // It calls the backend's native LayerNorm op directly — the caller must check
 // Capabilities().Operations[backends.OpTypeLayerNorm] before calling.
-func BackendLayerNorm(x *Node, axes []int, epsilon float64, gamma, beta *Node) *Node {
+func LayerNorm(x *Node, axes []int, epsilon float64, gamma, beta *Node) *Node {
 	inputNodes := []*Node{x}
 	if gamma != nil {
 		inputNodes = append(inputNodes, gamma)
@@ -117,10 +119,10 @@ func BackendLayerNorm(x *Node, axes []int, epsilon float64, gamma, beta *Node) *
 	return node
 }
 
-// BackendLinear wraps the backend Linear call, handling nil bias.
+// Linear wraps the backend Linear call, handling nil bias.
 // It calls the backend's native Linear op directly — the caller must check
 // Capabilities().Operations[backends.OpTypeLinear] before calling.
-func BackendLinear(x, weight, bias *Node) *Node {
+func Linear(x, weight, bias *Node) *Node {
 	inputNodes := []*Node{x, weight}
 	if bias != nil {
 		inputNodes = append(inputNodes, bias)
@@ -149,10 +151,10 @@ func BackendLinear(x, weight, bias *Node) *Node {
 	return node
 }
 
-// BackendLinearActivation wraps the backend LinearActivation call, handling nil bias.
+// LinearActivation wraps the backend LinearActivation call, handling nil bias.
 // It calls the backend's native LinearActivation op directly — the caller must check
 // Capabilities().Operations[backends.OpTypeLinearActivation] before calling.
-func BackendLinearActivation(x, weight, bias *Node, activation backends.ActivationType) *Node {
+func LinearActivation(x, weight, bias *Node, activation backends.ActivationType) *Node {
 	inputNodes := []*Node{x, weight}
 	if bias != nil {
 		inputNodes = append(inputNodes, bias)
@@ -179,48 +181,4 @@ func BackendLinearActivation(x, weight, bias *Node, activation backends.Activati
 	}
 	g.registerNode(node)
 	return node
-}
-
-// TrySoftmax attempts to use the backend's native Softmax if supported.
-// Returns the result node and true if successful, or nil and false if the
-// backend does not support Softmax (caller should fall back to decomposition).
-func TrySoftmax(x *Node, axis int) (*Node, bool) {
-	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeSoftmax] {
-		return backendSoftmax(x, axis), true
-	}
-	return nil, false
-}
-
-// TryGelu attempts to use the backend's native Gelu if supported.
-// Returns the result node and true if successful, or nil and false if the
-// backend does not support Gelu (caller should fall back to decomposition).
-func TryGelu(x *Node, mode string) (*Node, bool) {
-	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeGelu] {
-		return backendGelu(x, mode), true
-	}
-	return nil, false
-}
-
-// TryLayerNorm attempts to use the backend's native LayerNorm if supported.
-func TryLayerNorm(x *Node, axes []int, epsilon float64, gamma, beta *Node) (*Node, bool) {
-	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeLayerNorm] {
-		return BackendLayerNorm(x, axes, epsilon, gamma, beta), true
-	}
-	return nil, false
-}
-
-// TryLinear attempts to use the backend's native Linear if supported.
-func TryLinear(x, weight, bias *Node) (*Node, bool) {
-	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeLinear] {
-		return BackendLinear(x, weight, bias), true
-	}
-	return nil, false
-}
-
-// TryLinearActivation attempts to use the backend's native LinearActivation if supported.
-func TryLinearActivation(x, weight, bias *Node, activation backends.ActivationType) (*Node, bool) {
-	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeLinearActivation] {
-		return BackendLinearActivation(x, weight, bias, activation), true
-	}
-	return nil, false
 }

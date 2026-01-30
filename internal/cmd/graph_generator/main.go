@@ -47,10 +47,7 @@ var (
 		"Sign",
 		"ShiftLeft", "ShiftRightArithmetic", "ShiftRightLogical",
 		"Slice",
-		"Transpose", "Where",
-
-		// Fused ops with simple signatures (auto-generated wrappers):
-		"Softmax", "Gelu")
+		"Transpose", "Where")
 
 	// methodsNotGenerated but for which there is still a NodeType.
 	// These get a NodeType but no auto-generated wrapper (hand-written due to nil-able Value params).
