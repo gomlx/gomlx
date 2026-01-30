@@ -12,7 +12,6 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/nn"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
@@ -323,10 +322,10 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	// Shape: [batch, <query_elements>, num_heads, <key_elements>]
 	softmaxAxes := xslices.Iota(attentionLogits.Rank()-numKeyAxes, numKeyAxes)
 	if mask == nil {
-		attentionCoefficients = nn.Softmax(attentionLogits, softmaxAxes...)
+		attentionCoefficients = Softmax(attentionLogits, softmaxAxes...)
 	} else {
 		//fmt.Printf("\tmask=%s\n", mask.Shape())
-		attentionCoefficients = nn.MaskedSoftmax(attentionLogits, mask, softmaxAxes...)
+		attentionCoefficients = MaskedSoftmax(attentionLogits, mask, softmaxAxes...)
 	}
 	//fmt.Printf("\tattentionCoefficients: %s\n", attentionLogits.Shape())
 	if b.dropoutRate > 0 {

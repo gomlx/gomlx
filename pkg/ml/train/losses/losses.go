@@ -14,7 +14,6 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/nn"
 	"github.com/pkg/errors"
 )
 
@@ -400,7 +399,7 @@ func categoricalCrossEntropyLogitsImpl(labels, logits *Node, extras []*Node) *No
 		expandedMask = BroadcastToShape(InsertAxes(mask, -1), logits.Shape())
 		logits = Where(expandedMask, logits, ZerosLike(logits))
 	}
-	logPredictions := nn.LogSoftmax(logits)
+	logPredictions := LogSoftmax(logits)
 	loss := ReduceSum(Neg(Mul(labels, logPredictions)), -1)
 	// loss will usually be shaped `[batchSize]` now.
 	if weights != nil {

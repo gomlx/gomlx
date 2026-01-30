@@ -377,6 +377,63 @@ func TestGrow(t *testing.T) {
 		})
 }
 
+func TestSoftmax(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "TestSoftmax()",
+		func(g *Graph) (inputs, outputs []*Node) {
+			logits := Const(g, [][]float64{{-1, 0, 1.}, {-1, 0, 0}})
+			inputs = []*Node{logits}
+			outputs = []*Node{Softmax(logits)}
+			return
+		}, []any{
+			[][]float64{
+				{0.09003057317038046, 0.24472847105479764, 0.6652409557748218},
+				{0.15536240349696362, 0.4223187982515182, 0.4223187982515182}},
+		}, xslices.Epsilon)
+}
+
+func TestMaskedSoftmax(t *testing.T) {
+	// Values checked with Tensorflow's `tf.nn.softmax()` function.
+	graphtest.RunTestGraphFn(t, "TestMaskedSoftmax()",
+		func(g *Graph) (inputs, outputs []*Node) {
+			logits := Const(g, [][]float64{{-1, 0, 1.}, {-1, 5, 10}})
+			mask := Const(g, [][]bool{{true, true, true}, {true, false, false}})
+			inputs = []*Node{logits, mask}
+			outputs = []*Node{MaskedSoftmax(logits, mask, -1)}
+			return
+		}, []any{
+			[][]float64{{0.09003057317038046, 0.24472847105479764, 0.6652409557748218}, {1, 0, 0}},
+		}, xslices.Epsilon)
+}
+
+func TestLogSoftmax(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "TestSoftmax()",
+		func(g *Graph) (inputs, outputs []*Node) {
+			logits := Const(g, [][]float32{{-1, 0, 1.}, {-1, 0, 0}})
+			inputs = []*Node{logits}
+			outputs = []*Node{LogSoftmax(logits)}
+			return
+		}, []any{
+			[][]float32{
+				{-2.4076061, -1.407606, -0.40760604},
+				{-1.8619947, -0.8619948, -0.8619948}},
+		}, xslices.Epsilon)
+}
+
+func TestMaskedLogSoftmax(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "TestSoftmax()",
+		func(g *Graph) (inputs, outputs []*Node) {
+			logits := Const(g, [][]float64{{-1, 0, 1., 1000}, {-1, 0, 1000, 0}})
+			mask := Const(g, [][]bool{{true, true, true, false}, {true, true, false, true}})
+			inputs = []*Node{logits}
+			outputs = []*Node{MaskedLogSoftmax(logits, mask)}
+			return
+		}, []any{
+			[][]float64{
+				{-2.4076061, -1.407606, -0.40760604, math.Inf(-1)},
+				{-1.8619947, -0.8619948, math.Inf(-1), -0.8619948}},
+		}, xslices.Epsilon)
+}
+
 func TestCumSum(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "TestCumSum()",
 		func(g *Graph) (inputs, outputs []*Node) {
