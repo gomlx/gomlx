@@ -17,6 +17,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/pkg/ml/nn"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 )
 
@@ -95,8 +96,13 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 	weights := weightsVar.ValueGraph(g)
 	var output *Node
 	if inputRank <= 2 && len(outputDimensions) == 1 {
-		// Vanilla version: input = [batch_size, feature_size], output = [batch_size, output_dim].
-		output = Dot(input, weights)
+		// Fast path: dispatch to nn.Dense which uses fused op if available.
+		var biasNode *Node
+		if useBias {
+			biasVar := ctx.VariableWithShape("biases", shapes.Make(inputShape.DType, outputDimensions...))
+			biasNode = biasVar.ValueGraph(g)
+		}
+		return nn.Dense(input, weights, biasNode)
 	} else {
 		// Einsum all batch dimensions:
 		axis := 'a'

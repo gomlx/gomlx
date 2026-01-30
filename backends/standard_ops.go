@@ -661,23 +661,24 @@ type StandardOps interface {
 	// If either condition, onTrue or onFalse is a scalar, it will be broadcasted to the shape of the other operands.
 	Where(condition, onTrue, onFalse Value) (Value, error)
 
-	// Softmax computes softmax along the specified axis.
+	// FusedSoftmax computes softmax along the specified axis.
 	// axis: single axis to compute softmax over (negative indexing supported).
-	Softmax(x Value, axis int) (Value, error)
+	FusedSoftmax(x Value, axis int) (Value, error)
 
-	// Gelu computes Gaussian Error Linear Unit activation.
+	// FusedGelu computes Gaussian Error Linear Unit activation.
 	// mode: "exact" or "tanh_approximation".
-	Gelu(x Value, mode string) (Value, error)
+	FusedGelu(x Value, mode string) (Value, error)
 
-	// LayerNorm applies layer normalization over specified axes.
+	// FusedLayerNorm applies layer normalization over specified axes.
 	// gamma and beta can be nil if no learned scale/offset.
 	// epsilon: numerical stability constant (typically 1e-5).
-	LayerNorm(x Value, axes []int, epsilon float64, gamma, beta Value) (Value, error)
+	FusedLayerNorm(x Value, axes []int, epsilon float64, gamma, beta Value) (Value, error)
 
-	// Linear performs fused matmul + bias: y = x @ weight^T + bias.
-	// bias can be nil for no bias addition.
-	Linear(x, weight, bias Value) (Value, error)
+	// FusedDense performs fused matmul + bias: y = x @ W + bias.
+	// x: [batch..., in_features], weight: [in_features, out_features...], bias: [out_features...] (nil-able).
+	// Contracts x's last axis with weight's first axis.
+	FusedDense(x, weight, bias Value) (Value, error)
 
-	// LinearActivation performs Linear followed by activation in one op.
-	LinearActivation(x, weight, bias Value, activation ActivationType) (Value, error)
+	// FusedDenseActivation performs FusedDense followed by activation in one op.
+	FusedDenseActivation(x, weight, bias Value, activation ActivationType) (Value, error)
 }

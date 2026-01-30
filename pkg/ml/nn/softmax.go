@@ -6,7 +6,7 @@ package nn
 import (
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/pkg/core/graph"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
 )
 
 // Softmax computes softmax activations. It's the equivalent to
@@ -22,7 +22,7 @@ import (
 //
 // If the backend supports fused softmax (single axis), it will use the
 // optimized native implementation instead of decomposing into primitives.
-func Softmax(logits *graph.Node, axes ...int) *graph.Node {
+func Softmax(logits *Node, axes ...int) *Node {
 	if !logits.DType().IsFloat() {
 		Panicf("invalid logits dtype (%s), it must be float", logits.DType())
 	}
@@ -32,17 +32,17 @@ func Softmax(logits *graph.Node, axes ...int) *graph.Node {
 
 	// Try native softmax for the single-axis case.
 	if len(axes) == 1 {
-		if logits.Graph().Backend().Capabilities().Operations[backends.OpTypeSoftmax] {
-			return graph.Softmax(logits, axes[0])
+		if logits.Graph().Backend().Capabilities().Operations[backends.OpTypeFusedSoftmax] {
+			return FusedSoftmax(logits, axes[0])
 		}
 	}
 
 	// Fall back to decomposition.
-	normalizingMax := graph.StopGradient(graph.ReduceAndKeep(logits, graph.ReduceMax, axes...))
-	normalizedLogits := graph.Sub(logits, normalizingMax)
-	numerator := graph.Exp(normalizedLogits)
-	denominator := graph.ReduceAndKeep(numerator, graph.ReduceSum, axes...)
-	return graph.Div(numerator, denominator)
+	normalizingMax := StopGradient(ReduceAndKeep(logits, ReduceMax, axes...))
+	normalizedLogits := Sub(logits, normalizingMax)
+	numerator := Exp(normalizedLogits)
+	denominator := ReduceAndKeep(numerator, ReduceSum, axes...)
+	return Div(numerator, denominator)
 }
 
 // MaskedSoftmax computes softmax activations. It's the equivalent to
@@ -63,7 +63,7 @@ func Softmax(logits *graph.Node, axes ...int) *graph.Node {
 //
 // It ignores values for which the corresponding mask is false, and will return 0 for
 // those fields. mask and logits must have the same shape.
-func MaskedSoftmax(logits, mask *graph.Node, axes ...int) *graph.Node {
+func MaskedSoftmax(logits, mask *Node, axes ...int) *Node {
 	if mask == nil {
 		return Softmax(logits, axes...)
 	}
@@ -73,16 +73,16 @@ func MaskedSoftmax(logits, mask *graph.Node, axes ...int) *graph.Node {
 	if len(axes) == 0 {
 		axes = []int{-1}
 	}
-	normalizingMax := graph.StopGradient(graph.MaskedReduceAndKeep(logits, mask, graph.MaskedReduceMax, axes...))
-	zeros := graph.ZerosLike(logits)
-	normalizedLogits := graph.Sub(logits, normalizingMax)
-	normalizedLogits = graph.Where(mask, normalizedLogits, zeros)
-	numerator := graph.Exp(normalizedLogits)
-	numerator = graph.Where(mask, numerator, zeros)
+	normalizingMax := StopGradient(MaskedReduceAndKeep(logits, mask, MaskedReduceMax, axes...))
+	zeros := ZerosLike(logits)
+	normalizedLogits := Sub(logits, normalizingMax)
+	normalizedLogits = Where(mask, normalizedLogits, zeros)
+	numerator := Exp(normalizedLogits)
+	numerator = Where(mask, numerator, zeros)
 	// Apply mask on numerator, setting softmax to zero where masked.
-	denominator := graph.ReduceAndKeep(numerator, graph.ReduceSum, axes...)
-	result := graph.Div(numerator, denominator)
-	result = graph.Where(mask, result, zeros)
+	denominator := ReduceAndKeep(numerator, ReduceSum, axes...)
+	result := Div(numerator, denominator)
+	result = Where(mask, result, zeros)
 	return result
 }
 
@@ -98,18 +98,18 @@ func MaskedSoftmax(logits, mask *graph.Node, axes ...int) *graph.Node {
 //
 // If any input values are "+inf", the result will be all "NaN": this reflects the
 // fact that "inf / inf" is not well-defined in the context of floating-point math.
-func LogSoftmax(logits *graph.Node, axes ...int) *graph.Node {
+func LogSoftmax(logits *Node, axes ...int) *Node {
 	if !logits.DType().IsFloat() {
 		Panicf("invalid logits dtype (%s), it must be float", logits.DType())
 	}
 	if len(axes) == 0 {
 		axes = []int{-1}
 	}
-	adjustedAxes := graph.AdjustAxesToRankAndSort(logits.Rank(), axes, "logits")
-	normalizingMax := graph.StopGradient(graph.ReduceAndKeep(logits, graph.ReduceMax, adjustedAxes...))
-	shiftedLogits := graph.Sub(logits, normalizingMax)
-	shiftedLogSumExp := graph.Log(graph.ReduceAndKeep(graph.Exp(shiftedLogits), graph.ReduceSum, adjustedAxes...))
-	return graph.Sub(shiftedLogits, shiftedLogSumExp)
+	adjustedAxes := AdjustAxesToRankAndSort(logits.Rank(), axes, "logits")
+	normalizingMax := StopGradient(ReduceAndKeep(logits, ReduceMax, adjustedAxes...))
+	shiftedLogits := Sub(logits, normalizingMax)
+	shiftedLogSumExp := Log(ReduceAndKeep(Exp(shiftedLogits), ReduceSum, adjustedAxes...))
+	return Sub(shiftedLogits, shiftedLogSumExp)
 }
 
 // MaskedLogSoftmax computes the logarithm of the MaskedSoftmax function, which rescales
@@ -120,7 +120,7 @@ func LogSoftmax(logits *graph.Node, axes ...int) *graph.Node {
 // If mask is nil, it behaves like LogSoftmax.
 //
 // See LogSoftmax for details.
-func MaskedLogSoftmax(logits, mask *graph.Node, axes ...int) *graph.Node {
+func MaskedLogSoftmax(logits, mask *Node, axes ...int) *Node {
 	if mask == nil {
 		return LogSoftmax(logits, axes...)
 	}
@@ -131,9 +131,9 @@ func MaskedLogSoftmax(logits, mask *graph.Node, axes ...int) *graph.Node {
 	if len(axes) == 0 {
 		axes = []int{-1}
 	}
-	adjustedAxes := graph.AdjustAxesToRankAndSort(logits.Rank(), axes, "logits")
-	normalizingMax := graph.StopGradient(graph.MaskedReduceAndKeep(logits, mask, graph.MaskedReduceMax, adjustedAxes...))
-	shiftedLogits := graph.Sub(logits, normalizingMax)
-	shiftedLogSumExp := graph.Log(graph.MaskedReduceAndKeep(graph.Exp(shiftedLogits), mask, graph.MaskedReduceSum, adjustedAxes...))
-	return graph.Where(mask, graph.Sub(shiftedLogits, shiftedLogSumExp), graph.Infinity(logits.Graph(), dtype, -1))
+	adjustedAxes := AdjustAxesToRankAndSort(logits.Rank(), axes, "logits")
+	normalizingMax := StopGradient(MaskedReduceAndKeep(logits, mask, MaskedReduceMax, adjustedAxes...))
+	shiftedLogits := Sub(logits, normalizingMax)
+	shiftedLogSumExp := Log(MaskedReduceAndKeep(Exp(shiftedLogits), mask, MaskedReduceSum, adjustedAxes...))
+	return Where(mask, Sub(shiftedLogits, shiftedLogSumExp), Infinity(logits.Graph(), dtype, -1))
 }

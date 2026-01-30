@@ -143,11 +143,11 @@ const (
 	// If supported (declared in Capabilities.Operations), GoMLX uses the
 	// native implementation; otherwise it decomposes into primitives.
 
-	OpTypeSoftmax
-	OpTypeLayerNorm
-	OpTypeGelu
-	OpTypeLinear
-	OpTypeLinearActivation
+	OpTypeFusedSoftmax
+	OpTypeFusedLayerNorm
+	OpTypeFusedGelu
+	OpTypeFusedDense
+	OpTypeFusedDenseActivation
 
 	// OpTypeLast should always be kept the last, it is used as a counter/marker for OpType.
 	OpTypeLast

@@ -10,13 +10,13 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
-// Hand-written wrappers for fused ops with nil-able Value parameters
-// (LayerNorm, Linear, LinearActivation).
-// Softmax and Gelu have simple signatures and are auto-generated as
-// exported wrappers in gen_backend_ops.go.
+// Hand-written fused-op wrappers for ops with nil-able Value parameters
+// (FusedLayerNorm, FusedDense, FusedDenseActivation).
+// FusedSoftmax and FusedGelu have simple signatures and are auto-generated
+// in gen_backend_ops.go.
 
-// nodeInputsLayerNorm holds the inputs for a LayerNorm node.
-type nodeInputsLayerNorm struct {
+// nodeInputsFusedLayerNorm holds the inputs for a LayerNorm node.
+type nodeInputsFusedLayerNorm struct {
 	x       *Node
 	axes    []int
 	epsilon float64
@@ -24,11 +24,11 @@ type nodeInputsLayerNorm struct {
 	beta    *Node
 }
 
-func (ni *nodeInputsLayerNorm) Type() NodeType {
-	return NodeTypeLayerNorm
+func (ni *nodeInputsFusedLayerNorm) Type() NodeType {
+	return NodeTypeFusedLayerNorm
 }
 
-func (ni *nodeInputsLayerNorm) String() string {
+func (ni *nodeInputsFusedLayerNorm) String() string {
 	gammaStr, betaStr := "nil", "nil"
 	if ni.gamma != nil {
 		gammaStr = fmt.Sprintf("[#%d]", ni.gamma.Id())
@@ -40,51 +40,49 @@ func (ni *nodeInputsLayerNorm) String() string {
 		ni.x.Id(), ni.axes, ni.epsilon, gammaStr, betaStr)
 }
 
-// nodeInputsLinear holds the inputs for a Linear node.
-type nodeInputsLinear struct {
+// nodeInputsFusedDense holds the inputs for a Dense node.
+type nodeInputsFusedDense struct {
 	x      *Node
 	weight *Node
 	bias   *Node
 }
 
-func (ni *nodeInputsLinear) Type() NodeType {
-	return NodeTypeLinear
+func (ni *nodeInputsFusedDense) Type() NodeType {
+	return NodeTypeFusedDense
 }
 
-func (ni *nodeInputsLinear) String() string {
+func (ni *nodeInputsFusedDense) String() string {
 	biasStr := "nil"
 	if ni.bias != nil {
 		biasStr = fmt.Sprintf("[#%d]", ni.bias.Id())
 	}
-	return fmt.Sprintf("Linear(x=[#%d], weight=[#%d], bias=%s)",
+	return fmt.Sprintf("Dense(x=[#%d], weight=[#%d], bias=%s)",
 		ni.x.Id(), ni.weight.Id(), biasStr)
 }
 
-// nodeInputsLinearActivation holds the inputs for a LinearActivation node.
-type nodeInputsLinearActivation struct {
+// nodeInputsFusedDenseActivation holds the inputs for a DenseActivation node.
+type nodeInputsFusedDenseActivation struct {
 	x          *Node
 	weight     *Node
 	bias       *Node
 	activation backends.ActivationType
 }
 
-func (ni *nodeInputsLinearActivation) Type() NodeType {
-	return NodeTypeLinearActivation
+func (ni *nodeInputsFusedDenseActivation) Type() NodeType {
+	return NodeTypeFusedDenseActivation
 }
 
-func (ni *nodeInputsLinearActivation) String() string {
+func (ni *nodeInputsFusedDenseActivation) String() string {
 	biasStr := "nil"
 	if ni.bias != nil {
 		biasStr = fmt.Sprintf("[#%d]", ni.bias.Id())
 	}
-	return fmt.Sprintf("LinearActivation(x=[#%d], weight=[#%d], bias=%s, activation=%s)",
+	return fmt.Sprintf("DenseActivation(x=[#%d], weight=[#%d], bias=%s, activation=%s)",
 		ni.x.Id(), ni.weight.Id(), biasStr, ni.activation)
 }
 
-// LayerNorm wraps the backend LayerNorm call, handling nil gamma/beta.
-// It calls the backend's native LayerNorm op directly — the caller must check
-// Capabilities().Operations[backends.OpTypeLayerNorm] before calling.
-func LayerNorm(x *Node, axes []int, epsilon float64, gamma, beta *Node) *Node {
+// FusedLayerNorm wraps the backend LayerNorm call, handling nil gamma/beta.
+func FusedLayerNorm(x *Node, axes []int, epsilon float64, gamma, beta *Node) *Node {
 	inputNodes := []*Node{x}
 	if gamma != nil {
 		inputNodes = append(inputNodes, gamma)
@@ -102,12 +100,12 @@ func LayerNorm(x *Node, axes []int, epsilon float64, gamma, beta *Node) *Node {
 		betaVal = beta.outputOps[0]
 	}
 
-	result, err := g.currentFunc.backendFunc.LayerNorm(x.outputOps[0], slices.Clone(axes), epsilon, gammaVal, betaVal)
+	result, err := g.currentFunc.backendFunc.FusedLayerNorm(x.outputOps[0], slices.Clone(axes), epsilon, gammaVal, betaVal)
 	if err != nil {
 		panic(err)
 	}
 
-	inputs := &nodeInputsLayerNorm{x: x, axes: slices.Clone(axes), epsilon: epsilon, gamma: gamma, beta: beta}
+	inputs := &nodeInputsFusedLayerNorm{x: x, axes: slices.Clone(axes), epsilon: epsilon, gamma: gamma, beta: beta}
 	node := &Node{
 		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
@@ -119,10 +117,8 @@ func LayerNorm(x *Node, axes []int, epsilon float64, gamma, beta *Node) *Node {
 	return node
 }
 
-// Linear wraps the backend Linear call, handling nil bias.
-// It calls the backend's native Linear op directly — the caller must check
-// Capabilities().Operations[backends.OpTypeLinear] before calling.
-func Linear(x, weight, bias *Node) *Node {
+// FusedDense wraps the backend Dense call, handling nil bias.
+func FusedDense(x, weight, bias *Node) *Node {
 	inputNodes := []*Node{x, weight}
 	if bias != nil {
 		inputNodes = append(inputNodes, bias)
@@ -134,12 +130,12 @@ func Linear(x, weight, bias *Node) *Node {
 		biasVal = bias.outputOps[0]
 	}
 
-	result, err := g.currentFunc.backendFunc.Linear(x.outputOps[0], weight.outputOps[0], biasVal)
+	result, err := g.currentFunc.backendFunc.FusedDense(x.outputOps[0], weight.outputOps[0], biasVal)
 	if err != nil {
 		panic(err)
 	}
 
-	inputs := &nodeInputsLinear{x: x, weight: weight, bias: bias}
+	inputs := &nodeInputsFusedDense{x: x, weight: weight, bias: bias}
 	node := &Node{
 		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
@@ -151,10 +147,8 @@ func Linear(x, weight, bias *Node) *Node {
 	return node
 }
 
-// LinearActivation wraps the backend LinearActivation call, handling nil bias.
-// It calls the backend's native LinearActivation op directly — the caller must check
-// Capabilities().Operations[backends.OpTypeLinearActivation] before calling.
-func LinearActivation(x, weight, bias *Node, activation backends.ActivationType) *Node {
+// FusedDenseActivation wraps the backend DenseActivation call, handling nil bias.
+func FusedDenseActivation(x, weight, bias *Node, activation backends.ActivationType) *Node {
 	inputNodes := []*Node{x, weight}
 	if bias != nil {
 		inputNodes = append(inputNodes, bias)
@@ -166,12 +160,12 @@ func LinearActivation(x, weight, bias *Node, activation backends.ActivationType)
 		biasVal = bias.outputOps[0]
 	}
 
-	result, err := g.currentFunc.backendFunc.LinearActivation(x.outputOps[0], weight.outputOps[0], biasVal, activation)
+	result, err := g.currentFunc.backendFunc.FusedDenseActivation(x.outputOps[0], weight.outputOps[0], biasVal, activation)
 	if err != nil {
 		panic(err)
 	}
 
-	inputs := &nodeInputsLinearActivation{x: x, weight: weight, bias: bias, activation: activation}
+	inputs := &nodeInputsFusedDenseActivation{x: x, weight: weight, bias: bias, activation: activation}
 	node := &Node{
 		outputOps:    []backends.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},

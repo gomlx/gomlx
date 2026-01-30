@@ -12,7 +12,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/pkg/core/graph"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 )
 
@@ -53,7 +53,7 @@ const (
 // and applies it to x.
 //
 // It defaults to "relu".
-func ApplyFromContext(ctx *context.Context, x *graph.Node) *graph.Node {
+func ApplyFromContext(ctx *context.Context, x *Node) *Node {
 	activationName := context.GetParamOr(ctx, ParamActivation, "relu")
 	return Apply(FromName(activationName), x)
 }
@@ -62,7 +62,7 @@ func ApplyFromContext(ctx *context.Context, x *graph.Node) *graph.Node {
 // The TypeNone activation is a no-op.
 //
 // See TypeValues for valid values.
-func Apply(activation Type, x *graph.Node) *graph.Node {
+func Apply(activation Type, x *Node) *Node {
 	switch activation {
 	case TypeNone:
 		return x
@@ -71,9 +71,9 @@ func Apply(activation Type, x *graph.Node) *graph.Node {
 	case TypeLeakyRelu:
 		return LeakyRelu(x)
 	case TypeSigmoid:
-		return graph.Sigmoid(x)
+		return Sigmoid(x)
 	case TypeTanh:
-		return graph.Tanh(x)
+		return Tanh(x)
 	case TypeSwish, TypeSilu:
 		return Swish(x)
 	case TypeSelu:
@@ -104,27 +104,27 @@ func FromName(activationName string) Type {
 }
 
 // Relu activation function. It returns Max(x, 0), and is commonly used as an activation function in neural networks.
-func Relu(x *graph.Node) *graph.Node {
-	return graph.Max(x, graph.ZerosLike(x))
+func Relu(x *Node) *Node {
+	return Max(x, ZerosLike(x))
 }
 
 // LeakyRelu activation function. It allows a small gradient when the unit is not active (x < 0).
 // The `alpha` parameter is fixed at 0.3.
 //
 // It returns `x if x >= 0; alpha*x if x < 0`.
-func LeakyRelu(x *graph.Node) *graph.Node {
+func LeakyRelu(x *Node) *Node {
 	return LeakyReluWithAlpha(x, 0.3)
 }
 
 // LeakyReluWithAlpha activation function. It allows a small gradient when the unit is not active (x < 0).
 //
 // It returns `x if x >= 0; alpha*x if x < 0`.
-func LeakyReluWithAlpha(x *graph.Node, alpha float64) *graph.Node {
+func LeakyReluWithAlpha(x *Node, alpha float64) *Node {
 	g := x.Graph()
-	return graph.Where(
-		graph.GreaterOrEqual(x, graph.ScalarZero(g, x.DType())),
+	return Where(
+		GreaterOrEqual(x, ScalarZero(g, x.DType())),
 		x,
-		graph.MulScalar(x, alpha))
+		MulScalar(x, alpha))
 }
 
 // Swish activation (or SiLU) returns `x * Sigmoid(x)`.
@@ -138,8 +138,8 @@ func LeakyReluWithAlpha(x *graph.Node, alpha float64) *graph.Node {
 // [Ramachandran et al. 2017](https://arxiv.org/abs/1710.05941)
 //
 // Here the beta parameter is fixed at 1.0.
-func Swish(x *graph.Node) *graph.Node {
-	return graph.Mul(x, graph.Sigmoid(x))
+func Swish(x *Node) *Node {
+	return Mul(x, Sigmoid(x))
 }
 
 const (
@@ -153,12 +153,12 @@ const (
 //
 // Ideally, it should be matched with a "LecunNormal initializer" and the dropout variant called "AlphaDropout"
 // -- TODO, neither are implemented yet.
-func Selu(x *graph.Node) *graph.Node {
-	x = graph.Where(graph.GreaterThan(x, graph.ScalarZero(x.Graph(), x.DType())),
+func Selu(x *Node) *Node {
+	x = Where(GreaterThan(x, ScalarZero(x.Graph(), x.DType())),
 		x,
-		graph.MulScalar(graph.MinusOne(graph.Exp(x)), SeluAlpha),
+		MulScalar(MinusOne(Exp(x)), SeluAlpha),
 	)
-	return graph.MulScalar(x, SeluScale)
+	return MulScalar(x, SeluScale)
 }
 
 // Gelu activation function, the original Gelu function.
@@ -170,16 +170,16 @@ func Selu(x *graph.Node) *graph.Node {
 //
 // The exact version is slower in TPUs due to the "Erf" function, but some argue it is more stable. See discussion in:
 // https://github.com/jax-ml/jax/issues/4428
-func Gelu(x *graph.Node) *graph.Node {
+func Gelu(x *Node) *Node {
 	// Try fused GELU if backend supports it.
-	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeGelu] {
-		return graph.Gelu(x, "exact")
+	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeFusedGelu] {
+		return FusedGelu(x, "exact")
 	}
 
 	// Fall back to decomposition.
 	// Φ(x) = 0.5 * (1 + Erf(x / √2))
-	cdf := graph.MulScalar(graph.AddScalar(graph.Erf(graph.DivScalar(x, math.Sqrt2)), 1), 0.5)
-	return graph.Mul(x, cdf)
+	cdf := MulScalar(AddScalar(Erf(DivScalar(x, math.Sqrt2)), 1), 0.5)
+	return Mul(x, cdf)
 }
 
 // GeluApproximate is a close approximation to the original Gelu function.
@@ -191,16 +191,16 @@ func Gelu(x *graph.Node) *graph.Node {
 //
 // The exact version is slower in TPUs, some argue it is more stable. See discussion in:
 // https://github.com/jax-ml/jax/issues/4428
-func GeluApproximate(x *graph.Node) *graph.Node {
+func GeluApproximate(x *Node) *Node {
 	// Try fused GELU if backend supports it.
-	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeGelu] {
-		return graph.Gelu(x, "approximate")
+	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeFusedGelu] {
+		return FusedGelu(x, "approximate")
 	}
 
 	// Fall back to decomposition.
-	cdfApprox := graph.Add(x, graph.MulScalar(graph.PowScalar(x, 3), 0.044715))
+	cdfApprox := Add(x, MulScalar(PowScalar(x, 3), 0.044715))
 	sqrt2ByPi := math.Sqrt(2.0 / math.Pi)
-	cdfApprox = graph.Tanh(graph.MulScalar(cdfApprox, sqrt2ByPi))
-	cdfApprox = graph.MulScalar(graph.OnePlus(cdfApprox), 0.5)
-	return graph.Mul(x, cdfApprox)
+	cdfApprox = Tanh(MulScalar(cdfApprox, sqrt2ByPi))
+	cdfApprox = MulScalar(OnePlus(cdfApprox), 0.5)
+	return Mul(x, cdfApprox)
 }

@@ -53,7 +53,7 @@ var (
 	// These get a NodeType but no auto-generated wrapper (hand-written due to nil-able Value params).
 	methodsNotGenerated = sets.MakeWith(
 		"Constant", "Parameter",
-		"LayerNorm", "Linear", "LinearActivation")
+		"FusedLayerNorm", "FusedDense", "FusedDenseActivation")
 
 	// methodsExcluded from generating and even from having a NodeType.
 	// These are utility methods, not part of building a graph.

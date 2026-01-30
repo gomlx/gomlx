@@ -172,15 +172,16 @@ func decomposedLayerNormFloat32(input []float32, shape shapes.Shape, axis int, e
 	return output
 }
 
-// decomposedLinearFloat32 computes y = x @ W^T + b using separate matmul and add steps.
-func decomposedLinearFloat32(xData, wData, biasData []float32, batchSize, inFeatures, outFeatures int) []float32 {
-	// Step 1: MatMul x @ W^T (intermediate)
+// decomposedDenseFloat32 computes y = x @ W + b using separate matmul and add steps.
+// W is [in_features, out_features].
+func decomposedDenseFloat32(xData, wData, biasData []float32, batchSize, inFeatures, outFeatures int) []float32 {
+	// Step 1: MatMul x @ W (intermediate)
 	matmulOut := make([]float32, batchSize*outFeatures)
 	for b := 0; b < batchSize; b++ {
 		for o := 0; o < outFeatures; o++ {
 			var sum float32
 			for i := 0; i < inFeatures; i++ {
-				sum += xData[b*inFeatures+i] * wData[o*inFeatures+i]
+				sum += xData[b*inFeatures+i] * wData[i*outFeatures+o]
 			}
 			matmulOut[b*outFeatures+o] = sum
 		}
@@ -353,9 +354,9 @@ func BenchmarkLayerNorm(b *testing.B) {
 	}
 }
 
-// --- Linear Benchmarks ---
+// --- Dense Benchmarks ---
 
-func BenchmarkLinear(b *testing.B) {
+func BenchmarkDense(b *testing.B) {
 	sizes := []struct {
 		name        string
 		batch       int
@@ -369,7 +370,7 @@ func BenchmarkLinear(b *testing.B) {
 
 	for _, sz := range sizes {
 		xShape := shapes.Make(dtypes.Float32, sz.batch, sz.inFeatures)
-		wShape := shapes.Make(dtypes.Float32, sz.outFeatures, sz.inFeatures)
+		wShape := shapes.Make(dtypes.Float32, sz.inFeatures, sz.outFeatures)
 		bShape := shapes.Make(dtypes.Float32, sz.outFeatures)
 
 		xData := make([]float32, xShape.Size())
@@ -397,7 +398,7 @@ func BenchmarkLinear(b *testing.B) {
 			node := &Node{shape: outShape}
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				out, err := execFusedLinear(be, node, []*Buffer{xBuf, wBuf, bBuf}, []bool{false, false, false})
+				out, err := execFusedDense(be, node, []*Buffer{xBuf, wBuf, bBuf}, []bool{false, false, false})
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -408,7 +409,7 @@ func BenchmarkLinear(b *testing.B) {
 		b.Run(fmt.Sprintf("Decomposed/%s", sz.name), func(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = decomposedLinearFloat32(xData, wData, biasData, sz.batch, sz.inFeatures, sz.outFeatures)
+				_ = decomposedDenseFloat32(xData, wData, biasData, sz.batch, sz.inFeatures, sz.outFeatures)
 			}
 		})
 	}

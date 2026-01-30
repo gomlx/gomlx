@@ -12,11 +12,11 @@ import (
 )
 
 func init() {
-	setNodeExecutor(backends.OpTypeSoftmax, priorityTyped, execFusedSoftmax)
-	setNodeExecutor(backends.OpTypeGelu, priorityTyped, execFusedGelu)
-	setNodeExecutor(backends.OpTypeLayerNorm, priorityTyped, execFusedLayerNorm)
-	setNodeExecutor(backends.OpTypeLinear, priorityTyped, execFusedLinear)
-	setNodeExecutor(backends.OpTypeLinearActivation, priorityTyped, execFusedLinearActivation)
+	setNodeExecutor(backends.OpTypeFusedSoftmax, priorityTyped, execFusedSoftmax)
+	setNodeExecutor(backends.OpTypeFusedGelu, priorityTyped, execFusedGelu)
+	setNodeExecutor(backends.OpTypeFusedLayerNorm, priorityTyped, execFusedLayerNorm)
+	setNodeExecutor(backends.OpTypeFusedDense, priorityTyped, execFusedDense)
+	setNodeExecutor(backends.OpTypeFusedDenseActivation, priorityTyped, execFusedDenseActivation)
 }
 
 // computeAxisStrides returns the outer size, axis size, and inner size for iterating
@@ -585,9 +585,9 @@ func layerNormFloat64(input, output, gamma, beta *Buffer, axes []int, epsilon fl
 	}
 }
 
-// execFusedLinear implements y = x @ W^T + b.
-// x: [..., in_features], weight: [out_features, in_features], bias: [out_features] (optional)
-func execFusedLinear(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+// execFusedDense implements y = x @ W + b.
+// x: [..., in_features], weight: [in_features, out_features], bias: [out_features] (optional)
+func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	x := inputs[0]
 	weight := inputs[1]
 	var bias *Buffer
@@ -599,22 +599,22 @@ func execFusedLinear(backend *Backend, node *Node, inputs []*Buffer, inputsOwned
 
 	switch x.shape.DType {
 	case dtypes.Float32:
-		linearFloat32(x, weight, bias, output)
+		denseFloat32(x, weight, bias, output)
 	case dtypes.Float64:
-		linearFloat64(x, weight, bias, output)
+		denseFloat64(x, weight, bias, output)
 	default:
-		return nil, errors.Errorf("FusedLinear: unsupported dtype %s", x.shape.DType)
+		return nil, errors.Errorf("FusedDense: unsupported dtype %s", x.shape.DType)
 	}
 	return output, nil
 }
 
-func linearFloat32(x, weight, bias, output *Buffer) {
+func denseFloat32(x, weight, bias, output *Buffer) {
 	xData := x.flat.([]float32)
 	wData := weight.flat.([]float32)
 	outData := output.flat.([]float32)
 
 	inFeatures := x.shape.Dimensions[x.shape.Rank()-1]
-	outFeatures := weight.shape.Dimensions[0]
+	outFeatures := weight.shape.Dimensions[1]
 	batchSize := x.shape.Size() / inFeatures
 
 	var biasData []float32
@@ -622,16 +622,16 @@ func linearFloat32(x, weight, bias, output *Buffer) {
 		biasData = bias.flat.([]float32)
 	}
 
-	// y = x @ W^T + b
-	// For each batch element, compute matmul with weight transposed.
+	// y = x @ W + b
+	// W is [in_features, out_features], so we iterate over output features
+	// and accumulate the dot product of x row with W column.
 	for b := 0; b < batchSize; b++ {
 		xBase := b * inFeatures
 		oBase := b * outFeatures
 		for o := 0; o < outFeatures; o++ {
 			var sum float32
-			wBase := o * inFeatures
 			for i := 0; i < inFeatures; i++ {
-				sum += xData[xBase+i] * wData[wBase+i]
+				sum += xData[xBase+i] * wData[i*outFeatures+o]
 			}
 			if biasData != nil {
 				sum += biasData[o]
@@ -641,13 +641,13 @@ func linearFloat32(x, weight, bias, output *Buffer) {
 	}
 }
 
-func linearFloat64(x, weight, bias, output *Buffer) {
+func denseFloat64(x, weight, bias, output *Buffer) {
 	xData := x.flat.([]float64)
 	wData := weight.flat.([]float64)
 	outData := output.flat.([]float64)
 
 	inFeatures := x.shape.Dimensions[x.shape.Rank()-1]
-	outFeatures := weight.shape.Dimensions[0]
+	outFeatures := weight.shape.Dimensions[1]
 	batchSize := x.shape.Size() / inFeatures
 
 	var biasData []float64
@@ -660,9 +660,8 @@ func linearFloat64(x, weight, bias, output *Buffer) {
 		oBase := b * outFeatures
 		for o := 0; o < outFeatures; o++ {
 			var sum float64
-			wBase := o * inFeatures
 			for i := 0; i < inFeatures; i++ {
-				sum += xData[xBase+i] * wData[wBase+i]
+				sum += xData[xBase+i] * wData[i*outFeatures+o]
 			}
 			if biasData != nil {
 				sum += biasData[o]
@@ -672,8 +671,8 @@ func linearFloat64(x, weight, bias, output *Buffer) {
 	}
 }
 
-// execFusedLinearActivation implements y = activation(x @ W^T + b).
-func execFusedLinearActivation(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+// execFusedDenseActivation implements y = activation(x @ W + b).
+func execFusedDenseActivation(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	x := inputs[0]
 	weight := inputs[1]
 	var bias *Buffer
@@ -682,17 +681,17 @@ func execFusedLinearActivation(backend *Backend, node *Node, inputs []*Buffer, i
 	}
 
 	output := backend.getBufferForShape(node.shape)
-	data := node.data.(*nodeFusedLinearActivation)
+	data := node.data.(*nodeFusedDenseActivation)
 
 	switch x.shape.DType {
 	case dtypes.Float32:
-		linearFloat32(x, weight, bias, output)
+		denseFloat32(x, weight, bias, output)
 		applyActivationFloat32(output.flat.([]float32), data.activation)
 	case dtypes.Float64:
-		linearFloat64(x, weight, bias, output)
+		denseFloat64(x, weight, bias, output)
 		applyActivationFloat64(output.flat.([]float64), data.activation)
 	default:
-		return nil, errors.Errorf("FusedLinearActivation: unsupported dtype %s", x.shape.DType)
+		return nil, errors.Errorf("FusedDenseActivation: unsupported dtype %s", x.shape.DType)
 	}
 	return output, nil
 }

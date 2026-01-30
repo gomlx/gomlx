@@ -54,8 +54,12 @@ const (
 	NodeTypeExpm1
 	NodeTypeFFT
 	NodeTypeFloor
+	NodeTypeFusedDense
+	NodeTypeFusedDenseActivation
+	NodeTypeFusedGelu
+	NodeTypeFusedLayerNorm
+	NodeTypeFusedSoftmax
 	NodeTypeGather
-	NodeTypeGelu
 	NodeTypeGreaterOrEqual
 	NodeTypeGreaterOrEqualTotalOrder
 	NodeTypeGreaterThan
@@ -65,13 +69,10 @@ const (
 	NodeTypeIota
 	NodeTypeIsFinite
 	NodeTypeIsNaN
-	NodeTypeLayerNorm
 	NodeTypeLessOrEqual
 	NodeTypeLessOrEqualTotalOrder
 	NodeTypeLessThan
 	NodeTypeLessThanTotalOrder
-	NodeTypeLinear
-	NodeTypeLinearActivation
 	NodeTypeLog
 	NodeTypeLog1p
 	NodeTypeLogicalAnd
@@ -117,7 +118,6 @@ const (
 	NodeTypeSign
 	NodeTypeSin
 	NodeTypeSlice
-	NodeTypeSoftmax
 	NodeTypeSqrt
 	NodeTypeSub
 	NodeTypeTanh
@@ -1795,6 +1795,96 @@ func Floor(x *Node) (
 	return
 }
 
+// nodeInputsFusedGelu holds the inputs used for the call to backends.FusedGelu.
+type nodeInputsFusedGelu struct {
+	x    *Node
+	mode string
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedGelu) Type() NodeType {
+	return NodeTypeFusedGelu
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedGelu) String() string {
+	return fmt.Sprintf("%s(x=[#%d], mode=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.mode,
+	)
+}
+
+// FusedGelu computes Gaussian Error Linear Unit activation.
+// mode: "exact" or "tanh_approximation".
+func FusedGelu(x *Node, mode string) (
+	node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedGelu{
+		x:    x,
+		mode: mode,
+	}
+	result, err := g.currentFunc.backendFunc.FusedGelu(x.outputOps[0], inputs.mode)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsFusedSoftmax holds the inputs used for the call to backends.FusedSoftmax.
+type nodeInputsFusedSoftmax struct {
+	x    *Node
+	axis int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedSoftmax) Type() NodeType {
+	return NodeTypeFusedSoftmax
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedSoftmax) String() string {
+	return fmt.Sprintf("%s(x=[#%d], axis=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.axis,
+	)
+}
+
+// FusedSoftmax computes softmax along the specified axis.
+// axis: single axis to compute softmax over (negative indexing supported).
+func FusedSoftmax(x *Node, axis int) (
+	node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedSoftmax{
+		x:    x,
+		axis: axis,
+	}
+	result, err := g.currentFunc.backendFunc.FusedSoftmax(x.outputOps[0], inputs.axis)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
 // nodeInputsGather holds the inputs used for the call to backends.Gather.
 type nodeInputsGather struct {
 	operand            *Node
@@ -1843,51 +1933,6 @@ func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offse
 		indicesAreSorted:   indicesAreSorted,
 	}
 	result, err := g.currentFunc.backendFunc.Gather(operand.outputOps[0], startIndices.outputOps[0], inputs.indexVectorAxis, inputs.offsetOutputAxes, inputs.collapsedSliceAxes, inputs.startIndexMap, inputs.sliceSizes, inputs.indicesAreSorted)
-	if err != nil {
-		panic(err)
-	}
-	node = &Node{
-		outputOps:    []backends.Value{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-	}
-	g.registerNode(node)
-	return
-}
-
-// nodeInputsGelu holds the inputs used for the call to backends.Gelu.
-type nodeInputsGelu struct {
-	x    *Node
-	mode string
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsGelu) Type() NodeType {
-	return NodeTypeGelu
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsGelu) String() string {
-	return fmt.Sprintf("%s(x=[#%d], mode=%v)",
-		ni.Type(),
-		ni.x.Id(),
-		ni.mode,
-	)
-}
-
-// Gelu computes Gaussian Error Linear Unit activation.
-// mode: "exact" or "tanh_approximation".
-func Gelu(x *Node, mode string) (
-	node *Node) {
-	inputNodes := []*Node{x}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsGelu{
-		x:    x,
-		mode: mode,
-	}
-	result, err := g.currentFunc.backendFunc.Gelu(x.outputOps[0], inputs.mode)
 	if err != nil {
 		panic(err)
 	}
@@ -4488,51 +4533,6 @@ func backendSlice(x *Node, starts []int, limits []int, strides []int) (
 		strides: slices.Clone(strides),
 	}
 	result, err := g.currentFunc.backendFunc.Slice(x.outputOps[0], inputs.starts, inputs.limits, inputs.strides)
-	if err != nil {
-		panic(err)
-	}
-	node = &Node{
-		outputOps:    []backends.Value{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-	}
-	g.registerNode(node)
-	return
-}
-
-// nodeInputsSoftmax holds the inputs used for the call to backends.Softmax.
-type nodeInputsSoftmax struct {
-	x    *Node
-	axis int
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsSoftmax) Type() NodeType {
-	return NodeTypeSoftmax
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsSoftmax) String() string {
-	return fmt.Sprintf("%s(x=[#%d], axis=%v)",
-		ni.Type(),
-		ni.x.Id(),
-		ni.axis,
-	)
-}
-
-// Softmax computes softmax along the specified axis.
-// axis: single axis to compute softmax over (negative indexing supported).
-func Softmax(x *Node, axis int) (
-	node *Node) {
-	inputNodes := []*Node{x}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsSoftmax{
-		x:    x,
-		axis: axis,
-	}
-	result, err := g.currentFunc.backendFunc.Softmax(x.outputOps[0], inputs.axis)
 	if err != nil {
 		panic(err)
 	}
