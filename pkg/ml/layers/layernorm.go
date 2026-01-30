@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/pkg/ml/nn"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 )
@@ -185,6 +186,35 @@ func (builder *LayerNormBuilder) Done() *Node {
 	x := builder.x
 	mask := builder.mask
 	g := x.Graph()
+
+	// Fast path: dispatch to nn.LayerNorm when no special features are needed
+	// (no mask, scale normalization enabled, no dtype conversion).
+	if mask == nil && builder.scaleNormalization && builder.normalizationDType == x.DType() {
+		normShape := shapes.Make(x.DType(), xslices.Map(builder.normalizingAxes, func(axis int) int {
+			return x.Shape().Dimensions[axis]
+		})...)
+		broadcastNormShape := x.Shape().Clone()
+		for ii := range broadcastNormShape.Dimensions {
+			broadcastNormShape.Dimensions[ii] = 1
+		}
+		for _, axis := range builder.normalizingAxes {
+			broadcastNormShape.Dimensions[axis] = x.Shape().Dimensions[axis]
+		}
+
+		var gamma, beta *Node
+		if builder.gain {
+			gainVar := ctx.WithInitializer(initializers.One).VariableWithShape("gain", normShape).SetTrainable(true)
+			if builder.regularizer != nil {
+				builder.regularizer(ctx, g, gainVar)
+			}
+			gamma = Reshape(gainVar.ValueGraph(g), broadcastNormShape.Dimensions...)
+		}
+		if builder.center {
+			offsetVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("offset", normShape).SetTrainable(true)
+			beta = Reshape(offsetVar.ValueGraph(g), broadcastNormShape.Dimensions...)
+		}
+		return nn.LayerNorm(x, builder.normalizingAxes, builder.epsilon, gamma, beta)
+	}
 
 	// LearnedGain and offset to be applied to the normalized value.
 	var gain, offset *Node
