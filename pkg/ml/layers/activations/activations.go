@@ -192,6 +192,12 @@ func Gelu(x *graph.Node) *graph.Node {
 // The exact version is slower in TPUs, some argue it is more stable. See discussion in:
 // https://github.com/jax-ml/jax/issues/4428
 func GeluApproximate(x *graph.Node) *graph.Node {
+	// Try fused GELU if backend supports it.
+	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeGelu] {
+		return graph.Gelu(x, "approximate")
+	}
+
+	// Fall back to decomposition.
 	cdfApprox := graph.Add(x, graph.MulScalar(graph.PowScalar(x, 3), 0.044715))
 	sqrt2ByPi := math.Sqrt(2.0 / math.Pi)
 	cdfApprox = graph.Tanh(graph.MulScalar(cdfApprox, sqrt2ByPi))
