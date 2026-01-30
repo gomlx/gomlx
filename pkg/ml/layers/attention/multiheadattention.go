@@ -670,7 +670,7 @@ func (b *MultiHeadAttentionBuilder) buildCausalMask() (mask *Node) {
 // Example usage for generation with KV cache:
 //
 //	output := attention.SelfAttention(ctx, x, numHeads, headDim).
-//	    WithKVCache(cache, position).
+//	    WithKVCache(maxCacheLen, position).
 //	    WithRoPE(10000.0).
 //	    Done()
 func SelfAttention(ctx *context.Context, x *Node, numHeads int, headDim int) *MultiHeadAttentionBuilder {

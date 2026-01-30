@@ -193,21 +193,12 @@ func createKVCacheAttentionMask(g *Graph, cacheShape shapes.Shape, currentPositi
 
 	// For rotating cache: if position >= maxSeqLen, all slots are filled
 	// effectivePosition = min(currentPosition, maxSeqLen)
-	maxSeqLenNode := Scalar(g, dtype, maxSeqLen)
-	effectivePosition := Min(currentPosition, maxSeqLenNode)
-
-	// Expand for broadcasting
-	// effectivePosition: scalar -> [1, 1, 1, 1]
-	// keyPositions: [keySeqLen] -> [1, 1, 1, keySeqLen]
-	effectivePosition = ExpandAxes(effectivePosition, 0, 1, 2, 3)
-	keyPositions = BroadcastPrefix(keyPositions, 1, 1, 1)
+	effectivePosition := MinScalar(currentPosition, maxSeqLen)
 
 	// Create mask: True where key position < effectivePosition (i.e., slot is filled)
+	// mask shape: [keySeqLen]
 	mask := LessThan(keyPositions, effectivePosition)
 
 	// Broadcast to [batch_size, 1, query_seq_len, key_seq_len]
-	maskShape := shapes.Make(dtypes.Bool, batchSize, 1, querySeqLen, keySeqLen)
-	mask = BroadcastToShape(mask, maskShape)
-
-	return mask
+	return BroadcastPrefix(mask, batchSize, 1, querySeqLen)
 }
