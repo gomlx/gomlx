@@ -130,6 +130,7 @@ func simpleTransformerModel(ctx *context.Context, inputs []*Node) []*Node {
 	headDim := context.GetParamOr(ctx, ParamHeadDim, 16)
 	numLayers := context.GetParamOr(ctx, ParamNumLayers, 2)
 	maxPosEmbed := context.GetParamOr(ctx, ParamMaxPosEmbed, 256)
+	useCache := context.GetParamOr(ctx, ParamUseCache, false)
 
 	tokens := inputs[0]
 	g := tokens.Graph()
@@ -149,9 +150,21 @@ func simpleTransformerModel(ctx *context.Context, inputs []*Node) []*Node {
 	for layer := 0; layer < numLayers; layer++ {
 		layerCtx := ctx.In(fmt.Sprintf("layer_%d", layer))
 		residual := x
-		attn := attention.MultiHeadAttention(layerCtx.In("attn"), x, x, x, numHeads, headDim).
-			UseCausalMask().
-			Done()
+
+		// Build attention with optional KV cache based on context parameter
+		attnBuilder := attention.MultiHeadAttention(layerCtx.In("attn"), x, x, x, numHeads, headDim).
+			UseCausalMask()
+
+		// Check if we should use KVCache
+		if useCache {
+			if posValue, found := ctx.GetParam("_generation_position"); found {
+				if positionNode, ok := posValue.(*Node); ok && positionNode != nil {
+					attnBuilder = attnBuilder.WithKVCache(maxPosEmbed, positionNode)
+				}
+			}
+		}
+
+		attn := attnBuilder.Done()
 		x = layers.LayerNormalization(layerCtx.In("norm1"), Add(residual, attn), -1).Done()
 		residual = x
 		ff := layers.Dense(layerCtx.In("ff1"), x, true, embedDim*4)
@@ -198,40 +211,12 @@ func trainModel(backend backends.Backend, ctx *context.Context) {
 	learningRate := context.GetParamOr(ctx, optimizers.ParamLearningRate, 0.01)
 	batchSize := context.GetParamOr(ctx, ParamBatchSize, 4)
 	seqLen := context.GetParamOr(ctx, ParamSeqLen, 32)
-	vocabSize := context.GetParamOr(ctx, ParamVocabSize, 128)
-	embedDim := context.GetParamOr(ctx, ParamEmbedDim, 64)
-	numLayers := context.GetParamOr(ctx, ParamNumLayers, 2)
-	numHeads := context.GetParamOr(ctx, ParamNumHeads, 4)
-	headDim := context.GetParamOr(ctx, ParamHeadDim, 16)
-	maxPosEmbed := context.GetParamOr(ctx, ParamMaxPosEmbed, 256)
-	useCache := context.GetParamOr(ctx, ParamUseCache, false)
 
 	fmt.Printf("\nTraining Model\nSteps: %d  LR: %.4f  Batch: %d  SeqLen: %d\n\n", steps, learningRate, batchSize, seqLen)
 
-	var modelFn func(ctx *context.Context, _ any, inputs []*Node) []*Node
-
-	if useCache {
-		// Build cached transformer (training path uses non-cached forward)
-		transformerCfg := generation.NewTransformerConfig(vocabSize, embedDim, numLayers, numHeads, headDim).
-			WithFFNDim(embedDim * 4).
-			WithMaxPosEmbed(maxPosEmbed).
-			WithDType(dtype).
-			WithLayerNorm(true).
-			WithBias(true)
-
-		cachedTransformer := generation.BuildCachedTransformer(ctx, transformerCfg)
-
-		// Use ForTraining() which doesn't use cache
-		modelFn = func(ctx *context.Context, _ any, inputs []*Node) []*Node {
-			tokens := inputs[0]
-			logits := cachedTransformer.ForTraining()(ctx, tokens)
-			return []*Node{logits}
-		}
-	} else {
-		// Use simple transformer model (non-cached)
-		modelFn = func(ctx *context.Context, _ any, inputs []*Node) []*Node {
-			return simpleTransformerModel(ctx, inputs)
-		}
+	// Simple model function wrapper
+	modelFn := func(ctx *context.Context, _ any, inputs []*Node) []*Node {
+		return simpleTransformerModel(ctx, inputs)
 	}
 
 	trainer := train.NewTrainer(backend, ctx, modelFn,
@@ -259,11 +244,6 @@ func trainModel(backend backends.Backend, ctx *context.Context) {
 
 func generateText(backend backends.Backend, ctx *context.Context, prompt string) {
 	vocabSize := context.GetParamOr(ctx, ParamVocabSize, 128)
-	embedDim := context.GetParamOr(ctx, ParamEmbedDim, 64)
-	numLayers := context.GetParamOr(ctx, ParamNumLayers, 2)
-	numHeads := context.GetParamOr(ctx, ParamNumHeads, 4)
-	headDim := context.GetParamOr(ctx, ParamHeadDim, 16)
-	maxPosEmbed := context.GetParamOr(ctx, ParamMaxPosEmbed, 256)
 	useCache := context.GetParamOr(ctx, ParamUseCache, false)
 	strategy := context.GetParamOr(ctx, ParamStrategy, "greedy")
 	temperature := context.GetParamOr(ctx, ParamTemperature, 1.0)
@@ -277,40 +257,15 @@ func generateText(backend backends.Backend, ctx *context.Context, prompt string)
 		promptTokens = []int{32}
 	}
 
-	var genCfg *generation.GenerationConfig
-
-	if useCache {
-		transformerCfg := generation.NewTransformerConfig(vocabSize, embedDim, numLayers, numHeads, headDim).
-			WithFFNDim(embedDim * 4).
-			WithMaxPosEmbed(maxPosEmbed).
-			WithDType(dtype).
-			WithLayerNorm(true).
-			WithBias(true)
-
-		cachedTransformer := generation.BuildCachedTransformer(ctx, transformerCfg)
-
-		genCfg = generation.NewGenerationConfigCached(
-			cachedTransformer.ForGeneration(),
-			numLayers,
-			numHeads,
-			headDim,
-			maxPosEmbed,
-			dtype,
-		).
-			WithStrategy(strategy).
-			WithTemperature(float32(temperature)).
-			WithMaxLength(maxLength)
-	} else {
-		modelFn := func(genCtx *context.Context, tokens *Node) *Node {
-			outputs := simpleTransformerModel(genCtx, []*Node{tokens})
-			return outputs[0]
-		}
-
-		genCfg = generation.NewGenerationConfig(modelFn).
-			WithStrategy(strategy).
-			WithTemperature(float32(temperature)).
-			WithMaxLength(maxLength)
+	modelFn := func(genCtx *context.Context, tokens *Node) *Node {
+		outputs := simpleTransformerModel(genCtx, []*Node{tokens})
+		return outputs[0]
 	}
+
+	genCfg := generation.NewGenerationConfig(modelFn).
+		WithStrategy(strategy).
+		WithTemperature(float32(temperature)).
+		WithMaxLength(maxLength)
 
 	promptTensor := tensors.FromValue([][]int32{xslices.Map(promptTokens, func(t int) int32 { return int32(t) })})
 	generated, err := genCfg.Generate(backend, ctx, promptTensor)
