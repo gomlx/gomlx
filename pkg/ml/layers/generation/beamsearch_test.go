@@ -52,7 +52,7 @@ func TestBeamSearchStep(t *testing.T) {
 		currentLength := 3
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits, sequences, scores *Node) []*Node {
-			nextSeqs, nextScores, isFinished := BeamSearchStep(logits, sequences, scores, config, currentLength)
+			nextSeqs, nextScores, isFinished := config.Step(logits, sequences, scores, currentLength)
 			return []*Node{nextSeqs, nextScores, isFinished}
 		})
 
@@ -90,7 +90,7 @@ func TestBeamSearchStep(t *testing.T) {
 		currentLength := 3
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits, sequences, scores *Node) []*Node {
-			nextSeqs, nextScores, isFinished := BeamSearchStep(logits, sequences, scores, config, currentLength)
+			nextSeqs, nextScores, isFinished := config.Step(logits, sequences, scores, currentLength)
 			return []*Node{nextSeqs, nextScores, isFinished}
 		})
 
@@ -122,7 +122,7 @@ func TestBeamSearchStep(t *testing.T) {
 		currentLength := 5
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits, sequences, scores *Node) []*Node {
-			nextSeqs, nextScores, isFinished := BeamSearchStep(logits, sequences, scores, config, currentLength)
+			nextSeqs, nextScores, isFinished := config.Step(logits, sequences, scores, currentLength)
 			return []*Node{nextSeqs, nextScores, isFinished}
 		})
 
@@ -151,7 +151,7 @@ func TestBeamSearchStep(t *testing.T) {
 		currentLength := 2
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits, sequences, scores *Node) []*Node {
-			nextSeqs, nextScores, isFinished := BeamSearchStep(logits, sequences, scores, config, currentLength)
+			nextSeqs, nextScores, isFinished := config.Step(logits, sequences, scores, currentLength)
 			return []*Node{nextSeqs, nextScores, isFinished}
 		})
 
@@ -194,8 +194,9 @@ func TestApplyLengthPenalty(t *testing.T) {
 	t.Run("NoPenalty", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
+		config := NewBeamSearch(2, 999) // lengthPenalty defaults to 1.0
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, scores, lengths *Node) *Node {
-			return ApplyLengthPenalty(scores, lengths, 1.0)
+			return config.applyLengthPenalty(scores, lengths)
 		})
 		scores := tensors.FromValue([]float32{-1.0, -2.0, -3.0, -4.0})
 		lengths := tensors.FromValue([]int32{5, 10, 15, 20})
@@ -211,8 +212,9 @@ func TestApplyLengthPenalty(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 		penalty := 1.5
+		config := NewBeamSearch(2, 999).WithLengthPenalty(penalty)
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, scores, lengths *Node) *Node {
-			return ApplyLengthPenalty(scores, lengths, penalty)
+			return config.applyLengthPenalty(scores, lengths)
 		})
 		scores := tensors.FromValue([]float32{-10.0, -20.0})
 		lengths := tensors.FromValue([]int32{4, 8})

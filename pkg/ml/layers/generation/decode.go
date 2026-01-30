@@ -552,11 +552,10 @@ func (cfg *GenerationConfig) generateBeamSearchNonCached(
 			lastLogits = Squeeze(lastLogits, 1)
 
 			// Beam search step
-			nextSeqs, nextScores, isFinished := BeamSearchStep(
+			nextSeqs, nextScores, isFinished := beamConfig.Step(
 				lastLogits,
 				sequences,
 				scores,
-				beamConfig,
 				currentLength,
 			)
 
@@ -596,13 +595,8 @@ func (cfg *GenerationConfig) generateBeamSearchNonCached(
 
 	// Apply length penalty; select best sequences
 	selectExec, err := context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, sequences, scores *Node) (*Node, *Node) {
-		// Apply length penalty
-		seqLen := sequences.Shape().Dimensions[1]
-		lengths := ConstAs(scores, float64(seqLen))
-		adjustedScores := ApplyLengthPenalty(scores, lengths, beamConfig.lengthPenalty)
-
-		// Select best sequences
-		bestSeqs, bestScores := SelectBestSequences(sequences, adjustedScores, beamConfig)
+		// Select best sequences (length penalty is applied automatically)
+		bestSeqs, bestScores := beamConfig.SelectBest(sequences, scores)
 		return bestSeqs, bestScores
 	})
 	if err != nil {
@@ -717,11 +711,10 @@ func (cfg *GenerationConfig) generateBeamSearchCached(
 			logits = Squeeze(logits, 1) // [batch_beam_size, vocab_size]
 
 			// Beam search step
-			nextSeqs, nextScores, isFinished := BeamSearchStep(
+			nextSeqs, nextScores, isFinished := beamConfig.Step(
 				logits,
 				sequences,
 				scores,
-				beamConfig,
 				position,
 			)
 
@@ -761,10 +754,8 @@ func (cfg *GenerationConfig) generateBeamSearchCached(
 
 	// Select best sequences
 	selectExec, err := context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, sequences, scores *Node) (*Node, *Node) {
-		seqLen := sequences.Shape().Dimensions[1]
-		lengths := ConstAs(scores, float64(seqLen))
-		adjustedScores := ApplyLengthPenalty(scores, lengths, beamConfig.lengthPenalty)
-		bestSeqs, bestScores := SelectBestSequences(sequences, adjustedScores, beamConfig)
+		// Select best sequences (length penalty is applied automatically)
+		bestSeqs, bestScores := beamConfig.SelectBest(sequences, scores)
 		return bestSeqs, bestScores
 	})
 	if err != nil {
