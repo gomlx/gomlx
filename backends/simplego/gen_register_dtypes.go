@@ -433,6 +433,33 @@ func init() {
 	convDTypeMap.Register(dtypes.Float32, priorityGeneric, execConvGeneric[float32])
 	convDTypeMap.Register(dtypes.Float64, priorityGeneric, execConvGeneric[float64])
 
+	// DTypeMap: dotGeneralSmallMatMulDTypeMap
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Int8, priorityGeneric, execDotGeneralSmallMatMulGeneric[int8])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Int16, priorityGeneric, execDotGeneralSmallMatMulGeneric[int16])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Int32, priorityGeneric, execDotGeneralSmallMatMulGeneric[int32])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Int64, priorityGeneric, execDotGeneralSmallMatMulGeneric[int64])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Uint8, priorityGeneric, execDotGeneralSmallMatMulGeneric[uint8])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Uint16, priorityGeneric, execDotGeneralSmallMatMulGeneric[uint16])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Uint32, priorityGeneric, execDotGeneralSmallMatMulGeneric[uint32])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Uint64, priorityGeneric, execDotGeneralSmallMatMulGeneric[uint64])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Float32, priorityGeneric, execDotGeneralSmallMatMulGeneric[float32])
+	dotGeneralSmallMatMulDTypeMap.Register(dtypes.Float64, priorityGeneric, execDotGeneralSmallMatMulGeneric[float64])
+
+	// DTypeMap: applyPermutationDTypeMap
+	applyPermutationDTypeMap.Register(dtypes.Int8, priorityGeneric, applyPermutationGeneric[int8])
+	applyPermutationDTypeMap.Register(dtypes.Int16, priorityGeneric, applyPermutationGeneric[int16])
+	applyPermutationDTypeMap.Register(dtypes.Int32, priorityGeneric, applyPermutationGeneric[int32])
+	applyPermutationDTypeMap.Register(dtypes.Int64, priorityGeneric, applyPermutationGeneric[int64])
+	applyPermutationDTypeMap.Register(dtypes.Uint8, priorityGeneric, applyPermutationGeneric[uint8])
+	applyPermutationDTypeMap.Register(dtypes.Uint16, priorityGeneric, applyPermutationGeneric[uint16])
+	applyPermutationDTypeMap.Register(dtypes.Uint32, priorityGeneric, applyPermutationGeneric[uint32])
+	applyPermutationDTypeMap.Register(dtypes.Uint64, priorityGeneric, applyPermutationGeneric[uint64])
+	applyPermutationDTypeMap.Register(dtypes.Float32, priorityGeneric, applyPermutationGeneric[float32])
+	applyPermutationDTypeMap.Register(dtypes.Float64, priorityGeneric, applyPermutationGeneric[float64])
+	applyPermutationDTypeMap.Register(dtypes.BFloat16, priorityGeneric, applyPermutationGeneric[bfloat16.BFloat16])
+	applyPermutationDTypeMap.Register(dtypes.Float16, priorityGeneric, applyPermutationGeneric[float16.Float16])
+	applyPermutationDTypeMap.Register(dtypes.Bool, priorityGeneric, applyPermutationGeneric[bool])
+
 	// DTypePairMap: convertDTypePairMap
 	convertDTypePairMap.Register(dtypes.Int8, dtypes.Int8, priorityGeneric, execConvertDTypeGeneric[int8, int8])
 	convertDTypePairMap.Register(dtypes.Int8, dtypes.Int16, priorityGeneric, execConvertDTypeGeneric[int8, int16])

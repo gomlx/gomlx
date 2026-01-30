@@ -26,9 +26,9 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
-	"golang.org/x/exp/maps"
 	"k8s.io/klog/v2"
 )
 
@@ -181,7 +181,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 	modelType := context.GetParamOr(ctx, "model", "")
 	modelFn, found := ModelsFns[modelType]
 	if !found {
-		exceptions.Panicf("Unknown model type %q: valid values are %q", modelType, maps.Keys(ModelsFns))
+		exceptions.Panicf("Unknown model type %q: valid values are %q", modelType, xslices.Keys(ModelsFns))
 	}
 	fmt.Printf("Model: %q\n", modelType)
 	if modelPrep, found := ModelsPrep[modelType]; found {

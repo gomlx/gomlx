@@ -4,11 +4,9 @@ package simplego
 
 import (
 	"reflect"
-	"slices"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
-	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
@@ -24,22 +22,8 @@ type Builder struct {
 	compiled bool
 
 	// mainFn is the main function of the computation.
+	// Each function (including mainFn and closures) has its own nodes slice.
 	mainFn *Function
-
-	// nodes are only created when their inputs have already been created. So this is a natural DAG (Directed Acyclic Graph)
-	// ordering of the graph. The executor rely on this invariance.
-	nodes []*Node
-
-	// inputs will have nodeParameter as data.
-	inputs []*Node
-
-	// outputs can be any type of node.
-	outputs []*Node
-
-	// nodeDedup provides automatic de-duplication for nodes.
-	// Key: (opType, input count, first input pointer)
-	// Value: list of candidate nodes to check for exact match
-	nodeDedup map[nodeDedupKey][]*Node
 }
 
 // Compile-time check.
@@ -56,10 +40,24 @@ func (b *Builder) Main() backends.Function {
 }
 
 // NewFunction creates a new named function within this builder.
+// Named functions can be called with Call() and are independent of the main function.
 func (b *Builder) NewFunction(name string) (backends.Function, error) {
-	return nil, errors.Wrapf(
-		notimplemented.NotImplementedError,
-		"sub-functions not supported for %q builder", BackendName)
+	if b == nil {
+		return nil, errors.Errorf("Builder is nil")
+	}
+	if b.compiled {
+		return nil, errors.Errorf("cannot create new function, builder has already been compiled")
+	}
+	if name == "" {
+		return nil, errors.Errorf("function name cannot be empty")
+	}
+	f := &Function{
+		builder:   b,
+		name:      name,
+		parent:    nil, // Top-level functions have no parent
+		nodeDedup: make(map[nodeDedupKey][]*Node),
+	}
+	return f, nil
 }
 
 // Compile implements backends.Builder.
@@ -68,12 +66,10 @@ func (b *Builder) Compile() (backends.Executable, error) {
 		return nil, errors.Errorf("Main function must have Return() called before Compile()")
 	}
 
-	// Use the outputs from mainFn
-	b.outputs = b.mainFn.outputs
-
 	// Handle duplicate outputs by creating Identity nodes for duplicates.
+	outputs := b.mainFn.outputs
 	seenNodes := sets.Make[*Node]()
-	for i, node := range b.outputs {
+	for i, node := range outputs {
 		if seenNodes.Has(node) {
 			// Create an Identity node for this duplicate output.
 			identityOp, err := b.mainFn.Identity(node)
@@ -84,12 +80,12 @@ func (b *Builder) Compile() (backends.Executable, error) {
 			if !ok {
 				return nil, errors.Errorf("Identity returned unexpected type for duplicate output at index %d", i)
 			}
-			b.outputs[i] = identityNode
+			outputs[i] = identityNode
 		} else {
 			seenNodes.Insert(node)
 		}
 	}
-	for _, node := range b.outputs {
+	for _, node := range outputs {
 		if len(node.multiOutputsShapes) != 0 {
 			return nil, errors.Errorf(
 				"%s node %q is internal (with multiple-outputs) and cannot be used for output",
@@ -98,28 +94,49 @@ func (b *Builder) Compile() (backends.Executable, error) {
 			)
 		}
 	}
+
+	// Update mainFn outputs (in case duplicates were handled) and compile
+	b.mainFn.outputs = outputs
+	mainFnExec, err := newFunctionExecutable(b.mainFn)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed to compile main function")
+	}
+	b.mainFn.compiled = mainFnExec
+
 	b.compiled = true
-	return newExecutable(b), nil
+	return newExecutable(b, mainFnExec), nil
 }
 
-// Finalize immediately release the resources associated with the Builder.
+// Finalize immediately releases the resources associated with the Builder.
 func (b *Builder) Finalize() {
-	b.inputs = nil
-	b.outputs = nil
-	b.nodes = nil
-	b.nodeDedup = nil
+	if b.mainFn != nil {
+		b.mainFn.nodes = nil
+		b.mainFn.nodeDedup = nil
+		b.mainFn.parameters = nil
+		b.mainFn.outputs = nil
+	}
 }
 
 // Node in the SimpleGo computation graph.
 type Node struct {
-	// builderIdx in Builder.nodes
-	builderIdx int
-	inputs     []*Node
+	// idx is the index of this node in its function's nodes slice.
+	idx    int
+	inputs []*Node
+
+	// capturedInputs holds nodes from parent scopes that are used by closures
+	// called by this node (for ops like If, While, Sort that use closures).
+	// Each inner slice corresponds to one closure's captured values.
+	// These are treated as additional inputs for dependency tracking and lifetime management.
+	capturedInputs [][]*Node
 
 	// shape of the output.
 	opType  backends.OpType
 	shape   shapes.Shape
 	builder *Builder
+
+	// function is the function in which this node was created.
+	// This is used to detect cross-function node usage.
+	function *Function
 
 	// multiOutputsShapes are set for a few specialized nodes.
 	// For most nodes this is set to nil.
@@ -132,48 +149,14 @@ type Node struct {
 	data any
 }
 
-// newNode adds a new node of the given opType and shape to the Builder graph.
-// It's used by the other ops when creating new nodes.
-//
-// Use instead getOrCreateNode instead.
-func (b *Builder) newNode(opType backends.OpType, shape shapes.Shape, inputs ...*Node) *Node {
-	n := &Node{
-		builder:    b,
-		opType:     opType,
-		builderIdx: len(b.nodes),
-		shape:      shape,
-		inputs:     slices.Clone(inputs),
-	}
-	b.nodes = append(b.nodes, n)
-	return n
-}
 
-// newMultiOutputsNode create the multi-outputs node, and its "select nodes", one per output.
-// The node.multiOutputsNodes will be set with the individual outputs and can be used by the Builder to return
-// to the user.
-//
-// Note: no de-duplication of multi-output nodes.
-func (b *Builder) newMultiOutputsNode(
-	opType backends.OpType,
-	outputShapes []shapes.Shape,
-	inputs ...*Node,
-) (node *Node) {
-	node = b.newNode(opType, shapes.Invalid(), inputs...)
-	node.multiOutputsShapes = outputShapes
-	node.multiOutputsNodes = make([]*Node, len(outputShapes))
-	for idx, shape := range outputShapes {
-		node.multiOutputsNodes[idx] = &Node{
-			builder:            b,
-			opType:             opType,
-			builderIdx:         len(b.nodes),
-			shape:              shape,
-			inputs:             []*Node{node},
-			isNodeSelectOutput: true,
-			selectOutputIdx:    idx,
-		}
-		b.nodes = append(b.nodes, node.multiOutputsNodes[idx])
+// MultiOutputValues converts a multi-output node's outputs to []backends.Value.
+func (node *Node) MultiOutputValues() []backends.Value {
+	outputs := make([]backends.Value, len(node.multiOutputsNodes))
+	for i, outNode := range node.multiOutputsNodes {
+		outputs[i] = outNode
 	}
-	return node
+	return outputs
 }
 
 // IsMultiOutputs returns whether this node yields multiple outputs.
@@ -181,18 +164,18 @@ func (n *Node) IsMultiOutputs() bool {
 	return len(n.multiOutputsShapes) > 0
 }
 
-// checkOps validates that the ops are from SimpleGo and from this builder.
+// checkValues validates that the values are from SimpleGo and from this builder.
 // It also checks whether the Builder is not yet compiled.
-func (b *Builder) checkOps(opType string, ops ...backends.Value) ([]*Node, error) {
+func (b *Builder) checkValues(opType string, values ...backends.Value) ([]*Node, error) {
 	if b == nil {
 		return nil, errors.Errorf("%s: Builder is nil (!?), cannot build a graph", opType)
 	}
 	if b.compiled {
 		return nil, errors.Errorf("cannot add new op (%s) to Builder %q, it has already been compiled", opType, b.name)
 	}
-	nodes := make([]*Node, len(ops))
+	nodes := make([]*Node, len(values))
 	var ok bool
-	for idx, op := range ops {
+	for idx, op := range values {
 		if op == nil {
 			return nil, errors.Errorf("%s: input op #%d is nil!?", opType, idx)
 		}
@@ -220,7 +203,7 @@ func (b *Builder) checkOps(opType string, ops ...backends.Value) ([]*Node, error
 
 // OpShape returns the shape of a computation Op.
 func (b *Builder) OpShape(op backends.Value) (shapes.Shape, error) {
-	inputs, err := b.checkOps("OpShape", op)
+	inputs, err := b.checkValues("OpShape", op)
 	if err != nil {
 		return shapes.Invalid(), err
 	}
@@ -241,50 +224,4 @@ func checkFlat(flat any) (dtype dtypes.DType, flatLen int, err error) {
 	flatValue := reflect.ValueOf(flat)
 	flatLen = flatValue.Len()
 	return dtype, flatLen, nil
-}
-
-// addUnaryOp adds a generic binary op.
-func (b *Builder) addUnaryOp(opType backends.OpType, operandOp backends.Value) (*Node, error) {
-	inputs, err := b.checkOps(opType.String(), operandOp)
-	if err != nil {
-		return nil, err
-	}
-	operand := inputs[0]
-	shape, err := shapeinference.UnaryOp(opType, operand.shape)
-	if err != nil {
-
-		return nil, err
-	}
-	node, _ := b.getOrCreateNode(opType, shape, []*Node{operand}, nil)
-	return node, nil
-}
-
-// addBinaryOp adds a generic binary op.
-func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Value) (*Node, error) {
-	inputs, err := b.checkOps(opType.String(), lhsOp, rhsOp)
-	if err != nil {
-		return nil, err
-	}
-	lhs, rhs := inputs[0], inputs[1]
-	shape, err := shapeinference.BinaryOp(opType, lhs.shape, rhs.shape)
-	if err != nil {
-		return nil, err
-	}
-	node, _ := b.getOrCreateNode(opType, shape, []*Node{lhs, rhs}, nil)
-	return node, nil
-}
-
-// addComparisonOp adds a generic comparison binary op.
-func (b *Builder) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.Value) (*Node, error) {
-	inputs, err := b.checkOps(opType.String(), lhsOp, rhsOp)
-	if err != nil {
-		return nil, err
-	}
-	lhs, rhs := inputs[0], inputs[1]
-	shape, err := shapeinference.ComparisonOp(opType, lhs.shape, rhs.shape)
-	if err != nil {
-		return nil, err
-	}
-	node, _ := b.getOrCreateNode(opType, shape, []*Node{lhs, rhs}, nil)
-	return node, nil
 }

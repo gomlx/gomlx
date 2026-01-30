@@ -238,7 +238,7 @@ func newReduceOutputIterator(dimensions []int, reduceAxes []int) *reduceOutputIt
 	inputRank := len(dimensions)
 	it := &reduceOutputIterator{
 		perAxisIdx: make([]int, inputRank),
-		dimensions: dimensions,
+		dimensions: slices.Clone(dimensions),
 	}
 	it.perAxisStride = slices.Clone(dimensions)
 	stride := 1
@@ -549,7 +549,7 @@ func newTransposeIterator(operand shapes.Shape, permutations []int) *transposeIt
 	it := &transposeIterator{
 		perAxisIdx:     make([]int, rank),
 		perAxisStrides: make([]int, rank),
-		dimensions:     operand.Dimensions,
+		dimensions:     slices.Clone(operand.Dimensions),
 	}
 
 	// First, calculate strides on the output.
@@ -1443,7 +1443,9 @@ func execRNGBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsO
 		panic(errors.Wrapf(err, "cannot update RNGBitGenerator state"))
 	}
 	if len(rngState) != 20 && string(rngState[:4]) != "pcg:" {
-		return nil, errors.Errorf("format of PCG random number generator changed (we got %d bytes starting with %q, we wanted 20 and starting with the string 'pcg:'), pls open an issue in GoMLX", rngState[:4], len(rngState))
+		return nil, errors.Errorf("format of PCG random number generator changed (we got %d bytes starting with %q, "+
+			"we wanted 20 and starting with the string 'pcg:'), pls open an issue in GoMLX",
+			len(rngState), rngState[:4])
 	}
 	stateFlat[0] = binary.LittleEndian.Uint64(rngState[4 : 4+8])
 	stateFlat[1] = binary.LittleEndian.Uint64(rngState[4+8 : 4+16])

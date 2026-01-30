@@ -8,6 +8,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/pkg/errors"
 )
 
 // Dedup implementation: remove duplicated expressions, also known as "common subexpression elimination".
@@ -45,11 +46,55 @@ func makeNodeDedupKey(opType backends.OpType, inputs []*Node) nodeDedupKey {
 // getOrCreateNode attempts to find a node with the content (opType, shape, inputs, data).
 // If found, it returns the node.
 // If not, it creates a new node with the filled fields, and returns found=false.
-func (b *Builder) getOrCreateNode(opType backends.OpType, shape shapes.Shape, inputs []*Node, data any) (n *Node, found bool) {
-	// Try to find existing node.
+//
+// It also validates that all input nodes belong to this function or one of its ancestors.
+// Using nodes from an ancestor function (closure capture) is not yet supported.
+func (f *Function) getOrCreateNode(
+	opType backends.OpType, shape shapes.Shape, inputs []*Node, data any) (
+	n *Node, found bool) {
+	// Check that all input nodes belong to this function or an ancestor.
+	for i, node := range inputs {
+		if node == nil {
+			panic(errors.Errorf("getOrCreateNode(%s): input node #%d is nil", opType, i))
+		}
+		if node.function == nil {
+			panic(errors.Errorf("getOrCreateNode(%s): input node #%d has a nil function", opType, i))
+		}
+		if node.function == f {
+			continue // Same function, OK.
+		}
+		// Check if the node is from an ancestor function (closure capture).
+		if f.IsAncestorOf(node.function) {
+			// Node is from a child function - this shouldn't happen in normal usage.
+			panic(errors.Errorf(
+				"getOrCreateNode(%s): input #%d is from a child function scope %q, not from this function %q",
+				opType, i, node.function.name, f.name))
+		}
+		if node.function.IsAncestorOf(f) {
+			// Node is from a parent function (closure capture) - not yet supported.
+			panic(errors.Errorf(
+				"getOrCreateNode(%s): input #%d uses a node from a parent function scope (closure capturing parent values). "+
+					"This is not yet supported in the SimpleGo backend. "+
+					"Please pass the value as a closure parameter instead. "+
+					"If you need this feature, please open an issue at github.com/gomlx/gomlx",
+				opType, i))
+		}
+		// Completely different function branches - this shouldn't happen.
+		panic(errors.Errorf(
+			"getOrCreateNode(%s): input #%d is from an incompatible function scope %q, not from this function %q",
+			opType, i, node.function.name, f.name))
+	}
+
+	// Try to find existing node using function-local dedup.
 	key := makeNodeDedupKey(opType, inputs)
-	candidates := b.nodeDedup[key]
+	candidates := f.nodeDedup[key]
 	for _, candidate := range candidates {
+		// Only deduplicate within the same function scope.
+		// Deduplicating across functions would cause "different function scope" errors
+		// when the node is used in a closure.
+		if candidate.function != f {
+			continue
+		}
 		if !slices.Equal(candidate.inputs, inputs) {
 			continue
 		}
@@ -63,9 +108,9 @@ func (b *Builder) getOrCreateNode(opType backends.OpType, shape shapes.Shape, in
 	}
 
 	// Create new node.
-	n = b.newNode(opType, shape, inputs...)
+	n = f.newNode(opType, shape, inputs...)
 	n.data = data
-	b.nodeDedup[key] = append(b.nodeDedup[key], n)
+	f.nodeDedup[key] = append(f.nodeDedup[key], n)
 	return n, false
 }
 

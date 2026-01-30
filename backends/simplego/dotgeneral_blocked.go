@@ -91,7 +91,11 @@ func dgCreateBlockedShape(dtype dtypes.DType, batchSize, crossSize, contractingS
 
 // blockForDotGeneralData holds parameters for the BlockForDotGeneral operation.
 // This operation pre-blocks a tensor (LHS or RHS) for efficient DotGeneral execution.
-// Works with any shape after normalization to [batchSize, crossSize, contractingSize].
+//
+// It works with any shape after normalization to [batchSize, crossSize, contractingSize]
+// or [batchSize, contractingSize, crossSize], and outputs
+// [batchSize, crossBlocks, contractBlocks, blockDim, blockDim] or
+// [batchSize, contractBlocks, crossBlocks, blockDim, blockDim]
 type blockForDotGeneralData struct {
 	// blockLog2Dim is log2 of the block dimension
 	blockLog2Dim int
@@ -140,26 +144,26 @@ func init() {
 // Parameters:
 //   - input: the node to block
 //   - contractingAxes, batchAxes: axes from the original tensor shape
-//   - batchSize, crossSize, contractingSize: normalized sizes
-func (b *Builder) blockForDotGeneral(input *Node,
+//   - batchSize, axesASize, axesBSize: normalized sizes
+func (f *Function) blockForDotGeneral(input *Node,
 	contractingAxes, batchAxes []int,
-	batchSize, crossSize, contractingSize int) *Node {
+	batchSize, axesASize, axesBSize int) *Node {
 
 	dtype := input.shape.DType
 	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
-	blockedShape := dgCreateBlockedShape(dtype, batchSize, crossSize, contractingSize, blockLog2Dim)
+	blockedShape := dgCreateBlockedShape(dtype, batchSize, axesASize, axesBSize, blockLog2Dim)
 
 	data := &blockForDotGeneralData{
 		blockLog2Dim:    blockLog2Dim,
 		blockedShape:    blockedShape,
 		batchSize:       batchSize,
-		crossSize:       crossSize,
-		contractingSize: contractingSize,
+		crossSize:       axesASize,
+		contractingSize: axesBSize,
 		contractingAxes: slices.Clone(contractingAxes),
 		batchAxes:       slices.Clone(batchAxes),
 	}
 
-	blocked, _ := b.getOrCreateNode(backends.OpTypeBlockForDotGeneral, blockedShape, []*Node{input}, data)
+	blocked, _ := f.getOrCreateNode(backends.OpTypeBlockForDotGeneral, blockedShape, []*Node{input}, data)
 	return blocked
 }
 
@@ -175,12 +179,11 @@ func execBlockForDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []
 	// Allocate output buffer for blocked data
 	output := backend.getBuffer(dtype, data.blockedShape.Size())
 	output.shape = data.blockedShape
-	output.Zeros()
+	// output.Zeros()
 
 	// Copy data from flat to blocked format using the generic copy function
 	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
 	copyFlatToBlock(input, output, data.contractingAxes, data.batchAxes, data.batchSize, data.crossSize, data.contractingSize, data.blockLog2Dim)
-
 	return output, nil
 }
 
@@ -255,113 +258,112 @@ func dgCopyFlatToBlockShape[T interface {
 }](
 	source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int) {
 	rank := source.shape.Rank()
+	sourceDims := source.shape.Dimensions
 
-	// Map source axes to their types (0: cross, 1: contracting, 2: batch)
-	axesTypes := make([]int, rank)
+	// Calculate source strides (standard row-major).
+	sourceStrides := make([]int, rank)
+	stride := 1
+	for i := rank - 1; i >= 0; i-- {
+		sourceStrides[i] = stride
+		stride *= sourceDims[i]
+	}
+
+	// Identify Cross axes (all axes that are not batch or contracting).
+	// We preserve their relative order.
+	axesTypes := make([]int, rank) // 0: cross, 1: contracting, 2: batch
 	for _, axis := range contractingAxes {
 		axesTypes[axis] = 1
 	}
 	for _, axis := range batchAxes {
 		axesTypes[axis] = 2
 	}
-	sourceDims := source.shape.Dimensions
-	// sourceStrides stores strides per axis-type: crossStride, contractStride or batchStride.
-	// sourceRewindAmount stores the amount needed to rewind when the axis index goes back to zero (see the loop that updates the index below)
-	sourceStrides := make([]int, rank)      // Stride is per type of axis.
-	sourceRewindAmount := make([]int, rank) // dim-1 * stride.
-	batchStride, crossStride, contractStride := 1, 1, 1
-	// - crossStride:
-	for axis := rank - 1; axis >= 0; axis-- {
-		if axesTypes[axis] != 0 {
-			continue
+	crossAxes := make([]int, 0, rank)
+	for i := 0; i < rank; i++ {
+		if axesTypes[i] == 0 {
+			crossAxes = append(crossAxes, i)
 		}
-		sourceStrides[axis] = crossStride
-		sourceRewindAmount[axis] = crossStride * (sourceDims[axis] - 1)
-		crossStride *= sourceDims[axis]
-	}
-	// batchStride and contractStride must be computed in order of the axes given: they may be transposed.
-	// - contractStride: strides go from the last axis to the first.
-	lenContracting := len(contractingAxes)
-	for ii := lenContracting - 1; ii >= 0; ii-- {
-		axis := contractingAxes[ii]
-		sourceStrides[axis] = contractStride
-		sourceRewindAmount[axis] = contractStride * (sourceDims[axis] - 1)
-		contractStride *= sourceDims[axis]
-	}
-	// - batchStride: strides go from the last axis to the first.
-	lenBatch := len(batchAxes)
-	for ii := lenBatch - 1; ii >= 0; ii-- {
-		axis := batchAxes[ii]
-		sourceStrides[axis] = batchStride
-		sourceRewindAmount[axis] = batchStride * (sourceDims[axis] - 1)
-		batchStride *= sourceDims[axis]
 	}
 
-	// Calculate sizes
+	// Helper to build offsets for a logical dimension composed of multiple axes.
+	// axes: the list of source axes making up this dimension (Major to Minor).
+	// size: the total size of this dimension.
+	buildOffsets := func(axes []int, size int) []int {
+		offsets := make([]int, size) // zero initialized
+
+		logicalStride := 1
+		for i := len(axes) - 1; i >= 0; i-- {
+			axis := axes[i]
+			dim := sourceDims[axis]
+			physStride := sourceStrides[axis]
+
+			// For this axis, we add `k * physStride` to blocks of size `logicalStride`.
+			// The pattern repeats every `logicalStride * dim`.
+
+			if dim == 1 {
+				continue
+			} // Optimization
+
+			for base := 0; base < size; base += logicalStride * dim {
+				for k := 0; k < dim; k++ {
+					val := k * physStride
+					start := base + k*logicalStride
+					end := start + logicalStride
+					// For the inner-most axis (logicalStride=1), this loop is tight.
+					for idx := start; idx < end; idx++ {
+						offsets[idx] += val
+					}
+				}
+			}
+			logicalStride *= dim
+		}
+		return offsets
+	}
+
+	batchOffsets := buildOffsets(batchAxes, batchSize)
+	crossOffsets := buildOffsets(crossAxes, crossSize)
+	contractOffsets := buildOffsets(contractingAxes, contractingSize)
+
+	// Output Pointers
+	sourceData := source.flat.([]T)
+	outputData := blkOutput.flat.([]T)
+
 	blkDim := 1 << blkLog2Dim
-	blkMask := blkDim - 1
 	crossBlocks := (crossSize + blkDim - 1) / blkDim
 	contractBlocks := (contractingSize + blkDim - 1) / blkDim
 
-	// Calculate the virtual output shape as: [batchSize, outerCross, outerContracting, innerCross, innerContracting],
-	// where innerCross = innerContracting = blkDim.
-	outputDims := [5]int{batchSize, crossBlocks, contractBlocks, blkDim, blkDim}
-	outputStrides := [5]int{1, 1, 1, 1, 1}
-	for ii := 3; ii >= 0; ii-- {
-		outputStrides[ii] = outputStrides[ii+1] * outputDims[ii+1]
-	}
-	var outputIdx [5]int
-	var outputCrossIdx, outputContractIdx int
+	// Iterate over Output Blocks
+	// Output Layout: [BATCH, CROSS_BLOCKS, CONTRACT_BLOCKS, BLK_DIM, BLK_DIM] (implicitly flattened)
 
-	// Pre-compute axis counters and limits
-	sourceData := source.flat.([]T)
-	outputData := blkOutput.flat.([]T)
-	sourceIdx := make([]int, rank)
+	outIdx := 0
+	for b := 0; b < batchSize; b++ {
+		batchBase := batchOffsets[b]
+		for cb := 0; cb < crossBlocks; cb++ {
+			crossBaseIdx := cb * blkDim
+			for kb := 0; kb < contractBlocks; kb++ {
+				contractBaseIdx := kb * blkDim
 
-	// Sequential iteration over source data
-	for sourceFlatIdx := range len(sourceData) {
-		// Copy over value.
-		outputIdx[4] = outputContractIdx & blkMask     // Take only the innerContracting bits.
-		outputIdx[2] = outputContractIdx >> blkLog2Dim // Shift innerContracting bits away.
-		outputIdx[3] = outputCrossIdx & blkMask
-		outputIdx[1] = outputCrossIdx >> blkLog2Dim
-		outputFlatIdx := outputIdx[4] +
-			outputIdx[3]*outputStrides[3] +
-			outputIdx[2]*outputStrides[2] +
-			outputIdx[1]*outputStrides[1] +
-			outputIdx[0]*outputStrides[0]
-		outputData[outputFlatIdx] = sourceData[sourceFlatIdx]
-		// fmt.Printf("\toutput%v (flat %d) = source%v (flat %d)\n", outputIdx, outputFlatIdx, sourceIdx, sourceFlatIdx)
+				// Inner Block Loop
+				for i := 0; i < blkDim; i++ { // Inner Cross
+					c := crossBaseIdx + i
+					var cOffset int
+					inCross := c < crossSize
+					if inCross {
+						cOffset = crossOffsets[c]
+					}
 
-		// Increment position.
-		for axis := rank - 1; axis >= 0; axis-- {
-			if sourceDims[axis] == 1 {
-				continue
-			}
-
-			sourceIdx[axis]++
-			if sourceIdx[axis] < sourceDims[axis] {
-				// Not reached the end of this axis.
-				switch axesTypes[axis] {
-				case 0: // Cross
-					outputCrossIdx += sourceStrides[axis]
-				case 1: // Contracting
-					outputContractIdx += sourceStrides[axis]
-				case 2: // Batch
-					outputIdx[0] += sourceStrides[axis]
+					for j := 0; j < blkDim; j++ { // Inner Contract
+						k := contractBaseIdx + j
+						if inCross && k < contractingSize {
+							// In-bounds
+							outputData[outIdx] = sourceData[batchBase+cOffset+contractOffsets[k]]
+						} else {
+							// Padding
+							var zero T
+							outputData[outIdx] = zero
+						}
+						outIdx++
+					}
 				}
-				break
-			}
-
-			// Reached the end of this axis, rewind the index to 0: both in sourceIdx and the corresponding output index.
-			sourceIdx[axis] = 0
-			switch axesTypes[axis] {
-			case 0: // Cross
-				outputCrossIdx -= sourceRewindAmount[axis]
-			case 1: // Contracting
-				outputContractIdx -= sourceRewindAmount[axis]
-			case 2: // Batch
-				outputIdx[0] -= sourceRewindAmount[axis]
 			}
 		}
 	}

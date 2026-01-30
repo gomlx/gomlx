@@ -32,6 +32,10 @@ var numericDTypes = []dtypes.DType{
 
 // Capabilities of the SimpleGo backends: the set of supported operations and data types.
 var Capabilities = backends.Capabilities{
+	// Functions indicates that SimpleGo supports closures and named functions.
+	// This enables control flow operations like While, If, Sort that take closures as parameters.
+	Functions: true,
+
 	Operations: map[backends.OpType]bool{
 		// Graph inputs (leaf nodes)
 		backends.OpTypeParameter: true,
@@ -117,6 +121,11 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeTranspose:        true,
 		backends.OpTypeWhere:            true,
 		backends.OpTypeConvGeneral:      true,
+
+		// Control flow operations:
+		backends.OpTypeIf:    true,
+		backends.OpTypeWhile: true,
+		backends.OpTypeSort:  true,
 
 		// TODO: not implemented yet:
 		// backends.OpTypePad: true,
