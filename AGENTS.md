@@ -43,6 +43,10 @@ an error, to simplify the code. But everywhere else, use standard Go error handl
 
 The compiled and execution of the graphs later is parallelized and can be executed in concurrently as one wishes.
 
+Files that mostly define graph building functions, by convention, should dot-import the 
+`github.com/gomlx/gomlx/pkg/core/graph` package: having `graph.` repeated everywhere makes the math harder to read.
+This is commonly the case for libraries under `pkg/core/ml/layers`.
+
 ### Error Handling
 
 All errors should include a stack-trace, using the `github.com/pkg/errors` package.
@@ -59,6 +63,7 @@ an error, to simplify the code. But everywhere else, use standard Go error handl
 - Use the `for range` construct for loops over slices, maps, etc.
 
 ### Copyright Notes
+
 Normal code files are prefixed with the following copyright line:
 
 ```
