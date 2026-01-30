@@ -36,30 +36,56 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/gomlx/ui/commandline"
+)
+
+// Hyperparameter keys
+const (
+	ParamVocabSize   = "vocab_size"
+	ParamEmbedDim    = "embed_dim"
+	ParamNumHeads    = "num_heads"
+	ParamHeadDim     = "head_dim"
+	ParamNumLayers   = "num_layers"
+	ParamSeqLen      = "seq_len"
+	ParamBatchSize   = "batch_size"
+	ParamMaxPosEmbed = "max_pos_embed"
+	ParamTrainSteps  = "train_steps"
+	ParamUseCache    = "use_cache"
+	ParamStrategy    = "strategy"
+	ParamTemperature = "temperature"
+	ParamMaxLength   = "max_length"
 )
 
 var (
-	flagStrategy     = flag.String("strategy", "greedy", "Sampling strategy: greedy|temperature")
-	flagTemperature  = flag.Float64("temperature", 1.0, "Sampling temperature")
-	flagMaxLength    = flag.Int("max_length", 50, "Max generation length")
-	flagPrompt       = flag.String("prompt", "The quick", "Prompt text")
-	flagSteps        = flag.Int("steps", 200, "Training steps")
-	flagLearningRate = flag.Float64("lr", 0.01, "Learning rate")
-	flagUseCache     = flag.Bool("use_cache", false, "Use KV cache (faster generation)")
+	flagPrompt = flag.String("prompt", "The quick", "Prompt text")
+	dtype      = dtypes.Float32
 )
 
-const (
-	vocabSize   = 128
-	embedDim    = 64
-	numHeads    = 4
-	headDim     = 16
-	numLayers   = 2
-	seqLen      = 32
-	batchSize   = 4
-	maxPosEmbed = 256
-)
+func createDefaultContext() *context.Context {
+	ctx := context.New()
+	ctx.SetParams(map[string]any{
+		// Model hyperparameters
+		ParamVocabSize:   128,
+		ParamEmbedDim:    64,
+		ParamNumHeads:    4,
+		ParamHeadDim:     16,
+		ParamNumLayers:   2,
+		ParamSeqLen:      32,
+		ParamBatchSize:   4,
+		ParamMaxPosEmbed: 256,
 
-var dtype = dtypes.Float32
+		// Training hyperparameters
+		ParamTrainSteps:              200,
+		optimizers.ParamLearningRate: 0.01,
+
+		// Generation hyperparameters
+		ParamUseCache:    false,
+		ParamStrategy:    "greedy",
+		ParamTemperature: 1.0,
+		ParamMaxLength:   50,
+	})
+	return ctx
+}
 
 const trainingText = `The quick brown fox jumps over the lazy dog. ` +
 	`The quick brown fox jumps over the lazy dog. ` +
@@ -70,13 +96,15 @@ const trainingText = `The quick brown fox jumps over the lazy dog. ` +
 	`How vexingly quick daft zebras jump! ` +
 	`How vexingly quick daft zebras jump! `
 
-type CharTokenizer struct{}
+type CharTokenizer struct {
+	vocabSize int
+}
 
 func (t *CharTokenizer) Encode(text string) []int {
 	tokens := make([]int, len(text))
 	for i, char := range text {
 		tokens[i] = int(char)
-		if tokens[i] >= vocabSize {
+		if tokens[i] >= t.vocabSize {
 			tokens[i] = 32 // Use space for unknown chars
 		}
 	}
@@ -86,7 +114,7 @@ func (t *CharTokenizer) Encode(text string) []int {
 func (t *CharTokenizer) Decode(tokens []int) string {
 	chars := make([]byte, len(tokens))
 	for i, token := range tokens {
-		if token >= 0 && token < vocabSize {
+		if token >= 0 && token < t.vocabSize {
 			chars[i] = byte(token)
 		} else {
 			chars[i] = ' '
@@ -96,6 +124,13 @@ func (t *CharTokenizer) Decode(tokens []int) string {
 }
 
 func simpleTransformerModel(ctx *context.Context, inputs []*Node) []*Node {
+	vocabSize := context.GetParamOr(ctx, ParamVocabSize, 128)
+	embedDim := context.GetParamOr(ctx, ParamEmbedDim, 64)
+	numHeads := context.GetParamOr(ctx, ParamNumHeads, 4)
+	headDim := context.GetParamOr(ctx, ParamHeadDim, 16)
+	numLayers := context.GetParamOr(ctx, ParamNumLayers, 2)
+	maxPosEmbed := context.GetParamOr(ctx, ParamMaxPosEmbed, 256)
+
 	tokens := inputs[0]
 	g := tokens.Graph()
 	currentSeqLen := tokens.Shape().Dimensions[1]
@@ -129,8 +164,12 @@ func simpleTransformerModel(ctx *context.Context, inputs []*Node) []*Node {
 	return []*Node{logits}
 }
 
-func createTrainingBatch(text string, batchSize, seqLen int) (inputs [][]int32, targets [][][]int32) {
-	tokenizer := &CharTokenizer{}
+func createTrainingBatch(ctx *context.Context, text string) (inputs [][]int32, targets [][][]int32) {
+	batchSize := context.GetParamOr(ctx, ParamBatchSize, 4)
+	seqLen := context.GetParamOr(ctx, ParamSeqLen, 32)
+	vocabSize := context.GetParamOr(ctx, ParamVocabSize, 128)
+
+	tokenizer := &CharTokenizer{vocabSize: vocabSize}
 	tokens := tokenizer.Encode(text)
 
 	for len(tokens) < batchSize*(seqLen+1) {
@@ -154,15 +193,24 @@ func createTrainingBatch(text string, batchSize, seqLen int) (inputs [][]int32, 
 	return inputs, targets
 }
 
-func trainModel(backend backends.Backend, ctx *context.Context, steps int, learningRate float64) {
-	fmt.Printf("\nTraining Model\nSteps: %d  LR: %.4f  Batch: %d  SeqLen: %d\n\n", steps, learningRate, batchSize, seqLen)
+func trainModel(backend backends.Backend, ctx *context.Context) {
+	steps := context.GetParamOr(ctx, ParamTrainSteps, 200)
+	learningRate := context.GetParamOr(ctx, optimizers.ParamLearningRate, 0.01)
+	batchSize := context.GetParamOr(ctx, ParamBatchSize, 4)
+	seqLen := context.GetParamOr(ctx, ParamSeqLen, 32)
+	vocabSize := context.GetParamOr(ctx, ParamVocabSize, 128)
+	embedDim := context.GetParamOr(ctx, ParamEmbedDim, 64)
+	numLayers := context.GetParamOr(ctx, ParamNumLayers, 2)
+	numHeads := context.GetParamOr(ctx, ParamNumHeads, 4)
+	headDim := context.GetParamOr(ctx, ParamHeadDim, 16)
+	maxPosEmbed := context.GetParamOr(ctx, ParamMaxPosEmbed, 256)
+	useCache := context.GetParamOr(ctx, ParamUseCache, false)
 
-	// Set learning rate in context
-	ctx.SetParam(optimizers.ParamLearningRate, learningRate)
+	fmt.Printf("\nTraining Model\nSteps: %d  LR: %.4f  Batch: %d  SeqLen: %d\n\n", steps, learningRate, batchSize, seqLen)
 
 	var modelFn func(ctx *context.Context, _ any, inputs []*Node) []*Node
 
-	if *flagUseCache {
+	if useCache {
 		// Build cached transformer (training path uses non-cached forward)
 		transformerCfg := generation.NewTransformerConfig(vocabSize, embedDim, numLayers, numHeads, headDim).
 			WithFFNDim(embedDim * 4).
@@ -192,7 +240,7 @@ func trainModel(backend backends.Backend, ctx *context.Context, steps int, learn
 		nil, nil) // no metrics for this simple example
 
 	for step := 0; step < steps; step++ {
-		inputData, targetData := createTrainingBatch(trainingText, batchSize, seqLen)
+		inputData, targetData := createTrainingBatch(ctx, trainingText)
 		inputTensor := tensors.FromValue(inputData)
 		targetTensor := tensors.FromValue(targetData)
 
@@ -210,8 +258,19 @@ func trainModel(backend backends.Backend, ctx *context.Context, steps int, learn
 }
 
 func generateText(backend backends.Backend, ctx *context.Context, prompt string) {
-	tokenizer := &CharTokenizer{}
-	fmt.Printf("\nGeneration\nStrategy: %s  Temp: %.2f  MaxLen: %d  Cache: %v\nPrompt: %q\n\n", *flagStrategy, *flagTemperature, *flagMaxLength, *flagUseCache, prompt)
+	vocabSize := context.GetParamOr(ctx, ParamVocabSize, 128)
+	embedDim := context.GetParamOr(ctx, ParamEmbedDim, 64)
+	numLayers := context.GetParamOr(ctx, ParamNumLayers, 2)
+	numHeads := context.GetParamOr(ctx, ParamNumHeads, 4)
+	headDim := context.GetParamOr(ctx, ParamHeadDim, 16)
+	maxPosEmbed := context.GetParamOr(ctx, ParamMaxPosEmbed, 256)
+	useCache := context.GetParamOr(ctx, ParamUseCache, false)
+	strategy := context.GetParamOr(ctx, ParamStrategy, "greedy")
+	temperature := context.GetParamOr(ctx, ParamTemperature, 1.0)
+	maxLength := context.GetParamOr(ctx, ParamMaxLength, 50)
+
+	tokenizer := &CharTokenizer{vocabSize: vocabSize}
+	fmt.Printf("\nGeneration\nStrategy: %s  Temp: %.2f  MaxLen: %d  Cache: %v\nPrompt: %q\n\n", strategy, temperature, maxLength, useCache, prompt)
 
 	promptTokens := tokenizer.Encode(prompt)
 	if len(promptTokens) == 0 {
@@ -220,7 +279,7 @@ func generateText(backend backends.Backend, ctx *context.Context, prompt string)
 
 	var genCfg *generation.GenerationConfig
 
-	if *flagUseCache {
+	if useCache {
 		transformerCfg := generation.NewTransformerConfig(vocabSize, embedDim, numLayers, numHeads, headDim).
 			WithFFNDim(embedDim * 4).
 			WithMaxPosEmbed(maxPosEmbed).
@@ -238,9 +297,9 @@ func generateText(backend backends.Backend, ctx *context.Context, prompt string)
 			maxPosEmbed,
 			dtype,
 		).
-			WithStrategy(*flagStrategy).
-			WithTemperature(float32(*flagTemperature)).
-			WithMaxLength(*flagMaxLength)
+			WithStrategy(strategy).
+			WithTemperature(float32(temperature)).
+			WithMaxLength(maxLength)
 	} else {
 		modelFn := func(genCtx *context.Context, tokens *Node) *Node {
 			outputs := simpleTransformerModel(genCtx, []*Node{tokens})
@@ -248,9 +307,9 @@ func generateText(backend backends.Backend, ctx *context.Context, prompt string)
 		}
 
 		genCfg = generation.NewGenerationConfig(modelFn).
-			WithStrategy(*flagStrategy).
-			WithTemperature(float32(*flagTemperature)).
-			WithMaxLength(*flagMaxLength)
+			WithStrategy(strategy).
+			WithTemperature(float32(temperature)).
+			WithMaxLength(maxLength)
 	}
 
 	promptTensor := tensors.FromValue([][]int32{xslices.Map(promptTokens, func(t int) int32 { return int32(t) })})
@@ -287,16 +346,22 @@ func extractTokens(generated *tensors.Tensor) []int {
 }
 
 func main() {
+	ctx := createDefaultContext()
+	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	flag.Parse()
+	_, err := commandline.ParseContextSettings(ctx, *settings)
+	if err != nil {
+		log.Fatalf("Failed to parse context settings: %v", err)
+	}
+
+	fmt.Println(commandline.SprintContextSettings(ctx))
 
 	backend, err := backends.New()
 	if err != nil {
 		log.Fatalf("Failed to create backend: %v", err)
 	}
 
-	ctx := context.New()
-
-	trainModel(backend, ctx, *flagSteps, *flagLearningRate)
+	trainModel(backend, ctx)
 
 	ctx = ctx.Reuse()
 
