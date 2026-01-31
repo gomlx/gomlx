@@ -9,6 +9,7 @@ import (
 	graphtest "github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/decode/sample"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +20,7 @@ func TestGenerationConfig(t *testing.T) {
 		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
 		cfg := New(modelFn)
 		assert.Equal(t, 100, cfg.MaxLength)
-		assert.Equal(t, "greedy", cfg.Strategy)
+		assert.Equal(t, sample.StrategyGreedy, cfg.Strategy)
 		assert.Equal(t, float32(1.0), cfg.Temperature)
 		assert.Equal(t, 50, cfg.TopK)
 		assert.Equal(t, float32(0.9), cfg.TopP)
@@ -32,14 +33,14 @@ func TestGenerationConfig(t *testing.T) {
 		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
 		cfg := New(modelFn).
 			WithMaxLength(50).
-			WithStrategy("temperature").
+			WithStrategy(sample.StrategyTemperature).
 			WithTemperature(0.7).
 			WithTopK(40).
 			WithTopP(0.95).
 			WithBeamSize(8).
 			WithEOS(2)
 		assert.Equal(t, 50, cfg.MaxLength)
-		assert.Equal(t, "temperature", cfg.Strategy)
+		assert.Equal(t, sample.StrategyTemperature, cfg.Strategy)
 		assert.Equal(t, float32(0.7), cfg.Temperature)
 		assert.Equal(t, 40, cfg.TopK)
 		assert.Equal(t, float32(0.95), cfg.TopP)
@@ -64,7 +65,7 @@ func TestGenerateSampling(t *testing.T) {
 			logits = Where(Equal(indices, ConstAs(indices, 5)), ConstAs(logits, 100.0), logits)
 			return logits
 		}
-		cfg := New(modelFn).WithStrategy("greedy").WithMaxLength(10)
+		cfg := New(modelFn).WithStrategy(sample.StrategyGreedy).WithMaxLength(10)
 		prompt := [][]int32{{1, 2, 3}}
 		result, err := cfg.Decode(backend, ctx, prompt)
 		require.NoError(t, err)
@@ -87,7 +88,7 @@ func TestGenerateSampling(t *testing.T) {
 			g := tokens.Graph()
 			return IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, vocabSize))
 		}
-		cfg := New(modelFn).WithStrategy("temperature").WithTemperature(1.5).WithMaxLength(10)
+		cfg := New(modelFn).WithStrategy(sample.StrategyTemperature).WithTemperature(1.5).WithMaxLength(10)
 		prompt := [][]int32{{1, 2, 3}}
 		result, err := cfg.Decode(backend, ctx, prompt)
 		require.NoError(t, err)
@@ -110,7 +111,7 @@ func TestGenerateSampling(t *testing.T) {
 			g := tokens.Graph()
 			return IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, vocabSize))
 		}
-		cfg := New(modelFn).WithStrategy("greedy").WithMaxLength(10)
+		cfg := New(modelFn).WithStrategy(sample.StrategyGreedy).WithMaxLength(10)
 		prompt := []int32{1, 2, 3}
 		result, err := cfg.Decode(backend, ctx, prompt)
 		require.NoError(t, err)
@@ -141,7 +142,7 @@ func TestGenerateBeamSearch(t *testing.T) {
 		g := tokens.Graph()
 		return IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, 10))
 	}
-	cfg := New(modelFn).WithStrategy("beam_search").WithBeamSize(4).WithMaxLength(10)
+	cfg := New(modelFn).WithStrategy(sample.StrategyBeamSearch).WithBeamSize(4).WithMaxLength(10)
 	prompt := [][]int32{{1, 2, 3}}
 	result, err := cfg.Decode(backend, ctx, prompt)
 	require.NoError(t, err)

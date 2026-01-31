@@ -16,10 +16,10 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/decode/sample"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
-	"github.com/gomlx/gomlx/pkg/ml/layers/generation"
 	"github.com/gomlx/gomlx/pkg/ml/model/transformer"
 )
 
@@ -34,7 +34,7 @@ type GPT2Config struct {
 	DType       dtypes.DType
 
 	// Sampling configuration
-	Strategy    string
+	Strategy    sample.Strategy
 	Temperature float64
 	TopK        int
 	TopP        float64
@@ -161,7 +161,7 @@ func LoadGPT2(backend backends.Backend, repo *hub.Repo) (*GPT2Model, api.Tokeniz
 			logits := model.forwardGPT2(ctx, tokens, position)
 			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 			lastLogits = Squeeze(lastLogits, 1)
-			return generation.SampleWithStrategy(
+			return sample.SampleWithStrategy(
 				ctx, lastLogits,
 				model.config.Strategy,
 				model.config.Temperature,
@@ -185,7 +185,7 @@ func LoadGPT2(backend backends.Backend, repo *hub.Repo) (*GPT2Model, api.Tokeniz
 // GenerationConfig holds parameters for text generation.
 type GenerationConfig struct {
 	MaxTokens   int
-	Strategy    string
+	Strategy    sample.Strategy
 	Temperature float64
 	TopK        int
 	TopP        float64

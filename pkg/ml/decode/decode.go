@@ -8,7 +8,7 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/layers/generation"
+	"github.com/gomlx/gomlx/pkg/ml/decode/sample"
 	"github.com/pkg/errors"
 )
 
@@ -57,7 +57,7 @@ type Decoder struct {
 
 	// Generation parameters
 	MaxLength   int
-	Strategy    string // "greedy", "temperature", "top_k", "top_p", "beam_search"
+	Strategy    sample.Strategy
 	Temperature float32
 	TopK        int
 	TopP        float32
@@ -92,7 +92,7 @@ type Decoder struct {
 //
 //	// KV-cached generation
 //	decoder := decode.New(model.Incremental())
-//	decoder.WithStrategy("temperature").WithTemperature(0.8)
+//	decoder.WithStrategy(sample.StrategyTemperature).WithTemperature(0.8)
 func New[M interface{ ModelFn | IncrementalModelFn }](modelFn M) *Decoder {
 	var decoder *Decoder
 	switch typedModelFn := any(modelFn).(type) {
@@ -108,7 +108,7 @@ func New[M interface{ ModelFn | IncrementalModelFn }](modelFn M) *Decoder {
 
 	// Set default parameters
 	decoder.MaxLength = 100
-	decoder.Strategy = "greedy"
+	decoder.Strategy = sample.StrategyGreedy
 	decoder.Temperature = 1.0
 	decoder.TopK = 50
 	decoder.TopP = 0.9
@@ -144,33 +144,40 @@ func New[M interface{ ModelFn | IncrementalModelFn }](modelFn M) *Decoder {
 //	    "decode_max_length": 200,
 //	})
 //	decoder.FromContext(ctx)
-func (cfg *Decoder) FromContext(ctx *context.Context) *Decoder {
+func (dec *Decoder) FromContext(ctx *context.Context) *Decoder {
 	// Optional parameters with defaults
-	cfg.MaxLength = context.GetParamOr(ctx, ParamMaxLength, cfg.MaxLength)
-	cfg.Strategy = context.GetParamOr(ctx, ParamStrategy, cfg.Strategy)
-	cfg.Temperature = context.GetParamOr(ctx, ParamTemperature, cfg.Temperature)
-	cfg.TopK = context.GetParamOr(ctx, ParamTopK, cfg.TopK)
-	cfg.TopP = context.GetParamOr(ctx, ParamTopP, cfg.TopP)
-	cfg.BeamSize = context.GetParamOr(ctx, ParamBeamSize, cfg.BeamSize)
-	cfg.EosTokenId = context.GetParamOr(ctx, ParamEosTokenId, cfg.EosTokenId)
-	cfg.StopOnEOS = context.GetParamOr(ctx, ParamStopOnEOS, cfg.StopOnEOS)
+	dec.MaxLength = context.GetParamOr(ctx, ParamMaxLength, dec.MaxLength)
+	strategyName := context.GetParamOr(ctx, ParamStrategy, "")
+	if strategyName != "" {
+		var err error
+		dec.Strategy, err = sample.StrategyString(strategyName)
+		if err != nil {
+			panic(errors.Wrapf(err, "failed to parse sampling strategy %q, valid values are %v", strategyName, sample.StrategyStrings()))
+		}
+	}
+	dec.Temperature = context.GetParamOr(ctx, ParamTemperature, dec.Temperature)
+	dec.TopK = context.GetParamOr(ctx, ParamTopK, dec.TopK)
+	dec.TopP = context.GetParamOr(ctx, ParamTopP, dec.TopP)
+	dec.BeamSize = context.GetParamOr(ctx, ParamBeamSize, dec.BeamSize)
+	dec.EosTokenId = context.GetParamOr(ctx, ParamEosTokenId, dec.EosTokenId)
+	dec.StopOnEOS = context.GetParamOr(ctx, ParamStopOnEOS, dec.StopOnEOS)
 
-	return cfg
+	return dec
 }
 
 // initializePromptExec creates the cached executor for processing prompts in incremental generation.
 // This executor is reused across multiple generation calls to avoid recompilation overhead.
-func (cfg *Decoder) initializePromptExec(backend backends.Backend, ctx *context.Context) error {
-	if cfg.promptExec != nil || cfg.IncrementalModelFn == nil {
+func (dec *Decoder) initializePromptExec(backend backends.Backend, ctx *context.Context) error {
+	if dec.promptExec != nil || dec.IncrementalModelFn == nil {
 		return nil
 	}
 
 	var err error
-	cfg.promptExec, err = context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, tokens *Node) *Node {
-		logits := cfg.IncrementalModelFn(ctx, tokens, 0)
+	dec.promptExec, err = context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, tokens *Node) *Node {
+		logits := dec.IncrementalModelFn(ctx, tokens, 0)
 		lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 		lastLogits = Squeeze(lastLogits, 1) // [batch, vocab_size]
-		nextToken := generation.SampleWithStrategy(ctx, lastLogits, cfg.Strategy, float64(cfg.Temperature), cfg.TopK, float64(cfg.TopP))
+		nextToken := sample.SampleWithStrategy(ctx, lastLogits, dec.Strategy, float64(dec.Temperature), dec.TopK, float64(dec.TopP))
 		return nextToken
 	})
 	if err != nil {
@@ -181,67 +188,70 @@ func (cfg *Decoder) initializePromptExec(backend backends.Backend, ctx *context.
 }
 
 // WithMaxLength sets the maximum generation length (including prompt).
-func (cfg *Decoder) WithMaxLength(maxLength int) *Decoder {
-	cfg.MaxLength = maxLength
-	return cfg
+func (dec *Decoder) WithMaxLength(maxLength int) *Decoder {
+	dec.MaxLength = maxLength
+	return dec
 }
 
 // WithStrategy sets the sampling strategy.
-// Options: "greedy", "temperature", "top_k", "top_p", "beam_search".
-func (cfg *Decoder) WithStrategy(strategy string) *Decoder {
-	cfg.Strategy = strategy
-	return cfg
+// The default strategy is sample.StrategyGreedy, which always take the immediately most likely next token.
+func (dec *Decoder) WithStrategy(strategy sample.Strategy) *Decoder {
+	dec.Strategy = strategy
+	return dec
 }
 
 // WithTemperature sets the temperature for sampling.
 // Higher values (>1.0) increase randomness, lower values (<1.0) make output more deterministic.
-func (cfg *Decoder) WithTemperature(temperature float32) *Decoder {
-	cfg.Temperature = temperature
-	return cfg
+//
+// You have to also set the strategy to sample.StrategyTemperature or sample.StrategyTopK or
+// sample.StrategyTopP to use this parameter
+func (dec *Decoder) WithTemperature(temperature float32) *Decoder {
+	dec.Temperature = temperature
+	return dec
 }
 
 // WithTopK sets k for top-k sampling.
 // Only the k most likely tokens are considered at each step.
-func (cfg *Decoder) WithTopK(topK int) *Decoder {
-	cfg.TopK = topK
-	return cfg
+func (dec *Decoder) WithTopK(topK int) *Decoder {
+	dec.TopK = topK
+	return dec
 }
 
 // WithTopP sets p for nucleus sampling.
 // Tokens with cumulative probability up to p are considered.
-func (cfg *Decoder) WithTopP(topP float32) *Decoder {
-	cfg.TopP = topP
-	return cfg
+func (dec *Decoder) WithTopP(topP float32) *Decoder {
+	dec.TopP = topP
+	return dec
 }
 
 // WithBeamSize sets the beam size for beam search.
 // Higher values explore more candidates but are slower.
-func (cfg *Decoder) WithBeamSize(beamSize int) *Decoder {
-	cfg.BeamSize = beamSize
-	return cfg
+func (dec *Decoder) WithBeamSize(beamSize int) *Decoder {
+	dec.BeamSize = beamSize
+	return dec
 }
 
 // WithEOS sets the end-of-sequence token ID and enables early stopping.
 // Generation stops when this token is produced.
-func (cfg *Decoder) WithEOS(eosTokenId int) *Decoder {
-	cfg.EosTokenId = eosTokenId
-	cfg.StopOnEOS = true
-	return cfg
+func (dec *Decoder) WithEOS(eosTokenId int) *Decoder {
+	dec.EosTokenId = eosTokenId
+	dec.StopOnEOS = true
+	return dec
 }
 
 // isCached returns true if this decoder uses KV caching.
-func (cfg *Decoder) isCached() bool {
-	return cfg.IncrementalModelFn != nil
+func (dec *Decoder) isCached() bool {
+	return dec.IncrementalModelFn != nil
 }
 
 // validate checks that the decoder configuration is valid.
 // Returns an error if required fields are missing or invalid.
-func (cfg *Decoder) validate() error {
+func (dec *Decoder) validate() error {
 	// Exactly one model function must be set
-	if cfg.ModelFn != nil && cfg.IncrementalModelFn != nil {
+	if dec.ModelFn != nil && dec.IncrementalModelFn != nil {
 		return errors.Errorf("cannot set both ModelFn and IncrementalModelFn")
 	}
-	if cfg.ModelFn == nil && cfg.IncrementalModelFn == nil {
+	if dec.ModelFn == nil && dec.IncrementalModelFn == nil {
 		return errors.Errorf("must set either ModelFn or IncrementalModelFn")
 	}
 
@@ -264,18 +274,18 @@ func (cfg *Decoder) validate() error {
 //
 //	prompt := []int32{1, 2, 3}  // Token IDs
 //	output, err := decoder.Decode(backend, ctx, prompt)
-func (cfg *Decoder) Decode(
+func (dec *Decoder) Decode(
 	backend backends.Backend,
 	ctx *context.Context,
 	prompt any,
 ) (*tensors.Tensor, error) {
 	// Validate configuration
-	if err := cfg.validate(); err != nil {
+	if err := dec.validate(); err != nil {
 		return nil, errors.WithMessagef(err, "invalid generation config")
 	}
 
 	// Initialize cached executors for incremental generation
-	if err := cfg.initializePromptExec(backend, ctx); err != nil {
+	if err := dec.initializePromptExec(backend, ctx); err != nil {
 		return nil, err
 	}
 
@@ -296,16 +306,16 @@ func (cfg *Decoder) Decode(
 		promptLen = promptShape.Dimensions[1]
 	}
 
-	if promptLen >= cfg.MaxLength {
-		return nil, errors.Errorf("prompt length %d >= max length %d", promptLen, cfg.MaxLength)
+	if promptLen >= dec.MaxLength {
+		return nil, errors.Errorf("prompt length %d >= max length %d", promptLen, dec.MaxLength)
 	}
 
-	if cfg.Strategy == "beam_search" {
-		return cfg.generateBeamSearch(backend, ctx, promptTensor)
+	if dec.Strategy == sample.StrategyBeamSearch {
+		return dec.generateBeamSearch(backend, ctx, promptTensor)
 	}
 
 	// Regular sampling-based generation
-	return cfg.generateSampling(backend, ctx, promptTensor)
+	return dec.generateSampling(backend, ctx, promptTensor)
 }
 
 // generateSampling performs generation using sampling strategies.
@@ -319,7 +329,7 @@ func (cfg *Decoder) Decode(
 // Returns:
 //   - Generated sequence [batch, totalLen] where totalLen <= MaxLength
 //   - Error if generation fails
-func (cfg *Decoder) generateSampling(
+func (dec *Decoder) generateSampling(
 	backend backends.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
@@ -348,14 +358,14 @@ func (cfg *Decoder) generateSampling(
 		promptLen = promptShape.Dimensions[1]
 	}
 
-	if promptLen >= cfg.MaxLength {
-		return nil, errors.Errorf("prompt length %d >= max length %d", promptLen, cfg.MaxLength)
+	if promptLen >= dec.MaxLength {
+		return nil, errors.Errorf("prompt length %d >= max length %d", promptLen, dec.MaxLength)
 	}
 
-	if cfg.isCached() {
-		return cfg.generateSamplingIncremental(backend, ctx, prompt, batchSize, promptLen)
+	if dec.isCached() {
+		return dec.generateSamplingIncremental(backend, ctx, prompt, batchSize, promptLen)
 	}
-	return cfg.generateSamplingFull(backend, ctx, prompt, promptLen)
+	return dec.generateSamplingFull(backend, ctx, prompt, promptLen)
 }
 
 // generateSamplingFull performs sampling-based generation without KV caching.
@@ -370,13 +380,13 @@ func (cfg *Decoder) generateSampling(
 // Returns:
 //   - Generated sequence [batch, totalLen] where totalLen <= MaxLength
 //   - Error if generation fails
-func (cfg *Decoder) generateSamplingFull(
+func (dec *Decoder) generateSamplingFull(
 	backend backends.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
 	promptLen int,
 ) (*tensors.Tensor, error) {
-	numTokensToGenerate := cfg.MaxLength - promptLen
+	numTokensToGenerate := dec.MaxLength - promptLen
 	if numTokensToGenerate <= 0 {
 		return prompt, nil
 	}
@@ -388,7 +398,7 @@ func (cfg *Decoder) generateSamplingFull(
 	// Store generated tokens as int32 values [batch][position]
 	outputTokens := make([][]int32, batchSize)
 	for i := range outputTokens {
-		outputTokens[i] = make([]int32, 0, cfg.MaxLength)
+		outputTokens[i] = make([]int32, 0, dec.MaxLength)
 	}
 
 	// Add prompt tokens to output
@@ -398,14 +408,14 @@ func (cfg *Decoder) generateSamplingFull(
 	}
 
 	// Create or reuse cached executor for full sequence generation
-	if cfg.fullExec == nil {
+	if dec.fullExec == nil {
 		predCtx := ctx.Reuse()
 		var err error
-		cfg.fullExec, err = context.NewExec(backend, predCtx, func(ctx *context.Context, currentSeq *Node) *Node {
-			logits := cfg.ModelFn(ctx, currentSeq)
+		dec.fullExec, err = context.NewExec(backend, predCtx, func(ctx *context.Context, currentSeq *Node) *Node {
+			logits := dec.ModelFn(ctx, currentSeq)
 			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 			lastLogits = Squeeze(lastLogits, 1) // Remove the seq_len dimension
-			nextToken := generation.SampleWithStrategy(ctx, lastLogits, cfg.Strategy, float64(cfg.Temperature), cfg.TopK, float64(cfg.TopP))
+			nextToken := sample.SampleWithStrategy(ctx, lastLogits, dec.Strategy, float64(dec.Temperature), dec.TopK, float64(dec.TopP))
 			return nextToken
 		})
 		if err != nil {
@@ -417,7 +427,7 @@ func (cfg *Decoder) generateSamplingFull(
 		// Build current sequence tensor from accumulated tokens
 		currentSeq := tensors.FromValue(outputTokens)
 
-		outputs, err := cfg.fullExec.Exec(currentSeq)
+		outputs, err := dec.fullExec.Exec(currentSeq)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "generation step %d failed", step)
 		}
@@ -429,12 +439,12 @@ func (cfg *Decoder) generateSamplingFull(
 		allEOS := true
 		for i := range batchSize {
 			outputTokens[i] = append(outputTokens[i], nextTokenValues[i])
-			if cfg.StopOnEOS && cfg.EosTokenId >= 0 && int(nextTokenValues[i]) != cfg.EosTokenId {
+			if dec.StopOnEOS && dec.EosTokenId >= 0 && int(nextTokenValues[i]) != dec.EosTokenId {
 				allEOS = false
 			}
 		}
 
-		if cfg.StopOnEOS && cfg.EosTokenId >= 0 && allEOS {
+		if dec.StopOnEOS && dec.EosTokenId >= 0 && allEOS {
 			break
 		}
 	}
@@ -455,21 +465,21 @@ func (cfg *Decoder) generateSamplingFull(
 // Returns:
 //   - Generated sequence [batch, totalLen] where totalLen <= MaxLength
 //   - Error if generation fails
-func (cfg *Decoder) generateSamplingIncremental(
+func (dec *Decoder) generateSamplingIncremental(
 	backend backends.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
 	_, promptLen int,
 ) (*tensors.Tensor, error) {
 	// Use cached promptExec (initialized in Decode)
-	outputs, err := cfg.promptExec.Exec(prompt)
+	outputs, err := dec.promptExec.Exec(prompt)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to process prompt")
 	}
 
 	firstToken := outputs[0]
 
-	if cfg.StopOnEOS && cfg.EosTokenId >= 0 && cfg.checkEOS(firstToken) {
+	if dec.StopOnEOS && dec.EosTokenId >= 0 && dec.checkEOS(firstToken) {
 		concatExec, _ := NewExec(backend, func(seq, token *Node) *Node {
 			tokenReshaped := ExpandDims(token, -1)
 			return Concatenate([]*Node{seq, tokenReshaped}, 1)
@@ -491,7 +501,7 @@ func (cfg *Decoder) generateSamplingIncremental(
 	// Store generated tokens as int32 values [batch][position]
 	outputTokens := make([][]int32, batchSize)
 	for i := range outputTokens {
-		outputTokens[i] = make([]int32, 0, cfg.MaxLength)
+		outputTokens[i] = make([]int32, 0, dec.MaxLength)
 	}
 
 	// Add prompt tokens to output
@@ -506,7 +516,7 @@ func (cfg *Decoder) generateSamplingIncremental(
 		outputTokens[i] = append(outputTokens[i], firstTokenValues[i])
 	}
 
-	numTokensToGenerate := cfg.MaxLength - promptLen - 1
+	numTokensToGenerate := dec.MaxLength - promptLen - 1
 	if numTokensToGenerate <= 0 {
 		return tensors.FromValue(outputTokens), nil
 	}
@@ -514,8 +524,8 @@ func (cfg *Decoder) generateSamplingIncremental(
 	genCtx := ctx.Reuse()
 
 	// Initialize cache if needed
-	if cfg.genExecCache == nil {
-		cfg.genExecCache = make(map[int]*context.Exec)
+	if dec.genExecCache == nil {
+		dec.genExecCache = make(map[int]*context.Exec)
 	}
 
 	currentPosition := promptLen
@@ -523,20 +533,20 @@ func (cfg *Decoder) generateSamplingIncremental(
 		position := currentPosition + step
 
 		// Get or create cached executor for this position
-		exec, ok := cfg.genExecCache[position]
+		exec, ok := dec.genExecCache[position]
 		if !ok {
 			var err error
 			exec, err = context.NewExec(backend, genCtx, func(ctx *context.Context, token *Node) *Node {
 				tokenReshaped := ExpandDims(token, -1)
-				logits := cfg.IncrementalModelFn(ctx, tokenReshaped, position)
+				logits := dec.IncrementalModelFn(ctx, tokenReshaped, position)
 				lastLogits := Squeeze(logits, 1)
-				nextToken := generation.SampleWithStrategy(ctx, lastLogits, cfg.Strategy, float64(cfg.Temperature), cfg.TopK, float64(cfg.TopP))
+				nextToken := sample.SampleWithStrategy(ctx, lastLogits, dec.Strategy, float64(dec.Temperature), dec.TopK, float64(dec.TopP))
 				return nextToken
 			})
 			if err != nil {
 				return nil, errors.WithMessagef(err, "failed to create generation exec at position %d", position)
 			}
-			cfg.genExecCache[position] = exec
+			dec.genExecCache[position] = exec
 		}
 
 		// Get previous token from each batch as tensor
@@ -558,12 +568,12 @@ func (cfg *Decoder) generateSamplingIncremental(
 		allEOS := true
 		for i := range batchSize {
 			outputTokens[i] = append(outputTokens[i], nextTokenValues[i])
-			if cfg.StopOnEOS && cfg.EosTokenId >= 0 && int(nextTokenValues[i]) != cfg.EosTokenId {
+			if dec.StopOnEOS && dec.EosTokenId >= 0 && int(nextTokenValues[i]) != dec.EosTokenId {
 				allEOS = false
 			}
 		}
 
-		if cfg.StopOnEOS && cfg.EosTokenId >= 0 && allEOS {
+		if dec.StopOnEOS && dec.EosTokenId >= 0 && allEOS {
 			break
 		}
 	}
@@ -572,32 +582,32 @@ func (cfg *Decoder) generateSamplingIncremental(
 }
 
 // checkEOS returns true if any token in the tensor matches the EOS token ID.
-func (cfg *Decoder) checkEOS(token *tensors.Tensor) bool {
+func (dec *Decoder) checkEOS(token *tensors.Tensor) bool {
 	tokenValue := token.Value()
 	switch v := tokenValue.(type) {
 	case []int32:
 		for _, t := range v {
-			if int(t) == cfg.EosTokenId {
+			if int(t) == dec.EosTokenId {
 				return true
 			}
 		}
 	case int32:
-		return int(v) == cfg.EosTokenId
+		return int(v) == dec.EosTokenId
 	case []int64:
 		for _, t := range v {
-			if int(t) == cfg.EosTokenId {
+			if int(t) == dec.EosTokenId {
 				return true
 			}
 		}
 	case int64:
-		return int(v) == cfg.EosTokenId
+		return int(v) == dec.EosTokenId
 	}
 	return false
 }
 
 // generateBeamSearch performs beam search generation.
 // Dispatches to cached or non-cached implementation based on configuration.
-func (cfg *Decoder) generateBeamSearch(
+func (dec *Decoder) generateBeamSearch(
 	backend backends.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
@@ -626,26 +636,26 @@ func (cfg *Decoder) generateBeamSearch(
 		promptLen = promptShape.Dimensions[1]
 	}
 
-	if promptLen >= cfg.MaxLength {
-		return nil, errors.Errorf("prompt length %d >= max length %d", promptLen, cfg.MaxLength)
+	if promptLen >= dec.MaxLength {
+		return nil, errors.Errorf("prompt length %d >= max length %d", promptLen, dec.MaxLength)
 	}
 
 	// Dispatch cached or non-cached
-	if cfg.isCached() {
-		return cfg.generateBeamSearchCached(backend, ctx, prompt, batchSize, promptLen)
+	if dec.isCached() {
+		return dec.generateBeamSearchCached(backend, ctx, prompt, batchSize, promptLen)
 	}
-	return cfg.generateBeamSearchNonCached(backend, ctx, prompt, batchSize, promptLen)
+	return dec.generateBeamSearchNonCached(backend, ctx, prompt, batchSize, promptLen)
 }
 
 // generateBeamSearchNonCached performs beam search without KV caching.
 // Maintains multiple beam hypotheses and selects the best sequence.
-func (cfg *Decoder) generateBeamSearchNonCached(
+func (dec *Decoder) generateBeamSearchNonCached(
 	backend backends.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
 	batchSize, promptLen int,
 ) (*tensors.Tensor, error) {
-	beamSize := cfg.BeamSize
+	beamSize := dec.BeamSize
 	batchBeamSize := batchSize * beamSize
 
 	// Replicate prompt for each beam
@@ -681,13 +691,13 @@ func (cfg *Decoder) generateBeamSearchNonCached(
 	currentSequences := replicatedResults[0]
 
 	// Beam search configuration
-	beamConfig := generation.NewBeamSearch(beamSize, cfg.EosTokenId).
-		WithMaxLength(cfg.MaxLength).
+	beamConfig := sample.NewBeamSearch(beamSize, dec.EosTokenId).
+		WithMaxLength(dec.MaxLength).
 		WithLengthPenalty(1.0)
 
 	// Main loop
 	predCtx := ctx.Reuse()
-	numSteps := cfg.MaxLength - promptLen
+	numSteps := dec.MaxLength - promptLen
 
 	for step := 0; step < numSteps; step++ {
 		currentLength := promptLen + step
@@ -697,7 +707,7 @@ func (cfg *Decoder) generateBeamSearchNonCached(
 		// I leave it like this for now as I think we need the dynamic shape support of the simplego backend.
 		exec, err := context.NewExec(backend, predCtx, func(ctx *context.Context, sequences, scores *Node) (*Node, *Node, *Node) {
 			// Run model
-			logits := cfg.ModelFn(ctx, sequences)
+			logits := dec.ModelFn(ctx, sequences)
 
 			// Last token logits: [batch_beam_size, vocab_size]
 			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
@@ -765,13 +775,13 @@ func (cfg *Decoder) generateBeamSearchNonCached(
 
 // generateBeamSearchCached performs beam search with KV caching.
 // Each beam maintains its own cache for efficient incremental generation.
-func (cfg *Decoder) generateBeamSearchCached(
+func (dec *Decoder) generateBeamSearchCached(
 	backend backends.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
 	batchSize, promptLen int,
 ) (*tensors.Tensor, error) {
-	beamSize := cfg.BeamSize
+	beamSize := dec.BeamSize
 
 	// Note: KV caches are now automatically managed within the context by the attention layers.
 	// Each call to WithKVCache in the model function will create/reuse cache variables in the context.
@@ -797,7 +807,7 @@ func (cfg *Decoder) generateBeamSearchCached(
 
 	// Process prompt to populate caches
 	promptExec, err := context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, tokens *Node) *Node {
-		logits := cfg.IncrementalModelFn(ctx, tokens, 0)
+		logits := dec.IncrementalModelFn(ctx, tokens, 0)
 		lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 		return Squeeze(lastLogits, 1)
 	})
@@ -825,13 +835,13 @@ func (cfg *Decoder) generateBeamSearchCached(
 	currentSequences := replicatedPrompt
 
 	// Beam search configuration
-	beamConfig := generation.NewBeamSearch(beamSize, cfg.EosTokenId).
-		WithMaxLength(cfg.MaxLength).
+	beamConfig := sample.NewBeamSearch(beamSize, dec.EosTokenId).
+		WithMaxLength(dec.MaxLength).
 		WithLengthPenalty(1.0)
 
 	// Main loop
 	genCtx := ctx.Reuse()
-	numSteps := cfg.MaxLength - promptLen
+	numSteps := dec.MaxLength - promptLen
 
 	for step := 0; step < numSteps; step++ {
 		position := promptLen + step
@@ -862,7 +872,7 @@ func (cfg *Decoder) generateBeamSearchCached(
 			tokensReshaped := ExpandDims(tokens, -1) // [batch_beam_size, 1]
 
 			// Process with incremental model
-			logits := cfg.IncrementalModelFn(ctx, tokensReshaped, position)
+			logits := dec.IncrementalModelFn(ctx, tokensReshaped, position)
 			logits = Squeeze(logits, 1) // [batch_beam_size, vocab_size]
 
 			// Beam search step
@@ -938,7 +948,7 @@ func (cfg *Decoder) generateBeamSearchCached(
 //   - Error if generation fails
 //
 // Note: This is a placeholder for future streaming support.
-func (cfg *Decoder) GenerateStreaming(
+func (dec *Decoder) GenerateStreaming(
 	backend backends.Backend,
 	ctx *context.Context,
 	prompt any,

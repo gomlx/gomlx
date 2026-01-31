@@ -1,4 +1,4 @@
-package generation
+package sample
 
 import (
 	"testing"
@@ -11,12 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestGreedySample groups greedy sampling tests.
-func TestGreedySample(t *testing.T) {
+// TestGreedy groups greedy sampling tests.
+func TestGreedy(t *testing.T) {
 	t.Run("Basic", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node { return GreedySample(ctx, logits) })
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node { return Greedy(logits) })
 		logits := [][]float32{
 			{0, 0, 0, 0, 0, 10, 0, 0, 0, 0},
 			{0, 0, 0, 10, 0, 0, 0, 0, 0, 0},
@@ -30,12 +30,12 @@ func TestGreedySample(t *testing.T) {
 	})
 }
 
-// TestTemperatureSample groups temperature sampling tests.
-func TestTemperatureSample(t *testing.T) {
+// TestTemperature groups temperature sampling tests.
+func TestTemperature(t *testing.T) {
 	t.Run("Range", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node { return TemperatureSample(ctx, logits, 1.0) })
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node { return Temperature(ctx, logits, 1.0) })
 		logits := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
 		tokens := exec.MustExec(logits)[0]
 		assert.Equal(t, dtypes.Int32, tokens.DType())
@@ -45,15 +45,15 @@ func TestTemperatureSample(t *testing.T) {
 	})
 }
 
-// TestTopPSample groups top-p (nucleus) sampling tests.
-func TestTopPSample(t *testing.T) {
+// TestTopP groups top-p (nucleus) sampling tests.
+func TestTopP(t *testing.T) {
 	t.Run("BatchShape", func(t *testing.T) {
 		// Test that TopPSample correctly handles batch dimensions
 		// This tests the BroadcastToShape fix for condition broadcasting
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node {
-			return TopPSample(ctx, logits, 0.9, 1.0)
+			return TopP(ctx, logits, 0.9, 1.0)
 		})
 
 		// Batch of 2 with vocab size 10
@@ -79,7 +79,7 @@ func TestTopPSample(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node {
-			return TopPSample(ctx, logits, 0.95, 0.8)
+			return TopP(ctx, logits, 0.95, 0.8)
 		})
 
 		logits := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
@@ -102,7 +102,7 @@ func TestTopKSample(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node {
-			return TopKSample(ctx, logits, 5, 1.0)
+			return TopKWithTemperature(ctx, logits, 5, 1.0)
 		})
 
 		// Batch of 2 with vocab size 10
@@ -130,7 +130,7 @@ func TestSampleWithStrategy(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node {
-			return SampleWithStrategy(ctx, logits, "greedy", 0, 0, 0)
+			return SampleWithStrategy(ctx, logits, StrategyGreedy, 0, 0, 0)
 		})
 		logits := [][]float32{{0, 0, 0, 0, 0, 0, 0, 10, 0, 0}}
 		tokens := exec.MustExec(logits)[0]
@@ -142,7 +142,7 @@ func TestSampleWithStrategy(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node {
-			return SampleWithStrategy(ctx, logits, "temperature", 0.8, 0, 0)
+			return SampleWithStrategy(ctx, logits, StrategyTemperature, 0.8, 0, 0)
 		})
 		logits := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
 		tokens := exec.MustExec(logits)[0]
@@ -155,7 +155,7 @@ func TestSampleWithStrategy(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node {
-			return SampleWithStrategy(ctx, logits, "top_k", 1.0, 3, 0)
+			return SampleWithStrategy(ctx, logits, StrategyTopK, 1.0, 3, 0)
 		})
 		logits := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
 		tokens := exec.MustExec(logits)[0]
@@ -168,7 +168,7 @@ func TestSampleWithStrategy(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node {
-			return SampleWithStrategy(ctx, logits, "top_p", 1.0, 0, 0.8)
+			return SampleWithStrategy(ctx, logits, StrategyTopP, 1.0, 0, 0.8)
 		})
 		logits := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
 		tokens := exec.MustExec(logits)[0]
