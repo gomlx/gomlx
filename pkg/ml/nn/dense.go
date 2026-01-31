@@ -3,89 +3,92 @@
 package nn
 
 import (
-	"math"
-
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 )
 
-// Dense performs a dense (linear) transformation: y = x @ weight + bias.
+// Dense performs a dense (linear) transformation with optional activation:
+//   y = activation(x @ weight + bias)
 //
 // weight has shape [in_features, out_features...]. bias is optional (nil means no
 // bias). x's last axis contracts with weight's first axis.
 //
+// activation is optional; if omitted or activations.TypeNone, no activation is
+// applied.
+//
 // If the backend supports fused Dense (backends.OpTypeFusedDense), the optimized
 // native implementation is used; otherwise the operation is decomposed into
-// Einsum + Add.
-func Dense(x, weight, bias *Node) *Node {
+// Einsum + Add + activation.
+func Dense(x, weight, bias *Node, activation ...activations.Type) *Node {
+	act := activations.TypeNone
+	if len(activation) > 0 {
+		act = activation[0]
+	}
+
+	backendAct := activationTypeToBackend(act)
+
 	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeFusedDense] {
-		return FusedDense(x, weight, bias)
+		return FusedDense(x, weight, bias, backendAct)
 	}
 
 	// Decomposed: contract x's last axis with weight's first axis,
 	// producing x @ weight.
 	xShape := x.Shape()
-	rank := xShape.Rank()
+	wShape := weight.Shape()
+	xRank := xShape.Rank()
+	wRank := wShape.Rank()
+
+	// Flatten x to 2D [batchSize, inFeatures] if needed.
+	inFeatures := xShape.Dimensions[xRank-1]
+	xBatchSize := xShape.Size() / inFeatures
+	x2d := x
+	if xRank > 2 {
+		x2d = Reshape(x, xBatchSize, inFeatures)
+	}
+
+	// Flatten weight to 2D [inFeatures, outFeatures] if needed.
+	outFeaturesFlat := wShape.Size() / wShape.Dimensions[0]
+	w2d := weight
+	if wRank > 2 {
+		w2d = Reshape(weight, wShape.Dimensions[0], outFeaturesFlat)
+	}
+
+	y2d := Dot(x2d, w2d)
+
+	// Reshape output to [x_batch_dims..., weight_out_dims...] if needed.
 	var y *Node
-	if rank <= 2 {
-		y = Dot(x, weight)
+	if xRank <= 2 && wRank <= 2 {
+		y = y2d
 	} else {
-		// Reshape to 2D, Dot, reshape back.
-		inFeatures := xShape.Dimensions[rank-1]
-		batchSize := xShape.Size() / inFeatures
-		x2d := Reshape(x, batchSize, inFeatures)
-		y2d := Dot(x2d, weight)
-		outDims := make([]int, rank-1+weight.Shape().Rank()-1)
-		copy(outDims, xShape.Dimensions[:rank-1])
-		copy(outDims[rank-1:], weight.Shape().Dimensions[1:])
+		outDims := make([]int, xRank-1+wRank-1)
+		copy(outDims, xShape.Dimensions[:xRank-1])
+		copy(outDims[xRank-1:], wShape.Dimensions[1:])
 		y = Reshape(y2d, outDims...)
 	}
 	if bias != nil {
 		y = Add(y, ExpandLeftToRank(bias, y.Rank()))
 	}
+	if act != activations.TypeNone {
+		y = activations.Apply(act, y)
+	}
 	return y
 }
 
-// DenseActivation performs a dense transformation followed by an activation
-// function: activation(x @ weight + bias).
-//
-// weight has shape [in_features, out_features...]. bias is optional (nil means no
-// bias). activation specifies the activation function to apply.
-//
-// If the backend supports fused DenseActivation
-// (backends.OpTypeFusedDenseActivation), the optimized native implementation is
-// used; otherwise the operation is decomposed into Dense + activation.
-func DenseActivation(x, weight, bias *Node, activation backends.ActivationType) *Node {
-	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeFusedDenseActivation] {
-		return FusedDenseActivation(x, weight, bias, activation)
-	}
-
-	// Decomposed: dense + activation.
-	y := Dense(x, weight, bias)
-	return applyActivation(y, activation)
-}
-
-// applyActivation applies the given activation function using decomposed graph ops.
-func applyActivation(x *Node, activation backends.ActivationType) *Node {
-	switch activation {
-	case backends.ActivationNone:
-		return x
-	case backends.ActivationGelu:
-		// Approximate GELU: x * 0.5 * (1 + tanh(sqrt(2/pi) * (x + 0.044715*x^3)))
-		cdfApprox := Add(x, MulScalar(PowScalar(x, 3), 0.044715))
-		sqrt2ByPi := math.Sqrt(2.0 / math.Pi)
-		cdfApprox = Tanh(MulScalar(cdfApprox, sqrt2ByPi))
-		cdfApprox = MulScalar(OnePlus(cdfApprox), 0.5)
-		return Mul(x, cdfApprox)
-	case backends.ActivationRelu:
-		zero := ScalarZero(x.Graph(), x.DType())
-		return Max(x, zero)
-	case backends.ActivationSilu:
-		// SiLU = x * sigmoid(x)
-		return Mul(x, Sigmoid(x))
-	case backends.ActivationTanh:
-		return Tanh(x)
+// activationTypeToBackend converts activations.Type to backends.ActivationType.
+func activationTypeToBackend(act activations.Type) backends.ActivationType {
+	switch act {
+	case activations.TypeNone:
+		return backends.ActivationNone
+	case activations.TypeGelu, activations.TypeGeluApprox:
+		return backends.ActivationGelu
+	case activations.TypeRelu:
+		return backends.ActivationRelu
+	case activations.TypeSwish, activations.TypeSilu:
+		return backends.ActivationSilu
+	case activations.TypeTanh:
+		return backends.ActivationTanh
 	default:
-		panic("nn.DenseActivation: unsupported activation type")
+		return backends.ActivationNone
 	}
 }

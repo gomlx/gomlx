@@ -37,45 +37,41 @@ func (d *nodeFusedLayerNorm) EqualNodeData(other nodeDataComparable) bool {
 }
 
 type nodeFusedGelu struct {
-	mode string
+	exact bool
 }
 
 func (d *nodeFusedGelu) EqualNodeData(other nodeDataComparable) bool {
-	return d.mode == other.(*nodeFusedGelu).mode
+	return d.exact == other.(*nodeFusedGelu).exact
 }
 
-type nodeFusedDenseActivation struct {
+type nodeFusedDense struct {
 	activation backends.ActivationType
 }
 
-func (d *nodeFusedDenseActivation) EqualNodeData(other nodeDataComparable) bool {
-	return d.activation == other.(*nodeFusedDenseActivation).activation
+func (d *nodeFusedDense) EqualNodeData(other nodeDataComparable) bool {
+	return d.activation == other.(*nodeFusedDense).activation
 }
 
-// Softmax computes softmax along the specified axis.
+// FusedSoftmax computes softmax along the specified axis.
+// The axis must be non-negative (the caller normalizes negative indices).
 func (f *Function) FusedSoftmax(x backends.Value, axis int) (backends.Value, error) {
-	inputs, err := f.verifyAndCastValues("Softmax", x)
+	inputs, err := f.verifyAndCastValues("FusedSoftmax", x)
 	if err != nil {
 		return nil, err
 	}
 	xNode := inputs[0]
 
-	// Normalize negative axis.
 	rank := xNode.shape.Rank()
-	if axis < 0 {
-		axis += rank
-	}
 	if axis < 0 || axis >= rank {
-		return nil, errors.Errorf("Softmax: axis %d out of range for rank %d", axis, rank)
+		return nil, errors.Errorf("FusedSoftmax: axis %d out of range for rank %d", axis, rank)
 	}
 
-	// Output shape is the same as input shape.
 	data := &nodeFusedSoftmax{axis: axis}
 	node, _ := f.getOrCreateNode(backends.OpTypeFusedSoftmax, xNode.shape.Clone(), []*Node{xNode}, data)
 	return node, nil
 }
 
-// LayerNorm applies layer normalization.
+// FusedLayerNorm applies layer normalization.
 func (f *Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, gamma, beta backends.Value) (backends.Value, error) {
 	values := []backends.Value{x}
 	if gamma != nil {
@@ -84,7 +80,7 @@ func (f *Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64,
 	if beta != nil {
 		values = append(values, beta)
 	}
-	inputs, err := f.verifyAndCastValues("LayerNorm", values...)
+	inputs, err := f.verifyAndCastValues("FusedLayerNorm", values...)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +94,7 @@ func (f *Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64,
 			a += rank
 		}
 		if a < 0 || a >= rank {
-			return nil, errors.Errorf("LayerNorm: axis %d out of range for rank %d", axes[i], rank)
+			return nil, errors.Errorf("FusedLayerNorm: axis %d out of range for rank %d", axes[i], rank)
 		}
 		normalizedAxes[i] = a
 	}
@@ -108,43 +104,42 @@ func (f *Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64,
 	return node, nil
 }
 
-// Gelu computes Gaussian Error Linear Unit activation.
-func (f *Function) FusedGelu(x backends.Value, mode string) (backends.Value, error) {
-	inputs, err := f.verifyAndCastValues("Gelu", x)
+// FusedGelu computes Gaussian Error Linear Unit activation.
+// If exact is true, uses the exact GELU (erf); otherwise uses the tanh approximation.
+func (f *Function) FusedGelu(x backends.Value, exact bool) (backends.Value, error) {
+	inputs, err := f.verifyAndCastValues("FusedGelu", x)
 	if err != nil {
 		return nil, err
 	}
 	xNode := inputs[0]
 
-	data := &nodeFusedGelu{mode: mode}
+	data := &nodeFusedGelu{exact: exact}
 	node, _ := f.getOrCreateNode(backends.OpTypeFusedGelu, xNode.shape.Clone(), []*Node{xNode}, data)
 	return node, nil
 }
 
-// Dense performs fused matmul + bias: y = x @ W + bias.
-// x: [..., in_features], weight: [in_features, out_features...], bias: [out_features...] (optional)
-func (f *Function) FusedDense(x, weight, bias backends.Value) (backends.Value, error) {
+// FusedDense performs fused matmul + optional bias + optional activation:
+//
+//	y = activation(x @ W + bias)
+func (f *Function) FusedDense(x, weight, bias backends.Value, activation backends.ActivationType) (backends.Value, error) {
 	values := []backends.Value{x, weight}
 	if bias != nil {
 		values = append(values, bias)
 	}
-	inputs, err := f.verifyAndCastValues("Dense", values...)
+	inputs, err := f.verifyAndCastValues("FusedDense", values...)
 	if err != nil {
 		return nil, err
 	}
 	xNode := inputs[0]
 	wNode := inputs[1]
 
-	// Output shape: x's batch dims + weight's remaining dims (out_features...).
-	// x: [..., in_features], weight: [in_features, out_features...]
-	// output: [..., out_features...]
 	if xNode.shape.Rank() < 1 || wNode.shape.Rank() < 2 {
-		return nil, errors.Errorf("Dense: x must have rank >= 1 (got %d), weight must have rank >= 2 (got %d)",
+		return nil, errors.Errorf("FusedDense: x must have rank >= 1 (got %d), weight must have rank >= 2 (got %d)",
 			xNode.shape.Rank(), wNode.shape.Rank())
 	}
 	inFeatures := xNode.shape.Dimensions[xNode.shape.Rank()-1]
 	if inFeatures != wNode.shape.Dimensions[0] {
-		return nil, errors.Errorf("Dense: x's last dim (%d) must match weight's first dim (%d)",
+		return nil, errors.Errorf("FusedDense: x's last dim (%d) must match weight's first dim (%d)",
 			inFeatures, wNode.shape.Dimensions[0])
 	}
 
@@ -153,39 +148,7 @@ func (f *Function) FusedDense(x, weight, bias backends.Value) (backends.Value, e
 	copy(outDims[xNode.shape.Rank()-1:], wNode.shape.Dimensions[1:])
 	outShape := shapes.Make(xNode.shape.DType, outDims...)
 
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedDense, outShape, inputs, nil)
-	return node, nil
-}
-
-// DenseActivation performs Dense followed by activation in one op.
-func (f *Function) FusedDenseActivation(x, weight, bias backends.Value, activation backends.ActivationType) (backends.Value, error) {
-	values := []backends.Value{x, weight}
-	if bias != nil {
-		values = append(values, bias)
-	}
-	inputs, err := f.verifyAndCastValues("DenseActivation", values...)
-	if err != nil {
-		return nil, err
-	}
-	xNode := inputs[0]
-	wNode := inputs[1]
-
-	if xNode.shape.Rank() < 1 || wNode.shape.Rank() < 2 {
-		return nil, errors.Errorf("DenseActivation: x must have rank >= 1 (got %d), weight must have rank >= 2 (got %d)",
-			xNode.shape.Rank(), wNode.shape.Rank())
-	}
-	inFeatures := xNode.shape.Dimensions[xNode.shape.Rank()-1]
-	if inFeatures != wNode.shape.Dimensions[0] {
-		return nil, errors.Errorf("DenseActivation: x's last dim (%d) must match weight's first dim (%d)",
-			inFeatures, wNode.shape.Dimensions[0])
-	}
-
-	outDims := make([]int, xNode.shape.Rank()-1+wNode.shape.Rank()-1)
-	copy(outDims, xNode.shape.Dimensions[:xNode.shape.Rank()-1])
-	copy(outDims[xNode.shape.Rank()-1:], wNode.shape.Dimensions[1:])
-	outShape := shapes.Make(xNode.shape.DType, outDims...)
-
-	data := &nodeFusedDenseActivation{activation: activation}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedDenseActivation, outShape, inputs, data)
+	data := &nodeFusedDense{activation: activation}
+	node, _ := f.getOrCreateNode(backends.OpTypeFusedDense, outShape, inputs, data)
 	return node, nil
 }

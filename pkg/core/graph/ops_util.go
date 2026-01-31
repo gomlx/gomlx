@@ -364,7 +364,11 @@ func Softmax(logits *Node, axes ...int) *Node {
 	// Try native softmax for the single-axis case.
 	if len(axes) == 1 {
 		if logits.Graph().Backend().Capabilities().Operations[backends.OpTypeFusedSoftmax] {
-			return FusedSoftmax(logits, axes[0])
+			axis := axes[0]
+			if axis < 0 {
+				axis += logits.Rank()
+			}
+			return FusedSoftmax(logits, axis)
 		}
 	}
 

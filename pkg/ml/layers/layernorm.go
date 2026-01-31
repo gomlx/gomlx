@@ -213,7 +213,7 @@ func (builder *LayerNormBuilder) Done() *Node {
 			offsetVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("offset", normShape).SetTrainable(true)
 			beta = Reshape(offsetVar.ValueGraph(g), broadcastNormShape.Dimensions...)
 		}
-		return nn.LayerNorm(x, builder.normalizingAxes, builder.epsilon, gamma, beta)
+		return nn.LayerNorm(x, builder.normalizingAxes, builder.epsilon, gamma, beta, nil)
 	}
 
 	// LearnedGain and offset to be applied to the normalized value.

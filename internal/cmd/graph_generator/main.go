@@ -49,8 +49,8 @@ var (
 		"Slice",
 		"Transpose", "Where")
 
-	// methodsNotGenerated but for which there is still a NodeType.
-	// These get a NodeType but no auto-generated wrapper.
+	// methodsNotGenerated get a NodeType but no auto-generated wrapper
+	// (hand-written implementations).
 	methodsNotGenerated = sets.MakeWith(
 		"Constant", "Parameter")
 
@@ -59,7 +59,6 @@ var (
 	nillableParams = sets.MakeWith(
 		"FusedLayerNorm.gamma", "FusedLayerNorm.beta",
 		"FusedDense.bias",
-		"FusedDenseActivation.bias",
 	)
 
 	// methodsExcluded from generating and even from having a NodeType.

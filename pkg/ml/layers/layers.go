@@ -9,7 +9,6 @@ package layers
 
 import (
 	"cmp"
-	"fmt"
 
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
@@ -94,47 +93,15 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 		regularizer(ctx, g, weightsVar)
 	}
 	weights := weightsVar.ValueGraph(g)
-	var output *Node
-	if inputRank <= 2 && len(outputDimensions) == 1 {
-		// Fast path: dispatch to nn.Dense which uses fused op if available.
-		var biasNode *Node
-		if useBias {
-			biasVar := ctx.VariableWithShape("biases", shapes.Make(inputShape.DType, outputDimensions...))
-			biasNode = biasVar.ValueGraph(g)
-		}
-		return nn.Dense(input, weights, biasNode)
-	} else {
-		// Einsum all batch dimensions:
-		axis := 'a'
-		var equationPrefix string
-		for ii := 0; ii < inputRank-1; ii++ {
-			equationPrefix += string(axis)
-			axis += 1
-		}
-		featureAxis := axis
-		axis += 1
-		var outputSuffix string
-		for range outputDimensions {
-			outputSuffix += string(axis)
-			axis += 1
-		}
 
-		equationPrefix = fmt.Sprintf("%s%c,%c%s->%s%s", equationPrefix, featureAxis, featureAxis, outputSuffix, equationPrefix, outputSuffix)
-		output = Einsum(equationPrefix, input, weights)
-	}
-
-	// Add bias: it takes no regularizer by default.
+	// Dispatch to nn.Dense which handles arbitrary rank, multi-dimensional
+	// output weights, and fused ops.
+	var biasNode *Node
 	if useBias {
 		biasVar := ctx.VariableWithShape("biases", shapes.Make(inputShape.DType, outputDimensions...))
-		bias := biasVar.ValueGraph(g)
-		expandedBiasShape := output.Shape().Clone()
-		for ii := range expandedBiasShape.Dimensions[:output.Rank()-len(outputDimensions)] {
-			expandedBiasShape.Dimensions[ii] = 1
-		}
-		expandedBias := ReshapeWithShape(bias, expandedBiasShape)
-		output = Add(output, expandedBias)
+		biasNode = biasVar.ValueGraph(g)
 	}
-	return output
+	return nn.Dense(input, weights, biasNode)
 }
 
 // Embedding creates an embedding table with vocabSize elements (typically a vocabulary size)

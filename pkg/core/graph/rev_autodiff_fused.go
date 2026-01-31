@@ -16,7 +16,6 @@ func init() {
 	VJPRegistration[NodeTypeFusedGelu] = vjpForSingleOutput(geluVJP)
 	VJPRegistration[NodeTypeFusedLayerNorm] = vjpForSingleOutput(layerNormVJP)
 	VJPRegistration[NodeTypeFusedDense] = vjpForSingleOutput(denseVJP)
-	VJPRegistration[NodeTypeFusedDenseActivation] = vjpForSingleOutput(denseActivationVJP)
 }
 
 // softmaxVJP computes the VJP for fused Softmax.
@@ -133,112 +132,66 @@ func reduceToBroadcastShape(grad, param *Node, normAxes []int, x *Node) *Node {
 
 // denseVJP computes the VJP for fused Dense.
 //
-// Dense: y = x @ W + bias
+// Dense: y = activation(x @ W + bias)
 // where x: [..., in_features], W: [in_features, out_features]
 //
-//	dy/dx = v @ W^T                             (v: [..., out], W: [in, out] → [..., in])
-//	dy/dW = sum_batch(x^T @ v)                  (→ [in, out])
-//	dy/dbias = sum_batch(v)                      (→ [out])
+// Chain rule: backprop through activation first (if any), then through dense.
 func denseVJP(node, v *Node, _ shapes.Shape) []*Node {
 	params := node.inputs.(*nodeInputsFusedDense)
 	x := params.x
 	weight := params.weight
 	xRank := x.Rank()
+	lastAxis := xRank - 1
+
+	// If activation is present, backprop through it first.
+	if params.activation != backends.ActivationNone {
+		// Recompute pre-activation: z = x @ W + bias.
+		z := DotGeneral(x, []int{lastAxis}, []int{}, weight, []int{0}, []int{})
+		if params.bias != nil {
+			z = Add(z, params.bias)
+		}
+
+		// Compute v * activation'(z).
+		switch params.activation {
+		case backends.ActivationRelu:
+			zero := ScalarZero(z.Graph(), z.DType())
+			v = Where(GreaterThan(z, zero), v, zero)
+		case backends.ActivationGelu:
+			cdf := MulScalar(AddScalar(Erf(DivScalar(z, math.Sqrt2)), 1), 0.5)
+			pdf := MulScalar(Exp(MulScalar(Mul(z, z), -0.5)), 1.0/math.Sqrt(2.0*math.Pi))
+			v = Mul(v, Add(cdf, Mul(z, pdf)))
+		case backends.ActivationSilu:
+			sig := Logistic(z)
+			one := ScalarOne(z.Graph(), z.DType())
+			v = Mul(v, Mul(sig, Add(one, Mul(z, Sub(one, sig)))))
+		case backends.ActivationTanh:
+			t := Tanh(z)
+			one := ScalarOne(z.Graph(), z.DType())
+			v = Mul(v, Sub(one, Mul(t, t)))
+		default:
+			Panicf("denseVJP: unsupported activation type %s", params.activation)
+		}
+	}
 
 	// dx = v @ W^T
-	// v: [..., out], W: [in, out] → contract on out axis
-	// v's last axis (out) contracts with weight's last axis (out).
-	lastAxis := xRank - 1
 	dx := DotGeneral(v, []int{lastAxis}, []int{}, weight, []int{1}, []int{})
 
 	// dW: contract batch dims of v and x, keep in from x and out from v.
-	// v: [..., out], x: [..., in]
-	// Batch dims: 0..rank-2.
-	// Result: [in, out]
 	var batchDimsV, batchDimsX []int
 	for i := 0; i < xRank-1; i++ {
 		batchDimsV = append(batchDimsV, i)
 		batchDimsX = append(batchDimsX, i)
 	}
-	// lhs=x contracting=batch, rhs=v contracting=batch → [in] x [out] = [in, out]
 	dweight := DotGeneral(x, batchDimsX, []int{}, v, batchDimsV, []int{})
 
 	results := []*Node{dx, dweight}
 
 	if params.bias != nil {
-		// dbias = sum(v) over batch dims → [out]
 		if len(batchDimsV) > 0 {
 			dbias := ReduceSum(v, batchDimsV...)
 			results = append(results, dbias)
 		} else {
 			results = append(results, v)
-		}
-	}
-
-	return results
-}
-
-// denseActivationVJP computes the VJP for fused DenseActivation.
-//
-// DenseActivation: y = activation(x @ W + bias)
-//
-// Chain rule: backprop through activation first, then through dense.
-func denseActivationVJP(node, v *Node, _ shapes.Shape) []*Node {
-	params := node.inputs.(*nodeInputsFusedDenseActivation)
-	x := params.x
-	weight := params.weight
-	xRank := x.Rank()
-
-	// Recompute pre-activation: z = x @ W + bias.
-	lastAxis := xRank - 1
-	z := DotGeneral(x, []int{lastAxis}, []int{}, weight, []int{0}, []int{})
-	if params.bias != nil {
-		z = Add(z, params.bias)
-	}
-
-	// Compute v * activation'(z).
-	var vz *Node
-	switch params.activation {
-	case backends.ActivationNone:
-		vz = v
-	case backends.ActivationRelu:
-		zero := ScalarZero(z.Graph(), z.DType())
-		vz = Where(GreaterThan(z, zero), v, zero)
-	case backends.ActivationGelu:
-		cdf := MulScalar(AddScalar(Erf(DivScalar(z, math.Sqrt2)), 1), 0.5)
-		pdf := MulScalar(Exp(MulScalar(Mul(z, z), -0.5)), 1.0/math.Sqrt(2.0*math.Pi))
-		vz = Mul(v, Add(cdf, Mul(z, pdf)))
-	case backends.ActivationSilu:
-		sig := Logistic(z)
-		one := ScalarOne(z.Graph(), z.DType())
-		vz = Mul(v, Mul(sig, Add(one, Mul(z, Sub(one, sig)))))
-	case backends.ActivationTanh:
-		t := Tanh(z)
-		one := ScalarOne(z.Graph(), z.DType())
-		vz = Mul(v, Sub(one, Mul(t, t)))
-	default:
-		Panicf("denseActivationVJP: unsupported activation type %s", params.activation)
-	}
-
-	// Now compute dense VJP with vz as the upstream gradient.
-	// dx = vz @ W^T
-	dx := DotGeneral(vz, []int{lastAxis}, []int{}, weight, []int{1}, []int{})
-
-	// dW = sum_batch(x^T @ vz) → [in, out]
-	var batchDims []int
-	for i := 0; i < xRank-1; i++ {
-		batchDims = append(batchDims, i)
-	}
-	dweight := DotGeneral(x, batchDims, []int{}, vz, batchDims, []int{})
-
-	results := []*Node{dx, dweight}
-
-	if params.bias != nil {
-		if len(batchDims) > 0 {
-			dbias := ReduceSum(vz, batchDims...)
-			results = append(results, dbias)
-		} else {
-			results = append(results, vz)
 		}
 	}
 

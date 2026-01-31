@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
@@ -16,7 +17,6 @@ func init() {
 	setNodeExecutor(backends.OpTypeFusedGelu, priorityTyped, execFusedGelu)
 	setNodeExecutor(backends.OpTypeFusedLayerNorm, priorityTyped, execFusedLayerNorm)
 	setNodeExecutor(backends.OpTypeFusedDense, priorityTyped, execFusedDense)
-	setNodeExecutor(backends.OpTypeFusedDenseActivation, priorityTyped, execFusedDenseActivation)
 }
 
 // computeAxisStrides returns the outer size, axis size, and inner size for iterating
@@ -46,23 +46,23 @@ func execFusedSoftmax(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 
 	switch input.shape.DType {
 	case dtypes.Float32:
-		softmaxFloat32(input.flat.([]float32), output.flat.([]float32), axis, node.shape)
+		softmax(input.flat.([]float32), output.flat.([]float32), axis, node.shape)
 	case dtypes.Float64:
-		softmaxFloat64(input.flat.([]float64), output.flat.([]float64), axis, node.shape)
+		softmax(input.flat.([]float64), output.flat.([]float64), axis, node.shape)
 	default:
 		return nil, errors.Errorf("FusedSoftmax: unsupported dtype %s", input.shape.DType)
 	}
 	return output, nil
 }
 
-func softmaxFloat32(input, output []float32, axis int, shape shapes.Shape) {
+func softmax[T float32 | float64](input, output []T, axis int, shape shapes.Shape) {
 	outerSize, axisSize, innerSize := computeAxisStrides(shape, axis)
 	for outer := 0; outer < outerSize; outer++ {
 		for inner := 0; inner < innerSize; inner++ {
 			baseIdx := outer*axisSize*innerSize + inner
 
 			// Pass 1: Find max.
-			maxVal := float32(math.Inf(-1))
+			maxVal := T(math.Inf(-1))
 			for i := 0; i < axisSize; i++ {
 				idx := baseIdx + i*innerSize
 				if input[idx] > maxVal {
@@ -71,44 +71,14 @@ func softmaxFloat32(input, output []float32, axis int, shape shapes.Shape) {
 			}
 
 			// Pass 2: Exp and sum.
-			var sum float32
+			var sum T
 			for i := 0; i < axisSize; i++ {
 				idx := baseIdx + i*innerSize
-				output[idx] = float32(math.Exp(float64(input[idx] - maxVal)))
+				output[idx] = T(math.Exp(float64(input[idx] - maxVal)))
 				sum += output[idx]
 			}
 
 			// Pass 3: Normalize.
-			invSum := 1.0 / sum
-			for i := 0; i < axisSize; i++ {
-				idx := baseIdx + i*innerSize
-				output[idx] *= invSum
-			}
-		}
-	}
-}
-
-func softmaxFloat64(input, output []float64, axis int, shape shapes.Shape) {
-	outerSize, axisSize, innerSize := computeAxisStrides(shape, axis)
-	for outer := 0; outer < outerSize; outer++ {
-		for inner := 0; inner < innerSize; inner++ {
-			baseIdx := outer*axisSize*innerSize + inner
-
-			maxVal := math.Inf(-1)
-			for i := 0; i < axisSize; i++ {
-				idx := baseIdx + i*innerSize
-				if input[idx] > maxVal {
-					maxVal = input[idx]
-				}
-			}
-
-			var sum float64
-			for i := 0; i < axisSize; i++ {
-				idx := baseIdx + i*innerSize
-				output[idx] = math.Exp(input[idx] - maxVal)
-				sum += output[idx]
-			}
-
 			invSum := 1.0 / sum
 			for i := 0; i < axisSize; i++ {
 				idx := baseIdx + i*innerSize
@@ -125,26 +95,19 @@ func execFusedGelu(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 
 	switch input.shape.DType {
 	case dtypes.Float32:
-		geluFloat32(input.flat.([]float32), output.flat.([]float32))
+		gelu(input.flat.([]float32), output.flat.([]float32))
 	case dtypes.Float64:
-		geluFloat64(input.flat.([]float64), output.flat.([]float64))
+		gelu(input.flat.([]float64), output.flat.([]float64))
 	default:
 		return nil, errors.Errorf("FusedGelu: unsupported dtype %s", input.shape.DType)
 	}
 	return output, nil
 }
 
-func geluFloat32(input, output []float32) {
-	sqrt2Inv := float32(1.0 / math.Sqrt(2.0))
+func gelu[T float32 | float64](input, output []T) {
+	sqrt2Inv := T(1.0 / math.Sqrt(2.0))
 	for i, x := range input {
-		output[i] = x * 0.5 * (1.0 + float32(math.Erf(float64(x*sqrt2Inv))))
-	}
-}
-
-func geluFloat64(input, output []float64) {
-	sqrt2Inv := 1.0 / math.Sqrt(2.0)
-	for i, x := range input {
-		output[i] = x * 0.5 * (1.0 + math.Erf(x*sqrt2Inv))
+		output[i] = x * 0.5 * (1.0 + T(math.Erf(float64(x*sqrt2Inv))))
 	}
 }
 
@@ -585,8 +548,10 @@ func layerNormFloat64(input, output, gamma, beta *Buffer, axes []int, epsilon fl
 	}
 }
 
-// execFusedDense implements y = x @ W + b.
+// execFusedDense implements y = activation(x @ W + b).
 // x: [..., in_features], weight: [in_features, out_features], bias: [out_features] (optional)
+// Uses packGemm for the matmul. When bias is present, the output is pre-filled
+// with broadcast bias and GEMM is called with beta=1 so that C = 1*A*B + 1*C.
 func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	x := inputs[0]
 	weight := inputs[1]
@@ -596,114 +561,70 @@ func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 	}
 
 	output := backend.getBufferForShape(node.shape)
+	data := node.data.(*nodeFusedDense)
 
 	switch x.shape.DType {
 	case dtypes.Float32:
-		denseFloat32(x, weight, bias, output)
+		dense(backend, x, weight, bias, output)
+		applyActivation(output.flat.([]float32), data.activation)
 	case dtypes.Float64:
-		denseFloat64(x, weight, bias, output)
+		dense(backend, x, weight, bias, output)
+		applyActivation(output.flat.([]float64), data.activation)
 	default:
 		return nil, errors.Errorf("FusedDense: unsupported dtype %s", x.shape.DType)
 	}
 	return output, nil
 }
 
-func denseFloat32(x, weight, bias, output *Buffer) {
-	xData := x.flat.([]float32)
-	wData := weight.flat.([]float32)
-	outData := output.flat.([]float32)
+// dense computes output = x @ weight + bias using packGemm.
+// When bias is present, output is pre-filled with broadcast bias and GEMM uses beta=1.
+func dense(backend *Backend, x, weight, bias, output *Buffer) {
+	xShape := x.shape
+	wShape := weight.shape
+	inFeatures := xShape.Dimensions[xShape.Rank()-1]
+	outFeatures := wShape.Dimensions[1]
+	batchSize := xShape.Size() / inFeatures
 
-	inFeatures := x.shape.Dimensions[x.shape.Rank()-1]
-	outFeatures := weight.shape.Dimensions[1]
-	batchSize := x.shape.Size() / inFeatures
-
-	var biasData []float32
+	// Pre-fill output with bias so GEMM accumulates: C = 1*A*B + beta*C.
+	var beta float64
 	if bias != nil {
-		biasData = bias.flat.([]float32)
+		broadcastBias(bias, output, batchSize, outFeatures)
+		beta = 1
 	}
 
-	// y = x @ W + b
-	// W is [in_features, out_features], so we iterate over output features
-	// and accumulate the dot product of x row with W column.
-	for b := 0; b < batchSize; b++ {
-		xBase := b * inFeatures
-		oBase := b * outFeatures
-		for o := 0; o < outFeatures; o++ {
-			var sum float32
-			for i := 0; i < inFeatures; i++ {
-				sum += xData[xBase+i] * wData[i*outFeatures+o]
-			}
-			if biasData != nil {
-				sum += biasData[o]
-			}
-			outData[oBase+o] = sum
+	inputDType := x.shape.DType
+	outputDType := output.shape.DType
+	packgemm.GEMMDynamic(inputDType, outputDType, 1, beta,
+		x.flat, weight.flat,
+		1, batchSize, outFeatures, inFeatures,
+		output.flat,
+		getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), backend.workers)
+}
+
+// broadcastBias fills output with bias repeated across the batch dimension.
+func broadcastBias(bias, output *Buffer, batchSize, outFeatures int) {
+	switch biasData := bias.flat.(type) {
+	case []float32:
+		outData := output.flat.([]float32)
+		for b := 0; b < batchSize; b++ {
+			copy(outData[b*outFeatures:(b+1)*outFeatures], biasData)
+		}
+	case []float64:
+		outData := output.flat.([]float64)
+		for b := 0; b < batchSize; b++ {
+			copy(outData[b*outFeatures:(b+1)*outFeatures], biasData)
 		}
 	}
 }
 
-func denseFloat64(x, weight, bias, output *Buffer) {
-	xData := x.flat.([]float64)
-	wData := weight.flat.([]float64)
-	outData := output.flat.([]float64)
-
-	inFeatures := x.shape.Dimensions[x.shape.Rank()-1]
-	outFeatures := weight.shape.Dimensions[1]
-	batchSize := x.shape.Size() / inFeatures
-
-	var biasData []float64
-	if bias != nil {
-		biasData = bias.flat.([]float64)
-	}
-
-	for b := 0; b < batchSize; b++ {
-		xBase := b * inFeatures
-		oBase := b * outFeatures
-		for o := 0; o < outFeatures; o++ {
-			var sum float64
-			for i := 0; i < inFeatures; i++ {
-				sum += xData[xBase+i] * wData[i*outFeatures+o]
-			}
-			if biasData != nil {
-				sum += biasData[o]
-			}
-			outData[oBase+o] = sum
-		}
-	}
-}
-
-// execFusedDenseActivation implements y = activation(x @ W + b).
-func execFusedDenseActivation(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	x := inputs[0]
-	weight := inputs[1]
-	var bias *Buffer
-	if len(inputs) > 2 {
-		bias = inputs[2]
-	}
-
-	output := backend.getBufferForShape(node.shape)
-	data := node.data.(*nodeFusedDenseActivation)
-
-	switch x.shape.DType {
-	case dtypes.Float32:
-		denseFloat32(x, weight, bias, output)
-		applyActivationFloat32(output.flat.([]float32), data.activation)
-	case dtypes.Float64:
-		denseFloat64(x, weight, bias, output)
-		applyActivationFloat64(output.flat.([]float64), data.activation)
-	default:
-		return nil, errors.Errorf("FusedDenseActivation: unsupported dtype %s", x.shape.DType)
-	}
-	return output, nil
-}
-
-func applyActivationFloat32(data []float32, activation backends.ActivationType) {
-	sqrt2Inv := float32(1.0 / math.Sqrt(2.0))
+func applyActivation[T float32 | float64](data []T, activation backends.ActivationType) {
+	sqrt2Inv := T(1.0 / math.Sqrt(2.0))
 	switch activation {
 	case backends.ActivationNone:
 		// No-op.
 	case backends.ActivationGelu:
 		for i, x := range data {
-			data[i] = x * 0.5 * (1.0 + float32(math.Erf(float64(x*sqrt2Inv))))
+			data[i] = x * 0.5 * (1.0 + T(math.Erf(float64(x*sqrt2Inv))))
 		}
 	case backends.ActivationRelu:
 		for i, x := range data {
@@ -713,37 +634,11 @@ func applyActivationFloat32(data []float32, activation backends.ActivationType) 
 		}
 	case backends.ActivationSilu:
 		for i, x := range data {
-			data[i] = x / (1.0 + float32(math.Exp(float64(-x))))
+			data[i] = x / (1.0 + T(math.Exp(float64(-x))))
 		}
 	case backends.ActivationTanh:
 		for i, x := range data {
-			data[i] = float32(math.Tanh(float64(x)))
-		}
-	}
-}
-
-func applyActivationFloat64(data []float64, activation backends.ActivationType) {
-	sqrt2Inv := 1.0 / math.Sqrt(2.0)
-	switch activation {
-	case backends.ActivationNone:
-		// No-op.
-	case backends.ActivationGelu:
-		for i, x := range data {
-			data[i] = x * 0.5 * (1.0 + math.Erf(x*sqrt2Inv))
-		}
-	case backends.ActivationRelu:
-		for i, x := range data {
-			if x < 0 {
-				data[i] = 0
-			}
-		}
-	case backends.ActivationSilu:
-		for i, x := range data {
-			data[i] = x / (1.0 + math.Exp(-x))
-		}
-	case backends.ActivationTanh:
-		for i, x := range data {
-			data[i] = math.Tanh(x)
+			data[i] = T(math.Tanh(float64(x)))
 		}
 	}
 }

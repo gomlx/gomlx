@@ -277,21 +277,23 @@ func (f Function) Floor(x backends.Value) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFloor)
 }
 
-// FusedDense performs fused matmul + bias: y = x @ W + bias.
-// x: [batch..., in_features], weight: [in_features, out_features...], bias: [out_features...] (nil-able).
+// FusedDense performs fused matmul + optional bias + optional activation:
+//
+//	y = activation(x @ W + bias)
+//
+// x: [batch..., in_features], weight: [in_features, out_features...],
+// bias: [out_features...] (nil-able).
 // Contracts x's last axis with weight's first axis.
-func (f Function) FusedDense(x backends.Value, weight backends.Value, bias backends.Value) (backends.Value, error) {
+// activation specifies the activation function to apply after the matmul+bias.
+// Use ActivationNone for no activation.
+func (f Function) FusedDense(x backends.Value, weight backends.Value, bias backends.Value, activation backends.ActivationType) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFusedDense)
 }
 
-// FusedDenseActivation performs FusedDense followed by activation in one op.
-func (f Function) FusedDenseActivation(x backends.Value, weight backends.Value, bias backends.Value, activation backends.ActivationType) (backends.Value, error) {
-	return nil, f.baseErrFn(backends.OpTypeFusedDenseActivation)
-}
-
 // FusedGelu computes Gaussian Error Linear Unit activation.
-// mode: "exact" or "tanh_approximation".
-func (f Function) FusedGelu(x backends.Value, mode string) (backends.Value, error) {
+// If exact is true, the exact GELU (using erf) is computed;
+// otherwise the tanh approximation is used.
+func (f Function) FusedGelu(x backends.Value, exact bool) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFusedGelu)
 }
 
@@ -303,7 +305,10 @@ func (f Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, 
 }
 
 // FusedSoftmax computes softmax along the specified axis.
-// axis: single axis to compute softmax over (negative indexing supported).
+//
+// Note: unlike the generic softmax in GoMLX's graph package, the fused
+// softmax only accepts one axis. The axis must be non-negative (the caller
+// normalizes negative indices before calling).
 func (f Function) FusedSoftmax(x backends.Value, axis int) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFusedSoftmax)
 }

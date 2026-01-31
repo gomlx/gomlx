@@ -272,7 +272,7 @@ func BenchmarkGelu(b *testing.B) {
 			copy(input.flat.([]float32), data)
 			node := &Node{
 				shape: shape,
-				data:  &nodeFusedGelu{mode: "exact"},
+				data:  &nodeFusedGelu{exact: true},
 			}
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

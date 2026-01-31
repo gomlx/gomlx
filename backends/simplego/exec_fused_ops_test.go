@@ -185,18 +185,17 @@ func TestFusedSoftmax_Axis0(t *testing.T) {
 }
 
 func TestFusedSoftmax_NegativeAxis(t *testing.T) {
-	input := []float32{1, 2, 3, 4, 5, 6}
+	// Negative axes should be rejected by FusedSoftmax (caller normalizes).
 	shape := shapes.Make(dtypes.Float32, 2, 3)
 
-	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedSoftmax(param, -1) // Should be same as axis=1.
-	})
+	builder := backend.Builder("fused_test")
+	mainFn := builder.Main()
 
-	got := result.flat.([]float32)
-	want := referenceSoftmax(input, shape, 1)
-	for i := range got {
-		assert.InDelta(t, want[i], got[i], fusedTestTol, "index %d", i)
-	}
+	param, err := mainFn.Parameter("x", shape, nil)
+	require.NoError(t, err)
+
+	_, err = mainFn.FusedSoftmax(param, -1)
+	assert.Error(t, err, "FusedSoftmax should reject negative axis")
 }
 
 func TestFusedSoftmax_Float64(t *testing.T) {
@@ -223,7 +222,7 @@ func TestFusedGelu(t *testing.T) {
 	shape := shapes.Make(dtypes.Float32, 7)
 
 	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedGelu(param, "exact")
+		return f.FusedGelu(param, true)
 	})
 
 	got := result.flat.([]float32)
@@ -243,7 +242,7 @@ func TestFusedGelu_Float64(t *testing.T) {
 	shape := shapes.Make(dtypes.Float64, 3)
 
 	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedGelu(param, "exact")
+		return f.FusedGelu(param, true)
 	})
 
 	got := result.flat.([]float64)
@@ -325,10 +324,6 @@ func TestFusedDense(t *testing.T) {
 	// b: [4]    (out_features=4)
 	// output: [2, 4]
 	x := []float32{1, 2, 3, 4, 5, 6}
-	// Weight is [in, out] = [3, 4]:
-	// Row 0 (in=0): [1, 0, 0, 1]  — contributes x[0] to out[0] and out[3]
-	// Row 1 (in=1): [0, 1, 0, 1]  — contributes x[1] to out[1] and out[3]
-	// Row 2 (in=2): [0, 0, 1, 1]  — contributes x[2] to out[2] and out[3]
 	w := []float32{
 		1, 0, 0, 1,
 		0, 1, 0, 1,
@@ -344,21 +339,11 @@ func TestFusedDense(t *testing.T) {
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]interface{}{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedDense(params[0], params[1], params[2])
+			return f.FusedDense(params[0], params[1], params[2], backends.ActivationNone)
 		},
 	)
 
 	got := result.flat.([]float32)
-	// Row 0: x=[1,2,3]
-	// out[0] = 1*1+2*0+3*0 + 10 = 11
-	// out[1] = 1*0+2*1+3*0 + 20 = 22
-	// out[2] = 1*0+2*0+3*1 + 30 = 33
-	// out[3] = 1*1+2*1+3*1 + 40 = 46
-	// Row 1: x=[4,5,6]
-	// out[4] = 4+10 = 14
-	// out[5] = 5+20 = 25
-	// out[6] = 6+30 = 36
-	// out[7] = 4+5+6+40 = 55
 	want := []float32{11, 22, 33, 46, 14, 25, 36, 55}
 	for i := range got {
 		assert.InDelta(t, want[i], got[i], fusedTestTol, "index %d", i)
@@ -367,7 +352,6 @@ func TestFusedDense(t *testing.T) {
 
 func TestFusedDense_NoBias(t *testing.T) {
 	x := []float32{1, 2, 3}
-	// w: [3, 2] (in_features=3, out_features=2)
 	w := []float32{
 		1, 2,
 		1, 2,
@@ -381,27 +365,19 @@ func TestFusedDense_NoBias(t *testing.T) {
 		[]shapes.Shape{xShape, wShape},
 		[]interface{}{x, w},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedDense(params[0], params[1], nil)
+			return f.FusedDense(params[0], params[1], nil, backends.ActivationNone)
 		},
 	)
 
 	got := result.flat.([]float32)
-	// out[0] = 1+2+3 = 6
-	// out[1] = 2+4+6 = 12
 	want := []float32{6, 12}
 	for i := range got {
 		assert.InDelta(t, want[i], got[i], fusedTestTol, "index %d", i)
 	}
 }
 
-func TestFusedDenseActivation_Relu(t *testing.T) {
-	// x: [1, 2], w: [2, 2], b: [2]
-	// Output before activation: [0, 1]
-	// After ReLU: [0, 1]
+func TestFusedDense_Relu(t *testing.T) {
 	x := []float32{1, -1}
-	// w: [2, 2] (in_features=2, out_features=2)
-	// x @ w: [1*1+(-1)*0, 1*1+(-1)*(-1)] = [1, 2]
-	// + bias [-1, -1]: [0, 1]
 	w := []float32{
 		1, 1,
 		0, -1,
@@ -416,18 +392,18 @@ func TestFusedDenseActivation_Relu(t *testing.T) {
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]interface{}{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedDenseActivation(params[0], params[1], params[2], backends.ActivationRelu)
+			return f.FusedDense(params[0], params[1], params[2], backends.ActivationRelu)
 		},
 	)
 
 	got := result.flat.([]float32)
-	want := []float32{0, 1} // ReLU clamps -1 to 0.
+	want := []float32{0, 1} // ReLU clamps negative to 0.
 	for i := range got {
 		assert.InDelta(t, want[i], got[i], fusedTestTol, "index %d", i)
 	}
 }
 
-func TestFusedDenseActivation_Gelu(t *testing.T) {
+func TestFusedDense_Gelu(t *testing.T) {
 	x := []float32{1, 0}
 	w := []float32{1, 0, 0, 1} // identity [2,2]
 	b := []float32{0, 0}
@@ -440,19 +416,18 @@ func TestFusedDenseActivation_Gelu(t *testing.T) {
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]interface{}{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedDenseActivation(params[0], params[1], params[2], backends.ActivationGelu)
+			return f.FusedDense(params[0], params[1], params[2], backends.ActivationGelu)
 		},
 	)
 
 	got := result.flat.([]float32)
-	// Dense output is [1, 0], then GELU applied.
 	wantGelu := referenceGelu([]float32{1, 0})
 	for i := range got {
 		assert.InDelta(t, wantGelu[i], got[i], fusedTestTol, "index %d", i)
 	}
 }
 
-func TestFusedDenseActivation_Silu(t *testing.T) {
+func TestFusedDense_Silu(t *testing.T) {
 	x := []float32{2}
 	w := []float32{1} // [1,1]
 	b := []float32{0}
@@ -465,17 +440,16 @@ func TestFusedDenseActivation_Silu(t *testing.T) {
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]interface{}{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedDenseActivation(params[0], params[1], params[2], backends.ActivationSilu)
+			return f.FusedDense(params[0], params[1], params[2], backends.ActivationSilu)
 		},
 	)
 
 	got := result.flat.([]float32)
-	// SiLU(2) = 2 / (1 + exp(-2))
 	want := float32(2.0 / (1.0 + math.Exp(-2.0)))
 	assert.InDelta(t, want, got[0], fusedTestTol)
 }
 
-func TestFusedDenseActivation_Tanh(t *testing.T) {
+func TestFusedDense_Tanh(t *testing.T) {
 	x := []float32{1}
 	w := []float32{1}
 	b := []float32{0}
@@ -488,7 +462,7 @@ func TestFusedDenseActivation_Tanh(t *testing.T) {
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]interface{}{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedDenseActivation(params[0], params[1], params[2], backends.ActivationTanh)
+			return f.FusedDense(params[0], params[1], params[2], backends.ActivationTanh)
 		},
 	)
 

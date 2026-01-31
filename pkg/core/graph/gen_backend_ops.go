@@ -55,7 +55,6 @@ const (
 	NodeTypeFFT
 	NodeTypeFloor
 	NodeTypeFusedDense
-	NodeTypeFusedDenseActivation
 	NodeTypeFusedGelu
 	NodeTypeFusedLayerNorm
 	NodeTypeFusedSoftmax
@@ -1797,9 +1796,10 @@ func Floor(x *Node) (
 
 // nodeInputsFusedDense holds the inputs used for the call to backends.FusedDense.
 type nodeInputsFusedDense struct {
-	x      *Node
-	weight *Node
-	bias   *Node
+	x          *Node
+	weight     *Node
+	bias       *Node
+	activation backends.ActivationType
 }
 
 // Type implements the interface NodeInputs.
@@ -1809,68 +1809,6 @@ func (ni *nodeInputsFusedDense) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsFusedDense) String() string {
-	return fmt.Sprintf("%s(x=[#%d], weight=[#%d], bias=%s)",
-		ni.Type(),
-		ni.x.Id(),
-		ni.weight.Id(),
-		func() string {
-			if ni.bias != nil {
-				return fmt.Sprintf("[#%d]", ni.bias.Id())
-			}
-			return "nil"
-		}(),
-	)
-}
-
-// FusedDense performs fused matmul + bias: y = x @ W + bias.
-// x: [batch..., in_features], weight: [in_features, out_features...], bias: [out_features...] (nil-able).
-// Contracts x's last axis with weight's first axis.
-func FusedDense(x *Node, weight *Node, bias *Node) (
-	node *Node) {
-	inputNodes := []*Node{x, weight}
-	if bias != nil {
-		inputNodes = append(inputNodes, bias)
-	}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsFusedDense{
-		x:      x,
-		weight: weight,
-		bias:   bias,
-	}
-	var biasVal backends.Value
-	if bias != nil {
-		biasVal = bias.outputOps[0]
-	}
-	result, err := g.currentFunc.backendFunc.FusedDense(x.outputOps[0], weight.outputOps[0], biasVal)
-	if err != nil {
-		panic(err)
-	}
-	node = &Node{
-		outputOps:    []backends.Value{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-	}
-	g.registerNode(node)
-	return
-}
-
-// nodeInputsFusedDenseActivation holds the inputs used for the call to backends.FusedDenseActivation.
-type nodeInputsFusedDenseActivation struct {
-	x          *Node
-	weight     *Node
-	bias       *Node
-	activation backends.ActivationType
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsFusedDenseActivation) Type() NodeType {
-	return NodeTypeFusedDenseActivation
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsFusedDenseActivation) String() string {
 	return fmt.Sprintf("%s(x=[#%d], weight=[#%d], bias=%s, activation=%s)",
 		ni.Type(),
 		ni.x.Id(),
@@ -1885,15 +1823,23 @@ func (ni *nodeInputsFusedDenseActivation) String() string {
 	)
 }
 
-// FusedDenseActivation performs FusedDense followed by activation in one op.
-func FusedDenseActivation(x *Node, weight *Node, bias *Node, activation backends.ActivationType) (
+// FusedDense performs fused matmul + optional bias + optional activation:
+//
+//	y = activation(x @ W + bias)
+//
+// x: [batch..., in_features], weight: [in_features, out_features...],
+// bias: [out_features...] (nil-able).
+// Contracts x's last axis with weight's first axis.
+// activation specifies the activation function to apply after the matmul+bias.
+// Use ActivationNone for no activation.
+func FusedDense(x *Node, weight *Node, bias *Node, activation backends.ActivationType) (
 	node *Node) {
 	inputNodes := []*Node{x, weight}
 	if bias != nil {
 		inputNodes = append(inputNodes, bias)
 	}
 	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsFusedDenseActivation{
+	inputs := &nodeInputsFusedDense{
 		x:          x,
 		weight:     weight,
 		bias:       bias,
@@ -1903,7 +1849,7 @@ func FusedDenseActivation(x *Node, weight *Node, bias *Node, activation backends
 	if bias != nil {
 		biasVal = bias.outputOps[0]
 	}
-	result, err := g.currentFunc.backendFunc.FusedDenseActivation(x.outputOps[0], weight.outputOps[0], biasVal, inputs.activation)
+	result, err := g.currentFunc.backendFunc.FusedDense(x.outputOps[0], weight.outputOps[0], biasVal, inputs.activation)
 	if err != nil {
 		panic(err)
 	}
@@ -1920,8 +1866,8 @@ func FusedDenseActivation(x *Node, weight *Node, bias *Node, activation backends
 
 // nodeInputsFusedGelu holds the inputs used for the call to backends.FusedGelu.
 type nodeInputsFusedGelu struct {
-	x    *Node
-	mode string
+	x     *Node
+	exact bool
 }
 
 // Type implements the interface NodeInputs.
@@ -1931,24 +1877,25 @@ func (ni *nodeInputsFusedGelu) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsFusedGelu) String() string {
-	return fmt.Sprintf("%s(x=[#%d], mode=%v)",
+	return fmt.Sprintf("%s(x=[#%d], exact=%v)",
 		ni.Type(),
 		ni.x.Id(),
-		ni.mode,
+		ni.exact,
 	)
 }
 
 // FusedGelu computes Gaussian Error Linear Unit activation.
-// mode: "exact" or "tanh_approximation".
-func FusedGelu(x *Node, mode string) (
+// If exact is true, the exact GELU (using erf) is computed;
+// otherwise the tanh approximation is used.
+func FusedGelu(x *Node, exact bool) (
 	node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsFusedGelu{
-		x:    x,
-		mode: mode,
+		x:     x,
+		exact: exact,
 	}
-	result, err := g.currentFunc.backendFunc.FusedGelu(x.outputOps[0], inputs.mode)
+	result, err := g.currentFunc.backendFunc.FusedGelu(x.outputOps[0], inputs.exact)
 	if err != nil {
 		panic(err)
 	}
@@ -2063,7 +2010,10 @@ func (ni *nodeInputsFusedSoftmax) String() string {
 }
 
 // FusedSoftmax computes softmax along the specified axis.
-// axis: single axis to compute softmax over (negative indexing supported).
+//
+// Note: unlike the generic softmax in GoMLX's graph package, the fused
+// softmax only accepts one axis. The axis must be non-negative (the caller
+// normalizes negative indices before calling).
 func FusedSoftmax(x *Node, axis int) (
 	node *Node) {
 	inputNodes := []*Node{x}

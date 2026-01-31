@@ -10,7 +10,6 @@ package activations
 import (
 	"math"
 
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -171,12 +170,6 @@ func Selu(x *Node) *Node {
 // The exact version is slower in TPUs due to the "Erf" function, but some argue it is more stable. See discussion in:
 // https://github.com/jax-ml/jax/issues/4428
 func Gelu(x *Node) *Node {
-	// Try fused GELU if backend supports it.
-	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeFusedGelu] {
-		return FusedGelu(x, "exact")
-	}
-
-	// Fall back to decomposition.
 	// Φ(x) = 0.5 * (1 + Erf(x / √2))
 	cdf := MulScalar(AddScalar(Erf(DivScalar(x, math.Sqrt2)), 1), 0.5)
 	return Mul(x, cdf)
@@ -192,12 +185,6 @@ func Gelu(x *Node) *Node {
 // The exact version is slower in TPUs, some argue it is more stable. See discussion in:
 // https://github.com/jax-ml/jax/issues/4428
 func GeluApproximate(x *Node) *Node {
-	// Try fused GELU if backend supports it.
-	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeFusedGelu] {
-		return FusedGelu(x, "approximate")
-	}
-
-	// Fall back to decomposition.
 	cdfApprox := Add(x, MulScalar(PowScalar(x, 3), 0.044715))
 	sqrt2ByPi := math.Sqrt(2.0 / math.Pi)
 	cdfApprox = Tanh(MulScalar(cdfApprox, sqrt2ByPi))
