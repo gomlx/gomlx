@@ -16,10 +16,10 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/decode/sample"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
-	"github.com/gomlx/gomlx/pkg/ml/layers/generation"
 	"github.com/gomlx/gomlx/pkg/ml/model/transformer"
 )
 
@@ -34,7 +34,7 @@ type GPT2Config struct {
 	DType       dtypes.DType
 
 	// Sampling configuration
-	Strategy    string
+	Strategy    sample.Strategy
 	Temperature float64
 	TopK        int
 	TopP        float64
@@ -56,10 +56,10 @@ func DefaultGPT2Config() GPT2Config {
 
 // GPT2Model represents a loaded GPT-2 model ready for inference.
 type GPT2Model struct {
-	backend        backends.Backend
-	ctx            *context.Context
-	config         GPT2Config
-	transformerCfg *transformer.Model
+	backend backends.Backend
+	ctx     *context.Context
+	config  GPT2Config
+	model   *transformer.Model
 
 	// Single cached exec for all token generations
 	tokenExec *context.Exec
@@ -67,25 +67,25 @@ type GPT2Model struct {
 
 // forwardGPT2 implements GPT-2's forward pass with pre-norm architecture.
 func (m *GPT2Model) forwardGPT2(ctx *context.Context, tokens *Node, position *Node) *Node {
-	cfg := m.transformerCfg
+	model := m.model
 	g := tokens.Graph()
 	currentSeqLen := tokens.Shape().Dimensions[1]
 
 	// Token + positional embeddings
-	embedded := layers.Embedding(ctx.In("token_embed"), tokens, cfg.DType, cfg.VocabSize, cfg.EmbedDim)
+	embedded := layers.Embedding(ctx.In("token_embed"), tokens, model.DType, model.VocabSize, model.EmbedDim)
 	if embedded.Rank() == 2 {
 		embedded = ExpandDims(embedded, 1)
 	}
 
 	posEmbedFull := ctx.In("pos_embed").VariableWithShape("embeddings",
-		shapes.Make(cfg.DType, cfg.MaxPosEmbed, cfg.EmbedDim)).ValueGraph(g)
+		shapes.Make(model.DType, model.MaxPosEmbed, model.EmbedDim)).ValueGraph(g)
 	posScalar := Squeeze(ConvertDType(position, dtypes.Int32))
-	posEmbed := DynamicSlice(posEmbedFull, []*Node{posScalar, Const(g, int32(0))}, []int{currentSeqLen, cfg.EmbedDim})
+	posEmbed := DynamicSlice(posEmbedFull, []*Node{posScalar, Const(g, int32(0))}, []int{currentSeqLen, model.EmbedDim})
 	posEmbed = BroadcastToShape(ExpandDims(posEmbed, 0), embedded.Shape())
 	x := Add(embedded, posEmbed)
 
 	// Transformer layers (pre-norm architecture)
-	for layer := 0; layer < cfg.NumLayers; layer++ {
+	for layer := 0; layer < model.NumLayers; layer++ {
 		layerCtx := ctx.In(fmt.Sprintf("layer_%d", layer))
 
 		// Pre-attention LayerNorm
@@ -93,8 +93,8 @@ func (m *GPT2Model) forwardGPT2(ctx *context.Context, tokens *Node, position *No
 			Epsilon(m.config.NormEps).Done()
 
 		// Self-attention with KV cache
-		attn := attention.SelfAttention(layerCtx.In("attn"), attnInput, cfg.NumHeads, cfg.HeadDim).
-			WithKVCache(cfg.MaxPosEmbed, position).
+		attn := attention.SelfAttention(layerCtx.In("attn"), attnInput, model.NumHeads, model.HeadDim).
+			WithKVCache(model.MaxPosEmbed, position).
 			UseProjectionBias(true).
 			UseCausalMask().
 			Done()
@@ -105,9 +105,9 @@ func (m *GPT2Model) forwardGPT2(ctx *context.Context, tokens *Node, position *No
 			Epsilon(m.config.NormEps).Done()
 
 		// Feed-forward network
-		ff := layers.Dense(layerCtx.In("ff1"), ffInput, true, cfg.FFNDim)
+		ff := layers.Dense(layerCtx.In("ff1"), ffInput, true, model.FFNDim)
 		ff = activations.Gelu(ff)
-		ff = layers.Dense(layerCtx.In("ff2"), ff, true, cfg.EmbedDim)
+		ff = layers.Dense(layerCtx.In("ff2"), ff, true, model.EmbedDim)
 		x = Add(x, ff)
 	}
 
@@ -116,7 +116,7 @@ func (m *GPT2Model) forwardGPT2(ctx *context.Context, tokens *Node, position *No
 		Epsilon(m.config.NormEps).Done()
 
 	// Output projection
-	return layers.Dense(ctx.In("output"), x, false, cfg.VocabSize)
+	return layers.Dense(ctx.In("output"), x, false, model.VocabSize)
 }
 
 // LoadGPT2 loads the GPT-2 model from the given HuggingFace repository.
@@ -148,10 +148,10 @@ func LoadGPT2(backend backends.Backend, repo *hub.Repo) (*GPT2Model, api.Tokeniz
 	}
 
 	model := &GPT2Model{
-		backend:        backend,
-		ctx:            ctx,
-		config:         config,
-		transformerCfg: transformerModel,
+		backend: backend,
+		ctx:     ctx,
+		config:  config,
+		model:   transformerModel,
 	}
 
 	// Create the generation exec once during loading (saves JIT compilation on first Generate call)
@@ -161,7 +161,7 @@ func LoadGPT2(backend backends.Backend, repo *hub.Repo) (*GPT2Model, api.Tokeniz
 			logits := model.forwardGPT2(ctx, tokens, position)
 			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 			lastLogits = Squeeze(lastLogits, 1)
-			return generation.SampleWithStrategy(
+			return sample.SampleWithStrategy(
 				ctx, lastLogits,
 				model.config.Strategy,
 				model.config.Temperature,
@@ -185,7 +185,7 @@ func LoadGPT2(backend backends.Backend, repo *hub.Repo) (*GPT2Model, api.Tokeniz
 // GenerationConfig holds parameters for text generation.
 type GenerationConfig struct {
 	MaxTokens   int
-	Strategy    string
+	Strategy    sample.Strategy
 	Temperature float64
 	TopK        int
 	TopP        float64

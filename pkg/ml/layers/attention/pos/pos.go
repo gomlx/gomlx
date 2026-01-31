@@ -25,13 +25,13 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
-// PositionalEncoder is the interface for applying positional information to attention inputs.
+// Encoder is the interface for applying positional information to attention inputs.
 // Different implementations can provide various positional encoding strategies like RoPE,
 // ALiBi (Attention with Linear Biases), learned positional embeddings, or sinusoidal embeddings.
 //
 // The interface is designed to work with attention mechanisms where position information
 // needs to be incorporated into query and key projections.
-type PositionalEncoder interface {
+type Encoder interface {
 	// Apply applies the positional embedding to the input tensor.
 	//
 	// Parameters:
@@ -67,7 +67,7 @@ type PositionalEncoder interface {
 // Returns:
 //   - Position indices with values [startPos, startPos+1, ..., startPos+seqLen-1]
 //     Shape is [seqLen] for scalar startPos, or [batchSize, seqLen] for batched startPos.
-//     Returns Int32 dtype; the PositionalEncoder will convert to the appropriate dtype.
+//     Returns Int32 dtype; the Encoder will convert to the appropriate dtype.
 //
 // Example:
 //

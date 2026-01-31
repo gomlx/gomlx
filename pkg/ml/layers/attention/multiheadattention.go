@@ -49,9 +49,8 @@ type MultiHeadAttentionBuilder struct {
 	position       *Node // Position as a graph node (scalar int32) for graph caching
 	actualCacheLen *Node // Actual filled cache length (scalar int32)
 
-	// RoPE (Rotary Position Embeddings) support.
-	useRoPE      bool
-	ropeBaseFreq float64
+	// Positional Encoder to be used, e.g: RoPE.
+	positionalEncoder pos.Encoder
 }
 
 // MultiHeadAttention defines a multi-head attention layers, as described in the paper
@@ -338,8 +337,13 @@ func (b *MultiHeadAttentionBuilder) KVCacheShape() shapes.Shape {
 // baseFreq is typically 10000.0 (default from RoFormer paper).
 // RoPE is applied after projections and works with both training and generation modes.
 func (b *MultiHeadAttentionBuilder) WithRoPE(baseFreq float64) *MultiHeadAttentionBuilder {
-	b.useRoPE = true
-	b.ropeBaseFreq = baseFreq
+	b.positionalEncoder = pos.NewRoPE(baseFreq)
+	return b
+}
+
+// WithPositionalEncoder sets the positional encoder to use.
+func (b *MultiHeadAttentionBuilder) WithPositionalEncoder(encoder pos.Encoder) *MultiHeadAttentionBuilder {
+	b.positionalEncoder = encoder
 	return b
 }
 
@@ -368,14 +372,18 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	projectedValue := layers.Dense(b.ctx.In("value"), b.value, true, b.numHeads, b.valueDim)
 
 	// Apply RoPE if enabled (before KV cache to cache rotated embeddings)
-	if b.useRoPE {
-		rope := pos.NewRoPE(b.ropeBaseFreq)
+	if b.positionalEncoder != nil {
 		// Create sequential position indices from the position node
 		// projectedQuery shape: [..., seqLen, numHeads, headDim]
 		seqLen := projectedQuery.Shape().Dimensions[projectedQuery.Rank()-2]
-		posIndices := pos.SequentialPositions(b.g, b.position, seqLen)
-		projectedQuery = rope.Apply(projectedQuery, posIndices)
-		projectedKey = rope.Apply(projectedKey, posIndices)
+		var posIndices *Node
+		if b.position != nil {
+			posIndices = pos.SequentialPositions(b.g, b.position, seqLen)
+		} else {
+			posIndices = pos.SequentialPositions(b.g, Const(b.g, int32(0)), seqLen)
+		}
+		projectedQuery = b.positionalEncoder.Apply(projectedQuery, posIndices)
+		projectedKey = b.positionalEncoder.Apply(projectedKey, posIndices)
 	}
 
 	// Handle KV cache if in incremental generation mode

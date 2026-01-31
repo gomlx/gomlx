@@ -14,7 +14,7 @@
  *	limitations under the License.
  */
 
-package generation
+package sample
 
 import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
@@ -57,11 +57,14 @@ type BeamSearchConfig struct {
 //
 // Example:
 //
-//	beamCfg := generation.NewBeamSearch(4, eosTokenId).
+//	beamCfg := sample.NewBeamSearch(4, eosTokenId).
 //	    WithLengthPenalty(0.9).     // slightly favor shorter sequences
 //	    WithMaxLength(150).
 //	    WithMinLength(10).          // require at least 10 tokens
 //	    WithNumReturnSequences(3)   // return top 3 sequences
+//
+// Then one would use beamCfg.Step() in a loop to generate tokens.
+// See decode.Decoder.Decode() for a higher-level API.
 func NewBeamSearch(beamSize, eosTokenId int) *BeamSearchConfig {
 	return &BeamSearchConfig{
 		beamSize:      beamSize,
@@ -144,7 +147,7 @@ func (c *BeamSearchConfig) EarlyStopping() bool {
 //   - isFinished: Boolean mask indicating which beams hit EOS [batch*beam]
 //
 // Note: This method is typically called in a loop by higher-level generation code.
-// Most users should use GenerationConfig.Generate() with strategy="beam_search" instead.
+// Most users should use decode.Decoder.Decode() with strategy="beam_search" instead.
 func (c *BeamSearchConfig) Step(
 	logits *Node,
 	currentSequences *Node,

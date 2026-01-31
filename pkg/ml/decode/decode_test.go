@@ -9,17 +9,18 @@ import (
 	graphtest "github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/decode/sample"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestGenerationConfig groups config default and builder tests.
-func TestGenerationConfig(t *testing.T) {
+// TestDecoder groups config default and builder tests.
+func TestDecoder(t *testing.T) {
 	t.Run("Defaults", func(t *testing.T) {
-		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
+		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
 		cfg := New(modelFn)
 		assert.Equal(t, 100, cfg.MaxLength)
-		assert.Equal(t, "greedy", cfg.Strategy)
+		assert.Equal(t, sample.StrategyGreedy, cfg.Strategy)
 		assert.Equal(t, float32(1.0), cfg.Temperature)
 		assert.Equal(t, 50, cfg.TopK)
 		assert.Equal(t, float32(0.9), cfg.TopP)
@@ -29,17 +30,17 @@ func TestGenerationConfig(t *testing.T) {
 	})
 
 	t.Run("Builders", func(t *testing.T) {
-		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
+		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
 		cfg := New(modelFn).
 			WithMaxLength(50).
-			WithStrategy("temperature").
+			WithStrategy(sample.StrategyTemperature).
 			WithTemperature(0.7).
 			WithTopK(40).
 			WithTopP(0.95).
 			WithBeamSize(8).
 			WithEOS(2)
 		assert.Equal(t, 50, cfg.MaxLength)
-		assert.Equal(t, "temperature", cfg.Strategy)
+		assert.Equal(t, sample.StrategyTemperature, cfg.Strategy)
 		assert.Equal(t, float32(0.7), cfg.Temperature)
 		assert.Equal(t, 40, cfg.TopK)
 		assert.Equal(t, float32(0.95), cfg.TopP)
@@ -49,12 +50,12 @@ func TestGenerationConfig(t *testing.T) {
 	})
 }
 
-// TestGenerateSampling groups non-beam sampling tests.
-func TestGenerateSampling(t *testing.T) {
-	t.Run("GreedyStrategy", func(t *testing.T) {
+// TestDecoderSampling groups non-beam sampling tests.
+func TestDecoderSampling(t *testing.T) {
+	t.Run("Greedy", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
+		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
 			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
@@ -64,7 +65,7 @@ func TestGenerateSampling(t *testing.T) {
 			logits = Where(Equal(indices, ConstAs(indices, 5)), ConstAs(logits, 100.0), logits)
 			return logits
 		}
-		cfg := New(modelFn).WithStrategy("greedy").WithMaxLength(10)
+		cfg := New(modelFn).WithStrategy(sample.StrategyGreedy).WithMaxLength(10)
 		prompt := [][]int32{{1, 2, 3}}
 		result, err := cfg.Decode(backend, ctx, prompt)
 		require.NoError(t, err)
@@ -77,17 +78,17 @@ func TestGenerateSampling(t *testing.T) {
 		assert.Equal(t, int32(5), seq[0][len(seq[0])-1])
 	})
 
-	t.Run("TemperatureStrategy", func(t *testing.T) {
+	t.Run("Temperature", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
+		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
 			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
 			g := tokens.Graph()
 			return IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, vocabSize))
 		}
-		cfg := New(modelFn).WithStrategy("temperature").WithTemperature(1.5).WithMaxLength(10)
+		cfg := New(modelFn).WithStrategy(sample.StrategyTemperature).WithTemperature(1.5).WithMaxLength(10)
 		prompt := [][]int32{{1, 2, 3}}
 		result, err := cfg.Decode(backend, ctx, prompt)
 		require.NoError(t, err)
@@ -103,14 +104,14 @@ func TestGenerateSampling(t *testing.T) {
 	t.Run("OneDPrompt", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
+		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
 			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
 			g := tokens.Graph()
 			return IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, vocabSize))
 		}
-		cfg := New(modelFn).WithStrategy("greedy").WithMaxLength(10)
+		cfg := New(modelFn).WithStrategy(sample.StrategyGreedy).WithMaxLength(10)
 		prompt := []int32{1, 2, 3}
 		result, err := cfg.Decode(backend, ctx, prompt)
 		require.NoError(t, err)
@@ -122,7 +123,7 @@ func TestGenerateSampling(t *testing.T) {
 	t.Run("PromptTooLong", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
+		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
 		cfg := New(modelFn).WithMaxLength(5)
 		prompt := [][]int32{{1, 2, 3, 4, 5, 6, 7, 8}}
 		_, err := cfg.Decode(backend, ctx, prompt)
@@ -132,16 +133,16 @@ func TestGenerateSampling(t *testing.T) {
 }
 
 // TestGenerateBeamSearchNotImplemented remains as a placeholder expectation.
-func TestGenerateBeamSearch(t *testing.T) {
+func TestBeamSearch(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
+	var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node {
 		batchSize := tokens.Shape().Dimensions[0]
 		seqLen := tokens.Shape().Dimensions[1]
 		g := tokens.Graph()
 		return IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, 10))
 	}
-	cfg := New(modelFn).WithStrategy("beam_search").WithBeamSize(4).WithMaxLength(10)
+	cfg := New(modelFn).WithStrategy(sample.StrategyBeamSearch).WithBeamSize(4).WithMaxLength(10)
 	prompt := [][]int32{{1, 2, 3}}
 	result, err := cfg.Decode(backend, ctx, prompt)
 	require.NoError(t, err)
@@ -151,11 +152,11 @@ func TestGenerateBeamSearch(t *testing.T) {
 	assert.Equal(t, []int{1, 10}, result.Shape().Dimensions)
 }
 
-// TestGenerateStreamingNotImplemented groups streaming placeholder test.
-func TestGenerateStreamingNotImplemented(t *testing.T) {
+// TestStreamingNotImplemented groups streaming placeholder test.
+func TestStreamingNotImplemented(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
+	var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
 	cfg := New(modelFn)
 	prompt := []int32{1, 2, 3}
 	err := cfg.GenerateStreaming(backend, ctx, prompt, func(token int) bool { return true })

@@ -13,6 +13,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
+	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"
 )
 
 // Hyperparameter keys for context configuration
@@ -26,10 +27,12 @@ const (
 	ParamMaxPosEmbed  = "transformer_max_pos_embed"
 	ParamDType        = "transformer_dtype"
 	ParamDropout      = "transformer_dropout"
-	ParamUseRoPE      = "transformer_use_rope"
-	ParamRoPEBaseFreq = "transformer_rope_base_freq"
 	ParamUseLayerNorm = "transformer_use_layer_norm"
 	ParamUseBias      = "transformer_use_bias"
+
+	// Legacy RoPE parameters, used to configure PosEmbed if set.
+	ParamUseRoPE      = "transformer_use_rope"
+	ParamRoPEBaseFreq = "transformer_rope_base_freq"
 )
 
 // Model holds configuration for building a cached transformer model.
@@ -44,10 +47,10 @@ type Model struct {
 	MaxPosEmbed  int          // Max positional embedding length
 	DType        dtypes.DType // Data type
 	Dropout      float64      // Dropout rate (0.0 = none)
-	UseRoPE      bool         // Use Rotary Position Embeddings
-	RoPEBaseFreq float64      // RoPE base frequency (default 10000)
 	UseLayerNorm bool         // Use layer normalization
 	UseBias      bool         // Use bias in dense layers
+
+	PosEmbed pos.Encoder // Positional encoder (e.g. RoPE). If nil, standard absolute positional embeddings are used.
 }
 
 // New creates a default transformer configuration.
@@ -62,10 +65,9 @@ func New(vocabSize, embedDim, numLayers, numHeads, headDim int) *Model {
 		MaxPosEmbed:  512,
 		DType:        dtypes.Float32,
 		Dropout:      0.0,
-		UseRoPE:      false,
-		RoPEBaseFreq: 10000.0,
 		UseLayerNorm: true,
 		UseBias:      true,
+		PosEmbed:     nil,
 	}
 }
 
@@ -140,10 +142,15 @@ func (m *Model) FromContext(ctx *context.Context) *Model {
 	m.FFNDim = context.GetParamOr(ctx, ParamFFNDim, m.FFNDim)
 	m.MaxPosEmbed = context.GetParamOr(ctx, ParamMaxPosEmbed, m.MaxPosEmbed)
 	m.Dropout = context.GetParamOr(ctx, ParamDropout, m.Dropout)
-	m.UseRoPE = context.GetParamOr(ctx, ParamUseRoPE, m.UseRoPE)
-	m.RoPEBaseFreq = context.GetParamOr(ctx, ParamRoPEBaseFreq, m.RoPEBaseFreq)
 	m.UseLayerNorm = context.GetParamOr(ctx, ParamUseLayerNorm, m.UseLayerNorm)
 	m.UseBias = context.GetParamOr(ctx, ParamUseBias, m.UseBias)
+
+	// Legacy RoPE configuration from context
+	useRoPE := context.GetParamOr(ctx, ParamUseRoPE, false)
+	if useRoPE {
+		baseFreq := context.GetParamOr(ctx, ParamRoPEBaseFreq, 10000.0)
+		m.PosEmbed = pos.NewRoPE(baseFreq)
+	}
 
 	// Handle dtype separately since it's a string
 	dtypeStr := context.GetParamOr(ctx, ParamDType, "")
@@ -184,8 +191,13 @@ func (m *Model) WithDropout(rate float64) *Model {
 
 // WithRoPE enables RoPE with base frequency.
 func (m *Model) WithRoPE(baseFreq float64) *Model {
-	m.UseRoPE = true
-	m.RoPEBaseFreq = baseFreq
+	m.PosEmbed = pos.NewRoPE(baseFreq)
+	return m
+}
+
+// WithPositionalEmbedding sets the positional encoder.
+func (m *Model) WithPositionalEmbedding(encoder pos.Encoder) *Model {
+	m.PosEmbed = encoder
 	return m
 }
 
@@ -202,7 +214,7 @@ func (m *Model) WithBias(use bool) *Model {
 }
 
 // ForTraining returns a model function for training (full-sequence forward, no KV cache).
-func (m *Model) ForTraining() decode.ModelFn {
+func (m *Model) ForTraining() decode.IterativeModelFn {
 	return func(ctx *context.Context, tokens *Node) *Node {
 		return m.forwardFull(ctx, tokens, false, 0)
 	}
@@ -233,7 +245,7 @@ func (m *Model) forwardFull(
 	}
 
 	x := embedded
-	if !cfg.UseRoPE {
+	if cfg.PosEmbed == nil {
 		posEmbedFull := ctx.In("pos_embed").VariableWithShape("embeddings",
 			shapes.Make(cfg.DType, cfg.MaxPosEmbed, cfg.EmbedDim)).ValueGraph(g)
 
@@ -262,8 +274,8 @@ func (m *Model) forwardFull(
 			attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, cfg.NumHeads, cfg.HeadDim).
 				WithKVCache(cfg.MaxPosEmbed, positionNode)
 
-			if cfg.UseRoPE {
-				attnBuilder = attnBuilder.WithRoPE(cfg.RoPEBaseFreq)
+			if cfg.PosEmbed != nil {
+				attnBuilder = attnBuilder.WithPositionalEncoder(cfg.PosEmbed)
 			}
 
 			if !cfg.UseBias {
@@ -280,8 +292,8 @@ func (m *Model) forwardFull(
 			attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, cfg.NumHeads, cfg.HeadDim).
 				UseCausalMask()
 
-			if cfg.UseRoPE {
-				attnBuilder = attnBuilder.WithRoPE(cfg.RoPEBaseFreq)
+			if cfg.PosEmbed != nil {
+				attnBuilder = attnBuilder.WithPositionalEncoder(cfg.PosEmbed)
 			}
 
 			if !cfg.UseBias {

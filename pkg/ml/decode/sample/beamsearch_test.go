@@ -1,4 +1,4 @@
-package generation
+package sample
 
 import (
 	"testing"
