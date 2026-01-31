@@ -64,9 +64,9 @@ type FusedOps interface {
 	//
 	// It does y = activation(x @ W + bias). Where @ is a standard matmul,
 	// it contracts x's last axis with weight's first axis.
-	// 
+	//
 	// - x: [batch..., in_features], weight: [in_features, out_features...],
 	// - bias: [out_features...] (nil-able).
-	// - activation: applied after the matmul+bias; set to ActivationNone for no activation. 
+	// - activation: applied after the matmul+bias; set to ActivationNone for no activation.
 	FusedDense(x, weight, bias Value, activation ActivationType) (Value, error)
 }

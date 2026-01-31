@@ -4,9 +4,9 @@ package simplego
 
 import (
 	"math"
+	"sync"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
@@ -95,16 +95,37 @@ func execFusedGelu(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 
 	switch input.shape.DType {
 	case dtypes.Float32:
-		gelu(input.flat.([]float32), output.flat.([]float32))
+		gelu(backend, input.flat.([]float32), output.flat.([]float32))
 	case dtypes.Float64:
-		gelu(input.flat.([]float64), output.flat.([]float64))
+		gelu(backend, input.flat.([]float64), output.flat.([]float64))
 	default:
 		return nil, errors.Wrapf(backends.ErrUnsupportedDType, "FusedGelu: dtype %s", input.shape.DType)
 	}
 	return output, nil
 }
 
-func gelu[T float32 | float64](input, output []T) {
+// minParallelizeChunk is the minimum number of elements to parallelize over.
+const minParallelizeChunk = 4096
+
+func gelu[T float32 | float64](backend *Backend, input, output []T) {
+	n := len(input)
+	if backend != nil && backend.workers.IsEnabled() && n > minParallelizeChunk {
+		var wg sync.WaitGroup
+		for ii := 0; ii < n; ii += minParallelizeChunk {
+			iiEnd := min(ii+minParallelizeChunk, n)
+			wg.Add(1)
+			backend.workers.WaitToStart(func() {
+				geluChunk(input[ii:iiEnd], output[ii:iiEnd])
+				wg.Done()
+			})
+		}
+		wg.Wait()
+	} else {
+		geluChunk(input, output)
+	}
+}
+
+func geluChunk[T float32 | float64](input, output []T) {
 	sqrt2Inv := T(1.0 / math.Sqrt(2.0))
 	for i, x := range input {
 		output[i] = x * 0.5 * (1.0 + T(math.Erf(float64(x*sqrt2Inv))))
@@ -272,81 +293,73 @@ func arbitraryAxesLayerNorm[T float32 | float64](inData, outData, gammaData, bet
 	}
 }
 
-// execFusedDense implements y = activation(x @ W + b).
-// x: [..., in_features], weight: [in_features, out_features], bias: [out_features] (optional)
-// Uses packGemm for the matmul. When bias is present, the output is pre-filled
-// with broadcast bias and GEMM is called with beta=1 so that C = 1*A*B + 1*C.
+// execFusedDense implements y = activation(matmul + bias).
+// inputs[0] is the DotGeneral result (matmul already computed by the backend).
+// inputs[1] is the optional bias.
 func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	x := inputs[0]
-	weight := inputs[1]
+	matmul := inputs[0]
 	var bias *Buffer
-	if len(inputs) > 2 {
-		bias = inputs[2]
+	if len(inputs) > 1 {
+		bias = inputs[1]
 	}
 
-	output := backend.getBufferForShape(node.shape)
 	data := node.data.(*nodeFusedDense)
 
-	switch x.shape.DType {
+	// If no bias and no activation, just return the matmul result directly.
+	if bias == nil && data.activation == backends.ActivationNone {
+		if inputsOwned[0] {
+			inputs[0] = nil // Signal to executor that we reused the input.
+			return matmul, nil
+		}
+		output := backend.getBufferForShape(node.shape)
+		copyFlat(output.flat, matmul.flat)
+		return output, nil
+	}
+
+	// Try to reuse the matmul buffer if owned; otherwise allocate.
+	var output *Buffer
+	if inputsOwned[0] {
+		output = matmul
+		inputs[0] = nil // Signal to executor that we reused the input.
+	} else {
+		output = backend.getBufferForShape(node.shape)
+		copyFlat(output.flat, matmul.flat)
+	}
+
+	switch output.shape.DType {
 	case dtypes.Float32:
-		dense(backend, x, weight, bias, output)
-		applyActivation(output.flat.([]float32), data.activation)
+		outData := output.flat.([]float32)
+		if bias != nil {
+			addBias(outData, bias.flat.([]float32))
+		}
+		applyActivation(backend, outData, data.activation)
 	case dtypes.Float64:
-		dense(backend, x, weight, bias, output)
-		applyActivation(output.flat.([]float64), data.activation)
+		outData := output.flat.([]float64)
+		if bias != nil {
+			addBias(outData, bias.flat.([]float64))
+		}
+		applyActivation(backend, outData, data.activation)
 	default:
-		return nil, errors.Wrapf(backends.ErrUnsupportedDType, "FusedDense: dtype %s", x.shape.DType)
+		return nil, errors.Wrapf(backends.ErrUnsupportedDType, "FusedDense: dtype %s", output.shape.DType)
 	}
 	return output, nil
 }
 
-// dense computes output = x @ weight + bias using packGemm.
-// When bias is present, output is pre-filled with broadcast bias and GEMM uses beta=1.
-func dense(backend *Backend, x, weight, bias, output *Buffer) {
-	xShape := x.shape
-	wShape := weight.shape
-	inFeatures := xShape.Dimensions[xShape.Rank()-1]
-	outFeatures := wShape.Dimensions[1]
-	batchSize := xShape.Size() / inFeatures
-
-	// Pre-fill output with bias so GEMM accumulates: C = 1*A*B + beta*C.
-	var beta float64
-	if bias != nil {
-		broadcastBias(bias, output, batchSize, outFeatures)
-		beta = 1
-	}
-
-	inputDType := x.shape.DType
-	outputDType := output.shape.DType
-	packgemm.GEMMDynamic(inputDType, outputDType, 1, beta,
-		x.flat, weight.flat,
-		1, batchSize, outFeatures, inFeatures,
-		output.flat,
-		getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), backend.workers)
-}
-
-// broadcastBias fills output with bias repeated across the batch dimension.
-func broadcastBias(bias, output *Buffer, batchSize, outFeatures int) {
-	switch biasData := bias.flat.(type) {
-	case []float32:
-		outData := output.flat.([]float32)
-		for b := 0; b < batchSize; b++ {
-			copy(outData[b*outFeatures:(b+1)*outFeatures], biasData)
-		}
-	case []float64:
-		outData := output.flat.([]float64)
-		for b := 0; b < batchSize; b++ {
-			copy(outData[b*outFeatures:(b+1)*outFeatures], biasData)
-		}
+// addBias adds bias to each row of the output in-place.
+// output shape is [..., outFeatures], bias shape is [outFeatures].
+func addBias[T float32 | float64](output, bias []T) {
+	outFeatures := len(bias)
+	for i, v := range output {
+		output[i] = v + bias[i%outFeatures]
 	}
 }
 
-func applyActivation[T float32 | float64](data []T, activation backends.ActivationType) {
+func applyActivation[T float32 | float64](backend *Backend, data []T, activation backends.ActivationType) {
 	switch activation {
 	case backends.ActivationNone:
 		// No-op.
 	case backends.ActivationGelu:
-		gelu(data, data) // in-place
+		gelu(backend, data, data) // in-place
 	case backends.ActivationRelu:
 		for i, x := range data {
 			if x < 0 {

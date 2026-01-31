@@ -121,6 +121,10 @@ func (f *Function) FusedGelu(x backends.Value, exact bool) (backends.Value, erro
 // FusedDense performs fused matmul + optional bias + optional activation:
 //
 //	y = activation(x @ W + bias)
+//
+// The matmul is delegated to DotGeneral (which selects the optimal execution
+// path at build time). FusedDense then adds bias and applies activation on top
+// of the DotGeneral result.
 func (f *Function) FusedDense(x, weight, bias backends.Value, activation backends.ActivationType) (backends.Value, error) {
 	values := []backends.Value{x, weight}
 	if bias != nil {
@@ -148,7 +152,20 @@ func (f *Function) FusedDense(x, weight, bias backends.Value, activation backend
 	copy(outDims[xNode.shape.Rank()-1:], wNode.shape.Dimensions[1:])
 	outShape := shapes.Make(xNode.shape.DType, outDims...)
 
+	// Build DotGeneral sub-node for the matmul: contract x's last axis with weight's first.
+	dotResult, err := f.DotGeneral(xNode, []int{xNode.shape.Rank() - 1}, nil, wNode, []int{0}, nil)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "FusedDense: DotGeneral")
+	}
+	dotNode := dotResult.(*Node)
+
+	// FusedDense inputs: [dotResult, bias?]. The matmul is already computed by DotGeneral.
+	fusedInputs := []*Node{dotNode}
+	if len(inputs) > 2 {
+		fusedInputs = append(fusedInputs, inputs[2])
+	}
+
 	data := &nodeFusedDense{activation: activation}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedDense, outShape, inputs, data)
+	node, _ := f.getOrCreateNode(backends.OpTypeFusedDense, outShape, fusedInputs, data)
 	return node, nil
 }
