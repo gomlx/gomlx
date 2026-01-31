@@ -9,10 +9,10 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/decode"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
-	"github.com/gomlx/gomlx/pkg/ml/layers/generation"
 )
 
 // Hyperparameter keys for context configuration
@@ -202,14 +202,14 @@ func (m *Model) WithBias(use bool) *Model {
 }
 
 // ForTraining returns a model function for training (full-sequence forward, no KV cache).
-func (m *Model) ForTraining() generation.ModelFn {
+func (m *Model) ForTraining() decode.ModelFn {
 	return func(ctx *context.Context, tokens *Node) *Node {
 		return m.forwardFull(ctx, tokens, false, 0)
 	}
 }
 
 // ForGeneration returns a model function for generation (incremental forward with KV cache).
-func (m *Model) ForGeneration() generation.IncrementalModelFn {
+func (m *Model) ForGeneration() decode.IncrementalModelFn {
 	return func(ctx *context.Context, newTokens *Node, position int) *Node {
 		return m.forwardFull(ctx, newTokens, true, position)
 	}

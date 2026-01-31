@@ -1,4 +1,4 @@
-package generation
+package decode
 
 import (
 	"testing"
@@ -16,8 +16,8 @@ import (
 // TestGenerationConfig groups config default and builder tests.
 func TestGenerationConfig(t *testing.T) {
 	t.Run("Defaults", func(t *testing.T) {
-		modelFn := func(ctx *context.Context, tokens *Node) *Node { return tokens }
-		cfg := NewGenerationConfig(modelFn)
+		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
+		cfg := New(modelFn)
 		assert.Equal(t, 100, cfg.MaxLength)
 		assert.Equal(t, "greedy", cfg.Strategy)
 		assert.Equal(t, float32(1.0), cfg.Temperature)
@@ -29,8 +29,8 @@ func TestGenerationConfig(t *testing.T) {
 	})
 
 	t.Run("Builders", func(t *testing.T) {
-		modelFn := func(ctx *context.Context, tokens *Node) *Node { return tokens }
-		cfg := NewGenerationConfig(modelFn).
+		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
+		cfg := New(modelFn).
 			WithMaxLength(50).
 			WithStrategy("temperature").
 			WithTemperature(0.7).
@@ -54,7 +54,7 @@ func TestGenerateSampling(t *testing.T) {
 	t.Run("GreedyStrategy", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		modelFn := func(ctx *context.Context, tokens *Node) *Node {
+		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
 			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
@@ -64,9 +64,9 @@ func TestGenerateSampling(t *testing.T) {
 			logits = Where(Equal(indices, ConstAs(indices, 5)), ConstAs(logits, 100.0), logits)
 			return logits
 		}
-		cfg := NewGenerationConfig(modelFn).WithStrategy("greedy").WithMaxLength(10)
+		cfg := New(modelFn).WithStrategy("greedy").WithMaxLength(10)
 		prompt := [][]int32{{1, 2, 3}}
-		result, err := cfg.Generate(backend, ctx, prompt)
+		result, err := cfg.Decode(backend, ctx, prompt)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		// Expect full sequence [batch=1, length=10]
@@ -80,16 +80,16 @@ func TestGenerateSampling(t *testing.T) {
 	t.Run("TemperatureStrategy", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		modelFn := func(ctx *context.Context, tokens *Node) *Node {
+		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
 			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
 			g := tokens.Graph()
 			return IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, vocabSize))
 		}
-		cfg := NewGenerationConfig(modelFn).WithStrategy("temperature").WithTemperature(1.5).WithMaxLength(10)
+		cfg := New(modelFn).WithStrategy("temperature").WithTemperature(1.5).WithMaxLength(10)
 		prompt := [][]int32{{1, 2, 3}}
-		result, err := cfg.Generate(backend, ctx, prompt)
+		result, err := cfg.Decode(backend, ctx, prompt)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, 2, result.Rank())
@@ -103,16 +103,16 @@ func TestGenerateSampling(t *testing.T) {
 	t.Run("OneDPrompt", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		modelFn := func(ctx *context.Context, tokens *Node) *Node {
+		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
 			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
 			g := tokens.Graph()
 			return IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, vocabSize))
 		}
-		cfg := NewGenerationConfig(modelFn).WithStrategy("greedy").WithMaxLength(10)
+		cfg := New(modelFn).WithStrategy("greedy").WithMaxLength(10)
 		prompt := []int32{1, 2, 3}
-		result, err := cfg.Generate(backend, ctx, prompt)
+		result, err := cfg.Decode(backend, ctx, prompt)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, 2, result.Rank())
@@ -122,10 +122,10 @@ func TestGenerateSampling(t *testing.T) {
 	t.Run("PromptTooLong", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		modelFn := func(ctx *context.Context, tokens *Node) *Node { return tokens }
-		cfg := NewGenerationConfig(modelFn).WithMaxLength(5)
+		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
+		cfg := New(modelFn).WithMaxLength(5)
 		prompt := [][]int32{{1, 2, 3, 4, 5, 6, 7, 8}}
-		_, err := cfg.Generate(backend, ctx, prompt)
+		_, err := cfg.Decode(backend, ctx, prompt)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "prompt length")
 	})
@@ -135,15 +135,15 @@ func TestGenerateSampling(t *testing.T) {
 func TestGenerateBeamSearch(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	modelFn := func(ctx *context.Context, tokens *Node) *Node {
+	var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
 		batchSize := tokens.Shape().Dimensions[0]
 		seqLen := tokens.Shape().Dimensions[1]
 		g := tokens.Graph()
 		return IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, 10))
 	}
-	cfg := NewGenerationConfig(modelFn).WithStrategy("beam_search").WithBeamSize(4).WithMaxLength(10)
+	cfg := New(modelFn).WithStrategy("beam_search").WithBeamSize(4).WithMaxLength(10)
 	prompt := [][]int32{{1, 2, 3}}
-	result, err := cfg.Generate(backend, ctx, prompt)
+	result, err := cfg.Decode(backend, ctx, prompt)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	// Expect best sequences: shape [batch, seq_len]
@@ -155,8 +155,8 @@ func TestGenerateBeamSearch(t *testing.T) {
 func TestGenerateStreamingNotImplemented(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	modelFn := func(ctx *context.Context, tokens *Node) *Node { return tokens }
-	cfg := NewGenerationConfig(modelFn)
+	var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
+	cfg := New(modelFn)
 	prompt := []int32{1, 2, 3}
 	err := cfg.GenerateStreaming(backend, ctx, prompt, func(token int) bool { return true })
 	require.Error(t, err)

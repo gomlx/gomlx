@@ -115,6 +115,11 @@ func (c *BeamSearchConfig) WithEarlyStopping(early bool) *BeamSearchConfig {
 	return c
 }
 
+// EarlyStopping returns whether early stopping is enabled.
+func (c *BeamSearchConfig) EarlyStopping() bool {
+	return c.earlyStopping
+}
+
 // Step performs one decoding step of beam search.
 // This is a low-level method for implementing beam search generation.
 // It takes current beam states and model logits, then selects the top-k

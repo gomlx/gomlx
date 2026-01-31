@@ -29,9 +29,9 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/decode"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
-	"github.com/gomlx/gomlx/pkg/ml/layers/generation"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
@@ -257,18 +257,18 @@ func generateText(backend backends.Backend, ctx *context.Context, prompt string)
 		promptTokens = []int{32}
 	}
 
-	modelFn := func(genCtx *context.Context, tokens *Node) *Node {
+	var modelFn decode.ModelFn = func(genCtx *context.Context, tokens *Node) *Node {
 		outputs := simpleTransformerModel(genCtx, []*Node{tokens})
 		return outputs[0]
 	}
 
-	genCfg := generation.NewGenerationConfig(modelFn).
+	genCfg := decode.New(modelFn).
 		WithStrategy(strategy).
 		WithTemperature(float32(temperature)).
 		WithMaxLength(maxLength)
 
 	promptTensor := tensors.FromValue([][]int32{xslices.Map(promptTokens, func(t int) int32 { return int32(t) })})
-	generated, err := genCfg.Generate(backend, ctx, promptTensor)
+	generated, err := genCfg.Decode(backend, ctx, promptTensor)
 	if err != nil {
 		log.Fatalf("Generation failed: %v", err)
 	}
