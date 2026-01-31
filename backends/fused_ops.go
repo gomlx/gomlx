@@ -70,4 +70,3 @@ type FusedOps interface {
 	// - activation: applied after the matmul+bias; set to ActivationNone for no activation. 
 	FusedDense(x, weight, bias Value, activation ActivationType) (Value, error)
 }
-a

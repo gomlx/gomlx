@@ -140,10 +140,10 @@ func TestFusedGelu_Float64(t *testing.T) {
 	})
 
 	got := result.flat.([]float64)
-	sqrt2Inv := 1.0 / math.Sqrt(2.0)
-	for i, x := range input {
-		want := x * 0.5 * (1.0 + math.Erf(x*sqrt2Inv))
-		assert.InDelta(t, want, got[i], fusedTestTol, "gelu(%v)", x)
+	// Known-correct GELU values.
+	want := []float64{-0.15865525393145702, 0.0, 0.8413447460685429}
+	for i := range got {
+		assert.InDelta(t, want[i], got[i], fusedTestTol, "gelu(%v)", input[i])
 	}
 }
 
