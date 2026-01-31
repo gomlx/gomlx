@@ -68,6 +68,11 @@ type Decoder struct {
 	// Internal backend for small operations (concat, reshape)
 	// Uses simplego for faster compilation and dynamic shape support
 	simpleBackend backends.Backend
+
+	// Cached executors to avoid recompilation
+	promptExec   *context.Exec         // Cached executor for processing initial prompt in incremental generation
+	genExecCache map[int]*context.Exec // Cached executors for each position in incremental generation
+	fullExec     *context.Exec         // Cached executor for non-cached full sequence generation
 }
 
 // New creates a decoder for autoregressive text generation.
@@ -151,6 +156,28 @@ func (cfg *Decoder) FromContext(ctx *context.Context) *Decoder {
 	cfg.StopOnEOS = context.GetParamOr(ctx, ParamStopOnEOS, cfg.StopOnEOS)
 
 	return cfg
+}
+
+// initializePromptExec creates the cached executor for processing prompts in incremental generation.
+// This executor is reused across multiple generation calls to avoid recompilation overhead.
+func (cfg *Decoder) initializePromptExec(backend backends.Backend, ctx *context.Context) error {
+	if cfg.promptExec != nil || cfg.IncrementalModelFn == nil {
+		return nil
+	}
+
+	var err error
+	cfg.promptExec, err = context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, tokens *Node) *Node {
+		logits := cfg.IncrementalModelFn(ctx, tokens, 0)
+		lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
+		lastLogits = Squeeze(lastLogits, 1) // [batch, vocab_size]
+		nextToken := generation.SampleWithStrategy(ctx, lastLogits, cfg.Strategy, float64(cfg.Temperature), cfg.TopK, float64(cfg.TopP))
+		return nextToken
+	})
+	if err != nil {
+		return errors.WithMessagef(err, "failed to create prompt exec")
+	}
+
+	return nil
 }
 
 // WithMaxLength sets the maximum generation length (including prompt).
@@ -247,8 +274,12 @@ func (cfg *Decoder) Decode(
 		return nil, errors.WithMessagef(err, "invalid generation config")
 	}
 
-	promptTensor := tensors.FromAnyValue(prompt)
+	// Initialize cached executors for incremental generation
+	if err := cfg.initializePromptExec(backend, ctx); err != nil {
+		return nil, err
+	}
 
+	promptTensor := tensors.FromAnyValue(prompt)
 	if promptTensor.Rank() == 1 {
 		// Reshape is not a method on Tensor, so we need to work with the shape
 		// For now, we'll use the prompt as-is in the graph
@@ -305,7 +336,7 @@ func (cfg *Decoder) generateSampling(
 			return nil, errors.WithMessagef(err, "failed to create reshape exec")
 		}
 
-		reshapeResults, _, err := reshapeExec.ExecWithGraph(prompt)
+		reshapeResults, err := reshapeExec.Exec(prompt)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to reshape prompt")
 		}
@@ -322,12 +353,12 @@ func (cfg *Decoder) generateSampling(
 	}
 
 	if cfg.isCached() {
-		return cfg.generateSamplingCached(backend, ctx, prompt, batchSize, promptLen)
+		return cfg.generateSamplingIncremental(backend, ctx, prompt, batchSize, promptLen)
 	}
-	return cfg.generateSamplingNonCached(backend, ctx, prompt, promptLen)
+	return cfg.generateSamplingFull(backend, ctx, prompt, promptLen)
 }
 
-// generateSamplingNonCached performs sampling-based generation without KV caching.
+// generateSamplingFull performs sampling-based generation without KV caching.
 // Processes the full sequence at each step.
 //
 // Parameters:
@@ -339,32 +370,38 @@ func (cfg *Decoder) generateSampling(
 // Returns:
 //   - Generated sequence [batch, totalLen] where totalLen <= MaxLength
 //   - Error if generation fails
-func (cfg *Decoder) generateSamplingNonCached(
+func (cfg *Decoder) generateSamplingFull(
 	backend backends.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
 	promptLen int,
 ) (*tensors.Tensor, error) {
-	concatExec, err := NewExec(backend, func(seq, token *Node) *Node {
-		tokenReshaped := ExpandDims(token, -1) // [batch, 1]
-		return Concatenate([]*Node{seq, tokenReshaped}, 1)
-	})
-	if err != nil {
-		return nil, errors.WithMessagef(err, "failed to create concat graph")
-	}
-	concatExec.SetMaxCache(-1) // No limit - sequence length varies at each step
-
-	predCtx := ctx.Reuse()
-
-	currentSeq := prompt
-
 	numTokensToGenerate := cfg.MaxLength - promptLen
 	if numTokensToGenerate <= 0 {
 		return prompt, nil
 	}
 
-	for step := 0; step < numTokensToGenerate; step++ {
-		exec, err := context.NewExec(backend, predCtx, func(ctx *context.Context, currentSeq *Node) *Node {
+	// Extract batch size from prompt shape
+	promptShape := prompt.Shape()
+	batchSize := promptShape.Dimensions[0]
+
+	// Store generated tokens as int32 values [batch][position]
+	outputTokens := make([][]int32, batchSize)
+	for i := range outputTokens {
+		outputTokens[i] = make([]int32, 0, cfg.MaxLength)
+	}
+
+	// Add prompt tokens to output
+	promptValues := prompt.Value().([][]int32)
+	for i := range batchSize {
+		outputTokens[i] = append(outputTokens[i], promptValues[i]...)
+	}
+
+	// Create or reuse cached executor for full sequence generation
+	if cfg.fullExec == nil {
+		predCtx := ctx.Reuse()
+		var err error
+		cfg.fullExec, err = context.NewExec(backend, predCtx, func(ctx *context.Context, currentSeq *Node) *Node {
 			logits := cfg.ModelFn(ctx, currentSeq)
 			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 			lastLogits = Squeeze(lastLogits, 1) // Remove the seq_len dimension
@@ -372,38 +409,40 @@ func (cfg *Decoder) generateSamplingNonCached(
 			return nextToken
 		})
 		if err != nil {
-			return nil, errors.WithMessagef(err, "failed to create generation graph")
+			return nil, errors.WithMessagef(err, "failed to create generation exec")
 		}
+	}
 
-		outputs, err := exec.Exec(currentSeq)
+	for step := 0; step < numTokensToGenerate; step++ {
+		// Build current sequence tensor from accumulated tokens
+		currentSeq := tensors.FromValue(outputTokens)
+
+		outputs, err := cfg.fullExec.Exec(currentSeq)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "generation step %d failed", step)
 		}
 
 		nextToken := outputs[0]
+		nextTokenValues := nextToken.Value().([]int32)
 
-		if cfg.StopOnEOS && cfg.EosTokenId >= 0 {
-			if cfg.checkEOS(nextToken) {
-				concatResults, err := concatExec.Exec(currentSeq, nextToken)
-				if err != nil {
-					return nil, errors.WithMessagef(err, "final concatenation failed")
-				}
-				return concatResults[0], nil
+		// Check for EOS and append tokens
+		allEOS := true
+		for i := range batchSize {
+			outputTokens[i] = append(outputTokens[i], nextTokenValues[i])
+			if cfg.StopOnEOS && cfg.EosTokenId >= 0 && int(nextTokenValues[i]) != cfg.EosTokenId {
+				allEOS = false
 			}
 		}
 
-		concatResults, err := concatExec.Exec(currentSeq, nextToken)
-		if err != nil {
-			return nil, errors.WithMessagef(err, "concatenation step %d failed", step)
+		if cfg.StopOnEOS && cfg.EosTokenId >= 0 && allEOS {
+			break
 		}
-
-		currentSeq = concatResults[0]
 	}
 
-	return currentSeq, nil
+	return tensors.FromValue(outputTokens), nil
 }
 
-// generateSamplingCached performs sampling-based generation with KV caching.
+// generateSamplingIncremental performs sampling-based generation with KV caching.
 // Processes only new tokens at each step, reusing cached attention.
 //
 // Parameters:
@@ -416,27 +455,14 @@ func (cfg *Decoder) generateSamplingNonCached(
 // Returns:
 //   - Generated sequence [batch, totalLen] where totalLen <= MaxLength
 //   - Error if generation fails
-func (cfg *Decoder) generateSamplingCached(
+func (cfg *Decoder) generateSamplingIncremental(
 	backend backends.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
 	_, promptLen int,
 ) (*tensors.Tensor, error) {
-	// Note: KV caches are now automatically managed within the context by the attention layers.
-	// Each call to WithKVCache in the model function will create/reuse cache variables in the context.
-
-	promptExec, err := context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, tokens *Node) *Node {
-		logits := cfg.IncrementalModelFn(ctx, tokens, 0)
-		lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
-		lastLogits = Squeeze(lastLogits, 1) // [batch, vocab_size]
-		nextToken := generation.SampleWithStrategy(ctx, lastLogits, cfg.Strategy, float64(cfg.Temperature), cfg.TopK, float64(cfg.TopP))
-		return nextToken
-	})
-	if err != nil {
-		return nil, errors.WithMessagef(err, "failed to create prompt exec")
-	}
-
-	outputs, err := promptExec.Exec(prompt)
+	// Use cached promptExec (initialized in Decode)
+	outputs, err := cfg.promptExec.Exec(prompt)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to process prompt")
 	}
@@ -458,49 +484,91 @@ func (cfg *Decoder) generateSamplingCached(
 		return result[0], nil
 	}
 
-	outputTokens := make([]*tensors.Tensor, 0, cfg.MaxLength)
-	outputTokens = append(outputTokens, prompt, firstToken)
+	// Extract batch size from prompt shape
+	promptShape := prompt.Shape()
+	batchSize := promptShape.Dimensions[0]
+
+	// Store generated tokens as int32 values [batch][position]
+	outputTokens := make([][]int32, batchSize)
+	for i := range outputTokens {
+		outputTokens[i] = make([]int32, 0, cfg.MaxLength)
+	}
+
+	// Add prompt tokens to output
+	promptValues := prompt.Value().([][]int32)
+	for i := range batchSize {
+		outputTokens[i] = append(outputTokens[i], promptValues[i]...)
+	}
+
+	// Add first generated token
+	firstTokenValues := firstToken.Value().([]int32)
+	for i := range batchSize {
+		outputTokens[i] = append(outputTokens[i], firstTokenValues[i])
+	}
 
 	numTokensToGenerate := cfg.MaxLength - promptLen - 1
 	if numTokensToGenerate <= 0 {
-		return cfg.concatenateTokens(backend, outputTokens)
+		return tensors.FromValue(outputTokens), nil
 	}
 
 	genCtx := ctx.Reuse()
+
+	// Initialize cache if needed
+	if cfg.genExecCache == nil {
+		cfg.genExecCache = make(map[int]*context.Exec)
+	}
 
 	currentPosition := promptLen
 	for step := 0; step < numTokensToGenerate; step++ {
 		position := currentPosition + step
 
-		exec, err := context.NewExec(backend, genCtx, func(ctx *context.Context, token *Node) *Node {
-			tokenReshaped := ExpandDims(token, -1)
-			logits := cfg.IncrementalModelFn(ctx, tokenReshaped, position)
-			lastLogits := Squeeze(logits, 1)
-			nextToken := generation.SampleWithStrategy(ctx, lastLogits, cfg.Strategy, float64(cfg.Temperature), cfg.TopK, float64(cfg.TopP))
-			return nextToken
-		})
-		if err != nil {
-			return nil, errors.WithMessagef(err, "failed to create generation exec at position %d", position)
+		// Get or create cached executor for this position
+		exec, ok := cfg.genExecCache[position]
+		if !ok {
+			var err error
+			exec, err = context.NewExec(backend, genCtx, func(ctx *context.Context, token *Node) *Node {
+				tokenReshaped := ExpandDims(token, -1)
+				logits := cfg.IncrementalModelFn(ctx, tokenReshaped, position)
+				lastLogits := Squeeze(logits, 1)
+				nextToken := generation.SampleWithStrategy(ctx, lastLogits, cfg.Strategy, float64(cfg.Temperature), cfg.TopK, float64(cfg.TopP))
+				return nextToken
+			})
+			if err != nil {
+				return nil, errors.WithMessagef(err, "failed to create generation exec at position %d", position)
+			}
+			cfg.genExecCache[position] = exec
 		}
 
-		prevToken := outputTokens[len(outputTokens)-1]
+		// Get previous token from each batch as tensor
+		prevTokens := make([]int32, batchSize)
+		for i := range batchSize {
+			prevTokens[i] = outputTokens[i][len(outputTokens[i])-1]
+		}
+		prevTokenTensor := tensors.FromValue(prevTokens)
 
-		outputs, err := exec.Exec(prevToken)
+		outputs, err := exec.Exec(prevTokenTensor)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "generation step %d (position %d) failed", step, position)
 		}
 
 		nextToken := outputs[0]
+		nextTokenValues := nextToken.Value().([]int32)
 
-		if cfg.StopOnEOS && cfg.EosTokenId >= 0 && cfg.checkEOS(nextToken) {
-			outputTokens = append(outputTokens, nextToken)
-			break
+		// Check for EOS and append tokens
+		allEOS := true
+		for i := range batchSize {
+			outputTokens[i] = append(outputTokens[i], nextTokenValues[i])
+			if cfg.StopOnEOS && cfg.EosTokenId >= 0 && int(nextTokenValues[i]) != cfg.EosTokenId {
+				allEOS = false
+			}
 		}
 
-		outputTokens = append(outputTokens, nextToken)
+		if cfg.StopOnEOS && cfg.EosTokenId >= 0 && allEOS {
+			break
+		}
 	}
 
-	return cfg.concatenateTokens(backend, outputTokens)
+	return tensors.FromValue(outputTokens), nil
 }
 
 // checkEOS returns true if any token in the tensor matches the EOS token ID.
@@ -527,39 +595,6 @@ func (cfg *Decoder) checkEOS(token *tensors.Tensor) bool {
 	return false
 }
 
-// concatenateTokens concatenates a sequence of token tensors along the sequence dimension.
-func (cfg *Decoder) concatenateTokens(
-	backend backends.Backend,
-	tokens []*tensors.Tensor,
-) (*tensors.Tensor, error) {
-	if len(tokens) == 0 {
-		return nil, errors.Errorf("no tokens to concatenate")
-	}
-	if len(tokens) == 1 {
-		return tokens[0], nil
-	}
-
-	result := tokens[0]
-	concatExec, err := NewExec(backend, func(seq, token *Node) *Node {
-		tokenReshaped := ExpandDims(token, -1) // [batch] -> [batch, 1]
-		return Concatenate([]*Node{seq, tokenReshaped}, 1)
-	})
-	if err != nil {
-		return nil, errors.WithMessagef(err, "failed to create concatenation exec")
-	}
-	concatExec.SetMaxCache(-1)
-
-	for i := 1; i < len(tokens); i++ {
-		outputs, err := concatExec.Exec(result, tokens[i])
-		if err != nil {
-			return nil, errors.WithMessagef(err, "failed to concatenate token %d", i)
-		}
-		result = outputs[0]
-	}
-
-	return result, nil
-}
-
 // generateBeamSearch performs beam search generation.
 // Dispatches to cached or non-cached implementation based on configuration.
 func (cfg *Decoder) generateBeamSearch(
@@ -579,7 +614,7 @@ func (cfg *Decoder) generateBeamSearch(
 			return nil, errors.WithMessagef(err, "failed to create reshape exec")
 		}
 
-		reshapeResults, _, err := reshapeExec.ExecWithGraph(prompt)
+		reshapeResults, err := reshapeExec.Exec(prompt)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to reshape prompt")
 		}
@@ -628,12 +663,10 @@ func (cfg *Decoder) generateBeamSearchNonCached(
 		return nil, errors.WithMessagef(err, "failed to create replicate exec")
 	}
 
-	replicatedResults, _, err := replicateExec.ExecWithGraph(prompt)
+	replicatedResults, err := replicateExec.Exec(prompt)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to replicate prompt")
 	}
-
-	currentSequences := replicatedResults[0]
 
 	// Initialize beam scores: first beam 0, others -1e10
 	initialScores := make([]float32, batchBeamSize)
@@ -645,6 +678,7 @@ func (cfg *Decoder) generateBeamSearchNonCached(
 		}
 	}
 	beamScores := tensors.FromValue(initialScores)
+	currentSequences := replicatedResults[0]
 
 	// Beam search configuration
 	beamConfig := generation.NewBeamSearch(beamSize, cfg.EosTokenId).
@@ -658,7 +692,9 @@ func (cfg *Decoder) generateBeamSearchNonCached(
 	for step := 0; step < numSteps; step++ {
 		currentLength := promptLen + step
 
-		// Create exec for this step
+		// TODO: It seems I cannot cache this exec because currentLength changes each iteration
+		// and is used as a compile-time constant in the graph (passed to beamConfig.Step)
+		// I leave it like this for now as I think we need the dynamic shape support of the simplego backend.
 		exec, err := context.NewExec(backend, predCtx, func(ctx *context.Context, sequences, scores *Node) (*Node, *Node, *Node) {
 			// Run model
 			logits := cfg.ModelFn(ctx, sequences)
@@ -681,7 +717,7 @@ func (cfg *Decoder) generateBeamSearchNonCached(
 			return nil, errors.WithMessagef(err, "failed to create beam search exec at step %d", step)
 		}
 
-		outputs, _, err := exec.ExecWithGraph(currentSequences, beamScores)
+		outputs, err := exec.Exec(currentSequences, beamScores)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "beam search step %d failed", step)
 		}
@@ -719,7 +755,7 @@ func (cfg *Decoder) generateBeamSearchNonCached(
 		return nil, errors.WithMessagef(err, "failed to create select exec")
 	}
 
-	selectResults, _, err := selectExec.ExecWithGraph(currentSequences, beamScores)
+	selectResults, err := selectExec.Exec(currentSequences, beamScores)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to select best sequences")
 	}
@@ -752,7 +788,7 @@ func (cfg *Decoder) generateBeamSearchCached(
 		return nil, errors.WithMessagef(err, "failed to create replicate exec")
 	}
 
-	replicatedResults, _, err := replicateExec.ExecWithGraph(prompt)
+	replicatedResults, err := replicateExec.Exec(prompt)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to replicate prompt")
 	}
@@ -769,7 +805,7 @@ func (cfg *Decoder) generateBeamSearchCached(
 		return nil, errors.WithMessagef(err, "failed to create prompt exec")
 	}
 
-	_, _, err = promptExec.ExecWithGraph(replicatedPrompt)
+	_, err = promptExec.Exec(replicatedPrompt)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to process prompt")
 	}
@@ -800,8 +836,9 @@ func (cfg *Decoder) generateBeamSearchCached(
 	for step := 0; step < numSteps; step++ {
 		position := promptLen + step
 
-		// Cached: process single token; beam step needs logits from all beams.
-		// Extract last token from each sequence.
+		// Note: Cannot cache extractExec across decode calls because it would need
+		// to be invalidated when sequences change shape. Creating it per-step is acceptable
+		// since it's a trivial slice operation.
 		extractExec, err := context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, sequences *Node) *Node {
 			// Last token: [batch_beam_size]
 			lastTokens := Slice(sequences, AxisRange(), AxisElem(-1))
@@ -811,14 +848,15 @@ func (cfg *Decoder) generateBeamSearchCached(
 			return nil, errors.WithMessagef(err, "failed to create extract exec")
 		}
 
-		extractResults, _, err := extractExec.ExecWithGraph(currentSequences)
+		extractResults, err := extractExec.Exec(currentSequences)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to extract last tokens")
 		}
 
 		lastTokens := extractResults[0]
 
-		// Generate next token logits using cached model
+		// Note: Cannot cache this exec because position changes each iteration
+		// and is used as a compile-time constant in the graph (passed to IncrementalModelFn)
 		exec, err := context.NewExec(backend, genCtx, func(ctx *context.Context, tokens, scores, sequences *Node) (*Node, *Node, *Node) {
 			// tokens: [batch_beam_size]
 			tokensReshaped := ExpandDims(tokens, -1) // [batch_beam_size, 1]
@@ -841,7 +879,7 @@ func (cfg *Decoder) generateBeamSearchCached(
 			return nil, errors.WithMessagef(err, "failed to create beam step exec")
 		}
 
-		outputs, _, err := exec.ExecWithGraph(lastTokens, beamScores, currentSequences)
+		outputs, err := exec.Exec(lastTokens, beamScores, currentSequences)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "beam search step %d failed", step)
 		}
@@ -879,7 +917,7 @@ func (cfg *Decoder) generateBeamSearchCached(
 		return nil, errors.WithMessagef(err, "failed to create select exec")
 	}
 
-	selectResults, _, err := selectExec.ExecWithGraph(currentSequences, beamScores)
+	selectResults, err := selectExec.Exec(currentSequences, beamScores)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to select best sequences")
 	}
