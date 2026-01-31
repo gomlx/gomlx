@@ -17,7 +17,7 @@ import (
 // TestDecoder groups config default and builder tests.
 func TestDecoder(t *testing.T) {
 	t.Run("Defaults", func(t *testing.T) {
-		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
+		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
 		cfg := New(modelFn)
 		assert.Equal(t, 100, cfg.MaxLength)
 		assert.Equal(t, sample.StrategyGreedy, cfg.Strategy)
@@ -30,7 +30,7 @@ func TestDecoder(t *testing.T) {
 	})
 
 	t.Run("Builders", func(t *testing.T) {
-		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
+		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
 		cfg := New(modelFn).
 			WithMaxLength(50).
 			WithStrategy(sample.StrategyTemperature).
@@ -55,7 +55,7 @@ func TestDecoderSampling(t *testing.T) {
 	t.Run("Greedy", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
+		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
 			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
@@ -81,7 +81,7 @@ func TestDecoderSampling(t *testing.T) {
 	t.Run("Temperature", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
+		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
 			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
@@ -104,7 +104,7 @@ func TestDecoderSampling(t *testing.T) {
 	t.Run("OneDPrompt", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
+		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
 			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
@@ -123,7 +123,7 @@ func TestDecoderSampling(t *testing.T) {
 	t.Run("PromptTooLong", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
+		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
 		cfg := New(modelFn).WithMaxLength(5)
 		prompt := [][]int32{{1, 2, 3, 4, 5, 6, 7, 8}}
 		_, err := cfg.Decode(backend, ctx, prompt)
@@ -136,7 +136,7 @@ func TestDecoderSampling(t *testing.T) {
 func TestBeamSearch(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
+	var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node {
 		batchSize := tokens.Shape().Dimensions[0]
 		seqLen := tokens.Shape().Dimensions[1]
 		g := tokens.Graph()
@@ -156,7 +156,7 @@ func TestBeamSearch(t *testing.T) {
 func TestStreamingNotImplemented(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
+	var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
 	cfg := New(modelFn)
 	prompt := []int32{1, 2, 3}
 	err := cfg.GenerateStreaming(backend, ctx, prompt, func(token int) bool { return true })

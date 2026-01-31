@@ -3,6 +3,8 @@
 package decode
 
 import (
+	"sync"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/simplego"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
@@ -10,6 +12,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/decode/sample"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 )
 
 // Hyperparameter keys for context configuration
@@ -24,22 +27,32 @@ const (
 	ParamStopOnEOS   = "decode_stop_on_eos"
 )
 
-// ModelFn represents a full-sequence model function.
-// Takes a token sequence and returns logits for all positions.
+// IterativeModelFn represents a full-sequence model function,
+// that is used iteratively during decoding, by re-feeding the
+// whole previous state.
+//
+// Only use this if your backend supports dynamic shapes, otherwise
+// this will likely be very slow.
 //
 // Parameters:
-//   - ctx: Context containing model parameters and variables
-//   - tokens: Input token sequence [batch, seqLen]
+//   - ctx: Model context passed along by the Decoder.
+//   - tokens: Input token sequence, shaped [batch, seqLen].
 //
 // Returns:
-//   - logits: Output logits [batch, seqLen, vocabSize]
-type ModelFn func(ctx *context.Context, tokens *Node) *Node
+//   - logits: Output logits per candidate token (vocabSize), shaped [batch, seqLen, vocabSize]
+type IterativeModelFn func(ctx *context.Context, tokens *Node) *Node
 
-// IncrementalModelFn represents an incremental model function with KV caching.
-// Processes new tokens at a specific position, reusing cached key/value projections.
+// IncrementalModelFn represents an incremental model function, which is expected to have
+// some form of caching (stored in the variables in the context).
+//
+// It processes new tokens at a specific position, presumably reusing cached previous results
+// (typically in the form of a "KVCache" or cached key/value projections, stored in the context).
+//
+// Currently, it doesn't support concurrent generation -- it's expected to have only one
+// cache during execution.
 //
 // Parameters:
-//   - ctx: Context containing model parameters and KV cache variables
+//   - ctx: Model context passed along by the Decoder. Likely contains the cache during the execution.
 //   - newTokens: New tokens to process [batch, newLen]
 //   - position: Position in the sequence (for cache indexing)
 //
@@ -49,10 +62,10 @@ type IncrementalModelFn func(ctx *context.Context, newTokens *Node, position int
 
 // Decoder configures and executes autoregressive text generation.
 // Supports multiple sampling strategies (greedy, temperature, top-k, nucleus, beam search)
-// with optional KV caching for efficient incremental generation.
+// and incremeantal models, usually using some form of cache (e.g.: a "KV-cache").
 type Decoder struct {
 	// Model functions (exactly one should be set)
-	ModelFn            ModelFn            // Standard model for non-cached generation
+	ModelFn            IterativeModelFn   // Standard model for non-cached generation
 	IncrementalModelFn IncrementalModelFn // Incremental model for KV-cached generation
 
 	// Generation parameters
@@ -73,6 +86,10 @@ type Decoder struct {
 	promptExec   *context.Exec         // Cached executor for processing initial prompt in incremental generation
 	genExecCache map[int]*context.Exec // Cached executors for each position in incremental generation
 	fullExec     *context.Exec         // Cached executor for non-cached full sequence generation
+
+	// err is a delayed error set during initialization, and returned by Decode.
+	err error
+	mu  sync.Mutex
 }
 
 // New creates a decoder for autoregressive text generation.
@@ -87,16 +104,16 @@ type Decoder struct {
 //
 // Example:
 //
-//	// Non-cached generation
-//	decoder := decode.New(model.FullSequence())
-//
-//	// KV-cached generation
-//	decoder := decode.New(model.Incremental())
-//	decoder.WithStrategy(sample.StrategyTemperature).WithTemperature(0.8)
-func New[M interface{ ModelFn | IncrementalModelFn }](modelFn M) *Decoder {
+//	decoder := decode.New(model.Incremental()).
+//		WithStrategy(sample.StrategyTemperature).WithTemperature(0.8)
+//	output, err := decoder.Decode(prompt)
+func New[M interface {
+	IterativeModelFn | IncrementalModelFn
+}](modelFn M) *Decoder {
 	var decoder *Decoder
 	switch typedModelFn := any(modelFn).(type) {
-	case ModelFn:
+	case IterativeModelFn:
+		klog.Warning("Using Decoder to generate text with interactive model is not yet well supported, and will likely be very slow. Consider using an IncrementalModelFn instead.")
 		decoder = &Decoder{
 			ModelFn: typedModelFn,
 		}
@@ -145,6 +162,12 @@ func New[M interface{ ModelFn | IncrementalModelFn }](modelFn M) *Decoder {
 //	})
 //	decoder.FromContext(ctx)
 func (dec *Decoder) FromContext(ctx *context.Context) *Decoder {
+	dec.mu.Lock()
+	defer dec.mu.Unlock()
+	if dec.promptExec != nil {
+		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return dec
+	}
 	// Optional parameters with defaults
 	dec.MaxLength = context.GetParamOr(ctx, ParamMaxLength, dec.MaxLength)
 	strategyName := context.GetParamOr(ctx, ParamStrategy, "")
@@ -152,7 +175,8 @@ func (dec *Decoder) FromContext(ctx *context.Context) *Decoder {
 		var err error
 		dec.Strategy, err = sample.StrategyString(strategyName)
 		if err != nil {
-			panic(errors.Wrapf(err, "failed to parse sampling strategy %q, valid values are %v", strategyName, sample.StrategyStrings()))
+			dec.err = errors.Wrapf(err, "failed to parse sampling strategy %q, valid values are %v", strategyName, sample.StrategyStrings())
+			return dec
 		}
 	}
 	dec.Temperature = context.GetParamOr(ctx, ParamTemperature, dec.Temperature)
@@ -161,7 +185,6 @@ func (dec *Decoder) FromContext(ctx *context.Context) *Decoder {
 	dec.BeamSize = context.GetParamOr(ctx, ParamBeamSize, dec.BeamSize)
 	dec.EosTokenId = context.GetParamOr(ctx, ParamEosTokenId, dec.EosTokenId)
 	dec.StopOnEOS = context.GetParamOr(ctx, ParamStopOnEOS, dec.StopOnEOS)
-
 	return dec
 }
 
@@ -189,6 +212,12 @@ func (dec *Decoder) initializePromptExec(backend backends.Backend, ctx *context.
 
 // WithMaxLength sets the maximum generation length (including prompt).
 func (dec *Decoder) WithMaxLength(maxLength int) *Decoder {
+	dec.mu.Lock()
+	defer dec.mu.Unlock()
+	if dec.promptExec != nil {
+		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return dec
+	}
 	dec.MaxLength = maxLength
 	return dec
 }
@@ -196,6 +225,12 @@ func (dec *Decoder) WithMaxLength(maxLength int) *Decoder {
 // WithStrategy sets the sampling strategy.
 // The default strategy is sample.StrategyGreedy, which always take the immediately most likely next token.
 func (dec *Decoder) WithStrategy(strategy sample.Strategy) *Decoder {
+	dec.mu.Lock()
+	defer dec.mu.Unlock()
+	if dec.promptExec != nil {
+		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return dec
+	}
 	dec.Strategy = strategy
 	return dec
 }
@@ -206,6 +241,12 @@ func (dec *Decoder) WithStrategy(strategy sample.Strategy) *Decoder {
 // You have to also set the strategy to sample.StrategyTemperature or sample.StrategyTopK or
 // sample.StrategyTopP to use this parameter
 func (dec *Decoder) WithTemperature(temperature float32) *Decoder {
+	dec.mu.Lock()
+	defer dec.mu.Unlock()
+	if dec.promptExec != nil {
+		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return dec
+	}
 	dec.Temperature = temperature
 	return dec
 }
@@ -213,6 +254,12 @@ func (dec *Decoder) WithTemperature(temperature float32) *Decoder {
 // WithTopK sets k for top-k sampling.
 // Only the k most likely tokens are considered at each step.
 func (dec *Decoder) WithTopK(topK int) *Decoder {
+	dec.mu.Lock()
+	defer dec.mu.Unlock()
+	if dec.promptExec != nil {
+		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return dec
+	}
 	dec.TopK = topK
 	return dec
 }
@@ -220,6 +267,12 @@ func (dec *Decoder) WithTopK(topK int) *Decoder {
 // WithTopP sets p for nucleus sampling.
 // Tokens with cumulative probability up to p are considered.
 func (dec *Decoder) WithTopP(topP float32) *Decoder {
+	dec.mu.Lock()
+	defer dec.mu.Unlock()
+	if dec.promptExec != nil {
+		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return dec
+	}
 	dec.TopP = topP
 	return dec
 }
@@ -227,6 +280,12 @@ func (dec *Decoder) WithTopP(topP float32) *Decoder {
 // WithBeamSize sets the beam size for beam search.
 // Higher values explore more candidates but are slower.
 func (dec *Decoder) WithBeamSize(beamSize int) *Decoder {
+	dec.mu.Lock()
+	defer dec.mu.Unlock()
+	if dec.promptExec != nil {
+		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return dec
+	}
 	dec.BeamSize = beamSize
 	return dec
 }
@@ -234,6 +293,12 @@ func (dec *Decoder) WithBeamSize(beamSize int) *Decoder {
 // WithEOS sets the end-of-sequence token ID and enables early stopping.
 // Generation stops when this token is produced.
 func (dec *Decoder) WithEOS(eosTokenId int) *Decoder {
+	dec.mu.Lock()
+	defer dec.mu.Unlock()
+	if dec.promptExec != nil {
+		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return dec
+	}
 	dec.EosTokenId = eosTokenId
 	dec.StopOnEOS = true
 	return dec
@@ -247,6 +312,9 @@ func (dec *Decoder) isCached() bool {
 // validate checks that the decoder configuration is valid.
 // Returns an error if required fields are missing or invalid.
 func (dec *Decoder) validate() error {
+	if dec.err != nil {
+		return errors.WithMessagef(dec.err, "Decoder failed during configuration")
+	}
 	// Exactly one model function must be set
 	if dec.ModelFn != nil && dec.IncrementalModelFn != nil {
 		return errors.Errorf("cannot set both ModelFn and IncrementalModelFn")
@@ -279,9 +347,12 @@ func (dec *Decoder) Decode(
 	ctx *context.Context,
 	prompt any,
 ) (*tensors.Tensor, error) {
+	dec.mu.Lock()
+	defer dec.mu.Unlock()
+
 	// Validate configuration
 	if err := dec.validate(); err != nil {
-		return nil, errors.WithMessagef(err, "invalid generation config")
+		return nil, errors.WithMessagef(err, "invalid Decoder config")
 	}
 
 	// Initialize cached executors for incremental generation
@@ -423,7 +494,7 @@ func (dec *Decoder) generateSamplingFull(
 		}
 	}
 
-	for step := 0; step < numTokensToGenerate; step++ {
+	for step := range numTokensToGenerate {
 		// Build current sequence tensor from accumulated tokens
 		currentSeq := tensors.FromValue(outputTokens)
 
@@ -954,5 +1025,7 @@ func (dec *Decoder) GenerateStreaming(
 	prompt any,
 	callback func(token int) bool,
 ) error {
+	dec.mu.Lock()
+	defer dec.mu.Unlock()
 	return errors.Errorf("streaming generation not yet implemented")
 }

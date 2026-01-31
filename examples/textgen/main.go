@@ -257,7 +257,7 @@ func generateText(backend backends.Backend, ctx *context.Context, prompt string)
 		promptTokens = []int{32}
 	}
 
-	var modelFn decode.ModelFn = func(genCtx *context.Context, tokens *Node) *Node {
+	var modelFn decode.IterativeModelFn = func(genCtx *context.Context, tokens *Node) *Node {
 		outputs := simpleTransformerModel(genCtx, []*Node{tokens})
 		return outputs[0]
 	}

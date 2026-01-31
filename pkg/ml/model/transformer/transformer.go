@@ -202,7 +202,7 @@ func (m *Model) WithBias(use bool) *Model {
 }
 
 // ForTraining returns a model function for training (full-sequence forward, no KV cache).
-func (m *Model) ForTraining() decode.ModelFn {
+func (m *Model) ForTraining() decode.IterativeModelFn {
 	return func(ctx *context.Context, tokens *Node) *Node {
 		return m.forwardFull(ctx, tokens, false, 0)
 	}
