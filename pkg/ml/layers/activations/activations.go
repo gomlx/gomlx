@@ -10,6 +10,7 @@ package activations
 import (
 	"math"
 
+	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -45,6 +46,25 @@ const (
 	TypeGelu
 	TypeGeluApprox
 )
+
+// ToBackend converts an activations.Type to the corresponding backends.ActivationType.
+// Unsupported activation types map to backends.ActivationNone.
+func (t Type) ToBackend() backends.ActivationType {
+	switch t {
+	case TypeNone:
+		return backends.ActivationNone
+	case TypeGelu, TypeGeluApprox:
+		return backends.ActivationGelu
+	case TypeRelu:
+		return backends.ActivationRelu
+	case TypeSwish, TypeSilu:
+		return backends.ActivationSilu
+	case TypeTanh:
+		return backends.ActivationTanh
+	default:
+		return backends.ActivationNone
+	}
+}
 
 //go:generate enumer -type=Type -trimprefix=Type -transform=snake -values -text -json -yaml activations.go
 

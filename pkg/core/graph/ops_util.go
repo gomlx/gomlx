@@ -3,7 +3,6 @@
 package graph
 
 import (
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -361,23 +360,27 @@ func Softmax(logits *Node, axes ...int) *Node {
 		axes = []int{-1}
 	}
 
-	// Try native softmax for the single-axis case.
-	if len(axes) == 1 {
-		if logits.Graph().Backend().Capabilities().Operations[backends.OpTypeFusedSoftmax] {
-			axis := axes[0]
-			if axis < 0 {
-				axis += logits.Rank()
-			}
-			return FusedSoftmax(logits, axis)
-		}
+	decomposed := func() *Node {
+		normalizingMax := StopGradient(ReduceAndKeep(logits, ReduceMax, axes...))
+		normalizedLogits := Sub(logits, normalizingMax)
+		numerator := Exp(normalizedLogits)
+		denominator := ReduceAndKeep(numerator, ReduceSum, axes...)
+		return Div(numerator, denominator)
 	}
 
-	// Fall back to decomposition.
-	normalizingMax := StopGradient(ReduceAndKeep(logits, ReduceMax, axes...))
-	normalizedLogits := Sub(logits, normalizingMax)
-	numerator := Exp(normalizedLogits)
-	denominator := ReduceAndKeep(numerator, ReduceSum, axes...)
-	return Div(numerator, denominator)
+	// Try fused softmax for the single-axis case.
+	if len(axes) == 1 {
+		axis := axes[0]
+		if axis < 0 {
+			axis += logits.Rank()
+		}
+		return FusedOpCaller(
+			func() *Node { return FusedSoftmax(logits, axis) },
+			decomposed,
+		)
+	}
+
+	return decomposed()
 }
 
 // MaskedSoftmax computes softmax activations. It's the equivalent to

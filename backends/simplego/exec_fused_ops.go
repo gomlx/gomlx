@@ -50,7 +50,7 @@ func execFusedSoftmax(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 	case dtypes.Float64:
 		softmax(input.flat.([]float64), output.flat.([]float64), axis, node.shape)
 	default:
-		return nil, errors.Errorf("FusedSoftmax: unsupported dtype %s", input.shape.DType)
+		return nil, errors.Wrapf(backends.ErrUnsupportedDType, "FusedSoftmax: dtype %s", input.shape.DType)
 	}
 	return output, nil
 }
@@ -99,7 +99,7 @@ func execFusedGelu(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 	case dtypes.Float64:
 		gelu(input.flat.([]float64), output.flat.([]float64))
 	default:
-		return nil, errors.Errorf("FusedGelu: unsupported dtype %s", input.shape.DType)
+		return nil, errors.Wrapf(backends.ErrUnsupportedDType, "FusedGelu: dtype %s", input.shape.DType)
 	}
 	return output, nil
 }
@@ -129,35 +129,29 @@ func execFusedLayerNorm(backend *Backend, node *Node, inputs []*Buffer, inputsOw
 
 	switch input.shape.DType {
 	case dtypes.Float32:
-		layerNormFloat32(input, output, gamma, beta, data.axes, data.epsilon)
+		layerNorm[float32](input, output, gamma, beta, data.axes, data.epsilon)
 	case dtypes.Float64:
-		layerNormFloat64(input, output, gamma, beta, data.axes, data.epsilon)
+		layerNorm[float64](input, output, gamma, beta, data.axes, data.epsilon)
 	default:
-		return nil, errors.Errorf("FusedLayerNorm: unsupported dtype %s", input.shape.DType)
+		return nil, errors.Wrapf(backends.ErrUnsupportedDType, "FusedLayerNorm: dtype %s", input.shape.DType)
 	}
 	return output, nil
 }
 
-func layerNormFloat32(input, output, gamma, beta *Buffer, axes []int, epsilon float64) {
-	inData := input.flat.([]float32)
-	outData := output.flat.([]float32)
+// layerNorm dispatches to the trailing-axes fast path or the general case.
+func layerNorm[T float32 | float64](input, output, gamma, beta *Buffer, axes []int, epsilon float64) {
+	inData := input.flat.([]T)
+	outData := output.flat.([]T)
 	dims := input.shape.Dimensions
+	rank := len(dims)
 
-	// Compute the size of the normalization region (product of axes dimensions).
 	normSize := 1
 	for _, a := range axes {
 		normSize *= dims[a]
 	}
-	normSizeF := float32(normSize)
-	totalSize := input.shape.Size()
 
-	// Compute the outer size (number of independent normalizations).
-	outerSize := totalSize / normSize
-
-	// Compute stride pattern: for each outer index, which elements belong together.
-	// For the common case of normalizing over the last N axes, we can use a fast path.
+	// Check for trailing axes fast path.
 	isTrailingAxes := true
-	rank := len(dims)
 	for i, a := range axes {
 		if a != rank-len(axes)+i {
 			isTrailingAxes = false
@@ -165,386 +159,116 @@ func layerNormFloat32(input, output, gamma, beta *Buffer, axes []int, epsilon fl
 		}
 	}
 
-	var gammaData, betaData []float32
+	var gammaData, betaData []T
 	if gamma != nil {
-		gammaData = gamma.flat.([]float32)
+		gammaData = gamma.flat.([]T)
 	}
 	if beta != nil {
-		betaData = beta.flat.([]float32)
+		betaData = beta.flat.([]T)
 	}
 
 	if isTrailingAxes {
-		// Fast path: normalizing over trailing axes.
-		// Each contiguous block of normSize elements is one normalization group.
-		for outer := 0; outer < outerSize; outer++ {
-			base := outer * normSize
-
-			// Compute mean.
-			var sum float32
-			for i := 0; i < normSize; i++ {
-				sum += inData[base+i]
-			}
-			mean := sum / normSizeF
-
-			// Compute variance.
-			var varSum float32
-			for i := 0; i < normSize; i++ {
-				diff := inData[base+i] - mean
-				varSum += diff * diff
-			}
-			variance := varSum / normSizeF
-			invStd := float32(1.0 / math.Sqrt(float64(variance)+epsilon))
-
-			// Normalize and apply scale/offset.
-			for i := 0; i < normSize; i++ {
-				normalized := (inData[base+i] - mean) * invStd
-				if gammaData != nil {
-					normalized *= gammaData[i]
-				}
-				if betaData != nil {
-					normalized += betaData[i]
-				}
-				outData[base+i] = normalized
-			}
-		}
+		trailingAxesLayerNorm(inData, outData, gammaData, betaData, normSize, epsilon)
 	} else {
-		// General case: copy input, normalize element-wise using index decomposition.
-		// This is slower but handles arbitrary axis combinations.
-		copy(outData, inData)
+		arbitraryAxesLayerNorm(inData, outData, gammaData, betaData, dims, axes, normSize, epsilon)
+	}
+}
 
-		// For the general case, we need to compute mean/variance over the specified axes.
-		// Use the same approach as the fast path but with strided access.
-		// For simplicity, fall back to computing per-element with index decomposition.
-		// This is a reference implementation; the fast path above handles the common case.
-		eps32 := float32(epsilon)
+// trailingAxesLayerNorm handles the common case where normalization axes are the last N axes.
+// Each contiguous block of normSize elements is one normalization group.
+func trailingAxesLayerNorm[T float32 | float64](inData, outData, gammaData, betaData []T, normSize int, epsilon float64) {
+	normSizeF := T(normSize)
+	outerSize := len(inData) / normSize
 
-		// Compute strides.
-		strides := make([]int, rank)
-		strides[rank-1] = 1
-		for i := rank - 2; i >= 0; i-- {
-			strides[i] = strides[i+1] * dims[i+1]
+	for outer := 0; outer < outerSize; outer++ {
+		base := outer * normSize
+
+		// Compute mean.
+		var sum T
+		for i := 0; i < normSize; i++ {
+			sum += inData[base+i]
 		}
+		mean := sum / normSizeF
 
-		// Build set of norm axes for fast lookup.
-		isNormAxis := make([]bool, rank)
-		for _, a := range axes {
-			isNormAxis[a] = true
+		// Compute variance.
+		var varSum T
+		for i := 0; i < normSize; i++ {
+			diff := inData[base+i] - mean
+			varSum += diff * diff
 		}
+		variance := varSum / normSizeF
+		invStd := T(1.0 / math.Sqrt(float64(variance)+epsilon))
 
-		// For each outer group, compute mean and variance across the norm axes.
-		// An "outer group" is identified by fixing the non-norm axes.
-		outerDims := make([]int, 0, rank-len(axes))
-		outerStrides := make([]int, 0, rank-len(axes))
-		normDims := make([]int, 0, len(axes))
-		normStrides := make([]int, 0, len(axes))
-		for i := 0; i < rank; i++ {
-			if isNormAxis[i] {
-				normDims = append(normDims, dims[i])
-				normStrides = append(normStrides, strides[i])
-			} else {
-				outerDims = append(outerDims, dims[i])
-				outerStrides = append(outerStrides, strides[i])
+		// Normalize and apply scale/offset.
+		for i := 0; i < normSize; i++ {
+			normalized := (inData[base+i] - mean) * invStd
+			if gammaData != nil {
+				normalized *= gammaData[i]
 			}
-		}
-
-		// Iterate over outer indices.
-		outerIdx := make([]int, len(outerDims))
-		for {
-			// Compute base index for this outer group.
-			outerBase := 0
-			for i, idx := range outerIdx {
-				outerBase += idx * outerStrides[i]
+			if betaData != nil {
+				normalized += betaData[i]
 			}
-
-			// Compute mean over norm axes.
-			var sum float32
-			normIdx := make([]int, len(normDims))
-			for {
-				offset := 0
-				for i, idx := range normIdx {
-					offset += idx * normStrides[i]
-				}
-				sum += inData[outerBase+offset]
-
-				// Increment normIdx.
-				carry := true
-				for i := len(normIdx) - 1; i >= 0 && carry; i-- {
-					normIdx[i]++
-					if normIdx[i] < normDims[i] {
-						carry = false
-					} else {
-						normIdx[i] = 0
-					}
-				}
-				if carry {
-					break
-				}
-			}
-			mean := sum / normSizeF
-
-			// Compute variance.
-			var varSum float32
-			normIdx = make([]int, len(normDims))
-			for {
-				offset := 0
-				for i, idx := range normIdx {
-					offset += idx * normStrides[i]
-				}
-				diff := inData[outerBase+offset] - mean
-				varSum += diff * diff
-
-				carry := true
-				for i := len(normIdx) - 1; i >= 0 && carry; i-- {
-					normIdx[i]++
-					if normIdx[i] < normDims[i] {
-						carry = false
-					} else {
-						normIdx[i] = 0
-					}
-				}
-				if carry {
-					break
-				}
-			}
-			variance := varSum / normSizeF
-			invStd := float32(1.0 / math.Sqrt(float64(variance+eps32)))
-
-			// Normalize.
-			normIdx = make([]int, len(normDims))
-			normFlatIdx := 0
-			for {
-				offset := 0
-				for i, idx := range normIdx {
-					offset += idx * normStrides[i]
-				}
-				normalized := (inData[outerBase+offset] - mean) * invStd
-				if gammaData != nil {
-					normalized *= gammaData[normFlatIdx]
-				}
-				if betaData != nil {
-					normalized += betaData[normFlatIdx]
-				}
-				outData[outerBase+offset] = normalized
-
-				normFlatIdx++
-				carry := true
-				for i := len(normIdx) - 1; i >= 0 && carry; i-- {
-					normIdx[i]++
-					if normIdx[i] < normDims[i] {
-						carry = false
-					} else {
-						normIdx[i] = 0
-					}
-				}
-				if carry {
-					break
-				}
-			}
-
-			// Increment outerIdx.
-			carry := true
-			for i := len(outerIdx) - 1; i >= 0 && carry; i-- {
-				outerIdx[i]++
-				if outerIdx[i] < outerDims[i] {
-					carry = false
-				} else {
-					outerIdx[i] = 0
-				}
-			}
-			if carry {
-				break
-			}
+			outData[base+i] = normalized
 		}
 	}
 }
 
-func layerNormFloat64(input, output, gamma, beta *Buffer, axes []int, epsilon float64) {
-	inData := input.flat.([]float64)
-	outData := output.flat.([]float64)
-	dims := input.shape.Dimensions
-
-	normSize := 1
-	for _, a := range axes {
-		normSize *= dims[a]
-	}
-	normSizeF := float64(normSize)
-
-	// Check for trailing axes fast path.
-	isTrailingAxes := true
+// arbitraryAxesLayerNorm handles normalization over arbitrary (non-trailing) axes
+// using Shape.IterOnAxes for index iteration.
+func arbitraryAxesLayerNorm[T float32 | float64](inData, outData, gammaData, betaData []T, dims, axes []int, normSize int, epsilon float64) {
+	normSizeF := T(normSize)
 	rank := len(dims)
-	for i, a := range axes {
-		if a != rank-len(axes)+i {
-			isTrailingAxes = false
-			break
+
+	// Build set of norm axes for fast lookup.
+	isNormAxis := make([]bool, rank)
+	for _, a := range axes {
+		isNormAxis[a] = true
+	}
+
+	// Build outer axes (those not in normalization set).
+	outerAxes := make([]int, 0, rank-len(axes))
+	for i := 0; i < rank; i++ {
+		if !isNormAxis[i] {
+			outerAxes = append(outerAxes, i)
 		}
 	}
 
-	var gammaData, betaData []float64
-	if gamma != nil {
-		gammaData = gamma.flat.([]float64)
-	}
-	if beta != nil {
-		betaData = beta.flat.([]float64)
-	}
+	// Create shape for iteration. DType is irrelevant for IterOnAxes.
+	shape := shapes.Make(dtypes.Float32, dims...)
+	strides := shape.Strides()
+	indices := make([]int, rank)
 
-	if isTrailingAxes {
-		totalSize := input.shape.Size()
-		outerSize := totalSize / normSize
-		for outer := 0; outer < outerSize; outer++ {
-			base := outer * normSize
-
-			var sum float64
-			for i := 0; i < normSize; i++ {
-				sum += inData[base+i]
-			}
-			mean := sum / normSizeF
-
-			var varSum float64
-			for i := 0; i < normSize; i++ {
-				diff := inData[base+i] - mean
-				varSum += diff * diff
-			}
-			variance := varSum / normSizeF
-			invStd := 1.0 / math.Sqrt(variance+epsilon)
-
-			for i := 0; i < normSize; i++ {
-				normalized := (inData[base+i] - mean) * invStd
-				if gammaData != nil {
-					normalized *= gammaData[i]
-				}
-				if betaData != nil {
-					normalized += betaData[i]
-				}
-				outData[base+i] = normalized
-			}
+	for outerFlatIdx := range shape.IterOnAxes(outerAxes, strides, indices) {
+		// Compute mean over norm axes.
+		var sum T
+		for flatIdx := range shape.IterOnAxes(axes, strides, indices) {
+			sum += inData[flatIdx]
 		}
-	} else {
-		// General case: similar to float32 version above.
-		copy(outData, inData)
+		mean := sum / normSizeF
 
-		strides := make([]int, rank)
-		strides[rank-1] = 1
-		for i := rank - 2; i >= 0; i-- {
-			strides[i] = strides[i+1] * dims[i+1]
+		// Compute variance.
+		var varSum T
+		for flatIdx := range shape.IterOnAxes(axes, strides, indices) {
+			diff := inData[flatIdx] - mean
+			varSum += diff * diff
 		}
+		variance := varSum / normSizeF
+		invStd := T(1.0 / math.Sqrt(float64(variance)+epsilon))
 
-		isNormAxis := make([]bool, rank)
-		for _, a := range axes {
-			isNormAxis[a] = true
+		// Normalize and apply scale/offset.
+		normFlatIdx := 0
+		for flatIdx := range shape.IterOnAxes(axes, strides, indices) {
+			normalized := (inData[flatIdx] - mean) * invStd
+			if gammaData != nil {
+				normalized *= gammaData[normFlatIdx]
+			}
+			if betaData != nil {
+				normalized += betaData[normFlatIdx]
+			}
+			outData[flatIdx] = normalized
+			normFlatIdx++
 		}
-
-		outerDims := make([]int, 0, rank-len(axes))
-		outerStrides := make([]int, 0, rank-len(axes))
-		normDims := make([]int, 0, len(axes))
-		normStrides := make([]int, 0, len(axes))
-		for i := 0; i < rank; i++ {
-			if isNormAxis[i] {
-				normDims = append(normDims, dims[i])
-				normStrides = append(normStrides, strides[i])
-			} else {
-				outerDims = append(outerDims, dims[i])
-				outerStrides = append(outerStrides, strides[i])
-			}
-		}
-
-		outerIdx := make([]int, len(outerDims))
-		for {
-			outerBase := 0
-			for i, idx := range outerIdx {
-				outerBase += idx * outerStrides[i]
-			}
-
-			var sum float64
-			normIdx := make([]int, len(normDims))
-			for {
-				offset := 0
-				for i, idx := range normIdx {
-					offset += idx * normStrides[i]
-				}
-				sum += inData[outerBase+offset]
-				carry := true
-				for i := len(normIdx) - 1; i >= 0 && carry; i-- {
-					normIdx[i]++
-					if normIdx[i] < normDims[i] {
-						carry = false
-					} else {
-						normIdx[i] = 0
-					}
-				}
-				if carry {
-					break
-				}
-			}
-			mean := sum / normSizeF
-
-			var varSum float64
-			normIdx = make([]int, len(normDims))
-			for {
-				offset := 0
-				for i, idx := range normIdx {
-					offset += idx * normStrides[i]
-				}
-				diff := inData[outerBase+offset] - mean
-				varSum += diff * diff
-				carry := true
-				for i := len(normIdx) - 1; i >= 0 && carry; i-- {
-					normIdx[i]++
-					if normIdx[i] < normDims[i] {
-						carry = false
-					} else {
-						normIdx[i] = 0
-					}
-				}
-				if carry {
-					break
-				}
-			}
-			variance := varSum / normSizeF
-			invStd := 1.0 / math.Sqrt(variance+epsilon)
-
-			normIdx = make([]int, len(normDims))
-			normFlatIdx := 0
-			for {
-				offset := 0
-				for i, idx := range normIdx {
-					offset += idx * normStrides[i]
-				}
-				normalized := (inData[outerBase+offset] - mean) * invStd
-				if gammaData != nil {
-					normalized *= gammaData[normFlatIdx]
-				}
-				if betaData != nil {
-					normalized += betaData[normFlatIdx]
-				}
-				outData[outerBase+offset] = normalized
-				normFlatIdx++
-				carry := true
-				for i := len(normIdx) - 1; i >= 0 && carry; i-- {
-					normIdx[i]++
-					if normIdx[i] < normDims[i] {
-						carry = false
-					} else {
-						normIdx[i] = 0
-					}
-				}
-				if carry {
-					break
-				}
-			}
-
-			carry := true
-			for i := len(outerIdx) - 1; i >= 0 && carry; i-- {
-				outerIdx[i]++
-				if outerIdx[i] < outerDims[i] {
-					carry = false
-				} else {
-					outerIdx[i] = 0
-				}
-			}
-			if carry {
-				break
-			}
-		}
+		_ = outerFlatIdx
 	}
 }
 
@@ -571,7 +295,7 @@ func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 		dense(backend, x, weight, bias, output)
 		applyActivation(output.flat.([]float64), data.activation)
 	default:
-		return nil, errors.Errorf("FusedDense: unsupported dtype %s", x.shape.DType)
+		return nil, errors.Wrapf(backends.ErrUnsupportedDType, "FusedDense: dtype %s", x.shape.DType)
 	}
 	return output, nil
 }
@@ -618,14 +342,11 @@ func broadcastBias(bias, output *Buffer, batchSize, outFeatures int) {
 }
 
 func applyActivation[T float32 | float64](data []T, activation backends.ActivationType) {
-	sqrt2Inv := T(1.0 / math.Sqrt(2.0))
 	switch activation {
 	case backends.ActivationNone:
 		// No-op.
 	case backends.ActivationGelu:
-		for i, x := range data {
-			data[i] = x * 0.5 * (1.0 + T(math.Erf(float64(x*sqrt2Inv))))
-		}
+		gelu(data, data) // in-place
 	case backends.ActivationRelu:
 		for i, x := range data {
 			if x < 0 {

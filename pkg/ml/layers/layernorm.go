@@ -187,66 +187,47 @@ func (builder *LayerNormBuilder) Done() *Node {
 	mask := builder.mask
 	g := x.Graph()
 
-	// Fast path: dispatch to nn.LayerNorm when no special features are needed
-	// (no mask, scale normalization enabled, no dtype conversion).
-	if mask == nil && builder.scaleNormalization && builder.normalizationDType == x.DType() {
-		normShape := shapes.Make(x.DType(), xslices.Map(builder.normalizingAxes, func(axis int) int {
-			return x.Shape().Dimensions[axis]
-		})...)
-		broadcastNormShape := x.Shape().Clone()
-		for ii := range broadcastNormShape.Dimensions {
-			broadcastNormShape.Dimensions[ii] = 1
-		}
-		for _, axis := range builder.normalizingAxes {
-			broadcastNormShape.Dimensions[axis] = x.Shape().Dimensions[axis]
-		}
-
-		var gamma, beta *Node
-		if builder.gain {
-			gainVar := ctx.WithInitializer(initializers.One).VariableWithShape("gain", normShape).SetTrainable(true)
-			if builder.regularizer != nil {
-				builder.regularizer(ctx, g, gainVar)
-			}
-			gamma = Reshape(gainVar.ValueGraph(g), broadcastNormShape.Dimensions...)
-		}
-		if builder.center {
-			offsetVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("offset", normShape).SetTrainable(true)
-			beta = Reshape(offsetVar.ValueGraph(g), broadcastNormShape.Dimensions...)
-		}
-		return nn.LayerNorm(x, builder.normalizingAxes, builder.epsilon, gamma, beta, nil)
-	}
-
-	// LearnedGain and offset to be applied to the normalized value.
-	var gain, offset *Node
+	// Compute gamma/beta variable shapes.
 	normShape := shapes.Make(x.DType(), xslices.Map(builder.normalizingAxes, func(axis int) int {
 		return x.Shape().Dimensions[axis]
 	})...)
-	broadcastNormShape := x.Shape().Clone() // the shape `normShape` will need to be reshaped to be combined with `x`.
+	broadcastNormShape := x.Shape().Clone()
 	for ii := range broadcastNormShape.Dimensions {
 		broadcastNormShape.Dimensions[ii] = 1
 	}
 	for _, axis := range builder.normalizingAxes {
-		broadcastNormShape.Dimensions[axis] = x.Shape().Dimensions[axis] // Same value for the feature axes we are normalizing over.
+		broadcastNormShape.Dimensions[axis] = x.Shape().Dimensions[axis]
 	}
-	var gainVar *context.Variable
+
+	// Create gamma/beta variables.
+	var gamma, beta *Node
 	if builder.gain {
-		gainVar = ctx.WithInitializer(initializers.One).VariableWithShape("gain", normShape).SetTrainable(true)
+		gainVar := ctx.WithInitializer(initializers.One).VariableWithShape("gain", normShape).SetTrainable(true)
 		if builder.regularizer != nil {
-			builder.regularizer(ctx, g, gainVar) // Apply regularizer.
+			builder.regularizer(ctx, g, gainVar)
 		}
-		gain = Reshape(gainVar.ValueGraph(g), broadcastNormShape.Dimensions...)
-	} else {
-		gain = Ones(g, broadcastNormShape)
+		gamma = Reshape(gainVar.ValueGraph(g), broadcastNormShape.Dimensions...)
 	}
 	if builder.center {
 		offsetVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("offset", normShape).SetTrainable(true)
-		offset = Reshape(offsetVar.ValueGraph(g), broadcastNormShape.Dimensions...)
-	} else {
-		offset = Zeros(g, broadcastNormShape)
+		beta = Reshape(offsetVar.ValueGraph(g), broadcastNormShape.Dimensions...)
 	}
 
-	// Calculate mean and variance over normalizingAxes and normalize using configured normalizationDType
-	// Notice: ConvertDType is a no-op if the dtype is not changed.
+	if builder.scaleNormalization {
+		// Convert to normalization dtype if needed (ConvertDType is a no-op if same dtype).
+		convertedX := ConvertDType(x, builder.normalizationDType)
+		var convertedGamma, convertedBeta *Node
+		if gamma != nil {
+			convertedGamma = ConvertDType(gamma, builder.normalizationDType)
+		}
+		if beta != nil {
+			convertedBeta = ConvertDType(beta, builder.normalizationDType)
+		}
+		result := nn.LayerNorm(convertedX, builder.normalizingAxes, builder.epsilon, convertedGamma, convertedBeta, mask)
+		return ConvertDType(result, x.DType())
+	}
+
+	// Without scale normalization: only center by subtracting the mean.
 	var mean *Node
 	convertedX := ConvertDType(x, builder.normalizationDType)
 	if mask == nil {
@@ -258,25 +239,12 @@ func (builder *LayerNormBuilder) Done() *Node {
 	if mask != nil {
 		normalized = Where(mask, normalized, ZerosLike(normalized))
 	}
-	if builder.scaleNormalization {
-		var variance *Node
-		if mask == nil {
-			variance = ReduceAndKeep(Square(normalized), ReduceMean, builder.normalizingAxes...)
-		} else {
-			variance = MaskedReduceAndKeep(Square(normalized), mask, MaskedReduceMean, builder.normalizingAxes...)
-		}
-		epsilon := ConstAs(convertedX, builder.epsilon)
-		normalized = Div(normalized, Sqrt(Add(variance, epsilon)))
+	normalized = ConvertDType(normalized, x.DType())
+	if gamma != nil {
+		normalized = Mul(normalized, gamma)
 	}
-	normalized = ConvertDType(normalized, x.DType()) // Convert back to the input's DType.
-
-	// Adjust if using learned offset/gain factors.
-	if builder.gain {
-		normalized = Mul(normalized, gain)
+	if beta != nil {
+		normalized = Add(normalized, beta)
 	}
-	if builder.center {
-		normalized = Add(normalized, offset)
-	}
-
 	return normalized
 }

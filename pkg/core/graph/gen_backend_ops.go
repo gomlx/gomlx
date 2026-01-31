@@ -13,6 +13,14 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
+// strNillableNode formats a nillable *Node for display.
+func strNillableNode(n *Node) string {
+	if n == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("[#%d]", n.Id())
+}
+
 type NodeType int
 
 const (
@@ -1813,25 +1821,13 @@ func (ni *nodeInputsFusedDense) String() string {
 		ni.Type(),
 		ni.x.Id(),
 		ni.weight.Id(),
-		func() string {
-			if ni.bias != nil {
-				return fmt.Sprintf("[#%d]", ni.bias.Id())
-			}
-			return "nil"
-		}(),
+		strNillableNode(ni.bias),
 		ni.activation,
 	)
 }
 
-// FusedDense performs fused matmul + optional bias + optional activation:
-//
-//	y = activation(x @ W + bias)
-//
-// x: [batch..., in_features], weight: [in_features, out_features...],
-// bias: [out_features...] (nil-able).
-// Contracts x's last axis with weight's first axis.
-// activation specifies the activation function to apply after the matmul+bias.
-// Use ActivationNone for no activation.
+// FusedDense is a low-level backend fused op wrapper.
+// Internal: prefer graph.Softmax, nn.Dense, nn.LayerNorm, or activations.Apply which handle fallback and gradients.
 func FusedDense(x *Node, weight *Node, bias *Node, activation backends.ActivationType) (
 	node *Node) {
 	inputNodes := []*Node{x, weight}
@@ -1884,9 +1880,8 @@ func (ni *nodeInputsFusedGelu) String() string {
 	)
 }
 
-// FusedGelu computes Gaussian Error Linear Unit activation.
-// If exact is true, the exact GELU (using erf) is computed;
-// otherwise the tanh approximation is used.
+// FusedGelu is a low-level backend fused op wrapper.
+// Internal: prefer graph.Softmax, nn.Dense, nn.LayerNorm, or activations.Apply which handle fallback and gradients.
 func FusedGelu(x *Node, exact bool) (
 	node *Node) {
 	inputNodes := []*Node{x}
@@ -1931,24 +1926,13 @@ func (ni *nodeInputsFusedLayerNorm) String() string {
 		ni.x.Id(),
 		ni.axes,
 		ni.epsilon,
-		func() string {
-			if ni.gamma != nil {
-				return fmt.Sprintf("[#%d]", ni.gamma.Id())
-			}
-			return "nil"
-		}(),
-		func() string {
-			if ni.beta != nil {
-				return fmt.Sprintf("[#%d]", ni.beta.Id())
-			}
-			return "nil"
-		}(),
+		strNillableNode(ni.gamma),
+		strNillableNode(ni.beta),
 	)
 }
 
-// FusedLayerNorm applies layer normalization over specified axes.
-// gamma and beta can be nil if no learned scale/offset.
-// epsilon: numerical stability constant (typically 1e-5).
+// FusedLayerNorm is a low-level backend fused op wrapper.
+// Internal: prefer graph.Softmax, nn.Dense, nn.LayerNorm, or activations.Apply which handle fallback and gradients.
 func FusedLayerNorm(x *Node, axes []int, epsilon float64, gamma *Node, beta *Node) (
 	node *Node) {
 	inputNodes := []*Node{x}
@@ -2009,11 +1993,8 @@ func (ni *nodeInputsFusedSoftmax) String() string {
 	)
 }
 
-// FusedSoftmax computes softmax along the specified axis.
-//
-// Note: unlike the generic softmax in GoMLX's graph package, the fused
-// softmax only accepts one axis. The axis must be non-negative (the caller
-// normalizes negative indices before calling).
+// FusedSoftmax is a low-level backend fused op wrapper.
+// Internal: prefer graph.Softmax, nn.Dense, nn.LayerNorm, or activations.Apply which handle fallback and gradients.
 func FusedSoftmax(x *Node, axis int) (
 	node *Node) {
 	inputNodes := []*Node{x}

@@ -4,197 +4,94 @@ package simplego
 
 import (
 	"fmt"
-	"math"
 	"math/rand/v2"
 	"testing"
 
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
-// --- Decomposed implementations operating directly on float32 slices ---
-// These mirror what the decomposed graph ops would compute, but without
-// graph overhead, giving a fair comparison of the fused executor vs
-// equivalent element-wise operations with intermediate allocations.
-
-// decomposedSoftmaxFloat32 computes softmax using separate passes with intermediate allocations.
-func decomposedSoftmaxFloat32(input []float32, shape shapes.Shape, axis int) []float32 {
-	outerSize, axisSize, innerSize := computeAxisStrides(shape, axis)
-	size := len(input)
-
-	// Step 1: ReduceMax (intermediate allocation)
-	maxVals := make([]float32, outerSize*innerSize)
-	for outer := 0; outer < outerSize; outer++ {
-		for inner := 0; inner < innerSize; inner++ {
-			maxVal := float32(math.Inf(-1))
-			for i := 0; i < axisSize; i++ {
-				idx := outer*axisSize*innerSize + i*innerSize + inner
-				if input[idx] > maxVal {
-					maxVal = input[idx]
-				}
-			}
-			maxVals[outer*innerSize+inner] = maxVal
-		}
+// benchMust panics on error, used in benchmark setup.
+func benchMust[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
 	}
-
-	// Step 2: Sub x - max (intermediate allocation)
-	shifted := make([]float32, size)
-	for outer := 0; outer < outerSize; outer++ {
-		for inner := 0; inner < innerSize; inner++ {
-			maxVal := maxVals[outer*innerSize+inner]
-			for i := 0; i < axisSize; i++ {
-				idx := outer*axisSize*innerSize + i*innerSize + inner
-				shifted[idx] = input[idx] - maxVal
-			}
-		}
-	}
-
-	// Step 3: Exp (intermediate allocation)
-	expVals := make([]float32, size)
-	for i, v := range shifted {
-		expVals[i] = float32(math.Exp(float64(v)))
-	}
-
-	// Step 4: ReduceSum (intermediate allocation)
-	sumVals := make([]float32, outerSize*innerSize)
-	for outer := 0; outer < outerSize; outer++ {
-		for inner := 0; inner < innerSize; inner++ {
-			var sum float32
-			for i := 0; i < axisSize; i++ {
-				idx := outer*axisSize*innerSize + i*innerSize + inner
-				sum += expVals[idx]
-			}
-			sumVals[outer*innerSize+inner] = sum
-		}
-	}
-
-	// Step 5: Div (output)
-	output := make([]float32, size)
-	for outer := 0; outer < outerSize; outer++ {
-		for inner := 0; inner < innerSize; inner++ {
-			invSum := 1.0 / sumVals[outer*innerSize+inner]
-			for i := 0; i < axisSize; i++ {
-				idx := outer*axisSize*innerSize + i*innerSize + inner
-				output[idx] = expVals[idx] * invSum
-			}
-		}
-	}
-	return output
+	return v
 }
 
-// decomposedGeluFloat32 computes GELU using separate element-wise ops with intermediate allocations.
-func decomposedGeluFloat32(input []float32) []float32 {
-	sqrt2Inv := float32(1.0 / math.Sqrt(2.0))
-	size := len(input)
-
-	// Step 1: x / sqrt(2) (intermediate)
-	scaled := make([]float32, size)
-	for i, x := range input {
-		scaled[i] = x * sqrt2Inv
+// benchMustOK panics on error.
+func benchMustOK(err error) {
+	if err != nil {
+		panic(err)
 	}
-
-	// Step 2: erf (intermediate)
-	erfVals := make([]float32, size)
-	for i, v := range scaled {
-		erfVals[i] = float32(math.Erf(float64(v)))
-	}
-
-	// Step 3: 1 + erf (intermediate)
-	onePlusErf := make([]float32, size)
-	for i, v := range erfVals {
-		onePlusErf[i] = 1.0 + v
-	}
-
-	// Step 4: 0.5 * (1 + erf) (intermediate)
-	cdf := make([]float32, size)
-	for i, v := range onePlusErf {
-		cdf[i] = 0.5 * v
-	}
-
-	// Step 5: x * cdf (output)
-	output := make([]float32, size)
-	for i, x := range input {
-		output[i] = x * cdf[i]
-	}
-	return output
 }
 
-// decomposedLayerNormFloat32 computes layer norm using separate ops with intermediate allocations.
-func decomposedLayerNormFloat32(input []float32, shape shapes.Shape, axis int, epsilon float64, gamma, beta []float32) []float32 {
-	outerSize, normSize, _ := computeAxisStrides(shape, axis)
-	normSizeF := float32(normSize)
-	output := make([]float32, len(input))
-
-	for outer := 0; outer < outerSize; outer++ {
-		base := outer * normSize
-
-		// Step 1: ReduceSum → mean (intermediate)
-		var sum float32
-		for i := 0; i < normSize; i++ {
-			sum += input[base+i]
-		}
-		mean := sum / normSizeF
-
-		// Step 2: Sub x - mean (intermediate)
-		diff := make([]float32, normSize)
-		for i := 0; i < normSize; i++ {
-			diff[i] = input[base+i] - mean
-		}
-
-		// Step 3: Square (intermediate)
-		diffSq := make([]float32, normSize)
-		for i, d := range diff {
-			diffSq[i] = d * d
-		}
-
-		// Step 4: ReduceSum → variance (intermediate)
-		var varSum float32
-		for _, v := range diffSq {
-			varSum += v
-		}
-		variance := varSum / normSizeF
-
-		// Step 5: Add epsilon, Sqrt, Div (intermediate)
-		invStd := float32(1.0 / math.Sqrt(float64(variance)+epsilon))
-
-		// Step 6: Normalize, scale, shift (output)
-		for i := 0; i < normSize; i++ {
-			normalized := diff[i] * invStd
-			if gamma != nil {
-				normalized *= gamma[i]
-			}
-			if beta != nil {
-				normalized += beta[i]
-			}
-			output[base+i] = normalized
-		}
-	}
-	return output
+// benchExec holds a compiled executable and its input buffers for benchmarking.
+type benchExec struct {
+	exec   backends.Executable
+	inputs []backends.Buffer
 }
 
-// decomposedDenseFloat32 computes y = x @ W + b using separate matmul and add steps.
-// W is [in_features, out_features].
-func decomposedDenseFloat32(xData, wData, biasData []float32, batchSize, inFeatures, outFeatures int) []float32 {
-	// Step 1: MatMul x @ W (intermediate)
-	matmulOut := make([]float32, batchSize*outFeatures)
-	for b := 0; b < batchSize; b++ {
-		for o := 0; o < outFeatures; o++ {
-			var sum float32
-			for i := 0; i < inFeatures; i++ {
-				sum += xData[b*inFeatures+i] * wData[i*outFeatures+o]
-			}
-			matmulOut[b*outFeatures+o] = sum
+func (be *benchExec) run(b *testing.B) {
+	b.Helper()
+	for i := 0; i < b.N; i++ {
+		outputs, err := be.exec.Execute(be.inputs, nil, 0)
+		if err != nil {
+			b.Fatal(err)
 		}
+		for _, buf := range outputs {
+			buf.(*Buffer).flat = nil // release data
+		}
+	}
+}
+
+// buildBenchExec builds, compiles, and prepares inputs for a benchmark.
+func buildBenchExec(inputShapes []shapes.Shape, inputDatas []any,
+	buildFn func(f backends.Function, params []backends.Value) (backends.Value, error),
+) *benchExec {
+	builder := backend.Builder("bench")
+	mainFn := builder.Main()
+
+	params := make([]backends.Value, len(inputShapes))
+	for i, s := range inputShapes {
+		params[i] = benchMust(mainFn.Parameter(fmt.Sprintf("x%d", i), s, nil))
 	}
 
-	// Step 2: Add bias (output)
-	output := make([]float32, batchSize*outFeatures)
-	for b := 0; b < batchSize; b++ {
-		for o := 0; o < outFeatures; o++ {
-			output[b*outFeatures+o] = matmulOut[b*outFeatures+o] + biasData[o]
-		}
+	out := benchMust(buildFn(mainFn, params))
+	benchMustOK(mainFn.Return([]backends.Value{out}, nil))
+	exec := benchMust(builder.Compile())
+
+	inputs := make([]backends.Buffer, len(inputDatas))
+	for i, data := range inputDatas {
+		inputs[i] = benchMust(backend.BufferFromFlatData(0, data, inputShapes[i]))
 	}
-	return output
+
+	return &benchExec{exec: exec, inputs: inputs}
+}
+
+// reduceAndKeep performs ReduceMax or ReduceSum and reshapes back to keep dims.
+func reduceAndKeep(f backends.Function, x backends.Value, reduceFn func(backends.Value, ...int) (backends.Value, error), shape shapes.Shape, axis int) backends.Value {
+	reduced := benchMust(reduceFn(x, axis))
+	// Reshape to keep dimension: insert a size-1 at the axis position.
+	keepDims := make([]int, shape.Rank())
+	copy(keepDims, shape.Dimensions)
+	keepDims[axis] = 1
+	reshaped := benchMust(f.Reshape(reduced, keepDims...))
+	// Broadcast back to original shape.
+	broadcastAxes := make([]int, shape.Rank())
+	for i := range broadcastAxes {
+		broadcastAxes[i] = i
+	}
+	return benchMust(f.BroadcastInDim(reshaped, shape, broadcastAxes))
+}
+
+func randomFloat32(n int) []float32 {
+	data := make([]float32, n)
+	for i := range data {
+		data[i] = rand.Float32()*2 - 1
+	}
+	return data
 }
 
 // --- Softmax Benchmarks ---
@@ -214,35 +111,26 @@ func BenchmarkSoftmax(b *testing.B) {
 
 	for _, sz := range sizes {
 		shape := shapes.Make(dtypes.Float32, sz.dims...)
-		data := make([]float32, shape.Size())
-		for i := range data {
-			data[i] = rand.Float32()*2 - 1
-		}
+		data := randomFloat32(shape.Size())
+		axis := sz.axis
 
-		b.Run(fmt.Sprintf("Fused/%s", sz.name), func(b *testing.B) {
-			be := backend.(*Backend)
-			input := be.getBufferForShape(shape)
-			copy(input.flat.([]float32), data)
-			node := &Node{
-				shape: shape,
-				data:  &nodeFusedSoftmax{axis: sz.axis},
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				out, err := execFusedSoftmax(be, node, []*Buffer{input}, []bool{false})
-				if err != nil {
-					b.Fatal(err)
-				}
-				be.putBuffer(out)
-			}
-		})
+		fused := buildBenchExec([]shapes.Shape{shape}, []any{data},
+			func(f backends.Function, params []backends.Value) (backends.Value, error) {
+				return f.FusedSoftmax(params[0], axis)
+			})
 
-		b.Run(fmt.Sprintf("Decomposed/%s", sz.name), func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_ = decomposedSoftmaxFloat32(data, shape, sz.axis)
-			}
-		})
+		decomposed := buildBenchExec([]shapes.Shape{shape}, []any{data},
+			func(f backends.Function, params []backends.Value) (backends.Value, error) {
+				x := params[0]
+				maxVal := reduceAndKeep(f, x, f.ReduceMax, shape, axis)
+				shifted := benchMust(f.Sub(x, maxVal))
+				exps := benchMust(f.Exp(shifted))
+				sumExps := reduceAndKeep(f, exps, f.ReduceSum, shape, axis)
+				return f.Div(exps, sumExps)
+			})
+
+		b.Run(fmt.Sprintf("Fused/%s", sz.name), func(b *testing.B) { fused.run(b) })
+		b.Run(fmt.Sprintf("Decomposed/%s", sz.name), func(b *testing.B) { decomposed.run(b) })
 	}
 }
 
@@ -261,35 +149,33 @@ func BenchmarkGelu(b *testing.B) {
 
 	for _, sz := range sizes {
 		shape := shapes.Make(dtypes.Float32, sz.dims...)
-		data := make([]float32, shape.Size())
-		for i := range data {
-			data[i] = rand.Float32()*2 - 1
-		}
+		data := randomFloat32(shape.Size())
 
-		b.Run(fmt.Sprintf("Fused/%s", sz.name), func(b *testing.B) {
-			be := backend.(*Backend)
-			input := be.getBufferForShape(shape)
-			copy(input.flat.([]float32), data)
-			node := &Node{
-				shape: shape,
-				data:  &nodeFusedGelu{exact: true},
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				out, err := execFusedGelu(be, node, []*Buffer{input}, []bool{false})
-				if err != nil {
-					b.Fatal(err)
-				}
-				be.putBuffer(out)
-			}
-		})
+		fused := buildBenchExec([]shapes.Shape{shape}, []any{data},
+			func(f backends.Function, params []backends.Value) (backends.Value, error) {
+				return f.FusedGelu(params[0], true)
+			})
 
-		b.Run(fmt.Sprintf("Decomposed/%s", sz.name), func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_ = decomposedGeluFloat32(data)
-			}
-		})
+		// Decomposed GELU: x * 0.5 * (1 + erf(x / sqrt(2)))
+		decomposed := buildBenchExec([]shapes.Shape{shape}, []any{data},
+			func(f backends.Function, params []backends.Value) (backends.Value, error) {
+				x := params[0]
+				sqrt2Inv := benchMust(f.Constant([]float32{float32(1.0 / 1.4142135623730951)}, 1))
+				sqrt2InvBroadcast := benchMust(f.BroadcastInDim(sqrt2Inv, shape, []int{0}))
+				half := benchMust(f.Constant([]float32{0.5}, 1))
+				halfBroadcast := benchMust(f.BroadcastInDim(half, shape, []int{0}))
+				one := benchMust(f.Constant([]float32{1.0}, 1))
+				oneBroadcast := benchMust(f.BroadcastInDim(one, shape, []int{0}))
+
+				scaled := benchMust(f.Mul(x, sqrt2InvBroadcast))
+				erfVal := benchMust(f.Erf(scaled))
+				onePlusErf := benchMust(f.Add(oneBroadcast, erfVal))
+				xHalf := benchMust(f.Mul(x, halfBroadcast))
+				return f.Mul(xHalf, onePlusErf)
+			})
+
+		b.Run(fmt.Sprintf("Fused/%s", sz.name), func(b *testing.B) { fused.run(b) })
+		b.Run(fmt.Sprintf("Decomposed/%s", sz.name), func(b *testing.B) { decomposed.run(b) })
 	}
 }
 
@@ -309,48 +195,72 @@ func BenchmarkLayerNorm(b *testing.B) {
 
 	for _, sz := range sizes {
 		shape := shapes.Make(dtypes.Float32, sz.dims...)
-		data := make([]float32, shape.Size())
-		for i := range data {
-			data[i] = rand.Float32()*2 - 1
-		}
+		data := randomFloat32(shape.Size())
 		normDim := sz.dims[sz.axis]
-		gamma := make([]float32, normDim)
-		beta := make([]float32, normDim)
-		for i := range gamma {
-			gamma[i] = rand.Float32()*2 - 1
-			beta[i] = rand.Float32()*2 - 1
-		}
+		gammaData := randomFloat32(normDim)
+		betaData := randomFloat32(normDim)
 		gammaShape := shapes.Make(dtypes.Float32, normDim)
 		betaShape := shapes.Make(dtypes.Float32, normDim)
+		axis := sz.axis
 
-		b.Run(fmt.Sprintf("Fused/%s", sz.name), func(b *testing.B) {
-			be := backend.(*Backend)
-			input := be.getBufferForShape(shape)
-			copy(input.flat.([]float32), data)
-			gammaBuf := be.getBufferForShape(gammaShape)
-			copy(gammaBuf.flat.([]float32), gamma)
-			betaBuf := be.getBufferForShape(betaShape)
-			copy(betaBuf.flat.([]float32), beta)
-			node := &Node{
-				shape: shape,
-				data:  &nodeFusedLayerNorm{axes: []int{sz.axis}, epsilon: 1e-5},
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				out, err := execFusedLayerNorm(be, node, []*Buffer{input, gammaBuf, betaBuf}, []bool{false, false, false})
-				if err != nil {
-					b.Fatal(err)
+		allShapes := []shapes.Shape{shape, gammaShape, betaShape}
+		allDatas := []any{data, gammaData, betaData}
+
+		fused := buildBenchExec(allShapes, allDatas,
+			func(f backends.Function, params []backends.Value) (backends.Value, error) {
+				return f.FusedLayerNorm(params[0], []int{axis}, 1e-5, params[1], params[2])
+			})
+
+		// Decomposed: mean, variance, normalize, scale, offset.
+		decomposed := buildBenchExec(allShapes, allDatas,
+			func(f backends.Function, params []backends.Value) (backends.Value, error) {
+				x := params[0]
+				gamma := params[1]
+				beta := params[2]
+
+				// Compute normSize as float constant.
+				normSizeF := float32(sz.dims[axis])
+				normSizeConst := benchMust(f.Constant([]float32{normSizeF}, 1))
+				normSizeBroadcast := benchMust(f.BroadcastInDim(normSizeConst, shape, []int{0}))
+
+				// Mean.
+				sum := reduceAndKeep(f, x, f.ReduceSum, shape, axis)
+				mean := benchMust(f.Div(sum, normSizeBroadcast))
+
+				// Variance.
+				diff := benchMust(f.Sub(x, mean))
+				diffSq := benchMust(f.Mul(diff, diff))
+				varSum := reduceAndKeep(f, diffSq, f.ReduceSum, shape, axis)
+				variance := benchMust(f.Div(varSum, normSizeBroadcast))
+
+				// Normalize.
+				epsConst := benchMust(f.Constant([]float32{1e-5}, 1))
+				epsBroadcast := benchMust(f.BroadcastInDim(epsConst, shape, []int{0}))
+				varPlusEps := benchMust(f.Add(variance, epsBroadcast))
+				invStd := benchMust(f.Rsqrt(varPlusEps))
+				normalized := benchMust(f.Mul(diff, invStd))
+
+				// Scale and offset: gamma and beta have shape [normDim], need to broadcast.
+				broadcastShape := shape.Clone()
+				for i := range broadcastShape.Dimensions {
+					broadcastShape.Dimensions[i] = 1
 				}
-				be.putBuffer(out)
-			}
-		})
+				broadcastShape.Dimensions[axis] = normDim
+				gammaReshaped := benchMust(f.Reshape(gamma, broadcastShape.Dimensions...))
+				broadcastAxes := make([]int, shape.Rank())
+				for i := range broadcastAxes {
+					broadcastAxes[i] = i
+				}
+				gammaBroadcast := benchMust(f.BroadcastInDim(gammaReshaped, shape, broadcastAxes))
+				scaled := benchMust(f.Mul(normalized, gammaBroadcast))
 
-		b.Run(fmt.Sprintf("Decomposed/%s", sz.name), func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_ = decomposedLayerNormFloat32(data, shape, sz.axis, 1e-5, gamma, beta)
-			}
-		})
+				betaReshaped := benchMust(f.Reshape(beta, broadcastShape.Dimensions...))
+				betaBroadcast := benchMust(f.BroadcastInDim(betaReshaped, shape, broadcastAxes))
+				return f.Add(scaled, betaBroadcast)
+			})
+
+		b.Run(fmt.Sprintf("Fused/%s", sz.name), func(b *testing.B) { fused.run(b) })
+		b.Run(fmt.Sprintf("Decomposed/%s", sz.name), func(b *testing.B) { decomposed.run(b) })
 	}
 }
 
@@ -372,45 +282,36 @@ func BenchmarkDense(b *testing.B) {
 		xShape := shapes.Make(dtypes.Float32, sz.batch, sz.inFeatures)
 		wShape := shapes.Make(dtypes.Float32, sz.inFeatures, sz.outFeatures)
 		bShape := shapes.Make(dtypes.Float32, sz.outFeatures)
+		outShape := shapes.Make(dtypes.Float32, sz.batch, sz.outFeatures)
 
-		xData := make([]float32, xShape.Size())
-		wData := make([]float32, wShape.Size())
-		biasData := make([]float32, bShape.Size())
-		for i := range xData {
-			xData[i] = rand.Float32()*2 - 1
-		}
-		for i := range wData {
-			wData[i] = rand.Float32()*2 - 1
-		}
-		for i := range biasData {
-			biasData[i] = rand.Float32()*2 - 1
-		}
+		xData := randomFloat32(xShape.Size())
+		wData := randomFloat32(wShape.Size())
+		biasData := randomFloat32(bShape.Size())
 
-		b.Run(fmt.Sprintf("Fused/%s", sz.name), func(b *testing.B) {
-			be := backend.(*Backend)
-			xBuf := be.getBufferForShape(xShape)
-			copy(xBuf.flat.([]float32), xData)
-			wBuf := be.getBufferForShape(wShape)
-			copy(wBuf.flat.([]float32), wData)
-			bBuf := be.getBufferForShape(bShape)
-			copy(bBuf.flat.([]float32), biasData)
-			outShape := shapes.Make(dtypes.Float32, sz.batch, sz.outFeatures)
-			node := &Node{shape: outShape}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				out, err := execFusedDense(be, node, []*Buffer{xBuf, wBuf, bBuf}, []bool{false, false, false})
-				if err != nil {
-					b.Fatal(err)
-				}
-				be.putBuffer(out)
-			}
-		})
+		allShapes := []shapes.Shape{xShape, wShape, bShape}
+		allDatas := []any{xData, wData, biasData}
 
-		b.Run(fmt.Sprintf("Decomposed/%s", sz.name), func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_ = decomposedDenseFloat32(xData, wData, biasData, sz.batch, sz.inFeatures, sz.outFeatures)
-			}
-		})
+		fused := buildBenchExec(allShapes, allDatas,
+			func(f backends.Function, params []backends.Value) (backends.Value, error) {
+				return f.FusedDense(params[0], params[1], params[2], backends.ActivationNone)
+			})
+
+		// Decomposed: DotGeneral + bias add.
+		decomposed := buildBenchExec(allShapes, allDatas,
+			func(f backends.Function, params []backends.Value) (backends.Value, error) {
+				x := params[0]
+				weight := params[1]
+				bias := params[2]
+
+				// x @ weight via DotGeneral: contract x's axis 1 with weight's axis 0.
+				y := benchMust(f.DotGeneral(x, []int{1}, nil, weight, []int{0}, nil))
+
+				// Add bias: broadcast [outFeatures] -> [batch, outFeatures].
+				biasBroadcast := benchMust(f.BroadcastInDim(bias, outShape, []int{1}))
+				return f.Add(y, biasBroadcast)
+			})
+
+		b.Run(fmt.Sprintf("Fused/%s", sz.name), func(b *testing.B) { fused.run(b) })
+		b.Run(fmt.Sprintf("Decomposed/%s", sz.name), func(b *testing.B) { decomposed.run(b) })
 	}
 }

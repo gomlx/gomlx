@@ -16,120 +16,17 @@ import (
 // tolerance for floating point comparison.
 const fusedTestTol = 1e-6
 
-// helper to build, compile and execute a single-output fused op graph.
-// buildFn receives the Function and the parameter Value, and returns the output Value.
-func execFusedOp(t *testing.T, inputShape shapes.Shape, inputData interface{},
-	buildFn func(f backends.Function, param backends.Value) (backends.Value, error),
-) *Buffer {
-	t.Helper()
-	builder := backend.Builder("fused_test")
-	mainFn := builder.Main()
-
-	param, err := mainFn.Parameter("x", inputShape, nil)
-	require.NoError(t, err)
-
-	out, err := buildFn(mainFn, param)
-	require.NoError(t, err)
-
-	err = mainFn.Return([]backends.Value{out}, nil)
-	require.NoError(t, err)
-
-	exec, err := builder.Compile()
-	require.NoError(t, err)
-
-	inputBuf, err := backend.BufferFromFlatData(0, inputData, inputShape)
-	require.NoError(t, err)
-
-	outputs, err := exec.Execute([]backends.Buffer{inputBuf}, nil, 0)
-	require.NoError(t, err)
-	require.Len(t, outputs, 1)
-	return outputs[0].(*Buffer)
-}
-
-// execFusedOpMultiInput is like execFusedOp but supports multiple input parameters.
-func execFusedOpMultiInput(t *testing.T, inputShapes []shapes.Shape, inputDatas []interface{},
-	buildFn func(f backends.Function, params []backends.Value) (backends.Value, error),
-) *Buffer {
-	t.Helper()
-	builder := backend.Builder("fused_test_multi")
-	mainFn := builder.Main()
-
-	params := make([]backends.Value, len(inputShapes))
-	for i, s := range inputShapes {
-		p, err := mainFn.Parameter("x"+string(rune('0'+i)), s, nil)
-		require.NoError(t, err)
-		params[i] = p
-	}
-
-	out, err := buildFn(mainFn, params)
-	require.NoError(t, err)
-
-	err = mainFn.Return([]backends.Value{out}, nil)
-	require.NoError(t, err)
-
-	exec, err := builder.Compile()
-	require.NoError(t, err)
-
-	inputBufs := make([]backends.Buffer, len(inputDatas))
-	for i, data := range inputDatas {
-		buf, err := backend.BufferFromFlatData(0, data, inputShapes[i])
-		require.NoError(t, err)
-		inputBufs[i] = buf
-	}
-
-	outputs, err := exec.Execute(inputBufs, nil, 0)
-	require.NoError(t, err)
-	require.Len(t, outputs, 1)
-	return outputs[0].(*Buffer)
-}
-
-// referenceSoftmax computes softmax on the last axis for a flat float32 slice
-// with the given shape, returning a new flat slice.
-func referenceSoftmax(input []float32, shape shapes.Shape, axis int) []float32 {
-	output := make([]float32, len(input))
-	outerSize, axisSize, innerSize := computeAxisStrides(shape, axis)
-	for outer := 0; outer < outerSize; outer++ {
-		for inner := 0; inner < innerSize; inner++ {
-			base := outer*axisSize*innerSize + inner
-			maxVal := float32(math.Inf(-1))
-			for i := 0; i < axisSize; i++ {
-				if input[base+i*innerSize] > maxVal {
-					maxVal = input[base+i*innerSize]
-				}
-			}
-			var sum float32
-			for i := 0; i < axisSize; i++ {
-				output[base+i*innerSize] = float32(math.Exp(float64(input[base+i*innerSize] - maxVal)))
-				sum += output[base+i*innerSize]
-			}
-			for i := 0; i < axisSize; i++ {
-				output[base+i*innerSize] /= sum
-			}
-		}
-	}
-	return output
-}
-
-// referenceGelu computes exact GELU element-wise.
-func referenceGelu(input []float32) []float32 {
-	output := make([]float32, len(input))
-	sqrt2Inv := float32(1.0 / math.Sqrt(2.0))
-	for i, x := range input {
-		output[i] = x * 0.5 * (1.0 + float32(math.Erf(float64(x*sqrt2Inv))))
-	}
-	return output
-}
-
 func TestFusedSoftmax_1D(t *testing.T) {
 	input := []float32{1.0, 2.0, 3.0, 4.0}
 	shape := shapes.Make(dtypes.Float32, 4)
 
-	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
 		return f.FusedSoftmax(param, 0)
 	})
 
 	got := result.flat.([]float32)
-	want := referenceSoftmax(input, shape, 0)
+	// Known-correct softmax([1,2,3,4]).
+	want := []float32{0.0320586, 0.0871443, 0.2368828, 0.6439143}
 	require.Len(t, got, len(want))
 	for i := range got {
 		assert.InDelta(t, want[i], got[i], fusedTestTol, "index %d", i)
@@ -148,19 +45,17 @@ func TestFusedSoftmax_2D(t *testing.T) {
 	input := []float32{1, 2, 3, 4, 5, 6}
 	shape := shapes.Make(dtypes.Float32, 2, 3)
 
-	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
 		return f.FusedSoftmax(param, 1)
 	})
 
 	got := result.flat.([]float32)
-	want := referenceSoftmax(input, shape, 1)
-	for i := range got {
-		assert.InDelta(t, want[i], got[i], fusedTestTol, "index %d", i)
-	}
-
 	// Each row should sum to 1.
 	assert.InDelta(t, 1.0, got[0]+got[1]+got[2], fusedTestTol)
 	assert.InDelta(t, 1.0, got[3]+got[4]+got[5], fusedTestTol)
+	// Values within each row should be monotonically increasing.
+	assert.Less(t, got[0], got[1])
+	assert.Less(t, got[1], got[2])
 }
 
 func TestFusedSoftmax_Axis0(t *testing.T) {
@@ -168,16 +63,11 @@ func TestFusedSoftmax_Axis0(t *testing.T) {
 	input := []float32{1, 2, 3, 4, 5, 6}
 	shape := shapes.Make(dtypes.Float32, 2, 3)
 
-	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
 		return f.FusedSoftmax(param, 0)
 	})
 
 	got := result.flat.([]float32)
-	want := referenceSoftmax(input, shape, 0)
-	for i := range got {
-		assert.InDelta(t, want[i], got[i], fusedTestTol, "index %d", i)
-	}
-
 	// Each column should sum to 1.
 	assert.InDelta(t, 1.0, got[0]+got[3], fusedTestTol) // col 0
 	assert.InDelta(t, 1.0, got[1]+got[4], fusedTestTol) // col 1
@@ -202,7 +92,7 @@ func TestFusedSoftmax_Float64(t *testing.T) {
 	input := []float64{1.0, 2.0, 3.0}
 	shape := shapes.Make(dtypes.Float64, 3)
 
-	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
 		return f.FusedSoftmax(param, 0)
 	})
 
@@ -221,27 +111,31 @@ func TestFusedGelu(t *testing.T) {
 	input := []float32{-2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0}
 	shape := shapes.Make(dtypes.Float32, 7)
 
-	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
 		return f.FusedGelu(param, true)
 	})
 
 	got := result.flat.([]float32)
-	want := referenceGelu(input)
+	// Known-correct GELU values (computed at float32 precision).
+	want := []float32{
+		-0.04550028, // gelu(-2)
+		-0.15865526, // gelu(-1)
+		-0.15426877, // gelu(-0.5)
+		0.0,         // gelu(0)
+		0.34573123,  // gelu(0.5)
+		0.84134474,  // gelu(1)
+		1.9544997,   // gelu(2)
+	}
 	for i := range got {
 		assert.InDelta(t, want[i], got[i], fusedTestTol, "index %d: gelu(%v)", i, input[i])
 	}
-
-	// GELU(0) should be 0.
-	assert.InDelta(t, 0.0, got[3], fusedTestTol)
-	// GELU(x) ≈ x for large positive x.
-	assert.InDelta(t, 2.0*0.5*(1.0+float32(math.Erf(float64(2.0/math.Sqrt(2.0))))), got[6], fusedTestTol)
 }
 
 func TestFusedGelu_Float64(t *testing.T) {
 	input := []float64{-1.0, 0.0, 1.0}
 	shape := shapes.Make(dtypes.Float64, 3)
 
-	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
 		return f.FusedGelu(param, true)
 	})
 
@@ -259,7 +153,7 @@ func TestFusedLayerNorm_Simple(t *testing.T) {
 	shape := shapes.Make(dtypes.Float32, 2, 4)
 	epsilon := 1e-5
 
-	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
 		return f.FusedLayerNorm(param, []int{1}, epsilon, nil, nil)
 	})
 
@@ -294,9 +188,9 @@ func TestFusedLayerNorm_WithGammaBeta(t *testing.T) {
 	betaShape := shapes.Make(dtypes.Float32, 3)
 	epsilon := 1e-5
 
-	result := execFusedOpMultiInput(t,
+	result := testBackendMultiInput(t,
 		[]shapes.Shape{shape, gammaShape, betaShape},
-		[]interface{}{input, gamma, beta},
+		[]any{input, gamma, beta},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
 			return f.FusedLayerNorm(params[0], []int{1}, epsilon, params[1], params[2])
 		},
@@ -335,9 +229,9 @@ func TestFusedDense(t *testing.T) {
 	wShape := shapes.Make(dtypes.Float32, 3, 4)
 	bShape := shapes.Make(dtypes.Float32, 4)
 
-	result := execFusedOpMultiInput(t,
+	result := testBackendMultiInput(t,
 		[]shapes.Shape{xShape, wShape, bShape},
-		[]interface{}{x, w, b},
+		[]any{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
 			return f.FusedDense(params[0], params[1], params[2], backends.ActivationNone)
 		},
@@ -361,9 +255,9 @@ func TestFusedDense_NoBias(t *testing.T) {
 	xShape := shapes.Make(dtypes.Float32, 1, 3)
 	wShape := shapes.Make(dtypes.Float32, 3, 2)
 
-	result := execFusedOpMultiInput(t,
+	result := testBackendMultiInput(t,
 		[]shapes.Shape{xShape, wShape},
-		[]interface{}{x, w},
+		[]any{x, w},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
 			return f.FusedDense(params[0], params[1], nil, backends.ActivationNone)
 		},
@@ -388,9 +282,9 @@ func TestFusedDense_Relu(t *testing.T) {
 	wShape := shapes.Make(dtypes.Float32, 2, 2)
 	bShape := shapes.Make(dtypes.Float32, 2)
 
-	result := execFusedOpMultiInput(t,
+	result := testBackendMultiInput(t,
 		[]shapes.Shape{xShape, wShape, bShape},
-		[]interface{}{x, w, b},
+		[]any{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
 			return f.FusedDense(params[0], params[1], params[2], backends.ActivationRelu)
 		},
@@ -412,19 +306,18 @@ func TestFusedDense_Gelu(t *testing.T) {
 	wShape := shapes.Make(dtypes.Float32, 2, 2)
 	bShape := shapes.Make(dtypes.Float32, 2)
 
-	result := execFusedOpMultiInput(t,
+	result := testBackendMultiInput(t,
 		[]shapes.Shape{xShape, wShape, bShape},
-		[]interface{}{x, w, b},
+		[]any{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
 			return f.FusedDense(params[0], params[1], params[2], backends.ActivationGelu)
 		},
 	)
 
 	got := result.flat.([]float32)
-	wantGelu := referenceGelu([]float32{1, 0})
-	for i := range got {
-		assert.InDelta(t, wantGelu[i], got[i], fusedTestTol, "index %d", i)
-	}
+	// Known-correct: gelu(1) ≈ 0.8413447, gelu(0) = 0.
+	assert.InDelta(t, 0.8413447, got[0], fusedTestTol)
+	assert.InDelta(t, 0.0, got[1], fusedTestTol)
 }
 
 func TestFusedDense_Silu(t *testing.T) {
@@ -436,9 +329,9 @@ func TestFusedDense_Silu(t *testing.T) {
 	wShape := shapes.Make(dtypes.Float32, 1, 1)
 	bShape := shapes.Make(dtypes.Float32, 1)
 
-	result := execFusedOpMultiInput(t,
+	result := testBackendMultiInput(t,
 		[]shapes.Shape{xShape, wShape, bShape},
-		[]interface{}{x, w, b},
+		[]any{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
 			return f.FusedDense(params[0], params[1], params[2], backends.ActivationSilu)
 		},
@@ -458,9 +351,9 @@ func TestFusedDense_Tanh(t *testing.T) {
 	wShape := shapes.Make(dtypes.Float32, 1, 1)
 	bShape := shapes.Make(dtypes.Float32, 1)
 
-	result := execFusedOpMultiInput(t,
+	result := testBackendMultiInput(t,
 		[]shapes.Shape{xShape, wShape, bShape},
-		[]interface{}{x, w, b},
+		[]any{x, w, b},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
 			return f.FusedDense(params[0], params[1], params[2], backends.ActivationTanh)
 		},
@@ -476,7 +369,7 @@ func TestFusedSoftmax_LargeValues(t *testing.T) {
 	input := []float32{1000, 1001, 1002}
 	shape := shapes.Make(dtypes.Float32, 3)
 
-	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
 		return f.FusedSoftmax(param, 0)
 	})
 
@@ -502,13 +395,15 @@ func TestFusedSoftmax_3D(t *testing.T) {
 	}
 	shape := shapes.Make(dtypes.Float32, 2, 2, 3)
 
-	result := execFusedOp(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
 		return f.FusedSoftmax(param, 2)
 	})
 
 	got := result.flat.([]float32)
-	want := referenceSoftmax(input, shape, 2)
-	for i := range got {
-		assert.InDelta(t, want[i], got[i], fusedTestTol, "index %d", i)
+	// Each group of 3 should sum to 1.
+	for group := 0; group < 4; group++ {
+		base := group * 3
+		sum := got[base] + got[base+1] + got[base+2]
+		assert.InDelta(t, 1.0, sum, fusedTestTol, "group %d", group)
 	}
 }

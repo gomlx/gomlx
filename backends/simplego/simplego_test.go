@@ -44,6 +44,55 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// testBackend builds, compiles, and executes a single-input, single-output backend graph.
+func testBackend(t *testing.T, inputShape shapes.Shape, inputData any,
+	buildFn func(f backends.Function, param backends.Value) (backends.Value, error),
+) *Buffer {
+	t.Helper()
+	return testBackendMultiInput(t, []shapes.Shape{inputShape}, []any{inputData},
+		func(f backends.Function, params []backends.Value) (backends.Value, error) {
+			return buildFn(f, params[0])
+		},
+	)
+}
+
+// testBackendMultiInput builds, compiles, and executes a multi-input, single-output backend graph.
+func testBackendMultiInput(t *testing.T, inputShapes []shapes.Shape, inputDatas []any,
+	buildFn func(f backends.Function, params []backends.Value) (backends.Value, error),
+) *Buffer {
+	t.Helper()
+	builder := backend.Builder("test_backend")
+	mainFn := builder.Main()
+
+	params := make([]backends.Value, len(inputShapes))
+	for i, s := range inputShapes {
+		p, err := mainFn.Parameter("x"+string(rune('0'+i)), s, nil)
+		require.NoError(t, err)
+		params[i] = p
+	}
+
+	out, err := buildFn(mainFn, params)
+	require.NoError(t, err)
+
+	err = mainFn.Return([]backends.Value{out}, nil)
+	require.NoError(t, err)
+
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	inputBufs := make([]backends.Buffer, len(inputDatas))
+	for i, data := range inputDatas {
+		buf, err := backend.BufferFromFlatData(0, data, inputShapes[i])
+		require.NoError(t, err)
+		inputBufs[i] = buf
+	}
+
+	outputs, err := exec.Execute(inputBufs, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	return outputs[0].(*Buffer)
+}
+
 func TestDuplicatedOutputNodes(t *testing.T) {
 	// Create a builder and a node
 	builder := backend.Builder("test_duplicated_outputs")

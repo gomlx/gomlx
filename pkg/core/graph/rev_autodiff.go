@@ -167,6 +167,39 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			continue
 		}
 
+		// If the node has a vjpAlternateOutput (e.g. fused ops with a decomposed alternative),
+		// compute gradients through the decomposed subgraph instead.
+		if node.vjpAlternateOutput != nil {
+			alt := node.vjpAlternateOutput
+			// Build a mini reverse-autodiff through the decomposed subgraph.
+			// The alternate output was built from the same input nodes as the fused node,
+			// so gradients flow to the same inputs.
+			altVJPs := reverseAutodiffAlternate(alt, node.inputNodes, rNode.AccumulatedVJP, outputShape)
+			for ii, input := range node.Inputs() {
+				vjp := altVJPs[ii]
+				if vjp == nil {
+					continue
+				}
+				combinedShape := combineOutputShape(outputShape, input.Shape())
+				if !vjp.Shape().Equal(combinedShape) {
+					if node.Trace() != nil {
+						_, _ = fmt.Fprintf(os.Stderr, "Trace for node in error: %s\n%+v\n\n", node, node.Trace())
+					}
+					Panicf("invalid Gradient calculation for node %q: invalid shape (or DType) for calculated AccumulatedVJP for "+
+						"input #%d (out of %d): input shape=%s, calculated AccumulatedVJP shape=%s (wanted %s)"+
+						" -- this probably indicates a bug in the code, please report the issue.",
+						node, ii, len(node.Inputs()), input.Shape(), vjp.Shape(), combinedShape)
+				}
+				rInput := rg.ReverseNodes[input.Id()]
+				if rInput.AccumulatedVJP == nil {
+					rInput.AccumulatedVJP = vjp
+				} else {
+					rInput.AccumulatedVJP = Add(rInput.AccumulatedVJP, vjp)
+				}
+			}
+			continue
+		}
+
 		// Find vjpFn that calculates backpropagation for this node.
 		vjpFn := node.customVJP
 		if vjpFn == nil {

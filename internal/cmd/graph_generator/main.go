@@ -88,6 +88,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			GraphName:    name,
 			Exported:     !methodsNotExported.Has(name),
 			Excluded:     methodsNotGenerated.Has(name),
+			Internal:     strings.HasPrefix(name, "Fused"),
 			Comments:     raw.Comments,
 			StopGradient: methodsNoGradient.Has(name),
 		}
@@ -111,9 +112,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 					mi.NillableInputs = append(mi.NillableInputs, param.Name)
 					pi.ConvertStatement = fmt.Sprintf("%sVal", param.Name)
 					pi.Format = "%s"
-					pi.FormatValue = fmt.Sprintf(
-						`func() string { if ni.%s != nil { return fmt.Sprintf("[#%%d]", ni.%s.Id()) }; return "nil" }()`,
-						param.Name, param.Name)
+					pi.FormatValue = fmt.Sprintf("strNillableNode(ni.%s)", param.Name)
 				} else {
 					pi.ConvertStatement = fmt.Sprintf("%s.outputOps[0]", param.Name)
 					mi.OpInputs = append(mi.OpInputs, param.Name)
@@ -225,6 +224,7 @@ type MethodInfo struct {
 	NillableInputs         []string
 	Inputs                 []*ParameterInfo
 	Exported, Excluded     bool
+	Internal               bool
 	Comments               []string
 	StopGradient           bool
 
@@ -263,6 +263,14 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
+
+// strNillableNode formats a nillable *Node for display.
+func strNillableNode(n *Node) string {
+	if n == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("[#%d]", n.Id())
+}
 
 type NodeType int
 
@@ -310,6 +318,9 @@ func (ni *nodeInputs{{.BackendName}}) String() string {
 
 {{- if not .Exported}}
 // {{.GraphName}} is a Graph wrapper for the backend.Builder.{{.BackendName}} method.
+{{- else if .Internal}}
+// {{.GraphName}} is a low-level backend fused op wrapper.
+// Internal: prefer graph.Softmax, nn.Dense, nn.LayerNorm, or activations.Apply which handle fallback and gradients.
 {{- else}}
 {{- range .Comments}}
 {{.}}

@@ -3,13 +3,14 @@
 package nn
 
 import (
-	"github.com/gomlx/gomlx/backends"
+	. "github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 )
 
 // Dense performs a dense (linear) transformation with optional activation:
-//   y = activation(x @ weight + bias)
+//
+//	y = activation(x @ weight + bias)
 //
 // weight has shape [in_features, out_features...]. bias is optional (nil means no
 // bias). x's last axis contracts with weight's first axis.
@@ -17,23 +18,31 @@ import (
 // activation is optional; if omitted or activations.TypeNone, no activation is
 // applied.
 //
-// If the backend supports fused Dense (backends.OpTypeFusedDense), the optimized
-// native implementation is used; otherwise the operation is decomposed into
-// Einsum + Add + activation.
+// If the backend supports fused Dense, the optimized native implementation is
+// used; otherwise the operation is decomposed into primitives. Fallback is
+// handled automatically via fusedOpCaller.
 func Dense(x, weight, bias *Node, activation ...activations.Type) *Node {
+	if len(activation) > 1 {
+		Panicf("nn.Dense() can only take one optional activation, got %v", activation)
+	}
 	act := activations.TypeNone
 	if len(activation) > 0 {
 		act = activation[0]
 	}
 
-	backendAct := activationTypeToBackend(act)
-
-	if x.Graph().Backend().Capabilities().Operations[backends.OpTypeFusedDense] {
-		return FusedDense(x, weight, bias, backendAct)
+	decomposed := func() *Node {
+		return denseDecomposed(x, weight, bias, act)
 	}
 
-	// Decomposed: contract x's last axis with weight's first axis,
-	// producing x @ weight.
+	backendAct := act.ToBackend()
+	return FusedOpCaller(
+		func() *Node { return FusedDense(x, weight, bias, backendAct) },
+		decomposed,
+	)
+}
+
+// denseDecomposed implements Dense using primitive graph ops.
+func denseDecomposed(x, weight, bias *Node, act activations.Type) *Node {
 	xShape := x.Shape()
 	wShape := weight.Shape()
 	xRank := xShape.Rank()
@@ -73,22 +82,4 @@ func Dense(x, weight, bias *Node, activation ...activations.Type) *Node {
 		y = activations.Apply(act, y)
 	}
 	return y
-}
-
-// activationTypeToBackend converts activations.Type to backends.ActivationType.
-func activationTypeToBackend(act activations.Type) backends.ActivationType {
-	switch act {
-	case activations.TypeNone:
-		return backends.ActivationNone
-	case activations.TypeGelu, activations.TypeGeluApprox:
-		return backends.ActivationGelu
-	case activations.TypeRelu:
-		return backends.ActivationRelu
-	case activations.TypeSwish, activations.TypeSilu:
-		return backends.ActivationSilu
-	case activations.TypeTanh:
-		return backends.ActivationTanh
-	default:
-		return backends.ActivationNone
-	}
 }
