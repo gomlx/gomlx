@@ -53,12 +53,14 @@ type FusedOps interface {
 	// epsilon: numerical stability constant (typically 1e-5).
 	FusedLayerNorm(x Value, axes []int, epsilon float64, gamma, beta Value) (Value, error)
 
-	// FusedDense performs fused matmul + optional bias + optional activation:
-	//   y = activation(x @ W + bias)
-	// x: [batch..., in_features], weight: [in_features, out_features...],
-	// bias: [out_features...] (nil-able).
-	// Contracts x's last axis with weight's first axis.
-	// activation specifies the activation function to apply after the matmul+bias.
-	// Use ActivationNone for no activation.
+	// FusedDense performs fused matmul + optional bias + optional activation.
+	//
+	// It does y = activation(x @ W + bias). Where @ is a standard matmul,
+	// it contracts x's last axis with weight's first axis.
+	// 
+	// - x: [batch..., in_features], weight: [in_features, out_features...],
+	// - bias: [out_features...] (nil-able).
+	// - activation: applied after the matmul+bias; set to ActivationNone for no activation. 
 	FusedDense(x, weight, bias Value, activation ActivationType) (Value, error)
 }
+a
