@@ -24,14 +24,11 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	_ "github.com/gomlx/gomlx/backends/default"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/decode"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
-	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
+	"github.com/gomlx/gomlx/pkg/ml/model/transformer"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
@@ -41,46 +38,35 @@ import (
 
 // Hyperparameter keys
 const (
-	ParamVocabSize   = "vocab_size"
-	ParamEmbedDim    = "embed_dim"
-	ParamNumHeads    = "num_heads"
-	ParamHeadDim     = "head_dim"
-	ParamNumLayers   = "num_layers"
-	ParamSeqLen      = "seq_len"
-	ParamBatchSize   = "batch_size"
-	ParamMaxPosEmbed = "max_pos_embed"
-	ParamTrainSteps  = "train_steps"
-	ParamUseCache    = "use_cache"
-
-	ParamStrategy    = "strategy"
-	ParamTemperature = "temperature"
-	ParamMaxLength   = "max_length"
+	ParamSeqLen     = "seq_len"
+	ParamBatchSize  = "batch_size"
+	ParamTrainSteps = "train_steps"
 )
 
 var (
 	flagPrompt = flag.String("prompt", "The quick", "Prompt text")
-	dtype      = dtypes.Float32
 )
 
 func createDefaultContext() *context.Context {
 	ctx := context.New()
 	ctx.SetParams(map[string]any{
 		// Model hyperparameters
-		ParamVocabSize:   128,
-		ParamEmbedDim:    64,
-		ParamNumHeads:    4,
-		ParamHeadDim:     16,
-		ParamNumLayers:   2,
-		ParamSeqLen:      32,
-		ParamBatchSize:   4,
-		ParamMaxPosEmbed: 256,
+		transformer.ParamVocabSize:   128,
+		transformer.ParamEmbedDim:    64,
+		transformer.ParamNumHeads:    4,
+		transformer.ParamHeadDim:     16,
+		transformer.ParamNumLayers:   2,
+		ParamSeqLen:                  32,
+		ParamBatchSize:               32,
+		transformer.ParamMaxPosEmbed: 256,
+		transformer.ParamDType:       "float32",
 
 		// Training hyperparameters
 		ParamTrainSteps:              200,
-		optimizers.ParamLearningRate: 0.01,
+		optimizers.ParamLearningRate: 0.001,
 
 		// Generation hyperparameters
-		ParamUseCache:           false,
+		// decode.ParamStrategy is initialized to "greedy" by default.
 		decode.ParamStrategy:    "greedy",
 		decode.ParamTemperature: 1.0,
 		decode.ParamMaxLength:   50,
@@ -124,64 +110,10 @@ func (t *CharTokenizer) Decode(tokens []int) string {
 	return string(chars)
 }
 
-func simpleTransformerModel(ctx *context.Context, inputs []*Node) []*Node {
-	vocabSize := context.GetParamOr(ctx, ParamVocabSize, 128)
-	embedDim := context.GetParamOr(ctx, ParamEmbedDim, 64)
-	numHeads := context.GetParamOr(ctx, ParamNumHeads, 4)
-	headDim := context.GetParamOr(ctx, ParamHeadDim, 16)
-	numLayers := context.GetParamOr(ctx, ParamNumLayers, 2)
-	maxPosEmbed := context.GetParamOr(ctx, ParamMaxPosEmbed, 256)
-	useCache := context.GetParamOr(ctx, ParamUseCache, false)
-
-	tokens := inputs[0]
-	g := tokens.Graph()
-	currentSeqLen := tokens.Shape().Dimensions[1]
-
-	embedded := layers.Embedding(ctx.In("token_embed"), tokens, dtype, vocabSize, embedDim)
-
-	posEmbedFull := ctx.In("pos_embed").VariableWithShape("embeddings",
-		shapes.Make(dtype, maxPosEmbed, embedDim)).ValueGraph(g)
-
-	posEmbed := Slice(posEmbedFull, AxisRange(0, currentSeqLen))
-	posEmbed = ExpandDims(posEmbed, 0)
-	posEmbed = BroadcastToShape(posEmbed, embedded.Shape())
-
-	x := Add(embedded, posEmbed)
-
-	for layer := 0; layer < numLayers; layer++ {
-		layerCtx := ctx.In(fmt.Sprintf("layer_%d", layer))
-		residual := x
-
-		// Build attention with optional KV cache based on context parameter
-		attnBuilder := attention.MultiHeadAttention(layerCtx.In("attn"), x, x, x, numHeads, headDim).
-			UseCausalMask()
-
-		// Check if we should use KVCache
-		if useCache {
-			if posValue, found := ctx.GetParam("_generation_position"); found {
-				if positionNode, ok := posValue.(*Node); ok && positionNode != nil {
-					attnBuilder = attnBuilder.WithKVCache(maxPosEmbed, positionNode)
-				}
-			}
-		}
-
-		attn := attnBuilder.Done()
-		x = layers.LayerNormalization(layerCtx.In("norm1"), Add(residual, attn), -1).Done()
-		residual = x
-		ff := layers.Dense(layerCtx.In("ff1"), x, true, embedDim*4)
-		ff = Tanh(ff)
-		ff = layers.Dense(layerCtx.In("ff2"), ff, true, embedDim)
-		x = layers.LayerNormalization(layerCtx.In("norm2"), Add(residual, ff), -1).Done()
-	}
-	logits := layers.Dense(ctx.In("output"), x, false, vocabSize)
-
-	return []*Node{logits}
-}
-
 func createTrainingBatch(ctx *context.Context, text string) (inputs [][]int32, targets [][][]int32) {
 	batchSize := context.GetParamOr(ctx, ParamBatchSize, 4)
 	seqLen := context.GetParamOr(ctx, ParamSeqLen, 32)
-	vocabSize := context.GetParamOr(ctx, ParamVocabSize, 128)
+	vocabSize := context.GetParamOr(ctx, transformer.ParamVocabSize, 128)
 
 	tokenizer := &CharTokenizer{vocabSize: vocabSize}
 	tokens := tokenizer.Encode(text)
@@ -216,8 +148,9 @@ func trainModel(backend backends.Backend, ctx *context.Context) {
 	fmt.Printf("\nTraining Model\nSteps: %d  LR: %.4f  Batch: %d  SeqLen: %d\n\n", steps, learningRate, batchSize, seqLen)
 
 	// Simple model function wrapper
-	modelFn := func(ctx *context.Context, _ any, inputs []*Node) []*Node {
-		return simpleTransformerModel(ctx, inputs)
+	modelFn := func(ctx *context.Context, _ any, inputs []*graph.Node) []*graph.Node {
+		tFn := transformer.NewFromContext(ctx).ForTraining()
+		return []*graph.Node{tFn(ctx, inputs[0])}
 	}
 
 	trainer := train.NewTrainer(backend, ctx, modelFn,
@@ -225,7 +158,7 @@ func trainModel(backend backends.Backend, ctx *context.Context) {
 		optimizers.Adam().Done(),
 		nil, nil) // no metrics for this simple example
 
-	for step := 0; step < steps; step++ {
+	for step := range steps {
 		inputData, targetData := createTrainingBatch(ctx, trainingText)
 		inputTensor := tensors.FromValue(inputData)
 		targetTensor := tensors.FromValue(targetData)
@@ -244,8 +177,7 @@ func trainModel(backend backends.Backend, ctx *context.Context) {
 }
 
 func generateText(backend backends.Backend, ctx *context.Context, prompt string) {
-	vocabSize := context.GetParamOr(ctx, ParamVocabSize, 128)
-	useCache := context.GetParamOr(ctx, ParamUseCache, false)
+	vocabSize := context.GetParamOr(ctx, transformer.ParamVocabSize, 128)
 
 	tokenizer := &CharTokenizer{vocabSize: vocabSize}
 
@@ -254,14 +186,11 @@ func generateText(backend backends.Backend, ctx *context.Context, prompt string)
 		promptTokens = []int{32}
 	}
 
-	var modelFn decode.IterativeModelFn = func(genCtx *context.Context, tokens *Node) *Node {
-		outputs := simpleTransformerModel(genCtx, []*Node{tokens})
-		return outputs[0]
-	}
+	modelFn := transformer.NewFromContext(ctx).ForGeneration()
 
 	decoder := decode.New(modelFn).FromContext(ctx)
-	fmt.Printf("\nGeneration\nStrategy: %s  Temp: %.2f  MaxLen: %d  Cache: %v\nPrompt: %q\n\n",
-		decoder.Strategy, decoder.Temperature, decoder.MaxLength, useCache, prompt)
+	fmt.Printf("\nGeneration\nStrategy: %s  Temp: %.2f  MaxLen: %d\nPrompt: %q\n\n",
+		decoder.Strategy, decoder.Temperature, decoder.MaxLength, prompt)
 
 	promptTensor := tensors.FromValue([][]int32{xslices.Map(promptTokens, func(t int) int32 { return int32(t) })})
 	generated, err := decoder.Decode(backend, ctx, promptTensor)
