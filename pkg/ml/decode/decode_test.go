@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestGenerationConfig groups config default and builder tests.
-func TestGenerationConfig(t *testing.T) {
+// TestDecoder groups config default and builder tests.
+func TestDecoder(t *testing.T) {
 	t.Run("Defaults", func(t *testing.T) {
 		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
 		cfg := New(modelFn)
@@ -50,9 +50,9 @@ func TestGenerationConfig(t *testing.T) {
 	})
 }
 
-// TestGenerateSampling groups non-beam sampling tests.
-func TestGenerateSampling(t *testing.T) {
-	t.Run("GreedyStrategy", func(t *testing.T) {
+// TestDecoderSampling groups non-beam sampling tests.
+func TestDecoderSampling(t *testing.T) {
+	t.Run("Greedy", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
@@ -78,7 +78,7 @@ func TestGenerateSampling(t *testing.T) {
 		assert.Equal(t, int32(5), seq[0][len(seq[0])-1])
 	})
 
-	t.Run("TemperatureStrategy", func(t *testing.T) {
+	t.Run("Temperature", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 		var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
@@ -133,7 +133,7 @@ func TestGenerateSampling(t *testing.T) {
 }
 
 // TestGenerateBeamSearchNotImplemented remains as a placeholder expectation.
-func TestGenerateBeamSearch(t *testing.T) {
+func TestBeamSearch(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
 	var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node {
@@ -152,8 +152,8 @@ func TestGenerateBeamSearch(t *testing.T) {
 	assert.Equal(t, []int{1, 10}, result.Shape().Dimensions)
 }
 
-// TestGenerateStreamingNotImplemented groups streaming placeholder test.
-func TestGenerateStreamingNotImplemented(t *testing.T) {
+// TestStreamingNotImplemented groups streaming placeholder test.
+func TestStreamingNotImplemented(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
 	var modelFn ModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
