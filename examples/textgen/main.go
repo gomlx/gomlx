@@ -51,6 +51,7 @@ const (
 	ParamMaxPosEmbed = "max_pos_embed"
 	ParamTrainSteps  = "train_steps"
 	ParamUseCache    = "use_cache"
+
 	ParamStrategy    = "strategy"
 	ParamTemperature = "temperature"
 	ParamMaxLength   = "max_length"
@@ -79,10 +80,10 @@ func createDefaultContext() *context.Context {
 		optimizers.ParamLearningRate: 0.01,
 
 		// Generation hyperparameters
-		ParamUseCache:    false,
-		ParamStrategy:    "greedy",
-		ParamTemperature: 1.0,
-		ParamMaxLength:   50,
+		ParamUseCache:           false,
+		decode.ParamStrategy:    "greedy",
+		decode.ParamTemperature: 1.0,
+		decode.ParamMaxLength:   50,
 	})
 	return ctx
 }
@@ -245,12 +246,8 @@ func trainModel(backend backends.Backend, ctx *context.Context) {
 func generateText(backend backends.Backend, ctx *context.Context, prompt string) {
 	vocabSize := context.GetParamOr(ctx, ParamVocabSize, 128)
 	useCache := context.GetParamOr(ctx, ParamUseCache, false)
-	strategy := context.GetParamOr(ctx, ParamStrategy, "greedy")
-	temperature := context.GetParamOr(ctx, ParamTemperature, 1.0)
-	maxLength := context.GetParamOr(ctx, ParamMaxLength, 50)
 
 	tokenizer := &CharTokenizer{vocabSize: vocabSize}
-	fmt.Printf("\nGeneration\nStrategy: %s  Temp: %.2f  MaxLen: %d  Cache: %v\nPrompt: %q\n\n", strategy, temperature, maxLength, useCache, prompt)
 
 	promptTokens := tokenizer.Encode(prompt)
 	if len(promptTokens) == 0 {
@@ -262,13 +259,12 @@ func generateText(backend backends.Backend, ctx *context.Context, prompt string)
 		return outputs[0]
 	}
 
-	genCfg := decode.New(modelFn).
-		WithStrategy(strategy).
-		WithTemperature(float32(temperature)).
-		WithMaxLength(maxLength)
+	decoder := decode.New(modelFn).FromContext(ctx)
+	fmt.Printf("\nGeneration\nStrategy: %s  Temp: %.2f  MaxLen: %d  Cache: %v\nPrompt: %q\n\n",
+		decoder.Strategy, decoder.Temperature, decoder.MaxLength, useCache, prompt)
 
 	promptTensor := tensors.FromValue([][]int32{xslices.Map(promptTokens, func(t int) int32 { return int32(t) })})
-	generated, err := genCfg.Decode(backend, ctx, promptTensor)
+	generated, err := decoder.Decode(backend, ctx, promptTensor)
 	if err != nil {
 		log.Fatalf("Generation failed: %v", err)
 	}
