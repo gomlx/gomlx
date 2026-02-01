@@ -50,7 +50,7 @@ func execFusedSoftmax(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 	case dtypes.Float64:
 		softmax(input.flat.([]float64), output.flat.([]float64), axis, node.shape)
 	default:
-		return nil, errors.Wrapf(backends.ErrUnsupportedDType, "FusedSoftmax: dtype %s", input.shape.DType)
+		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedSoftmax: dtype %s", input.shape.DType)
 	}
 	return output, nil
 }
@@ -99,7 +99,7 @@ func execFusedGelu(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 	case dtypes.Float64:
 		gelu(backend, input.flat.([]float64), output.flat.([]float64))
 	default:
-		return nil, errors.Wrapf(backends.ErrUnsupportedDType, "FusedGelu: dtype %s", input.shape.DType)
+		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedGelu: dtype %s", input.shape.DType)
 	}
 	return output, nil
 }
@@ -154,7 +154,7 @@ func execFusedLayerNorm(backend *Backend, node *Node, inputs []*Buffer, inputsOw
 	case dtypes.Float64:
 		layerNorm[float64](input, output, gamma, beta, data.axes, data.epsilon)
 	default:
-		return nil, errors.Wrapf(backends.ErrUnsupportedDType, "FusedLayerNorm: dtype %s", input.shape.DType)
+		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedLayerNorm: dtype %s", input.shape.DType)
 	}
 	return output, nil
 }
@@ -206,14 +206,14 @@ func trailingAxesLayerNorm[T float32 | float64](inData, outData, gammaData, beta
 
 		// Compute mean.
 		var sum T
-		for i := 0; i < normSize; i++ {
+		for i := range normSize {
 			sum += inData[base+i]
 		}
 		mean := sum / normSizeF
 
 		// Compute variance.
 		var varSum T
-		for i := 0; i < normSize; i++ {
+		for i := range normSize {
 			diff := inData[base+i] - mean
 			varSum += diff * diff
 		}
@@ -221,7 +221,7 @@ func trailingAxesLayerNorm[T float32 | float64](inData, outData, gammaData, beta
 		invStd := T(1.0 / math.Sqrt(float64(variance)+epsilon))
 
 		// Normalize and apply scale/offset.
-		for i := 0; i < normSize; i++ {
+		for i := range normSize {
 			normalized := (inData[base+i] - mean) * invStd
 			if gammaData != nil {
 				normalized *= gammaData[i]
@@ -257,19 +257,22 @@ func arbitraryAxesLayerNorm[T float32 | float64](inData, outData, gammaData, bet
 	// Create shape for iteration. DType is irrelevant for IterOnAxes.
 	shape := shapes.Make(dtypes.Float32, dims...)
 	strides := shape.Strides()
-	indices := make([]int, rank)
+	outerIndices := make([]int, rank)
+	normIndices := make([]int, rank)
 
-	for outerFlatIdx := range shape.IterOnAxes(outerAxes, strides, indices) {
+	for outerFlatIdx := range shape.IterOnAxes(outerAxes, strides, outerIndices) {
 		// Compute mean over norm axes.
 		var sum T
-		for flatIdx := range shape.IterOnAxes(axes, strides, indices) {
+		copy(normIndices, outerIndices)
+		for flatIdx := range shape.IterOnAxes(axes, strides, normIndices) {
 			sum += inData[flatIdx]
 		}
 		mean := sum / normSizeF
 
 		// Compute variance.
 		var varSum T
-		for flatIdx := range shape.IterOnAxes(axes, strides, indices) {
+		copy(normIndices, outerIndices)
+		for flatIdx := range shape.IterOnAxes(axes, strides, normIndices) {
 			diff := inData[flatIdx] - mean
 			varSum += diff * diff
 		}
@@ -278,7 +281,8 @@ func arbitraryAxesLayerNorm[T float32 | float64](inData, outData, gammaData, bet
 
 		// Normalize and apply scale/offset.
 		normFlatIdx := 0
-		for flatIdx := range shape.IterOnAxes(axes, strides, indices) {
+		copy(normIndices, outerIndices)
+		for flatIdx := range shape.IterOnAxes(axes, strides, normIndices) {
 			normalized := (inData[flatIdx] - mean) * invStd
 			if gammaData != nil {
 				normalized *= gammaData[normFlatIdx]
@@ -341,7 +345,7 @@ func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 		}
 		applyActivation(backend, outData, data.activation)
 	default:
-		return nil, errors.Wrapf(backends.ErrUnsupportedDType, "FusedDense: dtype %s", output.shape.DType)
+		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedDense: dtype %s", output.shape.DType)
 	}
 	return output, nil
 }

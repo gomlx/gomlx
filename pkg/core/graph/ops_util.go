@@ -374,8 +374,8 @@ func Softmax(logits *Node, axes ...int) *Node {
 		if axis < 0 {
 			axis += logits.Rank()
 		}
-		return FusedOpCaller(
-			func() *Node { return FusedSoftmax(logits, axis) },
+		return InternalFusedOpCaller(
+			func() *Node { return BackendFusedSoftmax(logits, axis) },
 			decomposed,
 		)
 	}

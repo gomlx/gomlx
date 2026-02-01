@@ -13,7 +13,7 @@ import (
 //
 // If the backend supports fused LayerNorm, the optimized native implementation
 // is used; otherwise the operation is decomposed into primitives. Fallback is
-// handled automatically via FusedOpCaller.
+// handled automatically via InternalFusedOpCaller.
 func LayerNorm(x *Node, axes []int, epsilon float64, gamma, beta, mask *Node) *Node {
 	decomposed := func() *Node {
 		return layerNormDecomposed(x, axes, epsilon, gamma, beta, mask)
@@ -21,8 +21,8 @@ func LayerNorm(x *Node, axes []int, epsilon float64, gamma, beta, mask *Node) *N
 
 	// Only try fused when there's no mask (fused ops don't support masking).
 	if mask == nil {
-		return FusedOpCaller(
-			func() *Node { return FusedLayerNorm(x, axes, epsilon, gamma, beta) },
+		return InternalFusedOpCaller(
+			func() *Node { return BackendFusedLayerNorm(x, axes, epsilon, gamma, beta) },
 			decomposed,
 		)
 	}

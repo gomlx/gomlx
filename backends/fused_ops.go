@@ -4,10 +4,11 @@ package backends
 
 import "github.com/pkg/errors"
 
-// ErrUnsupportedDType indicates a fused op does not support the given dtype.
-// Backends should wrap this error so FusedOpCaller can distinguish "not supported"
-// from genuine bugs and fall back to the decomposed implementation.
-var ErrUnsupportedDType = errors.New("unsupported dtype for fused op")
+// ErrNotImplemented indicates a fused op is not implemented for the given
+// configuration (e.g. unsupported dtype or backend). Backends should wrap this
+// error so InternalFusedOpCaller can distinguish "not supported" from genuine
+// bugs and fall back to the decomposed implementation.
+var ErrNotImplemented = errors.New("fused op not implemented")
 
 // ActivationType specifies the activation function for fused operations.
 type ActivationType int

@@ -196,11 +196,21 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 		}
 
 		// If the node has a vjpAlternateOutput (e.g. fused ops with a decomposed alternative),
-		// compute gradients through the decomposed subgraph instead.
+		// transfer the accumulated VJP to the alternate output node and let the normal
+		// gradient loop process the decomposed subgraph. The alternate output has a lower
+		// nodeIdx (built first by InternalFusedOpCaller), so the loop will reach it later.
 		if node.vjpAlternateOutput != nil {
 			alt := node.vjpAlternateOutput
-			altVJPs := reverseAutodiffAlternate(alt, node.inputNodes, rNode.AccumulatedVJP, outputShape)
-			rg.accumulateInputVJPs(node, altVJPs, outputShape)
+			rAlt := rg.ReverseNodes[alt.Id()]
+			// Transfer VJP to the decomposed output.
+			if rAlt.AccumulatedVJP == nil {
+				rAlt.AccumulatedVJP = rNode.AccumulatedVJP
+			} else {
+				rAlt.AccumulatedVJP = Add(rAlt.AccumulatedVJP, rNode.AccumulatedVJP)
+			}
+			// Mark the decomposed subgraph as Included and Useful so the gradient
+			// loop processes it instead of skipping.
+			markSubgraphUseful(rg, alt)
 			continue
 		}
 
@@ -309,6 +319,23 @@ func recursiveMarkAsUseful(rg *reverseGraph, rNode *reverseNode) {
 	rNode.Useful = true
 	for _, consumer := range rNode.Consumers {
 		recursiveMarkAsUseful(rg, consumer)
+	}
+}
+
+// markSubgraphUseful walks the decomposed subgraph rooted at node and marks
+// every reachable node as Included and Useful, so the gradient loop will
+// process them. This is called when a fused node's VJP is transferred to its
+// vjpAlternateOutput — without this, the decomposed nodes may have been
+// marked as dead code and would be skipped.
+func markSubgraphUseful(rg *reverseGraph, node *Node) {
+	rNode := rg.ReverseNodes[node.Id()]
+	if rNode.Included && rNode.Useful {
+		return // Already marked.
+	}
+	rNode.Included = true
+	rNode.Useful = true
+	for _, input := range node.inputNodes {
+		markSubgraphUseful(rg, input)
 	}
 }
 

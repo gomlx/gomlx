@@ -20,7 +20,7 @@ import (
 //
 // If the backend supports fused Dense, the optimized native implementation is
 // used; otherwise the operation is decomposed into primitives. Fallback is
-// handled automatically via fusedOpCaller.
+// handled automatically via InternalFusedOpCaller.
 func Dense(x, weight, bias *Node, activation ...activations.Type) *Node {
 	act := activations.TypeNone
 	if len(activation) > 0 {
@@ -35,8 +35,8 @@ func Dense(x, weight, bias *Node, activation ...activations.Type) *Node {
 	}
 
 	backendAct := act.ToBackend()
-	return FusedOpCaller(
-		func() *Node { return FusedDense(x, weight, bias, backendAct) },
+	return InternalFusedOpCaller(
+		func() *Node { return BackendFusedDense(x, weight, bias, backendAct) },
 		decomposed,
 	)
 }
