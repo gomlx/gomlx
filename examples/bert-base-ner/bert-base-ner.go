@@ -12,15 +12,15 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"math"
 	"os"
 	"strings"
+	"unicode"
 
 	"github.com/gomlx/go-huggingface/hub"
-	"github.com/gomlx/go-huggingface/tokenizers"
-	"github.com/gomlx/go-huggingface/tokenizers/api"
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -66,11 +66,9 @@ func main() {
 	hfAuthToken := os.Getenv("HF_TOKEN")
 	repo := hub.New(hfModelID).WithAuth(hfAuthToken)
 
-	// Load tokenizer
-	tok, err := tokenizers.New(repo)
-	if err != nil {
-		klog.Fatalf("Failed to load tokenizer: %v", err)
-	}
+	// Load vocabulary for tokenizer
+	vocabPath := must.M1(repo.DownloadFile("vocab.txt"))
+	tok := must.M1(newTokenizer(vocabPath))
 
 	// Load ONNX model
 	onnxPath := must.M1(repo.DownloadFile("onnx/model.onnx"))
@@ -86,25 +84,7 @@ func main() {
 
 	// Tokenize input
 	fmt.Printf("\nInput: %s\n", *flagText)
-	tokenIDs := tok.Encode(*flagText)
-
-	// Get special token IDs
-	clsID, _ := tok.SpecialTokenID(api.TokBeginningOfSentence)
-	sepID, _ := tok.SpecialTokenID(api.TokEndOfSentence)
-
-	// Add [CLS] and [SEP] if not already present
-	if len(tokenIDs) == 0 || tokenIDs[0] != clsID {
-		tokenIDs = append([]int{clsID}, tokenIDs...)
-	}
-	if tokenIDs[len(tokenIDs)-1] != sepID {
-		tokenIDs = append(tokenIDs, sepID)
-	}
-
-	// Decode each token to get the token strings
-	tokens := make([]string, len(tokenIDs))
-	for i, id := range tokenIDs {
-		tokens[i] = tok.Decode([]int{id})
-	}
+	tokenIDs, tokens := tok.encode(*flagText)
 
 	// Prepare tensors
 	seqLen := len(tokenIDs)
@@ -158,6 +138,136 @@ func main() {
 	}
 }
 
+// tokenizer implements a simple WordPiece tokenizer for BERT.
+type tokenizer struct {
+	vocab    map[string]int
+	clsID    int
+	sepID    int
+	unkID    int
+}
+
+func newTokenizer(vocabPath string) (*tokenizer, error) {
+	file, err := os.Open(vocabPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open vocab file: %w", err)
+	}
+	defer file.Close()
+
+	vocab := make(map[string]int)
+	scanner := bufio.NewScanner(file)
+	idx := 0
+	for scanner.Scan() {
+		vocab[scanner.Text()] = idx
+		idx++
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read vocab file: %w", err)
+	}
+
+	t := &tokenizer{vocab: vocab}
+	if id, ok := vocab["[CLS]"]; ok {
+		t.clsID = id
+	}
+	if id, ok := vocab["[SEP]"]; ok {
+		t.sepID = id
+	}
+	if id, ok := vocab["[UNK]"]; ok {
+		t.unkID = id
+	}
+	return t, nil
+}
+
+func (t *tokenizer) encode(text string) ([]int, []string) {
+	// Basic tokenization: split on whitespace and punctuation
+	words := t.basicTokenize(text)
+
+	// WordPiece tokenization
+	var allTokens []string
+	var allIDs []int
+
+	allTokens = append(allTokens, "[CLS]")
+	allIDs = append(allIDs, t.clsID)
+
+	for _, word := range words {
+		subTokens := t.wordPieceTokenize(word)
+		for _, st := range subTokens {
+			allTokens = append(allTokens, st)
+			if id, ok := t.vocab[st]; ok {
+				allIDs = append(allIDs, id)
+			} else {
+				allIDs = append(allIDs, t.unkID)
+			}
+		}
+	}
+
+	allTokens = append(allTokens, "[SEP]")
+	allIDs = append(allIDs, t.sepID)
+
+	return allIDs, allTokens
+}
+
+func (t *tokenizer) basicTokenize(text string) []string {
+	var words []string
+	var current strings.Builder
+
+	for _, r := range text {
+		if unicode.IsSpace(r) {
+			if current.Len() > 0 {
+				words = append(words, current.String())
+				current.Reset()
+			}
+		} else if unicode.IsPunct(r) {
+			if current.Len() > 0 {
+				words = append(words, current.String())
+				current.Reset()
+			}
+			words = append(words, string(r))
+		} else {
+			current.WriteRune(r)
+		}
+	}
+	if current.Len() > 0 {
+		words = append(words, current.String())
+	}
+	return words
+}
+
+func (t *tokenizer) wordPieceTokenize(word string) []string {
+	if len(word) == 0 {
+		return nil
+	}
+
+	var tokens []string
+	start := 0
+	runes := []rune(word)
+
+	for start < len(runes) {
+		end := len(runes)
+		var curToken string
+		found := false
+
+		for end > start {
+			substr := string(runes[start:end])
+			if start > 0 {
+				substr = "##" + substr
+			}
+			if _, ok := t.vocab[substr]; ok {
+				curToken = substr
+				found = true
+				break
+			}
+			end--
+		}
+
+		if !found {
+			return []string{"[UNK]"}
+		}
+		tokens = append(tokens, curToken)
+		start = end
+	}
+	return tokens
+}
+
 // extractEntities converts model logits to entity spans using BIO tagging.
 func extractEntities(tokens []string, logits []float32, numLabels int) []Entity {
 	var entities []Entity
@@ -189,7 +299,6 @@ func extractEntities(tokens []string, logits []float32, numLabels int) []Entity 
 		score := softmax(logits[i*numLabels:(i+1)*numLabels], maxIdx)
 
 		if label == "O" {
-			// Finalize current entity if any
 			if len(currentTokens) > 0 {
 				entities = append(entities, Entity{
 					Text:  reconstructText(currentTokens),
@@ -199,7 +308,6 @@ func extractEntities(tokens []string, logits []float32, numLabels int) []Entity 
 				currentTokens = nil
 			}
 		} else if strings.HasPrefix(label, "B-") {
-			// Start new entity
 			if len(currentTokens) > 0 {
 				entities = append(entities, Entity{
 					Text:  reconstructText(currentTokens),
@@ -214,12 +322,10 @@ func extractEntities(tokens []string, logits []float32, numLabels int) []Entity 
 		} else if strings.HasPrefix(label, "I-") {
 			entityType := label[2:]
 			if len(currentTokens) > 0 && currentLabel == entityType {
-				// Continue current entity
 				currentTokens = append(currentTokens, token)
 				scoreSum += score
 				scoreCount++
 			} else {
-				// I- without matching B-, treat as new entity
 				if len(currentTokens) > 0 {
 					entities = append(entities, Entity{
 						Text:  reconstructText(currentTokens),
@@ -235,7 +341,6 @@ func extractEntities(tokens []string, logits []float32, numLabels int) []Entity 
 		}
 	}
 
-	// Finalize remaining entity
 	if len(currentTokens) > 0 {
 		entities = append(entities, Entity{
 			Text:  reconstructText(currentTokens),
@@ -247,7 +352,6 @@ func extractEntities(tokens []string, logits []float32, numLabels int) []Entity 
 	return entities
 }
 
-// reconstructText rebuilds text from WordPiece tokens.
 func reconstructText(tokens []string) string {
 	var sb strings.Builder
 	for i, token := range tokens {
@@ -263,7 +367,6 @@ func reconstructText(tokens []string) string {
 	return sb.String()
 }
 
-// softmax computes the softmax probability for a specific index.
 func softmax(logits []float32, idx int) float32 {
 	maxVal := logits[0]
 	for _, v := range logits[1:] {
@@ -271,7 +374,6 @@ func softmax(logits []float32, idx int) float32 {
 			maxVal = v
 		}
 	}
-
 	var sum float32
 	for _, v := range logits {
 		sum += float32(math.Exp(float64(v - maxVal)))
