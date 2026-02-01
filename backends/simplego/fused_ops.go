@@ -159,8 +159,11 @@ func (f *Function) FusedDense(x, weight, bias backends.Value, activation backend
 	}
 	dotNode := dotResult.(*Node)
 
-	// FusedDense inputs: [dotResult, bias?]. The matmul is already computed by DotGeneral.
-	fusedInputs := []*Node{dotNode}
+	// FusedDense inputs: [dotResult, x, weight, bias?].
+	// The matmul is already computed by the DotGeneral sub-node (inputs[0]).
+	// x and weight are included so that SIMD-accelerated executors (highway) can
+	// redo the fused matmul+bias+activation from scratch.
+	fusedInputs := []*Node{dotNode, xNode, wNode}
 	if len(inputs) > 2 {
 		fusedInputs = append(fusedInputs, inputs[2])
 	}
