@@ -20,13 +20,6 @@ func benchMust[T any](v T, err error) T {
 	return v
 }
 
-// benchMustOK panics on error.
-func benchMustOK(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
 // benchExec holds a compiled executable and its input buffers for benchmarking.
 type benchExec struct {
 	exec   backends.Executable
@@ -50,23 +43,10 @@ func (be *benchExec) run(b *testing.B) {
 func buildBenchExec(inputShapes []shapes.Shape, inputDatas []any,
 	buildFn func(f backends.Function, params []backends.Value) (backends.Value, error),
 ) *benchExec {
-	builder := backend.Builder("bench")
-	mainFn := builder.Main()
-
-	params := make([]backends.Value, len(inputShapes))
-	for i, s := range inputShapes {
-		params[i] = benchMust(mainFn.Parameter(fmt.Sprintf("x%d", i), s, nil))
+	exec, inputs, err := buildGraph(inputShapes, inputDatas, buildFn)
+	if err != nil {
+		panic(err)
 	}
-
-	out := benchMust(buildFn(mainFn, params))
-	benchMustOK(mainFn.Return([]backends.Value{out}, nil))
-	exec := benchMust(builder.Compile())
-
-	inputs := make([]backends.Buffer, len(inputDatas))
-	for i, data := range inputDatas {
-		inputs[i] = benchMust(backend.BufferFromFlatData(0, data, inputShapes[i]))
-	}
-
 	return &benchExec{exec: exec, inputs: inputs}
 }
 

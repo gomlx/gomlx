@@ -23,7 +23,7 @@ func LayerNorm(x *Node, axes []int, epsilon float64, gamma, beta, mask *Node) *N
 	if mask == nil {
 		return FusedOpCaller(
 			func() *Node { return FusedLayerNorm(x, axes, epsilon, gamma, beta) },
-			func() *Node { return layerNormDecomposed(x, axes, epsilon, gamma, beta, nil) },
+			decomposed,
 		)
 	}
 
