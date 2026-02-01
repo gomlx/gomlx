@@ -340,8 +340,6 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 		params, maxWorkers, workChan)
 
 	// 2. Saturate (fan-out workers) on workItems.
-	// var workerIdx atomic.Int32
-	// 2. Saturate (fan-out workers) on workItems.
 	pool.Saturate(func() {
 		packedLhsRef, packedLHS := bufAllocFn(params.LHSPanelCrossSize * params.PanelContractingSize)
 		packedRhsRef, packedRHS := bufAllocFn(params.PanelContractingSize * params.RHSPanelCrossSize)
@@ -623,10 +621,10 @@ func applyPackedOutput[T dtypes.Number](
 	outputRowStride int,
 	height, width int, // actual amount of data to copy
 ) {
-	for r := 0; r < height; r++ {
+	for r := range height {
 		packedRowOffset := r * packedOutputRowStride
 		outRowOffset := (lhsRowOffset+r)*outputRowStride + rhsColOffset
-		for c := 0; c < width; c++ {
+		for c := range width {
 			val := packedOutput[packedRowOffset+c]
 			basicWriteScalar(output, outRowOffset+c, alpha, beta, val)
 		}

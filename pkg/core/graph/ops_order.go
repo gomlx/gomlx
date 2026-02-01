@@ -178,6 +178,9 @@ func SortFunc(comparator *Function, axis int, isStable bool, inputs ...*Node) []
 //
 // The output shapes have the same rank as input, with the specified axis having size K.
 //
+// Tie-breaking: When multiple elements have equal values, stable sort is used,
+// meaning elements that appear earlier in the original order along the axis are selected first.
+//
 // Example:
 //
 //	x := Const(g, []float32{3, 1, 4, 1, 5, 9, 2, 6})
@@ -200,6 +203,9 @@ func TopK(x *Node, k int, axis int) (values, indices *Node) {
 //   - indices: The indices of the K smallest values in the original tensor (dtype Int32).
 //
 // The output shapes have the same rank as input, with the specified axis having size K.
+//
+// Tie-breaking: When multiple elements have equal values, stable sort is used,
+// meaning elements that appear earlier in the original order along the axis are selected first.
 //
 // Example:
 //
@@ -269,4 +275,64 @@ func topKImpl(x *Node, k int, axis int, ascending bool) (values, indices *Node) 
 	indices = Slice(sortedIndices, sliceSpecs...)
 
 	return values, indices
+}
+
+// TopKMask returns a boolean mask of the top-k elements along the specified axis.
+// This is more efficient than TopK when you only need to know which elements are in the top-k.
+//
+// Parameters:
+//   - x: Input tensor
+//   - k: Number of top elements to mark
+//   - axis: The axis along which to find top K (can be negative to count from the end)
+//
+// Returns:
+//   - mask: Boolean mask with same shape as x, true for top-k elements
+//
+// Tie-breaking: When multiple elements have equal values, stable sort is used,
+// meaning elements that appear earlier in the original order along the axis are selected first.
+// This ensures exactly k elements are marked as true in the mask.
+//
+// Example:
+//
+//	x := Const(g, []float32{3, 1, 4, 1, 5, 9, 2, 6})
+//	mask := TopKMask(x, 3, 0)
+//	// mask = [false, false, false, false, true, true, false, true]
+func TopKMask(x *Node, k int, axis int) *Node {
+	g := x.graph
+	g.AssertBuilding()
+
+	shape := x.Shape()
+	axis = MustAdjustAxis(axis, x)
+	axisSize := shape.Dimensions[axis]
+	if k <= 0 {
+		exceptions.Panicf("TopKMask: k must be positive, got %d", k)
+	}
+	if k > axisSize {
+		exceptions.Panicf("TopKMask: k=%d exceeds axis size %d", k, axisSize)
+	}
+
+	// If k equals the axis size, all elements are in the top-k
+	if k == axisSize {
+		boolShape := shape.Clone()
+		boolShape.DType = dtypes.Bool
+		return Ones(g, boolShape)
+	}
+
+	// Get the indices of the top-k elements
+	// Using stable sort ensures deterministic tie-breaking
+	_, topIndices := TopK(x, k, axis)
+
+	// Create position indices for comparison
+	indicesShape := shape.Clone()
+	indicesShape.DType = dtypes.Int32
+	positionIndices := Iota(g, indicesShape, axis)
+
+	// Create a mask by checking if each position index is in topIndices
+	// We'll expand both tensors to enable broadcasting comparison
+	expandedPos := ExpandDims(positionIndices, axis+1)
+	expandedTop := ExpandDims(topIndices, axis)
+	matches := Equal(expandedPos, expandedTop)
+	mask := ReduceLogicalOr(matches, axis+1)
+
+	return mask
 }

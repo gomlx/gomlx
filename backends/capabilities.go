@@ -23,8 +23,12 @@ type Capabilities struct {
 	// If not listed, it's assumed to be false, hence not supported.
 	DTypes map[dtypes.DType]bool
 
-	// PreferConstantsForVariables indicates whether the backend prefers using constants
-	// instead of variables for model weights. This is used by ONNX model conversion.
+	// PreferConstantsForVariables indicates that the backend prefers context variables
+	// (model weights) to be embedded as constants in the computation graph rather than
+	// passed as parameters (inputs) at execution time. This enables optimizations like
+	// weight blob storage and eliminates per-inference data transfer overhead.
+	// When true, libraries like onnx-gomlx should use graph.Const() instead of
+	// Variable.ValueGraph() for model weights.
 	PreferConstantsForVariables bool
 }
 

@@ -10,7 +10,7 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"golang.org/x/exp/maps"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 // Interface implemented by optimizer implementations.
@@ -140,7 +140,7 @@ func FromContext(ctx *context.Context) Interface {
 func ByName(ctx *context.Context, optName string) Interface {
 	optBuilder, found := KnownOptimizers[optName]
 	if !found {
-		Panicf("Unknown optimizer %q, valid values are %v.", optName, maps.Keys(KnownOptimizers))
+		Panicf("Unknown optimizer %q, valid values are %v.", optName, xslices.Keys(KnownOptimizers))
 	}
 	return optBuilder(ctx)
 }

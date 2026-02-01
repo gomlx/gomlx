@@ -126,3 +126,65 @@ func TestBottomK_ArgMin(t *testing.T) {
 		0,
 	)
 }
+
+func TestTopKMask_Basic(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "TopKMask: basic",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, [][]float32{{1.0, 5.0, 3.0, 2.0}})
+			mask := TopKMask(x, 2, -1)
+			return nil, []*Node{mask}
+		},
+		[]any{
+			[][]bool{{false, true, true, false}},
+		},
+		-1,
+	)
+}
+
+func TestTopKMask_Single(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "TopKMask: k=1",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, [][]float32{{1.0, -5.0, 3.0, 2.0}})
+			mask := TopKMask(x, 1, -1)
+			return nil, []*Node{mask}
+		},
+		[]any{
+			[][]bool{{false, false, true, false}},
+		},
+		-1,
+	)
+}
+
+func TestTopKMask_AllElements(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "TopKMask: all elements",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, [][]float32{{1.0, 5.0, 3.0, 2.0}})
+			mask := TopKMask(x, 4, -1)
+			return nil, []*Node{mask}
+		},
+		[]any{
+			[][]bool{{true, true, true, true}},
+		},
+		-1,
+	)
+}
+
+func TestTopKMask_MultipleBatches(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "TopKMask: multiple batches",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, [][]float32{
+				{1.0, 5.0, 3.0, 2.0},
+				{10.0, 2.0, 8.0, 6.0},
+			})
+			mask := TopKMask(x, 2, -1)
+			return nil, []*Node{mask}
+		},
+		[]any{
+			[][]bool{
+				{false, true, true, false},
+				{true, false, true, false},
+			},
+		},
+		-1,
+	)
+}

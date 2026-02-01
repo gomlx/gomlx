@@ -125,9 +125,14 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			rhsShape: []int{64, 64, 128}, rhsContractingAxes: []int{2}, rhsBatchAxes: []int{0},
 		},
 		{
-			name:     "Batched-Large",
+			name:     "Batched-Large-1",
 			lhsShape: []int{16, 1536, 1920}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int{0},
 			rhsShape: []int{16, 1920, 1024}, rhsContractingAxes: []int{1}, rhsBatchAxes: []int{0},
+		},
+		{
+			name:     "Batched-Large-2",
+			lhsShape: []int{16, 1024, 1920}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int{0},
+			rhsShape: []int{16, 1920, 1536}, rhsContractingAxes: []int{1}, rhsBatchAxes: []int{0},
 		},
 		// Shape values taken from the model https://huggingface.co/KnightsAnalytics/all-MiniLM-L6-v2
 		// while running the benchmark `TestBenchRobSentencesXLA` from github.com/gomlx/onnx-gomlx/internal/benchmark

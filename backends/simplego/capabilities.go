@@ -122,6 +122,11 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeWhere:            true,
 		backends.OpTypeConvGeneral:      true,
 
+		// Control flow operations:
+		backends.OpTypeIf:    true,
+		backends.OpTypeWhile: true,
+		backends.OpTypeSort:  true,
+
 		// TODO: not implemented yet:
 		// backends.OpTypePad: true,
 		// backends.OpTypeReverse: true,

@@ -123,10 +123,11 @@ type Node struct {
 	idx    int
 	inputs []*Node
 
-	// capturedInputs holds nodes from parent scopes that are used by a closure
+	// capturedInputs holds nodes from parent scopes that are used by closures
 	// called by this node (for ops like If, While, Sort that use closures).
+	// Each inner slice corresponds to one closure's captured values.
 	// These are treated as additional inputs for dependency tracking and lifetime management.
-	capturedInputs []*Node
+	capturedInputs [][]*Node
 
 	// shape of the output.
 	opType  backends.OpType
@@ -148,6 +149,15 @@ type Node struct {
 	data any
 }
 
+
+// MultiOutputValues converts a multi-output node's outputs to []backends.Value.
+func (node *Node) MultiOutputValues() []backends.Value {
+	outputs := make([]backends.Value, len(node.multiOutputsNodes))
+	for i, outNode := range node.multiOutputsNodes {
+		outputs[i] = outNode
+	}
+	return outputs
+}
 
 // IsMultiOutputs returns whether this node yields multiple outputs.
 func (n *Node) IsMultiOutputs() bool {

@@ -23,6 +23,13 @@
   - Added `Function` concept (and support for closures) and the `Function.Call` operation.
   - Control Flow: Added `While` and `If` operations.
   - Order operations: Added `Sort`, `SortFunc`, `TopK`, `BottomK`.
+- Package `ml/layers/attention`: Improved `MultiHeadAttention`; Added `KVCache` support.
+- Package `ml/layers/attention/pos`: Added `PositionalEncoder` interface, and "RoPE" (Rotary Positional Encoding) implementation.
+- Package `ml/models/transformers`: Added a `Transformer` "model": a collection of transformer layers are setup based on given configuration.
+- Package `ml/decode`: Added a `Decoder` object to generate text given a sequential model.
+- Package `ml/decode/sample`: Added implementation of various sampling strategies (greedy, temperature, beam-search, top-k, top-p, etc.), used by the `decode` package.
+- Added `examples/gpt2`: A simple GPT-2 implementation using the new transformers and decode packages. It downloads the model from HuggingFace.
+- Added `examples/textgen`, a minimal transformer text generation model that can be trained.
   
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 

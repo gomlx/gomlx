@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"iter"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/gomlx/gomlx/backends"
@@ -19,7 +20,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/pkg/errors"
-	"golang.org/x/exp/slices"
 )
 
 // Context organizes information shared in a model (or anything else). A model can
