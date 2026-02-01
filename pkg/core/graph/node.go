@@ -59,7 +59,7 @@ type Node struct {
 	// vjpAlternateOutput, when set, is a decomposed version of this node's computation
 	// built from primitive ops. During reverse-mode autodiff, the VJP is computed from
 	// this alternate output instead of the fused node, so no hand-written VJPs are needed
-	// for fused ops.
+	// for fused ops -- even though one can create a customVJP for a fused-op, if one wants.
 	vjpAlternateOutput *Node
 
 	trace error // Stack-trace error of where Node was created. Stored if graph.traced is true.
