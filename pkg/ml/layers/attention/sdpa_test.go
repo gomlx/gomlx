@@ -1,0 +1,126 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
+package attention
+
+import (
+	"math"
+	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/default"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestScaledDotProductAttention(t *testing.T) {
+	t.Run("BasicIdentity", func(t *testing.T) {
+		// With identity-like inputs, verify output shape and basic computation.
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) *Node {
+			return ScaledDotProductAttention(q, k, v).Done()
+		})
+
+		// [batch=1, heads=1, seq=2, dim=2]
+		query := [][][][]float32{{{{1, 0}, {0, 1}}}}
+		key := [][][][]float32{{{{1, 0}, {0, 1}}}}
+		value := [][][][]float32{{{{1, 2}, {3, 4}}}}
+
+		output := exec.MustExec(query, key, value)[0]
+		assert.Equal(t, []int{1, 1, 2, 2}, output.Shape().Dimensions)
+	})
+
+	t.Run("ScaleDefault", func(t *testing.T) {
+		// Verify that default scale is 1/sqrt(head_dim).
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
+			// Compute with default scale
+			defaultOut := ScaledDotProductAttention(q, k, v).Done()
+			// Compute with explicit scale = 1/sqrt(2) for head_dim=2
+			explicitOut := ScaledDotProductAttention(q, k, v).WithScale(1.0 / math.Sqrt(2.0)).Done()
+			return []*Node{defaultOut, explicitOut}
+		})
+
+		query := [][][][]float32{{{{1, 2}, {3, 4}}}}
+		key := [][][][]float32{{{{5, 6}, {7, 8}}}}
+		value := [][][][]float32{{{{9, 10}, {11, 12}}}}
+
+		outputs := exec.MustExec(query, key, value)
+		defaultData := outputs[0].Value().([][][][]float32)
+		explicitData := outputs[1].Value().([][][][]float32)
+
+		for i := range defaultData {
+			for j := range defaultData[i] {
+				for k := range defaultData[i][j] {
+					for l := range defaultData[i][j][k] {
+						assert.InDelta(t, defaultData[i][j][k][l], explicitData[i][j][k][l], 1e-5)
+					}
+				}
+			}
+		}
+	})
+
+	t.Run("WithAdditiveMask", func(t *testing.T) {
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v, mask *Node) *Node {
+			return ScaledDotProductAttention(q, k, v).WithAdditiveMask(mask).Done()
+		})
+
+		// [batch=1, heads=1, seq=2, dim=2]
+		query := [][][][]float32{{{{1, 0}, {0, 1}}}}
+		key := [][][][]float32{{{{1, 0}, {0, 1}}}}
+		value := [][][][]float32{{{{10, 20}, {30, 40}}}}
+
+		// Causal mask: prevent position 0 from attending to position 1
+		// [batch=1, heads=1, q_seq=2, kv_seq=2]
+		mask := [][][][]float32{{{{0, -1e9}, {0, 0}}}}
+
+		output := exec.MustExec(query, key, value, mask)[0]
+		outData := output.Value().([][][][]float32)
+
+		// Position 0 can only attend to position 0, so output[0] ≈ value[0] = [10, 20]
+		assert.InDelta(t, float32(10), outData[0][0][0][0], 0.1)
+		assert.InDelta(t, float32(20), outData[0][0][0][1], 0.1)
+	})
+
+	t.Run("DoneWithCoefficients", func(t *testing.T) {
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
+			output, weights := ScaledDotProductAttention(q, k, v).DoneWithCoefficients()
+			return []*Node{output, weights}
+		})
+
+		query := [][][][]float32{{{{1, 0}, {0, 1}}}}
+		key := [][][][]float32{{{{1, 0}, {0, 1}}}}
+		value := [][][][]float32{{{{1, 2}, {3, 4}}}}
+
+		outputs := exec.MustExec(query, key, value)
+		output := outputs[0]
+		weights := outputs[1]
+
+		assert.Equal(t, []int{1, 1, 2, 2}, output.Shape().Dimensions)
+		assert.Equal(t, []int{1, 1, 2, 2}, weights.Shape().Dimensions)
+
+		// Verify weights sum to 1 along last axis (softmax property)
+		wData := weights.Value().([][][][]float32)
+		for i := range wData {
+			for j := range wData[i] {
+				for k := range wData[i][j] {
+					sum := float32(0)
+					for _, w := range wData[i][j][k] {
+						sum += w
+					}
+					assert.InDelta(t, float32(1.0), sum, 1e-5)
+				}
+			}
+		}
+	})
+}

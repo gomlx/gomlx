@@ -110,6 +110,101 @@ func (r *RoPE) Apply(x *Node, positionIndices *Node) *Node {
 	return applyRoPEWithCustomDim(x, positionIndices, r.BaseFreq, r.DimStart, dimEnd)
 }
 
+// ApplyWithCosSin applies rotary position embeddings using pre-computed cos and sin tensors.
+// This is useful for ONNX inference where cos/sin are provided as cached inputs rather than
+// being computed from a base frequency and position indices.
+//
+// Unlike RoPE.Apply, this does not compute cos/sin from a base frequency — those concepts
+// are already baked into the pre-computed tensors.
+//
+// Parameters:
+//   - x: Input tensor shaped [..., seq_len, head_dim]
+//   - cos: Pre-computed cosine values, broadcastable to [..., seq_len, rotary_dim/2]
+//   - sin: Pre-computed sine values, same shape as cos
+//   - interleaved: If true, rotation pairs are at even/odd indices (x[..., 0], x[..., 1]).
+//     If false, pairs are split first-half/second-half (x[..., :dim/2], x[..., dim/2:]).
+//
+// Returns:
+//   - Tensor with rotary embeddings applied, same shape as x.
+//     If cos/sin cover fewer dimensions than x's last axis (partial rotation),
+//     the remaining dimensions are passed through unchanged.
+func ApplyWithCosSin(x, cos, sin *Node, interleaved bool) *Node {
+	rank := x.Shape().Rank()
+	embedDim := x.Shape().Dimensions[rank-1]
+
+	// Determine rotary dimension from cos shape: last dim is rotary_dim/2
+	cosRank := cos.Shape().Rank()
+	rotaryHalfDim := cos.Shape().Dimensions[cosRank-1]
+	rotaryDim := rotaryHalfDim * 2
+
+	// Split into rotatable and pass-through portions if partial rotation
+	var xRotate, xPass *Node
+	if rotaryDim < embedDim {
+		xRotate = Slice(x, AxisRange().Spacer(), AxisRange(0, rotaryDim))
+		xPass = Slice(x, AxisRange().Spacer(), AxisRange(rotaryDim, embedDim))
+	} else {
+		xRotate = x
+		xPass = nil
+	}
+
+	// Split xRotate into two halves for rotation
+	var x1, x2 *Node
+	if interleaved {
+		// Interleaved: x1 = even indices, x2 = odd indices
+		sliceSpec := make([]SliceAxisSpec, rank)
+		for i := 0; i < rank-1; i++ {
+			sliceSpec[i] = AxisRange()
+		}
+		sliceSpec[rank-1] = AxisRange(0, rotaryDim).Stride(2)
+		x1 = Slice(xRotate, sliceSpec...)
+
+		sliceSpec[rank-1] = AxisRange(1, rotaryDim).Stride(2)
+		x2 = Slice(xRotate, sliceSpec...)
+	} else {
+		// Non-interleaved: split in half
+		halfDim := rotaryDim / 2
+		x1 = Slice(xRotate, AxisRange().Spacer(), AxisRange(0, halfDim))
+		x2 = Slice(xRotate, AxisRange().Spacer(), AxisRange(halfDim, rotaryDim))
+	}
+
+	// Expand leading dimensions so BroadcastToShape can match x1's rank.
+	// BroadcastToShape only appends trailing axes, so we must add leading 1s manually.
+	x1Shape := x1.Shape()
+	for cos.Rank() < x1Shape.Rank() {
+		cos = ExpandDims(cos, 0)
+		sin = ExpandDims(sin, 0)
+	}
+	cos = BroadcastToShape(cos, x1Shape)
+	sin = BroadcastToShape(sin, x1Shape)
+
+	// Apply rotation: rotated_x1 = x1*cos - x2*sin, rotated_x2 = x1*sin + x2*cos
+	rotatedX1 := Sub(Mul(x1, cos), Mul(x2, sin))
+	rotatedX2 := Add(Mul(x1, sin), Mul(x2, cos))
+
+	// Recombine rotated values
+	var xRotated *Node
+	if interleaved {
+		// Interleave real and imag back together
+		// Stack along new axis then reshape to interleave
+		stacked := Stack([]*Node{rotatedX1, rotatedX2}, -1)
+		stackedDims := stacked.Shape().Dimensions
+		// Reshape: merge last two dims to get back rotaryDim
+		newDims := make([]int, len(stackedDims)-1)
+		copy(newDims, stackedDims[:len(stackedDims)-2])
+		newDims[len(newDims)-1] = rotaryDim
+		xRotated = Reshape(stacked, newDims...)
+	} else {
+		// Non-interleaved: concatenate
+		xRotated = Concatenate([]*Node{rotatedX1, rotatedX2}, -1)
+	}
+
+	// Combine rotated and pass-through portions
+	if xPass != nil {
+		return Concatenate([]*Node{xRotated, xPass}, -1)
+	}
+	return xRotated
+}
+
 // applyRoPE applies rotary position embeddings to the last dimension (even length).
 // Reference: RoFormer (https://arxiv.org/abs/2104.09864).
 //
@@ -168,40 +263,7 @@ func applyRoPE(x *Node, positionIndices *Node, baseFreq float64) *Node {
 	cosAngles := Cos(angles) // [seqLen, embedDim/2]
 	sinAngles := Sin(angles) // [seqLen, embedDim/2]
 
-	// Split input into first half and second half along the embedding dimension
-	// x1: [..., seqLen, embedDim/2] - even indices (first half)
-	// x2: [..., seqLen, embedDim/2] - odd indices (second half)
-	// Build slice specification for all axes
-	sliceSpec := make([]SliceAxisSpec, rank)
-	for i := 0; i < rank-1; i++ {
-		sliceSpec[i] = AxisRange()
-	}
-	sliceSpec[rank-1] = AxisRange(0, halfDim)
-	x1 := Slice(x, sliceSpec...)
-
-	sliceSpec[rank-1] = AxisRange(halfDim, embedDim)
-	x2 := Slice(x, sliceSpec...)
-
-	// Broadcast cos and sin to match input shape
-	// We need to expand them to match all leading dimensions of x
-	for range rank - 2 {
-		cosAngles = ExpandDims(cosAngles, 0)
-		sinAngles = ExpandDims(sinAngles, 0)
-	}
-	// Broadcast to actual shape
-	targetShape := shape.Clone()
-	targetShape.Dimensions[rank-1] = halfDim
-	cosAngles = BroadcastToShape(cosAngles, targetShape)
-	sinAngles = BroadcastToShape(sinAngles, targetShape)
-
-	// Apply rotation:
-	// rotated_x1 = x1 * cos - x2 * sin
-	// rotated_x2 = x1 * sin + x2 * cos
-	rotatedX1 := Sub(Mul(x1, cosAngles), Mul(x2, sinAngles))
-	rotatedX2 := Add(Mul(x1, sinAngles), Mul(x2, cosAngles))
-
-	// Concatenate back together
-	return Concatenate([]*Node{rotatedX1, rotatedX2}, -1)
+	return ApplyWithCosSin(x, cosAngles, sinAngles, false)
 }
 
 // applyRoPEWithCustomDim applies RoPE to x[..., dimStart:dimEnd] (even length).
