@@ -11,6 +11,7 @@ import (
 	"math"
 
 	"github.com/gomlx/gomlx/backends"
+
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -66,7 +67,7 @@ func (t Type) ToBackend() backends.ActivationType {
 	}
 }
 
-//go:generate enumer -type=Type -trimprefix=Type -transform=snake -values -text -json -yaml activations.go
+//go:generate go tool enumer -type Type -trimprefix=Type -output=gen_type_enumer.go activations.go
 
 // ApplyFromContext picks an activation function from the context using [ParamActivation] parameter,
 // and applies it to x.
