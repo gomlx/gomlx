@@ -47,7 +47,10 @@ var (
 		"Sign",
 		"ShiftLeft", "ShiftRightArithmetic", "ShiftRightLogical",
 		"Slice",
-		"Transpose", "Where")
+		"Transpose", "Where",
+
+		// Fused ops: exported wrappers with "Internal:" comments are hand-written in fused_ops.go.
+		"FusedDense", "FusedGelu", "FusedLayerNorm", "FusedSoftmax")
 
 	// methodsNotGenerated get a NodeType but no auto-generated wrapper
 	// (hand-written implementations).
@@ -88,7 +91,6 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			GraphName:    name,
 			Exported:     !methodsNotExported.Has(name),
 			Excluded:     methodsNotGenerated.Has(name),
-			Internal:     strings.HasPrefix(name, "Fused"),
 			Comments:     raw.Comments,
 			StopGradient: methodsNoGradient.Has(name),
 		}
@@ -223,9 +225,8 @@ type MethodInfo struct {
 	OpInputSlices          []string
 	NillableInputs         []string
 	Inputs                 []*ParameterInfo
-	Exported, Excluded     bool
-	Internal               bool
-	Comments               []string
+	Exported, Excluded bool
+	Comments           []string
 	StopGradient           bool
 
 	HasMultipleOutputs bool
@@ -318,9 +319,6 @@ func (ni *nodeInputs{{.BackendName}}) String() string {
 
 {{- if not .Exported}}
 // {{.GraphName}} is a Graph wrapper for the backend.Builder.{{.BackendName}} method.
-{{- else if .Internal}}
-// {{.GraphName}} is a low-level backend fused op wrapper.
-// Internal: prefer graph.Softmax, nn.Dense, nn.LayerNorm, or activations.Apply which handle fallback and gradients.
 {{- else}}
 {{- range .Comments}}
 {{.}}

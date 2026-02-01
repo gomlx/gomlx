@@ -22,11 +22,11 @@ import (
 // used; otherwise the operation is decomposed into primitives. Fallback is
 // handled automatically via fusedOpCaller.
 func Dense(x, weight, bias *Node, activation ...activations.Type) *Node {
-	if len(activation) > 1 {
-		Panicf("nn.Dense() can only take one optional activation, got %v", activation)
-	}
 	act := activations.TypeNone
 	if len(activation) > 0 {
+		if len(activation) > 1 {
+			Panicf("nn.Dense() can only take one optional activation, got %v", activation)
+		}
 		act = activation[0]
 	}
 

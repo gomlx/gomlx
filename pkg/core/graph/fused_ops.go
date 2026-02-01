@@ -11,6 +11,26 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
+// FusedSoftmax computes softmax along the specified axis.
+// Internal: prefer graph.Softmax which handles fallback and gradients.
+func FusedSoftmax(x *Node, axis int) *Node { return backendFusedSoftmax(x, axis) }
+
+// FusedGelu computes GELU activation (exact or approximate).
+// Internal: prefer activations.Apply which handles fallback and gradients.
+func FusedGelu(x *Node, exact bool) *Node { return backendFusedGelu(x, exact) }
+
+// FusedLayerNorm applies layer normalization. gamma and beta are optional (nil to skip).
+// Internal: prefer nn.LayerNorm which handles fallback and gradients.
+func FusedLayerNorm(x *Node, axes []int, epsilon float64, gamma, beta *Node) *Node {
+	return backendFusedLayerNorm(x, axes, epsilon, gamma, beta)
+}
+
+// FusedDense performs fused matmul + optional bias + optional activation.
+// Internal: prefer nn.Dense which handles fallback and gradients.
+func FusedDense(x, weight, bias *Node, activation backends.ActivationType) *Node {
+	return backendFusedDense(x, weight, bias, activation)
+}
+
 // FusedOpCaller attempts to call fused, and if it panics with
 // backends.ErrUnsupportedDType, falls back to decomposed. Any other panic is
 // re-thrown — this prevents real bugs in fused op implementations from being

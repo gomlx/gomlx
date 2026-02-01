@@ -1826,9 +1826,8 @@ func (ni *nodeInputsFusedDense) String() string {
 	)
 }
 
-// FusedDense is a low-level backend fused op wrapper.
-// Internal: prefer graph.Softmax, nn.Dense, nn.LayerNorm, or activations.Apply which handle fallback and gradients.
-func FusedDense(x *Node, weight *Node, bias *Node, activation backends.ActivationType) (
+// backendFusedDense is a Graph wrapper for the backend.Builder.FusedDense method.
+func backendFusedDense(x *Node, weight *Node, bias *Node, activation backends.ActivationType) (
 	node *Node) {
 	inputNodes := []*Node{x, weight}
 	if bias != nil {
@@ -1880,9 +1879,8 @@ func (ni *nodeInputsFusedGelu) String() string {
 	)
 }
 
-// FusedGelu is a low-level backend fused op wrapper.
-// Internal: prefer graph.Softmax, nn.Dense, nn.LayerNorm, or activations.Apply which handle fallback and gradients.
-func FusedGelu(x *Node, exact bool) (
+// backendFusedGelu is a Graph wrapper for the backend.Builder.FusedGelu method.
+func backendFusedGelu(x *Node, exact bool) (
 	node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1931,9 +1929,8 @@ func (ni *nodeInputsFusedLayerNorm) String() string {
 	)
 }
 
-// FusedLayerNorm is a low-level backend fused op wrapper.
-// Internal: prefer graph.Softmax, nn.Dense, nn.LayerNorm, or activations.Apply which handle fallback and gradients.
-func FusedLayerNorm(x *Node, axes []int, epsilon float64, gamma *Node, beta *Node) (
+// backendFusedLayerNorm is a Graph wrapper for the backend.Builder.FusedLayerNorm method.
+func backendFusedLayerNorm(x *Node, axes []int, epsilon float64, gamma *Node, beta *Node) (
 	node *Node) {
 	inputNodes := []*Node{x}
 	if gamma != nil {
@@ -1993,9 +1990,8 @@ func (ni *nodeInputsFusedSoftmax) String() string {
 	)
 }
 
-// FusedSoftmax is a low-level backend fused op wrapper.
-// Internal: prefer graph.Softmax, nn.Dense, nn.LayerNorm, or activations.Apply which handle fallback and gradients.
-func FusedSoftmax(x *Node, axis int) (
+// backendFusedSoftmax is a Graph wrapper for the backend.Builder.FusedSoftmax method.
+func backendFusedSoftmax(x *Node, axis int) (
 	node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
