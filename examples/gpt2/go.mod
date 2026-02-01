@@ -2,11 +2,9 @@ module github.com/gomlx/gomlx/examples/gpt2
 
 go 1.24.3
 
-replace github.com/gomlx/gomlx => ../..
-
 require (
 	github.com/gomlx/go-huggingface v0.3.2-0.20260125064416-b0f56ca7fbef
-	github.com/gomlx/gomlx v0.26.1-0.20260114072028-dd1b582c66f7
+	github.com/gomlx/gomlx v0.26.1-0.20260131161033-fde190ebb2c3
 )
 
 require (
