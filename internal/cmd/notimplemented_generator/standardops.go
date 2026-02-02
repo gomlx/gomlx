@@ -89,6 +89,8 @@ func GenerateStandardOpsInterface(methods []backendparser.Method) {
 				pi.Type = "backends.ConvolveAxesConfig"
 			case "...PadAxis":
 				pi.Type = "...backends.PadAxis"
+			case "ActivationType":
+				pi.Type = "backends.ActivationType"
 			}
 		}
 		newMethods = append(newMethods, method)
