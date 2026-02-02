@@ -21,6 +21,7 @@ func init() {
 	setNodeExecutor(backends.OpTypeWhere, priorityGeneric, execWhere)
 	setNodeExecutor(backends.OpTypeReshape, priorityGeneric, execReshape)
 	setNodeExecutor(backends.OpTypeTranspose, priorityGeneric, execTranspose)
+	setNodeExecutor(backends.OpTypeReverse, priorityGeneric, execReverse)
 	setNodeExecutor(backends.OpTypeBroadcast, priorityGeneric, execBroadcast)
 	setNodeExecutor(backends.OpTypeBroadcastInDim, priorityGeneric, execBroadcastInDim)
 	setNodeExecutor(backends.OpTypeReduceMax, priorityGeneric, execReduce)
@@ -606,6 +607,66 @@ func execTransposeGeneric[T SupportedTypesConstraints](operand, output *Buffer, 
 	for _, value := range operandFlat {
 		outputFlat[it.next()] = value
 	}
+}
+
+// ReverseOp ====================================================================================================
+
+// execReverse implements Reverse: reverses the values along the specified axes.
+// Since Reverse is purely data movement (no type-specific arithmetic), it operates on raw bytes
+// via mutableBytes(), avoiding the need for DTypeMap registrations across all types.
+func execReverse(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+	operand := inputs[0]
+	axes := node.data.([]int)
+	_ = inputsOwned // We don't reuse the inputs.
+
+	output := backend.getBuffer(operand.shape.DType, operand.shape.Size())
+	output.shape = node.shape
+
+	// Scalar or empty tensor: just copy.
+	if operand.shape.IsScalar() || operand.shape.Size() == 0 {
+		copy(output.mutableBytes(), operand.mutableBytes())
+		return output, nil
+	}
+
+	// Build a set of which axes to reverse for O(1) lookup.
+	reverseAxes := make([]bool, operand.shape.Rank())
+	for _, axis := range axes {
+		reverseAxes[axis] = true
+	}
+
+	srcBytes := operand.mutableBytes()
+	dstBytes := output.mutableBytes()
+	elementSize := int(operand.shape.DType.Size())
+	rank := operand.shape.Rank()
+	dims := operand.shape.Dimensions
+	strides := calculateStrides(dims)
+
+	// For each flat index in the output, compute the corresponding input flat index
+	// by reversing the per-axis indices for the reversed axes, then copy element bytes.
+	perAxisIdx := make([]int, rank)
+	for outputFlatIdx := range operand.shape.Size() {
+		srcFlatIdx := 0
+		for axis := range rank {
+			srcIdx := perAxisIdx[axis]
+			if reverseAxes[axis] {
+				srcIdx = dims[axis] - 1 - srcIdx
+			}
+			srcFlatIdx += srcIdx * strides[axis]
+		}
+		dstOffset := outputFlatIdx * elementSize
+		srcOffset := srcFlatIdx * elementSize
+		copy(dstBytes[dstOffset:dstOffset+elementSize], srcBytes[srcOffset:srcOffset+elementSize])
+
+		// Increment per-axis indices (row-major order).
+		for axis := rank - 1; axis >= 0; axis-- {
+			perAxisIdx[axis]++
+			if perAxisIdx[axis] < dims[axis] {
+				break
+			}
+			perAxisIdx[axis] = 0
+		}
+	}
+	return output, nil
 }
 
 // BroadcastOp ====================================================================================================
