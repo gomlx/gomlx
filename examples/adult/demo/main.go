@@ -12,7 +12,6 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/adult"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -44,6 +43,20 @@ var (
 	// ModelDType used for the model.
 	ModelDType = dtypes.Float32
 )
+
+// must reports and exits on error.
+func must(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// must1 reports and exits on error. Otherwise returns the value passed.
+func must1[T any](v T, err error) T {
+	must(err)
+	return v
+}
 
 func createDefaultContext() *context.Context {
 	ctx := context.New()
@@ -129,7 +142,7 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := must1(commandline.ParseContextSettings(ctx, *settings))
 	err := mainWithContext(ctx, *flagDataDir, *flagCheckpoint, paramsSet)
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
@@ -159,7 +172,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	const keepCheckpoints = 3
 	if checkpointPath != "" {
 		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", keepCheckpoints)
-		checkpoint = must.M1(checkpoints.Build(ctx).
+		checkpoint = must1(checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, "train_steps", "plots", "num_checkpoints")...).
