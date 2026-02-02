@@ -547,13 +547,13 @@ func execRound(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 
 func execRoundGeneric[T float32 | float64](inputs, outputs []T) {
 	for ii, input := range inputs {
-		outputs[ii] = T(math.Round(float64(input)))
+		outputs[ii] = T(math.RoundToEven(float64(input)))
 	}
 }
 
 func execRoundBF16(inputs, outputs []bfloat16.BFloat16) {
 	for ii, input := range inputs {
-		outputs[ii] = bfloat16.FromFloat32(float32(math.Round(float64(input.Float32()))))
+		outputs[ii] = bfloat16.FromFloat32(float32(math.RoundToEven(float64(input.Float32()))))
 	}
 }
 

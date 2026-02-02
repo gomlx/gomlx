@@ -453,6 +453,27 @@ func (f *Function) Reshape(operandOp backends.Value, dims ...int) (backends.Valu
 	return node, nil
 }
 
+// Reverse returns x with the values for the given dimensions reversed, that is,
+// the value indexed at `i` will be swapped with the value at indexed `(dimension_size - 1 - i)`.
+// The shape remains the same.
+func (f *Function) Reverse(operandOp backends.Value, axes ...int) (backends.Value, error) {
+	opType := backends.OpTypeReverse
+	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
+	if err != nil {
+		return nil, err
+	}
+	operand := inputs[0]
+	// Validate axes.
+	for _, axis := range axes {
+		if axis < 0 || axis >= operand.shape.Rank() {
+			return nil, errors.Errorf("Reverse: axis %d out of range for rank %d", axis, operand.shape.Rank())
+		}
+	}
+	// Output shape is the same as the input shape.
+	node, _ := f.getOrCreateNode(opType, operand.shape, []*Node{operand}, axes)
+	return node, nil
+}
+
 // Transpose axes of x.
 // There must be one value in permutations for each axis in the operand.
 // The output will have: output.Shape.Dimension[ii] = operand.Shape.Dimension[permutations[i]].

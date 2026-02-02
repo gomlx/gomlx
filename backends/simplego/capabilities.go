@@ -127,9 +127,10 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeWhile: true,
 		backends.OpTypeSort:  true,
 
+		backends.OpTypeReverse: true,
+
 		// TODO: not implemented yet:
 		// backends.OpTypePad: true,
-		// backends.OpTypeReverse: true,
 		// backends.OpTypeSelectAndScatterMax: true,
 		// backends.OpTypeSelectAndScatterMin: true,
 		// backends.OpTypeSelectAndScatterSum: true,
