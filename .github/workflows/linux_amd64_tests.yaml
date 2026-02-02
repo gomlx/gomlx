@@ -50,6 +50,7 @@ jobs:
         run: |
           go test -short $(go list ./... | grep -v "ui/fyneui")
           cd examples ; go test -short $(go list ./... | grep -v "ogbnmag")
+
       - name: Go Coverage Badge
         if: github.ref == 'refs/heads/main'
         uses: tj-actions/coverage-badge-go@v2
