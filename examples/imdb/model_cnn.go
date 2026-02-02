@@ -3,13 +3,13 @@
 package imdb
 
 import (
-	"github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // Conv1DModelGraph implements a convolution (1D) based model for the IMDB dataset.

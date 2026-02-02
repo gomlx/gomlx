@@ -16,10 +16,10 @@ package bsplines
 
 import (
 	"github.com/gomlx/bsplines"
-	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // Evaluate creates the computation graph to evaluate the B-splines defined by b (it's used only for the knots) and

@@ -3,10 +3,10 @@
 package graph
 
 import (
-	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
@@ -348,6 +348,9 @@ var ReduceAndKeepMasked = MaskedReduceAndKeep
 // (the axes that will be summed over).
 //
 // If no axes are given, it is assumed to be [-1], meaning, the last axes.
+//
+// If the backend supports fused softmax (single axis), it will use the
+// optimized native implementation instead of decomposing into primitives.
 func Softmax(logits *Node, axes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(logits)
 	if !logits.DType().IsFloat() {
@@ -356,11 +359,28 @@ func Softmax(logits *Node, axes ...int) *Node {
 	if len(axes) == 0 {
 		axes = []int{-1}
 	}
-	normalizingMax := StopGradient(ReduceAndKeep(logits, ReduceMax, axes...))
-	normalizedLogits := Sub(logits, normalizingMax)
-	numerator := Exp(normalizedLogits)
-	denominator := ReduceAndKeep(numerator, ReduceSum, axes...)
-	return Div(numerator, denominator)
+
+	decomposed := func() *Node {
+		normalizingMax := StopGradient(ReduceAndKeep(logits, ReduceMax, axes...))
+		normalizedLogits := Sub(logits, normalizingMax)
+		numerator := Exp(normalizedLogits)
+		denominator := ReduceAndKeep(numerator, ReduceSum, axes...)
+		return Div(numerator, denominator)
+	}
+
+	// Try fused softmax for the single-axis case.
+	if len(axes) == 1 {
+		axis := axes[0]
+		if axis < 0 {
+			axis += logits.Rank()
+		}
+		return InternalFusedOpCaller(
+			func() *Node { return BackendFusedSoftmax(logits, axis) },
+			decomposed,
+		)
+	}
+
+	return decomposed()
 }
 
 // MaskedSoftmax computes softmax activations. It's the equivalent to
@@ -437,7 +457,7 @@ func LogSoftmax(logits *Node, axes ...int) *Node {
 //
 // It takes a mask that is true on the values to be considered, and false for the values
 // not to be considered.
-// If mask is nil, it behaves like LogSoftmask.
+// If mask is nil, it behaves like LogSoftmax.
 //
 // See LogSoftmax for details.
 func MaskedLogSoftmax(logits, mask *Node, axes ...int) *Node {

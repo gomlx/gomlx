@@ -11,7 +11,6 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
@@ -57,7 +56,7 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 	excludeParams := make([]string, 0, len(c.ParamsSet)+len(ParamsExcludedFromLoading))
 	excludeParams = append(excludeParams, c.ParamsSet...)
 	excludeParams = append(excludeParams, ParamsExcludedFromLoading...)
-	checkpoint = must.M1(checkpoints.Build(c.Context).
+	checkpoint = check1(checkpoints.Build(c.Context).
 		DirFromBase(checkpointPath, c.DataDir).
 		Keep(numCheckpointsToKeep).
 		ExcludeParams(excludeParams...).
@@ -66,11 +65,9 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 	c.Checkpoint = checkpoint // Save in config.
 
 	// In case the loaded checkpoint has different values, we need to update the config accordingly.
-	c.DType = must.M1(dtypes.DTypeString(
+	c.DType = check1(dtypes.DTypeString(
 		context.GetParamOr(c.Context, "dtype", "float32")))
 	c.ImageSize = context.GetParamOr(c.Context, "image_size", 64)
-	c.BatchSize = context.GetParamOr(c.Context, "batch_size", 64)
-	c.EvalBatchSize = context.GetParamOr(c.Context, "eval_batch_size", 128)
 
 	// Load/generate sampled noise/flowerIDs.
 	noisePath := path.Join(checkpoint.Dir(), NoiseSamplesFile)
@@ -84,15 +81,15 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 		}
 	}
 	if !os.IsNotExist(err) {
-		must.M(err)
+		check(err)
 	}
 
 	// Create new noise and flower ids -- and save it for future training.
 	numSamples := context.GetParamOr(c.Context, "samples_during_training", 64)
 	noise = c.GenerateNoise(numSamples)
 	flowerIDs = c.GenerateFlowerIds(numSamples)
-	must.M(noise.Save(noisePath))
-	must.M(flowerIDs.Save(flowerIdsPath))
+	check(noise.Save(noisePath))
+	check(flowerIDs.Save(flowerIdsPath))
 	return checkpoint, noise, flowerIDs
 }
 
@@ -142,7 +139,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	var trainDS train.Dataset
 	if context.GetParamOr(ctx, "diffusion_balanced_dataset", false) {
 		fmt.Println("Using balanced datasets.")
-		balancedTrainDS := must.M1(flowers.NewBalancedDataset(config.Backend, config.DataDir, config.ImageSize))
+		balancedTrainDS := check1(flowers.NewBalancedDataset(config.Backend, config.DataDir, config.ImageSize))
 		trainDS = balancedTrainDS
 	} else {
 		trainDS = trainInMemoryDS
@@ -204,7 +201,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 
 	// Checkpoint saving: every 3 minutes of training.
 	if checkpoint != nil {
-		period := must.M1(
+		period := check1(
 			time.ParseDuration(context.GetParamOr(ctx, "checkpoint_frequency", "3m")))
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
@@ -247,17 +244,17 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 		trainer.SetContext(ctx.Reuse())
 	}
 	if globalStep < numTrainSteps {
-		_ = must.M1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
+		_ = check1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
 		if verbosity >= 1 {
 			fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 				loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 		}
 
 		// Update batch normalization averages, if they are used.
-		if must.M1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
+		if check1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpoint != nil {
-				must.M(checkpoint.Save())
+				check(checkpoint.Save())
 			}
 		}
 
@@ -271,7 +268,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 		if verbosity >= 1 {
 			fmt.Println()
 		}
-		must.M(commandline.ReportEval(trainer, trainEvalDS, validationDS))
+		check(commandline.ReportEval(trainer, trainEvalDS, validationDS))
 	}
 }
 
@@ -286,11 +283,11 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 		// Only works if there is a model directory.
 		return nil
 	}
-	must.M(checkpoint.Save())
-	must.M(checkpoint.Backup()) // Save backup, so these checkpoint doesn't get automatically collected.
+	check(checkpoint.Save())
+	check(checkpoint.Backup()) // Save backup, so these checkpoint doesn't get automatically collected.
 
 	// Update plotter with metrics.
-	must.M(stdplots.AddTrainAndEvalMetrics(plotter, loop, metrics, evalDatasets, evalDatasets[0]))
+	check(stdplots.AddTrainAndEvalMetrics(plotter, loop, metrics, evalDatasets, evalDatasets[0]))
 
 	// Kid generator
 	if kid != nil {
@@ -311,7 +308,7 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 	sampledImages := generator.Generate()
 	imagesPath := fmt.Sprintf("%s%07d.tensor", GeneratedSamplesPrefix, loop.LoopStep)
 	imagesPath = path.Join(checkpoint.Dir(), imagesPath)
-	must.M(sampledImages.Save(imagesPath))
+	check(sampledImages.Save(imagesPath))
 	return nil
 }
 
@@ -326,7 +323,7 @@ func DisplayTrainingPlots(ctx *context.Context, dataDir, checkpointPath string, 
 		fmt.Printf("You must set --checkpoint='model_sub_dir'!")
 		return
 	}
-	must.M(plotly.New().WithCheckpoint(checkpoint).Plot())
+	check(plotly.New().WithCheckpoint(checkpoint).Plot())
 }
 
 // CompareModelPlots display several model metrics on the same plots.
@@ -339,9 +336,23 @@ func CompareModelPlots(dataDir string, modelNames ...string) {
 			modelPath = path.Join(dataDir, modelPath)
 		}
 		modelPath = path.Join(modelPath, stdplots.TrainingPlotFileName)
-		_ = must.M1(plots.PreloadFile(modelPath, func(metricName string) string {
+		_ = check1(plots.PreloadFile(modelPath, func(metricName string) string {
 			return fmt.Sprintf("[%s] %s", modelName, metricName)
 		}))
 	}
 	plots.Plot()
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }

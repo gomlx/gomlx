@@ -74,8 +74,12 @@ an error, to simplify the code. But everywhere else, use standard Go error handl
 
 - Use generics where possible.
 - Use `slices` and `maps` package for slice operations.
+- Look also into `pkg/support/xslices` package for more slice and map helper methods.
+- Look into `pkg/support/xsync` package for more syncronization helpers.
+- Look into `pkg/support/sets` package for a generic `Set[T]` structure.
 - Use iterators (package `iter`) where it makes sense.
 - Use the `for range` construct for loops over slices, maps, etc.
+- Use `any` instead of `interface{}`.
 
 ### Copyright Notes
 

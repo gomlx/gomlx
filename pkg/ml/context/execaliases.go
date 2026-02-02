@@ -4,9 +4,9 @@ package context
 
 import (
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 )
 
