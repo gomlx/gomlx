@@ -134,25 +134,6 @@ func rerank(backend backends.Backend, ctx *context.Context, model *onnx.Model, t
 	// Tokenize each query-document pair.
 	pairs := encodePairs(tok, query, documents, *flagMaxLength)
 
-	// Build input tensors.
-	batchSize := len(documents)
-	seqLen := len(pairs.inputIDs[0])
-
-	flatInputIDs := make([]int64, batchSize*seqLen)
-	flatAttentionMask := make([]int64, batchSize*seqLen)
-	flatTokenTypeIDs := make([]int64, batchSize*seqLen)
-	for i := range batchSize {
-		for j := range seqLen {
-			flatInputIDs[i*seqLen+j] = int64(pairs.inputIDs[i][j])
-			flatAttentionMask[i*seqLen+j] = int64(pairs.attentionMask[i][j])
-			flatTokenTypeIDs[i*seqLen+j] = int64(pairs.tokenTypeIDs[i][j])
-		}
-	}
-
-	inputIDsTensor := tensors.FromFlatDataAndDimensions(flatInputIDs, batchSize, seqLen)
-	attentionMaskTensor := tensors.FromFlatDataAndDimensions(flatAttentionMask, batchSize, seqLen)
-	tokenTypeIDsTensor := tensors.FromFlatDataAndDimensions(flatTokenTypeIDs, batchSize, seqLen)
-
 	// Determine which inputs the model expects.
 	inputNames, _ := model.Inputs()
 	hasTokenTypeIDs := false
@@ -163,7 +144,7 @@ func rerank(backend backends.Backend, ctx *context.Context, model *onnx.Model, t
 		}
 	}
 
-	// Run inference.
+	// Run inference. MustExecOnce converts [][]int slices to tensors automatically.
 	var output *tensors.Tensor
 	if hasTokenTypeIDs {
 		output = context.MustExecOnce(
@@ -177,7 +158,7 @@ func rerank(backend backends.Backend, ctx *context.Context, model *onnx.Model, t
 				})
 				return outputs[0]
 			},
-			inputIDsTensor, attentionMaskTensor, tokenTypeIDsTensor,
+			pairs.inputIDs, pairs.attentionMask, pairs.tokenTypeIDs,
 		)
 	} else {
 		output = context.MustExecOnce(
@@ -190,7 +171,7 @@ func rerank(backend backends.Backend, ctx *context.Context, model *onnx.Model, t
 				})
 				return outputs[0]
 			},
-			inputIDsTensor, attentionMaskTensor,
+			pairs.inputIDs, pairs.attentionMask,
 		)
 	}
 
