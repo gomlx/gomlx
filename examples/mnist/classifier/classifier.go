@@ -11,7 +11,6 @@ package classifier
 
 import (
 	"image"
-	"runtime"
 
 	"github.com/pkg/errors"
 
@@ -90,45 +89,10 @@ func New(checkpointDir string) (*Classifier, error) {
 // TODO: resize image to 32x32, used by the model.
 func (c *Classifier) Classify(img image.Image) (int32, error) {
 	input := images.ToTensor(dtypes.Float32).Single(img)
-	var outputs []*tensors.Tensor
-	err := TryCatch[error](func() { outputs = c.exec.MustExec(input) })
+	outputs, err := c.exec.Exec(input)
 	if err != nil {
 		return 0, err
 	}
 	classID := tensors.ToScalar[int32](outputs[0]) // Convert tensor to Go value.
 	return classID, nil
-}
-
-func TryCatch[E any](fn func()) (exception E) {
-	defer func() {
-		e := recover()
-		if e == nil {
-			// No exceptions.
-			return
-		}
-		e = convertRuntimePanic(e)
-
-		var ok bool
-		exception, ok = e.(E)
-		if !ok {
-			// Re-throw an exception with the unexpected type.
-			panic(e)
-		}
-		// Return the recovered exception.
-	}()
-	fn()
-	return exception
-}
-
-// convertRuntimePanic converts a runtime panic error to something with a printable stack.
-func convertRuntimePanic(e any) any {
-	if e == nil {
-		return e
-	}
-	runtimeErr, ok := e.(runtime.Error)
-	if !ok {
-		// Not a runtime error.
-		return e
-	}
-	return errors.Wrap(runtimeErr, "runtime panic: ")
 }
