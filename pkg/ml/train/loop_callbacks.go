@@ -7,8 +7,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // nTimes is used to implement NTimesDuringLoop.

@@ -6,7 +6,6 @@ package metrics
 import (
 	"fmt"
 
-	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
@@ -14,6 +13,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/x448/float16"

@@ -23,14 +23,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
@@ -42,6 +41,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 )
@@ -54,7 +54,7 @@ type ContextFn func(ctx *context.Context) *context.Context
 
 func CreateDefaultContext() *context.Context {
 	ctx := context.New()
-	ctx.ResetRNGState()
+	_ = ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		// Model type to use
 		"model":           "linear",
@@ -120,7 +120,9 @@ func NewDatasetsConfigurationFromContext(ctx *context.Context, dataDir string) *
 func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) error {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
-		must.M(os.MkdirAll(dataDir, 0777))
+		if err := os.MkdirAll(dataDir, 0777); err != nil {
+			return err
+		}
 	}
 
 	modelType := context.GetParamOr(ctx, "model", "")
@@ -151,7 +153,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	dsConfig := NewDatasetsConfigurationFromContext(ctx, dataDir)
 	trainDS, trainEvalDS, validationEvalDS := CreateDatasets(backend, dsConfig)
 
-	// Metrics we are interested.
+	// Metrics we are interested in.
 	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
 	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
@@ -171,7 +173,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 		nanlogger.New().AttachToTrainer(trainer)
 	}
 
-	// Use standard training loop.
+	// Use a standard training loop.
 	loop := train.NewLoop(trainer)
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
@@ -208,7 +210,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 			WithBatchNormalizationAveragesUpdate(trainEvalDS)
 	}
 
-	// Loop for given number of steps.
+	// Loop for a given number of steps.
 	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
 	globalStep := int(optimizers.GetGlobalStep(ctx))
 	if globalStep > 0 {
@@ -224,10 +226,12 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 			loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 
 		// Update batch normalization averages, if they are used.
-		if must.M1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
+		if check1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpoint != nil {
-				must.M(checkpoint.Save())
+				if err := checkpoint.Save(); err != nil {
+					return errors.WithMessage(err, "save checkpoint")
+				}
 			}
 		}
 	} else {
@@ -241,4 +245,18 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	}
 	fmt.Println()
 	return nil
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }

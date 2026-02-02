@@ -25,21 +25,21 @@ package main
 import (
 	"flag"
 
-	"github.com/gomlx/gomlx/examples/mnist"
-	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"
+	"github.com/gomlx/gomlx/examples/mnist"
+	"github.com/gomlx/gomlx/ui/commandline"
 )
 
-// Example usage:  go run demo.go -train -checkpoint=cnn_triplet_hard_01 -set="model=cnn;loss=triplet;triplet_loss_mining_strategy=hard;triplet_loss_margin=0.1"
+// Example usage: go run demo.go -train -checkpoint=cnn_triplet_hard_01 -set="model=cnn;loss=triplet;triplet_loss_mining_strategy=hard;triplet_loss_margin=0.1"
 
 var (
 	flagTrain      = flag.Bool("train", true, "Flag to train")
 	flagDownload   = flag.Bool("download", false, "Flag to download")
 	flagDataDir    = flag.String("data", "~/work/mnist", "Directory to cache downloaded dataset.")
-	flagCheckpoint = flag.String("checkpoint", "", "Checkpoint directory from/to where to load/save the trained model. Path is relative to --data.")
+	flagCheckpoint = flag.String("checkpoint", "",
+		"Checkpoint directory from/to where to load/save the trained model. Path is relative to --data.")
 )
 
 func main() {
@@ -47,13 +47,20 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet, err := commandline.ParseContextSettings(ctx, *settings)
+	if err != nil {
+		klog.Fatal(err)
+	}
 	if *flagDownload {
-		must.M(mnist.Download(*flagDataDir))
+		if err := mnist.Download(*flagDataDir); err != nil {
+			klog.Fatal(err)
+		}
 		klog.Infof("Data downloaded in %s", *flagDataDir)
 	}
 	if *flagTrain {
-		must.M(mnist.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet))
+		if err := mnist.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet); err != nil {
+			klog.Fatal(err)
+		}
 	}
 	if !*flagDownload && !*flagTrain {
 		klog.Info("exit: usage -download and/or -train, optional -data")

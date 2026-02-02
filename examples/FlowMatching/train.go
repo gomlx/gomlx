@@ -9,7 +9,6 @@ import (
 
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -77,7 +76,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	var trainDS train.Dataset
 	if context.GetParamOr(ctx, "diffusion_balanced_dataset", false) {
 		fmt.Println("\t - Using balanced datasets.")
-		balancedTrainDS := must.M1(flowers.NewBalancedDataset(config.Backend, config.DataDir, config.ImageSize))
+		balancedTrainDS := check1(flowers.NewBalancedDataset(config.Backend, config.DataDir, config.ImageSize))
 		trainDS = balancedTrainDS
 	} else {
 		trainDS = trainInMemoryDS
@@ -107,7 +106,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 
 	// Checkpoint saving: every 3 minutes of training.
 	if checkpoint != nil {
-		period := must.M1(
+		period := check1(
 			time.ParseDuration(context.GetParamOr(ctx, "checkpoint_frequency", "3m")))
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
@@ -179,7 +178,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		if bnUpdated {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpoint != nil {
-				must.M(checkpoint.Save())
+				check(checkpoint.Save())
 			}
 		}
 
@@ -193,7 +192,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		if verbosity >= 1 {
 			fmt.Println()
 		}
-		must.M(commandline.ReportEval(trainer, trainEvalDS, validationDS))
+		check(commandline.ReportEval(trainer, trainEvalDS, validationDS))
 	}
 }
 
@@ -259,7 +258,7 @@ func BuildTrainComputation(config *diffusion.Config) train.ModelFn {
 		lossName := context.GetParamOr(ctx, losses.ParamLoss,
 			context.GetParamOr(ctx, "diffusion_loss", "mse"))
 		ctx.SetParam("loss", lossName) // Needed for old models that used "diffusion_loss".
-		lossFn := must.M1(losses.LossFromContext(ctx))
+		lossFn := check1(losses.LossFromContext(ctx))
 
 		// Large reduce operations lead to overflow for low-precision dtypes. We up-convert in those cases, before calculating the loss.
 		if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {
@@ -286,11 +285,11 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 		// Only works if there is a model directory.
 		return nil
 	}
-	must.M(checkpoint.Save())
-	must.M(checkpoint.Backup()) // Save backup, so these checkpoint doesn't get automatically collected.
+	check(checkpoint.Save())
+	check(checkpoint.Backup()) // Save backup, so these checkpoint doesn't get automatically collected.
 
 	// Update plotter with metrics.
-	must.M(stdplots.AddTrainAndEvalMetrics(plotter, loop, metrics, evalDatasets, evalDatasets[0]))
+	check(stdplots.AddTrainAndEvalMetrics(plotter, loop, metrics, evalDatasets, evalDatasets[0]))
 
 	// Kid generator
 	if kid != nil {
@@ -311,7 +310,21 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 	sampledImages := generator.Generate()
 	imagesPath := fmt.Sprintf("%s%07d.tensor", diffusion.GeneratedSamplesPrefix, loop.LoopStep)
 	imagesPath = path.Join(checkpoint.Dir(), imagesPath)
-	must.M(sampledImages.Save(imagesPath))
+	check(sampledImages.Save(imagesPath))
 
 	return nil
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }

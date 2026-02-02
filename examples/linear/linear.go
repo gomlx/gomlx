@@ -9,7 +9,6 @@ import (
 	"fmt"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -115,7 +114,7 @@ func main() {
 	fmt.Printf("Training data (inputs, labels): (%s, %s)\n\n", inputs.Shape(), labels.Shape())
 
 	// Create an in-memory dataset from the tensors.
-	dataset := must.M1(datasets.InMemoryFromData(backend, "linear dataset", []any{inputs}, []any{labels})).
+	dataset := check1(datasets.InMemoryFromData(backend, "linear dataset", []any{inputs}, []any{labels})).
 		Infinite(true).Shuffle().BatchSize(*flagNumExamples, false)
 	// dataset := &Dataset{"training", []*tensors.Tensor{inputs}, []*tensors.Tensor{labels}}
 
@@ -150,4 +149,18 @@ func main() {
 	learnedCoef, learnedBias := coefVar.MustValue(), biasVar.MustValue()
 	fmt.Printf("Learned coefficients: %0.5v\n", learnedCoef.Value())
 	fmt.Printf("Learned bias: %0.5v\n", learnedBias.Value())
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }

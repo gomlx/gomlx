@@ -6,7 +6,6 @@ import (
 	"math"
 
 	"github.com/gomlx/bsplines"
-	"github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -14,6 +13,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	xbsplines "github.com/gomlx/gomlx/pkg/ml/layers/bsplines"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"k8s.io/klog/v2"
 )
 

@@ -8,10 +8,13 @@
 package activations
 
 import (
-	. "github.com/gomlx/gomlx/internal/exceptions"
+	"math"
+
+	"github.com/gomlx/gomlx/backends"
+
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"math"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 const (
@@ -45,7 +48,26 @@ const (
 	TypeGeluApprox
 )
 
-//go:generate enumer -type=Type -trimprefix=Type -transform=snake -values -text -json -yaml activations.go
+// ToBackend converts an activations.Type to the corresponding backends.ActivationType.
+// Unsupported activation types map to backends.ActivationNone.
+func (t Type) ToBackend() backends.ActivationType {
+	switch t {
+	case TypeNone:
+		return backends.ActivationNone
+	case TypeGelu, TypeGeluApprox:
+		return backends.ActivationGelu
+	case TypeRelu:
+		return backends.ActivationRelu
+	case TypeSwish, TypeSilu:
+		return backends.ActivationSilu
+	case TypeTanh:
+		return backends.ActivationTanh
+	default:
+		return backends.ActivationNone
+	}
+}
+
+//go:generate go tool enumer -type Type -trimprefix=Type -output=gen_type_enumer.go activations.go
 
 // ApplyFromContext picks an activation function from the context using [ParamActivation] parameter,
 // and applies it to x.

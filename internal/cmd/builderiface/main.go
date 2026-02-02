@@ -9,8 +9,8 @@ import (
 	"os/exec"
 	"path"
 
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"k8s.io/klog/v2"
 )
 

@@ -21,13 +21,14 @@
 package fnn
 
 import (
-	"github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/pkg/ml/nn"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
@@ -278,28 +279,12 @@ func (c *Config) Done() *Node {
 			c.regularizer(layerCtx, g, weightsVar)
 		}
 		weights := weightsVar.ValueGraph(g)
-		if x.Rank() <= 2 && len(outputDims) == 1 {
-			// Vanilla version: input = [batch_size, feature_size], output = [batch_size, output_dim].
-			x = Dot(x, weights)
-		} else {
-			// DotGeneral:
-			xContractingAxes := []int{-1}
-			var xBatchAxes, weightsBatchAxes []int // Since weights has no batch axes, we take no matching batch axes.
-			weightsContractingAxes := []int{0}
-			x = DotGeneral(x, xContractingAxes, xBatchAxes, weights, weightsContractingAxes, weightsBatchAxes)
-		}
-
-		// Add bias
+		var biasNode *Node
 		if c.useBias {
 			biasVar := layerCtx.VariableWithShape("biases", shapes.Make(dtype, outputDims...))
-			bias := biasVar.ValueGraph(g)
-			expandedBiasShape := x.Shape().Clone()
-			for ii := range expandedBiasShape.Dimensions[:x.Rank()-len(outputDims)] {
-				expandedBiasShape.Dimensions[ii] = 1
-			}
-			expandedBias := ReshapeWithShape(bias, expandedBiasShape)
-			x = Add(x, expandedBias)
+			biasNode = biasVar.ValueGraph(g)
 		}
+		x = nn.Dense(x, weights, biasNode)
 	}
 	return x
 }
