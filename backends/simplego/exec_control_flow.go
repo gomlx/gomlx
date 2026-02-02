@@ -309,6 +309,12 @@ func execCall(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 	targetFn := data.target
 
 	outputs, err := targetFn.compiled.Execute(backend, inputs, inputsOwned, nil, nil)
+	// Mark donated inputs as consumed.
+	for i, owned := range inputsOwned {
+		if owned {
+			inputs[i] = nil
+		}
+	}
 	if err != nil {
 		return nil, errors.WithMessagef(err, "Call: executing function %q", targetFn.name)
 	}
