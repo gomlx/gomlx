@@ -170,9 +170,14 @@ func Selu(x *Node) *Node {
 // The exact version is slower in TPUs due to the "Erf" function, but some argue it is more stable. See discussion in:
 // https://github.com/jax-ml/jax/issues/4428
 func Gelu(x *Node) *Node {
-	// Φ(x) = 0.5 * (1 + Erf(x / √2))
-	cdf := MulScalar(AddScalar(Erf(DivScalar(x, math.Sqrt2)), 1), 0.5)
-	return Mul(x, cdf)
+	return InternalFusedOpCaller(
+		func() *Node { return BackendFusedGelu(x, true) },
+		func() *Node {
+			// Φ(x) = 0.5 * (1 + Erf(x / √2))
+			cdf := MulScalar(AddScalar(Erf(DivScalar(x, math.Sqrt2)), 1), 0.5)
+			return Mul(x, cdf)
+		},
+	)
 }
 
 // GeluApproximate is a close approximation to the original Gelu function.
