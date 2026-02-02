@@ -6,9 +6,11 @@ A complete GPT-2 implementation using GoMLX with safetensors weight loading and 
 
 ```bash
 go build
-# If downloads fail, set HF_ENDPOINT=https://hf-mirror.com then retry:
 ./gpt2 --prompt "Once upon a time" --max-tokens 100 --temperature 0.8
 ```
+
+If downloads fail, consider using a mirror by setting `HF_ENDPOINT`.
+One such mirrors from China is `HF_ENDPOINT=https://hf-mirror.com`.
 
 ## Features
 
