@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gomlx/gomlx/backends"
-	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
@@ -23,6 +22,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"

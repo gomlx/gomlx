@@ -13,8 +13,8 @@ import (
 	"text/template"
 
 	"github.com/gomlx/gomlx/internal/backendparser"
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"k8s.io/klog/v2"
 )
@@ -225,8 +225,8 @@ type MethodInfo struct {
 	OpInputSlices          []string
 	NillableInputs         []string
 	Inputs                 []*ParameterInfo
-	Exported, Excluded bool
-	Comments           []string
+	Exported, Excluded     bool
+	Comments               []string
 	StopGradient           bool
 
 	HasMultipleOutputs bool

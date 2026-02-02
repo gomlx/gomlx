@@ -10,7 +10,6 @@ package layers
 import (
 	"cmp"
 
-	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -18,6 +17,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/pkg/ml/nn"
 	"github.com/gomlx/gomlx/pkg/ml/train"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 const (

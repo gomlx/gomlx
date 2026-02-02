@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
-	"github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -34,6 +33,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 

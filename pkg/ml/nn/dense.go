@@ -3,9 +3,9 @@
 package nn
 
 import (
-	. "github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // Dense performs a dense (linear) transformation with optional activation:

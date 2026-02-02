@@ -6,7 +6,7 @@ import (
 	"flag"
 
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
-	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
 

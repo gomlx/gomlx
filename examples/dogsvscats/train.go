@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -24,6 +23,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/commandline"
