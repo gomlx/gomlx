@@ -24,7 +24,6 @@ package main
 
 import (
 	"flag"
-	"os"
 
 	"k8s.io/klog/v2"
 
@@ -51,19 +50,16 @@ func main() {
 	paramsSet, err := commandline.ParseContextSettings(ctx, *settings)
 	if err != nil {
 		klog.Fatal(err)
-		os.Exit(1)
 	}
 	if *flagDownload {
 		if err := mnist.Download(*flagDataDir); err != nil {
 			klog.Fatal(err)
-			os.Exit(2)
 		}
 		klog.Infof("Data downloaded in %s", *flagDataDir)
 	}
 	if *flagTrain {
 		if err := mnist.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet); err != nil {
 			klog.Fatal(err)
-			os.Exit(3)
 		}
 	}
 	if !*flagDownload && !*flagTrain {

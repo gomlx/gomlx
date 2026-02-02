@@ -11,10 +11,10 @@ import (
 	"github.com/gomlx/go-xla/pkg/pjrt"
 	xlabfloat16 "github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )

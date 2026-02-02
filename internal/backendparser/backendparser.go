@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // Method represents a single method from the backends.Builder or backends.Function interface
