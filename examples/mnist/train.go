@@ -24,9 +24,9 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -226,7 +226,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 			loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 
 		// Update batch normalization averages, if they are used.
-		if must.M1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
+		if check1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpoint != nil {
 				if err := checkpoint.Save(); err != nil {
@@ -245,4 +245,18 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	}
 	fmt.Println()
 	return nil
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }

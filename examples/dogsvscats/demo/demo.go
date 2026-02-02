@@ -15,7 +15,6 @@ import (
 
 	"github.com/gomlx/gomlx/examples/dogsvscats"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -39,7 +38,7 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
 
 	// --force_original better set by
 	err := exceptions.TryCatch[error](func() {
@@ -57,11 +56,25 @@ func main() {
 func preGenerate(ctx *context.Context, dataDir string) {
 	*flagDataDir = fsutil.MustReplaceTildeInDir(*flagDataDir)
 	if !fsutil.MustFileExists(*flagDataDir) {
-		must.M(os.MkdirAll(*flagDataDir, 0777))
+		check(os.MkdirAll(*flagDataDir, 0777))
 	}
-	must.M(dogsvscats.Download(*flagDataDir))
-	must.M(dogsvscats.FilterValidImages(*flagDataDir))
+	check(dogsvscats.Download(*flagDataDir))
+	check(dogsvscats.FilterValidImages(*flagDataDir))
 
 	config := dogsvscats.NewPreprocessingConfigurationFromContext(ctx, *flagDataDir)
 	dogsvscats.PreGenerate(config, *flagPreGenEpochs, true)
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }

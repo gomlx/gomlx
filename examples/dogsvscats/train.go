@@ -9,7 +9,6 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -145,14 +144,14 @@ func CreateDefaultContext() *context.Context {
 func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bool, paramsSet []string) {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
-		must.M(os.MkdirAll(dataDir, 0777))
+		check(os.MkdirAll(dataDir, 0777))
 	}
 
 	// Checkpoint: it loads if already exists, and it will save as we train.
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
 		numCheckpoints := context.GetParamOr(ctx, "num_checkpoints", 3)
-		checkpoint = must.M1(checkpoints.Build(ctx).
+		checkpoint = check1(checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
 			ExcludeParams(append(
 				paramsSet,
@@ -168,8 +167,8 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 	}
 
 	// Generation of augmented images and create datasets.
-	must.M(Download(dataDir))
-	must.M(FilterValidImages(dataDir))
+	check(Download(dataDir))
+	check(FilterValidImages(dataDir))
 	config := NewPreprocessingConfigurationFromContext(ctx, dataDir)
 	trainDS, trainEvalDS, validationEvalDS := CreateDatasets(config)
 
@@ -259,15 +258,15 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 		trainer.SetContext(ctx.Reuse())
 	}
 	if globalStep < numTrainSteps {
-		_ = must.M1(loop.RunSteps(trainDS, int(numTrainSteps-globalStep)))
+		_ = check1(loop.RunSteps(trainDS, int(numTrainSteps-globalStep)))
 		fmt.Printf(
 			"\t[Step %d] median train step: %d microseconds\n",
 			loop.LoopStep,
 			loop.MedianTrainStepDuration().Microseconds(),
 		)
-		if must.M1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
+		if check1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
-			must.M(checkpoint.Save())
+			check(checkpoint.Save())
 		}
 	} else {
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
@@ -278,16 +277,30 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 	if preTraining {
 		// If pre-training (unsupervised), skip evaluation, and clear optimizer variables and global step.
 		fmt.Println("Pre-training only, no evaluation.")
-		must.M(optimizer.Clear(ctx))
-		must.M(optimizers.DeleteGlobalStep(ctx))
-		must.M(checkpoint.Save())
+		check(optimizer.Clear(ctx))
+		check(optimizers.DeleteGlobalStep(ctx))
+		check(checkpoint.Save())
 		return
 	}
 
 	// Finally, print an evaluation on train and test datasets.
 	if runEval {
 		fmt.Println()
-		must.M(commandline.ReportEval(trainer, trainEvalDS, validationEvalDS))
+		check(commandline.ReportEval(trainer, trainEvalDS, validationEvalDS))
 		fmt.Println()
 	}
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }

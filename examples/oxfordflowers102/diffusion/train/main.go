@@ -4,9 +4,9 @@ package main
 
 import (
 	"flag"
+
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
 
@@ -25,11 +25,25 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
 	err := exceptions.TryCatch[error](func() {
 		diffusion.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
 	})
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
 	}
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }

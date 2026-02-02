@@ -20,7 +20,6 @@ import (
 	"github.com/gomlx/gomlx/examples/inceptionv3"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/internal/must"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -60,9 +59,9 @@ func PlotImages(images []image.Image) {
 // ImagesToHtml converts slice of images to a list of images side-by-side in HTML format,
 // that can be easily displayed.
 func ImagesToHtml(images []image.Image) string {
-	var parts []string
+	parts := make([]string, 0, len(images))
 	for _, img := range images {
-		imgSrc := must.M1(gonbui.EmbedImageAsPNGSrc(img))
+		imgSrc := check1(gonbui.EmbedImageAsPNGSrc(img))
 		parts = append(parts, fmt.Sprintf(`<img src="%s">`, imgSrc))
 	}
 	return fmt.Sprintf(
@@ -82,7 +81,7 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 		return
 	}
 	modelDir := c.Checkpoint.Dir()
-	entries := must.M1(os.ReadDir(modelDir))
+	entries := check1(os.ReadDir(modelDir))
 	var generatedFiles []string
 	var generateGlobalSteps []int
 	for _, entry := range entries {
@@ -95,7 +94,7 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 			continue
 		}
 		generatedFiles = append(generatedFiles, fileName)
-		generateGlobalSteps = append(generateGlobalSteps, must.M1(strconv.Atoi(nameMatches[1])))
+		generateGlobalSteps = append(generateGlobalSteps, check1(strconv.Atoi(nameMatches[1])))
 	}
 
 	if len(generatedFiles) == 0 {
@@ -107,7 +106,7 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 	if !animate {
 		// Simply display all images:
 		for ii, generatedFile := range generatedFiles {
-			imagesT := must.M1(tensors.Load(path.Join(modelDir, generatedFile)))
+			imagesT := check1(tensors.Load(path.Join(modelDir, generatedFile)))
 			images := timage.ToImage().MaxValue(255.0).Batch(imagesT)
 			images = images[:imagesPerSample]
 			gonbui.DisplayMarkdown(fmt.Sprintf("- global_step %d:\n", generateGlobalSteps[ii]))
@@ -131,16 +130,16 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 		ImagesPerSample: imagesPerSample,
 	}
 	for ii, generatedFile := range generatedFiles {
-		imagesT := must.M1(tensors.Load(path.Join(modelDir, generatedFile)))
+		imagesT := check1(tensors.Load(path.Join(modelDir, generatedFile)))
 		images := timage.ToImage().MaxValue(255.0).Batch(imagesT)
 		images = images[:imagesPerSample]
 		params.Images[ii] = xslices.Map(images[:imagesPerSample], func(img image.Image) string {
 			//return fmt.Sprintf("timestep_%d", ii)
-			return must.M1(gonbui.EmbedImageAsPNGSrc(img))
+			return check1(gonbui.EmbedImageAsPNGSrc(img))
 		})
 	}
 
-	var jsTemplate = must.M1(template.New("PlotModelEvolution").Parse(`
+	var jsTemplate = check1(template.New("PlotModelEvolution").Parse(`
 	<canvas id="canvas_{{.Id}}" height="{{.Size}}px" width="{{.Width}}px"></canvas>
 	<script>
 	var canvas_{{.Id}} = document.getElementById("canvas_{{.Id}}");
@@ -184,7 +183,7 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 	</script>
 `))
 	var buf bytes.Buffer
-	must.M(jsTemplate.Execute(&buf, params))
+	check(jsTemplate.Execute(&buf, params))
 	gonbui.DisplayHTML(buf.String())
 }
 
@@ -521,7 +520,7 @@ func (c *Config) NewKidGenerator(evalDS train.Dataset, numDiffusionStep int) *Ki
 	noise := c.GenerateNoise(c.EvalBatchSize)
 	flowerIds := c.GenerateFlowerIds(c.EvalBatchSize)
 	i3Path := path.Join(c.DataDir, "inceptionV3")
-	must.M(inceptionv3.DownloadAndUnpackWeights(i3Path))
+	check(inceptionv3.DownloadAndUnpackWeights(i3Path))
 	kg := &KidGenerator{
 		config:         c,
 		ctxInceptionV3: context.New().Checked(false),

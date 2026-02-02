@@ -4,7 +4,6 @@ package dogsvscats
 
 import (
 	"github.com/gomlx/gomlx/examples/inceptionv3"
-	"github.com/gomlx/gomlx/internal/must"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -16,7 +15,7 @@ import (
 func InceptionV3ModelPrep(ctx *context.Context, dataDir string, checkpoint *checkpoints.Handler) {
 	ctx.SetParam("data_dir", dataDir)
 	if context.GetParamOr(ctx, "inception_pretrained", true) {
-		must.M(inceptionv3.DownloadAndUnpackWeights(dataDir))
+		check(inceptionv3.DownloadAndUnpackWeights(dataDir))
 	}
 }
 

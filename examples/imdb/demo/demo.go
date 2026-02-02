@@ -12,7 +12,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/ui/commandline"
 
-	"github.com/gomlx/gomlx/internal/must"
 	"k8s.io/klog/v2"
 )
 
@@ -31,11 +30,25 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
 	err := exceptions.TryCatch[error](func() {
 		imdb.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
 	})
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
 	}
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }
