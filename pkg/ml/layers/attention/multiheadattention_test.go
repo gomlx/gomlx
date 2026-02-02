@@ -69,6 +69,64 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 		}, xslices.Epsilon)
 }
 
+// TestMultiHeadAttentionFusedPath verifies that the fused SDPA fast path
+// produces the same results as the decomposed path.
+func TestMultiHeadAttentionFusedPath(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+
+	// Test that Done() (which may use fused path) matches DoneWithCoefficients()
+	// (which always uses decomposed path) with the same weights.
+	for _, useCausal := range []bool{false, true} {
+		name := "no_causal"
+		if useCausal {
+			name = "causal"
+		}
+		t.Run(name, func(t *testing.T) {
+			batchSize := 2
+			seqLen := 3
+			inputDim := 4
+			numHeads := 2
+			headDim := 2
+
+			// Build two graphs with the same context (shared weights):
+			// one using DoneWithCoefficients (decomposed), one using Done (fused).
+			ctx := context.New().WithInitializer(initializers.One)
+
+			// Decomposed path.
+			decomposedExec := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
+				input := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, inputDim))
+				builder := MultiHeadAttention(ctx, input, input, input, numHeads, headDim)
+				if useCausal {
+					builder = builder.UseCausalMask()
+				}
+				output, _ := builder.DoneWithCoefficients()
+				return []*Node{output}
+			})
+			decomposedOutputs := decomposedExec.MustExec()
+
+			// Fused path (Done() will use fused when available).
+			fusedExec := context.MustNewExec(backend, ctx.Reuse(), func(ctx *context.Context, g *Graph) []*Node {
+				input := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, inputDim))
+				builder := MultiHeadAttention(ctx, input, input, input, numHeads, headDim)
+				if useCausal {
+					builder = builder.UseCausalMask()
+				}
+				output := builder.Done()
+				return []*Node{output}
+			})
+			fusedOutputs := fusedExec.MustExec()
+
+			// Compare outputs.
+			decomposedVal := decomposedOutputs[0].Value()
+			fusedVal := fusedOutputs[0].Value()
+
+			require.Truef(t, xslices.SlicesInDelta(decomposedVal, fusedVal, 1e-4),
+				"Fused and decomposed paths produce different results.\nDecomposed: %v\nFused: %v",
+				decomposedVal, fusedVal)
+		})
+	}
+}
+
 // buildSyntheticAttentionModelFn builds a model graph building function that does a regression on the elements
 // of a sequence, with a learnable positional embedding.
 //

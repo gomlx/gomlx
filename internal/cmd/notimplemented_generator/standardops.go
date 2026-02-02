@@ -28,7 +28,8 @@ var (
 		"Constant", "Parameter", "Identity", "ReduceWindow",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
 		"And", "Or", "Xor", "Not", "ReduceAnd", "ReduceOr", "ReduceXor", "ScatterAdd",
-		"AllReduce", // Output is not standard
+		"AllReduce",      // Output is not standard
+		"FusedQKVDense",  // Multi-output op, maintained manually
 		"Return", "Closure", "Name",
 	)
 

@@ -62,6 +62,11 @@ type Node struct {
 	// for fused ops -- even though one can create a customVJP for a fused-op, if one wants.
 	vjpAlternateOutput *Node
 
+	// vjpAlternateOutputs is the multi-output counterpart of vjpAlternateOutput.
+	// For multi-output fused ops (e.g. FusedQKVDense), each element corresponds
+	// to one split output's decomposed equivalent.
+	vjpAlternateOutputs []*Node
+
 	trace error // Stack-trace error of where Node was created. Stored if graph.traced is true.
 }
 

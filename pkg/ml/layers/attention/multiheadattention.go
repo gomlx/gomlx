@@ -480,12 +480,77 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	return attentionOutput, attentionCoefficients
 }
 
+// canUseFusedSDPA checks whether the fused SDPA fast path can be used.
+// Requirements: no dropout, rank-3 inputs (single inner axis),
+// no complex masks, and keyQueryDim == valueDim.
+// Backend dtype support is handled automatically by FusedOpCaller.
+func (b *MultiHeadAttentionBuilder) canUseFusedSDPA() bool {
+	if b.dropoutRate > 0 {
+		return false
+	}
+	if b.innerKeyAxes != 1 || b.innerQueryAxes != 1 {
+		return false
+	}
+	if b.queryMask != nil || b.keyMask != nil || b.queryKeyMatrixMask != nil {
+		return false
+	}
+	if b.keyQueryDim != b.valueDim {
+		return false
+	}
+	return true
+}
+
+// fusedDone implements the fused SDPA fast path for Done().
+// It projects Q/K/V using separate Dense layers (preserving variable names and checkpoint
+// compatibility), transposes to [batch, numHeads, seqLen, headDim], calls FusedMultiHeadSDPA,
+// transposes back and applies the output Dense projection.
+func (b *MultiHeadAttentionBuilder) fusedDone() *Node {
+	// Project Q, K, V with the same Dense layer names as DoneWithCoefficients.
+	projectedQuery := layers.Dense(b.ctx.In("query"), b.query, true, b.numHeads, b.keyQueryDim)
+	projectedKey := layers.Dense(b.ctx.In("key"), b.key, true, b.numHeads, b.keyQueryDim)
+	projectedValue := layers.Dense(b.ctx.In("value"), b.value, true, b.numHeads, b.valueDim)
+
+	// Projected shapes are [batch, seqLen, numHeads, headDim].
+	// Transpose to [batch, numHeads, seqLen, headDim] for SDPA.
+	projectedQuery = TransposeAllDims(projectedQuery, 0, 2, 1, 3)
+	projectedKey = TransposeAllDims(projectedKey, 0, 2, 1, 3)
+	projectedValue = TransposeAllDims(projectedValue, 0, 2, 1, 3)
+
+	// The decomposed path (DoneWithCoefficients) divides logits by sqrt(d).
+	// The fused SDPA multiplies scores by this scale, so use 1/d to match.
+	scale := 1.0 / float64(b.keyQueryDim)
+
+	sdpaOutput := InternalFusedOpCaller(
+		func() *Node {
+			return FusedMultiHeadSDPA(projectedQuery, projectedKey, projectedValue,
+				nil, b.numHeads, b.numHeads, scale, b.useCausalMask)
+		},
+		func() *Node {
+			return SDPADecomposed(projectedQuery, projectedKey, projectedValue,
+				nil, b.numHeads, b.numHeads, scale, b.useCausalMask)
+		},
+	)
+
+	// Transpose back: [batch, numHeads, seqLen, headDim] → [batch, seqLen, numHeads, headDim]
+	sdpaOutput = TransposeAllDims(sdpaOutput, 0, 2, 1, 3)
+
+	// Reshape to [batch, seqLen, numHeads*headDim]
+	dims := sdpaOutput.Shape().Dimensions
+	sdpaOutput = Reshape(sdpaOutput, dims[0], dims[1], dims[2]*dims[3])
+
+	// Final output projection: [batch, seqLen, outputDim]
+	return layers.Dense(b.ctx.In("output"), sdpaOutput, b.useProjectionBias, b.outputDim)
+}
+
 // Done or DoneWithCoefficients should be called after all optional settings are configured.
 // It returns both the attention output and the attention coefficients (matrix) used.
 //
 // `output` will be shaped `[batch_size, <query_elements>, output_dim]`, where `output_dim`
 // can be configured by `SetOutputDim`.
 func (b *MultiHeadAttentionBuilder) Done() (output *Node) {
+	if b.canUseFusedSDPA() {
+		return b.fusedDone()
+	}
 	output, _ = b.DoneWithCoefficients()
 	return output
 }
