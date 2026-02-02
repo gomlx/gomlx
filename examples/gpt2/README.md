@@ -9,6 +9,9 @@ go build
 ./gpt2 --prompt "Once upon a time" --max-tokens 100 --temperature 0.8
 ```
 
+If downloads fail, consider using a mirror by setting `HF_ENDPOINT`.
+One such mirrors from China is `HF_ENDPOINT=https://hf-mirror.com`.
+
 ## Features
 
 - Loads GPT-2 weights from Hugging Face (safetensors format)

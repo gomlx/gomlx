@@ -17,9 +17,9 @@
 package pos
 
 import (
-	. "github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // RoPE implements rotary position embeddings ("RoFormer", see [1]).

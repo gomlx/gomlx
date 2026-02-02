@@ -4,11 +4,11 @@ package main
 
 import (
 	"flag"
+
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/examples/FlowMatching"
+	fm "github.com/gomlx/gomlx/examples/FlowMatching"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
-	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
 
@@ -31,7 +31,7 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
 	config := diffusion.NewConfig(backend, ctx, *flagDataDir, paramsSet)
 	err := exceptions.TryCatch[error](func() {
 		fm.TrainModel(config, *flagCheckpoint, *flagEval, *flagVerbosity)
@@ -39,4 +39,18 @@ func main() {
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
 	}
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }

@@ -3,9 +3,9 @@
 package graph
 
 import (
-	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // This file contains operations that operate on "ragged" representations.
