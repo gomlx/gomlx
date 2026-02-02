@@ -67,6 +67,11 @@ func ParseBuilder() ([]Method, error) {
 	if err != nil {
 		return nil, err
 	}
+	fusedOpsFile, err := parser.ParseFile(fileSet, filepath.Join(root, "backends", "fused_ops.go"),
+		nil, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
 
 	// File contents cache
 	fileCache := make(map[string][]byte)
@@ -95,7 +100,7 @@ func ParseBuilder() ([]Method, error) {
 	}
 
 	// Helper to extract methods from interface declarations
-	includeInterfaces := []string{"Builder", "Function", "StandardOps", "CollectiveOps"}
+	includeInterfaces := []string{"Builder", "Function", "StandardOps", "CollectiveOps", "FusedOps"}
 	extractMethods := func(file *ast.File) {
 		ast.Inspect(file, func(n ast.Node) bool {
 			if typeSpec, ok := n.(*ast.TypeSpec); ok {
@@ -161,6 +166,7 @@ func ParseBuilder() ([]Method, error) {
 	extractMethods(functionFile)
 	extractMethods(standardOpsFile)
 	extractMethods(collectiveOpsFile)
+	extractMethods(fusedOpsFile)
 
 	return methods, nil
 }

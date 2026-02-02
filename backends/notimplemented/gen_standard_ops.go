@@ -277,6 +277,42 @@ func (f Function) Floor(x backends.Value) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFloor)
 }
 
+// FusedDense performs fused matmul + optional bias + optional activation:
+//
+//	y = activation(x @ W + bias)
+//
+// x: [batch..., in_features], weight: [in_features, out_features...],
+// bias: [out_features...] (nil-able).
+// Contracts x's last axis with weight's first axis.
+// activation specifies the activation function to apply after the matmul+bias.
+// Use ActivationNone for no activation.
+func (f Function) FusedDense(x backends.Value, weight backends.Value, bias backends.Value, activation backends.ActivationType) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedDense)
+}
+
+// FusedGelu computes Gaussian Error Linear Unit activation.
+// If exact is true, the exact GELU (using erf) is computed;
+// otherwise the tanh approximation is used.
+func (f Function) FusedGelu(x backends.Value, exact bool) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedGelu)
+}
+
+// FusedLayerNorm applies layer normalization over specified axes.
+// gamma and beta can be nil if no learned scale/offset.
+// epsilon: numerical stability constant (typically 1e-5).
+func (f Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, gamma backends.Value, beta backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedLayerNorm)
+}
+
+// FusedSoftmax computes softmax along the specified axis.
+//
+// Note: unlike the generic softmax in GoMLX's graph package, the fused
+// softmax only accepts one axis. The axis must be non-negative (the caller
+// normalizes negative indices before calling).
+func (f Function) FusedSoftmax(x backends.Value, axis int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedSoftmax)
+}
+
 // Gather is a powerful but cumbersome Gather operation offered by XLA.
 // Full details in https://www.tensorflow.org/xla/operation_semantics#gather or
 // in https://openxla.org/stablehlo/spec#gather (StableHLO also adds batch axes).
