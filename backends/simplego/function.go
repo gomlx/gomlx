@@ -342,13 +342,13 @@ func (f *Function) Return(outputs []backends.Value, shardings []*backends.Shardi
 	f.outputs = outputNodes
 	f.returned = true
 
-	// If this is a closure, pre-compile it for efficient execution.
+	// If this is a closure or a named function (not main), pre-compile it for efficient execution.
 	// Main functions are compiled later in Builder.Compile() after
 	// duplicate output handling.
-	if f.parent != nil {
+	if f.parent != nil || f.name != backends.MainName {
 		compiled, err := newFunctionExecutable(f)
 		if err != nil {
-			return errors.WithMessagef(err, "failed to compile closure")
+			return errors.WithMessagef(err, "failed to compile function %q", f.name)
 		}
 		f.compiled = compiled
 	}
@@ -366,6 +366,61 @@ func (f *Function) Compiled() *FunctionExecutable {
 // Returns nil for non-closures or closures that don't capture any values.
 func (f *Function) CapturedParentNodes() []*Node {
 	return f.capturedParentNodes
+}
+
+// Call creates nodes representing a call to the target function with the given inputs.
+// The target function must be a named function from the same builder that has been compiled.
+func (f *Function) Call(target backends.Function, inputs ...backends.Value) ([]backends.Value, error) {
+	inputNodes, err := f.verifyAndCastValues("Call", inputs...)
+	if err != nil {
+		return nil, err
+	}
+
+	targetFn, ok := target.(*Function)
+	if !ok {
+		return nil, errors.Errorf("Call: target function must be a *simplego.Function, got %T", target)
+	}
+	if targetFn.builder != f.builder {
+		return nil, errors.Errorf("Call: target function must be from the same builder")
+	}
+	if !targetFn.returned {
+		return nil, errors.Errorf("Call: target function %q must have Return() called", targetFn.name)
+	}
+	if targetFn.compiled == nil {
+		return nil, errors.Errorf("Call: target function %q must be compiled", targetFn.name)
+	}
+
+	// Validate input count and shapes
+	if len(inputNodes) != len(targetFn.parameters) {
+		return nil, errors.Errorf("Call: function %q expects %d parameters, got %d inputs",
+			targetFn.name, len(targetFn.parameters), len(inputNodes))
+	}
+	for i, param := range targetFn.parameters {
+		if !param.shape.Equal(inputNodes[i].shape) {
+			return nil, errors.Errorf("Call: function %q parameter %d shape %s doesn't match input shape %s",
+				targetFn.name, i, param.shape, inputNodes[i].shape)
+		}
+	}
+
+	// Create output shapes from target function's outputs
+	outputShapes := make([]shapes.Shape, len(targetFn.outputs))
+	for i, out := range targetFn.outputs {
+		outputShapes[i] = out.shape.Clone()
+	}
+
+	data := &callNode{
+		target: targetFn,
+	}
+
+	node := f.newMultiOutputsNode(backends.OpTypeCall, outputShapes, inputNodes...)
+	node.data = data
+
+	return node.MultiOutputValues(), nil
+}
+
+// callNode holds the data for a Call operation.
+type callNode struct {
+	target *Function
 }
 
 // AddNodeCapturedInputs adds captured inputs from a closure to this node.
