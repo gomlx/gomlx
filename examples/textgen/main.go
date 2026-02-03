@@ -45,6 +45,7 @@ const (
 
 var (
 	flagPrompt = flag.String("prompt", "The quick", "Prompt text")
+	flagSteps  = flag.Int("steps", 200, "Number of training steps, default 200")
 )
 
 func createDefaultContext() *context.Context {
@@ -62,7 +63,7 @@ func createDefaultContext() *context.Context {
 		transformer.ParamDType:       "float32",
 
 		// Training hyperparameters
-		ParamTrainSteps:              200,
+		ParamTrainSteps:              *flagSteps,
 		optimizers.ParamLearningRate: 0.001,
 
 		// Generation hyperparameters
@@ -226,6 +227,7 @@ func extractTokens(generated *tensors.Tensor) []int {
 }
 
 func main() {
+	flag.Parse()
 	ctx := createDefaultContext()
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	flag.Parse()
