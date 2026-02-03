@@ -15,7 +15,6 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"math"
 	"os"
 	"strings"
 	"unicode"
@@ -37,7 +36,7 @@ var (
 	hfModelID = "dslim/bert-base-NER"
 
 	// Labels for the NER model (BIO tagging scheme from config.json)
-	labels = []string{
+	labelNames = []string{
 		"O",      // 0: Outside
 		"B-MISC", // 1: Beginning of miscellaneous
 		"I-MISC", // 2: Inside miscellaneous
@@ -66,7 +65,9 @@ func main() {
 	hfAuthToken := os.Getenv("HF_TOKEN")
 	repo := hub.New(hfModelID).WithAuth(hfAuthToken)
 
-	// Load vocabulary for tokenizer
+	// Load vocabulary for tokenizer.
+	// Note: This model uses an older HuggingFace format without tokenizer.json or tokenizer_class,
+	// so we use a simple inline WordPiece tokenizer instead of github.com/gomlx/go-huggingface/tokenizers.
 	vocabPath := must.M1(repo.DownloadFile("vocab.txt"))
 	tok := must.M1(newTokenizer(vocabPath))
 
@@ -102,30 +103,38 @@ func main() {
 		tokenTypeIDs[0][i] = 0
 	}
 
-	// Run inference
+	// Run inference with argmax and softmax computed in the graph
 	outputs := context.MustExecOnceN(
 		backend, ctx,
 		func(ctx *context.Context, inputs []*Node) []*Node {
 			g := inputs[0].Graph()
-			return onnxModel.CallGraph(ctx, g,
+			logits := onnxModel.CallGraph(ctx, g,
 				map[string]*Node{
 					"input_ids":      inputs[0],
 					"attention_mask": inputs[1],
 					"token_type_ids": inputs[2],
 				},
 				"logits")
+			// Compute predictions and scores in the graph (more efficient than doing it in Go)
+			predictions := ArgMax(logits[0], -1)
+			scores := Softmax(logits[0])
+			return []*Node{predictions, scores}
 		},
 		inputIDs, attentionMask, tokenTypeIDs)
 
-	// Process logits
-	logitsTensor := outputs[0]
-	var logits []float32
-	logitsTensor.MustConstFlatData(func(flat any) {
-		logits = flat.([]float32)
+	// Extract predictions and scores from tensors
+	var predictions []int32
+	outputs[0].MustConstFlatData(func(flat any) {
+		predictions = flat.([]int32)
+	})
+
+	var scores []float32
+	outputs[1].MustConstFlatData(func(flat any) {
+		scores = flat.([]float32)
 	})
 
 	// Extract entities from predictions
-	entities := extractEntities(tokens, logits, len(labels))
+	entities := extractEntities(tokens, predictions, scores, len(labelNames))
 
 	// Print results
 	if len(entities) == 0 {
@@ -140,10 +149,10 @@ func main() {
 
 // tokenizer implements a simple WordPiece tokenizer for BERT.
 type tokenizer struct {
-	vocab    map[string]int
-	clsID    int
-	sepID    int
-	unkID    int
+	vocab map[string]int
+	clsID int
+	sepID int
+	unkID int
 }
 
 func newTokenizer(vocabPath string) (*tokenizer, error) {
@@ -268,11 +277,11 @@ func (t *tokenizer) wordPieceTokenize(word string) []string {
 	return tokens
 }
 
-// extractEntities converts model logits to entity spans using BIO tagging.
-func extractEntities(tokens []string, logits []float32, numLabels int) []Entity {
+// extractEntities converts model predictions to entity spans using BIO tagging.
+func extractEntities(tokens []string, predictions []int32, scores []float32, numLabels int) []Entity {
 	var entities []Entity
 	var currentTokens []string
-	var currentLabel string
+	var currentEntityType string
 	var scoreSum float32
 	var scoreCount int
 
@@ -286,42 +295,35 @@ func extractEntities(tokens []string, logits []float32, numLabels int) []Entity 
 			continue
 		}
 
-		// Get predicted label (argmax)
-		maxIdx := 0
-		maxVal := logits[i*numLabels]
-		for j := 1; j < numLabels; j++ {
-			if logits[i*numLabels+j] > maxVal {
-				maxVal = logits[i*numLabels+j]
-				maxIdx = j
-			}
-		}
-		label := labels[maxIdx]
-		score := softmax(logits[i*numLabels:(i+1)*numLabels], maxIdx)
+		// Get prediction and its score
+		predIdx := int(predictions[i])
+		prediction := labelNames[predIdx]
+		score := scores[i*numLabels+predIdx]
 
-		if label == "O" {
+		if prediction == "O" {
 			if len(currentTokens) > 0 {
 				entities = append(entities, Entity{
 					Text:  reconstructText(currentTokens),
-					Label: currentLabel,
+					Label: currentEntityType,
 					Score: scoreSum / float32(scoreCount),
 				})
 				currentTokens = nil
 			}
-		} else if strings.HasPrefix(label, "B-") {
+		} else if strings.HasPrefix(prediction, "B-") {
 			if len(currentTokens) > 0 {
 				entities = append(entities, Entity{
 					Text:  reconstructText(currentTokens),
-					Label: currentLabel,
+					Label: currentEntityType,
 					Score: scoreSum / float32(scoreCount),
 				})
 			}
-			currentLabel = label[2:]
+			currentEntityType = prediction[2:]
 			currentTokens = []string{token}
 			scoreSum = score
 			scoreCount = 1
-		} else if strings.HasPrefix(label, "I-") {
-			entityType := label[2:]
-			if len(currentTokens) > 0 && currentLabel == entityType {
+		} else if strings.HasPrefix(prediction, "I-") {
+			entityType := prediction[2:]
+			if len(currentTokens) > 0 && currentEntityType == entityType {
 				currentTokens = append(currentTokens, token)
 				scoreSum += score
 				scoreCount++
@@ -329,11 +331,11 @@ func extractEntities(tokens []string, logits []float32, numLabels int) []Entity 
 				if len(currentTokens) > 0 {
 					entities = append(entities, Entity{
 						Text:  reconstructText(currentTokens),
-						Label: currentLabel,
+						Label: currentEntityType,
 						Score: scoreSum / float32(scoreCount),
 					})
 				}
-				currentLabel = entityType
+				currentEntityType = entityType
 				currentTokens = []string{token}
 				scoreSum = score
 				scoreCount = 1
@@ -344,7 +346,7 @@ func extractEntities(tokens []string, logits []float32, numLabels int) []Entity 
 	if len(currentTokens) > 0 {
 		entities = append(entities, Entity{
 			Text:  reconstructText(currentTokens),
-			Label: currentLabel,
+			Label: currentEntityType,
 			Score: scoreSum / float32(scoreCount),
 		})
 	}
@@ -365,18 +367,4 @@ func reconstructText(tokens []string) string {
 		}
 	}
 	return sb.String()
-}
-
-func softmax(logits []float32, idx int) float32 {
-	maxVal := logits[0]
-	for _, v := range logits[1:] {
-		if v > maxVal {
-			maxVal = v
-		}
-	}
-	var sum float32
-	for _, v := range logits {
-		sum += float32(math.Exp(float64(v - maxVal)))
-	}
-	return float32(math.Exp(float64(logits[idx]-maxVal))) / sum
 }
