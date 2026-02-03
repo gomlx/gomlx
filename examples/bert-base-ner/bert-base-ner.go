@@ -22,6 +22,7 @@ import (
 	"github.com/gomlx/go-huggingface/hub"
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/onnx-gomlx/onnx"
 	"github.com/janpfeifer/must"
@@ -122,16 +123,9 @@ func main() {
 		},
 		inputIDs, attentionMask, tokenTypeIDs)
 
-	// Extract predictions and scores from tensors
-	var predictions []int32
-	outputs[0].MustConstFlatData(func(flat any) {
-		predictions = flat.([]int32)
-	})
-
-	var scores []float32
-	outputs[1].MustConstFlatData(func(flat any) {
-		scores = flat.([]float32)
-	})
+	// Extract predictions and scores from tensors (using MustCopyFlatData which returns a Go-safe copy)
+	predictions := tensors.MustCopyFlatData[int32](outputs[0])
+	scores := tensors.MustCopyFlatData[float32](outputs[1])
 
 	// Extract entities from predictions
 	entities := extractEntities(tokens, predictions, scores, len(labelNames))
