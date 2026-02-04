@@ -5,9 +5,9 @@ package attention
 import (
 	"math"
 
-	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // sdpaCore computes the core scaled dot-product attention operation.
