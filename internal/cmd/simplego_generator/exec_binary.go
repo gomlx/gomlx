@@ -167,8 +167,6 @@ func exec{{$name}}{{$version}}Generic[T POD{{$version}}Constraints](lhs, rhs []T
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = {{ CallOp .Format "lhs[lhsIdx]" "rhs[rhsIdx]" }}
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -233,8 +231,6 @@ func exec{{$name}}{{$version}}BFloat16(lhs, rhs []bfloat16.BFloat16, output []{{
 			output[outputIdx] = bfloat16.FromFloat32({{CallOp .Format "a" "b"}})
 		{{- end }}
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }

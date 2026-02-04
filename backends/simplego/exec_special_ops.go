@@ -223,7 +223,6 @@ func execReduce(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 		return nil, errors.Errorf("unsupported reduce op %s", node.opType)
 	}
 	reduceFn(operand, output, it, dtype)
-	putReduceIterator(it)
 	return output, nil
 }
 
@@ -235,13 +234,13 @@ type reduceOutputIterator struct {
 	perAxisStride []int // It is set to 0 for the axes being reduced.
 }
 
-// newReduceOutputIterator creates an iterator for reduce operations.
-// The caller must call putReduceIterator when done to return the iterator to the pool.
 func newReduceOutputIterator(dimensions []int, reduceAxes []int) *reduceOutputIterator {
 	inputRank := len(dimensions)
-	it := getReduceIterator(inputRank)
-	copy(it.dimensions, dimensions)
-	copy(it.perAxisStride, dimensions)
+	it := &reduceOutputIterator{
+		perAxisIdx: make([]int, inputRank),
+		dimensions: slices.Clone(dimensions),
+	}
+	it.perAxisStride = slices.Clone(dimensions)
 	stride := 1
 	for _, reduceAxis := range reduceAxes {
 		it.perAxisStride[reduceAxis] = 0
@@ -533,7 +532,6 @@ func execTranspose(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 	dtype := node.shape.DType
 	transposeFn := transposeDTypeMap.Get(dtype).(func(operand, output *Buffer, it *transposeIterator))
 	transposeFn(operand, output, it)
-	putTransposeIterator(it)
 	return output, nil
 }
 
@@ -545,20 +543,19 @@ type transposeIterator struct {
 // newTransposeIterator creates a dynamic iterator that yields output flat indices
 // for the corresponding flat index on the input operand, assuming the operand flat index is moving
 // incrementally.
-// The caller must call putTransposeIterator when done to return the iterator to the pool.
 func newTransposeIterator(operand shapes.Shape, permutations []int) *transposeIterator {
 	rank := operand.Rank()
 
-	it := getTransposeIterator(rank)
-	copy(it.dimensions, operand.Dimensions)
-
-	// Get workspace for temporary slices.
-	ws := getTransposeWorkspace(rank)
-	stridesOnOutput := ws.stridesOnOutput
-	reversePermutations := ws.reversePermutations
+	it := &transposeIterator{
+		perAxisIdx:     make([]int, rank),
+		perAxisStrides: make([]int, rank),
+		dimensions:     slices.Clone(operand.Dimensions),
+	}
 
 	// First, calculate strides on the output.
+	stridesOnOutput := make([]int, rank)
 	stride := 1
+	reversePermutations := make([]int, rank)
 	for outputAxis := rank - 1; outputAxis >= 0; outputAxis-- {
 		stridesOnOutput[outputAxis] = stride
 		operandAxis := permutations[outputAxis]
@@ -571,8 +568,6 @@ func newTransposeIterator(operand shapes.Shape, permutations []int) *transposeIt
 		outputAxis := reversePermutations[operandAxis]
 		it.perAxisStrides[operandAxis] = stridesOnOutput[outputAxis]
 	}
-
-	putTransposeWorkspace(ws)
 	return it
 }
 
@@ -668,7 +663,6 @@ func execBroadcastInDim(backend *Backend, node *Node, inputs []*Buffer, inputsOw
 	// Create broadcasting the iterator: it requires operand and output shapes to have the same rank.
 	iter := newBroadcastIterator(reshapedOperand, output.shape)
 	dispatchBroadcastInDim.Dispatch(output.shape.DType, operand.flat, output.flat, iter)
-	putBroadcastIterator(iter)
 	return output, nil
 }
 

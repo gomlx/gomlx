@@ -110,8 +110,6 @@ func execAddNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []T,
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] + rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -147,8 +145,6 @@ func execAddNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFlo
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = bfloat16.FromFloat32(a + b)
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -228,8 +224,6 @@ func execMulNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []T,
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] * rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -265,8 +259,6 @@ func execMulNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFlo
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = bfloat16.FromFloat32(a * b)
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -349,8 +341,6 @@ func execSubNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []T,
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] - rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -394,8 +384,6 @@ func execSubNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFlo
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = bfloat16.FromFloat32(a - b)
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -478,8 +466,6 @@ func execDivNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []T,
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] / rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -523,8 +509,6 @@ func execDivNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFlo
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = bfloat16.FromFloat32(a / b)
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -607,8 +591,6 @@ func execRemIntegerGeneric[T PODIntegerConstraints](lhs, rhs []T, output []T,
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] % rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -646,8 +628,6 @@ func execRemFloatGeneric[T PODFloatConstraints](lhs, rhs []T, output []T,
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = T(math.Mod(float64(lhs[lhsIdx]), float64(rhs[rhsIdx])))
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -691,8 +671,6 @@ func execRemFloatBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFloat
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = bfloat16.FromFloat32(float32(math.Mod(float64(a), float64(b))))
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -775,8 +753,6 @@ func execPowIntegerGeneric[T PODIntegerConstraints](lhs, rhs []T, output []T,
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = execScalarPowIntGeneric(lhs[lhsIdx], rhs[rhsIdx])
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -814,8 +790,6 @@ func execPowFloatGeneric[T PODFloatConstraints](lhs, rhs []T, output []T,
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = T(math.Pow(float64(lhs[lhsIdx]), float64(rhs[rhsIdx])))
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -859,8 +833,6 @@ func execPowFloatBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFloat
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = bfloat16.FromFloat32(float32(math.Pow(float64(a), float64(b))))
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -940,8 +912,6 @@ func execMaxNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []T,
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = max(lhs[lhsIdx], rhs[rhsIdx])
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -977,8 +947,6 @@ func execMaxNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFlo
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = bfloat16.FromFloat32(max(a, b))
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1058,8 +1026,6 @@ func execMinNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []T,
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = min(lhs[lhsIdx], rhs[rhsIdx])
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1095,8 +1061,6 @@ func execMinNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFlo
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = bfloat16.FromFloat32(min(a, b))
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1170,8 +1134,6 @@ func execBitwiseAndIntegerGeneric[T PODIntegerConstraints](lhs, rhs []T, output 
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] & rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1245,8 +1207,6 @@ func execBitwiseOrIntegerGeneric[T PODIntegerConstraints](lhs, rhs []T, output [
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] | rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1320,8 +1280,6 @@ func execBitwiseXorIntegerGeneric[T PODIntegerConstraints](lhs, rhs []T, output 
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] ^ rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1375,8 +1333,6 @@ func execLogicalAndBooleanGeneric[T PODBooleanConstraints](lhs, rhs []T, output 
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] && rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1430,8 +1386,6 @@ func execLogicalOrBooleanGeneric[T PODBooleanConstraints](lhs, rhs []T, output [
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] || rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1485,8 +1439,6 @@ func execLogicalXorBooleanGeneric[T PODBooleanConstraints](lhs, rhs []T, output 
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] != rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1569,8 +1521,6 @@ func execEqualNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []boo
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] == rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1606,8 +1556,6 @@ func execEqualNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bool,
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = a == b
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1690,8 +1638,6 @@ func execNotEqualNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] != rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1727,8 +1673,6 @@ func execNotEqualNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bool,
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = a != b
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1814,8 +1758,6 @@ func execGreaterOrEqualNumericGeneric[T PODNumericConstraints](lhs, rhs []T, out
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] >= rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1859,8 +1801,6 @@ func execGreaterOrEqualNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bo
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = a >= b
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1946,8 +1886,6 @@ func execGreaterThanNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] > rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -1991,8 +1929,6 @@ func execGreaterThanNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bool,
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = a > b
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -2078,8 +2014,6 @@ func execLessOrEqualNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] <= rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -2123,8 +2057,6 @@ func execLessOrEqualNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bool,
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = a <= b
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -2210,8 +2142,6 @@ func execLessThanNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = lhs[lhsIdx] < rhs[rhsIdx]
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }
@@ -2255,8 +2185,6 @@ func execLessThanNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bool,
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = a < b
 		}
-		putBroadcastIterator(lhsIter)
-		putBroadcastIterator(rhsIter)
 	}
 	return
 }

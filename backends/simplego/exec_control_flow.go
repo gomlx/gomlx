@@ -71,14 +71,14 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	condCaptured := closureInputs[0].Buffers
 	bodyCaptured := closureInputs[1].Buffers
 
-	// Get pooled workspace for state buffers and ownership tracking
-	ws := getWhileStateWorkspace(stateCount)
-	state := ws.state
-	donateState := ws.donateState
+	// Set up state buffers and ownership tracking
+	state := make([]*Buffer, stateCount)
 	copy(state, stateInputs)
-
-	// Track if we own all state (after first iteration)
-	allOwned := false
+	donateState := make([]bool, stateCount)
+	donateAll := make([]bool, stateCount)
+	for i := range donateAll {
+		donateAll[i] = true
+	}
 
 	for i := range stateCount {
 		if stateOwned[i] {
@@ -92,7 +92,6 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 		// Evaluate condition - DON'T donate state or captured buffers since we may need them
 		condOutputs, err := condFn.compiled.Execute(backend, state, nil, condCaptured, nil)
 		if err != nil {
-			putWhileStateWorkspace(ws)
 			return nil, errors.WithMessagef(err, "While: evaluating condition at iteration %d", iter)
 		}
 
@@ -108,32 +107,20 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 					state[i] = backend.cloneBuffer(state[i])
 				}
 			}
-			// Copy result out before returning workspace to pool
-			result := make([]*Buffer, stateCount)
-			copy(result, state)
-			putWhileStateWorkspace(ws)
-			return result, nil
+			return state, nil
 		}
 
 		// Execute body to get new state
 		// DON'T donate captured buffers - they're reused across iterations
 		newState, err := bodyFn.compiled.Execute(backend, state, donateState, bodyCaptured, nil)
+		// After bodyFn, all donated state is consumed.
+		donateState = donateAll // After first iteration, we always own everything
+
 		if err != nil {
-			putWhileStateWorkspace(ws)
 			return nil, errors.WithMessagef(err, "While: executing body at iteration %d", iter)
 		}
 
-		// After bodyFn, all donated state is consumed.
-		// After first iteration, we always own everything
-		if !allOwned {
-			allOwned = true
-			for i := range donateState {
-				donateState[i] = true
-			}
-		}
-
-		// Copy new state pointers into our pooled slice
-		copy(state, newState)
+		state = newState
 	}
 }
 
@@ -177,13 +164,8 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 		innerSize *= shape.Dimensions[i]
 	}
 
-	// Get pooled workspace for outputs, indices, and compInputs slices
-	ws := getSortWorkspace(inputCount, axisSize)
-	outputs := ws.outputs
-	indices := ws.indices
-	compInputs := ws.compInputs
-
 	// Create output buffers (clones of input tensors)
+	outputs := make([]*Buffer, inputCount)
 	for i, input := range tensorInputs {
 		if tensorOwned[i] {
 			outputs[i] = input
@@ -193,12 +175,14 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 		}
 	}
 
-	// Initialize index array
+	// Create index array for sorting
+	indices := make([]int, axisSize)
 	for i := range indices {
 		indices[i] = i
 	}
 
 	// Create temporary buffers for comparator inputs (2 scalars per input tensor)
+	compInputs := make([]*Buffer, 2*len(outputs))
 	for i, output := range outputs {
 		compInputs[2*i] = backend.getBuffer(output.shape.DType, 1)
 		compInputs[2*i].shape = output.shape.Clone()
@@ -208,18 +192,11 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 		compInputs[2*i+1].shape = output.shape.Clone()
 		compInputs[2*i+1].shape.Dimensions = nil // scalar
 	}
-
-	// Get a temp buffer for applyPermutation (reused across all permutations)
-	tempBuf := backend.getBuffer(outputs[0].shape.DType, axisSize)
-
-	cleanup := func() {
-		for i := range inputCount {
-			backend.putBuffer(compInputs[2*i])
-			backend.putBuffer(compInputs[2*i+1])
+	defer func() {
+		for _, buf := range compInputs {
+			backend.putBuffer(buf)
 		}
-		backend.putBuffer(tempBuf)
-		putSortWorkspace(ws)
-	}
+	}()
 
 	// Calculate strides for the axis
 	axisStride := innerSize
@@ -282,22 +259,17 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 				for _, buf := range outputs {
 					backend.putBuffer(buf)
 				}
-				cleanup()
 				return nil, errors.WithMessagef(sortErr, "Sort: comparator failed")
 			}
 
-			// Apply permutation to outputs using the shared temp buffer
+			// Apply permutation to outputs
 			for _, output := range outputs {
-				applyPermutation(backend, output, tempBuf, indices, baseOffset, axisStride, axisSize)
+				applyPermutation(output, indices, baseOffset, axisStride, axisSize)
 			}
 		}
 	}
 
-	// Copy results out before returning workspace to pool
-	result := make([]*Buffer, inputCount)
-	copy(result, outputs)
-	cleanup()
-	return result, nil
+	return outputs, nil
 }
 
 // setScalarFromFlat sets a scalar buffer's value from a flat array at the given offset.
@@ -310,17 +282,15 @@ func setScalarFromFlat(scalar *Buffer, flat any, offset int) {
 var applyPermutationDTypeMap = NewDTypeMap("ApplyPermutation")
 
 // applyPermutation reorders elements along the sort axis according to the given indices.
-// tempBuf is a pre-allocated buffer of the same dtype with at least axisSize elements.
-func applyPermutation(backend *Backend, buf, tempBuf *Buffer, indices []int, baseOffset, axisStride, axisSize int) {
-	fn := applyPermutationDTypeMap.Get(buf.shape.DType).(func(buf, tempBuf *Buffer, indices []int, baseOffset, axisStride, axisSize int))
-	fn(buf, tempBuf, indices, baseOffset, axisStride, axisSize)
+func applyPermutation(buf *Buffer, indices []int, baseOffset, axisStride, axisSize int) {
+	fn := applyPermutationDTypeMap.Get(buf.shape.DType).(func(buf *Buffer, indices []int, baseOffset, axisStride, axisSize int))
+	fn(buf, indices, baseOffset, axisStride, axisSize)
 }
 
-func applyPermutationGeneric[T SupportedTypesConstraints](buf, tempBuf *Buffer, indices []int, baseOffset, axisStride, axisSize int) {
+func applyPermutationGeneric[T SupportedTypesConstraints](buf *Buffer, indices []int, baseOffset, axisStride, axisSize int) {
 	flat := buf.flat.([]T)
-	temp := tempBuf.flat.([]T)
-
 	// Extract values to temp slice
+	temp := make([]T, axisSize)
 	for i := range axisSize {
 		temp[i] = flat[baseOffset+i*axisStride]
 	}
