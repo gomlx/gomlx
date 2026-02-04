@@ -328,8 +328,8 @@ func TestApplyWithCosSin(t *testing.T) {
 			cosAngles := Cos(angles)
 			sinAngles := Sin(angles)
 
-			// Result from ApplyWithCosSin (non-interleaved, matching RoPE.Apply)
-			cossinResult := ApplyWithCosSin(x, cosAngles, sinAngles, false)
+			// Result from RoPEWithCosSin (non-interleaved, matching RoPE.Apply)
+			cossinResult := NewRoPEWithCosSin(cosAngles, sinAngles).Apply(x, nil)
 
 			return []*Node{ropeResult, cossinResult}
 		})
@@ -362,7 +362,7 @@ func TestApplyWithCosSin(t *testing.T) {
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, cos, sin *Node) *Node {
-			return ApplyWithCosSin(x, cos, sin, true)
+			return NewRoPEWithCosSin(cos, sin).WithInterleaved(true).Apply(x, nil)
 		})
 
 		// x: [2, 4] (seq_len=2, head_dim=4)
@@ -404,7 +404,7 @@ func TestApplyWithCosSin(t *testing.T) {
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, cos, sin *Node) *Node {
-			return ApplyWithCosSin(x, cos, sin, false)
+			return NewRoPEWithCosSin(cos, sin).Apply(x, nil)
 		})
 
 		// x: [1, 6] - head_dim=6, but only rotary_dim=4

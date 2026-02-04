@@ -26,11 +26,14 @@ import (
 // It splits the embedding (aka. features) axis into pairs, and rotates
 // them at different frequencies, according to position.
 //
+// RoPE implements the Encoder interface and can be used with MultiHeadAttention.WithPositionEncoder().
+//
 // [1] "RoFormer: Enhanced Transformer with Rotary Position Embedding", https://arxiv.org/abs/2104.09864
 type RoPE struct {
-	BaseFreq float64
-	DimStart int
-	DimEnd   int
+	BaseFreq    float64
+	DimStart    int
+	DimEnd      int
+	Interleaved bool // If true, rotation pairs are at even/odd indices; if false, split first-half/second-half
 }
 
 // NewRoPE creates a RoPE positional embedding that applies to the entire embedding axis.
@@ -77,7 +80,17 @@ func NewRoPEWithDimRange(baseFreq float64, dimStart, dimEnd int) *RoPE {
 	}
 }
 
-// Apply implements the PositionalEncoder interface.
+// WithInterleaved sets whether rotation pairs are at interleaved indices.
+// If true, pairs are at even/odd indices (x[..., 0], x[..., 1]).
+// If false (default), pairs are split first-half/second-half (x[..., :dim/2], x[..., dim/2:]).
+//
+// Returns the modified RoPE for method chaining.
+func (r *RoPE) WithInterleaved(interleaved bool) *RoPE {
+	r.Interleaved = interleaved
+	return r
+}
+
+// Apply implements the Encoder interface.
 // It applies rotary position embeddings to x using the provided position indices.
 // The rotation is applied on a range of frequencies multiplied by the position
 // of each element, as specified by positionIndices.
@@ -98,7 +111,7 @@ func NewRoPEWithDimRange(baseFreq float64, dimStart, dimEnd int) *RoPE {
 func (r *RoPE) Apply(x *Node, positionIndices *Node) *Node {
 	if r.DimStart == 0 && r.DimEnd == -1 {
 		// Apply to entire dimension
-		return applyRoPE(x, positionIndices, r.BaseFreq)
+		return applyRoPE(x, positionIndices, r.BaseFreq, r.Interleaved)
 	}
 
 	// Apply to custom dimension range
@@ -107,15 +120,68 @@ func (r *RoPE) Apply(x *Node, positionIndices *Node) *Node {
 		dimEnd = x.Shape().Dimensions[x.Shape().Rank()-1]
 	}
 
-	return applyRoPEWithCustomDim(x, positionIndices, r.BaseFreq, r.DimStart, dimEnd)
+	return applyRoPEWithCustomDim(x, positionIndices, r.BaseFreq, r.DimStart, dimEnd, r.Interleaved)
 }
 
-// ApplyWithCosSin applies rotary position embeddings using pre-computed cos and sin tensors.
+// RoPEWithCosSin implements the Encoder interface using pre-computed cos and sin tensors.
 // This is useful for ONNX inference where cos/sin are provided as cached inputs rather than
 // being computed from a base frequency and position indices.
 //
-// Unlike RoPE.Apply, this does not compute cos/sin from a base frequency — those concepts
-// are already baked into the pre-computed tensors.
+// Use NewRoPEWithCosSin to create an instance.
+type RoPEWithCosSin struct {
+	cos, sin    *Node
+	interleaved bool
+}
+
+// NewRoPEWithCosSin creates a RoPE encoder using pre-computed cos and sin tensors.
+// This is useful for ONNX inference where cos/sin are provided as cached inputs.
+//
+// Parameters:
+//   - cos: Pre-computed cosine values, broadcastable to [..., seq_len, rotary_dim/2]
+//   - sin: Pre-computed sine values, same shape as cos
+//
+// Returns:
+//   - A RoPEWithCosSin instance that implements the Encoder interface
+//
+// Example:
+//
+//	// For ONNX inference with pre-computed cos/sin:
+//	rope := NewRoPEWithCosSin(cosTensor, sinTensor).WithInterleaved(true)
+//	embedded := rope.Apply(x, nil) // positionIndices not used
+func NewRoPEWithCosSin(cos, sin *Node) *RoPEWithCosSin {
+	return &RoPEWithCosSin{
+		cos:         cos,
+		sin:         sin,
+		interleaved: false,
+	}
+}
+
+// WithInterleaved sets whether rotation pairs are at interleaved indices.
+// If true, pairs are at even/odd indices (x[..., 0], x[..., 1]).
+// If false (default), pairs are split first-half/second-half (x[..., :dim/2], x[..., dim/2:]).
+//
+// Returns the modified RoPEWithCosSin for method chaining.
+func (r *RoPEWithCosSin) WithInterleaved(interleaved bool) *RoPEWithCosSin {
+	r.interleaved = interleaved
+	return r
+}
+
+// Apply implements the Encoder interface.
+// For RoPEWithCosSin, the positionIndices parameter is ignored since cos/sin are pre-computed.
+// Pass nil for positionIndices.
+//
+// Parameters:
+//   - x: Input tensor shaped [..., seq_len, head_dim]
+//   - positionIndices: Ignored (pass nil). Position information is already baked into cos/sin.
+//
+// Returns:
+//   - Tensor with rotary embeddings applied, same shape as x.
+func (r *RoPEWithCosSin) Apply(x *Node, positionIndices *Node) *Node {
+	return applyWithCosSin(x, r.cos, r.sin, r.interleaved)
+}
+
+// applyWithCosSin applies rotary position embeddings using pre-computed cos and sin tensors.
+// This is the internal implementation used by both RoPE and RoPEWithCosSin.
 //
 // Parameters:
 //   - x: Input tensor shaped [..., seq_len, head_dim]
@@ -128,7 +194,7 @@ func (r *RoPE) Apply(x *Node, positionIndices *Node) *Node {
 //   - Tensor with rotary embeddings applied, same shape as x.
 //     If cos/sin cover fewer dimensions than x's last axis (partial rotation),
 //     the remaining dimensions are passed through unchanged.
-func ApplyWithCosSin(x, cos, sin *Node, interleaved bool) *Node {
+func applyWithCosSin(x, cos, sin *Node, interleaved bool) *Node {
 	rank := x.Shape().Rank()
 	embedDim := x.Shape().Dimensions[rank-1]
 
@@ -212,10 +278,11 @@ func ApplyWithCosSin(x, cos, sin *Node, interleaved bool) *Node {
 //   - x: Input tensor shaped [..., seq_len, head_dim|embed_dim], last dim must be even
 //   - positionIndices: Position indices shaped [..., seq_len]
 //   - baseFreq: Base frequency for computing rotation angles
+//   - interleaved: If true, rotation pairs are at even/odd indices; if false, split first-half/second-half
 //
 // Returns:
 //   - Tensor with rotary embeddings applied, same shape as x
-func applyRoPE(x *Node, positionIndices *Node, baseFreq float64) *Node {
+func applyRoPE(x *Node, positionIndices *Node, baseFreq float64, interleaved bool) *Node {
 	g := x.Graph()
 	shape := x.Shape()
 	dtype := shape.DType
@@ -263,7 +330,7 @@ func applyRoPE(x *Node, positionIndices *Node, baseFreq float64) *Node {
 	cosAngles := Cos(angles) // [seqLen, embedDim/2]
 	sinAngles := Sin(angles) // [seqLen, embedDim/2]
 
-	return ApplyWithCosSin(x, cosAngles, sinAngles, false)
+	return applyWithCosSin(x, cosAngles, sinAngles, interleaved)
 }
 
 // applyRoPEWithCustomDim applies RoPE to x[..., dimStart:dimEnd] (even length).
@@ -275,16 +342,17 @@ func applyRoPE(x *Node, positionIndices *Node, baseFreq float64) *Node {
 //   - baseFreq: Base frequency for computing rotation angles
 //   - dimStart: Start index of the dimension range (inclusive)
 //   - dimEnd: End index of the dimension range (exclusive)
+//   - interleaved: If true, rotation pairs are at even/odd indices; if false, split first-half/second-half
 //
 // Returns:
 //   - Tensor with rotary embeddings applied to the specified range, same shape as x
-func applyRoPEWithCustomDim(x *Node, positionIndices *Node, baseFreq float64, dimStart, dimEnd int) *Node {
+func applyRoPEWithCustomDim(x *Node, positionIndices *Node, baseFreq float64, dimStart, dimEnd int, interleaved bool) *Node {
 	rank := x.Shape().Rank()
 	// Extract the part to apply RoPE (slice the last axis)
 	part := Slice(x, AxisRange().Spacer(), AxisRange(dimStart, dimEnd))
 
 	// Apply RoPE
-	rotatedPart := applyRoPE(part, positionIndices, baseFreq)
+	rotatedPart := applyRoPE(part, positionIndices, baseFreq, interleaved)
 
 	// Concatenate with unchanged parts
 	if dimStart == 0 && dimEnd == x.Shape().Dimensions[rank-1] {

@@ -410,12 +410,75 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 		projectedValue = TransposeAllDims(fullValue, 0, 2, 1, 3)
 	}
 
+	numKeyAxes := b.key.Rank() - 2
+
+	// For the common rank-3 case (single inner axis), use the optimized sdpaCore path
+	// which shares implementation with ScaledDotProductAttention.
+	if b.innerKeyAxes == 1 && b.innerQueryAxes == 1 && b.dropoutRate <= 0 {
+		attentionOutput, attentionCoefficients = b.executeWithSDPACore(projectedQuery, projectedKey, projectedValue)
+	} else {
+		// For higher rank cases or when dropout is needed, use the flexible Einsum-based approach
+		attentionOutput, attentionCoefficients = b.executeWithEinsum(projectedQuery, projectedKey, projectedValue, numKeyAxes)
+	}
+
+	// Final projection: flatten the heads and then do a final projection to the final
+	// outputDim (set with `SetOutputDim`).
+	flatDims := make([]int, attentionOutput.Rank()-1)
+	copy(flatDims, attentionOutput.Shape().Dimensions[:len(flatDims)])
+	flatDims[len(flatDims)-1] *= attentionOutput.Shape().Dimensions[attentionOutput.Rank()-1]
+	// New shape: `[batch, <query_elements>, num_head*value_dim]`
+	attentionOutput = Reshape(attentionOutput, flatDims...)
+	// Final shape: `[batch, <query_elements>, outputDim]`
+	attentionOutput = layers.Dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
+
+	return attentionOutput, attentionCoefficients
+}
+
+// executeWithSDPACore uses the shared sdpaCore implementation for the common rank-3 case.
+// This path is used when innerKeyAxes == 1 && innerQueryAxes == 1 && no dropout.
+// Input layout: [batch, seq, heads, dim], output layout: [batch, seq, heads, dim]
+func (b *MultiHeadAttentionBuilder) executeWithSDPACore(projectedQuery, projectedKey, projectedValue *Node) (attentionOutput, attentionCoefficients *Node) {
+	// Transpose from MHA layout [batch, seq, heads, dim] to SDPA layout [batch, heads, seq, dim]
+	querySDPA := TransposeAllDims(projectedQuery, 0, 2, 1, 3)
+	keySDPA := TransposeAllDims(projectedKey, 0, 2, 1, 3)
+	valueSDPA := TransposeAllDims(projectedValue, 0, 2, 1, 3)
+
+	// Compute scale factor
+	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
+
+	// Build additive mask from MHA's boolean mask
+	// MHA mask layout: [batch, query_seq, heads, key_seq]
+	// SDPA mask layout: [batch, heads, query_seq, key_seq]
+	var additiveMask *Node
+	mask := b.buildMask()
+	if mask != nil {
+		// Transpose mask from [batch, query, heads, key] to [batch, heads, query, key]
+		maskSDPA := TransposeAllDims(mask, 0, 2, 1, 3)
+		additiveMask = booleanToAdditiveMask(maskSDPA, querySDPA.DType())
+	}
+
+	// Call the shared core implementation
+	outputSDPA, weightsSDPA := sdpaCore(querySDPA, keySDPA, valueSDPA, scale, additiveMask, true)
+
+	// Transpose output back from SDPA layout [batch, heads, seq, dim] to MHA layout [batch, seq, heads, dim]
+	attentionOutput = TransposeAllDims(outputSDPA, 0, 2, 1, 3)
+
+	// Transpose coefficients back for compatibility
+	if weightsSDPA != nil {
+		attentionCoefficients = TransposeAllDims(weightsSDPA, 0, 2, 1, 3)
+	}
+
+	return attentionOutput, attentionCoefficients
+}
+
+// executeWithEinsum uses the flexible Einsum-based approach for higher rank cases or when dropout is needed.
+// This preserves the original MHA behavior for complex tensor layouts.
+func (b *MultiHeadAttentionBuilder) executeWithEinsum(projectedQuery, projectedKey, projectedValue *Node, numKeyAxes int) (attentionOutput, attentionCoefficients *Node) {
 	// Build equation for attention Einsum.
 	batchAxis := 'b'
 	headsAxis := 'h'
 	projectionAxis := 'd'
 
-	numKeyAxes := b.key.Rank() - 2
 	nextFreeAxis := 'i'
 	keyInnerAxes := nextNAxes(numKeyAxes, nextFreeAxis)
 	nextFreeAxis += rune(numKeyAxes)
@@ -434,11 +497,9 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 
 	// Attention logits: outer product of key/query inner dimensions, with a dot-product of their projections.
 	// Shape: [batch, <query_elements>, num_heads, <key_elements>]
-	// Note: We scale by 1/sqrt(keyQueryDim) ONCE here (removed duplicate scaling below)
 	attentionLogits := Einsum(attentionEquation, projectedQuery, projectedKey)
 	normalizingFactor := math.Sqrt(float64(b.keyQueryDim))
 	attentionLogits = DivScalar(attentionLogits, normalizingFactor)
-	//fmt.Printf("\tattentionLogits: %s\n", attentionLogits.Shape())
 
 	mask := b.buildMask()
 	// Attention coefficients: Softmax over all the inner key axes (the last dimensions of attentionLogits)
@@ -447,10 +508,8 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	if mask == nil {
 		attentionCoefficients = Softmax(attentionLogits, softmaxAxes...)
 	} else {
-		//fmt.Printf("\tmask=%s\n", mask.Shape())
 		attentionCoefficients = MaskedSoftmax(attentionLogits, mask, softmaxAxes...)
 	}
-	//fmt.Printf("\tattentionCoefficients: %s\n", attentionLogits.Shape())
 	if b.dropoutRate > 0 {
 		attentionCoefficients = layers.Dropout(b.ctx, attentionCoefficients, ConstAs(attentionCoefficients, b.dropoutRate))
 	}
@@ -463,19 +522,7 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 		batchAxis, queryInnerAxes, headsAxis, keyInnerAxes,
 		batchAxis, keyInnerAxes, headsAxis, projectionAxis,
 		batchAxis, queryInnerAxes, headsAxis, projectionAxis)
-	//fmt.Printf("\toutputEquation (coef x value): %s\n", outputEquation)
 	attentionOutput = Einsum(outputEquation, attentionCoefficients, projectedValue)
-
-	// Final projection: flatten the heads and then do a final projection to the final
-	// outputDim (set with `SetOutputDim`).
-	//fmt.Printf("\tattentionOutput (1): %s\n", attentionOutput.Shape())
-	flatDims := make([]int, attentionOutput.Rank()-1)
-	copy(flatDims, attentionOutput.Shape().Dimensions[:len(flatDims)])
-	flatDims[len(flatDims)-1] *= attentionOutput.Shape().Dimensions[attentionOutput.Rank()-1]
-	// New shape: `[batch, <query_elements>, num_head*value_dim]`
-	attentionOutput = Reshape(attentionOutput, flatDims...)
-	// Final shape: `[batch, <query_elements>, outputDim]`
-	attentionOutput = layers.Dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
 
 	return attentionOutput, attentionCoefficients
 }

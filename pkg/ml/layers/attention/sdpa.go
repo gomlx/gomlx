@@ -6,8 +6,63 @@ import (
 	"math"
 
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 )
+
+// sdpaCore computes the core scaled dot-product attention operation.
+// This is the shared implementation used by both ScaledDotProductAttention and MultiHeadAttention.
+//
+// All inputs must be in [batch, heads, seq, dim] layout:
+//   - query: [batch, heads, q_seq, head_dim]
+//   - key:   [batch, heads, kv_seq, head_dim]
+//   - value: [batch, heads, kv_seq, v_head_dim]
+//   - additiveMask: optional, broadcastable to [batch, heads, q_seq, kv_seq]
+//
+// Returns:
+//   - output: [batch, heads, q_seq, v_head_dim]
+//   - weights: [batch, heads, q_seq, kv_seq] (nil if returnWeights is false)
+func sdpaCore(query, key, value *Node, scale float64, additiveMask *Node, returnWeights bool) (*Node, *Node) {
+	// Compute attention scores: Q @ K^T * scale
+	// query: [batch, heads, q_seq, head_dim]
+	// key:   [batch, heads, kv_seq, head_dim]
+	// scores: [batch, heads, q_seq, kv_seq]
+	scores := Einsum("bhqd,bhkd->bhqk", query, key)
+	scores = MulScalar(scores, scale)
+
+	// Apply additive mask
+	if additiveMask != nil {
+		scores = Add(scores, additiveMask)
+	}
+
+	// Softmax over kv_seq dimension
+	weights := Softmax(scores, -1)
+
+	// Compute output: weights @ value
+	// weights: [batch, heads, q_seq, kv_seq]
+	// value:   [batch, heads, kv_seq, v_head_dim]
+	// output:  [batch, heads, q_seq, v_head_dim]
+	output := Einsum("bhqk,bhkd->bhqd", weights, value)
+
+	if returnWeights {
+		return output, weights
+	}
+	return output, nil
+}
+
+// booleanToAdditiveMask converts a boolean attention mask to an additive mask.
+// True means attend (adds 0), False means mask out (adds large negative value).
+// The dtype parameter specifies the output dtype (should match the scores dtype).
+func booleanToAdditiveMask(booleanMask *Node, dtype dtypes.DType) *Node {
+	g := booleanMask.Graph()
+
+	largeNeg := ScalarOne(g, dtype)
+	largeNeg = MulScalar(largeNeg, -1e9)
+	zero := ScalarZero(g, dtype)
+
+	// Where mask is true, add 0; where false, add large negative
+	return Where(booleanMask, zero, largeNeg)
+}
 
 // ScaledDotProductAttentionBuilder configures and executes scaled dot-product attention.
 // Create it with ScaledDotProductAttention, configure with builder methods, and call Done.
@@ -97,39 +152,18 @@ func (b *ScaledDotProductAttentionBuilder) execute(returnWeights bool) (*Node, *
 		scale = 1.0 / math.Sqrt(float64(headDim))
 	}
 
-	// Compute attention scores: Q @ K^T * scale
-	// query: [batch, heads, q_seq, head_dim]
-	// key:   [batch, heads, kv_seq, head_dim]
-	// scores: [batch, heads, q_seq, kv_seq]
-	scores := Einsum("bhqd,bhkd->bhqk", query, key)
-	scores = MulScalar(scores, scale)
-
-	// Apply boolean mask: convert to additive mask
+	// Build combined additive mask from boolean and additive masks
+	var additiveMask *Node
 	if b.booleanMask != nil {
-		// Where mask is false, set to large negative value
-		largeNeg := ScalarOne(scores.Graph(), scores.DType())
-		largeNeg = MulScalar(largeNeg, -1e9)
-		// Where mask is true, add 0; where false, add large negative
-		maskAdditive := Where(b.booleanMask, ScalarZero(scores.Graph(), scores.DType()), largeNeg)
-		scores = Add(scores, maskAdditive)
+		additiveMask = booleanToAdditiveMask(b.booleanMask, query.DType())
 	}
-
-	// Apply additive mask
 	if b.additiveMask != nil {
-		scores = Add(scores, b.additiveMask)
+		if additiveMask != nil {
+			additiveMask = Add(additiveMask, b.additiveMask)
+		} else {
+			additiveMask = b.additiveMask
+		}
 	}
 
-	// Softmax over kv_seq dimension
-	weights := Softmax(scores, -1)
-
-	// Compute output: weights @ value
-	// weights: [batch, heads, q_seq, kv_seq]
-	// value:   [batch, heads, kv_seq, v_head_dim]
-	// output:  [batch, heads, q_seq, v_head_dim]
-	output := Einsum("bhqk,bhkd->bhqd", weights, value)
-
-	if returnWeights {
-		return output, weights
-	}
-	return output, nil
+	return sdpaCore(query, key, value, scale, additiveMask, returnWeights)
 }
