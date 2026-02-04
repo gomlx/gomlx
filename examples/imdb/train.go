@@ -9,8 +9,6 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -26,10 +24,12 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -130,12 +130,12 @@ func TrainModel(
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
-		must.M(os.MkdirAll(dataDir, 0777))
+		check(os.MkdirAll(dataDir, 0777))
 	}
 
 	// Imdb data preparation.
 	IncludeSeparators = context.GetParamOr(ctx, "imdb_include_separators", false)
-	must.M(Download(dataDir))
+	check(Download(dataDir))
 	imdbUseUnsupervised := context.GetParamOr(ctx, "imdb_use_unsupervised", false)
 	imdbMaskWordTaskWeight := context.GetParamOr(ctx, "imdb_mask_word_task_weight", 0.0)
 	if imdbUseUnsupervised && imdbMaskWordTaskWeight <= 0 {
@@ -179,7 +179,7 @@ func TrainModel(
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
 		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
-		checkpoint = must.M1(checkpoints.Build(ctx).
+		checkpoint = check1(checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, ParamsExcludedFromLoading...)...).
@@ -248,17 +248,17 @@ func TrainModel(
 		trainer.SetContext(ctx.Reuse())
 	}
 	if globalStep < numTrainSteps {
-		_ = must.M1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
+		_ = check1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
 		if verbosity >= 1 {
 			fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 				loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 		}
 
 		// Update batch normalization averages, if they are used.
-		if must.M1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
+		if check1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpoint != nil {
-				must.M(checkpoint.Save())
+				check(checkpoint.Save())
 			}
 		}
 
@@ -272,7 +272,7 @@ func TrainModel(
 		if verbosity >= 1 {
 			fmt.Println()
 		}
-		must.M(commandline.ReportEval(trainer, trainEvalDS, testEvalDS))
+		check(commandline.ReportEval(trainer, trainEvalDS, testEvalDS))
 	}
 }
 
@@ -285,7 +285,8 @@ var sampleStyle = lipgloss.NewStyle().
 func PrintSample(n int) {
 	const maxLen = 200
 	ds := NewDataset("TypeTest", TypeTest, maxLen, n, true).Shuffle()
-	_, inputs, labels := must.M3(ds.Yield())
+	_, inputs, labels, err := ds.Yield()
+	check(err)
 	tensors.MustConstFlatData[int8](labels[0], func(labelsData []int8) {
 		for ii := range n {
 			fmt.Println(sampleStyle.Render(
@@ -293,4 +294,18 @@ func PrintSample(n int) {
 		}
 	})
 	fmt.Println()
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }

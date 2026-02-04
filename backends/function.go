@@ -39,6 +39,9 @@ type Function interface {
 	// CollectiveOps includes all collective (distributed cross-device) operations.
 	CollectiveOps
 
+	// FusedOps includes optional fused operations for better performance.
+	FusedOps
+
 	// Parameter creates an input parameter for this function.
 	//
 	// For the Main function, these become the computation's input parameters

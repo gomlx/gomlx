@@ -14,8 +14,8 @@ import (
 	"simd/archsimd"
 	"unsafe"
 
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 func init() {

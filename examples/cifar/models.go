@@ -3,7 +3,6 @@
 package cifar
 
 import (
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
@@ -11,6 +10,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
 	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // C10PlainModelGraph implements train.ModelFn, and returns the logit Node, given the input image.

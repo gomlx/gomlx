@@ -24,7 +24,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 

@@ -8,8 +8,8 @@ import (
 	"os"
 	"slices"
 
-	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 )
@@ -69,6 +69,34 @@ type reverseNode struct {
 	// VJPsForMultiOutputs holds the individual VJPs for a multi-outputs nodes: they are only collapsed to a VJP when
 	// all the VJPs for the outputs have been calculated.
 	VJPsForMultiOutputs []*Node
+}
+
+// accumulateInputVJPs validates and accumulates VJPs for each of node's inputs
+// into the reverse graph. It checks that each VJP has the expected shape and
+// either initializes or adds to the existing accumulated VJP.
+func (rg *reverseGraph) accumulateInputVJPs(node *Node, inputsVJPs []*Node, outputShape shapes.Shape) {
+	for ii, input := range node.Inputs() {
+		vjp := inputsVJPs[ii]
+		if vjp == nil {
+			continue
+		}
+		combinedShape := combineOutputShape(outputShape, input.Shape())
+		if !vjp.Shape().Equal(combinedShape) {
+			if node.Trace() != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "Trace for node in error: %s\n%+v\n\n", node, node.Trace())
+			}
+			Panicf("invalid Gradient calculation for node %q: invalid shape (or DType) for calculated AccumulatedVJP for "+
+				"input #%d (out of %d): input shape=%s, calculated AccumulatedVJP shape=%s (wanted %s)"+
+				" -- this probably indicates a bug in the code, please report the issue.",
+				node, ii, len(node.Inputs()), input.Shape(), vjp.Shape(), combinedShape)
+		}
+		rInput := rg.ReverseNodes[input.Id()]
+		if rInput.AccumulatedVJP == nil {
+			rInput.AccumulatedVJP = vjp
+		} else {
+			rInput.AccumulatedVJP = Add(rInput.AccumulatedVJP, vjp)
+		}
+	}
 }
 
 // The jacobian
@@ -167,6 +195,25 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			continue
 		}
 
+		// If the node has a vjpAlternateOutput (e.g. fused ops with a decomposed alternative),
+		// transfer the accumulated VJP to the alternate output node and let the normal
+		// gradient loop process the decomposed subgraph. The alternate output has a lower
+		// nodeIdx (built first by InternalFusedOpCaller), so the loop will reach it later.
+		if node.vjpAlternateOutput != nil {
+			alt := node.vjpAlternateOutput
+			rAlt := rg.ReverseNodes[alt.Id()]
+			// Transfer VJP to the decomposed output.
+			if rAlt.AccumulatedVJP == nil {
+				rAlt.AccumulatedVJP = rNode.AccumulatedVJP
+			} else {
+				rAlt.AccumulatedVJP = Add(rAlt.AccumulatedVJP, rNode.AccumulatedVJP)
+			}
+			// Mark the decomposed subgraph as Included and Useful so the gradient
+			// loop processes it instead of skipping.
+			markSubgraphUseful(rg, alt)
+			continue
+		}
+
 		// Find vjpFn that calculates backpropagation for this node.
 		vjpFn := node.customVJP
 		if vjpFn == nil {
@@ -186,30 +233,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			Panicf("AccumulatedVJP(%s) returned %d VJPs, but it has %d inputNodes, implementation of auto-differentiation for node failed",
 				node, len(inputsVJPs), len(node.Inputs()))
 		}
-		for ii, input := range node.Inputs() {
-			vjp := inputsVJPs[ii]
-			if vjp == nil {
-				// Skip this vjp, input is assumed to be static (or gradient stopped for some other reason)
-				continue
-			}
-			//vjp.SetLoggedf("\tVJP for %s / input #%d VJP --> to be backprop to %s", node, ii, input)
-			combinedShape := combineOutputShape(outputShape, input.Shape())
-			if !vjp.Shape().Equal(combinedShape) {
-				if node.Trace() != nil {
-					_, _ = fmt.Fprintf(os.Stderr, "Trace for node in error: %s\n%+v\n\n", node, node.Trace())
-				}
-				Panicf("invalid Gradient calculation for node %q: invalid shape (or DType) for calculated AccumulatedVJP for "+
-					"input #%d (out of %d): input shape=%s, calculated AccumulatedVJP shape=%s (wanted %s)"+
-					" -- this probably indicates a bug in the code, please report the issue.",
-					node, ii, len(node.Inputs()), input.Shape(), vjp.Shape(), combinedShape)
-			}
-			rInput := rg.ReverseNodes[input.Id()]
-			if rInput.AccumulatedVJP == nil {
-				rInput.AccumulatedVJP = vjp
-			} else {
-				rInput.AccumulatedVJP = Add(rInput.AccumulatedVJP, vjp)
-			}
-		}
+		rg.accumulateInputVJPs(node, inputsVJPs, outputShape)
 	}
 
 	gradients := make([]*Node, len(gradientNodes))
@@ -295,6 +319,23 @@ func recursiveMarkAsUseful(rg *reverseGraph, rNode *reverseNode) {
 	rNode.Useful = true
 	for _, consumer := range rNode.Consumers {
 		recursiveMarkAsUseful(rg, consumer)
+	}
+}
+
+// markSubgraphUseful walks the decomposed subgraph rooted at node and marks
+// every reachable node as Included and Useful, so the gradient loop will
+// process them. This is called when a fused node's VJP is transferred to its
+// vjpAlternateOutput — without this, the decomposed nodes may have been
+// marked as dead code and would be skipped.
+func markSubgraphUseful(rg *reverseGraph, node *Node) {
+	rNode := rg.ReverseNodes[node.Id()]
+	if rNode.Included && rNode.Useful {
+		return // Already marked.
+	}
+	rNode.Included = true
+	rNode.Useful = true
+	for _, input := range node.inputNodes {
+		markSubgraphUseful(rg, input)
 	}
 }
 

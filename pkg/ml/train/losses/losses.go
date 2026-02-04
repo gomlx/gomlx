@@ -9,11 +9,11 @@ package losses
 import (
 	"strings"
 
-	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 )
 

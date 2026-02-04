@@ -8,10 +8,8 @@ import (
 	"os"
 	"path"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -65,9 +63,9 @@ type Config struct {
 func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string, paramsSet []string) *Config {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
-		must.M(os.MkdirAll(dataDir, 0777))
+		check(os.MkdirAll(dataDir, 0777))
 	}
-	dtype := must.M1(dtypes.DTypeString(
+	dtype := check1(dtypes.DTypeString(
 		context.GetParamOr(ctx, "dtype", "float32")))
 	cfg := &Config{
 		Backend:       backend,
@@ -88,9 +86,9 @@ func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string, p
 
 // CreateInMemoryDatasets returns a train and a validation InMemoryDataset.
 func (c *Config) CreateInMemoryDatasets() (trainDS, validationDS *datasets.InMemoryDataset) {
-	trainDS = must.M1(
+	trainDS = check1(
 		flowers.InMemoryDataset(c.Backend, c.DataDir, c.ImageSize, "train", PartitionSeed, ValidationFraction, 1.0))
-	validationDS = must.M1(
+	validationDS = check1(
 		flowers.InMemoryDataset(
 			c.Backend,
 			c.DataDir,
@@ -126,15 +124,10 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 	f, err := os.Open(fPath)
 	if err == nil {
 		// Load previously generated values.
-		err = exceptions.TryCatch[error](func() {
-			dec := gob.NewDecoder(f)
-			mean = must.M1(tensors.GobDeserialize(dec))
-			stddev = must.M1(tensors.GobDeserialize(dec))
-			must.M(f.Close())
-		})
-		if err != nil {
-			panic(errors.WithMessagef(err, "While loading  NormalizationValues to %q", fPath))
-		}
+		dec := gob.NewDecoder(f)
+		mean = check1(tensors.GobDeserialize(dec))
+		stddev = check1(tensors.GobDeserialize(dec))
+		check(f.Close())
 		normalizationMean, normalizationStdDev = mean, stddev
 		return
 	}
@@ -153,21 +146,17 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 			return []*Node{images}, labels
 		},
 	)
-	normalizationMean, normalizationStdDev = must.M2(
-		datasets.Normalization(c.Backend, ds, 0, -1)) // mean/stddev for each channel (axis=-1) separately.
+	var err2 error
+	normalizationMean, normalizationStdDev, err2 = datasets.Normalization(c.Backend, ds, 0, -1) // mean/stddev for each channel (axis=-1) separately.
+	check(err2)
 	mean, stddev = normalizationMean, normalizationStdDev
 
 	// Save for future times.
-	err = exceptions.TryCatch[error](func() {
-		f = must.M1(os.Create(fPath))
-		enc := gob.NewEncoder(f)
-		must.M(mean.GobSerialize(enc))
-		must.M(stddev.GobSerialize(enc))
-		must.M(f.Close())
-	})
-	if err != nil {
-		panic(errors.WithMessagef(err, "While saving NormalizationValues to %q", fPath))
-	}
+	f = check1(os.Create(fPath))
+	enc := gob.NewEncoder(f)
+	check(mean.GobSerialize(enc))
+	check(stddev.GobSerialize(enc))
+	check(f.Close())
 	return
 }
 
