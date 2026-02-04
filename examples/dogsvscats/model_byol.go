@@ -7,7 +7,6 @@ package dogsvscats
 
 import (
 	"github.com/gomlx/gomlx/examples/inceptionv3"
-	"github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -15,6 +14,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
 	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // byolModelEmbedding is the core of the BYOL ((Bootstrap Your Own Latent) model.

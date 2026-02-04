@@ -11,7 +11,6 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
@@ -146,7 +145,7 @@ func main() {
 	}
 
 	// Parse hyperparameter settings.
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
 	if *flagVerbose {
 		fmt.Println("Hyperparameters set:")
 		fmt.Println(commandline.SprintModifiedContextSettings(ctx, paramsSet))
@@ -161,7 +160,7 @@ func main() {
 	// Load data from OGBN-MAG.
 	fmt.Printf("Loading data ... ")
 	start := time.Now()
-	must.M(mag.Download(*flagDataDir))
+	check(mag.Download(*flagDataDir))
 	fmt.Printf("elapsed: %s\n", time.Since(start))
 	SetTrainSteps(ctx) // Can only be set after mag data is loaded.
 
@@ -181,4 +180,18 @@ func main() {
 	if err != nil {
 		fmt.Printf("%+v\n", err)
 	}
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }

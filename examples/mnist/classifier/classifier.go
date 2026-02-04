@@ -12,17 +12,17 @@ package classifier
 import (
 	"image"
 
+	"github.com/pkg/errors"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/mnist"
-	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/core/tensors/images"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/pkg/errors"
 )
 
 // Classifier holds the MNIST model compiled.
@@ -45,7 +45,7 @@ func New(checkpointDir string) (*Classifier, error) {
 		ctx:     context.New(),
 	}
 
-	// Notice all hyperparameters are read from the checkpoint as well, so it will be build the
+	// Notice all hyperparameters are read from the checkpoint as well, so it will be built with the
 	// same model.
 	// We don't need to keep the checkpoint handler around, since we are not going to use it to save.
 	_, err := checkpoints.Load(c.ctx).
@@ -69,16 +69,17 @@ func New(checkpointDir string) (*Classifier, error) {
 	}
 
 	// Create model executor.
-	c.exec = context.MustNewExec(c.backend, c.ctx.In("model"), func(ctx *context.Context, image *graph.Node) (choice *graph.Node) {
-		// We take the first result from the modelFn -- it returns a slice.
-		image = graph.ExpandAxes(image, 0) // Create a batch dimension of size 1.
-		logits := modelFn(ctx, nil, []*graph.Node{image})[0]
-		// Take the class with highest logit value.
-		choice = graph.ArgMax(logits, -1, dtypes.Int32)
-		// Remove batch dimension.
-		choice = graph.Reshape(choice) // No dimensions given, means a scalar.
-		return
-	})
+	c.exec = context.MustNewExec(c.backend, c.ctx,
+		func(ctx *context.Context, image *graph.Node) (choice *graph.Node) {
+			// We take the first result from the modelFn -- it returns a slice.
+			image = graph.ExpandAxes(image, 0) // Create a batch dimension of size 1.
+			logits := modelFn(ctx, nil, []*graph.Node{image})[0]
+			// Take the class with highest logit value.
+			choice = graph.ArgMax(logits, -1, dtypes.Int32)
+			// Remove batch dimension.
+			choice = graph.Reshape(choice) // No dimensions given, means a scalar.
+			return
+		})
 	return c, nil
 }
 
@@ -88,8 +89,7 @@ func New(checkpointDir string) (*Classifier, error) {
 // TODO: resize image to 32x32, used by the model.
 func (c *Classifier) Classify(img image.Image) (int32, error) {
 	input := images.ToTensor(dtypes.Float32).Single(img)
-	var outputs []*tensors.Tensor
-	err := exceptions.TryCatch[error](func() { outputs = c.exec.MustExec(input) })
+	outputs, err := c.exec.Exec(input)
 	if err != nil {
 		return 0, err
 	}

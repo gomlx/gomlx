@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
@@ -33,7 +32,7 @@ func init() {
 
 func getTestConfig() *Config {
 	ctx := CreateDefaultContext()
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *ctxSettings))
+	paramsSet := check1(commandline.ParseContextSettings(ctx, *ctxSettings))
 	backend := graphtest.BuildTestBackend()
 	return NewConfig(backend, ctx, *flagDataDir, paramsSet)
 }

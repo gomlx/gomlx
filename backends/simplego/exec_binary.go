@@ -5,8 +5,8 @@ package simplego
 import (
 	"slices"
 
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // This file implements binary operations.
