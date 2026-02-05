@@ -371,19 +371,27 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	projectedQuery := layers.Dense(b.ctx.In("query"), b.query, true, b.numHeads, b.keyQueryDim)
 	projectedValue := layers.Dense(b.ctx.In("value"), b.value, true, b.numHeads, b.valueDim)
 
-	// Apply RoPE if enabled (before KV cache to cache rotated embeddings)
+	// Apply positional encoding (e.g. RoPE) if enabled.
+	// Applied before KV cache so that rotated embeddings are cached.
+	// projectedQuery/Key shape: [batch, seq, heads, dim] (BSHD layout).
+	// RoPE expects [..., seq_len, dim] at the last two axes, so we transpose
+	// to [batch, heads, seq, dim] (BHSD), apply, then transpose back.
 	if b.positionalEncoder != nil {
-		// Create sequential position indices from the position node
-		// projectedQuery shape: [..., seqLen, numHeads, headDim]
-		seqLen := projectedQuery.Shape().Dimensions[projectedQuery.Rank()-2]
+		seqLen := projectedQuery.Shape().Dimensions[1] // seq is at axis 1 in BSHD
 		var posIndices *Node
 		if b.position != nil {
 			posIndices = pos.SequentialPositions(b.g, b.position, seqLen)
 		} else {
 			posIndices = pos.SequentialPositions(b.g, Const(b.g, int32(0)), seqLen)
 		}
+		// Transpose to BHSD [batch, heads, seq, dim] so seq is at rank-2 for RoPE
+		projectedQuery = TransposeAllDims(projectedQuery, 0, 2, 1, 3)
 		projectedQuery = b.positionalEncoder.Apply(projectedQuery, posIndices)
+		projectedQuery = TransposeAllDims(projectedQuery, 0, 2, 1, 3) // back to BSHD
+
+		projectedKey = TransposeAllDims(projectedKey, 0, 2, 1, 3)
 		projectedKey = b.positionalEncoder.Apply(projectedKey, posIndices)
+		projectedKey = TransposeAllDims(projectedKey, 0, 2, 1, 3) // back to BSHD
 	}
 
 	// Handle KV cache if in incremental generation mode
@@ -436,37 +444,22 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 
 // executeWithSDPACore uses the shared sdpaCore implementation for the common rank-3 case.
 // This path is used when innerKeyAxes == 1 && innerQueryAxes == 1 && no dropout.
-// Input layout: [batch, seq, heads, dim], output layout: [batch, seq, heads, dim]
+// Input layout: [batch, seq, heads, dim] (BSHD), output layout: [batch, seq, heads, dim] (BSHD).
+// Uses LayoutBSHD to avoid transposing Q/K/V — sdpaCore uses layout-specific Einsum equations.
 func (b *MultiHeadAttentionBuilder) executeWithSDPACore(projectedQuery, projectedKey, projectedValue *Node) (attentionOutput, attentionCoefficients *Node) {
-	// Transpose from MHA layout [batch, seq, heads, dim] to SDPA layout [batch, heads, seq, dim]
-	querySDPA := TransposeAllDims(projectedQuery, 0, 2, 1, 3)
-	keySDPA := TransposeAllDims(projectedKey, 0, 2, 1, 3)
-	valueSDPA := TransposeAllDims(projectedValue, 0, 2, 1, 3)
-
 	// Compute scale factor
 	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
 
-	// Build additive mask from MHA's boolean mask
-	// MHA mask layout: [batch, query_seq, heads, key_seq]
-	// SDPA mask layout: [batch, heads, query_seq, key_seq]
+	// Build additive mask from MHA's boolean mask.
+	// buildMask() returns mask in [batch, query_seq, heads, key_seq] — matches BSHD score layout.
 	var additiveMask *Node
 	mask := b.buildMask()
 	if mask != nil {
-		// Transpose mask from [batch, query, heads, key] to [batch, heads, query, key]
-		maskSDPA := TransposeAllDims(mask, 0, 2, 1, 3)
-		additiveMask = booleanToAdditiveMask(maskSDPA, querySDPA.DType())
+		additiveMask = booleanToAdditiveMask(mask, projectedQuery.DType())
 	}
 
-	// Call the shared core implementation
-	outputSDPA, weightsSDPA := sdpaCore(querySDPA, keySDPA, valueSDPA, scale, additiveMask, true)
-
-	// Transpose output back from SDPA layout [batch, heads, seq, dim] to MHA layout [batch, seq, heads, dim]
-	attentionOutput = TransposeAllDims(outputSDPA, 0, 2, 1, 3)
-
-	// Transpose coefficients back for compatibility
-	if weightsSDPA != nil {
-		attentionCoefficients = TransposeAllDims(weightsSDPA, 0, 2, 1, 3)
-	}
+	// Call the shared core with BSHD layout — no transposes needed.
+	attentionOutput, attentionCoefficients = sdpaCore(projectedQuery, projectedKey, projectedValue, scale, additiveMask, true, LayoutBSHD)
 
 	return attentionOutput, attentionCoefficients
 }

@@ -13,6 +13,56 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestAxesLayoutEquivalence(t *testing.T) {
+	// Verify that BSHD and BHSD layouts produce the same results when
+	// given transposed versions of the same inputs.
+	backend := graphtest.BuildTestBackend()
+	ctx := context.New()
+
+	exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
+		// Compute with BHSD layout (default): q/k/v are [batch, heads, seq, dim]
+		bhsdOut := ScaledDotProductAttention(q, k, v).Done()
+
+		// Transpose to BSHD: [batch, seq, heads, dim]
+		qBSHD := TransposeAllDims(q, 0, 2, 1, 3)
+		kBSHD := TransposeAllDims(k, 0, 2, 1, 3)
+		vBSHD := TransposeAllDims(v, 0, 2, 1, 3)
+
+		// Compute with BSHD layout
+		bshdOut := ScaledDotProductAttention(qBSHD, kBSHD, vBSHD).WithLayout(LayoutBSHD).Done()
+
+		// Transpose BSHD output back to BHSD for comparison
+		bshdOutTransposed := TransposeAllDims(bshdOut, 0, 2, 1, 3)
+
+		return []*Node{bhsdOut, bshdOutTransposed}
+	})
+
+	// [batch=2, heads=2, seq=3, dim=4]
+	query := [][][][]float32{
+		{{{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}},
+			{{0.1, 0.2, 0.3, 0.4}, {0.5, 0.6, 0.7, 0.8}, {0.9, 1.0, 1.1, 1.2}}},
+		{{{-1, -2, -3, -4}, {-5, -6, -7, -8}, {-9, -10, -11, -12}},
+			{{2, 3, 4, 5}, {6, 7, 8, 9}, {10, 11, 12, 13}}},
+	}
+	key := query   // self-attention
+	value := query // self-attention
+
+	outputs := exec.MustExec(query, key, value)
+	bhsdData := outputs[0].Value().([][][][]float32)
+	bshdData := outputs[1].Value().([][][][]float32)
+
+	for i := range bhsdData {
+		for j := range bhsdData[i] {
+			for k := range bhsdData[i][j] {
+				for l := range bhsdData[i][j][k] {
+					assert.InDelta(t, bhsdData[i][j][k][l], bshdData[i][j][k][l], 1e-5,
+						"mismatch at [%d][%d][%d][%d]", i, j, k, l)
+				}
+			}
+		}
+	}
+}
+
 func TestScaledDotProductAttention(t *testing.T) {
 	t.Run("BasicIdentity", func(t *testing.T) {
 		// With identity-like inputs, verify output shape and basic computation.
