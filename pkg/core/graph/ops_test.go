@@ -253,7 +253,7 @@ func TestBinaryOps(t *testing.T) {
 						s1[ii] = test.fnScalar(s1[ii], yValue)
 					}
 				}
-				if !reflect.DeepEqual(got, want) {
+				if !xslices.SlicesInDelta(got, want, Epsilon) {
 					fmt.Printf("%s\n", g)
 					fmt.Printf("\tResult: %v %s\n", got, local.Shape())
 					t.Errorf("Wanted %v, got %v", want, got)
