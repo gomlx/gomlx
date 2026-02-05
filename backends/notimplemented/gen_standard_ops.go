@@ -304,6 +304,27 @@ func (f Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, 
 	return nil, f.baseErrFn(backends.OpTypeFusedLayerNorm)
 }
 
+// FusedMultiHeadSDPA computes multi-head scaled dot-product attention.
+//
+// output = softmax(Q @ K^T * scale + mask) @ V, computed per-head with GQA support.
+//
+// Inputs:
+//   - q: [batch, numHeads, seqLen, headDim]
+//   - k: [batch, numKVHeads, kvLen, headDim]
+//   - v: [batch, numKVHeads, kvLen, headDim]
+//   - mask: [seqLen, kvLen] (optional, additive mask; nil for no mask)
+//
+// Parameters:
+//   - numHeads: number of query attention heads
+//   - numKVHeads: number of key/value attention heads (for GQA; numHeads must be divisible by numKVHeads)
+//   - scale: scaling factor applied to Q @ K^T (typically 1/sqrt(headDim))
+//   - causal: if true, apply causal (lower-triangular) mask
+//
+// Output: [batch, numHeads, seqLen, headDim]
+func (f Function) FusedMultiHeadSDPA(q backends.Value, k backends.Value, v backends.Value, mask backends.Value, numHeads int, numKVHeads int, scale float64, causal bool) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedMultiHeadSDPA)
+}
+
 // FusedSoftmax computes softmax along the specified axis.
 //
 // Note: unlike the generic softmax in GoMLX's graph package, the fused

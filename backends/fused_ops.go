@@ -70,4 +70,40 @@ type FusedOps interface {
 	// - bias: [out_features...] (nil-able).
 	// - activation: applied after the matmul+bias; set to ActivationNone for no activation.
 	FusedDense(x, weight, bias Value, activation ActivationType) (Value, error)
+
+	// FusedMultiHeadSDPA computes multi-head scaled dot-product attention.
+	//
+	// output = softmax(Q @ K^T * scale + mask) @ V, computed per-head with GQA support.
+	//
+	// Inputs:
+	//   - q: [batch, numHeads, seqLen, headDim]
+	//   - k: [batch, numKVHeads, kvLen, headDim]
+	//   - v: [batch, numKVHeads, kvLen, headDim]
+	//   - mask: [seqLen, kvLen] (optional, additive mask; nil for no mask)
+	//
+	// Parameters:
+	//   - numHeads: number of query attention heads
+	//   - numKVHeads: number of key/value attention heads (for GQA; numHeads must be divisible by numKVHeads)
+	//   - scale: scaling factor applied to Q @ K^T (typically 1/sqrt(headDim))
+	//   - causal: if true, apply causal (lower-triangular) mask
+	//
+	// Output: [batch, numHeads, seqLen, headDim]
+	FusedMultiHeadSDPA(q, k, v, mask Value, numHeads, numKVHeads int, scale float64, causal bool) (Value, error)
+
+	// FusedQKVDense performs fused QKV projection: a single large matmul followed by
+	// scatter into separate Q, K, V outputs with optional per-projection bias.
+	//
+	// Inputs:
+	//   - x: [batch, inFeatures]
+	//   - wQKV: [inFeatures, qDim+2*kvDim] (Q/K/V weights concatenated along last axis)
+	//   - biasQ: [qDim] (optional, nil for no bias)
+	//   - biasK: [kvDim] (optional, nil for no bias)
+	//   - biasV: [kvDim] (optional, nil for no bias)
+	//
+	// Parameters:
+	//   - qDim: output dimension for Q projection
+	//   - kvDim: output dimension for K and V projections
+	//
+	// Outputs: q [batch, qDim], k [batch, kvDim], v [batch, kvDim]
+	FusedQKVDense(x, wQKV, biasQ, biasK, biasV Value, qDim, kvDim int) (q, k, v Value, err error)
 }

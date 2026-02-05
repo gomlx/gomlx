@@ -52,6 +52,29 @@ func (d *nodeFusedDense) EqualNodeData(other nodeDataComparable) bool {
 	return d.activation == other.(*nodeFusedDense).activation
 }
 
+type nodeFusedMultiHeadSDPA struct {
+	numHeads   int
+	numKVHeads int
+	scale      float64
+	causal     bool
+}
+
+func (d *nodeFusedMultiHeadSDPA) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*nodeFusedMultiHeadSDPA)
+	return d.numHeads == o.numHeads && d.numKVHeads == o.numKVHeads &&
+		d.scale == o.scale && d.causal == o.causal
+}
+
+type nodeFusedQKVDense struct {
+	qDim  int
+	kvDim int
+}
+
+func (d *nodeFusedQKVDense) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*nodeFusedQKVDense)
+	return d.qDim == o.qDim && d.kvDim == o.kvDim
+}
+
 // FusedSoftmax computes softmax along the specified axis.
 // The axis must be non-negative (the caller normalizes negative indices).
 func (f *Function) FusedSoftmax(x backends.Value, axis int) (backends.Value, error) {
@@ -171,4 +194,73 @@ func (f *Function) FusedDense(x, weight, bias backends.Value, activation backend
 	data := &nodeFusedDense{activation: activation}
 	node, _ := f.getOrCreateNode(backends.OpTypeFusedDense, outShape, fusedInputs, data)
 	return node, nil
+}
+
+// FusedMultiHeadSDPA computes multi-head scaled dot-product attention.
+func (f *Function) FusedMultiHeadSDPA(q, k, v, mask backends.Value, numHeads, numKVHeads int, scale float64, causal bool) (backends.Value, error) {
+	values := []backends.Value{q, k, v}
+	if mask != nil {
+		values = append(values, mask)
+	}
+	inputs, err := f.verifyAndCastValues("MultiHeadSDPA", values...)
+	if err != nil {
+		return nil, err
+	}
+	qNode := inputs[0]
+
+	// Validate shapes: q [batch, numHeads, seqLen, headDim]
+	if qNode.shape.Rank() != 4 {
+		return nil, errors.Errorf("MultiHeadSDPA: q must have rank 4, got %d", qNode.shape.Rank())
+	}
+	if numHeads <= 0 || numKVHeads <= 0 || numHeads%numKVHeads != 0 {
+		return nil, errors.Errorf("MultiHeadSDPA: numHeads (%d) must be positive and divisible by numKVHeads (%d)", numHeads, numKVHeads)
+	}
+
+	// Output shape is the same as q: [batch, numHeads, seqLen, headDim]
+	data := &nodeFusedMultiHeadSDPA{numHeads: numHeads, numKVHeads: numKVHeads, scale: scale, causal: causal}
+	node, _ := f.getOrCreateNode(backends.OpTypeFusedMultiHeadSDPA, qNode.shape.Clone(), inputs, data)
+	return node, nil
+}
+
+// FusedQKVDense performs fused QKV projection.
+func (f *Function) FusedQKVDense(x, wQKV, biasQ, biasK, biasV backends.Value, qDim, kvDim int) (qOut, kOut, vOut backends.Value, err error) {
+	values := []backends.Value{x, wQKV}
+	if biasQ != nil {
+		values = append(values, biasQ)
+	}
+	if biasK != nil {
+		values = append(values, biasK)
+	}
+	if biasV != nil {
+		values = append(values, biasV)
+	}
+	inputs, err := f.verifyAndCastValues("QKVDense", values...)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	xNode := inputs[0]
+
+	if xNode.shape.Rank() < 1 {
+		return nil, nil, nil, errors.Errorf("QKVDense: x must have rank >= 1, got %d", xNode.shape.Rank())
+	}
+
+	batchDims := xNode.shape.Dimensions[:xNode.shape.Rank()-1]
+	qDims := make([]int, len(batchDims)+1)
+	copy(qDims, batchDims)
+	qDims[len(batchDims)] = qDim
+	kvDims := make([]int, len(batchDims)+1)
+	copy(kvDims, batchDims)
+	kvDims[len(batchDims)] = kvDim
+
+	qShape := shapes.Make(xNode.shape.DType, qDims...)
+	kShape := shapes.Make(xNode.shape.DType, kvDims...)
+	vShape := shapes.Make(xNode.shape.DType, kvDims...)
+
+	data := &nodeFusedQKVDense{qDim: qDim, kvDim: kvDim}
+	node := f.newMultiOutputsNode(backends.OpTypeFusedQKVDense, []shapes.Shape{qShape, kShape, vShape}, inputs...)
+	node.data = data
+	qOut = node.multiOutputsNodes[0]
+	kOut = node.multiOutputsNodes[1]
+	vOut = node.multiOutputsNodes[2]
+	return
 }

@@ -65,6 +65,8 @@ const (
 	NodeTypeFusedDense
 	NodeTypeFusedGelu
 	NodeTypeFusedLayerNorm
+	NodeTypeFusedMultiHeadSDPA
+	NodeTypeFusedQKVDense
 	NodeTypeFusedSoftmax
 	NodeTypeGather
 	NodeTypeGreaterOrEqual
@@ -1967,6 +1969,157 @@ func backendFusedLayerNorm(x *Node, axes []int, epsilon float64, gamma *Node, be
 		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
+	return
+}
+
+// nodeInputsFusedMultiHeadSDPA holds the inputs used for the call to backends.FusedMultiHeadSDPA.
+type nodeInputsFusedMultiHeadSDPA struct {
+	q          *Node
+	k          *Node
+	v          *Node
+	mask       *Node
+	numHeads   int
+	numKVHeads int
+	scale      float64
+	causal     bool
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedMultiHeadSDPA) Type() NodeType {
+	return NodeTypeFusedMultiHeadSDPA
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedMultiHeadSDPA) String() string {
+	return fmt.Sprintf("%s(q=[#%d], k=[#%d], v=[#%d], mask=%s, numHeads=%v, numKVHeads=%v, scale=%v, causal=%v)",
+		ni.Type(),
+		ni.q.Id(),
+		ni.k.Id(),
+		ni.v.Id(),
+		strNillableNode(ni.mask),
+		ni.numHeads,
+		ni.numKVHeads,
+		ni.scale,
+		ni.causal,
+	)
+}
+
+// backendFusedMultiHeadSDPA is a Graph wrapper for the backend.Builder.FusedMultiHeadSDPA method.
+func backendFusedMultiHeadSDPA(q *Node, k *Node, v *Node, mask *Node, numHeads int, numKVHeads int, scale float64, causal bool) (
+	node *Node) {
+	inputNodes := []*Node{q, k, v}
+	if mask != nil {
+		inputNodes = append(inputNodes, mask)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedMultiHeadSDPA{
+		q:          q,
+		k:          k,
+		v:          v,
+		mask:       mask,
+		numHeads:   numHeads,
+		numKVHeads: numKVHeads,
+		scale:      scale,
+		causal:     causal,
+	}
+	var maskVal backends.Value
+	if mask != nil {
+		maskVal = mask.outputOps[0]
+	}
+	result, err := g.currentFunc.backendFunc.FusedMultiHeadSDPA(q.outputOps[0], k.outputOps[0], v.outputOps[0], maskVal, inputs.numHeads, inputs.numKVHeads, inputs.scale, inputs.causal)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsFusedQKVDense holds the inputs used for the call to backends.FusedQKVDense.
+type nodeInputsFusedQKVDense struct {
+	x     *Node
+	wQKV  *Node
+	biasQ *Node
+	biasK *Node
+	biasV *Node
+	qDim  int
+	kvDim int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedQKVDense) Type() NodeType {
+	return NodeTypeFusedQKVDense
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedQKVDense) String() string {
+	return fmt.Sprintf("%s(x=[#%d], wQKV=[#%d], biasQ=%s, biasK=%s, biasV=%s, qDim=%v, kvDim=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.wQKV.Id(),
+		strNillableNode(ni.biasQ),
+		strNillableNode(ni.biasK),
+		strNillableNode(ni.biasV),
+		ni.qDim,
+		ni.kvDim,
+	)
+}
+
+// backendFusedQKVDense is a Graph wrapper for the backend.Builder.FusedQKVDense method.
+func backendFusedQKVDense(x *Node, wQKV *Node, biasQ *Node, biasK *Node, biasV *Node, qDim int, kvDim int) (
+	q, k, v *Node) {
+	inputNodes := []*Node{x, wQKV}
+	if biasQ != nil {
+		inputNodes = append(inputNodes, biasQ)
+	}
+	if biasK != nil {
+		inputNodes = append(inputNodes, biasK)
+	}
+	if biasV != nil {
+		inputNodes = append(inputNodes, biasV)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedQKVDense{
+		x:     x,
+		wQKV:  wQKV,
+		biasQ: biasQ,
+		biasK: biasK,
+		biasV: biasV,
+		qDim:  qDim,
+		kvDim: kvDim,
+	}
+	var biasQVal backends.Value
+	if biasQ != nil {
+		biasQVal = biasQ.outputOps[0]
+	}
+	var biasKVal backends.Value
+	if biasK != nil {
+		biasKVal = biasK.outputOps[0]
+	}
+	var biasVVal backends.Value
+	if biasV != nil {
+		biasVVal = biasV.outputOps[0]
+	}
+	v0, v1, v2, err := g.currentFunc.backendFunc.FusedQKVDense(x.outputOps[0], wQKV.outputOps[0], biasQVal, biasKVal, biasVVal, inputs.qDim, inputs.kvDim)
+	if err != nil {
+		panic(err)
+	}
+	node := &Node{
+		outputOps:    []backends.Value{v0, v1, v2},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1)), mustNoError(g.builder.OpShape(v2))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	splitNodes := splitNode(node)
+	q, k, v = splitNodes[0], splitNodes[1], splitNodes[2]
 	return
 }
 

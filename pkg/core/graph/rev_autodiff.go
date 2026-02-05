@@ -214,6 +214,14 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			continue
 		}
 
+		// Multi-output fused ops: compute gradients through decomposed subgraphs,
+		// one per output, and accumulate the results.
+		if node.vjpAlternateOutputs != nil {
+			altVJPs := reverseAutodiffAlternateMulti(node.vjpAlternateOutputs, node.inputNodes, rNode.VJPsForMultiOutputs, outputShape)
+			rg.accumulateInputVJPs(node, altVJPs, outputShape)
+			continue
+		}
+
 		// Find vjpFn that calculates backpropagation for this node.
 		vjpFn := node.customVJP
 		if vjpFn == nil {
