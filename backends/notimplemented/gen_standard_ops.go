@@ -35,6 +35,13 @@ func (f Function) ArgMinMax(x backends.Value, axis int, outputDType dtypes.DType
 	return nil, f.baseErrFn(backends.OpTypeArgMinMax)
 }
 
+// Atan2 returns element-wise the arc tangent of y/x, using the signs of both arguments to determine
+// the correct quadrant of the result.
+// Standard broadcasting rules apply (see documentation).
+func (f Function) Atan2(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeAtan2)
+}
+
 // BitCount returns the number of bits that are set to one.
 // Also known as Population Count ("Popcnt") or Hamming Weight.
 func (f Function) BitCount(operand backends.Value) (backends.Value, error) {
@@ -277,15 +284,14 @@ func (f Function) Floor(x backends.Value) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFloor)
 }
 
-// FusedDense performs fused matmul + optional bias + optional activation:
+// FusedDense performs fused matmul + optional bias + optional activation.
 //
-//	y = activation(x @ W + bias)
+// It does y = activation(x @ W + bias). Where @ is a standard matmul,
+// it contracts x's last axis with weight's first axis.
 //
-// x: [batch..., in_features], weight: [in_features, out_features...],
-// bias: [out_features...] (nil-able).
-// Contracts x's last axis with weight's first axis.
-// activation specifies the activation function to apply after the matmul+bias.
-// Use ActivationNone for no activation.
+// - x: [batch..., in_features], weight: [in_features, out_features...],
+// - bias: [out_features...] (nil-able).
+// - activation: applied after the matmul+bias; set to ActivationNone for no activation.
 func (f Function) FusedDense(x backends.Value, weight backends.Value, bias backends.Value, activation backends.ActivationType) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFusedDense)
 }

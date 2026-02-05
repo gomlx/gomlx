@@ -26,6 +26,7 @@
   - Added `Function` concept (and support for closures) and the `Function.Call` operation.
   - Control Flow: Added `While` and `If` operations.
   - Order operations: Added `Sort`, `SortFunc`, `TopK`, `BottomK`.
+  - Added `Atan2` function.
 - Package `ml/layers/attention`: Improved `MultiHeadAttention`; Added `KVCache` support.
 - Package `ml/layers/attention/pos`: Added `PositionalEncoder` interface, and "RoPE" (Rotary Positional Encoding) implementation.
 - Package `ml/models/transformers`: Added a `Transformer` "model": a collection of transformer layers are setup based on given configuration.

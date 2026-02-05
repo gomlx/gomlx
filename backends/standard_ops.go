@@ -17,6 +17,11 @@ type StandardOps interface {
 	// Standard broadcasting rules apply (see documentation).
 	Add(lhs, rhs Value) (Value, error)
 
+	// Atan2 returns element-wise the arc tangent of y/x, using the signs of both arguments to determine
+	// the correct quadrant of the result.
+	// Standard broadcasting rules apply (see documentation).
+	Atan2(lhs, rhs Value) (Value, error)
+
 	// ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
 	//
 	// outputDType defines the output of the argmin/argmax, it doesn't need to be the same as the input.
