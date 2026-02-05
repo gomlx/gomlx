@@ -1155,6 +1155,11 @@ func (f *Function) Pow(lhsOp, rhsOp backends.Value) (backends.Value, error) {
 	return f.addBinaryOp(backends.OpTypePow, lhsOp, rhsOp)
 }
 
+// Atan2 implements the backends.Builder interface.
+func (f *Function) Atan2(lhsOp, rhsOp backends.Value) (backends.Value, error) {
+	return f.addBinaryOp(backends.OpTypeAtan2, lhsOp, rhsOp)
+}
+
 // BitwiseAnd implements the backends.Builder interface.
 func (f *Function) BitwiseAnd(lhsOp, rhsOp backends.Value) (backends.Value, error) {
 	return f.addBinaryOp(backends.OpTypeBitwiseAnd, lhsOp, rhsOp)

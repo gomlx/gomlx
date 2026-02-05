@@ -30,6 +30,7 @@ const (
 	NodeTypeAdd
 	NodeTypeAllReduce
 	NodeTypeArgMinMax
+	NodeTypeAtan2
 	NodeTypeBatchNormForInference
 	NodeTypeBatchNormForTraining
 	NodeTypeBatchNormGradient
@@ -302,6 +303,52 @@ func backendArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (
 		isMin:       isMin,
 	}
 	result, err := g.currentFunc.backendFunc.ArgMinMax(x.outputOps[0], inputs.axis, inputs.outputDType, inputs.isMin)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsAtan2 holds the inputs used for the call to backends.Atan2.
+type nodeInputsAtan2 struct {
+	lhs *Node
+	rhs *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsAtan2) Type() NodeType {
+	return NodeTypeAtan2
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsAtan2) String() string {
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
+		ni.Type(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
+	)
+}
+
+// Atan2 returns element-wise the arc tangent of y/x, using the signs of both arguments to determine
+// the correct quadrant of the result.
+// Standard broadcasting rules apply (see documentation).
+func Atan2(lhs *Node, rhs *Node) (
+	node *Node) {
+	inputNodes := []*Node{lhs, rhs}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsAtan2{
+		lhs: lhs,
+		rhs: rhs,
+	}
+	result, err := g.currentFunc.backendFunc.Atan2(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
