@@ -92,11 +92,11 @@ type Config struct {
 //	func MyModel(ctx *context.Context, inputs []*Node) (outputs []*Node) {
 //		x := inputs[0]
 //		logits := fnn.New(ctx.In("model"), x, NumClasses).
-//			NumHiddenLayers(3).
-//			Apply("swish").
+//			NumHiddenLayers(3, 128).
+//			Activation(activations.TypeSilu).
 //			Dropout(0.3).
 //			Normalization("layer").
-//			UseResidual(true).
+//			Residual(true).
 //			Done()
 //		return []*Node{logits}
 //	}
