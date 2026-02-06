@@ -19,6 +19,7 @@ func init() {
 	setNodeExecutor(backends.OpTypeDiv, priorityGeneric, execDiv)
 	setNodeExecutor(backends.OpTypeRem, priorityGeneric, execRem)
 	setNodeExecutor(backends.OpTypePow, priorityGeneric, execPow)
+	setNodeExecutor(backends.OpTypeAtan2, priorityGeneric, execAtan2)
 	setNodeExecutor(backends.OpTypeMax, priorityGeneric, execMax)
 	setNodeExecutor(backends.OpTypeMin, priorityGeneric, execMin)
 	setNodeExecutor(backends.OpTypeBitwiseAnd, priorityGeneric, execBitwiseAnd)
@@ -832,6 +833,107 @@ func execPowFloatBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFloat
 			a := lhs[lhsIdx].Float32()
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = bfloat16.FromFloat32(float32(math.Pow(float64(a), float64(b))))
+		}
+	}
+	return
+}
+
+// execAtan2 executes the binary op Atan2.
+func execAtan2(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
+
+	switch lhs.shape.DType {
+
+	case dtypes.Float32:
+		execAtan2FloatGeneric[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]float32), lhs.shape, rhs.shape, output.shape)
+
+	case dtypes.Float64:
+		execAtan2FloatGeneric[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]float64), lhs.shape, rhs.shape, output.shape)
+
+	case dtypes.BFloat16:
+		execAtan2FloatBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16), lhs.shape, rhs.shape, output.shape)
+	default:
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
+	}
+	return output, nil
+}
+
+func execAtan2FloatGeneric[T PODFloatConstraints](lhs, rhs []T, output []T,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = T(math.Atan2(float64(input), float64(c)))
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0]
+		for ii, input := range rhs {
+			output[ii] = T(math.Atan2(float64(c), float64(input)))
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = T(math.Atan2(float64(input), float64(rhs[ii])))
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = T(math.Atan2(float64(lhs[lhsIdx]), float64(rhs[rhsIdx])))
+		}
+	}
+	return
+}
+
+func execAtan2FloatBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFloat16,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0].Float32()
+		for ii, input := range lhs {
+			a := input.Float32()
+			output[ii] = bfloat16.FromFloat32(float32(math.Atan2(float64(a), float64(c))))
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0].Float32()
+		for ii, input := range rhs {
+			a := input.Float32()
+			output[ii] = bfloat16.FromFloat32(float32(math.Atan2(float64(c), float64(a))))
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for outputIdx := range output {
+			a := lhs[outputIdx].Float32()
+			b := rhs[outputIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(float32(math.Atan2(float64(a), float64(b))))
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			a := lhs[lhsIdx].Float32()
+			b := rhs[rhsIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(float32(math.Atan2(float64(a), float64(b))))
 		}
 	}
 	return

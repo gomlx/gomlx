@@ -26,6 +26,7 @@ const (
 	OpTypeAbs
 	OpTypeAdd
 	OpTypeArgMinMax
+	OpTypeAtan2
 	OpTypeBitcast
 	OpTypeBitwiseAnd
 	OpTypeBitwiseNot
