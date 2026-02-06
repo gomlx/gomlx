@@ -542,8 +542,9 @@ func (b *MultiHeadAttentionBuilder) canUseFusedSDPA() bool {
 
 // fusedDone implements the fused SDPA fast path for Done().
 // It projects Q/K/V using separate Dense layers (preserving variable names and checkpoint
-// compatibility), transposes to [batch, numHeads, seqLen, headDim], calls FusedMultiHeadSDPA,
-// transposes back and applies the output Dense projection.
+// compatibility), transposes to [batch, numHeads, seqLen, headDim], calls FusedMultiHeadSDPA
+// (with AttentionCore as the decomposed fallback), transposes back and applies the output
+// Dense projection.
 func (b *MultiHeadAttentionBuilder) fusedDone() *Node {
 	// Project Q, K, V with the same Dense layer names as DoneWithCoefficients.
 	projectedQuery := layers.Dense(b.ctx.In("query"), b.query, true, b.numHeads, b.keyQueryDim)
@@ -560,18 +561,25 @@ func (b *MultiHeadAttentionBuilder) fusedDone() *Node {
 	// The fused SDPA multiplies scores by this scale, so use 1/d to match.
 	scale := 1.0 / float64(b.keyQueryDim)
 
+	// Build causal additive mask for the decomposed fallback if needed.
+	var additiveMask *Node
+	if b.useCausalMask {
+		additiveMask = buildCausalAdditiveMask(projectedQuery)
+	}
+
 	sdpaOutput := InternalFusedOpCaller(
 		func() *Node {
 			return FusedMultiHeadSDPA(projectedQuery, projectedKey, projectedValue,
 				nil, b.numHeads, b.numHeads, scale, b.useCausalMask)
 		},
 		func() *Node {
-			return SDPADecomposed(projectedQuery, projectedKey, projectedValue,
-				nil, b.numHeads, b.numHeads, scale, b.useCausalMask)
+			output, _ := AttentionCore(projectedQuery, projectedKey, projectedValue,
+				scale, additiveMask, false, LayoutBHSD)
+			return output
 		},
 	)
 
-	// Transpose back: [batch, numHeads, seqLen, headDim] → [batch, seqLen, numHeads, headDim]
+	// Transpose back: [batch, numHeads, seqLen, headDim] -> [batch, seqLen, numHeads, headDim]
 	sdpaOutput = TransposeAllDims(sdpaOutput, 0, 2, 1, 3)
 
 	// Reshape to [batch, seqLen, numHeads*headDim]
@@ -580,6 +588,22 @@ func (b *MultiHeadAttentionBuilder) fusedDone() *Node {
 
 	// Final output projection: [batch, seqLen, outputDim]
 	return layers.Dense(b.ctx.In("output"), sdpaOutput, b.useProjectionBias, b.outputDim)
+}
+
+// buildCausalAdditiveMask builds an additive causal mask for BHSD layout.
+// Returns a mask broadcastable to [batch, heads, seqLen, kvLen] where future
+// positions are set to -inf.
+func buildCausalAdditiveMask(q *Node) *Node {
+	g := q.Graph()
+	seqLen := q.Shape().Dimensions[2]
+	// Lower-triangular boolean mask [seqLen, seqLen]
+	boolMask := LowerTriangular(g, seqLen)
+	// Convert to additive: true->0, false->-1e9
+	additive := BooleanToAdditiveMask(boolMask, q.DType())
+	// Expand to [1, 1, seqLen, seqLen] for broadcasting with [batch, heads, seqLen, kvLen]
+	additive = ExpandDims(additive, 0)
+	additive = ExpandDims(additive, 0)
+	return additive
 }
 
 // Done or DoneWithCoefficients should be called after all optional settings are configured.
