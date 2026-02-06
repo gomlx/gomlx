@@ -13,26 +13,28 @@ go run main.go
 With more training steps:
 
 ```bash
-go run main.go -steps 1000
+go run main.go -set="train_steps=1000"
 ```
 
 Try different sampling strategies:
 
 ```bash
-go run main.go -strategy temperature -temperature 1.5
+# For multiple context parameters, enclose them in quotes and separate with semicolons:
+go run main.go -set="decode_strategy=temperature;decode_temperature=1.5"
 ```
 
 ## Available Flags
 
-```bash
--strategy string      Sampling strategy: greedy|temperature (default "greedy")
--temperature float    Sampling temperature (default 1.0)
--max_length int       Max generation length (default 50)
--prompt string        Generation prompt (default "The quick")
--steps int            Training steps (default 200)
--lr float             Learning rate (default 0.01)
--use_cache bool       Use KV cache for generation (default false)
-```
+| Flag | Type | Description |
+|---|---|---|
+| `-prompt` | `string` | Generation prompt (default "The quick") |
+| `-set` | `string` | Set context parameters defining the model |
+
+> **Note**
+> For the full list of available context parameters (passed via `-set`), please run:
+> ```bash
+> go run . -h
+> ```
 
 ## Sampling Strategies
 

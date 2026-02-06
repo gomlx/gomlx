@@ -127,6 +127,45 @@ func TestMultiHeadAttentionFusedPath(t *testing.T) {
 	}
 }
 
+func TestMultiHeadAttentionWithRoPE(t *testing.T) {
+	// Verify MHA with RoPE runs without error and produces correct output shape.
+	// This test catches the seq axis bug where RoPE was applied on the heads axis
+	// instead of the seq axis for BSHD layout.
+	backend := graphtest.BuildTestBackend()
+	ctx := context.New()
+
+	exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
+		return SelfAttention(ctx, x, 2, 4).
+			WithRoPE(10000.0).
+			UseCausalMask().
+			Done()
+	})
+
+	// [batch=1, seq=4, embed=8]
+	input := [][][]float32{{{1, 2, 3, 4, 5, 6, 7, 8},
+		{9, 10, 11, 12, 13, 14, 15, 16},
+		{17, 18, 19, 20, 21, 22, 23, 24},
+		{25, 26, 27, 28, 29, 30, 31, 32}}}
+
+	output := exec.MustExec(input)[0]
+	assert.Equal(t, []int{1, 4, 8}, output.Shape().Dimensions)
+
+	// Run a second time with different sequence length to verify dynamic shapes
+	ctx2 := context.New()
+	exec2 := context.MustNewExec(backend, ctx2, func(ctx *context.Context, x *Node) *Node {
+		return SelfAttention(ctx, x, 2, 4).
+			WithRoPE(10000.0).
+			UseCausalMask().
+			Done()
+	})
+
+	input2 := [][][]float32{{{1, 2, 3, 4, 5, 6, 7, 8},
+		{9, 10, 11, 12, 13, 14, 15, 16}}}
+
+	output2 := exec2.MustExec(input2)[0]
+	assert.Equal(t, []int{1, 2, 8}, output2.Shape().Dimensions)
+}
+
 // buildSyntheticAttentionModelFn builds a model graph building function that does a regression on the elements
 // of a sequence, with a learnable positional embedding.
 //
