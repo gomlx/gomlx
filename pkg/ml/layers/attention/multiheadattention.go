@@ -420,12 +420,12 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 
 	numKeyAxes := b.key.Rank() - 2
 
-	// For the common rank-3 case (single inner axis), use the optimized sdpaCore path
-	// which shares implementation with ScaledDotProductAttention.
+	// For the common rank-3 case (single inner axis), use AttentionCore with layout-specific
+	// Einsum equations. For higher rank cases or when dropout is needed, use the flexible
+	// Einsum-based approach that dynamically builds equations.
 	if b.innerKeyAxes == 1 && b.innerQueryAxes == 1 && b.dropoutRate <= 0 {
-		attentionOutput, attentionCoefficients = b.executeWithSDPACore(projectedQuery, projectedKey, projectedValue)
+		attentionOutput, attentionCoefficients = b.executeWithAttentionCore(projectedQuery, projectedKey, projectedValue)
 	} else {
-		// For higher rank cases or when dropout is needed, use the flexible Einsum-based approach
 		attentionOutput, attentionCoefficients = b.executeWithEinsum(projectedQuery, projectedKey, projectedValue, numKeyAxes)
 	}
 
@@ -442,11 +442,11 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	return attentionOutput, attentionCoefficients
 }
 
-// executeWithSDPACore uses the shared sdpaCore implementation for the common rank-3 case.
+// executeWithAttentionCore uses AttentionCore for the common rank-3 case.
 // This path is used when innerKeyAxes == 1 && innerQueryAxes == 1 && no dropout.
 // Input layout: [batch, seq, heads, dim] (BSHD), output layout: [batch, seq, heads, dim] (BSHD).
-// Uses LayoutBSHD to avoid transposing Q/K/V — sdpaCore uses layout-specific Einsum equations.
-func (b *MultiHeadAttentionBuilder) executeWithSDPACore(projectedQuery, projectedKey, projectedValue *Node) (attentionOutput, attentionCoefficients *Node) {
+// Uses LayoutBSHD to avoid transposing Q/K/V — AttentionCore uses layout-specific Einsum equations.
+func (b *MultiHeadAttentionBuilder) executeWithAttentionCore(projectedQuery, projectedKey, projectedValue *Node) (attentionOutput, attentionCoefficients *Node) {
 	// Compute scale factor
 	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
 
@@ -455,11 +455,11 @@ func (b *MultiHeadAttentionBuilder) executeWithSDPACore(projectedQuery, projecte
 	var additiveMask *Node
 	mask := b.buildMask()
 	if mask != nil {
-		additiveMask = booleanToAdditiveMask(mask, projectedQuery.DType())
+		additiveMask = BooleanToAdditiveMask(mask, projectedQuery.DType())
 	}
 
-	// Call the shared core with BSHD layout — no transposes needed.
-	attentionOutput, attentionCoefficients = sdpaCore(projectedQuery, projectedKey, projectedValue, scale, additiveMask, true, LayoutBSHD)
+	// Call AttentionCore with BSHD layout — no transposes needed.
+	attentionOutput, attentionCoefficients = AttentionCore(projectedQuery, projectedKey, projectedValue, scale, additiveMask, true, LayoutBSHD)
 
 	return attentionOutput, attentionCoefficients
 }

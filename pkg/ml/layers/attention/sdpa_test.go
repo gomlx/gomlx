@@ -20,8 +20,11 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 	ctx := context.New()
 
 	exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
+		headDim := q.Shape().Dimensions[3]
+		scale := 1.0 / math.Sqrt(float64(headDim))
+
 		// Compute with BHSD layout (default): q/k/v are [batch, heads, seq, dim]
-		bhsdOut := ScaledDotProductAttention(q, k, v).Done()
+		bhsdOut, _ := AttentionCore(q, k, v, scale, nil, false, LayoutBHSD)
 
 		// Transpose to BSHD: [batch, seq, heads, dim]
 		qBSHD := TransposeAllDims(q, 0, 2, 1, 3)
@@ -29,7 +32,7 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 		vBSHD := TransposeAllDims(v, 0, 2, 1, 3)
 
 		// Compute with BSHD layout
-		bshdOut := ScaledDotProductAttention(qBSHD, kBSHD, vBSHD).WithLayout(LayoutBSHD).Done()
+		bshdOut, _ := AttentionCore(qBSHD, kBSHD, vBSHD, scale, nil, false, LayoutBSHD)
 
 		// Transpose BSHD output back to BHSD for comparison
 		bshdOutTransposed := TransposeAllDims(bshdOut, 0, 2, 1, 3)
@@ -63,14 +66,17 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 	}
 }
 
-func TestScaledDotProductAttention(t *testing.T) {
+func TestAttentionCore(t *testing.T) {
 	t.Run("BasicIdentity", func(t *testing.T) {
 		// With identity-like inputs, verify output shape and basic computation.
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) *Node {
-			return ScaledDotProductAttention(q, k, v).Done()
+			headDim := q.Shape().Dimensions[3]
+			scale := 1.0 / math.Sqrt(float64(headDim))
+			output, _ := AttentionCore(q, k, v, scale, nil, false, LayoutBHSD)
+			return output
 		})
 
 		// [batch=1, heads=1, seq=2, dim=2]
@@ -82,16 +88,17 @@ func TestScaledDotProductAttention(t *testing.T) {
 		assert.Equal(t, []int{1, 1, 2, 2}, output.Shape().Dimensions)
 	})
 
-	t.Run("ScaleDefault", func(t *testing.T) {
-		// Verify that default scale is 1/sqrt(head_dim).
+	t.Run("CustomScale", func(t *testing.T) {
+		// Verify that providing the default scale explicitly produces the same result.
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
-			// Compute with default scale
-			defaultOut := ScaledDotProductAttention(q, k, v).Done()
-			// Compute with explicit scale = 1/sqrt(2) for head_dim=2
-			explicitOut := ScaledDotProductAttention(q, k, v).WithScale(1.0 / math.Sqrt(2.0)).Done()
+			headDim := q.Shape().Dimensions[3]
+			defaultScale := 1.0 / math.Sqrt(float64(headDim))
+			// Both use the same scale — should produce identical results
+			defaultOut, _ := AttentionCore(q, k, v, defaultScale, nil, false, LayoutBHSD)
+			explicitOut, _ := AttentionCore(q, k, v, 1.0/math.Sqrt(2.0), nil, false, LayoutBHSD)
 			return []*Node{defaultOut, explicitOut}
 		})
 
@@ -119,7 +126,10 @@ func TestScaledDotProductAttention(t *testing.T) {
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v, mask *Node) *Node {
-			return ScaledDotProductAttention(q, k, v).WithAdditiveMask(mask).Done()
+			headDim := q.Shape().Dimensions[3]
+			scale := 1.0 / math.Sqrt(float64(headDim))
+			output, _ := AttentionCore(q, k, v, scale, mask, false, LayoutBHSD)
+			return output
 		})
 
 		// [batch=1, heads=1, seq=2, dim=2]
@@ -134,17 +144,47 @@ func TestScaledDotProductAttention(t *testing.T) {
 		output := exec.MustExec(query, key, value, mask)[0]
 		outData := output.Value().([][][][]float32)
 
-		// Position 0 can only attend to position 0, so output[0] ≈ value[0] = [10, 20]
+		// Position 0 can only attend to position 0, so output[0] ~ value[0] = [10, 20]
 		assert.InDelta(t, float32(10), outData[0][0][0][0], 0.1)
 		assert.InDelta(t, float32(20), outData[0][0][0][1], 0.1)
 	})
 
-	t.Run("DoneWithCoefficients", func(t *testing.T) {
+	t.Run("WithBooleanMask", func(t *testing.T) {
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v, boolMask *Node) *Node {
+			headDim := q.Shape().Dimensions[3]
+			scale := 1.0 / math.Sqrt(float64(headDim))
+			additiveMask := BooleanToAdditiveMask(boolMask, q.DType())
+			output, _ := AttentionCore(q, k, v, scale, additiveMask, false, LayoutBHSD)
+			return output
+		})
+
+		// [batch=1, heads=1, seq=2, dim=2]
+		query := [][][][]float32{{{{1, 0}, {0, 1}}}}
+		key := [][][][]float32{{{{1, 0}, {0, 1}}}}
+		value := [][][][]float32{{{{10, 20}, {30, 40}}}}
+
+		// Boolean causal mask: position 0 attends only to position 0
+		mask := [][][][]bool{{{{true, false}, {true, true}}}}
+
+		output := exec.MustExec(query, key, value, mask)[0]
+		outData := output.Value().([][][][]float32)
+
+		// Position 0 can only attend to position 0, so output[0] ~ value[0] = [10, 20]
+		assert.InDelta(t, float32(10), outData[0][0][0][0], 0.1)
+		assert.InDelta(t, float32(20), outData[0][0][0][1], 0.1)
+	})
+
+	t.Run("ReturnWeights", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
-			output, weights := ScaledDotProductAttention(q, k, v).DoneWithCoefficients()
+			headDim := q.Shape().Dimensions[3]
+			scale := 1.0 / math.Sqrt(float64(headDim))
+			output, weights := AttentionCore(q, k, v, scale, nil, true, LayoutBHSD)
 			return []*Node{output, weights}
 		})
 
