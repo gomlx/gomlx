@@ -3,10 +3,8 @@
 package attention
 
 import (
-	"fmt"
 	"math"
 	"reflect"
-	"strings"
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
@@ -38,8 +36,9 @@ type MultiHeadAttentionBuilder struct {
 	dropoutRate       float64
 
 	// layout records the internal layout used for the attention core.
-	// Currently hardcoded to LayoutBHSD. In the future this may be configurable
-	// to support FlashAttention (BSHD) or other layouts.
+	// Defaults to LayoutBSHD (Dense projections produce [batch, seq, heads, dim]).
+	// Callers such as ONNX converters may set LayoutBHSD when tensors arrive in
+	// [batch, heads, seq, dim] order.
 	layout AxesLayout
 
 	// Mask related attributes.
@@ -105,7 +104,7 @@ func MultiHeadAttention(ctx *context.Context, query, key, value *Node, numHeads 
 		innerKeyAxes:      innerKeyAxes,
 		innerQueryAxes:    innerQueryAxes,
 		useProjectionBias: true,
-		layout:            LayoutBHSD,
+		layout:            LayoutBSHD,
 	}
 
 	if queryShape.Rank() < 3 {
@@ -355,17 +354,6 @@ func (b *MultiHeadAttentionBuilder) WithPositionalEncoder(encoder pos.Encoder) *
 	return b
 }
 
-// nextNAxes enumerates the next n consecutive axis, starting from nextAxis. It returns
-// the string with the axis concatenated.
-func nextNAxes(n int, nextAxis rune) string {
-	var eq strings.Builder
-	for range n {
-		eq.WriteString(string(nextAxis))
-		nextAxis++
-	}
-	return eq.String()
-}
-
 // DoneWithCoefficients or Done should be called after all optional settings are configured.
 // It returns both the attention output and the attention coefficients (matrix) used.
 //
@@ -419,15 +407,64 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 		projectedValue = TransposeAllDims(fullValue, 0, 2, 1, 3)
 	}
 
-	numKeyAxes := b.key.Rank() - 2
+	// Build the mask before any flattening, since buildMask uses the original attentionShape.
+	// Mask shape: [batch, <query_elements>, num_heads, <key_elements>]
+	mask := b.buildMask()
 
-	// For the common rank-3 case (single inner axis), use Core with layout-specific
-	// Einsum equations and native boolean mask + dropout support. For higher rank cases,
-	// use the flexible Einsum-based approach that dynamically builds equations.
-	if b.innerKeyAxes == 1 && b.innerQueryAxes == 1 {
-		attentionOutput, attentionCoefficients = b.executeWithCore(projectedQuery, projectedKey, projectedValue)
-	} else {
-		attentionOutput, attentionCoefficients = b.executeWithEinsum(projectedQuery, projectedKey, projectedValue, numKeyAxes)
+	// For higher-rank cases (multiple inner axes), flatten inner axes into one axis
+	// so that Core (which expects rank-4 tensors) can be used for all cases.
+	needsFlatten := b.innerKeyAxes > 1 || b.innerQueryAxes > 1
+	var queryInnerDims, keyInnerDims []int
+	if needsFlatten {
+		qDims := projectedQuery.Shape().Dimensions
+		kDims := projectedKey.Shape().Dimensions
+
+		// Save original inner dimension sizes for unflattening later.
+		queryInnerDims = append([]int{}, qDims[1:1+b.innerQueryAxes]...)
+		keyInnerDims = append([]int{}, kDims[1:1+b.innerKeyAxes]...)
+
+		qFlat := 1
+		for _, d := range queryInnerDims {
+			qFlat *= d
+		}
+		kFlat := 1
+		for _, d := range keyInnerDims {
+			kFlat *= d
+		}
+
+		// Reshape Q: [batch, q1, q2, ..., heads, dim] -> [batch, q_flat, heads, dim]
+		projectedQuery = Reshape(projectedQuery, qDims[0], qFlat, qDims[1+b.innerQueryAxes], qDims[2+b.innerQueryAxes])
+		// Reshape K: [batch, k1, k2, ..., heads, dim] -> [batch, k_flat, heads, dim]
+		projectedKey = Reshape(projectedKey, kDims[0], kFlat, kDims[1+b.innerKeyAxes], kDims[2+b.innerKeyAxes])
+		// Reshape V: same inner axes as K (key and value share inner axes, validated at construction).
+		vDims := projectedValue.Shape().Dimensions
+		projectedValue = Reshape(projectedValue, vDims[0], kFlat, vDims[1+b.innerKeyAxes], vDims[2+b.innerKeyAxes])
+
+		// Flatten the mask: [batch, <query_inner>, heads, <key_inner>] -> [batch, q_flat, heads, k_flat]
+		if mask != nil {
+			mask = Reshape(mask, qDims[0], qFlat, b.numHeads, kFlat)
+		}
+	}
+
+	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
+	attentionOutput, attentionCoefficients = Core(b.ctx, projectedQuery, projectedKey, projectedValue, scale, mask, b.dropoutRate, b.layout)
+
+	// Unflatten output and coefficients back to original inner axis structure.
+	if needsFlatten {
+		// attentionOutput: [batch, q_flat, heads, value_dim] -> [batch, <query_inner>, heads, value_dim]
+		outDims := attentionOutput.Shape().Dimensions
+		unflatOut := []int{outDims[0]}
+		unflatOut = append(unflatOut, queryInnerDims...)
+		unflatOut = append(unflatOut, outDims[2], outDims[3]) // heads, value_dim
+		attentionOutput = Reshape(attentionOutput, unflatOut...)
+
+		// attentionCoefficients: [batch, q_flat, heads, k_flat] -> [batch, <query_inner>, heads, <key_inner>]
+		coefDims := attentionCoefficients.Shape().Dimensions
+		unflatCoef := []int{coefDims[0]}
+		unflatCoef = append(unflatCoef, queryInnerDims...)
+		unflatCoef = append(unflatCoef, coefDims[2]) // heads
+		unflatCoef = append(unflatCoef, keyInnerDims...)
+		attentionCoefficients = Reshape(attentionCoefficients, unflatCoef...)
 	}
 
 	// Final projection: flatten the heads and then do a final projection to the final
@@ -439,82 +476,6 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	attentionOutput = Reshape(attentionOutput, flatDims...)
 	// Final shape: `[batch, <query_elements>, outputDim]`
 	attentionOutput = layers.Dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
-
-	return attentionOutput, attentionCoefficients
-}
-
-// executeWithCore uses Core for the common rank-3 case.
-// Input layout: [batch, seq, heads, dim] (BSHD), output layout: [batch, seq, heads, dim] (BSHD).
-// Uses LayoutBSHD to avoid transposing Q/K/V — Core uses layout-specific Einsum equations.
-// Passes the boolean mask directly to Core (which auto-detects and uses MaskedSoftmax),
-// and handles dropout internally.
-func (b *MultiHeadAttentionBuilder) executeWithCore(projectedQuery, projectedKey, projectedValue *Node) (attentionOutput, attentionCoefficients *Node) {
-	// Compute scale factor
-	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
-
-	// buildMask() returns a boolean mask in [batch, query_seq, heads, key_seq] — matches BSHD score layout.
-	mask := b.buildMask()
-
-	// Call Core with BSHD layout — no transposes needed.
-	// Core handles boolean masks natively via MaskedSoftmax and applies dropout internally.
-	attentionOutput, attentionCoefficients = Core(b.ctx, projectedQuery, projectedKey, projectedValue, scale, mask, b.dropoutRate, LayoutBSHD)
-
-	return attentionOutput, attentionCoefficients
-}
-
-// executeWithEinsum uses the flexible Einsum-based approach for higher rank cases
-// (innerKeyAxes > 1 || innerQueryAxes > 1). This preserves the original MHA behavior
-// for complex tensor layouts.
-func (b *MultiHeadAttentionBuilder) executeWithEinsum(projectedQuery, projectedKey, projectedValue *Node, numKeyAxes int) (attentionOutput, attentionCoefficients *Node) {
-	// Build equation for attention Einsum.
-	batchAxis := 'b'
-	headsAxis := 'h'
-	projectionAxis := 'd'
-
-	nextFreeAxis := 'i'
-	keyInnerAxes := nextNAxes(numKeyAxes, nextFreeAxis)
-	nextFreeAxis += rune(numKeyAxes)
-	projectedKeyAxes := fmt.Sprintf("%c%s%c%c", batchAxis, keyInnerAxes, headsAxis, projectionAxis)
-	numQueryAxes := b.query.Rank() - 2
-	queryInnerAxes := nextNAxes(numKeyAxes, nextFreeAxis)
-	nextFreeAxis += rune(numQueryAxes)
-	projectedQueryAxes := fmt.Sprintf("%c%s%c%c", batchAxis, queryInnerAxes, headsAxis, projectionAxis)
-
-	// Example of attention equation:
-	//  - projectedKey.shape(rank 4)   = [batch, key_elements, numHeads, keyQueryDims]
-	//  - projectedQuery.shape(rank 4) = [batch, query_elements, numHeads, keyQueryDim]
-	//  - attentionEquation   = "bihd,bjhd->bjhi"
-	attentionEquation := fmt.Sprintf("%s,%s->%c%s%c%s", projectedQueryAxes, projectedKeyAxes,
-		batchAxis, queryInnerAxes, headsAxis, keyInnerAxes)
-
-	// Attention logits: outer product of key/query inner dimensions, with a dot-product of their projections.
-	// Shape: [batch, <query_elements>, num_heads, <key_elements>]
-	attentionLogits := Einsum(attentionEquation, projectedQuery, projectedKey)
-	normalizingFactor := math.Sqrt(float64(b.keyQueryDim))
-	attentionLogits = DivScalar(attentionLogits, normalizingFactor)
-
-	mask := b.buildMask()
-	// Attention coefficients: Softmax over all the inner key axes (the last dimensions of attentionLogits)
-	// Shape: [batch, <query_elements>, num_heads, <key_elements>]
-	softmaxAxes := xslices.Iota(attentionLogits.Rank()-numKeyAxes, numKeyAxes)
-	if mask == nil {
-		attentionCoefficients = Softmax(attentionLogits, softmaxAxes...)
-	} else {
-		attentionCoefficients = MaskedSoftmax(attentionLogits, mask, softmaxAxes...)
-	}
-	if b.dropoutRate > 0 {
-		attentionCoefficients = layers.Dropout(b.ctx, attentionCoefficients, ConstAs(attentionCoefficients, b.dropoutRate))
-	}
-
-	// Build equation for the attention output Einsum.
-	// - attentionCoefficients     = [batch, <query_elements>, num_heads, <key_elements>]
-	// - projectedValue            = [batch, <key_elements>, num_heads, value_dim]
-	// - resulting attentionOutput = [batch, <query_elements>, num_heads, value_dim]
-	outputEquation := fmt.Sprintf("%c%s%c%s,%c%s%c%c->%c%s%c%c",
-		batchAxis, queryInnerAxes, headsAxis, keyInnerAxes,
-		batchAxis, keyInnerAxes, headsAxis, projectionAxis,
-		batchAxis, queryInnerAxes, headsAxis, projectionAxis)
-	attentionOutput = Einsum(outputEquation, attentionCoefficients, projectedValue)
 
 	return attentionOutput, attentionCoefficients
 }

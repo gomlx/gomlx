@@ -89,31 +89,25 @@ func (l AxesLayout) SeqAxis() int {
 //
 // Always returns both the output and the attention weights.
 func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate float64, layout AxesLayout) (output, weights *Node) {
-	// Compute attention scores using layout-specific equation
 	scores := Einsum(layout.scoreEquation(), query, key)
 	scores = MulScalar(scores, scale)
 
 	if mask != nil && mask.DType() != dtypes.Bool {
-		// Float mask: add to scores before softmax (additive mask).
-		// Add handles broadcasting automatically.
+		// Additive float mask.
 		scores = Add(scores, mask)
 		weights = Softmax(scores, -1)
 	} else {
-		// Boolean mask or no mask: use MaskedSoftmax (handles nil mask as no mask).
-		// MaskedSoftmax requires the mask shape to exactly match scores, so broadcast first.
+		// Boolean mask (or nil): MaskedSoftmax handles both.
 		if mask != nil {
 			mask = BroadcastToShape(mask, scores.Shape())
 		}
 		weights = MaskedSoftmax(scores, mask, -1)
 	}
 
-	// Apply dropout to attention weights if training.
 	if dropoutRate > 0 && ctx != nil {
 		weights = layers.Dropout(ctx, weights, ConstAs(weights, dropoutRate))
 	}
 
-	// Compute output using layout-specific equation
 	output = Einsum(layout.outputEquation(), weights, value)
-
 	return output, weights
 }
