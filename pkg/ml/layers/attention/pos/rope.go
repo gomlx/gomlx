@@ -96,8 +96,12 @@ func (r *RoPE) WithInterleaved(interleaved bool) *RoPE {
 // of each element, as specified by positionIndices.
 //
 // Parameters:
-//   - x: Input tensor shaped [..., seq_len, head_dim|embed_dim]
-//   - positionIndices: Position indices shaped [..., seq_len] with position values for each token
+//   - x: Input tensor with sequence and embedding dimensions.
+//   - positionIndices: Position indices shaped [..., seq_len] with position values for each token.
+//   - seqAxis: The axis in x that represents the sequence dimension.
+//     If seqAxis == x.Rank()-2, the standard code path is used directly.
+//     Otherwise x is transposed so that seqAxis moves to rank-2, RoPE is applied, and the
+//     result is transposed back.
 //
 // Returns:
 //   - Tensor with rotary position embeddings applied, same shape as x
@@ -107,20 +111,36 @@ func (r *RoPE) WithInterleaved(interleaved bool) *RoPE {
 //	rope := NewRoPE(10000.0)
 //	// x has shape [batch, seq_len, embed_dim]
 //	// positions has shape [batch, seq_len] with values like [0, 1, 2, ...]
-//	embedded := rope.Apply(x, positions)
-func (r *RoPE) Apply(x *Node, positionIndices *Node) *Node {
+//	embedded := rope.Apply(x, positions, x.Rank()-2)
+func (r *RoPE) Apply(x *Node, positionIndices *Node, seqAxis int) *Node {
+	rank := x.Rank()
+	canonicalSeqAxis := seqAxis
+	if canonicalSeqAxis < 0 {
+		canonicalSeqAxis += rank
+	}
+
+	needsTranspose := canonicalSeqAxis != rank-2
+	var perm, invPerm []int
+	if needsTranspose {
+		perm, invPerm = buildSeqAxisTranspose(rank, canonicalSeqAxis)
+		x = TransposeAllDims(x, perm...)
+	}
+
+	var result *Node
 	if r.DimStart == 0 && r.DimEnd == -1 {
-		// Apply to entire dimension
-		return applyRoPE(x, positionIndices, r.BaseFreq, r.Interleaved)
+		result = applyRoPE(x, positionIndices, r.BaseFreq, r.Interleaved)
+	} else {
+		dimEnd := r.DimEnd
+		if dimEnd == -1 {
+			dimEnd = x.Shape().Dimensions[x.Shape().Rank()-1]
+		}
+		result = applyRoPEWithCustomDim(x, positionIndices, r.BaseFreq, r.DimStart, dimEnd, r.Interleaved)
 	}
 
-	// Apply to custom dimension range
-	dimEnd := r.DimEnd
-	if dimEnd == -1 {
-		dimEnd = x.Shape().Dimensions[x.Shape().Rank()-1]
+	if needsTranspose {
+		result = TransposeAllDims(result, invPerm...)
 	}
-
-	return applyRoPEWithCustomDim(x, positionIndices, r.BaseFreq, r.DimStart, dimEnd, r.Interleaved)
+	return result
 }
 
 // RoPEWithCosSin implements the Encoder interface using pre-computed cos and sin tensors.
@@ -147,7 +167,7 @@ type RoPEWithCosSin struct {
 //
 //	// For ONNX inference with pre-computed cos/sin:
 //	rope := NewRoPEWithCosSin(cosTensor, sinTensor).WithInterleaved(true)
-//	embedded := rope.Apply(x, nil) // positionIndices not used
+//	embedded := rope.Apply(x, nil, x.Rank()-2) // positionIndices not used
 func NewRoPEWithCosSin(cos, sin *Node) *RoPEWithCosSin {
 	return &RoPEWithCosSin{
 		cos:         cos,
@@ -171,13 +191,35 @@ func (r *RoPEWithCosSin) WithInterleaved(interleaved bool) *RoPEWithCosSin {
 // Pass nil for positionIndices.
 //
 // Parameters:
-//   - x: Input tensor shaped [..., seq_len, head_dim]
+//   - x: Input tensor with sequence and head_dim dimensions.
 //   - positionIndices: Ignored (pass nil). Position information is already baked into cos/sin.
+//   - seqAxis: The axis in x that represents the sequence dimension.
+//     If seqAxis == x.Rank()-2, the standard code path is used directly.
+//     Otherwise x is transposed so that seqAxis moves to rank-2, rotation is applied,
+//     and the result is transposed back.
 //
 // Returns:
 //   - Tensor with rotary embeddings applied, same shape as x.
-func (r *RoPEWithCosSin) Apply(x *Node, positionIndices *Node) *Node {
-	return applyWithCosSin(x, r.cos, r.sin, r.interleaved)
+func (r *RoPEWithCosSin) Apply(x *Node, positionIndices *Node, seqAxis int) *Node {
+	rank := x.Rank()
+	canonicalSeqAxis := seqAxis
+	if canonicalSeqAxis < 0 {
+		canonicalSeqAxis += rank
+	}
+
+	needsTranspose := canonicalSeqAxis != rank-2
+	var perm, invPerm []int
+	if needsTranspose {
+		perm, invPerm = buildSeqAxisTranspose(rank, canonicalSeqAxis)
+		x = TransposeAllDims(x, perm...)
+	}
+
+	result := applyWithCosSin(x, r.cos, r.sin, r.interleaved)
+
+	if needsTranspose {
+		result = TransposeAllDims(result, invPerm...)
+	}
+	return result
 }
 
 // applyWithCosSin applies rotary position embeddings using pre-computed cos and sin tensors.
@@ -331,6 +373,26 @@ func applyRoPE(x *Node, positionIndices *Node, baseFreq float64, interleaved boo
 	sinAngles := Sin(angles) // [seqLen, embedDim/2]
 
 	return applyWithCosSin(x, cosAngles, sinAngles, interleaved)
+}
+
+// buildSeqAxisTranspose builds a permutation that moves seqAxis to rank-2 (the second-to-last position)
+// and its inverse. This is used so that the RoPE internal code, which always operates on the
+// second-to-last axis, can work with any layout.
+func buildSeqAxisTranspose(rank, seqAxis int) (perm, invPerm []int) {
+	target := rank - 2
+	perm = make([]int, rank)
+	for i := range perm {
+		perm[i] = i
+	}
+	// Swap seqAxis with target (rank-2)
+	perm[seqAxis], perm[target] = perm[target], perm[seqAxis]
+
+	// Build inverse permutation
+	invPerm = make([]int, rank)
+	for i, p := range perm {
+		invPerm[p] = i
+	}
+	return perm, invPerm
 }
 
 // applyRoPEWithCustomDim applies RoPE to x[..., dimStart:dimEnd] (even length).

@@ -5,6 +5,8 @@ package attention
 import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/layers"
 )
 
 // AxesLayout specifies the ordering of axes in the 4D attention tensors.
@@ -63,7 +65,7 @@ func (l AxesLayout) SeqAxis() int {
 	}
 }
 
-// AttentionCore computes the core scaled dot-product attention operation.
+// Core computes the core scaled dot-product attention operation.
 // This is the shared implementation used by MultiHeadAttention and ONNX op converters.
 //
 // The layout parameter determines the axis ordering of the input tensors:
@@ -72,44 +74,46 @@ func (l AxesLayout) SeqAxis() int {
 //
 // The scale is typically 1/sqrt(head_dim).
 //
-// The additiveMask (if non-nil) is added to scores before softmax. It must match the
-// score tensor layout:
+// The mask parameter (if non-nil) controls which positions can be attended to:
+//   - Boolean mask (DType.IsBoolean()): uses MaskedSoftmax — true means attend, false means ignore.
+//     This avoids the -1e9 additive trick which causes gradient and low-precision issues.
+//   - Float mask: added to scores before softmax (additive mask).
+//
+// The mask must be broadcastable to the score tensor layout:
 //   - LayoutBHSD: broadcastable to [batch, heads, q_seq, kv_seq]
 //   - LayoutBSHD: broadcastable to [batch, q_seq, heads, kv_seq]
 //
-// Returns output and optionally weights in the same layout as inputs.
-func AttentionCore(query, key, value *Node, scale float64, additiveMask *Node, returnWeights bool, layout AxesLayout) (*Node, *Node) {
+// The dropoutRate (if > 0) applies dropout to the attention weights during training.
+// The ctx parameter provides the training/inference context for dropout; it may be nil
+// when dropoutRate is 0.
+//
+// Always returns both the output and the attention weights.
+func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate float64, layout AxesLayout) (output, weights *Node) {
 	// Compute attention scores using layout-specific equation
 	scores := Einsum(layout.scoreEquation(), query, key)
 	scores = MulScalar(scores, scale)
 
-	// Apply additive mask
-	if additiveMask != nil {
-		scores = Add(scores, additiveMask)
+	if mask != nil && mask.DType() != dtypes.Bool {
+		// Float mask: add to scores before softmax (additive mask).
+		// Add handles broadcasting automatically.
+		scores = Add(scores, mask)
+		weights = Softmax(scores, -1)
+	} else {
+		// Boolean mask or no mask: use MaskedSoftmax (handles nil mask as no mask).
+		// MaskedSoftmax requires the mask shape to exactly match scores, so broadcast first.
+		if mask != nil {
+			mask = BroadcastToShape(mask, scores.Shape())
+		}
+		weights = MaskedSoftmax(scores, mask, -1)
 	}
 
-	// Softmax over kv_seq dimension (always the last axis in the score tensor)
-	weights := Softmax(scores, -1)
+	// Apply dropout to attention weights if training.
+	if dropoutRate > 0 && ctx != nil {
+		weights = layers.Dropout(ctx, weights, ConstAs(weights, dropoutRate))
+	}
 
 	// Compute output using layout-specific equation
-	output := Einsum(layout.outputEquation(), weights, value)
+	output = Einsum(layout.outputEquation(), weights, value)
 
-	if returnWeights {
-		return output, weights
-	}
-	return output, nil
-}
-
-// BooleanToAdditiveMask converts a boolean attention mask to an additive mask.
-// True means attend (adds 0), False means mask out (adds large negative value).
-// The dtype parameter specifies the output dtype (should match the scores dtype).
-func BooleanToAdditiveMask(booleanMask *Node, dtype dtypes.DType) *Node {
-	g := booleanMask.Graph()
-
-	largeNeg := ScalarOne(g, dtype)
-	largeNeg = MulScalar(largeNeg, -1e9)
-	zero := ScalarZero(g, dtype)
-
-	// Where mask is true, add 0; where false, add large negative
-	return Where(booleanMask, zero, largeNeg)
+	return output, weights
 }

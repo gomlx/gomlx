@@ -37,6 +37,11 @@ type MultiHeadAttentionBuilder struct {
 	useProjectionBias bool
 	dropoutRate       float64
 
+	// layout records the internal layout used for the attention core.
+	// Currently hardcoded to LayoutBHSD. In the future this may be configurable
+	// to support FlashAttention (BSHD) or other layouts.
+	layout AxesLayout
+
 	// Mask related attributes.
 	keyMask, queryMask *Node
 	queryKeyMatrixMask *Node
@@ -100,6 +105,7 @@ func MultiHeadAttention(ctx *context.Context, query, key, value *Node, numHeads 
 		innerKeyAxes:      innerKeyAxes,
 		innerQueryAxes:    innerQueryAxes,
 		useProjectionBias: true,
+		layout:            LayoutBHSD,
 	}
 
 	if queryShape.Rank() < 3 {
@@ -336,6 +342,8 @@ func (b *MultiHeadAttentionBuilder) KVCacheShape() shapes.Shape {
 // WithRoPE enables Rotary Position Embeddings on query and key projections.
 // baseFreq is typically 10000.0 (default from RoFormer paper).
 // RoPE is applied after projections and works with both training and generation modes.
+//
+// Deprecated: Use WithPositionalEncoder, passing a pos.RoPE instead.
 func (b *MultiHeadAttentionBuilder) WithRoPE(baseFreq float64) *MultiHeadAttentionBuilder {
 	b.positionalEncoder = pos.NewRoPE(baseFreq)
 	return b
@@ -373,9 +381,8 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 
 	// Apply positional encoding (e.g. RoPE) if enabled.
 	// Applied before KV cache so that rotated embeddings are cached.
-	// projectedQuery/Key shape: [batch, seq, heads, dim] (BSHD layout).
-	// RoPE expects [..., seq_len, dim] at the last two axes, so we transpose
-	// to [batch, heads, seq, dim] (BHSD), apply, then transpose back.
+	// projectedQuery/Key shape: [batch, seq, heads, dim] (BSHD layout), seq is at axis 1.
+	// We pass seqAxis=1 so the encoder handles any internal transpositions itself.
 	if b.positionalEncoder != nil {
 		seqLen := projectedQuery.Shape().Dimensions[1] // seq is at axis 1 in BSHD
 		var posIndices *Node
@@ -384,14 +391,8 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 		} else {
 			posIndices = pos.SequentialPositions(b.g, Const(b.g, int32(0)), seqLen)
 		}
-		// Transpose to BHSD [batch, heads, seq, dim] so seq is at rank-2 for RoPE
-		projectedQuery = TransposeAllDims(projectedQuery, 0, 2, 1, 3)
-		projectedQuery = b.positionalEncoder.Apply(projectedQuery, posIndices)
-		projectedQuery = TransposeAllDims(projectedQuery, 0, 2, 1, 3) // back to BSHD
-
-		projectedKey = TransposeAllDims(projectedKey, 0, 2, 1, 3)
-		projectedKey = b.positionalEncoder.Apply(projectedKey, posIndices)
-		projectedKey = TransposeAllDims(projectedKey, 0, 2, 1, 3) // back to BSHD
+		projectedQuery = b.positionalEncoder.Apply(projectedQuery, posIndices, 1)
+		projectedKey = b.positionalEncoder.Apply(projectedKey, posIndices, 1)
 	}
 
 	// Handle KV cache if in incremental generation mode
@@ -420,11 +421,11 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 
 	numKeyAxes := b.key.Rank() - 2
 
-	// For the common rank-3 case (single inner axis), use AttentionCore with layout-specific
-	// Einsum equations. For higher rank cases or when dropout is needed, use the flexible
-	// Einsum-based approach that dynamically builds equations.
-	if b.innerKeyAxes == 1 && b.innerQueryAxes == 1 && b.dropoutRate <= 0 {
-		attentionOutput, attentionCoefficients = b.executeWithAttentionCore(projectedQuery, projectedKey, projectedValue)
+	// For the common rank-3 case (single inner axis), use Core with layout-specific
+	// Einsum equations and native boolean mask + dropout support. For higher rank cases,
+	// use the flexible Einsum-based approach that dynamically builds equations.
+	if b.innerKeyAxes == 1 && b.innerQueryAxes == 1 {
+		attentionOutput, attentionCoefficients = b.executeWithCore(projectedQuery, projectedKey, projectedValue)
 	} else {
 		attentionOutput, attentionCoefficients = b.executeWithEinsum(projectedQuery, projectedKey, projectedValue, numKeyAxes)
 	}
@@ -442,30 +443,28 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	return attentionOutput, attentionCoefficients
 }
 
-// executeWithAttentionCore uses AttentionCore for the common rank-3 case.
-// This path is used when innerKeyAxes == 1 && innerQueryAxes == 1 && no dropout.
+// executeWithCore uses Core for the common rank-3 case.
 // Input layout: [batch, seq, heads, dim] (BSHD), output layout: [batch, seq, heads, dim] (BSHD).
-// Uses LayoutBSHD to avoid transposing Q/K/V — AttentionCore uses layout-specific Einsum equations.
-func (b *MultiHeadAttentionBuilder) executeWithAttentionCore(projectedQuery, projectedKey, projectedValue *Node) (attentionOutput, attentionCoefficients *Node) {
+// Uses LayoutBSHD to avoid transposing Q/K/V — Core uses layout-specific Einsum equations.
+// Passes the boolean mask directly to Core (which auto-detects and uses MaskedSoftmax),
+// and handles dropout internally.
+func (b *MultiHeadAttentionBuilder) executeWithCore(projectedQuery, projectedKey, projectedValue *Node) (attentionOutput, attentionCoefficients *Node) {
 	// Compute scale factor
 	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
 
-	// Build additive mask from MHA's boolean mask.
-	// buildMask() returns mask in [batch, query_seq, heads, key_seq] — matches BSHD score layout.
-	var additiveMask *Node
+	// buildMask() returns a boolean mask in [batch, query_seq, heads, key_seq] — matches BSHD score layout.
 	mask := b.buildMask()
-	if mask != nil {
-		additiveMask = BooleanToAdditiveMask(mask, projectedQuery.DType())
-	}
 
-	// Call AttentionCore with BSHD layout — no transposes needed.
-	attentionOutput, attentionCoefficients = AttentionCore(projectedQuery, projectedKey, projectedValue, scale, additiveMask, true, LayoutBSHD)
+	// Call Core with BSHD layout — no transposes needed.
+	// Core handles boolean masks natively via MaskedSoftmax and applies dropout internally.
+	attentionOutput, attentionCoefficients = Core(b.ctx, projectedQuery, projectedKey, projectedValue, scale, mask, b.dropoutRate, LayoutBSHD)
 
 	return attentionOutput, attentionCoefficients
 }
 
-// executeWithEinsum uses the flexible Einsum-based approach for higher rank cases or when dropout is needed.
-// This preserves the original MHA behavior for complex tensor layouts.
+// executeWithEinsum uses the flexible Einsum-based approach for higher rank cases
+// (innerKeyAxes > 1 || innerQueryAxes > 1). This preserves the original MHA behavior
+// for complex tensor layouts.
 func (b *MultiHeadAttentionBuilder) executeWithEinsum(projectedQuery, projectedKey, projectedValue *Node, numKeyAxes int) (attentionOutput, attentionCoefficients *Node) {
 	// Build equation for attention Einsum.
 	batchAxis := 'b'
