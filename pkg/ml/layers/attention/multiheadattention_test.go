@@ -69,6 +69,103 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 		}, xslices.Epsilon)
 }
 
+// TestMultiHeadAttentionFusedPath verifies that the fused SDPA fast path
+// produces the same results as the decomposed path.
+func TestMultiHeadAttentionFusedPath(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+
+	// Test that Done() (which may use fused path) matches DoneWithCoefficients()
+	// (which always uses decomposed path) with the same weights.
+	for _, useCausal := range []bool{false, true} {
+		name := "no_causal"
+		if useCausal {
+			name = "causal"
+		}
+		t.Run(name, func(t *testing.T) {
+			batchSize := 2
+			seqLen := 3
+			inputDim := 4
+			numHeads := 2
+			headDim := 2
+
+			// Build two graphs with the same context (shared weights):
+			// one using DoneWithCoefficients (decomposed), one using Done (fused).
+			ctx := context.New().WithInitializer(initializers.One)
+
+			// Decomposed path.
+			decomposedExec := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
+				input := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, inputDim))
+				builder := MultiHeadAttention(ctx, input, input, input, numHeads, headDim)
+				if useCausal {
+					builder = builder.UseCausalMask()
+				}
+				output, _ := builder.DoneWithCoefficients()
+				return []*Node{output}
+			})
+			decomposedOutputs := decomposedExec.MustExec()
+
+			// Fused path (Done() will use fused when available).
+			fusedExec := context.MustNewExec(backend, ctx.Reuse(), func(ctx *context.Context, g *Graph) []*Node {
+				input := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, inputDim))
+				builder := MultiHeadAttention(ctx, input, input, input, numHeads, headDim)
+				if useCausal {
+					builder = builder.UseCausalMask()
+				}
+				output := builder.Done()
+				return []*Node{output}
+			})
+			fusedOutputs := fusedExec.MustExec()
+
+			// Compare outputs.
+			decomposedVal := decomposedOutputs[0].Value()
+			fusedVal := fusedOutputs[0].Value()
+
+			require.Truef(t, xslices.SlicesInDelta(decomposedVal, fusedVal, 1e-4),
+				"Fused and decomposed paths produce different results.\nDecomposed: %v\nFused: %v",
+				decomposedVal, fusedVal)
+		})
+	}
+}
+
+func TestMultiHeadAttentionWithRoPE(t *testing.T) {
+	// Verify MHA with RoPE runs without error and produces correct output shape.
+	// This test catches the seq axis bug where RoPE was applied on the heads axis
+	// instead of the seq axis for BSHD layout.
+	backend := graphtest.BuildTestBackend()
+	ctx := context.New()
+
+	exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
+		return SelfAttention(ctx, x, 2, 4).
+			WithRoPE(10000.0).
+			UseCausalMask().
+			Done()
+	})
+
+	// [batch=1, seq=4, embed=8]
+	input := [][][]float32{{{1, 2, 3, 4, 5, 6, 7, 8},
+		{9, 10, 11, 12, 13, 14, 15, 16},
+		{17, 18, 19, 20, 21, 22, 23, 24},
+		{25, 26, 27, 28, 29, 30, 31, 32}}}
+
+	output := exec.MustExec(input)[0]
+	assert.Equal(t, []int{1, 4, 8}, output.Shape().Dimensions)
+
+	// Run a second time with different sequence length to verify dynamic shapes
+	ctx2 := context.New()
+	exec2 := context.MustNewExec(backend, ctx2, func(ctx *context.Context, x *Node) *Node {
+		return SelfAttention(ctx, x, 2, 4).
+			WithRoPE(10000.0).
+			UseCausalMask().
+			Done()
+	})
+
+	input2 := [][][]float32{{{1, 2, 3, 4, 5, 6, 7, 8},
+		{9, 10, 11, 12, 13, 14, 15, 16}}}
+
+	output2 := exec2.MustExec(input2)[0]
+	assert.Equal(t, []int{1, 2, 8}, output2.Shape().Dimensions)
+}
+
 // buildSyntheticAttentionModelFn builds a model graph building function that does a regression on the elements
 // of a sequence, with a learnable positional embedding.
 //

@@ -371,19 +371,27 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	projectedQuery := layers.Dense(b.ctx.In("query"), b.query, true, b.numHeads, b.keyQueryDim)
 	projectedValue := layers.Dense(b.ctx.In("value"), b.value, true, b.numHeads, b.valueDim)
 
-	// Apply RoPE if enabled (before KV cache to cache rotated embeddings)
+	// Apply positional encoding (e.g. RoPE) if enabled.
+	// Applied before KV cache so that rotated embeddings are cached.
+	// projectedQuery/Key shape: [batch, seq, heads, dim] (BSHD layout).
+	// RoPE expects [..., seq_len, dim] at the last two axes, so we transpose
+	// to [batch, heads, seq, dim] (BHSD), apply, then transpose back.
 	if b.positionalEncoder != nil {
-		// Create sequential position indices from the position node
-		// projectedQuery shape: [..., seqLen, numHeads, headDim]
-		seqLen := projectedQuery.Shape().Dimensions[projectedQuery.Rank()-2]
+		seqLen := projectedQuery.Shape().Dimensions[1] // seq is at axis 1 in BSHD
 		var posIndices *Node
 		if b.position != nil {
 			posIndices = pos.SequentialPositions(b.g, b.position, seqLen)
 		} else {
 			posIndices = pos.SequentialPositions(b.g, Const(b.g, int32(0)), seqLen)
 		}
+		// Transpose to BHSD [batch, heads, seq, dim] so seq is at rank-2 for RoPE
+		projectedQuery = TransposeAllDims(projectedQuery, 0, 2, 1, 3)
 		projectedQuery = b.positionalEncoder.Apply(projectedQuery, posIndices)
+		projectedQuery = TransposeAllDims(projectedQuery, 0, 2, 1, 3) // back to BSHD
+
+		projectedKey = TransposeAllDims(projectedKey, 0, 2, 1, 3)
 		projectedKey = b.positionalEncoder.Apply(projectedKey, posIndices)
+		projectedKey = TransposeAllDims(projectedKey, 0, 2, 1, 3) // back to BSHD
 	}
 
 	// Handle KV cache if in incremental generation mode
@@ -410,12 +418,60 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 		projectedValue = TransposeAllDims(fullValue, 0, 2, 1, 3)
 	}
 
+	numKeyAxes := b.key.Rank() - 2
+
+	// For the common rank-3 case (single inner axis), use AttentionCore with layout-specific
+	// Einsum equations. For higher rank cases or when dropout is needed, use the flexible
+	// Einsum-based approach that dynamically builds equations.
+	if b.innerKeyAxes == 1 && b.innerQueryAxes == 1 && b.dropoutRate <= 0 {
+		attentionOutput, attentionCoefficients = b.executeWithAttentionCore(projectedQuery, projectedKey, projectedValue)
+	} else {
+		attentionOutput, attentionCoefficients = b.executeWithEinsum(projectedQuery, projectedKey, projectedValue, numKeyAxes)
+	}
+
+	// Final projection: flatten the heads and then do a final projection to the final
+	// outputDim (set with `SetOutputDim`).
+	flatDims := make([]int, attentionOutput.Rank()-1)
+	copy(flatDims, attentionOutput.Shape().Dimensions[:len(flatDims)])
+	flatDims[len(flatDims)-1] *= attentionOutput.Shape().Dimensions[attentionOutput.Rank()-1]
+	// New shape: `[batch, <query_elements>, num_head*value_dim]`
+	attentionOutput = Reshape(attentionOutput, flatDims...)
+	// Final shape: `[batch, <query_elements>, outputDim]`
+	attentionOutput = layers.Dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
+
+	return attentionOutput, attentionCoefficients
+}
+
+// executeWithAttentionCore uses AttentionCore for the common rank-3 case.
+// This path is used when innerKeyAxes == 1 && innerQueryAxes == 1 && no dropout.
+// Input layout: [batch, seq, heads, dim] (BSHD), output layout: [batch, seq, heads, dim] (BSHD).
+// Uses LayoutBSHD to avoid transposing Q/K/V — AttentionCore uses layout-specific Einsum equations.
+func (b *MultiHeadAttentionBuilder) executeWithAttentionCore(projectedQuery, projectedKey, projectedValue *Node) (attentionOutput, attentionCoefficients *Node) {
+	// Compute scale factor
+	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
+
+	// Build additive mask from MHA's boolean mask.
+	// buildMask() returns mask in [batch, query_seq, heads, key_seq] — matches BSHD score layout.
+	var additiveMask *Node
+	mask := b.buildMask()
+	if mask != nil {
+		additiveMask = BooleanToAdditiveMask(mask, projectedQuery.DType())
+	}
+
+	// Call AttentionCore with BSHD layout — no transposes needed.
+	attentionOutput, attentionCoefficients = AttentionCore(projectedQuery, projectedKey, projectedValue, scale, additiveMask, true, LayoutBSHD)
+
+	return attentionOutput, attentionCoefficients
+}
+
+// executeWithEinsum uses the flexible Einsum-based approach for higher rank cases or when dropout is needed.
+// This preserves the original MHA behavior for complex tensor layouts.
+func (b *MultiHeadAttentionBuilder) executeWithEinsum(projectedQuery, projectedKey, projectedValue *Node, numKeyAxes int) (attentionOutput, attentionCoefficients *Node) {
 	// Build equation for attention Einsum.
 	batchAxis := 'b'
 	headsAxis := 'h'
 	projectionAxis := 'd'
 
-	numKeyAxes := b.key.Rank() - 2
 	nextFreeAxis := 'i'
 	keyInnerAxes := nextNAxes(numKeyAxes, nextFreeAxis)
 	nextFreeAxis += rune(numKeyAxes)
@@ -434,11 +490,9 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 
 	// Attention logits: outer product of key/query inner dimensions, with a dot-product of their projections.
 	// Shape: [batch, <query_elements>, num_heads, <key_elements>]
-	// Note: We scale by 1/sqrt(keyQueryDim) ONCE here (removed duplicate scaling below)
 	attentionLogits := Einsum(attentionEquation, projectedQuery, projectedKey)
 	normalizingFactor := math.Sqrt(float64(b.keyQueryDim))
 	attentionLogits = DivScalar(attentionLogits, normalizingFactor)
-	//fmt.Printf("\tattentionLogits: %s\n", attentionLogits.Shape())
 
 	mask := b.buildMask()
 	// Attention coefficients: Softmax over all the inner key axes (the last dimensions of attentionLogits)
@@ -447,10 +501,8 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	if mask == nil {
 		attentionCoefficients = Softmax(attentionLogits, softmaxAxes...)
 	} else {
-		//fmt.Printf("\tmask=%s\n", mask.Shape())
 		attentionCoefficients = MaskedSoftmax(attentionLogits, mask, softmaxAxes...)
 	}
-	//fmt.Printf("\tattentionCoefficients: %s\n", attentionLogits.Shape())
 	if b.dropoutRate > 0 {
 		attentionCoefficients = layers.Dropout(b.ctx, attentionCoefficients, ConstAs(attentionCoefficients, b.dropoutRate))
 	}
@@ -463,21 +515,95 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 		batchAxis, queryInnerAxes, headsAxis, keyInnerAxes,
 		batchAxis, keyInnerAxes, headsAxis, projectionAxis,
 		batchAxis, queryInnerAxes, headsAxis, projectionAxis)
-	//fmt.Printf("\toutputEquation (coef x value): %s\n", outputEquation)
 	attentionOutput = Einsum(outputEquation, attentionCoefficients, projectedValue)
 
-	// Final projection: flatten the heads and then do a final projection to the final
-	// outputDim (set with `SetOutputDim`).
-	//fmt.Printf("\tattentionOutput (1): %s\n", attentionOutput.Shape())
-	flatDims := make([]int, attentionOutput.Rank()-1)
-	copy(flatDims, attentionOutput.Shape().Dimensions[:len(flatDims)])
-	flatDims[len(flatDims)-1] *= attentionOutput.Shape().Dimensions[attentionOutput.Rank()-1]
-	// New shape: `[batch, <query_elements>, num_head*value_dim]`
-	attentionOutput = Reshape(attentionOutput, flatDims...)
-	// Final shape: `[batch, <query_elements>, outputDim]`
-	attentionOutput = layers.Dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
-
 	return attentionOutput, attentionCoefficients
+}
+
+// canUseFusedSDPA checks whether the fused SDPA fast path can be used.
+// Requirements: no dropout, rank-3 inputs (single inner axis),
+// no complex masks, and keyQueryDim == valueDim.
+// Backend dtype support is handled automatically by FusedOpCaller.
+func (b *MultiHeadAttentionBuilder) canUseFusedSDPA() bool {
+	if b.dropoutRate > 0 {
+		return false
+	}
+	if b.innerKeyAxes != 1 || b.innerQueryAxes != 1 {
+		return false
+	}
+	if b.queryMask != nil || b.keyMask != nil || b.queryKeyMatrixMask != nil {
+		return false
+	}
+	if b.keyQueryDim != b.valueDim {
+		return false
+	}
+	return true
+}
+
+// fusedDone implements the fused SDPA fast path for Done().
+// It projects Q/K/V using separate Dense layers (preserving variable names and checkpoint
+// compatibility), transposes to [batch, numHeads, seqLen, headDim], calls FusedMultiHeadSDPA
+// (with AttentionCore as the decomposed fallback), transposes back and applies the output
+// Dense projection.
+func (b *MultiHeadAttentionBuilder) fusedDone() *Node {
+	// Project Q, K, V with the same Dense layer names as DoneWithCoefficients.
+	projectedQuery := layers.Dense(b.ctx.In("query"), b.query, true, b.numHeads, b.keyQueryDim)
+	projectedKey := layers.Dense(b.ctx.In("key"), b.key, true, b.numHeads, b.keyQueryDim)
+	projectedValue := layers.Dense(b.ctx.In("value"), b.value, true, b.numHeads, b.valueDim)
+
+	// Projected shapes are [batch, seqLen, numHeads, headDim].
+	// Transpose to [batch, numHeads, seqLen, headDim] for SDPA.
+	projectedQuery = TransposeAllDims(projectedQuery, 0, 2, 1, 3)
+	projectedKey = TransposeAllDims(projectedKey, 0, 2, 1, 3)
+	projectedValue = TransposeAllDims(projectedValue, 0, 2, 1, 3)
+
+	// The decomposed path (DoneWithCoefficients) divides logits by sqrt(d).
+	// The fused SDPA multiplies scores by this scale, so use 1/d to match.
+	scale := 1.0 / float64(b.keyQueryDim)
+
+	// Build causal additive mask for the decomposed fallback if needed.
+	var additiveMask *Node
+	if b.useCausalMask {
+		additiveMask = buildCausalAdditiveMask(projectedQuery)
+	}
+
+	sdpaOutput := InternalFusedOpCaller(
+		func() *Node {
+			return FusedMultiHeadSDPA(projectedQuery, projectedKey, projectedValue,
+				nil, b.numHeads, b.numHeads, scale, b.useCausalMask)
+		},
+		func() *Node {
+			output, _ := AttentionCore(projectedQuery, projectedKey, projectedValue,
+				scale, additiveMask, false, LayoutBHSD)
+			return output
+		},
+	)
+
+	// Transpose back: [batch, numHeads, seqLen, headDim] -> [batch, seqLen, numHeads, headDim]
+	sdpaOutput = TransposeAllDims(sdpaOutput, 0, 2, 1, 3)
+
+	// Reshape to [batch, seqLen, numHeads*headDim]
+	dims := sdpaOutput.Shape().Dimensions
+	sdpaOutput = Reshape(sdpaOutput, dims[0], dims[1], dims[2]*dims[3])
+
+	// Final output projection: [batch, seqLen, outputDim]
+	return layers.Dense(b.ctx.In("output"), sdpaOutput, b.useProjectionBias, b.outputDim)
+}
+
+// buildCausalAdditiveMask builds an additive causal mask for BHSD layout.
+// Returns a mask broadcastable to [batch, heads, seqLen, kvLen] where future
+// positions are set to -inf.
+func buildCausalAdditiveMask(q *Node) *Node {
+	g := q.Graph()
+	seqLen := q.Shape().Dimensions[2]
+	// Lower-triangular boolean mask [seqLen, seqLen]
+	boolMask := LowerTriangular(g, seqLen)
+	// Convert to additive: true->0, false->-1e9
+	additive := BooleanToAdditiveMask(boolMask, q.DType())
+	// Expand to [1, 1, seqLen, seqLen] for broadcasting with [batch, heads, seqLen, kvLen]
+	additive = ExpandDims(additive, 0)
+	additive = ExpandDims(additive, 0)
+	return additive
 }
 
 // Done or DoneWithCoefficients should be called after all optional settings are configured.
@@ -486,6 +612,9 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 // `output` will be shaped `[batch_size, <query_elements>, output_dim]`, where `output_dim`
 // can be configured by `SetOutputDim`.
 func (b *MultiHeadAttentionBuilder) Done() (output *Node) {
+	if b.canUseFusedSDPA() {
+		return b.fusedDone()
+	}
 	output, _ = b.DoneWithCoefficients()
 	return output
 }
