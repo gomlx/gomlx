@@ -1,45 +1,32 @@
-// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
-
-//go:build amd64 && goexperiment.simd
-
 package packgemm
 
 import (
-	"simd/archsimd"
-	"sync"
-	"unsafe"
-
+	"github.com/ajroetker/go-highway/hwy"
 	"github.com/gomlx/gomlx/internal/workerspool"
-	"k8s.io/klog/v2"
 )
 
-var avx512Float32Params = CacheParams{
-	LHSL1KernelRows:      4,   // Mr: Uses 4 ZMM registers for accumulation rows, this number must be a multiple of 4
-	RHSL1KernelCols:      32,  // Nr: Uses 2 ZMM registers for accumulation cols, each holds 16 values
+//go:generate go tool github.com/ajroetker/go-highway/cmd/hwygen -input gemm_16reg_base.go -output_prefix=gen_gemm16reg_impl -dispatch gen_gemm16reg_dispatch -targets avx2,avx512
+
+// simd16RegistersParams are the parameters to use if there are 16 SIMD registers available.
+// It still needs to be adjusted to the size of the registers (in terms )
+var simd16RegistersParams = CacheParams{
+	LHSL1KernelRows:      4,   // Mr: Uses 4 registers for accumulation rows.
+	RHSL1KernelCols:      2,   // Nr: Uses 2 registers for accumulation cols: this must be multiplied by the number of lanes.
 	PanelContractingSize: 128, // Kc: A strip fits in L1 cache
-	LHSPanelCrossSize:    4,   // Mc: Fits in L2 cache (multiple of LHSL1KernelRows)
-	RHSPanelCrossSize:    512, // Nc: Fits in L3 cache (multiple of RHSL1KernelCols)
+	LHSPanelCrossSize:    4,   // Mc: Fits in L2 cache (multiple of LHSL1KernelRows), multiple of LHSL1KernelRows, but usually just LHSL1KernelRows.
+	RHSPanelCrossSize:    512, // Nc: Fits in L3 cache (multiple of RHSL1KernelCols), multiple of RHSL1KernelRows.
 }
 
-func init() {
-	if archsimd.X86.AVX512() {
-		RegisterGEMM("AVX512", avx512Float32, &avx512Float32Params, PriorityDTypeSIMD)
-		knownParams["AVX512"] = &avx512Float32Params
-	}
-}
+func BaseGEMMSymmetric16Registers[T hwy.Floats](
+	alpha, beta T, lhsFlat, rhsFlat []T, batchSize, lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []T,
+	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
 
-var avx512WarningOnce sync.Once
-
-// avx512Float32 implements generic matrix multiplication for float32 inputs and outputs.
-// output = alpha * (lhs x rhs) + beta * output
-func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, lhsCrossSize, rhsCrossSize, contractingSize int, outputFlat []float32,
-	bufAllocFn BufAllocFn[float32], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
-	avx512WarningOnce.Do(func() {
-		klog.Infof("AVX512 GEMM (General Matrix Multiplication) algorithm still experimental!")
-	})
+	// Adjust params to current architecture.
+	numLanes := hwy.NumLanes[T]()
+	params := simd16RegistersParams // Copy.
+	params.RHSL1KernelCols *= numLanes
 
 	// 1. Resolve Strides
-	params := &avx512Float32Params
 	lhsBatchStride := lhsCrossSize * contractingSize
 	rhsBatchStride := contractingSize * rhsCrossSize
 	outputBatchStride := lhsCrossSize * rhsCrossSize
@@ -63,11 +50,11 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 			batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
 			batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
 			batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
-			avx512Float32GemmChunk(
+			GEMMSymmetric16RegistersGemmChunk(
 				alpha, beta,
 				batchLhs, batchRhs, batchOutput,
 				lhsCrossSize, rhsCrossSize, contractingSize,
-				params, 0, lhsCrossSize, 0, rhsCrossSize,
+				&params, 0, lhsCrossSize, 0, rhsCrossSize,
 				packedLHS, packedRHS, packedOutput,
 			)
 		}
@@ -78,7 +65,7 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 	workChan := make(chan workItem, max(2000, 2*maxWorkers))
 	go feedWorkItems(
 		batchSize, lhsCrossSize, rhsCrossSize,
-		params, maxWorkers, workChan)
+		&params, maxWorkers, workChan)
 
 	// 2. Saturate (fan-out workers) on workItems.
 	pool.Saturate(func() {
@@ -96,7 +83,7 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 				batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
 				batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
 				batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
-				avx512Float32GemmChunk(
+				GEMMSymmetric16RegistersGemmChunk(
 					alpha, beta,
 					batchLhs, batchRhs, batchOutput,
 					lhsCrossSize, rhsCrossSize, contractingSize,
@@ -110,13 +97,13 @@ func avx512Float32(alpha, beta float32, lhsFlat, rhsFlat []float32, batchSize, l
 	return nil
 }
 
-// avx512Float32GemmChunk performs the 5-loop GotoBLAS algorithm on a slice of a single batch matrix.
-func avx512Float32GemmChunk(
-	alpha, beta float32,
-	lhs, rhs, output []float32,
+// BaseGEMMSymmetric16RegistersGemmChunk performs the 5-loop GotoBLAS algorithm on a slice of a single batch matrix.
+func BaseGEMMSymmetric16RegistersGemmChunk[T hwy.Floats](
+	alpha, beta T,
+	lhs, rhs, output []T,
 	lhsCrossSize, rhsCrossSize, contractingSize int,
 	params *CacheParams, lhsRowStart, lhsRowEnd, rhsColStart, rhsColEnd int,
-	packedLhs, packedRhs, packedOutput []float32,
+	packedLhs, packedRhs, packedOutput []T,
 ) {
 	// fmt.Printf("gemmChunk(colStart=%d, colEnd=%d)\n", colStart, colEnd)
 
@@ -140,7 +127,7 @@ func avx512Float32GemmChunk(
 			// We pack a [contractingPanelWidth, rhsPanelWidth] block of RHS into contiguous memory.
 			// Format: Vertical strips of width rhsL1KernelCols (Nr).
 			// ---------------------------------------------------------
-			avx512Float32PackRHS(rhs, packedRhs, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth,
+			PackRHS(rhs, packedRhs, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth,
 				rhsPanelWidth, params.RHSL1KernelCols)
 			// PackRHS(rhs, packedRhs, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth,
 			// 	rhsPanelWidth, params.RHSL1KernelCols)
@@ -163,7 +150,7 @@ func avx512Float32GemmChunk(
 				// Computes a [lhsPanelHeight, rhsPanelWidth] block of Output
 				// by iterating over micro-kernels.
 				// ---------------------------------------------
-				avx512Float32Panel(
+				BaseGEMMSymmetric16RegistersPanel(
 					contractingPanelWidth,
 					packedLhs, packedRhs, packedOutput,
 					params,
@@ -175,7 +162,7 @@ func avx512Float32GemmChunk(
 				if contractingPanelIdx > 0 {
 					effectiveBeta = 1
 				}
-				avx512Float32ApplyPackedOutput(
+				ApplyPackedOutput(
 					packedOutput, output,
 					alpha, effectiveBeta,
 					params.RHSPanelCrossSize,
@@ -187,11 +174,11 @@ func avx512Float32GemmChunk(
 	}
 }
 
-// avx512Float32Panel computes a [lhsPanelHeight, rhsPanelWidth] block of the output matrix.
+// BaseGEMMSymmetric16RegistersPanel computes a [lhsPanelHeight, rhsPanelWidth] block of the output matrix.
 // It iterates over micro-kernels of size [params.LHSL1KernelRows, params.RHSL1KernelCols].
-func avx512Float32Panel(
+func BaseGEMMSymmetric16RegistersPanel[T hwy.Floats](
 	activeContractingLen int,
-	packedLHS, packedRHS, packedOutput []float32, // Packed Buffers
+	packedLHS, packedRHS, packedOutput []T, // Packed Buffers
 	params *CacheParams,
 	lhsActivePanelHeight, rhsActivePanelWidth int,
 ) {
@@ -199,6 +186,7 @@ func avx512Float32Panel(
 	_ = packedLHS[activeContractingLen*lhsActivePanelHeight-1]
 	_ = packedRHS[activeContractingLen*rhsActivePanelWidth-1]
 	_ = packedOutput[lhsActivePanelHeight*rhsActivePanelWidth-1]
+	numLanes := hwy.NumLanes[T]()
 
 	// Loop 1 (ir): Micro-Kernel Rows (Mr == lhsL1BlockRows)
 	for lhsRowIdx := 0; lhsRowIdx < lhsActivePanelHeight; lhsRowIdx += params.LHSL1KernelRows {
@@ -220,14 +208,14 @@ func avx512Float32Panel(
 			// 2. Initialize Accumulators (Registers) to 0.0
 			// ---------------------------------------------------------
 			// We use 4 rows (Mr) worth of registers at a time.
-			accum_lhs0_rhs0 := archsimd.BroadcastFloat32x16(0.0)
-			accum_lhs0_rhs1 := archsimd.BroadcastFloat32x16(0.0)
-			accum_lhs1_rhs0 := archsimd.BroadcastFloat32x16(0.0)
-			accum_lhs1_rhs1 := archsimd.BroadcastFloat32x16(0.0)
-			accum_lhs2_rhs0 := archsimd.BroadcastFloat32x16(0.0)
-			accum_lhs2_rhs1 := archsimd.BroadcastFloat32x16(0.0)
-			accum_lhs3_rhs0 := archsimd.BroadcastFloat32x16(0.0)
-			accum_lhs3_rhs1 := archsimd.BroadcastFloat32x16(0.0)
+			accum_lhs0_rhs0 := hwy.Set[T](0)
+			accum_lhs0_rhs1 := hwy.Set[T](0)
+			accum_lhs1_rhs0 := hwy.Set[T](0)
+			accum_lhs1_rhs1 := hwy.Set[T](0)
+			accum_lhs2_rhs0 := hwy.Set[T](0)
+			accum_lhs2_rhs1 := hwy.Set[T](0)
+			accum_lhs3_rhs0 := hwy.Set[T](0)
+			accum_lhs3_rhs1 := hwy.Set[T](0)
 
 			// ---------------------------------------------------------
 			// 3. The K-Loop (Dot Product)
@@ -235,33 +223,33 @@ func avx512Float32Panel(
 			idxLHS := lhsRowIdx * activeContractingLen
 			for range activeContractingLen {
 				// Load RHS (Broadcasting/Streaming)
-				rhsVec0 := archsimd.LoadFloat32x16(castToArray16(&packedRHS[idxRHS]))
-				rhsVec1 := archsimd.LoadFloat32x16(castToArray16(&packedRHS[idxRHS+16]))
-				idxRHS += 32
+				rhsVec0 := hwy.LoadFull(packedRHS[idxRHS:])
+				rhsVec1 := hwy.LoadFull(packedRHS[idxRHS+numLanes:])
+				idxRHS += 2 * numLanes
 
 				// Row 0
 				lhsVal0 := packedLHS[idxLHS+0]
-				lhsVec0 := archsimd.BroadcastFloat32x16(lhsVal0)
-				accum_lhs0_rhs0 = rhsVec0.MulAdd(lhsVec0, accum_lhs0_rhs0)
-				accum_lhs0_rhs1 = rhsVec1.MulAdd(lhsVec0, accum_lhs0_rhs1)
+				lhsVec0 := hwy.Set[T](lhsVal0)
+				accum_lhs0_rhs0 = hwy.MulAdd(rhsVec0, lhsVec0, accum_lhs0_rhs0)
+				accum_lhs0_rhs1 = hwy.MulAdd(rhsVec1, lhsVec0, accum_lhs0_rhs1)
 
 				// Row 1
 				lhsVal1 := packedLHS[idxLHS+1]
-				lhsVec1 := archsimd.BroadcastFloat32x16(lhsVal1)
-				accum_lhs1_rhs0 = rhsVec0.MulAdd(lhsVec1, accum_lhs1_rhs0)
-				accum_lhs1_rhs1 = rhsVec1.MulAdd(lhsVec1, accum_lhs1_rhs1)
+				lhsVec1 := hwy.Set[T](lhsVal1)
+				accum_lhs1_rhs0 = hwy.MulAdd(rhsVec0, lhsVec1, accum_lhs1_rhs0)
+				accum_lhs1_rhs1 = hwy.MulAdd(rhsVec1, lhsVec1, accum_lhs1_rhs1)
 
 				// Row 2
 				lhsVal2 := packedLHS[idxLHS+2]
-				lhsVec2 := archsimd.BroadcastFloat32x16(lhsVal2)
-				accum_lhs2_rhs0 = rhsVec0.MulAdd(lhsVec2, accum_lhs2_rhs0)
-				accum_lhs2_rhs1 = rhsVec1.MulAdd(lhsVec2, accum_lhs2_rhs1)
+				lhsVec2 := hwy.Set[T](lhsVal2)
+				accum_lhs2_rhs0 = hwy.MulAdd(rhsVec0, lhsVec2, accum_lhs2_rhs0)
+				accum_lhs2_rhs1 = hwy.MulAdd(rhsVec1, lhsVec2, accum_lhs2_rhs1)
 
 				// Row 3
 				lhsVal3 := packedLHS[idxLHS+3]
-				lhsVec3 := archsimd.BroadcastFloat32x16(lhsVal3)
-				accum_lhs3_rhs0 = rhsVec0.MulAdd(lhsVec3, accum_lhs3_rhs0)
-				accum_lhs3_rhs1 = rhsVec1.MulAdd(lhsVec3, accum_lhs3_rhs1)
+				lhsVec3 := hwy.Set[T](lhsVal3)
+				accum_lhs3_rhs0 = hwy.MulAdd(rhsVec0, lhsVec3, accum_lhs3_rhs0)
+				accum_lhs3_rhs1 = hwy.MulAdd(rhsVec1, lhsVec3, accum_lhs3_rhs1)
 
 				idxLHS += lhsKernelRows
 			}
@@ -274,114 +262,14 @@ func avx512Float32Panel(
 			outputIdx2 := outputIdx0 + 2*params.RHSPanelCrossSize
 			outputIdx3 := outputIdx0 + 3*params.RHSPanelCrossSize
 
-			accum_lhs0_rhs0.Store(castToArray16(&packedOutput[outputIdx0]))
-			accum_lhs0_rhs1.Store(castToArray16(&packedOutput[outputIdx0+16]))
-			accum_lhs1_rhs0.Store(castToArray16(&packedOutput[outputIdx1]))
-			accum_lhs1_rhs1.Store(castToArray16(&packedOutput[outputIdx1+16]))
-			accum_lhs2_rhs0.Store(castToArray16(&packedOutput[outputIdx2]))
-			accum_lhs2_rhs1.Store(castToArray16(&packedOutput[outputIdx2+16]))
-			accum_lhs3_rhs0.Store(castToArray16(&packedOutput[outputIdx3]))
-			accum_lhs3_rhs1.Store(castToArray16(&packedOutput[outputIdx3+16]))
-		}
-	}
-}
-
-func castToArray16[T float32](ptr *T) *[16]T {
-	return (*[16]T)(unsafe.Pointer(ptr))
-}
-
-// applyPackedOutput applies the computed packedOutput to the final output.
-func avx512Float32ApplyPackedOutput(
-	packedOutput, output []float32,
-	alpha, beta float32,
-	packedOutputRowStride int,
-	lhsRowOffset, rhsColOffset int, // Global output offsets
-	outputRowStride int,
-	height, width int, // actual amount of data to copy
-) {
-	// Vectorized constants
-	alphaVec := archsimd.BroadcastFloat32x16(alpha)
-	betaVec := archsimd.BroadcastFloat32x16(beta)
-
-	for r := range height {
-		packedIdx := r * packedOutputRowStride
-		outputIdx := (lhsRowOffset+r)*outputRowStride + rhsColOffset
-
-		c := 0
-		// Vectorized loop
-		for ; c+16 <= width; c += 16 {
-			packedVal := archsimd.LoadFloat32x16(castToArray16(&packedOutput[packedIdx]))
-			outputVal := archsimd.LoadFloat32x16(castToArray16(&output[outputIdx]))
-
-			// output = alpha * packed + beta * output
-			newVal := alphaVec.MulAdd(packedVal, betaVec.Mul(outputVal))
-
-			newVal.Store(castToArray16(&output[outputIdx]))
-
-			packedIdx += 16
-			outputIdx += 16
-		}
-
-		// Scalar tail
-		for ; c < width; c++ {
-			val := packedOutput[packedIdx]
-			output[outputIdx] = beta*output[outputIdx] + alpha*val
-			packedIdx++
-			outputIdx++
-		}
-	}
-}
-
-// avx512Float32PackRHS is the AVX512/Flaot32 version of the generic PackRHS.
-// PackRHS packs a slice of size [contractingRows, numCols] block from RHS into
-// the panel reshaped+transposed to [ceil(numCols/kernelCols), contractingRows, kernelCols],
-// padding the cols of the last strip with zeros if necessary.
-//
-//   - src: [contractingSize, numCols]
-//   - dst: a slice with enough size to hold the panel
-//   - srcRowStart: start row in src
-//   - srcColStart: start col in src
-//   - srcRowStride: row-stride of src (number of columns per row in src)
-//   - contractingRows: number of rows to be copied in the panel (must fit total panel allocated size)
-//   - numCols: number of columns to be copied in the panel (excluding padding), will be padded to a kernelCols
-//     multiple with zeros.
-//   - kernelCols: number of columns in each "L1 kernel" (nr)
-func avx512Float32PackRHS(src, dst []float32, srcRowStart, srcColStart, srcRowStride,
-	contractingRows, numCols, kernelCols int) {
-	numFullStrips := numCols / kernelCols
-	fullStripsCol := numFullStrips * kernelCols
-	srcStartRowIdx := srcRowStart * srcRowStride
-	dstIdx := 0
-	const numLanes = 16
-
-	// Iterate over full-cols strips.
-	for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
-		srcIdx := srcStartRowIdx + srcColStart + stripColIdx
-		for range contractingRows {
-			v0 := archsimd.LoadFloat32x16(castToArray16(&src[srcIdx]))
-			v1 := archsimd.LoadFloat32x16(castToArray16(&src[srcIdx+numLanes]))
-			v0.Store(castToArray16(&dst[dstIdx]))
-			v1.Store(castToArray16(&dst[dstIdx+numLanes]))
-			dstIdx += kernelCols
-			srcIdx += srcRowStride
-		}
-	}
-
-	// Last strip, with incomplete number of columns.
-	validCols := numCols - fullStripsCol
-	if validCols == 0 {
-		// We are done.
-		return
-	}
-	srcIdx := srcStartRowIdx + srcColStart + fullStripsCol
-	for range contractingRows {
-		// Copy valid columns
-		copy(dst[dstIdx:], src[srcIdx:srcIdx+validCols])
-		dstIdx += validCols
-		// Zero-pad if strip is incomplete (edge of matrix)
-		for range kernelCols - validCols {
-			dst[dstIdx] = 0
-			dstIdx++
+			hwy.StoreFull(accum_lhs0_rhs0, packedOutput[outputIdx0:])
+			hwy.StoreFull(accum_lhs0_rhs1, packedOutput[outputIdx0+numLanes:])
+			hwy.StoreFull(accum_lhs1_rhs0, packedOutput[outputIdx1:])
+			hwy.StoreFull(accum_lhs1_rhs1, packedOutput[outputIdx1+numLanes:])
+			hwy.StoreFull(accum_lhs2_rhs0, packedOutput[outputIdx2:])
+			hwy.StoreFull(accum_lhs2_rhs1, packedOutput[outputIdx2+numLanes:])
+			hwy.StoreFull(accum_lhs3_rhs0, packedOutput[outputIdx3:])
+			hwy.StoreFull(accum_lhs3_rhs1, packedOutput[outputIdx3+numLanes:])
 		}
 	}
 }
