@@ -7,6 +7,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,7 @@ func TestRoPE(t *testing.T) {
 			// Create position indices using helper function
 			seqLen := x.Shape().Dimensions[0]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			return rope.Apply(x, posIndices)
+			return rope.Apply(x, posIndices, x.Rank()-2)
 		})
 
 		input := [][]float32{
@@ -47,7 +48,7 @@ func TestRoPE(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[0]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			return rope.Apply(x, posIndices)
+			return rope.Apply(x, posIndices, x.Rank()-2)
 		})
 
 		input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
@@ -65,7 +66,7 @@ func TestRoPE(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			return rope.Apply(x, posIndices)
+			return rope.Apply(x, posIndices, x.Rank()-2)
 		})
 
 		input := [][]float32{
@@ -86,7 +87,7 @@ func TestRoPE(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			rotated := rope.Apply(x, posIndices)
+			rotated := rope.Apply(x, posIndices, x.Rank()-2)
 			return ReduceAllSum(Abs(rotated))
 		})
 
@@ -111,7 +112,7 @@ func TestRoPE(t *testing.T) {
 			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 				seqLen := x.Shape().Dimensions[x.Rank()-2]
 				posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-				return rope.Apply(x, posIndices)
+				return rope.Apply(x, posIndices, x.Rank()-2)
 			})
 
 			input := [][]float32{
@@ -136,7 +137,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 			// Apply RoPE only to middle dimensions [2:6]
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			return rope.Apply(x, posIndices)
+			return rope.Apply(x, posIndices, x.Rank()-2)
 		})
 
 		input := [][]float32{
@@ -159,7 +160,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 			// Apply RoPE to the full embedding range [0:8]
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			return rope.Apply(x, posIndices)
+			return rope.Apply(x, posIndices, x.Rank()-2)
 		})
 
 		input := [][]float32{
@@ -182,7 +183,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 			// Apply RoPE to tail half with different startPos and baseFreq
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			return rope.Apply(x, posIndices)
+			return rope.Apply(x, posIndices, x.Rank()-2)
 		})
 
 		input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
@@ -202,7 +203,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 				seqLen := x.Shape().Dimensions[x.Rank()-2]
 				posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-				return rope.Apply(x, posIndices)
+				return rope.Apply(x, posIndices, x.Rank()-2)
 			})
 
 			input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
@@ -221,7 +222,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 				seqLen := x.Shape().Dimensions[x.Rank()-2]
 				posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-				return rope.Apply(x, posIndices)
+				return rope.Apply(x, posIndices, x.Rank()-2)
 			})
 
 			input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
@@ -241,7 +242,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			return rope.Apply(x, posIndices)
+			return rope.Apply(x, posIndices, x.Rank()-2)
 		})
 
 		// Input shape: [batch=2, seq_len=3, embed_dim=8]
@@ -282,6 +283,196 @@ func TestRoPEWithCustomDim(t *testing.T) {
 				for k := 4; k < 8; k++ {
 					assert.Equal(t, input[i][j][k], outputData[i][j][k],
 						"Unchanged dimension [%d][%d][%d] should be preserved", i, j, k)
+				}
+			}
+		}
+	})
+}
+
+// TestApplyWithCosSin tests the ApplyWithCosSin function.
+func TestApplyWithCosSin(t *testing.T) {
+	t.Run("MatchesRoPEApply", func(t *testing.T) {
+		// Verify that ApplyWithCosSin produces the same result as RoPE.Apply
+		// when cos/sin are computed from the same base frequency and positions.
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		baseFreq := 10000.0
+		rope := NewRoPE(baseFreq)
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) []*Node {
+			g := x.Graph()
+			shape := x.Shape()
+			dtype := shape.DType
+			rank := shape.Rank()
+			seqLen := shape.Dimensions[rank-2]
+			embedDim := shape.Dimensions[rank-1]
+			halfDim := embedDim / 2
+
+			posIndices := SequentialPositions(g, startPos, seqLen)
+
+			// Result from RoPE.Apply
+			ropeResult := rope.Apply(x, posIndices, x.Rank()-2)
+
+			// Compute cos/sin manually (replicating what applyRoPE does internally)
+			positions := ConvertDType(posIndices, dtype)
+			dimIndices := Iota(g, shapes.Make(dtype, halfDim), 0)
+			dimIndices = MulScalar(dimIndices, 2.0/float64(embedDim))
+			baseFreqTensor := Const(g, []float64{baseFreq})
+			baseFreqTensor = ConvertDType(baseFreqTensor, dtype)
+			freqs := Pow(baseFreqTensor, dimIndices)
+			freqs = Reciprocal(freqs)
+			positions = ExpandDims(positions, -1)
+			freqs = ExpandDims(freqs, 0)
+			angles := Mul(positions, freqs)
+			cosAngles := Cos(angles)
+			sinAngles := Sin(angles)
+
+			// Result from RoPEWithCosSin (non-interleaved, matching RoPE.Apply)
+			cossinResult := NewRoPEWithCosSin(cosAngles, sinAngles).Apply(x, nil, x.Rank()-2)
+
+			return []*Node{ropeResult, cossinResult}
+		})
+
+		input := [][]float32{
+			{1, 2, 3, 4, 5, 6, 7, 8},
+			{8, 7, 6, 5, 4, 3, 2, 1},
+			{1, 0, 1, 0, 1, 0, 1, 0},
+		}
+		startPos := []int32{0}
+
+		outputs := exec.MustExec(input, startPos)
+		ropeOut := outputs[0].Value().([][]float32)
+		cossinOut := outputs[1].Value().([][]float32)
+
+		for i := range ropeOut {
+			for j := range ropeOut[i] {
+				diff := ropeOut[i][j] - cossinOut[i][j]
+				if diff < 0 {
+					diff = -diff
+				}
+				assert.InDelta(t, ropeOut[i][j], cossinOut[i][j], 1e-5,
+					"Mismatch at [%d][%d]: rope=%v cossin=%v", i, j, ropeOut[i][j], cossinOut[i][j])
+			}
+		}
+	})
+
+	t.Run("Interleaved", func(t *testing.T) {
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, cos, sin *Node) *Node {
+			return NewRoPEWithCosSin(cos, sin).WithInterleaved(true).Apply(x, nil, x.Rank()-2)
+		})
+
+		// x: [2, 4] (seq_len=2, head_dim=4)
+		input := [][]float32{
+			{1, 2, 3, 4},
+			{5, 6, 7, 8},
+		}
+		// cos/sin: [2, 2] (seq_len=2, dim/2=2)
+		cosVals := [][]float32{
+			{1, 1},
+			{0, 1},
+		}
+		sinVals := [][]float32{
+			{0, 0},
+			{1, 0},
+		}
+
+		output := exec.MustExec(input, cosVals, sinVals)[0]
+		assert.Equal(t, []int{2, 4}, output.Shape().Dimensions)
+
+		// At position 0: cos=1, sin=0 -> no rotation, output = input
+		// At position 1: cos=[0,1], sin=[1,0]
+		// Interleaved pairs: (x[0],x[1]) and (x[2],x[3])
+		// For pair (5,6) with cos=0, sin=1: rotated = (5*0-6*1, 5*1+6*0) = (-6, 5)
+		// For pair (7,8) with cos=1, sin=0: rotated = (7*1-8*0, 7*0+8*1) = (7, 8)
+		outData := output.Value().([][]float32)
+		assert.InDelta(t, float32(1), outData[0][0], 1e-5)
+		assert.InDelta(t, float32(2), outData[0][1], 1e-5)
+		assert.InDelta(t, float32(3), outData[0][2], 1e-5)
+		assert.InDelta(t, float32(4), outData[0][3], 1e-5)
+		assert.InDelta(t, float32(-6), outData[1][0], 1e-5)
+		assert.InDelta(t, float32(5), outData[1][1], 1e-5)
+		assert.InDelta(t, float32(7), outData[1][2], 1e-5)
+		assert.InDelta(t, float32(8), outData[1][3], 1e-5)
+	})
+
+	t.Run("PartialRotation", func(t *testing.T) {
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, cos, sin *Node) *Node {
+			return NewRoPEWithCosSin(cos, sin).Apply(x, nil, x.Rank()-2)
+		})
+
+		// x: [1, 6] - head_dim=6, but only rotary_dim=4
+		input := [][]float32{{1, 2, 3, 4, 5, 6}}
+		// cos/sin: [1, 2] -> rotary_dim/2 = 2, so rotary_dim = 4
+		cosVals := [][]float32{{1, 1}}
+		sinVals := [][]float32{{0, 0}}
+
+		output := exec.MustExec(input, cosVals, sinVals)[0]
+		assert.Equal(t, []int{1, 6}, output.Shape().Dimensions)
+
+		// With cos=1, sin=0, rotation is identity. Pass-through dims should be unchanged.
+		outData := output.Value().([][]float32)
+		for j := 0; j < 6; j++ {
+			assert.InDelta(t, input[0][j], outData[0][j], 1e-5, "dim %d", j)
+		}
+	})
+}
+
+// TestRoPEWithSeqAxis1 tests that RoPE works correctly with seqAxis=1 on a rank-4
+// tensor (the BSHD layout case: [batch, seq, heads, dim]).
+func TestRoPEWithSeqAxis1(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	ctx := context.New()
+
+	rope := NewRoPE(10000.0)
+
+	t.Run("Rank4_SeqAxis1", func(t *testing.T) {
+		// Compare: applying RoPE with seqAxis=1 on [batch, seq, heads, dim]
+		// should produce the same result on the seq/dim pair as seqAxis=rank-2
+		// on [batch, heads, seq, dim] (after transposing back).
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) []*Node {
+			g := x.Graph()
+			seqLen := x.Shape().Dimensions[1] // seq is at axis 1 in BSHD
+			posIndices := SequentialPositions(g, startPos, seqLen)
+
+			// Apply with seqAxis=1 (BSHD layout)
+			bshdResult := rope.Apply(x, posIndices, 1)
+
+			// Transpose to BHSD, apply with seqAxis=rank-2=2, transpose back
+			xBHSD := TransposeAllDims(x, 0, 2, 1, 3)
+			bhsdResult := rope.Apply(xBHSD, posIndices, 2)
+			bhsdResultBack := TransposeAllDims(bhsdResult, 0, 2, 1, 3)
+
+			return []*Node{bshdResult, bhsdResultBack}
+		})
+
+		// [batch=1, seq=3, heads=2, dim=4]
+		input := [][][][]float32{
+			{
+				{{1, 2, 3, 4}, {5, 6, 7, 8}},
+				{{9, 10, 11, 12}, {13, 14, 15, 16}},
+				{{17, 18, 19, 20}, {21, 22, 23, 24}},
+			},
+		}
+		startPos := []int32{0}
+
+		outputs := exec.MustExec(input, startPos)
+		bshdOut := outputs[0].Value().([][][][]float32)
+		bhsdOut := outputs[1].Value().([][][][]float32)
+
+		for i := range bshdOut {
+			for j := range bshdOut[i] {
+				for k := range bshdOut[i][j] {
+					for l := range bshdOut[i][j][k] {
+						assert.InDelta(t, bshdOut[i][j][k][l], bhsdOut[i][j][k][l], 1e-5,
+							"mismatch at [%d][%d][%d][%d]", i, j, k, l)
+					}
 				}
 			}
 		}

@@ -3,10 +3,9 @@
 package attention
 
 import (
-	"fmt"
 	"math"
 	"reflect"
-	"strings"
+	"slices"
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
@@ -36,6 +35,10 @@ type MultiHeadAttentionBuilder struct {
 
 	useProjectionBias bool
 	dropoutRate       float64
+
+	// layout records the internal layout used for the attention core.
+	// Defaults to LayoutBSHD (Dense projections produce [batch, seq, heads, dim]).
+	layout AxesLayout
 
 	// Mask related attributes.
 	keyMask, queryMask *Node
@@ -100,6 +103,7 @@ func MultiHeadAttention(ctx *context.Context, query, key, value *Node, numHeads 
 		innerKeyAxes:      innerKeyAxes,
 		innerQueryAxes:    innerQueryAxes,
 		useProjectionBias: true,
+		layout:            LayoutBSHD,
 	}
 
 	if queryShape.Rank() < 3 {
@@ -336,6 +340,8 @@ func (b *MultiHeadAttentionBuilder) KVCacheShape() shapes.Shape {
 // WithRoPE enables Rotary Position Embeddings on query and key projections.
 // baseFreq is typically 10000.0 (default from RoFormer paper).
 // RoPE is applied after projections and works with both training and generation modes.
+//
+// Deprecated: Use WithPositionalEncoder, passing a pos.RoPE instead.
 func (b *MultiHeadAttentionBuilder) WithRoPE(baseFreq float64) *MultiHeadAttentionBuilder {
 	b.positionalEncoder = pos.NewRoPE(baseFreq)
 	return b
@@ -347,17 +353,6 @@ func (b *MultiHeadAttentionBuilder) WithPositionalEncoder(encoder pos.Encoder) *
 	return b
 }
 
-// nextNAxes enumerates the next n consecutive axis, starting from nextAxis. It returns
-// the string with the axis concatenated.
-func nextNAxes(n int, nextAxis rune) string {
-	var eq strings.Builder
-	for range n {
-		eq.WriteString(string(nextAxis))
-		nextAxis++
-	}
-	return eq.String()
-}
-
 // DoneWithCoefficients or Done should be called after all optional settings are configured.
 // It returns both the attention output and the attention coefficients (matrix) used.
 //
@@ -367,23 +362,46 @@ func nextNAxes(n int, nextAxis rune) string {
 // `coefficients` is shaped `[batch_size, <query_elements>, <num_heads>, <key_elements>]`
 // with the attention weights (from 0 to 1).
 func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, attentionCoefficients *Node) {
-	projectedKey := layers.Dense(b.ctx.In("key"), b.key, true, b.numHeads, b.keyQueryDim)
-	projectedQuery := layers.Dense(b.ctx.In("query"), b.query, true, b.numHeads, b.keyQueryDim)
-	projectedValue := layers.Dense(b.ctx.In("value"), b.value, true, b.numHeads, b.valueDim)
+	if b.layout != LayoutBSHD {
+		Panicf("MultiHeadAttention only supports LayoutBSHD, got %s", b.layout)
+	}
+	seqAxis := b.layout.SeqAxis()
 
-	// Apply RoPE if enabled (before KV cache to cache rotated embeddings)
+	// Flatten inner axes to a single sequence axis before projection.
+	// This turns [batch, q1, q2, ..., inputDim] into [batch, q_flat, inputDim].
+	batchSize := b.query.Shape().Dim(0)
+	var queryInnerDims, keyInnerDims []int
+	flatQuery, flatKey, flatValue := b.query, b.key, b.value
+	needsUnflatten := b.innerKeyAxes > 1 || b.innerQueryAxes > 1
+	if needsUnflatten {
+		qDims := b.query.Shape().Dimensions
+		kDims := b.key.Shape().Dimensions
+
+		queryInnerDims = slices.Clone(qDims[1 : 1+b.innerQueryAxes])
+		keyInnerDims = slices.Clone(kDims[1 : 1+b.innerKeyAxes])
+
+		flatQuery = Reshape(b.query, batchSize, -1, b.query.Shape().Dim(-1))
+		flatKey = Reshape(b.key, batchSize, -1, b.key.Shape().Dim(-1))
+		flatValue = Reshape(b.value, batchSize, -1, b.value.Shape().Dim(-1))
+	}
+
+	projectedKey := layers.Dense(b.ctx.In("key"), flatKey, true, b.numHeads, b.keyQueryDim)
+	projectedQuery := layers.Dense(b.ctx.In("query"), flatQuery, true, b.numHeads, b.keyQueryDim)
+	projectedValue := layers.Dense(b.ctx.In("value"), flatValue, true, b.numHeads, b.valueDim)
+
+	// Apply positional encoding (e.g. RoPE) if enabled.
+	// Applied before KV cache so that rotated embeddings are cached.
+	// projectedQuery/Key shape: [batch, seq, heads, dim] (BSHD layout).
 	if b.positionalEncoder != nil {
-		// Create sequential position indices from the position node
-		// projectedQuery shape: [..., seqLen, numHeads, headDim]
-		seqLen := projectedQuery.Shape().Dimensions[projectedQuery.Rank()-2]
+		seqLen := projectedQuery.Shape().Dimensions[seqAxis]
 		var posIndices *Node
 		if b.position != nil {
 			posIndices = pos.SequentialPositions(b.g, b.position, seqLen)
 		} else {
 			posIndices = pos.SequentialPositions(b.g, Const(b.g, int32(0)), seqLen)
 		}
-		projectedQuery = b.positionalEncoder.Apply(projectedQuery, posIndices)
-		projectedKey = b.positionalEncoder.Apply(projectedKey, posIndices)
+		projectedQuery = b.positionalEncoder.Apply(projectedQuery, posIndices, seqAxis)
+		projectedKey = b.positionalEncoder.Apply(projectedKey, posIndices, seqAxis)
 	}
 
 	// Handle KV cache if in incremental generation mode
@@ -410,70 +428,38 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 		projectedValue = TransposeAllDims(fullValue, 0, 2, 1, 3)
 	}
 
-	// Build equation for attention Einsum.
-	batchAxis := 'b'
-	headsAxis := 'h'
-	projectionAxis := 'd'
-
-	numKeyAxes := b.key.Rank() - 2
-	nextFreeAxis := 'i'
-	keyInnerAxes := nextNAxes(numKeyAxes, nextFreeAxis)
-	nextFreeAxis += rune(numKeyAxes)
-	projectedKeyAxes := fmt.Sprintf("%c%s%c%c", batchAxis, keyInnerAxes, headsAxis, projectionAxis)
-	numQueryAxes := b.query.Rank() - 2
-	queryInnerAxes := nextNAxes(numKeyAxes, nextFreeAxis)
-	nextFreeAxis += rune(numQueryAxes)
-	projectedQueryAxes := fmt.Sprintf("%c%s%c%c", batchAxis, queryInnerAxes, headsAxis, projectionAxis)
-
-	// Example of attention equation:
-	//  - projectedKey.shape(rank 4)   = [batch, key_elements, numHeads, keyQueryDims]
-	//  - projectedQuery.shape(rank 4) = [batch, query_elements, numHeads, keyQueryDim]
-	//  - attentionEquation   = "bihd,bjhd->bjhi"
-	attentionEquation := fmt.Sprintf("%s,%s->%c%s%c%s", projectedQueryAxes, projectedKeyAxes,
-		batchAxis, queryInnerAxes, headsAxis, keyInnerAxes)
-
-	// Attention logits: outer product of key/query inner dimensions, with a dot-product of their projections.
-	// Shape: [batch, <query_elements>, num_heads, <key_elements>]
-	// Note: We scale by 1/sqrt(keyQueryDim) ONCE here (removed duplicate scaling below)
-	attentionLogits := Einsum(attentionEquation, projectedQuery, projectedKey)
-	normalizingFactor := math.Sqrt(float64(b.keyQueryDim))
-	attentionLogits = DivScalar(attentionLogits, normalizingFactor)
-	//fmt.Printf("\tattentionLogits: %s\n", attentionLogits.Shape())
-
+	// Build the mask before any flattening, since buildMask uses the original attentionShape.
+	// Mask shape: [batch, <query_elements>, num_heads, <key_elements>]
 	mask := b.buildMask()
-	// Attention coefficients: Softmax over all the inner key axes (the last dimensions of attentionLogits)
-	// Shape: [batch, <query_elements>, num_heads, <key_elements>]
-	softmaxAxes := xslices.Iota(attentionLogits.Rank()-numKeyAxes, numKeyAxes)
-	if mask == nil {
-		attentionCoefficients = Softmax(attentionLogits, softmaxAxes...)
-	} else {
-		//fmt.Printf("\tmask=%s\n", mask.Shape())
-		attentionCoefficients = MaskedSoftmax(attentionLogits, mask, softmaxAxes...)
-	}
-	//fmt.Printf("\tattentionCoefficients: %s\n", attentionLogits.Shape())
-	if b.dropoutRate > 0 {
-		attentionCoefficients = layers.Dropout(b.ctx, attentionCoefficients, ConstAs(attentionCoefficients, b.dropoutRate))
+
+	// Flatten the mask to match the now-flat Q/K/V when inner axes > 1.
+	if needsUnflatten && mask != nil {
+		qFlat := projectedQuery.Shape().Dimensions[seqAxis]
+		kFlat := projectedKey.Shape().Dimensions[seqAxis]
+		mask = Reshape(mask, batchSize, qFlat, b.numHeads, kFlat)
 	}
 
-	// Build equation for the attention output Einsum.
-	// - attentionCoefficients     = [batch, <query_elements>, num_heads, <key_elements>]
-	// - projectedValue            = [batch, <key_elements>, num_heads, value_dim]
-	// - resulting attentionOutput = [batch, <query_elements>, num_heads, value_dim]
-	outputEquation := fmt.Sprintf("%c%s%c%s,%c%s%c%c->%c%s%c%c",
-		batchAxis, queryInnerAxes, headsAxis, keyInnerAxes,
-		batchAxis, keyInnerAxes, headsAxis, projectionAxis,
-		batchAxis, queryInnerAxes, headsAxis, projectionAxis)
-	//fmt.Printf("\toutputEquation (coef x value): %s\n", outputEquation)
-	attentionOutput = Einsum(outputEquation, attentionCoefficients, projectedValue)
+	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
+	attentionOutput, attentionCoefficients = Core(b.ctx, projectedQuery, projectedKey, projectedValue, scale, mask, b.dropoutRate, b.layout)
 
-	// Final projection: flatten the heads and then do a final projection to the final
-	// outputDim (set with `SetOutputDim`).
-	//fmt.Printf("\tattentionOutput (1): %s\n", attentionOutput.Shape())
-	flatDims := make([]int, attentionOutput.Rank()-1)
-	copy(flatDims, attentionOutput.Shape().Dimensions[:len(flatDims)])
-	flatDims[len(flatDims)-1] *= attentionOutput.Shape().Dimensions[attentionOutput.Rank()-1]
-	// New shape: `[batch, <query_elements>, num_head*value_dim]`
-	attentionOutput = Reshape(attentionOutput, flatDims...)
+	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.
+	// attentionOutput: [batch, q_flat, heads, value_dim] -> [batch, <query_elements>, numHeads*valueDim]
+	// This is a no-op reshape when there are no extra inner axes to unflatten.
+	dims := slices.Clone(b.query.Shape().Dimensions)
+	dims[len(dims)-1] = -1
+	attentionOutput = Reshape(attentionOutput, dims...)
+
+	// Unflatten coefficients back to original inner axis structure when needed.
+	if needsUnflatten {
+		// attentionCoefficients: [batch, q_flat, heads, k_flat] -> [batch, <query_inner>, heads, <key_inner>]
+		coefDims := attentionCoefficients.Shape().Dimensions
+		unflatCoef := []int{coefDims[0]}
+		unflatCoef = append(unflatCoef, queryInnerDims...)
+		unflatCoef = append(unflatCoef, coefDims[2]) // heads
+		unflatCoef = append(unflatCoef, keyInnerDims...)
+		attentionCoefficients = Reshape(attentionCoefficients, unflatCoef...)
+	}
+
 	// Final shape: `[batch, <query_elements>, outputDim]`
 	attentionOutput = layers.Dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
 
