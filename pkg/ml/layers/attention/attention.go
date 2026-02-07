@@ -87,7 +87,10 @@ func (l AxesLayout) SeqAxis() int {
 // The ctx parameter provides the training/inference context for dropout; it may be nil
 // when dropoutRate is 0.
 //
-// Always returns both the output and the attention weights.
+// Returns:
+//   - output: same shape as value.
+//   - weights: attention weights shaped [batch, heads, q_seq, kv_seq] for LayoutBHSD
+//     or [batch, q_seq, heads, kv_seq] for LayoutBSHD.
 func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate float64, layout AxesLayout) (output, weights *Node) {
 	scores := Einsum(layout.scoreEquation(), query, key)
 	scores = MulScalar(scores, scale)

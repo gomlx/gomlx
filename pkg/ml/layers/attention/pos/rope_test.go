@@ -424,6 +424,61 @@ func TestApplyWithCosSin(t *testing.T) {
 	})
 }
 
+// TestRoPEWithSeqAxis1 tests that RoPE works correctly with seqAxis=1 on a rank-4
+// tensor (the BSHD layout case: [batch, seq, heads, dim]).
+func TestRoPEWithSeqAxis1(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	ctx := context.New()
+
+	rope := NewRoPE(10000.0)
+
+	t.Run("Rank4_SeqAxis1", func(t *testing.T) {
+		// Compare: applying RoPE with seqAxis=1 on [batch, seq, heads, dim]
+		// should produce the same result on the seq/dim pair as seqAxis=rank-2
+		// on [batch, heads, seq, dim] (after transposing back).
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) []*Node {
+			g := x.Graph()
+			seqLen := x.Shape().Dimensions[1] // seq is at axis 1 in BSHD
+			posIndices := SequentialPositions(g, startPos, seqLen)
+
+			// Apply with seqAxis=1 (BSHD layout)
+			bshdResult := rope.Apply(x, posIndices, 1)
+
+			// Transpose to BHSD, apply with seqAxis=rank-2=2, transpose back
+			xBHSD := TransposeAllDims(x, 0, 2, 1, 3)
+			bhsdResult := rope.Apply(xBHSD, posIndices, 2)
+			bhsdResultBack := TransposeAllDims(bhsdResult, 0, 2, 1, 3)
+
+			return []*Node{bshdResult, bhsdResultBack}
+		})
+
+		// [batch=1, seq=3, heads=2, dim=4]
+		input := [][][][]float32{
+			{
+				{{1, 2, 3, 4}, {5, 6, 7, 8}},
+				{{9, 10, 11, 12}, {13, 14, 15, 16}},
+				{{17, 18, 19, 20}, {21, 22, 23, 24}},
+			},
+		}
+		startPos := []int32{0}
+
+		outputs := exec.MustExec(input, startPos)
+		bshdOut := outputs[0].Value().([][][][]float32)
+		bhsdOut := outputs[1].Value().([][][][]float32)
+
+		for i := range bshdOut {
+			for j := range bshdOut[i] {
+				for k := range bshdOut[i][j] {
+					for l := range bshdOut[i][j][k] {
+						assert.InDelta(t, bshdOut[i][j][k][l], bhsdOut[i][j][k][l], 1e-5,
+							"mismatch at [%d][%d][%d][%d]", i, j, k, l)
+					}
+				}
+			}
+		}
+	})
+}
+
 // Helper functions for float validation
 func isNaN(f float32) bool {
 	return f != f

@@ -99,9 +99,6 @@ func (r *RoPE) WithInterleaved(interleaved bool) *RoPE {
 //   - x: Input tensor with sequence and embedding dimensions.
 //   - positionIndices: Position indices shaped [..., seq_len] with position values for each token.
 //   - seqAxis: The axis in x that represents the sequence dimension.
-//     If seqAxis == x.Rank()-2, the standard code path is used directly.
-//     Otherwise x is transposed so that seqAxis moves to rank-2, RoPE is applied, and the
-//     result is transposed back.
 //
 // Returns:
 //   - Tensor with rotary position embeddings applied, same shape as x
@@ -113,16 +110,14 @@ func (r *RoPE) WithInterleaved(interleaved bool) *RoPE {
 //	// positions has shape [batch, seq_len] with values like [0, 1, 2, ...]
 //	embedded := rope.Apply(x, positions, x.Rank()-2)
 func (r *RoPE) Apply(x *Node, positionIndices *Node, seqAxis int) *Node {
-	return withSeqAxisTranspose(x, seqAxis, func(x *Node) *Node {
-		if r.DimStart == 0 && r.DimEnd == -1 {
-			return applyRoPE(x, positionIndices, r.BaseFreq, r.Interleaved)
-		}
-		dimEnd := r.DimEnd
-		if dimEnd == -1 {
-			dimEnd = x.Shape().Dimensions[x.Shape().Rank()-1]
-		}
-		return applyRoPEWithCustomDim(x, positionIndices, r.BaseFreq, r.DimStart, dimEnd, r.Interleaved)
-	})
+	if r.DimStart == 0 && r.DimEnd == -1 {
+		return applyRoPE(x, positionIndices, r.BaseFreq, seqAxis, r.Interleaved)
+	}
+	dimEnd := r.DimEnd
+	if dimEnd == -1 {
+		dimEnd = x.Shape().Dimensions[x.Shape().Rank()-1]
+	}
+	return applyRoPEWithCustomDim(x, positionIndices, r.BaseFreq, r.DimStart, dimEnd, seqAxis, r.Interleaved)
 }
 
 // RoPEWithCosSin implements the Encoder interface using pre-computed cos and sin tensors.
@@ -173,28 +168,24 @@ func (r *RoPEWithCosSin) WithInterleaved(interleaved bool) *RoPEWithCosSin {
 // Pass nil for positionIndices.
 //
 // Parameters:
-//   - x: Input tensor with sequence and head_dim dimensions.
+//   - x: Input tensor with shape [..., seqLen, ..., headDim], where seqAxis identifies the sequence dimension.
 //   - positionIndices: Ignored (pass nil). Position information is already baked into cos/sin.
 //   - seqAxis: The axis in x that represents the sequence dimension.
-//     If seqAxis == x.Rank()-2, the standard code path is used directly.
-//     Otherwise x is transposed so that seqAxis moves to rank-2, rotation is applied,
-//     and the result is transposed back.
 //
 // Returns:
 //   - Tensor with rotary embeddings applied, same shape as x.
 func (r *RoPEWithCosSin) Apply(x *Node, _ *Node, seqAxis int) *Node {
-	return withSeqAxisTranspose(x, seqAxis, func(x *Node) *Node {
-		return applyWithCosSin(x, r.cos, r.sin, r.interleaved)
-	})
+	return applyWithCosSin(x, r.cos, r.sin, seqAxis, r.interleaved)
 }
 
 // applyWithCosSin applies rotary position embeddings using pre-computed cos and sin tensors.
 // This is the internal implementation used by both RoPE and RoPEWithCosSin.
 //
 // Parameters:
-//   - x: Input tensor shaped [..., seq_len, head_dim]
-//   - cos: Pre-computed cosine values, broadcastable to [..., seq_len, rotary_dim/2]
-//   - sin: Pre-computed sine values, same shape as cos
+//   - x: Input tensor shaped [..., seqLen, ..., headDim], where seqAxis identifies the sequence axis.
+//   - cos: Pre-computed cosine values, shaped [seqLen, rotary_dim/2].
+//   - sin: Pre-computed sine values, same shape as cos.
+//   - seqAxis: The axis in x that represents the sequence dimension.
 //   - interleaved: If true, rotation pairs are at even/odd indices (x[..., 0], x[..., 1]).
 //     If false, pairs are split first-half/second-half (x[..., :dim/2], x[..., dim/2:]).
 //
@@ -202,7 +193,7 @@ func (r *RoPEWithCosSin) Apply(x *Node, _ *Node, seqAxis int) *Node {
 //   - Tensor with rotary embeddings applied, same shape as x.
 //     If cos/sin cover fewer dimensions than x's last axis (partial rotation),
 //     the remaining dimensions are passed through unchanged.
-func applyWithCosSin(x, cos, sin *Node, interleaved bool) *Node {
+func applyWithCosSin(x, cos, sin *Node, seqAxis int, interleaved bool) *Node {
 	rank := x.Shape().Rank()
 	embedDim := x.Shape().Dimensions[rank-1]
 
@@ -225,15 +216,8 @@ func applyWithCosSin(x, cos, sin *Node, interleaved bool) *Node {
 	var x1, x2 *Node
 	if interleaved {
 		// Interleaved: x1 = even indices, x2 = odd indices
-		sliceSpec := make([]SliceAxisSpec, rank)
-		for i := 0; i < rank-1; i++ {
-			sliceSpec[i] = AxisRange()
-		}
-		sliceSpec[rank-1] = AxisRange(0, rotaryDim).Stride(2)
-		x1 = Slice(xRotate, sliceSpec...)
-
-		sliceSpec[rank-1] = AxisRange(1, rotaryDim).Stride(2)
-		x2 = Slice(xRotate, sliceSpec...)
+		x1 = Slice(xRotate, AxisRange().Spacer(), AxisRange(0, rotaryDim).Stride(2))
+		x2 = Slice(xRotate, AxisRange().Spacer(), AxisRange(1, rotaryDim).Stride(2))
 	} else {
 		// Non-interleaved: split in half
 		halfDim := rotaryDim / 2
@@ -241,13 +225,33 @@ func applyWithCosSin(x, cos, sin *Node, interleaved bool) *Node {
 		x2 = Slice(xRotate, AxisRange().Spacer(), AxisRange(halfDim, rotaryDim))
 	}
 
-	// Expand leading dimensions so BroadcastToShape can match x1's rank.
-	// BroadcastToShape only appends trailing axes, so we must add leading 1s manually.
+	// Broadcast cos/sin to match x1's shape.
+	// cos/sin start as [seqLen, rotary_dim/2]. We need to expand them to match x1's full shape
+	// which is [..., seqLen, ..., rotary_dim/2] where seqAxis identifies the seq dimension.
+	//
+	// Strategy: first add leading size-1 axes so that seqAxis aligns, then insert size-1 axes
+	// for any dimensions between seqAxis and the last axis, then broadcast.
 	x1Shape := x1.Shape()
-	for cos.Rank() < x1Shape.Rank() {
-		cos = ExpandDims(cos, 0)
-		sin = ExpandDims(sin, 0)
+
+	// Normalise seqAxis.
+	canonicalSeqAxis := seqAxis
+	if canonicalSeqAxis < 0 {
+		canonicalSeqAxis += rank
 	}
+
+	// Step 1: add leading size-1 axes so that the seq dimension of cos/sin sits at canonicalSeqAxis.
+	// cos/sin have rank 2: [seqLen, halfDim]. After ExpandLeftToRank(canonicalSeqAxis+2) they become
+	// [1, ..., 1, seqLen, halfDim] with seqLen at canonicalSeqAxis.
+	cos = ExpandLeftToRank(cos, canonicalSeqAxis+2)
+	sin = ExpandLeftToRank(sin, canonicalSeqAxis+2)
+
+	// Step 2: insert size-1 axes for each dimension between seqAxis and the last axis
+	// (e.g. the heads axis in BSHD layout).
+	for cos.Rank() < x1Shape.Rank() {
+		cos = ExpandAxes(cos, -2)
+		sin = ExpandAxes(sin, -2)
+	}
+
 	cos = BroadcastToShape(cos, x1Shape)
 	sin = BroadcastToShape(sin, x1Shape)
 
@@ -283,21 +287,29 @@ func applyWithCosSin(x, cos, sin *Node, interleaved bool) *Node {
 // Reference: RoFormer (https://arxiv.org/abs/2104.09864).
 //
 // Parameters:
-//   - x: Input tensor shaped [..., seq_len, head_dim|embed_dim], last dim must be even
+//   - x: Input tensor shaped [..., seqLen, ..., headDim], where seqAxis identifies the sequence axis.
+//     The last dim must be even.
 //   - positionIndices: Position indices shaped [..., seq_len]
 //   - baseFreq: Base frequency for computing rotation angles
+//   - seqAxis: The axis in x that represents the sequence dimension.
 //   - interleaved: If true, rotation pairs are at even/odd indices; if false, split first-half/second-half
 //
 // Returns:
 //   - Tensor with rotary embeddings applied, same shape as x
-func applyRoPE(x *Node, positionIndices *Node, baseFreq float64, interleaved bool) *Node {
+func applyRoPE(x *Node, positionIndices *Node, baseFreq float64, seqAxis int, interleaved bool) *Node {
 	g := x.Graph()
 	shape := x.Shape()
 	dtype := shape.DType
 	rank := shape.Rank()
 
-	// Extract dimensions - we apply RoPE to the last axis (head_dim or embed_dim)
-	seqLen := shape.Dimensions[rank-2] // Second to last axis is sequence length
+	// Normalise seqAxis.
+	canonicalSeqAxis := seqAxis
+	if canonicalSeqAxis < 0 {
+		canonicalSeqAxis += rank
+	}
+
+	// Extract dimensions
+	seqLen := shape.Dimensions[canonicalSeqAxis]
 	embedDim := shape.Dimensions[rank-1]
 
 	// RoPE is applied to pairs of dimensions, so embedDim must be even
@@ -338,64 +350,30 @@ func applyRoPE(x *Node, positionIndices *Node, baseFreq float64, interleaved boo
 	cosAngles := Cos(angles) // [seqLen, embedDim/2]
 	sinAngles := Sin(angles) // [seqLen, embedDim/2]
 
-	return applyWithCosSin(x, cosAngles, sinAngles, interleaved)
-}
-
-// withSeqAxisTranspose transposes x so that seqAxis is at rank-2, calls fn, then transposes back.
-// If seqAxis is already at rank-2 no transposes are emitted.
-func withSeqAxisTranspose(x *Node, seqAxis int, fn func(*Node) *Node) *Node {
-	rank := x.Rank()
-	canonical := seqAxis
-	if canonical < 0 {
-		canonical += rank
-	}
-	if canonical == rank-2 {
-		return fn(x)
-	}
-	perm, invPerm := buildSeqAxisTranspose(rank, canonical)
-	return TransposeAllDims(fn(TransposeAllDims(x, perm...)), invPerm...)
-}
-
-// buildSeqAxisTranspose builds a permutation that moves seqAxis to rank-2 (the second-to-last position)
-// and its inverse. This is used so that the RoPE internal code, which always operates on the
-// second-to-last axis, can work with any layout.
-func buildSeqAxisTranspose(rank, seqAxis int) (perm, invPerm []int) {
-	target := rank - 2
-	perm = make([]int, rank)
-	for i := range perm {
-		perm[i] = i
-	}
-	// Swap seqAxis with target (rank-2)
-	perm[seqAxis], perm[target] = perm[target], perm[seqAxis]
-
-	// Build inverse permutation
-	invPerm = make([]int, rank)
-	for i, p := range perm {
-		invPerm[p] = i
-	}
-	return perm, invPerm
+	return applyWithCosSin(x, cosAngles, sinAngles, seqAxis, interleaved)
 }
 
 // applyRoPEWithCustomDim applies RoPE to x[..., dimStart:dimEnd] (even length).
 // Unchanged dimensions outside [dimStart:dimEnd] are preserved.
 //
 // Parameters:
-//   - x: Input tensor shaped [..., seq_len, embed_dim]
+//   - x: Input tensor shaped [..., seqLen, ..., embed_dim], where seqAxis identifies the sequence axis.
 //   - positionIndices: Position indices shaped [..., seq_len]
 //   - baseFreq: Base frequency for computing rotation angles
 //   - dimStart: Start index of the dimension range (inclusive)
 //   - dimEnd: End index of the dimension range (exclusive)
+//   - seqAxis: The axis in x that represents the sequence dimension.
 //   - interleaved: If true, rotation pairs are at even/odd indices; if false, split first-half/second-half
 //
 // Returns:
 //   - Tensor with rotary embeddings applied to the specified range, same shape as x
-func applyRoPEWithCustomDim(x *Node, positionIndices *Node, baseFreq float64, dimStart, dimEnd int, interleaved bool) *Node {
+func applyRoPEWithCustomDim(x *Node, positionIndices *Node, baseFreq float64, dimStart, dimEnd, seqAxis int, interleaved bool) *Node {
 	rank := x.Shape().Rank()
 	// Extract the part to apply RoPE (slice the last axis)
 	part := Slice(x, AxisRange().Spacer(), AxisRange(dimStart, dimEnd))
 
 	// Apply RoPE
-	rotatedPart := applyRoPE(part, positionIndices, baseFreq, interleaved)
+	rotatedPart := applyRoPE(part, positionIndices, baseFreq, seqAxis, interleaved)
 
 	// Concatenate with unchanged parts
 	if dimStart == 0 && dimEnd == x.Shape().Dimensions[rank-1] {
