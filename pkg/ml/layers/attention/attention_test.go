@@ -184,9 +184,8 @@ func TestCore(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			// Core always returns weights now.
-			output, weights := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD)
-			return []*Node{output, weights}
+			output, coefficients := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD)
+			return []*Node{output, coefficients}
 		})
 
 		query := [][][][]float32{{{{1, 0}, {0, 1}}}}
@@ -195,13 +194,13 @@ func TestCore(t *testing.T) {
 
 		outputs := exec.MustExec(query, key, value)
 		output := outputs[0]
-		weights := outputs[1]
+		coefficients := outputs[1]
 
 		assert.Equal(t, []int{1, 1, 2, 2}, output.Shape().Dimensions)
-		assert.Equal(t, []int{1, 1, 2, 2}, weights.Shape().Dimensions)
+		assert.Equal(t, []int{1, 1, 2, 2}, coefficients.Shape().Dimensions)
 
-		// Verify weights sum to 1 along last axis (softmax property)
-		wData := weights.Value().([][][][]float32)
+		// Verify coefficients sum to 1 along last axis (softmax property)
+		wData := coefficients.Value().([][][][]float32)
 		for i := range wData {
 			for j := range wData[i] {
 				for k := range wData[i][j] {

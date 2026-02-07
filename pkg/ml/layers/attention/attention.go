@@ -45,7 +45,7 @@ func (l AxesLayout) scoreEquation() string {
 	}
 }
 
-// outputEquation returns the Einsum equation for computing weighted values (weights @ V).
+// outputEquation returns the Einsum equation for computing the attention output (coefficients @ V).
 func (l AxesLayout) outputEquation() string {
 	switch l {
 	case LayoutBSHD:
@@ -83,34 +83,35 @@ func (l AxesLayout) SeqAxis() int {
 //   - LayoutBHSD: broadcastable to [batch, heads, q_seq, kv_seq]
 //   - LayoutBSHD: broadcastable to [batch, q_seq, heads, kv_seq]
 //
-// The dropoutRate (if > 0) applies dropout to the attention weights during training.
+// The dropoutRate (if > 0) applies dropout to the attention coefficients during training.
 // The ctx parameter provides the training/inference context for dropout; it may be nil
 // when dropoutRate is 0.
 //
 // Returns:
 //   - output: same shape as value.
-//   - weights: attention weights shaped [batch, heads, q_seq, kv_seq] for LayoutBHSD
-//     or [batch, q_seq, heads, kv_seq] for LayoutBSHD.
-func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate float64, layout AxesLayout) (output, weights *Node) {
+//   - coefficients: attention coefficients (from 0 to 1) shaped
+//     [batch, heads, q_seq, kv_seq] for LayoutBHSD or
+//     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
+func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate float64, layout AxesLayout) (output, coefficients *Node) {
 	scores := Einsum(layout.scoreEquation(), query, key)
 	scores = MulScalar(scores, scale)
 
 	if mask != nil && mask.DType() != dtypes.Bool {
 		// Additive float mask.
 		scores = Add(scores, mask)
-		weights = Softmax(scores, -1)
+		coefficients = Softmax(scores, -1)
 	} else {
 		// Boolean mask (or nil): MaskedSoftmax handles both.
 		if mask != nil {
 			mask = BroadcastToShape(mask, scores.Shape())
 		}
-		weights = MaskedSoftmax(scores, mask, -1)
+		coefficients = MaskedSoftmax(scores, mask, -1)
 	}
 
 	if dropoutRate > 0 && ctx != nil {
-		weights = layers.Dropout(ctx, weights, ConstAs(weights, dropoutRate))
+		coefficients = layers.Dropout(ctx, coefficients, ConstAs(coefficients, dropoutRate))
 	}
 
-	output = Einsum(layout.outputEquation(), weights, value)
-	return output, weights
+	output = Einsum(layout.outputEquation(), coefficients, value)
+	return output, coefficients
 }
