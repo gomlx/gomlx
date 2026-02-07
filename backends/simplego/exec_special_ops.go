@@ -7,13 +7,14 @@ import (
 	"math/rand/v2"
 	"slices"
 
+	"github.com/pkg/errors"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/pkg/errors"
 )
 
 func init() {
@@ -73,7 +74,10 @@ func execIdentity(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []
 	}
 
 	// If the input is still in use, we make a copy.
-	output := backend.getBuffer(operand.shape.DType, operand.shape.Size())
+	output, err := backend.getBuffer(operand.shape.DType, operand.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = operand.shape
 	copyFlat(output.flat, operand.flat)
 	return output, nil
@@ -90,6 +94,7 @@ func execWhere(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	outputShape := node.shape
 
 	var output *Buffer
+	var err error
 	switch {
 	case onTrue.shape.Equal(outputShape) && inputsOwned[1]:
 		output = onTrue
@@ -98,7 +103,10 @@ func execWhere(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 		output = onFalse
 		inputs[2] = nil
 	default:
-		output = backend.getBuffer(outputShape.DType, outputShape.Size())
+		output, err = backend.getBuffer(outputShape.DType, outputShape.Size())
+		if err != nil {
+			return nil, err
+		}
 		output.shape = outputShape
 	}
 	fn := whereDTypeMap.Get(outputShape.DType).(func(conditionBuf, onTrueBuf, onFalseBuf, outputBuf *Buffer))
@@ -168,11 +176,15 @@ func execWhereSetOutputWithValue[T SupportedTypesConstraints](outputBuf, valueBu
 func execReshape(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	operand := inputs[0]
 	var output *Buffer
+	var err error
 	if inputsOwned[0] {
 		output = operand
 		inputs[0] = nil
 	} else {
-		output = backend.getBuffer(operand.shape.DType, operand.shape.Size())
+		output, err = backend.getBuffer(operand.shape.DType, operand.shape.Size())
+		if err != nil {
+			return nil, err
+		}
 		copyFlat(output.flat, operand.flat)
 	}
 	output.shape = node.shape
@@ -189,7 +201,10 @@ func execReduce(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 	if len(reduceAxes) == 0 {
 		return execIdentity(backend, node, inputs, inputsOwned)
 	}
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 	it := newReduceOutputIterator(operand.shape.Dimensions, reduceAxes)
 	dtype := output.shape.DType
@@ -526,7 +541,10 @@ func execTranspose(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 	_ = inputsOwned // We don't reuse the inputs.
 
 	// We can't write to the same buffer we read from because it's not done with swaps.
-	output := backend.getBuffer(operand.shape.DType, operand.shape.Size())
+	output, err := backend.getBuffer(operand.shape.DType, operand.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 	it := newTransposeIterator(operand.shape, permutations)
 	dtype := node.shape.DType
@@ -613,7 +631,10 @@ func execTransposeGeneric[T SupportedTypesConstraints](operand, output *Buffer, 
 func execBroadcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	_ = inputsOwned // We don't reuse the inputs.
 	operand := inputs[0]
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 	prefixDims := node.data.([]int)
 	repeats := 1
@@ -641,7 +662,10 @@ func execBroadcastGeneric[T SupportedTypesConstraints](params ...any) any {
 func execBroadcastInDim(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	_ = inputsOwned // We don't reuse the inputs.
 	operand := inputs[0]
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 
 	// Special case: if operand is a scalar, we just pass a nil iterator.
@@ -686,7 +710,10 @@ func execBroadcastInDimGeneric[T SupportedTypesConstraints](params ...any) any {
 
 func execIota(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	_, _ = inputs, inputsOwned // There are no inputs.
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 	iotaAxis := node.data.(int)
 	iotaSize := node.shape.Dimensions[iotaAxis]
@@ -751,7 +778,10 @@ func execGather(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 	_ = inputsOwned // We don't reuse the inputs.
 	operand, startIndices := inputs[0], inputs[1]
 	gatherParams := node.data.(*gatherNode)
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 
 	// Where to read/write the data.
@@ -1032,7 +1062,10 @@ func execConcatenate(backend *Backend, node *Node, inputs []*Buffer, inputsOwned
 	_ = inputsOwned // We don't reuse the inputs.
 
 	// Allocate output buffer.
-	output := backend.getBuffer(dtype, outputShape.Size())
+	output, err := backend.getBuffer(dtype, outputShape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = outputShape
 	outputBytes := output.mutableBytes()
 
@@ -1101,11 +1134,15 @@ func execScatter(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	// Output starts as a copy of the operand.
 	// We might be able to reuse the operand buffer if it's owned.
 	var output *Buffer
+	var err error
 	if inputsOwned[0] {
 		output = operand
 		inputs[0] = nil // Mark operand as consumed.
 	} else {
-		output = backend.cloneBuffer(operand) // Creates a new buffer with copied data.
+		output, err = backend.cloneBuffer(operand) // Creates a new buffer with copied data.
+		if err != nil {
+			return nil, err
+		}
 	}
 	output.shape = node.shape // Output shape is the same as operand shape.
 
@@ -1113,7 +1150,7 @@ func execScatter(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	dtype := output.shape.DType
 	type scatterFnT = func(opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode) error
 	scatterFn := scatterDTypeMap.Get(dtype).(scatterFnT)
-	err := scatterFn(node.opType, output, indices, updates, scatterParams)
+	err = scatterFn(node.opType, output, indices, updates, scatterParams)
 	if err != nil {
 		return nil, err
 	}
@@ -1123,7 +1160,8 @@ func execScatter(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 var scatterDTypeMap = NewDTypeMap("ScatterMax")
 
 // execScatterGeneric assumes the operand is already copied to the output.
-func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode) error {
+func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, output, indices, updates *Buffer,
+	scatterParams *scatterNode) error {
 	// Get combineFn for operand's dtype.
 	dtype := output.shape.DType
 	type combineFnT = func(a, b T) T
@@ -1344,7 +1382,10 @@ func execSlice(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 		return nil, errors.Errorf("internal error: node.data for Slice op is not *sliceNode, but %T", node.data)
 	}
 
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 
 	// Dispatch to the generic implementation based on DType.
@@ -1411,7 +1452,10 @@ func execRNGBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsO
 	stateFlat := state.flat.([]uint64)
 
 	// Reserved outputs:
-	rngData := backend.getBuffer(node.multiOutputsShapes[1].DType, node.multiOutputsShapes[1].Size())
+	rngData, err := backend.getBuffer(node.multiOutputsShapes[1].DType, node.multiOutputsShapes[1].Size())
+	if err != nil {
+		return nil, err
+	}
 	rngData.shape = node.multiOutputsShapes[1].Clone()
 	rngDataBytes := rngData.mutableBytes()
 
@@ -1433,7 +1477,10 @@ func execRNGBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsO
 		inputs[0] = nil
 	} else {
 		state.shape = node.multiOutputsShapes[0]
-		state = backend.getBuffer(state.shape.DType, state.shape.Size())
+		state, err = backend.getBuffer(state.shape.DType, state.shape.Size())
+		if err != nil {
+			return nil, err
+		}
 	}
 	stateFlat = state.flat.([]uint64)
 
@@ -1461,7 +1508,10 @@ func execArgMinMax(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 	operand := inputs[0]
 	reduceAxis := node.data.(*argMinMaxNode).axis
 	isMin := node.data.(*argMinMaxNode).isMin
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 
 	// There are 3 sizes to iterate over: before and after the reduceAxis, and the size (dimension) of the reduced axis itself.
@@ -1509,14 +1559,16 @@ func buildArgMinMaxCopyIntsFn[T PODIntegerConstraints](output *Buffer) func(flat
 	}
 }
 
+// TODO: treat the error condition.
 func execArgMinMaxGeneric[T PODNumericConstraints](
 	backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize, suffixSize int, isMin bool) {
 	operandFlat := operand.flat.([]T)
 
 	// Temporary data to store argMax results, so we can traverse the operand sequentially.
-	currentBestBuffer := backend.getBuffer(operand.shape.DType, suffixSize)
+	currentBestBuffer, _ := backend.getBuffer(operand.shape.DType, suffixSize)
+
 	currentBest := currentBestBuffer.flat.([]T)
-	currentArgBestBuffer := backend.getBuffer(dtypes.Int32, suffixSize)
+	currentArgBestBuffer, _ := backend.getBuffer(dtypes.Int32, suffixSize)
 	currentArgBest := currentArgBestBuffer.flat.([]int32)
 
 	outputFlatIdx := 0
@@ -1570,14 +1622,15 @@ func init() {
 	argMinMaxDTypeMap.Register(dtypes.BFloat16, priorityTyped, execArgMinMaxGenericBFloat16)
 }
 
+// TODO: treat the error condition
 func execArgMinMaxGenericBFloat16(
 	backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize, suffixSize int, isMin bool) {
 	operandFlat := operand.flat.([]bfloat16.BFloat16)
 
 	// Temporary data to store argMax results, so we can traverse the operand sequentially.
-	currentBestBuffer := backend.getBuffer(operand.shape.DType, suffixSize)
+	currentBestBuffer, _ := backend.getBuffer(operand.shape.DType, suffixSize)
 	currentBest := currentBestBuffer.flat.([]bfloat16.BFloat16)
-	currentArgBestBuffer := backend.getBuffer(dtypes.Int32, suffixSize)
+	currentArgBestBuffer , _:= backend.getBuffer(dtypes.Int32, suffixSize)
 	currentArgBest := currentArgBestBuffer.flat.([]int32)
 
 	outputFlatIdx := 0
@@ -1634,7 +1687,10 @@ func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, _ []bool) 
 	rank := operandShape.Rank()
 	dtype := operandShape.DType
 	outputShape := node.shape
-	output := backend.getBufferForShape(outputShape)
+	output, err := backend.getBufferForShape(outputShape)
+	if err != nil {
+		return nil, err
+	}
 	opData := node.data.(*reduceWindowNode)
 
 	// resolve the effective parameters, assuming shapeinference.ReduceWindowOp handled nils by defaulting them:

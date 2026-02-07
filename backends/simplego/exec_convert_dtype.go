@@ -1,10 +1,11 @@
 package simplego
 
 import (
+	"github.com/x448/float16"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-	"github.com/x448/float16"
 )
 
 // ConvertDType ====================================================================================================
@@ -16,7 +17,10 @@ func init() {
 func execConvertDType(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	operand := inputs[0]
 	_ = inputsOwned // We don't reuse the inputs.
-	output := backend.getBuffer(node.shape.DType, operand.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, operand.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 	convertFn := convertDTypePairMap.Get(operand.shape.DType, output.shape.DType).(convertFnType)
 	convertFn(operand, output)

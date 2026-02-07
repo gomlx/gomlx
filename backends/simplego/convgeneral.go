@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/pkg/errors"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/pkg/errors"
 )
 
 func init() {
@@ -184,8 +185,8 @@ func execConvGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 	params := node.data.(*convNode)
 	outputShape := node.shape
 	dtype := input.shape.DType
-	output := backend.getBufferForShape(outputShape)
-	if output == nil {
+	output, err := backend.getBufferForShape(outputShape)
+	if err != nil {
 		return nil, errors.Errorf("failed allocating (out-of-memory?) output buffer shaped %s", outputShape)
 	}
 	output.Zeros()
@@ -217,8 +218,8 @@ func execConvGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 		// Faster, but no dilation or grouping version.
 		convFn = convNoDilationDTypeMap.Get(dtype).(func(plan convGeneralExecPlan) error)
 	}
-	err := convFn(plan)
-	if err != nil {
+
+	if err := convFn(plan); err != nil {
 		backend.putBuffer(output)
 		return nil, err
 	}

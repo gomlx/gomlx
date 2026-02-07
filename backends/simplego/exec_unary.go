@@ -7,11 +7,12 @@ import (
 	"math/bits"
 	"sync"
 
+	"github.com/x448/float16"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/x448/float16"
 )
 
 func init() {
@@ -40,6 +41,7 @@ func init() {
 }
 
 // unaryOperandAndOutput is a convenience function to get the input and output -- which may be the reuse of the input
+// TODO: treat the error condition
 func unaryOperandAndOutput(backend *Backend, inputs []*Buffer, inputsOwned []bool) (input, output *Buffer) {
 	input = inputs[0]
 	if inputsOwned[0] {
@@ -47,7 +49,11 @@ func unaryOperandAndOutput(backend *Backend, inputs []*Buffer, inputsOwned []boo
 		inputs[0] = nil // This tells the executor that we took over the buffer.
 		return
 	}
-	output = backend.getBuffer(input.shape.DType, input.shape.Size())
+	var err error
+	output, err = backend.getBuffer(input.shape.DType, input.shape.Size())
+	if err != nil {
+		return input, nil // as output is nil
+	}
 	output.shape = input.shape.Clone()
 	return input, output
 }
@@ -750,7 +756,10 @@ func execTanhBF16(inputs, outputs []bfloat16.BFloat16) {
 func execIsFinite(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	input := inputs[0]
 	// Output has the same shape as the input, but different dtypes: it is a bool.
-	output := backend.getBuffer(dtypes.Bool, input.shape.Size())
+	output, err := backend.getBuffer(dtypes.Bool, input.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 	switch input.shape.DType {
 	case dtypes.Float32:

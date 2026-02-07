@@ -61,7 +61,8 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 {{- if .IsComparison }}
 	lhs, rhs := inputs[0], inputs[1]
 	lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
+	if err != nil {return nil, err}
 	output.shape = node.shape
 {{- else }}
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)

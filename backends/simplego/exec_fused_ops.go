@@ -6,10 +6,11 @@ import (
 	"math"
 	"sync"
 
+	"github.com/pkg/errors"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/pkg/errors"
 )
 
 func init() {
@@ -42,7 +43,10 @@ func execFusedSoftmax(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 	data := node.data.(*nodeFusedSoftmax)
 	axis := data.axis
 	input := inputs[0]
-	output := backend.getBufferForShape(node.shape)
+	output, err := backend.getBufferForShape(node.shape)
+	if err != nil {
+		return nil, err
+	}
 
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -91,7 +95,10 @@ func softmax[T float32 | float64](input, output []T, axis int, shape shapes.Shap
 // execFusedGelu implements GELU: x * 0.5 * (1 + erf(x / sqrt(2)))
 func execFusedGelu(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input := inputs[0]
-	output := backend.getBufferForShape(node.shape)
+	output, err := backend.getBufferForShape(node.shape)
+	if err != nil {
+		return nil, err
+	}
 
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -137,7 +144,10 @@ func geluChunk[T float32 | float64](input, output []T) {
 func execFusedLayerNorm(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	data := node.data.(*nodeFusedLayerNorm)
 	input := inputs[0]
-	output := backend.getBufferForShape(node.shape)
+	output, err := backend.getBufferForShape(node.shape)
+	if err != nil {
+		return nil, err
+	}
 
 	// Determine gamma/beta. inputs[0]=x, inputs[1]=gamma (optional), inputs[2]=beta (optional).
 	var gamma, beta *Buffer
@@ -316,7 +326,10 @@ func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 			inputs[0] = nil // Signal to executor that we reused the input.
 			return matmul, nil
 		}
-		output := backend.getBufferForShape(node.shape)
+		output, err := backend.getBufferForShape(node.shape)
+		if err != nil {
+			return nil, err
+		}
 		copyFlat(output.flat, matmul.flat)
 		return output, nil
 	}
@@ -325,9 +338,13 @@ func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 	var output *Buffer
 	if inputsOwned[0] {
 		output = matmul
-		inputs[0] = nil // Signal to executor that we reused the input.
+		inputs[0] = nil // Signal to the executor that we reused the input.
 	} else {
-		output = backend.getBufferForShape(node.shape)
+		var err error
+		output, err = backend.getBufferForShape(node.shape)
+		if err != nil {
+			return nil, err
+		}
 		copyFlat(output.flat, matmul.flat)
 	}
 

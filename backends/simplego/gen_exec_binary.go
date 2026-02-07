@@ -1447,7 +1447,10 @@ func execLogicalXorBooleanGeneric[T PODBooleanConstraints](lhs, rhs []T, output 
 func execEqual(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape // Add is commutative, so if any of the two is scalar, make the rhs the scalar one.
 	if lhsIsScalarOr1 && !rhsIsScalarOr1 {
 		lhs, rhs = rhs, lhs
@@ -1564,7 +1567,10 @@ func execEqualNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bool,
 func execNotEqual(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape // Add is commutative, so if any of the two is scalar, make the rhs the scalar one.
 	if lhsIsScalarOr1 && !rhsIsScalarOr1 {
 		lhs, rhs = rhs, lhs
@@ -1681,7 +1687,10 @@ func execNotEqualNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bool,
 func execGreaterOrEqual(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 
@@ -1809,7 +1818,10 @@ func execGreaterOrEqualNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bo
 func execGreaterThan(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 
@@ -1937,7 +1949,10 @@ func execGreaterThanNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bool,
 func execLessOrEqual(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 
@@ -2065,7 +2080,10 @@ func execLessOrEqualNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bool,
 func execLessThan(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 

@@ -6,8 +6,9 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
+
+	"github.com/gomlx/gomlx/backends"
 )
 
 func init() {
@@ -104,7 +105,10 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 			// Return state buffers. Clone any we don't own.
 			for i, owned := range donateState {
 				if !owned {
-					state[i] = backend.cloneBuffer(state[i])
+					state[i], err = backend.cloneBuffer(state[i])
+					if err != nil {
+						return nil, err
+					}
 				}
 			}
 			return state, nil
@@ -130,7 +134,8 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 //
 // Note on captured input donation: The comparator is called O(n log n) times during
 // sorting, so we never donate captured inputs. The executor handles freeing them.
-func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs []ClosureInputs) ([]*Buffer, error) {
+func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool,
+	closureInputs []ClosureInputs) ([]*Buffer, error) {
 	data := node.data.(*sortNode)
 	axis := data.axis
 	isStable := data.isStable
@@ -166,12 +171,16 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 
 	// Create output buffers (clones of input tensors)
 	outputs := make([]*Buffer, inputCount)
+	var err error
 	for i, input := range tensorInputs {
 		if tensorOwned[i] {
 			outputs[i] = input
 			tensorInputs[i] = nil
 		} else {
-			outputs[i] = backend.cloneBuffer(input)
+			outputs[i], err = backend.cloneBuffer(input)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -184,11 +193,17 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 	// Create temporary buffers for comparator inputs (2 scalars per input tensor)
 	compInputs := make([]*Buffer, 2*len(outputs))
 	for i, output := range outputs {
-		compInputs[2*i] = backend.getBuffer(output.shape.DType, 1)
+		compInputs[2*i], err = backend.getBuffer(output.shape.DType, 1)
+		if err != nil {
+			return nil, err
+		}
 		compInputs[2*i].shape = output.shape.Clone()
 		compInputs[2*i].shape.Dimensions = nil // scalar
 
-		compInputs[2*i+1] = backend.getBuffer(output.shape.DType, 1)
+		compInputs[2*i+1], err = backend.getBuffer(output.shape.DType, 1)
+		if err != nil {
+			return nil, err
+		}
 		compInputs[2*i+1].shape = output.shape.Clone()
 		compInputs[2*i+1].shape.Dimensions = nil // scalar
 	}

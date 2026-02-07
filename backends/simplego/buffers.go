@@ -8,13 +8,15 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
+
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
+
+var ErrBackendAlreadyExists = errors.New("backend already exists")
 
 // Compile-time check:
 var _ backends.DataInterface = (*Backend)(nil)
@@ -90,29 +92,30 @@ func (b *Backend) getBufferPool(dtype dtypes.DType, length int) *sync.Pool {
 	return poolInterface.(*sync.Pool)
 }
 
-// getBuffer from the backend pool of buffers.
+// getBuffer from the backend pool of buffers. It returns ErrBackendAlreadyExists if the backend is already
+// initialized.
 // Important: it's not necessarily initialized with zero, since it can reuse old buffers.
 //
 // See also Buffer.Zeros to initialize it with zeros, if needed.
-func (b *Backend) getBuffer(dtype dtypes.DType, length int) *Buffer {
+func (b *Backend) getBuffer(dtype dtypes.DType, length int) (*Buffer, error) {
 	if b.isFinalized {
-		return nil
+		return nil, ErrBackendAlreadyExists
 	}
 	pool := b.getBufferPool(dtype, length)
 	buf := pool.Get().(*Buffer)
 	buf.inUse = true
 	// buf.randomize() // Useful to find where zero-initialized is needed but missing.
-	return buf
+	return buf, nil
 }
 
 // getBufferForShape is a wrapper for getShape that also sets the buffer shape accordingly.
-func (b *Backend) getBufferForShape(shape shapes.Shape) *Buffer {
-	if b.isFinalized {
-		return nil
+func (b *Backend) getBufferForShape(shape shapes.Shape) (*Buffer, error) {
+	buf, err := b.getBuffer(shape.DType, shape.Size())
+	if err != nil {
+		return nil, err
 	}
-	buf := b.getBuffer(shape.DType, shape.Size())
 	buf.shape = shape
-	return buf
+	return buf, nil
 }
 
 // // randomize fills the buffer with random bits -- useful for testing.
@@ -211,7 +214,7 @@ func (b *Buffer) Ones() *Buffer {
 }
 
 // cloneBuffer using the pool to allocate a new one.
-func (b *Backend) cloneBuffer(buffer *Buffer) *Buffer {
+func (b *Backend) cloneBuffer(buffer *Buffer) (*Buffer, error) {
 	if buffer == nil || buffer.flat == nil || !buffer.shape.Ok() || !buffer.inUse {
 		// the buffer is already empty.
 		var issues []string
@@ -228,21 +231,26 @@ func (b *Backend) cloneBuffer(buffer *Buffer) *Buffer {
 		} else {
 			issues = append(issues, "buffer was nil")
 		}
-		exceptions.Panicf("cloneBuffer(%p): %s -- buffer was already isFinalized!?\n", buffer, strings.Join(issues, ", "))
-		return nil
+		return nil, errors.Wrapf(ErrBackendAlreadyExists,
+			"cloneBuffer(%p): %s -- buffer was already isFinalized!?\n", buffer, strings.Join(issues, ", "))
 	}
-	newBuffer := b.getBuffer(buffer.shape.DType, buffer.shape.Size())
+	newBuffer, err := b.getBuffer(buffer.shape.DType, buffer.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	newBuffer.shape = buffer.shape.Clone()
 	copyFlat(newBuffer.flat, buffer.flat)
-	return newBuffer
+	return newBuffer, nil
 }
 
 // NewBuffer creates the buffer with a newly allocated flat space.
+//
+// TODO: should we study the possibility to change the signature with an error?
 func (b *Backend) NewBuffer(shape shapes.Shape) *Buffer {
-	if b.isFinalized {
+	buffer, err := b.getBuffer(shape.DType, shape.Size())
+	if err != nil {
 		return nil
 	}
-	buffer := b.getBuffer(shape.DType, shape.Size())
 	buffer.shape = shape.Clone()
 	return buffer
 }
