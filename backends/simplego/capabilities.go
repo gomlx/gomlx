@@ -123,6 +123,7 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeConvGeneral:      true,
 
 		// Control flow operations:
+		backends.OpTypeCall:  true,
 		backends.OpTypeIf:    true,
 		backends.OpTypeWhile: true,
 		backends.OpTypeSort:  true,
