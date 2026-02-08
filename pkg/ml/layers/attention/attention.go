@@ -71,8 +71,8 @@ func (l AxesLayout) SeqAxis() int {
 func BooleanToAdditiveMask(mask *Node, dtype dtypes.DType) *Node {
 	g := mask.Graph()
 	zero := ScalarZero(g, dtype)
-	negInf := ConstAs(zero, float32(-1e9))
-	return Where(mask, zero, negInf)
+	largeNeg := ConstAs(zero, float32(-1e9))
+	return Where(mask, zero, largeNeg)
 }
 
 // Core computes the core scaled dot-product attention operation.
