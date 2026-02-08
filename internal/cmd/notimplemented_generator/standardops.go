@@ -92,6 +92,8 @@ func GenerateStandardOpsInterface(methods []backendparser.Method) {
 				pi.Type = "...backends.PadAxis"
 			case "ActivationType":
 				pi.Type = "backends.ActivationType"
+			case "AxesLayout":
+				pi.Type = "backends.AxesLayout"
 			}
 		}
 		newMethods = append(newMethods, method)

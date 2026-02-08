@@ -446,9 +446,9 @@ func execFusedOpMultiOutput3(t *testing.T, inputShapes []shapes.Shape, inputData
 	return [3]*Buffer{outputs[0].(*Buffer), outputs[1].(*Buffer), outputs[2].(*Buffer)}
 }
 
-// ---- FusedMultiHeadSDPA tests ----
+// ---- FusedScaledDotProductAttention tests ----
 
-func TestFusedMultiHeadSDPA_SingleHead(t *testing.T) {
+func TestFusedScaledDotProductAttention_SingleHead(t *testing.T) {
 	// batch=1, numHeads=1, seqLen=2, headDim=2, kvLen=2
 	// Q = [[1, 0], [0, 1]]
 	// K = [[1, 0], [0, 1]]  (identity-like)
@@ -467,7 +467,7 @@ func TestFusedMultiHeadSDPA_SingleHead(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedMultiHeadSDPA(params[0], params[1], params[2], nil, 1, 1, scale, false)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBHSD, scale, false)
 		},
 	)
 
@@ -487,7 +487,7 @@ func TestFusedMultiHeadSDPA_SingleHead(t *testing.T) {
 	}
 }
 
-func TestFusedMultiHeadSDPA_Causal(t *testing.T) {
+func TestFusedScaledDotProductAttention_Causal(t *testing.T) {
 	// batch=1, numHeads=1, seqLen=2, headDim=1, kvLen=2
 	// With causal mask: position 0 can only attend to position 0.
 	q := []float32{1, 1}
@@ -502,7 +502,7 @@ func TestFusedMultiHeadSDPA_Causal(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedMultiHeadSDPA(params[0], params[1], params[2], nil, 1, 1, 1.0, true)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBHSD, 1.0, true)
 		},
 	)
 
@@ -513,7 +513,7 @@ func TestFusedMultiHeadSDPA_Causal(t *testing.T) {
 	assert.InDelta(t, 15.0, got[1], fusedTestTol)
 }
 
-func TestFusedMultiHeadSDPA_MultiHead(t *testing.T) {
+func TestFusedScaledDotProductAttention_MultiHead(t *testing.T) {
 	// batch=1, numHeads=2, seqLen=1, headDim=1, kvLen=1
 	// Simple case: each head attends to a single key/value.
 	q := []float32{1, 2}     // 2 heads, each with seqLen=1, headDim=1
@@ -528,7 +528,7 @@ func TestFusedMultiHeadSDPA_MultiHead(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedMultiHeadSDPA(params[0], params[1], params[2], nil, 2, 2, 1.0, false)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBHSD, 1.0, false)
 		},
 	)
 
@@ -538,7 +538,7 @@ func TestFusedMultiHeadSDPA_MultiHead(t *testing.T) {
 	assert.InDelta(t, 200.0, got[1], fusedTestTol) // head 1
 }
 
-func TestFusedMultiHeadSDPA_GQA(t *testing.T) {
+func TestFusedScaledDotProductAttention_GQA(t *testing.T) {
 	// batch=1, numHeads=2, numKVHeads=1 (GQA: 2 query heads share 1 KV head)
 	// seqLen=1, kvLen=1, headDim=1
 	q := []float32{1, 2} // 2 heads
@@ -553,7 +553,7 @@ func TestFusedMultiHeadSDPA_GQA(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedMultiHeadSDPA(params[0], params[1], params[2], nil, 2, 1, 1.0, false)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 1, backends.AxesLayoutBHSD, 1.0, false)
 		},
 	)
 
@@ -563,7 +563,7 @@ func TestFusedMultiHeadSDPA_GQA(t *testing.T) {
 	assert.InDelta(t, 42.0, got[1], fusedTestTol)
 }
 
-func TestFusedMultiHeadSDPA_WithMask(t *testing.T) {
+func TestFusedScaledDotProductAttention_WithMask(t *testing.T) {
 	// batch=1, numHeads=1, seqLen=1, kvLen=2, headDim=1
 	// mask blocks second key position with -inf.
 	q := []float32{1}
@@ -580,7 +580,7 @@ func TestFusedMultiHeadSDPA_WithMask(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape, maskShape},
 		[]any{q, k, v, mask},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedMultiHeadSDPA(params[0], params[1], params[2], params[3], 1, 1, 1.0, false)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], params[3], 1, 1, backends.AxesLayoutBHSD, 1.0, false)
 		},
 	)
 

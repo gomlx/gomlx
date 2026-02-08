@@ -17,7 +17,7 @@ func init() {
 	setNodeExecutor(backends.OpTypeFusedGelu, priorityTyped, execFusedGelu)
 	setNodeExecutor(backends.OpTypeFusedLayerNorm, priorityTyped, execFusedLayerNorm)
 	setNodeExecutor(backends.OpTypeFusedDense, priorityTyped, execFusedDense)
-	setNodeExecutor(backends.OpTypeFusedMultiHeadSDPA, priorityTyped, execFusedMultiHeadSDPA)
+	setNodeExecutor(backends.OpTypeFusedScaledDotProductAttention, priorityTyped, execFusedScaledDotProductAttention)
 	multiOutputsNodeExecutors[backends.OpTypeFusedQKVDense] = execFusedQKVDense
 }
 
@@ -413,15 +413,15 @@ func computeMaskStrides(dims []int) (batchStride, headStride int) {
 	}
 }
 
-// execFusedMultiHeadSDPA implements multi-head scaled dot-product attention.
-// q: [batch, numHeads, seqLen, headDim], k/v: [batch, numKVHeads, kvLen, headDim]
+// execFusedScaledDotProductAttention implements multi-head scaled dot-product attention.
+// query: [batch, numHeads, seqLen, headDim], key/value: [batch, numKVHeads, kvLen, headDim]
 // mask: optional additive mask of rank 2–4 (broadcasting via strides)
 // output: [batch, numHeads, seqLen, headDim]
-func execFusedMultiHeadSDPA(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	data := node.data.(*nodeFusedMultiHeadSDPA)
-	q := inputs[0]
-	k := inputs[1]
-	v := inputs[2]
+func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+	data := node.data.(*nodeFusedScaledDotProductAttention)
+	query := inputs[0]
+	key := inputs[1]
+	value := inputs[2]
 	var mask *Buffer
 	if len(inputs) > 3 {
 		mask = inputs[3]
@@ -434,16 +434,16 @@ func execFusedMultiHeadSDPA(backend *Backend, node *Node, inputs []*Buffer, inpu
 		maskBatchStride, maskHeadStride = computeMaskStrides(mask.shape.Dimensions)
 	}
 
-	switch q.shape.DType {
+	switch query.shape.DType {
 	case dtypes.Float32:
 		var maskData []float32
 		if mask != nil {
 			maskData = mask.flat.([]float32)
 		}
 		multiHeadSDPA(
-			q.flat.([]float32), k.flat.([]float32), v.flat.([]float32), maskData, output.flat.([]float32),
-			q.shape.Dimensions[0], data.numHeads, data.numKVHeads,
-			q.shape.Dimensions[2], k.shape.Dimensions[2], q.shape.Dimensions[3],
+			query.flat.([]float32), key.flat.([]float32), value.flat.([]float32), maskData, output.flat.([]float32),
+			query.shape.Dimensions[0], data.numHeads, data.numKVHeads,
+			query.shape.Dimensions[2], key.shape.Dimensions[2], query.shape.Dimensions[3],
 			maskBatchStride, maskHeadStride,
 			float32(data.scale), data.causal,
 		)
@@ -453,14 +453,14 @@ func execFusedMultiHeadSDPA(backend *Backend, node *Node, inputs []*Buffer, inpu
 			maskData = mask.flat.([]float64)
 		}
 		multiHeadSDPA(
-			q.flat.([]float64), k.flat.([]float64), v.flat.([]float64), maskData, output.flat.([]float64),
-			q.shape.Dimensions[0], data.numHeads, data.numKVHeads,
-			q.shape.Dimensions[2], k.shape.Dimensions[2], q.shape.Dimensions[3],
+			query.flat.([]float64), key.flat.([]float64), value.flat.([]float64), maskData, output.flat.([]float64),
+			query.shape.Dimensions[0], data.numHeads, data.numKVHeads,
+			query.shape.Dimensions[2], key.shape.Dimensions[2], query.shape.Dimensions[3],
 			maskBatchStride, maskHeadStride,
 			data.scale, data.causal,
 		)
 	default:
-		return nil, errors.Errorf("FusedMultiHeadSDPA: unsupported dtype %s", q.shape.DType)
+		return nil, errors.Errorf("FusedScaledDotProductAttention: unsupported dtype %s", query.shape.DType)
 	}
 	return output, nil
 }

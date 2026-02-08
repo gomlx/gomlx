@@ -52,17 +52,18 @@ func (d *nodeFusedDense) EqualNodeData(other nodeDataComparable) bool {
 	return d.activation == other.(*nodeFusedDense).activation
 }
 
-type nodeFusedMultiHeadSDPA struct {
+type nodeFusedScaledDotProductAttention struct {
 	numHeads   int
 	numKVHeads int
+	axesLayout backends.AxesLayout
 	scale      float64
 	causal     bool
 }
 
-func (d *nodeFusedMultiHeadSDPA) EqualNodeData(other nodeDataComparable) bool {
-	o := other.(*nodeFusedMultiHeadSDPA)
+func (d *nodeFusedScaledDotProductAttention) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*nodeFusedScaledDotProductAttention)
 	return d.numHeads == o.numHeads && d.numKVHeads == o.numKVHeads &&
-		d.scale == o.scale && d.causal == o.causal
+		d.axesLayout == o.axesLayout && d.scale == o.scale && d.causal == o.causal
 }
 
 type nodeFusedQKVDense struct {
@@ -200,29 +201,34 @@ func (f *Function) FusedDense(x, weight, bias backends.Value, activation backend
 	return node, nil
 }
 
-// FusedMultiHeadSDPA computes multi-head scaled dot-product attention.
-func (f *Function) FusedMultiHeadSDPA(q, k, v, mask backends.Value, numHeads, numKVHeads int, scale float64, causal bool) (backends.Value, error) {
-	values := []backends.Value{q, k, v}
+// FusedScaledDotProductAttention computes multi-head scaled dot-product attention.
+func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backends.Value, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (backends.Value, error) {
+	// Only BHSD layout is supported by the simplego backend for now.
+	if axesLayout != backends.AxesLayoutBHSD {
+		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedScaledDotProductAttention: only BHSD layout is supported, got %s", axesLayout)
+	}
+
+	values := []backends.Value{query, key, value}
 	if mask != nil {
 		values = append(values, mask)
 	}
-	inputs, err := f.verifyAndCastValues("MultiHeadSDPA", values...)
+	inputs, err := f.verifyAndCastValues("FusedScaledDotProductAttention", values...)
 	if err != nil {
 		return nil, err
 	}
 	qNode := inputs[0]
 
-	// Validate shapes: q [batch, numHeads, seqLen, headDim]
+	// Validate shapes: query [batch, numHeads, seqLen, headDim]
 	if qNode.shape.Rank() != 4 {
-		return nil, errors.Errorf("MultiHeadSDPA: q must have rank 4, got %d", qNode.shape.Rank())
+		return nil, errors.Errorf("FusedScaledDotProductAttention: query must have rank 4, got %d", qNode.shape.Rank())
 	}
 	if numHeads <= 0 || numKVHeads <= 0 || numHeads%numKVHeads != 0 {
-		return nil, errors.Errorf("MultiHeadSDPA: numHeads (%d) must be positive and divisible by numKVHeads (%d)", numHeads, numKVHeads)
+		return nil, errors.Errorf("FusedScaledDotProductAttention: numHeads (%d) must be positive and divisible by numKVHeads (%d)", numHeads, numKVHeads)
 	}
 
-	// Output shape is the same as q: [batch, numHeads, seqLen, headDim]
-	data := &nodeFusedMultiHeadSDPA{numHeads: numHeads, numKVHeads: numKVHeads, scale: scale, causal: causal}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedMultiHeadSDPA, qNode.shape.Clone(), inputs, data)
+	// Output shape is the same as query.
+	data := &nodeFusedScaledDotProductAttention{numHeads: numHeads, numKVHeads: numKVHeads, axesLayout: axesLayout, scale: scale, causal: causal}
+	node, _ := f.getOrCreateNode(backends.OpTypeFusedScaledDotProductAttention, qNode.shape.Clone(), inputs, data)
 	return node, nil
 }
 

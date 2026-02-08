@@ -29,10 +29,10 @@ func BackendFusedDense(x, weight, bias *Node, activation backends.ActivationType
 	return backendFusedDense(x, weight, bias, activation)
 }
 
-// BackendFusedMultiHeadSDPA computes multi-head scaled dot-product attention.
+// BackendFusedScaledDotProductAttention computes multi-head scaled dot-product attention.
 // Internal: prefer the InternalFusedOpCaller wrapper in layers which handles fallback and gradients.
-func BackendFusedMultiHeadSDPA(q, k, v, mask *Node, numHeads, numKVHeads int, scale float64, causal bool) *Node {
-	return backendFusedMultiHeadSDPA(q, k, v, mask, numHeads, numKVHeads, scale, causal)
+func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) *Node {
+	return backendFusedScaledDotProductAttention(query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal)
 }
 
 // BackendFusedQKVDense performs fused QKV projection.
