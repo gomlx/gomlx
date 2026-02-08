@@ -42,6 +42,29 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 		assert.EqualValues(t, []int{batchSize, 7, 1, 6, 4, 5}, attCoef.Shape().Dimensions, "AttentionCoefficients shape mismatch")
 	}
 
+	// Higher-rank with key mask: verifies that masks are correctly flattened alongside Q/K/V
+	// when inner axes are > 1, and that the graph executes without errors.
+	{
+		ctx := context.New()
+		batchSize := 2
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, input *Node) (*Node, *Node) {
+			g := input.Graph()
+			key := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 4, 5))
+			query := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 6, 1, 3))
+			value := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 4, 7))
+			// keyMask shape: [batch, 3, 4] — one mask per key inner element, same for all heads.
+			keyMask := Const(g, true)
+			keyMask = BroadcastToDims(keyMask, batchSize, 3, 4)
+			return MultiHeadAttention(ctx, query, key, value, 2, 8).
+				SetKeyMask(keyMask).
+				SetOutputDim(9).DoneWithCoefficients()
+		})
+		// Pass a dummy input to trigger execution.
+		results := exec.MustExec(tensors.FromScalar(float32(0)))
+		assert.EqualValues(t, []int{batchSize, 6, 1, 9}, results[0].Shape().Dimensions, "Higher-rank masked output shape")
+		assert.EqualValues(t, []int{batchSize, 6, 1, 2, 3, 4}, results[1].Shape().Dimensions, "Higher-rank masked coef shape")
+	}
+
 	ctxtest.RunTestGraphFn(t, "MultiHeadAttention with masking",
 		func(ctx *context.Context, g *Graph) (inputs, outputs []*Node) {
 			batchSize := 2
@@ -150,9 +173,9 @@ func TestMultiHeadAttentionWithRoPE(t *testing.T) {
 	output := exec.MustExec(input)[0]
 	assert.Equal(t, []int{1, 4, 8}, output.Shape().Dimensions)
 
-	// Run a second time with different sequence length to verify dynamic shapes
-	ctx2 := context.New()
-	exec2 := context.MustNewExec(backend, ctx2, func(ctx *context.Context, x *Node) *Node {
+	// Run a second time with different sequence length to verify re-compilation
+	// with the same weights (reuse ctx so Dense parameters are shared).
+	exec2 := context.MustNewExec(backend, ctx.Reuse(), func(ctx *context.Context, x *Node) *Node {
 		return SelfAttention(ctx, x, 2, 4).
 			WithRoPE(10000.0).
 			UseCausalMask().

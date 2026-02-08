@@ -24,7 +24,7 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 		scale := 1.0 / math.Sqrt(float64(headDim))
 
 		// Compute with BHSD layout (default): q/k/v are [batch, heads, seq, dim]
-		bhsdOut, _ := AttentionCore(q, k, v, scale, nil, false, LayoutBHSD)
+		bhsdOut, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD)
 
 		// Transpose to BSHD: [batch, seq, heads, dim]
 		qBSHD := TransposeAllDims(q, 0, 2, 1, 3)
@@ -32,7 +32,7 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 		vBSHD := TransposeAllDims(v, 0, 2, 1, 3)
 
 		// Compute with BSHD layout
-		bshdOut, _ := AttentionCore(qBSHD, kBSHD, vBSHD, scale, nil, false, LayoutBSHD)
+		bshdOut, _ := Core(ctx, qBSHD, kBSHD, vBSHD, scale, nil, 0, LayoutBSHD)
 
 		// Transpose BSHD output back to BHSD for comparison
 		bshdOutTransposed := TransposeAllDims(bshdOut, 0, 2, 1, 3)
@@ -66,7 +66,7 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 	}
 }
 
-func TestAttentionCore(t *testing.T) {
+func TestCore(t *testing.T) {
 	t.Run("BasicIdentity", func(t *testing.T) {
 		// With identity-like inputs, verify output shape and basic computation.
 		backend := graphtest.BuildTestBackend()
@@ -75,7 +75,7 @@ func TestAttentionCore(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, _ := AttentionCore(q, k, v, scale, nil, false, LayoutBHSD)
+			output, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD)
 			return output
 		})
 
@@ -97,8 +97,8 @@ func TestAttentionCore(t *testing.T) {
 			headDim := q.Shape().Dimensions[3]
 			defaultScale := 1.0 / math.Sqrt(float64(headDim))
 			// Both use the same scale — should produce identical results
-			defaultOut, _ := AttentionCore(q, k, v, defaultScale, nil, false, LayoutBHSD)
-			explicitOut, _ := AttentionCore(q, k, v, 1.0/math.Sqrt(2.0), nil, false, LayoutBHSD)
+			defaultOut, _ := Core(ctx, q, k, v, defaultScale, nil, 0, LayoutBHSD)
+			explicitOut, _ := Core(ctx, q, k, v, 1.0/math.Sqrt(2.0), nil, 0, LayoutBHSD)
 			return []*Node{defaultOut, explicitOut}
 		})
 
@@ -128,7 +128,7 @@ func TestAttentionCore(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v, mask *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, _ := AttentionCore(q, k, v, scale, mask, false, LayoutBHSD)
+			output, _ := Core(ctx, q, k, v, scale, mask, 0, LayoutBHSD)
 			return output
 		})
 
@@ -156,8 +156,8 @@ func TestAttentionCore(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v, boolMask *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			additiveMask := BooleanToAdditiveMask(boolMask, q.DType())
-			output, _ := AttentionCore(q, k, v, scale, additiveMask, false, LayoutBHSD)
+			// Pass boolean mask directly — Core auto-detects and uses MaskedSoftmax.
+			output, _ := Core(ctx, q, k, v, scale, boolMask, 0, LayoutBHSD)
 			return output
 		})
 
@@ -184,8 +184,8 @@ func TestAttentionCore(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, weights := AttentionCore(q, k, v, scale, nil, true, LayoutBHSD)
-			return []*Node{output, weights}
+			output, coefficients := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD)
+			return []*Node{output, coefficients}
 		})
 
 		query := [][][][]float32{{{{1, 0}, {0, 1}}}}
@@ -194,13 +194,13 @@ func TestAttentionCore(t *testing.T) {
 
 		outputs := exec.MustExec(query, key, value)
 		output := outputs[0]
-		weights := outputs[1]
+		coefficients := outputs[1]
 
 		assert.Equal(t, []int{1, 1, 2, 2}, output.Shape().Dimensions)
-		assert.Equal(t, []int{1, 1, 2, 2}, weights.Shape().Dimensions)
+		assert.Equal(t, []int{1, 1, 2, 2}, coefficients.Shape().Dimensions)
 
-		// Verify weights sum to 1 along last axis (softmax property)
-		wData := weights.Value().([][][][]float32)
+		// Verify coefficients sum to 1 along last axis (softmax property)
+		wData := coefficients.Value().([][][][]float32)
 		for i := range wData {
 			for j := range wData[i] {
 				for k := range wData[i][j] {
