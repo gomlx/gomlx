@@ -21,7 +21,7 @@ import (
 func QKVDense(x, wQKV, biasQ, biasK, biasV *Node, qDim, kvDim int) (q, k, v *Node) {
 	results := FusedOpCallerMulti(
 		func() []*Node {
-			q, k, v := FusedQKVDense(x, wQKV, biasQ, biasK, biasV, qDim, kvDim)
+			q, k, v := BackendFusedQKVDense(x, wQKV, biasQ, biasK, biasV, qDim, kvDim)
 			return []*Node{q, k, v}
 		},
 		func() []*Node {

@@ -65,6 +65,16 @@ func (l AxesLayout) SeqAxis() int {
 	}
 }
 
+// BooleanToAdditiveMask converts a boolean mask to an additive float mask
+// in the given dtype. True values become 0.0 (attend), false values become -1e9 (mask out).
+// This is useful when interfacing with APIs that expect additive masks (like fused SDPA).
+func BooleanToAdditiveMask(mask *Node, dtype dtypes.DType) *Node {
+	g := mask.Graph()
+	zero := ScalarZero(g, dtype)
+	negInf := ConstAs(zero, float32(-1e9))
+	return Where(mask, zero, negInf)
+}
+
 // Core computes the core scaled dot-product attention operation.
 // This is the shared implementation used by MultiHeadAttention and ONNX op converters.
 //

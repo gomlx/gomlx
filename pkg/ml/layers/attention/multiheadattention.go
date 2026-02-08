@@ -466,14 +466,103 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	return attentionOutput, attentionCoefficients
 }
 
-// Done or DoneWithCoefficients should be called after all optional settings are configured.
-// It returns both the attention output and the attention coefficients (matrix) used.
-//
-// `output` will be shaped `[batch_size, <query_elements>, output_dim]`, where `output_dim`
-// can be configured by `SetOutputDim`.
+// Done should be called after all optional settings are configured.
+// It returns the attention output shaped `[batch_size, <query_elements>, output_dim]`,
+// where `output_dim` can be configured by `SetOutputDim`.
+// Use DoneWithCoefficients if the attention coefficients are also needed.
 func (b *MultiHeadAttentionBuilder) Done() (output *Node) {
+	if b.canUseFusedSDPA() {
+		return b.fusedDone()
+	}
 	output, _ = b.DoneWithCoefficients()
 	return output
+}
+
+// canUseFusedSDPA returns true when the attention configuration is compatible
+// with the fused SDPA backend op. The fused path is faster but has restrictions.
+func (b *MultiHeadAttentionBuilder) canUseFusedSDPA() bool {
+	// No dropout (fused doesn't support it).
+	if b.dropoutRate > 0 {
+		return false
+	}
+	// No inner key/query axes flattening needed (rank-3 Q/K/V only).
+	if b.innerKeyAxes > 1 || b.innerQueryAxes > 1 {
+		return false
+	}
+	// No separate key/query/matrix masks (only causal or no mask).
+	if b.keyMask != nil || b.queryMask != nil || b.queryKeyMatrixMask != nil {
+		return false
+	}
+	// No KV cache (fused doesn't support it yet).
+	if b.kvCacheShape.Ok() {
+		return false
+	}
+	// No positional encoder (would need to be applied between projection and SDPA).
+	if b.positionalEncoder != nil {
+		return false
+	}
+	// keyQueryDim == valueDim (fused SDPA uses same headDim for Q/K/V).
+	if b.keyQueryDim != b.valueDim {
+		return false
+	}
+	return true
+}
+
+// fusedDone implements the fused SDPA fast path for Done().
+// It projects Q/K/V, transposes to BHSD layout, calls the fused backend op
+// (falling back to Core if not supported), transposes back, and applies
+// the output projection.
+func (b *MultiHeadAttentionBuilder) fusedDone() *Node {
+	// Project Q, K, V using the same Dense scope names as DoneWithCoefficients
+	// for checkpoint compatibility.
+	projQ := layers.Dense(b.ctx.In("query"), b.query, true, b.numHeads, b.keyQueryDim)
+	projK := layers.Dense(b.ctx.In("key"), b.key, true, b.numHeads, b.keyQueryDim)
+	projV := layers.Dense(b.ctx.In("value"), b.value, true, b.numHeads, b.valueDim)
+
+	// Transpose BSHD [batch, seq, heads, dim] → BHSD [batch, heads, seq, dim]
+	projQ = TransposeAllDims(projQ, 0, 2, 1, 3)
+	projK = TransposeAllDims(projK, 0, 2, 1, 3)
+	projV = TransposeAllDims(projV, 0, 2, 1, 3)
+
+	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
+
+	var additiveMask *Node
+	if b.useCausalMask {
+		additiveMask = buildCausalAdditiveMask(projQ)
+	}
+
+	sdpaOutput := InternalFusedOpCaller(
+		func() *Node {
+			return BackendFusedMultiHeadSDPA(projQ, projK, projV,
+				nil, b.numHeads, b.numHeads, scale, b.useCausalMask)
+		},
+		func() *Node {
+			output, _ := Core(nil, projQ, projK, projV, scale, additiveMask, 0, LayoutBHSD)
+			return output
+		},
+	)
+
+	// Transpose back BHSD → BSHD [batch, seq, heads, dim]
+	sdpaOutput = TransposeAllDims(sdpaOutput, 0, 2, 1, 3)
+
+	// Reshape [batch, seq, heads, dim] → [batch, seq, heads*dim]
+	dims := sdpaOutput.Shape().Dimensions
+	sdpaOutput = Reshape(sdpaOutput, dims[0], dims[1], dims[2]*dims[3])
+
+	// Output projection.
+	return layers.Dense(b.ctx.In("output"), sdpaOutput, b.useProjectionBias, b.outputDim)
+}
+
+// buildCausalAdditiveMask builds a lower-triangular additive mask [1, 1, seqLen, seqLen]
+// for BHSD layout. Attend positions get 0.0, masked positions get -1e9.
+func buildCausalAdditiveMask(q *Node) *Node {
+	seqLen := q.Shape().Dimensions[2] // BHSD: axis 2 is seq
+	g := q.Graph()
+	boolMask := LowerTriangular(g, seqLen)
+	additiveMask := BooleanToAdditiveMask(boolMask, q.DType())
+	// Reshape to [1, 1, seqLen, seqLen] for broadcasting over batch and heads.
+	additiveMask = Reshape(additiveMask, 1, 1, seqLen, seqLen)
+	return additiveMask
 }
 
 // buildAttentionShape returns the shape of the attention coefficients and mask, and sets it to b.attentionShape.

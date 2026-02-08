@@ -166,6 +166,24 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 				continue
 			}
 
+			// Multi-output fused ops: transfer VJPs to decomposed alternate outputs
+			// and let the normal gradient loop process the decomposed subgraph.
+			if node.vjpAlternateOutputs != nil {
+				for i, alt := range node.vjpAlternateOutputs {
+					if alt == nil || rNode.VJPsForMultiOutputs[i] == nil {
+						continue
+					}
+					rAlt := rg.ReverseNodes[alt.Id()]
+					if rAlt.AccumulatedVJP == nil {
+						rAlt.AccumulatedVJP = rNode.VJPsForMultiOutputs[i]
+					} else {
+						rAlt.AccumulatedVJP = Add(rAlt.AccumulatedVJP, rNode.VJPsForMultiOutputs[i])
+					}
+					markSubgraphUseful(rg, alt)
+				}
+				continue
+			}
+
 			// Fill missing VJPs with zeros.
 			for ii, shape := range node.outputShapes {
 				if rNode.VJPsForMultiOutputs[ii] == nil {
@@ -211,14 +229,6 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			// Mark the decomposed subgraph as Included and Useful so the gradient
 			// loop processes it instead of skipping.
 			markSubgraphUseful(rg, alt)
-			continue
-		}
-
-		// Multi-output fused ops: compute gradients through decomposed subgraphs,
-		// one per output, and accumulate the results.
-		if node.vjpAlternateOutputs != nil {
-			altVJPs := reverseAutodiffAlternateMulti(node.vjpAlternateOutputs, node.inputNodes, rNode.VJPsForMultiOutputs, outputShape)
-			rg.accumulateInputVJPs(node, altVJPs, outputShape)
 			continue
 		}
 

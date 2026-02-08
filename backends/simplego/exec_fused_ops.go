@@ -410,7 +410,7 @@ func computeMaskStrides(dims []int) (batchStride, headStride int) {
 		}
 		return batchStride, headStride
 	default:
-		return 0, 0
+		panic(errors.Errorf("computeMaskStrides: unsupported mask rank %d (dims=%v), expected rank 2, 3, or 4", len(dims), dims))
 	}
 }
 
@@ -551,18 +551,19 @@ func execFusedQKVDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwn
 	x := inputs[0]
 	wQKV := inputs[1]
 
-	// Determine bias buffers by position.
+	// Determine bias buffers using flags from node data, not positional indexing.
+	// This correctly handles sparse biases (e.g. biasQ=nil, biasK=present).
 	var biasQ, biasK, biasV *Buffer
 	biasIdx := 2
-	if biasIdx < len(inputs) {
+	if data.hasBiasQ {
 		biasQ = inputs[biasIdx]
 		biasIdx++
 	}
-	if biasIdx < len(inputs) {
+	if data.hasBiasK {
 		biasK = inputs[biasIdx]
 		biasIdx++
 	}
-	if biasIdx < len(inputs) {
+	if data.hasBiasV {
 		biasV = inputs[biasIdx]
 	}
 

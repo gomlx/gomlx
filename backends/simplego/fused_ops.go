@@ -66,13 +66,17 @@ func (d *nodeFusedMultiHeadSDPA) EqualNodeData(other nodeDataComparable) bool {
 }
 
 type nodeFusedQKVDense struct {
-	qDim  int
-	kvDim int
+	qDim     int
+	kvDim    int
+	hasBiasQ bool
+	hasBiasK bool
+	hasBiasV bool
 }
 
 func (d *nodeFusedQKVDense) EqualNodeData(other nodeDataComparable) bool {
 	o := other.(*nodeFusedQKVDense)
-	return d.qDim == o.qDim && d.kvDim == o.kvDim
+	return d.qDim == o.qDim && d.kvDim == o.kvDim &&
+		d.hasBiasQ == o.hasBiasQ && d.hasBiasK == o.hasBiasK && d.hasBiasV == o.hasBiasV
 }
 
 // FusedSoftmax computes softmax along the specified axis.
@@ -256,7 +260,7 @@ func (f *Function) FusedQKVDense(x, wQKV, biasQ, biasK, biasV backends.Value, qD
 	kShape := shapes.Make(xNode.shape.DType, kvDims...)
 	vShape := shapes.Make(xNode.shape.DType, kvDims...)
 
-	data := &nodeFusedQKVDense{qDim: qDim, kvDim: kvDim}
+	data := &nodeFusedQKVDense{qDim: qDim, kvDim: kvDim, hasBiasQ: biasQ != nil, hasBiasK: biasK != nil, hasBiasV: biasV != nil}
 	node := f.newMultiOutputsNode(backends.OpTypeFusedQKVDense, []shapes.Shape{qShape, kShape, vShape}, inputs...)
 	node.data = data
 	qOut = node.multiOutputsNodes[0]
