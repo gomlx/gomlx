@@ -16,6 +16,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
+// ErrBackendAlreadyExists is returned when attempting to register or initialize a backend that already exists.
 var ErrBackendAlreadyExists = errors.New("backend already exists")
 
 // Compile-time check:
@@ -335,6 +336,10 @@ func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, sha
 			reflect.TypeOf(flat).Elem(), shape.DType)
 	}
 	buffer := b.NewBuffer(shape)
+	if buffer == nil {
+		return nil, ErrBackendAlreadyExists
+	}
+
 	copyFlat(buffer.flat, flat)
 	return buffer, nil
 }
@@ -358,15 +363,20 @@ func (b *Backend) HasSharedBuffers() bool {
 //
 // It returns a handle to the buffer and a slice of the corresponding data type pointing
 // to the shared data.
-func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer, flat any, err error) {
+func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer,
+	flat any, err error) {
 	if b.isFinalized {
 		return nil, nil, errors.Errorf("backend is already finalized")
 	}
 	if deviceNum != 0 {
-		return nil, nil, errors.Errorf("backend (%s) only supports deviceNum 0, cannot create buffer on deviceNum %d (shape=%s)",
-			b.Name(), deviceNum, shape)
+		return nil, nil,
+			errors.Errorf("backend (%s) only supports deviceNum 0, cannot create buffer on deviceNum %d (shape=%s)",
+				b.Name(), deviceNum, shape)
 	}
 	goBuffer := b.NewBuffer(shape)
+	if goBuffer == nil {
+		return nil, nil, ErrBackendAlreadyExists
+	}
 	return goBuffer, goBuffer.flat, nil
 }
 
@@ -388,7 +398,7 @@ func (b *Backend) BufferData(buffer backends.Buffer) (flat any, err error) {
 }
 
 // BufferCopyToDevice implements the backends.Backend interface.
-func (b *Backend) BufferCopyToDevice(source backends.Buffer, deviceNum backends.DeviceNum) (
+func (b *Backend) BufferCopyToDevice(_ backends.Buffer, _ backends.DeviceNum) (
 	bufferOnDevice backends.Buffer, err error) {
 	return nil, errors.Errorf("backend %q: multi-device not supported on this backend",
 		BackendName)
