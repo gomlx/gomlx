@@ -17,9 +17,9 @@ import (
 //
 // If the backend supports fused QKVDense, the optimized native implementation is
 // used; otherwise the operation is decomposed into primitives. Fallback is
-// handled automatically via FusedOpCallerMulti.
+// handled automatically via InternalFusedOpCallerMulti.
 func QKVDense(x, wQKV, biasQ, biasK, biasV *Node, qDim, kvDim int) (q, k, v *Node) {
-	results := FusedOpCallerMulti(
+	results := InternalFusedOpCallerMulti(
 		func() []*Node {
 			q, k, v := BackendFusedQKVDense(x, wQKV, biasQ, biasK, biasV, qDim, kvDim)
 			return []*Node{q, k, v}

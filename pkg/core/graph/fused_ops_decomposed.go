@@ -12,12 +12,7 @@ package graph
 //
 // Returns: [q, k, v] where q=[..., qDim], k=[..., kvDim], v=[..., kvDim]
 func QKVDenseDecomposed(x, wQKV, biasQ, biasK, biasV *Node, qDim, kvDim int) []*Node {
-	inFeatures := wQKV.Shape().Dimensions[0]
-
-	// Slice wQKV into wQ, wK, wV along the last axis.
-	wQ := backendSlice(wQKV, []int{0, 0}, []int{inFeatures, qDim}, nil)
-	wK := backendSlice(wQKV, []int{0, qDim}, []int{inFeatures, qDim + kvDim}, nil)
-	wV := backendSlice(wQKV, []int{0, qDim + kvDim}, []int{inFeatures, qDim + 2*kvDim}, nil)
+	totalOut := qDim + 2*kvDim
 
 	// Flatten x to 2D if needed for Dot.
 	xShape := x.Shape()
@@ -29,9 +24,13 @@ func QKVDenseDecomposed(x, wQKV, biasQ, biasK, biasV *Node, qDim, kvDim int) []*
 		x2d = Reshape(x, xBatchSize, inFeat)
 	}
 
-	q := Dot(x2d, wQ)
-	k := Dot(x2d, wK)
-	v := Dot(x2d, wV)
+	// Single matmul: [batch, inFeatures] @ [inFeatures, qDim+2*kvDim] → [batch, totalOut]
+	combined := Dot(x2d, wQKV)
+
+	// Slice the combined result into Q, K, V along the last axis.
+	q := Slice(combined, AxisRange(), AxisRange(0, qDim))
+	k := Slice(combined, AxisRange(), AxisRange(qDim, qDim+kvDim))
+	v := Slice(combined, AxisRange(), AxisRange(qDim+kvDim, totalOut))
 
 	// Reshape back to [..., outDim] if needed.
 	if xRank > 2 {

@@ -76,14 +76,14 @@ func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
 	return output
 }
 
-// FusedOpCallerMulti is the multi-output counterpart of InternalFusedOpCaller.
+// InternalFusedOpCallerMulti is the multi-output counterpart of InternalFusedOpCaller.
 // It handles fused ops that return multiple outputs (e.g. FusedQKVDense returning q, k, v).
 //
 // Like InternalFusedOpCaller, the decomposed version is built first so it has lower
 // node indices than the fused nodes. When the fused call succeeds, the decomposed
 // outputs are stored as vjpAlternateOutputs on the multi-output parent node for
 // reverse-mode autodiff.
-func FusedOpCallerMulti(fused, decomposed func() []*Node) []*Node {
+func InternalFusedOpCallerMulti(fused, decomposed func() []*Node) []*Node {
 	decomposedOutputs := decomposed()
 
 	var outputs []*Node
@@ -101,10 +101,12 @@ func FusedOpCallerMulti(fused, decomposed func() []*Node) []*Node {
 	// The fused function returns split nodes; we need the underlying multi-output node.
 	if len(outputs) > 0 {
 		firstSplit := outputs[0]
-		if splitInputs, ok := firstSplit.inputs.(*nodeInputsSplitNode); ok {
-			parent := splitInputs.multiOutputNode
-			parent.vjpAlternateOutputs = decomposedOutputs
+		splitInputs, ok := firstSplit.inputs.(*nodeInputsSplitNode)
+		if !ok {
+			panic(errors.New("InternalFusedOpCallerMulti: fused function returned non-split nodes; cannot set vjpAlternateOutputs"))
 		}
+		parent := splitInputs.multiOutputNode
+		parent.vjpAlternateOutputs = decomposedOutputs
 	}
 
 	return outputs

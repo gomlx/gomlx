@@ -306,7 +306,6 @@ func arbitraryAxesLayerNorm[T float32 | float64](inData, outData, gammaData, bet
 // inputs[3] is the optional bias.
 func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	matmul := inputs[0]
-	// inputs layout: [dotResult, x, weight, bias?]
 	var bias *Buffer
 	if len(inputs) > 3 {
 		bias = inputs[3]
