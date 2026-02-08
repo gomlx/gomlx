@@ -589,9 +589,9 @@ func TestFusedScaledDotProductAttention_WithMask(t *testing.T) {
 	assert.InDelta(t, 10.0, got[0], fusedTestTol)
 }
 
-// ---- FusedQKVDense tests ----
+// ---- FusedAttentionQKVProjection tests ----
 
-func TestFusedQKVDense_Identity(t *testing.T) {
+func TestFusedAttentionQKVProjection_Identity(t *testing.T) {
 	// batch=1, inFeatures=3, qDim=2, kvDim=1
 	// wQKV: [inFeatures, qDim+2*kvDim] = [3, 4]
 	// Use identity-like weights for easy verification.
@@ -619,7 +619,7 @@ func TestFusedQKVDense_Identity(t *testing.T) {
 		[]shapes.Shape{xShape, wShape, bqShape, bkShape, bvShape},
 		[]any{x, wQKV, biasQ, biasK, biasV},
 		func(f backends.Function, params []backends.Value) (backends.Value, backends.Value, backends.Value, error) {
-			return f.FusedQKVDense(params[0], params[1], params[2], params[3], params[4], 2, 1)
+			return f.FusedAttentionQKVProjection(params[0], params[1], params[2], params[3], params[4], 2, 1)
 		},
 	)
 
@@ -636,7 +636,7 @@ func TestFusedQKVDense_Identity(t *testing.T) {
 	assert.InDelta(t, 1006.0, vGot[0], fusedTestTol)
 }
 
-func TestFusedQKVDense_NoBias(t *testing.T) {
+func TestFusedAttentionQKVProjection_NoBias(t *testing.T) {
 	// batch=2, inFeatures=2, qDim=2, kvDim=1
 	x := []float32{
 		1, 0, // batch 0
@@ -656,7 +656,7 @@ func TestFusedQKVDense_NoBias(t *testing.T) {
 		[]shapes.Shape{xShape, wShape},
 		[]any{x, wQKV},
 		func(f backends.Function, params []backends.Value) (backends.Value, backends.Value, backends.Value, error) {
-			return f.FusedQKVDense(params[0], params[1], nil, nil, nil, 2, 1)
+			return f.FusedAttentionQKVProjection(params[0], params[1], nil, nil, nil, 2, 1)
 		},
 	)
 
@@ -683,7 +683,7 @@ func TestFusedQKVDense_NoBias(t *testing.T) {
 	assert.InDelta(t, 8.0, vGot[1], fusedTestTol)
 }
 
-func TestFusedQKVDense_EqualDims(t *testing.T) {
+func TestFusedAttentionQKVProjection_EqualDims(t *testing.T) {
 	// When qDim == kvDim, equivalent to 3 separate dense ops.
 	// batch=1, inFeatures=2, qDim=2, kvDim=2
 	x := []float32{1, 1}
@@ -701,7 +701,7 @@ func TestFusedQKVDense_EqualDims(t *testing.T) {
 		[]shapes.Shape{xShape, wShape},
 		[]any{x, wQKV},
 		func(f backends.Function, params []backends.Value) (backends.Value, backends.Value, backends.Value, error) {
-			return f.FusedQKVDense(params[0], params[1], nil, nil, nil, 2, 2)
+			return f.FusedAttentionQKVProjection(params[0], params[1], nil, nil, nil, 2, 2)
 		},
 	)
 

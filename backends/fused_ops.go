@@ -144,20 +144,21 @@ type FusedOps interface {
 	// Output: same shape as query.
 	FusedScaledDotProductAttention(query, key, value, mask Value, numHeads, numKVHeads int, axesLayout AxesLayout, scale float64, causal bool) (Value, error)
 
-	// FusedQKVDense performs fused QKV projection: a single large matmul followed by
-	// scatter into separate Q, K, V outputs with optional per-projection bias.
+	// FusedAttentionQKVProjection performs fused Query-Key-Value projection: a single large matmul
+	// merged with a scatter into separate query (Q), key (K), value (V) outputs with optional
+	// per-projection bias.
 	//
 	// Inputs:
 	//   - x: [batch, inFeatures]
-	//   - wQKV: [inFeatures, qDim+2*kvDim] (Q/K/V weights concatenated along last axis)
-	//   - biasQ: [qDim] (optional, nil for no bias)
-	//   - biasK: [kvDim] (optional, nil for no bias)
-	//   - biasV: [kvDim] (optional, nil for no bias)
+	//   - wQKV: [inFeatures, queryDim+2*keyValueDim] (Q/K/V weights concatenated along last axis)
+	//   - biasQ: [queryDim] (optional, nil for no bias)
+	//   - biasK: [keyValueDim] (optional, nil for no bias)
+	//   - biasV: [keyValueDim] (optional, nil for no bias)
 	//
 	// Parameters:
-	//   - qDim: output dimension for Q projection
-	//   - kvDim: output dimension for K and V projections
+	//   - queryDim: output dimension for query projection
+	//   - keyValueDim: output dimension for key and value projections
 	//
-	// Outputs: q [batch, qDim], k [batch, kvDim], v [batch, kvDim]
-	FusedQKVDense(x, wQKV, biasQ, biasK, biasV Value, qDim, kvDim int) (q, k, v Value, err error)
+	// Outputs: query [batch, queryDim], key [batch, keyValueDim], value [batch, keyValueDim]
+	FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV Value, queryDim, keyValueDim int) (query, key, value Value, err error)
 }

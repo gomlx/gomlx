@@ -30,7 +30,7 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backen
 	return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedScaledDotProductAttention not implemented in XLA backend")
 }
 
-func (f *Function) FusedQKVDense(x, wQKV, biasQ, biasK, biasV backends.Value, qDim, kvDim int) (q, k, v backends.Value, err error) {
-	err = errors.Wrapf(backends.ErrNotImplemented, "FusedQKVDense not implemented in XLA backend")
+func (f *Function) FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV backends.Value, queryDim, keyValueDim int) (query, key, value backends.Value, err error) {
+	err = errors.Wrapf(backends.ErrNotImplemented, "FusedAttentionQKVProjection not implemented in XLA backend")
 	return
 }

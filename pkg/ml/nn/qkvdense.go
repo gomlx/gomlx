@@ -6,26 +6,26 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 )
 
-// QKVDense performs a fused QKV projection: a single large matmul followed by
-// split into separate Q, K, V outputs with optional per-projection bias.
+// AttentionQKVProjection performs a fused Query-Key-Value projection: a single large matmul
+// followed by split into separate query, key, value outputs with optional per-projection bias.
 //
 // x: [..., inFeatures]
-// wQKV: [inFeatures, qDim+2*kvDim] with Q, K, V weights concatenated along the last axis
+// wQKV: [inFeatures, queryDim+2*keyValueDim] with Q, K, V weights concatenated along the last axis
 // biasQ, biasK, biasV: optional biases (nil for no bias)
-// qDim: output dimension for Q projection
-// kvDim: output dimension for K and V projections
+// queryDim: output dimension for query projection
+// keyValueDim: output dimension for key and value projections
 //
-// If the backend supports fused QKVDense, the optimized native implementation is
-// used; otherwise the operation is decomposed into primitives. Fallback is
+// If the backend supports the fused attention QKV projection, the optimized native implementation
+// is used; otherwise the operation is decomposed into primitives. Fallback is
 // handled automatically via InternalFusedOpCallerMulti.
-func QKVDense(x, wQKV, biasQ, biasK, biasV *Node, qDim, kvDim int) (q, k, v *Node) {
+func AttentionQKVProjection(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int) (query, key, value *Node) {
 	results := InternalFusedOpCallerMulti(
 		func() []*Node {
-			q, k, v := BackendFusedQKVDense(x, wQKV, biasQ, biasK, biasV, qDim, kvDim)
-			return []*Node{q, k, v}
+			query, key, value := BackendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
+			return []*Node{query, key, value}
 		},
 		func() []*Node {
-			return QKVDenseDecomposed(x, wQKV, biasQ, biasK, biasV, qDim, kvDim)
+			return AttentionQKVProjectionDecomposed(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
 		},
 	)
 	return results[0], results[1], results[2]

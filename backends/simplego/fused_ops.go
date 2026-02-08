@@ -66,7 +66,7 @@ func (d *nodeFusedScaledDotProductAttention) EqualNodeData(other nodeDataCompara
 		d.axesLayout == o.axesLayout && d.scale == o.scale && d.causal == o.causal
 }
 
-type nodeFusedQKVDense struct {
+type nodeFusedAttentionQKVProjection struct {
 	qDim     int
 	kvDim    int
 	hasBiasQ bool
@@ -74,8 +74,8 @@ type nodeFusedQKVDense struct {
 	hasBiasV bool
 }
 
-func (d *nodeFusedQKVDense) EqualNodeData(other nodeDataComparable) bool {
-	o := other.(*nodeFusedQKVDense)
+func (d *nodeFusedAttentionQKVProjection) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*nodeFusedAttentionQKVProjection)
 	return d.qDim == o.qDim && d.kvDim == o.kvDim &&
 		d.hasBiasQ == o.hasBiasQ && d.hasBiasK == o.hasBiasK && d.hasBiasV == o.hasBiasV
 }
@@ -232,8 +232,8 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backen
 	return node, nil
 }
 
-// FusedQKVDense performs fused QKV projection.
-func (f *Function) FusedQKVDense(x, wQKV, biasQ, biasK, biasV backends.Value, qDim, kvDim int) (qOut, kOut, vOut backends.Value, err error) {
+// FusedAttentionQKVProjection performs fused Query-Key-Value projection.
+func (f *Function) FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV backends.Value, queryDim, keyValueDim int) (queryOut, keyOut, valueOut backends.Value, err error) {
 	values := []backends.Value{x, wQKV}
 	if biasQ != nil {
 		values = append(values, biasQ)
@@ -244,33 +244,33 @@ func (f *Function) FusedQKVDense(x, wQKV, biasQ, biasK, biasV backends.Value, qD
 	if biasV != nil {
 		values = append(values, biasV)
 	}
-	inputs, err := f.verifyAndCastValues("QKVDense", values...)
+	inputs, err := f.verifyAndCastValues("AttentionQKVProjection", values...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	xNode := inputs[0]
 
 	if xNode.shape.Rank() < 1 {
-		return nil, nil, nil, errors.Errorf("QKVDense: x must have rank >= 1, got %d", xNode.shape.Rank())
+		return nil, nil, nil, errors.Errorf("AttentionQKVProjection: x must have rank >= 1, got %d", xNode.shape.Rank())
 	}
 
 	batchDims := xNode.shape.Dimensions[:xNode.shape.Rank()-1]
 	qDims := make([]int, len(batchDims)+1)
 	copy(qDims, batchDims)
-	qDims[len(batchDims)] = qDim
+	qDims[len(batchDims)] = queryDim
 	kvDims := make([]int, len(batchDims)+1)
 	copy(kvDims, batchDims)
-	kvDims[len(batchDims)] = kvDim
+	kvDims[len(batchDims)] = keyValueDim
 
 	qShape := shapes.Make(xNode.shape.DType, qDims...)
 	kShape := shapes.Make(xNode.shape.DType, kvDims...)
 	vShape := shapes.Make(xNode.shape.DType, kvDims...)
 
-	data := &nodeFusedQKVDense{qDim: qDim, kvDim: kvDim, hasBiasQ: biasQ != nil, hasBiasK: biasK != nil, hasBiasV: biasV != nil}
-	node := f.newMultiOutputsNode(backends.OpTypeFusedQKVDense, []shapes.Shape{qShape, kShape, vShape}, inputs...)
+	data := &nodeFusedAttentionQKVProjection{qDim: queryDim, kvDim: keyValueDim, hasBiasQ: biasQ != nil, hasBiasK: biasK != nil, hasBiasV: biasV != nil}
+	node := f.newMultiOutputsNode(backends.OpTypeFusedAttentionQKVProjection, []shapes.Shape{qShape, kShape, vShape}, inputs...)
 	node.data = data
-	qOut = node.multiOutputsNodes[0]
-	kOut = node.multiOutputsNodes[1]
-	vOut = node.multiOutputsNodes[2]
+	queryOut = node.multiOutputsNodes[0]
+	keyOut = node.multiOutputsNodes[1]
+	valueOut = node.multiOutputsNodes[2]
 	return
 }

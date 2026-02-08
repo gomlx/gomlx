@@ -18,7 +18,7 @@ func init() {
 	setNodeExecutor(backends.OpTypeFusedLayerNorm, priorityTyped, execFusedLayerNorm)
 	setNodeExecutor(backends.OpTypeFusedDense, priorityTyped, execFusedDense)
 	setNodeExecutor(backends.OpTypeFusedScaledDotProductAttention, priorityTyped, execFusedScaledDotProductAttention)
-	multiOutputsNodeExecutors[backends.OpTypeFusedQKVDense] = execFusedQKVDense
+	multiOutputsNodeExecutors[backends.OpTypeFusedAttentionQKVProjection] = execFusedAttentionQKVProjection
 }
 
 // computeAxisStrides returns the outer size, axis size, and inner size for iterating
@@ -541,12 +541,12 @@ func multiHeadSDPA[T float32 | float64](q, k, v, mask, output []T,
 	}
 }
 
-// execFusedQKVDense implements fused QKV projection.
-// x: [batch, inFeatures], wQKV: [inFeatures, qDim+2*kvDim] (Q/K/V weights concatenated along last axis)
+// execFusedAttentionQKVProjection implements fused QKV projection.
+// x: [batch, inFeatures], wQKV: [inFeatures, qDim+2*kvDim]
 // biasQ: [qDim] (opt), biasK: [kvDim] (opt), biasV: [kvDim] (opt)
 // outputs: q [batch, qDim], k [batch, kvDim], v [batch, kvDim]
-func execFusedQKVDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
-	data := node.data.(*nodeFusedQKVDense)
+func execFusedAttentionQKVProjection(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
+	data := node.data.(*nodeFusedAttentionQKVProjection)
 	x := inputs[0]
 	wQKV := inputs[1]
 
@@ -612,7 +612,7 @@ func execFusedQKVDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwn
 			batchSize, inFeatures, data.qDim, data.kvDim,
 		)
 	default:
-		return nil, errors.Errorf("FusedQKVDense: unsupported dtype %s", x.shape.DType)
+		return nil, errors.Errorf("FusedAttentionQKVProjection: unsupported dtype %s", x.shape.DType)
 	}
 
 	return []*Buffer{qBuf, kBuf, vBuf}, nil

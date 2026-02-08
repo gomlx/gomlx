@@ -41,10 +41,10 @@ func outputEquation(l AxesLayout) string {
 	}
 }
 
-// BooleanToAdditiveMask converts a boolean mask to an additive float mask
+// booleanToAdditiveMask converts a boolean mask to an additive float mask
 // in the given dtype. True values become 0.0 (attend), false values become -1e9 (mask out).
 // This is useful when interfacing with APIs that expect additive masks (like fused SDPA).
-func BooleanToAdditiveMask(mask *Node, dtype dtypes.DType) *Node {
+func booleanToAdditiveMask(mask *Node, dtype dtypes.DType) *Node {
 	g := mask.Graph()
 	zero := ScalarZero(g, dtype)
 	largeNeg := ConstAs(zero, float32(-1e9))
@@ -103,7 +103,7 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 		} else if decomposedMask.DType() == dtypes.Bool {
 			decomposedMask = LogicalAnd(causalBool, decomposedMask)
 		} else {
-			additiveCausal := BooleanToAdditiveMask(causalBool, query.DType())
+			additiveCausal := booleanToAdditiveMask(causalBool, query.DType())
 			decomposedMask = Add(additiveCausal, decomposedMask)
 		}
 	}

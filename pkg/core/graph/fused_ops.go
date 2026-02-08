@@ -35,10 +35,10 @@ func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHea
 	return backendFusedScaledDotProductAttention(query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal)
 }
 
-// BackendFusedQKVDense performs fused QKV projection.
-// Internal: prefer nn.QKVDense which handles fallback and gradients.
-func BackendFusedQKVDense(x, wQKV, biasQ, biasK, biasV *Node, qDim, kvDim int) (q, k, v *Node) {
-	return backendFusedQKVDense(x, wQKV, biasQ, biasK, biasV, qDim, kvDim)
+// BackendFusedAttentionQKVProjection performs fused Query-Key-Value projection.
+// Internal: prefer nn.AttentionQKVProjection which handles fallback and gradients.
+func BackendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int) (query, key, value *Node) {
+	return backendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
 }
 
 // InternalFusedOpCaller attempts to call fused, and if it panics with
@@ -77,7 +77,7 @@ func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
 }
 
 // InternalFusedOpCallerMulti is the multi-output counterpart of InternalFusedOpCaller.
-// It handles fused ops that return multiple outputs (e.g. FusedQKVDense returning q, k, v).
+// It handles fused ops that return multiple outputs (e.g. FusedAttentionQKVProjection returning q, k, v).
 //
 // Like InternalFusedOpCaller, the decomposed version is built first so it has lower
 // node indices than the fused nodes. When the fused call succeeds, the decomposed

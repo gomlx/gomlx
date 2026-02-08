@@ -63,10 +63,10 @@ const (
 	NodeTypeExpm1
 	NodeTypeFFT
 	NodeTypeFloor
+	NodeTypeFusedAttentionQKVProjection
 	NodeTypeFusedDense
 	NodeTypeFusedGelu
 	NodeTypeFusedLayerNorm
-	NodeTypeFusedQKVDense
 	NodeTypeFusedScaledDotProductAttention
 	NodeTypeFusedSoftmax
 	NodeTypeGather
@@ -1851,6 +1851,88 @@ func Floor(x *Node) (
 	return
 }
 
+// nodeInputsFusedAttentionQKVProjection holds the inputs used for the call to backends.FusedAttentionQKVProjection.
+type nodeInputsFusedAttentionQKVProjection struct {
+	x           *Node
+	wQKV        *Node
+	biasQ       *Node
+	biasK       *Node
+	biasV       *Node
+	queryDim    int
+	keyValueDim int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedAttentionQKVProjection) Type() NodeType {
+	return NodeTypeFusedAttentionQKVProjection
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedAttentionQKVProjection) String() string {
+	return fmt.Sprintf("%s(x=[#%d], wQKV=[#%d], biasQ=%s, biasK=%s, biasV=%s, queryDim=%v, keyValueDim=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.wQKV.Id(),
+		strNillableNode(ni.biasQ),
+		strNillableNode(ni.biasK),
+		strNillableNode(ni.biasV),
+		ni.queryDim,
+		ni.keyValueDim,
+	)
+}
+
+// backendFusedAttentionQKVProjection is a Graph wrapper for the backend.Builder.FusedAttentionQKVProjection method.
+func backendFusedAttentionQKVProjection(x *Node, wQKV *Node, biasQ *Node, biasK *Node, biasV *Node, queryDim int, keyValueDim int) (
+	query, key, value *Node) {
+	inputNodes := []*Node{x, wQKV}
+	if biasQ != nil {
+		inputNodes = append(inputNodes, biasQ)
+	}
+	if biasK != nil {
+		inputNodes = append(inputNodes, biasK)
+	}
+	if biasV != nil {
+		inputNodes = append(inputNodes, biasV)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedAttentionQKVProjection{
+		x:           x,
+		wQKV:        wQKV,
+		biasQ:       biasQ,
+		biasK:       biasK,
+		biasV:       biasV,
+		queryDim:    queryDim,
+		keyValueDim: keyValueDim,
+	}
+	var biasQVal backends.Value
+	if biasQ != nil {
+		biasQVal = biasQ.outputOps[0]
+	}
+	var biasKVal backends.Value
+	if biasK != nil {
+		biasKVal = biasK.outputOps[0]
+	}
+	var biasVVal backends.Value
+	if biasV != nil {
+		biasVVal = biasV.outputOps[0]
+	}
+	v0, v1, v2, err := g.currentFunc.backendFunc.FusedAttentionQKVProjection(x.outputOps[0], wQKV.outputOps[0], biasQVal, biasKVal, biasVVal, inputs.queryDim, inputs.keyValueDim)
+	if err != nil {
+		panic(err)
+	}
+	node := &Node{
+		outputOps:    []backends.Value{v0, v1, v2},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1)), mustNoError(g.builder.OpShape(v2))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	splitNodes := splitNode(node)
+	query, key, value = splitNodes[0], splitNodes[1], splitNodes[2]
+	return
+}
+
 // nodeInputsFusedDense holds the inputs used for the call to backends.FusedDense.
 type nodeInputsFusedDense struct {
 	x          *Node
@@ -2016,88 +2098,6 @@ func backendFusedLayerNorm(x *Node, axes []int, epsilon float64, gamma *Node, be
 		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
-	return
-}
-
-// nodeInputsFusedQKVDense holds the inputs used for the call to backends.FusedQKVDense.
-type nodeInputsFusedQKVDense struct {
-	x     *Node
-	wQKV  *Node
-	biasQ *Node
-	biasK *Node
-	biasV *Node
-	qDim  int
-	kvDim int
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsFusedQKVDense) Type() NodeType {
-	return NodeTypeFusedQKVDense
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsFusedQKVDense) String() string {
-	return fmt.Sprintf("%s(x=[#%d], wQKV=[#%d], biasQ=%s, biasK=%s, biasV=%s, qDim=%v, kvDim=%v)",
-		ni.Type(),
-		ni.x.Id(),
-		ni.wQKV.Id(),
-		strNillableNode(ni.biasQ),
-		strNillableNode(ni.biasK),
-		strNillableNode(ni.biasV),
-		ni.qDim,
-		ni.kvDim,
-	)
-}
-
-// backendFusedQKVDense is a Graph wrapper for the backend.Builder.FusedQKVDense method.
-func backendFusedQKVDense(x *Node, wQKV *Node, biasQ *Node, biasK *Node, biasV *Node, qDim int, kvDim int) (
-	q, k, v *Node) {
-	inputNodes := []*Node{x, wQKV}
-	if biasQ != nil {
-		inputNodes = append(inputNodes, biasQ)
-	}
-	if biasK != nil {
-		inputNodes = append(inputNodes, biasK)
-	}
-	if biasV != nil {
-		inputNodes = append(inputNodes, biasV)
-	}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsFusedQKVDense{
-		x:     x,
-		wQKV:  wQKV,
-		biasQ: biasQ,
-		biasK: biasK,
-		biasV: biasV,
-		qDim:  qDim,
-		kvDim: kvDim,
-	}
-	var biasQVal backends.Value
-	if biasQ != nil {
-		biasQVal = biasQ.outputOps[0]
-	}
-	var biasKVal backends.Value
-	if biasK != nil {
-		biasKVal = biasK.outputOps[0]
-	}
-	var biasVVal backends.Value
-	if biasV != nil {
-		biasVVal = biasV.outputOps[0]
-	}
-	v0, v1, v2, err := g.currentFunc.backendFunc.FusedQKVDense(x.outputOps[0], wQKV.outputOps[0], biasQVal, biasKVal, biasVVal, inputs.qDim, inputs.kvDim)
-	if err != nil {
-		panic(err)
-	}
-	node := &Node{
-		outputOps:    []backends.Value{v0, v1, v2},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1)), mustNoError(g.builder.OpShape(v2))},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-	}
-	g.registerNode(node)
-	splitNodes := splitNode(node)
-	q, k, v = splitNodes[0], splitNodes[1], splitNodes[2]
 	return
 }
 

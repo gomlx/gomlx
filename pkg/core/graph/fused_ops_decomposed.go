@@ -2,17 +2,20 @@
 
 package graph
 
-// QKVDenseDecomposed implements QKV projection using primitive ops.
+// AttentionQKVProjectionDecomposed implements Query-Key-Value projection using primitive ops.
+//
+// Internal: normal users will want to use MultiHeadAttention instead. This is mostly used
+// for converting existing models (that already have fused operations like this).
 //
 // x: [..., inFeatures]
-// wQKV: [inFeatures, qDim+2*kvDim] with Q, K, V weights concatenated along the last axis
-// biasQ: [qDim] (optional, nil for no bias)
-// biasK: [kvDim] (optional, nil for no bias)
-// biasV: [kvDim] (optional, nil for no bias)
+// wQKV: [inFeatures, queryDim+2*keyValueDim] with Q, K, V weights concatenated along the last axis
+// biasQ: [queryDim] (optional, nil for no bias)
+// biasK: [keyValueDim] (optional, nil for no bias)
+// biasV: [keyValueDim] (optional, nil for no bias)
 //
-// Returns: [q, k, v] where q=[..., qDim], k=[..., kvDim], v=[..., kvDim]
-func QKVDenseDecomposed(x, wQKV, biasQ, biasK, biasV *Node, qDim, kvDim int) []*Node {
-	totalOut := qDim + 2*kvDim
+// Returns: [query, key, value] where query=[..., queryDim], key=[..., keyValueDim], value=[..., keyValueDim]
+func AttentionQKVProjectionDecomposed(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int) []*Node {
+	totalOut := queryDim + 2*keyValueDim
 
 	// Flatten x to 2D if needed for Dot.
 	xShape := x.Shape()
@@ -24,33 +27,33 @@ func QKVDenseDecomposed(x, wQKV, biasQ, biasK, biasV *Node, qDim, kvDim int) []*
 		x2d = Reshape(x, xBatchSize, inFeat)
 	}
 
-	// Single matmul: [batch, inFeatures] @ [inFeatures, qDim+2*kvDim] → [batch, totalOut]
+	// Single matmul: [batch, inFeatures] @ [inFeatures, queryDim+2*keyValueDim] → [batch, totalOut]
 	combined := Dot(x2d, wQKV)
 
-	// Slice the combined result into Q, K, V along the last axis.
-	q := Slice(combined, AxisRange(), AxisRange(0, qDim))
-	k := Slice(combined, AxisRange(), AxisRange(qDim, qDim+kvDim))
-	v := Slice(combined, AxisRange(), AxisRange(qDim+kvDim, totalOut))
+	// Slice the combined result into query, key, value along the last axis.
+	query := Slice(combined, AxisRange(), AxisRange(0, queryDim))
+	key := Slice(combined, AxisRange(), AxisRange(queryDim, queryDim+keyValueDim))
+	value := Slice(combined, AxisRange(), AxisRange(queryDim+keyValueDim, totalOut))
 
 	// Reshape back to [..., outDim] if needed.
 	if xRank > 2 {
 		batchDims := xShape.Dimensions[:xRank-1]
-		qDims := append(append([]int{}, batchDims...), qDim)
-		kvDims := append(append([]int{}, batchDims...), kvDim)
-		q = Reshape(q, qDims...)
-		k = Reshape(k, kvDims...)
-		v = Reshape(v, kvDims...)
+		qDims := append(append([]int{}, batchDims...), queryDim)
+		kvDims := append(append([]int{}, batchDims...), keyValueDim)
+		query = Reshape(query, qDims...)
+		key = Reshape(key, kvDims...)
+		value = Reshape(value, kvDims...)
 	}
 
 	if biasQ != nil {
-		q = Add(q, ExpandLeftToRank(biasQ, q.Rank()))
+		query = Add(query, ExpandLeftToRank(biasQ, query.Rank()))
 	}
 	if biasK != nil {
-		k = Add(k, ExpandLeftToRank(biasK, k.Rank()))
+		key = Add(key, ExpandLeftToRank(biasK, key.Rank()))
 	}
 	if biasV != nil {
-		v = Add(v, ExpandLeftToRank(biasV, v.Rank()))
+		value = Add(value, ExpandLeftToRank(biasV, value.Rank()))
 	}
 
-	return []*Node{q, k, v}
+	return []*Node{query, key, value}
 }

@@ -51,7 +51,7 @@ var (
 
 		// Fused ops: exported wrappers with "Internal:" comments are hand-written in fused_ops.go.
 		"FusedDense", "FusedGelu", "FusedLayerNorm", "FusedSoftmax",
-		"FusedScaledDotProductAttention", "FusedQKVDense")
+		"FusedScaledDotProductAttention", "FusedAttentionQKVProjection")
 
 	// methodsNotGenerated get a NodeType but no auto-generated wrapper
 	// (hand-written implementations).
@@ -64,7 +64,7 @@ var (
 		"FusedLayerNorm.gamma", "FusedLayerNorm.beta",
 		"FusedDense.bias",
 		"FusedScaledDotProductAttention.mask",
-		"FusedQKVDense.biasQ", "FusedQKVDense.biasK", "FusedQKVDense.biasV",
+		"FusedAttentionQKVProjection.biasQ", "FusedAttentionQKVProjection.biasK", "FusedAttentionQKVProjection.biasV",
 	)
 
 	// methodsExcluded from generating and even from having a NodeType.

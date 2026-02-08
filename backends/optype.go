@@ -149,7 +149,7 @@ const (
 	OpTypeFusedGelu
 	OpTypeFusedDense
 	OpTypeFusedScaledDotProductAttention
-	OpTypeFusedQKVDense
+	OpTypeFusedAttentionQKVProjection
 
 	// OpTypeLast should always be kept the last, it is used as a counter/marker for OpType.
 	OpTypeLast

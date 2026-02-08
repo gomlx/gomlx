@@ -63,7 +63,7 @@ type Node struct {
 	vjpAlternateOutput *Node
 
 	// vjpAlternateOutputs is the multi-output counterpart of vjpAlternateOutput.
-	// For multi-output fused ops (e.g. FusedQKVDense), each element corresponds
+	// For multi-output fused ops (e.g. FusedAttentionQKVProjection), each element corresponds
 	// to one split output's decomposed equivalent.
 	vjpAlternateOutputs []*Node
 
