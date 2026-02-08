@@ -627,7 +627,8 @@ func dotGeneralCheckVersionsCmp(outputLarge, outputSmall *Buffer) (messages []st
 		// Not checking other dtypes.
 	}
 	if mismatches > 0 {
-		return messages, errors.Errorf("found %d mismatches (out of %d values) between DotGeneral large and small versions", mismatches, outputLarge.shape.Size())
+		return messages, errors.Errorf(
+			"found %d mismatches (out of %d values) between DotGeneral large and small versions", mismatches, outputLarge.shape.Size())
 	}
 	return
 }

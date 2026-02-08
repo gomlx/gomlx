@@ -148,7 +148,7 @@ func makeFloat16UnaryWrapper(
 		if inputs[0].shape.DType != dtypes.Float16 {
 			return origExec(backend, node, inputs, inputsOwned)
 		}
-		input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+		input, output, _ := unaryOperandAndOutput(backend, inputs, inputsOwned)
 		opFn(input.flat.([]float16.Float16), output.flat.([]float16.Float16))
 		return output, nil
 	}

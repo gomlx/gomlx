@@ -1561,7 +1561,8 @@ func buildArgMinMaxCopyIntsFn[T PODIntegerConstraints](output *Buffer) func(flat
 
 // TODO: treat the error condition.
 func execArgMinMaxGeneric[T PODNumericConstraints](
-	backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize, suffixSize int, isMin bool) {
+	backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize,
+	suffixSize int, isMin bool) {
 	operandFlat := operand.flat.([]T)
 
 	// Temporary data to store argMax results, so we can traverse the operand sequentially.
@@ -1624,13 +1625,14 @@ func init() {
 
 // TODO: treat the error condition
 func execArgMinMaxGenericBFloat16(
-	backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize, suffixSize int, isMin bool) {
+	backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize,
+	suffixSize int, isMin bool) {
 	operandFlat := operand.flat.([]bfloat16.BFloat16)
 
 	// Temporary data to store argMax results, so we can traverse the operand sequentially.
 	currentBestBuffer, _ := backend.getBuffer(operand.shape.DType, suffixSize)
 	currentBest := currentBestBuffer.flat.([]bfloat16.BFloat16)
-	currentArgBestBuffer , _:= backend.getBuffer(dtypes.Int32, suffixSize)
+	currentArgBestBuffer, _ := backend.getBuffer(dtypes.Int32, suffixSize)
 	currentArgBest := currentArgBestBuffer.flat.([]int32)
 
 	outputFlatIdx := 0
