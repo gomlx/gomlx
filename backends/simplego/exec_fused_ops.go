@@ -413,11 +413,28 @@ func sdpaComputeMaskStrides(dims []int) (batchStride, headStride int) {
 	}
 }
 
+// transposeBuffer transposes a buffer according to the given axis permutation,
+// reusing the existing transposeIterator and transposeDTypeMap infrastructure.
+func transposeBuffer(backend *Backend, buf *Buffer, permutations []int) *Buffer {
+	output := backend.getBuffer(buf.shape.DType, buf.shape.Size())
+	// Compute the output shape by permuting dimensions.
+	dims := buf.shape.Dimensions
+	outDims := make([]int, len(dims))
+	for i, p := range permutations {
+		outDims[i] = dims[p]
+	}
+	output.shape = shapes.Make(buf.shape.DType, outDims...)
+	it := newTransposeIterator(buf.shape, permutations)
+	transposeFn := transposeDTypeMap.Get(buf.shape.DType).(func(operand, output *Buffer, it *transposeIterator))
+	transposeFn(buf, output, it)
+	return output
+}
+
 // execFusedScaledDotProductAttention implements multi-head scaled dot-product attention.
-// query: [batch, numHeads, seqLen, headDim], key/value: [batch, numKVHeads, kvLen, headDim]
+// The internal computation always uses BHSD [batch, heads, seq, dim] layout.
+// For BSHD inputs, the executor transposes to BHSD, runs SDPA, and transposes back.
 // mask: optional additive mask of rank 2–4 (broadcasting via strides). Boolean masks are not
 // supported; the graph-level caller must convert them to additive form before reaching here.
-// output: [batch, numHeads, seqLen, headDim]
 func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	data := node.data.(*nodeFusedScaledDotProductAttention)
 	query := inputs[0]
@@ -433,9 +450,21 @@ func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*
 		return nil, errors.Errorf("FusedScaledDotProductAttention: boolean masks are not supported; convert to additive mask before calling")
 	}
 
-	output := backend.getBufferForShape(node.shape)
+	// Transpose BSHD → BHSD so the inner loop always operates on BHSD layout.
+	isBSHD := data.axesLayout == backends.AxesLayoutBSHD
+	if isBSHD {
+		perm := []int{0, 2, 1, 3}
+		query = transposeBuffer(backend, query, perm)
+		key = transposeBuffer(backend, key, perm)
+		value = transposeBuffer(backend, value, perm)
+		if mask != nil && mask.shape.Rank() == 4 {
+			mask = transposeBuffer(backend, mask, perm)
+		}
+	}
 
-	// Compute mask strides for broadcasting.
+	output := backend.getBufferForShape(query.shape.Clone())
+
+	// Compute mask strides for broadcasting (always BHSD convention now).
 	var maskBatchStride, maskHeadStride int
 	if mask != nil {
 		maskBatchStride, maskHeadStride = sdpaComputeMaskStrides(mask.shape.Dimensions)
@@ -448,6 +477,11 @@ func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*
 		sdpaMultiHeadGeneric[float64](query, key, value, mask, output, data, maskBatchStride, maskHeadStride)
 	default:
 		return nil, errors.Errorf("FusedScaledDotProductAttention: unsupported dtype %s", query.shape.DType)
+	}
+
+	// Transpose output back to BSHD if needed.
+	if isBSHD {
+		output = transposeBuffer(backend, output, []int{0, 2, 1, 3})
 	}
 	return output, nil
 }

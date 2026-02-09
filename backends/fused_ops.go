@@ -137,9 +137,9 @@ type FusedOps interface {
 	//   - numKVHeads: number of key/value attention heads (for GQA; numHeads must be divisible by numKVHeads)
 	//   - axesLayout: determines the axis ordering of query/key/value tensors
 	//   - scale: scaling factor applied to query @ key^T (typically 1/sqrt(headDim))
-	//   - causal: if true, apply causal (lower-triangular) mask. When both causal and mask are
-	//     provided, they are combined: for boolean masks via logical-AND, for additive masks the
-	//     causal additive mask is added to the explicit mask.
+	//   - causal: if true, apply causal (lower-triangular) mask. Callers (e.g. attention.Core)
+	//     treat causal and mask as mutually exclusive, folding causal into the mask before calling
+	//     this method when both are needed. Backends may assume they won't both be set.
 	//
 	// Output: same shape as query.
 	FusedScaledDotProductAttention(query, key, value, mask Value, numHeads, numKVHeads int, axesLayout AxesLayout, scale float64, causal bool) (Value, error)

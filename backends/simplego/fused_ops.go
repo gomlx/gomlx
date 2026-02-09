@@ -66,18 +66,15 @@ func (d *nodeFusedScaledDotProductAttention) EqualNodeData(other nodeDataCompara
 		d.axesLayout == o.axesLayout && d.scale == o.scale && d.causal == o.causal
 }
 
+// nodeFusedAttentionQKVProjection stores parameters for the fused QKV projection.
+// It does not implement nodeDataComparable because multi-output nodes are not
+// de-duplicated (see newMultiOutputsNode).
 type nodeFusedAttentionQKVProjection struct {
 	qDim     int
 	kvDim    int
 	hasBiasQ bool
 	hasBiasK bool
 	hasBiasV bool
-}
-
-func (d *nodeFusedAttentionQKVProjection) EqualNodeData(other nodeDataComparable) bool {
-	o := other.(*nodeFusedAttentionQKVProjection)
-	return d.qDim == o.qDim && d.kvDim == o.kvDim &&
-		d.hasBiasQ == o.hasBiasQ && d.hasBiasK == o.hasBiasK && d.hasBiasV == o.hasBiasV
 }
 
 // FusedSoftmax computes softmax along the specified axis.
@@ -202,12 +199,9 @@ func (f *Function) FusedDense(x, weight, bias backends.Value, activation backend
 }
 
 // FusedScaledDotProductAttention computes multi-head scaled dot-product attention.
+// Both AxesLayoutBHSD and AxesLayoutBSHD are supported; the executor transposes
+// BSHD inputs to BHSD internally.
 func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backends.Value, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (backends.Value, error) {
-	// Only BHSD layout is supported by the simplego backend for now.
-	if axesLayout != backends.AxesLayoutBHSD {
-		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedScaledDotProductAttention: only BHSD layout is supported, got %s", axesLayout)
-	}
-
 	values := []backends.Value{query, key, value}
 	if mask != nil {
 		values = append(values, mask)

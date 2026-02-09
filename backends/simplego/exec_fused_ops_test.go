@@ -589,6 +589,111 @@ func TestFusedScaledDotProductAttention_WithMask(t *testing.T) {
 	assert.InDelta(t, 10.0, got[0], fusedTestTol)
 }
 
+// ---- BSHD layout tests ----
+
+func TestFusedScaledDotProductAttention_BSHD_Causal(t *testing.T) {
+	// Same logical test as TestFusedScaledDotProductAttention_Causal, but in BSHD layout.
+	// batch=1, seqLen=2, numHeads=1, headDim=1
+	// BSHD: [batch, seq, heads, dim]
+	q := []float32{1, 1}
+	k := []float32{1, 1}
+	v := []float32{10, 20}
+
+	qShape := shapes.Make(dtypes.Float32, 1, 2, 1, 1)
+	kShape := shapes.Make(dtypes.Float32, 1, 2, 1, 1)
+	vShape := shapes.Make(dtypes.Float32, 1, 2, 1, 1)
+
+	result := testBackendMultiInput(t,
+		[]shapes.Shape{qShape, kShape, vShape},
+		[]any{q, k, v},
+		func(f backends.Function, params []backends.Value) (backends.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBSHD, 1.0, true)
+		},
+	)
+
+	got := result.flat.([]float32)
+	// Position 0 can only see position 0 → output = 10
+	assert.InDelta(t, 10.0, got[0], fusedTestTol)
+	// Position 1 can see both → softmax([1, 1]) = [0.5, 0.5] → output = 15
+	assert.InDelta(t, 15.0, got[1], fusedTestTol)
+}
+
+func TestFusedScaledDotProductAttention_BSHD_MultiHead(t *testing.T) {
+	// batch=1, seqLen=1, numHeads=2, headDim=1
+	// BSHD: [batch, seq, heads, dim]
+	// Data: same values as BHSD MultiHead test but in BSHD memory order.
+	// BHSD [1,2,1,1] data [1,2] → BSHD [1,1,2,1] data [1,2] (same flat data for this shape)
+	q := []float32{1, 2}
+	k := []float32{1, 1}
+	v := []float32{100, 200}
+
+	qShape := shapes.Make(dtypes.Float32, 1, 1, 2, 1)
+	kShape := shapes.Make(dtypes.Float32, 1, 1, 2, 1)
+	vShape := shapes.Make(dtypes.Float32, 1, 1, 2, 1)
+
+	result := testBackendMultiInput(t,
+		[]shapes.Shape{qShape, kShape, vShape},
+		[]any{q, k, v},
+		func(f backends.Function, params []backends.Value) (backends.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBSHD, 1.0, false)
+		},
+	)
+
+	got := result.flat.([]float32)
+	// With kvLen=1, attention is just V itself.
+	assert.InDelta(t, 100.0, got[0], fusedTestTol) // head 0
+	assert.InDelta(t, 200.0, got[1], fusedTestTol) // head 1
+}
+
+func TestFusedScaledDotProductAttention_BSHD_MultiSeq(t *testing.T) {
+	// Test where BSHD and BHSD have genuinely different memory layouts.
+	// batch=1, seqLen=2, numHeads=2, headDim=1
+	//
+	// Logical data (per batch, head, seq):
+	//   head0: q=[1, 3], k=[1, 3], v=[10, 30]
+	//   head1: q=[2, 4], k=[2, 4], v=[20, 40]
+	//
+	// BSHD [1, 2, 2, 1] memory order: [seq0_h0, seq0_h1, seq1_h0, seq1_h1]
+	q := []float32{1, 2, 3, 4}
+	k := []float32{1, 2, 3, 4}
+	v := []float32{10, 20, 30, 40}
+
+	qShape := shapes.Make(dtypes.Float32, 1, 2, 2, 1)
+	kShape := shapes.Make(dtypes.Float32, 1, 2, 2, 1)
+	vShape := shapes.Make(dtypes.Float32, 1, 2, 2, 1)
+
+	bshdResult := testBackendMultiInput(t,
+		[]shapes.Shape{qShape, kShape, vShape},
+		[]any{q, k, v},
+		func(f backends.Function, params []backends.Value) (backends.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBSHD, 1.0, false)
+		},
+	)
+
+	// Now compute the same thing with BHSD layout for reference.
+	// BHSD [1, 2, 2, 1] memory order: [h0_seq0, h0_seq1, h1_seq0, h1_seq1]
+	qBHSD := []float32{1, 3, 2, 4}
+	kBHSD := []float32{1, 3, 2, 4}
+	vBHSD := []float32{10, 30, 20, 40}
+
+	bhsdResult := testBackendMultiInput(t,
+		[]shapes.Shape{qShape, kShape, vShape},
+		[]any{qBHSD, kBHSD, vBHSD},
+		func(f backends.Function, params []backends.Value) (backends.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBHSD, 1.0, false)
+		},
+	)
+
+	// BHSD output is [h0_seq0, h0_seq1, h1_seq0, h1_seq1] → transpose to BSHD [seq0_h0, seq0_h1, seq1_h0, seq1_h1]
+	bhsdOut := bhsdResult.flat.([]float32)
+	bhsdTransposed := []float32{bhsdOut[0], bhsdOut[2], bhsdOut[1], bhsdOut[3]}
+
+	bshdOut := bshdResult.flat.([]float32)
+	for i := range bshdOut {
+		assert.InDelta(t, bhsdTransposed[i], bshdOut[i], fusedTestTol, "index %d", i)
+	}
+}
+
 // ---- FusedAttentionQKVProjection tests ----
 
 func TestFusedAttentionQKVProjection_Identity(t *testing.T) {
