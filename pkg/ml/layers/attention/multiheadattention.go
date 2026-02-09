@@ -442,7 +442,21 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
 	// Pass causal to Core only when not using KV cache (Core builds a simple lower-triangular mask).
 	// When using KV cache, the position-aware causal mask is already built in buildMask above.
+	// Core does not allow both mask and causal simultaneously, so if a user-provided mask is
+	// present together with causal, we fold the causal mask into the user mask here.
 	passCausal := b.useCausalMask && !b.kvCacheShape.Ok()
+	if passCausal && mask != nil {
+		seqLen := projectedQuery.Shape().Dimensions[b.layout.SeqAxis()]
+		causalBool := LowerTriangular(b.g, seqLen)
+		switch b.layout {
+		case LayoutBHSD:
+			causalBool = Reshape(causalBool, 1, 1, seqLen, seqLen)
+		default: // LayoutBSHD
+			causalBool = Reshape(causalBool, 1, seqLen, 1, seqLen)
+		}
+		mask = LogicalAnd(mask, causalBool)
+		passCausal = false
+	}
 	attentionOutput, attentionCoefficients = Core(b.ctx, projectedQuery, projectedKey, projectedValue, scale, mask, b.dropoutRate, b.layout, passCausal)
 
 	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.

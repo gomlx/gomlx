@@ -8,6 +8,7 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // AxesLayout is a type alias for backends.AxesLayout, re-exported for convenience.
@@ -41,16 +42,6 @@ func outputEquation(l AxesLayout) string {
 	}
 }
 
-// booleanToAdditiveMask converts a boolean mask to an additive float mask
-// in the given dtype. True values become 0.0 (attend), false values become -1e9 (mask out).
-// This is useful when interfacing with APIs that expect additive masks (like fused SDPA).
-func booleanToAdditiveMask(mask *Node, dtype dtypes.DType) *Node {
-	g := mask.Graph()
-	zero := ScalarZero(g, dtype)
-	largeNeg := ConstAs(zero, float32(-1e9))
-	return Where(mask, zero, largeNeg)
-}
-
 // Core computes the core scaled dot-product attention operation.
 // This is the shared implementation used by MultiHeadAttention and ONNX op converters.
 //
@@ -69,8 +60,9 @@ func booleanToAdditiveMask(mask *Node, dtype dtypes.DType) *Node {
 //   - LayoutBHSD: broadcastable to [batch, heads, q_seq, kv_seq]
 //   - LayoutBSHD: broadcastable to [batch, q_seq, heads, kv_seq]
 //
-// If causal is true, a lower-triangular causal mask is built and combined with the user
-// mask for the decomposed path. The fused backend op receives the causal flag directly.
+// The causal and mask parameters are mutually exclusive: providing both will panic.
+// If you need both causal masking and an explicit mask, combine them into a single mask
+// before calling Core (e.g. LogicalAnd a lower-triangular boolean mask with your mask).
 //
 // The dropoutRate (if > 0) applies dropout to the attention coefficients during training.
 // When dropout is active, the fused path is skipped (fused ops don't support dropout).
@@ -86,6 +78,10 @@ func booleanToAdditiveMask(mask *Node, dtype dtypes.DType) *Node {
 func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate float64, layout AxesLayout, causal bool) (output, coefficients *Node) {
 	g := query.Graph()
 
+	if causal && mask != nil {
+		Panicf("attention.Core: causal and mask are mutually exclusive; combine them into a single mask before calling Core")
+	}
+
 	// Build causal mask for the decomposed path.
 	decomposedMask := mask
 	if causal {
@@ -98,14 +94,7 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 		default: // LayoutBSHD
 			causalBool = Reshape(causalBool, 1, seqLen, 1, seqLen)
 		}
-		if decomposedMask == nil {
-			decomposedMask = causalBool
-		} else if decomposedMask.DType() == dtypes.Bool {
-			decomposedMask = LogicalAnd(causalBool, decomposedMask)
-		} else {
-			additiveCausal := booleanToAdditiveMask(causalBool, query.DType())
-			decomposedMask = Add(additiveCausal, decomposedMask)
-		}
+		decomposedMask = causalBool
 	}
 
 	// Decomposed attention.
@@ -124,9 +113,12 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 		coefficients = MaskedSoftmax(scores, decomposedMask, -1)
 	}
 
-	dropoutActive := dropoutRate > 0 && ctx != nil && ctx.IsTraining(g)
-	if dropoutActive {
-		coefficients = layers.Dropout(ctx, coefficients, ConstAs(coefficients, dropoutRate))
+	// Apply dropout; detect whether it was actually applied by comparing nodes.
+	var dropoutActive bool
+	if ctx != nil {
+		newCoefficients := layers.DropoutStatic(ctx, coefficients, dropoutRate)
+		dropoutActive = newCoefficients != coefficients
+		coefficients = newCoefficients
 	}
 
 	decomposedOutput := Einsum(outputEquation(layout), coefficients, value)

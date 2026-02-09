@@ -12,6 +12,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
 	"github.com/stretchr/testify/require"
 )
 
@@ -733,7 +734,7 @@ func TestGradientMaskedReducedSum(t *testing.T) {
 	)
 }
 
-func TestGradientAttentionQKVProjectionDecomposed(t *testing.T) {
+func TestGradientQKVProjectionDecomposed(t *testing.T) {
 	// x=[1,2], wQKV=[2,4] (queryDim=2, keyValueDim=1, totalOut=4)
 	// Combined matmul: x @ wQKV = [1,2] @ [[1,0,0,1],[0,1,0,1]] = [1, 2, 0, 3]
 	// query = [1, 2], key = [0], value = [3]
@@ -745,11 +746,11 @@ func TestGradientAttentionQKVProjectionDecomposed(t *testing.T) {
 	//
 	// d(loss)/d(wQKV): each wQKV[i,j] has gradient x[i] (since output[j] = sum_i x[i]*wQKV[i,j])
 	//   wQKV gradient = [[1,1,1,1],[2,2,2,2]]
-	testGradients(t, "AttentionQKVProjectionDecomposed",
+	testGradients(t, "QKVProjectionDecomposed",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			x := Const(g, [][]float64{{1, 2}})                        // [1, 2]
 			wQKV := Const(g, [][]float64{{1, 0, 0, 1}, {0, 1, 0, 1}}) // [2, 4]
-			results := AttentionQKVProjectionDecomposed(x, wQKV, nil, nil, nil, 2, 1)
+			results := attention.QKVProjectionDecomposed(x, wQKV, nil, nil, nil, 2, 1)
 			output = Add(ReduceAllSum(results[0]), Add(ReduceAllSum(results[1]), ReduceAllSum(results[2])))
 			return output, []*Node{x, wQKV}
 		}, []any{

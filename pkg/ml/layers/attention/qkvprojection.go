@@ -1,8 +1,37 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package graph
+package attention
 
-// AttentionQKVProjectionDecomposed implements Query-Key-Value projection using primitive ops.
+import (
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+)
+
+// QKVProjection performs a fused Query-Key-Value projection: a single large matmul
+// followed by split into separate query, key, value outputs with optional per-projection bias.
+//
+// x: [..., inFeatures]
+// wQKV: [inFeatures, queryDim+2*keyValueDim] with Q, K, V weights concatenated along the last axis
+// biasQ, biasK, biasV: optional biases (nil for no bias)
+// queryDim: output dimension for query projection
+// keyValueDim: output dimension for key and value projections
+//
+// If the backend supports the fused attention QKV projection, the optimized native implementation
+// is used; otherwise the operation is decomposed into primitives. Fallback is
+// handled automatically via InternalFusedOpCallerMulti.
+func QKVProjection(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int) (query, key, value *Node) {
+	results := InternalFusedOpCallerMulti(
+		func() []*Node {
+			query, key, value := BackendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
+			return []*Node{query, key, value}
+		},
+		func() []*Node {
+			return QKVProjectionDecomposed(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
+		},
+	)
+	return results[0], results[1], results[2]
+}
+
+// QKVProjectionDecomposed implements Query-Key-Value projection using primitive ops.
 //
 // Internal: normal users will want to use MultiHeadAttention instead. This is mostly used
 // for converting existing models (that already have fused operations like this).
@@ -14,7 +43,7 @@ package graph
 // biasV: [keyValueDim] (optional, nil for no bias)
 //
 // Returns: [query, key, value] where query=[..., queryDim], key=[..., keyValueDim], value=[..., keyValueDim]
-func AttentionQKVProjectionDecomposed(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int) []*Node {
+func QKVProjectionDecomposed(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int) []*Node {
 	totalOut := queryDim + 2*keyValueDim
 
 	// Flatten x to 2D if needed for Dot.

@@ -385,13 +385,13 @@ func applyActivation[T float32 | float64](backend *Backend, data []T, activation
 	}
 }
 
-// computeMaskStrides returns (batchStride, headStride) for indexing into a mask
+// sdpaComputeMaskStrides returns (batchStride, headStride) for indexing into a mask
 // tensor based on its rank. Dimensions of size 1 are broadcast (stride 0).
 //
 //	rank 2: [seqLen, kvLen]                     → (0, 0)
 //	rank 3: [batch, seqLen, kvLen]              → (seqLen*kvLen, 0) or (0, 0) if dim[0]==1
 //	rank 4: [batch, heads, seqLen, kvLen]       → strides computed per dim
-func computeMaskStrides(dims []int) (batchStride, headStride int) {
+func sdpaComputeMaskStrides(dims []int) (batchStride, headStride int) {
 	switch len(dims) {
 	case 2:
 		return 0, 0
@@ -409,13 +409,14 @@ func computeMaskStrides(dims []int) (batchStride, headStride int) {
 		}
 		return batchStride, headStride
 	default:
-		panic(errors.Errorf("computeMaskStrides: unsupported mask rank %d (dims=%v), expected rank 2, 3, or 4", len(dims), dims))
+		panic(errors.Errorf("sdpaComputeMaskStrides: unsupported mask rank %d (dims=%v), expected rank 2, 3, or 4", len(dims), dims))
 	}
 }
 
 // execFusedScaledDotProductAttention implements multi-head scaled dot-product attention.
 // query: [batch, numHeads, seqLen, headDim], key/value: [batch, numKVHeads, kvLen, headDim]
-// mask: optional additive mask of rank 2–4 (broadcasting via strides)
+// mask: optional additive mask of rank 2–4 (broadcasting via strides). Boolean masks are not
+// supported; the graph-level caller must convert them to additive form before reaching here.
 // output: [batch, numHeads, seqLen, headDim]
 func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	data := node.data.(*nodeFusedScaledDotProductAttention)
@@ -426,46 +427,32 @@ func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*
 	if len(inputs) > 3 {
 		mask = inputs[3]
 	}
+
+	// Boolean masks are not supported at the fused-op level; the caller must convert to additive.
+	if mask != nil && mask.shape.DType == dtypes.Bool {
+		return nil, errors.Errorf("FusedScaledDotProductAttention: boolean masks are not supported; convert to additive mask before calling")
+	}
+
 	output := backend.getBufferForShape(node.shape)
 
 	// Compute mask strides for broadcasting.
 	var maskBatchStride, maskHeadStride int
 	if mask != nil {
-		maskBatchStride, maskHeadStride = computeMaskStrides(mask.shape.Dimensions)
+		maskBatchStride, maskHeadStride = sdpaComputeMaskStrides(mask.shape.Dimensions)
 	}
 
 	switch query.shape.DType {
 	case dtypes.Float32:
-		var maskData []float32
-		if mask != nil {
-			maskData = mask.flat.([]float32)
-		}
-		multiHeadSDPA(
-			query.flat.([]float32), key.flat.([]float32), value.flat.([]float32), maskData, output.flat.([]float32),
-			query.shape.Dimensions[0], data.numHeads, data.numKVHeads,
-			query.shape.Dimensions[2], key.shape.Dimensions[2], query.shape.Dimensions[3],
-			maskBatchStride, maskHeadStride,
-			float32(data.scale), data.causal,
-		)
+		sdpaMultiHeadGeneric[float32](query, key, value, mask, output, data, maskBatchStride, maskHeadStride)
 	case dtypes.Float64:
-		var maskData []float64
-		if mask != nil {
-			maskData = mask.flat.([]float64)
-		}
-		multiHeadSDPA(
-			query.flat.([]float64), key.flat.([]float64), value.flat.([]float64), maskData, output.flat.([]float64),
-			query.shape.Dimensions[0], data.numHeads, data.numKVHeads,
-			query.shape.Dimensions[2], key.shape.Dimensions[2], query.shape.Dimensions[3],
-			maskBatchStride, maskHeadStride,
-			data.scale, data.causal,
-		)
+		sdpaMultiHeadGeneric[float64](query, key, value, mask, output, data, maskBatchStride, maskHeadStride)
 	default:
 		return nil, errors.Errorf("FusedScaledDotProductAttention: unsupported dtype %s", query.shape.DType)
 	}
 	return output, nil
 }
 
-func sdpa[T float32 | float64](q, k, v, mask, scores, output []T, seqLen, kvLen, headDim int, scale T, causal bool) {
+func sdpaGeneric[T float32 | float64](q, k, v, mask, scores, output []T, seqLen, kvLen, headDim int, scale T, causal bool) {
 	// scores[i][j] = sum_d(q[i][d] * k[j][d]) * scale + mask[i][j]
 	for i := range seqLen {
 		rowMax := T(math.Inf(-1))
@@ -510,31 +497,45 @@ func sdpa[T float32 | float64](q, k, v, mask, scores, output []T, seqLen, kvLen,
 	}
 }
 
-func multiHeadSDPA[T float32 | float64](q, k, v, mask, output []T,
-	batchSize, numHeads, numKVHeads, seqLen, kvLen, headDim int,
-	maskBatchStride, maskHeadStride int,
-	scale T, causal bool,
-) {
+func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *Buffer, data *nodeFusedScaledDotProductAttention, maskBatchStride, maskHeadStride int) {
+	q := query.flat.([]T)
+	k := key.flat.([]T)
+	v := value.flat.([]T)
+	out := output.flat.([]T)
+	var maskData []T
+	if mask != nil {
+		maskData = mask.flat.([]T)
+	}
+
+	batchSize := query.shape.Dimensions[0]
+	numHeads := data.numHeads
+	numKVHeads := data.numKVHeads
+	seqLen := query.shape.Dimensions[2]
+	kvLen := key.shape.Dimensions[2]
+	headDim := query.shape.Dimensions[3]
+	scale := T(data.scale)
+	causal := data.causal
+
 	headsPerKV := numHeads / numKVHeads
 	scores := make([]T, seqLen*kvLen)
 	headSize := seqLen * headDim
 	kvHeadSize := kvLen * headDim
 	maskSliceLen := seqLen * kvLen
-	for b := range batchSize {
-		for h := range numHeads {
-			kvH := h / headsPerKV
-			qOff := (b*numHeads + h) * headSize
-			kOff := (b*numKVHeads + kvH) * kvHeadSize
-			vOff := kOff
-			oOff := qOff
+	for batchIdx := range batchSize {
+		for headIdx := range numHeads {
+			kvHeadIdx := headIdx / headsPerKV
+			qOffset := (batchIdx*numHeads + headIdx) * headSize
+			kOffset := (batchIdx*numKVHeads + kvHeadIdx) * kvHeadSize
+			vOffset := kOffset
+			outOffset := qOffset
 			var maskSlice []T
-			if mask != nil {
-				maskOff := b*maskBatchStride + h*maskHeadStride
-				maskSlice = mask[maskOff : maskOff+maskSliceLen]
+			if maskData != nil {
+				maskOffset := batchIdx*maskBatchStride + headIdx*maskHeadStride
+				maskSlice = maskData[maskOffset : maskOffset+maskSliceLen]
 			}
-			sdpa(
-				q[qOff:qOff+headSize], k[kOff:kOff+kvHeadSize], v[vOff:vOff+kvHeadSize],
-				maskSlice, scores, output[oOff:oOff+headSize],
+			sdpaGeneric(
+				q[qOffset:qOffset+headSize], k[kOffset:kOffset+kvHeadSize], v[vOffset:vOffset+kvHeadSize],
+				maskSlice, scores, out[outOffset:outOffset+headSize],
 				seqLen, kvLen, headDim, scale, causal,
 			)
 		}
@@ -573,44 +574,11 @@ func execFusedAttentionQKVProjection(backend *Backend, node *Node, inputs []*Buf
 	kBuf := backend.getBufferForShape(kShape)
 	vBuf := backend.getBufferForShape(vShape)
 
-	inFeatures := x.shape.Dimensions[x.shape.Rank()-1]
-	batchSize := x.shape.Size() / inFeatures
-
 	switch x.shape.DType {
 	case dtypes.Float32:
-		var bqData, bkData, bvData []float32
-		if biasQ != nil {
-			bqData = biasQ.flat.([]float32)
-		}
-		if biasK != nil {
-			bkData = biasK.flat.([]float32)
-		}
-		if biasV != nil {
-			bvData = biasV.flat.([]float32)
-		}
-		qkvDense(
-			x.flat.([]float32), wQKV.flat.([]float32),
-			bqData, bkData, bvData,
-			qBuf.flat.([]float32), kBuf.flat.([]float32), vBuf.flat.([]float32),
-			batchSize, inFeatures, data.qDim, data.kvDim,
-		)
+		qkvDenseGeneric[float32](x, wQKV, biasQ, biasK, biasV, qBuf, kBuf, vBuf, data.qDim, data.kvDim)
 	case dtypes.Float64:
-		var bqData, bkData, bvData []float64
-		if biasQ != nil {
-			bqData = biasQ.flat.([]float64)
-		}
-		if biasK != nil {
-			bkData = biasK.flat.([]float64)
-		}
-		if biasV != nil {
-			bvData = biasV.flat.([]float64)
-		}
-		qkvDense(
-			x.flat.([]float64), wQKV.flat.([]float64),
-			bqData, bkData, bvData,
-			qBuf.flat.([]float64), kBuf.flat.([]float64), vBuf.flat.([]float64),
-			batchSize, inFeatures, data.qDim, data.kvDim,
-		)
+		qkvDenseGeneric[float64](x, wQKV, biasQ, biasK, biasV, qBuf, kBuf, vBuf, data.qDim, data.kvDim)
 	default:
 		return nil, errors.Errorf("FusedAttentionQKVProjection: unsupported dtype %s", x.shape.DType)
 	}
@@ -618,17 +586,33 @@ func execFusedAttentionQKVProjection(backend *Backend, node *Node, inputs []*Buf
 	return []*Buffer{qBuf, kBuf, vBuf}, nil
 }
 
-func qkvDense[T float32 | float64](x, wQKV, biasQ, biasK, biasV, q, k, v []T,
-	batchSize, inFeatures, qDim, kvDim int,
-) {
+func qkvDenseGeneric[T float32 | float64](xBuf, wQKVBuf, biasQBuf, biasKBuf, biasVBuf, qBuf, kBuf, vBuf *Buffer, qDim, kvDim int) {
+	x := xBuf.flat.([]T)
+	wQKV := wQKVBuf.flat.([]T)
+	q := qBuf.flat.([]T)
+	k := kBuf.flat.([]T)
+	v := vBuf.flat.([]T)
+	var biasQ, biasK, biasV []T
+	if biasQBuf != nil {
+		biasQ = biasQBuf.flat.([]T)
+	}
+	if biasKBuf != nil {
+		biasK = biasKBuf.flat.([]T)
+	}
+	if biasVBuf != nil {
+		biasV = biasVBuf.flat.([]T)
+	}
+
+	inFeatures := xBuf.shape.Dimensions[xBuf.shape.Rank()-1]
+	batchSize := xBuf.shape.Size() / inFeatures
 	totalOut := qDim + 2*kvDim
 	// wQKV is [inFeatures, totalOut] row-major.
 	// Column layout: [0..qDim) = Q, [qDim..qDim+kvDim) = K, [qDim+kvDim..totalOut) = V.
-	for b := range batchSize {
-		xBase := b * inFeatures
-		qBase := b * qDim
-		kBase := b * kvDim
-		vBase := b * kvDim
+	for batchIdx := range batchSize {
+		xBase := batchIdx * inFeatures
+		qBase := batchIdx * qDim
+		kBase := batchIdx * kvDim
+		vBase := batchIdx * kvDim
 
 		// Q = x @ wQ + biasQ, where wQ = wQKV[:, 0:qDim]
 		for o := range qDim {

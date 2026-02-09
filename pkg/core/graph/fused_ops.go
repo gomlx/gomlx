@@ -36,7 +36,7 @@ func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHea
 }
 
 // BackendFusedAttentionQKVProjection performs fused Query-Key-Value projection.
-// Internal: prefer nn.AttentionQKVProjection which handles fallback and gradients.
+// Internal: prefer attention.QKVProjection which handles fallback and gradients.
 func BackendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int) (query, key, value *Node) {
 	return backendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
 }
