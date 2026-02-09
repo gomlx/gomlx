@@ -543,18 +543,19 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 }
 
 // execFusedAttentionQKVProjection implements fused QKV projection.
-// x: [batch, inFeatures], wQKV: [inFeatures, qDim+2*kvDim]
-// biasQ: [qDim] (opt), biasK: [kvDim] (opt), biasV: [kvDim] (opt)
+// inputs[0]: pre-computed DotGeneral result [batch, qDim+2*kvDim]
+// inputs[1..]: biasQ, biasK, biasV (optional, determined by node data flags)
 // outputs: q [batch, qDim], k [batch, kvDim], v [batch, kvDim]
+//
+// The matmul (x @ wQKV) is already computed by the DotGeneral sub-node.
+// This executor just splits the combined result into Q/K/V and adds biases.
 func execFusedAttentionQKVProjection(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
 	data := node.data.(*nodeFusedAttentionQKVProjection)
-	x := inputs[0]
-	wQKV := inputs[1]
+	combined := inputs[0] // DotGeneral result: [batch, qDim+2*kvDim]
 
 	// Determine bias buffers using flags from node data, not positional indexing.
-	// This correctly handles sparse biases (e.g. biasQ=nil, biasK=present).
 	var biasQ, biasK, biasV *Buffer
-	biasIdx := 2
+	biasIdx := 1
 	if data.hasBiasQ {
 		biasQ = inputs[biasIdx]
 		biasIdx++
@@ -574,21 +575,25 @@ func execFusedAttentionQKVProjection(backend *Backend, node *Node, inputs []*Buf
 	kBuf := backend.getBufferForShape(kShape)
 	vBuf := backend.getBufferForShape(vShape)
 
-	switch x.shape.DType {
+	qDim := data.qDim
+	kvDim := data.kvDim
+
+	switch combined.shape.DType {
 	case dtypes.Float32:
-		qkvDenseGeneric[float32](x, wQKV, biasQ, biasK, biasV, qBuf, kBuf, vBuf, data.qDim, data.kvDim)
+		qkvSplitBiasGeneric[float32](combined, biasQ, biasK, biasV, qBuf, kBuf, vBuf, qDim, kvDim)
 	case dtypes.Float64:
-		qkvDenseGeneric[float64](x, wQKV, biasQ, biasK, biasV, qBuf, kBuf, vBuf, data.qDim, data.kvDim)
+		qkvSplitBiasGeneric[float64](combined, biasQ, biasK, biasV, qBuf, kBuf, vBuf, qDim, kvDim)
 	default:
-		return nil, errors.Errorf("FusedAttentionQKVProjection: unsupported dtype %s", x.shape.DType)
+		return nil, errors.Errorf("FusedAttentionQKVProjection: unsupported dtype %s", combined.shape.DType)
 	}
 
 	return []*Buffer{qBuf, kBuf, vBuf}, nil
 }
 
-func qkvDenseGeneric[T float32 | float64](xBuf, wQKVBuf, biasQBuf, biasKBuf, biasVBuf, qBuf, kBuf, vBuf *Buffer, qDim, kvDim int) {
-	x := xBuf.flat.([]T)
-	wQKV := wQKVBuf.flat.([]T)
+// qkvSplitBiasGeneric splits the pre-computed matmul result [batch, totalOut] into
+// Q [batch, qDim], K [batch, kvDim], V [batch, kvDim] and adds optional biases.
+func qkvSplitBiasGeneric[T float32 | float64](combined, biasQBuf, biasKBuf, biasVBuf, qBuf, kBuf, vBuf *Buffer, qDim, kvDim int) {
+	src := combined.flat.([]T)
 	q := qBuf.flat.([]T)
 	k := kBuf.flat.([]T)
 	v := vBuf.flat.([]T)
@@ -603,49 +608,36 @@ func qkvDenseGeneric[T float32 | float64](xBuf, wQKVBuf, biasQBuf, biasKBuf, bia
 		biasV = biasVBuf.flat.([]T)
 	}
 
-	inFeatures := xBuf.shape.Dimensions[xBuf.shape.Rank()-1]
-	batchSize := xBuf.shape.Size() / inFeatures
 	totalOut := qDim + 2*kvDim
-	// wQKV is [inFeatures, totalOut] row-major.
-	// Column layout: [0..qDim) = Q, [qDim..qDim+kvDim) = K, [qDim+kvDim..totalOut) = V.
+	batchSize := len(src) / totalOut
 	for batchIdx := range batchSize {
-		xBase := batchIdx * inFeatures
+		srcBase := batchIdx * totalOut
 		qBase := batchIdx * qDim
 		kBase := batchIdx * kvDim
 		vBase := batchIdx * kvDim
 
-		// Q = x @ wQ + biasQ, where wQ = wQKV[:, 0:qDim]
-		for o := range qDim {
-			var sum T
-			for i := range inFeatures {
-				sum += x[xBase+i] * wQKV[i*totalOut+o]
+		// Copy Q columns and add bias.
+		copy(q[qBase:qBase+qDim], src[srcBase:srcBase+qDim])
+		if biasQ != nil {
+			for o := range qDim {
+				q[qBase+o] += biasQ[o]
 			}
-			if biasQ != nil {
-				sum += biasQ[o]
-			}
-			q[qBase+o] = sum
 		}
-		// K = x @ wK + biasK, where wK = wQKV[:, qDim:qDim+kvDim]
-		for o := range kvDim {
-			var sum T
-			for i := range inFeatures {
-				sum += x[xBase+i] * wQKV[i*totalOut+qDim+o]
+
+		// Copy K columns and add bias.
+		copy(k[kBase:kBase+kvDim], src[srcBase+qDim:srcBase+qDim+kvDim])
+		if biasK != nil {
+			for o := range kvDim {
+				k[kBase+o] += biasK[o]
 			}
-			if biasK != nil {
-				sum += biasK[o]
-			}
-			k[kBase+o] = sum
 		}
-		// V = x @ wV + biasV, where wV = wQKV[:, qDim+kvDim:]
-		for o := range kvDim {
-			var sum T
-			for i := range inFeatures {
-				sum += x[xBase+i] * wQKV[i*totalOut+qDim+kvDim+o]
+
+		// Copy V columns and add bias.
+		copy(v[vBase:vBase+kvDim], src[srcBase+qDim+kvDim:srcBase+totalOut])
+		if biasV != nil {
+			for o := range kvDim {
+				v[vBase+o] += biasV[o]
 			}
-			if biasV != nil {
-				sum += biasV[o]
-			}
-			v[vBase+o] = sum
 		}
 	}
 }
