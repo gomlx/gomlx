@@ -123,9 +123,16 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeConvGeneral:      true,
 
 		// Control flow operations:
+		backends.OpTypeCall:  true,
 		backends.OpTypeIf:    true,
 		backends.OpTypeWhile: true,
 		backends.OpTypeSort:  true,
+
+		// Fused operations:
+		backends.OpTypeFusedSoftmax:   true,
+		backends.OpTypeFusedLayerNorm: true,
+		backends.OpTypeFusedGelu:      true,
+		backends.OpTypeFusedDense:     true,
 
 		// TODO: not implemented yet:
 		// backends.OpTypePad: true,

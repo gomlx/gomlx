@@ -33,7 +33,6 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
@@ -275,11 +274,11 @@ func CreateDatasets(backend backends.Backend, config *DatasetsConfiguration) (tr
 	var err error
 	baseTrain, err := NewDataset(backend, "train", config.DataDir, "train", config.Dtype)
 	if err != nil {
-		exceptions.Panicf("NewDataset: %v", err)
+		panic(err)
 	}
 	baseTest, err := NewDataset(backend, "test", config.DataDir, "test", config.Dtype)
 	if err != nil {
-		exceptions.Panicf("NewDataset: %v", err)
+		panic(err)
 	}
 
 	trainDS = baseTrain.Copy().BatchSize(config.BatchSize, true).Shuffle().Infinite(true)

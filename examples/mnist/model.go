@@ -21,12 +21,12 @@ package mnist
 // This file implements the baseline CNN model, including the FNN layers on top.
 
 import (
-	"github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
+	"github.com/pkg/errors"
 )
 
 // LinearModelGraph builds a simple  model logistic model
@@ -107,7 +107,6 @@ func normalizeCNN(ctx *context.Context, logits *Node) *Node {
 	case "none", "":
 		return logits
 	default:
-		exceptions.Panicf("invalid normalization type %q -- set it with parameter %q", normalizationType, "cnn_normalization")
-		return nil
+		panic(errors.Errorf("invalid normalization type %q -- set it with parameter %q", normalizationType, "cnn_normalization"))
 	}
 }

@@ -11,7 +11,6 @@ import (
 	"github.com/gomlx/gomlx/examples/imdb"
 	"github.com/gomlx/gomlx/ui/commandline"
 
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
 )
@@ -27,7 +26,7 @@ func init() {
 	klog.InitFlags(nil)
 	if _, found := os.LookupEnv(backends.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
-		must.M(os.Setenv(backends.ConfigEnvVar, "xla:cpu"))
+		check(os.Setenv(backends.ConfigEnvVar, "xla:cpu"))
 	}
 }
 
@@ -39,7 +38,7 @@ func TestDemo(t *testing.T) {
 
 	ctx := imdb.CreateDefaultContext()
 	ctx.SetParam("train_steps", 10)
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *flagSettings))
+	paramsSet := check1(commandline.ParseContextSettings(ctx, *flagSettings))
 
 	muTrain.Lock()
 	defer muTrain.Unlock()

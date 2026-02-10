@@ -3,14 +3,14 @@
 package main
 
 import (
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/examples/cifar"
-	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/ui/commandline"
-	"k8s.io/klog/v2"
 	"os"
 	"sync"
 	"testing"
+
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/examples/cifar"
+	"github.com/gomlx/gomlx/ui/commandline"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -24,7 +24,7 @@ func init() {
 	flagSettings = commandline.CreateContextSettingsFlag(ctx, "")
 	if _, found := os.LookupEnv(backends.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
-		must.M(os.Setenv(backends.ConfigEnvVar, "xla:cpu"))
+		check(os.Setenv(backends.ConfigEnvVar, "xla:cpu"))
 	}
 }
 
@@ -46,6 +46,6 @@ func TestDemo(t *testing.T) {
 
 	ctx := createDefaultContext()
 	ctx.SetParam("train_steps", 10) // Only 10 steps.
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *flagSettings))
+	paramsSet := check1(commandline.ParseContextSettings(ctx, *flagSettings))
 	cifar.TrainCifar10Model(ctx, *flagDataDir, "", true, 1, paramsSet)
 }

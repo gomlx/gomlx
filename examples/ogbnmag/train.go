@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"github.com/gomlx/gomlx/backends"
-	. "github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
@@ -24,6 +22,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
@@ -177,7 +176,7 @@ func Train(
 			ScheduleExponential(loop, 200, 1.2).
 			ScheduleEveryNSteps(loop, stepsPerEpoch)
 		if layerWiseEval {
-			magSampler := must.M1(NewSampler(dataDir))
+			magSampler := check1(NewSampler(dataDir))
 			layerWiseStrategy := NewSamplerStrategy(magSampler, 1, nil)
 			plots = plots.WithCustomMetricFn(BuildLayerWiseCustomMetricFn(backend, ctx, layerWiseStrategy))
 		} else {
@@ -283,7 +282,11 @@ func evalWithContext(backend backends.Backend, ctx *context.Context, baseDir str
 	}
 
 	// Evaluate on various datasets.
-	_, trainEvalDS, validEvalDS, testEvalDS := must.M4(MakeDatasets(baseDir))
+	var err error
+	var trainEvalDS, validEvalDS, testEvalDS train.Dataset
+	_, trainEvalDS, validEvalDS, testEvalDS, err = MakeDatasets(baseDir)
+	check(err)
+
 	if skipTrain {
 		return evalSampled(backend, ctx, validEvalDS, testEvalDS)
 	} else {
@@ -369,6 +372,20 @@ func convertPapersEmbeddings(backend backends.Backend, ctx *context.Context) {
 	})
 	converted := e.MustExec()[0]
 	// We don't want to destroy the unconverted values in case we need them again (it happens in tests).
-	must.M(papersVar.SetValuePreservingOld(converted))
+	check(papersVar.SetValuePreservingOld(converted))
 	klog.V(1).Infof("Converted papers embeddings to %s: new shape is %s", dtype, papersVar.Shape())
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }

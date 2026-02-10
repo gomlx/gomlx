@@ -115,6 +115,7 @@ var (
 		backends.OpTypeMul,
 		backends.OpTypeDiv,
 		backends.OpTypePow,
+		backends.OpTypeAtan2,
 		backends.OpTypeRem,
 		backends.OpTypeBitwiseAnd,
 		backends.OpTypeBitwiseOr,

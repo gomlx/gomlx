@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package layers
+package attention
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -16,6 +17,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/ctxtest"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
@@ -31,21 +33,44 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 		ctx := context.New()
 		g := NewGraph(backend, "test")
 		batchSize := 3
-		key := IotaFull(g, shapes.Make(F32, batchSize, 4, 5, 3))
-		query := IotaFull(g, shapes.Make(F32, batchSize, 7, 1, 2))
-		value := IotaFull(g, shapes.Make(F32, batchSize, 4, 5, 10))
+		key := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 4, 5, 3))
+		query := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 7, 1, 2))
+		value := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 4, 5, 10))
 		attOutput, attCoef := MultiHeadAttention(ctx, query, key, value, 6, 12).
 			SetOutputDim(11).DoneWithCoefficients()
 		assert.EqualValues(t, []int{batchSize, 7, 1, 11}, attOutput.Shape().Dimensions, "AttentionOutput shape mismatch")
 		assert.EqualValues(t, []int{batchSize, 7, 1, 6, 4, 5}, attCoef.Shape().Dimensions, "AttentionCoefficients shape mismatch")
 	}
 
+	// Higher-rank with key mask: verifies that masks are correctly flattened alongside Q/K/V
+	// when inner axes are > 1, and that the graph executes without errors.
+	{
+		ctx := context.New()
+		batchSize := 2
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, input *Node) (*Node, *Node) {
+			g := input.Graph()
+			key := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 4, 5))
+			query := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 6, 1, 3))
+			value := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 4, 7))
+			// keyMask shape: [batch, 3, 4] — one mask per key inner element, same for all heads.
+			keyMask := Const(g, true)
+			keyMask = BroadcastToDims(keyMask, batchSize, 3, 4)
+			return MultiHeadAttention(ctx, query, key, value, 2, 8).
+				SetKeyMask(keyMask).
+				SetOutputDim(9).DoneWithCoefficients()
+		})
+		// Pass a dummy input to trigger execution.
+		results := exec.MustExec(tensors.FromScalar(float32(0)))
+		assert.EqualValues(t, []int{batchSize, 6, 1, 9}, results[0].Shape().Dimensions, "Higher-rank masked output shape")
+		assert.EqualValues(t, []int{batchSize, 6, 1, 2, 3, 4}, results[1].Shape().Dimensions, "Higher-rank masked coef shape")
+	}
+
 	ctxtest.RunTestGraphFn(t, "MultiHeadAttention with masking",
 		func(ctx *context.Context, g *Graph) (inputs, outputs []*Node) {
 			batchSize := 2
-			key := IotaFull(g, shapes.Make(F32, batchSize, 3, 3))
-			query := IotaFull(g, shapes.Make(F32, batchSize, 3, 2))
-			value := OnePlus(IotaFull(g, shapes.Make(F32, batchSize, 3, 2)))
+			key := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 3))
+			query := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 2))
+			value := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 2)))
 			attOutput, attCoef := MultiHeadAttention(ctx.WithInitializer(initializers.One),
 				query, key, value, 1, 2).
 				UseCausalMask().
@@ -65,6 +90,45 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 				{{{1, 0, 0}}, {{0, 1, 0}}, {{0, 0, 1}}},
 			},
 		}, xslices.Epsilon)
+}
+
+func TestMultiHeadAttentionWithRoPE(t *testing.T) {
+	// Verify MHA with RoPE runs without error and produces correct output shape.
+	// This test catches the seq axis bug where RoPE was applied on the heads axis
+	// instead of the seq axis for BSHD layout.
+	backend := graphtest.BuildTestBackend()
+	ctx := context.New()
+
+	exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
+		return SelfAttention(ctx, x, 2, 4).
+			WithRoPE(10000.0).
+			UseCausalMask().
+			Done()
+	})
+
+	// [batch=1, seq=4, embed=8]
+	input := [][][]float32{{{1, 2, 3, 4, 5, 6, 7, 8},
+		{9, 10, 11, 12, 13, 14, 15, 16},
+		{17, 18, 19, 20, 21, 22, 23, 24},
+		{25, 26, 27, 28, 29, 30, 31, 32}}}
+
+	output := exec.MustExec(input)[0]
+	assert.Equal(t, []int{1, 4, 8}, output.Shape().Dimensions)
+
+	// Run a second time with different sequence length to verify re-compilation
+	// with the same weights (reuse ctx so Dense parameters are shared).
+	exec2 := context.MustNewExec(backend, ctx.Reuse(), func(ctx *context.Context, x *Node) *Node {
+		return SelfAttention(ctx, x, 2, 4).
+			WithRoPE(10000.0).
+			UseCausalMask().
+			Done()
+	})
+
+	input2 := [][][]float32{{{1, 2, 3, 4, 5, 6, 7, 8},
+		{9, 10, 11, 12, 13, 14, 15, 16}}}
+
+	output2 := exec2.MustExec(input2)[0]
+	assert.Equal(t, []int{1, 2, 8}, output2.Shape().Dimensions)
 }
 
 // buildSyntheticAttentionModelFn builds a model graph building function that does a regression on the elements
@@ -101,10 +165,10 @@ func buildSyntheticAttentionModelFn(debug bool) (modelGraphFn func(ctx *context.
 		}
 		residual := logits
 		logits = Sigmoid(logits)
-		logits = Dense(ctx.In("dense_seq_1"), logits, true, logits.Shape().Dimensions[2])
+		logits = layers.Dense(ctx.In("dense_seq_1"), logits, true, logits.Shape().Dimensions[2])
 		logits = Add(residual, logits)
 		logits = Sigmoid(logits)
-		logits = Dense(ctx.In("dense_seq_0"), logits, true, 1)
+		logits = layers.Dense(ctx.In("dense_seq_0"), logits, true, 1)
 		logits = Squeeze(logits, -1)
 		allLogits = []*Node{logits}
 		return

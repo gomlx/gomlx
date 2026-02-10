@@ -1,52 +1,61 @@
 # TODO List
 
-It's a large list (many in the middle of the code) ... while GoMLX has a thin vertical implementation from the ground 
-up of a full ML framework, it has very little breadth yet (my guess is < 1% of something like Jax, TensorFlow or
-Pytorch). But hopefully the 1% of the functionality may cover a large percentage of the use cases.
+It's endless ... while GoMLX has a thin vertical implementation from the ground 
+up of a full ML framework, the breadth still doesn't compare with PyTorch/Jax.
+But hopefully the functionality that is already there may cover a lot 
+of the use cases.
 
 Split by functionality, the most "desirable" TODOs are:
 
 ## Modeling
 
-* CNNs: add SeparableConv2D. The goal would be to have an exact ResNet50 working.
-* GNN Layer: tbd., but is one of the recent hotness, it would be nice to have a GNN layer/scheme available as well.
-* Importing models from TensorFlow/Jax/Pytorch/Hugging Face
-  * Both: (A) As a black-box for inference only; (B) for further fine-tuning.
-    * But if only the weights, and the model is translated by hand would already be good.
-  * Have a few of the standard models available: ResNet50 (older but a good reference), ViT, BERT, Chinchilla.
-  * Have a clear story importing models from Hugging Face (at least of one type, like TF or Jax, since they
-    also use XLA).
-* Computation Graph extensions and manipulation tools: there are good reasons for someone to want to 
-  change the Graph (splitting the graph for batch processing or distribution) or create arbitrary 
-  extensions to it (custom operations in Go or C/C++) and be able to differentiate through those. 
-  This is something that needs some design and thought.
-* Detecting first occurrence of NaNs (and Inf): have a mode -- likely slower -- where these are automatically checked
-  for and immediately prints a stack trace when they happen.
+* Importing models from HuggingFace (and others?)
+  * [ONNX-GoMLX](https://github.com/onnx/onnx-gomlx) already allows for many models to be imported as a graph.
+    But not all ops are implemented yet, and not all models are supported.
+  * Import generic classes of models from HuggingFace using safetensors directly, in particular transformer based
+    models: extend the package `pkg/ml/model/transformer` to support as many as possible.
+    * Create example of generator that take as input the hugging-face transformer model and a prompt and generate
+      the text from it.
+* More ML: latest publications, layers, optimizers, losses, regularizers, etc.
+  * GNN Layer: tbd., it would be nice to have a GNN layer/scheme available as well.
+* Checkpointing for gradient: to save memory during training.
+* Adding support for Jaccobian (gradients with respect to non-scalar values)
+
+## Graph
+
+* Support dynamic shapes:
+  * Input-dependend shapes (but not data-dependend), still fixed rank.
+  * Data-dependend shapes, still fixed rank.
+  * Symbolic shapes (named axes): symbolic shape inference.
+  * Current PR: https://github.com/gomlx/gomlx/pull/306
+
+## Backends
+
+Note: the backend is going to be shared with the [GX project](https://github.com/gx-org/gx)
+
+* Go backend (`backends/simplego`):
+  * More "fused ops" for the Go backend.
+  * More SIMD support: 
+    with upcoming Go 1.26 and above and the [go-highway](https://github.com/ajroetker/go-highway/) library.
+* ONNX as a backend (inside [ONNX-GoMLX](https://github.com/onnx/onnx-gomlx))
+  * Add API to save the graph as ONNX model.
+* WebGL/WebNN backend, for WASM.
+* [llama.cpp](https://github.com/ggerganov/llama.cpp) backend using the "purego"
+  [github.com/hybridgroup/yzma](https://github.com/hybridgroup/yzma) library, for CPU inference.
+* Other backends ?
 
 ## Infrastructure
 
-* Saving/Loading models:
-  * Exporting to TensorFLow's "SavedModel" format -- so models can leverage all the production tools
-    from TensorFlow -- using same mechanism as Jax is using, by converting code to StableHLO intermediary
-    language -- that conversion is done already.
-* Inference-only version: for now to run predictions one has to also import the whole engine and XLA machinery. 
-  * Ahead-Of-Time (AOT) compilation of a computation graph to a library that doesn't require linking 
-    the whole XLA. This can be the "official" save for inference method. Notice compiled graph will
-    work only on the hardware it was compiled for. See [discussion in OpenXLA](https://groups.google.com/a/openxla.org/g/openxla-discuss/c/0RXscLOHWtc).
-* Distributed training: at least synchronous mirrored strategy (data parallelism but no model parallelism yet) 
-  * Multi-device (GPU) set up.
-  * Multi-tenancy (multiple hosts) set up.
-
-## Lower level
-* Add support for multiple devices (e.g: multiple GPUs). In principle, it's already there (DeviceNum is supported)
-  but it hasn't been tested. But `train.Trainer` and `context.Exec` will need special casing.
-  * Implement a DistributedTrainer that will automatically distribute across multiple devices. Data 
-    parallelism at first, not model parallelism yet.
-* New backends:
-  * WebAssembly compatible backend (WebGL?), so models can be run (and even trained) in a browser.
-  * A faster/lighter CPU backend: maybe ggml?
+* Inference-only version: do we want to have save/load format of the model (that doesn't require 
+  importing GoMLX, but just the backend) ? Maybe ONNX is enough ?
+* Distributed training: mostly done, but not tested yet.
 
 ## API Improvements
 
 Nothing specific here ... but while some thought was put into the API, it certainly can be improved.
-And since these are earlier days in the library, we expect things to change some.
+
+- Replace `Context` object with plain Go struct (with annotations) for variables and hyperparameters:
+  - This will require some thought and lots of code introspection (`reflect` package),
+    since often the context is used go set global settings.
+
+## Fixes / Code Maintenance
