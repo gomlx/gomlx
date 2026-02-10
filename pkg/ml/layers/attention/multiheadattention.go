@@ -166,6 +166,10 @@ func (b *MultiHeadAttentionBuilder) SetOutputDim(outputDim int) *MultiHeadAttent
 // not both. Optionally, one can also UseCausalMask, which is combined (logical-and) to
 // any given mask.
 func (b *MultiHeadAttentionBuilder) SetKeyMask(keyMask *Node) *MultiHeadAttentionBuilder {
+	if b.useCausalMask {
+		Panicf("MultiHeadAttention: SetKeyMask is mutually exclusive with UseCausalMask; " +
+			"combine them into a single mask if both causal and explicit masks are needed")
+	}
 	if b.queryKeyMatrixMask != nil {
 		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
 	}
@@ -190,6 +194,10 @@ func (b *MultiHeadAttentionBuilder) SetKeyMask(keyMask *Node) *MultiHeadAttentio
 // not both.
 // Optionally, one can also UseCausalMask, which is combined (logical-and) to any given mask.
 func (b *MultiHeadAttentionBuilder) SetQueryMask(queryMask *Node) *MultiHeadAttentionBuilder {
+	if b.useCausalMask {
+		Panicf("MultiHeadAttention: SetQueryMask is mutually exclusive with UseCausalMask; " +
+			"combine them into a single mask if both causal and explicit masks are needed")
+	}
 	if b.queryKeyMatrixMask != nil {
 		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
 	}
@@ -214,6 +222,10 @@ func (b *MultiHeadAttentionBuilder) SetQueryMask(queryMask *Node) *MultiHeadAtte
 // not both.
 // Optionally, one can also UseCausalMask, which is combined (logical-and) to any given mask.
 func (b *MultiHeadAttentionBuilder) SetQueryKeyMatrixMask(queryKeyMatrixMask *Node) *MultiHeadAttentionBuilder {
+	if b.useCausalMask {
+		Panicf("MultiHeadAttention: SetQueryKeyMatrixMask is mutually exclusive with UseCausalMask; " +
+			"combine them into a single mask if both causal and explicit masks are needed")
+	}
 	if b.keyMask != nil || b.queryMask != nil {
 		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
 	}
@@ -245,8 +257,14 @@ func (b *MultiHeadAttentionBuilder) SetQueryKeyMatrixMask(queryKeyMatrixMask *No
 // It assumes that query and key are either the same or have the same inner shape, and there is
 // only one inner rank -- so key/query should have rank-3 shape `[batch, inner_dim, key/query_dim]`.
 //
-// This mask can be used in combination (logical-and) with other masks.
+// UseCausalMask is mutually exclusive with SetKeyMask, SetQueryMask, and SetQueryKeyMatrixMask.
+// If you need both causal masking and an explicit mask, combine them into a single mask
+// before passing it (e.g. LogicalAnd a lower-triangular boolean mask with your mask).
 func (b *MultiHeadAttentionBuilder) UseCausalMask() *MultiHeadAttentionBuilder {
+	if b.keyMask != nil || b.queryMask != nil || b.queryKeyMatrixMask != nil {
+		Panicf("MultiHeadAttention: UseCausalMask is mutually exclusive with SetKeyMask/SetQueryMask/SetQueryKeyMatrixMask; " +
+			"combine them into a single mask if both causal and explicit masks are needed")
+	}
 	queryShape := b.query.Shape()
 	keyShape := b.key.Shape()
 	if queryShape.Rank() != 3 || keyShape.Rank() != 3 {
@@ -357,12 +375,32 @@ func (b *MultiHeadAttentionBuilder) WithPositionalEncoder(encoder pos.Encoder) *
 // DoneWithCoefficients or Done should be called after all optional settings are configured.
 // It returns both the attention output and the attention coefficients (matrix) used.
 //
+// Because coefficients are requested, the decomposed attention path is used (no fused
+// SDPA op) so that the coefficient matrix is available. Use Done instead when coefficients
+// are not needed to allow the fused path.
+//
 // `output` will be shaped `[batch_size, <query_elements>, output_dim]`, where `output_dim`
 // can be configured by `SetOutputDim`.
 //
 // `coefficients` is shaped `[batch_size, <query_elements>, <num_heads>, <key_elements>]`
 // with the attention weights (from 0 to 1).
 func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, attentionCoefficients *Node) {
+	return b.doneInternal(true)
+}
+
+// Done should be called after all optional settings are configured.
+// It returns the attention output shaped `[batch_size, <query_elements>, output_dim]`,
+// where `output_dim` can be configured by `SetOutputDim`.
+// Use DoneWithCoefficients if the attention coefficients are also needed.
+func (b *MultiHeadAttentionBuilder) Done() (output *Node) {
+	output, _ = b.doneInternal(false)
+	return output
+}
+
+// doneInternal contains the shared implementation for Done and DoneWithCoefficients.
+// When wantCoefficients is true the decomposed path is used so that coefficients are
+// available; when false the fused SDPA op is attempted and coefficients is nil.
+func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attentionOutput, attentionCoefficients *Node) {
 	if b.layout != LayoutBSHD {
 		Panicf("MultiHeadAttention only supports LayoutBSHD, got %s", b.layout)
 	}
@@ -443,22 +481,8 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
 	// Pass causal to Core only when not using KV cache (Core builds a simple lower-triangular mask).
 	// When using KV cache, the position-aware causal mask is already built in buildMask above.
-	// Core does not allow both mask and causal simultaneously, so if a user-provided mask is
-	// present together with causal, we fold the causal mask into the user mask here.
 	passCausal := b.useCausalMask && !b.kvCacheShape.Ok()
-	if passCausal && mask != nil {
-		seqLen := projectedQuery.Shape().Dimensions[b.layout.SeqAxis()]
-		causalBool := LowerTriangular(b.g, seqLen)
-		switch b.layout {
-		case LayoutBHSD:
-			causalBool = Reshape(causalBool, 1, 1, seqLen, seqLen)
-		default: // LayoutBSHD
-			causalBool = Reshape(causalBool, 1, seqLen, 1, seqLen)
-		}
-		mask = LogicalAnd(mask, causalBool)
-		passCausal = false
-	}
-	attentionOutput, attentionCoefficients = Core(b.ctx, projectedQuery, projectedKey, projectedValue, scale, mask, b.dropoutRate, b.layout, passCausal)
+	attentionOutput, attentionCoefficients = Core(b.ctx, projectedQuery, projectedKey, projectedValue, scale, mask, b.dropoutRate, b.layout, passCausal, wantCoefficients)
 
 	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.
 	// attentionOutput: [batch, q_flat, heads, value_dim] -> [batch, <query_elements>, numHeads*valueDim]
@@ -468,7 +492,7 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	attentionOutput = Reshape(attentionOutput, dims...)
 
 	// Unflatten coefficients back to original inner axis structure when needed.
-	if needsUnflatten {
+	if wantCoefficients && needsUnflatten {
 		// attentionCoefficients: [batch, q_flat, heads, k_flat] -> [batch, <query_inner>, heads, <key_inner>]
 		coefDims := attentionCoefficients.Shape().Dimensions
 		unflatCoef := []int{coefDims[0]}
@@ -482,15 +506,6 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	attentionOutput = layers.Dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
 
 	return attentionOutput, attentionCoefficients
-}
-
-// Done should be called after all optional settings are configured.
-// It returns the attention output shaped `[batch_size, <query_elements>, output_dim]`,
-// where `output_dim` can be configured by `SetOutputDim`.
-// Use DoneWithCoefficients if the attention coefficients are also needed.
-func (b *MultiHeadAttentionBuilder) Done() (output *Node) {
-	output, _ = b.DoneWithCoefficients()
-	return output
 }
 
 // buildAttentionShape returns the shape of the attention coefficients and mask, and sets it to b.attentionShape.

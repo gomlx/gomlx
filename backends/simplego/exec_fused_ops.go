@@ -431,8 +431,8 @@ func transposeBuffer(backend *Backend, buf *Buffer, permutations []int) *Buffer 
 }
 
 // execFusedScaledDotProductAttention implements multi-head scaled dot-product attention.
-// The internal computation always uses BHSD [batch, heads, seq, dim] layout.
-// For BSHD inputs, the executor transposes to BHSD, runs SDPA, and transposes back.
+// Both BHSD and BSHD layouts are handled directly via stride-based indexing in
+// sdpaGeneric/sdpaMultiHeadGeneric, avoiding expensive transpose operations.
 // mask: optional additive mask of rank 2–4 (broadcasting via strides). Boolean masks are not
 // supported; the graph-level caller must convert them to additive form before reaching here.
 func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
@@ -450,21 +450,16 @@ func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*
 		return nil, errors.Errorf("FusedScaledDotProductAttention: boolean masks are not supported; convert to additive mask before calling")
 	}
 
-	// Transpose BSHD → BHSD so the inner loop always operates on BHSD layout.
-	isBSHD := data.axesLayout == backends.AxesLayoutBSHD
-	if isBSHD {
-		perm := []int{0, 2, 1, 3}
-		query = transposeBuffer(backend, query, perm)
-		key = transposeBuffer(backend, key, perm)
-		value = transposeBuffer(backend, value, perm)
-		if mask != nil && mask.shape.Rank() == 4 {
-			mask = transposeBuffer(backend, mask, perm)
-		}
+	// For rank-4 BSHD masks [batch, seq, heads, kvLen], transpose to BHSD so that
+	// per-head mask data is contiguous [seqLen, kvLen]. The mask is small (no headDim
+	// axis), so this is cheap. Rank ≤ 3 masks have no head dimension and work as-is.
+	if data.axesLayout == backends.AxesLayoutBSHD && mask != nil && mask.shape.Rank() == 4 {
+		mask = transposeBuffer(backend, mask, []int{0, 2, 1, 3})
 	}
 
 	output := backend.getBufferForShape(query.shape.Clone())
 
-	// Compute mask strides for broadcasting (always BHSD convention now).
+	// Compute mask strides for broadcasting (BHSD convention for the mask).
 	var maskBatchStride, maskHeadStride int
 	if mask != nil {
 		maskBatchStride, maskHeadStride = sdpaComputeMaskStrides(mask.shape.Dimensions)
@@ -479,31 +474,43 @@ func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*
 		return nil, errors.Errorf("FusedScaledDotProductAttention: unsupported dtype %s", query.shape.DType)
 	}
 
-	// Transpose output back to BSHD if needed.
-	if isBSHD {
-		output = transposeBuffer(backend, output, []int{0, 2, 1, 3})
-	}
 	return output, nil
 }
 
-func sdpaGeneric[T float32 | float64](q, k, v, mask, scores, output []T, seqLen, kvLen, headDim int, scale T, causal bool) {
-	// scores[i][j] = sum_d(q[i][d] * k[j][d]) * scale + mask[i][j]
-	for i := range seqLen {
+// sdpaGeneric computes scaled dot-product attention for a single head.
+//
+// The q/k/v/output slices are the full flat arrays for the tensor; qOff and kvOff
+// give the byte-offset to the first element of this head at seq=0. qSeqStride and
+// kvSeqStride are the element stride between consecutive sequence positions for a
+// single head (headDim for BHSD contiguous layout, numHeads*headDim for BSHD
+// interleaved layout). The output uses qOff/qSeqStride (same layout as query).
+//
+// mask and scores are dense per-head [seqLen, kvLen] scratch buffers.
+func sdpaGeneric[T float32 | float64](
+	q, k, v []T, qOff, kvOff, qSeqStride, kvSeqStride int,
+	mask, scores []T,
+	output []T,
+	seqLen, kvLen, headDim int, scale T, causal bool,
+) {
+	// scores[qIdx][kvIdx] = sum_d(q[qIdx][d] * k[kvIdx][d]) * scale + mask[qIdx][kvIdx]
+	for qIdx := range seqLen {
 		rowMax := T(math.Inf(-1))
-		for j := range kvLen {
-			if causal && j > i {
-				scores[i*kvLen+j] = T(math.Inf(-1))
+		qBase := qOff + qIdx*qSeqStride
+		for kvIdx := range kvLen {
+			if causal && kvIdx > qIdx {
+				scores[qIdx*kvLen+kvIdx] = T(math.Inf(-1))
 				continue
 			}
 			var dot T
+			kBase := kvOff + kvIdx*kvSeqStride
 			for d := range headDim {
-				dot += q[i*headDim+d] * k[j*headDim+d]
+				dot += q[qBase+d] * k[kBase+d]
 			}
 			s := dot * scale
 			if mask != nil {
-				s += mask[i*kvLen+j]
+				s += mask[qIdx*kvLen+kvIdx]
 			}
-			scores[i*kvLen+j] = s
+			scores[qIdx*kvLen+kvIdx] = s
 			if s > rowMax {
 				rowMax = s
 			}
@@ -511,22 +518,23 @@ func sdpaGeneric[T float32 | float64](q, k, v, mask, scores, output []T, seqLen,
 
 		// Softmax: exp(scores - max) and sum.
 		var sum T
-		for j := range kvLen {
-			scores[i*kvLen+j] = T(math.Exp(float64(scores[i*kvLen+j] - rowMax)))
-			sum += scores[i*kvLen+j]
+		for kvIdx := range kvLen {
+			scores[qIdx*kvLen+kvIdx] = T(math.Exp(float64(scores[qIdx*kvLen+kvIdx] - rowMax)))
+			sum += scores[qIdx*kvLen+kvIdx]
 		}
 		invSum := 1.0 / sum
-		for j := range kvLen {
-			scores[i*kvLen+j] *= invSum
+		for kvIdx := range kvLen {
+			scores[qIdx*kvLen+kvIdx] *= invSum
 		}
 
-		// output[i][d] = sum_j(scores[i][j] * v[j][d])
+		// output[qIdx][d] = sum_kvIdx(scores[qIdx][kvIdx] * v[kvIdx][d])
+		outBase := qOff + qIdx*qSeqStride
 		for d := range headDim {
 			var acc T
-			for j := range kvLen {
-				acc += scores[i*kvLen+j] * v[j*headDim+d]
+			for kvIdx := range kvLen {
+				acc += scores[qIdx*kvLen+kvIdx] * v[kvOff+kvIdx*kvSeqStride+d]
 			}
-			output[i*headDim+d] = acc
+			output[outBase+d] = acc
 		}
 	}
 }
@@ -541,35 +549,62 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 		maskData = mask.flat.([]T)
 	}
 
-	batchSize := query.shape.Dimensions[0]
+	dims := query.shape.Dimensions
+	batchSize := dims[0]
 	numHeads := data.numHeads
 	numKVHeads := data.numKVHeads
-	seqLen := query.shape.Dimensions[2]
-	kvLen := key.shape.Dimensions[2]
-	headDim := query.shape.Dimensions[3]
 	scale := T(data.scale)
 	causal := data.causal
-
 	headsPerKV := numHeads / numKVHeads
+
+	// Layout-dependent axis indices and strides.
+	var seqLen, kvLen, headDim int
+	var qSeqStride, kvSeqStride int       // element stride between consecutive seq positions for one head
+	var qBatchStride, kvBatchStride int    // element stride between consecutive batches
+	var qHeadStride, kvHeadStride int      // element stride between consecutive heads at seq=0
+
+	if data.axesLayout == backends.AxesLayoutBSHD {
+		// [batch, seq, heads, dim]
+		seqLen = dims[1]
+		headDim = dims[3]
+		kvDims := key.shape.Dimensions
+		kvLen = kvDims[1]
+		qSeqStride = numHeads * headDim
+		kvSeqStride = numKVHeads * headDim
+		qHeadStride = headDim
+		kvHeadStride = headDim
+		qBatchStride = seqLen * numHeads * headDim
+		kvBatchStride = kvLen * numKVHeads * headDim
+	} else {
+		// BHSD: [batch, heads, seq, dim]
+		seqLen = dims[2]
+		headDim = dims[3]
+		kvDims := key.shape.Dimensions
+		kvLen = kvDims[2]
+		qSeqStride = headDim
+		kvSeqStride = headDim
+		qHeadStride = seqLen * headDim
+		kvHeadStride = kvLen * headDim
+		qBatchStride = numHeads * seqLen * headDim
+		kvBatchStride = numKVHeads * kvLen * headDim
+	}
+
 	scores := make([]T, seqLen*kvLen)
-	headSize := seqLen * headDim
-	kvHeadSize := kvLen * headDim
 	maskSliceLen := seqLen * kvLen
 	for batchIdx := range batchSize {
 		for headIdx := range numHeads {
 			kvHeadIdx := headIdx / headsPerKV
-			qOffset := (batchIdx*numHeads + headIdx) * headSize
-			kOffset := (batchIdx*numKVHeads + kvHeadIdx) * kvHeadSize
-			vOffset := kOffset
-			outOffset := qOffset
+			qOff := batchIdx*qBatchStride + headIdx*qHeadStride
+			kvOff := batchIdx*kvBatchStride + kvHeadIdx*kvHeadStride
 			var maskSlice []T
 			if maskData != nil {
 				maskOffset := batchIdx*maskBatchStride + headIdx*maskHeadStride
 				maskSlice = maskData[maskOffset : maskOffset+maskSliceLen]
 			}
 			sdpaGeneric(
-				q[qOffset:qOffset+headSize], k[kOffset:kOffset+kvHeadSize], v[vOffset:vOffset+kvHeadSize],
-				maskSlice, scores, out[outOffset:outOffset+headSize],
+				q, k, v, qOff, kvOff, qSeqStride, kvSeqStride,
+				maskSlice, scores,
+				out,
 				seqLen, kvLen, headDim, scale, causal,
 			)
 		}

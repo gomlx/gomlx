@@ -72,7 +72,7 @@ func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
 		panic(err)
 	}
 	// Store decomposed version for VJP computation; dead-code-eliminated if unused.
-	output.vjpAlternateOutput = decomposedOutput
+	output.vjpAlternateOutputs = []*Node{decomposedOutput}
 	return output
 }
 

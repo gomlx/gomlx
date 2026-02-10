@@ -24,7 +24,7 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 		scale := 1.0 / math.Sqrt(float64(headDim))
 
 		// Compute with BHSD layout (default): q/k/v are [batch, heads, seq, dim]
-		bhsdOut, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD, false)
+		bhsdOut, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD, false, false)
 
 		// Transpose to BSHD: [batch, seq, heads, dim]
 		qBSHD := TransposeAllDims(q, 0, 2, 1, 3)
@@ -32,7 +32,7 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 		vBSHD := TransposeAllDims(v, 0, 2, 1, 3)
 
 		// Compute with BSHD layout
-		bshdOut, _ := Core(ctx, qBSHD, kBSHD, vBSHD, scale, nil, 0, LayoutBSHD, false)
+		bshdOut, _ := Core(ctx, qBSHD, kBSHD, vBSHD, scale, nil, 0, LayoutBSHD, false, false)
 
 		// Transpose BSHD output back to BHSD for comparison
 		bshdOutTransposed := TransposeAllDims(bshdOut, 0, 2, 1, 3)
@@ -75,7 +75,7 @@ func TestCore(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD, false)
+			output, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD, false, false)
 			return output
 		})
 
@@ -97,8 +97,8 @@ func TestCore(t *testing.T) {
 			headDim := q.Shape().Dimensions[3]
 			defaultScale := 1.0 / math.Sqrt(float64(headDim))
 			// Both use the same scale — should produce identical results
-			defaultOut, _ := Core(ctx, q, k, v, defaultScale, nil, 0, LayoutBHSD, false)
-			explicitOut, _ := Core(ctx, q, k, v, 1.0/math.Sqrt(2.0), nil, 0, LayoutBHSD, false)
+			defaultOut, _ := Core(ctx, q, k, v, defaultScale, nil, 0, LayoutBHSD, false, false)
+			explicitOut, _ := Core(ctx, q, k, v, 1.0/math.Sqrt(2.0), nil, 0, LayoutBHSD, false, false)
 			return []*Node{defaultOut, explicitOut}
 		})
 
@@ -128,7 +128,7 @@ func TestCore(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v, mask *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, _ := Core(ctx, q, k, v, scale, mask, 0, LayoutBHSD, false)
+			output, _ := Core(ctx, q, k, v, scale, mask, 0, LayoutBHSD, false, false)
 			return output
 		})
 
@@ -157,7 +157,7 @@ func TestCore(t *testing.T) {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			// Pass boolean mask directly — Core auto-detects and uses MaskedSoftmax.
-			output, _ := Core(ctx, q, k, v, scale, boolMask, 0, LayoutBHSD, false)
+			output, _ := Core(ctx, q, k, v, scale, boolMask, 0, LayoutBHSD, false, false)
 			return output
 		})
 
@@ -184,7 +184,7 @@ func TestCore(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, coefficients := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD, false)
+			output, coefficients := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD, false, true)
 			return []*Node{output, coefficients}
 		})
 
@@ -222,7 +222,7 @@ func TestCore(t *testing.T) {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			// Use causal=true, no explicit mask.
-			output, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD, true)
+			output, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD, true, false)
 			return output
 		})
 

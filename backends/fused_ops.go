@@ -148,8 +148,13 @@ type FusedOps interface {
 	// merged with a scatter into separate query (Q), key (K), value (V) outputs with optional
 	// per-projection bias.
 	//
+	// The caller is expected to flatten any leading dimensions (e.g. batch and sequence) into a
+	// single "batch" axis before calling, and reshape the outputs afterwards. For example, with
+	// BSHD layout the caller reshapes [batch, seqLen, inFeatures] → [batch*seqLen, inFeatures],
+	// calls this method, then reshapes each output back to [batch, seqLen, ...].
+	//
 	// Inputs:
-	//   - x: [batch, inFeatures]
+	//   - x: [batch, inFeatures] (batch may include a merged sequence dimension)
 	//   - wQKV: [inFeatures, queryDim+2*keyValueDim] (Q/K/V weights concatenated along last axis)
 	//   - biasQ: [queryDim] (optional, nil for no bias)
 	//   - biasK: [keyValueDim] (optional, nil for no bias)

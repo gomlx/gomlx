@@ -69,13 +69,16 @@ func outputEquation(l AxesLayout) string {
 // The ctx parameter provides the training/inference context for dropout; it may be nil
 // when dropoutRate is 0.
 //
+// When wantCoefficients is true, the decomposed path is used for the entire computation
+// (no fused op) and coefficients are returned. When false, the fused op is attempted for
+// the output and coefficients is nil.
+//
 // Returns:
-//   - output: same shape as value.
-//   - coefficients: attention coefficients (from 0 to 1) shaped
+//   - output: same shape as query.
+//   - coefficients: attention coefficients (nil when wantCoefficients is false) shaped
 //     [batch, heads, q_seq, kv_seq] for LayoutBHSD or
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
-//     Coefficients are always from the decomposed path (useful for visualization).
-func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate float64, layout AxesLayout, causal bool) (output, coefficients *Node) {
+func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate float64, layout AxesLayout, causal, wantCoefficients bool) (output, coefficients *Node) {
 	g := query.Graph()
 
 	if causal && mask != nil {
@@ -123,8 +126,9 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 
 	decomposedOutput := Einsum(outputEquation(layout), coefficients, value)
 
-	// Try fused SDPA (not when dropout is active during training).
-	if dropoutActive {
+	// When coefficients are requested, use the decomposed path for everything
+	// to avoid computing both paths (fused output + decomposed scores).
+	if wantCoefficients || dropoutActive {
 		output = decomposedOutput
 	} else {
 		numHeads := query.Shape().Dimensions[layout.HeadsAxis()]
@@ -137,6 +141,7 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 			},
 			func() *Node { return decomposedOutput },
 		)
+		coefficients = nil
 	}
 	return output, coefficients
 }
