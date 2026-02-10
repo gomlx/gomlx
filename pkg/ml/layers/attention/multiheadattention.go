@@ -13,6 +13,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"
+	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
@@ -54,6 +55,10 @@ type MultiHeadAttentionBuilder struct {
 
 	// Positional Encoder to be used, e.g: RoPE.
 	positionalEncoder pos.Encoder
+
+	// useQKVProjection replaces separate Dense Q/K/V projections with a single fused
+	// QKVProjection (one large matmul + split). Only valid for self-attention.
+	useQKVProjection bool
 }
 
 // MultiHeadAttention defines a multi-head attention layers, as described in the paper
@@ -372,6 +377,28 @@ func (b *MultiHeadAttentionBuilder) WithPositionalEncoder(encoder pos.Encoder) *
 	return b
 }
 
+// UseQKVProjection replaces the three separate Dense projections for query, key, and value
+// with a single fused QKVProjection (one large matmul followed by split).
+//
+// This is only valid for self-attention where query, key, and value are the same node.
+// Use SelfAttention() or pass the same node for all three to MultiHeadAttention().
+//
+// The fused weight is stored under the "qkv" context scope. This uses different variable
+// names than the default separate projections (query/dense, key/dense, value/dense), so
+// existing checkpoints using separate projections are not compatible.
+func (b *MultiHeadAttentionBuilder) UseQKVProjection() *MultiHeadAttentionBuilder {
+	if b.query != b.key || b.key != b.value {
+		Panicf("MultiHeadAttention: UseQKVProjection requires self-attention (query, key, and value must be the same node)")
+	}
+	if b.keyQueryDim != b.valueDim {
+		Panicf("MultiHeadAttention: UseQKVProjection requires keyQueryDim == valueDim (got %d != %d); "+
+			"QKVProjection uses a single keyValueDim for both key and value projections",
+			b.keyQueryDim, b.valueDim)
+	}
+	b.useQKVProjection = true
+	return b
+}
+
 // DoneWithCoefficients or Done should be called after all optional settings are configured.
 // It returns both the attention output and the attention coefficients (matrix) used.
 //
@@ -424,9 +451,14 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 		flatValue = Reshape(b.value, batchSize, -1, b.value.Shape().Dim(-1))
 	}
 
-	projectedKey := layers.Dense(b.ctx.In("key"), flatKey, true, b.numHeads, b.keyQueryDim)
-	projectedQuery := layers.Dense(b.ctx.In("query"), flatQuery, true, b.numHeads, b.keyQueryDim)
-	projectedValue := layers.Dense(b.ctx.In("value"), flatValue, true, b.numHeads, b.valueDim)
+	var projectedQuery, projectedKey, projectedValue *Node
+	if b.useQKVProjection {
+		projectedQuery, projectedKey, projectedValue = b.qkvProject(flatQuery)
+	} else {
+		projectedKey = layers.Dense(b.ctx.In("key"), flatKey, true, b.numHeads, b.keyQueryDim)
+		projectedQuery = layers.Dense(b.ctx.In("query"), flatQuery, true, b.numHeads, b.keyQueryDim)
+		projectedValue = layers.Dense(b.ctx.In("value"), flatValue, true, b.numHeads, b.valueDim)
+	}
 
 	// Apply positional encoding (e.g. RoPE) if enabled.
 	// Applied before KV cache so that rotated embeddings are cached.
@@ -506,6 +538,44 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	attentionOutput = layers.Dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
 
 	return attentionOutput, attentionCoefficients
+}
+
+// qkvProject performs a fused QKV projection using a single weight matrix.
+// x has shape [batch, seq, inFeatures]. Returns projectedQuery, projectedKey, projectedValue
+// each shaped [batch, seq, numHeads, headDim] matching the BSHD layout.
+func (b *MultiHeadAttentionBuilder) qkvProject(x *Node) (projectedQuery, projectedKey, projectedValue *Node) {
+	g := x.Graph()
+	qkvCtx := b.ctx.In("qkv")
+	dtype := x.DType()
+	inFeatures := x.Shape().Dim(-1)
+	queryDim := b.numHeads * b.keyQueryDim
+	keyValueDim := b.numHeads * b.valueDim
+
+	// Single fused weight: [inFeatures, queryDim + 2*keyValueDim].
+	wQKVVar := qkvCtx.VariableWithShape("weights", shapes.Make(dtype, inFeatures, queryDim+2*keyValueDim))
+	if regularizer := regularizers.FromContext(qkvCtx); regularizer != nil {
+		regularizer(qkvCtx, g, wQKVVar)
+	}
+	wQKV := wQKVVar.ValueGraph(g)
+
+	// Separate biases for Q, K, V (always enabled, matching the separate Dense path
+	// which hardcodes useBias=true for Q/K/V projections).
+	biasQ := qkvCtx.VariableWithShape("biases_q", shapes.Make(dtype, queryDim)).ValueGraph(g)
+	biasK := qkvCtx.VariableWithShape("biases_k", shapes.Make(dtype, keyValueDim)).ValueGraph(g)
+	biasV := qkvCtx.VariableWithShape("biases_v", shapes.Make(dtype, keyValueDim)).ValueGraph(g)
+
+	// QKVProjection expects [..., inFeatures] and returns [..., dim] flat outputs.
+	// With x=[batch, seq, inFeatures], outputs are [batch, seq, queryDim] etc.
+	q, k, v := QKVProjection(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
+
+	// Reshape from [batch, seq, numHeads*headDim] to [batch, seq, numHeads, headDim].
+	xDims := x.Shape().Dimensions
+	batch := xDims[0]
+	seqLen := xDims[1]
+	projectedQuery = Reshape(q, batch, seqLen, b.numHeads, b.keyQueryDim)
+	projectedKey = Reshape(k, batch, seqLen, b.numHeads, b.keyQueryDim)
+	projectedValue = Reshape(v, batch, seqLen, b.numHeads, b.valueDim)
+	return
 }
 
 // buildAttentionShape returns the shape of the attention coefficients and mask, and sets it to b.attentionShape.
