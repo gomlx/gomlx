@@ -58,3 +58,4 @@ Nothing specific here ... but while some thought was put into the API, it certai
   - This will require some thought and lots of code introspection (`reflect` package),
     since often the context is used go set global settings.
 
+## Fixes / Code Maintenance
