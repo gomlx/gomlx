@@ -237,6 +237,7 @@ func (b *MultiHeadAttentionBuilder) SetQueryKeyMatrixMask(queryKeyMatrixMask *No
 	// Broadcast numHeads axes.
 	queryKeyMatrixMask = InsertAxes(queryKeyMatrixMask, 1+b.innerQueryAxes)
 	queryKeyMatrixMask = BroadcastToDims(queryKeyMatrixMask, b.attentionShape.Dimensions...)
+	b.queryKeyMatrixMask = queryKeyMatrixMask
 	return b
 }
 
