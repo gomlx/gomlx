@@ -107,6 +107,50 @@ func TestFusedSoftmax(t *testing.T) {
 		assert.Less(t, got[0], got[1])
 		assert.Less(t, got[1], got[2])
 	})
+
+	t.Run("LargeValues", func(t *testing.T) {
+		// Test numerical stability with large values.
+		input := []float32{1000, 1001, 1002}
+		shape := shapes.Make(dtypes.Float32, 3)
+
+		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+			return f.FusedSoftmax(param, 0)
+		})
+
+		got := result.flat.([]float32)
+
+		// Should still sum to 1 and not overflow.
+		var sum float32
+		for _, v := range got {
+			sum += v
+			assert.False(t, math.IsNaN(float64(v)), "softmax produced NaN")
+			assert.False(t, math.IsInf(float64(v), 0), "softmax produced Inf")
+		}
+		assert.InDelta(t, 1.0, sum, fusedTestTol)
+	})
+
+	t.Run("3D", func(t *testing.T) {
+		// [2, 2, 3], softmax over axis 2 (last).
+		input := []float32{
+			1, 2, 3,
+			4, 5, 6,
+			7, 8, 9,
+			10, 11, 12,
+		}
+		shape := shapes.Make(dtypes.Float32, 2, 2, 3)
+
+		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+			return f.FusedSoftmax(param, 2)
+		})
+
+		got := result.flat.([]float32)
+		// Each group of 3 should sum to 1.
+		for group := range 4 {
+			base := group * 3
+			sum := got[base] + got[base+1] + got[base+2]
+			assert.InDelta(t, 1.0, sum, fusedTestTol, "group %d", group)
+		}
+	})
 }
 
 func TestFusedGelu(t *testing.T) {
@@ -366,88 +410,6 @@ func TestFusedDense_Tanh(t *testing.T) {
 	assert.InDelta(t, want, got[0], fusedTestTol)
 }
 
-func TestFusedSoftmax_LargeValues(t *testing.T) {
-	// Test numerical stability with large values.
-	input := []float32{1000, 1001, 1002}
-	shape := shapes.Make(dtypes.Float32, 3)
-
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedSoftmax(param, 0)
-	})
-
-	got := result.flat.([]float32)
-
-	// Should still sum to 1 and not overflow.
-	var sum float32
-	for _, v := range got {
-		sum += v
-		assert.False(t, math.IsNaN(float64(v)), "softmax produced NaN")
-		assert.False(t, math.IsInf(float64(v), 0), "softmax produced Inf")
-	}
-	assert.InDelta(t, 1.0, sum, fusedTestTol)
-}
-
-func TestFusedSoftmax_3D(t *testing.T) {
-	// [2, 2, 3], softmax over axis 2 (last).
-	input := []float32{
-		1, 2, 3,
-		4, 5, 6,
-		7, 8, 9,
-		10, 11, 12,
-	}
-	shape := shapes.Make(dtypes.Float32, 2, 2, 3)
-
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedSoftmax(param, 2)
-	})
-
-	got := result.flat.([]float32)
-	// Each group of 3 should sum to 1.
-	for group := range 4 {
-		base := group * 3
-		sum := got[base] + got[base+1] + got[base+2]
-		assert.InDelta(t, 1.0, sum, fusedTestTol, "group %d", group)
-	}
-}
-
-// execFusedOpMultiOutput builds, compiles and executes a multi-output fused op graph.
-// buildFn receives the Function and the parameter Values, and returns 3 output Values.
-func execFusedOpMultiOutput3(t *testing.T, inputShapes []shapes.Shape, inputDatas []any,
-	buildFn func(f backends.Function, params []backends.Value) (backends.Value, backends.Value, backends.Value, error),
-) [3]*Buffer {
-	t.Helper()
-	builder := backend.Builder("fused_test_multiout")
-	mainFn := builder.Main()
-
-	params := make([]backends.Value, len(inputShapes))
-	for i, s := range inputShapes {
-		p, err := mainFn.Parameter("x"+string(rune('0'+i)), s, nil)
-		require.NoError(t, err)
-		params[i] = p
-	}
-
-	o0, o1, o2, err := buildFn(mainFn, params)
-	require.NoError(t, err)
-
-	err = mainFn.Return([]backends.Value{o0, o1, o2}, nil)
-	require.NoError(t, err)
-
-	exec, err := builder.Compile()
-	require.NoError(t, err)
-
-	inputBufs := make([]backends.Buffer, len(inputDatas))
-	for i, data := range inputDatas {
-		buf, err := backend.BufferFromFlatData(0, data, inputShapes[i])
-		require.NoError(t, err)
-		inputBufs[i] = buf
-	}
-
-	outputs, err := exec.Execute(inputBufs, nil, 0)
-	require.NoError(t, err)
-	require.Len(t, outputs, 3)
-	return [3]*Buffer{outputs[0].(*Buffer), outputs[1].(*Buffer), outputs[2].(*Buffer)}
-}
-
 // ---- FusedScaledDotProductAttention tests ----
 
 func TestFusedScaledDotProductAttention_SingleHead(t *testing.T) {
@@ -694,6 +656,44 @@ func TestFusedScaledDotProductAttention_BSHD_MultiSeq(t *testing.T) {
 	for i := range bshdOut {
 		assert.InDelta(t, bhsdTransposed[i], bshdOut[i], fusedTestTol, "index %d", i)
 	}
+}
+
+// execFusedOpMultiOutput builds, compiles and executes a multi-output fused op graph.
+// buildFn receives the Function and the parameter Values, and returns 3 output Values.
+func execFusedOpMultiOutput3(t *testing.T, inputShapes []shapes.Shape, inputDatas []any,
+	buildFn func(f backends.Function, params []backends.Value) (backends.Value, backends.Value, backends.Value, error),
+) [3]*Buffer {
+	t.Helper()
+	builder := backend.Builder("fused_test_multiout")
+	mainFn := builder.Main()
+
+	params := make([]backends.Value, len(inputShapes))
+	for i, s := range inputShapes {
+		p, err := mainFn.Parameter("x"+string(rune('0'+i)), s, nil)
+		require.NoError(t, err)
+		params[i] = p
+	}
+
+	o0, o1, o2, err := buildFn(mainFn, params)
+	require.NoError(t, err)
+
+	err = mainFn.Return([]backends.Value{o0, o1, o2}, nil)
+	require.NoError(t, err)
+
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	inputBufs := make([]backends.Buffer, len(inputDatas))
+	for i, data := range inputDatas {
+		buf, err := backend.BufferFromFlatData(0, data, inputShapes[i])
+		require.NoError(t, err)
+		inputBufs[i] = buf
+	}
+
+	outputs, err := exec.Execute(inputBufs, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 3)
+	return [3]*Buffer{outputs[0].(*Buffer), outputs[1].(*Buffer), outputs[2].(*Buffer)}
 }
 
 // ---- FusedAttentionQKVProjection tests ----
