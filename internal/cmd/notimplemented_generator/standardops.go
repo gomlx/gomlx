@@ -28,7 +28,8 @@ var (
 		"Constant", "Parameter", "Identity", "ReduceWindow",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
 		"And", "Or", "Xor", "Not", "ReduceAnd", "ReduceOr", "ReduceXor", "ScatterAdd",
-		"AllReduce", // Output is not standard
+		"AllReduce",      // Output is not standard
+		"FusedAttentionQKVProjection",  // Multi-output op, maintained manually
 		"Return", "Closure", "Name",
 	)
 
@@ -91,6 +92,8 @@ func GenerateStandardOpsInterface(methods []backendparser.Method) {
 				pi.Type = "...backends.PadAxis"
 			case "ActivationType":
 				pi.Type = "backends.ActivationType"
+			case "AxesLayout":
+				pi.Type = "backends.AxesLayout"
 			}
 		}
 		newMethods = append(newMethods, method)

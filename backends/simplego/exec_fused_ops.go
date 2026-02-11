@@ -17,6 +17,8 @@ func init() {
 	setNodeExecutor(backends.OpTypeFusedGelu, priorityTyped, execFusedGelu)
 	setNodeExecutor(backends.OpTypeFusedLayerNorm, priorityTyped, execFusedLayerNorm)
 	setNodeExecutor(backends.OpTypeFusedDense, priorityTyped, execFusedDense)
+	setNodeExecutor(backends.OpTypeFusedScaledDotProductAttention, priorityTyped, execFusedScaledDotProductAttention)
+	multiOutputsNodeExecutors[backends.OpTypeFusedAttentionQKVProjection] = execFusedAttentionQKVProjection
 }
 
 // computeAxisStrides returns the outer size, axis size, and inner size for iterating
@@ -25,7 +27,7 @@ func init() {
 func computeAxisStrides(shape shapes.Shape, axis int) (outerSize, axisSize, innerSize int) {
 	dims := shape.Dimensions
 	outerSize = 1
-	for i := 0; i < axis; i++ {
+	for i := range axis {
 		outerSize *= dims[i]
 	}
 	axisSize = dims[axis]
@@ -57,13 +59,13 @@ func execFusedSoftmax(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 
 func softmax[T float32 | float64](input, output []T, axis int, shape shapes.Shape) {
 	outerSize, axisSize, innerSize := computeAxisStrides(shape, axis)
-	for outer := 0; outer < outerSize; outer++ {
-		for inner := 0; inner < innerSize; inner++ {
+	for outer := range outerSize {
+		for inner := range innerSize {
 			baseIdx := outer*axisSize*innerSize + inner
 
 			// Pass 1: Find max.
 			maxVal := T(math.Inf(-1))
-			for i := 0; i < axisSize; i++ {
+			for i := range axisSize {
 				idx := baseIdx + i*innerSize
 				if input[idx] > maxVal {
 					maxVal = input[idx]
@@ -72,7 +74,7 @@ func softmax[T float32 | float64](input, output []T, axis int, shape shapes.Shap
 
 			// Pass 2: Exp and sum.
 			var sum T
-			for i := 0; i < axisSize; i++ {
+			for i := range axisSize {
 				idx := baseIdx + i*innerSize
 				output[idx] = T(math.Exp(float64(input[idx] - maxVal)))
 				sum += output[idx]
@@ -80,7 +82,7 @@ func softmax[T float32 | float64](input, output []T, axis int, shape shapes.Shap
 
 			// Pass 3: Normalize.
 			invSum := 1.0 / sum
-			for i := 0; i < axisSize; i++ {
+			for i := range axisSize {
 				idx := baseIdx + i*innerSize
 				output[idx] *= invSum
 			}
@@ -201,7 +203,7 @@ func trailingAxesLayerNorm[T float32 | float64](inData, outData, gammaData, beta
 	normSizeF := T(normSize)
 	outerSize := len(inData) / normSize
 
-	for outer := 0; outer < outerSize; outer++ {
+	for outer := range outerSize {
 		base := outer * normSize
 
 		// Compute mean.
@@ -248,7 +250,7 @@ func arbitraryAxesLayerNorm[T float32 | float64](inData, outData, gammaData, bet
 
 	// Build outer axes (those not in normalization set).
 	outerAxes := make([]int, 0, rank-len(axes))
-	for i := 0; i < rank; i++ {
+	for i := range rank {
 		if !isNormAxis[i] {
 			outerAxes = append(outerAxes, i)
 		}
@@ -298,11 +300,12 @@ func arbitraryAxesLayerNorm[T float32 | float64](inData, outData, gammaData, bet
 }
 
 // execFusedDense implements y = activation(matmul + bias).
+// inputs layout: [dotResult, x, weight, bias?]
 // inputs[0] is the DotGeneral result (matmul already computed by the backend).
-// inputs[1] is the optional bias.
+// inputs[1] is x, inputs[2] is weight (unused by this executor).
+// inputs[3] is the optional bias.
 func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	matmul := inputs[0]
-	// inputs layout: [dotResult, x, weight, bias?]
 	var bias *Buffer
 	if len(inputs) > 3 {
 		bias = inputs[3]
@@ -378,6 +381,332 @@ func applyActivation[T float32 | float64](backend *Backend, data []T, activation
 	case backends.ActivationTanh:
 		for i, x := range data {
 			data[i] = T(math.Tanh(float64(x)))
+		}
+	}
+}
+
+// sdpaComputeMaskStrides returns (batchStride, headStride) for indexing into a mask
+// tensor based on its rank. Dimensions of size 1 are broadcast (stride 0).
+//
+//	rank 2: [seqLen, kvLen]                     → (0, 0)
+//	rank 3: [batch, seqLen, kvLen]              → (seqLen*kvLen, 0) or (0, 0) if dim[0]==1
+//	rank 4: [batch, heads, seqLen, kvLen]       → strides computed per dim
+func sdpaComputeMaskStrides(dims []int) (batchStride, headStride int) {
+	switch len(dims) {
+	case 2:
+		return 0, 0
+	case 3:
+		if dims[0] <= 1 {
+			return 0, 0
+		}
+		return dims[1] * dims[2], 0
+	case 4:
+		if dims[0] > 1 {
+			batchStride = dims[1] * dims[2] * dims[3]
+		}
+		if dims[1] > 1 {
+			headStride = dims[2] * dims[3]
+		}
+		return batchStride, headStride
+	default:
+		panic(errors.Errorf("sdpaComputeMaskStrides: unsupported mask rank %d (dims=%v), expected rank 2, 3, or 4", len(dims), dims))
+	}
+}
+
+// transposeBuffer transposes a buffer according to the given axis permutation,
+// reusing the existing transposeIterator and transposeDTypeMap infrastructure.
+func transposeBuffer(backend *Backend, buf *Buffer, permutations []int) *Buffer {
+	output := backend.getBuffer(buf.shape.DType, buf.shape.Size())
+	// Compute the output shape by permuting dimensions.
+	dims := buf.shape.Dimensions
+	outDims := make([]int, len(dims))
+	for i, p := range permutations {
+		outDims[i] = dims[p]
+	}
+	output.shape = shapes.Make(buf.shape.DType, outDims...)
+	it := newTransposeIterator(buf.shape, permutations)
+	transposeFn := transposeDTypeMap.Get(buf.shape.DType).(func(operand, output *Buffer, it *transposeIterator))
+	transposeFn(buf, output, it)
+	return output
+}
+
+// execFusedScaledDotProductAttention implements multi-head scaled dot-product attention.
+// Both BHSD and BSHD layouts are handled directly via stride-based indexing in
+// sdpaGeneric/sdpaMultiHeadGeneric, avoiding expensive transpose operations.
+// mask: optional additive mask of rank 2–4 (broadcasting via strides). Boolean masks are not
+// supported; the graph-level caller must convert them to additive form before reaching here.
+func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+	data := node.data.(*nodeFusedScaledDotProductAttention)
+	query := inputs[0]
+	key := inputs[1]
+	value := inputs[2]
+	var mask *Buffer
+	if len(inputs) > 3 {
+		mask = inputs[3]
+	}
+
+	// Boolean masks are not supported at the fused-op level; the caller must convert to additive.
+	if mask != nil && mask.shape.DType == dtypes.Bool {
+		return nil, errors.Errorf("FusedScaledDotProductAttention: boolean masks are not supported; convert to additive mask before calling")
+	}
+
+	// For rank-4 BSHD masks [batch, seq, heads, kvLen], transpose to BHSD so that
+	// per-head mask data is contiguous [seqLen, kvLen]. The mask is small (no headDim
+	// axis), so this is cheap. Rank ≤ 3 masks have no head dimension and work as-is.
+	if data.axesLayout == backends.AxesLayoutBSHD && mask != nil && mask.shape.Rank() == 4 {
+		mask = transposeBuffer(backend, mask, []int{0, 2, 1, 3})
+	}
+
+	output := backend.getBufferForShape(query.shape.Clone())
+
+	// Compute mask strides for broadcasting (BHSD convention for the mask).
+	var maskBatchStride, maskHeadStride int
+	if mask != nil {
+		maskBatchStride, maskHeadStride = sdpaComputeMaskStrides(mask.shape.Dimensions)
+	}
+
+	switch query.shape.DType {
+	case dtypes.Float32:
+		sdpaMultiHeadGeneric[float32](query, key, value, mask, output, data, maskBatchStride, maskHeadStride)
+	case dtypes.Float64:
+		sdpaMultiHeadGeneric[float64](query, key, value, mask, output, data, maskBatchStride, maskHeadStride)
+	default:
+		return nil, errors.Errorf("FusedScaledDotProductAttention: unsupported dtype %s", query.shape.DType)
+	}
+
+	return output, nil
+}
+
+// sdpaGeneric computes scaled dot-product attention for a single head.
+//
+// The q/k/v/output slices are the full flat arrays for the tensor; qOff and kvOff
+// give the byte-offset to the first element of this head at seq=0. qSeqStride and
+// kvSeqStride are the element stride between consecutive sequence positions for a
+// single head (headDim for BHSD contiguous layout, numHeads*headDim for BSHD
+// interleaved layout). The output uses qOff/qSeqStride (same layout as query).
+//
+// mask and scores are dense per-head [seqLen, kvLen] scratch buffers.
+func sdpaGeneric[T float32 | float64](
+	q, k, v []T, qOff, kvOff, qSeqStride, kvSeqStride int,
+	mask, scores []T,
+	output []T,
+	seqLen, kvLen, headDim int, scale T, causal bool,
+) {
+	// scores[qIdx][kvIdx] = sum_d(q[qIdx][d] * k[kvIdx][d]) * scale + mask[qIdx][kvIdx]
+	for qIdx := range seqLen {
+		rowMax := T(math.Inf(-1))
+		qBase := qOff + qIdx*qSeqStride
+		for kvIdx := range kvLen {
+			if causal && kvIdx > qIdx {
+				scores[qIdx*kvLen+kvIdx] = T(math.Inf(-1))
+				continue
+			}
+			var dot T
+			kBase := kvOff + kvIdx*kvSeqStride
+			for d := range headDim {
+				dot += q[qBase+d] * k[kBase+d]
+			}
+			s := dot * scale
+			if mask != nil {
+				s += mask[qIdx*kvLen+kvIdx]
+			}
+			scores[qIdx*kvLen+kvIdx] = s
+			if s > rowMax {
+				rowMax = s
+			}
+		}
+
+		// Softmax: exp(scores - max) and sum.
+		var sum T
+		for kvIdx := range kvLen {
+			scores[qIdx*kvLen+kvIdx] = T(math.Exp(float64(scores[qIdx*kvLen+kvIdx] - rowMax)))
+			sum += scores[qIdx*kvLen+kvIdx]
+		}
+		invSum := 1.0 / sum
+		for kvIdx := range kvLen {
+			scores[qIdx*kvLen+kvIdx] *= invSum
+		}
+
+		// output[qIdx][d] = sum_kvIdx(scores[qIdx][kvIdx] * v[kvIdx][d])
+		outBase := qOff + qIdx*qSeqStride
+		for d := range headDim {
+			var acc T
+			for kvIdx := range kvLen {
+				acc += scores[qIdx*kvLen+kvIdx] * v[kvOff+kvIdx*kvSeqStride+d]
+			}
+			output[outBase+d] = acc
+		}
+	}
+}
+
+func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *Buffer, data *nodeFusedScaledDotProductAttention, maskBatchStride, maskHeadStride int) {
+	q := query.flat.([]T)
+	k := key.flat.([]T)
+	v := value.flat.([]T)
+	out := output.flat.([]T)
+	var maskData []T
+	if mask != nil {
+		maskData = mask.flat.([]T)
+	}
+
+	dims := query.shape.Dimensions
+	batchSize := dims[0]
+	numHeads := data.numHeads
+	numKVHeads := data.numKVHeads
+	scale := T(data.scale)
+	causal := data.causal
+	headsPerKV := numHeads / numKVHeads
+
+	// Layout-dependent axis indices and strides.
+	var seqLen, kvLen, headDim int
+	var qSeqStride, kvSeqStride int       // element stride between consecutive seq positions for one head
+	var qBatchStride, kvBatchStride int    // element stride between consecutive batches
+	var qHeadStride, kvHeadStride int      // element stride between consecutive heads at seq=0
+
+	if data.axesLayout == backends.AxesLayoutBSHD {
+		// [batch, seq, heads, dim]
+		seqLen = dims[1]
+		headDim = dims[3]
+		kvDims := key.shape.Dimensions
+		kvLen = kvDims[1]
+		qSeqStride = numHeads * headDim
+		kvSeqStride = numKVHeads * headDim
+		qHeadStride = headDim
+		kvHeadStride = headDim
+		qBatchStride = seqLen * numHeads * headDim
+		kvBatchStride = kvLen * numKVHeads * headDim
+	} else {
+		// BHSD: [batch, heads, seq, dim]
+		seqLen = dims[2]
+		headDim = dims[3]
+		kvDims := key.shape.Dimensions
+		kvLen = kvDims[2]
+		qSeqStride = headDim
+		kvSeqStride = headDim
+		qHeadStride = seqLen * headDim
+		kvHeadStride = kvLen * headDim
+		qBatchStride = numHeads * seqLen * headDim
+		kvBatchStride = numKVHeads * kvLen * headDim
+	}
+
+	scores := make([]T, seqLen*kvLen)
+	maskSliceLen := seqLen * kvLen
+	for batchIdx := range batchSize {
+		for headIdx := range numHeads {
+			kvHeadIdx := headIdx / headsPerKV
+			qOff := batchIdx*qBatchStride + headIdx*qHeadStride
+			kvOff := batchIdx*kvBatchStride + kvHeadIdx*kvHeadStride
+			var maskSlice []T
+			if maskData != nil {
+				maskOffset := batchIdx*maskBatchStride + headIdx*maskHeadStride
+				maskSlice = maskData[maskOffset : maskOffset+maskSliceLen]
+			}
+			sdpaGeneric(
+				q, k, v, qOff, kvOff, qSeqStride, kvSeqStride,
+				maskSlice, scores,
+				out,
+				seqLen, kvLen, headDim, scale, causal,
+			)
+		}
+	}
+}
+
+// execFusedAttentionQKVProjection implements fused QKV projection.
+// inputs[0]: pre-computed DotGeneral result [batch, qDim+2*kvDim]
+// inputs[1..]: biasQ, biasK, biasV (optional, determined by node data flags)
+// outputs: q [batch, qDim], k [batch, kvDim], v [batch, kvDim]
+//
+// The matmul (x @ wQKV) is already computed by the DotGeneral sub-node.
+// This executor just splits the combined result into Q/K/V and adds biases.
+func execFusedAttentionQKVProjection(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
+	data := node.data.(*nodeFusedAttentionQKVProjection)
+	combined := inputs[0] // DotGeneral result: [batch, qDim+2*kvDim]
+
+	// Determine bias buffers using flags from node data, not positional indexing.
+	var biasQ, biasK, biasV *Buffer
+	biasIdx := 1
+	if data.hasBiasQ {
+		biasQ = inputs[biasIdx]
+		biasIdx++
+	}
+	if data.hasBiasK {
+		biasK = inputs[biasIdx]
+		biasIdx++
+	}
+	if data.hasBiasV {
+		biasV = inputs[biasIdx]
+	}
+
+	qShape := node.multiOutputsShapes[0]
+	kShape := node.multiOutputsShapes[1]
+	vShape := node.multiOutputsShapes[2]
+	qBuf := backend.getBufferForShape(qShape)
+	kBuf := backend.getBufferForShape(kShape)
+	vBuf := backend.getBufferForShape(vShape)
+
+	qDim := data.qDim
+	kvDim := data.kvDim
+
+	switch combined.shape.DType {
+	case dtypes.Float32:
+		qkvSplitBiasGeneric[float32](combined, biasQ, biasK, biasV, qBuf, kBuf, vBuf, qDim, kvDim)
+	case dtypes.Float64:
+		qkvSplitBiasGeneric[float64](combined, biasQ, biasK, biasV, qBuf, kBuf, vBuf, qDim, kvDim)
+	default:
+		return nil, errors.Errorf("FusedAttentionQKVProjection: unsupported dtype %s", combined.shape.DType)
+	}
+
+	return []*Buffer{qBuf, kBuf, vBuf}, nil
+}
+
+// qkvSplitBiasGeneric splits the pre-computed matmul result [batch, totalOut] into
+// Q [batch, qDim], K [batch, kvDim], V [batch, kvDim] and adds optional biases.
+func qkvSplitBiasGeneric[T float32 | float64](combined, biasQBuf, biasKBuf, biasVBuf, qBuf, kBuf, vBuf *Buffer, qDim, kvDim int) {
+	src := combined.flat.([]T)
+	q := qBuf.flat.([]T)
+	k := kBuf.flat.([]T)
+	v := vBuf.flat.([]T)
+	var biasQ, biasK, biasV []T
+	if biasQBuf != nil {
+		biasQ = biasQBuf.flat.([]T)
+	}
+	if biasKBuf != nil {
+		biasK = biasKBuf.flat.([]T)
+	}
+	if biasVBuf != nil {
+		biasV = biasVBuf.flat.([]T)
+	}
+
+	totalOut := qDim + 2*kvDim
+	batchSize := len(src) / totalOut
+	for batchIdx := range batchSize {
+		srcBase := batchIdx * totalOut
+		qBase := batchIdx * qDim
+		kBase := batchIdx * kvDim
+		vBase := batchIdx * kvDim
+
+		// Copy Q columns and add bias.
+		copy(q[qBase:qBase+qDim], src[srcBase:srcBase+qDim])
+		if biasQ != nil {
+			for o := range qDim {
+				q[qBase+o] += biasQ[o]
+			}
+		}
+
+		// Copy K columns and add bias.
+		copy(k[kBase:kBase+kvDim], src[srcBase+qDim:srcBase+qDim+kvDim])
+		if biasK != nil {
+			for o := range kvDim {
+				k[kBase+o] += biasK[o]
+			}
+		}
+
+		// Copy V columns and add bias.
+		copy(v[vBase:vBase+kvDim], src[srcBase+qDim+kvDim:srcBase+totalOut])
+		if biasV != nil {
+			for o := range kvDim {
+				v[vBase+o] += biasV[o]
+			}
 		}
 	}
 }
