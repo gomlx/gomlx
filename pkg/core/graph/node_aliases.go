@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // PushAliasScope pushes another scope to the current alias scope for new aliases.

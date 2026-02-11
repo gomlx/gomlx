@@ -8,10 +8,13 @@
 package activations
 
 import (
-	. "github.com/gomlx/gomlx/internal/exceptions"
+	"math"
+
+	"github.com/gomlx/gomlx/backends"
+
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"math"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 const (
@@ -45,7 +48,26 @@ const (
 	TypeGeluApprox
 )
 
-//go:generate enumer -type=Type -trimprefix=Type -transform=snake -values -text -json -yaml activations.go
+// ToBackend converts an activations.Type to the corresponding backends.ActivationType.
+// Unsupported activation types map to backends.ActivationNone.
+func (t Type) ToBackend() backends.ActivationType {
+	switch t {
+	case TypeNone:
+		return backends.ActivationNone
+	case TypeGelu, TypeGeluApprox:
+		return backends.ActivationGelu
+	case TypeRelu:
+		return backends.ActivationRelu
+	case TypeSwish, TypeSilu:
+		return backends.ActivationSilu
+	case TypeTanh:
+		return backends.ActivationTanh
+	default:
+		return backends.ActivationNone
+	}
+}
+
+//go:generate go tool enumer -type Type -trimprefix=Type -output=gen_type_enumer.go activations.go
 
 // ApplyFromContext picks an activation function from the context using [ParamActivation] parameter,
 // and applies it to x.
@@ -169,9 +191,14 @@ func Selu(x *Node) *Node {
 // The exact version is slower in TPUs due to the "Erf" function, but some argue it is more stable. See discussion in:
 // https://github.com/jax-ml/jax/issues/4428
 func Gelu(x *Node) *Node {
-	// Φ(x) = 0.5 * (1 + Erf(x / √2))
-	cdf := MulScalar(AddScalar(Erf(DivScalar(x, math.Sqrt2)), 1), 0.5)
-	return Mul(x, cdf)
+	return InternalFusedOpCaller(
+		func() *Node { return BackendFusedGelu(x, true) },
+		func() *Node {
+			// Φ(x) = 0.5 * (1 + Erf(x / √2))
+			cdf := MulScalar(AddScalar(Erf(DivScalar(x, math.Sqrt2)), 1), 0.5)
+			return Mul(x, cdf)
+		},
+	)
 }
 
 // GeluApproximate is a close approximation to the original Gelu function.

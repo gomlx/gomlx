@@ -8,10 +8,10 @@ import (
 	"reflect"
 
 	"github.com/gomlx/gomlx/backends"
-	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"golang.org/x/exp/constraints"
 )
 

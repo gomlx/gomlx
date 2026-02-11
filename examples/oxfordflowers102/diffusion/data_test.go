@@ -9,7 +9,6 @@ import (
 	"time"
 
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
@@ -20,7 +19,8 @@ func benchmarkDataset(ds train.Dataset) {
 	var batchSize int
 	// Warm up, run 100 ds.Yield().
 	for range 10 {
-		_, inputs, labels := must.M3(ds.Yield())
+		_, inputs, labels, err := ds.Yield()
+		check(err)
 		batchSize = inputs[0].Shape().Dimensions[0]
 		finalize(inputs)
 		finalize(labels)
@@ -34,7 +34,7 @@ func benchmarkDataset(ds train.Dataset) {
 		if err == io.EOF {
 			break
 		}
-		must.M(err)
+		check(err)
 		finalize(inputs)
 		finalize(labels)
 		count++

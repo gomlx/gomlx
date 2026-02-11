@@ -8,7 +8,6 @@ import (
 	"flag"
 
 	"github.com/gomlx/gomlx/examples/cifar"
-	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
@@ -110,8 +109,22 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
 
 	// Train.
 	cifar.TrainCifar10Model(ctx, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity, paramsSet)
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }

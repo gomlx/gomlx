@@ -8,9 +8,9 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
@@ -55,6 +55,16 @@ type Node struct {
 	// customVJP can be set for a custom reverse gradient definition for the function.
 	// Usually, defined for a NoOp operation.
 	customVJP VJP
+
+	// vjpAlternateOutputs holds decomposed versions of this node's computation built from
+	// primitive ops. During reverse-mode autodiff, the VJP is computed from these alternate
+	// outputs instead of the fused node, so no hand-written VJPs are needed for fused ops
+	// -- even though one can create a customVJP for a fused-op, if one wants.
+	//
+	// For single-output fused ops this is a 1-element slice; for multi-output fused ops
+	// (e.g. FusedAttentionQKVProjection) each element corresponds to one split output's
+	// decomposed equivalent.
+	vjpAlternateOutputs []*Node
 
 	trace error // Stack-trace error of where Node was created. Stored if graph.traced is true.
 }

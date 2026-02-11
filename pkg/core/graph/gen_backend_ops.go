@@ -13,6 +13,14 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
+// strNillableNode formats a nillable *Node for display.
+func strNillableNode(n *Node) string {
+	if n == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("[#%d]", n.Id())
+}
+
 type NodeType int
 
 const (
@@ -22,6 +30,7 @@ const (
 	NodeTypeAdd
 	NodeTypeAllReduce
 	NodeTypeArgMinMax
+	NodeTypeAtan2
 	NodeTypeBatchNormForInference
 	NodeTypeBatchNormForTraining
 	NodeTypeBatchNormGradient
@@ -54,6 +63,12 @@ const (
 	NodeTypeExpm1
 	NodeTypeFFT
 	NodeTypeFloor
+	NodeTypeFusedAttentionQKVProjection
+	NodeTypeFusedDense
+	NodeTypeFusedGelu
+	NodeTypeFusedLayerNorm
+	NodeTypeFusedScaledDotProductAttention
+	NodeTypeFusedSoftmax
 	NodeTypeGather
 	NodeTypeGreaterOrEqual
 	NodeTypeGreaterOrEqualTotalOrder
@@ -290,6 +305,52 @@ func backendArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (
 		isMin:       isMin,
 	}
 	result, err := g.currentFunc.backendFunc.ArgMinMax(x.outputOps[0], inputs.axis, inputs.outputDType, inputs.isMin)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsAtan2 holds the inputs used for the call to backends.Atan2.
+type nodeInputsAtan2 struct {
+	lhs *Node
+	rhs *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsAtan2) Type() NodeType {
+	return NodeTypeAtan2
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsAtan2) String() string {
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
+		ni.Type(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
+	)
+}
+
+// Atan2 returns element-wise the arc tangent of y/x, using the signs of both arguments to determine
+// the correct quadrant of the result.
+// Standard broadcasting rules apply (see documentation).
+func Atan2(lhs *Node, rhs *Node) (
+	node *Node) {
+	inputNodes := []*Node{lhs, rhs}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsAtan2{
+		lhs: lhs,
+		rhs: rhs,
+	}
+	result, err := g.currentFunc.backendFunc.Atan2(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1776,6 +1837,372 @@ func Floor(x *Node) (
 		x: x,
 	}
 	result, err := g.currentFunc.backendFunc.Floor(x.outputOps[0])
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsFusedAttentionQKVProjection holds the inputs used for the call to backends.FusedAttentionQKVProjection.
+type nodeInputsFusedAttentionQKVProjection struct {
+	x           *Node
+	wQKV        *Node
+	biasQ       *Node
+	biasK       *Node
+	biasV       *Node
+	queryDim    int
+	keyValueDim int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedAttentionQKVProjection) Type() NodeType {
+	return NodeTypeFusedAttentionQKVProjection
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedAttentionQKVProjection) String() string {
+	return fmt.Sprintf("%s(x=[#%d], wQKV=[#%d], biasQ=%s, biasK=%s, biasV=%s, queryDim=%v, keyValueDim=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.wQKV.Id(),
+		strNillableNode(ni.biasQ),
+		strNillableNode(ni.biasK),
+		strNillableNode(ni.biasV),
+		ni.queryDim,
+		ni.keyValueDim,
+	)
+}
+
+// backendFusedAttentionQKVProjection is a Graph wrapper for the backend.Builder.FusedAttentionQKVProjection method.
+func backendFusedAttentionQKVProjection(x *Node, wQKV *Node, biasQ *Node, biasK *Node, biasV *Node, queryDim int, keyValueDim int) (
+	query, key, value *Node) {
+	inputNodes := []*Node{x, wQKV}
+	if biasQ != nil {
+		inputNodes = append(inputNodes, biasQ)
+	}
+	if biasK != nil {
+		inputNodes = append(inputNodes, biasK)
+	}
+	if biasV != nil {
+		inputNodes = append(inputNodes, biasV)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedAttentionQKVProjection{
+		x:           x,
+		wQKV:        wQKV,
+		biasQ:       biasQ,
+		biasK:       biasK,
+		biasV:       biasV,
+		queryDim:    queryDim,
+		keyValueDim: keyValueDim,
+	}
+	var biasQVal backends.Value
+	if biasQ != nil {
+		biasQVal = biasQ.outputOps[0]
+	}
+	var biasKVal backends.Value
+	if biasK != nil {
+		biasKVal = biasK.outputOps[0]
+	}
+	var biasVVal backends.Value
+	if biasV != nil {
+		biasVVal = biasV.outputOps[0]
+	}
+	v0, v1, v2, err := g.currentFunc.backendFunc.FusedAttentionQKVProjection(x.outputOps[0], wQKV.outputOps[0], biasQVal, biasKVal, biasVVal, inputs.queryDim, inputs.keyValueDim)
+	if err != nil {
+		panic(err)
+	}
+	node := &Node{
+		outputOps:    []backends.Value{v0, v1, v2},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1)), mustNoError(g.builder.OpShape(v2))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	splitNodes := splitNode(node)
+	query, key, value = splitNodes[0], splitNodes[1], splitNodes[2]
+	return
+}
+
+// nodeInputsFusedDense holds the inputs used for the call to backends.FusedDense.
+type nodeInputsFusedDense struct {
+	x          *Node
+	weight     *Node
+	bias       *Node
+	activation backends.ActivationType
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedDense) Type() NodeType {
+	return NodeTypeFusedDense
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedDense) String() string {
+	return fmt.Sprintf("%s(x=[#%d], weight=[#%d], bias=%s, activation=%s)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.weight.Id(),
+		strNillableNode(ni.bias),
+		ni.activation,
+	)
+}
+
+// backendFusedDense is a Graph wrapper for the backend.Builder.FusedDense method.
+func backendFusedDense(x *Node, weight *Node, bias *Node, activation backends.ActivationType) (
+	node *Node) {
+	inputNodes := []*Node{x, weight}
+	if bias != nil {
+		inputNodes = append(inputNodes, bias)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedDense{
+		x:          x,
+		weight:     weight,
+		bias:       bias,
+		activation: activation,
+	}
+	var biasVal backends.Value
+	if bias != nil {
+		biasVal = bias.outputOps[0]
+	}
+	result, err := g.currentFunc.backendFunc.FusedDense(x.outputOps[0], weight.outputOps[0], biasVal, inputs.activation)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsFusedGelu holds the inputs used for the call to backends.FusedGelu.
+type nodeInputsFusedGelu struct {
+	x     *Node
+	exact bool
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedGelu) Type() NodeType {
+	return NodeTypeFusedGelu
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedGelu) String() string {
+	return fmt.Sprintf("%s(x=[#%d], exact=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.exact,
+	)
+}
+
+// backendFusedGelu is a Graph wrapper for the backend.Builder.FusedGelu method.
+func backendFusedGelu(x *Node, exact bool) (
+	node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedGelu{
+		x:     x,
+		exact: exact,
+	}
+	result, err := g.currentFunc.backendFunc.FusedGelu(x.outputOps[0], inputs.exact)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsFusedLayerNorm holds the inputs used for the call to backends.FusedLayerNorm.
+type nodeInputsFusedLayerNorm struct {
+	x       *Node
+	axes    []int
+	epsilon float64
+	gamma   *Node
+	beta    *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedLayerNorm) Type() NodeType {
+	return NodeTypeFusedLayerNorm
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedLayerNorm) String() string {
+	return fmt.Sprintf("%s(x=[#%d], axes=%v, epsilon=%v, gamma=%s, beta=%s)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.axes,
+		ni.epsilon,
+		strNillableNode(ni.gamma),
+		strNillableNode(ni.beta),
+	)
+}
+
+// backendFusedLayerNorm is a Graph wrapper for the backend.Builder.FusedLayerNorm method.
+func backendFusedLayerNorm(x *Node, axes []int, epsilon float64, gamma *Node, beta *Node) (
+	node *Node) {
+	inputNodes := []*Node{x}
+	if gamma != nil {
+		inputNodes = append(inputNodes, gamma)
+	}
+	if beta != nil {
+		inputNodes = append(inputNodes, beta)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedLayerNorm{
+		x:       x,
+		axes:    slices.Clone(axes),
+		epsilon: epsilon,
+		gamma:   gamma,
+		beta:    beta,
+	}
+	var gammaVal backends.Value
+	if gamma != nil {
+		gammaVal = gamma.outputOps[0]
+	}
+	var betaVal backends.Value
+	if beta != nil {
+		betaVal = beta.outputOps[0]
+	}
+	result, err := g.currentFunc.backendFunc.FusedLayerNorm(x.outputOps[0], inputs.axes, inputs.epsilon, gammaVal, betaVal)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsFusedScaledDotProductAttention holds the inputs used for the call to backends.FusedScaledDotProductAttention.
+type nodeInputsFusedScaledDotProductAttention struct {
+	query      *Node
+	key        *Node
+	value      *Node
+	mask       *Node
+	numHeads   int
+	numKVHeads int
+	axesLayout backends.AxesLayout
+	scale      float64
+	causal     bool
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedScaledDotProductAttention) Type() NodeType {
+	return NodeTypeFusedScaledDotProductAttention
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedScaledDotProductAttention) String() string {
+	return fmt.Sprintf("%s(query=[#%d], key=[#%d], value=[#%d], mask=%s, numHeads=%v, numKVHeads=%v, axesLayout=%s, scale=%v, causal=%v)",
+		ni.Type(),
+		ni.query.Id(),
+		ni.key.Id(),
+		ni.value.Id(),
+		strNillableNode(ni.mask),
+		ni.numHeads,
+		ni.numKVHeads,
+		ni.axesLayout,
+		ni.scale,
+		ni.causal,
+	)
+}
+
+// backendFusedScaledDotProductAttention is a Graph wrapper for the backend.Builder.FusedScaledDotProductAttention method.
+func backendFusedScaledDotProductAttention(query *Node, key *Node, value *Node, mask *Node, numHeads int, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (
+	node *Node) {
+	inputNodes := []*Node{query, key, value}
+	if mask != nil {
+		inputNodes = append(inputNodes, mask)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedScaledDotProductAttention{
+		query:      query,
+		key:        key,
+		value:      value,
+		mask:       mask,
+		numHeads:   numHeads,
+		numKVHeads: numKVHeads,
+		axesLayout: axesLayout,
+		scale:      scale,
+		causal:     causal,
+	}
+	var maskVal backends.Value
+	if mask != nil {
+		maskVal = mask.outputOps[0]
+	}
+	result, err := g.currentFunc.backendFunc.FusedScaledDotProductAttention(query.outputOps[0], key.outputOps[0], value.outputOps[0], maskVal, inputs.numHeads, inputs.numKVHeads, inputs.axesLayout, inputs.scale, inputs.causal)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsFusedSoftmax holds the inputs used for the call to backends.FusedSoftmax.
+type nodeInputsFusedSoftmax struct {
+	x    *Node
+	axis int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedSoftmax) Type() NodeType {
+	return NodeTypeFusedSoftmax
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedSoftmax) String() string {
+	return fmt.Sprintf("%s(x=[#%d], axis=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.axis,
+	)
+}
+
+// backendFusedSoftmax is a Graph wrapper for the backend.Builder.FusedSoftmax method.
+func backendFusedSoftmax(x *Node, axis int) (
+	node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedSoftmax{
+		x:    x,
+		axis: axis,
+	}
+	result, err := g.currentFunc.backendFunc.FusedSoftmax(x.outputOps[0], inputs.axis)
 	if err != nil {
 		panic(err)
 	}

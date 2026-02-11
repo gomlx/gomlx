@@ -43,6 +43,25 @@ an error, to simplify the code. But everywhere else, use standard Go error handl
 
 The compiled and execution of the graphs later is parallelized and can be executed in concurrently as one wishes.
 
+Files that mostly define graph building functions, by convention, should dot-import the 
+`github.com/gomlx/gomlx/pkg/core/graph` package: having `graph.` repeated everywhere makes the math harder to read.
+This is commonly the case for libraries under `pkg/core/ml/layers`.
+
+### Executing models and graphs:
+
+If executing a model with variables, those are stored in `pkg/ml/context.Context` objects, and require `context.Exec` 
+object to execute. Simpler graph functions can be simply executed with `pkg/core/graph.Exec` objects. They both
+have very similar APIs, just one takes an extra `Context` object with the models variables and parameters.
+
+Creating `Exec` objects implies in JIT-compiling for the first execution: that is expensive. When possible cache 
+the executor (`Exec` object) and reuse it.
+
+Also, currently GoMLX doesn't support dynamic shapes. That means each different input shape will trigger a different
+compilation. If a program needs different shapes, consider using powers of 2 (or some other base) shapes, and pad
+accordingly. Soon `simplego` (the pure Go backend) will support dynamic shapes. But XLA, the faster backend,
+only supports static shapes, and will always require recompilation for different shapes. So consider padding
+where appropriate.
+
 ### Error Handling
 
 All errors should include a stack-trace, using the `github.com/pkg/errors` package.
@@ -55,10 +74,16 @@ an error, to simplify the code. But everywhere else, use standard Go error handl
 
 - Use generics where possible.
 - Use `slices` and `maps` package for slice operations.
+- Look also into `pkg/support/xslices` package for more slice and map helper methods.
+- Look into `pkg/support/xsync` package for more syncronization helpers.
+- Look into `pkg/support/sets` package for a generic `Set[T]` structure.
 - Use iterators (package `iter`) where it makes sense.
 - Use the `for range` construct for loops over slices, maps, etc.
+- Use `any` instead of `interface{}`.
+- Organize tests in hierarchies using `t.Run()` to group related tests.
 
 ### Copyright Notes
+
 Normal code files are prefixed with the following copyright line:
 
 ```
