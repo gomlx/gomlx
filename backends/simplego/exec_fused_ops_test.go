@@ -412,7 +412,18 @@ func TestFusedDense_Tanh(t *testing.T) {
 
 // ---- FusedScaledDotProductAttention tests ----
 
-func TestFusedScaledDotProductAttention_SingleHead(t *testing.T) {
+func TestFusedScaledDotProductAttention(t *testing.T) {
+	t.Run("SingleHead", testFusedScaledDotProductAttention_SingleHead)
+	t.Run("Causal", testFusedScaledDotProductAttention_Causal)
+	t.Run("MultiHead", testFusedScaledDotProductAttention_MultiHead)
+	t.Run("GQA", testFusedScaledDotProductAttention_GQA)
+	t.Run("WithMask", testFusedScaledDotProductAttention_WithMask)
+	t.Run("BSHD_Causal", testFusedScaledDotProductAttention_BSHD_Causal)
+	t.Run("BSHD_MultiHead", testFusedScaledDotProductAttention_BSHD_MultiHead)
+	t.Run("BSHD_MultiSeq", testFusedScaledDotProductAttention_BSHD_MultiSeq)
+}
+
+func testFusedScaledDotProductAttention_SingleHead(t *testing.T) {
 	// batch=1, numHeads=1, seqLen=2, headDim=2, kvLen=2
 	// Q = [[1, 0], [0, 1]]
 	// K = [[1, 0], [0, 1]]  (identity-like)
@@ -451,7 +462,7 @@ func TestFusedScaledDotProductAttention_SingleHead(t *testing.T) {
 	}
 }
 
-func TestFusedScaledDotProductAttention_Causal(t *testing.T) {
+func testFusedScaledDotProductAttention_Causal(t *testing.T) {
 	// batch=1, numHeads=1, seqLen=2, headDim=1, kvLen=2
 	// With causal mask: position 0 can only attend to position 0.
 	q := []float32{1, 1}
@@ -477,7 +488,7 @@ func TestFusedScaledDotProductAttention_Causal(t *testing.T) {
 	assert.InDelta(t, 15.0, got[1], fusedTestTol)
 }
 
-func TestFusedScaledDotProductAttention_MultiHead(t *testing.T) {
+func testFusedScaledDotProductAttention_MultiHead(t *testing.T) {
 	// batch=1, numHeads=2, seqLen=1, headDim=1, kvLen=1
 	// Simple case: each head attends to a single key/value.
 	q := []float32{1, 2}     // 2 heads, each with seqLen=1, headDim=1
@@ -502,7 +513,7 @@ func TestFusedScaledDotProductAttention_MultiHead(t *testing.T) {
 	assert.InDelta(t, 200.0, got[1], fusedTestTol) // head 1
 }
 
-func TestFusedScaledDotProductAttention_GQA(t *testing.T) {
+func testFusedScaledDotProductAttention_GQA(t *testing.T) {
 	// batch=1, numHeads=2, numKVHeads=1 (GQA: 2 query heads share 1 KV head)
 	// seqLen=1, kvLen=1, headDim=1
 	q := []float32{1, 2} // 2 heads
@@ -527,7 +538,7 @@ func TestFusedScaledDotProductAttention_GQA(t *testing.T) {
 	assert.InDelta(t, 42.0, got[1], fusedTestTol)
 }
 
-func TestFusedScaledDotProductAttention_WithMask(t *testing.T) {
+func testFusedScaledDotProductAttention_WithMask(t *testing.T) {
 	// batch=1, numHeads=1, seqLen=1, kvLen=2, headDim=1
 	// mask blocks second key position with -inf.
 	q := []float32{1}
@@ -555,7 +566,7 @@ func TestFusedScaledDotProductAttention_WithMask(t *testing.T) {
 
 // ---- BSHD layout tests ----
 
-func TestFusedScaledDotProductAttention_BSHD_Causal(t *testing.T) {
+func testFusedScaledDotProductAttention_BSHD_Causal(t *testing.T) {
 	// Same logical test as TestFusedScaledDotProductAttention_Causal, but in BSHD layout.
 	// batch=1, seqLen=2, numHeads=1, headDim=1
 	// BSHD: [batch, seq, heads, dim]
@@ -582,7 +593,7 @@ func TestFusedScaledDotProductAttention_BSHD_Causal(t *testing.T) {
 	assert.InDelta(t, 15.0, got[1], fusedTestTol)
 }
 
-func TestFusedScaledDotProductAttention_BSHD_MultiHead(t *testing.T) {
+func testFusedScaledDotProductAttention_BSHD_MultiHead(t *testing.T) {
 	// batch=1, seqLen=1, numHeads=2, headDim=1
 	// BSHD: [batch, seq, heads, dim]
 	// Data: same values as BHSD MultiHead test but in BSHD memory order.
@@ -609,7 +620,7 @@ func TestFusedScaledDotProductAttention_BSHD_MultiHead(t *testing.T) {
 	assert.InDelta(t, 200.0, got[1], fusedTestTol) // head 1
 }
 
-func TestFusedScaledDotProductAttention_BSHD_MultiSeq(t *testing.T) {
+func testFusedScaledDotProductAttention_BSHD_MultiSeq(t *testing.T) {
 	// Test where BSHD and BHSD have genuinely different memory layouts.
 	// batch=1, seqLen=2, numHeads=2, headDim=1
 	//
