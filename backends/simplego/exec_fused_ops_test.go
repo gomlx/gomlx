@@ -669,6 +669,14 @@ func testFusedScaledDotProductAttention_BSHD_MultiSeq(t *testing.T) {
 	}
 }
 
+// ---- FusedAttentionQKVProjection tests ----
+
+func TestFusedAttentionQKVProjection(t *testing.T) {
+	t.Run("Identity", testFusedAttentionQKVProjection_Identity)
+	t.Run("NoBias", testFusedAttentionQKVProjection_NoBias)
+	t.Run("EqualDims", testFusedAttentionQKVProjection_EqualDims)
+}
+
 // execFusedOpMultiOutput builds, compiles and executes a multi-output fused op graph.
 // buildFn receives the Function and the parameter Values, and returns 3 output Values.
 func execFusedOpMultiOutput3(t *testing.T, inputShapes []shapes.Shape, inputDatas []any,
@@ -707,9 +715,7 @@ func execFusedOpMultiOutput3(t *testing.T, inputShapes []shapes.Shape, inputData
 	return [3]*Buffer{outputs[0].(*Buffer), outputs[1].(*Buffer), outputs[2].(*Buffer)}
 }
 
-// ---- FusedAttentionQKVProjection tests ----
-
-func TestFusedAttentionQKVProjection_Identity(t *testing.T) {
+func testFusedAttentionQKVProjection_Identity(t *testing.T) {
 	// batch=1, inFeatures=3, qDim=2, kvDim=1
 	// wQKV: [inFeatures, qDim+2*kvDim] = [3, 4]
 	// Use identity-like weights for easy verification.
@@ -754,7 +760,7 @@ func TestFusedAttentionQKVProjection_Identity(t *testing.T) {
 	assert.InDelta(t, 1006.0, vGot[0], fusedTestTol)
 }
 
-func TestFusedAttentionQKVProjection_NoBias(t *testing.T) {
+func testFusedAttentionQKVProjection_NoBias(t *testing.T) {
 	// batch=2, inFeatures=2, qDim=2, kvDim=1
 	x := []float32{
 		1, 0, // batch 0
@@ -801,7 +807,7 @@ func TestFusedAttentionQKVProjection_NoBias(t *testing.T) {
 	assert.InDelta(t, 8.0, vGot[1], fusedTestTol)
 }
 
-func TestFusedAttentionQKVProjection_EqualDims(t *testing.T) {
+func testFusedAttentionQKVProjection_EqualDims(t *testing.T) {
 	// When qDim == kvDim, equivalent to 3 separate dense ops.
 	// batch=1, inFeatures=2, qDim=2, kvDim=2
 	x := []float32{1, 1}
