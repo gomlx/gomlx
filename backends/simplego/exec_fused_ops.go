@@ -420,11 +420,6 @@ func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*
 		mask = inputs[3]
 	}
 
-	// Boolean masks are not supported at the fused-op level; the caller must convert to additive.
-	if mask != nil && mask.shape.DType == dtypes.Bool {
-		return nil, errors.Errorf("FusedScaledDotProductAttention: boolean masks are not supported; convert to additive mask before calling")
-	}
-
 	// For rank-4 BSHD masks [batch, seq, heads, kvLen], transpose to BHSD so that
 	// per-head mask data is contiguous [seqLen, kvLen]. The mask is small (no headDim
 	// axis), so this is cheap. Rank ≤ 3 masks have no head dimension and work as-is.
@@ -508,7 +503,9 @@ func transposeBuffer(backend *Backend, buf *Buffer, permutations []int) *Buffer 
 // mask and scores are dense per-head [seqLen, kvLen] scratch buffers.
 func sdpaGeneric[T float32 | float64](
 	q, k, v []T, qOff, kvOff, qSeqStride, kvSeqStride int,
-	mask, scores []T,
+	additiveMask []T,
+	booleanMask []bool,
+	scores []T,
 	output []T,
 	seqLen, kvLen, headDim int, scale T, causal bool,
 ) {
@@ -516,10 +513,18 @@ func sdpaGeneric[T float32 | float64](
 	for qIdx := range seqLen {
 		rowMax := T(math.Inf(-1))
 		qBase := qOff + qIdx*qSeqStride
-		for kvIdx := range kvLen {
-			if causal && kvIdx > qIdx {
-				scores[qIdx*kvLen+kvIdx] = T(math.Inf(-1))
-				continue
+		scoreIdxBase := qIdx * kvLen
+
+		kvLenUnmasked := kvLen
+		if causal {
+			kvLenUnmasked = min(kvLen, qIdx+1)
+		}
+		for kvIdx := range kvLenUnmasked {
+			scoreIdx := scoreIdxBase + kvIdx
+			if len(booleanMask) > 0 {
+				if !booleanMask[scoreIdx] {
+					continue
+				}
 			}
 			var dot T
 			kBase := kvOff + kvIdx*kvSeqStride
@@ -527,10 +532,10 @@ func sdpaGeneric[T float32 | float64](
 				dot += q[qBase+d] * k[kBase+d]
 			}
 			s := dot * scale
-			if mask != nil {
-				s += mask[qIdx*kvLen+kvIdx]
+			if len(additiveMask) > 0 {
+				s += additiveMask[scoreIdx]
 			}
-			scores[qIdx*kvLen+kvIdx] = s
+			scores[scoreIdx] = s
 			if s > rowMax {
 				rowMax = s
 			}
@@ -538,21 +543,47 @@ func sdpaGeneric[T float32 | float64](
 
 		// Softmax: exp(scores - max) and sum.
 		var sum T
-		for kvIdx := range kvLen {
-			scores[qIdx*kvLen+kvIdx] = T(math.Exp(float64(scores[qIdx*kvLen+kvIdx] - rowMax)))
-			sum += scores[qIdx*kvLen+kvIdx]
+		scoreIdx := scoreIdxBase
+		if len(booleanMask) > 0 {
+			for range kvLenUnmasked {
+				if booleanMask[scoreIdx] {
+					scores[scoreIdx] = T(math.Exp(float64(scores[scoreIdx] - rowMax)))
+					sum += scores[scoreIdx]
+				}
+				scoreIdx++
+			}
+		} else {
+			// No boolean mask, so we can use the fast path.
+			for range kvLenUnmasked {
+				scores[scoreIdx] = T(math.Exp(float64(scores[scoreIdx] - rowMax)))
+				sum += scores[scoreIdx]
+				scoreIdx++
+			}
 		}
 		invSum := 1.0 / sum
-		for kvIdx := range kvLen {
-			scores[qIdx*kvLen+kvIdx] *= invSum
+		scoreIdx = scoreIdxBase
+		for range kvLenUnmasked {
+			scores[scoreIdx] *= invSum
+			scoreIdx++
 		}
 
 		// output[qIdx][d] = sum_kvIdx(scores[qIdx][kvIdx] * v[kvIdx][d])
 		outBase := qOff + qIdx*qSeqStride
 		for d := range headDim {
+			scoreIdx := scoreIdxBase
 			var acc T
-			for kvIdx := range kvLen {
-				acc += scores[qIdx*kvLen+kvIdx] * v[kvOff+kvIdx*kvSeqStride+d]
+			if len(booleanMask) > 0 {
+				for kvIdx := range kvLenUnmasked {
+					if booleanMask[scoreIdx] {
+						acc += scores[scoreIdx] * v[kvOff+kvIdx*kvSeqStride+d]
+					}
+					scoreIdx++
+				}
+			} else {
+				for kvIdx := range kvLenUnmasked {
+					acc += scores[scoreIdx] * v[kvOff+kvIdx*kvSeqStride+d]
+					scoreIdx++
+				}
 			}
 			output[outBase+d] = acc
 		}
@@ -564,9 +595,14 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 	k := key.flat.([]T)
 	v := value.flat.([]T)
 	out := output.flat.([]T)
-	var maskData []T
+	var additiveMask []T
+	var booleanMask []bool
 	if mask != nil {
-		maskData = mask.flat.([]T)
+		if mask.shape.DType == dtypes.Bool {
+			booleanMask = mask.flat.([]bool)
+		} else {
+			additiveMask = mask.flat.([]T)
+		}
 	}
 
 	dims := query.shape.Dimensions
@@ -616,14 +652,19 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 			kvHeadIdx := headIdx / headsPerKV
 			qOff := batchIdx*qBatchStride + headIdx*qHeadStride
 			kvOff := batchIdx*kvBatchStride + kvHeadIdx*kvHeadStride
-			var maskSlice []T
-			if maskData != nil {
+			var additiveMaskSlice []T
+			var booleanMaskSlice []bool
+			if len(additiveMask) > 0 {
 				maskOffset := batchIdx*maskBatchStride + headIdx*maskHeadStride
-				maskSlice = maskData[maskOffset : maskOffset+maskSliceLen]
+				additiveMaskSlice = additiveMask[maskOffset : maskOffset+maskSliceLen]
+			}
+			if len(booleanMask) > 0 {
+				maskOffset := batchIdx*maskBatchStride + headIdx*maskHeadStride
+				booleanMaskSlice = booleanMask[maskOffset : maskOffset+maskSliceLen]
 			}
 			sdpaGeneric(
 				q, k, v, qOff, kvOff, qSeqStride, kvSeqStride,
-				maskSlice, scores,
+				additiveMaskSlice, booleanMaskSlice, scores,
 				out,
 				seqLen, kvLen, headDim, scale, causal,
 			)

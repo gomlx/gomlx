@@ -417,7 +417,8 @@ func TestFusedScaledDotProductAttention(t *testing.T) {
 	t.Run("Causal", testFusedScaledDotProductAttention_Causal)
 	t.Run("MultiHead", testFusedScaledDotProductAttention_MultiHead)
 	t.Run("GQA", testFusedScaledDotProductAttention_GQA)
-	t.Run("WithMask", testFusedScaledDotProductAttention_WithMask)
+	t.Run("WithAdditiveMask", testFusedScaledDotProductAttention_WithAdditiveMask)
+	t.Run("WithBooleanMask", testFusedScaledDotProductAttention_WithBooleanMask)
 	t.Run("BSHD_Causal", testFusedScaledDotProductAttention_BSHD_Causal)
 	t.Run("BSHD_MultiHead", testFusedScaledDotProductAttention_BSHD_MultiHead)
 	t.Run("BSHD_MultiSeq", testFusedScaledDotProductAttention_BSHD_MultiSeq)
@@ -538,7 +539,7 @@ func testFusedScaledDotProductAttention_GQA(t *testing.T) {
 	assert.InDelta(t, 42.0, got[1], fusedTestTol)
 }
 
-func testFusedScaledDotProductAttention_WithMask(t *testing.T) {
+func testFusedScaledDotProductAttention_WithAdditiveMask(t *testing.T) {
 	// batch=1, numHeads=1, seqLen=1, kvLen=2, headDim=1
 	// mask blocks second key position with -inf.
 	q := []float32{1}
@@ -556,6 +557,34 @@ func testFusedScaledDotProductAttention_WithMask(t *testing.T) {
 		[]any{q, k, v, mask},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
 			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], params[3], 1, 1, backends.AxesLayoutBHSD, 1.0, false)
+		},
+	)
+
+	got := result.flat.([]float32)
+	// Only first position visible → output = V[0] = 10
+	assert.InDelta(t, 10.0, got[0], fusedTestTol)
+}
+
+func testFusedScaledDotProductAttention_WithBooleanMask(t *testing.T) {
+	// batch=1, numHeads=1, seqLen=1, kvLen=2, headDim=1
+	// mask blocks second key position with false.
+	q := []float32{1}
+	k := []float32{1, 1}
+	v := []float32{10, 20}
+	mask := []bool{true, false}
+
+	qShape := shapes.Make(dtypes.Float32, 1, 1, 1, 1)
+	kShape := shapes.Make(dtypes.Float32, 1, 1, 2, 1)
+	vShape := shapes.Make(dtypes.Float32, 1, 1, 2, 1)
+	maskShape := shapes.Make(dtypes.Bool, 1, 2)
+
+	result := testBackendMultiInput(t,
+		[]shapes.Shape{qShape, kShape, vShape, maskShape},
+		[]any{q, k, v, mask},
+		func(f backends.Function, params []backends.Value) (backends.Value, error) {
+			return f.FusedScaledDotProductAttention(
+				params[0], params[1], params[2], params[3], 1, 1,
+				backends.AxesLayoutBHSD, 1.0, false)
 		},
 	)
 
