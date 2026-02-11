@@ -16,95 +16,97 @@ import (
 // tolerance for floating point comparison.
 const fusedTestTol = 1e-6
 
-func TestFusedSoftmax_1D(t *testing.T) {
-	input := []float32{1.0, 2.0, 3.0, 4.0}
-	shape := shapes.Make(dtypes.Float32, 4)
+func TestFusedSoftmax(t *testing.T) {
+	t.Run("1D", func(t *testing.T) {
+		input := []float32{1.0, 2.0, 3.0, 4.0}
+		shape := shapes.Make(dtypes.Float32, 4)
 
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedSoftmax(param, 0)
+		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+			return f.FusedSoftmax(param, 0)
+		})
+
+		got := result.flat.([]float32)
+		// Known-correct softmax([1,2,3,4]).
+		want := []float32{0.0320586, 0.0871443, 0.2368828, 0.6439143}
+		require.Len(t, got, len(want))
+		for i := range got {
+			assert.InDelta(t, want[i], got[i], fusedTestTol, "index %d", i)
+		}
+
+		// Softmax output should sum to 1.
+		var sum float32
+		for _, v := range got {
+			sum += v
+		}
+		assert.InDelta(t, 1.0, sum, fusedTestTol)
 	})
 
-	got := result.flat.([]float32)
-	// Known-correct softmax([1,2,3,4]).
-	want := []float32{0.0320586, 0.0871443, 0.2368828, 0.6439143}
-	require.Len(t, got, len(want))
-	for i := range got {
-		assert.InDelta(t, want[i], got[i], fusedTestTol, "index %d", i)
-	}
+	t.Run("2D", func(t *testing.T) {
+		// 2x3 matrix, softmax over axis 1 (last axis).
+		input := []float32{1, 2, 3, 4, 5, 6}
+		shape := shapes.Make(dtypes.Float32, 2, 3)
 
-	// Softmax output should sum to 1.
-	var sum float32
-	for _, v := range got {
-		sum += v
-	}
-	assert.InDelta(t, 1.0, sum, fusedTestTol)
-}
+		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+			return f.FusedSoftmax(param, 1)
+		})
 
-func TestFusedSoftmax_2D(t *testing.T) {
-	// 2x3 matrix, softmax over axis 1 (last axis).
-	input := []float32{1, 2, 3, 4, 5, 6}
-	shape := shapes.Make(dtypes.Float32, 2, 3)
-
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedSoftmax(param, 1)
+		got := result.flat.([]float32)
+		// Each row should sum to 1.
+		assert.InDelta(t, 1.0, got[0]+got[1]+got[2], fusedTestTol)
+		assert.InDelta(t, 1.0, got[3]+got[4]+got[5], fusedTestTol)
+		// Values within each row should be monotonically increasing.
+		assert.Less(t, got[0], got[1])
+		assert.Less(t, got[1], got[2])
 	})
 
-	got := result.flat.([]float32)
-	// Each row should sum to 1.
-	assert.InDelta(t, 1.0, got[0]+got[1]+got[2], fusedTestTol)
-	assert.InDelta(t, 1.0, got[3]+got[4]+got[5], fusedTestTol)
-	// Values within each row should be monotonically increasing.
-	assert.Less(t, got[0], got[1])
-	assert.Less(t, got[1], got[2])
-}
+	t.Run("Axis0", func(t *testing.T) {
+		// 2x3 matrix, softmax over axis 0 (columns).
+		input := []float32{1, 2, 3, 4, 5, 6}
+		shape := shapes.Make(dtypes.Float32, 2, 3)
 
-func TestFusedSoftmax_Axis0(t *testing.T) {
-	// 2x3 matrix, softmax over axis 0 (columns).
-	input := []float32{1, 2, 3, 4, 5, 6}
-	shape := shapes.Make(dtypes.Float32, 2, 3)
+		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+			return f.FusedSoftmax(param, 0)
+		})
 
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedSoftmax(param, 0)
+		got := result.flat.([]float32)
+		// Each column should sum to 1.
+		assert.InDelta(t, 1.0, got[0]+got[3], fusedTestTol) // col 0
+		assert.InDelta(t, 1.0, got[1]+got[4], fusedTestTol) // col 1
+		assert.InDelta(t, 1.0, got[2]+got[5], fusedTestTol) // col 2
 	})
 
-	got := result.flat.([]float32)
-	// Each column should sum to 1.
-	assert.InDelta(t, 1.0, got[0]+got[3], fusedTestTol) // col 0
-	assert.InDelta(t, 1.0, got[1]+got[4], fusedTestTol) // col 1
-	assert.InDelta(t, 1.0, got[2]+got[5], fusedTestTol) // col 2
-}
+	t.Run("NegativeAxis", func(t *testing.T) {
+		// Negative axes should be rejected by FusedSoftmax (caller normalizes).
+		shape := shapes.Make(dtypes.Float32, 2, 3)
 
-func TestFusedSoftmax_NegativeAxis(t *testing.T) {
-	// Negative axes should be rejected by FusedSoftmax (caller normalizes).
-	shape := shapes.Make(dtypes.Float32, 2, 3)
+		builder := backend.Builder("fused_test")
+		mainFn := builder.Main()
 
-	builder := backend.Builder("fused_test")
-	mainFn := builder.Main()
+		param, err := mainFn.Parameter("x", shape, nil)
+		require.NoError(t, err)
 
-	param, err := mainFn.Parameter("x", shape, nil)
-	require.NoError(t, err)
-
-	_, err = mainFn.FusedSoftmax(param, -1)
-	assert.Error(t, err, "FusedSoftmax should reject negative axis")
-}
-
-func TestFusedSoftmax_Float64(t *testing.T) {
-	input := []float64{1.0, 2.0, 3.0}
-	shape := shapes.Make(dtypes.Float64, 3)
-
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedSoftmax(param, 0)
+		_, err = mainFn.FusedSoftmax(param, -1)
+		assert.Error(t, err, "FusedSoftmax should reject negative axis")
 	})
 
-	got := result.flat.([]float64)
-	var sum float64
-	for _, v := range got {
-		sum += v
-	}
-	assert.InDelta(t, 1.0, sum, fusedTestTol)
-	// Values should be monotonically increasing.
-	assert.Less(t, got[0], got[1])
-	assert.Less(t, got[1], got[2])
+	t.Run("Float64", func(t *testing.T) {
+		input := []float64{1.0, 2.0, 3.0}
+		shape := shapes.Make(dtypes.Float64, 3)
+
+		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+			return f.FusedSoftmax(param, 0)
+		})
+
+		got := result.flat.([]float64)
+		var sum float64
+		for _, v := range got {
+			sum += v
+		}
+		assert.InDelta(t, 1.0, sum, fusedTestTol)
+		// Values should be monotonically increasing.
+		assert.Less(t, got[0], got[1])
+		assert.Less(t, got[1], got[2])
+	})
 }
 
 func TestFusedGelu(t *testing.T) {
