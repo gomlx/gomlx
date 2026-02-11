@@ -81,6 +81,7 @@ an error, to simplify the code. But everywhere else, use standard Go error handl
 - Use the `for range` construct for loops over slices, maps, etc.
 - Use `any` instead of `interface{}`.
 - Organize tests in hierarchies using `t.Run()` to group related tests.
+
 ### Copyright Notes
 
 Normal code files are prefixed with the following copyright line:
