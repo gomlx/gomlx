@@ -16,95 +16,141 @@ import (
 // tolerance for floating point comparison.
 const fusedTestTol = 1e-6
 
-func TestFusedSoftmax_1D(t *testing.T) {
-	input := []float32{1.0, 2.0, 3.0, 4.0}
-	shape := shapes.Make(dtypes.Float32, 4)
+func TestFusedSoftmax(t *testing.T) {
+	t.Run("1D", func(t *testing.T) {
+		input := []float32{1.0, 2.0, 3.0, 4.0}
+		shape := shapes.Make(dtypes.Float32, 4)
 
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedSoftmax(param, 0)
+		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+			return f.FusedSoftmax(param, 0)
+		})
+
+		got := result.flat.([]float32)
+		// Known-correct softmax([1,2,3,4]).
+		want := []float32{0.0320586, 0.0871443, 0.2368828, 0.6439143}
+		require.Len(t, got, len(want))
+		for i := range got {
+			assert.InDelta(t, want[i], got[i], fusedTestTol, "index %d", i)
+		}
+
+		// Softmax output should sum to 1.
+		var sum float32
+		for _, v := range got {
+			sum += v
+		}
+		assert.InDelta(t, 1.0, sum, fusedTestTol)
 	})
 
-	got := result.flat.([]float32)
-	// Known-correct softmax([1,2,3,4]).
-	want := []float32{0.0320586, 0.0871443, 0.2368828, 0.6439143}
-	require.Len(t, got, len(want))
-	for i := range got {
-		assert.InDelta(t, want[i], got[i], fusedTestTol, "index %d", i)
-	}
+	t.Run("2D", func(t *testing.T) {
+		// 2x3 matrix, softmax over axis 1 (last axis).
+		input := []float32{1, 2, 3, 4, 5, 6}
+		shape := shapes.Make(dtypes.Float32, 2, 3)
 
-	// Softmax output should sum to 1.
-	var sum float32
-	for _, v := range got {
-		sum += v
-	}
-	assert.InDelta(t, 1.0, sum, fusedTestTol)
-}
+		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+			return f.FusedSoftmax(param, 1)
+		})
 
-func TestFusedSoftmax_2D(t *testing.T) {
-	// 2x3 matrix, softmax over axis 1 (last axis).
-	input := []float32{1, 2, 3, 4, 5, 6}
-	shape := shapes.Make(dtypes.Float32, 2, 3)
-
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedSoftmax(param, 1)
+		got := result.flat.([]float32)
+		// Each row should sum to 1.
+		assert.InDelta(t, 1.0, got[0]+got[1]+got[2], fusedTestTol)
+		assert.InDelta(t, 1.0, got[3]+got[4]+got[5], fusedTestTol)
+		// Values within each row should be monotonically increasing.
+		assert.Less(t, got[0], got[1])
+		assert.Less(t, got[1], got[2])
 	})
 
-	got := result.flat.([]float32)
-	// Each row should sum to 1.
-	assert.InDelta(t, 1.0, got[0]+got[1]+got[2], fusedTestTol)
-	assert.InDelta(t, 1.0, got[3]+got[4]+got[5], fusedTestTol)
-	// Values within each row should be monotonically increasing.
-	assert.Less(t, got[0], got[1])
-	assert.Less(t, got[1], got[2])
-}
+	t.Run("Axis0", func(t *testing.T) {
+		// 2x3 matrix, softmax over axis 0 (columns).
+		input := []float32{1, 2, 3, 4, 5, 6}
+		shape := shapes.Make(dtypes.Float32, 2, 3)
 
-func TestFusedSoftmax_Axis0(t *testing.T) {
-	// 2x3 matrix, softmax over axis 0 (columns).
-	input := []float32{1, 2, 3, 4, 5, 6}
-	shape := shapes.Make(dtypes.Float32, 2, 3)
+		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+			return f.FusedSoftmax(param, 0)
+		})
 
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedSoftmax(param, 0)
+		got := result.flat.([]float32)
+		// Each column should sum to 1.
+		assert.InDelta(t, 1.0, got[0]+got[3], fusedTestTol) // col 0
+		assert.InDelta(t, 1.0, got[1]+got[4], fusedTestTol) // col 1
+		assert.InDelta(t, 1.0, got[2]+got[5], fusedTestTol) // col 2
 	})
 
-	got := result.flat.([]float32)
-	// Each column should sum to 1.
-	assert.InDelta(t, 1.0, got[0]+got[3], fusedTestTol) // col 0
-	assert.InDelta(t, 1.0, got[1]+got[4], fusedTestTol) // col 1
-	assert.InDelta(t, 1.0, got[2]+got[5], fusedTestTol) // col 2
-}
+	t.Run("NegativeAxis", func(t *testing.T) {
+		// Negative axes should be rejected by FusedSoftmax (caller normalizes).
+		shape := shapes.Make(dtypes.Float32, 2, 3)
 
-func TestFusedSoftmax_NegativeAxis(t *testing.T) {
-	// Negative axes should be rejected by FusedSoftmax (caller normalizes).
-	shape := shapes.Make(dtypes.Float32, 2, 3)
+		builder := backend.Builder("fused_test")
+		mainFn := builder.Main()
 
-	builder := backend.Builder("fused_test")
-	mainFn := builder.Main()
+		param, err := mainFn.Parameter("x", shape, nil)
+		require.NoError(t, err)
 
-	param, err := mainFn.Parameter("x", shape, nil)
-	require.NoError(t, err)
-
-	_, err = mainFn.FusedSoftmax(param, -1)
-	assert.Error(t, err, "FusedSoftmax should reject negative axis")
-}
-
-func TestFusedSoftmax_Float64(t *testing.T) {
-	input := []float64{1.0, 2.0, 3.0}
-	shape := shapes.Make(dtypes.Float64, 3)
-
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedSoftmax(param, 0)
+		_, err = mainFn.FusedSoftmax(param, -1)
+		assert.Error(t, err, "FusedSoftmax should reject negative axis")
 	})
 
-	got := result.flat.([]float64)
-	var sum float64
-	for _, v := range got {
-		sum += v
-	}
-	assert.InDelta(t, 1.0, sum, fusedTestTol)
-	// Values should be monotonically increasing.
-	assert.Less(t, got[0], got[1])
-	assert.Less(t, got[1], got[2])
+	t.Run("Float64", func(t *testing.T) {
+		input := []float64{1.0, 2.0, 3.0}
+		shape := shapes.Make(dtypes.Float64, 3)
+
+		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+			return f.FusedSoftmax(param, 0)
+		})
+
+		got := result.flat.([]float64)
+		var sum float64
+		for _, v := range got {
+			sum += v
+		}
+		assert.InDelta(t, 1.0, sum, fusedTestTol)
+		// Values should be monotonically increasing.
+		assert.Less(t, got[0], got[1])
+		assert.Less(t, got[1], got[2])
+	})
+
+	t.Run("LargeValues", func(t *testing.T) {
+		// Test numerical stability with large values.
+		input := []float32{1000, 1001, 1002}
+		shape := shapes.Make(dtypes.Float32, 3)
+
+		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+			return f.FusedSoftmax(param, 0)
+		})
+
+		got := result.flat.([]float32)
+
+		// Should still sum to 1 and not overflow.
+		var sum float32
+		for _, v := range got {
+			sum += v
+			assert.False(t, math.IsNaN(float64(v)), "softmax produced NaN")
+			assert.False(t, math.IsInf(float64(v), 0), "softmax produced Inf")
+		}
+		assert.InDelta(t, 1.0, sum, fusedTestTol)
+	})
+
+	t.Run("3D", func(t *testing.T) {
+		// [2, 2, 3], softmax over axis 2 (last).
+		input := []float32{
+			1, 2, 3,
+			4, 5, 6,
+			7, 8, 9,
+			10, 11, 12,
+		}
+		shape := shapes.Make(dtypes.Float32, 2, 2, 3)
+
+		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+			return f.FusedSoftmax(param, 2)
+		})
+
+		got := result.flat.([]float32)
+		// Each group of 3 should sum to 1.
+		for group := range 4 {
+			base := group * 3
+			sum := got[base] + got[base+1] + got[base+2]
+			assert.InDelta(t, 1.0, sum, fusedTestTol, "group %d", group)
+		}
+	})
 }
 
 func TestFusedGelu(t *testing.T) {
@@ -364,91 +410,21 @@ func TestFusedDense_Tanh(t *testing.T) {
 	assert.InDelta(t, want, got[0], fusedTestTol)
 }
 
-func TestFusedSoftmax_LargeValues(t *testing.T) {
-	// Test numerical stability with large values.
-	input := []float32{1000, 1001, 1002}
-	shape := shapes.Make(dtypes.Float32, 3)
-
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedSoftmax(param, 0)
-	})
-
-	got := result.flat.([]float32)
-
-	// Should still sum to 1 and not overflow.
-	var sum float32
-	for _, v := range got {
-		sum += v
-		assert.False(t, math.IsNaN(float64(v)), "softmax produced NaN")
-		assert.False(t, math.IsInf(float64(v), 0), "softmax produced Inf")
-	}
-	assert.InDelta(t, 1.0, sum, fusedTestTol)
-}
-
-func TestFusedSoftmax_3D(t *testing.T) {
-	// [2, 2, 3], softmax over axis 2 (last).
-	input := []float32{
-		1, 2, 3,
-		4, 5, 6,
-		7, 8, 9,
-		10, 11, 12,
-	}
-	shape := shapes.Make(dtypes.Float32, 2, 2, 3)
-
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
-		return f.FusedSoftmax(param, 2)
-	})
-
-	got := result.flat.([]float32)
-	// Each group of 3 should sum to 1.
-	for group := range 4 {
-		base := group * 3
-		sum := got[base] + got[base+1] + got[base+2]
-		assert.InDelta(t, 1.0, sum, fusedTestTol, "group %d", group)
-	}
-}
-
-// execFusedOpMultiOutput builds, compiles and executes a multi-output fused op graph.
-// buildFn receives the Function and the parameter Values, and returns 3 output Values.
-func execFusedOpMultiOutput3(t *testing.T, inputShapes []shapes.Shape, inputDatas []any,
-	buildFn func(f backends.Function, params []backends.Value) (backends.Value, backends.Value, backends.Value, error),
-) [3]*Buffer {
-	t.Helper()
-	builder := backend.Builder("fused_test_multiout")
-	mainFn := builder.Main()
-
-	params := make([]backends.Value, len(inputShapes))
-	for i, s := range inputShapes {
-		p, err := mainFn.Parameter("x"+string(rune('0'+i)), s, nil)
-		require.NoError(t, err)
-		params[i] = p
-	}
-
-	o0, o1, o2, err := buildFn(mainFn, params)
-	require.NoError(t, err)
-
-	err = mainFn.Return([]backends.Value{o0, o1, o2}, nil)
-	require.NoError(t, err)
-
-	exec, err := builder.Compile()
-	require.NoError(t, err)
-
-	inputBufs := make([]backends.Buffer, len(inputDatas))
-	for i, data := range inputDatas {
-		buf, err := backend.BufferFromFlatData(0, data, inputShapes[i])
-		require.NoError(t, err)
-		inputBufs[i] = buf
-	}
-
-	outputs, err := exec.Execute(inputBufs, nil, 0)
-	require.NoError(t, err)
-	require.Len(t, outputs, 3)
-	return [3]*Buffer{outputs[0].(*Buffer), outputs[1].(*Buffer), outputs[2].(*Buffer)}
-}
-
 // ---- FusedScaledDotProductAttention tests ----
 
-func TestFusedScaledDotProductAttention_SingleHead(t *testing.T) {
+func TestFusedScaledDotProductAttention(t *testing.T) {
+	t.Run("SingleHead", testFusedScaledDotProductAttention_SingleHead)
+	t.Run("Causal", testFusedScaledDotProductAttention_Causal)
+	t.Run("MultiHead", testFusedScaledDotProductAttention_MultiHead)
+	t.Run("GQA", testFusedScaledDotProductAttention_GQA)
+	t.Run("WithAdditiveMask", testFusedScaledDotProductAttention_WithAdditiveMask)
+	t.Run("WithBooleanMask", testFusedScaledDotProductAttention_WithBooleanMask)
+	t.Run("BSHD_Causal", testFusedScaledDotProductAttention_BSHD_Causal)
+	t.Run("BSHD_MultiHead", testFusedScaledDotProductAttention_BSHD_MultiHead)
+	t.Run("BSHD_MultiSeq", testFusedScaledDotProductAttention_BSHD_MultiSeq)
+}
+
+func testFusedScaledDotProductAttention_SingleHead(t *testing.T) {
 	// batch=1, numHeads=1, seqLen=2, headDim=2, kvLen=2
 	// Q = [[1, 0], [0, 1]]
 	// K = [[1, 0], [0, 1]]  (identity-like)
@@ -487,7 +463,7 @@ func TestFusedScaledDotProductAttention_SingleHead(t *testing.T) {
 	}
 }
 
-func TestFusedScaledDotProductAttention_Causal(t *testing.T) {
+func testFusedScaledDotProductAttention_Causal(t *testing.T) {
 	// batch=1, numHeads=1, seqLen=2, headDim=1, kvLen=2
 	// With causal mask: position 0 can only attend to position 0.
 	q := []float32{1, 1}
@@ -513,7 +489,7 @@ func TestFusedScaledDotProductAttention_Causal(t *testing.T) {
 	assert.InDelta(t, 15.0, got[1], fusedTestTol)
 }
 
-func TestFusedScaledDotProductAttention_MultiHead(t *testing.T) {
+func testFusedScaledDotProductAttention_MultiHead(t *testing.T) {
 	// batch=1, numHeads=2, seqLen=1, headDim=1, kvLen=1
 	// Simple case: each head attends to a single key/value.
 	q := []float32{1, 2}     // 2 heads, each with seqLen=1, headDim=1
@@ -538,7 +514,7 @@ func TestFusedScaledDotProductAttention_MultiHead(t *testing.T) {
 	assert.InDelta(t, 200.0, got[1], fusedTestTol) // head 1
 }
 
-func TestFusedScaledDotProductAttention_GQA(t *testing.T) {
+func testFusedScaledDotProductAttention_GQA(t *testing.T) {
 	// batch=1, numHeads=2, numKVHeads=1 (GQA: 2 query heads share 1 KV head)
 	// seqLen=1, kvLen=1, headDim=1
 	q := []float32{1, 2} // 2 heads
@@ -563,7 +539,7 @@ func TestFusedScaledDotProductAttention_GQA(t *testing.T) {
 	assert.InDelta(t, 42.0, got[1], fusedTestTol)
 }
 
-func TestFusedScaledDotProductAttention_WithMask(t *testing.T) {
+func testFusedScaledDotProductAttention_WithAdditiveMask(t *testing.T) {
 	// batch=1, numHeads=1, seqLen=1, kvLen=2, headDim=1
 	// mask blocks second key position with -inf.
 	q := []float32{1}
@@ -589,9 +565,37 @@ func TestFusedScaledDotProductAttention_WithMask(t *testing.T) {
 	assert.InDelta(t, 10.0, got[0], fusedTestTol)
 }
 
+func testFusedScaledDotProductAttention_WithBooleanMask(t *testing.T) {
+	// batch=1, numHeads=1, seqLen=1, kvLen=2, headDim=1
+	// mask blocks second key position with false.
+	q := []float32{1}
+	k := []float32{1, 1}
+	v := []float32{10, 20}
+	mask := []bool{true, false}
+
+	qShape := shapes.Make(dtypes.Float32, 1, 1, 1, 1)
+	kShape := shapes.Make(dtypes.Float32, 1, 1, 2, 1)
+	vShape := shapes.Make(dtypes.Float32, 1, 1, 2, 1)
+	maskShape := shapes.Make(dtypes.Bool, 1, 2)
+
+	result := testBackendMultiInput(t,
+		[]shapes.Shape{qShape, kShape, vShape, maskShape},
+		[]any{q, k, v, mask},
+		func(f backends.Function, params []backends.Value) (backends.Value, error) {
+			return f.FusedScaledDotProductAttention(
+				params[0], params[1], params[2], params[3], 1, 1,
+				backends.AxesLayoutBHSD, 1.0, false)
+		},
+	)
+
+	got := result.flat.([]float32)
+	// Only first position visible → output = V[0] = 10
+	assert.InDelta(t, 10.0, got[0], fusedTestTol)
+}
+
 // ---- BSHD layout tests ----
 
-func TestFusedScaledDotProductAttention_BSHD_Causal(t *testing.T) {
+func testFusedScaledDotProductAttention_BSHD_Causal(t *testing.T) {
 	// Same logical test as TestFusedScaledDotProductAttention_Causal, but in BSHD layout.
 	// batch=1, seqLen=2, numHeads=1, headDim=1
 	// BSHD: [batch, seq, heads, dim]
@@ -618,7 +622,7 @@ func TestFusedScaledDotProductAttention_BSHD_Causal(t *testing.T) {
 	assert.InDelta(t, 15.0, got[1], fusedTestTol)
 }
 
-func TestFusedScaledDotProductAttention_BSHD_MultiHead(t *testing.T) {
+func testFusedScaledDotProductAttention_BSHD_MultiHead(t *testing.T) {
 	// batch=1, seqLen=1, numHeads=2, headDim=1
 	// BSHD: [batch, seq, heads, dim]
 	// Data: same values as BHSD MultiHead test but in BSHD memory order.
@@ -645,7 +649,7 @@ func TestFusedScaledDotProductAttention_BSHD_MultiHead(t *testing.T) {
 	assert.InDelta(t, 200.0, got[1], fusedTestTol) // head 1
 }
 
-func TestFusedScaledDotProductAttention_BSHD_MultiSeq(t *testing.T) {
+func testFusedScaledDotProductAttention_BSHD_MultiSeq(t *testing.T) {
 	// Test where BSHD and BHSD have genuinely different memory layouts.
 	// batch=1, seqLen=2, numHeads=2, headDim=1
 	//
@@ -696,7 +700,51 @@ func TestFusedScaledDotProductAttention_BSHD_MultiSeq(t *testing.T) {
 
 // ---- FusedAttentionQKVProjection tests ----
 
-func TestFusedAttentionQKVProjection_Identity(t *testing.T) {
+func TestFusedAttentionQKVProjection(t *testing.T) {
+	t.Run("Identity", testFusedAttentionQKVProjection_Identity)
+	t.Run("NoBias", testFusedAttentionQKVProjection_NoBias)
+	t.Run("EqualDims", testFusedAttentionQKVProjection_EqualDims)
+}
+
+// execFusedOpMultiOutput builds, compiles and executes a multi-output fused op graph.
+// buildFn receives the Function and the parameter Values, and returns 3 output Values.
+func execFusedOpMultiOutput3(t *testing.T, inputShapes []shapes.Shape, inputDatas []any,
+	buildFn func(f backends.Function, params []backends.Value) (backends.Value, backends.Value, backends.Value, error),
+) [3]*Buffer {
+	t.Helper()
+	builder := backend.Builder("fused_test_multiout")
+	mainFn := builder.Main()
+
+	params := make([]backends.Value, len(inputShapes))
+	for i, s := range inputShapes {
+		p, err := mainFn.Parameter("x"+string(rune('0'+i)), s, nil)
+		require.NoError(t, err)
+		params[i] = p
+	}
+
+	o0, o1, o2, err := buildFn(mainFn, params)
+	require.NoError(t, err)
+
+	err = mainFn.Return([]backends.Value{o0, o1, o2}, nil)
+	require.NoError(t, err)
+
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	inputBufs := make([]backends.Buffer, len(inputDatas))
+	for i, data := range inputDatas {
+		buf, err := backend.BufferFromFlatData(0, data, inputShapes[i])
+		require.NoError(t, err)
+		inputBufs[i] = buf
+	}
+
+	outputs, err := exec.Execute(inputBufs, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 3)
+	return [3]*Buffer{outputs[0].(*Buffer), outputs[1].(*Buffer), outputs[2].(*Buffer)}
+}
+
+func testFusedAttentionQKVProjection_Identity(t *testing.T) {
 	// batch=1, inFeatures=3, qDim=2, kvDim=1
 	// wQKV: [inFeatures, qDim+2*kvDim] = [3, 4]
 	// Use identity-like weights for easy verification.
@@ -741,7 +789,7 @@ func TestFusedAttentionQKVProjection_Identity(t *testing.T) {
 	assert.InDelta(t, 1006.0, vGot[0], fusedTestTol)
 }
 
-func TestFusedAttentionQKVProjection_NoBias(t *testing.T) {
+func testFusedAttentionQKVProjection_NoBias(t *testing.T) {
 	// batch=2, inFeatures=2, qDim=2, kvDim=1
 	x := []float32{
 		1, 0, // batch 0
@@ -788,7 +836,7 @@ func TestFusedAttentionQKVProjection_NoBias(t *testing.T) {
 	assert.InDelta(t, 8.0, vGot[1], fusedTestTol)
 }
 
-func TestFusedAttentionQKVProjection_EqualDims(t *testing.T) {
+func testFusedAttentionQKVProjection_EqualDims(t *testing.T) {
 	// When qDim == kvDim, equivalent to 3 separate dense ops.
 	// batch=1, inFeatures=2, qDim=2, kvDim=2
 	x := []float32{1, 1}

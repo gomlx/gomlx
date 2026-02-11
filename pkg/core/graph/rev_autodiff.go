@@ -166,9 +166,10 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 				continue
 			}
 
-			// Fill missing VJPs with zeros (only for nodes going through normal VJP path,
-			// not for vjpAlternateOutputs which handles nil VJPs by skipping).
-			if node.vjpAlternateOutputs == nil {
+			// Fill missing VJPs with zeros (no VJP was incident on them), so the backward pass is calculated properly.
+			// * Except if using vjpAlternateOutputs, in which case we don't need the zeros, they
+			//   will be handled later in the when using the alternate path for VJP.
+			if len(node.vjpAlternateOutputs) == 0 {
 				for ii, shape := range node.outputShapes {
 					if rNode.VJPsForMultiOutputs[ii] == nil {
 						rNode.VJPsForMultiOutputs[ii] = Zeros(node.Graph(), shape)
@@ -203,7 +204,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 		// The alternates have lower nodeIdx (built first by InternalFusedOpCaller/Multi),
 		// so the loop will reach them later.
 		// Works for both single-output (1-element slice) and multi-output fused ops.
-		if node.vjpAlternateOutputs != nil {
+		if len(node.vjpAlternateOutputs) > 0 {
 			// Collect the arriving VJPs: for single-output nodes use AccumulatedVJP,
 			// for multi-output nodes use VJPsForMultiOutputs.
 			vjps := rNode.VJPsForMultiOutputs

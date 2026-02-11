@@ -142,7 +142,12 @@ type FusedOps interface {
 	//     this method when both are needed. Backends may assume they won't both be set.
 	//
 	// Output: same shape as query.
-	FusedScaledDotProductAttention(query, key, value, mask Value, numHeads, numKVHeads int, axesLayout AxesLayout, scale float64, causal bool) (Value, error)
+	FusedScaledDotProductAttention(
+		query, key, value, mask Value,
+		numHeads, numKVHeads int,
+		axesLayout AxesLayout,
+		scale float64,
+		causal bool) (Value, error)
 
 	// FusedAttentionQKVProjection performs fused Query-Key-Value projection: a single large matmul
 	// merged with a scatter into separate query (Q), key (K), value (V) outputs with optional
@@ -165,5 +170,8 @@ type FusedOps interface {
 	//   - keyValueDim: output dimension for key and value projections
 	//
 	// Outputs: query [batch, queryDim], key [batch, keyValueDim], value [batch, keyValueDim]
-	FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV Value, queryDim, keyValueDim int) (query, key, value Value, err error)
+	FusedAttentionQKVProjection(
+		x, wQKV, biasQ, biasK, biasV Value,
+		queryDim, keyValueDim int) (
+		query, key, value Value, err error)
 }

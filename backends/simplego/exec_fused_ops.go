@@ -21,10 +21,31 @@ func init() {
 	multiOutputsNodeExecutors[backends.OpTypeFusedAttentionQKVProjection] = execFusedAttentionQKVProjection
 }
 
-// computeAxisStrides returns the outer size, axis size, and inner size for iterating
+// FusedSoftmax =====================================================================================================
+
+// execFusedSoftmax implements optimized softmax with better cache locality.
+// Three passes over the axis: find max, compute exp(x-max) and sum, then normalize.
+func execFusedSoftmax(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+	data := node.data.(*nodeFusedSoftmax)
+	axis := data.axis
+	input := inputs[0]
+	output := backend.getBufferForShape(node.shape)
+
+	switch input.shape.DType {
+	case dtypes.Float32:
+		fusedSoftmax(input.flat.([]float32), output.flat.([]float32), axis, node.shape)
+	case dtypes.Float64:
+		fusedSoftmax(input.flat.([]float64), output.flat.([]float64), axis, node.shape)
+	default:
+		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedSoftmax: dtype %s", input.shape.DType)
+	}
+	return output, nil
+}
+
+// fusedSoftmaxComputeAxisStrides returns the outer size, axis size, and inner size for iterating
 // over an axis of the given shape. This decomposition allows softmax (and similar
 // axis-based ops) to operate on any axis.
-func computeAxisStrides(shape shapes.Shape, axis int) (outerSize, axisSize, innerSize int) {
+func fusedSoftmaxComputeAxisStrides(shape shapes.Shape, axis int) (outerSize, axisSize, innerSize int) {
 	dims := shape.Dimensions
 	outerSize = 1
 	for i := range axis {
@@ -38,27 +59,8 @@ func computeAxisStrides(shape shapes.Shape, axis int) (outerSize, axisSize, inne
 	return
 }
 
-// execFusedSoftmax implements optimized softmax with better cache locality.
-// Three passes over the axis: find max, compute exp(x-max) and sum, then normalize.
-func execFusedSoftmax(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	data := node.data.(*nodeFusedSoftmax)
-	axis := data.axis
-	input := inputs[0]
-	output := backend.getBufferForShape(node.shape)
-
-	switch input.shape.DType {
-	case dtypes.Float32:
-		softmax(input.flat.([]float32), output.flat.([]float32), axis, node.shape)
-	case dtypes.Float64:
-		softmax(input.flat.([]float64), output.flat.([]float64), axis, node.shape)
-	default:
-		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedSoftmax: dtype %s", input.shape.DType)
-	}
-	return output, nil
-}
-
-func softmax[T float32 | float64](input, output []T, axis int, shape shapes.Shape) {
-	outerSize, axisSize, innerSize := computeAxisStrides(shape, axis)
+func fusedSoftmax[T float32 | float64](input, output []T, axis int, shape shapes.Shape) {
+	outerSize, axisSize, innerSize := fusedSoftmaxComputeAxisStrides(shape, axis)
 	for outer := range outerSize {
 		for inner := range innerSize {
 			baseIdx := outer*axisSize*innerSize + inner
@@ -89,6 +91,8 @@ func softmax[T float32 | float64](input, output []T, axis int, shape shapes.Shap
 		}
 	}
 }
+
+// FusedGelu =======================================================================================================
 
 // execFusedGelu implements GELU: x * 0.5 * (1 + erf(x / sqrt(2)))
 func execFusedGelu(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
@@ -133,6 +137,8 @@ func geluChunk[T float32 | float64](input, output []T) {
 		output[i] = x * 0.5 * (1.0 + T(math.Erf(float64(x*sqrt2Inv))))
 	}
 }
+
+// FusedLayerNorm ===================================================================================================
 
 // execFusedLayerNorm implements layer normalization.
 // For each sample: y = (x - mean) / sqrt(var + epsilon) * gamma + beta
@@ -191,15 +197,19 @@ func layerNorm[T float32 | float64](input, output, gamma, beta *Buffer, axes []i
 	}
 
 	if isTrailingAxes {
-		trailingAxesLayerNorm(inData, outData, gammaData, betaData, normSize, epsilon)
+		layerNormTrailingAxes(inData, outData, gammaData, betaData, normSize, epsilon)
 	} else {
-		arbitraryAxesLayerNorm(inData, outData, gammaData, betaData, dims, axes, normSize, epsilon)
+		layerNormArbitraryAxes(inData, outData, gammaData, betaData, dims, axes, normSize, epsilon)
 	}
 }
 
-// trailingAxesLayerNorm handles the common case where normalization axes are the last N axes.
+// layerNormTrailingAxes handles the common case where normalization axes are the last N axes.
 // Each contiguous block of normSize elements is one normalization group.
-func trailingAxesLayerNorm[T float32 | float64](inData, outData, gammaData, betaData []T, normSize int, epsilon float64) {
+func layerNormTrailingAxes[T float32 | float64](
+	inData, outData, gammaData, betaData []T,
+	normSize int,
+	epsilon float64,
+) {
 	normSizeF := T(normSize)
 	outerSize := len(inData) / normSize
 
@@ -236,9 +246,14 @@ func trailingAxesLayerNorm[T float32 | float64](inData, outData, gammaData, beta
 	}
 }
 
-// arbitraryAxesLayerNorm handles normalization over arbitrary (non-trailing) axes
+// layerNormArbitraryAxes handles normalization over arbitrary (non-trailing) axes
 // using Shape.IterOnAxes for index iteration.
-func arbitraryAxesLayerNorm[T float32 | float64](inData, outData, gammaData, betaData []T, dims, axes []int, normSize int, epsilon float64) {
+func layerNormArbitraryAxes[T float32 | float64](
+	inData, outData, gammaData, betaData []T,
+	dims, axes []int,
+	normSize int,
+	epsilon float64,
+) {
 	normSizeF := T(normSize)
 	rank := len(dims)
 
@@ -299,6 +314,8 @@ func arbitraryAxesLayerNorm[T float32 | float64](inData, outData, gammaData, bet
 	}
 }
 
+// FusedDense =======================================================================================================
+
 // execFusedDense implements y = activation(matmul + bias).
 // inputs layout: [dotResult, x, weight, bias?]
 // inputs[0] is the DotGeneral result (matmul already computed by the backend).
@@ -338,31 +355,31 @@ func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 	case dtypes.Float32:
 		outData := output.flat.([]float32)
 		if bias != nil {
-			addBias(outData, bias.flat.([]float32))
+			fusedDenseAddBias(outData, bias.flat.([]float32))
 		}
-		applyActivation(backend, outData, data.activation)
+		fusedDenseApplyActivation(backend, outData, data.activation)
 	case dtypes.Float64:
 		outData := output.flat.([]float64)
 		if bias != nil {
-			addBias(outData, bias.flat.([]float64))
+			fusedDenseAddBias(outData, bias.flat.([]float64))
 		}
-		applyActivation(backend, outData, data.activation)
+		fusedDenseApplyActivation(backend, outData, data.activation)
 	default:
 		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedDense: dtype %s", output.shape.DType)
 	}
 	return output, nil
 }
 
-// addBias adds bias to each row of the output in-place.
+// fusedDenseAddBias adds bias to each row of the output in-place.
 // output shape is [..., outFeatures], bias shape is [outFeatures].
-func addBias[T float32 | float64](output, bias []T) {
+func fusedDenseAddBias[T float32 | float64](output, bias []T) {
 	outFeatures := len(bias)
 	for i, v := range output {
 		output[i] = v + bias[i%outFeatures]
 	}
 }
 
-func applyActivation[T float32 | float64](backend *Backend, data []T, activation backends.ActivationType) {
+func fusedDenseApplyActivation[T float32 | float64](backend *Backend, data []T, activation backends.ActivationType) {
 	switch activation {
 	case backends.ActivationNone:
 		// No-op.
@@ -383,6 +400,51 @@ func applyActivation[T float32 | float64](backend *Backend, data []T, activation
 			data[i] = T(math.Tanh(float64(x)))
 		}
 	}
+}
+
+// FusedScaledDotProductAttention ===================================================================================
+
+// execFusedScaledDotProductAttention implements multi-head scaled dot-product attention.
+// Both BHSD and BSHD layouts are handled directly via stride-based indexing in
+// sdpaGeneric/sdpaMultiHeadGeneric, avoiding expensive transpose operations.
+// mask: optional additive mask of rank 2–4 (broadcasting via strides). Boolean masks are not
+// supported; the graph-level caller must convert them to additive form before reaching here.
+func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (
+	*Buffer, error) {
+	data := node.data.(*nodeFusedScaledDotProductAttention)
+	query := inputs[0]
+	key := inputs[1]
+	value := inputs[2]
+	var mask *Buffer
+	if len(inputs) > 3 {
+		mask = inputs[3]
+	}
+
+	// For rank-4 BSHD masks [batch, seq, heads, kvLen], transpose to BHSD so that
+	// per-head mask data is contiguous [seqLen, kvLen]. The mask is small (no headDim
+	// axis), so this is cheap. Rank ≤ 3 masks have no head dimension and work as-is.
+	if data.axesLayout == backends.AxesLayoutBSHD && mask != nil && mask.shape.Rank() == 4 {
+		mask = transposeBuffer(backend, mask, []int{0, 2, 1, 3})
+	}
+
+	output := backend.getBufferForShape(query.shape.Clone())
+
+	// Compute mask strides for broadcasting (BHSD convention for the mask).
+	var maskBatchStride, maskHeadStride int
+	if mask != nil {
+		maskBatchStride, maskHeadStride = sdpaComputeMaskStrides(mask.shape.Dimensions)
+	}
+
+	switch query.shape.DType {
+	case dtypes.Float32:
+		sdpaMultiHeadGeneric[float32](query, key, value, mask, output, data, maskBatchStride, maskHeadStride)
+	case dtypes.Float64:
+		sdpaMultiHeadGeneric[float64](query, key, value, mask, output, data, maskBatchStride, maskHeadStride)
+	default:
+		return nil, errors.Errorf("FusedScaledDotProductAttention: unsupported dtype %s", query.shape.DType)
+	}
+
+	return output, nil
 }
 
 // sdpaComputeMaskStrides returns (batchStride, headStride) for indexing into a mask
@@ -430,53 +492,6 @@ func transposeBuffer(backend *Backend, buf *Buffer, permutations []int) *Buffer 
 	return output
 }
 
-// execFusedScaledDotProductAttention implements multi-head scaled dot-product attention.
-// Both BHSD and BSHD layouts are handled directly via stride-based indexing in
-// sdpaGeneric/sdpaMultiHeadGeneric, avoiding expensive transpose operations.
-// mask: optional additive mask of rank 2–4 (broadcasting via strides). Boolean masks are not
-// supported; the graph-level caller must convert them to additive form before reaching here.
-func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	data := node.data.(*nodeFusedScaledDotProductAttention)
-	query := inputs[0]
-	key := inputs[1]
-	value := inputs[2]
-	var mask *Buffer
-	if len(inputs) > 3 {
-		mask = inputs[3]
-	}
-
-	// Boolean masks are not supported at the fused-op level; the caller must convert to additive.
-	if mask != nil && mask.shape.DType == dtypes.Bool {
-		return nil, errors.Errorf("FusedScaledDotProductAttention: boolean masks are not supported; convert to additive mask before calling")
-	}
-
-	// For rank-4 BSHD masks [batch, seq, heads, kvLen], transpose to BHSD so that
-	// per-head mask data is contiguous [seqLen, kvLen]. The mask is small (no headDim
-	// axis), so this is cheap. Rank ≤ 3 masks have no head dimension and work as-is.
-	if data.axesLayout == backends.AxesLayoutBSHD && mask != nil && mask.shape.Rank() == 4 {
-		mask = transposeBuffer(backend, mask, []int{0, 2, 1, 3})
-	}
-
-	output := backend.getBufferForShape(query.shape.Clone())
-
-	// Compute mask strides for broadcasting (BHSD convention for the mask).
-	var maskBatchStride, maskHeadStride int
-	if mask != nil {
-		maskBatchStride, maskHeadStride = sdpaComputeMaskStrides(mask.shape.Dimensions)
-	}
-
-	switch query.shape.DType {
-	case dtypes.Float32:
-		sdpaMultiHeadGeneric[float32](query, key, value, mask, output, data, maskBatchStride, maskHeadStride)
-	case dtypes.Float64:
-		sdpaMultiHeadGeneric[float64](query, key, value, mask, output, data, maskBatchStride, maskHeadStride)
-	default:
-		return nil, errors.Errorf("FusedScaledDotProductAttention: unsupported dtype %s", query.shape.DType)
-	}
-
-	return output, nil
-}
-
 // sdpaGeneric computes scaled dot-product attention for a single head.
 //
 // The q/k/v/output slices are the full flat arrays for the tensor; qOff and kvOff
@@ -488,7 +503,9 @@ func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*
 // mask and scores are dense per-head [seqLen, kvLen] scratch buffers.
 func sdpaGeneric[T float32 | float64](
 	q, k, v []T, qOff, kvOff, qSeqStride, kvSeqStride int,
-	mask, scores []T,
+	additiveMask []T,
+	booleanMask []bool,
+	scores []T,
 	output []T,
 	seqLen, kvLen, headDim int, scale T, causal bool,
 ) {
@@ -496,10 +513,18 @@ func sdpaGeneric[T float32 | float64](
 	for qIdx := range seqLen {
 		rowMax := T(math.Inf(-1))
 		qBase := qOff + qIdx*qSeqStride
-		for kvIdx := range kvLen {
-			if causal && kvIdx > qIdx {
-				scores[qIdx*kvLen+kvIdx] = T(math.Inf(-1))
-				continue
+		scoreIdxBase := qIdx * kvLen
+
+		kvLenUnmasked := kvLen
+		if causal {
+			kvLenUnmasked = min(kvLen, qIdx+1)
+		}
+		for kvIdx := range kvLenUnmasked {
+			scoreIdx := scoreIdxBase + kvIdx
+			if len(booleanMask) > 0 {
+				if !booleanMask[scoreIdx] {
+					continue
+				}
 			}
 			var dot T
 			kBase := kvOff + kvIdx*kvSeqStride
@@ -507,10 +532,10 @@ func sdpaGeneric[T float32 | float64](
 				dot += q[qBase+d] * k[kBase+d]
 			}
 			s := dot * scale
-			if mask != nil {
-				s += mask[qIdx*kvLen+kvIdx]
+			if len(additiveMask) > 0 {
+				s += additiveMask[scoreIdx]
 			}
-			scores[qIdx*kvLen+kvIdx] = s
+			scores[scoreIdx] = s
 			if s > rowMax {
 				rowMax = s
 			}
@@ -518,21 +543,47 @@ func sdpaGeneric[T float32 | float64](
 
 		// Softmax: exp(scores - max) and sum.
 		var sum T
-		for kvIdx := range kvLen {
-			scores[qIdx*kvLen+kvIdx] = T(math.Exp(float64(scores[qIdx*kvLen+kvIdx] - rowMax)))
-			sum += scores[qIdx*kvLen+kvIdx]
+		scoreIdx := scoreIdxBase
+		if len(booleanMask) > 0 {
+			for range kvLenUnmasked {
+				if booleanMask[scoreIdx] {
+					scores[scoreIdx] = T(math.Exp(float64(scores[scoreIdx] - rowMax)))
+					sum += scores[scoreIdx]
+				}
+				scoreIdx++
+			}
+		} else {
+			// No boolean mask, so we can use the fast path.
+			for range kvLenUnmasked {
+				scores[scoreIdx] = T(math.Exp(float64(scores[scoreIdx] - rowMax)))
+				sum += scores[scoreIdx]
+				scoreIdx++
+			}
 		}
 		invSum := 1.0 / sum
-		for kvIdx := range kvLen {
-			scores[qIdx*kvLen+kvIdx] *= invSum
+		scoreIdx = scoreIdxBase
+		for range kvLenUnmasked {
+			scores[scoreIdx] *= invSum
+			scoreIdx++
 		}
 
 		// output[qIdx][d] = sum_kvIdx(scores[qIdx][kvIdx] * v[kvIdx][d])
 		outBase := qOff + qIdx*qSeqStride
 		for d := range headDim {
+			scoreIdx := scoreIdxBase
 			var acc T
-			for kvIdx := range kvLen {
-				acc += scores[qIdx*kvLen+kvIdx] * v[kvOff+kvIdx*kvSeqStride+d]
+			if len(booleanMask) > 0 {
+				for kvIdx := range kvLenUnmasked {
+					if booleanMask[scoreIdx] {
+						acc += scores[scoreIdx] * v[kvOff+kvIdx*kvSeqStride+d]
+					}
+					scoreIdx++
+				}
+			} else {
+				for kvIdx := range kvLenUnmasked {
+					acc += scores[scoreIdx] * v[kvOff+kvIdx*kvSeqStride+d]
+					scoreIdx++
+				}
 			}
 			output[outBase+d] = acc
 		}
@@ -544,9 +595,14 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 	k := key.flat.([]T)
 	v := value.flat.([]T)
 	out := output.flat.([]T)
-	var maskData []T
+	var additiveMask []T
+	var booleanMask []bool
 	if mask != nil {
-		maskData = mask.flat.([]T)
+		if mask.shape.DType == dtypes.Bool {
+			booleanMask = mask.flat.([]bool)
+		} else {
+			additiveMask = mask.flat.([]T)
+		}
 	}
 
 	dims := query.shape.Dimensions
@@ -559,9 +615,9 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 
 	// Layout-dependent axis indices and strides.
 	var seqLen, kvLen, headDim int
-	var qSeqStride, kvSeqStride int       // element stride between consecutive seq positions for one head
-	var qBatchStride, kvBatchStride int    // element stride between consecutive batches
-	var qHeadStride, kvHeadStride int      // element stride between consecutive heads at seq=0
+	var qSeqStride, kvSeqStride int     // element stride between consecutive seq positions for one head
+	var qBatchStride, kvBatchStride int // element stride between consecutive batches
+	var qHeadStride, kvHeadStride int   // element stride between consecutive heads at seq=0
 
 	if data.axesLayout == backends.AxesLayoutBSHD {
 		// [batch, seq, heads, dim]
@@ -596,20 +652,27 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 			kvHeadIdx := headIdx / headsPerKV
 			qOff := batchIdx*qBatchStride + headIdx*qHeadStride
 			kvOff := batchIdx*kvBatchStride + kvHeadIdx*kvHeadStride
-			var maskSlice []T
-			if maskData != nil {
+			var additiveMaskSlice []T
+			var booleanMaskSlice []bool
+			if len(additiveMask) > 0 {
 				maskOffset := batchIdx*maskBatchStride + headIdx*maskHeadStride
-				maskSlice = maskData[maskOffset : maskOffset+maskSliceLen]
+				additiveMaskSlice = additiveMask[maskOffset : maskOffset+maskSliceLen]
+			}
+			if len(booleanMask) > 0 {
+				maskOffset := batchIdx*maskBatchStride + headIdx*maskHeadStride
+				booleanMaskSlice = booleanMask[maskOffset : maskOffset+maskSliceLen]
 			}
 			sdpaGeneric(
 				q, k, v, qOff, kvOff, qSeqStride, kvSeqStride,
-				maskSlice, scores,
+				additiveMaskSlice, booleanMaskSlice, scores,
 				out,
 				seqLen, kvLen, headDim, scale, causal,
 			)
 		}
 	}
 }
+
+// FusedAttentionQKVProjection ===================================================================================
 
 // execFusedAttentionQKVProjection implements fused QKV projection.
 // inputs[0]: pre-computed DotGeneral result [batch, qDim+2*kvDim]

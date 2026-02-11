@@ -78,58 +78,62 @@ func outputEquation(l AxesLayout) string {
 //   - coefficients: attention coefficients (nil when wantCoefficients is false) shaped
 //     [batch, heads, q_seq, kv_seq] for LayoutBHSD or
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
-func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate float64, layout AxesLayout, causal, wantCoefficients bool) (output, coefficients *Node) {
+func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate float64,
+	layout AxesLayout, causal, wantCoefficients bool) (output, coefficients *Node) {
 	g := query.Graph()
 
 	if causal && mask != nil {
 		Panicf("attention.Core: causal and mask are mutually exclusive; combine them into a single mask before calling Core")
 	}
 
-	// Build causal mask for the decomposed path.
-	decomposedMask := mask
-	if causal {
-		seqLen := query.Shape().Dimensions[layout.SeqAxis()]
-		causalBool := LowerTriangular(g, seqLen)
-		// Reshape for correct broadcasting with score layout.
-		switch layout {
-		case LayoutBHSD:
-			causalBool = Reshape(causalBool, 1, 1, seqLen, seqLen)
-		default: // LayoutBSHD
-			causalBool = Reshape(causalBool, 1, seqLen, 1, seqLen)
+	dropoutActive := layers.IsDropoutActive(ctx, g) && dropoutRate > 0
+
+	// Function to compute the attention "decomposed" (as in not-fused).
+	// We use this as a closure (as opposed to calculating it directly), because it's required
+	// by InternalFusedOpCaller() below.
+	decomposedFn := func() (output *Node, coefficients *Node) {
+		// Build causal mask for the decomposed path.
+		decomposedMask := mask
+		if causal {
+			seqLen := query.Shape().Dimensions[layout.SeqAxis()]
+			causalBool := LowerTriangular(g, seqLen)
+			// Reshape for correct broadcasting with score layout.
+			switch layout {
+			case LayoutBHSD:
+				causalBool = Reshape(causalBool, 1, 1, seqLen, seqLen)
+			default: // LayoutBSHD
+				causalBool = Reshape(causalBool, 1, seqLen, 1, seqLen)
+			}
+			decomposedMask = causalBool
 		}
-		decomposedMask = causalBool
-	}
 
-	// Decomposed attention.
-	scores := Einsum(scoreEquation(layout), query, key)
-	scores = MulScalar(scores, scale)
+		// Decomposed attention.
+		scores := Einsum(scoreEquation(layout), query, key)
+		scores = MulScalar(scores, scale)
 
-	if decomposedMask != nil && decomposedMask.DType() != dtypes.Bool {
-		// Additive float mask.
-		scores = Add(scores, decomposedMask)
-		coefficients = Softmax(scores, -1)
-	} else {
-		// Boolean mask (or nil): MaskedSoftmax handles both.
-		if decomposedMask != nil {
-			decomposedMask = BroadcastToShape(decomposedMask, scores.Shape())
+		if decomposedMask != nil && decomposedMask.DType() != dtypes.Bool {
+			// Additive float mask.
+			scores = Add(scores, decomposedMask)
+			coefficients = Softmax(scores, -1)
+		} else {
+			// Boolean mask (or nil): MaskedSoftmax handles both.
+			if decomposedMask != nil {
+				decomposedMask = BroadcastToShape(decomposedMask, scores.Shape())
+			}
+			coefficients = MaskedSoftmax(scores, decomposedMask, -1)
 		}
-		coefficients = MaskedSoftmax(scores, decomposedMask, -1)
-	}
+		if dropoutActive {
+			coefficients = layers.DropoutStatic(ctx, coefficients, dropoutRate)
+		}
 
-	// Apply dropout; detect whether it was actually applied by comparing nodes.
-	var dropoutActive bool
-	if ctx != nil {
-		newCoefficients := layers.DropoutStatic(ctx, coefficients, dropoutRate)
-		dropoutActive = newCoefficients != coefficients
-		coefficients = newCoefficients
+		decomposedOutput := Einsum(outputEquation(layout), coefficients, value)
+		return decomposedOutput, coefficients
 	}
-
-	decomposedOutput := Einsum(outputEquation(layout), coefficients, value)
 
 	// When coefficients are requested, use the decomposed path for everything
 	// to avoid computing both paths (fused output + decomposed scores).
 	if wantCoefficients || dropoutActive {
-		output = decomposedOutput
+		output, coefficients = decomposedFn()
 	} else {
 		numHeads := query.Shape().Dimensions[layout.HeadsAxis()]
 		numKVHeads := key.Shape().Dimensions[layout.HeadsAxis()]
@@ -139,7 +143,10 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 					query, key, value, mask,
 					numHeads, numKVHeads, layout, scale, causal)
 			},
-			func() *Node { return decomposedOutput },
+			func() *Node {
+				output, _ := decomposedFn()
+				return output
+			},
 		)
 		coefficients = nil
 	}
