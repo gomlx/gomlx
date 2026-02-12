@@ -431,7 +431,6 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 					err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
 				}
 				if err != nil {
-					klog.Errorf("DotGeneral failed for packgemm: %+v", err)
 					backend.putBuffer(output2)
 					backend.putBuffer(output)
 					return nil, err
