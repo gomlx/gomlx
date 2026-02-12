@@ -5,8 +5,6 @@
 package packgemm
 
 import (
-	"os"
-
 	"github.com/ajroetker/go-highway/hwy"
 )
 
@@ -19,7 +17,21 @@ var ApplyPackedOutputBFloat16 func(packedOutput []hwy.BFloat16, output []hwy.BFl
 var ApplyPackedOutputFloat32 func(packedOutput []float32, output []float32, alpha float32, beta float32, packedOutputRowStride int, rowOffset int, colOffset int, outputRowStride int, height int, width int)
 var ApplyPackedOutputFloat64 func(packedOutput []float64, output []float64, alpha float64, beta float64, packedOutputRowStride int, rowOffset int, colOffset int, outputRowStride int, height int, width int)
 
-// PackRHS is the generic API that dispatches to the appropriate SIMD implementation.
+// PackRHS packs a slice of size [contractingRows, numCols] block from RHS into
+// the panel reshaped+transposed to [ceil(numCols/kernelCols), contractingRows, kernelCols],
+// padding the cols of the last strip with zeros if necessary.
+//
+//   - src: [contractingSize, numCols]
+//   - dst: a slice with enough size to hold the panel
+//   - srcRowStart: start row in src
+//   - srcColStart: start col in src
+//   - srcRowStride: row-stride of src (number of columns per row in src)
+//   - contractingRows: number of rows to be copied in the panel (must fit total panel allocated size)
+//   - numCols: number of columns to be copied in the panel (excluding padding), will be padded to a kernelCols
+//     multiple with zeros.
+//   - kernelCols: number of columns in each "L1 kernel" (nr)
+//
+// This function dispatches to the appropriate SIMD implementation at runtime.
 func PackRHS[T hwy.Floats](src []T, dst []T, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int) {
 	switch any(src).(type) {
 	case []hwy.Float16:
@@ -33,7 +45,9 @@ func PackRHS[T hwy.Floats](src []T, dst []T, srcRowStart int, srcColStart int, s
 	}
 }
 
-// ApplyPackedOutput is the generic API that dispatches to the appropriate SIMD implementation.
+// ApplyPackedOutput apply a packageOutput "panel" back into the output matrix.
+//
+// This function dispatches to the appropriate SIMD implementation at runtime.
 func ApplyPackedOutput[T hwy.Floats](packedOutput []T, output []T, alpha T, beta T, packedOutputRowStride int, rowOffset int, colOffset int, outputRowStride int, height int, width int) {
 	switch any(packedOutput).(type) {
 	case []hwy.Float16:
@@ -48,7 +62,7 @@ func ApplyPackedOutput[T hwy.Floats](packedOutput []T, output []T, alpha T, beta
 }
 
 func init() {
-	if os.Getenv("HWY_NO_SIMD") != "" {
+	if hwy.NoSimdEnv() {
 		initGen_packing_dispatchFallback()
 		return
 	}

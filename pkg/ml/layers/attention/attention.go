@@ -3,40 +3,27 @@
 package attention
 
 import (
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
-// AxesLayout specifies the ordering of axes in the 4D attention tensors.
-// Different layouts use different Einsum equations but produce mathematically equivalent results.
-type AxesLayout int
+// AxesLayout is a type alias for backends.AxesLayout, re-exported for convenience.
+type AxesLayout = backends.AxesLayout
 
 const (
-	// LayoutBHSD is the [batch, heads, seq, dim] layout used by PyTorch's F.scaled_dot_product_attention,
-	// ONNX, and most inference runtimes.
-	LayoutBHSD AxesLayout = iota
+	// LayoutBHSD is the [batch, heads, seq, dim] layout.
+	LayoutBHSD = backends.AxesLayoutBHSD
 
-	// LayoutBSHD is the [batch, seq, heads, dim] layout used internally by MultiHeadAttention
-	// (after Dense projections which produce [batch, seq, heads, dim]).
-	LayoutBSHD
+	// LayoutBSHD is the [batch, seq, heads, dim] layout.
+	LayoutBSHD = backends.AxesLayoutBSHD
 )
 
-// String returns the name of the layout.
-func (l AxesLayout) String() string {
-	switch l {
-	case LayoutBHSD:
-		return "BHSD"
-	case LayoutBSHD:
-		return "BSHD"
-	default:
-		return "unknown"
-	}
-}
-
 // scoreEquation returns the Einsum equation for computing attention scores (Q @ K^T).
-func (l AxesLayout) scoreEquation() string {
+func scoreEquation(l AxesLayout) string {
 	switch l {
 	case LayoutBSHD:
 		return "bqhd,bkhd->bqhk"
@@ -46,22 +33,12 @@ func (l AxesLayout) scoreEquation() string {
 }
 
 // outputEquation returns the Einsum equation for computing the attention output (coefficients @ V).
-func (l AxesLayout) outputEquation() string {
+func outputEquation(l AxesLayout) string {
 	switch l {
 	case LayoutBSHD:
 		return "bqhk,bkhd->bqhd"
 	default: // LayoutBHSD
 		return "bhqk,bhkd->bhqd"
-	}
-}
-
-// SeqAxis returns the axis index for the sequence dimension.
-func (l AxesLayout) SeqAxis() int {
-	switch l {
-	case LayoutBSHD:
-		return 1
-	default: // LayoutBHSD
-		return 2
 	}
 }
 
@@ -83,35 +60,95 @@ func (l AxesLayout) SeqAxis() int {
 //   - LayoutBHSD: broadcastable to [batch, heads, q_seq, kv_seq]
 //   - LayoutBSHD: broadcastable to [batch, q_seq, heads, kv_seq]
 //
+// The causal and mask parameters are mutually exclusive: providing both will panic.
+// If you need both causal masking and an explicit mask, combine them into a single mask
+// before calling Core (e.g. LogicalAnd a lower-triangular boolean mask with your mask).
+//
 // The dropoutRate (if > 0) applies dropout to the attention coefficients during training.
+// When dropout is active, the fused path is skipped (fused ops don't support dropout).
 // The ctx parameter provides the training/inference context for dropout; it may be nil
 // when dropoutRate is 0.
 //
+// When wantCoefficients is true, the decomposed path is used for the entire computation
+// (no fused op) and coefficients are returned. When false, the fused op is attempted for
+// the output and coefficients is nil.
+//
 // Returns:
-//   - output: same shape as value.
-//   - coefficients: attention coefficients (from 0 to 1) shaped
+//   - output: same shape as query.
+//   - coefficients: attention coefficients (nil when wantCoefficients is false) shaped
 //     [batch, heads, q_seq, kv_seq] for LayoutBHSD or
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
-func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate float64, layout AxesLayout) (output, coefficients *Node) {
-	scores := Einsum(layout.scoreEquation(), query, key)
-	scores = MulScalar(scores, scale)
+func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate float64,
+	layout AxesLayout, causal, wantCoefficients bool) (output, coefficients *Node) {
+	g := query.Graph()
 
-	if mask != nil && mask.DType() != dtypes.Bool {
-		// Additive float mask.
-		scores = Add(scores, mask)
-		coefficients = Softmax(scores, -1)
-	} else {
-		// Boolean mask (or nil): MaskedSoftmax handles both.
-		if mask != nil {
-			mask = BroadcastToShape(mask, scores.Shape())
+	if causal && mask != nil {
+		Panicf("attention.Core: causal and mask are mutually exclusive; combine them into a single mask before calling Core")
+	}
+
+	dropoutActive := layers.IsDropoutActive(ctx, g) && dropoutRate > 0
+
+	// Function to compute the attention "decomposed" (as in not-fused).
+	// We use this as a closure (as opposed to calculating it directly), because it's required
+	// by InternalFusedOpCaller() below.
+	decomposedFn := func() (output *Node, coefficients *Node) {
+		// Build causal mask for the decomposed path.
+		decomposedMask := mask
+		if causal {
+			seqLen := query.Shape().Dimensions[layout.SeqAxis()]
+			causalBool := LowerTriangular(g, seqLen)
+			// Reshape for correct broadcasting with score layout.
+			switch layout {
+			case LayoutBHSD:
+				causalBool = Reshape(causalBool, 1, 1, seqLen, seqLen)
+			default: // LayoutBSHD
+				causalBool = Reshape(causalBool, 1, seqLen, 1, seqLen)
+			}
+			decomposedMask = causalBool
 		}
-		coefficients = MaskedSoftmax(scores, mask, -1)
+
+		// Decomposed attention.
+		scores := Einsum(scoreEquation(layout), query, key)
+		scores = MulScalar(scores, scale)
+
+		if decomposedMask != nil && decomposedMask.DType() != dtypes.Bool {
+			// Additive float mask.
+			scores = Add(scores, decomposedMask)
+			coefficients = Softmax(scores, -1)
+		} else {
+			// Boolean mask (or nil): MaskedSoftmax handles both.
+			if decomposedMask != nil {
+				decomposedMask = BroadcastToShape(decomposedMask, scores.Shape())
+			}
+			coefficients = MaskedSoftmax(scores, decomposedMask, -1)
+		}
+		if dropoutActive {
+			coefficients = layers.DropoutStatic(ctx, coefficients, dropoutRate)
+		}
+
+		decomposedOutput := Einsum(outputEquation(layout), coefficients, value)
+		return decomposedOutput, coefficients
 	}
 
-	if dropoutRate > 0 && ctx != nil {
-		coefficients = layers.Dropout(ctx, coefficients, ConstAs(coefficients, dropoutRate))
+	// When coefficients are requested, use the decomposed path for everything
+	// to avoid computing both paths (fused output + decomposed scores).
+	if wantCoefficients || dropoutActive {
+		output, coefficients = decomposedFn()
+	} else {
+		numHeads := query.Shape().Dimensions[layout.HeadsAxis()]
+		numKVHeads := key.Shape().Dimensions[layout.HeadsAxis()]
+		output = InternalFusedOpCaller(
+			func() *Node {
+				return BackendFusedScaledDotProductAttention(
+					query, key, value, mask,
+					numHeads, numKVHeads, layout, scale, causal)
+			},
+			func() *Node {
+				output, _ := decomposedFn()
+				return output
+			},
+		)
+		coefficients = nil
 	}
-
-	output = Einsum(layout.outputEquation(), coefficients, value)
 	return output, coefficients
 }

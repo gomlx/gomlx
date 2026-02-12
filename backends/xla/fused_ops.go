@@ -25,3 +25,12 @@ func (f *Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64,
 func (f *Function) FusedDense(x, weight, bias backends.Value, activation backends.ActivationType) (backends.Value, error) {
 	return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedDense not implemented in XLA backend")
 }
+
+func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backends.Value, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (backends.Value, error) {
+	return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedScaledDotProductAttention not implemented in XLA backend")
+}
+
+func (f *Function) FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV backends.Value, queryDim, keyValueDim int) (query, key, value backends.Value, err error) {
+	err = errors.Wrapf(backends.ErrNotImplemented, "FusedAttentionQKVProjection not implemented in XLA backend")
+	return
+}

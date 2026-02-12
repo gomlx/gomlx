@@ -5,9 +5,10 @@
 package packgemm
 
 import (
+	"unsafe"
+
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/asm"
-	"unsafe"
 )
 
 func BasePackRHS_neon_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowStart int, srcColStart int, srcRowStride int, contractingRows int, numCols int, kernelCols int) {
@@ -21,12 +22,12 @@ func BasePackRHS_neon_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowStart 
 		switch {
 		case kernelCols == numLanes:
 			useScalar = false
-			var v0 hwy.Vec[hwy.Float16]
+			var v0 asm.Float16x8
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 = hwy.Load(src[srcIdx:])
-					hwy.StoreFull(v0, dst[dstIdx:])
+					v0 = asm.LoadFloat16x8Ptr(unsafe.Pointer(&src[srcIdx:][0]))
+					v0.StorePtr(unsafe.Pointer(&dst[dstIdx:][0]))
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -36,28 +37,28 @@ func BasePackRHS_neon_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowStart 
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 := hwy.Load(src[srcIdx:])
-					v1 := hwy.Load(src[srcIdx+numLanes:])
-					hwy.StoreFull(v0, dst[dstIdx:])
-					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					v0 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&src[srcIdx:][0]))
+					v1 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&src[srcIdx+numLanes:][0]))
+					v0.StorePtr(unsafe.Pointer(&dst[dstIdx:][0]))
+					v1.StorePtr(unsafe.Pointer(&dst[dstIdx+numLanes:][0]))
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
 			}
 		case kernelCols == numLanes*4:
 			useScalar = false
-			var v0, v1, v2, v3 hwy.Vec[hwy.Float16]
+			var v0, v1, v2, v3 asm.Float16x8
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 = hwy.Load(src[srcIdx:])
-					v1 = hwy.Load(src[srcIdx+numLanes:])
-					v2 = hwy.Load(src[srcIdx+numLanes*2:])
-					v3 = hwy.Load(src[srcIdx+numLanes*3:])
-					hwy.StoreFull(v0, dst[dstIdx:])
-					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-					hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
-					hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
+					v0 = asm.LoadFloat16x8Ptr(unsafe.Pointer(&src[srcIdx:][0]))
+					v1 = asm.LoadFloat16x8Ptr(unsafe.Pointer(&src[srcIdx+numLanes:][0]))
+					v2 = asm.LoadFloat16x8Ptr(unsafe.Pointer(&src[srcIdx+numLanes*2:][0]))
+					v3 = asm.LoadFloat16x8Ptr(unsafe.Pointer(&src[srcIdx+numLanes*3:][0]))
+					v0.StorePtr(unsafe.Pointer(&dst[dstIdx:][0]))
+					v1.StorePtr(unsafe.Pointer(&dst[dstIdx+numLanes:][0]))
+					v2.StorePtr(unsafe.Pointer(&dst[dstIdx+numLanes*2:][0]))
+					v3.StorePtr(unsafe.Pointer(&dst[dstIdx+numLanes*3:][0]))
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -100,12 +101,12 @@ func BasePackRHS_neon_BFloat16(src []hwy.BFloat16, dst []hwy.BFloat16, srcRowSta
 		switch {
 		case kernelCols == numLanes:
 			useScalar = false
-			var v0 hwy.Vec[hwy.BFloat16]
+			var v0 asm.BFloat16x8
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 = hwy.Load(src[srcIdx:])
-					hwy.StoreFull(v0, dst[dstIdx:])
+					v0 = asm.LoadBFloat16x8Ptr(unsafe.Pointer(&src[srcIdx:][0]))
+					v0.StorePtr(unsafe.Pointer(&dst[dstIdx:][0]))
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -115,28 +116,28 @@ func BasePackRHS_neon_BFloat16(src []hwy.BFloat16, dst []hwy.BFloat16, srcRowSta
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 := hwy.Load(src[srcIdx:])
-					v1 := hwy.Load(src[srcIdx+numLanes:])
-					hwy.StoreFull(v0, dst[dstIdx:])
-					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					v0 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&src[srcIdx:][0]))
+					v1 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&src[srcIdx+numLanes:][0]))
+					v0.StorePtr(unsafe.Pointer(&dst[dstIdx:][0]))
+					v1.StorePtr(unsafe.Pointer(&dst[dstIdx+numLanes:][0]))
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
 			}
 		case kernelCols == numLanes*4:
 			useScalar = false
-			var v0, v1, v2, v3 hwy.Vec[hwy.BFloat16]
+			var v0, v1, v2, v3 asm.BFloat16x8
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 = hwy.Load(src[srcIdx:])
-					v1 = hwy.Load(src[srcIdx+numLanes:])
-					v2 = hwy.Load(src[srcIdx+numLanes*2:])
-					v3 = hwy.Load(src[srcIdx+numLanes*3:])
-					hwy.StoreFull(v0, dst[dstIdx:])
-					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-					hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
-					hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
+					v0 = asm.LoadBFloat16x8Ptr(unsafe.Pointer(&src[srcIdx:][0]))
+					v1 = asm.LoadBFloat16x8Ptr(unsafe.Pointer(&src[srcIdx+numLanes:][0]))
+					v2 = asm.LoadBFloat16x8Ptr(unsafe.Pointer(&src[srcIdx+numLanes*2:][0]))
+					v3 = asm.LoadBFloat16x8Ptr(unsafe.Pointer(&src[srcIdx+numLanes*3:][0]))
+					v0.StorePtr(unsafe.Pointer(&dst[dstIdx:][0]))
+					v1.StorePtr(unsafe.Pointer(&dst[dstIdx+numLanes:][0]))
+					v2.StorePtr(unsafe.Pointer(&dst[dstIdx+numLanes*2:][0]))
+					v3.StorePtr(unsafe.Pointer(&dst[dstIdx+numLanes*3:][0]))
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -327,8 +328,8 @@ func BasePackRHS_neon_Float64(src []float64, dst []float64, srcRowStart int, src
 }
 
 func BaseApplyPackedOutput_neon_Float16(packedOutput []hwy.Float16, output []hwy.Float16, alpha hwy.Float16, beta hwy.Float16, packedOutputRowStride int, rowOffset int, colOffset int, outputRowStride int, height int, width int) {
-	alphaVec := hwy.Set[hwy.Float16](alpha)
-	betaVec := hwy.Set[hwy.Float16](beta)
+	alphaVec := asm.BroadcastFloat16x8(uint16(alpha))
+	betaVec := asm.BroadcastFloat16x8(uint16(beta))
 	for r := range height {
 		packedIdx := r * packedOutputRowStride
 		outputIdx := (rowOffset+r)*outputRowStride + colOffset
@@ -336,10 +337,10 @@ func BaseApplyPackedOutput_neon_Float16(packedOutput []hwy.Float16, output []hwy
 		if hwy.CurrentLevel() != hwy.DispatchScalar {
 			numLanes := 8
 			for ; c+numLanes <= width; c += numLanes {
-				packedVal := hwy.Load(packedOutput[packedIdx:])
-				outputVal := hwy.Load(output[outputIdx:])
-				newVal := hwy.FMAF16(alphaVec, packedVal, hwy.MulF16(betaVec, outputVal))
-				hwy.StoreFull(newVal, output[outputIdx:])
+				packedVal := asm.LoadFloat16x8Ptr(unsafe.Pointer(&packedOutput[packedIdx:][0]))
+				outputVal := asm.LoadFloat16x8Ptr(unsafe.Pointer(&output[outputIdx:][0]))
+				newVal := alphaVec.MulAdd(packedVal, betaVec.Mul(outputVal))
+				newVal.StorePtr(unsafe.Pointer(&output[outputIdx:][0]))
 				packedIdx += numLanes
 				outputIdx += numLanes
 			}
@@ -354,8 +355,8 @@ func BaseApplyPackedOutput_neon_Float16(packedOutput []hwy.Float16, output []hwy
 }
 
 func BaseApplyPackedOutput_neon_BFloat16(packedOutput []hwy.BFloat16, output []hwy.BFloat16, alpha hwy.BFloat16, beta hwy.BFloat16, packedOutputRowStride int, rowOffset int, colOffset int, outputRowStride int, height int, width int) {
-	alphaVec := hwy.Set[hwy.BFloat16](alpha)
-	betaVec := hwy.Set[hwy.BFloat16](beta)
+	alphaVec := asm.BroadcastBFloat16x8(uint16(alpha))
+	betaVec := asm.BroadcastBFloat16x8(uint16(beta))
 	for r := range height {
 		packedIdx := r * packedOutputRowStride
 		outputIdx := (rowOffset+r)*outputRowStride + colOffset
@@ -363,10 +364,10 @@ func BaseApplyPackedOutput_neon_BFloat16(packedOutput []hwy.BFloat16, output []h
 		if hwy.CurrentLevel() != hwy.DispatchScalar {
 			numLanes := 8
 			for ; c+numLanes <= width; c += numLanes {
-				packedVal := hwy.Load(packedOutput[packedIdx:])
-				outputVal := hwy.Load(output[outputIdx:])
-				newVal := hwy.FMABF16(alphaVec, packedVal, hwy.MulBF16(betaVec, outputVal))
-				hwy.StoreFull(newVal, output[outputIdx:])
+				packedVal := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&packedOutput[packedIdx:][0]))
+				outputVal := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&output[outputIdx:][0]))
+				newVal := alphaVec.MulAdd(packedVal, betaVec.Mul(outputVal))
+				newVal.StorePtr(unsafe.Pointer(&output[outputIdx:][0]))
 				packedIdx += numLanes
 				outputIdx += numLanes
 			}
