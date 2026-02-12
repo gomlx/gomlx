@@ -41,8 +41,9 @@ type CacheParams struct {
 	RHSPanelCrossSize    int // Nc: L3 cols
 }
 
-// Register of cache params:
-var knownParams = map[string]*CacheParams{}
+// Registry of cache params keyed by the algorithm name.
+// One per algorithm (same algorithm may serve various DTypes)
+var knownVariations = map[string]*CacheParams{}
 
 // Priority is used to determine the priority of a gemm version, when setting the
 // DTypeToGEMM map.
@@ -99,7 +100,10 @@ type GEMMRegistration struct {
 	DTypePair DTypePair
 	GEMMFn    any // Typed GEMM function
 	Priority  Priority
-	Params    *CacheParams
+
+	// Params for the registered function is used for testing only.
+	// It may not be accurate, in cases where it is dynamically modified according to the SIMD architecture available.
+	Params *CacheParams
 }
 
 // RegisterGEMM registers a GEMM function for the given dtypes with the given priority.
@@ -143,6 +147,10 @@ func GEMM[TInput, TOutput dtypes.Supported](alpha, beta TOutput, lhsFlat, rhsFla
 		return errors.Errorf("Registered GEMM function invalid for dtypes input=%s, output=%s!? This is a bug, we got"+
 			"instead %T as the registered function",
 			dtypePair.Input, dtypePair.Output, gemmRegs[0].GEMMFn)
+	}
+	if gemmFn == nil {
+		return errors.Errorf("Registered GEMM function is nil for dtypes input=%s, output=%s!? This is a bug",
+			dtypePair.Input, dtypePair.Output)
 	}
 	return gemmFn(alpha, beta, lhsFlat, rhsFlat, batchSize,
 		lhsCrossSize, rhsCrossSize, contractingSize, outputFlat,

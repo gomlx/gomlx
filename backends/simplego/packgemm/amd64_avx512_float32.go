@@ -24,7 +24,7 @@ var avx512Float32Params = CacheParams{
 func init() {
 	if archsimd.X86.AVX512() {
 		RegisterGEMM("AVX512", avx512Float32, &avx512Float32Params, PriorityDTypeSIMD)
-		knownParams["AVX512"] = &avx512Float32Params
+		knownVariations["AVX512"] = &avx512Float32Params
 	}
 }
 

@@ -1,20 +1,52 @@
 package packgemm
 
 import (
+	"simd/archsimd"
+
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/gomlx/gomlx/internal/workerspool"
 )
 
 //go:generate go tool github.com/ajroetker/go-highway/cmd/hwygen -input gemm_16reg_base.go -output_prefix=gen_gemm16reg_impl -dispatch gen_gemm16reg_dispatch -targets avx2,avx512,fallback
 
-// simd16RegistersParams are the parameters to use if there are 16 SIMD registers available.
-// It still needs to be adjusted to the size of the registers (in terms )
-var simd16RegistersParams = CacheParams{
-	LHSL1KernelRows:      4,   // Mr: Uses 4 registers for accumulation rows.
-	RHSL1KernelCols:      2,   // Nr: Uses 2 registers for accumulation cols: this must be multiplied by the number of lanes.
-	PanelContractingSize: 128, // Kc: A strip fits in L1 cache
-	LHSPanelCrossSize:    4,   // Mc: Fits in L2 cache (multiple of LHSL1KernelRows), multiple of LHSL1KernelRows, but usually just LHSL1KernelRows.
-	RHSPanelCrossSize:    512, // Nc: Fits in L3 cache (multiple of RHSL1KernelCols), multiple of RHSL1KernelRows.
+var (
+	// simd16RegistersParams are the parameters to use if there are 16 SIMD registers available.
+	// It still needs to be adjusted to the size of the registers (in terms )
+	simd16RegistersParams = CacheParams{
+		LHSL1KernelRows:      4,   // Mr: Uses 4 registers for accumulation rows.
+		RHSL1KernelCols:      2,   // Nr: Uses 2 registers for accumulation cols: this must be multiplied by the number of lanes.
+		PanelContractingSize: 128, // Kc: A strip fits in L1 cache
+		LHSPanelCrossSize:    4,   // Mc: Fits in L2 cache (multiple of LHSL1KernelRows), multiple of LHSL1KernelRows, but usually just LHSL1KernelRows.
+		RHSPanelCrossSize:    512, // Nc: Fits in L3 cache (multiple of RHSL1KernelCols), multiple of RHSL1KernelRows.
+	}
+)
+
+func init() {
+	initGen_gemm16reg_dispatchFallback()
+
+	if archsimd.X86.AVX512() || archsimd.X86.AVX2() {
+		knownVariations["hwy-AVX512"] = &simd16RegistersParams // Testing purpose only.
+		RegisterGEMM("hwy-AVX512", GEMMSymmetric16RegistersFloat32, &simd16RegistersParams, PriorityDTypeSIMD+1)
+		RegisterGEMM("hwy-AVX512", GEMMSymmetric16RegistersFloat64, &simd16RegistersParams, PriorityDTypeSIMD+1)
+		/*
+			RegisterGEMM("hwy-AVX512",
+				func(
+					alpha, beta float16.Float16,
+					lhsFlat, rhsFlat []float16.Float16,
+					batchSize int, lhsCrossSize int, rhsCrossSize int, contractingSize int,
+					outputFlat []float16.Float16,
+					bufAllocFn BufAllocFn[float16.Float16],
+					bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
+					return GEMMSymmetric16RegistersFloat16(
+						hwy.Float16(alpha), hwy.Float16(beta),
+						lhsFlat, rhsFlat,
+						batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+						outputFlat,
+						bufAllocFn, bufReleaseFn, pool)
+				}, &simd16RegistersParams, PriorityDTypeSIMD+1)
+			RegisterGEMM("hwy-AVX512", GEMMSymmetric16RegistersBFloat16, &simd16RegistersParams, PriorityDTypeSIMD+1)
+		*/
+	}
 }
 
 func BaseGEMMSymmetric16Registers[T hwy.Floats](

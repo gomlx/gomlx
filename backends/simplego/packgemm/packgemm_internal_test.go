@@ -165,8 +165,8 @@ func BenchmarkPack(b *testing.B) {
 
 	b.Run("RHS", func(b *testing.B) {
 		for _, size := range sizes {
-			for _, paramsName := range xslices.SortedKeys(knownParams) {
-				params := knownParams[paramsName]
+			for _, paramsName := range xslices.SortedKeys(knownVariations) {
+				params := knownVariations[paramsName]
 				testName := fmt.Sprintf("params=%s: K=%d,Kc=%d,N=%d,Nc=%d,Nr=%d",
 					paramsName,
 					size.contractingRows, params.PanelContractingSize,
@@ -229,8 +229,8 @@ func BenchmarkPack(b *testing.B) {
 			lhsRows := size.rhsCols
 			contractingCols := size.contractingRows
 
-			for _, paramsName := range xslices.SortedKeys(knownParams) {
-				params := knownParams[paramsName]
+			for _, paramsName := range xslices.SortedKeys(knownVariations) {
+				params := knownVariations[paramsName]
 				testName := fmt.Sprintf("params=%s/M=%d,Mc=%d,K=%d,Kc=%d,Mr=%d",
 					paramsName,
 					lhsRows, params.LHSPanelCrossSize,
