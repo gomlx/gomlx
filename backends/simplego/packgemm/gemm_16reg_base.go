@@ -163,7 +163,7 @@ func BaseGEMMSymmetric16RegistersGemmChunk[T hwy.Floats](
 				}
 				ApplyPackedOutput(
 					packedOutput, output,
-					alpha, effectiveBeta,
+					alpha, T(effectiveBeta),
 					params.RHSPanelCrossSize,
 					lhsPanelRowIdx, rhsPanelColIdx,
 					rhsCrossSize,

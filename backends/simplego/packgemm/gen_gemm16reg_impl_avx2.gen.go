@@ -231,7 +231,7 @@ func BaseGEMMSymmetric16RegistersGemmChunk_avx2_Float16(alpha hwy.Float16, beta 
 				if contractingPanelIdx > 0 {
 					effectiveBeta = 1
 				}
-				ApplyPackedOutput(packedOutput, output, alpha, effectiveBeta, params.RHSPanelCrossSize, lhsPanelRowIdx, rhsPanelColIdx, rhsCrossSize, lhsPanelHeight, rhsPanelWidth)
+				ApplyPackedOutput(packedOutput, output, alpha, hwy.Float32ToFloat16(effectiveBeta), params.RHSPanelCrossSize, lhsPanelRowIdx, rhsPanelColIdx, rhsCrossSize, lhsPanelHeight, rhsPanelWidth)
 			}
 		}
 	}
@@ -251,7 +251,7 @@ func BaseGEMMSymmetric16RegistersGemmChunk_avx2_BFloat16(alpha hwy.BFloat16, bet
 				if contractingPanelIdx > 0 {
 					effectiveBeta = 1
 				}
-				ApplyPackedOutput(packedOutput, output, alpha, effectiveBeta, params.RHSPanelCrossSize, lhsPanelRowIdx, rhsPanelColIdx, rhsCrossSize, lhsPanelHeight, rhsPanelWidth)
+				ApplyPackedOutput(packedOutput, output, alpha, hwy.Float32ToBFloat16(effectiveBeta), params.RHSPanelCrossSize, lhsPanelRowIdx, rhsPanelColIdx, rhsCrossSize, lhsPanelHeight, rhsPanelWidth)
 			}
 		}
 	}
@@ -271,7 +271,7 @@ func BaseGEMMSymmetric16RegistersGemmChunk_avx2(alpha float32, beta float32, lhs
 				if contractingPanelIdx > 0 {
 					effectiveBeta = 1
 				}
-				ApplyPackedOutput(packedOutput, output, alpha, effectiveBeta, params.RHSPanelCrossSize, lhsPanelRowIdx, rhsPanelColIdx, rhsCrossSize, lhsPanelHeight, rhsPanelWidth)
+				ApplyPackedOutput(packedOutput, output, alpha, float32(effectiveBeta), params.RHSPanelCrossSize, lhsPanelRowIdx, rhsPanelColIdx, rhsCrossSize, lhsPanelHeight, rhsPanelWidth)
 			}
 		}
 	}
@@ -291,7 +291,7 @@ func BaseGEMMSymmetric16RegistersGemmChunk_avx2_Float64(alpha float64, beta floa
 				if contractingPanelIdx > 0 {
 					effectiveBeta = 1
 				}
-				ApplyPackedOutput(packedOutput, output, alpha, effectiveBeta, params.RHSPanelCrossSize, lhsPanelRowIdx, rhsPanelColIdx, rhsCrossSize, lhsPanelHeight, rhsPanelWidth)
+				ApplyPackedOutput(packedOutput, output, alpha, float64(effectiveBeta), params.RHSPanelCrossSize, lhsPanelRowIdx, rhsPanelColIdx, rhsCrossSize, lhsPanelHeight, rhsPanelWidth)
 			}
 		}
 	}
