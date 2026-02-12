@@ -5,34 +5,16 @@
 package packgemm
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
-	"github.com/gomlx/gomlx/internal/workerspool"
 	"simd/archsimd"
 	"unsafe"
-)
 
-// Hoisted constants - pre-broadcasted at package init time
-var (
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs0_rhs0_f32 = archsimd.BroadcastFloat32x8(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs0_rhs0_f64 = archsimd.BroadcastFloat64x4(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs0_rhs1_f32 = archsimd.BroadcastFloat32x8(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs0_rhs1_f64 = archsimd.BroadcastFloat64x4(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs1_rhs0_f32 = archsimd.BroadcastFloat32x8(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs1_rhs0_f64 = archsimd.BroadcastFloat64x4(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs1_rhs1_f32 = archsimd.BroadcastFloat32x8(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs1_rhs1_f64 = archsimd.BroadcastFloat64x4(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs2_rhs0_f32 = archsimd.BroadcastFloat32x8(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs2_rhs0_f64 = archsimd.BroadcastFloat64x4(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs2_rhs1_f32 = archsimd.BroadcastFloat32x8(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs2_rhs1_f64 = archsimd.BroadcastFloat64x4(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs3_rhs0_f32 = archsimd.BroadcastFloat32x8(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs3_rhs0_f64 = archsimd.BroadcastFloat64x4(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs3_rhs1_f32 = archsimd.BroadcastFloat32x8(0)
-	BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs3_rhs1_f64 = archsimd.BroadcastFloat64x4(0)
+	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/asm"
+	"github.com/gomlx/gomlx/internal/workerspool"
 )
 
 func BaseGEMMSymmetric16Registers_avx2_Float16(alpha hwy.Float16, beta hwy.Float16, lhsFlat []hwy.Float16, rhsFlat []hwy.Float16, batchSize int, lhsCrossSize int, rhsCrossSize int, contractingSize int, outputFlat []hwy.Float16, bufAllocFn BufAllocFn[hwy.Float16], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
-	numLanes := 16
+	numLanes := 8
 	params := simd16RegistersParams
 	params.RHSL1KernelCols *= numLanes
 	lhsBatchStride := lhsCrossSize * contractingSize
@@ -75,7 +57,7 @@ func BaseGEMMSymmetric16Registers_avx2_Float16(alpha hwy.Float16, beta hwy.Float
 				batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
 				batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
 				batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
-				GEMMSymmetric16RegistersGemmChunk(alpha, beta, batchLhs, batchRhs, batchOutput, lhsCrossSize, rhsCrossSize, contractingSize, params, item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd, packedLHS, packedRHS, packedOutput)
+				GEMMSymmetric16RegistersGemmChunk(alpha, beta, batchLhs, batchRhs, batchOutput, lhsCrossSize, rhsCrossSize, contractingSize, &params, item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd, packedLHS, packedRHS, packedOutput)
 			}
 		}
 	})
@@ -83,7 +65,7 @@ func BaseGEMMSymmetric16Registers_avx2_Float16(alpha hwy.Float16, beta hwy.Float
 }
 
 func BaseGEMMSymmetric16Registers_avx2_BFloat16(alpha hwy.BFloat16, beta hwy.BFloat16, lhsFlat []hwy.BFloat16, rhsFlat []hwy.BFloat16, batchSize int, lhsCrossSize int, rhsCrossSize int, contractingSize int, outputFlat []hwy.BFloat16, bufAllocFn BufAllocFn[hwy.BFloat16], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
-	numLanes := 16
+	numLanes := 8
 	params := simd16RegistersParams
 	params.RHSL1KernelCols *= numLanes
 	lhsBatchStride := lhsCrossSize * contractingSize
@@ -126,7 +108,7 @@ func BaseGEMMSymmetric16Registers_avx2_BFloat16(alpha hwy.BFloat16, beta hwy.BFl
 				batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
 				batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
 				batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
-				GEMMSymmetric16RegistersGemmChunk(alpha, beta, batchLhs, batchRhs, batchOutput, lhsCrossSize, rhsCrossSize, contractingSize, params, item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd, packedLHS, packedRHS, packedOutput)
+				GEMMSymmetric16RegistersGemmChunk(alpha, beta, batchLhs, batchRhs, batchOutput, lhsCrossSize, rhsCrossSize, contractingSize, &params, item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd, packedLHS, packedRHS, packedOutput)
 			}
 		}
 	})
@@ -177,7 +159,7 @@ func BaseGEMMSymmetric16Registers_avx2(alpha float32, beta float32, lhsFlat []fl
 				batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
 				batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
 				batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
-				GEMMSymmetric16RegistersGemmChunk(alpha, beta, batchLhs, batchRhs, batchOutput, lhsCrossSize, rhsCrossSize, contractingSize, params, item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd, packedLHS, packedRHS, packedOutput)
+				GEMMSymmetric16RegistersGemmChunk(alpha, beta, batchLhs, batchRhs, batchOutput, lhsCrossSize, rhsCrossSize, contractingSize, &params, item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd, packedLHS, packedRHS, packedOutput)
 			}
 		}
 	})
@@ -228,7 +210,7 @@ func BaseGEMMSymmetric16Registers_avx2_Float64(alpha float64, beta float64, lhsF
 				batchLhs := lhsFlat[batchIdx*lhsBatchStride : (batchIdx+1)*lhsBatchStride]
 				batchRhs := rhsFlat[batchIdx*rhsBatchStride : (batchIdx+1)*rhsBatchStride]
 				batchOutput := outputFlat[batchIdx*outputBatchStride : (batchIdx+1)*outputBatchStride]
-				GEMMSymmetric16RegistersGemmChunk(alpha, beta, batchLhs, batchRhs, batchOutput, lhsCrossSize, rhsCrossSize, contractingSize, params, item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd, packedLHS, packedRHS, packedOutput)
+				GEMMSymmetric16RegistersGemmChunk(alpha, beta, batchLhs, batchRhs, batchOutput, lhsCrossSize, rhsCrossSize, contractingSize, &params, item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd, packedLHS, packedRHS, packedOutput)
 			}
 		}
 	})
@@ -244,7 +226,7 @@ func BaseGEMMSymmetric16RegistersGemmChunk_avx2_Float16(alpha hwy.Float16, beta 
 			for lhsPanelRowIdx := lhsRowStart; lhsPanelRowIdx < lhsRowEnd; lhsPanelRowIdx += params.LHSPanelCrossSize {
 				lhsPanelHeight := min(params.LHSPanelCrossSize, lhsRowEnd-lhsPanelRowIdx)
 				packLHS(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
-				BaseGEMMSymmetric16RegistersPanel_avx2_Float16(contractingPanelWidth, packedLhs, packedRhs, packedOutput, params, lhsPanelHeight, rhsPanelWidth)
+				GEMMSymmetric16RegistersPanel(contractingPanelWidth, packedLhs, packedRhs, packedOutput, params, lhsPanelHeight, rhsPanelWidth)
 				effectiveBeta := beta.Float32()
 				if contractingPanelIdx > 0 {
 					effectiveBeta = 1
@@ -264,7 +246,7 @@ func BaseGEMMSymmetric16RegistersGemmChunk_avx2_BFloat16(alpha hwy.BFloat16, bet
 			for lhsPanelRowIdx := lhsRowStart; lhsPanelRowIdx < lhsRowEnd; lhsPanelRowIdx += params.LHSPanelCrossSize {
 				lhsPanelHeight := min(params.LHSPanelCrossSize, lhsRowEnd-lhsPanelRowIdx)
 				packLHS(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
-				BaseGEMMSymmetric16RegistersPanel_avx2_BFloat16(contractingPanelWidth, packedLhs, packedRhs, packedOutput, params, lhsPanelHeight, rhsPanelWidth)
+				GEMMSymmetric16RegistersPanel(contractingPanelWidth, packedLhs, packedRhs, packedOutput, params, lhsPanelHeight, rhsPanelWidth)
 				effectiveBeta := beta.Float32()
 				if contractingPanelIdx > 0 {
 					effectiveBeta = 1
@@ -284,7 +266,7 @@ func BaseGEMMSymmetric16RegistersGemmChunk_avx2(alpha float32, beta float32, lhs
 			for lhsPanelRowIdx := lhsRowStart; lhsPanelRowIdx < lhsRowEnd; lhsPanelRowIdx += params.LHSPanelCrossSize {
 				lhsPanelHeight := min(params.LHSPanelCrossSize, lhsRowEnd-lhsPanelRowIdx)
 				packLHS(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
-				BaseGEMMSymmetric16RegistersPanel_avx2(contractingPanelWidth, packedLhs, packedRhs, packedOutput, params, lhsPanelHeight, rhsPanelWidth)
+				GEMMSymmetric16RegistersPanel(contractingPanelWidth, packedLhs, packedRhs, packedOutput, params, lhsPanelHeight, rhsPanelWidth)
 				effectiveBeta := beta
 				if contractingPanelIdx > 0 {
 					effectiveBeta = 1
@@ -304,7 +286,7 @@ func BaseGEMMSymmetric16RegistersGemmChunk_avx2_Float64(alpha float64, beta floa
 			for lhsPanelRowIdx := lhsRowStart; lhsPanelRowIdx < lhsRowEnd; lhsPanelRowIdx += params.LHSPanelCrossSize {
 				lhsPanelHeight := min(params.LHSPanelCrossSize, lhsRowEnd-lhsPanelRowIdx)
 				packLHS(lhs, packedLhs, lhsPanelRowIdx, contractingPanelIdx, contractingSize, lhsPanelHeight, contractingPanelWidth, params.LHSL1KernelRows)
-				BaseGEMMSymmetric16RegistersPanel_avx2_Float64(contractingPanelWidth, packedLhs, packedRhs, packedOutput, params, lhsPanelHeight, rhsPanelWidth)
+				GEMMSymmetric16RegistersPanel(contractingPanelWidth, packedLhs, packedRhs, packedOutput, params, lhsPanelHeight, rhsPanelWidth)
 				effectiveBeta := beta
 				if contractingPanelIdx > 0 {
 					effectiveBeta = 1
@@ -319,7 +301,7 @@ func BaseGEMMSymmetric16RegistersPanel_avx2_Float16(activeContractingLen int, pa
 	_ = packedLHS[activeContractingLen*lhsActivePanelHeight-1].Float32()
 	_ = packedRHS[activeContractingLen*rhsActivePanelWidth-1].Float32()
 	_ = packedOutput[lhsActivePanelHeight*rhsActivePanelWidth-1].Float32()
-	numLanes := 16
+	numLanes := 8
 	for lhsRowIdx := 0; lhsRowIdx < lhsActivePanelHeight; lhsRowIdx += params.LHSL1KernelRows {
 		idxRHS := 0
 		for rhsColIdx := 0; rhsColIdx < rhsActivePanelWidth; rhsColIdx += params.RHSL1KernelCols {
@@ -327,49 +309,49 @@ func BaseGEMMSymmetric16RegistersPanel_avx2_Float16(activeContractingLen int, pa
 			outputColStart := rhsColIdx
 			outputStride := params.RHSPanelCrossSize
 			lhsKernelRows := params.LHSL1KernelRows
-			accum_lhs0_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs0_rhs0_f32
-			accum_lhs0_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs0_rhs1_f32
-			accum_lhs1_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs1_rhs0_f32
-			accum_lhs1_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs1_rhs1_f32
-			accum_lhs2_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs2_rhs0_f32
-			accum_lhs2_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs2_rhs1_f32
-			accum_lhs3_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs3_rhs0_f32
-			accum_lhs3_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs3_rhs1_f32
+			accum_lhs0_rhs0 := asm.ZeroFloat16x8AVX2()
+			accum_lhs0_rhs1 := asm.ZeroFloat16x8AVX2()
+			accum_lhs1_rhs0 := asm.ZeroFloat16x8AVX2()
+			accum_lhs1_rhs1 := asm.ZeroFloat16x8AVX2()
+			accum_lhs2_rhs0 := asm.ZeroFloat16x8AVX2()
+			accum_lhs2_rhs1 := asm.ZeroFloat16x8AVX2()
+			accum_lhs3_rhs0 := asm.ZeroFloat16x8AVX2()
+			accum_lhs3_rhs1 := asm.ZeroFloat16x8AVX2()
 			idxLHS := lhsRowIdx * activeContractingLen
 			for range activeContractingLen {
-				rhsVec0 := hwy.Load(packedRHS[idxRHS:])
-				rhsVec1 := hwy.Load(packedRHS[idxRHS+numLanes:])
+				rhsVec0 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&packedRHS[idxRHS:][0]))
+				rhsVec1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&packedRHS[idxRHS+numLanes:][0]))
 				idxRHS += 2 * numLanes
 				lhsVal0 := packedLHS[idxLHS+0]
-				lhsVec0 := hwy.Set[hwy.Float16](lhsVal0)
-				accum_lhs0_rhs0 = hwy.FMAF16(rhsVec0, lhsVec0, accum_lhs0_rhs0)
-				accum_lhs0_rhs1 = hwy.FMAF16(rhsVec1, lhsVec0, accum_lhs0_rhs1)
+				lhsVec0 := asm.BroadcastFloat16x8AVX2(uint16(lhsVal0))
+				accum_lhs0_rhs0 = rhsVec0.MulAdd(lhsVec0, accum_lhs0_rhs0)
+				accum_lhs0_rhs1 = rhsVec1.MulAdd(lhsVec0, accum_lhs0_rhs1)
 				lhsVal1 := packedLHS[idxLHS+1]
-				lhsVec1 := hwy.Set[hwy.Float16](lhsVal1)
-				accum_lhs1_rhs0 = hwy.FMAF16(rhsVec0, lhsVec1, accum_lhs1_rhs0)
-				accum_lhs1_rhs1 = hwy.FMAF16(rhsVec1, lhsVec1, accum_lhs1_rhs1)
+				lhsVec1 := asm.BroadcastFloat16x8AVX2(uint16(lhsVal1))
+				accum_lhs1_rhs0 = rhsVec0.MulAdd(lhsVec1, accum_lhs1_rhs0)
+				accum_lhs1_rhs1 = rhsVec1.MulAdd(lhsVec1, accum_lhs1_rhs1)
 				lhsVal2 := packedLHS[idxLHS+2]
-				lhsVec2 := hwy.Set[hwy.Float16](lhsVal2)
-				accum_lhs2_rhs0 = hwy.FMAF16(rhsVec0, lhsVec2, accum_lhs2_rhs0)
-				accum_lhs2_rhs1 = hwy.FMAF16(rhsVec1, lhsVec2, accum_lhs2_rhs1)
+				lhsVec2 := asm.BroadcastFloat16x8AVX2(uint16(lhsVal2))
+				accum_lhs2_rhs0 = rhsVec0.MulAdd(lhsVec2, accum_lhs2_rhs0)
+				accum_lhs2_rhs1 = rhsVec1.MulAdd(lhsVec2, accum_lhs2_rhs1)
 				lhsVal3 := packedLHS[idxLHS+3]
-				lhsVec3 := hwy.Set[hwy.Float16](lhsVal3)
-				accum_lhs3_rhs0 = hwy.FMAF16(rhsVec0, lhsVec3, accum_lhs3_rhs0)
-				accum_lhs3_rhs1 = hwy.FMAF16(rhsVec1, lhsVec3, accum_lhs3_rhs1)
+				lhsVec3 := asm.BroadcastFloat16x8AVX2(uint16(lhsVal3))
+				accum_lhs3_rhs0 = rhsVec0.MulAdd(lhsVec3, accum_lhs3_rhs0)
+				accum_lhs3_rhs1 = rhsVec1.MulAdd(lhsVec3, accum_lhs3_rhs1)
 				idxLHS += lhsKernelRows
 			}
 			outputIdx0 := outputRowStart*outputStride + outputColStart
 			outputIdx1 := outputIdx0 + params.RHSPanelCrossSize
 			outputIdx2 := outputIdx0 + 2*params.RHSPanelCrossSize
 			outputIdx3 := outputIdx0 + 3*params.RHSPanelCrossSize
-			hwy.StoreFull(accum_lhs0_rhs0, packedOutput[outputIdx0:])
-			hwy.StoreFull(accum_lhs0_rhs1, packedOutput[outputIdx0+numLanes:])
-			hwy.StoreFull(accum_lhs1_rhs0, packedOutput[outputIdx1:])
-			hwy.StoreFull(accum_lhs1_rhs1, packedOutput[outputIdx1+numLanes:])
-			hwy.StoreFull(accum_lhs2_rhs0, packedOutput[outputIdx2:])
-			hwy.StoreFull(accum_lhs2_rhs1, packedOutput[outputIdx2+numLanes:])
-			hwy.StoreFull(accum_lhs3_rhs0, packedOutput[outputIdx3:])
-			hwy.StoreFull(accum_lhs3_rhs1, packedOutput[outputIdx3+numLanes:])
+			accum_lhs0_rhs0.StorePtr(unsafe.Pointer(&packedOutput[outputIdx0:][0]))
+			accum_lhs0_rhs1.StorePtr(unsafe.Pointer(&packedOutput[outputIdx0+numLanes:][0]))
+			accum_lhs1_rhs0.StorePtr(unsafe.Pointer(&packedOutput[outputIdx1:][0]))
+			accum_lhs1_rhs1.StorePtr(unsafe.Pointer(&packedOutput[outputIdx1+numLanes:][0]))
+			accum_lhs2_rhs0.StorePtr(unsafe.Pointer(&packedOutput[outputIdx2:][0]))
+			accum_lhs2_rhs1.StorePtr(unsafe.Pointer(&packedOutput[outputIdx2+numLanes:][0]))
+			accum_lhs3_rhs0.StorePtr(unsafe.Pointer(&packedOutput[outputIdx3:][0]))
+			accum_lhs3_rhs1.StorePtr(unsafe.Pointer(&packedOutput[outputIdx3+numLanes:][0]))
 		}
 	}
 }
@@ -378,7 +360,7 @@ func BaseGEMMSymmetric16RegistersPanel_avx2_BFloat16(activeContractingLen int, p
 	_ = packedLHS[activeContractingLen*lhsActivePanelHeight-1].Float32()
 	_ = packedRHS[activeContractingLen*rhsActivePanelWidth-1].Float32()
 	_ = packedOutput[lhsActivePanelHeight*rhsActivePanelWidth-1].Float32()
-	numLanes := 16
+	numLanes := 8
 	for lhsRowIdx := 0; lhsRowIdx < lhsActivePanelHeight; lhsRowIdx += params.LHSL1KernelRows {
 		idxRHS := 0
 		for rhsColIdx := 0; rhsColIdx < rhsActivePanelWidth; rhsColIdx += params.RHSL1KernelCols {
@@ -386,49 +368,49 @@ func BaseGEMMSymmetric16RegistersPanel_avx2_BFloat16(activeContractingLen int, p
 			outputColStart := rhsColIdx
 			outputStride := params.RHSPanelCrossSize
 			lhsKernelRows := params.LHSL1KernelRows
-			accum_lhs0_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs0_rhs0_f32
-			accum_lhs0_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs0_rhs1_f32
-			accum_lhs1_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs1_rhs0_f32
-			accum_lhs1_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs1_rhs1_f32
-			accum_lhs2_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs2_rhs0_f32
-			accum_lhs2_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs2_rhs1_f32
-			accum_lhs3_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs3_rhs0_f32
-			accum_lhs3_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs3_rhs1_f32
+			accum_lhs0_rhs0 := asm.ZeroBFloat16x8AVX2()
+			accum_lhs0_rhs1 := asm.ZeroBFloat16x8AVX2()
+			accum_lhs1_rhs0 := asm.ZeroBFloat16x8AVX2()
+			accum_lhs1_rhs1 := asm.ZeroBFloat16x8AVX2()
+			accum_lhs2_rhs0 := asm.ZeroBFloat16x8AVX2()
+			accum_lhs2_rhs1 := asm.ZeroBFloat16x8AVX2()
+			accum_lhs3_rhs0 := asm.ZeroBFloat16x8AVX2()
+			accum_lhs3_rhs1 := asm.ZeroBFloat16x8AVX2()
 			idxLHS := lhsRowIdx * activeContractingLen
 			for range activeContractingLen {
-				rhsVec0 := hwy.Load(packedRHS[idxRHS:])
-				rhsVec1 := hwy.Load(packedRHS[idxRHS+numLanes:])
+				rhsVec0 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&packedRHS[idxRHS:][0]))
+				rhsVec1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&packedRHS[idxRHS+numLanes:][0]))
 				idxRHS += 2 * numLanes
 				lhsVal0 := packedLHS[idxLHS+0]
-				lhsVec0 := hwy.Set[hwy.BFloat16](lhsVal0)
-				accum_lhs0_rhs0 = hwy.FMABF16(rhsVec0, lhsVec0, accum_lhs0_rhs0)
-				accum_lhs0_rhs1 = hwy.FMABF16(rhsVec1, lhsVec0, accum_lhs0_rhs1)
+				lhsVec0 := asm.BroadcastBFloat16x8AVX2(uint16(lhsVal0))
+				accum_lhs0_rhs0 = rhsVec0.MulAdd(lhsVec0, accum_lhs0_rhs0)
+				accum_lhs0_rhs1 = rhsVec1.MulAdd(lhsVec0, accum_lhs0_rhs1)
 				lhsVal1 := packedLHS[idxLHS+1]
-				lhsVec1 := hwy.Set[hwy.BFloat16](lhsVal1)
-				accum_lhs1_rhs0 = hwy.FMABF16(rhsVec0, lhsVec1, accum_lhs1_rhs0)
-				accum_lhs1_rhs1 = hwy.FMABF16(rhsVec1, lhsVec1, accum_lhs1_rhs1)
+				lhsVec1 := asm.BroadcastBFloat16x8AVX2(uint16(lhsVal1))
+				accum_lhs1_rhs0 = rhsVec0.MulAdd(lhsVec1, accum_lhs1_rhs0)
+				accum_lhs1_rhs1 = rhsVec1.MulAdd(lhsVec1, accum_lhs1_rhs1)
 				lhsVal2 := packedLHS[idxLHS+2]
-				lhsVec2 := hwy.Set[hwy.BFloat16](lhsVal2)
-				accum_lhs2_rhs0 = hwy.FMABF16(rhsVec0, lhsVec2, accum_lhs2_rhs0)
-				accum_lhs2_rhs1 = hwy.FMABF16(rhsVec1, lhsVec2, accum_lhs2_rhs1)
+				lhsVec2 := asm.BroadcastBFloat16x8AVX2(uint16(lhsVal2))
+				accum_lhs2_rhs0 = rhsVec0.MulAdd(lhsVec2, accum_lhs2_rhs0)
+				accum_lhs2_rhs1 = rhsVec1.MulAdd(lhsVec2, accum_lhs2_rhs1)
 				lhsVal3 := packedLHS[idxLHS+3]
-				lhsVec3 := hwy.Set[hwy.BFloat16](lhsVal3)
-				accum_lhs3_rhs0 = hwy.FMABF16(rhsVec0, lhsVec3, accum_lhs3_rhs0)
-				accum_lhs3_rhs1 = hwy.FMABF16(rhsVec1, lhsVec3, accum_lhs3_rhs1)
+				lhsVec3 := asm.BroadcastBFloat16x8AVX2(uint16(lhsVal3))
+				accum_lhs3_rhs0 = rhsVec0.MulAdd(lhsVec3, accum_lhs3_rhs0)
+				accum_lhs3_rhs1 = rhsVec1.MulAdd(lhsVec3, accum_lhs3_rhs1)
 				idxLHS += lhsKernelRows
 			}
 			outputIdx0 := outputRowStart*outputStride + outputColStart
 			outputIdx1 := outputIdx0 + params.RHSPanelCrossSize
 			outputIdx2 := outputIdx0 + 2*params.RHSPanelCrossSize
 			outputIdx3 := outputIdx0 + 3*params.RHSPanelCrossSize
-			hwy.StoreFull(accum_lhs0_rhs0, packedOutput[outputIdx0:])
-			hwy.StoreFull(accum_lhs0_rhs1, packedOutput[outputIdx0+numLanes:])
-			hwy.StoreFull(accum_lhs1_rhs0, packedOutput[outputIdx1:])
-			hwy.StoreFull(accum_lhs1_rhs1, packedOutput[outputIdx1+numLanes:])
-			hwy.StoreFull(accum_lhs2_rhs0, packedOutput[outputIdx2:])
-			hwy.StoreFull(accum_lhs2_rhs1, packedOutput[outputIdx2+numLanes:])
-			hwy.StoreFull(accum_lhs3_rhs0, packedOutput[outputIdx3:])
-			hwy.StoreFull(accum_lhs3_rhs1, packedOutput[outputIdx3+numLanes:])
+			accum_lhs0_rhs0.StorePtr(unsafe.Pointer(&packedOutput[outputIdx0:][0]))
+			accum_lhs0_rhs1.StorePtr(unsafe.Pointer(&packedOutput[outputIdx0+numLanes:][0]))
+			accum_lhs1_rhs0.StorePtr(unsafe.Pointer(&packedOutput[outputIdx1:][0]))
+			accum_lhs1_rhs1.StorePtr(unsafe.Pointer(&packedOutput[outputIdx1+numLanes:][0]))
+			accum_lhs2_rhs0.StorePtr(unsafe.Pointer(&packedOutput[outputIdx2:][0]))
+			accum_lhs2_rhs1.StorePtr(unsafe.Pointer(&packedOutput[outputIdx2+numLanes:][0]))
+			accum_lhs3_rhs0.StorePtr(unsafe.Pointer(&packedOutput[outputIdx3:][0]))
+			accum_lhs3_rhs1.StorePtr(unsafe.Pointer(&packedOutput[outputIdx3+numLanes:][0]))
 		}
 	}
 }
@@ -445,14 +427,14 @@ func BaseGEMMSymmetric16RegistersPanel_avx2(activeContractingLen int, packedLHS 
 			outputColStart := rhsColIdx
 			outputStride := params.RHSPanelCrossSize
 			lhsKernelRows := params.LHSL1KernelRows
-			accum_lhs0_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs0_rhs0_f32
-			accum_lhs0_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs0_rhs1_f32
-			accum_lhs1_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs1_rhs0_f32
-			accum_lhs1_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs1_rhs1_f32
-			accum_lhs2_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs2_rhs0_f32
-			accum_lhs2_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs2_rhs1_f32
-			accum_lhs3_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs3_rhs0_f32
-			accum_lhs3_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs3_rhs1_f32
+			accum_lhs0_rhs0 := archsimd.BroadcastFloat32x8(0)
+			accum_lhs0_rhs1 := archsimd.BroadcastFloat32x8(0)
+			accum_lhs1_rhs0 := archsimd.BroadcastFloat32x8(0)
+			accum_lhs1_rhs1 := archsimd.BroadcastFloat32x8(0)
+			accum_lhs2_rhs0 := archsimd.BroadcastFloat32x8(0)
+			accum_lhs2_rhs1 := archsimd.BroadcastFloat32x8(0)
+			accum_lhs3_rhs0 := archsimd.BroadcastFloat32x8(0)
+			accum_lhs3_rhs1 := archsimd.BroadcastFloat32x8(0)
 			idxLHS := lhsRowIdx * activeContractingLen
 			for range activeContractingLen {
 				rhsVec0 := archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&packedRHS[idxRHS])))
@@ -504,14 +486,14 @@ func BaseGEMMSymmetric16RegistersPanel_avx2_Float64(activeContractingLen int, pa
 			outputColStart := rhsColIdx
 			outputStride := params.RHSPanelCrossSize
 			lhsKernelRows := params.LHSL1KernelRows
-			accum_lhs0_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs0_rhs0_f64
-			accum_lhs0_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs0_rhs1_f64
-			accum_lhs1_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs1_rhs0_f64
-			accum_lhs1_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs1_rhs1_f64
-			accum_lhs2_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs2_rhs0_f64
-			accum_lhs2_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs2_rhs1_f64
-			accum_lhs3_rhs0 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs3_rhs0_f64
-			accum_lhs3_rhs1 := BaseGEMMSymmetric16RegistersPanel_AVX2_accum_lhs3_rhs1_f64
+			accum_lhs0_rhs0 := archsimd.BroadcastFloat64x4(0)
+			accum_lhs0_rhs1 := archsimd.BroadcastFloat64x4(0)
+			accum_lhs1_rhs0 := archsimd.BroadcastFloat64x4(0)
+			accum_lhs1_rhs1 := archsimd.BroadcastFloat64x4(0)
+			accum_lhs2_rhs0 := archsimd.BroadcastFloat64x4(0)
+			accum_lhs2_rhs1 := archsimd.BroadcastFloat64x4(0)
+			accum_lhs3_rhs0 := archsimd.BroadcastFloat64x4(0)
+			accum_lhs3_rhs1 := archsimd.BroadcastFloat64x4(0)
 			idxLHS := lhsRowIdx * activeContractingLen
 			for range activeContractingLen {
 				rhsVec0 := archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&packedRHS[idxRHS])))

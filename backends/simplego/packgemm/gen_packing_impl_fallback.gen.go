@@ -21,8 +21,8 @@ func BasePackRHS_fallback_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowSt
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 = hwy.LoadFull(src[srcIdx:])
-					hwy.StoreFull(v0, dst[dstIdx:])
+					v0 = hwy.Load(src[srcIdx:])
+					hwy.Store(v0, dst[dstIdx:])
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -32,10 +32,10 @@ func BasePackRHS_fallback_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowSt
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 := hwy.LoadFull(src[srcIdx:])
-					v1 := hwy.LoadFull(src[srcIdx+numLanes:])
-					hwy.StoreFull(v0, dst[dstIdx:])
-					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					v0 := hwy.Load(src[srcIdx:])
+					v1 := hwy.Load(src[srcIdx+numLanes:])
+					hwy.Store(v0, dst[dstIdx:])
+					hwy.Store(v1, dst[dstIdx+numLanes:])
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -46,14 +46,14 @@ func BasePackRHS_fallback_Float16(src []hwy.Float16, dst []hwy.Float16, srcRowSt
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 = hwy.LoadFull(src[srcIdx:])
-					v1 = hwy.LoadFull(src[srcIdx+numLanes:])
-					v2 = hwy.LoadFull(src[srcIdx+numLanes*2:])
-					v3 = hwy.LoadFull(src[srcIdx+numLanes*3:])
-					hwy.StoreFull(v0, dst[dstIdx:])
-					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-					hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
-					hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
+					v0 = hwy.Load(src[srcIdx:])
+					v1 = hwy.Load(src[srcIdx+numLanes:])
+					v2 = hwy.Load(src[srcIdx+numLanes*2:])
+					v3 = hwy.Load(src[srcIdx+numLanes*3:])
+					hwy.Store(v0, dst[dstIdx:])
+					hwy.Store(v1, dst[dstIdx+numLanes:])
+					hwy.Store(v2, dst[dstIdx+numLanes*2:])
+					hwy.Store(v3, dst[dstIdx+numLanes*3:])
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -100,8 +100,8 @@ func BasePackRHS_fallback_BFloat16(src []hwy.BFloat16, dst []hwy.BFloat16, srcRo
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 = hwy.LoadFull(src[srcIdx:])
-					hwy.StoreFull(v0, dst[dstIdx:])
+					v0 = hwy.Load(src[srcIdx:])
+					hwy.Store(v0, dst[dstIdx:])
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -111,10 +111,10 @@ func BasePackRHS_fallback_BFloat16(src []hwy.BFloat16, dst []hwy.BFloat16, srcRo
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 := hwy.LoadFull(src[srcIdx:])
-					v1 := hwy.LoadFull(src[srcIdx+numLanes:])
-					hwy.StoreFull(v0, dst[dstIdx:])
-					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					v0 := hwy.Load(src[srcIdx:])
+					v1 := hwy.Load(src[srcIdx+numLanes:])
+					hwy.Store(v0, dst[dstIdx:])
+					hwy.Store(v1, dst[dstIdx+numLanes:])
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -125,14 +125,14 @@ func BasePackRHS_fallback_BFloat16(src []hwy.BFloat16, dst []hwy.BFloat16, srcRo
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 = hwy.LoadFull(src[srcIdx:])
-					v1 = hwy.LoadFull(src[srcIdx+numLanes:])
-					v2 = hwy.LoadFull(src[srcIdx+numLanes*2:])
-					v3 = hwy.LoadFull(src[srcIdx+numLanes*3:])
-					hwy.StoreFull(v0, dst[dstIdx:])
-					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-					hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
-					hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
+					v0 = hwy.Load(src[srcIdx:])
+					v1 = hwy.Load(src[srcIdx+numLanes:])
+					v2 = hwy.Load(src[srcIdx+numLanes*2:])
+					v3 = hwy.Load(src[srcIdx+numLanes*3:])
+					hwy.Store(v0, dst[dstIdx:])
+					hwy.Store(v1, dst[dstIdx+numLanes:])
+					hwy.Store(v2, dst[dstIdx+numLanes*2:])
+					hwy.Store(v3, dst[dstIdx+numLanes*3:])
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -179,8 +179,8 @@ func BasePackRHS_fallback(src []float32, dst []float32, srcRowStart int, srcColS
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 = hwy.LoadFull(src[srcIdx:])
-					hwy.StoreFull(v0, dst[dstIdx:])
+					v0 = hwy.Load(src[srcIdx:])
+					hwy.Store(v0, dst[dstIdx:])
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -190,10 +190,10 @@ func BasePackRHS_fallback(src []float32, dst []float32, srcRowStart int, srcColS
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 := hwy.LoadFull(src[srcIdx:])
-					v1 := hwy.LoadFull(src[srcIdx+numLanes:])
-					hwy.StoreFull(v0, dst[dstIdx:])
-					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					v0 := hwy.Load(src[srcIdx:])
+					v1 := hwy.Load(src[srcIdx+numLanes:])
+					hwy.Store(v0, dst[dstIdx:])
+					hwy.Store(v1, dst[dstIdx+numLanes:])
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -204,14 +204,14 @@ func BasePackRHS_fallback(src []float32, dst []float32, srcRowStart int, srcColS
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 = hwy.LoadFull(src[srcIdx:])
-					v1 = hwy.LoadFull(src[srcIdx+numLanes:])
-					v2 = hwy.LoadFull(src[srcIdx+numLanes*2:])
-					v3 = hwy.LoadFull(src[srcIdx+numLanes*3:])
-					hwy.StoreFull(v0, dst[dstIdx:])
-					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-					hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
-					hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
+					v0 = hwy.Load(src[srcIdx:])
+					v1 = hwy.Load(src[srcIdx+numLanes:])
+					v2 = hwy.Load(src[srcIdx+numLanes*2:])
+					v3 = hwy.Load(src[srcIdx+numLanes*3:])
+					hwy.Store(v0, dst[dstIdx:])
+					hwy.Store(v1, dst[dstIdx+numLanes:])
+					hwy.Store(v2, dst[dstIdx+numLanes*2:])
+					hwy.Store(v3, dst[dstIdx+numLanes*3:])
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -258,8 +258,8 @@ func BasePackRHS_fallback_Float64(src []float64, dst []float64, srcRowStart int,
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 = hwy.LoadFull(src[srcIdx:])
-					hwy.StoreFull(v0, dst[dstIdx:])
+					v0 = hwy.Load(src[srcIdx:])
+					hwy.Store(v0, dst[dstIdx:])
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -269,10 +269,10 @@ func BasePackRHS_fallback_Float64(src []float64, dst []float64, srcRowStart int,
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 := hwy.LoadFull(src[srcIdx:])
-					v1 := hwy.LoadFull(src[srcIdx+numLanes:])
-					hwy.StoreFull(v0, dst[dstIdx:])
-					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
+					v0 := hwy.Load(src[srcIdx:])
+					v1 := hwy.Load(src[srcIdx+numLanes:])
+					hwy.Store(v0, dst[dstIdx:])
+					hwy.Store(v1, dst[dstIdx+numLanes:])
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -283,14 +283,14 @@ func BasePackRHS_fallback_Float64(src []float64, dst []float64, srcRowStart int,
 			for stripColIdx := 0; stripColIdx < fullStripsCol; stripColIdx += kernelCols {
 				srcIdx := srcStartRowIdx + srcColStart + stripColIdx
 				for range contractingRows {
-					v0 = hwy.LoadFull(src[srcIdx:])
-					v1 = hwy.LoadFull(src[srcIdx+numLanes:])
-					v2 = hwy.LoadFull(src[srcIdx+numLanes*2:])
-					v3 = hwy.LoadFull(src[srcIdx+numLanes*3:])
-					hwy.StoreFull(v0, dst[dstIdx:])
-					hwy.StoreFull(v1, dst[dstIdx+numLanes:])
-					hwy.StoreFull(v2, dst[dstIdx+numLanes*2:])
-					hwy.StoreFull(v3, dst[dstIdx+numLanes*3:])
+					v0 = hwy.Load(src[srcIdx:])
+					v1 = hwy.Load(src[srcIdx+numLanes:])
+					v2 = hwy.Load(src[srcIdx+numLanes*2:])
+					v3 = hwy.Load(src[srcIdx+numLanes*3:])
+					hwy.Store(v0, dst[dstIdx:])
+					hwy.Store(v1, dst[dstIdx+numLanes:])
+					hwy.Store(v2, dst[dstIdx+numLanes*2:])
+					hwy.Store(v3, dst[dstIdx+numLanes*3:])
 					dstIdx += kernelCols
 					srcIdx += srcRowStride
 				}
@@ -332,10 +332,10 @@ func BaseApplyPackedOutput_fallback_Float16(packedOutput []hwy.Float16, output [
 		if hwy.CurrentLevel() != hwy.DispatchScalar {
 			numLanes := hwy.NumLanes[hwy.Float16]()
 			for ; c+numLanes <= width; c += numLanes {
-				packedVal := hwy.LoadFull(packedOutput[packedIdx:])
-				outputVal := hwy.LoadFull(output[outputIdx:])
+				packedVal := hwy.Load(packedOutput[packedIdx:])
+				outputVal := hwy.Load(output[outputIdx:])
 				newVal := hwy.MulAdd(alphaVec, packedVal, hwy.Mul(betaVec, outputVal))
-				hwy.StoreFull(newVal, output[outputIdx:])
+				hwy.Store(newVal, output[outputIdx:])
 				packedIdx += numLanes
 				outputIdx += numLanes
 			}
@@ -359,10 +359,10 @@ func BaseApplyPackedOutput_fallback_BFloat16(packedOutput []hwy.BFloat16, output
 		if hwy.CurrentLevel() != hwy.DispatchScalar {
 			numLanes := hwy.NumLanes[hwy.BFloat16]()
 			for ; c+numLanes <= width; c += numLanes {
-				packedVal := hwy.LoadFull(packedOutput[packedIdx:])
-				outputVal := hwy.LoadFull(output[outputIdx:])
+				packedVal := hwy.Load(packedOutput[packedIdx:])
+				outputVal := hwy.Load(output[outputIdx:])
 				newVal := hwy.MulAdd(alphaVec, packedVal, hwy.Mul(betaVec, outputVal))
-				hwy.StoreFull(newVal, output[outputIdx:])
+				hwy.Store(newVal, output[outputIdx:])
 				packedIdx += numLanes
 				outputIdx += numLanes
 			}
@@ -386,10 +386,10 @@ func BaseApplyPackedOutput_fallback(packedOutput []float32, output []float32, al
 		if hwy.CurrentLevel() != hwy.DispatchScalar {
 			numLanes := hwy.NumLanes[float32]()
 			for ; c+numLanes <= width; c += numLanes {
-				packedVal := hwy.LoadFull(packedOutput[packedIdx:])
-				outputVal := hwy.LoadFull(output[outputIdx:])
+				packedVal := hwy.Load(packedOutput[packedIdx:])
+				outputVal := hwy.Load(output[outputIdx:])
 				newVal := hwy.MulAdd(alphaVec, packedVal, hwy.Mul(betaVec, outputVal))
-				hwy.StoreFull(newVal, output[outputIdx:])
+				hwy.Store(newVal, output[outputIdx:])
 				packedIdx += numLanes
 				outputIdx += numLanes
 			}
@@ -413,10 +413,10 @@ func BaseApplyPackedOutput_fallback_Float64(packedOutput []float64, output []flo
 		if hwy.CurrentLevel() != hwy.DispatchScalar {
 			numLanes := hwy.NumLanes[float64]()
 			for ; c+numLanes <= width; c += numLanes {
-				packedVal := hwy.LoadFull(packedOutput[packedIdx:])
-				outputVal := hwy.LoadFull(output[outputIdx:])
+				packedVal := hwy.Load(packedOutput[packedIdx:])
+				outputVal := hwy.Load(output[outputIdx:])
 				newVal := hwy.MulAdd(alphaVec, packedVal, hwy.Mul(betaVec, outputVal))
-				hwy.StoreFull(newVal, output[outputIdx:])
+				hwy.Store(newVal, output[outputIdx:])
 				packedIdx += numLanes
 				outputIdx += numLanes
 			}

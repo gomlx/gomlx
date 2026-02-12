@@ -5,7 +5,7 @@ import (
 	"github.com/gomlx/gomlx/internal/workerspool"
 )
 
-//go:generate go tool github.com/ajroetker/go-highway/cmd/hwygen -input gemm_16reg_base.go -output_prefix=gen_gemm16reg_impl -dispatch gen_gemm16reg_dispatch -targets avx2,avx512
+//go:generate go tool github.com/ajroetker/go-highway/cmd/hwygen -input gemm_16reg_base.go -output_prefix=gen_gemm16reg_impl -dispatch gen_gemm16reg_dispatch -targets avx2,avx512,fallback
 
 // simd16RegistersParams are the parameters to use if there are 16 SIMD registers available.
 // It still needs to be adjusted to the size of the registers (in terms )
@@ -87,8 +87,7 @@ func BaseGEMMSymmetric16Registers[T hwy.Floats](
 					alpha, beta,
 					batchLhs, batchRhs, batchOutput,
 					lhsCrossSize, rhsCrossSize, contractingSize,
-
-					params, item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd,
+					&params, item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd,
 					packedLHS, packedRHS, packedOutput,
 				)
 			}
@@ -150,7 +149,7 @@ func BaseGEMMSymmetric16RegistersGemmChunk[T hwy.Floats](
 				// Computes a [lhsPanelHeight, rhsPanelWidth] block of Output
 				// by iterating over micro-kernels.
 				// ---------------------------------------------
-				BaseGEMMSymmetric16RegistersPanel(
+				GEMMSymmetric16RegistersPanel(
 					contractingPanelWidth,
 					packedLhs, packedRhs, packedOutput,
 					params,
@@ -208,14 +207,14 @@ func BaseGEMMSymmetric16RegistersPanel[T hwy.Floats](
 			// 2. Initialize Accumulators (Registers) to 0.0
 			// ---------------------------------------------------------
 			// We use 4 rows (Mr) worth of registers at a time.
-			accum_lhs0_rhs0 := hwy.Set[T](0)
-			accum_lhs0_rhs1 := hwy.Set[T](0)
-			accum_lhs1_rhs0 := hwy.Set[T](0)
-			accum_lhs1_rhs1 := hwy.Set[T](0)
-			accum_lhs2_rhs0 := hwy.Set[T](0)
-			accum_lhs2_rhs1 := hwy.Set[T](0)
-			accum_lhs3_rhs0 := hwy.Set[T](0)
-			accum_lhs3_rhs1 := hwy.Set[T](0)
+			accum_lhs0_rhs0 := hwy.Zero[T]()
+			accum_lhs0_rhs1 := hwy.Zero[T]()
+			accum_lhs1_rhs0 := hwy.Zero[T]()
+			accum_lhs1_rhs1 := hwy.Zero[T]()
+			accum_lhs2_rhs0 := hwy.Zero[T]()
+			accum_lhs2_rhs1 := hwy.Zero[T]()
+			accum_lhs3_rhs0 := hwy.Zero[T]()
+			accum_lhs3_rhs1 := hwy.Zero[T]()
 
 			// ---------------------------------------------------------
 			// 3. The K-Loop (Dot Product)
@@ -223,8 +222,8 @@ func BaseGEMMSymmetric16RegistersPanel[T hwy.Floats](
 			idxLHS := lhsRowIdx * activeContractingLen
 			for range activeContractingLen {
 				// Load RHS (Broadcasting/Streaming)
-				rhsVec0 := hwy.LoadFull(packedRHS[idxRHS:])
-				rhsVec1 := hwy.LoadFull(packedRHS[idxRHS+numLanes:])
+				rhsVec0 := hwy.Load(packedRHS[idxRHS:])
+				rhsVec1 := hwy.Load(packedRHS[idxRHS+numLanes:])
 				idxRHS += 2 * numLanes
 
 				// Row 0
@@ -262,14 +261,14 @@ func BaseGEMMSymmetric16RegistersPanel[T hwy.Floats](
 			outputIdx2 := outputIdx0 + 2*params.RHSPanelCrossSize
 			outputIdx3 := outputIdx0 + 3*params.RHSPanelCrossSize
 
-			hwy.StoreFull(accum_lhs0_rhs0, packedOutput[outputIdx0:])
-			hwy.StoreFull(accum_lhs0_rhs1, packedOutput[outputIdx0+numLanes:])
-			hwy.StoreFull(accum_lhs1_rhs0, packedOutput[outputIdx1:])
-			hwy.StoreFull(accum_lhs1_rhs1, packedOutput[outputIdx1+numLanes:])
-			hwy.StoreFull(accum_lhs2_rhs0, packedOutput[outputIdx2:])
-			hwy.StoreFull(accum_lhs2_rhs1, packedOutput[outputIdx2+numLanes:])
-			hwy.StoreFull(accum_lhs3_rhs0, packedOutput[outputIdx3:])
-			hwy.StoreFull(accum_lhs3_rhs1, packedOutput[outputIdx3+numLanes:])
+			hwy.Store(accum_lhs0_rhs0, packedOutput[outputIdx0:])
+			hwy.Store(accum_lhs0_rhs1, packedOutput[outputIdx0+numLanes:])
+			hwy.Store(accum_lhs1_rhs0, packedOutput[outputIdx1:])
+			hwy.Store(accum_lhs1_rhs1, packedOutput[outputIdx1+numLanes:])
+			hwy.Store(accum_lhs2_rhs0, packedOutput[outputIdx2:])
+			hwy.Store(accum_lhs2_rhs1, packedOutput[outputIdx2+numLanes:])
+			hwy.Store(accum_lhs3_rhs0, packedOutput[outputIdx3:])
+			hwy.Store(accum_lhs3_rhs1, packedOutput[outputIdx3+numLanes:])
 		}
 	}
 }
