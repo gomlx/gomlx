@@ -262,6 +262,139 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 	})
 }
 
+func TestMultiHeadAttentionGQA(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+
+	t.Run("basic", func(t *testing.T) {
+		// GQA with 4 query heads, 2 KV heads (2:1 ratio).
+		ctx := context.New()
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
+			return MultiHeadAttention(ctx, x, x, x, 4, 8).
+				SetNumKVHeads(2).
+				Done()
+		})
+
+		// [batch=2, seq=3, embed=16]
+		input := make([][][]float32, 2)
+		for b := range input {
+			input[b] = make([][]float32, 3)
+			for s := range input[b] {
+				input[b][s] = make([]float32, 16)
+				for d := range input[b][s] {
+					input[b][s][d] = float32(b*100+s*10+d) * 0.1
+				}
+			}
+		}
+		output := exec.MustExec(input)[0]
+		// Output shape: [batch=2, seq=3, embed=16] (outputDim defaults to inputValueDim).
+		assert.Equal(t, []int{2, 3, 16}, output.Shape().Dimensions)
+	})
+
+	t.Run("MQA", func(t *testing.T) {
+		// Multi-Query Attention: 4 query heads, 1 KV head.
+		ctx := context.New()
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
+			return SelfAttention(ctx, x, 4, 8).
+				SetNumKVHeads(1).
+				Done()
+		})
+
+		input := [][][]float32{
+			{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16}},
+		}
+		output := exec.MustExec(input)[0]
+		assert.Equal(t, []int{1, 2, 8}, output.Shape().Dimensions)
+	})
+
+	t.Run("fused_vs_decomposed", func(t *testing.T) {
+		// Verify fused (Done) and decomposed (DoneWithCoefficients) paths agree for GQA.
+		ctx := context.New().WithInitializer(initializers.One)
+		batchSize := 2
+		seqLen := 3
+		inputDim := 8
+		numHeads := 4
+		numKVHeads := 2
+		headDim := 4
+
+		decomposedExec := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
+			input := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, inputDim))
+			output, _ := MultiHeadAttention(ctx, input, input, input, numHeads, headDim).
+				SetNumKVHeads(numKVHeads).
+				DoneWithCoefficients()
+			return []*Node{output}
+		})
+		decomposedOutputs := decomposedExec.MustExec()
+
+		fusedExec := context.MustNewExec(backend, ctx.Reuse(), func(ctx *context.Context, g *Graph) []*Node {
+			input := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, inputDim))
+			output := MultiHeadAttention(ctx, input, input, input, numHeads, headDim).
+				SetNumKVHeads(numKVHeads).
+				Done()
+			return []*Node{output}
+		})
+		fusedOutputs := fusedExec.MustExec()
+
+		require.Truef(t, xslices.SlicesInDelta(decomposedOutputs[0].Value(), fusedOutputs[0].Value(), 1e-4),
+			"Fused and decomposed paths produce different results for GQA.\nDecomposed: %v\nFused: %v",
+			decomposedOutputs[0].Value(), fusedOutputs[0].Value())
+	})
+
+	t.Run("with_causal_mask", func(t *testing.T) {
+		ctx := context.New()
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
+			return SelfAttention(ctx, x, 4, 4).
+				SetNumKVHeads(2).
+				UseCausalMask().
+				Done()
+		})
+
+		input := [][][]float32{
+			{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16},
+				{17, 18, 19, 20, 21, 22, 23, 24}},
+		}
+		output := exec.MustExec(input)[0]
+		assert.Equal(t, []int{1, 3, 8}, output.Shape().Dimensions)
+	})
+
+	t.Run("with_rope", func(t *testing.T) {
+		ctx := context.New()
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
+			return SelfAttention(ctx, x, 4, 4).
+				SetNumKVHeads(2).
+				WithRoPE(10000.0).
+				UseCausalMask().
+				Done()
+		})
+
+		input := [][][]float32{
+			{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16},
+				{17, 18, 19, 20, 21, 22, 23, 24}, {25, 26, 27, 28, 29, 30, 31, 32}},
+		}
+		output := exec.MustExec(input)[0]
+		assert.Equal(t, []int{1, 4, 8}, output.Shape().Dimensions)
+	})
+
+	t.Run("coefficients_shape", func(t *testing.T) {
+		// Verify coefficient shape uses numHeads (not numKVHeads).
+		ctx := context.New()
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) []*Node {
+			output, coef := SelfAttention(ctx, x, 4, 4).
+				SetNumKVHeads(2).
+				DoneWithCoefficients()
+			return []*Node{output, coef}
+		})
+
+		input := [][][]float32{
+			{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16},
+				{17, 18, 19, 20, 21, 22, 23, 24}},
+		}
+		outputs := exec.MustExec(input)
+		assert.Equal(t, []int{1, 3, 8}, outputs[0].Shape().Dimensions)
+		// Coefficients: [batch, seq, numHeads, seq] — numHeads=4, not numKVHeads=2.
+		assert.Equal(t, []int{1, 3, 4, 3}, outputs[1].Shape().Dimensions)
+	})
+}
+
 // buildSyntheticAttentionModelFn builds a model graph building function that does a regression on the elements
 // of a sequence, with a learnable positional embedding.
 //

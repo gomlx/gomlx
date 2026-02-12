@@ -27,6 +27,7 @@ type MultiHeadAttentionBuilder struct {
 	g                 *Graph
 	query, key, value *Node
 	numHeads          int
+	numKVHeads        int // 0 means same as numHeads (standard MHA).
 	keyQueryDim       int
 	valueDim          int
 	outputDim         int
@@ -135,6 +136,42 @@ func MultiHeadAttention(ctx *context.Context, query, key, value *Node, numHeads 
 		b.outputDim = valueShape.Dimensions[valueShape.Rank()-1]
 	}
 	b.buildAttentionShape()
+	return b
+}
+
+// effectiveNumKVHeads returns numKVHeads if set, or numHeads for standard MHA.
+func (b *MultiHeadAttentionBuilder) effectiveNumKVHeads() int {
+	if b.numKVHeads > 0 {
+		return b.numKVHeads
+	}
+	return b.numHeads
+}
+
+// SetNumKVHeads sets the number of key/value heads for Grouped Query Attention (GQA).
+//
+// When numKVHeads < numHeads, each group of numHeads/numKVHeads query heads shares the
+// same key/value head. This reduces the KV projection and KV cache size while retaining
+// most of the quality of full multi-head attention.
+//
+// Special cases:
+//   - numKVHeads == numHeads: standard multi-head attention (MHA), the default.
+//   - numKVHeads == 1: multi-query attention (MQA), all query heads share one KV head.
+//
+// numHeads must be divisible by numKVHeads. This method is incompatible with
+// UseQKVProjection when query == key == value and numKVHeads != numHeads,
+// since the fused QKV path assumes equal head counts for Q and KV.
+func (b *MultiHeadAttentionBuilder) SetNumKVHeads(numKVHeads int) *MultiHeadAttentionBuilder {
+	if numKVHeads <= 0 {
+		Panicf("MultiHeadAttention: numKVHeads (%d) must be positive", numKVHeads)
+	}
+	if b.numHeads%numKVHeads != 0 {
+		Panicf("MultiHeadAttention: numHeads (%d) must be divisible by numKVHeads (%d)", b.numHeads, numKVHeads)
+	}
+	if b.useQKVProjection && numKVHeads != b.numHeads {
+		Panicf("MultiHeadAttention: SetNumKVHeads(%d) is incompatible with UseQKVProjection (numHeads=%d); "+
+			"use separate projections instead", numKVHeads, b.numHeads)
+	}
+	b.numKVHeads = numKVHeads
 	return b
 }
 
@@ -342,10 +379,11 @@ func (b *MultiHeadAttentionBuilder) Dropout(rate float64) *MultiHeadAttentionBui
 // new entries wrap around and overwrite the oldest entries. This allows efficient
 // generation for sequences longer than maxSeqLen. Automatically enables causal masking.
 func (b *MultiHeadAttentionBuilder) WithKVCache(maxSeqLen int, position *Node) *MultiHeadAttentionBuilder {
-	// Derive cache shape from attention configuration
+	// Derive cache shape from attention configuration.
+	// KV cache stores with numKVHeads (not numHeads) to save memory with GQA.
 	batchSize := b.query.Shape().Dimensions[0]
 	dtype := b.query.DType()
-	b.kvCacheShape = shapes.Make(dtype, batchSize, b.numHeads, maxSeqLen, b.keyQueryDim)
+	b.kvCacheShape = shapes.Make(dtype, batchSize, b.effectiveNumKVHeads(), maxSeqLen, b.keyQueryDim)
 	b.position = position
 	// When using KV cache, automatically enable causal mask for proper attention
 	b.useCausalMask = true
@@ -355,7 +393,7 @@ func (b *MultiHeadAttentionBuilder) WithKVCache(maxSeqLen int, position *Node) *
 }
 
 // KVCacheShape returns the shape of the KV cache configured for this attention layer.
-// Shape is [batchSize, numHeads, maxSeqLen, headDim].
+// Shape is [batchSize, numKVHeads, maxSeqLen, headDim] (numKVHeads equals numHeads unless SetNumKVHeads was called).
 // Returns an invalid shape if WithKVCache was not called.
 func (b *MultiHeadAttentionBuilder) KVCacheShape() shapes.Shape {
 	return b.kvCacheShape
@@ -394,6 +432,10 @@ func (b *MultiHeadAttentionBuilder) UseQKVProjection() *MultiHeadAttentionBuilde
 		Panicf("MultiHeadAttention: UseQKVProjection requires keyQueryDim == valueDim (got %d != %d); "+
 			"QKVProjection uses a single keyValueDim for both key and value projections",
 			b.keyQueryDim, b.valueDim)
+	}
+	if b.numKVHeads > 0 && b.numKVHeads != b.numHeads {
+		Panicf("MultiHeadAttention: UseQKVProjection is not supported with GQA (numKVHeads=%d != numHeads=%d); "+
+			"use separate projections instead", b.numKVHeads, b.numHeads)
 	}
 	b.useQKVProjection = true
 	return b
@@ -451,13 +493,14 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 		flatValue = Reshape(b.value, batchSize, -1, b.value.Shape().Dim(-1))
 	}
 
+	kvHeads := b.effectiveNumKVHeads()
 	var projectedQuery, projectedKey, projectedValue *Node
 	if b.useQKVProjection {
 		projectedQuery, projectedKey, projectedValue = b.qkvProject(flatQuery)
 	} else {
-		projectedKey = layers.Dense(b.ctx.In("key"), flatKey, true, b.numHeads, b.keyQueryDim)
+		projectedKey = layers.Dense(b.ctx.In("key"), flatKey, true, kvHeads, b.keyQueryDim)
 		projectedQuery = layers.Dense(b.ctx.In("query"), flatQuery, true, b.numHeads, b.keyQueryDim)
-		projectedValue = layers.Dense(b.ctx.In("value"), flatValue, true, b.numHeads, b.valueDim)
+		projectedValue = layers.Dense(b.ctx.In("value"), flatValue, true, kvHeads, b.valueDim)
 	}
 
 	// Apply positional encoding (e.g. RoPE) if enabled.
