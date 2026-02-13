@@ -1,4 +1,4 @@
-//go:build perf
+//  - --- go:build perf
 
 // Copyright 2025 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
@@ -7,19 +7,18 @@ package packgemm_test
 import (
 	"flag"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/muesli/termenv"
 	"github.com/x448/float16"
 )
 
@@ -32,7 +31,6 @@ var (
 			"If empty, it will run for all supported dtypes.")
 	flagPerfDuration = flag.Duration("perf_duration", time.Second, "Duration to run each performance test.")
 	flagPerfMinRuns  = flag.Int("perf_min_runs", 10, "Minimum number of runs for each performance test.")
-	flagMarkdown     = flag.Bool("markdown", false, "If true, it will print the performance table in markdown format.")
 )
 
 // benchmarkCase defines input parameters for PackGemm to be benchmarked.
@@ -40,6 +38,7 @@ type benchmarkCase struct {
 	name                      string
 	lhsRows, lhsCols, rhsCols int // M, K, N
 	batchSize                 int
+	algorithms                []string
 }
 
 // TestPackGemm_PerformanceTable generates a performance table for differently
@@ -51,114 +50,120 @@ type benchmarkCase struct {
 //
 //	$ go test -tags=perf ./backends/simplego/packgemm -run=TestPackGemm_PerformanceTable -v -count=1
 func TestPackGemm_PerformanceTable(t *testing.T) {
-	filterPerfs := *flagPerfTests != ""
-	perfsToRun := sets.MakeWith(strings.Split(*flagPerfTests, ",")...)
-	filterDTypes := *flagPerfDTypes != ""
-	dtypesToRun := sets.MakeWith(strings.Split(*flagPerfDTypes, ",")...)
-
 	// Define benchmark cases
+	largeAlgos := []string{"hwy-16regs"}
 	cases := []benchmarkCase{
 		{
-			name:    "Tiny",
+			name:    "NoBatch-Tiny",
 			lhsRows: 4, lhsCols: 128, rhsCols: 1, // 4x128 * 128x1 -> 4x1
 		},
 		{
-			name:    "Small",
+			name:    "NoBatch-Small",
 			lhsRows: 128, lhsCols: 128, rhsCols: 32,
 		},
 		{
-			name:    "Medium",
+			name:    "NoBatch-Medium",
 			lhsRows: 128, lhsCols: 128, rhsCols: 256,
 		},
 		{
-			name:    "Large",
+			name:    "NoBatch-Large",
 			lhsRows: 1536, lhsCols: 1920, rhsCols: 1024,
+			algorithms: largeAlgos,
 		},
 		{
-			name:      "LargeBatch",
+			name:      "LargeBatch-Small",
 			batchSize: 128,
 			lhsRows:   64, lhsCols: 64, rhsCols: 64,
 		},
 		{
-			name:    "Comparison-Specific",
+			name:    "NoBatch-1024",
 			lhsRows: 1024, lhsCols: 1024, rhsCols: 1024,
 		},
+		{
+			name:      "Batched-Large",
+			batchSize: 16,
+			lhsRows:   1536, lhsCols: 1920, rhsCols: 1024,
+			algorithms: largeAlgos,
+		},
 	}
+
+	// Filter only selected cases, if there was a selection.
+	if *flagPerfTests != "" {
+		parts := strings.Split(*flagPerfTests, ",")
+		parts = slices.DeleteFunc(parts, func(p string) bool { return p == "" })
+		cases = slices.DeleteFunc(cases, func(c benchmarkCase) bool {
+			for _, p := range parts {
+				if strings.Contains(c.name, p) {
+					return false
+				}
+			}
+			return true
+		})
+		fmt.Printf("- Cases selected:      %q\n", xslices.Map(cases, func(c benchmarkCase) string {
+			return c.name
+		}))
+	}
+
+	// Enumerate dtypes to consider.
 	dtypesToTest := []dtypes.DType{dtypes.Float32, dtypes.Float64, dtypes.BFloat16, dtypes.Float16}
+	if *flagPerfDTypes != "" {
+		dtypesToTest = dtypesToTest[:0]
+		parts := strings.Split(*flagPerfDTypes, ",")
+		for _, p := range parts {
+			if p == "" {
+				continue
+			}
+			dtype, err := dtypes.DTypeString(p)
+			if err != nil {
+				t.Fatalf("unknown dtype %q: %v", p, err)
+			}
+			dtypesToTest = append(dtypesToTest, dtype)
+		}
+		fmt.Printf("- Dtypes selected:     %q\n", dtypesToTest)
+	}
 
 	// Workers pool
 	pool := workerspool.New() // Default parallelism
 
 	// 1. Discover all algorithms across all cases/dtypes to define columns
 	allAlgorithmNames := sets.Make[string]()
-	for _, dtype := range dtypesToTest {
-		if filterDTypes && !dtypesToRun.Has(dtype.String()) {
-			continue
+	for _, c := range cases {
+		for _, dtype := range dtypesToTest {
+			algs := packgemm.DTypeToGEMM[packgemm.DTypePair{Input: dtype, Output: dtype}]
+			for _, alg := range algs {
+				if len(c.algorithms) > 0 && !slices.Contains(c.algorithms, alg.Name) {
+					continue
+				}
+				allAlgorithmNames.Insert(alg.Name)
+			}
 		}
-		algs := packgemm.DTypeToGEMM[packgemm.DTypePair{Input: dtype, Output: dtype}]
-		for _, alg := range algs {
-			allAlgorithmNames.Insert(alg.Name)
-		}
+	}
+	if len(allAlgorithmNames) == 0 {
+		t.Fatalf("no algorithms found for the selected cases (%q) and dtypes (%q)", *flagPerfTests, *flagPerfDTypes)
 	}
 	sortedAlgorithmNames := xslices.SortedKeys(allAlgorithmNames)
+	fmt.Printf("- Algorithms selected: %q\n", sortedAlgorithmNames)
 
-	// 2. Setup output styling
-	originalProfile := lipgloss.ColorProfile()      // Optional: store original
-	lipgloss.SetColorProfile(termenv.ANSI256)       // Or termenv.TrueColor if you prefer
-	defer lipgloss.SetColorProfile(originalProfile) // Optional: reset
-	style1 := lipgloss.NewStyle()
-	style2 := lipgloss.NewStyle().Background(lipgloss.ANSIColor(0))
-
-	// 3. Print Header
+	// 2. Print Header
 	fmt.Printf("\n--- PackGemm Performance ---\n")
-	var headerParts []string
-	if *flagMarkdown {
-		headerParts = []string{"| Test Name", "LHS Dims", "RHS Dims", "DType", "BatchSize"}
-		for _, name := range sortedAlgorithmNames {
-			headerParts = append(headerParts, name)
-		}
-		headerParts = append(headerParts, "|")
-		fmt.Println(strings.Join(headerParts, " | "))
-
-		// Markdown separator
-		sepParts := []string{"| :---", ":---", ":---", ":---", ":---"}
-		for range sortedAlgorithmNames {
-			sepParts = append(sepParts, ":---")
-		}
-		sepParts = append(sepParts, "|")
-		fmt.Println(strings.Join(sepParts, " | "))
-
-	} else {
-		headerParts = []string{
-			fmt.Sprintf("| %-20s", "Test Name"),
-			fmt.Sprintf("%-15s", "LHS Dims"),
-			fmt.Sprintf("%-15s", "RHS Dims"),
-			fmt.Sprintf("%-8s", "DType"),
-			fmt.Sprintf("%-10s", "BatchSize"),
-		}
-		for _, name := range sortedAlgorithmNames {
-			headerParts = append(headerParts, fmt.Sprintf("%-20s", name))
-		}
-		headerParts = append(headerParts, "|")
-		headerStr := strings.Join(headerParts, " | ")
-		fmt.Println(headerStr)
-		fmt.Println(strings.Repeat("-", len(headerStr)))
+	headerParts := []string{"| DType", "Batch", "Test Name", "LHS Dims", "RHS Dims"}
+	for _, name := range sortedAlgorithmNames {
+		headerParts = append(headerParts, name)
 	}
+	headerParts = append(headerParts, "|")
+	fmt.Println(strings.Join(headerParts, " | "))
 
-	// 4. Run Benchmarks
-	rowIdx := 0
+	// Markdown separator
+	sepParts := []string{"| :---", ":---", ":---", ":---", ":---"}
+	for range sortedAlgorithmNames {
+		sepParts = append(sepParts, ":---")
+	}
+	sepParts = append(sepParts, "|")
+	fmt.Println(strings.Join(sepParts, " | "))
+
+	// 3. Run Benchmarks
 	for _, bc := range cases {
-		if filterPerfs {
-			if !perfsToRun.Has(bc.name) {
-				continue
-			}
-		}
-
 		for _, dtype := range dtypesToTest {
-			if filterDTypes && !dtypesToRun.Has(dtype.String()) {
-				continue
-			}
-
 			// Row Metadata
 			batchSize := bc.batchSize
 			if batchSize == 0 {
@@ -167,23 +172,12 @@ func TestPackGemm_PerformanceTable(t *testing.T) {
 			lhsDims := fmt.Sprintf("[%d, %d]", bc.lhsRows, bc.lhsCols)
 			rhsDims := fmt.Sprintf("[%d, %d]", bc.lhsCols, bc.rhsCols)
 
-			var rowParts []string
-			if *flagMarkdown {
-				rowParts = []string{
-					fmt.Sprintf("| `%s`", bc.name),
-					lhsDims,
-					rhsDims,
-					dtype.String(),
-					fmt.Sprintf("%d", batchSize),
-				}
-			} else {
-				rowParts = []string{
-					fmt.Sprintf("| %-20s", bc.name),
-					fmt.Sprintf("%-15s", lhsDims),
-					fmt.Sprintf("%-15s", rhsDims),
-					fmt.Sprintf("%-8s", dtype),
-					fmt.Sprintf("%-10d", batchSize),
-				}
+			rowParts := []string{
+				fmt.Sprintf("| %s", dtype),
+				fmt.Sprintf("%d", batchSize),
+				fmt.Sprintf("`%s`", bc.name),
+				lhsDims,
+				rhsDims,
 			}
 
 			// Calculate Ops
@@ -208,38 +202,17 @@ func TestPackGemm_PerformanceTable(t *testing.T) {
 				if found {
 					// Run Benchmark
 					gops := runBenchmark(bc, dtype, targetAlg, pool, numOps)
-					if *flagMarkdown {
-						cellContent = fmt.Sprintf("%.2f GFlops/s", gops)
-					} else {
-						cellContent = fmt.Sprintf("%.2f GFlops/s", gops)
-					}
+					cellContent = fmt.Sprintf("%.2f GFlops/s", gops)
 				}
 
-				if *flagMarkdown {
-					rowParts = append(rowParts, cellContent)
-				} else {
-					rowParts = append(rowParts, fmt.Sprintf("%-20s", cellContent))
-				}
+				rowParts = append(rowParts, cellContent)
 			}
 			rowParts = append(rowParts, "|")
 
 			// Print Row
 			rowStr := strings.Join(rowParts, " | ")
-			style := style1
-			if rowIdx%2 == 1 {
-				style = style2
-			}
-			if *flagMarkdown {
-				fmt.Println(rowStr)
-			} else {
-				fmt.Println(style.Render(rowStr))
-			}
-			rowIdx++
+			fmt.Println(rowStr)
 		}
-	}
-	if !*flagMarkdown {
-		// Just a visual separator line, simplified
-		fmt.Println(strings.Repeat("-", 80))
 	}
 	fmt.Println()
 }
