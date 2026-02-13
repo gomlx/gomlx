@@ -62,6 +62,10 @@ func ApplyPackedOutput[T hwy.Floats](packedOutput []T, output []T, alpha T, beta
 }
 
 func init() {
+	initGen_packing_dispatchAll()
+}
+
+func initGen_packing_dispatchAll() {
 	_ = hwy.NoSimdEnv // silence unused import
 	initGen_packing_dispatchFallback()
 }

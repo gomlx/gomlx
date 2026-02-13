@@ -91,8 +91,11 @@ func testsFloat32(t *testing.T, gemmFn float32GemmFn, params *packgemm.CachePara
 		Adata := xslices.Iota(float32(0), contractingSize)
 		Bdata := xslices.SliceWithValue(contractingSize, float32(1))
 		Cdata := []float32{1_000} // With beta==0, the 1_000 should be discarded.
-		gemmFn(alpha, beta, Adata, Bdata, batchSize, lhsCrossSize, rhsCrossSize, contractingSize, Cdata,
+		err := gemmFn(alpha, beta, Adata, Bdata, batchSize, lhsCrossSize, rhsCrossSize, contractingSize, Cdata,
 			sequentialFloat32BufAllocFn, sequentialFloat32BufReleaseFn, sequentialWorkerPool)
+		if err != nil {
+			t.Fatalf("gemmFn failed: %v", err)
+		}
 		want := 3*1_000 + float32(contractingSize*(contractingSize-1))/2
 		if Cdata[0] != want {
 			t.Errorf("Cdata[0] = %g, want %g", Cdata[0], want)

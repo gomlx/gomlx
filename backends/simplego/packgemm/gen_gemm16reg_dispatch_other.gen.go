@@ -71,6 +71,10 @@ func GEMMSymmetric16RegistersPanel[T hwy.Floats](activeContractingLen int, packe
 }
 
 func init() {
+	initGen_gemm16reg_dispatchAll()
+}
+
+func initGen_gemm16reg_dispatchAll() {
 	_ = hwy.NoSimdEnv // silence unused import
 	initGen_gemm16reg_dispatchFallback()
 }

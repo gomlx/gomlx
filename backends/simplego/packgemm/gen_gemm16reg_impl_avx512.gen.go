@@ -231,7 +231,7 @@ func BaseGEMMSymmetric16RegistersGemmChunk_avx512_Float16(alpha hwy.Float16, bet
 				if contractingPanelIdx > 0 {
 					effectiveBeta = 1
 				}
-				ApplyPackedOutput(packedOutput, output, alpha, hwy.Float32ToFloat16(effectiveBeta), params.RHSPanelCrossSize, lhsPanelRowIdx, rhsPanelColIdx, rhsCrossSize, lhsPanelHeight, rhsPanelWidth)
+				ApplyPackedOutput(packedOutput, output, alpha, hwy.Float32ToFloat16(float32(effectiveBeta)), params.RHSPanelCrossSize, lhsPanelRowIdx, rhsPanelColIdx, rhsCrossSize, lhsPanelHeight, rhsPanelWidth)
 			}
 		}
 	}
@@ -251,7 +251,7 @@ func BaseGEMMSymmetric16RegistersGemmChunk_avx512_BFloat16(alpha hwy.BFloat16, b
 				if contractingPanelIdx > 0 {
 					effectiveBeta = 1
 				}
-				ApplyPackedOutput(packedOutput, output, alpha, hwy.Float32ToBFloat16(effectiveBeta), params.RHSPanelCrossSize, lhsPanelRowIdx, rhsPanelColIdx, rhsCrossSize, lhsPanelHeight, rhsPanelWidth)
+				ApplyPackedOutput(packedOutput, output, alpha, hwy.Float32ToBFloat16(float32(effectiveBeta)), params.RHSPanelCrossSize, lhsPanelRowIdx, rhsPanelColIdx, rhsCrossSize, lhsPanelHeight, rhsPanelWidth)
 			}
 		}
 	}

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package packgemm
 
 import (
@@ -22,14 +24,14 @@ var (
 )
 
 func init() {
-	initGen_gemm16reg_dispatchFallback()
+	initGen_gemm16reg_dispatchAll()
 
 	if archsimd.X86.AVX512() || archsimd.X86.AVX2() {
-		knownVariations["hwy-AVX512"] = &simd16RegistersParams // Testing purpose only.
-		RegisterGEMM("hwy-AVX512", GEMMSymmetric16RegistersFloat32, &simd16RegistersParams, PriorityDTypeSIMD+1)
-		RegisterGEMM("hwy-AVX512", GEMMSymmetric16RegistersFloat64, &simd16RegistersParams, PriorityDTypeSIMD+1)
+		knownVariations["hwy-16regs"] = &simd16RegistersParams // Testing purpose only.
+		RegisterGEMM("hwy-16regs", GEMMSymmetric16RegistersFloat32, &simd16RegistersParams, PriorityDTypeSIMD+1)
+		RegisterGEMM("hwy-16regs", GEMMSymmetric16RegistersFloat64, &simd16RegistersParams, PriorityDTypeSIMD+1)
 		/*
-			RegisterGEMM("hwy-AVX512",
+			RegisterGEMM("hwy-16regs-AVX512",
 				func(
 					alpha, beta float16.Float16,
 					lhsFlat, rhsFlat []float16.Float16,
