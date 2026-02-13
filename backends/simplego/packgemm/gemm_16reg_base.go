@@ -3,8 +3,6 @@
 package packgemm
 
 import (
-	"simd/archsimd"
-
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
@@ -28,7 +26,7 @@ var (
 func init() {
 	initGen_gemm16reg_dispatchAll()
 
-	if archsimd.X86.AVX512() || archsimd.X86.AVX2() {
+	if hwy.HasSIMD() {
 		knownVariations["hwy-16regs"] = &simd16RegistersParams // Testing purpose only.
 		RegisterGEMM("hwy-16regs", GEMMSymmetric16RegistersFloat32, &simd16RegistersParams, PriorityDTypeSIMD+1)
 		RegisterGEMM("hwy-16regs", GEMMSymmetric16RegistersFloat64, &simd16RegistersParams, PriorityDTypeSIMD+1)
