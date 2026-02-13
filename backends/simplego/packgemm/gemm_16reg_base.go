@@ -7,6 +7,8 @@ import (
 
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/gomlx/gomlx/internal/workerspool"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/x448/float16"
 )
 
 //go:generate go tool github.com/ajroetker/go-highway/cmd/hwygen -input gemm_16reg_base.go -output_prefix=gen_gemm16reg_impl -dispatch gen_gemm16reg_dispatch -targets avx2,avx512,fallback
@@ -30,24 +32,46 @@ func init() {
 		knownVariations["hwy-16regs"] = &simd16RegistersParams // Testing purpose only.
 		RegisterGEMM("hwy-16regs", GEMMSymmetric16RegistersFloat32, &simd16RegistersParams, PriorityDTypeSIMD+1)
 		RegisterGEMM("hwy-16regs", GEMMSymmetric16RegistersFloat64, &simd16RegistersParams, PriorityDTypeSIMD+1)
-		/*
-			RegisterGEMM("hwy-16regs-AVX512",
-				func(
-					alpha, beta float16.Float16,
-					lhsFlat, rhsFlat []float16.Float16,
-					batchSize int, lhsCrossSize int, rhsCrossSize int, contractingSize int,
-					outputFlat []float16.Float16,
-					bufAllocFn BufAllocFn[float16.Float16],
-					bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
-					return GEMMSymmetric16RegistersFloat16(
-						hwy.Float16(alpha), hwy.Float16(beta),
-						lhsFlat, rhsFlat,
-						batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
-						outputFlat,
-						bufAllocFn, bufReleaseFn, pool)
-				}, &simd16RegistersParams, PriorityDTypeSIMD+1)
-			RegisterGEMM("hwy-AVX512", GEMMSymmetric16RegistersBFloat16, &simd16RegistersParams, PriorityDTypeSIMD+1)
-		*/
+
+		// Float16 version requires casting to/from the different versions of float16.
+		RegisterGEMM("hwy-16regs",
+			func(
+				alpha, beta float16.Float16,
+				lhsFlat, rhsFlat []float16.Float16,
+				batchSize int, lhsCrossSize int, rhsCrossSize int, contractingSize int,
+				outputFlat []float16.Float16,
+				bufAllocFn BufAllocFn[float16.Float16],
+				bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
+				return GEMMSymmetric16RegistersFloat16(
+					hwy.Float16(alpha), hwy.Float16(beta),
+					castHalfPrecisionSlice[hwy.Float16](lhsFlat),
+					castHalfPrecisionSlice[hwy.Float16](rhsFlat),
+					batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+					castHalfPrecisionSlice[hwy.Float16](outputFlat),
+					castBufAllocFn[hwy.Float16](bufAllocFn),
+					bufReleaseFn, pool)
+			},
+			&simd16RegistersParams, PriorityDTypeSIMD+1)
+
+		// BFloat16 version requires casting to/from the different versions of BFloat16.
+		RegisterGEMM("hwy-16regs",
+			func(
+				alpha, beta bfloat16.BFloat16,
+				lhsFlat, rhsFlat []bfloat16.BFloat16,
+				batchSize int, lhsCrossSize int, rhsCrossSize int, contractingSize int,
+				outputFlat []bfloat16.BFloat16,
+				bufAllocFn BufAllocFn[bfloat16.BFloat16],
+				bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
+				return GEMMSymmetric16RegistersBFloat16(
+					hwy.BFloat16(alpha), hwy.BFloat16(beta),
+					castHalfPrecisionSlice[hwy.BFloat16](lhsFlat),
+					castHalfPrecisionSlice[hwy.BFloat16](rhsFlat),
+					batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+					castHalfPrecisionSlice[hwy.BFloat16](outputFlat),
+					castBufAllocFn[hwy.BFloat16](bufAllocFn),
+					bufReleaseFn, pool)
+			},
+			&simd16RegistersParams, PriorityDTypeSIMD+1)
 	}
 }
 
