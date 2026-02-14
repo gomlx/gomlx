@@ -3,6 +3,8 @@
 package attention
 
 import (
+	"slices"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
@@ -22,18 +24,27 @@ const (
 	LayoutBSHD = backends.AxesLayoutBSHD
 )
 
+// Letters used in Einsum equations below:
+//
+//   - b: batch size
+//   - h: number of heads for keys/values, and usually the same for queries (see g below)
+//   - g: if using Grouped Query Attention (GQA), there are g*h query heads, while only h heads for keys/values
+//   - q: queries sequence length
+//   - k: keys/values sequence length
+//   - d: features (aka embedding) dimension, contracted during the attention calculation
+
 // scoreEquation returns the Einsum equation for computing attention scores (Q @ K^T).
-// When gqa is true, the query has been reshaped to split its heads axis into (numKVHeads, groupSize),
+// When isGQA is true, the query has been reshaped to split its heads axis into (numKVHeads, groupSize),
 // so the equation uses a 5D query and treats the KV-heads axis as a batch dimension.
-func scoreEquation(l AxesLayout, gqa bool) string {
-	if gqa {
+func scoreEquation(l AxesLayout, isGQA bool) string {
+	if isGQA {
 		switch l {
 		case LayoutBSHD:
-			// Q:[B,Sq,Hk,g,D] x K:[B,Sk,Hk,D] -> [B,Sq,Hk,g,Sk]
-			return "bqHgd,bkHd->bqHgk"
+			// Q:[b,q,h,g,d] x K:[b,k,h,d] -> [b,q,h,g,k]
+			return "bqhgd,bkhd->bqhgk"
 		default: // LayoutBHSD
-			// Q:[B,Hk,g,Sq,D] x K:[B,Hk,Sk,D] -> [B,Hk,g,Sq,Sk]
-			return "bHgqd,bHkd->bHgqk"
+			// Q:[b,h,g,q,d] x K:[b,h,k,d] -> [b,h,g,q,k]
+			return "bhgqd,bhkd->bhgqk"
 		}
 	}
 	switch l {
@@ -45,16 +56,16 @@ func scoreEquation(l AxesLayout, gqa bool) string {
 }
 
 // outputEquation returns the Einsum equation for computing the attention output (coefficients @ V).
-// When gqa is true, the coefficients have the split heads shape and V retains its original KV-heads shape.
-func outputEquation(l AxesLayout, gqa bool) string {
-	if gqa {
+// When isGQA is true, the coefficients have the split heads shape and V retains its original KV-heads shape.
+func outputEquation(l AxesLayout, isGQA bool) string {
+	if isGQA {
 		switch l {
 		case LayoutBSHD:
-			// C:[B,Sq,Hk,g,Sk] x V:[B,Sk,Hk,D] -> [B,Sq,Hk,g,D]
-			return "bqHgk,bkHd->bqHgd"
+			// C:[b,q,h,g,k] x V:[b,k,h,d] -> [b,q,h,g,d]
+			return "bqhgk,bkhd->bqhgd"
 		default: // LayoutBHSD
-			// C:[B,Hk,g,Sq,Sk] x V:[B,Hk,Sk,D] -> [B,Hk,g,Sq,D]
-			return "bHgqk,bHkd->bHgqd"
+			// C:[b,h,g,q,k] x V:[b,h,k,d] -> [b,h,g,q,d]
+			return "bhgqk,bhkd->bhgqd"
 		}
 	}
 	switch l {
@@ -65,49 +76,62 @@ func outputEquation(l AxesLayout, gqa bool) string {
 	}
 }
 
-// reshapeQueryForGQA splits the query's heads axis into (numKVHeads, groupSize) for GQA.
-// This is a pure reshape (no data copy) that lets DotGeneral treat numKVHeads as a batch
-// dimension, avoiding the need to broadcast-expand K/V tensors.
+// reshapeQueryForGQA splits the query's heads axis into (numKVHeads, groupSize) for
+// Grouped Query Attention (GQA). This is a pure reshape (no data copy) that lets
+// DotGeneral treat numKVHeads as a batch dimension, avoiding the need to
+// broadcast-expand K/V tensors.
 //
-// For LayoutBHSD: [batch, numHeads, seq, dim] → [batch, numKVHeads, groupSize, seq, dim]
-// For LayoutBSHD: [batch, seq, numHeads, dim] → [batch, seq, numKVHeads, groupSize, dim]
-func reshapeQueryForGQA(query *Node, numHeads, numKVHeads int, layout AxesLayout) *Node {
-	dims := query.Shape().Dimensions
-	groupSize := numHeads / numKVHeads
+// For LayoutBHSD: [batch, numQueryHeads, seq, dim] → [batch, numKVHeads, groupSize, seq, dim]
+// For LayoutBSHD: [batch, seq, numQueryHeads, dim] → [batch, seq, numKVHeads, groupSize, dim]
+func reshapeQueryForGQA(query *Node, numQueryHeads, numKVHeads int, layout AxesLayout) *Node {
+	groupSize := numQueryHeads / numKVHeads
 	headsAxis := layout.HeadsAxis()
-	newDims := make([]int, 5)
-	copy(newDims, dims[:headsAxis])
+	newDims := slices.Clone(query.Shape().Dimensions)
+	newDims = slices.Insert(newDims, headsAxis+1, groupSize)
 	newDims[headsAxis] = numKVHeads
-	newDims[headsAxis+1] = groupSize
-	copy(newDims[headsAxis+2:], dims[headsAxis+1:])
 	return Reshape(query, newDims...)
 }
 
-// reshapeMaskForGQA adapts a 4D mask to the 5D score shape used during GQA.
-// If the mask's heads dimension equals numHeads, it is reshaped to split heads into
-// (numKVHeads, groupSize). Otherwise an axis of size 1 is inserted for broadcasting.
-func reshapeMaskForGQA(mask *Node, numHeads, numKVHeads int, layout AxesLayout) *Node {
+// reshapeMaskForGQA adapts a 4D mask to the 5D score shape used during Grouped Query
+// Attention (GQA). If the mask's heads dimension equals numQueryHeads, it is reshaped
+// to split heads into (numKVHeads, groupSize). Otherwise an axis of size 1 is inserted
+// for broadcasting.
+func reshapeMaskForGQA(mask *Node, numQueryHeads, numKVHeads int, layout AxesLayout) *Node {
 	headsAxis := layout.HeadsAxis()
 	maskHeadDim := mask.Shape().Dimensions[headsAxis]
-	if maskHeadDim == numHeads {
+	if maskHeadDim == numQueryHeads {
 		// Per-head mask: split heads axis into (numKVHeads, groupSize).
-		dims := mask.Shape().Dimensions
-		groupSize := numHeads / numKVHeads
-		newDims := make([]int, 5)
-		copy(newDims, dims[:headsAxis])
+		groupSize := numQueryHeads / numKVHeads
+		newDims := slices.Clone(mask.Shape().Dimensions)
+		newDims = slices.Insert(newDims, headsAxis+1, groupSize)
 		newDims[headsAxis] = numKVHeads
-		newDims[headsAxis+1] = groupSize
-		copy(newDims[headsAxis+2:], dims[headsAxis+1:])
 		return Reshape(mask, newDims...)
 	}
 	// Head dim is 1 or numKVHeads: insert a dim for groupSize that will broadcast.
 	return InsertAxes(mask, headsAxis+1)
 }
 
-// mergeGQAHeads merges the split (numKVHeads, groupSize) axes back into a single heads axis.
-// The input is 5D and the output is the original 4D shape.
-func mergeGQAHeads(node *Node, targetDims []int) *Node {
-	return Reshape(node, targetDims...)
+// mergeOutputGQAHeads merges the split (numKVHeads, groupSize) axes back into a single
+// heads axis for the attention output tensor. The input is 5D and the output is 4D.
+// This correctly handles d_v != d_q since it operates on the node's own dimensions.
+func mergeOutputGQAHeads(node *Node, numQueryHeads int, layout AxesLayout) *Node {
+	dims := node.Shape().Dimensions
+	headsAxis := layout.HeadsAxis()
+	mergedDims := slices.Clone(dims)
+	mergedDims = slices.Delete(mergedDims, headsAxis+1, headsAxis+2)
+	mergedDims[headsAxis] = numQueryHeads
+	return Reshape(node, mergedDims...)
+}
+
+// mergeGQACoefficientHeads merges the split (numKVHeads, groupSize) axes back into a
+// single heads axis for the attention coefficient tensor. The input is 5D and the output is 4D.
+func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) *Node {
+	dims := node.Shape().Dimensions
+	headsAxis := layout.HeadsAxis()
+	mergedDims := slices.Clone(dims)
+	mergedDims = slices.Delete(mergedDims, headsAxis+1, headsAxis+2)
+	mergedDims[headsAxis] = numQueryHeads
+	return Reshape(node, mergedDims...)
 }
 
 // Core computes the core scaled dot-product attention operation.
@@ -154,14 +178,14 @@ func mergeGQAHeads(node *Node, targetDims []int) *Node {
 func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate float64,
 	layout AxesLayout, causal, wantCoefficients bool) (output, coefficients *Node) {
 	g := query.Graph()
-	numHeads := query.Shape().Dimensions[layout.HeadsAxis()]
+	numQueryHeads := query.Shape().Dimensions[layout.HeadsAxis()]
 	numKVHeads := key.Shape().Dimensions[layout.HeadsAxis()]
 
 	if causal && mask != nil {
 		Panicf("attention.Core: causal and mask are mutually exclusive; combine them into a single mask before calling Core")
 	}
-	if numHeads <= 0 || numKVHeads <= 0 || numHeads%numKVHeads != 0 {
-		Panicf("attention.Core: numHeads (%d) must be positive and divisible by numKVHeads (%d)", numHeads, numKVHeads)
+	if numQueryHeads <= 0 || numKVHeads <= 0 || numQueryHeads%numKVHeads != 0 {
+		Panicf("attention.Core: numQueryHeads (%d) must be positive and divisible by numKVHeads (%d)", numQueryHeads, numKVHeads)
 	}
 
 	dropoutActive := layers.IsDropoutActive(ctx, g) && dropoutRate > 0
@@ -185,20 +209,21 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 			decomposedMask = causalBool
 		}
 
-		// For GQA: reshape Q to split heads into (numKVHeads, groupSize) so that
-		// DotGeneral treats numKVHeads as a batch dimension. This avoids broadcasting
-		// K/V to match the query head count — only a free reshape of Q is needed.
-		gqa := numHeads != numKVHeads
+		// For Grouped Query Attention (GQA): reshape Q to split heads into
+		// (numKVHeads, groupSize) so that DotGeneral treats numKVHeads as a batch
+		// dimension. This avoids broadcasting K/V to match the query head count —
+		// only a free reshape of Q is needed.
+		isGQA := numQueryHeads != numKVHeads
 		decomposedQuery := query
-		if gqa {
-			decomposedQuery = reshapeQueryForGQA(query, numHeads, numKVHeads, layout)
+		if isGQA {
+			decomposedQuery = reshapeQueryForGQA(query, numQueryHeads, numKVHeads, layout)
 			if decomposedMask != nil {
-				decomposedMask = reshapeMaskForGQA(decomposedMask, numHeads, numKVHeads, layout)
+				decomposedMask = reshapeMaskForGQA(decomposedMask, numQueryHeads, numKVHeads, layout)
 			}
 		}
 
 		// Decomposed attention.
-		scores := Einsum(scoreEquation(layout, gqa), decomposedQuery, key)
+		scores := Einsum(scoreEquation(layout, isGQA), decomposedQuery, key)
 		scores = MulScalar(scores, scale)
 
 		if decomposedMask != nil && decomposedMask.DType() != dtypes.Bool {
@@ -216,18 +241,12 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 			coefficients = layers.DropoutStatic(ctx, coefficients, dropoutRate)
 		}
 
-		decomposedOutput := Einsum(outputEquation(layout, gqa), coefficients, value)
+		decomposedOutput := Einsum(outputEquation(layout, isGQA), coefficients, value)
 
-		if gqa {
-			// Merge (numKVHeads, groupSize) back into numHeads for output and coefficients.
-			decomposedOutput = mergeGQAHeads(decomposedOutput, query.Shape().Dimensions)
-			coeffDims := scores.Shape().Dimensions
-			headsAxis := layout.HeadsAxis()
-			mergedCoeffDims := make([]int, 4)
-			copy(mergedCoeffDims, coeffDims[:headsAxis])
-			mergedCoeffDims[headsAxis] = numHeads
-			copy(mergedCoeffDims[headsAxis+1:], coeffDims[headsAxis+2:])
-			coefficients = mergeGQAHeads(coefficients, mergedCoeffDims)
+		if isGQA {
+			// Merge (numKVHeads, groupSize) back into numQueryHeads for output and coefficients.
+			decomposedOutput = mergeOutputGQAHeads(decomposedOutput, numQueryHeads, layout)
+			coefficients = mergeGQACoefficientHeads(coefficients, numQueryHeads, layout)
 		}
 
 		return decomposedOutput, coefficients
@@ -242,7 +261,7 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 			func() *Node {
 				return BackendFusedScaledDotProductAttention(
 					query, key, value, mask,
-					numHeads, numKVHeads, layout, scale, causal)
+					numQueryHeads, numKVHeads, layout, scale, causal)
 			},
 			func() *Node {
 				output, _ := decomposedFn()
