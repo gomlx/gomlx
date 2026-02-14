@@ -1,4 +1,4 @@
-//  - --- go:build perf
+//  --- go:build perf
 
 // Copyright 2025 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
@@ -31,6 +32,7 @@ var (
 			"If empty, it will run for all supported dtypes.")
 	flagPerfDuration = flag.Duration("perf_duration", time.Second, "Duration to run each performance test.")
 	flagPerfMinRuns  = flag.Int("perf_min_runs", 10, "Minimum number of runs for each performance test.")
+	flagMarkdown     = flag.Bool("markdown", false, "Output in markdown format.")
 )
 
 // benchmarkCase defines input parameters for PackGemm to be benchmarked.
@@ -51,7 +53,7 @@ type benchmarkCase struct {
 //	$ go test -tags=perf ./backends/simplego/packgemm -run=TestPackGemm_PerformanceTable -v -count=1
 func TestPackGemm_PerformanceTable(t *testing.T) {
 	// Define benchmark cases
-	largeAlgos := []string{"hwy-16regs"}
+	largeAlgos := []string{"hwy-16regs", "nosimd-large"}
 	cases := []benchmarkCase{
 		{
 			name:    "NoBatch-Tiny",
@@ -146,7 +148,7 @@ func TestPackGemm_PerformanceTable(t *testing.T) {
 
 	// 2. Print Header
 	fmt.Printf("\n--- PackGemm Performance ---\n")
-	headerParts := []string{"| DType", "Batch", "Test Name", "LHS Dims", "RHS Dims"}
+	headerParts := []string{"| Test Name", "Ops", "DType", "Batch", "LHS Dims", "RHS Dims"}
 	for _, name := range sortedAlgorithmNames {
 		headerParts = append(headerParts, name)
 	}
@@ -154,7 +156,7 @@ func TestPackGemm_PerformanceTable(t *testing.T) {
 	fmt.Println(strings.Join(headerParts, " | "))
 
 	// Markdown separator
-	sepParts := []string{"| :---", ":---", ":---", ":---", ":---"}
+	sepParts := []string{"| :---", "---:", ":---", ":---", ":---", ":---"}
 	for range sortedAlgorithmNames {
 		sepParts = append(sepParts, ":---")
 	}
@@ -162,6 +164,7 @@ func TestPackGemm_PerformanceTable(t *testing.T) {
 	fmt.Println(strings.Join(sepParts, " | "))
 
 	// 3. Run Benchmarks
+	const emptyCellContent = "-"
 	for _, bc := range cases {
 		for _, dtype := range dtypesToTest {
 			// Row Metadata
@@ -172,20 +175,27 @@ func TestPackGemm_PerformanceTable(t *testing.T) {
 			lhsDims := fmt.Sprintf("[%d, %d]", bc.lhsRows, bc.lhsCols)
 			rhsDims := fmt.Sprintf("[%d, %d]", bc.lhsCols, bc.rhsCols)
 
-			rowParts := []string{
-				fmt.Sprintf("| %s", dtype),
-				fmt.Sprintf("%d", batchSize),
-				fmt.Sprintf("`%s`", bc.name),
-				lhsDims,
-				rhsDims,
-			}
-
 			// Calculate Ops
 			// 2 * M * N * K * BatchSize
 			numOps := 2 * int64(bc.lhsRows) * int64(bc.rhsCols) * int64(bc.lhsCols) * int64(batchSize)
 
+			rowParts := []string{
+				fmt.Sprintf("| `%s`", bc.name),
+				strings.ToUpper(humanize.SIWithDigits(float64(numOps), 2, "")),
+				fmt.Sprintf("%s", dtype),
+				fmt.Sprintf("%d", batchSize),
+				lhsDims,
+				rhsDims,
+			}
+
 			// Iterate unique algorithms (columns)
 			for _, algName := range sortedAlgorithmNames {
+				// Check if this algorithm is selected for this test case.
+				if len(bc.algorithms) > 0 && !slices.Contains(bc.algorithms, algName) {
+					rowParts = append(rowParts, emptyCellContent)
+					continue
+				}
+
 				// Find this specific algorithm implementation for this dtype
 				algs := packgemm.DTypeToGEMM[packgemm.DTypePair{Input: dtype, Output: dtype}]
 				var targetAlg packgemm.GEMMRegistration
@@ -197,14 +207,14 @@ func TestPackGemm_PerformanceTable(t *testing.T) {
 						break
 					}
 				}
-
-				cellContent := "-"
-				if found {
-					// Run Benchmark
-					gops := runBenchmark(bc, dtype, targetAlg, pool, numOps)
-					cellContent = fmt.Sprintf("%.2f GFlops/s", gops)
+				if !found {
+					rowParts = append(rowParts, emptyCellContent)
+					continue
 				}
 
+				// Run Benchmark
+				gops := runBenchmark(bc, dtype, targetAlg, pool, numOps)
+				cellContent := fmt.Sprintf("%.2f GFlops/s", gops)
 				rowParts = append(rowParts, cellContent)
 			}
 			rowParts = append(rowParts, "|")
