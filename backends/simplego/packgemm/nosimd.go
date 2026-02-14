@@ -69,7 +69,7 @@ func basicSymmetricGeneric[T hwy.Floats](alpha, beta T, lhsFlat, rhsFlat []T,
 	// gemmFlops := lhsCrossSize * rhsCrossSize * contractingSize
 
 	// 2. Check if small matrix multiplication kernel can be used.
-	if (forceVariant == VariantNone && gemmSize < nosimdSmallMatMulSizeThreshold) || forceVariant == VariantSmall {
+	if gemmSize < nosimdSmallMatMulSizeThreshold {
 		klog.V(1).Infof("Using small variant for GEMM kernel")
 		return basicSymmetricGenericSmallGEMMParallel(
 			alpha, beta,

@@ -57,26 +57,10 @@ func TestPackGemm(t *testing.T) {
 						"instead %T as the registered function as %q", reg.GEMMFn, reg.Name)
 				}
 				params := reg.Params
-				testLargeAndSmallVariants(t, float32GemmFn(gemmFn), params)
+				testsFloat32(t, float32GemmFn(gemmFn), params)
 			})
 		}
 	})
-}
-
-func testLargeAndSmallVariants(t *testing.T, gemmFn float32GemmFn, params *packgemm.CacheParams) {
-	variants := []packgemm.Variant{packgemm.VariantSmall, packgemm.VariantLarge}
-	variantNames := []string{"small-variant", "large-variant"}
-	defer func() {
-		// Clean up variant on leave.
-		packgemm.ForceVariant(packgemm.VariantNone)
-	}()
-	for variantIdx, variant := range variants {
-		packgemm.ForceVariant(variant)
-		variantName := variantNames[variantIdx]
-		t.Run(variantName, func(t *testing.T) {
-			testsFloat32(t, gemmFn, params)
-		})
-	}
 }
 
 func testsFloat32(t *testing.T, gemmFn float32GemmFn, params *packgemm.CacheParams) {

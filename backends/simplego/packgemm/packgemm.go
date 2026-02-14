@@ -70,28 +70,11 @@ var (
 	// DTypeToGEMM is a map of DType to GEMM function.
 	// Used for registration, use the generic GEMM[TInput, TOutput] to actually call it.
 	DTypeToGEMM = make(map[DTypePair][]GEMMRegistration, 100)
-
-	forceVariant Variant = VariantNone
-)
-
-// Variant of algorithms: usually just one for small matrices and the other for large matrices.
-type Variant int
-
-const (
-	VariantNone Variant = iota
-	VariantSmall
-	VariantLarge
 )
 
 // HasDTypeSupport returns true if a GEMM function is registered for the given dtypes.
 func HasDTypeSupport(input, output dtypes.DType) bool {
 	return len(DTypeToGEMM[DTypePair{input, output}]) > 0
-}
-
-// ForceVariant forces the use of the small/large variant.
-// Used for testing only.
-func ForceVariant(v Variant) {
-	forceVariant = v
 }
 
 // GEMMRegistration is a registration of a GEMM function for the given dtype pair.
