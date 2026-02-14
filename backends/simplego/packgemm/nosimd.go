@@ -3,13 +3,8 @@
 package packgemm
 
 import (
-	"unsafe"
-
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/gomlx/gomlx/internal/workerspool"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-	"github.com/x448/float16"
 	"k8s.io/klog/v2"
 )
 
@@ -41,62 +36,25 @@ var (
 )
 
 func init() {
-	RegisterGEMM("Basic(non-SIMD)", basicSymmetricGeneric[float32], &NoSIMD32Params, PriorityBase)
-	RegisterGEMM("Basic(non-SIMD)", basicSymmetricGeneric[float64], &NoSIMD32Params, PriorityBase)
-	RegisterGEMM("Basic(non-SIMD)", basicSymmetricFloat16, &NoSIMD32Params, PriorityBase)
+	RegisterGEMM("nosimd-auto", basicSymmetricGeneric[float32], &NoSIMD32Params, PriorityBase+1)
+	RegisterGEMM("nosimd-auto", basicSymmetricGeneric[float64], &NoSIMD32Params, PriorityBase+1)
+
+	RegisterGEMM("nosimd-small", basicSmallSymmetricGeneric[float32], &NoSIMD32Params, PriorityBase)
+	RegisterGEMM("nosimd-small", basicSmallSymmetricGeneric[float64], &NoSIMD32Params, PriorityBase)
+
+	RegisterGEMM("nosimd-large", basicLargeSymmetricGeneric[float32], &NoSIMD32Params, PriorityBase)
+	RegisterGEMM("nosimd-large", basicLargeSymmetricGeneric[float64], &NoSIMD32Params, PriorityBase)
 
 	knownVariations["no-SIMD"] = &NoSIMD32Params
-}
-
-func convertFloat16ToHighway(src []float16.Float16) []hwy.Float16 {
-	if len(src) == 0 {
-		return nil
-	}
-	// SliceData returns a pointer to the first element
-	// Slice creates a new slice header pointing to that data
-	return unsafe.Slice((*hwy.Float16)(unsafe.Pointer(unsafe.SliceData(src))), len(src))
-}
-
-func convertBFloat16ToHighway(src []bfloat16.BFloat16) []hwy.BFloat16 {
-	if len(src) == 0 {
-		return nil
-	}
-	// SliceData returns a pointer to the first element
-	// Slice creates a new slice header pointing to that data
-	return unsafe.Slice((*hwy.BFloat16)(unsafe.Pointer(unsafe.SliceData(src))), len(src))
-}
-
-// Wrapper to be able to use go-highway types.
-func basicSymmetricFloat16(alpha, beta float16.Float16, lhsFlat, rhsFlat []float16.Float16,
-	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
-	outputFlat []float16.Float16,
-	bufAllocFn BufAllocFn[float16.Float16], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
-	convertedBufAllocFn := func(size int) (any, []hwy.Float16) {
-		ref, data := bufAllocFn(size)
-		return ref, convertFloat16ToHighway(data)
-	}
-	return basicSymmetricGeneric(hwy.Float16(alpha), hwy.Float16(beta),
-		convertFloat16ToHighway(lhsFlat), convertFloat16ToHighway(rhsFlat),
-		batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
-		convertFloat16ToHighway(outputFlat), convertedBufAllocFn, bufReleaseFn, pool)
-}
-
-// highwayToDType converts a go-highway type to a dtypes.DType.
-func highwayToDType[T hwy.Floats]() dtypes.DType {
-	switch any(T(0)) {
-	case hwy.Float16(0):
-		return dtypes.Float16
-	case hwy.BFloat16(0):
-		return dtypes.BFloat16
-	default:
-		return dtypes.Float32
-	}
 }
 
 // basicSymmetricGeneric implements basic symmetric (input and output dtypes are the same) non-SIMD
 // GEMM for various types of inputs and outputs.
 //
 // It is used when no SIMD-optimized implementation is available.
+//
+// This is a small wrapper that decides whether to use the "small matrix" variant, or the "large matrix"
+// variant.
 func basicSymmetricGeneric[T hwy.Floats](alpha, beta T, lhsFlat, rhsFlat []T,
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
 	outputFlat []T,
@@ -129,6 +87,48 @@ func basicSymmetricGeneric[T hwy.Floats](alpha, beta T, lhsFlat, rhsFlat []T,
 		lhsBatchStride, rhsBatchStride, outputBatchStride,
 		bufAllocFn, bufReleaseFn,
 		pool)
+}
+
+// basicSmallSymmetricGeneric implements basic symmetric (input and output dtypes are the same) non-SIMD
+// GEMM for various types of inputs and outputs.
+//
+// It is used when no SIMD-optimized implementation is available and forces the small variant of the algorithm.
+func basicSmallSymmetricGeneric[T hwy.Floats](alpha, beta T, lhsFlat, rhsFlat []T,
+	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
+	outputFlat []T,
+	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
+	// Precalculate the strides.
+	lhsBatchStride := lhsCrossSize * contractingSize
+	rhsBatchStride := contractingSize * rhsCrossSize
+	outputBatchStride := lhsCrossSize * rhsCrossSize
+
+	return basicSymmetricGenericSmallGEMMParallel(
+		alpha, beta,
+		lhsFlat, rhsFlat, outputFlat,
+		batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+		lhsBatchStride, rhsBatchStride, outputBatchStride,
+		pool)
+}
+
+// basicLargeSymmetricGeneric implements basic symmetric (input and output dtypes are the same) non-SIMD
+// GEMM for various types of inputs and outputs.
+//
+// It is used when no SIMD-optimized implementation is available and forces the small variant of the algorithm.
+func basicLargeSymmetricGeneric[T hwy.Floats](alpha, beta T, lhsFlat, rhsFlat []T,
+	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
+	outputFlat []T,
+	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
+	// Precalculate the strides.
+	lhsBatchStride := lhsCrossSize * contractingSize
+	rhsBatchStride := contractingSize * rhsCrossSize
+	outputBatchStride := lhsCrossSize * rhsCrossSize
+
+	return basicSymmetricGenericLargeGEMMParallel(
+		alpha, beta,
+		lhsFlat, rhsFlat, outputFlat,
+		batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+		lhsBatchStride, rhsBatchStride, outputBatchStride,
+		bufAllocFn, bufReleaseFn, pool)
 }
 
 // basicSymmetricGenericSmallGEMMParallel implements basic symmetric (input and output dtypes are the same) non-SIMD
