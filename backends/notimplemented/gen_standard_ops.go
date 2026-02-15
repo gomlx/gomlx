@@ -210,7 +210,7 @@ func (f Function) Dot(lhs backends.Value, rhs backends.Value) (backends.Value, e
 // It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
-func (f Function) DotGeneral(lhs backends.Value, lhsContractingAxes []int, lhsBatchAxes []int, rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int, config DotGeneralConfig) (backends.Value, error) {
+func (f Function) DotGeneral(lhs backends.Value, lhsContractingAxes []int, lhsBatchAxes []int, rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int, config backends.DotGeneralConfig) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeDotGeneral)
 }
 

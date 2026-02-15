@@ -1383,7 +1383,7 @@ type nodeInputsDotGeneral struct {
 	rhs                *Node
 	rhsContractingAxes []int
 	rhsBatchAxes       []int
-	config             DotGeneralConfig
+	config             backends.DotGeneralConfig
 }
 
 // Type implements the interface NodeInputs.
@@ -1393,7 +1393,7 @@ func (ni *nodeInputsDotGeneral) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsDotGeneral) String() string {
-	return fmt.Sprintf("%s(lhs=[#%d], lhsContractingAxes=%v, lhsBatchAxes=%v, rhs=[#%d], rhsContractingAxes=%v, rhsBatchAxes=%v, config=%v)",
+	return fmt.Sprintf("%s(lhs=[#%d], lhsContractingAxes=%v, lhsBatchAxes=%v, rhs=[#%d], rhsContractingAxes=%v, rhsBatchAxes=%v, config=%+v)",
 		ni.Type(),
 		ni.lhs.Id(),
 		ni.lhsContractingAxes,
@@ -1406,7 +1406,7 @@ func (ni *nodeInputsDotGeneral) String() string {
 }
 
 // backendDotGeneral is a Graph wrapper for the backend.Builder.DotGeneral method.
-func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int, config DotGeneralConfig) (
+func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int, config backends.DotGeneralConfig) (
 	node *Node) {
 	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
