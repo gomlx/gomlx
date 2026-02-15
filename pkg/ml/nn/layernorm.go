@@ -51,9 +51,15 @@ func layerNormDecomposed(x *Node, axes []int, epsilon float64, gamma, beta, mask
 	eps := ConstAs(x, epsilon)
 	normalized := Div(xCentered, Sqrt(Add(variance, eps)))
 	if gamma != nil {
+		if gamma.Rank() < normalized.Rank() {
+			gamma = ExpandLeftToRank(gamma, normalized.Rank())
+		}
 		normalized = Mul(normalized, gamma)
 	}
 	if beta != nil {
+		if beta.Rank() < normalized.Rank() {
+			beta = ExpandLeftToRank(beta, normalized.Rank())
+		}
 		normalized = Add(normalized, beta)
 	}
 	return normalized
