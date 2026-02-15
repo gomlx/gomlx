@@ -1,9 +1,9 @@
 # Implementation Plan: DotGeneral Configured Accumulator and Output DTypes
 
-## Phase 1: Update Generic Backend and `notimplemented` Backend
+## Phase 1: Update Generic Backend and `notimplemented` Backend [checkpoint: 912551c]
 
-- [ ] **Task:** Update the `DotGeneral()` signature in the generic backend interface (`backends/backends.go`) to include the new `config` parameter with `AccumulatorDType` and `OutputDType` fields.
-- [ ] **Task:** Update the `DotGeneral()` signature in the `notimplemented` backend (`backends/notimplemented/notimplemented.go`) to match the new generic backend interface.
+- [x] **Task:** Update the `DotGeneral()` signature in the generic backend interface (`backends/backends.go`) to include the new `config` parameter with `AccumulatorDType` and `OutputDType` fields.
+- [x] **Task:** Update the `DotGeneral()` signature in the `notimplemented` backend (`backends/notimplemented/notimplemented.go`) to match the new generic backend interface.
 - [ ] **Task:** Conductor - User Manual Verification 'Phase 1: Update Generic Backend and notimplemented Backend' (Protocol in workflow.md)
 
 ## Phase 2: Implement `simplego` Backend
