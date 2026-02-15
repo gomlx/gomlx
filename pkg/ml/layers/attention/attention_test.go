@@ -24,7 +24,7 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 		scale := 1.0 / math.Sqrt(float64(headDim))
 
 		// Compute with BHSD layout (default): q/k/v are [batch, heads, seq, dim]
-		bhsdOut, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD)
+		bhsdOut, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD, false, false)
 
 		// Transpose to BSHD: [batch, seq, heads, dim]
 		qBSHD := TransposeAllDims(q, 0, 2, 1, 3)
@@ -32,7 +32,7 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 		vBSHD := TransposeAllDims(v, 0, 2, 1, 3)
 
 		// Compute with BSHD layout
-		bshdOut, _ := Core(ctx, qBSHD, kBSHD, vBSHD, scale, nil, 0, LayoutBSHD)
+		bshdOut, _ := Core(ctx, qBSHD, kBSHD, vBSHD, scale, nil, 0, LayoutBSHD, false, false)
 
 		// Transpose BSHD output back to BHSD for comparison
 		bshdOutTransposed := TransposeAllDims(bshdOut, 0, 2, 1, 3)
@@ -75,7 +75,7 @@ func TestCore(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD)
+			output, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD, false, false)
 			return output
 		})
 
@@ -97,8 +97,8 @@ func TestCore(t *testing.T) {
 			headDim := q.Shape().Dimensions[3]
 			defaultScale := 1.0 / math.Sqrt(float64(headDim))
 			// Both use the same scale — should produce identical results
-			defaultOut, _ := Core(ctx, q, k, v, defaultScale, nil, 0, LayoutBHSD)
-			explicitOut, _ := Core(ctx, q, k, v, 1.0/math.Sqrt(2.0), nil, 0, LayoutBHSD)
+			defaultOut, _ := Core(ctx, q, k, v, defaultScale, nil, 0, LayoutBHSD, false, false)
+			explicitOut, _ := Core(ctx, q, k, v, 1.0/math.Sqrt(2.0), nil, 0, LayoutBHSD, false, false)
 			return []*Node{defaultOut, explicitOut}
 		})
 
@@ -128,7 +128,7 @@ func TestCore(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v, mask *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, _ := Core(ctx, q, k, v, scale, mask, 0, LayoutBHSD)
+			output, _ := Core(ctx, q, k, v, scale, mask, 0, LayoutBHSD, false, false)
 			return output
 		})
 
@@ -157,7 +157,7 @@ func TestCore(t *testing.T) {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			// Pass boolean mask directly — Core auto-detects and uses MaskedSoftmax.
-			output, _ := Core(ctx, q, k, v, scale, boolMask, 0, LayoutBHSD)
+			output, _ := Core(ctx, q, k, v, scale, boolMask, 0, LayoutBHSD, false, false)
 			return output
 		})
 
@@ -184,7 +184,7 @@ func TestCore(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, coefficients := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD)
+			output, coefficients := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD, false, true)
 			return []*Node{output, coefficients}
 		})
 
@@ -212,5 +212,171 @@ func TestCore(t *testing.T) {
 				}
 			}
 		}
+	})
+
+	t.Run("GQA", func(t *testing.T) {
+		// Grouped Query Attention: 2 query heads share 1 KV head.
+		// Verifies both fused and decomposed paths produce the same results.
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
+			headDim := q.Shape().Dimensions[3]
+			scale := 1.0 / math.Sqrt(float64(headDim))
+			// Fused path (Done-style): numHeads=2, numKVHeads=1 inferred from shapes.
+			fusedOutput, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD, false, false)
+			// Decomposed path (DoneWithCoefficients-style):
+			decomposedOutput, coefficients := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD, false, true)
+			return []*Node{fusedOutput, decomposedOutput, coefficients}
+		})
+
+		// Q: [batch=1, heads=2, seq=2, dim=2]
+		query := [][][][]float32{{{{1, 0}, {0, 1}}, {{0.5, 0.5}, {1, -1}}}}
+		// K: [batch=1, heads=1, seq=2, dim=2] — 1 KV head shared by 2 Q heads
+		key := [][][][]float32{{{{1, 0}, {0, 1}}}}
+		// V: [batch=1, heads=1, seq=2, dim=2]
+		value := [][][][]float32{{{{10, 20}, {30, 40}}}}
+
+		outputs := exec.MustExec(query, key, value)
+		fusedData := outputs[0].Value().([][][][]float32)
+		decomposedData := outputs[1].Value().([][][][]float32)
+		coeffData := outputs[2].Value().([][][][]float32)
+
+		// Output shapes must match query: [1, 2, 2, 2].
+		assert.Equal(t, []int{1, 2, 2, 2}, outputs[0].Shape().Dimensions)
+		assert.Equal(t, []int{1, 2, 2, 2}, outputs[1].Shape().Dimensions)
+		// Coefficient shape: [1, 2, 2, 2] — 2 Q heads, each with 2x2 attention weights.
+		assert.Equal(t, []int{1, 2, 2, 2}, outputs[2].Shape().Dimensions)
+
+		// Fused and decomposed paths must agree.
+		for i := range fusedData {
+			for j := range fusedData[i] {
+				for k := range fusedData[i][j] {
+					for l := range fusedData[i][j][k] {
+						assert.InDelta(t, fusedData[i][j][k][l], decomposedData[i][j][k][l], 1e-5,
+							"fused vs decomposed mismatch at [%d][%d][%d][%d]", i, j, k, l)
+					}
+				}
+			}
+		}
+
+		// Verify coefficients sum to 1 along last axis.
+		for i := range coeffData {
+			for j := range coeffData[i] {
+				for k := range coeffData[i][j] {
+					sum := float32(0)
+					for _, w := range coeffData[i][j][k] {
+						sum += w
+					}
+					assert.InDelta(t, float32(1.0), sum, 1e-5)
+				}
+			}
+		}
+	})
+
+	t.Run("GQA_BSHD", func(t *testing.T) {
+		// Same GQA test but with BSHD layout.
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
+			headDim := q.Shape().Dimensions[3]
+			scale := 1.0 / math.Sqrt(float64(headDim))
+			fusedOutput, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBSHD, false, false)
+			decomposedOutput, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBSHD, false, true)
+			return []*Node{fusedOutput, decomposedOutput}
+		})
+
+		// Q: [batch=1, seq=2, heads=2, dim=2]
+		query := [][][][]float32{{{{1, 0}, {0.5, 0.5}}, {{0, 1}, {1, -1}}}}
+		// K: [batch=1, seq=2, heads=1, dim=2]
+		key := [][][][]float32{{{{1, 0}}, {{0, 1}}}}
+		// V: [batch=1, seq=2, heads=1, dim=2]
+		value := [][][][]float32{{{{10, 20}}, {{30, 40}}}}
+
+		outputs := exec.MustExec(query, key, value)
+		fusedData := outputs[0].Value().([][][][]float32)
+		decomposedData := outputs[1].Value().([][][][]float32)
+
+		assert.Equal(t, []int{1, 2, 2, 2}, outputs[0].Shape().Dimensions)
+		for i := range fusedData {
+			for j := range fusedData[i] {
+				for k := range fusedData[i][j] {
+					for l := range fusedData[i][j][k] {
+						assert.InDelta(t, fusedData[i][j][k][l], decomposedData[i][j][k][l], 1e-5,
+							"fused vs decomposed mismatch at [%d][%d][%d][%d]", i, j, k, l)
+					}
+				}
+			}
+		}
+	})
+
+	t.Run("GQA_WithBooleanMask", func(t *testing.T) {
+		// GQA with boolean causal mask.
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v, boolMask *Node) []*Node {
+			headDim := q.Shape().Dimensions[3]
+			scale := 1.0 / math.Sqrt(float64(headDim))
+			fusedOutput, _ := Core(ctx, q, k, v, scale, boolMask, 0, LayoutBHSD, false, false)
+			decomposedOutput, _ := Core(ctx, q, k, v, scale, boolMask, 0, LayoutBHSD, false, true)
+			return []*Node{fusedOutput, decomposedOutput}
+		})
+
+		// Q: [batch=1, heads=2, seq=2, dim=2]
+		query := [][][][]float32{{{{1, 0}, {0, 1}}, {{1, 0}, {0, 1}}}}
+		// K: [batch=1, heads=1, seq=2, dim=2]
+		key := [][][][]float32{{{{1, 0}, {0, 1}}}}
+		// V: [batch=1, heads=1, seq=2, dim=2]
+		value := [][][][]float32{{{{10, 20}, {30, 40}}}}
+
+		// Boolean causal mask: [1, 1, 2, 2] — broadcasts to both Q heads.
+		mask := [][][][]bool{{{{true, false}, {true, true}}}}
+
+		outputs := exec.MustExec(query, key, value, mask)
+		fusedData := outputs[0].Value().([][][][]float32)
+		decomposedData := outputs[1].Value().([][][][]float32)
+
+		for i := range fusedData {
+			for j := range fusedData[i] {
+				for k := range fusedData[i][j] {
+					for l := range fusedData[i][j][k] {
+						assert.InDelta(t, fusedData[i][j][k][l], decomposedData[i][j][k][l], 1e-5,
+							"fused vs decomposed mismatch at [%d][%d][%d][%d]", i, j, k, l)
+					}
+				}
+			}
+		}
+
+		// Position 0, head 0: can only attend to position 0 → output ≈ value[0] = [10, 20].
+		assert.InDelta(t, float32(10), fusedData[0][0][0][0], 0.1)
+		assert.InDelta(t, float32(20), fusedData[0][0][0][1], 0.1)
+	})
+
+	t.Run("Causal", func(t *testing.T) {
+		backend := graphtest.BuildTestBackend()
+		ctx := context.New()
+
+		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) *Node {
+			headDim := q.Shape().Dimensions[3]
+			scale := 1.0 / math.Sqrt(float64(headDim))
+			// Use causal=true, no explicit mask.
+			output, _ := Core(ctx, q, k, v, scale, nil, 0, LayoutBHSD, true, false)
+			return output
+		})
+
+		// [batch=1, heads=1, seq=2, dim=1]
+		query := [][][][]float32{{{{1}, {1}}}}
+		key := [][][][]float32{{{{1}, {1}}}}
+		value := [][][][]float32{{{{10}, {20}}}}
+
+		output := exec.MustExec(query, key, value)[0]
+		outData := output.Value().([][][][]float32)
+
+		// Position 0 can only see position 0 → output = 10
+		assert.InDelta(t, float32(10), outData[0][0][0][0], 0.1)
+		// Position 1 sees both → softmax([1,1]) = [0.5, 0.5] → 15
+		assert.InDelta(t, float32(15), outData[0][0][1][0], 0.1)
 	})
 }

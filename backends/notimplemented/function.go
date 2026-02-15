@@ -87,6 +87,10 @@ func (f Function) AllReduce(inputs []backends.Value, reduceOp backends.ReduceOpT
 	return nil, f.baseErrFn(backends.OpTypeAllReduce)
 }
 
+func (f Function) FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV backends.Value, queryDim, keyValueDim int) (query, key, value backends.Value, err error) {
+	return nil, nil, nil, f.baseErrFn(backends.OpTypeFusedAttentionQKVProjection)
+}
+
 func (f Function) Sort(comparator backends.Function, axis int, isStable bool, inputs ...backends.Value) (
 	[]backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeSort)
