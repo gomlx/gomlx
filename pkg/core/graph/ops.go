@@ -1764,7 +1764,8 @@ func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *No
 	lhsBatchAxes, rhsBatchAxes := normalizePairs("batchAxes", batchAxes)
 
 	// Execute DotGeneral with parameters.
-	return backendDotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
+	return backendDotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes,
+		backends.DotGeneralConfig{})
 }
 
 // DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
