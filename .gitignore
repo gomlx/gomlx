@@ -22,3 +22,7 @@ Untitled.ipynb
 
 # Conductor files
 conductor/
+
+# Agent context files (root only)
+/GEMINI.md
+/CLAUDE.md
