@@ -8,11 +8,10 @@ package simplego
 import (
 	"math"
 
-	"github.com/x448/float16"
-
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/x448/float16"
 )
 
 // Float16 binary operations
@@ -123,10 +122,10 @@ func makeFloat16CompareWrapper(
 		}
 		lhs, rhs := inputs[0], inputs[1]
 		output, err := backend.getBuffer(node.shape.DType, node.shape.Size())
-		output.shape = node.shape
 		if err != nil {
 			return nil, err
 		}
+		output.shape = node.shape
 		execCompareFloat16(opFn, lhs.flat.([]float16.Float16), rhs.flat.([]float16.Float16),
 			output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
 		return output, nil

@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/pkg/errors"
-
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
@@ -176,7 +174,8 @@ func (f *Function) ConvGeneralDilated(inputOp, kernelOp backends.Value, axes bac
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
 	channelGroupCount, batchGroupCount int) (backends.Value, error) {
-	return f.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations, channelGroupCount, batchGroupCount)
+	return f.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations,
+		channelGroupCount, batchGroupCount)
 }
 
 // execConvGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
@@ -187,7 +186,7 @@ func execConvGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 	dtype := input.shape.DType
 	output, err := backend.getBufferForShape(outputShape)
 	if err != nil {
-		return nil, errors.Errorf("failed allocating (out-of-memory?) output buffer shaped %s", outputShape)
+		return nil, err
 	}
 	output.Zeros()
 

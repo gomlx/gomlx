@@ -8,16 +8,14 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/pkg/errors"
-
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/pkg/errors"
 )
 
-// ErrBackendAlreadyExists is returned when attempting to register or initialize a backend that already exists.
-var ErrBackendAlreadyExists = errors.New("backend already exists")
+// ErrBackendAlreadyFinalized is returned when attempting to register or initialize a backend that already exists.
+var ErrBackendAlreadyFinalized = errors.New("backend already exists")
 
 // Compile-time check:
 var _ backends.DataInterface = (*Backend)(nil)
@@ -93,14 +91,14 @@ func (b *Backend) getBufferPool(dtype dtypes.DType, length int) *sync.Pool {
 	return poolInterface.(*sync.Pool)
 }
 
-// getBuffer from the backend pool of buffers. It returns ErrBackendAlreadyExists if the backend is already
+// getBuffer from the backend pool of buffers. It returns ErrBackendAlreadyFinalized if the backend is already
 // initialized.
 // Important: it's not necessarily initialized with zero, since it can reuse old buffers.
 //
 // See also Buffer.Zeros to initialize it with zeros, if needed.
 func (b *Backend) getBuffer(dtype dtypes.DType, length int) (*Buffer, error) {
 	if b.isFinalized {
-		return nil, ErrBackendAlreadyExists
+		return nil, errors.WithStack(ErrBackendAlreadyFinalized)
 	}
 	pool := b.getBufferPool(dtype, length)
 	buf := pool.Get().(*Buffer)
@@ -232,8 +230,8 @@ func (b *Backend) cloneBuffer(buffer *Buffer) (*Buffer, error) {
 		} else {
 			issues = append(issues, "buffer was nil")
 		}
-		return nil, errors.Wrapf(ErrBackendAlreadyExists,
-			"cloneBuffer(%p): %s -- buffer was already isFinalized!?\n", buffer, strings.Join(issues, ", "))
+		return nil, errors.Errorf("cloneBuffer(%p): %s -- buffer was already isFinalized!?\n", buffer,
+			strings.Join(issues, ", "))
 	}
 	newBuffer, err := b.getBuffer(buffer.shape.DType, buffer.shape.Size())
 	if err != nil {
@@ -282,7 +280,8 @@ func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) error {
 		} else {
 			issues = append(issues, "buffer was nil")
 		}
-		return errors.Errorf("BufferFinalize(%p): %s -- buffer was already finalized or back in the pool!?\n", buffer, strings.Join(issues, ", "))
+		return errors.Errorf("BufferFinalize(%p): %s -- buffer was already finalized or back in the pool!?\n",
+			buffer, strings.Join(issues, ", "))
 	}
 	// fmt.Printf("> BufferFinalize(%p): shape=%s\n", buffer, buffer.shape)
 	// fmt.Printf("\tStack trace:\n%s\n", debug.Stack())
@@ -325,7 +324,7 @@ func (b *Backend) BufferToFlatData(backendBuffer backends.Buffer, flat any) erro
 // to the deviceNum, and returns the corresponding backends.Buffer.
 func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) (backends.Buffer, error) {
 	if b.isFinalized {
-		return nil, errors.Errorf("backend is already finalized")
+		return nil, errors.WithStack(ErrBackendAlreadyFinalized)
 	}
 	if deviceNum != 0 {
 		return nil, errors.Errorf("backend (%s) only supports deviceNum 0, cannot create buffer on deviceNum %d (shape=%s)",
@@ -337,7 +336,7 @@ func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, sha
 	}
 	buffer := b.NewBuffer(shape)
 	if buffer == nil {
-		return nil, ErrBackendAlreadyExists
+		return nil, errors.WithStack(ErrBackendAlreadyFinalized)
 	}
 
 	copyFlat(buffer.flat, flat)
@@ -375,7 +374,7 @@ func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Sha
 	}
 	goBuffer := b.NewBuffer(shape)
 	if goBuffer == nil {
-		return nil, nil, ErrBackendAlreadyExists
+		return nil, nil, errors.WithStack(ErrBackendAlreadyFinalized)
 	}
 	return goBuffer, goBuffer.flat, nil
 }

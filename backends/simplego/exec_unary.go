@@ -7,12 +7,11 @@ import (
 	"math/bits"
 	"sync"
 
-	"github.com/x448/float16"
-
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/x448/float16"
 )
 
 func init() {
@@ -53,7 +52,7 @@ func unaryOperandAndOutput(backend *Backend, inputs []*Buffer, inputsOwned []boo
 		return input, nil, err // as output is nil
 	}
 	output.shape = input.shape.Clone()
-	return input, output, err
+	return input, output, nil
 }
 
 // execNeg executes the unary op Neg.

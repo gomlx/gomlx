@@ -8,10 +8,9 @@ package simplego
 import (
 	"math"
 
-	"github.com/x448/float16"
-
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/x448/float16"
 )
 
 // Float16 unary operation helpers

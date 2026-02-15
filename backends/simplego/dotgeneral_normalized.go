@@ -5,12 +5,10 @@ package simplego
 import (
 	"sync"
 
-	"github.com/x448/float16"
-
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/x448/float16"
 )
 
 var dotGeneralNormalizeShapeDTypeMap = NewDTypeMap("DotGeneralNormalizeShape")
@@ -120,7 +118,7 @@ func dgNormalizePrepare(shape shapes.Shape, contractingAxes, batchAxes []int) *d
 // It returns a buffer with the transposed/reshaped source.
 //
 // In the chance that the source needs no transposing, output is returned nil.
-// TODO: treat the error.
+// TODO: handle the error.
 func dgNormalizeShape[T interface {
 	PODNumericConstraints | bfloat16.BFloat16 | float16.Float16
 }](backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize,

@@ -7,21 +7,19 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/gomlx/backends/simplego/highway"
+	"github.com/gomlx/gomlx/backends/simplego/packgemm"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/x448/float16"
 	"k8s.io/klog/v2"
-
-	"github.com/gomlx/gomlx/backends/simplego/highway"
-	"github.com/gomlx/gomlx/backends/simplego/packgemm"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-
-	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 func TestDotGeneral_LargeShapesAndCopy(t *testing.T) {

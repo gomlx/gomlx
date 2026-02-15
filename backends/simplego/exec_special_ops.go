@@ -7,14 +7,13 @@ import (
 	"math/rand/v2"
 	"slices"
 
-	"github.com/pkg/errors"
-
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -1559,7 +1558,7 @@ func buildArgMinMaxCopyIntsFn[T PODIntegerConstraints](output *Buffer) func(flat
 	}
 }
 
-// TODO: treat the error condition.
+// TODO: handle the error condition.
 func execArgMinMaxGeneric[T PODNumericConstraints](
 	backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize,
 	suffixSize int, isMin bool) {
@@ -1623,7 +1622,7 @@ func init() {
 	argMinMaxDTypeMap.Register(dtypes.BFloat16, priorityTyped, execArgMinMaxGenericBFloat16)
 }
 
-// TODO: treat the error condition
+// TODO: handle the error condition
 func execArgMinMaxGenericBFloat16(
 	backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize,
 	suffixSize int, isMin bool) {

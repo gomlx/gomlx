@@ -5,13 +5,12 @@ package simplego
 import (
 	"slices"
 
-	"github.com/x448/float16"
-
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
+	"github.com/x448/float16"
 )
 
 // This file contains the implementation for the blocked (cache-tiled) DotGeneral algorithm.

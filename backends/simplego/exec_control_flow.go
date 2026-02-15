@@ -6,9 +6,8 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/pkg/errors"
-
 	"github.com/gomlx/gomlx/backends"
+	"github.com/pkg/errors"
 )
 
 func init() {

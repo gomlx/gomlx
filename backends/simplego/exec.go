@@ -3,10 +3,9 @@
 package simplego
 
 import (
-	"github.com/pkg/errors"
-
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/pkg/errors"
 )
 
 var _ backends.Executable = (*Executable)(nil)
