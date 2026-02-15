@@ -9,7 +9,7 @@ import (
 	"github.com/x448/float16"
 )
 
-//go:generate go tool github.com/ajroetker/go-highway/cmd/hwygen -input gemm_16reg_base.go -output_prefix=gen_gemm16reg_impl -dispatch gen_gemm16reg_dispatch -targets avx2,avx512,fallback
+//go:generate go tool github.com/ajroetker/go-highway/cmd/hwygen -input gemm_16reg_base.go -output_prefix=gen_gemm16reg_impl -dispatch gen_gemm16reg_dispatch -targets avx2,avx512,neon,fallback
 
 var (
 	// simd16RegistersParams are the parameters to use if there are 16 SIMD registers available.
