@@ -1790,7 +1790,8 @@ func DotGeneral(
 	lhsBatchAxes = adjustAxesToRank(lhs.Rank(), lhsBatchAxes, "lhsBatchAxes")
 	rhsContractingAxes = adjustAxesToRank(rhs.Rank(), rhsContractingAxes, "rhsContractingAxes")
 	rhsBatchAxes = adjustAxesToRank(rhs.Rank(), rhsBatchAxes, "rhsBatchAxes")
-	return backendDotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
+	return backendDotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes,
+		backends.DotGeneralConfig{})
 }
 
 // InternalBatchNormForTraining is a wrapper to the backend function.
