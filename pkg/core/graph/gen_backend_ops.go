@@ -1383,6 +1383,7 @@ type nodeInputsDotGeneral struct {
 	rhs                *Node
 	rhsContractingAxes []int
 	rhsBatchAxes       []int
+	config             DotGeneralConfig
 }
 
 // Type implements the interface NodeInputs.
@@ -1392,7 +1393,7 @@ func (ni *nodeInputsDotGeneral) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsDotGeneral) String() string {
-	return fmt.Sprintf("%s(lhs=[#%d], lhsContractingAxes=%v, lhsBatchAxes=%v, rhs=[#%d], rhsContractingAxes=%v, rhsBatchAxes=%v)",
+	return fmt.Sprintf("%s(lhs=[#%d], lhsContractingAxes=%v, lhsBatchAxes=%v, rhs=[#%d], rhsContractingAxes=%v, rhsBatchAxes=%v, config=%v)",
 		ni.Type(),
 		ni.lhs.Id(),
 		ni.lhsContractingAxes,
@@ -1400,11 +1401,12 @@ func (ni *nodeInputsDotGeneral) String() string {
 		ni.rhs.Id(),
 		ni.rhsContractingAxes,
 		ni.rhsBatchAxes,
+		ni.config,
 	)
 }
 
 // backendDotGeneral is a Graph wrapper for the backend.Builder.DotGeneral method.
-func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int) (
+func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int, config DotGeneralConfig) (
 	node *Node) {
 	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1415,8 +1417,9 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 		rhs:                rhs,
 		rhsContractingAxes: slices.Clone(rhsContractingAxes),
 		rhsBatchAxes:       slices.Clone(rhsBatchAxes),
+		config:             config,
 	}
-	result, err := g.currentFunc.backendFunc.DotGeneral(lhs.outputOps[0], inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.outputOps[0], inputs.rhsContractingAxes, inputs.rhsBatchAxes)
+	result, err := g.currentFunc.backendFunc.DotGeneral(lhs.outputOps[0], inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.outputOps[0], inputs.rhsContractingAxes, inputs.rhsBatchAxes, inputs.config)
 	if err != nil {
 		panic(err)
 	}

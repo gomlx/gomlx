@@ -210,7 +210,7 @@ func (f Function) Dot(lhs backends.Value, rhs backends.Value) (backends.Value, e
 // It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
-func (f Function) DotGeneral(lhs backends.Value, lhsContractingAxes []int, lhsBatchAxes []int, rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int) (backends.Value, error) {
+func (f Function) DotGeneral(lhs backends.Value, lhsContractingAxes []int, lhsBatchAxes []int, rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int, config DotGeneralConfig) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeDotGeneral)
 }
 
@@ -331,9 +331,9 @@ func (f Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, 
 //   - numKVHeads: number of key/value attention heads (for GQA; numHeads must be divisible by numKVHeads)
 //   - axesLayout: determines the axis ordering of query/key/value tensors
 //   - scale: scaling factor applied to query @ key^T (typically 1/sqrt(headDim))
-//   - causal: if true, apply causal (lower-triangular) mask. When both causal and mask are
-//     provided, they are combined: for boolean masks via logical-AND, for additive masks the
-//     causal additive mask is added to the explicit mask.
+//   - causal: if true, apply causal (lower-triangular) mask. Callers (e.g. attention.Core)
+//     treat causal and mask as mutually exclusive, folding causal into the mask before calling
+//     this method when both are needed. Backends may assume they won't both be set.
 //
 // Output: same shape as query.
 func (f Function) FusedScaledDotProductAttention(query backends.Value, key backends.Value, value backends.Value, mask backends.Value, numHeads int, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (backends.Value, error) {
