@@ -217,6 +217,7 @@ type StandardOps interface {
 		lhsContractingAxes, lhsBatchAxes []int,
 		rhs Value,
 		rhsContractingAxes, rhsBatchAxes []int,
+		config DotGeneralConfig,
 	) (Value, error)
 
 	// DynamicSlice extracts a slice from the operand at the startIndices position and the given sliceSizes.

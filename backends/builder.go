@@ -156,11 +156,34 @@ const (
 	ReduceOpMin
 )
 
+//go:generate go tool enumer -type ReduceOpType -trimprefix=ReduceOp -output=gen_reduceoptype_enumer.go builder.go
+
 // RNGStateShape is the default shape for the random number generator state.
 // It dependents on the algorithm, but for now we are using Philox.
 var RNGStateShape = shapes.Make(dtypes.Uint64, 3) //nolint:mnd // This is a constant.
 
-//go:generate go tool enumer -type ReduceOpType -trimprefix=ReduceOp -output=gen_reduceoptype_enumer.go builder.go
+// DotGeneralConfig are optional configurations for the DotGeneral operation.
+type DotGeneralConfig struct {
+	// AccumulatorDType is the data type of the accumulator during the matrix multiplication.
+	// Commonly set to Float32 for half-precision (Float16 and BFloat16) operations, or maybe for Int32
+	// for small quantized values operations.
+	//
+	// If left empty, it defaults to the same dtype as the inputs.
+	//
+	// Some backends may not support this option and this will cause it to simply convert the input to the accumulation
+	// type upfront, which is less efficient.
+	AccumulatorDType dtypes.DType
+
+	// OutputDType is the data type of the output of the matrix multiplication.
+	//
+	// If left empty, it defaults to the same dtype as the AccumulatorDType.
+	//
+	// Some backends may not support this option and this will cause it to simply convert the input to the output
+	// type upfront, which is less efficient.
+	OutputDType dtypes.DType
+
+	// TODO: add quantization configuration.
+}
 
 // Mesh represents a mesh of devices, passed to the Builder.DistributedAutoSharding method.
 //
