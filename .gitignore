@@ -19,3 +19,6 @@ go.work.sum
 # Jupyter tmp files
 .ipynb_checkpoints
 Untitled.ipynb
+
+# Conductor files
+conductor/
