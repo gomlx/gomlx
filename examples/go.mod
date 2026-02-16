@@ -9,14 +9,14 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/dustin/go-humanize v1.0.1
 	github.com/go-gota/gota v0.12.0
-	github.com/gomlx/gomlx v0.26.1-0.20260202080443-e13ff2c34b2b
+	github.com/gomlx/gomlx v0.26.1-0.20260205133009-58d4161931e5
 	github.com/janpfeifer/gonb v0.11.1
 	github.com/janpfeifer/must v0.2.0
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/pkg/errors v0.9.1
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546
+	golang.org/x/exp v0.0.0-20260112195511-716be5621a96
 	k8s.io/klog/v2 v2.130.1
 )
 
@@ -47,7 +47,7 @@ require (
 	golang.org/x/image v0.26.0 // indirect
 	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
-	golang.org/x/term v0.38.0 // indirect
+	golang.org/x/term v0.39.0 // indirect
 	gonum.org/v1/gonum v0.16.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

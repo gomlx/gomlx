@@ -253,6 +253,9 @@ without linking GoMLX -- it will save a little executable size.
     `go` (_SimpleGo_) backends. If you add `-tags=noxla` to the compiler it won't include the XLA backend.
   - `import _ "github.com/gomlx/gomlx/backends/simplego"` to include only `go` (no C++ dependencies)
   - `import _ "github.com/gomlx/gomlx/backends/xla"` to import only XLA.
+- **Where are AI context files for (Gemini/Claude Code/Conductor, etc.)**
+  - To prevent cluttering the root folder of the project, they are all moved to the `.agents/` directory and also included in the `.gitignore`. This way
+    one can simply symbolic link whichever AI configuration file they use to the root directory of their local copy to use them.
 
 ## 🤝 Collaborating
 

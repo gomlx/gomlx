@@ -14,6 +14,7 @@ func init() {
 	nodeClosureExecutors[backends.OpTypeIf] = execIf
 	nodeClosureExecutors[backends.OpTypeWhile] = execWhile
 	nodeClosureExecutors[backends.OpTypeSort] = execSort
+	multiOutputsNodeExecutors[backends.OpTypeCall] = execCall
 }
 
 // execIf executes the If operation by evaluating the predicate and running one branch.
@@ -313,4 +314,24 @@ func applyPermutationGeneric[T SupportedTypesConstraints](buf *Buffer, indices [
 	for i, idx := range indices {
 		flat[baseOffset+i*axisStride] = temp[idx]
 	}
+}
+
+// execCall executes a Call operation by running the target function with the given inputs.
+// Regular inputs are the arguments to the called function.
+func execCall(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
+	data := node.data.(*callNode)
+	targetFn := data.target
+
+	outputs, err := targetFn.compiled.Execute(backend, inputs, inputsOwned, nil, nil)
+	// Mark donated inputs as consumed.
+	for i, owned := range inputsOwned {
+		if owned {
+			inputs[i] = nil
+		}
+	}
+	if err != nil {
+		return nil, errors.WithMessagef(err, "Call: executing function %q", targetFn.name)
+	}
+
+	return outputs, nil
 }

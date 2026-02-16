@@ -311,6 +311,10 @@ var (
 			{Float: true, Name: "Float", Format: "T(math.Pow(float64(%s), float64(%s)))"},
 			{BFloat16: true, Name: "Float", Format: "float32(math.Pow(float64(%s), float64(%s)))"},
 		}},
+		{Name: "Atan2", Versions: []BinaryOpVersion{
+			{Float: true, Name: "Float", Format: "T(math.Atan2(float64(%s), float64(%s)))"},
+			{BFloat16: true, Name: "Float", Format: "float32(math.Atan2(float64(%s), float64(%s)))"},
+		}},
 		{Name: "Max", IsCommutative: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "max(%s, %s)"}}},
 		{Name: "Min", IsCommutative: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "min(%s, %s)"}}},
 		{Name: "BitwiseAnd", Versions: []BinaryOpVersion{

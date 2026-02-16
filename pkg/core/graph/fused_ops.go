@@ -29,6 +29,18 @@ func BackendFusedDense(x, weight, bias *Node, activation backends.ActivationType
 	return backendFusedDense(x, weight, bias, activation)
 }
 
+// BackendFusedScaledDotProductAttention computes multi-head scaled dot-product attention.
+// Internal: prefer the InternalFusedOpCaller wrapper in layers which handles fallback and gradients.
+func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) *Node {
+	return backendFusedScaledDotProductAttention(query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal)
+}
+
+// BackendFusedAttentionQKVProjection performs fused Query-Key-Value projection.
+// Internal: prefer attention.QKVProjection which handles fallback and gradients.
+func BackendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int) (query, key, value *Node) {
+	return backendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
+}
+
 // InternalFusedOpCaller attempts to call fused, and if it panics with
 // backends.ErrNotImplemented, falls back to the decomposed version. Any other
 // panic is re-thrown — this prevents real bugs in fused op implementations from
@@ -60,6 +72,43 @@ func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
 		panic(err)
 	}
 	// Store decomposed version for VJP computation; dead-code-eliminated if unused.
-	output.vjpAlternateOutput = decomposedOutput
+	output.vjpAlternateOutputs = []*Node{decomposedOutput}
 	return output
 }
+
+// InternalFusedOpCallerMulti is the multi-output counterpart of InternalFusedOpCaller.
+// It handles fused ops that return multiple outputs (e.g. FusedAttentionQKVProjection returning q, k, v).
+//
+// Like InternalFusedOpCaller, the decomposed version is built first so it has lower
+// node indices than the fused nodes. When the fused call succeeds, the decomposed
+// outputs are stored as vjpAlternateOutputs on the multi-output parent node for
+// reverse-mode autodiff.
+func InternalFusedOpCallerMulti(fused, decomposed func() []*Node) []*Node {
+	decomposedOutputs := decomposed()
+
+	var outputs []*Node
+	err := exceptions.TryCatch[error](func() {
+		outputs = fused()
+	})
+	if err != nil {
+		if errors.Is(err, backends.ErrNotImplemented) {
+			return decomposedOutputs
+		}
+		panic(err)
+	}
+
+	// Find the multi-output parent node via the first split node.
+	// The fused function returns split nodes; we need the underlying multi-output node.
+	if len(outputs) > 0 {
+		firstSplit := outputs[0]
+		splitInputs, ok := firstSplit.inputs.(*nodeInputsSplitNode)
+		if !ok {
+			panic(errors.New("InternalFusedOpCallerMulti: fused function returned non-split nodes; cannot set vjpAlternateOutputs"))
+		}
+		parent := splitInputs.multiOutputNode
+		parent.vjpAlternateOutputs = decomposedOutputs
+	}
+
+	return outputs
+}
+

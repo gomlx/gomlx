@@ -35,6 +35,13 @@ func (f Function) ArgMinMax(x backends.Value, axis int, outputDType dtypes.DType
 	return nil, f.baseErrFn(backends.OpTypeArgMinMax)
 }
 
+// Atan2 returns element-wise the arc tangent of y/x, using the signs of both arguments to determine
+// the correct quadrant of the result.
+// Standard broadcasting rules apply (see documentation).
+func (f Function) Atan2(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeAtan2)
+}
+
 // BitCount returns the number of bits that are set to one.
 // Also known as Population Count ("Popcnt") or Hamming Weight.
 func (f Function) BitCount(operand backends.Value) (backends.Value, error) {
@@ -277,15 +284,14 @@ func (f Function) Floor(x backends.Value) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFloor)
 }
 
-// FusedDense performs fused matmul + optional bias + optional activation:
+// FusedDense performs fused matmul + optional bias + optional activation.
 //
-//	y = activation(x @ W + bias)
+// It does y = activation(x @ W + bias). Where @ is a standard matmul,
+// it contracts x's last axis with weight's first axis.
 //
-// x: [batch..., in_features], weight: [in_features, out_features...],
-// bias: [out_features...] (nil-able).
-// Contracts x's last axis with weight's first axis.
-// activation specifies the activation function to apply after the matmul+bias.
-// Use ActivationNone for no activation.
+// - x: [batch..., in_features], weight: [in_features, out_features...],
+// - bias: [out_features...] (nil-able).
+// - activation: applied after the matmul+bias; set to ActivationNone for no activation.
 func (f Function) FusedDense(x backends.Value, weight backends.Value, bias backends.Value, activation backends.ActivationType) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFusedDense)
 }
@@ -302,6 +308,36 @@ func (f Function) FusedGelu(x backends.Value, exact bool) (backends.Value, error
 // epsilon: numerical stability constant (typically 1e-5).
 func (f Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, gamma backends.Value, beta backends.Value) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFusedLayerNorm)
+}
+
+// FusedScaledDotProductAttention computes multi-head scaled dot-product attention.
+//
+// output = softmax(query @ key^T * scale + mask) @ value, computed per-head with GQA support.
+//
+// Inputs:
+//   - query, key, value: 4D tensors whose axis ordering is determined by axesLayout.
+//     For AxesLayoutBHSD: query [batch, numHeads, seqLen, headDim],
+//     key/value [batch, numKVHeads, kvLen, headDim].
+//     For AxesLayoutBSHD: query [batch, seqLen, numHeads, headDim],
+//     key/value [batch, kvLen, numKVHeads, headDim].
+//   - mask: [seqLen, kvLen] (seqLen is the query sequence length): optional (can be nil) mask
+//     that can be either boolean or additive (any dtype other than Bool). See also causal below.
+//     Boolean mask: true = attend, false = ignore.
+//     Float/additive mask: added to scores before softmax.
+//     Must be broadcastable to the score tensor shape.
+//
+// Parameters:
+//   - numHeads: number of query attention heads
+//   - numKVHeads: number of key/value attention heads (for GQA; numHeads must be divisible by numKVHeads)
+//   - axesLayout: determines the axis ordering of query/key/value tensors
+//   - scale: scaling factor applied to query @ key^T (typically 1/sqrt(headDim))
+//   - causal: if true, apply causal (lower-triangular) mask. When both causal and mask are
+//     provided, they are combined: for boolean masks via logical-AND, for additive masks the
+//     causal additive mask is added to the explicit mask.
+//
+// Output: same shape as query.
+func (f Function) FusedScaledDotProductAttention(query backends.Value, key backends.Value, value backends.Value, mask backends.Value, numHeads int, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedScaledDotProductAttention)
 }
 
 // FusedSoftmax computes softmax along the specified axis.

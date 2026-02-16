@@ -26,6 +26,7 @@ const (
 	OpTypeAbs
 	OpTypeAdd
 	OpTypeArgMinMax
+	OpTypeAtan2
 	OpTypeBitcast
 	OpTypeBitwiseAnd
 	OpTypeBitwiseNot
@@ -147,6 +148,8 @@ const (
 	OpTypeFusedLayerNorm
 	OpTypeFusedGelu
 	OpTypeFusedDense
+	OpTypeFusedScaledDotProductAttention
+	OpTypeFusedAttentionQKVProjection
 
 	// OpTypeLast should always be kept the last, it is used as a counter/marker for OpType.
 	OpTypeLast
