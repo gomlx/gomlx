@@ -38,6 +38,15 @@
 // This is enabled by default if the plugin is called "cpu". To force advertising support for this
 // for other PJRTs provide the "shared_buffers" option, e.g.: GOMLX_BACKEND="xla:my_pjrt,shared_buffers".
 // Or to force disabling the support, provide the "noshared_buffers" option.
+//
+// # Options
+//
+// Those can be passed after the plugin name, e.g.: GOMLX_BACKEND="xla:my_pjrt,notf32,shared_buffers".
+//
+//   - "tf32", "notf32": controls whether to use TF32 for DotGeneral operations that are using float32
+//     (it can be faster in modern GPUs). It's enabled by default.
+//   - "shared_buffers", "noshared_buffers": controls whether to use shared buffers for the device buffer
+//     (where device=CPU). It's enabled by default if the plugin is called "cpu".
 package xla
 
 import (
@@ -142,11 +151,12 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 	}
 	klog.V(1).Infof("created new plugin %q for backend %q", pluginName, BackendName)
 	backend := &Backend{
-		plugin:       plugin,
-		client:       client,
-		pluginName:   pluginName,
-		capabilities: Capabilities.Clone(),
-		numDevices:   len(client.AddressableDevices()),
+		plugin:            plugin,
+		client:            client,
+		pluginName:        pluginName,
+		capabilities:      Capabilities.Clone(),
+		numDevices:        len(client.AddressableDevices()),
+		DotGeneralUseTF32: true,
 	}
 
 	// Support "shared buffers":
@@ -161,7 +171,10 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 
 	// Support for tf32 DotGeneral.
 	if idx := slices.Index(pluginOptions, "tf32"); idx != -1 {
-		backend.DotGeneralConfig.UseTF32 = true
+		backend.DotGeneralUseTF32 = true
+		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
+	} else if idx := slices.Index(pluginOptions, "notf32"); idx != -1 {
+		backend.DotGeneralUseTF32 = false
 		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
 	}
 

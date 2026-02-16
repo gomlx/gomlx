@@ -27,7 +27,10 @@ type Backend struct {
 	hasSharedBuffers bool
 	capabilities     backends.Capabilities
 	numDevices       int
-	DotGeneralConfig
+
+	// DotGeneralUseTF32 controls whether to use TF32 for DotGeneral operations that are using float32.
+	// (it can be faster in modern GPUs, and it's enabled by default)
+	DotGeneralUseTF32 bool
 }
 
 // Compile-time check:

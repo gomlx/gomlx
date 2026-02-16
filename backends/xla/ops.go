@@ -346,16 +346,16 @@ func (f *Function) Dot(lhs, rhs backends.Value) (backends.Value, error) {
 	var output backends.Value
 	if lhsNode.shape.Rank() == 1 && rhsNode.shape.Rank() == 1 {
 		// Contracting both vectors.
-		output, err = f.DotGeneral(lhsNode, []int{0}, []int{}, rhsNode, []int{0}, []int{})
+		output, err = f.DotGeneral(lhsNode, []int{0}, []int{}, rhsNode, []int{0}, []int{}, backends.DotGeneralConfig{})
 	} else if lhsNode.shape.Rank() == 2 && rhsNode.shape.Rank() == 1 {
 		// Contract rhs vector.
-		output, err = f.DotGeneral(lhsNode, []int{1}, []int{}, rhsNode, []int{0}, []int{})
+		output, err = f.DotGeneral(lhsNode, []int{1}, []int{}, rhsNode, []int{0}, []int{}, backends.DotGeneralConfig{})
 	} else if lhsNode.shape.Rank() == 1 && rhsNode.shape.Rank() == 2 {
 		// Contract lhs vector.
-		output, err = f.DotGeneral(lhsNode, []int{0}, []int{}, rhsNode, []int{0}, []int{})
+		output, err = f.DotGeneral(lhsNode, []int{0}, []int{}, rhsNode, []int{0}, []int{}, backends.DotGeneralConfig{})
 	} else if lhsNode.shape.Rank() == 2 && rhsNode.shape.Rank() == 2 {
 		// Traditional matrix multiplication:
-		output, err = f.DotGeneral(lhsNode, []int{1}, []int{}, rhsNode, []int{0}, []int{})
+		output, err = f.DotGeneral(lhsNode, []int{1}, []int{}, rhsNode, []int{0}, []int{}, backends.DotGeneralConfig{})
 	} else {
 		return nil, errors.Errorf("Dot operands have invalid ranks: lhs=%v, rhs=%v", lhsNode.shape, rhsNode.shape)
 	}
