@@ -147,7 +147,7 @@ func makeFloat16UnaryWrapper(
 		if inputs[0].shape.DType != dtypes.Float16 {
 			return origExec(backend, node, inputs, inputsOwned)
 		}
-		input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+		input, output, _ := unaryOperandAndOutput(backend, inputs, inputsOwned)
 		opFn(input.flat.([]float16.Float16), output.flat.([]float16.Float16))
 		return output, nil
 	}
@@ -174,12 +174,16 @@ func init() {
 	setNodeExecutor(backends.OpTypeErf, priorityTyped, makeFloat16UnaryWrapper(execErf, execErfF16))
 
 	// IsFinite is special - returns bool
-	setNodeExecutor(backends.OpTypeIsFinite, priorityTyped, func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+	setNodeExecutor(backends.OpTypeIsFinite, priorityTyped, func(backend *Backend, node *Node, inputs []*Buffer,
+		inputsOwned []bool) (*Buffer, error) {
 		if inputs[0].shape.DType != dtypes.Float16 {
 			return execIsFinite(backend, node, inputs, inputsOwned)
 		}
 		input := inputs[0]
-		output := backend.getBuffer(dtypes.Bool, input.shape.Size())
+		output, err := backend.getBuffer(dtypes.Bool, input.shape.Size())
+		if err != nil {
+			return nil, err
+		}
 		output.shape = node.shape
 		execIsFiniteF16(input.flat.([]float16.Float16), output.flat.([]bool))
 		return output, nil

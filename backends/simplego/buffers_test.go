@@ -12,7 +12,8 @@ import (
 )
 
 func TestBuffers_Bytes(t *testing.T) {
-	buf := backend.(*Backend).getBuffer(dtypes.Int32, 3)
+	buf, err := backend.(*Backend).getBuffer(dtypes.Int32, 3)
+	require.NoError(t, err)
 	buf.shape = shapes.Make(dtypes.Int32, 3)
 	buf.Zeros()
 	require.Len(t, buf.flat.([]int32), 3)
@@ -26,12 +27,11 @@ func TestBuffers_Bytes(t *testing.T) {
 }
 
 func TestBuffers_Fill(t *testing.T) {
-	buf := backend.(*Backend).getBuffer(dtypes.Int32, 3)
+	buf, err := backend.(*Backend).getBuffer(dtypes.Int32, 3)
+	require.NoError(t, err)
 	buf.shape = shapes.Make(dtypes.Int32, 3)
 	require.Len(t, buf.flat.([]int32), 3)
-
-	err := buf.Fill(int32(3))
-	require.NoError(t, err)
+	require.NoError(t, buf.Fill(int32(3)))
 	require.Equal(t, []int32{3, 3, 3}, buf.flat.([]int32))
 
 	buf.Zeros()

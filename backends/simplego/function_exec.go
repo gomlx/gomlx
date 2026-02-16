@@ -6,8 +6,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
+
+	"github.com/gomlx/gomlx/backends"
 )
 
 // FunctionExecutable contains pre-compiled execution information for any function.
@@ -227,7 +228,10 @@ func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate
 		}
 		if !execBuf.owned[outIdx] {
 			// Clone the buffer since we don't own it
-			outputs[i] = backend.cloneBuffer(execBuf.results[outIdx])
+			outputs[i], err = backend.cloneBuffer(execBuf.results[outIdx])
+			if err != nil {
+				return nil, err
+			}
 		}
 		execBuf.results[outIdx] = nil // Prevent double-free
 	}

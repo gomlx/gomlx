@@ -11,7 +11,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/pkg/errors"
 )
 
 func init() {
@@ -175,7 +174,8 @@ func (f *Function) ConvGeneralDilated(inputOp, kernelOp backends.Value, axes bac
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
 	channelGroupCount, batchGroupCount int) (backends.Value, error) {
-	return f.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations, channelGroupCount, batchGroupCount)
+	return f.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations,
+		channelGroupCount, batchGroupCount)
 }
 
 // execConvGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
@@ -184,9 +184,9 @@ func execConvGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 	params := node.data.(*convNode)
 	outputShape := node.shape
 	dtype := input.shape.DType
-	output := backend.getBufferForShape(outputShape)
-	if output == nil {
-		return nil, errors.Errorf("failed allocating (out-of-memory?) output buffer shaped %s", outputShape)
+	output, err := backend.getBufferForShape(outputShape)
+	if err != nil {
+		return nil, err
 	}
 	output.Zeros()
 
@@ -217,8 +217,8 @@ func execConvGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 		// Faster, but no dilation or grouping version.
 		convFn = convNoDilationDTypeMap.Get(dtype).(func(plan convGeneralExecPlan) error)
 	}
-	err := convFn(plan)
-	if err != nil {
+
+	if err := convFn(plan); err != nil {
 		backend.putBuffer(output)
 		return nil, err
 	}

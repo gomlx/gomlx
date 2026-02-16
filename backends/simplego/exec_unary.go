@@ -40,21 +40,27 @@ func init() {
 }
 
 // unaryOperandAndOutput is a convenience function to get the input and output -- which may be the reuse of the input
-func unaryOperandAndOutput(backend *Backend, inputs []*Buffer, inputsOwned []bool) (input, output *Buffer) {
+func unaryOperandAndOutput(backend *Backend, inputs []*Buffer, inputsOwned []bool) (input, output *Buffer, err error) {
 	input = inputs[0]
 	if inputsOwned[0] {
 		output = input
 		inputs[0] = nil // This tells the executor that we took over the buffer.
 		return
 	}
-	output = backend.getBuffer(input.shape.DType, input.shape.Size())
+	output, err = backend.getBuffer(input.shape.DType, input.shape.Size())
+	if err != nil {
+		return input, nil, err // as output is nil
+	}
 	output.shape = input.shape.Clone()
-	return input, output
+	return input, output, nil
 }
 
 // execNeg executes the unary op Neg.
 func execNeg(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Int8:
 		execNegGeneric[int8](input.flat.([]int8), output.flat.([]int8))
@@ -90,7 +96,10 @@ func execNegBF16(inputs, outputs []bfloat16.BFloat16) {
 
 // execAbs executes the unary op Abs.
 func execAbs(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Int8:
 		execAbsGeneric[int8](input.flat.([]int8), output.flat.([]int8))
@@ -150,7 +159,10 @@ func execAbsBF16(inputs, outputs []bfloat16.BFloat16) {
 
 // execSign executes the unary op Sign.
 func execSign(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Int8:
 		execSignGeneric[int8](input.flat.([]int8), output.flat.([]int8))
@@ -219,7 +231,10 @@ func execSignBF16(inputs, outputs []bfloat16.BFloat16) {
 
 // execLogicalNot executes the unary op LogicalNot.
 func execLogicalNot(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	if input.shape.DType != dtypes.Bool {
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
@@ -231,7 +246,10 @@ func execLogicalNot(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 
 // execBitwiseNot executes the unary op BitwiseNot.
 func execBitwiseNot(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Int8:
 		execBitwiseNotGeneric[int8](input.flat.([]int8), output.flat.([]int8))
@@ -263,7 +281,10 @@ func execBitwiseNotGeneric[T PODIntegerConstraints](inputs, outputs []T) {
 
 // execBitCount executes the unary op BitCount.
 func execBitCount(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Int8:
 		execBitCountGeneric8[int8](input.flat.([]int8), output.flat.([]int8))
@@ -313,7 +334,10 @@ func execBitCountGeneric64[T int64 | uint64](inputs, outputs []T) {
 
 // execClz executes the unary op Clz.
 func execClz(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Int8:
 		execClzGeneric8[int8](input.flat.([]int8), output.flat.([]int8))
@@ -363,7 +387,10 @@ func execClzGeneric64[T int64 | uint64](inputs, outputs []T) {
 
 // execExp executes the unary op Exp.
 func execExp(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Float32:
 		execExpGeneric[float32](input.flat.([]float32), output.flat.([]float32))
@@ -391,7 +418,10 @@ func execExpBF16(inputs, outputs []bfloat16.BFloat16) {
 
 // execExpm1 executes the unary op Expm1.
 func execExpm1(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Float32:
 		execExpm1Generic[float32](input.flat.([]float32), output.flat.([]float32))
@@ -419,7 +449,10 @@ func execExpm1BF16(inputs, outputs []bfloat16.BFloat16) {
 
 // execLog executes the unary op Log.
 func execLog(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Float32:
 		execLogGeneric[float32](input.flat.([]float32), output.flat.([]float32))
@@ -447,7 +480,10 @@ func execLogBF16(inputs, outputs []bfloat16.BFloat16) {
 
 // execLog1p executes the unary op Log1p.
 func execLog1p(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Float32:
 		execLog1pGeneric[float32](input.flat.([]float32), output.flat.([]float32))
@@ -475,7 +511,10 @@ func execLog1pBF16(inputs, outputs []bfloat16.BFloat16) {
 
 // execCeil executes the unary op Ceil.
 func execCeil(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Float32:
 		execCeilGeneric[float32](input.flat.([]float32), output.flat.([]float32))
@@ -503,7 +542,10 @@ func execCeilBF16(inputs, outputs []bfloat16.BFloat16) {
 
 // execFloor executes the unary op Floor.
 func execFloor(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Float32:
 		execFloorGeneric[float32](input.flat.([]float32), output.flat.([]float32))
@@ -531,7 +573,10 @@ func execFloorBF16(inputs, outputs []bfloat16.BFloat16) {
 
 // execRound executes the unary op Round.
 func execRound(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Float32:
 		execRoundGeneric[float32](input.flat.([]float32), output.flat.([]float32))
@@ -559,7 +604,10 @@ func execRoundBF16(inputs, outputs []bfloat16.BFloat16) {
 
 // execRsqrt executes the unary op Rsqrt.
 func execRsqrt(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Float32:
 		execRsqrtGeneric[float32](input.flat.([]float32), output.flat.([]float32))
@@ -587,7 +635,10 @@ func execRsqrtBF16(inputs, outputs []bfloat16.BFloat16) {
 
 // execSqrt executes the unary op Sqrt.
 func execSqrt(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Float32:
 		execSqrtGeneric[float32](input.flat.([]float32), output.flat.([]float32))
@@ -623,7 +674,10 @@ func execSqrtF16(inputs, outputs []float16.Float16) {
 
 // execCos executes the unary op Cos.
 func execCos(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Float32:
 		execCosGeneric[float32](input.flat.([]float32), output.flat.([]float32))
@@ -651,7 +705,10 @@ func execCosBF16(inputs, outputs []bfloat16.BFloat16) {
 
 // execSin executes the unary op Sin.
 func execSin(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Float32:
 		execSinGeneric[float32](input.flat.([]float32), output.flat.([]float32))
@@ -679,7 +736,10 @@ func execSinBF16(inputs, outputs []bfloat16.BFloat16) {
 
 // execLogistic executes the unary op Logistic.
 func execLogistic(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Float32:
 		execLogisticGeneric[float32](input.flat.([]float32), output.flat.([]float32))
@@ -720,7 +780,10 @@ func execLogisticBF16(inputs, outputs []bfloat16.BFloat16) {
 
 // execTanh executes the unary op Tanh.
 func execTanh(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Float32:
 		execTanhGeneric[float32](input.flat.([]float32), output.flat.([]float32))
@@ -750,7 +813,10 @@ func execTanhBF16(inputs, outputs []bfloat16.BFloat16) {
 func execIsFinite(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	input := inputs[0]
 	// Output has the same shape as the input, but different dtypes: it is a bool.
-	output := backend.getBuffer(dtypes.Bool, input.shape.Size())
+	output, err := backend.getBuffer(dtypes.Bool, input.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = node.shape
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -780,7 +846,10 @@ func execIsFiniteBF16(inputs []bfloat16.BFloat16, outputs []bool) {
 
 // execErf executes the unary op Erf.
 func execErf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	input, output, err := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if err != nil {
+		return nil, err
+	}
 	switch input.shape.DType {
 	case dtypes.Float32:
 		execErfGeneric[float32](backend, input.flat.([]float32), output.flat.([]float32))

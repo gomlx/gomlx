@@ -177,13 +177,18 @@ func execBlockForDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []
 	dtype := input.shape.DType
 
 	// Allocate output buffer for blocked data
-	output := backend.getBuffer(dtype, data.blockedShape.Size())
+	output, err := backend.getBuffer(dtype, data.blockedShape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = data.blockedShape
 	// output.Zeros()
 
 	// Copy data from flat to blocked format using the generic copy function
-	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
-	copyFlatToBlock(input, output, data.contractingAxes, data.batchAxes, data.batchSize, data.crossSize, data.contractingSize, data.blockLog2Dim)
+	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes,
+		batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
+	copyFlatToBlock(input, output, data.contractingAxes, data.batchAxes, data.batchSize, data.crossSize,
+		data.contractingSize, data.blockLog2Dim)
 	return output, nil
 }
 
@@ -204,14 +209,18 @@ func execBlockForDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []
 //   - lhsBlockData, rhsBlockData: pre-blocking metadata from the input nodes
 //   - params: DotGeneral parameters
 //   - output: output buffer in flat format
-func execDotGeneralBlocked(backend *Backend, lhsBlocks, rhsBlocks *Buffer, hasBatch bool, params *dotGeneralNodeData, output *Buffer) error {
+func execDotGeneralBlocked(backend *Backend, lhsBlocks, rhsBlocks *Buffer, hasBatch bool, params *dotGeneralNodeData,
+	output *Buffer) error {
 	dtype := lhsBlocks.shape.DType
 	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
 
 	// Allocate output buffer in blocked format.
 	// Use params.outputBlockedShape.DType which is the accumulator type (Float32 for FP16/BF16).
 	accumulatorDType := params.outputBlockedShape.DType
-	outputBlocks := backend.getBuffer(accumulatorDType, params.outputBlockedShape.Size())
+	outputBlocks, err := backend.getBuffer(accumulatorDType, params.outputBlockedShape.Size())
+	if err != nil {
+		return err
+	}
 	outputBlocks.shape = params.outputBlockedShape
 	outputBlocks.Zeros()
 
