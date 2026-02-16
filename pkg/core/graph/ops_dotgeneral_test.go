@@ -12,7 +12,7 @@ import (
 func TestDot(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 
-	t.Run("Product", func(t *testing) {
+	t.Run("Product", func(t *testing.T) {
 		g := NewGraph(backend, t.Name())
 
 		// Shape: [batch=4, dims=3]
