@@ -156,7 +156,7 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		pluginName:        pluginName,
 		capabilities:      Capabilities.Clone(),
 		numDevices:        len(client.AddressableDevices()),
-		DotGeneralUseTF32: true,
+		DotGeneralUseTF32: plugin.IsCUDA(), // Attempt to enable it if it thinks it's a CUDA backend.
 	}
 
 	// Support "shared buffers":
