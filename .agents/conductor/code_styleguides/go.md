@@ -73,6 +73,11 @@ Files that mostly define graph building functions, by convention, should dot-imp
 `github.com/gomlx/gomlx/pkg/core/graph` package: having `graph.` repeated everywhere makes the math harder to read.
 This is commonly the case for libraries under `pkg/core/ml/layers`.
 
+### Generators
+
+Files that generate code (under `internal/cmd/...`) should assume they are running from the directory where they are
+going to generate files -- this is what happens when one runs `go generate ./...`.
+
 ### Modern Go Style
 
 - Use generics where possible.
