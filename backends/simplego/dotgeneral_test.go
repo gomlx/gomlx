@@ -586,14 +586,12 @@ func TestDotGeneral_ConfigDTypes(t *testing.T) {
 	rhsTensor := tensors.FromFlatDataAndDimensions(rhsData, 3, 2)
 
 	t.Run("AccumulatorDType", func(t *testing.T) {
-		// Define config with AccumulatorDType = Float32
-		config := backends.DotGeneralConfig{
-			AccumulatorDType: dtypes.Float32,
-		}
-
 		// Compile and execute
 		exec := graph.MustNewExec(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
-			return graph.DotGeneral(lhs, []int{1}, nil, rhs, []int{0}, nil, config)
+			// Define config with AccumulatorDType = Float32
+			return graph.Dot(lhs, rhs).
+				WithAccumulatorDType(dtypes.Float32).
+				General([]int{1}, nil, []int{0}, nil)
 		})
 		result := exec.MustExec(lhsTensor, rhsTensor)[0]
 
@@ -608,14 +606,12 @@ func TestDotGeneral_ConfigDTypes(t *testing.T) {
 	})
 
 	t.Run("OutputDType", func(t *testing.T) {
-		// Define config with OutputDType = Float32
-		config := backends.DotGeneralConfig{
-			OutputDType: dtypes.Float32,
-		}
-
 		// Compile and execute
 		exec := graph.MustNewExec(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
-			return graph.DotGeneral(lhs, []int{1}, nil, rhs, []int{0}, nil, config)
+			// Define config with OutputDType = Float32
+			return graph.Dot(lhs, rhs).
+				WithOutputDType(dtypes.Float32).
+				General([]int{1}, nil, []int{0}, nil)
 		})
 		result := exec.MustExec(lhsTensor, rhsTensor)[0]
 
@@ -634,15 +630,13 @@ func TestDotGeneral_ConfigDTypes(t *testing.T) {
 	})
 
 	t.Run("AccumulatorAndOutputDType", func(t *testing.T) {
-		// Define config with AccumulatorDType = Float32 and OutputDType = BFloat16
-		config := backends.DotGeneralConfig{
-			AccumulatorDType: dtypes.Float32,
-			OutputDType:      dtypes.BFloat16,
-		}
-
 		// Compile and execute
 		exec := graph.MustNewExec(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
-			return graph.DotGeneral(lhs, []int{1}, nil, rhs, []int{0}, nil, config)
+			// Define config with AccumulatorDType = Float32 and OutputDType = BFloat16
+			return graph.Dot(lhs, rhs).
+				WithAccumulatorDType(dtypes.Float32).
+				WithOutputDType(dtypes.BFloat16).
+				General([]int{1}, nil, []int{0}, nil)
 		})
 		result := exec.MustExec(lhsTensor, rhsTensor)[0]
 
@@ -658,7 +652,7 @@ func TestDotGeneral_ConfigDTypes(t *testing.T) {
 }
 
 func TestDotGeneral_Dot(t *testing.T) {
-	exec := graph.MustNewExec(backend, graph.Dot)
+	exec := graph.MustNewExec(backend, graph.DotProduct)
 
 	y0 := exec.MustExec([]float32{1, 2, 3}, []float32{10, 11, 12})[0]
 	fmt.Printf("\ty0=%s\n", y0.GoStr())
