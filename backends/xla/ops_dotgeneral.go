@@ -5,7 +5,6 @@ package xla
 import (
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
-	xladtypes "github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
@@ -40,31 +39,30 @@ func (f *Function) DotGeneral(
 		rhsNode.value, rhsContractingAxes, rhsBatchAxes)
 
 	// Set algorithm based on config.
-	var algo stablehlotypes.DotGeneralAlgorithm
-	algo.LhsComponentCount = 1
-	algo.RhsComponentCount = 1
-	algo.NumPrimitiveOperations = 1
-	algo.AllowImpreciseAccumulation = false
+	useTF32 := dtype == dtypes.F32 && f.builder.backend.DotGeneralUseTF32
+	if useTF32 || config.AccumulatorDType != dtypes.InvalidDType {
+		var algo stablehlotypes.DotGeneralAlgorithm
+		algo.LhsComponentCount = 1
+		algo.RhsComponentCount = 1
+		algo.NumPrimitiveOperations = 1
+		algo.AllowImpreciseAccumulation = false
 
-	if config.AccumulatorDType != dtypes.InvalidDType {
-		algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(config.AccumulatorDType)}
-	} else {
-		algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)}
-	}
-
-	useTF32 := f.builder.backend.DotGeneralUseTF32
-	if useTF32 && dtype == dtypes.Float32 {
-		algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
-		algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
-		if algo.AccumulationType.DType == xladtypes.F32 {
-			algo.AccumulationType.TF32 = true
+		if config.AccumulatorDType != dtypes.InvalidDType {
+			algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(config.AccumulatorDType)}
+		} else {
+			algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)}
 		}
-	} else {
-		algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)}
-		algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)}
-	}
-	dotGeneralBuilder.Algorithm(&algo)
 
+		useTF32 := f.builder.backend.DotGeneralUseTF32
+		if useTF32 && dtype == dtypes.Float32 {
+			algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
+			algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
+		} else {
+			algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)}
+			algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)}
+		}
+		dotGeneralBuilder.Algorithm(&algo)
+	}
 	if config.OutputDType != dtypes.InvalidDType {
 		dotGeneralBuilder.OutputDType(DTypeToXLA(config.OutputDType))
 	}
