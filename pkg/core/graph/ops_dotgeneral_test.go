@@ -408,3 +408,49 @@ func TestGradientDot(t *testing.T) {
 	})
 
 }
+
+func TestGradientDotConfig(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "dot_with_accumulator_dtype", func(g *Graph) (inputs, outputs []*Node) {
+		// lhs and rhs are Float32.
+		// We set AccumulatorDType to Float64.
+		// We explicitly set OutputDType to Float32 to check that VJP handles the mismatch between
+		// computation precision (F64) and adjoint/output precision (F32).
+		v1 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(2)))
+		v2 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(3)))
+
+		// Dot product with F64 accumulator.
+		output := Dot(v1, v2).WithAccumulatorDType(dtypes.Float64).WithOutputDType(dtypes.Float32).Product()
+
+		// Calculate gradients.
+		gradients := Gradient(output, v1, v2)
+
+		inputs = []*Node{v1, v2}
+		outputs = append([]*Node{output}, gradients...)
+		return
+	}, []any{
+		float32(24),           // dot product output (Float32)
+		[]float32{3, 3, 3, 3}, // gradient with respect to v1 (Float32)
+		[]float32{2, 2, 2, 2}, // gradient with respect to v2 (Float32)
+	}, Epsilon)
+
+	graphtest.RunTestGraphFn(t, "dot_with_output_dtype", func(g *Graph) (inputs, outputs []*Node) {
+		// lhs and rhs are Float32.
+		// We set OutputDType to Float64.
+		v1 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(2)))
+		v2 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(3)))
+
+		// Dot product with F64 output.
+		output := Dot(v1, v2).WithOutputDType(dtypes.Float64).Product()
+
+		// Calculate gradients.
+		gradients := Gradient(output, v1, v2)
+
+		inputs = []*Node{v1, v2}
+		outputs = append([]*Node{output}, gradients...)
+		return
+	}, []any{
+		float64(24),           // dot product output (Float64)
+		[]float32{3, 3, 3, 3}, // gradient with respect to v1 (Float32)
+		[]float32{2, 2, 2, 2}, // gradient with respect to v2 (Float32)
+	}, Epsilon)
+}
