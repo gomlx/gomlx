@@ -3,9 +3,112 @@
 package backends
 
 import (
+	"slices"
+
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
+
+// ConvolveAxesConfig defines the interpretation of the input/kernel/output tensor axes.
+// There must be the same number of spatial dimensions (axes) for each of the 3 tensors.
+// Input and output have batch and channel axes. Kernel has inputChannel and outputChannel axes.
+//
+// See Builder.ConvGeneral.
+type ConvolveAxesConfig struct {
+	InputBatch, InputChannels int
+	InputSpatial              []int
+
+	KernelInputChannels, KernelOutputChannels int
+	KernelSpatial                             []int
+
+	OutputBatch, OutputChannels int
+	OutputSpatial               []int
+}
+
+// Clone returns a deep copy of the structure.
+func (c ConvolveAxesConfig) Clone() ConvolveAxesConfig {
+	var c2 ConvolveAxesConfig
+	c2 = c
+	c2.InputSpatial = slices.Clone(c.InputSpatial)
+	c2.KernelSpatial = slices.Clone(c.KernelSpatial)
+	c2.OutputSpatial = slices.Clone(c.OutputSpatial)
+	return c2
+}
+
+// PadAxis defines the amount of padding preceding one axis (Start), at the end of axis (End)
+// or in between the inputs (Interior).
+// This is used as a parameter for the Pad operation.
+type PadAxis struct {
+	Start, End, Interior int
+}
+
+// FFTType select among the basic types of Fast Fourier Transform (FFT) supported.
+type FFTType int
+
+//go:generate go tool enumer -type FFTType -trimprefix=FFT -output=gen_ffttype_enumer.go standard_ops.go
+
+const (
+	// FFTForward - complex in, complex out.
+	FFTForward FFTType = iota
+
+	// FFTInverse - complex in, complex out.
+	FFTInverse
+
+	// FFTForwardReal - real in, fft_length / 2 + 1 complex out.
+	FFTForwardReal
+
+	// FFTInverseReal - fft_length / 2 + 1 complex in.
+	FFTInverseReal
+)
+
+// ReduceOpType select among the basic types of reduction supported.
+type ReduceOpType int
+
+//go:generate go tool enumer -type ReduceOpType -trimprefix=ReduceOp -output=gen_reduceoptype_enumer.go standard_ops.go
+
+const (
+	// ReduceOpUndefined is an undefined value.
+	ReduceOpUndefined ReduceOpType = iota
+
+	// ReduceOpSum reduces by summing all elements being reduced.
+	ReduceOpSum
+
+	// ReduceOpProduct reduces by multiplying all elements being reduced.
+	ReduceOpProduct
+
+	// ReduceOpMax reduces by taking the maximum value.
+	ReduceOpMax
+
+	// ReduceOpMin reduces by taking the minimum value.
+	ReduceOpMin
+)
+
+// RNGStateShape is the default shape for the random number generator state.
+// It dependents on the algorithm, but for now we are using Philox.
+var RNGStateShape = shapes.Make(dtypes.Uint64, 3) //nolint:mnd // This is a constant.
+
+// DotGeneralConfig are optional configurations for the DotGeneral operation.
+type DotGeneralConfig struct {
+	// AccumulatorDType is the data type of the accumulator during the matrix multiplication.
+	// Commonly set to Float32 for half-precision (Float16 and BFloat16) operations, or maybe for Int32
+	// for small quantized values operations.
+	//
+	// If left empty, it defaults to the same dtype as the inputs.
+	//
+	// Some backends may not support this option and this will cause it to simply convert the input to the accumulation
+	// type upfront, which is less efficient.
+	AccumulatorDType dtypes.DType
+
+	// OutputDType is the data type of the output of the matrix multiplication.
+	//
+	// If left empty, it defaults to the same dtype as the AccumulatorDType.
+	//
+	// Some backends may not support this option and this will cause it to simply convert the input to the output
+	// type upfront, which is less efficient.
+	OutputDType dtypes.DType
+
+	// FutureWork: add quantization configuration.
+}
 
 // StandardOps lists the bulk of the operations that a backends.Builder must support.
 type StandardOps interface {
