@@ -5,6 +5,7 @@ package xla
 import (
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
+	xladtypes "github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
@@ -55,6 +56,9 @@ func (f *Function) DotGeneral(
 	if useTF32 && dtype == dtypes.Float32 {
 		algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
 		algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
+		if algo.AccumulationType.DType == xladtypes.F32 {
+			algo.AccumulationType.TF32 = true
+		}
 	} else {
 		algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)}
 		algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)}
