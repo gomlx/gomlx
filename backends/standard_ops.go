@@ -288,20 +288,6 @@ type StandardOps interface {
 	// Standard broadcasting rules apply (see documentation).
 	Div(lhs, rhs Value) (Value, error)
 
-	// Dot returns the "dot product" operation.
-	// The exact semantics of this operation depend on the ranks of the operands:
-	// | Input | Output | Semantics |
-	// | vector [n] dot vector [n] | scalar | vector dot product |
-	// | matrix [m x k] dot vector [k] | vector [m]	matrix-vector multiplication |
-	// | matrix [m x k] dot matrix [k x n] | matrix [m x n] | matrix-matrix multiplication |
-	// The operation performs sum of products over the second dimension of x0 (or the first if it has rank 1) and
-	// the first dimension of x1.
-	// These are the "contracted" dimensions.
-	// The contracted dimensions of x0 and x1 must be of the same size.
-	// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications, or
-	// matrix/matrix multiplications.
-	Dot(lhs, rhs Value) (Value, error)
-
 	// DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
 	// for a general vector product -- a generalized "Einsum". Each axis can be:
 	//
