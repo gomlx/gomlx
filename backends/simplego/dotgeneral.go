@@ -85,7 +85,24 @@ func adjustAxisToRank(rank, axis int) (int, error) {
 // node with normalized inputs. Finally, it reshapes back to the final result.
 //
 // See execDotGeneral for the implementation.
-func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Value, rhsContractingAxes, rhsBatchAxes []int) (backends.Value, error) {
+func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Value, rhsContractingAxes, rhsBatchAxes []int, config backends.DotGeneralConfig) (backends.Value, error) {
+	// originalDType is used if config.OutputDType is not set.
+	var originalDType dtypes.DType
+	if lhsNode, ok := lhsOp.(*Node); ok {
+		originalDType = lhsNode.shape.DType
+	}
+
+	if config.AccumulatorDType != dtypes.InvalidDType {
+		var err error
+		lhsOp, err = f.ConvertDType(lhsOp, config.AccumulatorDType)
+		if err != nil {
+			return nil, err
+		}
+		rhsOp, err = f.ConvertDType(rhsOp, config.AccumulatorDType)
+		if err != nil {
+			return nil, err
+		}
+	}
 	inputPair, err := f.verifyAndCastValues(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
@@ -223,6 +240,18 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 
 	if err != nil {
 		return nil, err
+	}
+
+	targetOutputDType := originalDType
+	if config.OutputDType != dtypes.InvalidDType {
+		targetOutputDType = config.OutputDType
+	}
+
+	if targetOutputDType != dtypes.InvalidDType && targetOutputDType != result.(*Node).shape.DType {
+		result, err = f.ConvertDType(result, targetOutputDType)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
@@ -539,13 +568,13 @@ func (f *Function) Dot(lhsOp, rhsOp backends.Value) (backends.Value, error) {
 	switch {
 	case lhs.shape.Rank() == 1 && rhs.shape.Rank() == 1:
 		// Contracting both vectors.
-		output, err = f.DotGeneral(lhs, []int{0}, []int{}, rhs, []int{0}, []int{})
+		output, err = f.DotGeneral(lhs, []int{0}, []int{}, rhs, []int{0}, []int{}, backends.DotGeneralConfig{})
 	case lhs.shape.Rank() == 2 && rhs.shape.Rank() == 1:
 		// Contract rhs vector.
-		output, err = f.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+		output, err = f.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{}, backends.DotGeneralConfig{})
 	case lhs.shape.Rank() == 2 && rhs.shape.Rank() == 2:
 		// Traditional matrix multiplication:
-		output, err = f.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+		output, err = f.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{}, backends.DotGeneralConfig{})
 	default:
 		return nil, errors.Errorf("Dot operands have invalid ranks: lhs=%v, rhs=%v", lhs.shape, rhs.shape)
 	}
