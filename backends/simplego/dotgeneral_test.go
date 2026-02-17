@@ -596,7 +596,7 @@ func TestDotGeneral_ConfigDTypes(t *testing.T) {
 		result := exec.MustExec(lhsTensor, rhsTensor)[0]
 
 		// Verify output DType and value (should be as if computed in Float32)
-		require.Equal(t, F16, result.Shape().DType) // Output should still be Float16
+		require.Equal(t, F16, result.Shape().DType, "Got %s, wanted %s", result.Shape().DType, F16) // Output should still be Float16
 		// Expected value is calculated with Float32 precision
 		expectedFloat32 := []float32{1*7 + 2*9 + 3*11, 1*8 + 2*10 + 3*12, 4*7 + 5*9 + 6*11, 4*8 + 5*10 + 6*12}
 

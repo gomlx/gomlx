@@ -152,9 +152,13 @@ func (b *DotBuilder) General(
 	}
 	output = backendDotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes,
 		backends.DotGeneralConfig{})
+
+	outputDType := b.lhs.DType() // Default to the same as the input.
 	if b.config.OutputDType != 0 {
-		output = ConvertDType(output, b.config.OutputDType)
+		outputDType = b.config.OutputDType
 	}
+	// Conversion may happen if accumulatorDType != outputDType. It's a no-op if there is no conversion.
+	output = ConvertDType(output, outputDType)
 	return output
 }
 
