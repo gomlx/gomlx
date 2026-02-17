@@ -92,16 +92,11 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 		originalDType = lhsNode.shape.DType
 	}
 
-	if config.AccumulatorDType != dtypes.InvalidDType {
-		var err error
-		lhsOp, err = f.ConvertDType(lhsOp, config.AccumulatorDType)
-		if err != nil {
-			return nil, err
-		}
-		rhsOp, err = f.ConvertDType(rhsOp, config.AccumulatorDType)
-		if err != nil {
-			return nil, err
-		}
+	if config.AccumulatorDType != dtypes.InvalidDType || config.OutputDType != dtypes.InvalidDType {
+		// Not implemented yet.
+		return nil, errors.Wrapf(backends.ErrNotImplemented,
+			"DotGeneral with accumulator or output dtype different from original dtype is not implemented for %s",
+			BackendName)
 	}
 	inputPair, err := f.verifyAndCastValues(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
 	if err != nil {
@@ -237,21 +232,8 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	resultingDims = append(resultingDims, lhsCrossDims...)
 	resultingDims = append(resultingDims, rhsCrossDims...)
 	result, err := f.Reshape(dotGeneral, resultingDims...)
-
 	if err != nil {
 		return nil, err
-	}
-
-	targetOutputDType := originalDType
-	if config.OutputDType != dtypes.InvalidDType {
-		targetOutputDType = config.OutputDType
-	}
-
-	if targetOutputDType != dtypes.InvalidDType && targetOutputDType != result.(*Node).shape.DType {
-		result, err = f.ConvertDType(result, targetOutputDType)
-		if err != nil {
-			return nil, err
-		}
 	}
 	return result, nil
 }
