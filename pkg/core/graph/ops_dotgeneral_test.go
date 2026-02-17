@@ -1,6 +1,7 @@
 package graph_test
 
 import (
+	"flag"
 	"fmt"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/stretchr/testify/require"
 )
@@ -453,4 +455,49 @@ func TestGradientDotConfig(t *testing.T) {
 		[]float32{3, 3, 3, 3}, // gradient with respect to v1 (Float32)
 		[]float32{2, 2, 2, 2}, // gradient with respect to v2 (Float32)
 	}, Epsilon)
+}
+
+var flagDotGeneralDTypes = flag.Bool("dot_general_dtypes", false, "Run DotGeneralDTypes test")
+
+func TestDotGeneralDTypes(t *testing.T) {
+	if !*flagDotGeneralDTypes {
+		t.Skip("skipping DotGeneralDTypes test")
+	}
+	testDTypes := sets.Make[dtypes.DType]()
+	for _, dtSet := range []*dtypes.DTypeSet{&dtypes.FloatDTypes, &dtypes.IntDTypes, &dtypes.UnsignedDTypes} {
+		for dtype, included := range *dtSet {
+			if included {
+				testDTypes.Insert(dtypes.DType(dtype))
+			}
+		}
+	}
+
+	backend := graphtest.BuildTestBackend()
+	for inputDType := range sets.MakeWith(dtypes.BF16) { //testDTypes {
+		for accumulatorDType := range sets.MakeWith(dtypes.Float32) { // testDTypes {
+			for outputDType := range sets.MakeWith(dtypes.BF16, dtypes.Float32) { //testDTypes {
+				if inputDType == accumulatorDType && inputDType == outputDType {
+					// Skip this case: symmetric operations are always supported.
+					continue
+				}
+				exec, err := NewExec(backend, func(g *Graph) *Node {
+					lhs := Iota(g, shapes.Make(inputDType, 16), 0)
+					rhs := OnesLike(lhs)
+					return Dot(lhs, rhs).
+						WithAccumulatorDType(accumulatorDType).
+						WithOutputDType(outputDType).
+						Product()
+				})
+				if err != nil {
+					t.Fatalf("DotGeneralDTypes failed to create graph: %v", err)
+				}
+				_, err = exec.Exec()
+				if err != nil {
+					fmt.Printf("* failed for %s, %s, %s: %v\n", inputDType, accumulatorDType, outputDType, err)
+				} else {
+					fmt.Printf("%s,%s,%s\n", inputDType, accumulatorDType, outputDType)
+				}
+			}
+		}
+	}
 }
