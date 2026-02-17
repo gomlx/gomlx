@@ -19,7 +19,8 @@
   - DotGeneral: Added smallMatMul execution path, optimized for small matrix multiplications (thx @timkaye11)
   - Experimental `packgemm` support leveraging simd operations (@ajroetker, @janpfeifer)
   - Funtions/closures support (thx @ajroetker)
-  - Added fused operations: `FusedGelu`, `FusedDense`, `FusedSoftmax`, `FusedLayerNorm`.
+  - Added fused operations: `FusedGelu`, `FusedDense`, `FusedSoftmax`, `FusedLayerNorm`, 
+    `FusedScaledDotProductAttention`, `FusedAttentionQKVProjection`.
 - New package `bucketing`:
   - Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
 - Package `dtypes`:
