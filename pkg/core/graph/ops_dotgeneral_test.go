@@ -473,16 +473,16 @@ func TestDotGeneralDTypes(t *testing.T) {
 	}
 
 	backend := graphtest.BuildTestBackend()
-	for inputDType := range sets.MakeWith(dtypes.BF16) { //testDTypes {
-		for accumulatorDType := range sets.MakeWith(dtypes.Float32) { // testDTypes {
-			for outputDType := range sets.MakeWith(dtypes.BF16, dtypes.Float32) { //testDTypes {
+	for inputDType := range testDTypes { // sets.MakeWith(dtypes.BF16) { //
+		for accumulatorDType := range testDTypes { // sets.MakeWith(dtypes.Float32) { //
+			for outputDType := range testDTypes { // sets.MakeWith(dtypes.BF16, dtypes.Float32) { //
 				if inputDType == accumulatorDType && inputDType == outputDType {
 					// Skip this case: symmetric operations are always supported.
 					continue
 				}
 				exec, err := NewExec(backend, func(g *Graph) *Node {
 					lhs := Iota(g, shapes.Make(inputDType, 16), 0)
-					rhs := OnesLike(lhs)
+					rhs := ConvertDType(OnesLike(lhs), inputDType)
 					return Dot(lhs, rhs).
 						WithAccumulatorDType(accumulatorDType).
 						WithOutputDType(outputDType).
@@ -493,10 +493,11 @@ func TestDotGeneralDTypes(t *testing.T) {
 				}
 				_, err = exec.Exec()
 				if err != nil {
-					fmt.Printf("* failed for %s, %s, %s: %v\n", inputDType, accumulatorDType, outputDType, err)
+					fmt.Printf("* failed for %s, %s, %s\n", inputDType, accumulatorDType, outputDType)
 				} else {
 					fmt.Printf("%s,%s,%s\n", inputDType, accumulatorDType, outputDType)
 				}
+				exec.Finalize()
 			}
 		}
 	}

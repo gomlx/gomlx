@@ -47,19 +47,21 @@ func (f *Function) DotGeneral(
 		algo.NumPrimitiveOperations = 1
 		algo.AllowImpreciseAccumulation = false
 
+		accumulationDType := dtype
 		if config.AccumulatorDType != dtypes.InvalidDType {
+			accumulationDType = config.AccumulatorDType
 			algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(config.AccumulatorDType)}
 		} else {
 			algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)}
 		}
 
 		useTF32 := f.builder.backend.DotGeneralUseTF32
-		if useTF32 && dtype == dtypes.Float32 {
+		if useTF32 && accumulationDType == dtypes.Float32 {
 			algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
 			algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
 		} else {
-			algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)}
-			algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)}
+			algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
+			algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
 		}
 		dotGeneralBuilder.Algorithm(&algo)
 	}
