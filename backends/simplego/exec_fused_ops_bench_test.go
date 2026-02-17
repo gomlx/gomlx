@@ -284,7 +284,7 @@ func BenchmarkDense(b *testing.B) {
 				bias := params[2]
 
 				// x @ weight via DotGeneral: contract x's axis 1 with weight's axis 0.
-				y := benchMust(f.DotGeneral(x, []int{1}, nil, weight, []int{0}, nil))
+				y := benchMust(f.DotGeneral(x, []int{1}, nil, weight, []int{0}, nil, backends.DotGeneralConfig{}))
 
 				// Add bias: broadcast [outFeatures] -> [batch, outFeatures].
 				biasBroadcast := benchMust(f.BroadcastInDim(bias, outShape, []int{1}))

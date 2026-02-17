@@ -8,6 +8,9 @@
   - Renamed `backends.Op` -> `backends.Value`.
   - Added `FusedOps`, allowing backends to expose fused (more efficient) operations -- with proper/automatic
     fallback to decomposed operations when not supported or for gradients.
+  - Added `ErrNotImplemented` error and `IsNotImplemented(err)` function.
+  - Removed `Dot()` operation (redundant with `DotGeneral`).
+  - `DotGeneral()` now takes a `DotGeneralConfig` struct, with options for setting the accumulator and output dtypes.
 - Package `simplego`:
   - Added `Float16` support (thx @timkaye11) 
   - Added dedup of computation nodes (aka. "common subexpression elimination" CSE) (thx @timkaye11, @janpfeifer)
@@ -16,7 +19,8 @@
   - DotGeneral: Added smallMatMul execution path, optimized for small matrix multiplications (thx @timkaye11)
   - Experimental `packgemm` support leveraging simd operations (@ajroetker, @janpfeifer)
   - Funtions/closures support (thx @ajroetker)
-  - Added fused operations: `FusedGelu`, `FusedDense`, `FusedSoftmax`, `FusedLayerNorm`.
+  - Added fused operations: `FusedGelu`, `FusedDense`, `FusedSoftmax`, `FusedLayerNorm`, 
+    `FusedScaledDotProductAttention`, `FusedAttentionQKVProjection`.
 - New package `bucketing`:
   - Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
 - Package `dtypes`:

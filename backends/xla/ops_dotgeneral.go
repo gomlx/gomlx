@@ -7,16 +7,8 @@ import (
 	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/pkg/errors"
 )
-
-// DotGeneralConfig represents the configuration to use for DotGeneral.
-// StableHLO has lots of options (see github.com/gomlx/go-xla/pkg/stablehlo.DotGeneral),
-// and here is what we expose for now.
-type DotGeneralConfig struct {
-	// UseTF32 specifies whether to use tf32 (a truncated float32 that NVidia CUDA PJRT is able to use)
-	// when doing float32 dot general.
-	UseTF32 bool
-}
 
 // DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
 // for a general vector product -- a generalized "Einsum". Each axis can be:
@@ -31,28 +23,53 @@ type DotGeneralConfig struct {
 // It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
-func (f *Function) DotGeneral(lhs backends.Value, lhsContractingAxes, lhsBatchAxes []int, rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int) (backends.Value, error) {
+func (f *Function) DotGeneral(
+	lhs backends.Value, lhsContractingAxes, lhsBatchAxes []int,
+	rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int,
+	config backends.DotGeneralConfig) (backends.Value, error) {
 	nodes, err := f.verifyAndCastValues("Dot", lhs, rhs)
 	if err != nil {
 		return nil, err
 	}
 	lhsNode := nodes[0]
 	rhsNode := nodes[1]
-
-	config := f.builder.backend.DotGeneralConfig
 	dtype := lhsNode.shape.DType
+	accumulationDType := dtype
+	if config.AccumulatorDType != dtypes.InvalidDType {
+		accumulationDType = config.AccumulatorDType
+		if accumulationDType != dtypes.F32 {
+			return nil, errors.Wrapf(backends.ErrNotImplemented,
+				"XLA only supports mixed dtypes if accumulation is in F32")
+		}
+	}
 
-	dotGeneralBuilder := stablehlo.DotGeneral(lhsNode.value, lhsContractingAxes, lhsBatchAxes, rhsNode.value, rhsContractingAxes, rhsBatchAxes)
-	if config.UseTF32 && dtype == dtypes.Float32 {
-		dotGeneralBuilder.Algorithm(&stablehlotypes.DotGeneralAlgorithm{
-			LhsPrecisionType:           stablehlotypes.FloatPrecisionType{TF32: true},
-			RhsPrecisionType:           stablehlotypes.FloatPrecisionType{TF32: true},
-			AccumulationType:           stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)},
-			LhsComponentCount:          1,
-			RhsComponentCount:          1,
-			NumPrimitiveOperations:     1,
-			AllowImpreciseAccumulation: false,
-		})
+	dotGeneralBuilder := stablehlo.DotGeneral(
+		lhsNode.value, lhsContractingAxes, lhsBatchAxes,
+		rhsNode.value, rhsContractingAxes, rhsBatchAxes)
+
+	// Set algorithm based on config.
+	useTF32 := accumulationDType == dtypes.F32 && f.builder.backend.DotGeneralUseTF32
+	if useTF32 || config.AccumulatorDType != dtypes.InvalidDType {
+		var algo stablehlotypes.DotGeneralAlgorithm
+		algo.LhsComponentCount = 1
+		algo.RhsComponentCount = 1
+		algo.NumPrimitiveOperations = 1
+		algo.AllowImpreciseAccumulation = false
+		algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
+
+		useTF32 := f.builder.backend.DotGeneralUseTF32
+		if useTF32 && accumulationDType == dtypes.Float32 {
+			algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
+			algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
+			algo.AccumulationType.TF32 = true
+		} else {
+			algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
+			algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
+		}
+		dotGeneralBuilder.Algorithm(&algo)
+	}
+	if config.OutputDType != dtypes.InvalidDType {
+		dotGeneralBuilder.OutputDType(DTypeToXLA(config.OutputDType))
 	}
 	value, err := dotGeneralBuilder.Done()
 	if err != nil {

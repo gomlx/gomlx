@@ -100,7 +100,7 @@ func RotateOnOrigin(x, roll, pitch, yaw *Node) *Node {
 		if R == nil {
 			R = rY
 		} else {
-			R = Dot(R, rY)
+			R = DotProduct(R, rY)
 		}
 	}
 	if yaw != nil {
@@ -113,9 +113,9 @@ func RotateOnOrigin(x, roll, pitch, yaw *Node) *Node {
 		if R == nil {
 			R = rZ
 		} else {
-			R = Dot(R, rZ)
+			R = DotProduct(R, rZ)
 		}
 	}
-	rotated := Dot(normX, R)
+	rotated := DotProduct(normX, R)
 	return Reshape(rotated, x.Shape().Dimensions...)
 }
