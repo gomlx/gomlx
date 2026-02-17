@@ -85,13 +85,10 @@ func adjustAxisToRank(rank, axis int) (int, error) {
 // node with normalized inputs. Finally, it reshapes back to the final result.
 //
 // See execDotGeneral for the implementation.
-func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Value, rhsContractingAxes, rhsBatchAxes []int, config backends.DotGeneralConfig) (backends.Value, error) {
-	// originalDType is used if config.OutputDType is not set.
-	var originalDType dtypes.DType
-	if lhsNode, ok := lhsOp.(*Node); ok {
-		originalDType = lhsNode.shape.DType
-	}
-
+func (f *Function) DotGeneral(
+	lhsOp backends.Value, lhsContractingAxes, lhsBatchAxes []int,
+	rhsOp backends.Value, rhsContractingAxes, rhsBatchAxes []int,
+	config backends.DotGeneralConfig) (backends.Value, error) {
 	if config.AccumulatorDType != dtypes.InvalidDType || config.OutputDType != dtypes.InvalidDType {
 		// Not implemented yet.
 		return nil, errors.Wrapf(backends.ErrNotImplemented,
@@ -105,7 +102,8 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	lhs, rhs := inputPair[0], inputPair[1]
 	dtype := lhs.shape.DType
 	if dtype != rhs.shape.DType {
-		return nil, errors.Errorf("DotGeneral lhs (left-hand-side) and rhs operands don't match data types: %s and %s", dtype, rhs.shape.DType)
+		return nil, errors.Errorf("DotGeneral lhs (left-hand-side) and rhs operands don't match data types: %s and %s",
+			dtype, rhs.shape.DType)
 	}
 	if len(lhsContractingAxes) != len(rhsContractingAxes) {
 		return nil, errors.Errorf("DotGeneral number of contracting axes for lhs (%d) doesn't match rhs (%d)",
@@ -129,25 +127,31 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	for ii, axis := range lhsContractingAxes {
 		params.lhsContractingAxes[ii], err = adjustAxisToRank(lhsRank, axis)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "while adjusting contractingAxes for DotGeneral(lhs=%s, lhsContractingAxes=%v)", lhs.shape, lhsContractingAxes)
+			return nil, errors.WithMessagef(err,
+				"while adjusting contractingAxes for DotGeneral(lhs=%s, lhsContractingAxes=%v)",
+				lhs.shape, lhsContractingAxes)
 		}
 	}
 	for ii, axis := range lhsBatchAxes {
 		params.lhsBatchAxes[ii], err = adjustAxisToRank(lhsRank, axis)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "while adjusting batchAxes for DotGeneral(lhs=%s, lhsBatchAxes=%v)", lhs.shape, lhsBatchAxes)
+			return nil, errors.WithMessagef(err,
+				"while adjusting batchAxes for DotGeneral(lhs=%s, lhsBatchAxes=%v)", lhs.shape, lhsBatchAxes)
 		}
 	}
 	for ii, axis := range rhsContractingAxes {
 		params.rhsContractingAxes[ii], err = adjustAxisToRank(rhsRank, axis)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "while adjusting contractingAxes for DotGeneral(rhs=%s, rhsContractingAxes=%v)", rhs.shape, rhsContractingAxes)
+			return nil, errors.WithMessagef(err,
+				"while adjusting contractingAxes for DotGeneral(rhs=%s, rhsContractingAxes=%v)",
+				rhs.shape, rhsContractingAxes)
 		}
 	}
 	for ii, axis := range rhsBatchAxes {
 		params.rhsBatchAxes[ii], err = adjustAxisToRank(rhsRank, axis)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "while adjusting batchAxes for DotGeneral(rhs=%s, rhsBatchAxes=%v)", rhs.shape, rhsBatchAxes)
+			return nil, errors.WithMessagef(err,
+				"while adjusting batchAxes for DotGeneral(rhs=%s, rhsBatchAxes=%v)", rhs.shape, rhsBatchAxes)
 		}
 	}
 
@@ -173,7 +177,8 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 
 	// Find sizes of the normalized operands ([batchSize, crossSize, contractSize]).
 	var lhsCrossDims, rhsCrossDims []int
-	params.batchSize, params.lhsCrossSize, params.contractingSize, lhsCrossDims = dgFindSizes(lhs.shape, lhsContractingAxes, lhsBatchAxes)
+	params.batchSize, params.lhsCrossSize, params.contractingSize, lhsCrossDims = dgFindSizes(
+		lhs.shape, lhsContractingAxes, lhsBatchAxes)
 	_, params.rhsCrossSize, _, rhsCrossDims = dgFindSizes(rhs.shape, rhsContractingAxes, rhsBatchAxes)
 
 	// Check that all sizes are positive
@@ -187,15 +192,18 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	params.rhsNormalization = dgNormalizePrepare(rhs.shape, params.rhsContractingAxes, params.rhsBatchAxes)
 
 	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
-	params.lhsBlockedShape = dgCreateBlockedShape(dtype, params.batchSize, params.lhsCrossSize, params.contractingSize, blockLog2Dim)
-	params.rhsBlockedShape = dgCreateBlockedShape(dtype, params.batchSize, params.rhsCrossSize, params.contractingSize, blockLog2Dim)
+	params.lhsBlockedShape = dgCreateBlockedShape(
+		dtype, params.batchSize, params.lhsCrossSize, params.contractingSize, blockLog2Dim)
+	params.rhsBlockedShape = dgCreateBlockedShape(
+		dtype, params.batchSize, params.rhsCrossSize, params.contractingSize, blockLog2Dim)
 	outputDType := dtype
 	if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
 		// For 16 bits, store the intermediary results as float32 to minimize numerical errors during accumulation.
 		// Notice the blockLog2Dim must be the same, because the block dimensions much match the inputs.
 		outputDType = dtypes.Float32
 	}
-	params.outputBlockedShape = dgCreateBlockedShape(outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
+	params.outputBlockedShape = dgCreateBlockedShape(
+		outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
 
 	// Select execution path at build time based on problem size and matrix layout.
 	// This enables proper deduplication of pre-blocked inputs via getOrCreateNode.
