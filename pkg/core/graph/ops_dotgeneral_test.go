@@ -471,12 +471,16 @@ func TestDotGeneralDTypes(t *testing.T) {
 			}
 		}
 	}
+	testDTypes.Insert(dtypes.InvalidDType)
 
 	backend := graphtest.BuildTestBackend()
 	for inputDType := range testDTypes { // sets.MakeWith(dtypes.BF16) { //
+		if inputDType == dtypes.InvalidDType {
+			continue
+		}
 		for accumulatorDType := range testDTypes { // sets.MakeWith(dtypes.Float32) { //
 			for outputDType := range testDTypes { // sets.MakeWith(dtypes.BF16, dtypes.Float32) { //
-				if inputDType == accumulatorDType && inputDType == outputDType {
+				if accumulatorDType == dtypes.InvalidDType && outputDType == dtypes.InvalidDType {
 					// Skip this case: symmetric operations are always supported.
 					continue
 				}

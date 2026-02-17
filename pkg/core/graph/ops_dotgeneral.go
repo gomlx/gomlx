@@ -38,12 +38,21 @@ func Dot(lhs, rhs *Node) *DotBuilder {
 }
 
 // WithAccumulatorDType sets the accumulator data type for the DotGeneral operation.
+//
+// Support for accumulator dtypes is very backend dependent. For example, XLA only supports
+// mixed dtypes if accumulation is in F32.
+//
+// GoMLX's Dot() operation will attempt to recover from an error and pre-convert the operands (lhs, rhs)
+// to the accumulator dtype if the backend yields a "not-implemented" error.
 func (b *DotBuilder) WithAccumulatorDType(dtype dtypes.DType) *DotBuilder {
 	b.config.AccumulatorDType = dtype
 	return b
 }
 
 // WithOutputDType sets the output data type for the DotGeneral operation.
+//
+// Some combinations of input/accumulator/output dtypes may be invalid and yield errors -- in which case simply
+// use ConvertDType after the DotGeneral operation.
 func (b *DotBuilder) WithOutputDType(dtype dtypes.DType) *DotBuilder {
 	b.config.OutputDType = dtype
 	return b
@@ -122,8 +131,31 @@ func (b *DotBuilder) General(
 	lhsBatchAxes = adjustAxesToRank(b.lhs.Rank(), lhsBatchAxes, "lhsBatchAxes")
 	rhsContractingAxes = adjustAxesToRank(b.rhs.Rank(), rhsContractingAxes, "rhsContractingAxes")
 	rhsBatchAxes = adjustAxesToRank(b.rhs.Rank(), rhsBatchAxes, "rhsBatchAxes")
-	return backendDotGeneral(b.lhs, lhsContractingAxes, lhsBatchAxes, b.rhs, rhsContractingAxes, rhsBatchAxes,
-		b.config)
+
+	var output *Node
+	err := exceptions.TryCatch[error](func() {
+		output = backendDotGeneral(b.lhs, lhsContractingAxes, lhsBatchAxes, b.rhs, rhsContractingAxes, rhsBatchAxes,
+			b.config)
+	})
+	if err == nil {
+		return output
+	}
+	if !backends.IsNotImplemented(err) || (b.config.AccumulatorDType == 0 && b.config.OutputDType == 0) {
+		panic(err)
+	}
+
+	// Decompose the conversion of accumulator and output dtypes.
+	lhs, rhs := b.lhs, b.rhs
+	if b.config.AccumulatorDType != 0 {
+		lhs = ConvertDType(b.lhs, b.config.AccumulatorDType)
+		rhs = ConvertDType(b.rhs, b.config.AccumulatorDType)
+	}
+	output = backendDotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes,
+		backends.DotGeneralConfig{})
+	if b.config.OutputDType != 0 {
+		output = ConvertDType(output, b.config.OutputDType)
+	}
+	return output
 }
 
 // DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
@@ -621,8 +653,7 @@ func (b *DotBuilder) EinsumAxes(contractingAxes, batchAxes [][2]int) (output *No
 	lhsBatchAxes, rhsBatchAxes := normalizePairs("batchAxes", batchAxes)
 
 	// Execute DotGeneral with parameters.
-	return backendDotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes,
-		backends.DotGeneralConfig{})
+	return b.General(lhsContractingAxes, lhsBatchAxes, rhsContractingAxes, rhsBatchAxes)
 }
 
 // crossAxes list all axes not included in contracting or batch: these are the dimensions that DotGeneral

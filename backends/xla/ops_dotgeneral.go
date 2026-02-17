@@ -7,6 +7,7 @@ import (
 	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/pkg/errors"
 )
 
 // DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
@@ -32,33 +33,35 @@ func (f *Function) DotGeneral(
 	}
 	lhsNode := nodes[0]
 	rhsNode := nodes[1]
-
 	dtype := lhsNode.shape.DType
+	accumulationDType := dtype
+	if config.AccumulatorDType != dtypes.InvalidDType {
+		accumulationDType = config.AccumulatorDType
+		if accumulationDType != dtypes.F32 {
+			return nil, errors.Wrapf(backends.ErrNotImplemented,
+				"XLA only supports mixed dtypes if accumulation is in F32")
+		}
+	}
+
 	dotGeneralBuilder := stablehlo.DotGeneral(
 		lhsNode.value, lhsContractingAxes, lhsBatchAxes,
 		rhsNode.value, rhsContractingAxes, rhsBatchAxes)
 
 	// Set algorithm based on config.
-	useTF32 := dtype == dtypes.F32 && f.builder.backend.DotGeneralUseTF32
+	useTF32 := accumulationDType == dtypes.F32 && f.builder.backend.DotGeneralUseTF32
 	if useTF32 || config.AccumulatorDType != dtypes.InvalidDType {
 		var algo stablehlotypes.DotGeneralAlgorithm
 		algo.LhsComponentCount = 1
 		algo.RhsComponentCount = 1
 		algo.NumPrimitiveOperations = 1
 		algo.AllowImpreciseAccumulation = false
-
-		accumulationDType := dtype
-		if config.AccumulatorDType != dtypes.InvalidDType {
-			accumulationDType = config.AccumulatorDType
-			algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(config.AccumulatorDType)}
-		} else {
-			algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(dtype)}
-		}
+		algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
 
 		useTF32 := f.builder.backend.DotGeneralUseTF32
 		if useTF32 && accumulationDType == dtypes.Float32 {
 			algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
 			algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
+			algo.AccumulationType.TF32 = true
 		} else {
 			algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
 			algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
