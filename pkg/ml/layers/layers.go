@@ -324,12 +324,18 @@ func DropoutStatic(ctx *context.Context, input *Node, dropoutRate float64) *Node
 	return Dropout(ctx, input, Scalar(g, dtypes.Float32, dropoutRate))
 }
 
+// IsDropoutActive returns true if dropout is active (i.e. if it's training).
+// If using DropoutStatic, also check that dropoutRate > 0.
+func IsDropoutActive(ctx *context.Context, g *Graph) bool {
+	return ctx != nil && ctx.IsTraining(g)
+}
+
 // DropoutNormalize randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
 // it's a no op (it returns input). If normalize is set, it scales the output by 1/(1-dropoutRate)
 // to preserve the mean of the input values.
 func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, normalize bool) *Node {
 	g := input.Graph()
-	if !ctx.IsTraining(g) {
+	if !IsDropoutActive(ctx, g) {
 		return input
 	}
 

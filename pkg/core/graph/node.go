@@ -56,15 +56,14 @@ type Node struct {
 	// Usually, defined for a NoOp operation.
 	customVJP VJP
 
-	// vjpAlternateOutput, when set, is a decomposed version of this node's computation
-	// built from primitive ops. During reverse-mode autodiff, the VJP is computed from
-	// this alternate output instead of the fused node, so no hand-written VJPs are needed
-	// for fused ops -- even though one can create a customVJP for a fused-op, if one wants.
-	vjpAlternateOutput *Node
-
-	// vjpAlternateOutputs is the multi-output counterpart of vjpAlternateOutput.
-	// For multi-output fused ops (e.g. FusedQKVDense), each element corresponds
-	// to one split output's decomposed equivalent.
+	// vjpAlternateOutputs holds decomposed versions of this node's computation built from
+	// primitive ops. During reverse-mode autodiff, the VJP is computed from these alternate
+	// outputs instead of the fused node, so no hand-written VJPs are needed for fused ops
+	// -- even though one can create a customVJP for a fused-op, if one wants.
+	//
+	// For single-output fused ops this is a 1-element slice; for multi-output fused ops
+	// (e.g. FusedAttentionQKVProjection) each element corresponds to one split output's
+	// decomposed equivalent.
 	vjpAlternateOutputs []*Node
 
 	trace error // Stack-trace error of where Node was created. Stored if graph.traced is true.

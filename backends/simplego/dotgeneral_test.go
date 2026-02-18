@@ -17,6 +17,7 @@ import (
 	"github.com/x448/float16"
 	"k8s.io/klog/v2"
 
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -317,6 +318,7 @@ func TestDotGeneral_Shape(t *testing.T) {
 	gotOp, err := mainFn.DotGeneral(
 		lhs, []int{1}, []int{3, 0},
 		rhs, []int{3}, []int{0, 2},
+		backends.DotGeneralConfig{},
 	)
 	require.NoError(t, err)
 	got := gotOp.(*Node)
@@ -568,8 +570,89 @@ func TestDotGeneral_Exec(t *testing.T) {
 	}
 }
 
+func TestDotGeneral_ConfigDTypes(t *testing.T) {
+	// Setup simplego backend
+	goBackend, ok := backend.(*Backend)
+	if !ok {
+		t.Skip("Test requires SimpleGo backend")
+	}
+
+	// Define common input shapes and values
+	F16 := dtypes.Float16
+	f16 := float16.Fromfloat32
+	lhsData := []float16.Float16{f16(1), f16(2), f16(3), f16(4), f16(5), f16(6)}
+	rhsData := []float16.Float16{f16(7), f16(8), f16(9), f16(10), f16(11), f16(12)}
+	lhsTensor := tensors.FromFlatDataAndDimensions(lhsData, 2, 3)
+	rhsTensor := tensors.FromFlatDataAndDimensions(rhsData, 3, 2)
+
+	t.Run("AccumulatorDType", func(t *testing.T) {
+		// Compile and execute
+		exec := graph.MustNewExec(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+			// Define config with AccumulatorDType = Float32
+			return graph.Dot(lhs, rhs).
+				WithAccumulatorDType(dtypes.Float32).
+				General([]int{1}, nil, []int{0}, nil)
+		})
+		result := exec.MustExec(lhsTensor, rhsTensor)[0]
+
+		// Verify output DType and value (should be as if computed in Float32)
+		require.Equal(t, F16, result.Shape().DType, "Got %s, wanted %s", result.Shape().DType, F16) // Output should still be Float16
+		// Expected value is calculated with Float32 precision
+		expectedFloat32 := []float32{1*7 + 2*9 + 3*11, 1*8 + 2*10 + 3*12, 4*7 + 5*9 + 6*11, 4*8 + 5*10 + 6*12}
+
+		gotFlat := tensors.MustCopyFlatData[float16.Float16](result)
+		gotFloat32 := xslices.Map(gotFlat, func(f float16.Float16) float32 { return f.Float32() })
+		require.InDeltaSlice(t, expectedFloat32, gotFloat32, 1e-2)
+	})
+
+	t.Run("OutputDType", func(t *testing.T) {
+		// Compile and execute
+		exec := graph.MustNewExec(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+			// Define config with OutputDType = Float32
+			return graph.Dot(lhs, rhs).
+				WithOutputDType(dtypes.Float32).
+				General([]int{1}, nil, []int{0}, nil)
+		})
+		result := exec.MustExec(lhsTensor, rhsTensor)[0]
+
+		// Verify output DType and value
+		require.Equal(t, dtypes.Float32, result.Shape().DType) // Output should be Float32
+
+		// Recompute expected values using Float16 for intermediate results (default behavior without AccumulatorDType)
+		// and then convert to Float32 at the end.
+		val00 := f16(1).Float32()*f16(7).Float32() + f16(2).Float32()*f16(9).Float32() + f16(3).Float32()*f16(11).Float32()
+		val01 := f16(1).Float32()*f16(8).Float32() + f16(2).Float32()*f16(10).Float32() + f16(3).Float32()*f16(12).Float32()
+		val10 := f16(4).Float32()*f16(7).Float32() + f16(5).Float32()*f16(9).Float32() + f16(6).Float32()*f16(11).Float32()
+		val11 := f16(4).Float32()*f16(8).Float32() + f16(5).Float32()*f16(10).Float32() + f16(6).Float32()*f16(12).Float32()
+
+		expectedConvertedFloat32 := []float32{val00, val01, val10, val11}
+		require.InDeltaSlice(t, expectedConvertedFloat32, tensors.MustCopyFlatData[float32](result), 1e-2)
+	})
+
+	t.Run("AccumulatorAndOutputDType", func(t *testing.T) {
+		// Compile and execute
+		exec := graph.MustNewExec(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+			// Define config with AccumulatorDType = Float32 and OutputDType = BFloat16
+			return graph.Dot(lhs, rhs).
+				WithAccumulatorDType(dtypes.Float32).
+				WithOutputDType(dtypes.BFloat16).
+				General([]int{1}, nil, []int{0}, nil)
+		})
+		result := exec.MustExec(lhsTensor, rhsTensor)[0]
+
+		// Verify output DType and value (should be computed in Float32, then converted to BFloat16)
+		require.Equal(t, dtypes.BFloat16, result.Shape().DType) // Output should be BFloat16
+		// Expected value from Float32 computation, then converted to BFloat16
+		expectedFloat32 := []float32{1*7 + 2*9 + 3*11, 1*8 + 2*10 + 3*12, 4*7 + 5*9 + 6*11, 4*8 + 5*10 + 6*12}
+
+		gotFlat := tensors.MustCopyFlatData[bfloat16.BFloat16](result)
+		gotFloat32 := xslices.Map(gotFlat, func(f bfloat16.BFloat16) float32 { return f.Float32() })
+		require.InDeltaSlice(t, expectedFloat32, gotFloat32, 1e-2)
+	})
+}
+
 func TestDotGeneral_Dot(t *testing.T) {
-	exec := graph.MustNewExec(backend, graph.Dot)
+	exec := graph.MustNewExec(backend, graph.DotProduct)
 
 	y0 := exec.MustExec([]float32{1, 2, 3}, []float32{10, 11, 12})[0]
 	fmt.Printf("\ty0=%s\n", y0.GoStr())

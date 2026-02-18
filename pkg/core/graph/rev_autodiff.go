@@ -166,10 +166,14 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 				continue
 			}
 
-			// Fill missing VJPs with zeros.
-			for ii, shape := range node.outputShapes {
-				if rNode.VJPsForMultiOutputs[ii] == nil {
-					rNode.VJPsForMultiOutputs[ii] = Zeros(node.Graph(), shape)
+			// Fill missing VJPs with zeros (no VJP was incident on them), so the backward pass is calculated properly.
+			// * Except if using vjpAlternateOutputs, in which case we don't need the zeros, they
+			//   will be handled later in the when using the alternate path for VJP.
+			if len(node.vjpAlternateOutputs) == 0 {
+				for ii, shape := range node.outputShapes {
+					if rNode.VJPsForMultiOutputs[ii] == nil {
+						rNode.VJPsForMultiOutputs[ii] = Zeros(node.Graph(), shape)
+					}
 				}
 			}
 		}
@@ -195,30 +199,30 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			continue
 		}
 
-		// If the node has a vjpAlternateOutput (e.g. fused ops with a decomposed alternative),
-		// transfer the accumulated VJP to the alternate output node and let the normal
-		// gradient loop process the decomposed subgraph. The alternate output has a lower
-		// nodeIdx (built first by InternalFusedOpCaller), so the loop will reach it later.
-		if node.vjpAlternateOutput != nil {
-			alt := node.vjpAlternateOutput
-			rAlt := rg.ReverseNodes[alt.Id()]
-			// Transfer VJP to the decomposed output.
-			if rAlt.AccumulatedVJP == nil {
-				rAlt.AccumulatedVJP = rNode.AccumulatedVJP
-			} else {
-				rAlt.AccumulatedVJP = Add(rAlt.AccumulatedVJP, rNode.AccumulatedVJP)
+		// Fused ops with decomposed alternatives: transfer VJPs to the alternate output
+		// nodes and let the normal gradient loop process the decomposed subgraph.
+		// The alternates have lower nodeIdx (built first by InternalFusedOpCaller/Multi),
+		// so the loop will reach them later.
+		// Works for both single-output (1-element slice) and multi-output fused ops.
+		if len(node.vjpAlternateOutputs) > 0 {
+			// Collect the arriving VJPs: for single-output nodes use AccumulatedVJP,
+			// for multi-output nodes use VJPsForMultiOutputs.
+			vjps := rNode.VJPsForMultiOutputs
+			if node.NumOutputs() == 1 {
+				vjps = []*Node{rNode.AccumulatedVJP}
 			}
-			// Mark the decomposed subgraph as Included and Useful so the gradient
-			// loop processes it instead of skipping.
-			markSubgraphUseful(rg, alt)
-			continue
-		}
-
-		// Multi-output fused ops: compute gradients through decomposed subgraphs,
-		// one per output, and accumulate the results.
-		if node.vjpAlternateOutputs != nil {
-			altVJPs := reverseAutodiffAlternateMulti(node.vjpAlternateOutputs, node.inputNodes, rNode.VJPsForMultiOutputs, outputShape)
-			rg.accumulateInputVJPs(node, altVJPs, outputShape)
+			for i, alt := range node.vjpAlternateOutputs {
+				if alt == nil || vjps[i] == nil {
+					continue
+				}
+				rAlt := rg.ReverseNodes[alt.Id()]
+				if rAlt.AccumulatedVJP == nil {
+					rAlt.AccumulatedVJP = vjps[i]
+				} else {
+					rAlt.AccumulatedVJP = Add(rAlt.AccumulatedVJP, vjps[i])
+				}
+				markSubgraphUseful(rg, alt)
+			}
 			continue
 		}
 
@@ -432,7 +436,6 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeReduceMax:          vjpForSingleOutput(reduceMaxVJP),
 	NodeTypeReduceMin:          vjpForSingleOutput(reduceMinVJP),
 	NodeTypeLogistic:           vjpForSingleOutput(logisticVJP),
-	NodeTypeDot:                vjpForSingleOutput(dotVJP),
 	NodeTypeDotGeneral:         vjpForSingleOutput(dotGeneralVJP),
 	NodeTypeSlice:              vjpForSingleOutput(sliceVJP),
 	NodeTypeGather:             vjpForSingleOutput(gatherVJP),
@@ -811,38 +814,6 @@ func logisticVJP(node, v *Node, _ shapes.Shape) []*Node {
 	grad := Mul(node, Sub(ScalarOne(g, node.Shape().DType), node))
 	vjp := Mul(v, grad)
 	return []*Node{vjp}
-}
-
-func dotVJP(node, v *Node, _ shapes.Shape) []*Node {
-	// Case 1: dot product of two vectors.
-	if node.inputNodes[0].Rank() == 1 && node.inputNodes[1].Rank() == 1 {
-		return []*Node{
-			Mul(v, node.inputNodes[1]),
-			Mul(v, node.inputNodes[0]),
-		}
-	}
-
-	// Case 2: matrix[i, j] x vector[j] -> vector[i]
-	if node.inputNodes[0].Rank() == 2 && node.inputNodes[1].Rank() == 1 {
-		v = InsertAxes(v, -1)
-		v = BroadcastToShape(v, node.inputNodes[0].Shape())
-		return []*Node{
-			Mul(v, InsertAxes(node.inputNodes[1], 0)),
-			ReduceSum(Mul(v, node.inputNodes[0]), 0),
-		}
-	}
-
-	// Case 3: matrix[i, j] x matrix[j, k] -> matrix[i, k]
-	if node.inputNodes[0].Rank() != 2 || node.inputNodes[1].Rank() != 2 {
-		Panicf("Dot node with combination of ranks not accepted: %s, %s", node.inputNodes[0].Shape(), node.inputNodes[1].Shape())
-	}
-	dimI, dimJ, dimK := node.Shape().Dimensions[0], node.inputNodes[0].Shape().Dimensions[1], node.Shape().Dimensions[1]
-	v = InsertAxes(v, 1) // Shape [i, 1, k]
-	v = BroadcastToShape(v, shapes.Make(node.Shape().DType, dimI, dimJ, dimK))
-	return []*Node{
-		ReduceSum(Mul(v, InsertAxes(node.inputNodes[1], 0)), 2),
-		ReduceSum(Mul(v, InsertAxes(node.inputNodes[0], -1)), 0),
-	}
 }
 
 // sliceVJP generates the adjoint gradient term for SliceNode, encoded by the

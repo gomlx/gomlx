@@ -1,0 +1,8 @@
+{
+  "track_id": "dotgeneralconfigdtypes_20260215",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-02-15T00:00:00Z",
+  "updated_at": "2026-02-15T00:00:00Z",
+  "description": "I just created an extra `config` parameter to the generic backend `DotGeneral()` operation. It includes optional `AccumulatorDType` and `OutputDType`."
+}

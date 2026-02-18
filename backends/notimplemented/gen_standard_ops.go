@@ -181,22 +181,6 @@ func (f Function) Div(lhs backends.Value, rhs backends.Value) (backends.Value, e
 	return nil, f.baseErrFn(backends.OpTypeDiv)
 }
 
-// Dot returns the "dot product" operation.
-// The exact semantics of this operation depend on the ranks of the operands:
-// | Input | Output | Semantics |
-// | vector [n] dot vector [n] | scalar | vector dot product |
-// | matrix [m x k] dot vector [k] | vector [m]	matrix-vector multiplication |
-// | matrix [m x k] dot matrix [k x n] | matrix [m x n] | matrix-matrix multiplication |
-// The operation performs sum of products over the second dimension of x0 (or the first if it has rank 1) and
-// the first dimension of x1.
-// These are the "contracted" dimensions.
-// The contracted dimensions of x0 and x1 must be of the same size.
-// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications, or
-// matrix/matrix multiplications.
-func (f Function) Dot(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
-	return nil, f.baseErrFn(backends.OpTypeDot)
-}
-
 // DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
 // for a general vector product -- a generalized "Einsum". Each axis can be:
 //
@@ -210,7 +194,7 @@ func (f Function) Dot(lhs backends.Value, rhs backends.Value) (backends.Value, e
 // It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
-func (f Function) DotGeneral(lhs backends.Value, lhsContractingAxes []int, lhsBatchAxes []int, rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int) (backends.Value, error) {
+func (f Function) DotGeneral(lhs backends.Value, lhsContractingAxes []int, lhsBatchAxes []int, rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int, config backends.DotGeneralConfig) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeDotGeneral)
 }
 
@@ -310,25 +294,34 @@ func (f Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, 
 	return nil, f.baseErrFn(backends.OpTypeFusedLayerNorm)
 }
 
-// FusedMultiHeadSDPA computes multi-head scaled dot-product attention.
+// FusedScaledDotProductAttention computes multi-head scaled dot-product attention.
 //
-// output = softmax(Q @ K^T * scale + mask) @ V, computed per-head with GQA support.
+// output = softmax(query @ key^T * scale + mask) @ value, computed per-head with GQA support.
 //
 // Inputs:
-//   - q: [batch, numHeads, seqLen, headDim]
-//   - k: [batch, numKVHeads, kvLen, headDim]
-//   - v: [batch, numKVHeads, kvLen, headDim]
-//   - mask: [seqLen, kvLen] (optional, additive mask; nil for no mask)
+//   - query, key, value: 4D tensors whose axis ordering is determined by axesLayout.
+//     For AxesLayoutBHSD: query [batch, numHeads, seqLen, headDim],
+//     key/value [batch, numKVHeads, kvLen, headDim].
+//     For AxesLayoutBSHD: query [batch, seqLen, numHeads, headDim],
+//     key/value [batch, kvLen, numKVHeads, headDim].
+//   - mask: [seqLen, kvLen] (seqLen is the query sequence length): optional (can be nil) mask
+//     that can be either boolean or additive (any dtype other than Bool). See also causal below.
+//     Boolean mask: true = attend, false = ignore.
+//     Float/additive mask: added to scores before softmax.
+//     Must be broadcastable to the score tensor shape.
 //
 // Parameters:
 //   - numHeads: number of query attention heads
 //   - numKVHeads: number of key/value attention heads (for GQA; numHeads must be divisible by numKVHeads)
-//   - scale: scaling factor applied to Q @ K^T (typically 1/sqrt(headDim))
-//   - causal: if true, apply causal (lower-triangular) mask
+//   - axesLayout: determines the axis ordering of query/key/value tensors
+//   - scale: scaling factor applied to query @ key^T (typically 1/sqrt(headDim))
+//   - causal: if true, apply causal (lower-triangular) mask. Callers (e.g. attention.Core)
+//     treat causal and mask as mutually exclusive, folding causal into the mask before calling
+//     this method when both are needed. Backends may assume they won't both be set.
 //
-// Output: [batch, numHeads, seqLen, headDim]
-func (f Function) FusedMultiHeadSDPA(q backends.Value, k backends.Value, v backends.Value, mask backends.Value, numHeads int, numKVHeads int, scale float64, causal bool) (backends.Value, error) {
-	return nil, f.baseErrFn(backends.OpTypeFusedMultiHeadSDPA)
+// Output: same shape as query.
+func (f Function) FusedScaledDotProductAttention(query backends.Value, key backends.Value, value backends.Value, mask backends.Value, numHeads int, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedScaledDotProductAttention)
 }
 
 // FusedSoftmax computes softmax along the specified axis.

@@ -12,6 +12,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,53 +50,6 @@ func TestGradientAdd(t *testing.T) {
 		want := []float32{2}
 		require.Equalf(t, want, got.Value(), "%s: wanted %v, got %v", t.Name(), want, got)
 	}
-}
-
-func TestGradientDot(t *testing.T) {
-	graphtest.RunTestGraphFn(t, "GradientDot: dot(vector, vector)", func(g *Graph) (inputs, outputs []*Node) {
-		v1 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(2)))
-		v2 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(3)))
-		output := Dot(v1, v2)
-		gradients := Gradient(output, v1, v2)
-		inputs = []*Node{v1, v2}
-		outputs = append([]*Node{output}, gradients...)
-		return
-	}, []any{
-		float32(24),           // dot product output
-		[]float32{3, 3, 3, 3}, // gradient with respect to v1
-		[]float32{2, 2, 2, 2}, // gradient with respect to v2
-	}, Epsilon)
-
-	graphtest.RunTestGraphFn(t, "GradientDot: dot(matrix, vector)", func(g *Graph) (inputs, outputs []*Node) {
-		v1 := Add(Iota(g, MakeShape(F32, 2, 4), 0), Const(g, float32(2)))
-		v2 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(3)))
-		output := Dot(v1, v2)
-		sum := ReduceAllSum(output)
-		gradients := Gradient(sum, v1, v2)
-		inputs = []*Node{v1, v2}
-		outputs = append([]*Node{output}, gradients...)
-		return
-	}, []any{
-		[]float32{24, 36},                       // dot product output
-		[][]float32{{3, 3, 3, 3}, {3, 3, 3, 3}}, // gradient with respect to v1
-		[]float32{5, 5, 5, 5},                   // gradient with respect to v2
-	}, Epsilon)
-
-	graphtest.RunTestGraphFn(t, "GradientDot: dot(matrix, matrix)", func(g *Graph) (inputs, outputs []*Node) {
-		v1 := Add(Iota(g, MakeShape(F32, 2, 4), 0), Const(g, float32(2)))
-		v2 := Add(Iota(g, MakeShape(F32, 4, 1), 0), Const(g, float32(1)))
-		output := Dot(v1, v2)
-		require.NoError(t, output.Shape().CheckDims(2, 1))
-		sum := ReduceAllSum(output)
-		gradients := Gradient(sum, v1, v2)
-		inputs = []*Node{v1, v2}
-		outputs = append([]*Node{output}, gradients...)
-		return
-	}, []any{
-		[][]float32{{20}, {30}},                 // dot product output
-		[][]float32{{1, 2, 3, 4}, {1, 2, 3, 4}}, // gradient with respect to v1
-		[][]float32{{5}, {5}, {5}, {5}},         // gradient with respect to v2
-	}, Epsilon)
 }
 
 func TestGradientSlice(t *testing.T) {
@@ -606,7 +560,7 @@ func TestGradientWhere(t *testing.T) {
 			ifTrue := Const(g, []float32{1, 1, 1})
 			ifFalse := Const(g, []float32{0, 0, 0})
 			output = Where(cond, ifTrue, ifFalse)
-			output = Dot(OnePlus(IotaFull(g, output.Shape())), output)
+			output = DotProduct(OnePlus(IotaFull(g, output.Shape())), output)
 			return output, []*Node{ifTrue, ifFalse}
 		}, []any{
 			[]float32{1, 0, 3},
@@ -620,7 +574,7 @@ func TestGradientWhere(t *testing.T) {
 			ifTrue := Const(g, float32(1))
 			ifFalse := Const(g, []float32{0, 0, 0})
 			output = Where(cond, ifTrue, ifFalse)
-			output = Dot(OnePlus(IotaFull(g, output.Shape())), output)
+			output = DotProduct(OnePlus(IotaFull(g, output.Shape())), output)
 			return output, []*Node{ifTrue, ifFalse}
 		}, []any{
 			float32(1 + 3),
@@ -634,7 +588,7 @@ func TestGradientWhere(t *testing.T) {
 			ifTrue := Const(g, float32(1))
 			ifFalse := Const(g, float32(0))
 			output = Where(cond, ifTrue, ifFalse)
-			output = Dot(OnePlus(IotaFull(g, output.Shape())), output)
+			output = DotProduct(OnePlus(IotaFull(g, output.Shape())), output)
 			return output, []*Node{ifTrue, ifFalse}
 		}, []any{
 			float32(1 + 3),
@@ -729,6 +683,32 @@ func TestGradientMaskedReducedSum(t *testing.T) {
 			return output, []*Node{values}
 		}, []any{
 			[]float64{1, 0, 1, 0},
+		},
+	)
+}
+
+func TestGradientQKVProjectionDecomposed(t *testing.T) {
+	// x=[1,2], wQKV=[2,4] (queryDim=2, keyValueDim=1, totalOut=4)
+	// Combined matmul: x @ wQKV = [1,2] @ [[1,0,0,1],[0,1,0,1]] = [1, 2, 0, 3]
+	// query = [1, 2], key = [0], value = [3]
+	// loss = sum(query) + sum(key) + sum(value) = 1+2+0+3 = 6
+	//
+	// d(loss)/d(x) = sum over all output columns of wQKV rows:
+	//   x[0] contributes to outputs via wQKV[0,:] = [1,0,0,1] → d/dx[0] = 1+0+0+1 = 2
+	//   x[1] contributes to outputs via wQKV[1,:] = [0,1,0,1] → d/dx[1] = 0+1+0+1 = 2
+	//
+	// d(loss)/d(wQKV): each wQKV[i,j] has gradient x[i] (since output[j] = sum_i x[i]*wQKV[i,j])
+	//   wQKV gradient = [[1,1,1,1],[2,2,2,2]]
+	testGradients(t, "QKVProjectionDecomposed",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			x := Const(g, [][]float64{{1, 2}})                        // [1, 2]
+			wQKV := Const(g, [][]float64{{1, 0, 0, 1}, {0, 1, 0, 1}}) // [2, 4]
+			results := attention.QKVProjectionDecomposed(x, wQKV, nil, nil, nil, 2, 1)
+			output = Add(ReduceAllSum(results[0]), Add(ReduceAllSum(results[1]), ReduceAllSum(results[2])))
+			return output, []*Node{x, wQKV}
+		}, []any{
+			[][]float64{{2, 2}},
+			[][]float64{{1, 1, 1, 1}, {2, 2, 2, 2}},
 		},
 	)
 }
