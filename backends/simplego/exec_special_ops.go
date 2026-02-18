@@ -628,43 +628,33 @@ func execReverse(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 		return output, nil
 	}
 
-	// Build a set of which axes to reverse for O(1) lookup.
-	reverseAxes := make([]bool, operand.shape.Rank())
-	for _, axis := range axes {
-		reverseAxes[axis] = true
-	}
-
 	srcBytes := operand.mutableBytes()
 	dstBytes := output.mutableBytes()
 	elementSize := int(operand.shape.DType.Size())
-	rank := operand.shape.Rank()
+	strides := operand.shape.Strides()
 	dims := operand.shape.Dimensions
-	strides := calculateStrides(dims)
+
+	// Pre-compute per reversed-axis: dimension and stride, so the inner loop only
+	// touches the axes that are actually reversed.
+	reverseDims := make([]int, len(axes))
+	reverseStrides := make([]int, len(axes))
+	for i, axis := range axes {
+		reverseDims[i] = dims[axis]
+		reverseStrides[i] = strides[axis]
+	}
 
 	// For each flat index in the output, compute the corresponding input flat index
-	// by reversing the per-axis indices for the reversed axes, then copy element bytes.
-	perAxisIdx := make([]int, rank)
-	for outputFlatIdx := range operand.shape.Size() {
-		srcFlatIdx := 0
-		for axis := range rank {
-			srcIdx := perAxisIdx[axis]
-			if reverseAxes[axis] {
-				srcIdx = dims[axis] - 1 - srcIdx
-			}
-			srcFlatIdx += srcIdx * strides[axis]
+	// by flipping the per-axis indices for the reversed axes, then copy element bytes.
+	for outputFlatIdx, outputAxesIndices := range operand.shape.Iter() {
+		srcFlatIdx := outputFlatIdx
+		for i, axis := range axes {
+			outAxisIdx := outputAxesIndices[axis]
+			srcAxisIdx := reverseDims[i] - 1 - outAxisIdx
+			srcFlatIdx += (srcAxisIdx - outAxisIdx) * reverseStrides[i]
 		}
 		dstOffset := outputFlatIdx * elementSize
 		srcOffset := srcFlatIdx * elementSize
 		copy(dstBytes[dstOffset:dstOffset+elementSize], srcBytes[srcOffset:srcOffset+elementSize])
-
-		// Increment per-axis indices (row-major order).
-		for axis := rank - 1; axis >= 0; axis-- {
-			perAxisIdx[axis]++
-			if perAxisIdx[axis] < dims[axis] {
-				break
-			}
-			perAxisIdx[axis] = 0
-		}
 	}
 	return output, nil
 }
