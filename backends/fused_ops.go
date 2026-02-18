@@ -55,6 +55,37 @@ func (l AxesLayout) HeadsAxis() int {
 	}
 }
 
+// QuantFormat specifies the quantization format for packed weights.
+type QuantFormat int
+
+const (
+	// QuantNF4 is 4-bit NormalFloat from QLoRA: 16 fixed values looked up per nibble.
+	// Packed weights: [K, N/2] uint8, two values per byte (low nibble first).
+	QuantNF4 QuantFormat = iota
+
+	// QuantInt4 is 4-bit symmetric integer: nibble mapped to [-8, 7] via (nibble - 8).
+	// Packed weights: [K, N/2] uint8, two values per byte (low nibble first).
+	QuantInt4
+
+	// QuantInt8 is 8-bit signed integer: direct int8 values.
+	// Weights: [K, N] int8.
+	QuantInt8
+)
+
+// String returns the name of the quantization format.
+func (q QuantFormat) String() string {
+	switch q {
+	case QuantNF4:
+		return "NF4"
+	case QuantInt4:
+		return "Int4"
+	case QuantInt8:
+		return "Int8"
+	default:
+		return "unknown"
+	}
+}
+
 // ActivationType specifies the activation function for fused operations.
 type ActivationType int
 
@@ -143,6 +174,40 @@ type FusedOps interface {
 	//
 	// Output: same shape as query.
 	FusedScaledDotProductAttention(
+		query, key, value, mask Value,
+		numHeads, numKVHeads int,
+		axesLayout AxesLayout,
+		scale float64,
+		causal bool) (Value, error)
+
+	// FusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
+	//
+	// It computes y = activation(x @ dequant(packedWeights, scales) + bias), where the
+	// dequantization and matmul are fused into a single pass to avoid materializing the
+	// full float32 weight matrix.
+	//
+	// Inputs:
+	//   - x: [batch..., K] float32 input activations.
+	//   - packedWeights: [K, N/2] uint8 for NF4/Int4 (two values per byte, low nibble first),
+	//     or [K, N] int8 for Int8.
+	//   - scales: [K, numGroups] float32, where numGroups = ceil(N / groupSize).
+	//     Each scale covers a contiguous group of groupSize output columns for one row.
+	//   - bias: [N] float32 (nil-able), added after matmul but before activation.
+	//
+	// Parameters:
+	//   - quantFormat: NF4, Int4, or Int8.
+	//   - groupSize: number of output columns sharing a single scale factor.
+	//   - outFeatures: the N dimension (number of output columns). For 4-bit formats,
+	//     N cannot be inferred from packed weight shape alone.
+	//   - activation: applied after matmul+bias; set to ActivationNone for no activation.
+	FusedQuantizedDense(x, packedWeights, scales, bias Value,
+		quantFormat QuantFormat, groupSize int, outFeatures int,
+		activation ActivationType) (Value, error)
+
+	// FusedQuantizedScaledDotProductAttention computes multi-head SDPA using int8×int8
+	// matmuls for Q@K^T and attn@V. Inputs are float32; quantization is internal.
+	// Same interface as FusedScaledDotProductAttention.
+	FusedQuantizedScaledDotProductAttention(
 		query, key, value, mask Value,
 		numHeads, numKVHeads int,
 		axesLayout AxesLayout,
