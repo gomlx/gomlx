@@ -108,7 +108,7 @@ func quantizedDenseDecomposed(x, packedWeights, scales, bias *Node,
 		x2d = Reshape(x, M, K)
 	}
 
-	y := Dot(x2d, dequant) // [M, N]
+	y := Dot(x2d, dequant).Product() // [M, N]
 
 	// Reshape output back if x had more than 2 dimensions.
 	if xShape.Rank() > 2 {
