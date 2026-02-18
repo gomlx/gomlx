@@ -27,8 +27,8 @@
   ## [MODEL-1] HuggingFace Transformer Import (safetensors direct)
 
   - **DRI:** _unassigned_
-  - **Status:** ready
-  - **Priority:** P0
+  - **Status:** `ready`
+  - **Priority:** `P0`
   - **Area:** `pkg/ml/model/transformer`
   - **Depends on:** GRAPH-1
   - **Description:** Import generic transformer architectures directly from safetensors without ONNX.
@@ -42,8 +42,8 @@
   ## [MODEL-2] Text Generation Example (HF Transformer + Prompt)
 
   - **DRI:** _unassigned_
-  - **Status:** ready
-  - **Priority:** P0
+  - **Status:** `ready`
+  - **Priority:** `P1`
   - **Depends on:** MODEL-1
   - **Description:** Provide example generator using imported transformer model.
   - **Definition of Done:**
@@ -56,15 +56,15 @@
   ## [MODEL-3] ONNX Import Coverage Expansion
 
   - **DRI:** _unassigned_
-  - **Status:** ready
-  - **Priority:** P1
+  - **Status:** `ready`
+  - **Priority:** `P1`
   - **Repo:** ONNX-GoMLX
   - **Description:** Improve op coverage for ONNX graph import.
   - **Definition of Done:**
-    - Missing-op report tool
-    - Implement top 5 most common missing ops
-    - Validate against 3 popular models
-
+    - Continous: there will always be another model to import, untill all ops are covered.
+    - Per contribution:
+      - Tests for ops; Example when a new model gets to work.
+    
   ---
 
   ## [MODEL-4] New Layers / Optimizers / Losses
@@ -74,9 +74,9 @@
   - **Priority:** P1
   - **Description:** Add recent ML layers, optimizers, regularizers.
   - **Definition of Done:**
-    - At least 2 new optimizers
-    - At least 2 new layers
-    - Benchmark example
+    - Continuous: there will always be new papers.
+    - For each new contribution:
+      - Tests and benchmark example. Bonus if a notebook.
 
   ---
 
@@ -95,8 +95,8 @@
   ## [MODEL-6] Gradient Checkpointing
 
   - **DRI:** _unassigned_
-  - **Status:** ready
-  - **Priority:** P1
+  - **Status:** idea
+  - **Priority:** P2
   - **Description:** Reduce memory usage during training.
   - **Definition of Done:**
     - Memory usage reduced in benchmark
@@ -108,7 +108,7 @@
 
   - **DRI:** _unassigned_
   - **Status:** ready
-  - **Priority:** P1
+  - **Priority:** P2
   - **Description:** Support gradients wrt vector/tensor outputs.
   - **Definition of Done:**
     - API to compute Jacobian
@@ -125,6 +125,7 @@
   - **DRI:** _unassigned_
   - **Status:** in_progress
   - **Priority:** P0
+  - **Target:** v0.28.0
   - **Links:** PR #306
   - **Definition of Done:**
     - Input-dependent shapes supported
@@ -149,6 +150,7 @@
   - **DRI:** _unassigned_
   - **Status:** ready
   - **Priority:** P0
+  - **Target:** v0.28.0
   - **Depends on:** GRAPH-1
   - **Definition of Done:**
     - Named axis abstraction
@@ -160,42 +162,32 @@
 
   ---
 
-  ## [BE-1] SimpleGo Backend – Fused Ops Expansion
+  ## [BACKEND-2] SimpleGo Backend – SIMD Support (Go 1.26+)
 
   - **DRI:** _unassigned_
-  - **Status:** ready
-  - **Priority:** P1
-  - **Definition of Done:**
-    - 3 fused patterns implemented
-    - Benchmark shows measurable improvement
-
-  ---
-
-  ## [BE-2] SimpleGo Backend – SIMD Support (Go 1.26+)
-
-  - **DRI:** _unassigned_
-  - **Status:** idea
-  - **Priority:** P1
+  - **Status:** `in-progress`
+  - **Priority:** `P0`
+  - **Target:** v0.28.0
   - **Depends on:** Go 1.26, go-highway
   - **Definition of Done:**
-    - SIMD path for matmul or conv
+    - Supporting AVX-2, AVX-512 and Arm64 NEON (with C/Assembly tranliteration).
     - Benchmark comparison
 
   ---
 
-  ## [BE-3] ONNX Export API
+  ## [BACKEND-3] ONNX Export API
 
   - **DRI:** _unassigned_
-  - **Status:** ready
+  - **Status:** idea
   - **Priority:** P1
   - **Description:** Save GoMLX graph as ONNX model.
   - **Definition of Done:**
-    - `ExportONNX()` API
+    - `Save()` API for the ONNX backend.
     - Model validated with ONNX runtime
 
   ---
 
-  ## [BE-4] WebGL/WebNN WASM Backend
+  ## [BACKEND-4] WebGL/WebNN WASM Backend
 
   - **DRI:** _unassigned_
   - **Status:** idea
@@ -205,22 +197,15 @@
 
   ---
 
-  ## [BE-5] llama.cpp Backend (purego / yzma)
-
-  - **DRI:** _unassigned_
-  - **Status:** ready
-  - **Priority:** P1
-  - **Definition of Done:**
-    - Load llama.cpp model
-    - Inference parity with reference
-
-  ---
-
-  ## [BE-6] Additional Backend Exploration
+  ## [BACKEND-5] llama.cpp Backend (purego / yzma)
 
   - **DRI:** _unassigned_
   - **Status:** idea
   - **Priority:** P2
+  - **Link:** [https://github.com/hybridgroup/yzma/](https://github.com/hybridgroup/yzma/)
+  - **Definition of Done:**
+    - Load llama.cpp model
+    - Inference parity with reference
 
   ---
 
@@ -231,7 +216,7 @@
   ## [INFRA-1] Inference-Only Distribution Mode
 
   - **DRI:** _unassigned_
-  - **Status:** ready
+  - **Status:** idea
   - **Priority:** P1
   - **Definition of Done:**
     - Backend-only load mode
@@ -298,15 +283,14 @@
   - MODEL-4
   - MODEL-6
   - MODEL-7
-  - BE-1
-  - BE-2
-  - BE-3
-  - BE-5
+  - BACKEND-2
+  - BACKEND-3
+  - BACKEND-5
   - INFRA-1
   - API-1
 
   ## P2 (Exploratory)
   - MODEL-5
-  - BE-4
-  - BE-6
+  - BACKEND-4
+  - BACKEND-6
   - MAINT-1
