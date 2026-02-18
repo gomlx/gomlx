@@ -3,8 +3,6 @@
 package graph
 
 import (
-	"errors"
-
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
@@ -77,7 +75,7 @@ func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
 		output = fused()
 	})
 	if err != nil {
-		if errors.Is(err, backends.ErrNotImplemented) {
+		if backends.IsNotImplemented(err) {
 			// Expected: fused op doesn't support this config; fall back to decomposed.
 			return decomposedOutput
 		}
@@ -104,7 +102,7 @@ func InternalFusedOpCallerMulti(fused, decomposed func() []*Node) []*Node {
 		outputs = fused()
 	})
 	if err != nil {
-		if errors.Is(err, backends.ErrNotImplemented) {
+		if backends.IsNotImplemented(err) {
 			return decomposedOutputs
 		}
 		panic(err)
@@ -116,7 +114,7 @@ func InternalFusedOpCallerMulti(fused, decomposed func() []*Node) []*Node {
 		firstSplit := outputs[0]
 		splitInputs, ok := firstSplit.inputs.(*nodeInputsSplitNode)
 		if !ok {
-			panic(errors.New("InternalFusedOpCallerMulti: fused function returned non-split nodes; cannot set vjpAlternateOutputs"))
+			exceptions.Panicf("InternalFusedOpCallerMulti: fused function returned non-split nodes; cannot set vjpAlternateOutputs")
 		}
 		parent := splitInputs.multiOutputNode
 		parent.vjpAlternateOutputs = decomposedOutputs
@@ -124,4 +122,3 @@ func InternalFusedOpCallerMulti(fused, decomposed func() []*Node) []*Node {
 
 	return outputs
 }
-

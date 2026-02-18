@@ -2,14 +2,6 @@
 
 package backends
 
-import "github.com/pkg/errors"
-
-// ErrNotImplemented indicates a fused op is not implemented for the given
-// configuration (e.g. unsupported dtype or backend). Backends should wrap this
-// error so InternalFusedOpCaller can distinguish "not supported" from genuine
-// bugs and fall back to the decomposed implementation.
-var ErrNotImplemented = errors.New("fused op not implemented")
-
 // AxesLayout specifies the ordering of axes in 4D attention tensors.
 type AxesLayout int
 
@@ -118,6 +110,9 @@ func (a ActivationType) String() string {
 // FusedOps defines optional fused operations. Backends may implement these for
 // better performance; the graph layer falls back to decomposed operations when
 // unavailable.
+//
+// Like with standard ops, if the backend doesn't implement the fused op, return
+// ErrNotImplemented (wrapped with a stack).
 type FusedOps interface {
 
 	// FusedSoftmax computes softmax along the specified axis.

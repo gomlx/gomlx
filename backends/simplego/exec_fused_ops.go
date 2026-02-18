@@ -494,100 +494,116 @@ func transposeBuffer(backend *Backend, buf *Buffer, permutations []int) *Buffer 
 	return output
 }
 
-// sdpaGeneric computes scaled dot-product attention for a single head.
+// sdpaGeneric computes scaled dot-product attention for a group of query heads
+// that share the same key/value head (Grouped Query Attention / GQA).
+// For standard multi-head attention, groupSize is 1.
 //
 // The q/k/v/output slices are the full flat arrays for the tensor; qOff and kvOff
-// give the byte-offset to the first element of this head at seq=0. qSeqStride and
-// kvSeqStride are the element stride between consecutive sequence positions for a
-// single head (headDim for BHSD contiguous layout, numHeads*headDim for BSHD
-// interleaved layout). The output uses qOff/qSeqStride (same layout as query).
+// give the element-offset to the first element of this group at seq=0 (for Q, this
+// is the first query head in the group). qSeqStride and kvSeqStride are the element
+// stride between consecutive sequence positions for a single head (headDim for BHSD
+// contiguous layout, numHeads*headDim for BSHD interleaved layout). qGroupStride is
+// the element stride between consecutive query heads within the group.
+// The output uses qOff/qSeqStride/qGroupStride (same layout as query).
 //
-// mask and scores are dense per-head [seqLen, kvLen] scratch buffers.
+// scores is a dense [groupSize, seqLen, kvLen] scratch buffer.
+// Masks are dense per-head [seqLen, kvLen] buffers, shared across the group when
+// maskGroupStride is 0, or offset by maskGroupStride per group member for per-head masks.
 func sdpaGeneric[T float32 | float64](
-	q, k, v []T, qOff, kvOff, qSeqStride, kvSeqStride int,
+	q, k, v []T, qOff, kvOff, qSeqStride, kvSeqStride, qGroupStride int,
 	additiveMask []T,
 	booleanMask []bool,
+	maskGroupStride int,
 	scores []T,
 	output []T,
-	seqLen, kvLen, headDim int, scale T, causal bool,
+	groupSize, seqLen, kvLen, headDim int, scale T, causal bool,
 ) {
-	// scores[qIdx][kvIdx] = sum_d(q[qIdx][d] * k[kvIdx][d]) * scale + mask[qIdx][kvIdx]
-	for qIdx := range seqLen {
-		rowMax := T(math.Inf(-1))
-		qBase := qOff + qIdx*qSeqStride
-		scoreIdxBase := qIdx * kvLen
+	for gIdx := range groupSize {
+		gQOff := qOff + gIdx*qGroupStride
+		gMaskOff := gIdx * maskGroupStride
+		for qIdx := range seqLen {
+			rowMax := T(math.Inf(-1))
+			qBase := gQOff + qIdx*qSeqStride
+			scoreIdxBase := (gIdx*seqLen + qIdx) * kvLen
+			maskIdxBase := gMaskOff + qIdx*kvLen
 
-		kvLenUnmasked := kvLen
-		if causal {
-			kvLenUnmasked = min(kvLen, qIdx+1)
-		}
-		for kvIdx := range kvLenUnmasked {
-			scoreIdx := scoreIdxBase + kvIdx
-			if len(booleanMask) > 0 {
-				if !booleanMask[scoreIdx] {
-					continue
+			kvLenUnmasked := kvLen
+			if causal {
+				kvLenUnmasked = min(kvLen, qIdx+1)
+			}
+			for kvIdx := range kvLenUnmasked {
+				scoreIdx := scoreIdxBase + kvIdx
+				maskIdx := maskIdxBase + kvIdx
+				if len(booleanMask) > 0 {
+					if !booleanMask[maskIdx] {
+						continue
+					}
+				}
+				var dot T
+				kBase := kvOff + kvIdx*kvSeqStride
+				for d := range headDim {
+					dot += q[qBase+d] * k[kBase+d]
+				}
+				s := dot * scale
+				if len(additiveMask) > 0 {
+					s += additiveMask[maskIdx]
+				}
+				scores[scoreIdx] = s
+				if s > rowMax {
+					rowMax = s
 				}
 			}
-			var dot T
-			kBase := kvOff + kvIdx*kvSeqStride
-			for d := range headDim {
-				dot += q[qBase+d] * k[kBase+d]
-			}
-			s := dot * scale
-			if len(additiveMask) > 0 {
-				s += additiveMask[scoreIdx]
-			}
-			scores[scoreIdx] = s
-			if s > rowMax {
-				rowMax = s
-			}
-		}
 
-		// Softmax: exp(scores - max) and sum.
-		var sum T
-		scoreIdx := scoreIdxBase
-		if len(booleanMask) > 0 {
-			for range kvLenUnmasked {
-				if booleanMask[scoreIdx] {
-					scores[scoreIdx] = T(math.Exp(float64(scores[scoreIdx] - rowMax)))
-					sum += scores[scoreIdx]
-				}
-				scoreIdx++
-			}
-		} else {
-			// No boolean mask, so we can use the fast path.
-			for range kvLenUnmasked {
-				scores[scoreIdx] = T(math.Exp(float64(scores[scoreIdx] - rowMax)))
-				sum += scores[scoreIdx]
-				scoreIdx++
-			}
-		}
-		invSum := 1.0 / sum
-		scoreIdx = scoreIdxBase
-		for range kvLenUnmasked {
-			scores[scoreIdx] *= invSum
-			scoreIdx++
-		}
-
-		// output[qIdx][d] = sum_kvIdx(scores[qIdx][kvIdx] * v[kvIdx][d])
-		outBase := qOff + qIdx*qSeqStride
-		for d := range headDim {
+			// Softmax: exp(scores - max) and sum.
+			var sum T
 			scoreIdx := scoreIdxBase
-			var acc T
+			maskIdx := maskIdxBase
 			if len(booleanMask) > 0 {
-				for kvIdx := range kvLenUnmasked {
-					if booleanMask[scoreIdx] {
-						acc += scores[scoreIdx] * v[kvOff+kvIdx*kvSeqStride+d]
+				for range kvLenUnmasked {
+					if booleanMask[maskIdx] {
+						scores[scoreIdx] = T(math.Exp(float64(scores[scoreIdx] - rowMax)))
+						sum += scores[scoreIdx]
 					}
 					scoreIdx++
+					maskIdx++
 				}
 			} else {
-				for kvIdx := range kvLenUnmasked {
-					acc += scores[scoreIdx] * v[kvOff+kvIdx*kvSeqStride+d]
+				// No boolean mask, so we can use the fast path.
+				for range kvLenUnmasked {
+					scores[scoreIdx] = T(math.Exp(float64(scores[scoreIdx] - rowMax)))
+					sum += scores[scoreIdx]
 					scoreIdx++
 				}
 			}
-			output[outBase+d] = acc
+			invSum := 1.0 / sum
+			scoreIdx = scoreIdxBase
+			for range kvLenUnmasked {
+				scores[scoreIdx] *= invSum
+				scoreIdx++
+			}
+
+			// output[qIdx][d] = sum_kvIdx(scores[qIdx][kvIdx] * v[kvIdx][d])
+			outBase := gQOff + qIdx*qSeqStride
+			for d := range headDim {
+				scoreIdx := scoreIdxBase
+				maskIdx := maskIdxBase
+				var acc T
+				if len(booleanMask) > 0 {
+					for kvIdx := range kvLenUnmasked {
+						if booleanMask[maskIdx] {
+							acc += scores[scoreIdx] * v[kvOff+kvIdx*kvSeqStride+d]
+						}
+						scoreIdx++
+						maskIdx++
+					}
+				} else {
+					for kvIdx := range kvLenUnmasked {
+						acc += scores[scoreIdx] * v[kvOff+kvIdx*kvSeqStride+d]
+						scoreIdx++
+					}
+				}
+				output[outBase+d] = acc
+			}
 		}
 	}
 }
@@ -613,7 +629,7 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 	numKVHeads := data.numKVHeads
 	scale := T(data.scale)
 	causal := data.causal
-	headsPerKV := numHeads / numKVHeads
+	groupSize := numHeads / numKVHeads
 
 	// Layout-dependent axis indices and strides.
 	var seqLen, kvLen, headDim int
@@ -647,28 +663,41 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 		kvBatchStride = numKVHeads * kvLen * headDim
 	}
 
-	scores := make([]T, seqLen*kvLen)
+	scores := make([]T, groupSize*seqLen*kvLen)
 	maskSliceLen := seqLen * kvLen
 	for batchIdx := range batchSize {
-		for headIdx := range numHeads {
-			kvHeadIdx := headIdx / headsPerKV
-			qOff := batchIdx*qBatchStride + headIdx*qHeadStride
+		for kvHeadIdx := range numKVHeads {
+			qOff := batchIdx*qBatchStride + kvHeadIdx*groupSize*qHeadStride
 			kvOff := batchIdx*kvBatchStride + kvHeadIdx*kvHeadStride
+
+			// Compute mask slice and group stride for this KV head group.
 			var additiveMaskSlice []T
 			var booleanMaskSlice []bool
+			maskGroupStride := 0
 			if len(additiveMask) > 0 {
-				maskOffset := batchIdx*maskBatchStride + headIdx*maskHeadStride
-				additiveMaskSlice = additiveMask[maskOffset : maskOffset+maskSliceLen]
+				maskOffset := batchIdx*maskBatchStride + kvHeadIdx*groupSize*maskHeadStride
+				maskEnd := maskOffset + maskSliceLen
+				if maskHeadStride > 0 && groupSize > 1 {
+					maskEnd = maskOffset + (groupSize-1)*maskHeadStride + maskSliceLen
+					maskGroupStride = maskHeadStride
+				}
+				additiveMaskSlice = additiveMask[maskOffset:maskEnd]
 			}
 			if len(booleanMask) > 0 {
-				maskOffset := batchIdx*maskBatchStride + headIdx*maskHeadStride
-				booleanMaskSlice = booleanMask[maskOffset : maskOffset+maskSliceLen]
+				maskOffset := batchIdx*maskBatchStride + kvHeadIdx*groupSize*maskHeadStride
+				maskEnd := maskOffset + maskSliceLen
+				if maskHeadStride > 0 && groupSize > 1 {
+					maskEnd = maskOffset + (groupSize-1)*maskHeadStride + maskSliceLen
+					maskGroupStride = maskHeadStride
+				}
+				booleanMaskSlice = booleanMask[maskOffset:maskEnd]
 			}
 			sdpaGeneric(
-				q, k, v, qOff, kvOff, qSeqStride, kvSeqStride,
-				additiveMaskSlice, booleanMaskSlice, scores,
+				q, k, v, qOff, kvOff, qSeqStride, kvSeqStride, qHeadStride,
+				additiveMaskSlice, booleanMaskSlice, maskGroupStride,
+				scores,
 				out,
-				seqLen, kvLen, headDim, scale, causal,
+				groupSize, seqLen, kvLen, headDim, scale, causal,
 			)
 		}
 	}

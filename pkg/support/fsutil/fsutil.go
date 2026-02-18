@@ -6,6 +6,7 @@ package fsutil
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"log"
@@ -34,7 +35,7 @@ func FileExists(path string) (bool, error) {
 	if err == nil {
 		return true, nil
 	}
-	if errors.Is(err, os.ErrNotExist) {
+	if stderrors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
 	return false, errors.Wrapf(err, "failed to FileExists(%q)", path)

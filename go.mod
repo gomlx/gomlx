@@ -10,7 +10,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/erkkah/margaid v0.3.0
 	github.com/gomlx/bsplines v0.2.0
-	github.com/gomlx/go-xla v0.1.5-0.20260107152240-2890a4924d88
+	github.com/gomlx/go-xla v0.1.5-0.20260216131338-de76a357de93
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.1

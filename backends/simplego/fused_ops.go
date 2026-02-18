@@ -205,7 +205,7 @@ func (f *Function) FusedDense(x, weight, bias backends.Value, activation backend
 	outShape := shapes.Make(xNode.shape.DType, outDims...)
 
 	// Build DotGeneral sub-node for the matmul: contract x's last axis with weight's first.
-	dotResult, err := f.DotGeneral(xNode, []int{xNode.shape.Rank() - 1}, nil, wNode, []int{0}, nil)
+	dotResult, err := f.DotGeneral(xNode, []int{xNode.shape.Rank() - 1}, nil, wNode, []int{0}, nil, backends.DotGeneralConfig{})
 	if err != nil {
 		return nil, errors.WithMessagef(err, "FusedDense: DotGeneral")
 	}
@@ -389,7 +389,7 @@ func (f *Function) FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV back
 
 	// Build DotGeneral sub-node for the matmul: x @ wQKV.
 	// This delegates to the optimized matmul infrastructure (blocked, packgemm, highway, etc.).
-	dotResult, dotErr := f.DotGeneral(xNode, []int{xNode.shape.Rank() - 1}, nil, wNode, []int{0}, nil)
+	dotResult, dotErr := f.DotGeneral(xNode, []int{xNode.shape.Rank() - 1}, nil, wNode, []int{0}, nil, backends.DotGeneralConfig{})
 	if dotErr != nil {
 		return nil, nil, nil, errors.WithMessagef(dotErr, "FusedAttentionQKVProjection: DotGeneral")
 	}

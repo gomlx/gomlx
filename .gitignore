@@ -19,3 +19,8 @@ go.work.sum
 # Jupyter tmp files
 .ipynb_checkpoints
 Untitled.ipynb
+
+# Agent context files (root only)
+/GEMINI.md
+/CLAUDE.md
+/conductor

@@ -52,7 +52,6 @@ const (
 	NodeTypeConvertDType
 	NodeTypeCos
 	NodeTypeDiv
-	NodeTypeDot
 	NodeTypeDotGeneral
 	NodeTypeDynamicSlice
 	NodeTypeDynamicUpdateSlice
@@ -1322,61 +1321,6 @@ func Div(lhs *Node, rhs *Node) (
 	return
 }
 
-// nodeInputsDot holds the inputs used for the call to backends.Dot.
-type nodeInputsDot struct {
-	lhs *Node
-	rhs *Node
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsDot) Type() NodeType {
-	return NodeTypeDot
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsDot) String() string {
-	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
-		ni.Type(),
-		ni.lhs.Id(),
-		ni.rhs.Id(),
-	)
-}
-
-// Dot returns the "dot product" operation.
-// The exact semantics of this operation depend on the ranks of the operands:
-// | Input | Output | Semantics |
-// | vector [n] dot vector [n] | scalar | vector dot product |
-// | matrix [m x k] dot vector [k] | vector [m]	matrix-vector multiplication |
-// | matrix [m x k] dot matrix [k x n] | matrix [m x n] | matrix-matrix multiplication |
-// The operation performs sum of products over the second dimension of x0 (or the first if it has rank 1) and
-// the first dimension of x1.
-// These are the "contracted" dimensions.
-// The contracted dimensions of x0 and x1 must be of the same size.
-// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications, or
-// matrix/matrix multiplications.
-func Dot(lhs *Node, rhs *Node) (
-	node *Node) {
-	inputNodes := []*Node{lhs, rhs}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsDot{
-		lhs: lhs,
-		rhs: rhs,
-	}
-	result, err := g.currentFunc.backendFunc.Dot(lhs.outputOps[0], rhs.outputOps[0])
-	if err != nil {
-		panic(err)
-	}
-	node = &Node{
-		outputOps:    []backends.Value{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-	}
-	g.registerNode(node)
-	return
-}
-
 // nodeInputsDotGeneral holds the inputs used for the call to backends.DotGeneral.
 type nodeInputsDotGeneral struct {
 	lhs                *Node
@@ -1385,6 +1329,7 @@ type nodeInputsDotGeneral struct {
 	rhs                *Node
 	rhsContractingAxes []int
 	rhsBatchAxes       []int
+	config             backends.DotGeneralConfig
 }
 
 // Type implements the interface NodeInputs.
@@ -1394,7 +1339,7 @@ func (ni *nodeInputsDotGeneral) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsDotGeneral) String() string {
-	return fmt.Sprintf("%s(lhs=[#%d], lhsContractingAxes=%v, lhsBatchAxes=%v, rhs=[#%d], rhsContractingAxes=%v, rhsBatchAxes=%v)",
+	return fmt.Sprintf("%s(lhs=[#%d], lhsContractingAxes=%v, lhsBatchAxes=%v, rhs=[#%d], rhsContractingAxes=%v, rhsBatchAxes=%v, config=%+v)",
 		ni.Type(),
 		ni.lhs.Id(),
 		ni.lhsContractingAxes,
@@ -1402,11 +1347,12 @@ func (ni *nodeInputsDotGeneral) String() string {
 		ni.rhs.Id(),
 		ni.rhsContractingAxes,
 		ni.rhsBatchAxes,
+		ni.config,
 	)
 }
 
 // backendDotGeneral is a Graph wrapper for the backend.Builder.DotGeneral method.
-func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int) (
+func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int, config backends.DotGeneralConfig) (
 	node *Node) {
 	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1417,8 +1363,9 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 		rhs:                rhs,
 		rhsContractingAxes: slices.Clone(rhsContractingAxes),
 		rhsBatchAxes:       slices.Clone(rhsBatchAxes),
+		config:             config,
 	}
-	result, err := g.currentFunc.backendFunc.DotGeneral(lhs.outputOps[0], inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.outputOps[0], inputs.rhsContractingAxes, inputs.rhsBatchAxes)
+	result, err := g.currentFunc.backendFunc.DotGeneral(lhs.outputOps[0], inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.outputOps[0], inputs.rhsContractingAxes, inputs.rhsBatchAxes, inputs.config)
 	if err != nil {
 		panic(err)
 	}
