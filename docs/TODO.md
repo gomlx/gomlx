@@ -1,52 +1,296 @@
-# TODO List
+  # GoMLX Roadmap & Ownership
 
-It's a large list (many in the middle of the code) ... while GoMLX has a thin vertical implementation from the ground 
-up of a full ML framework, it has very little breadth yet (my guess is < 1% of something like Jax, TensorFlow or
-Pytorch). But hopefully the 1% of the functionality may cover a large percentage of the use cases.
+  This document tracks feature development, ownership, and priorities.
 
-Split by functionality, the most "desirable" TODOs are:
+  ---
 
-## Modeling
+  ## Status Legend
 
-* CNNs: add SeparableConv2D. The goal would be to have an exact ResNet50 working.
-* GNN Layer: tbd., but is one of the recent hotness, it would be nice to have a GNN layer/scheme available as well.
-* Importing models from TensorFlow/Jax/Pytorch/Hugging Face
-  * Both: (A) As a black-box for inference only; (B) for further fine-tuning.
-    * But if only the weights, and the model is translated by hand would already be good.
-  * Have a few of the standard models available: ResNet50 (older but a good reference), ViT, BERT, Chinchilla.
-  * Have a clear story importing models from Hugging Face (at least of one type, like TF or Jax, since they
-    also use XLA).
-* Computation Graph extensions and manipulation tools: there are good reasons for someone to want to 
-  change the Graph (splitting the graph for batch processing or distribution) or create arbitrary 
-  extensions to it (custom operations in Go or C/C++) and be able to differentiate through those. 
-  This is something that needs some design and thought.
-* Detecting first occurrence of NaNs (and Inf): have a mode -- likely slower -- where these are automatically checked
-  for and immediately prints a stack trace when they happen.
+  - `idea` – not scoped yet
+  - `ready` – clearly defined, free to claim
+  - `in_progress` – actively worked on
+  - `blocked` – waiting on dependency
+  - `done` – completed
 
-## Infrastructure
+  ## Priority Legend
 
-* Saving/Loading models:
-  * Exporting to TensorFLow's "SavedModel" format -- so models can leverage all the production tools
-    from TensorFlow -- using same mechanism as Jax is using, by converting code to StableHLO intermediary
-    language -- that conversion is done already.
-* Inference-only version: for now to run predictions one has to also import the whole engine and XLA machinery. 
-  * Ahead-Of-Time (AOT) compilation of a computation graph to a library that doesn't require linking 
-    the whole XLA. This can be the "official" save for inference method. Notice compiled graph will
-    work only on the hardware it was compiled for. See [discussion in OpenXLA](https://groups.google.com/a/openxla.org/g/openxla-discuss/c/0RXscLOHWtc).
-* Distributed training: at least synchronous mirrored strategy (data parallelism but no model parallelism yet) 
-  * Multi-device (GPU) set up.
-  * Multi-tenancy (multiple hosts) set up.
+  - `P0` – critical / ecosystem enabling
+  - `P1` – important feature expansion
+  - `P2` – nice to have / exploratory
 
-## Lower level
-* Add support for multiple devices (e.g: multiple GPUs). In principle, it's already there (DeviceNum is supported)
-  but it hasn't been tested. But `train.Trainer` and `context.Exec` will need special casing.
-  * Implement a DistributedTrainer that will automatically distribute across multiple devices. Data 
-    parallelism at first, not model parallelism yet.
-* New backends:
-  * WebAssembly compatible backend (WebGL?), so models can be run (and even trained) in a browser.
-  * A faster/lighter CPU backend: maybe ggml?
+  ---
 
-## API Improvements
+  # Modeling
 
-Nothing specific here ... but while some thought was put into the API, it certainly can be improved.
-And since these are earlier days in the library, we expect things to change some.
+  ---
+
+  ## [MODEL-1] HuggingFace Transformer Import (safetensors direct)
+
+  - **DRI:** _unassigned_
+  - **Status:** `ready`
+  - **Priority:** `P0`
+  - **Area:** `pkg/ml/model/transformer`
+  - **Depends on:** GRAPH-1
+  - **Description:** Import generic transformer architectures directly from safetensors without ONNX.
+  - **Definition of Done:**
+    - Load at least 2 transformer families (e.g., GPT-style, BERT-style)
+    - Weights load successfully from safetensors
+    - Minimal documentation of supported architecture subset
+
+  ---
+
+  ## [MODEL-2] Text Generation Example (HF Transformer + Prompt)
+
+  - **DRI:** _unassigned_
+  - **Status:** `ready`
+  - **Priority:** `P1`
+  - **Depends on:** MODEL-1
+  - **Description:** Provide example generator using imported transformer model.
+  - **Definition of Done:**
+    - `examples/transformer_generate`
+    - Prompt → generated output
+    - Reproducible with seed
+
+  ---
+
+  ## [MODEL-3] ONNX Import Coverage Expansion
+
+  - **DRI:** _unassigned_
+  - **Status:** `ready`
+  - **Priority:** `P1`
+  - **Repo:** ONNX-GoMLX
+  - **Description:** Improve op coverage for ONNX graph import.
+  - **Definition of Done:**
+    - Continous: there will always be another model to import, untill all ops are covered.
+    - Per contribution:
+      - Tests for ops; Example when a new model gets to work.
+    
+  ---
+
+  ## [MODEL-4] New Layers / Optimizers / Losses
+
+  - **DRI:** _unassigned_
+  - **Status:** idea
+  - **Priority:** P1
+  - **Description:** Add recent ML layers, optimizers, regularizers.
+  - **Definition of Done:**
+    - Continuous: there will always be new papers.
+    - For each new contribution:
+      - Tests and benchmark example. Bonus if a notebook.
+
+  ---
+
+  ## [MODEL-5] GNN Layer Support
+
+  - **DRI:** _unassigned_
+  - **Status:** idea
+  - **Priority:** P2
+  - **Description:** Add Graph Neural Network layer abstraction.
+  - **Definition of Done:**
+    - Basic message-passing GNN
+    - Example on sample dataset
+
+  ---
+
+  ## [MODEL-6] Gradient Checkpointing
+
+  - **DRI:** _unassigned_
+  - **Status:** idea
+  - **Priority:** P2
+  - **Description:** Reduce memory usage during training.
+  - **Definition of Done:**
+    - Memory usage reduced in benchmark
+    - Same convergence behavior
+
+  ---
+
+  ## [MODEL-7] Jacobian Support (non-scalar gradients)
+
+  - **DRI:** _unassigned_
+  - **Status:** ready
+  - **Priority:** P2
+  - **Description:** Support gradients wrt vector/tensor outputs.
+  - **Definition of Done:**
+    - API to compute Jacobian
+    - Unit tests with analytic comparison
+
+  ---
+
+  # Graph
+
+  ---
+
+  ## [GRAPH-1] Dynamic Shapes (Input-Dependent, Fixed Rank)
+
+  - **DRI:** _unassigned_
+  - **Status:** in_progress
+  - **Priority:** P0
+  - **Target:** v0.28.0
+  - **Links:** PR #306
+  - **Definition of Done:**
+    - Input-dependent shapes supported
+    - Full shape inference test coverage
+
+  ---
+
+  ## [GRAPH-2] Data-Dependent Shapes (Fixed Rank)
+
+  - **DRI:** _unassigned_
+  - **Status:** idea
+  - **Priority:** P1
+  - **Depends on:** GRAPH-1
+  - **Definition of Done:**
+    - Runtime shape propagation works
+    - Fallback for unsupported cases
+
+  ---
+
+  ## [GRAPH-3] Symbolic Shapes (Named Axes)
+
+  - **DRI:** _unassigned_
+  - **Status:** ready
+  - **Priority:** P0
+  - **Target:** v0.28.0
+  - **Depends on:** GRAPH-1
+  - **Definition of Done:**
+    - Named axis abstraction
+    - Symbolic inference working in transformer example
+
+  ---
+
+  # Backends
+
+  ---
+
+  ## [BACKEND-2] SimpleGo Backend – SIMD Support (Go 1.26+)
+
+  - **DRI:** _unassigned_
+  - **Status:** `in-progress`
+  - **Priority:** `P0`
+  - **Target:** v0.28.0
+  - **Depends on:** Go 1.26, go-highway
+  - **Definition of Done:**
+    - Supporting AVX-2, AVX-512 and Arm64 NEON (with C/Assembly tranliteration).
+    - Benchmark comparison
+
+  ---
+
+  ## [BACKEND-3] ONNX Export API
+
+  - **DRI:** _unassigned_
+  - **Status:** idea
+  - **Priority:** P1
+  - **Description:** Save GoMLX graph as ONNX model.
+  - **Definition of Done:**
+    - `Save()` API for the ONNX backend.
+    - Model validated with ONNX runtime
+
+  ---
+
+  ## [BACKEND-4] WebGL/WebNN WASM Backend
+
+  - **DRI:** _unassigned_
+  - **Status:** idea
+  - **Priority:** P2
+  - **Definition of Done:**
+    - Proof-of-concept inference in browser
+
+  ---
+
+  ## [BACKEND-5] llama.cpp Backend (purego / yzma)
+
+  - **DRI:** _unassigned_
+  - **Status:** idea
+  - **Priority:** P2
+  - **Link:** [https://github.com/hybridgroup/yzma/](https://github.com/hybridgroup/yzma/)
+  - **Definition of Done:**
+    - Load llama.cpp model
+    - Inference parity with reference
+
+  ---
+
+  # Infrastructure
+
+  ---
+
+  ## [INFRA-1] Inference-Only Distribution Mode
+
+  - **DRI:** _unassigned_
+  - **Status:** idea
+  - **Priority:** P1
+  - **Definition of Done:**
+    - Backend-only load mode
+    - Load pre-exported model
+    - Minimal example
+
+  ---
+
+  ## [INFRA-2] Distributed Training Validation
+
+  - **DRI:** _unassigned_
+  - **Status:** blocked
+  - **Priority:** P0
+  - **Definition of Done:**
+    - Multi-node test example
+    - Stability verification
+    - Documentation
+
+  ---
+
+  # API Improvements
+
+  ---
+
+  ## [API-1] Replace Context with Plain Go Struct + Annotations
+
+  - **DRI:** _unassigned_
+  - **Status:** idea
+  - **Priority:** P1
+  - **Description:** Replace Context object with struct-based annotated config.
+  - **Definition of Done:**
+    - RFC document
+    - Reflection-based prototype
+    - Migration example
+
+  ---
+
+  # Maintenance
+
+  ---
+
+  ## [MAINT-1] Code Cleanup & Refactoring Pass
+
+  - **DRI:** _unassigned_
+  - **Status:** ready
+  - **Priority:** P2
+  - **Definition of Done:**
+    - Remove deprecated APIs
+    - Improve test coverage
+
+  ---
+
+  # Priority Overview
+
+  ## P0 (Critical)
+  - MODEL-1
+  - MODEL-2
+  - GRAPH-1
+  - GRAPH-3
+  - INFRA-2
+
+  ## P1 (Important)
+  - MODEL-3
+  - MODEL-4
+  - MODEL-6
+  - MODEL-7
+  - BACKEND-2
+  - BACKEND-3
+  - BACKEND-5
+  - INFRA-1
+  - API-1
+
+  ## P2 (Exploratory)
+  - MODEL-5
+  - BACKEND-4
+  - BACKEND-6
+  - MAINT-1

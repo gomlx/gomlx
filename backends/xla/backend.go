@@ -11,10 +11,10 @@ import (
 	"github.com/gomlx/go-xla/pkg/pjrt"
 	xlabfloat16 "github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -27,7 +27,10 @@ type Backend struct {
 	hasSharedBuffers bool
 	capabilities     backends.Capabilities
 	numDevices       int
-	DotGeneralConfig
+
+	// DotGeneralUseTF32 controls whether to use TF32 for DotGeneral operations that are using float32.
+	// (it can be faster in modern GPUs, and it's enabled by default)
+	DotGeneralUseTF32 bool
 }
 
 // Compile-time check:

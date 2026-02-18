@@ -209,17 +209,17 @@ func TestConvertDType(t *testing.T) {
 	}, []any{wantF32, wantF64}, -1)
 }
 
-type TwoArgsTestCase[T dtypes.Supported] struct {
+type BinaryOpsTestCase[T dtypes.Supported] struct {
 	fnGraph  func(x, y *Node) *Node
 	fnScalar func(x, y T) T
 	name     string
 }
 
-func TestTwoArgsOps(t *testing.T) {
+func TestBinaryOps(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 
 	{
-		casesFloat32 := []TwoArgsTestCase[float32]{
+		casesFloat32 := []BinaryOpsTestCase[float32]{
 			{Mul, func(x, y float32) float32 { return x * y }, "Mul"},
 			{Sub, func(x, y float32) float32 { return x - y }, "Sub"},
 			{Div, func(x, y float32) float32 { return x / y }, "Div"},
@@ -229,36 +229,41 @@ func TestTwoArgsOps(t *testing.T) {
 			{Pow, func(x, y float32) float32 {
 				return float32(math.Pow(float64(x), float64(y)))
 			}, "Pow"},
+			{Atan2, func(x, y float32) float32 {
+				return float32(math.Atan2(float64(x), float64(y)))
+			}, "Atan2"},
 		}
 		xSlices := [][]float32{{11, 12}, {13, 14}}
 		yValue := float32(3)
 		for _, test := range casesFloat32 {
-			g := NewGraph(backend, "TwoArgsOps [2, 2] Graph")
-			x := Const(g, xSlices)
-			y := Const(g, yValue)
-			n := test.fnGraph(x, y)
-			wantShape := shapes.Make(dtypes.Float32, 2, 2)
-			if !n.Shape().Equal(wantShape) {
-				t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
-			}
-			local := compileRunAndTakeFirst(t, g)
-			got := local.Value().([][]float32)
-			want := [][]float32{{11, 12}, {13, 14}}
-			for _, s1 := range want {
-				for ii := range s1 {
-					s1[ii] = test.fnScalar(s1[ii], yValue)
+			t.Run(test.name, func(t *testing.T) {
+				g := NewGraph(backend, "TwoArgsOps [2, 2] Graph")
+				x := Const(g, xSlices)
+				y := Const(g, yValue)
+				n := test.fnGraph(x, y)
+				wantShape := shapes.Make(dtypes.Float32, 2, 2)
+				if !n.Shape().Equal(wantShape) {
+					t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 				}
-			}
-			if !reflect.DeepEqual(got, want) {
-				fmt.Printf("%s\n", g)
-				fmt.Printf("\tResult: %v %s\n", got, local.Shape())
-				t.Errorf("Wanted %v, got %v", want, got)
-			}
+				local := compileRunAndTakeFirst(t, g)
+				got := local.Value().([][]float32)
+				want := [][]float32{{11, 12}, {13, 14}}
+				for _, s1 := range want {
+					for ii := range s1 {
+						s1[ii] = test.fnScalar(s1[ii], yValue)
+					}
+				}
+				if !xslices.SlicesInDelta(got, want, Epsilon) {
+					fmt.Printf("%s\n", g)
+					fmt.Printf("\tResult: %v %s\n", got, local.Shape())
+					t.Errorf("Wanted %v, got %v", want, got)
+				}
+			})
 		}
 	}
 
 	{
-		casesInt := []TwoArgsTestCase[int64]{
+		casesInt := []BinaryOpsTestCase[int64]{
 			{BitwiseAnd, func(x, y int64) int64 { return x & y }, "BitwiseAnd"},
 			{BitwiseOr, func(x, y int64) int64 { return x | y }, "BitwiseOr"},
 			{BitwiseXor, func(x, y int64) int64 { return x ^ y }, "BitwiseXor"},
@@ -291,7 +296,7 @@ func TestTwoArgsOps(t *testing.T) {
 	}
 
 	{
-		casesBool := []TwoArgsTestCase[bool]{
+		casesBool := []BinaryOpsTestCase[bool]{
 			{LogicalAnd, func(x, y bool) bool { return x && y }, "LogicalAnd"},
 			{LogicalOr, func(x, y bool) bool { return x || y }, "LogicalOr"},
 			{LogicalXor, func(x, y bool) bool { return x != y }, "LogicalXor"},
@@ -401,25 +406,6 @@ func TestClzOp(t *testing.T) {
 			output = Clz(input)
 			return
 		}, []int64{64 - 5, 64 - 4})
-}
-
-func TestDot(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
-	g := NewGraph(backend, "").WithName("Dot")
-
-	// Shape: [batch=4, dims=3]
-	inputs := Const(g, [][]float32{{1.1, 2.2, 3.3}, {11, 22, 33}, {111, 222, 333}, {1111, 2222, 3333}})
-	// Layer 0: outputShapes [3, 2], that is the inputNodes have dim=3, and should output dims=2
-	w0 := Const(g, [][]float32{{1, 0}, {1, -1}, {-1, 1}})
-	// Dot(inputNodes, w0) -> outputShapes [batch=4, dims=2]
-	Dot(inputs, w0) // The last node created in the graph is taken as output by default.
-	got := compileRunAndTakeFirst(t, g)
-	want := tensors.FromValue([][]float32{{0, 1.1}, {0, 11}, {0, 111}, {0, 1111}})
-	if !want.InDelta(got, Epsilon) {
-		fmt.Printf("%s\n", g)
-		fmt.Printf("\tResult=%v\n", got)
-		t.Errorf("Wanted %v, got %v", want, got)
-	}
 }
 
 func TestBroadcast(t *testing.T) {

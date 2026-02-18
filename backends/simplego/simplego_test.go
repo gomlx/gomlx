@@ -44,6 +44,74 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// buildGraph compiles a backend graph from the given input shapes and build function,
+// and creates input buffers from the provided data. Used by both test and benchmark helpers.
+func buildGraph(inputShapes []shapes.Shape, inputDatas []any,
+	buildFn func(f backends.Function, params []backends.Value) (backends.Value, error),
+) (backends.Executable, []backends.Buffer, error) {
+	builder := backend.Builder("test")
+	mainFn := builder.Main()
+
+	params := make([]backends.Value, len(inputShapes))
+	for i, s := range inputShapes {
+		p, err := mainFn.Parameter(fmt.Sprintf("x%d", i), s, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		params[i] = p
+	}
+
+	out, err := buildFn(mainFn, params)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := mainFn.Return([]backends.Value{out}, nil); err != nil {
+		return nil, nil, err
+	}
+
+	exec, err := builder.Compile()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	inputs := make([]backends.Buffer, len(inputDatas))
+	for i, data := range inputDatas {
+		buf, err := backend.BufferFromFlatData(0, data, inputShapes[i])
+		if err != nil {
+			return nil, nil, err
+		}
+		inputs[i] = buf
+	}
+
+	return exec, inputs, nil
+}
+
+// testBackend builds, compiles, and executes a single-input, single-output backend graph.
+func testBackend(t *testing.T, inputShape shapes.Shape, inputData any,
+	buildFn func(f backends.Function, param backends.Value) (backends.Value, error),
+) *Buffer {
+	t.Helper()
+	return testBackendMultiInput(t, []shapes.Shape{inputShape}, []any{inputData},
+		func(f backends.Function, params []backends.Value) (backends.Value, error) {
+			return buildFn(f, params[0])
+		},
+	)
+}
+
+// testBackendMultiInput builds, compiles, and executes a multi-input, single-output backend graph.
+func testBackendMultiInput(t *testing.T, inputShapes []shapes.Shape, inputDatas []any,
+	buildFn func(f backends.Function, params []backends.Value) (backends.Value, error),
+) *Buffer {
+	t.Helper()
+	exec, inputBufs, err := buildGraph(inputShapes, inputDatas, buildFn)
+	require.NoError(t, err)
+	outputs, err := exec.Execute(inputBufs, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	return outputs[0].(*Buffer)
+}
+
 func TestDuplicatedOutputNodes(t *testing.T) {
 	// Create a builder and a node
 	builder := backend.Builder("test_duplicated_outputs")

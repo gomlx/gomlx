@@ -9,15 +9,15 @@ package layers
 
 import (
 	"cmp"
-	"fmt"
 
-	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/pkg/ml/nn"
 	"github.com/gomlx/gomlx/pkg/ml/train"
+	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 const (
@@ -93,42 +93,15 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 		regularizer(ctx, g, weightsVar)
 	}
 	weights := weightsVar.ValueGraph(g)
-	var output *Node
-	if inputRank <= 2 && len(outputDimensions) == 1 {
-		// Vanilla version: input = [batch_size, feature_size], output = [batch_size, output_dim].
-		output = Dot(input, weights)
-	} else {
-		// Einsum all batch dimensions:
-		axis := 'a'
-		var equationPrefix string
-		for ii := 0; ii < inputRank-1; ii++ {
-			equationPrefix += string(axis)
-			axis += 1
-		}
-		featureAxis := axis
-		axis += 1
-		var outputSuffix string
-		for range outputDimensions {
-			outputSuffix += string(axis)
-			axis += 1
-		}
 
-		equationPrefix = fmt.Sprintf("%s%c,%c%s->%s%s", equationPrefix, featureAxis, featureAxis, outputSuffix, equationPrefix, outputSuffix)
-		output = Einsum(equationPrefix, input, weights)
-	}
-
-	// Add bias: it takes no regularizer by default.
+	// Dispatch to nn.Dense which handles arbitrary rank, multi-dimensional
+	// output weights, and fused ops.
+	var biasNode *Node
 	if useBias {
 		biasVar := ctx.VariableWithShape("biases", shapes.Make(inputShape.DType, outputDimensions...))
-		bias := biasVar.ValueGraph(g)
-		expandedBiasShape := output.Shape().Clone()
-		for ii := range expandedBiasShape.Dimensions[:output.Rank()-len(outputDimensions)] {
-			expandedBiasShape.Dimensions[ii] = 1
-		}
-		expandedBias := ReshapeWithShape(bias, expandedBiasShape)
-		output = Add(output, expandedBias)
+		biasNode = biasVar.ValueGraph(g)
 	}
-	return output
+	return nn.Dense(input, weights, biasNode)
 }
 
 // Embedding creates an embedding table with vocabSize elements (typically a vocabulary size)
@@ -351,12 +324,18 @@ func DropoutStatic(ctx *context.Context, input *Node, dropoutRate float64) *Node
 	return Dropout(ctx, input, Scalar(g, dtypes.Float32, dropoutRate))
 }
 
+// IsDropoutActive returns true if dropout is active (i.e. if it's training).
+// If using DropoutStatic, also check that dropoutRate > 0.
+func IsDropoutActive(ctx *context.Context, g *Graph) bool {
+	return ctx != nil && ctx.IsTraining(g)
+}
+
 // DropoutNormalize randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
 // it's a no op (it returns input). If normalize is set, it scales the output by 1/(1-dropoutRate)
 // to preserve the mean of the input values.
 func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, normalize bool) *Node {
 	g := input.Graph()
-	if !ctx.IsTraining(g) {
+	if !IsDropoutActive(ctx, g) {
 		return input
 	}
 

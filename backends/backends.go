@@ -21,10 +21,11 @@
 package backends
 
 import (
+	stderrors "errors"
 	"os"
 	"strings"
 
-	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
@@ -67,6 +68,19 @@ type Backend interface {
 	// Tensors stored on a backend may hold a reference to a finalized backend, and when being garbage collected,
 	// check whether it is finalized before requesting the backend to finalize its buffers.
 	IsFinalized() bool
+}
+
+// ErrNotImplemented indicates an op is not implemented (typically a fused op, but normal ops may return this
+// as well) for the given configuration (e.g. unsupported dtype or backend). Backends should wrap this
+// error so InternalFusedOpCaller can distinguish "not supported" from genuine
+// bugs and fall back to the decomposed implementation.
+//
+// It doesn't contain a stack, attach a stack to with with errors.Wrapf(ErrNotImplemented, "...") when using it.
+var ErrNotImplemented = stderrors.New("op not implemented")
+
+// IsNotImplemented returns true if the error is a ErrNotImplemented.
+func IsNotImplemented(err error) bool {
+	return stderrors.Is(err, ErrNotImplemented)
 }
 
 // Constructor takes a config string (optionally empty) and returns a Backend.

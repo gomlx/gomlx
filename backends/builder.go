@@ -3,9 +3,6 @@
 package backends
 
 import (
-	"slices"
-
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
@@ -84,83 +81,6 @@ type Builder interface {
 	// The Main function must have had Return() called before compilation.
 	Compile() (Executable, error)
 }
-
-// ConvolveAxesConfig defines the interpretation of the input/kernel/output tensor axes.
-// There must be the same number of spatial dimensions (axes) for each of the 3 tensors.
-// Input and output have batch and channel axes. Kernel has inputChannel and outputChannel axes.
-//
-// See Builder.ConvGeneral.
-type ConvolveAxesConfig struct {
-	InputBatch, InputChannels int
-	InputSpatial              []int
-
-	KernelInputChannels, KernelOutputChannels int
-	KernelSpatial                             []int
-
-	OutputBatch, OutputChannels int
-	OutputSpatial               []int
-}
-
-// Clone returns a deep copy of the structure.
-func (c ConvolveAxesConfig) Clone() ConvolveAxesConfig {
-	var c2 ConvolveAxesConfig
-	c2 = c
-	c2.InputSpatial = slices.Clone(c.InputSpatial)
-	c2.KernelSpatial = slices.Clone(c.KernelSpatial)
-	c2.OutputSpatial = slices.Clone(c.OutputSpatial)
-	return c2
-}
-
-// PadAxis defines the amount of padding preceding one axis (Start), at the end of axis (End)
-// or in between the inputs (Interior).
-// This is used as a parameter for the Pad operation.
-type PadAxis struct {
-	Start, End, Interior int
-}
-
-type FFTType int
-
-const (
-	// FFTForward - complex in, complex out.
-	FFTForward FFTType = iota
-
-	// FFTInverse - complex in, complex out.
-	FFTInverse
-
-	// FFTForwardReal - real in, fft_length / 2 + 1 complex out.
-	FFTForwardReal
-
-	// FFTInverseReal - fft_length / 2 + 1 complex in.
-	FFTInverseReal
-)
-
-//go:generate go tool enumer -type FFTType -trimprefix=FFT -output=gen_ffttype_enumer.go builder.go
-
-// ReduceOpType select among the basic types of reduction supported.
-type ReduceOpType int
-
-const (
-	// ReduceOpUndefined is an undefined value.
-	ReduceOpUndefined ReduceOpType = iota
-
-	// ReduceOpSum reduces by summing all elements being reduced.
-	ReduceOpSum
-
-	// ReduceOpProduct reduces by multiplying all elements being reduced.
-	ReduceOpProduct
-
-	// ReduceOpMax reduces by taking the maximum value.
-	ReduceOpMax
-
-	// ReduceOpMin reduces by taking the minimum value.
-	ReduceOpMin
-)
-
-// RNGStateShape is the default shape for the random number generator state.
-// It dependents on the algorithm, but for now we are using Philox.
-var RNGStateShape = shapes.Make(dtypes.Uint64, 3) //nolint:mnd // This is a constant.
-
-//go:generate go tool enumer -type ReduceOpType -trimprefix=ReduceOp -output=gen_reduceoptype_enumer.go builder.go
 
 // Mesh represents a mesh of devices, passed to the Builder.DistributedAutoSharding method.
 //

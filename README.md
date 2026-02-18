@@ -7,7 +7,7 @@
 [![Linux/arm64 Tests](https://github.com/gomlx/gomlx/actions/workflows/linux_arm64_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/linux_arm64_tests.yaml)
 [![Darwin/arm64 Tests](https://github.com/gomlx/gomlx/actions/workflows/darwin_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/darwin_tests.yaml)
 [![Windows/amd64 Tests](https://github.com/gomlx/gomlx/actions/workflows/windows_amd64_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/windows_amd64_tests.yaml)
-![Coverage](https://img.shields.io/badge/Coverage-71.9%25-yellow)
+![Coverage](https://img.shields.io/badge/Coverage-71.4%25-yellow)
 [![Slack](https://img.shields.io/badge/Slack-GoMLX-purple.svg?logo=slack)](https://app.slack.com/client/T029RQSE6/C08TX33BX6U)
 [![Sponsor gomlx](https://img.shields.io/badge/Sponsor-gomlx-white?logo=github&style=flat-square)](https://github.com/sponsors/gomlx)
 
@@ -253,6 +253,9 @@ without linking GoMLX -- it will save a little executable size.
     `go` (_SimpleGo_) backends. If you add `-tags=noxla` to the compiler it won't include the XLA backend.
   - `import _ "github.com/gomlx/gomlx/backends/simplego"` to include only `go` (no C++ dependencies)
   - `import _ "github.com/gomlx/gomlx/backends/xla"` to import only XLA.
+- **Where are AI context files for (Gemini/Claude Code/Conductor, etc.)**
+  - To prevent cluttering the root folder of the project, they are all moved to the `.agents/` directory and also included in the `.gitignore`. This way
+    one can simply symbolic link whichever AI configuration file they use to the root directory of their local copy to use them.
 
 ## 🤝 Collaborating
 

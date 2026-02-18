@@ -20,8 +20,6 @@ import (
 	"strings"
 
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
-	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/internal/must"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -35,6 +33,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
@@ -466,7 +465,7 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 			lossName = context.GetParamOr(ctx, "diffusion_loss", "mse")
 		}
 		ctx.SetParam(losses.ParamLoss, lossName) // Needed for old models that used "diffusion_loss".
-		lossFn := must.M1(losses.LossFromContext(ctx))
+		lossFn := check1(losses.LossFromContext(ctx))
 		noisesLoss := lossFn([]*Node{noises}, []*Node{predictedNoises})
 		if !noisesLoss.IsScalar() {
 			noisesLoss = ReduceAllMean(noisesLoss)

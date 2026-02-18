@@ -26,6 +26,7 @@ const (
 	OpTypeAbs
 	OpTypeAdd
 	OpTypeArgMinMax
+	OpTypeAtan2
 	OpTypeBitcast
 	OpTypeBitwiseAnd
 	OpTypeBitwiseNot
@@ -138,6 +139,17 @@ const (
 	// OpTypeBlockForDotGeneral pre-blocks a tensor for efficient DotGeneral execution.
 	// This is an internal optimization used by the simplego backend.
 	OpTypeBlockForDotGeneral
+
+	// Fused operations: high-level ops that backends may implement natively.
+	// If supported (declared in Capabilities.Operations), GoMLX uses the
+	// native implementation; otherwise it decomposes into primitives.
+
+	OpTypeFusedSoftmax
+	OpTypeFusedLayerNorm
+	OpTypeFusedGelu
+	OpTypeFusedDense
+	OpTypeFusedScaledDotProductAttention
+	OpTypeFusedAttentionQKVProjection
 
 	// OpTypeLast should always be kept the last, it is used as a counter/marker for OpType.
 	OpTypeLast

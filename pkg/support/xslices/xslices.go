@@ -473,3 +473,13 @@ func MustSlicesInRelData[T float32 | float64](s0, s1 []T, relDelta float64) erro
 	}
 	return nil
 }
+
+// Gather returns a slice of T values by gathering the values indexed by indices.
+// Eg: Gather([]int{1,3}, []float32{10, 20, 30, 40, 50}) -> []float32{20, 40}
+func Gather[T any](values []T, indices []int) []T {
+	slice := make([]T, len(indices))
+	for ii := range slice {
+		slice[ii] = values[indices[ii]]
+	}
+	return slice
+}

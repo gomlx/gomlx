@@ -35,6 +35,13 @@ func (f Function) ArgMinMax(x backends.Value, axis int, outputDType dtypes.DType
 	return nil, f.baseErrFn(backends.OpTypeArgMinMax)
 }
 
+// Atan2 returns element-wise the arc tangent of y/x, using the signs of both arguments to determine
+// the correct quadrant of the result.
+// Standard broadcasting rules apply (see documentation).
+func (f Function) Atan2(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeAtan2)
+}
+
 // BitCount returns the number of bits that are set to one.
 // Also known as Population Count ("Popcnt") or Hamming Weight.
 func (f Function) BitCount(operand backends.Value) (backends.Value, error) {
@@ -174,22 +181,6 @@ func (f Function) Div(lhs backends.Value, rhs backends.Value) (backends.Value, e
 	return nil, f.baseErrFn(backends.OpTypeDiv)
 }
 
-// Dot returns the "dot product" operation.
-// The exact semantics of this operation depend on the ranks of the operands:
-// | Input | Output | Semantics |
-// | vector [n] dot vector [n] | scalar | vector dot product |
-// | matrix [m x k] dot vector [k] | vector [m]	matrix-vector multiplication |
-// | matrix [m x k] dot matrix [k x n] | matrix [m x n] | matrix-matrix multiplication |
-// The operation performs sum of products over the second dimension of x0 (or the first if it has rank 1) and
-// the first dimension of x1.
-// These are the "contracted" dimensions.
-// The contracted dimensions of x0 and x1 must be of the same size.
-// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications, or
-// matrix/matrix multiplications.
-func (f Function) Dot(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
-	return nil, f.baseErrFn(backends.OpTypeDot)
-}
-
 // DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
 // for a general vector product -- a generalized "Einsum". Each axis can be:
 //
@@ -203,7 +194,7 @@ func (f Function) Dot(lhs backends.Value, rhs backends.Value) (backends.Value, e
 // It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
-func (f Function) DotGeneral(lhs backends.Value, lhsContractingAxes []int, lhsBatchAxes []int, rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int) (backends.Value, error) {
+func (f Function) DotGeneral(lhs backends.Value, lhsContractingAxes []int, lhsBatchAxes []int, rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int, config backends.DotGeneralConfig) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeDotGeneral)
 }
 
@@ -275,6 +266,71 @@ func (f Function) FFT(operand backends.Value, fftType backends.FFTType, fftLengt
 // Floor returns the Op that represents the output of the corresponding operation.
 func (f Function) Floor(x backends.Value) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFloor)
+}
+
+// FusedDense performs fused matmul + optional bias + optional activation.
+//
+// It does y = activation(x @ W + bias). Where @ is a standard matmul,
+// it contracts x's last axis with weight's first axis.
+//
+// - x: [batch..., in_features], weight: [in_features, out_features...],
+// - bias: [out_features...] (nil-able).
+// - activation: applied after the matmul+bias; set to ActivationNone for no activation.
+func (f Function) FusedDense(x backends.Value, weight backends.Value, bias backends.Value, activation backends.ActivationType) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedDense)
+}
+
+// FusedGelu computes Gaussian Error Linear Unit activation.
+// If exact is true, the exact GELU (using erf) is computed;
+// otherwise the tanh approximation is used.
+func (f Function) FusedGelu(x backends.Value, exact bool) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedGelu)
+}
+
+// FusedLayerNorm applies layer normalization over specified axes.
+// gamma and beta can be nil if no learned scale/offset.
+// epsilon: numerical stability constant (typically 1e-5).
+func (f Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, gamma backends.Value, beta backends.Value) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedLayerNorm)
+}
+
+// FusedScaledDotProductAttention computes multi-head scaled dot-product attention.
+//
+// output = softmax(query @ key^T * scale + mask) @ value, computed per-head with GQA support.
+//
+// Inputs:
+//   - query, key, value: 4D tensors whose axis ordering is determined by axesLayout.
+//     For AxesLayoutBHSD: query [batch, numHeads, seqLen, headDim],
+//     key/value [batch, numKVHeads, kvLen, headDim].
+//     For AxesLayoutBSHD: query [batch, seqLen, numHeads, headDim],
+//     key/value [batch, kvLen, numKVHeads, headDim].
+//   - mask: [seqLen, kvLen] (seqLen is the query sequence length): optional (can be nil) mask
+//     that can be either boolean or additive (any dtype other than Bool). See also causal below.
+//     Boolean mask: true = attend, false = ignore.
+//     Float/additive mask: added to scores before softmax.
+//     Must be broadcastable to the score tensor shape.
+//
+// Parameters:
+//   - numHeads: number of query attention heads
+//   - numKVHeads: number of key/value attention heads (for GQA; numHeads must be divisible by numKVHeads)
+//   - axesLayout: determines the axis ordering of query/key/value tensors
+//   - scale: scaling factor applied to query @ key^T (typically 1/sqrt(headDim))
+//   - causal: if true, apply causal (lower-triangular) mask. Callers (e.g. attention.Core)
+//     treat causal and mask as mutually exclusive, folding causal into the mask before calling
+//     this method when both are needed. Backends may assume they won't both be set.
+//
+// Output: same shape as query.
+func (f Function) FusedScaledDotProductAttention(query backends.Value, key backends.Value, value backends.Value, mask backends.Value, numHeads int, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedScaledDotProductAttention)
+}
+
+// FusedSoftmax computes softmax along the specified axis.
+//
+// Note: unlike the generic softmax in GoMLX's graph package, the fused
+// softmax only accepts one axis. The axis must be non-negative (the caller
+// normalizes negative indices before calling).
+func (f Function) FusedSoftmax(x backends.Value, axis int) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedSoftmax)
 }
 
 // Gather is a powerful but cumbersome Gather operation offered by XLA.

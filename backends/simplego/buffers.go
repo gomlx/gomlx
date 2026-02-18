@@ -12,8 +12,8 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // Compile-time check:
@@ -73,6 +73,42 @@ type bufferPoolKey struct {
 	length int
 }
 
+// makeSliceForDType creates a slice of the appropriate type for the given dtype and length.
+// Fast paths for common dtypes avoid reflection overhead.
+func makeSliceForDType(dtype dtypes.DType, length int) any {
+	switch dtype {
+	case dtypes.Float32:
+		return make([]float32, length)
+	case dtypes.Float64:
+		return make([]float64, length)
+	case dtypes.Int32:
+		return make([]int32, length)
+	case dtypes.Int64:
+		return make([]int64, length)
+	case dtypes.Int8:
+		return make([]int8, length)
+	case dtypes.Int16:
+		return make([]int16, length)
+	case dtypes.Uint8:
+		return make([]uint8, length)
+	case dtypes.Uint16:
+		return make([]uint16, length)
+	case dtypes.Uint32:
+		return make([]uint32, length)
+	case dtypes.Uint64:
+		return make([]uint64, length)
+	case dtypes.Bool:
+		return make([]bool, length)
+	case dtypes.Complex64:
+		return make([]complex64, length)
+	case dtypes.Complex128:
+		return make([]complex128, length)
+	default:
+		// Fallback to reflection for less common types (BFloat16, Float16, etc.).
+		return reflect.MakeSlice(reflect.SliceOf(dtype.GoType()), length, length).Interface()
+	}
+}
+
 // getBufferPool for given dtype/length.
 func (b *Backend) getBufferPool(dtype dtypes.DType, length int) *sync.Pool {
 	key := bufferPoolKey{dtype: dtype, length: length}
@@ -81,7 +117,7 @@ func (b *Backend) getBufferPool(dtype dtypes.DType, length int) *sync.Pool {
 		poolInterface, _ = b.bufferPools.LoadOrStore(key, &sync.Pool{
 			New: func() any {
 				return &Buffer{
-					flat:  reflect.MakeSlice(reflect.SliceOf(dtype.GoType()), length, length).Interface(),
+					flat:  makeSliceForDType(dtype, length),
 					shape: shapes.Make(dtype, length),
 				}
 			},
@@ -142,8 +178,28 @@ func (b *Backend) putBuffer(buffer *Buffer) {
 }
 
 // copyFlat assumes both flat slices are of the same underlying type.
+// Fast paths for common dtypes avoid reflection overhead.
 func copyFlat(flatDst, flatSrc any) {
-	reflect.Copy(reflect.ValueOf(flatDst), reflect.ValueOf(flatSrc))
+	// Fast paths for common types to avoid reflection overhead.
+	switch dst := flatDst.(type) {
+	case []float32:
+		copy(dst, flatSrc.([]float32))
+	case []float64:
+		copy(dst, flatSrc.([]float64))
+	case []int32:
+		copy(dst, flatSrc.([]int32))
+	case []int64:
+		copy(dst, flatSrc.([]int64))
+	case []int:
+		copy(dst, flatSrc.([]int))
+	case []uint8:
+		copy(dst, flatSrc.([]uint8))
+	case []bool:
+		copy(dst, flatSrc.([]bool))
+	default:
+		// Fallback to reflection for less common types.
+		reflect.Copy(reflect.ValueOf(flatDst), reflect.ValueOf(flatSrc))
+	}
 }
 
 // mutableBytes returns the slice of the bytes used by the flat given -- it works with any of the supported data types for buffers.

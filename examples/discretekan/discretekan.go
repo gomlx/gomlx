@@ -10,11 +10,11 @@ import (
 	grob "github.com/MetalBlueberry/go-plotly/generated/v2.34.0/graph_objects"
 	ptypes "github.com/MetalBlueberry/go-plotly/pkg/types"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	gonbplotly "github.com/janpfeifer/gonb/gonbui/plotly"
+	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
@@ -84,5 +84,19 @@ func Plot(name string, univariateFunctions ...Univariate) {
 				Y:    ptypes.DataArray(outputs),
 			})
 	}
-	must.M(gonbplotly.DisplayFig(fig))
+	check(gonbplotly.DisplayFig(fig))
+}
+
+// check reports and exits on error.
+func check(err error) {
+	if err == nil {
+		return
+	}
+	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// check1 reports and exits on error. Otherwise returns the value passed.
+func check1[T any](v T, err error) T {
+	check(err)
+	return v
 }

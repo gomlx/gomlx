@@ -21,6 +21,21 @@ func (f *Function) Add(lhs, rhs backends.Value) (backends.Value, error) {
 	return f.newNode(value), nil
 }
 
+// Atan2 returns element-wise the arc tangent of y/x, using the signs of both arguments to determine
+// the correct quadrant of the result.
+// Standard broadcasting rules apply (see documentation).
+func (f *Function) Atan2(lhs, rhs backends.Value) (backends.Value, error) {
+	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeAtan2, lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
+	value, err := stablehlo.Atan2(lhsNode.value, rhsNode.value)
+	if err != nil {
+		return nil, err
+	}
+	return f.newNode(value), nil
+}
+
 // BitwiseAnd returns the element-wise bitwise AND operation.
 func (f *Function) BitwiseAnd(lhs, rhs backends.Value) (backends.Value, error) {
 	lhsNode, rhsNode, err := f.builder.broadcastForBinaryOps(backends.OpTypeBitwiseAnd, lhs, rhs)

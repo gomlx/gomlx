@@ -3,14 +3,14 @@
 package dogsvscats
 
 import (
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
-	"github.com/gomlx/gomlx/ui/commandline"
-	"k8s.io/klog/v2"
 	"os"
 	"sync"
 	"testing"
+
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/ml/layers"
+	"github.com/gomlx/gomlx/ui/commandline"
+	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
@@ -26,7 +26,7 @@ func init() {
 	klog.InitFlags(nil)
 	if _, found := os.LookupEnv(backends.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
-		must.M(os.Setenv(backends.ConfigEnvVar, "xla:cpu"))
+		check(os.Setenv(backends.ConfigEnvVar, "xla:cpu"))
 	}
 }
 
@@ -40,6 +40,6 @@ func TestTrain(t *testing.T) {
 	ctx.SetParam("train_steps", 10)
 	ctx.SetParam("plots", false)
 	ctx.SetParam(layers.ParamNormalization, "layer")
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *flagSettings))
+	paramsSet := check1(commandline.ParseContextSettings(ctx, *flagSettings))
 	TrainModel(ctx, *flagDataDir, "", false, paramsSet)
 }
