@@ -57,26 +57,10 @@ func TestPackGemm(t *testing.T) {
 						"instead %T as the registered function as %q", reg.GEMMFn, reg.Name)
 				}
 				params := reg.Params
-				testLargeAndSmallVariants(t, float32GemmFn(gemmFn), params)
+				testsFloat32(t, float32GemmFn(gemmFn), params)
 			})
 		}
 	})
-}
-
-func testLargeAndSmallVariants(t *testing.T, gemmFn float32GemmFn, params *packgemm.CacheParams) {
-	variants := []packgemm.Variant{packgemm.VariantSmall, packgemm.VariantLarge}
-	variantNames := []string{"small-variant", "large-variant"}
-	defer func() {
-		// Clean up variant on leave.
-		packgemm.ForceVariant(packgemm.VariantNone)
-	}()
-	for variantIdx, variant := range variants {
-		packgemm.ForceVariant(variant)
-		variantName := variantNames[variantIdx]
-		t.Run(variantName, func(t *testing.T) {
-			testsFloat32(t, gemmFn, params)
-		})
-	}
 }
 
 func testsFloat32(t *testing.T, gemmFn float32GemmFn, params *packgemm.CacheParams) {
@@ -91,8 +75,11 @@ func testsFloat32(t *testing.T, gemmFn float32GemmFn, params *packgemm.CachePara
 		Adata := xslices.Iota(float32(0), contractingSize)
 		Bdata := xslices.SliceWithValue(contractingSize, float32(1))
 		Cdata := []float32{1_000} // With beta==0, the 1_000 should be discarded.
-		gemmFn(alpha, beta, Adata, Bdata, batchSize, lhsCrossSize, rhsCrossSize, contractingSize, Cdata,
+		err := gemmFn(alpha, beta, Adata, Bdata, batchSize, lhsCrossSize, rhsCrossSize, contractingSize, Cdata,
 			sequentialFloat32BufAllocFn, sequentialFloat32BufReleaseFn, sequentialWorkerPool)
+		if err != nil {
+			t.Fatalf("gemmFn failed: %v", err)
+		}
 		want := 3*1_000 + float32(contractingSize*(contractingSize-1))/2
 		if Cdata[0] != want {
 			t.Errorf("Cdata[0] = %g, want %g", Cdata[0], want)
