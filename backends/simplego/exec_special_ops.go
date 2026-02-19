@@ -615,39 +615,96 @@ func execTransposeGeneric[T SupportedTypesConstraints](operand, output *Buffer, 
 // Since Reverse is purely data movement (no type-specific arithmetic), it operates on raw bytes
 // via mutableBytes(), avoiding the need for DTypeMap registrations across all types.
 func execReverse(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	operand := inputs[0]
-	axes := node.data.([]int)
 	_ = inputsOwned // We don't reuse the inputs.
+	operand := inputs[0]
+	reverseAxes := node.data.([]int)
+	shape := operand.shape
 
+	if len(reverseAxes) == 0 && inputsOwned[0] {
+		// No-op: reuse the input buffer.
+		output := operand
+		inputs[0] = nil // Mark as consumed.
+		return output, nil
+	}
+
+	// Allocate output buffer.
+	// TODO: if we can reuse the input buffer, create a version that uses swap instead of copy, and reverse in-place.
 	output := backend.getBuffer(operand.shape.DType, operand.shape.Size())
-	output.shape = node.shape
+	output.shape = shape
+	if len(reverseAxes) == 0 {
+		// No-op, simply copy over bytes.
+		copy(output.mutableBytes(), operand.mutableBytes())
+		return output, nil
+	}
+
+	// Collect axes by merging consecutive axes with the same reverse direction (and ignoring any axis that are of size 1),
+	// and create a new intermediaryShape that has the same size as the original shape, but with alternating
+	// reversed and non-reversed axes.
+	areAxesReversed := make([]bool, shape.Rank())
+	for _, axis := range reverseAxes {
+		areAxesReversed[axis] = true
+	}
+	mergedDims := make([]int, 0, shape.Rank())
+	var mergedReversedAxes []int
+	mergedNewDim := 1
+	mergedLastIsReversed := false
+	isFirstAxis := true
+	elementSize := int(shape.DType.Size())
+	for axis, dim := range shape.Dimensions {
+		isReversed := areAxesReversed[axis]
+		if dim == 1 {
+			// Ignore axes of size 1: reverse are a no-op on them.
+			continue
+		}
+		if isFirstAxis {
+			isFirstAxis = false
+			mergedLastIsReversed = isReversed
+		}
+		if isReversed != mergedLastIsReversed {
+			// Add the previous axis being merged.
+			if mergedLastIsReversed {
+				mergedReversedAxes = append(mergedReversedAxes, len(mergedDims))
+			}
+			mergedDims = append(mergedDims, mergedNewDim)
+			mergedNewDim = 1
+			mergedLastIsReversed = isReversed
+		}
+		mergedNewDim *= dim
+	}
+	if mergedLastIsReversed {
+		mergedReversedAxes = append(mergedReversedAxes, len(mergedDims))
+		mergedDims = append(mergedDims, mergedNewDim)
+	} else {
+		// If the last axis is not reversed, we remove it, and "merge" it into the element size.
+		elementSize *= mergedNewDim
+	}
+	mergedShape := shapes.Make(shape.DType, mergedDims...)
 
 	// Scalar or empty tensor: just copy.
-	if operand.shape.IsScalar() || operand.shape.Size() == 0 {
+	if operand.shape.IsScalar() || operand.shape.Size() <= 1 {
 		copy(output.mutableBytes(), operand.mutableBytes())
 		return output, nil
 	}
 
 	srcBytes := operand.mutableBytes()
 	dstBytes := output.mutableBytes()
-	elementSize := int(operand.shape.DType.Size())
-	strides := operand.shape.Strides()
-	dims := operand.shape.Dimensions
+	strides := mergedShape.Strides()
+	dims := mergedShape.Dimensions
 
 	// Pre-compute per reversed-axis: dimension and stride, so the inner loop only
 	// touches the axes that are actually reversed.
-	reverseDims := make([]int, len(axes))
-	reverseStrides := make([]int, len(axes))
-	for i, axis := range axes {
+	reverseDims := make([]int, len(mergedReversedAxes))
+	reverseStrides := make([]int, len(mergedReversedAxes))
+	for i, axis := range mergedReversedAxes {
 		reverseDims[i] = dims[axis]
 		reverseStrides[i] = strides[axis]
 	}
 
 	// For each flat index in the output, compute the corresponding input flat index
 	// by flipping the per-axis indices for the reversed axes, then copy element bytes.
-	for outputFlatIdx, outputAxesIndices := range operand.shape.Iter() {
+	for outputFlatIdx, outputAxesIndices := range mergedShape.Iter() {
 		srcFlatIdx := outputFlatIdx
-		for i, axis := range axes {
+		for i, axis := range mergedReversedAxes {
 			outAxisIdx := outputAxesIndices[axis]
 			srcAxisIdx := reverseDims[i] - 1 - outAxisIdx
 			srcFlatIdx += (srcAxisIdx - outAxisIdx) * reverseStrides[i]

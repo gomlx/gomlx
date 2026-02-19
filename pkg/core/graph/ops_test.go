@@ -939,13 +939,28 @@ func TestReduceAndKeep(t *testing.T) {
 }
 
 func TestReverse(t *testing.T) {
-	testFuncOneInput(t, "Reverse(dimensions={1, 2})",
-		func(g *Graph) (input, output *Node) {
-			input = Iota(g, MakeShape(dtypes.Float32, 9), 0)
-			input = Reshape(input, 1, 3, 3, 1)
-			output = Reverse(input, 1, 2)
-			return
-		}, [][][][]float32{{{{8}, {7}, {6}}, {{5}, {4}, {3}}, {{2}, {1}, {0}}}})
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+		graphtest.RunTestGraphFnWithBackend(t, "Reverse(dimensions={1,2})", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				input := Iota(g, MakeShape(dtypes.Float32, 9), 0)
+				input = Reshape(input, 1, 3, 3, 1)
+				output := Reverse(input, 1, 2)
+				return []*Node{input}, []*Node{output}
+			}, []any{
+				[][][][]float32{{{{8}, {7}, {6}}, {{5}, {4}, {3}}, {{2}, {1}, {0}}}},
+			}, 0)
+
+		graphtest.RunTestGraphFnWithBackend(t, "Reverse(dimensions={0,1})", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				input := Iota(g, MakeShape(dtypes.Float32, 9), 0)
+				input = Reshape(input, 1, 3, 1, 3)
+				return []*Node{input}, []*Node{
+					Reverse(input, 0, 1),
+				}
+			}, []any{
+				[][][][]float32{{{{6, 7, 8}}, {{3, 4, 5}}, {{0, 1, 2}}}},
+			}, 0)
+	})
 }
 
 func TestTranspose(t *testing.T) {

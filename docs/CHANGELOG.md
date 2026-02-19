@@ -19,6 +19,7 @@
   - DotGeneral: Added smallMatMul execution path, optimized for small matrix multiplications (thx @timkaye11)
   - Experimental `packgemm` support leveraging simd operations (@ajroetker, @janpfeifer)
   - Funtions/closures support (thx @ajroetker)
+  - Added `Reverse` operation.
   - Added fused operations: `FusedGelu`, `FusedDense`, `FusedSoftmax`, `FusedLayerNorm`, 
     `FusedScaledDotProductAttention`, `FusedAttentionQKVProjection`.
 - New package `bucketing`:
@@ -31,6 +32,7 @@
   - Control Flow: Added `While` and `If` operations.
   - Order operations: Added `Sort`, `SortFunc`, `TopK`, `BottomK`.
   - Added `Atan2` function.
+  - Added test helper functions to test various backends at once.
 - Package `ml/layers/attention`: Improved `MultiHeadAttention`; Added `KVCache` support.
 - Package `ml/layers/attention/pos`: Added `PositionalEncoder` interface, and "RoPE" (Rotary Positional Encoding) implementation.
 - Package `ml/models/transformers`: Added a `Transformer` "model": a collection of transformer layers are setup based on given configuration.
