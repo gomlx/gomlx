@@ -665,3 +665,60 @@ func TestReduceWindowOp(t *testing.T) {
 		})
 	}
 }
+
+func TestGather(t *testing.T) {
+	t.Run("Basic", func(t *testing.T) {
+		// operand: F32[3, 4], startIndices: I32[2, 1]
+		// Gather 2 rows from a 3x4 matrix.
+		output, err := Gather(
+			S(F32, 3, 4),       // operand
+			S(I32, 2, 1),       // startIndices
+			1,                  // indexVectorAxis
+			[]int{1},           // offsetOutputAxes
+			[]int{0},           // collapsedSliceAxes
+			[]int{0},           // startIndexMap
+			[]int{1, 4},        // sliceSizes
+			false,              // indicesAreSorted
+		)
+		require.NoError(t, err)
+		assert.True(t, S(F32, 2, 4).Equal(output), "expected F32[2, 4], got %s", output)
+	})
+
+	t.Run("HighIndexVectorAxisLowRankOperand", func(t *testing.T) {
+		// Regression test: indexVectorAxis refers to startIndices, not operand.
+		// A high indexVectorAxis is valid when startIndices has high rank,
+		// even if the operand has low rank (e.g. rank 2).
+		// This is the pattern used by CLIP text models (aten.index.Tensor).
+		//
+		// operand: Bool[1, 12], startIndices: I32[1, 1, 12, 1, 1]
+		// indexVectorAxis=4 is valid because startIndices.Rank()=5.
+		output, err := Gather(
+			S(Bool, 1, 12),          // operand
+			S(I32, 1, 1, 12, 1, 1), // startIndices
+			4,                       // indexVectorAxis (valid: <= startIndices.Rank())
+			[]int{},                 // offsetOutputAxes
+			[]int{0, 1},             // collapsedSliceAxes
+			[]int{0},                // startIndexMap
+			[]int{1, 1},             // sliceSizes
+			false,                   // indicesAreSorted
+		)
+		require.NoError(t, err)
+		assert.True(t, S(Bool, 1, 1, 12, 1).Equal(output), "expected Bool[1, 1, 12, 1], got %s", output)
+	})
+
+	t.Run("IndexVectorAxisOutOfRange", func(t *testing.T) {
+		// indexVectorAxis=3 is out of range for startIndices of rank 2.
+		_, err := Gather(
+			S(F32, 3, 4),  // operand
+			S(I32, 2, 1),  // startIndices (rank 2)
+			3,             // indexVectorAxis (invalid: > startIndices.Rank())
+			[]int{1},      // offsetOutputAxes
+			[]int{0},      // collapsedSliceAxes
+			[]int{0},      // startIndexMap
+			[]int{1, 4},   // sliceSizes
+			false,         // indicesAreSorted
+		)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "indexVectorAxis=3 is out of range")
+	})
+}
