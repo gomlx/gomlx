@@ -19,7 +19,8 @@ import (
 
 const (
 	// ParamActivation context hyperparameter defines the activation to use, for models using ApplyFromContext.
-	// Available values are: `none`, `relu`, `leaky_relu`, `sigmoid`, `tanh` or `swish` (same as `silu`).
+	// Available values are: `none`, `relu`, `leaky_relu`, `sigmoid`, `tanh`, `swish` (same as `silu`), `hard_swish`,
+	// `selu`, `gelu` or `gelu_approx`.
 	// The default is `relu`.
 	// See activations.TypeValues for complete list.
 	ParamActivation = "activation"
@@ -38,6 +39,7 @@ const (
 	TypeLeakyRelu
 	TypeSelu
 	TypeSwish
+	TypeHardSwish
 
 	// TypeSilu is an alias to TypeSwish
 	TypeSilu
@@ -60,6 +62,8 @@ func (t Type) ToBackend() backends.ActivationType {
 		return backends.ActivationRelu
 	case TypeSwish, TypeSilu:
 		return backends.ActivationSilu
+	case TypeHardSwish:
+		return backends.ActivationHardSwish
 	case TypeTanh:
 		return backends.ActivationTanh
 	default:
@@ -96,6 +100,8 @@ func Apply(activation Type, x *Node) *Node {
 		return Tanh(x)
 	case TypeSwish, TypeSilu:
 		return Swish(x)
+	case TypeHardSwish:
+		return HardSwish(x)
 	case TypeSelu:
 		return Selu(x)
 	case TypeGelu:
@@ -160,6 +166,37 @@ func LeakyReluWithAlpha(x *Node, alpha float64) *Node {
 // Here the beta parameter is fixed at 1.0.
 func Swish(x *Node) *Node {
 	return Mul(x, Sigmoid(x))
+}
+
+// HardSwish activation function.
+//
+// It returns x·ReLU6(x+3)/6.
+//
+// See [1] for details and analysis.
+//
+// [1]: "Evaluating Model Performance with Hard-Swish Activation Function Adjustments", https://arxiv.org/abs/2410.06879
+func HardSwish(x *Node) *Node {
+	g := x.Graph()
+	scale := Scalar(g, x.DType(), 1.0/6.0)
+	bias := Scalar(g, x.DType(), 0.5)
+	return ParameterizedHardSwish(x, scale, bias)
+}
+
+// ParameterizedHardSwish activation function, it allows more flexibility in setting the HardSwish bias
+// and scale parameters.
+//
+// It returns x·Clip((x·scale+bias), 0, 1).
+//
+// - x: operand to be "activated"
+// - scale: scale parameter, scalar.
+// - bias: bias parameter, scalar.
+//
+// See HardSwish for the default parameters and [1] for details and analysis.
+//
+// [1]: "Evaluating Model Performance with Hard-Swish Activation Function Adjustments", https://arxiv.org/abs/2410.06879
+func ParameterizedHardSwish(x, scale, bias *Node) *Node {
+	return Mul(x,
+		ClipScalar(Add(Mul(x, scale), bias), 0, 1)) // (x·scale+bias) cliped to [0, 1].
 }
 
 const (
