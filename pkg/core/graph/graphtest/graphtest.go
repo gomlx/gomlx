@@ -12,6 +12,7 @@ import (
 
 	"github.com/gomlx/go-xla/pkg/installer"
 	"github.com/gomlx/gomlx/backends"
+	_ "github.com/gomlx/gomlx/backends/simplego"
 	"github.com/gomlx/gomlx/backends/xla"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
