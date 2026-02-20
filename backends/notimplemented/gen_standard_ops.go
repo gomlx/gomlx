@@ -294,6 +294,37 @@ func (f Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, 
 	return nil, f.baseErrFn(backends.OpTypeFusedLayerNorm)
 }
 
+// FusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
+//
+// It computes y = activation(x @ dequant(packedWeights, scales) + bias), where the
+// dequantization and matmul are fused into a single pass to avoid materializing the
+// full float32 weight matrix.
+//
+// Inputs:
+//   - x: [batch..., K] float32 input activations.
+//   - packedWeights: [K, N/2] uint8 for NF4/Int4 (two values per byte, low nibble first),
+//     or [K, N] int8 for Int8.
+//   - scales: [K, numGroups] float32, where numGroups = ceil(N / groupSize).
+//     Each scale covers a contiguous group of groupSize output columns for one row.
+//   - bias: [N] float32 (nil-able), added after matmul but before activation.
+//
+// Parameters:
+//   - quantFormat: NF4, Int4, or Int8.
+//   - groupSize: number of output columns sharing a single scale factor.
+//   - outFeatures: the N dimension (number of output columns). For 4-bit formats,
+//     N cannot be inferred from packed weight shape alone.
+//   - activation: applied after matmul+bias; set to ActivationNone for no activation.
+func (f Function) FusedQuantizedDense(x backends.Value, packedWeights backends.Value, scales backends.Value, bias backends.Value, quantFormat backends.QuantFormat, groupSize int, outFeatures int, activation backends.ActivationType) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedQuantizedDense)
+}
+
+// FusedQuantizedScaledDotProductAttention computes multi-head SDPA using int8×int8
+// matmuls for Q@K^T and attn@V. Inputs are float32; quantization is internal.
+// Same interface as FusedScaledDotProductAttention.
+func (f Function) FusedQuantizedScaledDotProductAttention(query backends.Value, key backends.Value, value backends.Value, mask backends.Value, numHeads int, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedQuantizedScaledDotProductAttention)
+}
+
 // FusedScaledDotProductAttention computes multi-head scaled dot-product attention.
 //
 // output = softmax(query @ key^T * scale + mask) @ value, computed per-head with GQA support.
