@@ -64,28 +64,82 @@ import (
 	"github.com/pkg/errors"
 )
 
+// DimDynamic is a marker for dynamic dimensions in a Shape.
+// When Dimensions[i] == DimDynamic, the size of that axis is unknown at compile time.
+// If AxisNames[i] != "", the axis is a named dynamic axis (e.g., "batch").
+// If AxisNames[i] == "", the axis is an unnamed dynamic axis.
+const DimDynamic = -1
+
 // Shape represents the shape of either a Tensor or the expected shape
 // of the value from a computation node.
 //
-// Use Make to create a new shape. See examples in the package documentation.
+// Use Make to create a new shape with concrete dimensions.
+// Use MakeDynamic to create a shape with named dynamic axes.
+// See examples in the package documentation.
 type Shape struct {
 	// DType is the data type of the unit element in a tensor.
 	DType dtypes.DType
 
 	// Dimensions is the size of each axis. Its length determines the rank.
+	// A value of DimDynamic (-1) indicates a dynamic dimension.
 	Dimensions []int
+
+	// AxisNames holds optional names for each axis. Empty string "" means unnamed.
+	// Named axes enable compile-time validation that related dimensions match.
+	// For example, two tensors with axis "batch" must have the same batch size.
+	// This slice may be nil for fully static shapes (backward compatibility).
+	AxisNames []string
+
 	// TupleShapes is used if this Shape represents a tuple of elements.
 	// Internal use only.
 	TupleShapes []Shape `json:"tuple,omitempty"` // Shapes of the tuple, if this is a tuple.
 }
 
 // Make returns a Shape structure filled with the values given.
+// All dimensions must be non-negative. Use MakeDynamic for dynamic shapes.
 // See MakeTuple for tuple shapes.
 func Make(dtype dtypes.DType, dimensions ...int) Shape {
 	s := Shape{Dimensions: slices.Clone(dimensions), DType: dtype}
 	for _, dim := range dimensions {
 		if dim < 0 {
-			panic(errors.Errorf("shapes.Make(%s): cannot create a shape with an axis with dimension < 0", s))
+			panic(errors.Errorf("shapes.Make(%s): cannot create a shape with an axis with dimension < 0; use MakeDynamic for dynamic shapes", s))
+		}
+	}
+	return s
+}
+
+// MakeDynamic creates a shape that may have dynamic dimensions.
+// Each dimension can be:
+//   - int: A concrete dimension value (must be >= 0)
+//   - string: A named dynamic axis (e.g., "batch", "seq_len")
+//
+// Examples:
+//
+//	shapes.MakeDynamic(F32, "batch", 512)     // [batch, 512] - batch is dynamic
+//	shapes.MakeDynamic(F32, "batch", "seq")  // [batch, seq] - both dynamic
+//	shapes.MakeDynamic(F32, 32, 512)         // [32, 512] - fully concrete
+func MakeDynamic(dtype dtypes.DType, dims ...any) Shape {
+	s := Shape{
+		DType:      dtype,
+		Dimensions: make([]int, len(dims)),
+		AxisNames:  make([]string, len(dims)),
+	}
+	for i, dim := range dims {
+		switch v := dim.(type) {
+		case int:
+			if v < 0 {
+				panic(errors.Errorf("shapes.MakeDynamic: dimension %d at index %d cannot be negative", v, i))
+			}
+			s.Dimensions[i] = v
+			s.AxisNames[i] = ""
+		case string:
+			if v == "" {
+				panic(errors.Errorf("shapes.MakeDynamic: axis name at index %d cannot be empty string; use int for unnamed dimensions", i))
+			}
+			s.Dimensions[i] = DimDynamic
+			s.AxisNames[i] = v
+		default:
+			panic(errors.Errorf("shapes.MakeDynamic: dimension at index %d must be int or string, got %T", i, dim))
 		}
 	}
 	return s
@@ -112,6 +166,45 @@ func (s Shape) Rank() int { return len(s.Dimensions) }
 // IsScalar returns whether the shape represents a scalar, that is there are no dimensions (rank==0).
 func (s Shape) IsScalar() bool { return s.Ok() && s.Rank() == 0 }
 
+// IsDynamic returns true if any axis has an unknown length (DimDynamic).
+func (s Shape) IsDynamic() bool {
+	for _, dim := range s.Dimensions {
+		if dim == DimDynamic {
+			return true
+		}
+	}
+	return false
+}
+
+// HasNamedAxes returns true if any axis has a name.
+func (s Shape) HasNamedAxes() bool {
+	for _, name := range s.AxisNames {
+		if name != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// IsFullyConcrete returns true if all dimensions are known integers (not dynamic).
+// Equivalent to !IsDynamic().
+func (s Shape) IsFullyConcrete() bool {
+	return !s.IsDynamic()
+}
+
+// AxisName returns the name of the given axis, or "" if unnamed.
+// axis can be negative, counting from the end (like Dim).
+func (s Shape) AxisName(axis int) string {
+	adjustedAxis := axis
+	if adjustedAxis < 0 {
+		adjustedAxis += s.Rank()
+	}
+	if adjustedAxis < 0 || adjustedAxis >= len(s.AxisNames) || s.AxisNames == nil {
+		return ""
+	}
+	return s.AxisNames[adjustedAxis]
+}
+
 // Dim returns the dimension of the given axis. axis can take negative numbers, in which
 // case it counts as starting from the end -- so axis=-1 refers to the last axis.
 // Like with a slice indexing, it panics for an out-of-bound axis.
@@ -130,6 +223,8 @@ func (s Shape) Dim(axis int) int {
 func (s Shape) Shape() Shape { return s }
 
 // String implements stringer, pretty-prints the shape.
+// For shapes with named axes, outputs like "(F32)[batch, 512]".
+// For shapes with named axes and concrete values, outputs like "(F32)[batch=32, 512]".
 func (s Shape) String() string {
 	if s.TupleSize() > 0 {
 		parts := make([]string, 0, s.TupleSize())
@@ -141,7 +236,25 @@ func (s Shape) String() string {
 	if s.Rank() == 0 {
 		return fmt.Sprintf("(%s)", s.DType)
 	}
-	return fmt.Sprintf("(%s)%v", s.DType, s.Dimensions)
+	// Check if we have any axis names
+	if !s.HasNamedAxes() {
+		return fmt.Sprintf("(%s)%v", s.DType, s.Dimensions)
+	}
+	// Format with axis names
+	parts := make([]string, s.Rank())
+	for i, dim := range s.Dimensions {
+		name := s.AxisName(i)
+		if name != "" {
+			if dim == DimDynamic {
+				parts[i] = name // Just name for dynamic
+			} else {
+				parts[i] = fmt.Sprintf("%s=%d", name, dim) // name=value for resolved
+			}
+		} else {
+			parts[i] = fmt.Sprintf("%d", dim)
+		}
+	}
+	return fmt.Sprintf("(%s)[%s]", s.DType, strings.Join(parts, ", "))
 }
 
 // Size returns the number of elements (not bytes) for this shape. It's the product of all dimensions.
@@ -185,7 +298,7 @@ func (s Shape) TupleSize() int {
 	return len(s.TupleShapes)
 }
 
-// Equal compares two shapes for equality: dtype and dimensions are compared.
+// Equal compares two shapes for equality: dtype, dimensions, and axis names are compared.
 func (s Shape) Equal(s2 Shape) bool {
 	if s.DType != s2.DType {
 		return false
@@ -207,8 +320,22 @@ func (s Shape) Equal(s2 Shape) bool {
 	if s.IsScalar() {
 		return true
 	}
-	// For normal shapes just compare dimensions.
-	return slices.Equal(s.Dimensions, s2.Dimensions)
+	// Compare dimensions.
+	if !slices.Equal(s.Dimensions, s2.Dimensions) {
+		return false
+	}
+	// Compare axis names.
+	// Treat shapes as equal if both have no named axes (all empty strings or nil).
+	if !s.HasNamedAxes() && !s2.HasNamedAxes() {
+		return true
+	}
+	// If one has named axes and the other doesn't, they're not equal.
+	// We need element-wise comparison when both have names.
+	if len(s.AxisNames) != len(s2.AxisNames) {
+		// One is nil/shorter, check if the other has only empty names
+		return false
+	}
+	return slices.Equal(s.AxisNames, s2.AxisNames)
 }
 
 // EqualDimensions compares two shapes for equality of dimensions. Dtypes can be different.
@@ -241,6 +368,7 @@ func (s Shape) EqualDimensions(s2 Shape) bool {
 func (s Shape) Clone() (s2 Shape) {
 	s2.DType = s.DType
 	s2.Dimensions = slices.Clone(s.Dimensions)
+	s2.AxisNames = slices.Clone(s.AxisNames)
 	if s.TupleSize() > 0 {
 		s2.TupleShapes = make([]Shape, 0, len(s.TupleShapes))
 		for _, subShape := range s.TupleShapes {
@@ -251,6 +379,8 @@ func (s Shape) Clone() (s2 Shape) {
 }
 
 // GobSerialize shape in binary format.
+// Note: AxisNames are NOT serialized to maintain backward compatibility with existing
+// serialized data. They are part of the computation graph definition, not stored tensor data.
 func (s Shape) GobSerialize(encoder *gob.Encoder) (err error) {
 	enc := func(e any) {
 		if err != nil {
@@ -277,6 +407,7 @@ func (s Shape) GobSerialize(encoder *gob.Encoder) (err error) {
 }
 
 // GobDeserialize a Shape. Returns new Shape or an error.
+// Note: AxisNames will be nil in deserialized shapes (not stored for backward compatibility).
 func GobDeserialize(decoder *gob.Decoder) (s Shape, err error) {
 	dec := func(data any) {
 		if err != nil {
