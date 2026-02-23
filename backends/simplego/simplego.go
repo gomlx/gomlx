@@ -10,14 +10,13 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/pkg/errors"
-
-	"sync"
 )
 
 // Generates some trivial functions (binary and unary operators) automatically.

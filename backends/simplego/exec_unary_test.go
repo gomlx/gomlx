@@ -7,10 +7,9 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/gomlx/gomlx/pkg/core/graph"
 )
 
 func TestBackendIsSimpleGo(t *testing.T) {
