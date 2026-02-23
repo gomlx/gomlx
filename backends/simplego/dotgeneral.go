@@ -9,15 +9,14 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/simplego/highway"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
-
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
 func init() {
@@ -85,7 +84,16 @@ func adjustAxisToRank(rank, axis int) (int, error) {
 // node with normalized inputs. Finally, it reshapes back to the final result.
 //
 // See execDotGeneral for the implementation.
-func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Value, rhsContractingAxes, rhsBatchAxes []int) (backends.Value, error) {
+func (f *Function) DotGeneral(
+	lhsOp backends.Value, lhsContractingAxes, lhsBatchAxes []int,
+	rhsOp backends.Value, rhsContractingAxes, rhsBatchAxes []int,
+	config backends.DotGeneralConfig) (backends.Value, error) {
+	if config.AccumulatorDType != dtypes.InvalidDType || config.OutputDType != dtypes.InvalidDType {
+		// Not implemented yet.
+		return nil, errors.Wrapf(backends.ErrNotImplemented,
+			"DotGeneral with accumulator or output dtype different from original dtype is not implemented for %s",
+			BackendName)
+	}
 	inputPair, err := f.verifyAndCastValues(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
@@ -93,7 +101,8 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	lhs, rhs := inputPair[0], inputPair[1]
 	dtype := lhs.shape.DType
 	if dtype != rhs.shape.DType {
-		return nil, errors.Errorf("DotGeneral lhs (left-hand-side) and rhs operands don't match data types: %s and %s", dtype, rhs.shape.DType)
+		return nil, errors.Errorf("DotGeneral lhs (left-hand-side) and rhs operands don't match data types: %s and %s",
+			dtype, rhs.shape.DType)
 	}
 	if len(lhsContractingAxes) != len(rhsContractingAxes) {
 		return nil, errors.Errorf("DotGeneral number of contracting axes for lhs (%d) doesn't match rhs (%d)",
@@ -117,25 +126,31 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	for ii, axis := range lhsContractingAxes {
 		params.lhsContractingAxes[ii], err = adjustAxisToRank(lhsRank, axis)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "while adjusting contractingAxes for DotGeneral(lhs=%s, lhsContractingAxes=%v)", lhs.shape, lhsContractingAxes)
+			return nil, errors.WithMessagef(err,
+				"while adjusting contractingAxes for DotGeneral(lhs=%s, lhsContractingAxes=%v)",
+				lhs.shape, lhsContractingAxes)
 		}
 	}
 	for ii, axis := range lhsBatchAxes {
 		params.lhsBatchAxes[ii], err = adjustAxisToRank(lhsRank, axis)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "while adjusting batchAxes for DotGeneral(lhs=%s, lhsBatchAxes=%v)", lhs.shape, lhsBatchAxes)
+			return nil, errors.WithMessagef(err,
+				"while adjusting batchAxes for DotGeneral(lhs=%s, lhsBatchAxes=%v)", lhs.shape, lhsBatchAxes)
 		}
 	}
 	for ii, axis := range rhsContractingAxes {
 		params.rhsContractingAxes[ii], err = adjustAxisToRank(rhsRank, axis)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "while adjusting contractingAxes for DotGeneral(rhs=%s, rhsContractingAxes=%v)", rhs.shape, rhsContractingAxes)
+			return nil, errors.WithMessagef(err,
+				"while adjusting contractingAxes for DotGeneral(rhs=%s, rhsContractingAxes=%v)",
+				rhs.shape, rhsContractingAxes)
 		}
 	}
 	for ii, axis := range rhsBatchAxes {
 		params.rhsBatchAxes[ii], err = adjustAxisToRank(rhsRank, axis)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "while adjusting batchAxes for DotGeneral(rhs=%s, rhsBatchAxes=%v)", rhs.shape, rhsBatchAxes)
+			return nil, errors.WithMessagef(err,
+				"while adjusting batchAxes for DotGeneral(rhs=%s, rhsBatchAxes=%v)", rhs.shape, rhsBatchAxes)
 		}
 	}
 
@@ -161,7 +176,8 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 
 	// Find sizes of the normalized operands ([batchSize, crossSize, contractSize]).
 	var lhsCrossDims, rhsCrossDims []int
-	params.batchSize, params.lhsCrossSize, params.contractingSize, lhsCrossDims = dgFindSizes(lhs.shape, lhsContractingAxes, lhsBatchAxes)
+	params.batchSize, params.lhsCrossSize, params.contractingSize, lhsCrossDims = dgFindSizes(
+		lhs.shape, lhsContractingAxes, lhsBatchAxes)
 	_, params.rhsCrossSize, _, rhsCrossDims = dgFindSizes(rhs.shape, rhsContractingAxes, rhsBatchAxes)
 
 	// Check that all sizes are positive
@@ -175,15 +191,18 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	params.rhsNormalization = dgNormalizePrepare(rhs.shape, params.rhsContractingAxes, params.rhsBatchAxes)
 
 	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
-	params.lhsBlockedShape = dgCreateBlockedShape(dtype, params.batchSize, params.lhsCrossSize, params.contractingSize, blockLog2Dim)
-	params.rhsBlockedShape = dgCreateBlockedShape(dtype, params.batchSize, params.rhsCrossSize, params.contractingSize, blockLog2Dim)
+	params.lhsBlockedShape = dgCreateBlockedShape(
+		dtype, params.batchSize, params.lhsCrossSize, params.contractingSize, blockLog2Dim)
+	params.rhsBlockedShape = dgCreateBlockedShape(
+		dtype, params.batchSize, params.rhsCrossSize, params.contractingSize, blockLog2Dim)
 	outputDType := dtype
 	if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
 		// For 16 bits, store the intermediary results as float32 to minimize numerical errors during accumulation.
 		// Notice the blockLog2Dim must be the same, because the block dimensions much match the inputs.
 		outputDType = dtypes.Float32
 	}
-	params.outputBlockedShape = dgCreateBlockedShape(outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
+	params.outputBlockedShape = dgCreateBlockedShape(
+		outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
 
 	// Select execution path at build time based on problem size and matrix layout.
 	// This enables proper deduplication of pre-blocked inputs via getOrCreateNode.
@@ -220,7 +239,6 @@ func (f *Function) DotGeneral(lhsOp backends.Value, lhsContractingAxes, lhsBatch
 	resultingDims = append(resultingDims, lhsCrossDims...)
 	resultingDims = append(resultingDims, rhsCrossDims...)
 	result, err := f.Reshape(dotGeneral, resultingDims...)
-
 	if err != nil {
 		return nil, err
 	}
@@ -358,9 +376,10 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	lhs, rhs := inputs[0], inputs[1]
 	params := node.data.(*dotGeneralNodeData)
 	outputShape := node.shape
-	output := backend.getBufferForShape(outputShape)
-
-	var err error
+	output, err := backend.getBufferForShape(outputShape)
+	if err != nil {
+		return nil, err
+	}
 	switch params.execPath {
 	case blockedPath, checkPath:
 		// Inputs are pre-blocked at graph-build time. Extract block metadata from input nodes.
@@ -387,7 +406,10 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			// The "checkPath" is the debug path: it uses the blocked path as a reference and runs all other possible paths
 			// comparing the results.
 			lhsRaw, rhsRaw := inputs[2], inputs[3]
-			output2 := backend.getBufferForShape(outputShape)
+			output2, err := backend.getBufferForShape(outputShape)
+			if err != nil {
+				return nil, err
+			}
 			output2.Zeros()
 			err = execDotGeneralNormalized(backend, lhsRaw, rhsRaw, params, output2)
 			if err != nil {
@@ -509,50 +531,6 @@ func log2int(x int) int {
 	return bits.Len(uint(x)) - 1
 }
 
-// Dot ------------------------------------------------------------------------------------------------------
-// Dot implements backends.Builder interface.
-//
-// It is implemented using DotGeneral and Reshape.
-//
-// Dot returns the "dot product" operation.
-// The exact semantics of this operation depend on the ranks of the operands:
-// | Input | Output | Semantics |
-// | vector [n] dot vector [n] | scalar | vector dot product |
-// | matrix [m x k] dot vector [k] | vector [m]	matrix-vector multiplication |
-// | matrix [m x k] dot matrix [k x n] | matrix [m x n] | matrix-matrix multiplication |
-// The operation performs sum of products over the second dimension of x0 (or the first if it has rank 1) and
-// the first dimension of x1.
-// These are the "contracted" dimensions.
-// The contracted dimensions of x0 and x1 must be of the same size.
-// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
-// matrix/matrix multiplications.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (f *Function) Dot(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	inputs, err := f.verifyAndCastValues(backends.OpTypeDot.String(), lhsOp, rhsOp)
-	if err != nil {
-		return nil, err
-	}
-	lhs, rhs := inputs[0], inputs[1]
-	var output backends.Value
-	switch {
-	case lhs.shape.Rank() == 1 && rhs.shape.Rank() == 1:
-		// Contracting both vectors.
-		output, err = f.DotGeneral(lhs, []int{0}, []int{}, rhs, []int{0}, []int{})
-	case lhs.shape.Rank() == 2 && rhs.shape.Rank() == 1:
-		// Contract rhs vector.
-		output, err = f.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
-	case lhs.shape.Rank() == 2 && rhs.shape.Rank() == 2:
-		// Traditional matrix multiplication:
-		output, err = f.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
-	default:
-		return nil, errors.Errorf("Dot operands have invalid ranks: lhs=%v, rhs=%v", lhs.shape, rhs.shape)
-	}
-	if err != nil {
-		return nil, errors.WithMessagef(err, "while building op Dot()")
-	}
-	return output, nil
-}
-
 var dotGeneralVersionsCheckDelta = 1e-3
 
 func dotGeneralCheckVersions(_ *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, outputLarge, outputSmall *Buffer) error {
@@ -618,24 +596,33 @@ func dotGeneralCheckVersionsCmp(outputLarge, outputSmall *Buffer) (messages []st
 		// Not checking other dtypes.
 	}
 	if mismatches > 0 {
-		return messages, errors.Errorf("found %d mismatches (out of %d values) between DotGeneral large and small versions", mismatches, outputLarge.shape.Size())
+		return messages, errors.Errorf(
+			"found %d mismatches (out of %d values) between DotGeneral large and small versions", mismatches, outputLarge.shape.Size())
 	}
 	return
 }
 
 // getBufAllocator returns a buffer allocator for the given numeric type.
+// TODO: change signature to return the error
 func getBufAllocator[T dtypes.NumberNotComplex](backend *Backend) packgemm.BufAllocFn[T] {
 	dtype := dtypes.FromGenericsType[T]()
 	return func(size int) (ref any, data []T) {
-		buf := backend.getBuffer(dtype, size)
+		buf, err := backend.getBuffer(dtype, size)
+		if err != nil {
+			return nil, nil
+		}
 		return buf, buf.flat.([]T)
 	}
 }
 
 // getAnyBufAllocator returns a buffer allocator for the given dtype.
+// TODO: change signature to return the error
 func getAnyBufAllocator(backend *Backend, dtype dtypes.DType) packgemm.BufAllocAnyFn {
 	return func(size int) (ref any, data any) {
-		buf := backend.getBuffer(dtype, size)
+		buf, err := backend.getBuffer(dtype, size)
+		if err != nil {
+			return nil, nil
+		}
 		return buf, buf.flat
 	}
 }

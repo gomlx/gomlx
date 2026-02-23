@@ -7,9 +7,8 @@ import (
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-	"github.com/x448/float16"
-
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/x448/float16"
 )
 
 var dotGeneralNormalizeShapeDTypeMap = NewDTypeMap("DotGeneralNormalizeShape")
@@ -119,16 +118,18 @@ func dgNormalizePrepare(shape shapes.Shape, contractingAxes, batchAxes []int) *d
 // It returns a buffer with the transposed/reshaped source.
 //
 // In the chance that the source needs no transposing, output is returned nil.
+// TODO: handle the error.
 func dgNormalizeShape[T interface {
 	PODNumericConstraints | bfloat16.BFloat16 | float16.Float16
-}](backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) (output *Buffer) {
+}](backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize,
+	crossSize, contractingSize int) (output *Buffer) {
 	if !info.needsTranspose {
 		return nil
 	}
 
 	// Create the output buffer.
 	outputShape := shapes.Make(source.shape.DType, batchSize, crossSize, contractingSize)
-	output = backend.getBufferForShape(outputShape)
+	output, _ = backend.getBufferForShape(outputShape)
 	outputStrides := [3]int{crossSize * contractingSize, contractingSize, 1}
 	var outputIdx [3]int
 
@@ -172,7 +173,8 @@ func dgNormalizeShape[T interface {
 // both rhs and lhs are shaped [batchSize, crossSize, contractingSize]
 func execDotGeneralNormalized(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
 	dtype := lhs.shape.DType
-	normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) *Buffer)
+	normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer,
+		info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) *Buffer)
 
 	batchSize := params.batchSize
 	contractingSize := params.contractingSize
@@ -195,11 +197,16 @@ func execDotGeneralNormalized(backend *Backend, lhs, rhs *Buffer, params *dotGen
 	castToFloat32 := dtype == dtypes.BFloat16 || dtype == dtypes.Float16
 	if castToFloat32 {
 		outputShape := shapes.Make(dtypes.Float32, params.batchSize, params.lhsCrossSize, params.rhsCrossSize)
-		tmpOutput = backend.getBufferForShape(outputShape)
+		var err error
+		tmpOutput, err = backend.getBufferForShape(outputShape)
+		if err != nil {
+			return err
+		}
 		tmpOutput.Zeros()
 	}
 
-	normalizeDotGeneral := dotGeneralNormalizedDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int))
+	normalizeDotGeneral := dotGeneralNormalizedDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer,
+		params *dotGeneralNodeData, batchStartIdx, batchEndIdx int))
 
 	// Decide on using parallelism across the batch -- each example is started on a separate worker.
 	useBatchParallelism := backend.workers.IsEnabled()
