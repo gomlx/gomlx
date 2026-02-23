@@ -57,7 +57,7 @@ func QKVProjectionDecomposed(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyVa
 	}
 
 	// Single matmul: [batch, inFeatures] @ [inFeatures, queryDim+2*keyValueDim] → [batch, totalOut]
-	combined := Dot(x2d, wQKV)
+	combined := DotProduct(x2d, wQKV)
 
 	// Slice the combined result into query, key, value along the last axis.
 	query := Slice(combined, AxisRange(), AxisRange(0, queryDim))

@@ -52,53 +52,6 @@ func TestGradientAdd(t *testing.T) {
 	}
 }
 
-func TestGradientDot(t *testing.T) {
-	graphtest.RunTestGraphFn(t, "GradientDot: dot(vector, vector)", func(g *Graph) (inputs, outputs []*Node) {
-		v1 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(2)))
-		v2 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(3)))
-		output := Dot(v1, v2)
-		gradients := Gradient(output, v1, v2)
-		inputs = []*Node{v1, v2}
-		outputs = append([]*Node{output}, gradients...)
-		return
-	}, []any{
-		float32(24),           // dot product output
-		[]float32{3, 3, 3, 3}, // gradient with respect to v1
-		[]float32{2, 2, 2, 2}, // gradient with respect to v2
-	}, Epsilon)
-
-	graphtest.RunTestGraphFn(t, "GradientDot: dot(matrix, vector)", func(g *Graph) (inputs, outputs []*Node) {
-		v1 := Add(Iota(g, MakeShape(F32, 2, 4), 0), Const(g, float32(2)))
-		v2 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(3)))
-		output := Dot(v1, v2)
-		sum := ReduceAllSum(output)
-		gradients := Gradient(sum, v1, v2)
-		inputs = []*Node{v1, v2}
-		outputs = append([]*Node{output}, gradients...)
-		return
-	}, []any{
-		[]float32{24, 36},                       // dot product output
-		[][]float32{{3, 3, 3, 3}, {3, 3, 3, 3}}, // gradient with respect to v1
-		[]float32{5, 5, 5, 5},                   // gradient with respect to v2
-	}, Epsilon)
-
-	graphtest.RunTestGraphFn(t, "GradientDot: dot(matrix, matrix)", func(g *Graph) (inputs, outputs []*Node) {
-		v1 := Add(Iota(g, MakeShape(F32, 2, 4), 0), Const(g, float32(2)))
-		v2 := Add(Iota(g, MakeShape(F32, 4, 1), 0), Const(g, float32(1)))
-		output := Dot(v1, v2)
-		require.NoError(t, output.Shape().CheckDims(2, 1))
-		sum := ReduceAllSum(output)
-		gradients := Gradient(sum, v1, v2)
-		inputs = []*Node{v1, v2}
-		outputs = append([]*Node{output}, gradients...)
-		return
-	}, []any{
-		[][]float32{{20}, {30}},                 // dot product output
-		[][]float32{{1, 2, 3, 4}, {1, 2, 3, 4}}, // gradient with respect to v1
-		[][]float32{{5}, {5}, {5}, {5}},         // gradient with respect to v2
-	}, Epsilon)
-}
-
 func TestGradientSlice(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "Slice Gradient Tests",
 		func(g *Graph) (inputs, outputs []*Node) {
@@ -607,7 +560,7 @@ func TestGradientWhere(t *testing.T) {
 			ifTrue := Const(g, []float32{1, 1, 1})
 			ifFalse := Const(g, []float32{0, 0, 0})
 			output = Where(cond, ifTrue, ifFalse)
-			output = Dot(OnePlus(IotaFull(g, output.Shape())), output)
+			output = DotProduct(OnePlus(IotaFull(g, output.Shape())), output)
 			return output, []*Node{ifTrue, ifFalse}
 		}, []any{
 			[]float32{1, 0, 3},
@@ -621,7 +574,7 @@ func TestGradientWhere(t *testing.T) {
 			ifTrue := Const(g, float32(1))
 			ifFalse := Const(g, []float32{0, 0, 0})
 			output = Where(cond, ifTrue, ifFalse)
-			output = Dot(OnePlus(IotaFull(g, output.Shape())), output)
+			output = DotProduct(OnePlus(IotaFull(g, output.Shape())), output)
 			return output, []*Node{ifTrue, ifFalse}
 		}, []any{
 			float32(1 + 3),
@@ -635,7 +588,7 @@ func TestGradientWhere(t *testing.T) {
 			ifTrue := Const(g, float32(1))
 			ifFalse := Const(g, float32(0))
 			output = Where(cond, ifTrue, ifFalse)
-			output = Dot(OnePlus(IotaFull(g, output.Shape())), output)
+			output = DotProduct(OnePlus(IotaFull(g, output.Shape())), output)
 			return output, []*Node{ifTrue, ifFalse}
 		}, []any{
 			float32(1 + 3),

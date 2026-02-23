@@ -63,7 +63,7 @@ func denseDecomposed(x, weight, bias *Node, act activations.Type) *Node {
 		w2d = Reshape(weight, wShape.Dimensions[0], outFeaturesFlat)
 	}
 
-	y2d := Dot(x2d, w2d)
+	y2d := DotProduct(x2d, w2d)
 
 	// Reshape output to [x_batch_dims..., weight_out_dims...] if needed.
 	var y *Node

@@ -16,9 +16,9 @@ import (
 )
 
 // NotImplementedError is returned by every method.
-// It wraps backends.ErrNotImplemented so that errors.Is checks in
-// InternalFusedOpCaller (and elsewhere) correctly detect the fallback case.
-var NotImplementedError = fmt.Errorf("not implemented: %w", backends.ErrNotImplemented)
+//
+// It doesn't contain a stack, attach a stack to with with errors.Wrapf(ErrNotImplemented, "...") when using it.
+var NotImplementedError = backends.ErrNotImplemented
 
 // Backend is a dummy backend that can be imported to create mock backends.
 type Backend struct{}

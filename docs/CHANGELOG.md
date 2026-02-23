@@ -8,6 +8,9 @@
   - Renamed `backends.Op` -> `backends.Value`.
   - Added `FusedOps`, allowing backends to expose fused (more efficient) operations -- with proper/automatic
     fallback to decomposed operations when not supported or for gradients.
+  - Added `ErrNotImplemented` error and `IsNotImplemented(err)` function.
+  - Removed `Dot()` operation (redundant with `DotGeneral`).
+  - `DotGeneral()` now takes a `DotGeneralConfig` struct, with options for setting the accumulator and output dtypes.
 - Package `simplego`:
   - Added `Float16` support (thx @timkaye11) 
   - Added dedup of computation nodes (aka. "common subexpression elimination" CSE) (thx @timkaye11, @janpfeifer)
@@ -16,7 +19,9 @@
   - DotGeneral: Added smallMatMul execution path, optimized for small matrix multiplications (thx @timkaye11)
   - Experimental `packgemm` support leveraging simd operations (@ajroetker, @janpfeifer)
   - Funtions/closures support (thx @ajroetker)
-  - Added fused operations: `FusedGelu`, `FusedDense`, `FusedSoftmax`, `FusedLayerNorm`.
+  - Added `Reverse` operation.
+  - Added fused operations: `FusedGelu`, `FusedDense`, `FusedSoftmax`, `FusedLayerNorm`, 
+    `FusedScaledDotProductAttention`, `FusedAttentionQKVProjection`.
 - New package `bucketing`:
   - Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
 - Package `dtypes`:
@@ -27,11 +32,17 @@
   - Control Flow: Added `While` and `If` operations.
   - Order operations: Added `Sort`, `SortFunc`, `TopK`, `BottomK`.
   - Added `Atan2` function.
+  - Added test helper functions to test various backends at once.
 - Package `ml/layers/attention`: Improved `MultiHeadAttention`; Added `KVCache` support.
 - Package `ml/layers/attention/pos`: Added `PositionalEncoder` interface, and "RoPE" (Rotary Positional Encoding) implementation.
-- Package `ml/models/transformers`: Added a `Transformer` "model": a collection of transformer layers are setup based on given configuration.
-- Package `ml/decode`: Added a `Decoder` object to generate text given a sequential model.
-- Package `ml/decode/sample`: Added implementation of various sampling strategies (greedy, temperature, beam-search, top-k, top-p, etc.), used by the `decode` package.
+- Package `ml/models/transformers`: 
+  - Added a `Transformer` "model": a collection of transformer layers are setup based on given configuration.
+- Package `ml/decode`: 
+  Added a `Decoder` object to generate text given a sequential model.
+- Package `ml/decode/sample`: 
+  - Added implementation of various sampling strategies (greedy, temperature, beam-search, top-k, top-p, etc.), used by the `decode` package.
+- Package `ml/layers/activations`: 
+  - Added `HardSwish`.
 - Package `examples`:
   - Separated in its own sub-modules, to separate its dependencies.
   - Added `gpt2`: A simple GPT-2 implementation using the new transformers and decode packages. It downloads the model from HuggingFace.

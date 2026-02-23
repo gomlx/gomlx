@@ -411,6 +411,13 @@ func fusedDenseApplyActivation[T float32 | float64](backend *Backend, data []T, 
 		for i, x := range data {
 			data[i] = x / (1.0 + T(math.Exp(float64(-x))))
 		}
+	case backends.ActivationHardSwish:
+		const scale = 1.0 / 6.0
+		const bias = 0.5
+		for i, x := range data {
+			shapeX := min(max(x*scale+bias, 0), 1)
+			data[i] = x * shapeX
+		}
 	case backends.ActivationTanh:
 		for i, x := range data {
 			data[i] = T(math.Tanh(float64(x)))

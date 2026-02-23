@@ -172,6 +172,9 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			case "AxesLayout":
 				pi.BackendType = "backends." + pi.BackendType
 				pi.Format = "%s"
+			case "DotGeneralConfig":
+				pi.BackendType = "backends." + pi.BackendType
+				pi.Format = "%+v"
 			default:
 				switch {
 				case strings.HasPrefix(pi.BackendType, "..."):
