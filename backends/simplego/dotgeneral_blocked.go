@@ -182,8 +182,10 @@ func execBlockForDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []
 	// output.Zeros()
 
 	// Copy data from flat to blocked format using the generic copy function
-	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
-	copyFlatToBlock(input, output, data.contractingAxes, data.batchAxes, data.batchSize, data.crossSize, data.contractingSize, data.blockLog2Dim)
+	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes,
+		batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
+	copyFlatToBlock(input, output, data.contractingAxes, data.batchAxes, data.batchSize, data.crossSize,
+		data.contractingSize, data.blockLog2Dim)
 	return output, nil
 }
 
@@ -278,7 +280,7 @@ func dgCopyFlatToBlockShape[T interface {
 		axesTypes[axis] = 2
 	}
 	crossAxes := make([]int, 0, rank)
-	for i := 0; i < rank; i++ {
+	for i := range rank {
 		if axesTypes[i] == 0 {
 			crossAxes = append(crossAxes, i)
 		}
@@ -304,11 +306,11 @@ func dgCopyFlatToBlockShape[T interface {
 			} // Optimization
 
 			for base := 0; base < size; base += logicalStride * dim {
-				for k := 0; k < dim; k++ {
+				for k := range dim {
 					val := k * physStride
 					start := base + k*logicalStride
 					end := start + logicalStride
-					// For the inner-most axis (logicalStride=1), this loop is tight.
+					// For the innermost axis (logicalStride=1), this loop is tight.
 					for idx := start; idx < end; idx++ {
 						offsets[idx] += val
 					}
@@ -335,15 +337,15 @@ func dgCopyFlatToBlockShape[T interface {
 	// Output Layout: [BATCH, CROSS_BLOCKS, CONTRACT_BLOCKS, BLK_DIM, BLK_DIM] (implicitly flattened)
 
 	outIdx := 0
-	for b := 0; b < batchSize; b++ {
+	for b := range batchSize {
 		batchBase := batchOffsets[b]
-		for cb := 0; cb < crossBlocks; cb++ {
+		for cb := range crossBlocks {
 			crossBaseIdx := cb * blkDim
-			for kb := 0; kb < contractBlocks; kb++ {
+			for kb := range contractBlocks {
 				contractBaseIdx := kb * blkDim
 
 				// Inner Block Loop
-				for i := 0; i < blkDim; i++ { // Inner Cross
+				for i := range blkDim { // Inner Cross
 					c := crossBaseIdx + i
 					var cOffset int
 					inCross := c < crossSize
@@ -351,7 +353,7 @@ func dgCopyFlatToBlockShape[T interface {
 						cOffset = crossOffsets[c]
 					}
 
-					for j := 0; j < blkDim; j++ { // Inner Contract
+					for j := range blkDim { // Inner Contract
 						k := contractBaseIdx + j
 						if inCross && k < contractingSize {
 							// In-bounds
@@ -408,8 +410,7 @@ func runDotGeneralBatchLoop(backend *Backend, recursive *dotGeneralRecursiveData
 		wg.Add(1)
 		batchSplitFn := func() {
 			for innerBatchIdx := outerBatchIdx; innerBatchIdx < min(outerBatchIdx+batchSplitSize, batchSize); innerBatchIdx++ {
-				var batchRecursive dotGeneralRecursiveData
-				batchRecursive = *recursive
+				batchRecursive := *recursive
 				batchRecursive.lhsBatchOffset = innerBatchIdx * recursive.lhsCrossBlocks * recursive.contractBlocks
 				if rhsHasBatch {
 					batchRecursive.rhsBatchOffset = innerBatchIdx * recursive.rhsCrossBlocks * recursive.contractBlocks

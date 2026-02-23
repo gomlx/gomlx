@@ -975,9 +975,9 @@ func (f *Function) ReduceWindow(
 	return node, nil
 }
 
-//======================================================================================================================
+// ======================================================================================================================
 // Unary Operations ----------------------------------------------------------------------------------------------------
-//======================================================================================================================
+// ======================================================================================================================
 
 // Neg implements the backends.Builder interface.
 func (f *Function) Neg(operand backends.Value) (backends.Value, error) {
@@ -1116,7 +1116,6 @@ func (f *Function) addUnaryOp(opType backends.OpType, operandOp backends.Value) 
 	operand := inputs[0]
 	shape, err := shapeinference.UnaryOp(opType, operand.shape)
 	if err != nil {
-
 		return nil, err
 	}
 	node, _ := f.getOrCreateNode(opType, shape, []*Node{operand}, nil)
@@ -1263,12 +1262,12 @@ func (f *Function) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends
 // Clamp returns the element-wise clamping operation.
 //
 // The values max and min can either be a scalar or have the same shape as x.
-func (f *Function) Clamp(min, x, max backends.Value) (backends.Value, error) {
-	clamped, err := f.Max(min, x)
+func (f *Function) Clamp(minV, x, maxV backends.Value) (backends.Value, error) {
+	clamped, err := f.Max(minV, x)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "Backend %q: failed Clamp", BackendName)
 	}
-	clamped, err = f.Min(clamped, max)
+	clamped, err = f.Min(clamped, maxV)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "Backend %q: failed Clamp", BackendName)
 	}
@@ -1285,7 +1284,7 @@ func (f *Function) IsNaN(x backends.Value) (backends.Value, error) {
 }
 
 // AllReduce implements the backends.CollectiveOps interface.
-func (f *Function) AllReduce(operands []backends.Value, reductionType backends.ReduceOpType, replicaGroups [][]int) ([]backends.Value, error) {
+func (f *Function) AllReduce(_ []backends.Value, _ backends.ReduceOpType, _ [][]int) ([]backends.Value, error) {
 	return nil, errors.Wrapf(
 		notimplemented.NotImplementedError,
 		"AllReduce not supported for %q builder", BackendName)
@@ -1430,7 +1429,7 @@ func (f *Function) While(cond, body backends.Function, initialState ...backends.
 	if err != nil {
 		return nil, err
 	}
-	if err := checkClosureParams("While", "cond", condFn, stateNodes); err != nil {
+	if err = checkClosureParams("While", "cond", condFn, stateNodes); err != nil {
 		return nil, err
 	}
 
