@@ -646,7 +646,10 @@ func execReverse(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 
 	// Allocate output buffer.
 	// TODO: if we can reuse the input buffer, create a version that uses swap instead of copy, and reverse in-place.
-	output := backend.getBuffer(operand.shape.DType, operand.shape.Size())
+	output, err := backend.getBuffer(operand.shape.DType, operand.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	output.shape = shape
 	if len(reverseAxes) == 0 {
 		// No-op, simply copy over bytes.
