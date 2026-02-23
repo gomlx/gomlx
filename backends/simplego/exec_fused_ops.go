@@ -25,11 +25,14 @@ func init() {
 
 // execFusedSoftmax implements optimized softmax with better cache locality.
 // Three passes over the axis: find max, compute exp(x-max) and sum, then normalize.
-func execFusedSoftmax(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+func execFusedSoftmax(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	data := node.data.(*nodeFusedSoftmax)
 	axis := data.axis
 	input := inputs[0]
-	output := backend.getBufferForShape(node.shape)
+	output, err := backend.getBufferForShape(node.shape)
+	if err != nil {
+		return nil, err
+	}
 
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -95,9 +98,12 @@ func fusedSoftmax[T float32 | float64](input, output []T, axis int, shape shapes
 // FusedGelu =======================================================================================================
 
 // execFusedGelu implements GELU: x * 0.5 * (1 + erf(x / sqrt(2)))
-func execFusedGelu(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+func execFusedGelu(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	input := inputs[0]
-	output := backend.getBufferForShape(node.shape)
+	output, err := backend.getBufferForShape(node.shape)
+	if err != nil {
+		return nil, err
+	}
 
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -142,10 +148,13 @@ func geluChunk[T float32 | float64](input, output []T) {
 
 // execFusedLayerNorm implements layer normalization.
 // For each sample: y = (x - mean) / sqrt(var + epsilon) * gamma + beta
-func execFusedLayerNorm(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+func execFusedLayerNorm(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	data := node.data.(*nodeFusedLayerNorm)
 	input := inputs[0]
-	output := backend.getBufferForShape(node.shape)
+	output, err := backend.getBufferForShape(node.shape)
+	if err != nil {
+		return nil, err
+	}
 
 	// Determine gamma/beta. inputs[0]=x, inputs[1]=gamma (optional), inputs[2]=beta (optional).
 	var gamma, beta *Buffer
@@ -336,7 +345,10 @@ func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 			inputs[0] = nil // Signal to executor that we reused the input.
 			return matmul, nil
 		}
-		output := backend.getBufferForShape(node.shape)
+		output, err := backend.getBufferForShape(node.shape)
+		if err != nil {
+			return nil, err
+		}
 		copyFlat(output.flat, matmul.flat)
 		return output, nil
 	}
@@ -345,9 +357,13 @@ func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 	var output *Buffer
 	if inputsOwned[0] {
 		output = matmul
-		inputs[0] = nil // Signal to executor that we reused the input.
+		inputs[0] = nil // Signal to the executor that we reused the input.
 	} else {
-		output = backend.getBufferForShape(node.shape)
+		var err error
+		output, err = backend.getBufferForShape(node.shape)
+		if err != nil {
+			return nil, err
+		}
 		copyFlat(output.flat, matmul.flat)
 	}
 
@@ -416,7 +432,7 @@ func fusedDenseApplyActivation[T float32 | float64](backend *Backend, data []T, 
 // sdpaGeneric/sdpaMultiHeadGeneric, avoiding expensive transpose operations.
 // mask: optional additive mask of rank 2–4 (broadcasting via strides). Boolean masks are not
 // supported; the graph-level caller must convert them to additive form before reaching here.
-func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (
+func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 	*Buffer, error) {
 	data := node.data.(*nodeFusedScaledDotProductAttention)
 	query := inputs[0]
@@ -431,10 +447,17 @@ func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*
 	// per-head mask data is contiguous [seqLen, kvLen]. The mask is small (no headDim
 	// axis), so this is cheap. Rank ≤ 3 masks have no head dimension and work as-is.
 	if data.axesLayout == backends.AxesLayoutBSHD && mask != nil && mask.shape.Rank() == 4 {
-		mask = transposeBuffer(backend, mask, []int{0, 2, 1, 3})
+		var err error
+		mask, err = transposeBuffer(backend, mask, []int{0, 2, 1, 3})
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	output := backend.getBufferForShape(query.shape.Clone())
+	output, err := backend.getBufferForShape(query.shape.Clone())
+	if err != nil {
+		return nil, err
+	}
 
 	// Compute mask strides for broadcasting (BHSD convention for the mask).
 	var maskBatchStride, maskHeadStride int
@@ -484,8 +507,11 @@ func sdpaComputeMaskStrides(dims []int) (batchStride, headStride int) {
 
 // transposeBuffer transposes a buffer according to the given axis permutation,
 // reusing the existing transposeIterator and transposeDTypeMap infrastructure.
-func transposeBuffer(backend *Backend, buf *Buffer, permutations []int) *Buffer {
-	output := backend.getBuffer(buf.shape.DType, buf.shape.Size())
+func transposeBuffer(backend *Backend, buf *Buffer, permutations []int) (*Buffer, error) {
+	output, err := backend.getBuffer(buf.shape.DType, buf.shape.Size())
+	if err != nil {
+		return nil, err
+	}
 	// Compute the output shape by permuting dimensions.
 	dims := buf.shape.Dimensions
 	outDims := make([]int, len(dims))
@@ -496,7 +522,7 @@ func transposeBuffer(backend *Backend, buf *Buffer, permutations []int) *Buffer 
 	it := newTransposeIterator(buf.shape, permutations)
 	transposeFn := transposeDTypeMap.Get(buf.shape.DType).(func(operand, output *Buffer, it *transposeIterator))
 	transposeFn(buf, output, it)
-	return output
+	return output, nil
 }
 
 // sdpaGeneric computes scaled dot-product attention for a group of query heads
@@ -717,7 +743,7 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 //
 // The matmul (x @ wQKV) is already computed by the DotGeneral sub-node.
 // This executor just splits the combined result into Q/K/V and adds biases.
-func execFusedAttentionQKVProjection(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
+func execFusedAttentionQKVProjection(backend *Backend, node *Node, inputs []*Buffer, _ []bool) ([]*Buffer, error) {
 	data := node.data.(*nodeFusedAttentionQKVProjection)
 	combined := inputs[0] // DotGeneral result: [batch, qDim+2*kvDim]
 
@@ -739,10 +765,18 @@ func execFusedAttentionQKVProjection(backend *Backend, node *Node, inputs []*Buf
 	qShape := node.multiOutputsShapes[0]
 	kShape := node.multiOutputsShapes[1]
 	vShape := node.multiOutputsShapes[2]
-	qBuf := backend.getBufferForShape(qShape)
-	kBuf := backend.getBufferForShape(kShape)
-	vBuf := backend.getBufferForShape(vShape)
-
+	qBuf, err := backend.getBufferForShape(qShape)
+	if err != nil {
+		return nil, errors.Wrapf(err, "fail to get buffer for shape %s", qShape)
+	}
+	kBuf, err := backend.getBufferForShape(kShape)
+	if err != nil {
+		return nil, errors.Wrapf(err, "fail to get buffer for shape %s", kShape)
+	}
+	vBuf, err := backend.getBufferForShape(vShape)
+	if err != nil {
+		return nil, errors.Wrapf(err, "fail to get buffer for shape %s", vShape)
+	}
 	qDim := data.qDim
 	kvDim := data.kvDim
 
