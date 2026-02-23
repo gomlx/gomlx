@@ -3,6 +3,7 @@
 package simplego
 
 import (
+	stderrors "errors"
 	"reflect"
 	"strings"
 	"sync"
@@ -15,7 +16,7 @@ import (
 )
 
 // ErrBackendAlreadyFinalized is returned when attempting to register or initialize a backend that already exists.
-var ErrBackendAlreadyFinalized = errors.New("backend already exists")
+var ErrBackendAlreadyFinalized = stderrors.New("backend already exists")
 
 // Compile-time check:
 var _ backends.DataInterface = (*Backend)(nil)
