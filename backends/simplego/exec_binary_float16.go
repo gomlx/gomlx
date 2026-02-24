@@ -18,15 +18,15 @@ import (
 
 func execBinaryFloat16[OpFn func(a, b float32) float32](opFn OpFn, lhs, rhs []float16.Float16, output []float16.Float16,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
-	if len(rhs) == 1 {
+	switch {
+	case len(rhs) == 1:
 		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
 		c := rhs[0].Float32()
 		for ii, input := range lhs {
 			a := input.Float32()
 			output[ii] = float16.Fromfloat32(opFn(a, c))
 		}
-		return
-	} else if len(lhs) == 1 {
+	case len(lhs) == 1:
 		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
 		// This is needed for non-commutative operations like Sub and Div.
 		c := lhs[0].Float32()
@@ -34,16 +34,14 @@ func execBinaryFloat16[OpFn func(a, b float32) float32](opFn OpFn, lhs, rhs []fl
 			b := input.Float32()
 			output[ii] = float16.Fromfloat32(opFn(c, b))
 		}
-		return
-	} else if lhsShape.Equal(rhsShape) {
+	case lhsShape.Equal(rhsShape):
 		// Case 2: Exact same shapes, no broadcasting.
 		for outputIdx := range output {
 			a := lhs[outputIdx].Float32()
 			b := rhs[outputIdx].Float32()
 			output[outputIdx] = float16.Fromfloat32(opFn(a, b))
 		}
-		return
-	} else {
+	default:
 		// Case 3: with broadcasting non-scalar tensors:
 		lhsIter := newBroadcastIterator(lhsShape, outputShape)
 		rhsIter := newBroadcastIterator(rhsShape, outputShape)
@@ -59,31 +57,29 @@ func execBinaryFloat16[OpFn func(a, b float32) float32](opFn OpFn, lhs, rhs []fl
 
 func execCompareFloat16[OpFn func(a, b float32) bool](opFn OpFn, lhs, rhs []float16.Float16, output []bool,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
-	if len(rhs) == 1 {
+	switch {
+	case len(rhs) == 1:
 		// Case 1: One side (rhs) is a scalar.
 		c := rhs[0].Float32()
 		for ii, input := range lhs {
 			a := input.Float32()
 			output[ii] = opFn(a, c)
 		}
-		return
-	} else if len(lhs) == 1 {
+	case len(lhs) == 1:
 		// Case 1b: One side (lhs) is a scalar.
 		c := lhs[0].Float32()
 		for ii, input := range rhs {
 			b := input.Float32()
 			output[ii] = opFn(c, b)
 		}
-		return
-	} else if lhsShape.Equal(rhsShape) {
+	case lhsShape.Equal(rhsShape):
 		// Case 2: Exact same shapes.
 		for outputIdx := range output {
 			a := lhs[outputIdx].Float32()
 			b := rhs[outputIdx].Float32()
 			output[outputIdx] = opFn(a, b)
 		}
-		return
-	} else {
+	default:
 		// Case 3: Broadcasting.
 		lhsIter := newBroadcastIterator(lhsShape, outputShape)
 		rhsIter := newBroadcastIterator(rhsShape, outputShape)
@@ -136,29 +132,32 @@ func init() {
 	// Register Float16 wrappers with priorityTyped.
 	// These wrap the generic executors (from gen_exec_binary.go) to handle Float16 dtype.
 	// NEON implementations in float16_binary_neon_arm64.go use priorityArch to override these.
-	setNodeExecutor(backends.OpTypeAdd, priorityTyped, makeFloat16BinaryWrapper(execAdd, func(a, b float32) float32 { return a + b }))
-	setNodeExecutor(backends.OpTypeSub, priorityTyped, makeFloat16BinaryWrapper(execSub, func(a, b float32) float32 { return a - b }))
-	setNodeExecutor(backends.OpTypeMul, priorityTyped, makeFloat16BinaryWrapper(execMul, func(a, b float32) float32 { return a * b }))
-	setNodeExecutor(backends.OpTypeDiv, priorityTyped, makeFloat16BinaryWrapper(execDiv, func(a, b float32) float32 { return a / b }))
-	setNodeExecutor(backends.OpTypeMax, priorityTyped, makeFloat16BinaryWrapper(execMax, func(a, b float32) float32 {
-		if a > b {
-			return a
-		}
-		return b
-	}))
+	setNodeExecutor(backends.OpTypeAdd, priorityTyped,
+		makeFloat16BinaryWrapper(execAdd, func(a, b float32) float32 { return a + b }))
+	setNodeExecutor(backends.OpTypeSub, priorityTyped,
+		makeFloat16BinaryWrapper(execSub, func(a, b float32) float32 { return a - b }))
+	setNodeExecutor(backends.OpTypeMul, priorityTyped,
+		makeFloat16BinaryWrapper(execMul, func(a, b float32) float32 { return a * b }))
+	setNodeExecutor(backends.OpTypeDiv, priorityTyped,
+		makeFloat16BinaryWrapper(execDiv, func(a, b float32) float32 { return a / b }))
+	setNodeExecutor(backends.OpTypeMax, priorityTyped,
+		makeFloat16BinaryWrapper(execMax, func(a, b float32) float32 { return max(a, b) }))
 	setNodeExecutor(backends.OpTypeMin, priorityTyped, makeFloat16BinaryWrapper(execMin, func(a, b float32) float32 {
-		if a < b {
-			return a
-		}
-		return b
+		return min(a, b)
 	}))
 	setNodeExecutor(backends.OpTypePow, priorityTyped, makeFloat16BinaryWrapper(execPow, func(a, b float32) float32 {
 		return float32(math.Pow(float64(a), float64(b)))
 	}))
-	setNodeExecutor(backends.OpTypeEqual, priorityTyped, makeFloat16CompareWrapper(execEqual, func(a, b float32) bool { return a == b }))
-	setNodeExecutor(backends.OpTypeNotEqual, priorityTyped, makeFloat16CompareWrapper(execNotEqual, func(a, b float32) bool { return a != b }))
-	setNodeExecutor(backends.OpTypeGreaterOrEqual, priorityTyped, makeFloat16CompareWrapper(execGreaterOrEqual, func(a, b float32) bool { return a >= b }))
-	setNodeExecutor(backends.OpTypeGreaterThan, priorityTyped, makeFloat16CompareWrapper(execGreaterThan, func(a, b float32) bool { return a > b }))
-	setNodeExecutor(backends.OpTypeLessOrEqual, priorityTyped, makeFloat16CompareWrapper(execLessOrEqual, func(a, b float32) bool { return a <= b }))
-	setNodeExecutor(backends.OpTypeLessThan, priorityTyped, makeFloat16CompareWrapper(execLessThan, func(a, b float32) bool { return a < b }))
+	setNodeExecutor(backends.OpTypeEqual, priorityTyped,
+		makeFloat16CompareWrapper(execEqual, func(a, b float32) bool { return a == b }))
+	setNodeExecutor(backends.OpTypeNotEqual, priorityTyped,
+		makeFloat16CompareWrapper(execNotEqual, func(a, b float32) bool { return a != b }))
+	setNodeExecutor(backends.OpTypeGreaterOrEqual, priorityTyped,
+		makeFloat16CompareWrapper(execGreaterOrEqual, func(a, b float32) bool { return a >= b }))
+	setNodeExecutor(backends.OpTypeGreaterThan, priorityTyped,
+		makeFloat16CompareWrapper(execGreaterThan, func(a, b float32) bool { return a > b }))
+	setNodeExecutor(backends.OpTypeLessOrEqual, priorityTyped,
+		makeFloat16CompareWrapper(execLessOrEqual, func(a, b float32) bool { return a <= b }))
+	setNodeExecutor(backends.OpTypeLessThan, priorityTyped,
+		makeFloat16CompareWrapper(execLessThan, func(a, b float32) bool { return a < b }))
 }
