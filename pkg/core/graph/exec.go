@@ -169,6 +169,12 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 //     The devices are organized in an arbitrary mesh. Usually, it's a 1D list of devices, but they can be organized
 //     in multiple axes. One uses Graph.Distributed() for the synchronization operations
 //     (like AllReduce, AllGather, etc.), which need to be organized by the user.
+//
+// # Concurrency
+//
+// Exec compiles graphs for different input shapes concurrently. The provided graphFn must
+// be safe for concurrent invocation — each call receives its own Graph and Node arguments,
+// but graphFn must not mutate external shared state without its own synchronization.
 type Exec struct {
 	name    string
 	backend backends.Backend
@@ -194,15 +200,33 @@ type Exec struct {
 
 	// MaxCacheSize: if more than these different graph instantiations are
 	// created, Exec starts returning errors in MustExec.
+	//
+	// Note: with concurrent compilation this is a soft limit — up to N-1
+	// extra entries may be added when N compilations pass the size check
+	// simultaneously before any of them insert into the cache.
 	maxCacheSize int
 
 	// setSideParams for graphs that take them.
 	setSideParams SideParamsFn
 	loggerFn      LoggerFn
 
-	// Protects cache structure.
-	cacheMu sync.Mutex
-	cache   []*execGraphCacheEntry
+	// Protects cache structure, pending map, and finalized flag.
+	cacheMu   sync.Mutex
+	cache     []*execGraphCacheEntry
+	finalized bool // set by Finalize; prevents new compilations
+
+	// pending tracks in-flight compilations so concurrent callers wait
+	// rather than duplicating work. Uses linear search like cache, since
+	// the number of concurrent compilations is expected to be small.
+	pending []*pendingCompilation
+}
+
+// pendingCompilation tracks an in-flight graph compilation.
+type pendingCompilation struct {
+	argsShapes []shapes.Shape       // shapes being compiled
+	done       chan struct{}         // closed when compilation finishes
+	entry      *execGraphCacheEntry // result (nil if failed)
+	err        error                // compilation error, if any
 }
 
 // execGraphCacheEntry: no hashing, just a simple list. This is faster
@@ -475,7 +499,7 @@ func (e *Exec) GetNodeLogger() LoggerFn {
 
 // ExecWithGraphOnDevice is a version of ExecGraph that runs on the given device by default.
 //
-// deafultDevice is used for single-device computations that are portable (no fixed device assignment set
+// defaultDevice is used for single-device computations that are portable (no fixed device assignment set
 // WithDeviceAssignment). Otherwise, it is ignored.
 func (e *Exec) ExecWithGraphOnDevice(defaultDevice backends.DeviceNum, args ...any) (
 	[]*tensors.Tensor, *Graph, error) {
@@ -544,7 +568,7 @@ func unwrapDistributedTensors(numDevices int, args []any) ([]any, error) {
 
 // validateArgs to number of expected number of inputs and devices.
 //
-// deafultDevice is used for single-device computations that are portable (no fixed device assignment).
+// defaultDevice is used for single-device computations that are portable (no fixed device assignment).
 // Otherwise, it is ignored.
 func (e *Exec) validateArgs(args []any) error {
 	if len(args) == 0 {
@@ -662,7 +686,7 @@ func (e *Exec) expandArgsToTotalParams(g *Graph, argsAsBuffers []backends.Buffer
 
 // compileAndExecute compiles a graph for arguments and optionally executes it.
 //
-// deafultDevice is used for single-device computations that are portable (no fixed device assignment set
+// defaultDevice is used for single-device computations that are portable (no fixed device assignment set
 // WithDeviceAssignment). Otherwise, it is ignored.
 func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum, args ...any) (
 	[]*tensors.Tensor, *Graph, error) {
@@ -683,10 +707,7 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 	}
 
 	// Get or build the graph.
-	var entry *execGraphCacheEntry
-	err = exceptions.TryCatch[error](func() {
-		entry = e.findOrCreateGraph(argsShapes)
-	})
+	entry, err := e.findOrCreateGraph(argsShapes)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -777,41 +798,33 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 	return graphFnOutputs, g, nil
 }
 
-// createAndCacheGraph creates and compiles the graph for the arguments with the given
-// shapes. It creates and stores a cache entry for it and returns it.
-// Returns nil if the cache size is >= MaxCacheSize.
-// Should be called with cacheMu locked.
-func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEntry {
-	if e.maxCacheSize > 0 && len(e.cache) >= e.maxCacheSize {
-		return nil
-	}
-	entry := &execGraphCacheEntry{graph: NewGraph(e.backend, fmt.Sprintf("%s#%d", e.name, len(e.cache)))}
+// buildAndCompileGraph builds and compiles the graph for the given input shapes.
+// cacheIndex is used only for naming the graph (e.g. "Exec:fn#3").
+//
+// It does NOT insert into the cache — the caller is responsible for that.
+// This method does not acquire cacheMu and only reads immutable Exec fields.
+//
+// Panics from the user-provided graphFn are caught and returned as errors.
+// All other error conditions return proper errors without panicking.
+func (e *Exec) buildAndCompileGraph(argsShapes []shapes.Shape, cacheIndex int) (*execGraphCacheEntry, error) {
+	entry := &execGraphCacheEntry{graph: NewGraph(e.backend, fmt.Sprintf("%s#%d", e.name, cacheIndex))}
 	g := entry.graph
 	switch e.distStrategy {
 	case distributed.AutoSharding:
-		err := g.SetAutoSharding(e.meshes...)
-		if err != nil {
-			panic(errors.WithMessagef(err, "failed to assign AutoSharding for graph %q", g.Name()))
+		if err := g.SetAutoSharding(e.meshes...); err != nil {
+			return nil, errors.WithMessagef(err, "failed to assign AutoSharding for graph %q", g.Name())
 		}
 	case distributed.SPMD:
-		err := g.SetSPMD(e.meshes[0])
-		if err != nil {
-			panic(errors.WithMessagef(err, "failed to assign SPMD for graph %q", g.Name()))
+		if err := g.SetSPMD(e.meshes[0]); err != nil {
+			return nil, errors.WithMessagef(err, "failed to assign SPMD for graph %q", g.Name())
 		}
 	case distributed.None:
 		// Nothing to do.
 	}
 	if e.deviceAssignment != nil {
-		err := g.SetDeviceAssignment(e.deviceAssignment)
-		if err != nil {
-			panic(
-				errors.WithMessagef(
-					err,
-					"failed to assign device assignment %v for graph %q",
-					e.deviceAssignment,
-					g.Name(),
-				),
-			)
+		if err := g.SetDeviceAssignment(e.deviceAssignment); err != nil {
+			return nil, errors.WithMessagef(err, "failed to assign device assignment %v for graph %q",
+				e.deviceAssignment, g.Name())
 		}
 	}
 
@@ -867,31 +880,37 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 		argsV = []reflect.Value{reflect.ValueOf(args)}
 	}
 
-	// Enumerate outputs from wrapped graphFn.
-	start := time.Now()
-	outputsV := graphFnV.Call(argsV)
-	if klog.V(1).Enabled() {
-		elapsed := time.Since(start)
-		klog.Infof("Build graph time for %q: %s", e.name, elapsed)
+	// Call graphFn — this is user code that may panic, so we catch panics here.
+	var outputsV []reflect.Value
+	err := exceptions.TryCatch[error](func() {
+		start := time.Now()
+		outputsV = graphFnV.Call(argsV)
+		if klog.V(1).Enabled() {
+			elapsed := time.Since(start)
+			klog.Infof("Build graph time for %q: %s", e.name, elapsed)
+		}
+	})
+	if err != nil {
+		return nil, errors.WithMessagef(err, "graphFn for %q panicked", e.Name())
 	}
 
 	var outputs []*Node
 	if e.outputAsSlice {
 		if len(outputsV) != 1 {
-			exceptions.Panicf("graphFn for %q returned %d results, as opposed to simply a slice of nodes -- []*Node",
+			return nil, errors.Errorf("graphFn for %q returned %d results, as opposed to simply a slice of nodes -- []*Node",
 				e.Name(), len(outputsV))
 		}
 		var ok bool
 		outputs, ok = outputsV[0].Interface().([]*Node)
 		if !ok {
-			exceptions.Panicf("graphFn for %q did not return a []*Node, instead it returned %T!?",
+			return nil, errors.Errorf("graphFn for %q did not return a []*Node, instead it returned %T",
 				e.Name(), outputsV[0].Interface())
 		}
 		entry.numGraphFnOutputs = len(outputs)
 	} else {
 		entry.numGraphFnOutputs = e.numOutputs // Fixed number of outputs.
 		if len(outputsV) != e.numOutputs {
-			exceptions.Panicf(
+			return nil, errors.Errorf(
 				"graphFn for %q returned %d results, as opposed to the actual returned %d results -- []*Node",
 				e.Name(), len(outputsV), e.numOutputs)
 		}
@@ -899,7 +918,7 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 		for i, outV := range outputsV {
 			outputNode, ok := outV.Interface().(*Node)
 			if !ok {
-				exceptions.Panicf("graphFn for %q did not return a *Node for output #%d, instead it returned %T!?",
+				return nil, errors.Errorf("graphFn for %q did not return a *Node for output #%d, instead it returned %T",
 					e.Name(), i, outV.Interface())
 			}
 			outputs = append(outputs, outputNode)
@@ -917,7 +936,9 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 	}
 
 	// Append ShardingSpec for logged nodes: they are always replicated.
-	outputShardingSpecs := e.outputShardingSpecs
+	// Clone to avoid racing on the shared backing array when multiple
+	// goroutines compile concurrently.
+	outputShardingSpecs := slices.Clone(e.outputShardingSpecs)
 	if len(outputShardingSpecs) > 0 {
 		if len(outputShardingSpecs) < entry.numGraphFnOutputs {
 			// For variable length outputs, we repeat the last spec.
@@ -937,36 +958,123 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 	entry.argsShapes = make([]shapes.Shape, len(argsShapes))
 	copy(entry.argsShapes, argsShapes)
 	entry.numAllOutputs = len(outputs)
-	e.cache = append(e.cache, entry)
-	return entry
+	return entry, nil
 }
 
-// findOrCreateGraph returns the graph for the given arguments shapes: either from cache or by creating a new one.
-// if no cache entry exists.
-func (e *Exec) findOrCreateGraph(argsShapes []shapes.Shape) *execGraphCacheEntry {
-	e.cacheMu.Lock()
-	defer e.cacheMu.Unlock()
+// shapesMatch returns whether two shape slices are element-wise equal.
+func shapesMatch(a, b []shapes.Shape) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, s := range a {
+		if !s.Equal(b[i]) {
+			return false
+		}
+	}
+	return true
+}
 
-LoopCache:
+// lockedFindInCache searches the cache for a matching entry.
+// Caller must hold e.cacheMu.
+func (e *Exec) lockedFindInCache(argsShapes []shapes.Shape) *execGraphCacheEntry {
 	for _, entry := range e.cache {
-		if len(argsShapes) != len(entry.argsShapes) {
-			continue
+		if shapesMatch(argsShapes, entry.argsShapes) {
+			return entry
 		}
-		for ii, shape := range argsShapes {
-			if !shape.Equal(entry.argsShapes[ii]) {
-				continue LoopCache
-			}
+	}
+	return nil
+}
+
+// lockedFindPending searches the pending list for an in-flight compilation
+// matching the given shapes. Caller must hold e.cacheMu.
+func (e *Exec) lockedFindPending(argsShapes []shapes.Shape) *pendingCompilation {
+	for _, pc := range e.pending {
+		if shapesMatch(argsShapes, pc.argsShapes) {
+			return pc
 		}
-		return entry
+	}
+	return nil
+}
+
+// findOrCreateGraph returns the graph for the given arguments shapes: either
+// from cache, by waiting on an in-flight compilation, or by creating a new one.
+//
+// Compilation happens outside cacheMu so that concurrent callers compiling
+// different shapes can proceed in parallel.
+func (e *Exec) findOrCreateGraph(argsShapes []shapes.Shape) (*execGraphCacheEntry, error) {
+	e.cacheMu.Lock()
+
+	if e.finalized {
+		e.cacheMu.Unlock()
+		return nil, errors.Errorf("Exec %q has been finalized and cannot compile new graphs", e.name)
 	}
 
-	// No graph in cache, create a new one.
-	return e.createAndCacheGraph(argsShapes)
+	// Fast path: already in cache.
+	if entry := e.lockedFindInCache(argsShapes); entry != nil {
+		e.cacheMu.Unlock()
+		return entry, nil
+	}
+
+	// Check for in-flight compilation of the same shapes.
+	if pc := e.lockedFindPending(argsShapes); pc != nil {
+		e.cacheMu.Unlock()
+		<-pc.done // Wait for compilation to finish.
+		if pc.err != nil {
+			return nil, errors.WithMessagef(pc.err, "compilation failed for Exec %q", e.name)
+		}
+		return pc.entry, nil
+	}
+
+	// Check max cache size before starting a new compilation.
+	if e.maxCacheSize > 0 && len(e.cache) >= e.maxCacheSize {
+		e.cacheMu.Unlock()
+		return nil, nil
+	}
+
+	// No cache hit and no in-flight compilation — start one.
+	pc := &pendingCompilation{argsShapes: argsShapes, done: make(chan struct{})}
+	e.pending = append(e.pending, pc)
+	cacheIndex := len(e.cache) + len(e.pending)
+	e.cacheMu.Unlock()
+
+	// Build and compile outside the lock.
+	entry, err := e.buildAndCompileGraph(argsShapes, cacheIndex)
+	pc.entry = entry
+	pc.err = err
+
+	// Insert into cache and remove from pending.
+	e.cacheMu.Lock()
+	if entry != nil {
+		e.cache = append(e.cache, entry)
+	}
+	e.pending = slices.DeleteFunc(e.pending, func(p *pendingCompilation) bool { return p == pc })
+	e.cacheMu.Unlock()
+
+	close(pc.done) // Wake up any waiters.
+
+	if err != nil {
+		return nil, errors.WithMessagef(err, "compilation failed for Exec %q", e.name)
+	}
+	return entry, nil
 }
 
 // Finalize clears the cache, finalizing the compiled graphs. The Exec object shouldn't be
 // used after that.
+//
+// Finalize sets a flag to prevent new compilations, waits for any in-flight
+// compilations to complete, then finalizes all cached graphs.
 func (e *Exec) Finalize() {
+	// Mark as finalized and snapshot in-flight compilations.
+	e.cacheMu.Lock()
+	e.finalized = true
+	pendingList := slices.Clone(e.pending)
+	e.cacheMu.Unlock()
+
+	// Wait outside the lock so in-flight compilations can finish.
+	for _, pc := range pendingList {
+		<-pc.done
+	}
+
 	e.cacheMu.Lock()
 	defer e.cacheMu.Unlock()
 
