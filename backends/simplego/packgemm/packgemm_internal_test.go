@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -155,3 +156,132 @@ func TestFeedWorkItems(t *testing.T) {
 
 // Ensure slices package is used (it might be already imported in packgemm.go but this file is separate compilation unit if internal test? No, same package).
 var _ = slices.Clone[[]int]
+
+func BenchmarkPack(b *testing.B) {
+	sizes := []struct{ contractingRows, rhsCols int }{
+		{1920, 1024},
+		{1920, 1536},
+	}
+
+	b.Run("RHS", func(b *testing.B) {
+		for _, size := range sizes {
+			for _, paramsName := range xslices.SortedKeys(knownVariations) {
+				params := knownVariations[paramsName]
+				testName := fmt.Sprintf("params=%s: K=%d,Kc=%d,N=%d,Nc=%d,Nr=%d",
+					paramsName,
+					size.contractingRows, params.PanelContractingSize,
+					size.rhsCols, params.RHSPanelCrossSize, params.RHSL1KernelCols)
+				b.Run(testName, func(b *testing.B) {
+					panelContractingRows := params.PanelContractingSize
+					panelRhsCols := params.RHSPanelCrossSize
+
+					// Allocate buffers
+					// src: [contractingRows, rhsCols] full size
+					src := make([]float32, size.contractingRows*size.rhsCols)
+					// Fill src with random data if needed, or just zeros. Zeros is fine for speed test.
+
+					// dst: size depends on packing.
+					// [ceil(rhsCols(panel)/RHSL1KernelCols), contractingRows(panel), RHSL1KernelCols]
+					numStrips := (panelRhsCols + params.RHSL1KernelCols - 1) / params.RHSL1KernelCols
+					dstSize := numStrips * panelContractingRows * params.RHSL1KernelCols
+					dst := make([]float32, dstSize)
+
+					// Calculate number of panels in each dimension
+					numRowPanels := size.contractingRows / panelContractingRows
+					if numRowPanels == 0 {
+						numRowPanels = 1
+					}
+					numColPanels := size.rhsCols / panelRhsCols
+					if numColPanels == 0 {
+						numColPanels = 1
+					}
+					totalPanels := numRowPanels * numColPanels
+
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						panelIdx := i % totalPanels
+						// Simple row-major iteration of panels
+						rowPanelIdx := panelIdx / numColPanels
+						colPanelIdx := panelIdx % numColPanels
+
+						// Make sure we don't go out of bounds if the size is not explicitly large enough for the default panel layout
+						// though the sizes provided seem large enough.
+						// Handle edge cases where size < panel size by clamping to 0.
+						rowStart := rowPanelIdx * panelContractingRows
+						if rowStart+panelContractingRows > size.contractingRows {
+							rowStart = 0
+						}
+						colStart := colPanelIdx * panelRhsCols
+						if colStart+panelRhsCols > size.rhsCols {
+							colStart = 0
+						}
+
+						PackRHS(src, dst, rowStart, colStart, size.rhsCols, panelContractingRows, panelRhsCols, params.RHSL1KernelCols)
+					}
+				})
+			}
+		}
+	})
+
+	b.Run("LHS", func(b *testing.B) {
+		for _, size := range sizes {
+			// Reuse sizes, mapping rhsCols -> M (lhsRows) and contractingRows -> K (contractingCols)
+			lhsRows := size.rhsCols
+			contractingCols := size.contractingRows
+
+			for _, paramsName := range xslices.SortedKeys(knownVariations) {
+				params := knownVariations[paramsName]
+				testName := fmt.Sprintf("params=%s/M=%d,Mc=%d,K=%d,Kc=%d,Mr=%d",
+					paramsName,
+					lhsRows, params.LHSPanelCrossSize,
+					contractingCols, params.PanelContractingSize, params.LHSL1KernelRows)
+				b.Run(testName, func(b *testing.B) {
+					panelContractingCols := params.PanelContractingSize
+					panelLhsRows := params.LHSPanelCrossSize
+
+					// Allocate buffers
+					// src: [lhsRows, contractingCols] full size
+					src := make([]float32, lhsRows*contractingCols)
+
+					// dst: size depends on packing.
+					// [ceil(lhsRows(panel)/LHSL1KernelRows), contractingCols(panel), LHSL1KernelRows]
+					numStrips := (panelLhsRows + params.LHSL1KernelRows - 1) / params.LHSL1KernelRows
+					dstSize := numStrips * panelContractingCols * params.LHSL1KernelRows
+					dst := make([]float32, dstSize)
+
+					// Calculate number of panels in each dimension
+					numRowPanels := lhsRows / panelLhsRows
+					if numRowPanels == 0 {
+						numRowPanels = 1
+					}
+					numColPanels := contractingCols / panelContractingCols
+					if numColPanels == 0 {
+						numColPanels = 1
+					}
+					totalPanels := numRowPanels * numColPanels
+
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						panelIdx := i % totalPanels
+						// Simple row-major iteration of panels
+						rowPanelIdx := panelIdx / numColPanels
+						colPanelIdx := panelIdx % numColPanels
+
+						// Make sure we don't go out of bounds
+						rowStart := rowPanelIdx * panelLhsRows
+						if rowStart+panelLhsRows > lhsRows {
+							rowStart = 0
+						}
+						colStart := colPanelIdx * panelContractingCols
+						if colStart+panelContractingCols > contractingCols {
+							colStart = 0
+						}
+
+						// packLHS(src, dst, srcRowStart, srcColStart, srcRowStride, lhsRows, contractingCols, lhsL1KernelRows)
+						packLHS(src, dst, rowStart, colStart, contractingCols, panelLhsRows, panelContractingCols, params.LHSL1KernelRows)
+					}
+				})
+			}
+		}
+	})
+}

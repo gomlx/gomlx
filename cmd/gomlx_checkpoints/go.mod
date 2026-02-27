@@ -1,6 +1,6 @@
 module github.com/gomlx/gomlx/cmd/gomlx_checkpoints
 
-go 1.24.3
+go 1.26
 
 require (
 	github.com/MetalBlueberry/go-plotly v0.7.0

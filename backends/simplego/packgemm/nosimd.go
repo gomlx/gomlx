@@ -3,8 +3,8 @@
 package packgemm
 
 import (
+	"github.com/ajroetker/go-highway/hwy"
 	"github.com/gomlx/gomlx/internal/workerspool"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"k8s.io/klog/v2"
 )
 
@@ -36,16 +36,26 @@ var (
 )
 
 func init() {
-	RegisterGEMM("Basic(non-SIMD)", basicSymmetricGeneric[float32], &NoSIMD32Params, PriorityBase)
-	RegisterGEMM("Basic(non-SIMD)", basicSymmetricGeneric[int32], &NoSIMD32Params, PriorityBase)
-	RegisterGEMM("Basic(non-SIMD)", basicSymmetricGeneric[uint32], &NoSIMD32Params, PriorityBase)
+	RegisterGEMM("nosimd-auto", basicSymmetricGeneric[float32], &NoSIMD32Params, PriorityBase+1)
+	RegisterGEMM("nosimd-auto", basicSymmetricGeneric[float64], &NoSIMD32Params, PriorityBase+1)
+
+	RegisterGEMM("nosimd-small", basicSmallSymmetricGeneric[float32], &NoSIMD32Params, PriorityBase)
+	RegisterGEMM("nosimd-small", basicSmallSymmetricGeneric[float64], &NoSIMD32Params, PriorityBase)
+
+	RegisterGEMM("nosimd-large", basicLargeSymmetricGeneric[float32], &NoSIMD32Params, PriorityBase)
+	RegisterGEMM("nosimd-large", basicLargeSymmetricGeneric[float64], &NoSIMD32Params, PriorityBase)
+
+	knownVariations["no-SIMD"] = &NoSIMD32Params
 }
 
 // basicSymmetricGeneric implements basic symmetric (input and output dtypes are the same) non-SIMD
 // GEMM for various types of inputs and outputs.
 //
 // It is used when no SIMD-optimized implementation is available.
-func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
+//
+// This is a small wrapper that decides whether to use the "small matrix" variant, or the "large matrix"
+// variant.
+func basicSymmetricGeneric[T hwy.Floats](alpha, beta T, lhsFlat, rhsFlat []T,
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
 	outputFlat []T,
 	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
@@ -54,12 +64,12 @@ func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 	lhsBatchStride := lhsCrossSize * contractingSize
 	rhsBatchStride := contractingSize * rhsCrossSize
 	outputBatchStride := lhsCrossSize * rhsCrossSize
-	dtype := dtypes.FromGenericsType[T]()
+	dtype := highwayToDType[T]()
 	gemmSize := (lhsBatchStride + rhsBatchStride + outputBatchStride) * dtype.Size()
 	// gemmFlops := lhsCrossSize * rhsCrossSize * contractingSize
 
 	// 2. Check if small matrix multiplication kernel can be used.
-	if (forceVariant == VariantNone && gemmSize < nosimdSmallMatMulSizeThreshold) || forceVariant == VariantSmall {
+	if gemmSize < nosimdSmallMatMulSizeThreshold {
 		klog.V(1).Infof("Using small variant for GEMM kernel")
 		return basicSymmetricGenericSmallGEMMParallel(
 			alpha, beta,
@@ -79,6 +89,48 @@ func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 		pool)
 }
 
+// basicSmallSymmetricGeneric implements basic symmetric (input and output dtypes are the same) non-SIMD
+// GEMM for various types of inputs and outputs.
+//
+// It is used when no SIMD-optimized implementation is available and forces the small variant of the algorithm.
+func basicSmallSymmetricGeneric[T hwy.Floats](alpha, beta T, lhsFlat, rhsFlat []T,
+	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
+	outputFlat []T,
+	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
+	// Precalculate the strides.
+	lhsBatchStride := lhsCrossSize * contractingSize
+	rhsBatchStride := contractingSize * rhsCrossSize
+	outputBatchStride := lhsCrossSize * rhsCrossSize
+
+	return basicSymmetricGenericSmallGEMMParallel(
+		alpha, beta,
+		lhsFlat, rhsFlat, outputFlat,
+		batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+		lhsBatchStride, rhsBatchStride, outputBatchStride,
+		pool)
+}
+
+// basicLargeSymmetricGeneric implements basic symmetric (input and output dtypes are the same) non-SIMD
+// GEMM for various types of inputs and outputs.
+//
+// It is used when no SIMD-optimized implementation is available and forces the small variant of the algorithm.
+func basicLargeSymmetricGeneric[T hwy.Floats](alpha, beta T, lhsFlat, rhsFlat []T,
+	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
+	outputFlat []T,
+	bufAllocFn BufAllocFn[T], bufReleaseFn BufReleaseFn, pool *workerspool.Pool) error {
+	// Precalculate the strides.
+	lhsBatchStride := lhsCrossSize * contractingSize
+	rhsBatchStride := contractingSize * rhsCrossSize
+	outputBatchStride := lhsCrossSize * rhsCrossSize
+
+	return basicSymmetricGenericLargeGEMMParallel(
+		alpha, beta,
+		lhsFlat, rhsFlat, outputFlat,
+		batchSize, lhsCrossSize, rhsCrossSize, contractingSize,
+		lhsBatchStride, rhsBatchStride, outputBatchStride,
+		bufAllocFn, bufReleaseFn, pool)
+}
+
 // basicSymmetricGenericSmallGEMMParallel implements basic symmetric (input and output dtypes are the same) non-SIMD
 // GEMM for various types of inputs and outputs for **small matrices** (not counting the batch size).
 //
@@ -86,7 +138,7 @@ func basicSymmetricGeneric[T dtypes.Number](alpha, beta T, lhsFlat, rhsFlat []T,
 // worth parallelizing.
 //
 // It is used when no SIMD-optimized implementation is available.
-func basicSymmetricGenericSmallGEMMParallel[T dtypes.Number](
+func basicSymmetricGenericSmallGEMMParallel[T hwy.Floats](
 	alpha, beta T,
 	lhsFlat, rhsFlat []T, outputFlat []T,
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
@@ -144,7 +196,7 @@ func basicSymmetricGenericSmallGEMMParallel[T dtypes.Number](
 	return nil
 }
 
-func basicSymmetricGenericSmallGEMM[T dtypes.Number](
+func basicSymmetricGenericSmallGEMM[T hwy.Floats](
 	alpha, beta T,
 	lhs, rhs, output []T,
 	batchCount, lhsCrossSize, rhsCrossSize, contractingSize int,
@@ -158,7 +210,7 @@ func basicSymmetricGenericSmallGEMM[T dtypes.Number](
 		return
 	}
 
-	for batchIdx := 0; batchIdx < batchCount; batchIdx++ {
+	for batchIdx := range batchCount {
 		lhsBase := batchIdx * lhsStride
 		rhsBase := batchIdx * rhsStride
 		outputBase := batchIdx * outputStride
@@ -269,7 +321,7 @@ func basicSymmetricGenericSmallGEMM[T dtypes.Number](
 }
 
 // basicWriteCol4 handles a single row of 4 columns to maximize store-throughput
-func basicWriteCol4[T dtypes.Number](out []T, offset int, alpha, beta T, v0, v1, v2, v3 T) {
+func basicWriteCol4[T hwy.Floats](out []T, offset int, alpha, beta T, v0, v1, v2, v3 T) {
 	if beta != 0 {
 		out[offset+0] = beta*out[offset+0] + alpha*v0
 		out[offset+1] = beta*out[offset+1] + alpha*v1
@@ -284,7 +336,7 @@ func basicWriteCol4[T dtypes.Number](out []T, offset int, alpha, beta T, v0, v1,
 }
 
 // basicWriteScalar handles a single scalar write to maximize store-throughput
-func basicWriteScalar[T dtypes.Number](out []T, idx int, alpha, beta T, value T) {
+func basicWriteScalar[T hwy.Floats](out []T, idx int, alpha, beta T, value T) {
 	if beta != 0 {
 		out[idx] = beta*out[idx] + alpha*value
 	} else {
@@ -292,7 +344,7 @@ func basicWriteScalar[T dtypes.Number](out []T, idx int, alpha, beta T, value T)
 	}
 }
 
-func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
+func basicSymmetricGenericLargeGEMMParallel[T hwy.Floats](
 	alpha, beta T,
 	lhsFlat, rhsFlat []T, outputFlat []T,
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int,
@@ -324,7 +376,7 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 			basicSymmetricLargeGemmSlice(
 				alpha, beta,
 				batchLhs, batchRhs, batchOutput,
-				lhsCrossSize, rhsCrossSize, contractingSize,
+				/*lhsCrossSize,*/ rhsCrossSize, contractingSize,
 				NoSIMD32Params,
 				0, lhsCrossSize, 0, rhsCrossSize,
 				packedLHS, packedRHS, packedOutput,
@@ -358,7 +410,7 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 				basicSymmetricLargeGemmSlice(
 					alpha, beta,
 					batchLhs, batchRhs, batchOutput,
-					lhsCrossSize, rhsCrossSize, contractingSize,
+					/*lhsCrossSize,*/ rhsCrossSize, contractingSize,
 					NoSIMD32Params,
 					item.lhsRowStart, item.lhsRowEnd, item.rhsColStart, item.rhsColEnd,
 					packedLHS, packedRHS, packedOutput,
@@ -373,10 +425,10 @@ func basicSymmetricGenericLargeGEMMParallel[T dtypes.Number](
 // must already have sliced one example of the batch dimension.
 //
 // packedLHS and packedRHS must be pre-allocated buffers of appropriate size.
-func basicSymmetricLargeGemmSlice[T dtypes.Number](
+func basicSymmetricLargeGemmSlice[T hwy.Floats](
 	alpha, beta T,
 	lhs, rhs, output []T,
-	lhsCrossSize, rhsCrossSize, contractingSize int,
+	/*lhsCrossSize,*/ rhsCrossSize, contractingSize int,
 	params CacheParams,
 	rowStart, rowEnd, colStart, colEnd int,
 	packedLHS, packedRHS, packedOutput []T,
@@ -388,7 +440,7 @@ func basicSymmetricLargeGemmSlice[T dtypes.Number](
 		// Loop 4 (p): Tiling K (Depth)
 		for contractingPanelIdx := 0; contractingPanelIdx < contractingSize; contractingPanelIdx += params.PanelContractingSize {
 			contractingPanelWidth := min(params.PanelContractingSize, contractingSize-contractingPanelIdx)
-			packRHS(rhs, packedRHS, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
+			PackRHS(rhs, packedRHS, contractingPanelIdx, rhsPanelColIdx, rhsCrossSize, contractingPanelWidth, rhsPanelWidth, params.RHSL1KernelCols)
 
 			// Loop 3 (ic): Tiling M (Output Rows)
 			for lhsPanelRowIdx := rowStart; lhsPanelRowIdx < rowEnd; lhsPanelRowIdx += params.LHSPanelCrossSize {
@@ -409,7 +461,7 @@ func basicSymmetricLargeGemmSlice[T dtypes.Number](
 				if contractingPanelIdx > 0 {
 					effectiveBeta = 1
 				}
-				applyPackedOutput(
+				ApplyPackedOutput(
 					packedOutput, output,
 					alpha, effectiveBeta,
 					params.RHSPanelCrossSize,
@@ -432,7 +484,7 @@ func basicSymmetricLargeGemmSlice[T dtypes.Number](
 // It assumes lhsL1KernelRows=4 and rhsL1KernelCols=4.
 //
 // See basicSymmetricMicroKernel for documentation on arguments.
-func basicSymmetricPanel[T dtypes.Number](
+func basicSymmetricPanel[T hwy.Floats](
 	packedLHS, packedRHS []T,
 	packedOutput []T,
 	lhsPanelRows, rhsPanelCols int,
@@ -609,24 +661,5 @@ func basicSymmetricPanel[T dtypes.Number](
 			rhsOffset += rhsBlockStride
 		}
 		lhsOffset += lhsBlockStride
-	}
-}
-
-// applyPackedOutput applies the computed packedOutput to the final output.
-func applyPackedOutput[T dtypes.Number](
-	packedOutput, output []T,
-	alpha, beta T,
-	packedOutputRowStride int,
-	lhsRowOffset, rhsColOffset int, // Global output offsets
-	outputRowStride int,
-	height, width int, // actual amount of data to copy
-) {
-	for r := range height {
-		packedRowOffset := r * packedOutputRowStride
-		outRowOffset := (lhsRowOffset+r)*outputRowStride + rhsColOffset
-		for c := range width {
-			val := packedOutput[packedRowOffset+c]
-			basicWriteScalar(output, outRowOffset+c, alpha, beta, val)
-		}
 	}
 }
