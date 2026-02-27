@@ -33,6 +33,19 @@ func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHea
 	return backendFusedScaledDotProductAttention(query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal)
 }
 
+// BackendFusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
+// Internal: prefer nn.QuantizedDense which handles fallback and gradients.
+func BackendFusedQuantizedDense(x, packedWeights, scales, bias *Node, quantFormat backends.QuantFormat, groupSize int, outFeatures int, activation backends.ActivationType) *Node {
+	return backendFusedQuantizedDense(x, packedWeights, scales, bias, quantFormat, groupSize, outFeatures, activation)
+}
+
+// BackendFusedQuantizedScaledDotProductAttention computes multi-head SDPA using int8×int8
+// matmuls for Q@K^T and attn@V. Inputs are float32; quantization is internal.
+// Internal: prefer the InternalFusedOpCaller wrapper which handles fallback and gradients.
+func BackendFusedQuantizedScaledDotProductAttention(query, key, value, mask *Node, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) *Node {
+	return backendFusedQuantizedScaledDotProductAttention(query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal)
+}
+
 // BackendFusedAttentionQKVProjection performs fused Query-Key-Value projection.
 // Internal: prefer attention.QKVProjection which handles fallback and gradients.
 func BackendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int) (query, key, value *Node) {

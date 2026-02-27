@@ -18,6 +18,8 @@ func init() {
 	setNodeExecutor(backends.OpTypeFusedLayerNorm, priorityTyped, execFusedLayerNorm)
 	setNodeExecutor(backends.OpTypeFusedDense, priorityTyped, execFusedDense)
 	setNodeExecutor(backends.OpTypeFusedScaledDotProductAttention, priorityTyped, execFusedScaledDotProductAttention)
+	setNodeExecutor(backends.OpTypeFusedQuantizedDense, priorityTyped, execFusedQuantizedDense)
+	setNodeExecutor(backends.OpTypeFusedQuantizedScaledDotProductAttention, priorityTyped, execFusedQuantizedScaledDotProductAttention)
 	multiOutputsNodeExecutors[backends.OpTypeFusedAttentionQKVProjection] = execFusedAttentionQKVProjection
 }
 
@@ -732,6 +734,197 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 			)
 		}
 	}
+}
+
+// FusedQuantizedDense =============================================================================================
+
+// nf4LookupTable contains the 16 fixed QLoRA NF4 values.
+var nf4LookupTable = [16]float32{
+	-1.0,
+	-0.6961928009986877,
+	-0.5250730514526367,
+	-0.39491748809814453,
+	-0.28444138169288635,
+	-0.18477343022823334,
+	-0.09105003625154495,
+	0.0,
+	0.07958029955625534,
+	0.16093020141124725,
+	0.24611230194568634,
+	0.33791524171829224,
+	0.44070982933044434,
+	0.5626170039176941,
+	0.7229568362236023,
+	1.0,
+}
+
+// execFusedQuantizedDense implements scalar dequant + matmul + bias + activation.
+// inputs layout: [x, packedWeights, scales, bias?]
+func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+	data := node.data.(*nodeFusedQuantizedDense)
+
+	xBuf := inputs[0]
+	wBuf := inputs[1]
+	sBuf := inputs[2]
+	var biasBuf *Buffer
+	if len(inputs) > 3 {
+		biasBuf = inputs[3]
+	}
+
+	if xBuf.shape.DType != dtypes.Float32 {
+		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: only float32 input supported, got %s", xBuf.shape.DType)
+	}
+
+	output := backend.getBufferForShape(node.shape)
+	x := xBuf.flat.([]float32)
+	scales := sBuf.flat.([]float32)
+	out := output.flat.([]float32)
+
+	K := xBuf.shape.Dimensions[xBuf.shape.Rank()-1]
+	N := data.outFeatures
+	M := xBuf.shape.Size() / K
+	groupSize := data.groupSize
+	numGroups := (N + groupSize - 1) / groupSize
+
+	var bias []float32
+	if biasBuf != nil {
+		bias = biasBuf.flat.([]float32)
+	}
+
+	switch data.quantFormat {
+	case backends.QuantNF4:
+		packed := wBuf.flat.([]uint8)
+		quantizedDenseNF4(x, packed, scales, bias, out, M, K, N, groupSize, numGroups)
+	case backends.QuantInt4:
+		packed := wBuf.flat.([]uint8)
+		quantizedDenseInt4(x, packed, scales, bias, out, M, K, N, groupSize, numGroups)
+	case backends.QuantInt8:
+		weights := wBuf.flat.([]int8)
+		quantizedDenseInt8(x, weights, scales, bias, out, M, K, N, groupSize, numGroups)
+	default:
+		return nil, errors.Errorf("FusedQuantizedDense: unknown quant format %d", data.quantFormat)
+	}
+
+	fusedDenseApplyActivation[float32](backend, out, data.activation)
+	return output, nil
+}
+
+// quantizedDenseNF4 performs scalar NF4 dequant + matmul + bias.
+func quantizedDenseNF4(x []float32, packed []uint8, scales []float32, bias []float32, out []float32, M, K, N, groupSize, numGroups int) {
+	packedN := (N + 1) / 2
+	for m := range M {
+		for n := range N {
+			groupIdx := n / groupSize
+			var sum float32
+			for k := range K {
+				byteIdx := k*packedN + n/2
+				var nibble uint8
+				if n%2 == 0 {
+					nibble = packed[byteIdx] & 0x0F
+				} else {
+					nibble = packed[byteIdx] >> 4
+				}
+				weight := nf4LookupTable[nibble] * scales[k*numGroups+groupIdx]
+				sum += x[m*K+k] * weight
+			}
+			if bias != nil {
+				sum += bias[n]
+			}
+			out[m*N+n] = sum
+		}
+	}
+}
+
+// quantizedDenseInt4 performs scalar Int4 dequant + matmul + bias.
+func quantizedDenseInt4(x []float32, packed []uint8, scales []float32, bias []float32, out []float32, M, K, N, groupSize, numGroups int) {
+	packedN := (N + 1) / 2
+	for m := range M {
+		for n := range N {
+			groupIdx := n / groupSize
+			var sum float32
+			for k := range K {
+				byteIdx := k*packedN + n/2
+				var nibble uint8
+				if n%2 == 0 {
+					nibble = packed[byteIdx] & 0x0F
+				} else {
+					nibble = packed[byteIdx] >> 4
+				}
+				weight := float32(int8(nibble)-8) * scales[k*numGroups+groupIdx]
+				sum += x[m*K+k] * weight
+			}
+			if bias != nil {
+				sum += bias[n]
+			}
+			out[m*N+n] = sum
+		}
+	}
+}
+
+// quantizedDenseInt8 performs scalar Int8 dequant + matmul + bias.
+func quantizedDenseInt8(x []float32, weights []int8, scales []float32, bias []float32, out []float32, M, K, N, groupSize, numGroups int) {
+	for m := range M {
+		for n := range N {
+			groupIdx := n / groupSize
+			var sum float32
+			for k := range K {
+				weight := float32(weights[k*N+n]) * scales[k*numGroups+groupIdx]
+				sum += x[m*K+k] * weight
+			}
+			if bias != nil {
+				sum += bias[n]
+			}
+			out[m*N+n] = sum
+		}
+	}
+}
+
+// FusedQuantizedScaledDotProductAttention ======================================================================
+
+// execFusedQuantizedScaledDotProductAttention implements quantized SDPA as a scalar fallback.
+// Inputs are float32 Q/K/V; quantization to int8 is an optimization done by the highway
+// executor. The scalar fallback simply delegates to the float SDPA implementation.
+func execFusedQuantizedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (
+	*Buffer, error) {
+	data := node.data.(*nodeFusedQuantizedScaledDotProductAttention)
+	query := inputs[0]
+	key := inputs[1]
+	value := inputs[2]
+	var mask *Buffer
+	if len(inputs) > 3 {
+		mask = inputs[3]
+	}
+
+	if data.axesLayout == backends.AxesLayoutBSHD && mask != nil && mask.shape.Rank() == 4 {
+		mask = transposeBuffer(backend, mask, []int{0, 2, 1, 3})
+	}
+
+	output := backend.getBufferForShape(query.shape.Clone())
+
+	var maskBatchStride, maskHeadStride int
+	if mask != nil {
+		maskBatchStride, maskHeadStride = sdpaComputeMaskStrides(mask.shape.Dimensions)
+	}
+
+	// Reuse the float SDPA node data for the generic kernel.
+	floatData := &nodeFusedScaledDotProductAttention{
+		numHeads:   data.numHeads,
+		numKVHeads: data.numKVHeads,
+		axesLayout: data.axesLayout,
+		scale:      data.scale,
+		causal:     data.causal,
+	}
+
+	switch query.shape.DType {
+	case dtypes.Float32:
+		sdpaMultiHeadGeneric[float32](query, key, value, mask, output, floatData, maskBatchStride, maskHeadStride)
+	case dtypes.Float64:
+		sdpaMultiHeadGeneric[float64](query, key, value, mask, output, floatData, maskBatchStride, maskHeadStride)
+	default:
+		return nil, errors.Errorf("FusedQuantizedScaledDotProductAttention: unsupported dtype %s", query.shape.DType)
+	}
+
+	return output, nil
 }
 
 // FusedAttentionQKVProjection ===================================================================================
