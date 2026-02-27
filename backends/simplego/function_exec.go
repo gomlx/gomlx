@@ -487,7 +487,10 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			return errors.Errorf("no multi-output executor for op %s", node.opType)
 		}
 
-		outputBuffers, err := multiExecutor(backend, node, inputBuffers, inputsOwned)
+		// Note: Multi-output ops that use closures (If, While, Sort) should use
+		// nodeClosureExecutors instead. This path is for simple multi-output ops
+		// like RNGBitGenerator that don't have captured inputs.
+		outputBuffers, err := multiExecutor(backend, node, inputBuffers, inputsOwned, nil, nil)
 		if err != nil {
 			return errors.WithMessagef(err, "executing multi-output %s", node.opType)
 		}

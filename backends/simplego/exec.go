@@ -90,7 +90,9 @@ func newExecutable(builder *Builder, mainFn *FunctionExecutable) *Executable {
 type nodeExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error)
 
 // nodeMultiOutputExecutor is a version of a node executor when it returns multiple outputs.
-type nodeMultiOutputExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error)
+// capturedInputs and capturedOwned are for control flow ops (If, While, Sort) that need to pass
+// captured values to closures. For other multi-output ops, these will be nil.
+type nodeMultiOutputExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, capturedInputs []*Buffer, capturedOwned []bool) ([]*Buffer, error)
 
 // ClosureInputs holds the captured inputs and their ownership for a single closure.
 // This is used to pass captured values to closure-calling operations (If, While, Sort).
