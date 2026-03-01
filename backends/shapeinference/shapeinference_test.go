@@ -722,3 +722,267 @@ func TestGather(t *testing.T) {
 		assert.Contains(t, err.Error(), "indexVectorAxis=3 is out of range")
 	})
 }
+
+// SD creates a dynamic shape with axis names (shorthand for tests).
+var SD = shapes.MakeDynamic
+
+// --- Axis Name Propagation Tests ---
+
+func TestBinaryOp_AxisNames(t *testing.T) {
+	t.Run("MatchingNames", func(t *testing.T) {
+		lhs := SD(F32, []int{-1, 512}, []string{"batch", ""})
+		rhs := SD(F32, []int{-1, 512}, []string{"batch", ""})
+		output, err := BinaryOp(OpTypeAdd, lhs, rhs)
+		require.NoError(t, err)
+		require.Equal(t, []string{"batch", ""}, output.AxisNames)
+		// Dynamic dim propagates.
+		require.Equal(t, []int{-1, 512}, output.Dimensions)
+	})
+
+	t.Run("OneNamed", func(t *testing.T) {
+		// lhs has names, rhs does not → adopt lhs names.
+		lhs := SD(F32, []int{-1, 512}, []string{"batch", ""})
+		rhs := S(F32, 32, 512)
+		output, err := BinaryOp(OpTypeAdd, lhs, rhs)
+		require.NoError(t, err)
+		require.Equal(t, []string{"batch", ""}, output.AxisNames)
+	})
+
+	t.Run("BothUnnamed", func(t *testing.T) {
+		lhs := S(F32, 2, 3)
+		rhs := S(F32, 2, 3)
+		output, err := BinaryOp(OpTypeAdd, lhs, rhs)
+		require.NoError(t, err)
+		require.Nil(t, output.AxisNames)
+	})
+
+	t.Run("ConflictingNames", func(t *testing.T) {
+		lhs := SD(F32, []int{-1, 512}, []string{"batch", ""})
+		rhs := SD(F32, []int{-1, 512}, []string{"time", ""})
+		_, err := BinaryOp(OpTypeAdd, lhs, rhs)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "axis name conflict")
+	})
+
+	t.Run("DynamicBroadcast", func(t *testing.T) {
+		// lhs: [batch=-1, 1], rhs: [1, 512] → output: [batch=-1, 512]
+		lhs := SD(F32, []int{-1, 1}, []string{"batch", ""})
+		rhs := S(F32, 1, 512)
+		output, err := BinaryOp(OpTypeMul, lhs, rhs)
+		require.NoError(t, err)
+		require.Equal(t, []int{-1, 512}, output.Dimensions)
+		require.Equal(t, []string{"batch", ""}, output.AxisNames)
+	})
+
+	t.Run("BothDynamic", func(t *testing.T) {
+		// Both sides dynamic non-broadcast → output is dynamic.
+		lhs := SD(F32, []int{-1, 512}, []string{"batch", ""})
+		rhs := SD(F32, []int{-1, 512}, []string{"batch", ""})
+		output, err := BinaryOp(OpTypeAdd, lhs, rhs)
+		require.NoError(t, err)
+		require.Equal(t, shapes.DynamicDim, output.Dimensions[0])
+	})
+
+	t.Run("ScalarWithNamed", func(t *testing.T) {
+		// Scalar + named tensor → named tensor (scalar path returns rhs directly).
+		scalar := S(F32)
+		named := SD(F32, []int{-1, 512}, []string{"batch", ""})
+		output, err := BinaryOp(OpTypeAdd, scalar, named)
+		require.NoError(t, err)
+		require.Equal(t, []string{"batch", ""}, output.AxisNames)
+	})
+}
+
+func TestComparisonOp_AxisNames(t *testing.T) {
+	lhs := SD(F32, []int{-1, 512}, []string{"batch", ""})
+	rhs := SD(F32, []int{-1, 512}, []string{"batch", ""})
+	output, err := ComparisonOp(OpTypeEqual, lhs, rhs)
+	require.NoError(t, err)
+	require.Equal(t, dtypes.Bool, output.DType)
+	require.Equal(t, []string{"batch", ""}, output.AxisNames)
+}
+
+func TestUnaryOp_AxisNames(t *testing.T) {
+	named := SD(F32, []int{-1, 512}, []string{"batch", ""})
+	output, err := UnaryOp(OpTypeExp, named)
+	require.NoError(t, err)
+	// UnaryOp returns operand directly, so names are preserved.
+	require.Equal(t, []string{"batch", ""}, output.AxisNames)
+}
+
+func TestTransposeOp_AxisNames(t *testing.T) {
+	t.Run("PermutesNames", func(t *testing.T) {
+		s := SD(F32, []int{-1, -1, 768}, []string{"batch", "seq_len", ""})
+		output, err := TransposeOp(s, []int{1, 0, 2})
+		require.NoError(t, err)
+		require.Equal(t, []int{-1, -1, 768}, output.Dimensions)
+		require.Equal(t, []string{"seq_len", "batch", ""}, output.AxisNames)
+	})
+
+	t.Run("NoNames", func(t *testing.T) {
+		s := S(F32, 2, 3)
+		output, err := TransposeOp(s, []int{1, 0})
+		require.NoError(t, err)
+		require.Nil(t, output.AxisNames)
+	})
+}
+
+func TestBroadcastOp_AxisNames(t *testing.T) {
+	t.Run("PrependsEmptyNames", func(t *testing.T) {
+		s := SD(F32, []int{-1, 512}, []string{"batch", ""})
+		output, err := BroadcastOp(s, []int{3})
+		require.NoError(t, err)
+		require.Equal(t, []int{3, -1, 512}, output.Dimensions)
+		require.Equal(t, []string{"", "batch", ""}, output.AxisNames)
+	})
+
+	t.Run("NoNamesNoOutput", func(t *testing.T) {
+		s := S(F32, 2, 3)
+		output, err := BroadcastOp(s, []int{5})
+		require.NoError(t, err)
+		require.Nil(t, output.AxisNames)
+	})
+
+	t.Run("EmptyPrefix", func(t *testing.T) {
+		s := SD(F32, []int{-1, 512}, []string{"batch", ""})
+		output, err := BroadcastOp(s, []int{})
+		require.NoError(t, err)
+		require.Equal(t, []string{"batch", ""}, output.AxisNames)
+	})
+}
+
+func TestReduceOp_AxisNames(t *testing.T) {
+	t.Run("RemovesReducedAxis", func(t *testing.T) {
+		s := SD(F32, []int{-1, -1, 768}, []string{"batch", "seq_len", ""})
+		// Reduce last axis → names for remaining axes preserved.
+		output, err := ReduceOp(s, []int{2})
+		require.NoError(t, err)
+		require.Equal(t, []int{-1, -1}, output.Dimensions)
+		require.Equal(t, []string{"batch", "seq_len"}, output.AxisNames)
+	})
+
+	t.Run("ReduceToScalar", func(t *testing.T) {
+		s := SD(F32, []int{-1, 512}, []string{"batch", ""})
+		output, err := ReduceOp(s, []int{0, 1})
+		require.NoError(t, err)
+		require.True(t, output.IsScalar())
+	})
+
+	t.Run("NoNames", func(t *testing.T) {
+		s := S(F32, 4, 5, 6)
+		output, err := ReduceOp(s, []int{1})
+		require.NoError(t, err)
+		require.Nil(t, output.AxisNames)
+	})
+}
+
+func TestConcatenateOp_AxisNames(t *testing.T) {
+	t.Run("UnifiesNames", func(t *testing.T) {
+		s1 := SD(F32, []int{-1, 512}, []string{"batch", ""})
+		s2 := SD(F32, []int{-1, 256}, []string{"batch", ""})
+		output, err := ConcatenateOp([]shapes.Shape{s1, s2}, 1)
+		require.NoError(t, err)
+		require.Equal(t, []string{"batch", ""}, output.AxisNames)
+	})
+
+	t.Run("ConcatAxisNameConflictDrops", func(t *testing.T) {
+		// Different names on the concat axis → name is dropped for that axis.
+		s1 := SD(F32, []int{-1, -1}, []string{"batch", "a"})
+		s2 := SD(F32, []int{-1, -1}, []string{"batch", "b"})
+		output, err := ConcatenateOp([]shapes.Shape{s1, s2}, 1) // concat on axis 1
+		require.NoError(t, err)
+		require.Equal(t, "batch", output.AxisNames[0])
+		require.Equal(t, "", output.AxisNames[1]) // dropped due to conflict
+	})
+
+	t.Run("NonConcatAxisNameConflictErrors", func(t *testing.T) {
+		s1 := SD(F32, []int{-1, 512}, []string{"batch", ""})
+		s2 := SD(F32, []int{-1, 512}, []string{"time", ""})
+		_, err := ConcatenateOp([]shapes.Shape{s1, s2}, 1) // concat on axis 1, conflict on axis 0
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "axis name conflict")
+	})
+
+	t.Run("DynamicConcatAxis", func(t *testing.T) {
+		s1 := SD(F32, []int{-1, -1}, []string{"batch", "seq"})
+		s2 := SD(F32, []int{-1, 128}, []string{"batch", ""})
+		output, err := ConcatenateOp([]shapes.Shape{s1, s2}, 1)
+		require.NoError(t, err)
+		require.Equal(t, shapes.DynamicDim, output.Dimensions[1])
+	})
+}
+
+func TestSliceOp_AxisNames(t *testing.T) {
+	t.Run("PreservesNames", func(t *testing.T) {
+		s := S(F32, 10, 20).WithAxisNames("height", "width")
+		output, err := SliceOp(s, []int{2, 5}, []int{8, 15}, []int{1, 1})
+		require.NoError(t, err)
+		require.Equal(t, []string{"height", "width"}, output.AxisNames)
+		require.Equal(t, []int{6, 10}, output.Dimensions)
+	})
+
+	t.Run("DynamicAxis", func(t *testing.T) {
+		s := SD(F32, []int{-1, 512}, []string{"batch", ""})
+		output, err := SliceOp(s, []int{0, 0}, []int{0, 256}, []int{1, 1})
+		require.NoError(t, err)
+		require.Equal(t, shapes.DynamicDim, output.Dimensions[0])
+		require.Equal(t, []string{"batch", ""}, output.AxisNames)
+	})
+
+	t.Run("NoNames", func(t *testing.T) {
+		s := S(F32, 10, 20)
+		output, err := SliceOp(s, []int{0, 0}, []int{5, 10}, []int{1, 1})
+		require.NoError(t, err)
+		require.Nil(t, output.AxisNames)
+	})
+}
+
+func TestArgMinMaxOp_AxisNames(t *testing.T) {
+	t.Run("RemovesAxisName", func(t *testing.T) {
+		s := SD(F32, []int{-1, -1, 768}, []string{"batch", "seq_len", ""})
+		output, err := ArgMinMaxOp(s, 2, I32)
+		require.NoError(t, err)
+		require.Equal(t, []int{-1, -1}, output.Dimensions)
+		require.Equal(t, []string{"batch", "seq_len"}, output.AxisNames)
+	})
+
+	t.Run("RemovesFirstAxis", func(t *testing.T) {
+		s := SD(F32, []int{-1, 512}, []string{"batch", ""})
+		output, err := ArgMinMaxOp(s, 0, I32)
+		require.NoError(t, err)
+		require.Equal(t, []int{512}, output.Dimensions)
+		require.Equal(t, []string{""}, output.AxisNames)
+	})
+
+	t.Run("NoNames", func(t *testing.T) {
+		s := S(F32, 5, 6)
+		output, err := ArgMinMaxOp(s, 1, I32)
+		require.NoError(t, err)
+		require.Nil(t, output.AxisNames)
+	})
+}
+
+func TestReduceWindowOp_AxisNames(t *testing.T) {
+	t.Run("PreservesNames", func(t *testing.T) {
+		s := S(F32, 1, 20, 22, 3).WithAxisNames("batch", "height", "width", "channels")
+		output, err := ReduceWindowOp(s, []int{1, 3, 3, 1}, []int{1, 2, 2, 1}, nil, nil, nil)
+		require.NoError(t, err)
+		require.Equal(t, []string{"batch", "height", "width", "channels"}, output.AxisNames)
+	})
+
+	t.Run("DynamicDim", func(t *testing.T) {
+		s := SD(F32, []int{-1, 10}, []string{"batch", "seq"})
+		output, err := ReduceWindowOp(s, []int{1, 3}, []int{1, 1}, nil, nil, nil)
+		require.NoError(t, err)
+		require.Equal(t, shapes.DynamicDim, output.Dimensions[0])
+		require.Equal(t, 8, output.Dimensions[1])
+		require.Equal(t, []string{"batch", "seq"}, output.AxisNames)
+	})
+
+	t.Run("NoNames", func(t *testing.T) {
+		s := S(F32, 10)
+		output, err := ReduceWindowOp(s, []int{3}, nil, nil, nil, nil)
+		require.NoError(t, err)
+		require.Nil(t, output.AxisNames)
+	})
+}
