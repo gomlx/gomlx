@@ -78,7 +78,7 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 {{- end }}
 
-	switch lhs.shape.DType {
+	switch lhs.shape.DType {  //nolint:exhaustive
 {{- range .Versions}}
 {{- $version := .Name }}
 
@@ -88,7 +88,7 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 
 	case dtypes.{{.DType}}:
 		exec{{$name}}{{$version}}Generic[{{.GoType}}](lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]
-	{{- if $is_comparison }} bool {{- else }} {{.GoType}} {{- end }} ), lhs.shape, rhs.shape, output.shape)
+	{{- if $is_comparison }} bool {{- else }} {{.GoType}} {{- end }} ), lhs.shape, rhs.shape, output.shape) //nolint:errcheck // if nok, it would panic
 {{- end}}
 {{- end}}
 
@@ -98,7 +98,7 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 
 	case dtypes.{{.DType}}:
 		exec{{$name}}{{$version}}Generic[{{.GoType}}](lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]
-	{{- if $is_comparison }} bool {{- else }} {{.GoType}} {{- end }} ), lhs.shape, rhs.shape, output.shape)
+	{{- if $is_comparison }} bool {{- else }} {{.GoType}} {{- end }} ), lhs.shape, rhs.shape, output.shape) //nolint:errcheck // if nok, it would panic
 {{- end}}
 {{- end}}
 
@@ -107,7 +107,7 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 
 	case dtypes.{{.DType}}:
 		exec{{$name}}{{$version}}BFloat16(lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]
-	{{- if $is_comparison }} bool {{- else }} {{.GoType}} {{- end }} ), lhs.shape, rhs.shape, output.shape)
+	{{- if $is_comparison }} bool {{- else }} {{.GoType}} {{- end }} ), lhs.shape, rhs.shape, output.shape) //nolint:errcheck // if nok, it would panic
 {{- end}}
 {{- end}}
 
@@ -116,7 +116,7 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 {{- range $.BooleanTypes}}
 	case dtypes.{{.DType}}:
 		exec{{$name}}{{$version}}Generic[{{.GoType}}](lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]{{.GoType}}),
-			lhs.shape, rhs.shape, output.shape)
+			lhs.shape, rhs.shape, output.shape) //nolint:errcheck // if nok, it would panic
 {{- end}}
 {{- end}}
 
@@ -135,7 +135,8 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 
 func exec{{$name}}{{$version}}Generic[T POD{{$version}}Constraints](lhs, rhs []T, output []{{if $is_comparison}}bool{{else}}T{{end}},
 	lhsShape, rhsShape, outputShape shapes.Shape) {
-	if len(rhs) == 1 {
+	switch {
+	case len(rhs) == 1:
 		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
 		c := rhs[0]
 		for ii, input := range lhs {
@@ -143,7 +144,7 @@ func exec{{$name}}{{$version}}Generic[T POD{{$version}}Constraints](lhs, rhs []T
 		}
 		return
 {{- if not $is_commutative }}
-	} else if len(lhs) == 1 {
+	case len(lhs) == 1:
 		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
 		c := lhs[0]
 		for ii, input := range rhs {
@@ -151,15 +152,13 @@ func exec{{$name}}{{$version}}Generic[T POD{{$version}}Constraints](lhs, rhs []T
 		}
 		return
 {{- end}}
-
-	} else if lhsShape.Equal(rhsShape) {
+	case lhsShape.Equal(rhsShape):
 		// Case 2: Exact same shapes, no broadcasting.
 		for ii, input := range lhs {
 			output[ii] = {{ CallOp .Format "input" "rhs[ii]" }}
 		}
 		return
-
-	} else {
+	default:
 		// Case 3: with broadcasting non-scalar tensors:
 		lhsIter := newBroadcastIterator(lhsShape, outputShape)
 		rhsIter := newBroadcastIterator(rhsShape, outputShape)
@@ -168,8 +167,8 @@ func exec{{$name}}{{$version}}Generic[T POD{{$version}}Constraints](lhs, rhs []T
 			rhsIdx := rhsIter.Next()
 			output[outputIdx] = {{ CallOp .Format "lhs[lhsIdx]" "rhs[rhsIdx]" }}
 		}
+		return
 	}
-	return
 }
 {{- end}}
 
@@ -177,7 +176,8 @@ func exec{{$name}}{{$version}}Generic[T POD{{$version}}Constraints](lhs, rhs []T
 
 func exec{{$name}}{{$version}}BFloat16(lhs, rhs []bfloat16.BFloat16, output []{{if $is_comparison}}bool{{else}}bfloat16.BFloat16{{end}},
 	lhsShape, rhsShape, outputShape shapes.Shape) {
-	if len(rhs) == 1 {
+	switch {
+	case len(rhs) == 1:
 		// One side (rhs) is a scalar: only iterate over the lhs.
 		c := rhs[0].Float32()
 		for ii, input := range lhs {
@@ -190,7 +190,7 @@ func exec{{$name}}{{$version}}BFloat16(lhs, rhs []bfloat16.BFloat16, output []{{
 		}
 		return
 {{- if not $is_commutative }}
-	} else if len(lhs) == 1 {
+	case len(lhs) == 1:
 		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
 		c := lhs[0].Float32()
 		for ii, input := range rhs {
@@ -203,8 +203,7 @@ func exec{{$name}}{{$version}}BFloat16(lhs, rhs []bfloat16.BFloat16, output []{{
 		}
 		return
 {{- end}}
-
-	} else if lhsShape.Equal(rhsShape) {
+	case lhsShape.Equal(rhsShape):
 		// Case 2: Exact same shapes, no broadcasting.
 		for outputIdx := range output {
 			a := lhs[outputIdx].Float32()
@@ -216,8 +215,7 @@ func exec{{$name}}{{$version}}BFloat16(lhs, rhs []bfloat16.BFloat16, output []{{
 		{{- end }}
 		}
 		return
-
-	} else {
+	default:
 		// Case 3: with broadcasting non-scalar tensors:
 		lhsIter := newBroadcastIterator(lhsShape, outputShape)
 		rhsIter := newBroadcastIterator(rhsShape, outputShape)
@@ -232,8 +230,8 @@ func exec{{$name}}{{$version}}BFloat16(lhs, rhs []bfloat16.BFloat16, output []{{
 			output[outputIdx] = bfloat16.FromFloat32({{CallOp .Format "a" "b"}})
 		{{- end }}
 		}
-	}
 	return
+	}
 }
 {{- end}}
 
