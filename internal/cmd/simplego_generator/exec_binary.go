@@ -12,18 +12,11 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/support/sets"
 )
 
 const (
 	execBinaryFile = "gen_exec_binary.go"
 )
-
-// methodsToExclude from generating the API, they are maintained manually,
-// or simply excluded (deprecated methods).
-var methodsToExclude = sets.MakeWith(
-	"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
-	"And", "Or", "Xor", "Not", "ReduceAnd", "ReduceOr", "ReduceXor", "ScatterAdd")
 
 var (
 	execBinaryTemplate = template.Must(

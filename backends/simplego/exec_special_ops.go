@@ -210,7 +210,7 @@ func execReduce(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 	dtype := output.shape.DType
 
 	var reduceFn genericReduceFn
-	switch node.opType {
+	switch node.opType { //nolint:exhaustive
 	case backends.OpTypeReduceMax:
 		reduceFn = reduceMaxDTypeMap.Get(dtype).(genericReduceFn)
 	case backends.OpTypeReduceMin:
@@ -669,7 +669,7 @@ func execReverse(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	mergedNewDim := 1
 	mergedLastIsReversed := false
 	isFirstAxis := true
-	elementSize := int(shape.DType.Size())
+	elementSize := shape.DType.Size()
 	for axis, dim := range shape.Dimensions {
 		isReversed := areAxesReversed[axis]
 		if dim == 1 {
@@ -695,7 +695,7 @@ func execReverse(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 		mergedReversedAxes = append(mergedReversedAxes, len(mergedDims))
 		mergedDims = append(mergedDims, mergedNewDim)
 	} else {
-		// If the last axis is not reversed, we remove it, and "merge" it into the element size.
+		// If the last axis is not reversed, we remove it and "merge" it into the element size.
 		elementSize *= mergedNewDim
 	}
 	mergedShape := shapes.Make(shape.DType, mergedDims...)
@@ -1210,7 +1210,7 @@ func execConcatenate(backend *Backend, node *Node, inputs []*Buffer, inputsOwned
 		inputBlockBytes := inputConcatAxisSize * innerBlockBytes
 
 		// Iterate through all outer dimension blocks.
-		for outerIdx := 0; outerIdx < outerBlockSize; outerIdx++ {
+		for outerIdx := range outerBlockSize {
 			// Calculate the starting byte position for the current outer block in the input.
 			// This is simply the outer block index times the size of the block to copy for this input.
 			inputStartOffset := outerIdx * inputBlockBytes
@@ -1276,23 +1276,23 @@ func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, out
 	dtype := output.shape.DType
 	type combineFnT = func(a, b T) T
 	var combineFn combineFnT
-	switch opType {
+	switch opType { //nolint:exhaustive
 	case backends.OpTypeScatterMax:
-		combineFn = combineMaxDTypeMap.Get(dtype).(combineFnT)
+		combineFn = combineMaxDTypeMap.Get(dtype).(combineFnT) //nolint:errcheck
 	case backends.OpTypeScatterMin:
-		combineFn = combineMinDTypeMap.Get(dtype).(combineFnT)
+		combineFn = combineMinDTypeMap.Get(dtype).(combineFnT) //nolint:errcheck
 	case backends.OpTypeScatterSum:
-		combineFn = combineSumDTypeMap.Get(dtype).(combineFnT)
+		combineFn = combineSumDTypeMap.Get(dtype).(combineFnT) //nolint:errcheck
 	default:
 		return errors.Errorf("unsupported scatter op type %q", opType)
 	}
 	_ = combineFn
 
 	outputShape := output.shape
-	outputFlat := output.flat.([]T)
+	outputFlat := output.flat.([]T) //nolint:errcheck  // it will panic
 	indicesFlat := indices.flat
 	updatesShape := updates.shape
-	updatesFlat := updates.flat.([]T)
+	updatesFlat := updates.flat.([]T) //nolint:errcheck  // it will panic
 
 	// Initialize gather of the scatter indices.
 	indicesShape := indices.shape
@@ -1351,9 +1351,7 @@ func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, out
 
 		// Prepare innerUpdatesIt to start from the indices in the updatesIt.
 		innerUpdatesIt.FlatIdx = updatesIt.FlatIdx
-		for ii, idx := range updatesIt.PerAxisIdx {
-			innerUpdatesIt.PerAxisIdx[ii] = idx
-		}
+		copy(innerUpdatesIt.PerAxisIdx, updatesIt.PerAxisIdx)
 
 		// Inner-loop: combine slice (window) of update into output.
 		for {
@@ -1483,7 +1481,7 @@ func combineForScatterSumBFloat16(a, b bfloat16.BFloat16) bfloat16.BFloat16 {
 // SliceOp ========================================================================================================
 
 // execSlice is the executor function registered for backends.OpTypeSlice.
-func execSlice(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+func execSlice(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	operand := inputs[0]
 	sliceParams, ok := node.data.(*sliceNode)
 	if !ok {
@@ -1500,7 +1498,7 @@ func execSlice(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 
 	// Dispatch to the generic implementation based on DType.
 	// Note: limits are not used in the generic exec function but passed for potential future use or consistency.
-	fn := sliceDTypeMap.Get(node.shape.DType).(func(operand, output *Buffer, params *sliceNode))
+	fn := sliceDTypeMap.Get(node.shape.DType).(func(operand, output *Buffer, params *sliceNode)) //nolint:errcheck
 	fn(operand, output, sliceParams)
 	return output, nil
 }
@@ -1614,7 +1612,7 @@ func execRNGBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsO
 const MaxArgMinMaxReductionSize = 0x8000_0000
 
 // execArgMinMax is the executor function registered for backends.OpTypeArgMinMax.
-func execArgMinMax(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+func execArgMinMax(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	operand := inputs[0]
 	reduceAxis := node.data.(*argMinMaxNode).axis
 	isMin := node.data.(*argMinMaxNode).isMin
@@ -1832,7 +1830,7 @@ func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, _ []bool) 
 
 	// Initialize output and updateFn according to the reduction type
 	var buildUpdateFnMap *DTypeMap
-	switch opData.reductionType {
+	switch opData.reductionType { //nolint:exhaustive
 	case backends.ReduceOpMax:
 		err := output.Fill(dtype.LowestValue())
 		if err != nil {

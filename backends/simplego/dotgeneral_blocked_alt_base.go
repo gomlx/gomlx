@@ -65,7 +65,7 @@ func dgCopyOutputBlockToFlat[T interface { //alt:base
 				outputBlockOffset := outputLhsOffset + rhsStart*outputRhsStride
 
 				// Copy valid elements from the block
-				for i := 0; i < lhsEnd-lhsStart; i++ {
+				for i := range lhsEnd - lhsStart {
 					sourceRowOffset := sourceBlockOffset + i*blockDim
 					outputRowOffset := outputBlockOffset + i*outputLhsStride
 					copy(outputData[outputRowOffset:outputRowOffset+rhsEnd-rhsStart], //alt:base

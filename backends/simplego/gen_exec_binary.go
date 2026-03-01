@@ -46,6 +46,7 @@ func execAdd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	}
 
 	switch lhs.shape.DType { //nolint:exhaustive
+
 	case dtypes.Uint8:
 		execAddNumericGeneric[uint8](lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8), lhs.shape, rhs.shape, output.shape) //nolint:errcheck // if nok, it would panic
 
@@ -1474,8 +1475,8 @@ func execLogicalXor(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 	switch lhs.shape.DType { //nolint:exhaustive
 	// Boolean:
 	case dtypes.Bool:
-		execLogicalXorBooleanGeneric[bool](lhs.flat.([]bool), rhs.flat.([]bool), //nolint:errcheck // if nok, it would panic
-			output.flat.([]bool), lhs.shape, rhs.shape, output.shape) //nolint:errcheck // if nok, it would panic
+		execLogicalXorBooleanGeneric[bool](lhs.flat.([]bool), rhs.flat.([]bool), output.flat.([]bool),
+			lhs.shape, rhs.shape, output.shape) //nolint:errcheck // if nok, it would panic
 	default:
 		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
