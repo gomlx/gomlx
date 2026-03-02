@@ -879,6 +879,12 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) *execGraphCacheEnt
 	default:
 		argsV = make([]reflect.Value, 0, len(argsShapesToUse))
 	}
+	// Defense-in-depth: verify the backend supports dynamic axes before injecting
+	// DynamicDim parameters. WithDynamicAxes already checks this, but guard here
+	// in case dynamicAxes is set by other means.
+	if e.dynamicAxes != nil && !e.backend.Capabilities().DynamicAxes {
+		panic(errors.Errorf("createAndCacheGraph: backend %q does not support dynamic axes", e.backend.Name()))
+	}
 	for ii, shape := range argsShapesToUse {
 		var spec *distributed.ShardingSpec
 		if ii < len(e.inputShardingSpecs) {

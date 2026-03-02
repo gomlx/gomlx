@@ -288,13 +288,20 @@ func (f *Function) dotGeneralDynamic(
 	batchDims []int, batchAxisNames []string, contractingDims []int,
 ) (backends.Value, error) {
 	// Find sizes with dynamic-awareness.
+	//
+	// Two representations of batch axis names are used:
+	//   - batchAxisNames ([]string, from DotGeneral caller): per-axis names for the
+	//     output reshape, preserving individual batch dimensions.
+	//   - batchAxisName (string, from dgFindSizesDynamic): single combined name for the
+	//     product dimension in the rank-3 intermediate shape [batchSize, lhsCross, rhsCross].
+	//     Taken from whichever side has a dynamic batch axis (preferring rhs, falling back to lhs).
 	var lhsCrossDims, rhsCrossDims []int
 	var lhsCrossAxisNames, rhsCrossAxisNames []string
 	var batchAxisName, lhsBatchAxisName string
 	params.batchSize, params.lhsCrossSize, params.contractingSize, lhsCrossDims, lhsCrossAxisNames,
-		lhsBatchAxisName, _ = dgFindSizesDynamic(lhs.shape, params.lhsContractingAxes, params.lhsBatchAxes)
+		lhsBatchAxisName = dgFindSizesDynamic(lhs.shape, params.lhsContractingAxes, params.lhsBatchAxes)
 	_, params.rhsCrossSize, _, rhsCrossDims, rhsCrossAxisNames,
-		batchAxisName, _ = dgFindSizesDynamic(rhs.shape, params.rhsContractingAxes, params.rhsBatchAxes)
+		batchAxisName = dgFindSizesDynamic(rhs.shape, params.rhsContractingAxes, params.rhsBatchAxes)
 	if batchAxisName == "" {
 		batchAxisName = lhsBatchAxisName
 	}
@@ -415,10 +422,10 @@ func dgFindSizes(shape shapes.Shape, contractingAxes, batchAxes []int) (
 // dgFindSizesDynamic is like dgFindSizes but handles DynamicDim values.
 // If any contributing axis has DynamicDim, the running product becomes DynamicDim.
 // It also returns the axis names for each cross dimension and the combined axis name
-// for the batch and contracting products.
+// for the batch product (used for the rank-3 intermediate shape).
 func dgFindSizesDynamic(shape shapes.Shape, contractingAxes, batchAxes []int) (
 	batchSize, crossSize, contractingSize int, crossDims []int, crossAxisNames []string,
-	batchAxisName, contractingAxisName string) {
+	batchAxisName string) {
 	rank := shape.Rank()
 	axesTypes := make([]int, rank)
 
@@ -442,9 +449,6 @@ func dgFindSizesDynamic(shape shapes.Shape, contractingAxes, batchAxes []int) (
 			crossAxisNames = append(crossAxisNames, name)
 		case 1: // Contracting axes
 			contractingSize = mulDynamic(contractingSize, dim)
-			if dim == shapes.DynamicDim && contractingAxisName == "" {
-				contractingAxisName = name
-			}
 		case 2: // Batch axes
 			batchSize = mulDynamic(batchSize, dim)
 			if dim == shapes.DynamicDim && batchAxisName == "" {

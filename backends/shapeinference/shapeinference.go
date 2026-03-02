@@ -1157,14 +1157,16 @@ func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 	if channelGroupCount < 1 {
 		return errorf("channelGroupCount=%d must be >= 1 for input shape %s", channelGroupCount, input)
 	}
-	if inputChannels%channelGroupCount != 0 {
-		return errorf("input channels dimension %d must be divisible by channelGroupCount %d", inputChannels, channelGroupCount)
+	if inputChannels != shapes.DynamicDim {
+		if inputChannels%channelGroupCount != 0 {
+			return errorf("input channels dimension %d must be divisible by channelGroupCount %d", inputChannels, channelGroupCount)
+		}
 	}
 	if outputChannels%channelGroupCount != 0 {
 		return errorf("kernel output channels dimension %d must be divisible by channelGroupCount %d", outputChannels, channelGroupCount)
 	}
 	kernelInputChannels := kernel.Dim(axes.KernelInputChannels)
-	if inputChannels != kernelInputChannels*channelGroupCount {
+	if inputChannels != shapes.DynamicDim && inputChannels != kernelInputChannels*channelGroupCount {
 		return errorf("we must have inputChannels (=%d) = kernelInputChannels (=%d) * channelGroupCount (=%d) -- input shape is %s, kernel shape is %s",
 			inputChannels, kernelInputChannels, channelGroupCount, input, kernel)
 	}
@@ -1192,6 +1194,13 @@ func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 
 	for spatialAxisIdx, inputAxis := range axes.InputSpatial {
 		inputDim := input.Dim(inputAxis)
+
+		// Dynamic spatial dims: propagate DynamicDim without arithmetic.
+		if inputDim == shapes.DynamicDim {
+			output.Dimensions[axes.OutputSpatial[spatialAxisIdx]] = shapes.DynamicDim
+			continue
+		}
+
 		filterAxis := axes.KernelSpatial[spatialAxisIdx]
 		kernelDim := kernel.Dim(filterAxis)
 		stride := 1

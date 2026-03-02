@@ -432,8 +432,8 @@ func TestExecWithDynamicAxes(t *testing.T) {
 	exec.Finalize()
 }
 
-func TestExecWithDynamicAxes_CacheSingleEntry(t *testing.T) {
-	// Verify that WithDynamicAxes compiles only one graph regardless of input shape variation.
+func TestExecWithDynamicAxes_VaryingBatchSizes(t *testing.T) {
+	// Verify that WithDynamicAxes produces correct results across multiple batch sizes.
 	mulFn := func(a, b *graph.Node) *graph.Node {
 		return graph.Mul(a, b)
 	}

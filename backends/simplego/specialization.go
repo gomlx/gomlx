@@ -213,10 +213,12 @@ func recomputeDotGeneralData(backend *Backend, resolved []*Node, orig *Node) (*d
 	}
 	newData.outputBlockedShape = dgCreateBlockedShape(outputDType, newData.batchSize, newData.lhsCrossSize, newData.rhsCrossSize, blockLog2Dim)
 
-	// Select exec path excluding blockedPath (no pre-blocking nodes for dynamic graphs).
+	// Select exec path. blockedPath and checkPath require pre-blocked input nodes
+	// created at graph build time, which aren't available for dynamic graphs.
+	// Fall back to normalizedPath for those. packgemmPath and highwayPath work
+	// directly on raw inputs and are fine for dynamic graphs.
 	newData.execPath = dgSelectExecPath(backend, lhsShape, rhsShape, newData)
 	if newData.execPath == blockedPath || newData.execPath == checkPath {
-		// Dynamic-shape graphs don't have pre-blocked nodes; fall back to normalizedPath.
 		newData.execPath = normalizedPath
 	}
 
