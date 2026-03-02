@@ -486,6 +486,351 @@ func TestExecWithDynamicAxes_Neg(t *testing.T) {
 	exec.Finalize()
 }
 
+// TestExecuteDynamic_DotGeneral_MatMul tests DotGeneral with dynamic batch axis
+// for a standard matrix multiplication: [batch, M, K] × [K, N] → [batch, M, N].
+func TestExecuteDynamic_DotGeneral_MatMul(t *testing.T) {
+	M, K, N := 3, 4, 5
+
+	// Build graph with dynamic batch.
+	builder := backend.Builder("test_dynamic_dotgeneral_matmul")
+	mainFn := builder.Main()
+
+	xShape := shapes.MakeDynamic(dtypes.Float32, []int{-1, M, K}, []string{"batch", "", ""})
+	yShape := shapes.Make(dtypes.Float32, K, N) // rhs is static
+
+	x, err := mainFn.Parameter("x", xShape, nil)
+	require.NoError(t, err)
+	y, err := mainFn.Parameter("y", yShape, nil)
+	require.NoError(t, err)
+
+	// Contract last axis of x with first axis of y.
+	dot, err := mainFn.DotGeneral(x, []int{2}, nil, y, []int{0}, nil, backends.DotGeneralConfig{})
+	require.NoError(t, err)
+
+	err = mainFn.Return([]backends.Value{dot}, nil)
+	require.NoError(t, err)
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	// Execute with batch=2.
+	batch := 2
+	xData := make([]float32, batch*M*K)
+	for i := range xData {
+		xData[i] = float32(i%K + 1) // Values 1..K repeating
+	}
+	yData := make([]float32, K*N)
+	for i := range yData {
+		yData[i] = float32(i%N + 1) // Values 1..N repeating
+	}
+
+	xBuf, err := backend.BufferFromFlatData(0, xData, shapes.Make(dtypes.Float32, batch, M, K))
+	require.NoError(t, err)
+	yBuf, err := backend.BufferFromFlatData(0, yData, shapes.Make(dtypes.Float32, K, N))
+	require.NoError(t, err)
+
+	outputs, err := exec.Execute([]backends.Buffer{xBuf, yBuf}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+
+	outBuf := outputs[0].(*Buffer)
+	require.Equal(t, dtypes.Float32, outBuf.shape.DType)
+	require.Equal(t, []int{batch, M, N}, outBuf.shape.Dimensions)
+
+	// Verify correctness: compute expected output manually.
+	outFlat := outBuf.flat.([]float32)
+	for b := 0; b < batch; b++ {
+		for m := 0; m < M; m++ {
+			for n := 0; n < N; n++ {
+				var expected float32
+				for k := 0; k < K; k++ {
+					expected += xData[b*M*K+m*K+k] * yData[k*N+n]
+				}
+				idx := b*M*N + m*N + n
+				require.InDelta(t, expected, outFlat[idx], 1e-4,
+					"output[%d,%d,%d] = %f, want %f", b, m, n, outFlat[idx], expected)
+			}
+		}
+	}
+
+	// Execute again with a different batch size (batch=4).
+	batch2 := 4
+	xData2 := make([]float32, batch2*M*K)
+	for i := range xData2 {
+		xData2[i] = 1.0
+	}
+	xBuf2, err := backend.BufferFromFlatData(0, xData2, shapes.Make(dtypes.Float32, batch2, M, K))
+	require.NoError(t, err)
+
+	outputs2, err := exec.Execute([]backends.Buffer{xBuf2, yBuf}, nil, 0)
+	require.NoError(t, err)
+	outBuf2 := outputs2[0].(*Buffer)
+	require.Equal(t, []int{batch2, M, N}, outBuf2.shape.Dimensions)
+
+	// Each element should be the sum of a column of y (since all x values are 1).
+	outFlat2 := outBuf2.flat.([]float32)
+	for b := 0; b < batch2; b++ {
+		for m := 0; m < M; m++ {
+			for n := 0; n < N; n++ {
+				var expected float32
+				for k := 0; k < K; k++ {
+					expected += yData[k*N+n]
+				}
+				idx := b*M*N + m*N + n
+				require.InDelta(t, expected, outFlat2[idx], 1e-4)
+			}
+		}
+	}
+}
+
+// TestExecuteDynamic_DotGeneral_BatchedMatMul tests DotGeneral with dynamic batch axis
+// and batch axes: [batch, M, K] × [batch, K, N] → [batch, M, N].
+func TestExecuteDynamic_DotGeneral_BatchedMatMul(t *testing.T) {
+	M, K, N := 2, 3, 2
+
+	builder := backend.Builder("test_dynamic_dotgeneral_batched")
+	mainFn := builder.Main()
+
+	xShape := shapes.MakeDynamic(dtypes.Float32, []int{-1, M, K}, []string{"batch", "", ""})
+	yShape := shapes.MakeDynamic(dtypes.Float32, []int{-1, K, N}, []string{"batch", "", ""})
+
+	x, err := mainFn.Parameter("x", xShape, nil)
+	require.NoError(t, err)
+	y, err := mainFn.Parameter("y", yShape, nil)
+	require.NoError(t, err)
+
+	// Batch axis 0, contract last of x with axis 1 of y.
+	dot, err := mainFn.DotGeneral(x, []int{2}, []int{0}, y, []int{1}, []int{0}, backends.DotGeneralConfig{})
+	require.NoError(t, err)
+
+	err = mainFn.Return([]backends.Value{dot}, nil)
+	require.NoError(t, err)
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	// Execute with batch=2.
+	batch := 2
+	xData := []float32{
+		// batch 0: identity-like
+		1, 0, 0,
+		0, 1, 0,
+		// batch 1: all ones
+		1, 1, 1,
+		1, 1, 1,
+	}
+	yData := []float32{
+		// batch 0
+		1, 2,
+		3, 4,
+		5, 6,
+		// batch 1
+		10, 20,
+		30, 40,
+		50, 60,
+	}
+
+	xBuf, err := backend.BufferFromFlatData(0, xData, shapes.Make(dtypes.Float32, batch, M, K))
+	require.NoError(t, err)
+	yBuf, err := backend.BufferFromFlatData(0, yData, shapes.Make(dtypes.Float32, batch, K, N))
+	require.NoError(t, err)
+
+	outputs, err := exec.Execute([]backends.Buffer{xBuf, yBuf}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+
+	outBuf := outputs[0].(*Buffer)
+	require.Equal(t, []int{batch, M, N}, outBuf.shape.Dimensions)
+
+	outFlat := outBuf.flat.([]float32)
+	// Batch 0: [[1,0,0],[0,1,0]] × [[1,2],[3,4],[5,6]] = [[1,2],[3,4]]
+	// Batch 1: [[1,1,1],[1,1,1]] × [[10,20],[30,40],[50,60]] = [[90,120],[90,120]]
+	expected := []float32{1, 2, 3, 4, 90, 120, 90, 120}
+	for i, v := range expected {
+		require.InDelta(t, v, outFlat[i], 1e-4, "index %d", i)
+	}
+
+	// Execute with batch=1.
+	xBuf1, err := backend.BufferFromFlatData(0, []float32{2, 0, 0, 0, 2, 0}, shapes.Make(dtypes.Float32, 1, M, K))
+	require.NoError(t, err)
+	yBuf1, err := backend.BufferFromFlatData(0, []float32{1, 2, 3, 4, 5, 6}, shapes.Make(dtypes.Float32, 1, K, N))
+	require.NoError(t, err)
+
+	outputs1, err := exec.Execute([]backends.Buffer{xBuf1, yBuf1}, nil, 0)
+	require.NoError(t, err)
+	outFlat1 := outputs1[0].(*Buffer).flat.([]float32)
+	// [[2,0,0],[0,2,0]] × [[1,2],[3,4],[5,6]] = [[2,4],[6,8]]
+	expected1 := []float32{2, 4, 6, 8}
+	for i, v := range expected1 {
+		require.InDelta(t, v, outFlat1[i], 1e-4, "batch=1 index %d", i)
+	}
+}
+
+// TestExecuteDynamic_ConvGeneral_DynamicBatch tests ConvGeneral with dynamic batch axis.
+func TestExecuteDynamic_ConvGeneral_DynamicBatch(t *testing.T) {
+	// 1D conv: input [batch, channels_in, width], kernel [channels_out, channels_in, kernel_width]
+	channelsIn, channelsOut := 1, 1
+	width, kernelWidth := 5, 3
+
+	builder := backend.Builder("test_dynamic_conv")
+	mainFn := builder.Main()
+
+	inputShape := shapes.MakeDynamic(dtypes.Float32, []int{-1, channelsIn, width}, []string{"batch", "", ""})
+	kernelShape := shapes.Make(dtypes.Float32, channelsOut, channelsIn, kernelWidth)
+
+	input, err := mainFn.Parameter("input", inputShape, nil)
+	require.NoError(t, err)
+	kernel, err := mainFn.Parameter("kernel", kernelShape, nil)
+	require.NoError(t, err)
+
+	axes := backends.ConvolveAxesConfig{
+		InputBatch:           0,
+		InputChannels:        1,
+		InputSpatial:         []int{2},
+		KernelInputChannels:  1,
+		KernelOutputChannels: 0,
+		KernelSpatial:        []int{2},
+		OutputBatch:          0,
+		OutputChannels:       1,
+		OutputSpatial:        []int{2},
+	}
+
+	conv, err := mainFn.ConvGeneral(input, kernel, axes,
+		[]int{1},       // strides
+		[][2]int{{0, 0}}, // no padding
+		nil, nil,       // no dilations
+		1, 1,           // group counts
+	)
+	require.NoError(t, err)
+
+	err = mainFn.Return([]backends.Value{conv}, nil)
+	require.NoError(t, err)
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	// Execute with batch=1.
+	outputWidth := width - kernelWidth + 1 // 5 - 3 + 1 = 3
+	inputData := []float32{1, 2, 3, 4, 5}
+	kernelData := []float32{1, 1, 1} // sum-of-3 kernel
+
+	inputBuf, err := backend.BufferFromFlatData(0, inputData, shapes.Make(dtypes.Float32, 1, channelsIn, width))
+	require.NoError(t, err)
+	kernelBuf, err := backend.BufferFromFlatData(0, kernelData, kernelShape)
+	require.NoError(t, err)
+
+	outputs, err := exec.Execute([]backends.Buffer{inputBuf, kernelBuf}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+
+	outBuf := outputs[0].(*Buffer)
+	require.Equal(t, []int{1, channelsOut, outputWidth}, outBuf.shape.Dimensions)
+
+	outFlat := outBuf.flat.([]float32)
+	// [1+2+3, 2+3+4, 3+4+5] = [6, 9, 12]
+	require.InDelta(t, float32(6), outFlat[0], 1e-4)
+	require.InDelta(t, float32(9), outFlat[1], 1e-4)
+	require.InDelta(t, float32(12), outFlat[2], 1e-4)
+
+	// Execute with batch=2.
+	inputData2 := []float32{
+		1, 2, 3, 4, 5, // batch 0
+		10, 20, 30, 40, 50, // batch 1
+	}
+	inputBuf2, err := backend.BufferFromFlatData(0, inputData2, shapes.Make(dtypes.Float32, 2, channelsIn, width))
+	require.NoError(t, err)
+
+	outputs2, err := exec.Execute([]backends.Buffer{inputBuf2, kernelBuf}, nil, 0)
+	require.NoError(t, err)
+	outBuf2 := outputs2[0].(*Buffer)
+	require.Equal(t, []int{2, channelsOut, outputWidth}, outBuf2.shape.Dimensions)
+
+	outFlat2 := outBuf2.flat.([]float32)
+	// Batch 0: [6, 9, 12], Batch 1: [60, 90, 120]
+	expected := []float32{6, 9, 12, 60, 90, 120}
+	for i, v := range expected {
+		require.InDelta(t, v, outFlat2[i], 1e-4, "index %d", i)
+	}
+}
+
+// TestExecWithDynamicAxes_DotGeneral tests end-to-end DotGeneral with dynamic axes
+// using the graph.MustNewExec API.
+func TestExecWithDynamicAxes_DotGeneral(t *testing.T) {
+	matMulFn := func(x, y *graph.Node) *graph.Node {
+		return graph.Einsum("bmk,kn->bmn", x, y)
+	}
+	exec := graph.MustNewExec(backend, matMulFn).
+		WithDynamicAxes([]string{"batch", "", ""}, []string{"", ""})
+
+	// batch=2, M=2, K=3, N=2
+	x1 := tensors.FromFlatDataAndDimensions([]float32{
+		1, 0, 0,
+		0, 1, 0,
+		1, 1, 1,
+		1, 1, 1,
+	}, 2, 2, 3)
+	y1 := tensors.FromFlatDataAndDimensions([]float32{
+		1, 2,
+		3, 4,
+		5, 6,
+	}, 3, 2)
+
+	outputs := exec.MustExec(x1, y1)
+	require.Len(t, outputs, 1)
+	got, err := tensors.CopyFlatData[float32](outputs[0])
+	require.NoError(t, err)
+	// Batch 0: [[1,0,0],[0,1,0]] × [[1,2],[3,4],[5,6]] = [[1,2],[3,4]]
+	// Batch 1: [[1,1,1],[1,1,1]] × [[1,2],[3,4],[5,6]] = [[9,12],[9,12]]
+	expected := []float32{1, 2, 3, 4, 9, 12, 9, 12}
+	for i, v := range expected {
+		require.InDelta(t, v, got[i], 1e-4, "index %d", i)
+	}
+
+	// Reuse with batch=1.
+	x2 := tensors.FromFlatDataAndDimensions([]float32{2, 0, 0, 0, 2, 0}, 1, 2, 3)
+	outputs2 := exec.MustExec(x2, y1)
+	got2, err := tensors.CopyFlatData[float32](outputs2[0])
+	require.NoError(t, err)
+	expected2 := []float32{2, 4, 6, 8}
+	for i, v := range expected2 {
+		require.InDelta(t, v, got2[i], 1e-4, "batch=1 index %d", i)
+	}
+
+	exec.Finalize()
+}
+
+// TestExecWithDynamicAxes_ConvGeneral tests end-to-end ConvGeneral with dynamic batch.
+// Uses channels-last layout: input=[batch, width, channels], kernel=[out_channels, spatial, in_channels].
+func TestExecWithDynamicAxes_ConvGeneral(t *testing.T) {
+	convFn := func(input, kernel *graph.Node) *graph.Node {
+		return graph.Convolve(input, kernel).PadSame().Done()
+	}
+	exec := graph.MustNewExec(backend, convFn).
+		WithDynamicAxes([]string{"batch", "", ""}, []string{"", "", ""})
+
+	// ChannelsLast layout:
+	//   input:  [batch, width, channels_in]
+	//   kernel: [kernel_width, channels_in, channels_out]
+	// PadSame means output width = input width = 3.
+	input1 := tensors.FromFlatDataAndDimensions([]float32{1, 2, 3}, 1, 3, 1)
+	kernel1 := tensors.FromFlatDataAndDimensions([]float32{1, 0, 0}, 3, 1, 1)
+
+	outputs := exec.MustExec(input1, kernel1)
+	require.Len(t, outputs, 1)
+	got, err := tensors.CopyFlatData[float32](outputs[0])
+	require.NoError(t, err)
+	require.Len(t, got, 3) // [1, 3, 1] output
+
+	// Reuse with batch=2.
+	input2 := tensors.FromFlatDataAndDimensions([]float32{
+		1, 2, 3,
+		10, 20, 30,
+	}, 2, 3, 1)
+	outputs2 := exec.MustExec(input2, kernel1)
+	got2, err := tensors.CopyFlatData[float32](outputs2[0])
+	require.NoError(t, err)
+	require.Len(t, got2, 6) // [2, 3, 1] output
+
+	exec.Finalize()
+}
+
 func TestCreateSpecialization(t *testing.T) {
 	// Build a dynamic graph and verify the specialization has correctly resolved shapes.
 	builder := backend.Builder("test_create_spec")
@@ -524,4 +869,100 @@ func TestCreateSpecialization(t *testing.T) {
 		"expected resolved parameter dimensions [16, 8], got %v", paramNode.shape.Dimensions)
 
 	fmt.Printf("Specialization test passed for bindings: %v\n", bindings)
+}
+
+// TestExecuteDynamic_DotGeneral_LargeMatrix tests dynamic DotGeneral with matrix sizes
+// large enough to potentially trigger packgemm/highway/blocked exec paths (depending on
+// backend config), exercising the fallback logic in recomputeDotGeneralData.
+func TestExecuteDynamic_DotGeneral_LargeMatrix(t *testing.T) {
+	M, K, N := 64, 32, 64
+
+	builder := backend.Builder("test_dynamic_dotgeneral_large")
+	mainFn := builder.Main()
+
+	xShape := shapes.MakeDynamic(dtypes.Float32, []int{-1, M, K}, []string{"batch", "", ""})
+	yShape := shapes.Make(dtypes.Float32, K, N)
+
+	x, err := mainFn.Parameter("x", xShape, nil)
+	require.NoError(t, err)
+	y, err := mainFn.Parameter("y", yShape, nil)
+	require.NoError(t, err)
+
+	// Standard matmul: contract last axis of x with first axis of y.
+	dot, err := mainFn.DotGeneral(x, []int{2}, nil, y, []int{0}, nil, backends.DotGeneralConfig{})
+	require.NoError(t, err)
+
+	err = mainFn.Return([]backends.Value{dot}, nil)
+	require.NoError(t, err)
+	exec, err := builder.Compile()
+	require.NoError(t, err)
+
+	// Execute with batch=2: x is all-ones, y is identity-like (y[k][n] = 1 if k==n, else 0).
+	batch := 2
+	xData := make([]float32, batch*M*K)
+	for i := range xData {
+		xData[i] = 1.0
+	}
+	yData := make([]float32, K*N)
+	for k := 0; k < K; k++ {
+		yData[k*N+k] = 1.0 // identity in the K×N subblock (K <= N)
+	}
+
+	xBuf, err := backend.BufferFromFlatData(0, xData, shapes.Make(dtypes.Float32, batch, M, K))
+	require.NoError(t, err)
+	yBuf, err := backend.BufferFromFlatData(0, yData, yShape)
+	require.NoError(t, err)
+
+	outputs, err := exec.Execute([]backends.Buffer{xBuf, yBuf}, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+
+	outBuf := outputs[0].(*Buffer)
+	require.Equal(t, []int{batch, M, N}, outBuf.shape.Dimensions)
+
+	// Each row of the output should be the sum of the identity columns = [1,1,...,1,0,...,0]
+	// (first K entries are 1, remaining N-K are 0).
+	outFlat := outBuf.flat.([]float32)
+	for b := 0; b < batch; b++ {
+		for m := 0; m < M; m++ {
+			for n := 0; n < N; n++ {
+				idx := b*M*N + m*N + n
+				var expected float32
+				if n < K {
+					expected = 1.0
+				}
+				require.InDelta(t, expected, outFlat[idx], 1e-4,
+					"output[%d,%d,%d] = %f, want %f", b, m, n, outFlat[idx], expected)
+			}
+		}
+	}
+
+	// Execute with batch=4 to verify specialization caching works for larger batches too.
+	batch2 := 4
+	xData2 := make([]float32, batch2*M*K)
+	for i := range xData2 {
+		xData2[i] = 2.0
+	}
+	xBuf2, err := backend.BufferFromFlatData(0, xData2, shapes.Make(dtypes.Float32, batch2, M, K))
+	require.NoError(t, err)
+
+	outputs2, err := exec.Execute([]backends.Buffer{xBuf2, yBuf}, nil, 0)
+	require.NoError(t, err)
+	outBuf2 := outputs2[0].(*Buffer)
+	require.Equal(t, []int{batch2, M, N}, outBuf2.shape.Dimensions)
+
+	outFlat2 := outBuf2.flat.([]float32)
+	for b := 0; b < batch2; b++ {
+		for m := 0; m < M; m++ {
+			for n := 0; n < N; n++ {
+				idx := b*M*N + m*N + n
+				var expected float32
+				if n < K {
+					expected = 2.0
+				}
+				require.InDelta(t, expected, outFlat2[idx], 1e-4,
+					"batch2 output[%d,%d,%d] = %f, want %f", b, m, n, outFlat2[idx], expected)
+			}
+		}
+	}
 }

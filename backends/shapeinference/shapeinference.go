@@ -389,6 +389,20 @@ func WhereOp(condition, onTrue, onFalse shapes.Shape) (output shapes.Shape, err 
 //
 // Notice the backends.Reshape doesn't support auto-scaling dimensions (set to -1), as graph.Reshape does.
 func ReshapeOp(operand shapes.Shape, dims []int) (output shapes.Shape, err error) {
+	if operand.HasDynamicDims() {
+		// Dynamic path: skip size validation (deferred to specialization time).
+		// Reject DynamicDim values in target dims — axis names would be lost.
+		// Callers needing dynamic output dims should create reshape nodes directly
+		// via getOrCreateNode with a properly-named MakeDynamic shape.
+		for i, d := range dims {
+			if d == shapes.DynamicDim {
+				return shapes.Invalid(), errors.Errorf(
+					"ReshapeOp: target dims[%d] is DynamicDim; use getOrCreateNode directly for dynamic reshape targets", i)
+			}
+		}
+		output = shapes.Shape{DType: operand.DType, Dimensions: slices.Clone(dims)}
+		return output, nil
+	}
 	output = shapes.Make(operand.DType, dims...)
 	if operand.Size() != output.Size() {
 		err = errors.Errorf("Reshape() cannot reshape %s to dimensions %v, their size don't match",
@@ -1160,7 +1174,7 @@ func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 	if batchGroupCount < 1 {
 		return errorf("batchGroupCount=%d must be >= 1 for input shape %s", batchGroupCount, input)
 	}
-	if inputBatch%batchGroupCount != 0 {
+	if inputBatch != shapes.DynamicDim && inputBatch%batchGroupCount != 0 {
 		return errorf("input batch dimension %d must be divisible by batchGroupCount %d", inputBatch, batchGroupCount)
 	}
 	if outputChannels%batchGroupCount != 0 {
@@ -1169,17 +1183,19 @@ func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 
 	// Find the output shape.
 	output := input.Clone()
-	output.Dimensions[axes.OutputBatch] = inputBatch / batchGroupCount
+	if inputBatch == shapes.DynamicDim {
+		output.Dimensions[axes.OutputBatch] = shapes.DynamicDim
+	} else {
+		output.Dimensions[axes.OutputBatch] = inputBatch / batchGroupCount
+	}
 	output.Dimensions[axes.OutputChannels] = outputChannels
 
 	for spatialAxisIdx, inputAxis := range axes.InputSpatial {
 		inputDim := input.Dim(inputAxis)
 		filterAxis := axes.KernelSpatial[spatialAxisIdx]
 		kernelDim := kernel.Dim(filterAxis)
-		var (
-			stride  int
-			padding [2]int
-		)
+		stride := 1
+		var padding [2]int
 		if strides != nil {
 			stride = strides[spatialAxisIdx]
 		}

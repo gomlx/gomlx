@@ -3,7 +3,10 @@
 package simplego
 
 import (
+	"slices"
+
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 )
@@ -63,12 +66,9 @@ func extractBindingsFromInputs(params []*Node, inputs []*Buffer) (shapes.AxisBin
 }
 
 // createSpecialization builds a ShapeSpecialization for the given bindings.
-// It creates shallow copies of all nodes with shapes resolved, and rewires
-// multiOutputsNodes pointers to the resolved copies.
-//
-// Returns an error if a DotGeneral or ConvGeneral node involves dynamic dimensions,
-// as those operations require precomputed parameters that depend on concrete
-// shapes (deferred to Phase 3).
+// It creates shallow copies of all nodes with shapes resolved, rewires
+// multiOutputsNodes pointers to the resolved copies, and recomputes
+// shape-dependent node.data for DotGeneral and ConvGeneral operations.
 func (e *Executable) createSpecialization(bindings shapes.AxisBindings) (spec *ShapeSpecialization, err error) {
 	// Shape.Resolve panics on missing bindings, non-positive values, or unnamed
 	// dynamic axes. Recover those panics and surface them as errors.
@@ -85,24 +85,6 @@ func (e *Executable) createSpecialization(bindings shapes.AxisBindings) (spec *S
 
 	origNodes := e.builder.mainFn.nodes
 	resolved := make([]*Node, len(origNodes))
-
-	// Guard: return error if DotGeneral or ConvGeneral have dynamic dims.
-	// These ops precompute execution parameters from concrete shapes at graph
-	// build time. Supporting them with dynamic shapes requires deferring that
-	// computation to specialization time (Phase 3).
-	// Check before resolving to give a clear error referencing the symbolic shapes.
-	for _, n := range origNodes {
-		if n.opType == backends.OpTypeDotGeneral || n.opType == backends.OpTypeConvGeneral {
-			for _, input := range n.inputs {
-				if input.shape.HasDynamicDims() {
-					return nil, errors.Errorf(
-						"specialization: %s with dynamic-shaped inputs is not yet supported (requires Phase 3); "+
-							"input node %d has symbolic shape %s",
-						n.opType, input.idx, input.shape)
-				}
-			}
-		}
-	}
 
 	// First pass: shallow copy each node and resolve its shape.
 	for i, orig := range origNodes {
@@ -143,10 +125,139 @@ func (e *Executable) createSpecialization(bindings shapes.AxisBindings) (spec *S
 		}
 	}
 
+	// Third pass: recompute shape-dependent node.data for ops that need it.
+	// DotGeneral and ConvGeneral store precomputed parameters (sizes, strides,
+	// normalization info, exec path) in node.data at graph build time.
+	// When inputs have dynamic dims, these are placeholders that must be
+	// recomputed from the resolved concrete shapes.
+	//
+	// For DotGeneral, we must also fix the node's shape. The intermediate rank-3
+	// shape [batchSize, lhsCrossSize, rhsCrossSize] may use DynamicDim for
+	// product dimensions (e.g., batch*M). Shape.Resolve replaces DynamicDim
+	// with the raw binding value, but the actual product (batch*M) differs.
+	// After recomputation we have the correct concrete sizes.
+	for i, orig := range origNodes {
+		if !anyInputHasDynamicDims(orig) {
+			continue // Static inputs → original data is fine
+		}
+		switch orig.opType {
+		case backends.OpTypeDotGeneral:
+			newData, recomputeErr := recomputeDotGeneralData(e.backend, resolved, orig)
+			if recomputeErr != nil {
+				return nil, errors.WithMessagef(recomputeErr, "specialization: recomputing DotGeneral data for node %d", i)
+			}
+			resolved[i].data = newData
+			// Fix the intermediate shape to match the recomputed concrete sizes.
+			resolved[i].shape = shapes.Make(resolved[i].shape.DType,
+				newData.batchSize, newData.lhsCrossSize, newData.rhsCrossSize)
+		case backends.OpTypeConvGeneral:
+			newData, recomputeErr := recomputeConvGeneralData(resolved, orig)
+			if recomputeErr != nil {
+				return nil, errors.WithMessagef(recomputeErr, "specialization: recomputing ConvGeneral data for node %d", i)
+			}
+			resolved[i].data = newData
+		}
+	}
+
 	return &ShapeSpecialization{
 		bindings:      bindings,
 		resolvedNodes: resolved,
 	}, nil
+}
+
+// anyInputHasDynamicDims returns true if any input of the node has dynamic dimensions.
+func anyInputHasDynamicDims(n *Node) bool {
+	for _, input := range n.inputs {
+		if input.shape.HasDynamicDims() {
+			return true
+		}
+	}
+	return false
+}
+
+// recomputeDotGeneralData creates a new dotGeneralNodeData with all shape-dependent
+// fields recomputed from the resolved (concrete) input shapes. The axis configuration
+// (contracting/batch axes) is preserved from the original.
+func recomputeDotGeneralData(backend *Backend, resolved []*Node, orig *Node) (*dotGeneralNodeData, error) {
+	origData := orig.data.(*dotGeneralNodeData)
+
+	// Get resolved (concrete) input shapes.
+	lhsShape := resolved[orig.inputs[0].idx].shape
+	rhsShape := resolved[orig.inputs[1].idx].shape
+
+	newData := &dotGeneralNodeData{
+		lhsContractingAxes: slices.Clone(origData.lhsContractingAxes),
+		lhsBatchAxes:       slices.Clone(origData.lhsBatchAxes),
+		rhsContractingAxes: slices.Clone(origData.rhsContractingAxes),
+		rhsBatchAxes:       slices.Clone(origData.rhsBatchAxes),
+	}
+
+	// Recompute sizes from concrete shapes using the existing dgFindSizes.
+	newData.batchSize, newData.lhsCrossSize, newData.contractingSize, _ =
+		dgFindSizes(lhsShape, origData.lhsContractingAxes, origData.lhsBatchAxes)
+	_, newData.rhsCrossSize, _, _ =
+		dgFindSizes(rhsShape, origData.rhsContractingAxes, origData.rhsBatchAxes)
+
+	// Recompute normalization info from concrete shapes.
+	newData.lhsNormalization = dgNormalizePrepare(lhsShape, origData.lhsContractingAxes, origData.lhsBatchAxes)
+	newData.rhsNormalization = dgNormalizePrepare(rhsShape, origData.rhsContractingAxes, origData.rhsBatchAxes)
+
+	// Recompute blocked shapes.
+	dtype := lhsShape.DType
+	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
+	newData.lhsBlockedShape = dgCreateBlockedShape(dtype, newData.batchSize, newData.lhsCrossSize, newData.contractingSize, blockLog2Dim)
+	newData.rhsBlockedShape = dgCreateBlockedShape(dtype, newData.batchSize, newData.rhsCrossSize, newData.contractingSize, blockLog2Dim)
+	outputDType := dtype
+	if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
+		outputDType = dtypes.Float32
+	}
+	newData.outputBlockedShape = dgCreateBlockedShape(outputDType, newData.batchSize, newData.lhsCrossSize, newData.rhsCrossSize, blockLog2Dim)
+
+	// Select exec path excluding blockedPath (no pre-blocking nodes for dynamic graphs).
+	newData.execPath = dgSelectExecPath(backend, lhsShape, rhsShape, newData)
+	if newData.execPath == blockedPath || newData.execPath == checkPath {
+		// Dynamic-shape graphs don't have pre-blocked nodes; fall back to normalizedPath.
+		newData.execPath = normalizedPath
+	}
+
+	return newData, nil
+}
+
+// recomputeConvGeneralData creates a new convNode with stride-dependent fields
+// recomputed from the resolved (concrete) input shapes.
+func recomputeConvGeneralData(resolved []*Node, orig *Node) (*convNode, error) {
+	origData := orig.data.(*convNode)
+
+	inputShape := resolved[orig.inputs[0].idx].shape
+	kernelShape := resolved[orig.inputs[1].idx].shape
+
+	newData := &convNode{
+		axes:               origData.axes,
+		strides:            origData.strides,
+		paddings:           origData.paddings,
+		inputDilations:     origData.inputDilations,
+		kernelDilations:    origData.kernelDilations,
+		channelGroupCount:  origData.channelGroupCount,
+		batchGroupCount:    origData.batchGroupCount,
+		hasInputDilations:  origData.hasInputDilations,
+		hasKernelDilations: origData.hasKernelDilations,
+	}
+
+	newData.inputStrides = inputShape.Strides()
+	newData.kernelStrides = kernelShape.Strides()
+
+	spatialRank := inputShape.Rank() - 2
+	newData.dilatedInputSpatialDims = make([]int, spatialRank)
+	newData.inputSpatialStrides = make([]int, spatialRank)
+	for spatialIdx, inputAxis := range origData.axes.InputSpatial {
+		newData.inputSpatialStrides[spatialIdx] = newData.inputStrides[inputAxis]
+		dim := inputShape.Dimensions[inputAxis]
+		if dim > 0 {
+			newData.dilatedInputSpatialDims[spatialIdx] = (dim-1)*origData.inputDilations[spatialIdx] + 1
+		}
+	}
+
+	return newData, nil
 }
 
 // getOrCreateSpecialization returns a cached specialization for the given bindings,
