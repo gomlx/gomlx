@@ -1026,7 +1026,7 @@ func (e *Exec) findOrCreateGraph(argsShapes []shapes.Shape) (*execGraphCacheEntr
 	}
 
 	// Check max cache size before starting a new compilation.
-	if e.maxCacheSize > 0 && len(e.cache) >= e.maxCacheSize {
+	if e.maxCacheSize > 0 && len(e.cache)+len(e.pending) >= e.maxCacheSize {
 		e.cacheMu.Unlock()
 		return nil, nil
 	}
