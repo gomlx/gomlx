@@ -417,6 +417,10 @@ func (e *Exec) WithDynamicAxes(axisNames ...[]string) *Exec {
 			"WithDynamicAxes: cannot use dynamic axes with func(*Graph) signature; "+
 				"dynamic axes require *Node parameters to bind concrete input shapes")
 	}
+	if !e.backend.Capabilities().DynamicAxes {
+		exceptions.Panicf(
+			"WithDynamicAxes: backend %q does not support dynamic axes", e.backend.Name())
+	}
 	e.dynamicAxes = axisNames
 	return e
 }
