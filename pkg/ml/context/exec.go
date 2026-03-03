@@ -712,6 +712,17 @@ func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 	return e
 }
 
+// WithDynamicAxes configures which axes of inputs are dynamic. Each element
+// of axisNames provides the axis names for the corresponding input parameter.
+// Empty string "" means a static axis; a non-empty name marks a dynamic axis.
+// When set, the graph is compiled once with symbolic shapes and specialized
+// per concrete axis binding at execution time.
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithDynamicAxes(axisNames ...[]string) *Exec {
+	e.exec.WithDynamicAxes(axisNames...)
+	return e
+}
+
 // Context returns the associated Context object, usually created
 // during the creation of the Exec object. It can be set to something
 // different with SetContext().

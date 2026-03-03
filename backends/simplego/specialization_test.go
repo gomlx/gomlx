@@ -874,6 +874,234 @@ func TestCreateSpecialization(t *testing.T) {
 // TestExecuteDynamic_DotGeneral_LargeMatrix tests dynamic DotGeneral with matrix sizes
 // large enough to potentially trigger packgemm/highway/blocked exec paths (depending on
 // backend config), exercising the fallback logic in recomputeDotGeneralData.
+// TestExecWithDynamicAxes_Attention builds a mini self-attention graph and verifies
+// that dynamic batch execution produces identical results to static batch execution.
+// This tests the backend itself (no ONNX), exercising: Einsum (DotGeneral), Reshape,
+// Transpose, BroadcastToShape, Where, Softmax, and Mul.
+func TestExecWithDynamicAxes_Attention(t *testing.T) {
+	const (
+		seqLen  = 4
+		hidden  = 8
+		heads   = 2
+		headDim = hidden / heads // 4
+	)
+
+	// Mini self-attention: input [batch, seq, hidden] -> output [batch, seq, hidden].
+	attentionFn := func(input, mask *graph.Node) *graph.Node {
+		g := input.Graph()
+		batch := input.Shape().Dim(0) // concrete or DynamicDim
+
+		// Fake QKV projection: just use the input directly split into Q, K, V.
+		// Reshape [batch, seq, hidden] -> [batch, seq, heads, headDim]
+		qkv := graph.Reshape(input, batch, seqLen, heads, headDim)
+		// Transpose to [batch, heads, seq, headDim]
+		qkv = graph.TransposeAllDims(qkv, 0, 2, 1, 3)
+
+		q, k, v := qkv, qkv, qkv
+
+		// Attention scores: Q * K^T -> [batch, heads, seq, seq]
+		scores := graph.Einsum("bhsd,bhtd->bhst", q, k)
+
+		// Scale by 1/sqrt(headDim)
+		scale := graph.Scalar(g, input.DType(), 1.0/2.0) // sqrt(4) = 2
+		scores = graph.Mul(scores, scale)
+
+		// Apply mask: mask is [batch, 1, 1, seq] (broadcastable)
+		// Where mask == 0, replace with -1e9
+		negInf := graph.Scalar(g, input.DType(), -1e9)
+		maskBool := graph.Equal(mask, graph.Scalar(g, mask.DType(), 1))
+		// Expand mask from [batch, seq] -> [batch, 1, 1, seq]
+		maskBool = graph.ExpandLeftToRank(graph.InsertAxes(maskBool, 1, 1), scores.Rank())
+		// Broadcast mask to scores shape
+		maskBool = graph.BroadcastToShape(maskBool, scores.Shape())
+		scores = graph.Where(maskBool, scores, negInf)
+
+		// Softmax over last axis
+		attnWeights := graph.Softmax(scores, -1)
+
+		// Weighted sum: attn * V -> [batch, heads, seq, headDim]
+		output := graph.Einsum("bhst,bhtd->bhsd", attnWeights, v)
+
+		// Transpose back to [batch, seq, heads, headDim]
+		output = graph.TransposeAllDims(output, 0, 2, 1, 3)
+
+		// Reshape to [batch, seq, hidden]
+		return graph.Reshape(output, batch, seqLen, hidden)
+	}
+
+	// Create deterministic input data.
+	batchSize := 3
+	inputData := make([]float32, batchSize*seqLen*hidden)
+	for i := range inputData {
+		inputData[i] = float32(i%7-3) * 0.1 // values in [-0.3, 0.3]
+	}
+	maskData := make([]int32, batchSize*seqLen)
+	for i := range maskData {
+		maskData[i] = 1 // all tokens attended
+	}
+	// Mask out last token for batch item 1.
+	maskData[1*seqLen+seqLen-1] = 0
+
+	inputT := tensors.FromFlatDataAndDimensions(inputData, batchSize, seqLen, hidden)
+	maskT := tensors.FromFlatDataAndDimensions(maskData, batchSize, seqLen)
+
+	// Static execution (concrete batch=3).
+	staticExec := graph.MustNewExec(backend, attentionFn)
+	defer staticExec.Finalize()
+	staticOutputs := staticExec.MustExec(inputT, maskT)
+	staticData, err := tensors.CopyFlatData[float32](staticOutputs[0])
+	require.NoError(t, err)
+
+	// Dynamic execution (dynamic batch).
+	dynamicExec := graph.MustNewExec(backend, attentionFn).
+		WithDynamicAxes([]string{"batch", "", ""}, []string{"batch", ""})
+	defer dynamicExec.Finalize()
+	dynamicOutputs := dynamicExec.MustExec(inputT, maskT)
+	dynamicData, err := tensors.CopyFlatData[float32](dynamicOutputs[0])
+	require.NoError(t, err)
+
+	// Compare: must be identical.
+	require.Equal(t, len(staticData), len(dynamicData), "output length mismatch")
+	for i := range staticData {
+		b := i / (seqLen * hidden)
+		s := (i / hidden) % seqLen
+		h := i % hidden
+		require.InDelta(t, staticData[i], dynamicData[i], 1e-5,
+			"mismatch at [batch=%d, seq=%d, hidden=%d]: static=%f, dynamic=%f",
+			b, s, h, staticData[i], dynamicData[i])
+	}
+
+	// Also verify different batch sizes produce correct results.
+	inputT2 := tensors.FromFlatDataAndDimensions(inputData[:1*seqLen*hidden], 1, seqLen, hidden)
+	maskT2 := tensors.FromFlatDataAndDimensions(maskData[:1*seqLen], 1, seqLen)
+
+	// Static batch=1.
+	staticExec2 := graph.MustNewExec(backend, attentionFn)
+	defer staticExec2.Finalize()
+	staticOutputs2 := staticExec2.MustExec(inputT2, maskT2)
+	staticData2, err := tensors.CopyFlatData[float32](staticOutputs2[0])
+	require.NoError(t, err)
+
+	// Dynamic batch=1 (reusing the dynamic exec from above).
+	dynamicOutputs2 := dynamicExec.MustExec(inputT2, maskT2)
+	dynamicData2, err := tensors.CopyFlatData[float32](dynamicOutputs2[0])
+	require.NoError(t, err)
+
+	for i := range staticData2 {
+		s := (i / hidden) % seqLen
+		h := i % hidden
+		require.InDelta(t, staticData2[i], dynamicData2[i], 1e-5,
+			"batch=1 mismatch at [seq=%d, hidden=%d]: static=%f, dynamic=%f",
+			s, h, staticData2[i], dynamicData2[i])
+	}
+
+	t.Logf("Static vs dynamic attention: all values match (batch=3 and batch=1)")
+}
+
+// TestExecWithDynamicAxes_LayerNorm tests that a LayerNorm-like computation
+// produces identical results for static vs dynamic batch execution.
+func TestExecWithDynamicAxes_LayerNorm(t *testing.T) {
+	const (
+		seqLen = 4
+		hidden = 8
+	)
+
+	layerNormFn := func(input *graph.Node) *graph.Node {
+		g := input.Graph()
+		// LayerNorm: (x - mean) / sqrt(var + eps) * gamma + beta
+		eps := graph.Scalar(g, input.DType(), 1e-5)
+		mean := graph.ReduceMean(input, -1)
+		mean = graph.InsertAxes(mean, -1) // [batch, seq, 1]
+		centered := graph.Sub(input, mean)
+		variance := graph.ReduceMean(graph.Mul(centered, centered), -1)
+		variance = graph.InsertAxes(variance, -1)
+		normalized := graph.Div(centered, graph.Sqrt(graph.Add(variance, eps)))
+		// Use fixed gamma=1, beta=0 (identity).
+		return normalized
+	}
+
+	batchSize := 3
+	inputData := make([]float32, batchSize*seqLen*hidden)
+	for i := range inputData {
+		inputData[i] = float32(i%11-5) * 0.1
+	}
+	inputT := tensors.FromFlatDataAndDimensions(inputData, batchSize, seqLen, hidden)
+
+	staticExec := graph.MustNewExec(backend, layerNormFn)
+	defer staticExec.Finalize()
+	staticOutputs := staticExec.MustExec(inputT)
+	staticData, err := tensors.CopyFlatData[float32](staticOutputs[0])
+	require.NoError(t, err)
+
+	dynamicExec := graph.MustNewExec(backend, layerNormFn).
+		WithDynamicAxes([]string{"batch", "", ""})
+	defer dynamicExec.Finalize()
+	dynamicOutputs := dynamicExec.MustExec(inputT)
+	dynamicData, err := tensors.CopyFlatData[float32](dynamicOutputs[0])
+	require.NoError(t, err)
+
+	require.Equal(t, len(staticData), len(dynamicData))
+	for i := range staticData {
+		require.InDelta(t, staticData[i], dynamicData[i], 1e-5,
+			"LayerNorm mismatch at index %d: static=%f, dynamic=%f",
+			i, staticData[i], dynamicData[i])
+	}
+	t.Logf("LayerNorm: static vs dynamic all match")
+}
+
+// TestExecWithDynamicAxes_Gather tests that Gather works correctly when
+// the operand has a dynamic batch dimension. This exercises the
+// specialization recomputation of gatherNode.sliceSizes.
+func TestExecWithDynamicAxes_Gather(t *testing.T) {
+	// Graph: x=[batch, 3, 4], Gather axis=1 index=1 → output [batch, 4]
+	// This mimics selecting Q/K/V from a combined QKV tensor.
+	gatherFn := func(x *graph.Node) *graph.Node {
+		g := x.Graph()
+		// Gather on axis 1: transpose to [3, batch, 4], gather index 1, transpose back.
+		transposed := graph.TransposeAllAxes(x, 1, 0, 2)           // [3, batch, 4]
+		idx := graph.Const(g, []int32{1})                           // index for gather
+		expandedIdx := graph.InsertAxes(idx, -1)                    // [1, 1]
+		gathered := graph.Gather(transposed, expandedIdx)            // [batch, 4]
+		return gathered
+	}
+
+	// Input data: [batch=2, 3, 4].
+	// batch 0: head0=[1,2,3,4], head1=[10,20,30,40], head2=[100,200,300,400]
+	// batch 1: head0=[5,6,7,8], head1=[50,60,70,80], head2=[500,600,700,800]
+	inputData := []float32{
+		1, 2, 3, 4, 10, 20, 30, 40, 100, 200, 300, 400,
+		5, 6, 7, 8, 50, 60, 70, 80, 500, 600, 700, 800,
+	}
+	inputT := tensors.FromFlatDataAndDimensions(inputData, 2, 3, 4)
+
+	// Static execution: batch=2.
+	staticExec := graph.MustNewExec(backend, gatherFn)
+	defer staticExec.Finalize()
+	staticOut := staticExec.MustExec(inputT)
+	staticFlat := tensors.MustCopyFlatData[float32](staticOut[0])
+
+	// Expected: gathering index 1 (head1) → [[10,20,30,40], [50,60,70,80]]
+	expected := []float32{10, 20, 30, 40, 50, 60, 70, 80}
+	require.Equal(t, expected, staticFlat, "static gather mismatch")
+
+	// Dynamic execution: dynamic batch.
+	dynamicExec := graph.MustNewExec(backend, gatherFn).
+		WithDynamicAxes([]string{"batch", "", ""})
+	defer dynamicExec.Finalize()
+
+	dynamicOut := dynamicExec.MustExec(inputT)
+	dynamicFlat := tensors.MustCopyFlatData[float32](dynamicOut[0])
+	require.Equal(t, expected, dynamicFlat, "dynamic gather mismatch (batch=2)")
+
+	// Execute with batch=1 to verify specialization works for different sizes.
+	inputT1 := tensors.FromFlatDataAndDimensions(inputData[:12], 1, 3, 4)
+	dynamicOut1 := dynamicExec.MustExec(inputT1)
+	dynamicFlat1 := tensors.MustCopyFlatData[float32](dynamicOut1[0])
+	require.Equal(t, []float32{10, 20, 30, 40}, dynamicFlat1, "dynamic gather mismatch (batch=1)")
+
+	t.Logf("Gather with dynamic batch: static and dynamic results match")
+}
+
 func TestExecuteDynamic_DotGeneral_LargeMatrix(t *testing.T) {
 	M, K, N := 64, 32, 64
 

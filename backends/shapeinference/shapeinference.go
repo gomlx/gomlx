@@ -391,15 +391,10 @@ func WhereOp(condition, onTrue, onFalse shapes.Shape) (output shapes.Shape, err 
 func ReshapeOp(operand shapes.Shape, dims []int) (output shapes.Shape, err error) {
 	if operand.HasDynamicDims() {
 		// Dynamic path: skip size validation (deferred to specialization time).
-		// Reject DynamicDim values in target dims — axis names would be lost.
-		// Callers needing dynamic output dims should create reshape nodes directly
-		// via getOrCreateNode with a properly-named MakeDynamic shape.
-		for i, d := range dims {
-			if d == shapes.DynamicDim {
-				return shapes.Invalid(), errors.Errorf(
-					"ReshapeOp: target dims[%d] is DynamicDim; use getOrCreateNode directly for dynamic reshape targets", i)
-			}
-		}
+		// DynamicDim values in target dims are allowed — they propagate through
+		// reshape operations and are resolved during shape specialization.
+		// Axis name propagation for dynamic dims is handled by the backend's
+		// node creation (propagateDynamicAxisNames in SimpleGo).
 		output = shapes.Shape{DType: operand.DType, Dimensions: slices.Clone(dims)}
 		return output, nil
 	}
@@ -584,10 +579,14 @@ func Gather(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOutpu
 		return output, errors.Errorf("sliceSizes must have one value per operand axes, so it length (%d) must match operand rank (%d)", len(sliceSizes), operand.Rank())
 	}
 	for axis, sliceSize := range sliceSizes {
+		if sliceSize == shapes.DynamicDim {
+			// Dynamic slice size: skip validation, will be resolved at specialization time.
+			continue
+		}
 		if sliceSize < 0 {
 			return output, errors.Errorf("sliceSize %d for axis %d is negative, it must be non-negative", sliceSize, axis)
 		}
-		if operand.Dimensions[axis] < sliceSize {
+		if operand.Dimensions[axis] != shapes.DynamicDim && operand.Dimensions[axis] < sliceSize {
 			return output, errors.Errorf("sliceSize %d for axis %d is larger than the corresponding operand dimension %d", sliceSize, axis, operand.Dimensions[axis])
 		}
 	}

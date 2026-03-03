@@ -156,6 +156,11 @@ func (e *Executable) createSpecialization(bindings shapes.AxisBindings) (spec *S
 				return nil, errors.WithMessagef(recomputeErr, "specialization: recomputing ConvGeneral data for node %d", i)
 			}
 			resolved[i].data = newData
+		case backends.OpTypeGather:
+			newData := recomputeGatherData(resolved, orig)
+			if newData != nil {
+				resolved[i].data = newData
+			}
 		}
 	}
 
@@ -227,6 +232,46 @@ func recomputeDotGeneralData(backend *Backend, resolved []*Node, orig *Node) (*d
 
 // recomputeConvGeneralData creates a new convNode with stride-dependent fields
 // recomputed from the resolved (concrete) input shapes.
+// recomputeGatherData updates the Gather node's sliceSizes from the resolved
+// operand shape. When the operand has DynamicDim at build time, sliceSizes
+// entries contain -1 (DynamicDim) which must be replaced with concrete values.
+// Returns nil if no update is needed.
+func recomputeGatherData(resolved []*Node, orig *Node) *gatherNode {
+	origData := orig.data.(*gatherNode)
+	operandShape := resolved[orig.inputs[0].idx].shape
+
+	// Check if any sliceSize needs updating.
+	needsUpdate := false
+	for i, s := range origData.sliceSizes {
+		if s == shapes.DynamicDim {
+			if operandShape.Dimensions[i] == shapes.DynamicDim {
+				// Still dynamic after resolution — shouldn't happen but guard anyway.
+				continue
+			}
+			needsUpdate = true
+			break
+		}
+	}
+	if !needsUpdate {
+		return nil
+	}
+
+	newData := &gatherNode{
+		indexVectorAxis:      origData.indexVectorAxis,
+		offsetOutputAxes:     origData.offsetOutputAxes,
+		collapsedSlicesAxes:  origData.collapsedSlicesAxes,
+		startIndexMap:        origData.startIndexMap,
+		sliceSizes:           slices.Clone(origData.sliceSizes),
+		indicesAreSorted:     origData.indicesAreSorted,
+	}
+	for i, s := range newData.sliceSizes {
+		if s == shapes.DynamicDim {
+			newData.sliceSizes[i] = operandShape.Dimensions[i]
+		}
+	}
+	return newData
+}
+
 func recomputeConvGeneralData(resolved []*Node, orig *Node) (*convNode, error) {
 	origData := orig.data.(*convNode)
 
