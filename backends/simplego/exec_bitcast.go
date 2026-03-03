@@ -83,6 +83,8 @@ func execBitcastUint8ToNibbles(src, output *Buffer, dstDType dtypes.DType) (*Buf
 			dstData[2*i] = b & 0x0F
 			dstData[2*i+1] = b >> 4
 		}
+	default:
+		return nil, errors.Errorf("Bitcast: unsupported nibble unpack target dtype %s", dstDType)
 	}
 	return output, nil
 }
@@ -106,6 +108,8 @@ func execBitcastNibblesToUint8(src, output *Buffer, srcDType dtypes.DType) (*Buf
 			hi := srcData[2*i+1] & 0x0F
 			dstData[i] = lo | (hi << 4)
 		}
+	default:
+		return nil, errors.Errorf("Bitcast: unsupported nibble pack source dtype %s", srcDType)
 	}
 	return output, nil
 }

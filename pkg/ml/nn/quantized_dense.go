@@ -94,6 +94,11 @@ func quantizedDenseDecomposed(x, weights *Node, quant *Quantization, bias *Node,
 		Panicf("nn.QuantizedDense: only BlockAxis=1 is supported, got %d", quant.BlockAxis)
 	}
 
+	// NF4 quantization uses a fixed lookup table and does not support zero points.
+	if quant.Scheme == backends.QuantNF4 && quant.ZeroPoint != nil {
+		Panicf("nn.QuantizedDense: ZeroPoint must be nil for NF4 quantization scheme")
+	}
+
 	g := x.Graph()
 	xShape := x.Shape()
 	K := xShape.Dimensions[xShape.Rank()-1]

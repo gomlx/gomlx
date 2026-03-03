@@ -14,68 +14,71 @@ import (
 )
 
 func TestQuantizedDense_Int8(t *testing.T) {
-	// M=2, K=4, N=3, blockSize=3 → numBlocks=1, scales [4, 1].
-	K, N, blockSize := 4, 3, 3
+	// Test Int8 QuantLinear across all official backends (both fused simplego and decomposed XLA paths).
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+		// M=2, K=4, N=3, blockSize=3 → numBlocks=1, scales [4, 1].
+		K, N, blockSize := 4, 3, 3
 
-	xData := [][]float32{{1, 0, 0, 0}, {0, 1, 0, 0}}
-	weightsData := [][]int8{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}}
-	numBlocks := (N + blockSize - 1) / blockSize
-	scalesData := make([][]float32, K)
-	for k := range K {
-		scalesData[k] = make([]float32, numBlocks)
-		for g := range numBlocks {
-			scalesData[k][g] = 1.0
+		xData := [][]float32{{1, 0, 0, 0}, {0, 1, 0, 0}}
+		weightsData := [][]int8{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}}
+		numBlocks := (N + blockSize - 1) / blockSize
+		scalesData := make([][]float32, K)
+		for k := range K {
+			scalesData[k] = make([]float32, numBlocks)
+			for g := range numBlocks {
+				scalesData[k][g] = 1.0
+			}
 		}
-	}
-	biasData := []float32{0.1, 0.2, 0.3}
+		biasData := []float32{0.1, 0.2, 0.3}
 
-	// Expected: x @ float32(weights) + bias
-	// x[0]=[1,0,0,0] → y[0]=[1,2,3]+[0.1,0.2,0.3]=[1.1,2.2,3.3]
-	// x[1]=[0,1,0,0] → y[1]=[4,5,6]+[0.1,0.2,0.3]=[4.1,5.2,6.3]
-	graphtest.RunTestGraphFn(t, "with_bias", func(g *Graph) (inputs, outputs []*Node) {
-		x := Const(g, xData)
-		w := Const(g, weightsData)
-		s := Const(g, scalesData)
-		b := Const(g, biasData)
-		quant := &nn.Quantization{
-			Scheme:    backends.QuantLinear,
-			Scale:     s,
-			BlockAxis: 1,
-			BlockSize: blockSize,
-		}
-		y := nn.QuantizedDense(x, w, quant, b)
-		return []*Node{x}, []*Node{y}
-	}, []any{[][]float32{{1.1, 2.2, 3.3}, {4.1, 5.2, 6.3}}}, 1e-4)
+		// Expected: x @ float32(weights) + bias
+		// x[0]=[1,0,0,0] → y[0]=[1,2,3]+[0.1,0.2,0.3]=[1.1,2.2,3.3]
+		// x[1]=[0,1,0,0] → y[1]=[4,5,6]+[0.1,0.2,0.3]=[4.1,5.2,6.3]
+		graphtest.RunTestGraphFnWithBackend(t, "with_bias", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, xData)
+			w := Const(g, weightsData)
+			s := Const(g, scalesData)
+			b := Const(g, biasData)
+			quant := &nn.Quantization{
+				Scheme:    backends.QuantLinear,
+				Scale:     s,
+				BlockAxis: 1,
+				BlockSize: blockSize,
+			}
+			y := nn.QuantizedDense(x, w, quant, b)
+			return []*Node{x}, []*Node{y}
+		}, []any{[][]float32{{1.1, 2.2, 3.3}, {4.1, 5.2, 6.3}}}, 1e-4)
 
-	graphtest.RunTestGraphFn(t, "no_bias", func(g *Graph) (inputs, outputs []*Node) {
-		x := Const(g, xData)
-		w := Const(g, weightsData)
-		s := Const(g, scalesData)
-		quant := &nn.Quantization{
-			Scheme:    backends.QuantLinear,
-			Scale:     s,
-			BlockAxis: 1,
-			BlockSize: blockSize,
-		}
-		y := nn.QuantizedDense(x, w, quant, nil)
-		return []*Node{x}, []*Node{y}
-	}, []any{[][]float32{{1, 2, 3}, {4, 5, 6}}}, 1e-4)
+		graphtest.RunTestGraphFnWithBackend(t, "no_bias", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, xData)
+			w := Const(g, weightsData)
+			s := Const(g, scalesData)
+			quant := &nn.Quantization{
+				Scheme:    backends.QuantLinear,
+				Scale:     s,
+				BlockAxis: 1,
+				BlockSize: blockSize,
+			}
+			y := nn.QuantizedDense(x, w, quant, nil)
+			return []*Node{x}, []*Node{y}
+		}, []any{[][]float32{{1, 2, 3}, {4, 5, 6}}}, 1e-4)
 
-	// All output values are positive, so ReLU acts as identity.
-	graphtest.RunTestGraphFn(t, "with_relu", func(g *Graph) (inputs, outputs []*Node) {
-		x := Const(g, xData)
-		w := Const(g, weightsData)
-		s := Const(g, scalesData)
-		b := Const(g, biasData)
-		quant := &nn.Quantization{
-			Scheme:    backends.QuantLinear,
-			Scale:     s,
-			BlockAxis: 1,
-			BlockSize: blockSize,
-		}
-		y := nn.QuantizedDense(x, w, quant, b, activations.TypeRelu)
-		return []*Node{x}, []*Node{y}
-	}, []any{[][]float32{{1.1, 2.2, 3.3}, {4.1, 5.2, 6.3}}}, 1e-4)
+		// All output values are positive, so ReLU acts as identity.
+		graphtest.RunTestGraphFnWithBackend(t, "with_relu", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, xData)
+			w := Const(g, weightsData)
+			s := Const(g, scalesData)
+			b := Const(g, biasData)
+			quant := &nn.Quantization{
+				Scheme:    backends.QuantLinear,
+				Scale:     s,
+				BlockAxis: 1,
+				BlockSize: blockSize,
+			}
+			y := nn.QuantizedDense(x, w, quant, b, activations.TypeRelu)
+			return []*Node{x}, []*Node{y}
+		}, []any{[][]float32{{1.1, 2.2, 3.3}, {4.1, 5.2, 6.3}}}, 1e-4)
+	})
 }
 
 func TestQuantizedDense_NF4(t *testing.T) {
@@ -114,6 +117,85 @@ func TestQuantizedDense_NF4(t *testing.T) {
 			return []*Node{x}, []*Node{y}
 		}, []any{[][]float32{{1.0, -1.0, 0.0, 0.0}}}, 1e-4)
 	}, "xla:cpu", "xla:cuda")
+}
+
+// TestQuantizedDense_MultiBlock exercises numBlocks > 1 with distinct per-row and per-block
+// scale values. This verifies the block-index arithmetic in both the fused executor and the
+// decomposed graph-level fallback.
+func TestQuantizedDense_MultiBlock(t *testing.T) {
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+		// M=1, K=2, N=4, blockSize=2 → numBlocks=2, scales [2, 2].
+		//
+		// weights [K=2, N=4]:
+		//   row 0: [1, 2, 3, 4]
+		//   row 1: [5, 6, 7, 8]
+		//
+		// scales [K=2, numBlocks=2] — distinct per-row AND per-block:
+		//   row 0: [2.0, 3.0]  (block 0 cols 0-1 → scale=2.0, block 1 cols 2-3 → scale=3.0)
+		//   row 1: [4.0, 5.0]  (block 0 cols 0-1 → scale=4.0, block 1 cols 2-3 → scale=5.0)
+		//
+		// Dequantized weights: float = int * scale[k][n/blockSize]
+		//   [0][0]=1*2=2   [0][1]=2*2=4   [0][2]=3*3=9    [0][3]=4*3=12
+		//   [1][0]=5*4=20  [1][1]=6*4=24  [1][2]=7*5=35   [1][3]=8*5=40
+		//
+		// y = x @ dequant(weights), x=[1,1]:
+		//   y = [2+20, 4+24, 9+35, 12+40] = [22, 28, 44, 52]
+		K, N, blockSize := 2, 4, 2
+
+		xData := [][]float32{{1.0, 1.0}}
+		weightsData := [][]int8{{1, 2, 3, 4}, {5, 6, 7, 8}}
+		scalesData := [][]float32{{2.0, 3.0}, {4.0, 5.0}}
+
+		graphtest.RunTestGraphFnWithBackend(t, "int8_multi_block", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, xData)
+			w := Const(g, weightsData)
+			s := Const(g, scalesData)
+			quant := &nn.Quantization{
+				Scheme:    backends.QuantLinear,
+				Scale:     s,
+				BlockAxis: 1,
+				BlockSize: blockSize,
+			}
+			y := nn.QuantizedDense(x, w, quant, nil)
+			return []*Node{x}, []*Node{y}
+		}, []any{[][]float32{{22.0, 28.0, 44.0, 52.0}}}, 1e-4)
+
+		// Also test with bias to verify bias is added after the blocked matmul.
+		biasData := []float32{0.1, 0.2, 0.3, 0.4}
+		graphtest.RunTestGraphFnWithBackend(t, "int8_multi_block_with_bias", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, xData)
+			w := Const(g, weightsData)
+			s := Const(g, scalesData)
+			b := Const(g, biasData)
+			quant := &nn.Quantization{
+				Scheme:    backends.QuantLinear,
+				Scale:     s,
+				BlockAxis: 1,
+				BlockSize: blockSize,
+			}
+			y := nn.QuantizedDense(x, w, quant, b)
+			return []*Node{x}, []*Node{y}
+		}, []any{[][]float32{{22.1, 28.2, 44.3, 52.4}}}, 1e-4)
+
+		// Test with multiple batch rows to verify M > 1 with multi-block.
+		// x = [[1,0], [0,1]] → y[0] = [2,4,9,12], y[1] = [20,24,35,40]
+		xData2 := [][]float32{{1.0, 0.0}, {0.0, 1.0}}
+		graphtest.RunTestGraphFnWithBackend(t, "int8_multi_block_batch", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, xData2)
+			w := Const(g, weightsData)
+			s := Const(g, scalesData)
+			quant := &nn.Quantization{
+				Scheme:    backends.QuantLinear,
+				Scale:     s,
+				BlockAxis: 1,
+				BlockSize: blockSize,
+			}
+			y := nn.QuantizedDense(x, w, quant, nil)
+			return []*Node{x}, []*Node{y}
+		}, []any{[][]float32{{2.0, 4.0, 9.0, 12.0}, {20.0, 24.0, 35.0, 40.0}}}, 1e-4)
+		_ = K
+		_ = N
+	})
 }
 
 func TestQuantizedDense_Int4(t *testing.T) {

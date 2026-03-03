@@ -571,6 +571,14 @@ func sdpaGeneric[T float32 | float64](
 			if causal {
 				kvLenUnmasked = min(kvLen, qIdx+1)
 			}
+
+			// Zero out scores for this row to prevent stale data from previous
+			// (batchIdx, kvHeadIdx) iterations when boolean mask or causal mask
+			// skips positions.
+			for i := scoreIdxBase; i < scoreIdxBase+kvLen; i++ {
+				scores[i] = 0
+			}
+
 			for kvIdx := range kvLenUnmasked {
 				scoreIdx := scoreIdxBase + kvIdx
 				maskIdx := maskIdxBase + kvIdx
@@ -615,7 +623,12 @@ func sdpaGeneric[T float32 | float64](
 					scoreIdx++
 				}
 			}
-			invSum := 1.0 / sum
+			// Guard against all-masked rows: if sum == 0 (every position was masked),
+			// set invSum to 0 so the output row is all zeros rather than NaN/Inf.
+			var invSum T
+			if sum != 0 {
+				invSum = 1.0 / sum
+			}
 			if len(booleanMask) > 0 {
 				scoreIdx = scoreIdxBase
 				maskIdx = maskIdxBase

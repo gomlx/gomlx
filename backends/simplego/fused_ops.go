@@ -4,6 +4,7 @@ package simplego
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 )
@@ -253,6 +254,11 @@ func (f *Function) FusedQuantizedDense(x, weights, scales, zeroPoints, bias back
 	wNode := inputs[1]
 	sNode := inputs[2]
 
+	// Validate x dtype: only float32 is supported.
+	if xNode.shape.DType != dtypes.Float32 {
+		return nil, errors.Errorf("FusedQuantizedDense: x must be float32, got %s", xNode.shape.DType)
+	}
+
 	// Validate x shape: [batch..., K]
 	if xNode.shape.Rank() < 1 {
 		return nil, errors.Errorf("FusedQuantizedDense: x must have rank >= 1, got %d", xNode.shape.Rank())
@@ -281,6 +287,11 @@ func (f *Function) FusedQuantizedDense(x, weights, scales, zeroPoints, bias back
 	// Only blockAxis=1 (output-features axis) is currently supported.
 	if blockAxis != 1 {
 		return nil, errors.Errorf("FusedQuantizedDense: only blockAxis=1 is supported, got %d", blockAxis)
+	}
+
+	// NF4 quantization uses a fixed lookup table and does not support zero points.
+	if scheme == backends.QuantNF4 && zeroPoints != nil {
+		return nil, errors.Errorf("FusedQuantizedDense: zeroPoints must be nil for NF4 quantization scheme")
 	}
 
 	data := &nodeFusedQuantizedDense{
