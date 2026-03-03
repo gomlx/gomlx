@@ -35,8 +35,8 @@ func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHea
 
 // BackendFusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
 // Internal: prefer nn.QuantizedDense which handles fallback and gradients.
-func BackendFusedQuantizedDense(x, packedWeights, scales, bias *Node, quantFormat backends.QuantFormat, groupSize int, outFeatures int, activation backends.ActivationType) *Node {
-	return backendFusedQuantizedDense(x, packedWeights, scales, bias, quantFormat, groupSize, outFeatures, activation)
+func BackendFusedQuantizedDense(x, weights, scales, zeroPoints, bias *Node, scheme backends.QuantizationScheme, blockAxis int, blockSize int, activation backends.ActivationType) *Node {
+	return backendFusedQuantizedDense(x, weights, scales, zeroPoints, bias, scheme, blockAxis, blockSize, activation)
 }
 
 // BackendFusedQuantizedScaledDotProductAttention computes multi-head SDPA using int8×int8

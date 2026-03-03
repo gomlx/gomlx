@@ -18,29 +18,53 @@ var nf4LookupValues = [16]float32{
 	0.44070982933044434, 0.5626170039176941, 0.7229568362236023, 1.0,
 }
 
+// Quantization bundles the metadata needed to dequantize a weight tensor.
+//
+// For typical usage:
+//   - QuantLinear with Int4/Int8 weights: float_value = int_value * Scale + ZeroPoint
+//   - QuantNF4 with Uint4/Int4 weights: float_value = nf4_table[nibble_index] * Scale
+//
+// The weights tensor should have its DType set to reflect the actual storage type
+// (e.g. dtypes.Int4, dtypes.Int8). For sub-byte types, the caller should
+// Bitcast packed uint8 data to the correct dtype before passing to QuantizedDense.
+type Quantization struct {
+	// Scheme specifies how integer values map to float values.
+	Scheme backends.QuantizationScheme
+
+	// Scale holds per-block scale factors: [K, numBlocks] float32,
+	// where numBlocks = ceil(N / BlockSize).
+	Scale *Node
+
+	// ZeroPoint holds per-block additive offsets: [K, numBlocks] float32.
+	// Nil for symmetric quantization and NF4.
+	ZeroPoint *Node
+
+	// BlockAxis is the dimension of the weights tensor along which blocking is applied
+	// (typically 1, the output-features axis).
+	BlockAxis int
+
+	// BlockSize is the number of output columns sharing a single scale factor.
+	BlockSize int
+}
+
 // QuantizedDense performs a quantized dense (linear) transformation with optional activation:
 //
-//	y = activation(x @ dequant(packedWeights, scales) + bias)
+//	y = activation(x @ dequant(weights, quant) + bias)
 //
-// The packed weights are dequantized on the fly using the specified quantization format
-// and per-group scale factors, then multiplied with x.
+// The weights are dequantized on the fly using the quantization metadata, then multiplied with x.
 //
 // Parameters:
 //   - x: [batch..., K] float32 input activations.
-//   - packedWeights: [K, N/2] uint8 for NF4/Int4 (two values per byte, low nibble first),
-//     or [K, N] int8 for Int8.
-//   - scales: [K, numGroups] float32, where numGroups = ceil(N / groupSize).
+//   - weights: [K, N] with dtype reflecting storage type (e.g. Int4, Int8).
+//     For sub-byte types, Bitcast packed uint8 data to the correct dtype first.
+//   - quant: quantization metadata (scheme, scale, zeroPoint, blockAxis, blockSize).
 //   - bias: [N] float32 (nil means no bias).
-//   - quantFormat: NF4, Int4, or Int8.
-//   - groupSize: number of output columns sharing a single scale factor.
-//   - outFeatures: the N dimension (number of output columns).
 //   - activation: optional; if omitted or activations.TypeNone, no activation is applied.
 //
 // If the backend supports fused QuantizedDense, the optimized native implementation is
 // used; otherwise the operation is decomposed into primitives. Fallback is handled
 // automatically via InternalFusedOpCaller.
-func QuantizedDense(x, packedWeights, scales, bias *Node,
-	quantFormat backends.QuantFormat, groupSize, outFeatures int,
+func QuantizedDense(x, weights *Node, quant *Quantization, bias *Node,
 	activation ...activations.Type) *Node {
 
 	act := activations.TypeNone
@@ -52,54 +76,68 @@ func QuantizedDense(x, packedWeights, scales, bias *Node,
 	}
 
 	decomposed := func() *Node {
-		return quantizedDenseDecomposed(x, packedWeights, scales, bias, quantFormat, groupSize, outFeatures, act)
+		return quantizedDenseDecomposed(x, weights, quant, bias, act)
 	}
 
 	backendAct := act.ToBackend()
 	return InternalFusedOpCaller(
 		func() *Node {
-			return BackendFusedQuantizedDense(x, packedWeights, scales, bias, quantFormat, groupSize, outFeatures, backendAct)
+			return BackendFusedQuantizedDense(x, weights, quant.Scale, quant.ZeroPoint, bias,
+				quant.Scheme, quant.BlockAxis, quant.BlockSize, backendAct)
 		},
 		decomposed,
 	)
 }
 
 // quantizedDenseDecomposed implements QuantizedDense using primitive graph ops.
-func quantizedDenseDecomposed(x, packedWeights, scales, bias *Node,
-	quantFormat backends.QuantFormat, groupSize, outFeatures int,
+// Weights have their dtype set to the actual storage type (Int4, Int8, etc.).
+func quantizedDenseDecomposed(x, weights *Node, quant *Quantization, bias *Node,
 	act activations.Type) *Node {
+
+	// Only blockAxis=1 (output-features axis) is currently supported.
+	if quant.BlockAxis != 1 {
+		Panicf("nn.QuantizedDense: only BlockAxis=1 is supported, got %d", quant.BlockAxis)
+	}
 
 	g := x.Graph()
 	xShape := x.Shape()
 	K := xShape.Dimensions[xShape.Rank()-1]
-	N := outFeatures
+	wShape := weights.Shape()
+	N := wShape.Dimensions[1]
 
-	// Step A: Dequantize packed weights to [K, N] float32.
+	// Step A: Dequantize weights to [K, N] float32.
 	var dequant *Node
-	switch quantFormat {
+	switch quant.Scheme {
 	case backends.QuantNF4:
-		dequant = dequantNF4(g, packedWeights, K, N)
-	case backends.QuantInt4:
-		dequant = dequantInt4(g, packedWeights, K, N)
-	case backends.QuantInt8:
-		dequant = ConvertDType(packedWeights, dtypes.Float32)
+		dequant = dequantNF4FromTyped(g, weights, K, N)
+	case backends.QuantLinear:
+		dequant = ConvertDType(weights, dtypes.Float32) // [K, N] float32
 	default:
-		Panicf("nn.QuantizedDense: unsupported quantization format %v", quantFormat)
+		Panicf("nn.QuantizedDense: unsupported quantization scheme %v", quant.Scheme)
 	}
 
-	// Step B: Expand scales from [K, numGroups] to [K, N].
+	// Step B: Expand scales from [K, numBlocks] to [K, N].
+	blockSize := quant.BlockSize
 	groupIdxSlice := make([]int32, N)
 	for j := range N {
-		groupIdxSlice[j] = int32(j / groupSize)
+		groupIdxSlice[j] = int32(j / blockSize)
 	}
-	groupIdx := Const(g, groupIdxSlice)                  // [N] int32
-	scalesT := Transpose(scales, 0, 1)                   // [numGroups, K]
-	groupIdxForGather := Reshape(groupIdx, N, 1)          // [N, 1]
-	expandedScales := Gather(scalesT, groupIdxForGather)  // [N, K]
-	expandedScales = Transpose(expandedScales, 0, 1)      // [K, N]
+	groupIdx := Const(g, groupIdxSlice)                       // [N] int32
+	scalesT := Transpose(quant.Scale, 0, 1)                   // [numBlocks, K]
+	groupIdxForGather := Reshape(groupIdx, N, 1)               // [N, 1]
+	expandedScales := Gather(scalesT, groupIdxForGather)       // [N, K]
+	expandedScales = Transpose(expandedScales, 0, 1)           // [K, N]
 
 	// Step C: Apply scales.
 	dequant = Mul(dequant, expandedScales) // [K, N]
+
+	// Step C2: Apply zero points if present.
+	if quant.ZeroPoint != nil {
+		zpT := Transpose(quant.ZeroPoint, 0, 1)           // [numBlocks, K]
+		expandedZP := Gather(zpT, groupIdxForGather)       // [N, K]
+		expandedZP = Transpose(expandedZP, 0, 1)           // [K, N]
+		dequant = Add(dequant, expandedZP)
+	}
 
 	// Step D: Flatten x to 2D [M, K] if needed, then matmul.
 	M := xShape.Size() / K
@@ -127,29 +165,27 @@ func quantizedDenseDecomposed(x, packedWeights, scales, bias *Node,
 	return y
 }
 
-// extractNibbles extracts low and high nibbles from packed [K, N/2] uint8,
-// interleaving them into [K, N] of the specified dtype.
-// Low nibble = even column, high nibble = odd column.
-func extractNibbles(g *Graph, packed *Node, K, N int, targetDType dtypes.DType) *Node {
-	mask := Scalar(g, dtypes.Uint8, uint8(0x0F))
-	low := BitwiseAnd(packed, mask)                                            // [K, N/2]
-	high := BitwiseAnd(BitwiseShiftRightLogicalScalar(packed, 4), mask)        // [K, N/2]
-	indices := Stack([]*Node{low, high}, -1)                                   // [K, N/2, 2]
-	indices = Reshape(indices, K, N)                                           // [K, N]
-	return ConvertDType(indices, targetDType)
-}
-
-// dequantNF4 dequantizes NF4-packed weights to [K, N] float32 using the QLoRA lookup table.
-func dequantNF4(g *Graph, packed *Node, K, N int) *Node {
-	indices := extractNibbles(g, packed, K, N, dtypes.Int32)    // [K, N] int32
-	nf4Table := Const(g, nf4LookupValues[:])                   // [16] float32
-	indicesForGather := Reshape(indices, K, N, 1)               // [K, N, 1]
-	return Gather(nf4Table, indicesForGather)                   // [K, N] float32
-}
-
-// dequantInt4 dequantizes Int4-packed weights to [K, N] float32.
-// Each nibble is mapped to the signed range [-8, 7] via (nibble - 8).
-func dequantInt4(g *Graph, packed *Node, K, N int) *Node {
-	nibbles := extractNibbles(g, packed, K, N, dtypes.Float32)  // [K, N] float32
-	return SubScalar(nibbles, float32(8))                       // [K, N] float32
+// dequantNF4FromTyped dequantizes NF4 weights (Int4/Uint4, already unpacked) to [K, N] float32
+// using the QLoRA lookup table. The nibble indices are in [0..15].
+func dequantNF4FromTyped(g *Graph, weights *Node, K, N int) *Node {
+	// Convert to int32 indices for Gather. For Int4 (sign-extended [-8..7]),
+	// mask to [0..15] first by converting via Uint8 then Int32.
+	wDType := weights.Shape().DType
+	var indices *Node
+	switch wDType {
+	case dtypes.Uint4:
+		indices = ConvertDType(weights, dtypes.Int32) // [K, N] int32, values [0..15]
+	case dtypes.Int4:
+		// Int4 values are sign-extended to int8 [-8..7]. To recover the original nibble [0..15],
+		// convert to int32 and add 16 to negative values (equivalent to masking with 0x0F).
+		indices = ConvertDType(weights, dtypes.Int32)
+		// BitwiseAnd with 0x0F to get unsigned nibble [0..15].
+		mask := Scalar(g, dtypes.Int32, int32(0x0F))
+		indices = BitwiseAnd(indices, mask)
+	default:
+		Panicf("dequantNF4FromTyped: expected Int4 or Uint4 weights, got %s", wDType)
+	}
+	nf4Table := Const(g, nf4LookupValues[:])       // [16] float32
+	indicesForGather := Reshape(indices, K, N, 1)   // [K, N, 1]
+	return Gather(nf4Table, indicesForGather)        // [K, N] float32
 }

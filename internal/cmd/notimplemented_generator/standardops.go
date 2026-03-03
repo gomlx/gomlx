@@ -94,8 +94,8 @@ func GenerateStandardOpsInterface(methods []backendparser.Method) {
 				pi.Type = "backends.ActivationType"
 			case "AxesLayout":
 				pi.Type = "backends.AxesLayout"
-			case "QuantFormat":
-				pi.Type = "backends.QuantFormat"
+			case "QuantizationScheme":
+				pi.Type = "backends.QuantizationScheme"
 			case "DotGeneralConfig":
 				pi.Type = "backends.DotGeneralConfig"
 			}

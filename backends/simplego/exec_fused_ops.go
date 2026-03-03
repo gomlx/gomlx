@@ -726,16 +726,31 @@ var nf4LookupTable = [16]float32{
 }
 
 // execFusedQuantizedDense implements scalar dequant + matmul + bias + activation.
-// inputs layout: [x, packedWeights, scales, bias?]
+// inputs layout: [x, weights, scales, zeroPoints?, bias?]
+//
+// Weights have their dtype set to reflect the storage type (Int4, Int8, etc.).
+// For sub-byte types (Int4/Uint4), weights are already unpacked: one int8/uint8 per element.
+// The Bitcast from packed uint8 to Int4/Uint4 should have been done by the caller.
 func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	data := node.data.(*nodeFusedQuantizedDense)
 
 	xBuf := inputs[0]
 	wBuf := inputs[1]
 	sBuf := inputs[2]
-	var biasBuf *Buffer
-	if len(inputs) > 3 {
-		biasBuf = inputs[3]
+
+	// Determine zeroPoints and bias from remaining inputs.
+	// Inputs: [x, weights, scales, zeroPoints?, bias?]
+	// zeroPoints has dtype Float32 and rank 2; bias has dtype Float32 and rank 1.
+	var zeroPointsBuf, biasBuf *Buffer
+	nextIdx := 3
+	if nextIdx < len(inputs) {
+		if inputs[nextIdx].shape.Rank() == 2 {
+			zeroPointsBuf = inputs[nextIdx]
+			nextIdx++
+		}
+	}
+	if nextIdx < len(inputs) {
+		biasBuf = inputs[nextIdx]
 	}
 
 	if xBuf.shape.DType != dtypes.Float32 {
@@ -748,51 +763,60 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 	out := output.flat.([]float32)
 
 	K := xBuf.shape.Dimensions[xBuf.shape.Rank()-1]
-	N := data.outFeatures
+	N := wBuf.shape.Dimensions[1]
 	M := xBuf.shape.Size() / K
-	groupSize := data.groupSize
-	numGroups := (N + groupSize - 1) / groupSize
+	blockSize := data.blockSize
+	numBlocks := (N + blockSize - 1) / blockSize
 
 	var bias []float32
 	if biasBuf != nil {
 		bias = biasBuf.flat.([]float32)
 	}
+	var zeroPoints []float32
+	if zeroPointsBuf != nil {
+		zeroPoints = zeroPointsBuf.flat.([]float32)
+	}
 
-	switch data.quantFormat {
+	switch data.scheme {
 	case backends.QuantNF4:
-		packed := wBuf.flat.([]uint8)
-		quantizedDenseNF4(x, packed, scales, bias, out, M, K, N, groupSize, numGroups)
-	case backends.QuantInt4:
-		packed := wBuf.flat.([]uint8)
-		quantizedDenseInt4(x, packed, scales, bias, out, M, K, N, groupSize, numGroups)
-	case backends.QuantInt8:
-		weights := wBuf.flat.([]int8)
-		quantizedDenseInt8(x, weights, scales, bias, out, M, K, N, groupSize, numGroups)
+		// NF4 weights are Int4/Uint4 with unpacked nibble indices [0..15].
+		switch wBuf.shape.DType {
+		case dtypes.Int4:
+			quantizedDenseNF4(x, wBuf.flat.([]int8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
+		case dtypes.Uint4:
+			quantizedDenseNF4(x, wBuf.flat.([]uint8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
+		default:
+			return nil, errors.Errorf("FusedQuantizedDense: NF4 requires Int4 or Uint4 weights, got %s", wBuf.shape.DType)
+		}
+	case backends.QuantLinear:
+		switch wBuf.shape.DType {
+		case dtypes.Int4, dtypes.Int8:
+			quantizedDenseLinearInt(x, wBuf.flat.([]int8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
+		default:
+			return nil, errors.Errorf("FusedQuantizedDense: Linear scheme requires Int4 or Int8 weights, got %s", wBuf.shape.DType)
+		}
 	default:
-		return nil, errors.Errorf("FusedQuantizedDense: unknown quant format %d", data.quantFormat)
+		return nil, errors.Errorf("FusedQuantizedDense: unknown quantization scheme %d", data.scheme)
 	}
 
 	fusedDenseApplyActivation[float32](backend, out, data.activation)
 	return output, nil
 }
 
-// quantizedDenseNF4 performs scalar NF4 dequant + matmul + bias.
-func quantizedDenseNF4(x []float32, packed []uint8, scales []float32, bias []float32, out []float32, M, K, N, groupSize, numGroups int) {
-	packedN := (N + 1) / 2
+// quantizedDenseNF4 performs NF4 dequant + matmul + bias for Int4 (int8) or Uint4 (uint8) weights.
+// The weight values are nibble indices masked to [0..15] for lookup in the NF4 table.
+func quantizedDenseNF4[T int8 | uint8](x []float32, weights []T, scales, zeroPoints, bias, out []float32, M, K, N, blockSize, numBlocks int) {
 	for m := range M {
 		for n := range N {
-			groupIdx := n / groupSize
+			blockIdx := n / blockSize
 			var sum float32
 			for k := range K {
-				byteIdx := k*packedN + n/2
-				var nibble uint8
-				if n%2 == 0 {
-					nibble = packed[byteIdx] & 0x0F
-				} else {
-					nibble = packed[byteIdx] >> 4
+				nibble := uint8(weights[k*N+n]) & 0x0F
+				w := nf4LookupTable[nibble] * scales[k*numBlocks+blockIdx]
+				if zeroPoints != nil {
+					w += zeroPoints[k*numBlocks+blockIdx]
 				}
-				weight := nf4LookupTable[nibble] * scales[k*numGroups+groupIdx]
-				sum += x[m*K+k] * weight
+				sum += x[m*K+k] * w
 			}
 			if bias != nil {
 				sum += bias[n]
@@ -802,41 +826,19 @@ func quantizedDenseNF4(x []float32, packed []uint8, scales []float32, bias []flo
 	}
 }
 
-// quantizedDenseInt4 performs scalar Int4 dequant + matmul + bias.
-func quantizedDenseInt4(x []float32, packed []uint8, scales []float32, bias []float32, out []float32, M, K, N, groupSize, numGroups int) {
-	packedN := (N + 1) / 2
+// quantizedDenseLinearInt performs linear dequant + matmul + bias for integer weights.
+// float_value = int_value * scale + zeroPoint
+func quantizedDenseLinearInt[T int8 | uint8](x []float32, weights []T, scales, zeroPoints, bias, out []float32, M, K, N, blockSize, numBlocks int) {
 	for m := range M {
 		for n := range N {
-			groupIdx := n / groupSize
+			blockIdx := n / blockSize
 			var sum float32
 			for k := range K {
-				byteIdx := k*packedN + n/2
-				var nibble uint8
-				if n%2 == 0 {
-					nibble = packed[byteIdx] & 0x0F
-				} else {
-					nibble = packed[byteIdx] >> 4
+				w := float32(weights[k*N+n]) * scales[k*numBlocks+blockIdx]
+				if zeroPoints != nil {
+					w += zeroPoints[k*numBlocks+blockIdx]
 				}
-				weight := float32(int8(nibble)-8) * scales[k*numGroups+groupIdx]
-				sum += x[m*K+k] * weight
-			}
-			if bias != nil {
-				sum += bias[n]
-			}
-			out[m*N+n] = sum
-		}
-	}
-}
-
-// quantizedDenseInt8 performs scalar Int8 dequant + matmul + bias.
-func quantizedDenseInt8(x []float32, weights []int8, scales []float32, bias []float32, out []float32, M, K, N, groupSize, numGroups int) {
-	for m := range M {
-		for n := range N {
-			groupIdx := n / groupSize
-			var sum float32
-			for k := range K {
-				weight := float32(weights[k*N+n]) * scales[k*numGroups+groupIdx]
-				sum += x[m*K+k] * weight
+				sum += x[m*K+k] * w
 			}
 			if bias != nil {
 				sum += bias[n]
@@ -853,45 +855,9 @@ func quantizedDenseInt8(x []float32, weights []int8, scales []float32, bias []fl
 // executor. The scalar fallback simply delegates to the float SDPA implementation.
 func execFusedQuantizedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (
 	*Buffer, error) {
-	data := node.data.(*nodeFusedQuantizedScaledDotProductAttention)
-	query := inputs[0]
-	key := inputs[1]
-	value := inputs[2]
-	var mask *Buffer
-	if len(inputs) > 3 {
-		mask = inputs[3]
-	}
-
-	if data.axesLayout == backends.AxesLayoutBSHD && mask != nil && mask.shape.Rank() == 4 {
-		mask = transposeBuffer(backend, mask, []int{0, 2, 1, 3})
-	}
-
-	output := backend.getBufferForShape(query.shape.Clone())
-
-	var maskBatchStride, maskHeadStride int
-	if mask != nil {
-		maskBatchStride, maskHeadStride = sdpaComputeMaskStrides(mask.shape.Dimensions)
-	}
-
-	// Reuse the float SDPA node data for the generic kernel.
-	floatData := &nodeFusedScaledDotProductAttention{
-		numHeads:   data.numHeads,
-		numKVHeads: data.numKVHeads,
-		axesLayout: data.axesLayout,
-		scale:      data.scale,
-		causal:     data.causal,
-	}
-
-	switch query.shape.DType {
-	case dtypes.Float32:
-		sdpaMultiHeadGeneric[float32](query, key, value, mask, output, floatData, maskBatchStride, maskHeadStride)
-	case dtypes.Float64:
-		sdpaMultiHeadGeneric[float64](query, key, value, mask, output, floatData, maskBatchStride, maskHeadStride)
-	default:
-		return nil, errors.Errorf("FusedQuantizedScaledDotProductAttention: unsupported dtype %s", query.shape.DType)
-	}
-
-	return output, nil
+	// nodeFusedQuantizedScaledDotProductAttention is a type alias for nodeFusedScaledDotProductAttention,
+	// so the data is already the correct type for the float SDPA executor.
+	return execFusedScaledDotProductAttention(backend, node, inputs, inputsOwned)
 }
 
 // FusedAttentionQKVProjection ===================================================================================

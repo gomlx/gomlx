@@ -743,6 +743,47 @@ func (f *Function) Concatenate(axis int, operandOps ...backends.Value) (backends
 	return node, nil
 }
 
+// Bitcast reinterprets the bits of operandOp as targetDType. It implements the backends.Builder interface.
+//
+// If the element sizes differ, the last dimension is adjusted:
+//   - Smaller target: a new trailing axis of size (srcBits / dstBits) is appended.
+//   - Larger target: the last axis must be divisible by (dstBits / srcBits) and is collapsed.
+func (f *Function) Bitcast(operandOp backends.Value, targetDType dtypes.DType) (backends.Value, error) {
+	opType := backends.OpTypeBitcast
+	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
+	if err != nil {
+		return nil, err
+	}
+	operand := inputs[0]
+	if operand.shape.DType == targetDType {
+		return operand, nil
+	}
+
+	srcBits := operand.shape.DType.Bits()
+	dstBits := targetDType.Bits()
+	dims := slices.Clone(operand.shape.Dimensions)
+
+	switch {
+	case srcBits == dstBits:
+		// Same element size: just change dtype, keep dimensions.
+	case srcBits > dstBits:
+		// Smaller target: append a trailing axis.
+		ratio := srcBits / dstBits
+		dims = append(dims, ratio)
+	default:
+		// Larger target: collapse the last axis.
+		ratio := dstBits / srcBits
+		lastDim := dims[len(dims)-1]
+		if lastDim%ratio != 0 {
+			return nil, errors.Errorf("Bitcast: last dim %d not divisible by element-size ratio %d", lastDim, ratio)
+		}
+		dims[len(dims)-1] = lastDim / ratio
+	}
+	outputShape := shapes.Make(targetDType, dims...)
+	node, _ := f.getOrCreateNode(opType, outputShape, []*Node{operand}, nil)
+	return node, nil
+}
+
 // ConvertDType converts operandOp to the given dtype. It implements the backends.Builder interface.
 func (f *Function) ConvertDType(operandOp backends.Value, dtype dtypes.DType) (backends.Value, error) {
 	opType := backends.OpTypeConvertDType

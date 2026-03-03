@@ -66,6 +66,7 @@ var (
 		"FusedDense.bias",
 		"FusedScaledDotProductAttention.mask",
 		"FusedAttentionQKVProjection.biasQ", "FusedAttentionQKVProjection.biasK", "FusedAttentionQKVProjection.biasV",
+		"FusedQuantizedDense.zeroPoints",
 		"FusedQuantizedDense.bias",
 		"FusedQuantizedScaledDotProductAttention.mask",
 	)
@@ -175,7 +176,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			case "AxesLayout":
 				pi.BackendType = "backends." + pi.BackendType
 				pi.Format = "%s"
-			case "QuantFormat":
+			case "QuantizationScheme":
 				pi.BackendType = "backends." + pi.BackendType
 				pi.Format = "%s"
 			case "DotGeneralConfig":

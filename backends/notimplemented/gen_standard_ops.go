@@ -296,25 +296,28 @@ func (f Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, 
 
 // FusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
 //
-// It computes y = activation(x @ dequant(packedWeights, scales) + bias), where the
+// It computes y = activation(x @ dequant(weights, scales, zeroPoints) + bias), where the
 // dequantization and matmul are fused into a single pass to avoid materializing the
 // full float32 weight matrix.
 //
 // Inputs:
 //   - x: [batch..., K] float32 input activations.
-//   - packedWeights: [K, N/2] uint8 for NF4/Int4 (two values per byte, low nibble first),
-//     or [K, N] int8 for Int8.
-//   - scales: [K, numGroups] float32, where numGroups = ceil(N / groupSize).
-//     Each scale covers a contiguous group of groupSize output columns for one row.
+//   - weights: [K, N] with dtype reflecting storage precision (e.g. Int4, Int8).
+//     For sub-byte types the caller should Bitcast packed uint8 data to the correct dtype
+//     before calling.
+//   - scales: [K, numBlocks] float32, where numBlocks = ceil(N / blockSize).
+//     Each scale covers a contiguous block of blockSize output columns for one row.
+//   - zeroPoints: [K, numBlocks] float32 (nil-able). Additive offset applied after
+//     scaling: float_value = int_value * scale + zeroPoint. Nil for symmetric / NF4.
 //   - bias: [N] float32 (nil-able), added after matmul but before activation.
 //
 // Parameters:
-//   - quantFormat: NF4, Int4, or Int8.
-//   - groupSize: number of output columns sharing a single scale factor.
-//   - outFeatures: the N dimension (number of output columns). For 4-bit formats,
-//     N cannot be inferred from packed weight shape alone.
+//   - scheme: QuantLinear or QuantNF4.
+//   - blockAxis: the dimension of the weights tensor along which blocking is applied
+//     (typically 1, the output-features axis).
+//   - blockSize: number of output columns sharing a single scale factor.
 //   - activation: applied after matmul+bias; set to ActivationNone for no activation.
-func (f Function) FusedQuantizedDense(x backends.Value, packedWeights backends.Value, scales backends.Value, bias backends.Value, quantFormat backends.QuantFormat, groupSize int, outFeatures int, activation backends.ActivationType) (backends.Value, error) {
+func (f Function) FusedQuantizedDense(x backends.Value, weights backends.Value, scales backends.Value, zeroPoints backends.Value, bias backends.Value, scheme backends.QuantizationScheme, blockAxis int, blockSize int, activation backends.ActivationType) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFusedQuantizedDense)
 }
 

@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package simplego
 
 import (
@@ -28,6 +30,27 @@ type convertFnType = func(operand, output *Buffer)
 var convertDTypePairMap = NewDTypePairMap("ConvertDType")
 
 func init() {
+	// Register sub-byte type conversions (Int4, Uint4).
+	// In simplego, Int4 values are stored unpacked as int8 (one value per element),
+	// Uint4 values as uint8. The generic converter works because the Go slice
+	// element type matches the container type.
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Float32, priorityTyped, execConvertDTypeGeneric[int8, float32])
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Float64, priorityTyped, execConvertDTypeGeneric[int8, float64])
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int32, priorityTyped, execConvertDTypeGeneric[int8, int32])
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int64, priorityTyped, execConvertDTypeGeneric[int8, int64])
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int8, priorityTyped, execConvertDTypeGeneric[int8, int8])
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Float32, priorityTyped, execConvertDTypeGeneric[uint8, float32])
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Float64, priorityTyped, execConvertDTypeGeneric[uint8, float64])
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int32, priorityTyped, execConvertDTypeGeneric[uint8, int32])
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int64, priorityTyped, execConvertDTypeGeneric[uint8, int64])
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Uint8, priorityTyped, execConvertDTypeGeneric[uint8, uint8])
+
+	// Register mutableBytes and fillBuffer for sub-byte types.
+	mutableBytesDTypeMap.Register(dtypes.Int4, priorityTyped, mutableBytesGeneric[int8])
+	mutableBytesDTypeMap.Register(dtypes.Uint4, priorityTyped, mutableBytesGeneric[uint8])
+	fillBufferDTypeMap.Register(dtypes.Int4, priorityTyped, fillBufferGeneric[int8])
+	fillBufferDTypeMap.Register(dtypes.Uint4, priorityTyped, fillBufferGeneric[uint8])
+
 	// Manually register bool x bfloat16 conversion functions.
 	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Bool, priorityTyped, execConvertDTypeBFloat16ToBool)
 	convertDTypePairMap.Register(dtypes.Bool, dtypes.BFloat16, priorityTyped, execConvertDTypeBoolToBFloat16)

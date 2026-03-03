@@ -2052,14 +2052,15 @@ func backendFusedLayerNorm(x *Node, axes []int, epsilon float64, gamma *Node, be
 
 // nodeInputsFusedQuantizedDense holds the inputs used for the call to backends.FusedQuantizedDense.
 type nodeInputsFusedQuantizedDense struct {
-	x             *Node
-	packedWeights *Node
-	scales        *Node
-	bias          *Node
-	quantFormat   backends.QuantFormat
-	groupSize     int
-	outFeatures   int
-	activation    backends.ActivationType
+	x          *Node
+	weights    *Node
+	scales     *Node
+	zeroPoints *Node
+	bias       *Node
+	scheme     backends.QuantizationScheme
+	blockAxis  int
+	blockSize  int
+	activation backends.ActivationType
 }
 
 // Type implements the interface NodeInputs.
@@ -2069,42 +2070,51 @@ func (ni *nodeInputsFusedQuantizedDense) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsFusedQuantizedDense) String() string {
-	return fmt.Sprintf("%s(x=[#%d], packedWeights=[#%d], scales=[#%d], bias=%s, quantFormat=%s, groupSize=%v, outFeatures=%v, activation=%s)",
+	return fmt.Sprintf("%s(x=[#%d], weights=[#%d], scales=[#%d], zeroPoints=%s, bias=%s, scheme=%s, blockAxis=%v, blockSize=%v, activation=%s)",
 		ni.Type(),
 		ni.x.Id(),
-		ni.packedWeights.Id(),
+		ni.weights.Id(),
 		ni.scales.Id(),
+		strNillableNode(ni.zeroPoints),
 		strNillableNode(ni.bias),
-		ni.quantFormat,
-		ni.groupSize,
-		ni.outFeatures,
+		ni.scheme,
+		ni.blockAxis,
+		ni.blockSize,
 		ni.activation,
 	)
 }
 
 // backendFusedQuantizedDense is a Graph wrapper for the backend.Builder.FusedQuantizedDense method.
-func backendFusedQuantizedDense(x *Node, packedWeights *Node, scales *Node, bias *Node, quantFormat backends.QuantFormat, groupSize int, outFeatures int, activation backends.ActivationType) (
+func backendFusedQuantizedDense(x *Node, weights *Node, scales *Node, zeroPoints *Node, bias *Node, scheme backends.QuantizationScheme, blockAxis int, blockSize int, activation backends.ActivationType) (
 	node *Node) {
-	inputNodes := []*Node{x, packedWeights, scales}
+	inputNodes := []*Node{x, weights, scales}
+	if zeroPoints != nil {
+		inputNodes = append(inputNodes, zeroPoints)
+	}
 	if bias != nil {
 		inputNodes = append(inputNodes, bias)
 	}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsFusedQuantizedDense{
-		x:             x,
-		packedWeights: packedWeights,
-		scales:        scales,
-		bias:          bias,
-		quantFormat:   quantFormat,
-		groupSize:     groupSize,
-		outFeatures:   outFeatures,
-		activation:    activation,
+		x:          x,
+		weights:    weights,
+		scales:     scales,
+		zeroPoints: zeroPoints,
+		bias:       bias,
+		scheme:     scheme,
+		blockAxis:  blockAxis,
+		blockSize:  blockSize,
+		activation: activation,
+	}
+	var zeroPointsVal backends.Value
+	if zeroPoints != nil {
+		zeroPointsVal = zeroPoints.outputOps[0]
 	}
 	var biasVal backends.Value
 	if bias != nil {
 		biasVal = bias.outputOps[0]
 	}
-	result, err := g.currentFunc.backendFunc.FusedQuantizedDense(x.outputOps[0], packedWeights.outputOps[0], scales.outputOps[0], biasVal, inputs.quantFormat, inputs.groupSize, inputs.outFeatures, inputs.activation)
+	result, err := g.currentFunc.backendFunc.FusedQuantizedDense(x.outputOps[0], weights.outputOps[0], scales.outputOps[0], zeroPointsVal, biasVal, inputs.scheme, inputs.blockAxis, inputs.blockSize, inputs.activation)
 	if err != nil {
 		panic(err)
 	}

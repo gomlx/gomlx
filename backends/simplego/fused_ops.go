@@ -78,31 +78,21 @@ type nodeFusedAttentionQKVProjection struct {
 }
 
 type nodeFusedQuantizedDense struct {
-	quantFormat backends.QuantFormat
-	groupSize   int
-	outFeatures int
-	activation  backends.ActivationType
+	scheme    backends.QuantizationScheme
+	blockAxis int
+	blockSize int
+	activation backends.ActivationType
 }
 
 func (d *nodeFusedQuantizedDense) EqualNodeData(other nodeDataComparable) bool {
 	o := other.(*nodeFusedQuantizedDense)
-	return d.quantFormat == o.quantFormat && d.groupSize == o.groupSize &&
-		d.outFeatures == o.outFeatures && d.activation == o.activation
+	return d.scheme == o.scheme && d.blockAxis == o.blockAxis &&
+		d.blockSize == o.blockSize && d.activation == o.activation
 }
 
-type nodeFusedQuantizedScaledDotProductAttention struct {
-	numHeads   int
-	numKVHeads int
-	axesLayout backends.AxesLayout
-	scale      float64
-	causal     bool
-}
-
-func (d *nodeFusedQuantizedScaledDotProductAttention) EqualNodeData(other nodeDataComparable) bool {
-	o := other.(*nodeFusedQuantizedScaledDotProductAttention)
-	return d.numHeads == o.numHeads && d.numKVHeads == o.numKVHeads &&
-		d.axesLayout == o.axesLayout && d.scale == o.scale && d.causal == o.causal
-}
+// nodeFusedQuantizedScaledDotProductAttention is identical to nodeFusedScaledDotProductAttention;
+// the quantized SDPA scalar fallback delegates to the same sdpaMultiHeadGeneric kernel.
+type nodeFusedQuantizedScaledDotProductAttention = nodeFusedScaledDotProductAttention
 
 // FusedSoftmax computes softmax along the specified axis.
 // The axis must be non-negative (the caller normalizes negative indices).
@@ -257,12 +247,18 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backen
 //
 // Unlike FusedDense, this does not create a DotGeneral sub-node — the quantized matmul
 // is fundamentally different (mixed-dtype with per-group scales). The inputs to the
-// executor are [x, packedWeights, scales, bias?] directly.
-func (f *Function) FusedQuantizedDense(x, packedWeights, scales, bias backends.Value,
-	quantFormat backends.QuantFormat, groupSize int, outFeatures int,
+// executor are [x, weights, scales, zeroPoints?, bias?] directly.
+//
+// Weights should have their dtype set to reflect the actual storage type (e.g. Int4, Int8).
+// For sub-byte types, the caller should Bitcast packed uint8 data to the correct dtype.
+func (f *Function) FusedQuantizedDense(x, weights, scales, zeroPoints, bias backends.Value,
+	scheme backends.QuantizationScheme, blockAxis int, blockSize int,
 	activation backends.ActivationType) (backends.Value, error) {
 
-	values := []backends.Value{x, packedWeights, scales}
+	values := []backends.Value{x, weights, scales}
+	if zeroPoints != nil {
+		values = append(values, zeroPoints)
+	}
 	if bias != nil {
 		values = append(values, bias)
 	}
@@ -279,32 +275,18 @@ func (f *Function) FusedQuantizedDense(x, packedWeights, scales, bias backends.V
 		return nil, errors.Errorf("FusedQuantizedDense: x must have rank >= 1, got %d", xNode.shape.Rank())
 	}
 	K := xNode.shape.Dimensions[xNode.shape.Rank()-1]
-	N := outFeatures
 
-	// Validate packed weight shape based on format.
-	switch quantFormat {
-	case backends.QuantNF4, backends.QuantInt4:
-		// Expected: [K, N/2] uint8
-		packedN := (N + 1) / 2
-		if wNode.shape.Rank() != 2 || wNode.shape.Dimensions[0] != K || wNode.shape.Dimensions[1] != packedN {
-			return nil, errors.Errorf("FusedQuantizedDense: %s packed weights must be [%d, %d], got %v",
-				quantFormat, K, packedN, wNode.shape.Dimensions)
-		}
-	case backends.QuantInt8:
-		// Expected: [K, N] int8
-		if wNode.shape.Rank() != 2 || wNode.shape.Dimensions[0] != K || wNode.shape.Dimensions[1] != N {
-			return nil, errors.Errorf("FusedQuantizedDense: Int8 weights must be [%d, %d], got %v",
-				K, N, wNode.shape.Dimensions)
-		}
-	default:
-		return nil, errors.Errorf("FusedQuantizedDense: unknown quant format %d", quantFormat)
+	// Derive N from weights shape. The weights dtype reflects the storage type.
+	if wNode.shape.Rank() != 2 || wNode.shape.Dimensions[0] != K {
+		return nil, errors.Errorf("FusedQuantizedDense: weights must be [%d, N], got %v", K, wNode.shape.Dimensions)
 	}
+	N := wNode.shape.Dimensions[1]
 
-	// Validate scales shape: [K, numGroups]
-	numGroups := (N + groupSize - 1) / groupSize
-	if sNode.shape.Rank() != 2 || sNode.shape.Dimensions[0] != K || sNode.shape.Dimensions[1] != numGroups {
+	// Validate scales shape: [K, numBlocks]
+	numBlocks := (N + blockSize - 1) / blockSize
+	if sNode.shape.Rank() != 2 || sNode.shape.Dimensions[0] != K || sNode.shape.Dimensions[1] != numBlocks {
 		return nil, errors.Errorf("FusedQuantizedDense: scales must be [%d, %d], got %v",
-			K, numGroups, sNode.shape.Dimensions)
+			K, numBlocks, sNode.shape.Dimensions)
 	}
 
 	// Output shape: [batch..., N]
@@ -313,11 +295,16 @@ func (f *Function) FusedQuantizedDense(x, packedWeights, scales, bias backends.V
 	outDims[xNode.shape.Rank()-1] = N
 	outShape := shapes.Make(xNode.shape.DType, outDims...)
 
+	// Only blockAxis=1 (output-features axis) is currently supported.
+	if blockAxis != 1 {
+		return nil, errors.Errorf("FusedQuantizedDense: only blockAxis=1 is supported, got %d", blockAxis)
+	}
+
 	data := &nodeFusedQuantizedDense{
-		quantFormat: quantFormat,
-		groupSize:   groupSize,
-		outFeatures: outFeatures,
-		activation:  activation,
+		scheme:    scheme,
+		blockAxis: blockAxis,
+		blockSize: blockSize,
+		activation: activation,
 	}
 	node, _ := f.getOrCreateNode(backends.OpTypeFusedQuantizedDense, outShape, inputs, data)
 	return node, nil
