@@ -1040,43 +1040,13 @@ func shapesMatch(a, b []shapes.Shape) bool {
 
 // lockedFindInCache searches the cache for a matching entry.
 // When dynamicAxes is configured, returns the single cached entry (if any)
-// after validating dtypes and static dimensions. Otherwise does exact match.
+// without validation (caller must validate after releasing the lock).
 // Caller must hold e.cacheMu.
 func (e *Exec) lockedFindInCache(argsShapes []shapes.Shape) *execGraphCacheEntry {
 	// When dynamic axes are configured, there is exactly one compiled graph.
 	// The Executable handles different concrete shapes via specialization.
 	if e.dynamicAxes != nil && len(e.cache) > 0 {
-		entry := e.cache[0]
-		// Validate that dtypes and static dimensions match the cached entry.
-		// Dynamic dimensions may differ (that's the point), but dtypes and
-		// dimensions for axes not marked dynamic must be identical.
-		if len(argsShapes) == len(entry.argsShapes) {
-			for ii, shape := range argsShapes {
-				cached := entry.argsShapes[ii]
-				if shape.DType != cached.DType {
-					exceptions.Panicf(
-						"dynamic-axes Exec %q: input %d dtype mismatch: got %s, but graph was compiled with %s",
-						e.Name(), ii, shape.DType, cached.DType)
-				}
-				if shape.Rank() != cached.Rank() {
-					exceptions.Panicf(
-						"dynamic-axes Exec %q: input %d rank mismatch: got %d, but graph was compiled with rank %d",
-						e.Name(), ii, shape.Rank(), cached.Rank())
-				}
-				for ax := range shape.Dimensions {
-					if ii < len(e.dynamicAxes) && e.dynamicAxes[ii] != nil &&
-						ax < len(e.dynamicAxes[ii]) && e.dynamicAxes[ii][ax] != "" {
-						continue // dynamic axis, skip
-					}
-					if shape.Dimensions[ax] != cached.Dimensions[ax] {
-						exceptions.Panicf(
-							"dynamic-axes Exec %q: input %d static axis %d mismatch: got %d, but graph was compiled with %d",
-							e.Name(), ii, ax, shape.Dimensions[ax], cached.Dimensions[ax])
-					}
-				}
-			}
-		}
-		return entry
+		return e.cache[0]
 	}
 
 	for _, entry := range e.cache {
@@ -1087,9 +1057,48 @@ func (e *Exec) lockedFindInCache(argsShapes []shapes.Shape) *execGraphCacheEntry
 	return nil
 }
 
+// validateDynamicAxesShapes checks that dtypes and static dimensions of argsShapes
+// match the cached entry. Dynamic dimensions may differ. Panics on mismatch.
+// Must be called without holding cacheMu.
+func (e *Exec) validateDynamicAxesShapes(argsShapes []shapes.Shape, entry *execGraphCacheEntry) {
+	if len(argsShapes) != len(entry.argsShapes) {
+		return
+	}
+	for ii, shape := range argsShapes {
+		cached := entry.argsShapes[ii]
+		if shape.DType != cached.DType {
+			exceptions.Panicf(
+				"dynamic-axes Exec %q: input %d dtype mismatch: got %s, but graph was compiled with %s",
+				e.Name(), ii, shape.DType, cached.DType)
+		}
+		if shape.Rank() != cached.Rank() {
+			exceptions.Panicf(
+				"dynamic-axes Exec %q: input %d rank mismatch: got %d, but graph was compiled with rank %d",
+				e.Name(), ii, shape.Rank(), cached.Rank())
+		}
+		for ax := range shape.Dimensions {
+			if ii < len(e.dynamicAxes) && e.dynamicAxes[ii] != nil &&
+				ax < len(e.dynamicAxes[ii]) && e.dynamicAxes[ii][ax] != "" {
+				continue // dynamic axis, skip
+			}
+			if shape.Dimensions[ax] != cached.Dimensions[ax] {
+				exceptions.Panicf(
+					"dynamic-axes Exec %q: input %d static axis %d mismatch: got %d, but graph was compiled with %d",
+					e.Name(), ii, ax, shape.Dimensions[ax], cached.Dimensions[ax])
+			}
+		}
+	}
+}
+
 // lockedFindPending searches the pending list for an in-flight compilation
-// matching the given shapes. Caller must hold e.cacheMu.
+// matching the given shapes. For dynamic-axes Execs, any pending compilation
+// produces the same symbolic graph, so the first pending entry is returned.
+// Caller must hold e.cacheMu.
 func (e *Exec) lockedFindPending(argsShapes []shapes.Shape) *pendingCompilation {
+	// For dynamic axes, all compilations produce the same symbolic graph.
+	if e.dynamicAxes != nil && len(e.pending) > 0 {
+		return e.pending[0]
+	}
 	for _, pc := range e.pending {
 		if shapesMatch(argsShapes, pc.argsShapes) {
 			return pc
@@ -1114,6 +1123,10 @@ func (e *Exec) findOrCreateGraph(argsShapes []shapes.Shape) (*execGraphCacheEntr
 	// Fast path: already in cache.
 	if entry := e.lockedFindInCache(argsShapes); entry != nil {
 		e.cacheMu.Unlock()
+		// Validate after releasing lock so panics don't leave cacheMu locked.
+		if e.dynamicAxes != nil {
+			e.validateDynamicAxesShapes(argsShapes, entry)
+		}
 		return entry, nil
 	}
 

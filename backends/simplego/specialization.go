@@ -230,8 +230,6 @@ func recomputeDotGeneralData(backend *Backend, resolved []*Node, orig *Node) (*d
 	return newData, nil
 }
 
-// recomputeConvGeneralData creates a new convNode with stride-dependent fields
-// recomputed from the resolved (concrete) input shapes.
 // recomputeGatherData updates the Gather node's sliceSizes from the resolved
 // operand shape. When the operand has DynamicDim at build time, sliceSizes
 // entries contain -1 (DynamicDim) which must be replaced with concrete values.
@@ -272,6 +270,8 @@ func recomputeGatherData(resolved []*Node, orig *Node) *gatherNode {
 	return newData
 }
 
+// recomputeConvGeneralData creates a new convNode with stride-dependent fields
+// recomputed from the resolved (concrete) input shapes.
 func recomputeConvGeneralData(resolved []*Node, orig *Node) (*convNode, error) {
 	origData := orig.data.(*convNode)
 

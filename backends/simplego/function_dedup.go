@@ -158,6 +158,10 @@ func dataEqual(a, b any) bool {
 // has an axis name, inheriting from input nodes if needed. Shape inference ops
 // may produce shapes with DynamicDim but no axis names; this function fills
 // the gaps so specialization can resolve dynamic dims to concrete values.
+//
+// Axis names are matched by position: output axis i inherits from input axis i.
+// This prevents incorrect name assignment when multiple differently-named
+// dynamic axes exist (e.g., "batch" at axis 0, "seq" at axis 1).
 func propagateDynamicAxisNames(shape *shapes.Shape, inputs []*Node) {
 	if !shape.HasDynamicDims() {
 		return
@@ -169,21 +173,16 @@ func propagateDynamicAxisNames(shape *shapes.Shape, inputs []*Node) {
 		if i < len(shape.AxisNames) && shape.AxisNames[i] != "" {
 			continue // Already named.
 		}
-		// Find a matching axis name from any input's dynamic dims.
+		// Find a matching axis name from any input at the same position.
 		for _, input := range inputs {
-			if len(input.shape.AxisNames) == 0 {
+			if i >= len(input.shape.Dimensions) || input.shape.Dimensions[i] != shapes.DynamicDim {
 				continue
 			}
-			for j, srcDim := range input.shape.Dimensions {
-				if srcDim == shapes.DynamicDim && j < len(input.shape.AxisNames) && input.shape.AxisNames[j] != "" {
-					if len(shape.AxisNames) == 0 {
-						shape.AxisNames = make([]string, len(shape.Dimensions))
-					}
-					shape.AxisNames[i] = input.shape.AxisNames[j]
-					break
+			if i < len(input.shape.AxisNames) && input.shape.AxisNames[i] != "" {
+				if len(shape.AxisNames) == 0 {
+					shape.AxisNames = make([]string, len(shape.Dimensions))
 				}
-			}
-			if len(shape.AxisNames) > i && shape.AxisNames[i] != "" {
+				shape.AxisNames[i] = input.shape.AxisNames[i]
 				break
 			}
 		}
