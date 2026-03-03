@@ -150,6 +150,13 @@ type ExecGraphFnOneOutput interface {
 //
 // For safety concerns, the cache of JIT-compiled graphs for different input shapes is limited.
 // It can be set or disabled with SetMaxCache.
+//
+// # Concurrency
+//
+// context.Exec inherits concurrent graph compilation from graph.Exec. The provided
+// ctxGraphFn must be safe for concurrent invocation — each call receives its own Graph
+// and Node arguments, but ctxGraphFn must not mutate external shared state without its
+// own synchronization.
 type Exec struct {
 	backend backends.Backend
 	context *Context
@@ -167,6 +174,10 @@ type Exec struct {
 	// as extra outputs.
 	changedVars   map[graph.GraphId][]*Variable
 	muChangedVars sync.Mutex
+
+	// reuseOnce ensures the context is marked for reuse exactly once,
+	// safe for concurrent graph compilations.
+	reuseOnce sync.Once
 
 	// isInitializeVariablesExec indicates this executor is being used to initialize variables.
 	// Initializing variables within the cxtGraphFn would lead to an infinite recursion.
@@ -352,9 +363,9 @@ func (e *Exec) buildGraphFn() {
 		results = []reflect.Value{reflect.ValueOf(allValues)}
 
 		// Mark context for reuse after the first time it is used.
-		if !e.context.reuse {
+		e.reuseOnce.Do(func() {
 			e.context = e.context.Reuse()
-		}
+		})
 		return
 	}).Interface()
 }
