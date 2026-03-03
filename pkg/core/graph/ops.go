@@ -1038,8 +1038,16 @@ func ReduceMean(x *Node, reduceAxes ...int) *Node {
 	sum := ReduceSum(x, reduceAxes...)
 	if x.Shape().HasDynamicDims() || sum.Shape().HasDynamicDims() {
 		// Compute denominator from the reduced axes' dimensions directly.
+		// When reduceAxes is empty (reduce all), use all axes.
+		axes := reduceAxes
+		if len(axes) == 0 {
+			axes = make([]int, x.Rank())
+			for i := range axes {
+				axes[i] = i
+			}
+		}
 		denom := 1
-		for _, axis := range reduceAxes {
+		for _, axis := range axes {
 			if axis < 0 {
 				axis += x.Rank()
 			}

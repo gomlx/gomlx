@@ -499,7 +499,9 @@ func BroadcastInDimOp(operand, outputShape shapes.Shape, broadcastAxes []int) er
 				broadcastAxes, axisInOutput, axisInOperand, outputShape.Rank()-1)
 		}
 		preservedSet.Insert(axisInOutput)
-		if operand.Dimensions[axisInOperand] != 1 && operand.Dimensions[axisInOperand] != outputShape.Dimensions[axisInOutput] {
+		oDim := operand.Dimensions[axisInOperand]
+		outDim := outputShape.Dimensions[axisInOutput]
+		if oDim != shapes.DynamicDim && outDim != shapes.DynamicDim && oDim != 1 && oDim != outDim {
 			return errors.Errorf("the values of outputShape (%v) that are being broadcast (listed in broadcastAxes) "+
 				"must match the corresponding value in the operand shape (%s) or be 1 (if broadcasting), "+
 				"but the value of outputShape.Dimensions[%d]=%d does not match the value in operand.Shape().Dimensions[%d]=%d",
@@ -781,7 +783,7 @@ func ScatterOp(operand, indices, updates shapes.Shape, indexVectorAxis int, upda
 	if indexVectorAxis < indices.Rank() {
 		numIndexedAxes = indices.Dimensions[indexVectorAxis]
 	}
-	if len(scatterAxesToOperandAxes) != numIndexedAxes {
+	if numIndexedAxes != shapes.DynamicDim && len(scatterAxesToOperandAxes) != numIndexedAxes {
 		return shapes.Invalid(), errors.Errorf("scatterAxesToOperandAxes length (%d) must match the size of indices's indexVectorAxis dimension (%d)",
 			len(scatterAxesToOperandAxes), indices.Dimensions[indexVectorAxis])
 	}
@@ -828,9 +830,11 @@ func ScatterOp(operand, indices, updates shapes.Shape, indexVectorAxis int, upda
 	}
 	for ii, updatesAxis := range updateWindowAxes {
 		operandAxis := operandUpdatedWindowAxes[ii]
-		if updates.Dimensions[updatesAxis] > operand.Dimensions[operandAxis] {
+		uDim := updates.Dimensions[updatesAxis]
+		oDim := operand.Dimensions[operandAxis]
+		if uDim != shapes.DynamicDim && oDim != shapes.DynamicDim && uDim > oDim {
 			return shapes.Invalid(), errors.Errorf("updates.Dimensions[axis=%d](%d) > operand.Dimensions[axis=%d](%d), updates won't fit into the operand",
-				updatesAxis, updates.Dimensions[updatesAxis], operandAxis, operand.Dimensions[operandAxis])
+				updatesAxis, uDim, operandAxis, oDim)
 		}
 	}
 	return operand, nil

@@ -1062,7 +1062,9 @@ func (e *Exec) lockedFindInCache(argsShapes []shapes.Shape) *execGraphCacheEntry
 // Must be called without holding cacheMu.
 func (e *Exec) validateDynamicAxesShapes(argsShapes []shapes.Shape, entry *execGraphCacheEntry) {
 	if len(argsShapes) != len(entry.argsShapes) {
-		return
+		exceptions.Panicf(
+			"dynamic-axes Exec %q: argument count mismatch: got %d, compiled with %d",
+			e.Name(), len(argsShapes), len(entry.argsShapes))
 	}
 	for ii, shape := range argsShapes {
 		cached := entry.argsShapes[ii]
