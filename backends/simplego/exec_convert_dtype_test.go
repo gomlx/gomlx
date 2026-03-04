@@ -6,9 +6,8 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/stretchr/testify/assert"
-
 	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestExecSpecialOps_ConvertDType(t *testing.T) {

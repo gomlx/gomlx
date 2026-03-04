@@ -19,7 +19,10 @@ func execBitcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	srcBits := srcDType.Bits()
 	dstBits := targetDType.Bits()
 
-	output := backend.getBufferForShape(node.shape)
+	output, err := backend.getBufferForShape(node.shape)
+	if err != nil {
+		return nil, err
+	}
 
 	switch {
 	case srcBits == dstBits:

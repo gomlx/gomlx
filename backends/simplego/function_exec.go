@@ -6,8 +6,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
+
+	"github.com/gomlx/gomlx/backends"
 )
 
 // FunctionExecutable contains pre-compiled execution information for any function.
@@ -145,7 +146,8 @@ type funcExecBuffers struct {
 // capturedInputs are the values captured from parent scopes (for closures).
 // donateCaptures indicates which captured inputs can be donated to the closure.
 // If donateCaptures is nil, no captured inputs will be donated.
-func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate []bool, capturedInputs []*Buffer, donateCaptures []bool) ([]*Buffer, error) {
+func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate []bool, capturedInputs []*Buffer,
+	donateCaptures []bool) ([]*Buffer, error) {
 	// Use function's parameters (not builder.inputs) for proper function/closure support
 	funcParams := fe.function.parameters
 	if len(inputs) != len(funcParams) {
@@ -227,7 +229,10 @@ func (fe *FunctionExecutable) Execute(backend *Backend, inputs []*Buffer, donate
 		}
 		if !execBuf.owned[outIdx] {
 			// Clone the buffer since we don't own it
-			outputs[i] = backend.cloneBuffer(execBuf.results[outIdx])
+			outputs[i], err = backend.cloneBuffer(execBuf.results[outIdx])
+			if err != nil {
+				return nil, err
+			}
 		}
 		execBuf.results[outIdx] = nil // Prevent double-free
 	}
@@ -427,7 +432,8 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 	// Check for closure executor first (If, While, Sort).
 	// Closure executors receive captured inputs separately with explicit ownership tracking.
 	closureExecutor := nodeClosureExecutors[node.opType]
-	if closureExecutor != nil {
+	switch {
+	case closureExecutor != nil:
 		// Build []ClosureInputs from node.capturedInputs (already grouped per closure).
 		closureInputs := make([]ClosureInputs, len(node.capturedInputs))
 		for closureIdx, closureCaptures := range node.capturedInputs {
@@ -439,7 +445,8 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 				capturedIdx := capturedNode.idx
 				closureInputs[closureIdx].Buffers[i] = execBuf.results[capturedIdx]
 				if closureInputs[closureIdx].Buffers[i] == nil {
-					return errors.Errorf("captured input %d for closure %d of node %s not computed yet", i, closureIdx, node.opType)
+					return errors.Errorf("captured input %d for closure %d of node %s not computed yet",
+						i, closureIdx, node.opType)
 				}
 				// Only "own" the captured input if this is the last use of it.
 				closureInputs[closureIdx].Owned[i] = execBuf.owned[capturedIdx] &&
@@ -473,7 +480,7 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			execBuf.results[outputNodeIdx] = outputBuf
 			execBuf.owned[outputNodeIdx] = true
 		}
-	} else if node.IsMultiOutputs() {
+	case node.IsMultiOutputs():
 		// Execute the node
 		multiExecutor := multiOutputsNodeExecutors[node.opType]
 		if multiExecutor == nil {
@@ -496,7 +503,7 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			execBuf.results[outputNodeIdx] = outputBuf
 			execBuf.owned[outputNodeIdx] = true
 		}
-	} else {
+	default:
 		executor := nodeExecutors[node.opType]
 		if executor == nil {
 			return errors.Errorf("no executor for op %s", node.opType)
@@ -538,10 +545,9 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 						return errors.Errorf("op %s (output %d) reused input %d as output but didn't set input to nil in buffer slice", node.opType, outIdx, i)
 					}
 				}
-			} else {
-				if execBuf.results[nodeIdx] == inputBuffers[i] {
-					return errors.Errorf("op %s reused input %d as output but didn't set input to nil in buffer slice", node.opType, i)
-				}
+			} else if execBuf.results[nodeIdx] == inputBuffers[i] {
+				return errors.Errorf("op %s reused input %d as output but didn't set input to nil in buffer slice",
+					node.opType, i)
 			}
 
 			// Release the input buffer - all users have finished.

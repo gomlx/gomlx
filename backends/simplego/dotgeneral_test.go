@@ -7,21 +7,20 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/simplego/highway"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/x448/float16"
 	"k8s.io/klog/v2"
-
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 func TestDotGeneral_LargeShapesAndCopy(t *testing.T) {
@@ -68,7 +67,8 @@ func TestDotGeneral_LargeShapesAndCopy(t *testing.T) {
 			},
 			outShape.Dimensions,
 		)
-		outBlocks := be.getBuffer(dtype, outShape.Size())
+		outBlocks, err := be.getBuffer(dtype, outShape.Size())
+		require.NoError(t, err)
 		outBlocks.shape = outShape
 		outBlocks.Zeros()
 		copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
@@ -136,7 +136,8 @@ func TestDotGeneral_LargeShapesAndCopy(t *testing.T) {
 			},
 			outShape.Dimensions,
 		)
-		outBlocks := be.getBuffer(dtype, outShape.Size())
+		outBlocks, err := be.getBuffer(dtype, outShape.Size())
+		require.NoError(t, err)
 		outBlocks.shape = outShape
 		outBlocks.Zeros()
 		copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))

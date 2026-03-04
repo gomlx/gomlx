@@ -9,15 +9,14 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/simplego/highway"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
-
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
 func init() {
@@ -377,9 +376,10 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	lhs, rhs := inputs[0], inputs[1]
 	params := node.data.(*dotGeneralNodeData)
 	outputShape := node.shape
-	output := backend.getBufferForShape(outputShape)
-
-	var err error
+	output, err := backend.getBufferForShape(outputShape)
+	if err != nil {
+		return nil, err
+	}
 	switch params.execPath {
 	case blockedPath, checkPath:
 		// Inputs are pre-blocked at graph-build time. Extract block metadata from input nodes.
@@ -406,7 +406,10 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			// The "checkPath" is the debug path: it uses the blocked path as a reference and runs all other possible paths
 			// comparing the results.
 			lhsRaw, rhsRaw := inputs[2], inputs[3]
-			output2 := backend.getBufferForShape(outputShape)
+			output2, err := backend.getBufferForShape(outputShape)
+			if err != nil {
+				return nil, err
+			}
 			output2.Zeros()
 			err = execDotGeneralNormalized(backend, lhsRaw, rhsRaw, params, output2)
 			if err != nil {
@@ -497,10 +500,12 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		// Custom GEMM path for large "malmul" order.
 		inputDType := lhs.shape.DType
 		outputDType := output.shape.DType
-		packgemm.GEMMDynamic(inputDType, outputDType, 1, 0, lhs.flat.([]float32), rhs.flat.([]float32),
+		if err = packgemm.GEMMDynamic(inputDType, outputDType, 1, 0, lhs.flat.([]float32), rhs.flat.([]float32),
 			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 			output.flat.([]float32),
-			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), backend.workers)
+			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), backend.workers); err != nil {
+			return nil, err
+		}
 		return output, nil
 
 	case highwayPath:
@@ -595,24 +600,33 @@ func dotGeneralCheckVersionsCmp(outputLarge, outputSmall *Buffer) (messages []st
 		// Not checking other dtypes.
 	}
 	if mismatches > 0 {
-		return messages, errors.Errorf("found %d mismatches (out of %d values) between DotGeneral large and small versions", mismatches, outputLarge.shape.Size())
+		return messages, errors.Errorf(
+			"found %d mismatches (out of %d values) between DotGeneral large and small versions", mismatches, outputLarge.shape.Size())
 	}
 	return
 }
 
 // getBufAllocator returns a buffer allocator for the given numeric type.
+// TODO: change signature to return the error
 func getBufAllocator[T dtypes.NumberNotComplex](backend *Backend) packgemm.BufAllocFn[T] {
 	dtype := dtypes.FromGenericsType[T]()
 	return func(size int) (ref any, data []T) {
-		buf := backend.getBuffer(dtype, size)
+		buf, err := backend.getBuffer(dtype, size)
+		if err != nil {
+			return nil, nil
+		}
 		return buf, buf.flat.([]T)
 	}
 }
 
 // getAnyBufAllocator returns a buffer allocator for the given dtype.
+// TODO: change signature to return the error
 func getAnyBufAllocator(backend *Backend, dtype dtypes.DType) packgemm.BufAllocAnyFn {
 	return func(size int) (ref any, data any) {
-		buf := backend.getBuffer(dtype, size)
+		buf, err := backend.getBuffer(dtype, size)
+		if err != nil {
+			return nil, nil
+		}
 		return buf, buf.flat
 	}
 }
