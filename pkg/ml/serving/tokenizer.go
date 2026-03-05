@@ -5,7 +5,7 @@
 // tokens back through channels. It follows the same concurrency model as
 // ONNX Runtime GenAI's Engine API but is implemented in pure Go on top
 // of GoMLX's graph execution infrastructure.
-package engine
+package serving
 
 // Tokenizer is the interface the engine uses for streaming decoded text
 // back to callers and for detecting end-of-sequence tokens.
