@@ -91,6 +91,40 @@ func KVCacheGetVars(ctx *context.Context, cacheShape shapes.Shape) (keyVar, valu
 	return
 }
 
+// kvCacheWriteElement writes one batch element's keys/values to the cache using
+// DynamicUpdateSlice. For multi-token updates, each token is written individually
+// with wrap-around handling.
+//
+// Parameters:
+//   - keyCache, valueCache: [batchSize, numHeads, maxSeqLen, headDim]
+//   - batchIdx: scalar int32 — which batch element to update
+//   - headsIdx, dimIdx: scalar int32(0) — zero start indices for heads and dim axes
+//   - wrappedPos: scalar int32 — start position in cache (already mod maxSeqLen)
+//   - newKeys, newValues: [1, numHeads, updateSeqLen, headDim]
+//   - maxSeqLen: cache sequence length (for modulo wrapping in multi-token case)
+//   - updateSeqLen: number of tokens being written
+func kvCacheWriteElement(
+	keyCache, valueCache *Node,
+	batchIdx, headsIdx, dimIdx, wrappedPos *Node,
+	newKeys, newValues *Node,
+	maxSeqLen, updateSeqLen int,
+) (*Node, *Node) {
+	if updateSeqLen == 1 {
+		keyCache = DynamicUpdateSlice(keyCache, newKeys, []*Node{batchIdx, headsIdx, wrappedPos, dimIdx})
+		valueCache = DynamicUpdateSlice(valueCache, newValues, []*Node{batchIdx, headsIdx, wrappedPos, dimIdx})
+	} else {
+		for i := range updateSeqLen {
+			tokenPos := AddScalar(wrappedPos, i)
+			tokenWrappedPos := ModScalar(tokenPos, maxSeqLen)
+			tokenKeys := Slice(newKeys, AxisRange(), AxisRange(), AxisElem(i), AxisRange())
+			tokenValues := Slice(newValues, AxisRange(), AxisRange(), AxisElem(i), AxisRange())
+			keyCache = DynamicUpdateSlice(keyCache, tokenKeys, []*Node{batchIdx, headsIdx, tokenWrappedPos, dimIdx})
+			valueCache = DynamicUpdateSlice(valueCache, tokenValues, []*Node{batchIdx, headsIdx, tokenWrappedPos, dimIdx})
+		}
+	}
+	return keyCache, valueCache
+}
+
 // KVCacheUpdate writes new keys/values to the cache at the specified position.
 // This is used during incremental generation to accumulate key/value projections.
 // Supports rolling (circular) cache: when position exceeds maxSeqLen, it wraps around.
@@ -132,28 +166,12 @@ func KVCacheUpdate(ctx *context.Context, g *Graph, cacheShape shapes.Shape, star
 	headsIdx := Const(g, int32(0))
 	dimIdx := Const(g, int32(0))
 
-	if updateSeqLen == 1 {
-		// Common case: single token update, no wrap-around possible
-		keyCache = DynamicUpdateSlice(keyCache, newKeysSlice, []*Node{batchIdx, headsIdx, cacheWritePos, dimIdx})
-		valueCache = DynamicUpdateSlice(valueCache, newValuesSlice, []*Node{batchIdx, headsIdx, cacheWritePos, dimIdx})
-	} else {
-		// Multi-token update: handle wrap-around by writing each token individually
-		// with its wrapped position. For example, with maxSeqLen=4, cacheWritePos=3, updateSeqLen=2:
-		//   - Token 0 writes to position 3
-		//   - Token 1 writes to position 0 (wrapped)
-		for i := range updateSeqLen {
-			// Calculate wrapped position for this token
-			tokenPos := AddScalar(cacheWritePos, i)
-			wrappedPos := ModScalar(tokenPos, maxSeqLen)
-
-			// Extract single token slice: [batch, heads, 1, dim]
-			tokenKeys := Slice(newKeysSlice, AxisRange(), AxisRange(), AxisElem(i), AxisRange())
-			tokenValues := Slice(newValuesSlice, AxisRange(), AxisRange(), AxisElem(i), AxisRange())
-
-			keyCache = DynamicUpdateSlice(keyCache, tokenKeys, []*Node{batchIdx, headsIdx, wrappedPos, dimIdx})
-			valueCache = DynamicUpdateSlice(valueCache, tokenValues, []*Node{batchIdx, headsIdx, wrappedPos, dimIdx})
-		}
-	}
+	keyCache, valueCache = kvCacheWriteElement(
+		keyCache, valueCache,
+		batchIdx, headsIdx, dimIdx, cacheWritePos,
+		newKeysSlice, newValuesSlice,
+		maxSeqLen, updateSeqLen,
+	)
 
 	// Update the cache variables
 	keyVar.SetValueGraph(keyCache)
@@ -182,14 +200,15 @@ func getKVCache(ctx *context.Context, g *Graph, cacheShape shapes.Shape) (keys, 
 func createKVCacheAttentionMask(g *Graph, cacheShape shapes.Shape, currentPosition *Node, querySeqLen, keySeqLen int) *Node {
 	batchSize := cacheShape.Dimensions[0]
 	maxSeqLen := cacheShape.Dimensions[2]
-	dtype := cacheShape.DType
 
-	currentPosition = ConvertDType(currentPosition, dtype)
+	// Use Int32 for position arithmetic regardless of cache DType.
+	// BFloat16 caches would lose integer precision past ~256, corrupting masks.
+	currentPosition = ConvertDType(currentPosition, dtypes.Int32)
 	currentPosition = Reshape(currentPosition) // Ensure scalar
 
 	// Create position indices for keys: [0, 1, 2, ..., keySeqLen-1]
 	// Shape: [keySeqLen]
-	keyPositions := Iota(g, shapes.Make(dtype, keySeqLen), 0)
+	keyPositions := Iota(g, shapes.Make(dtypes.Int32, keySeqLen), 0)
 
 	// For rotating cache: if position >= maxSeqLen, all slots are filled
 	// effectivePosition = min(currentPosition, maxSeqLen)
@@ -201,4 +220,97 @@ func createKVCacheAttentionMask(g *Graph, cacheShape shapes.Shape, currentPositi
 
 	// Broadcast to [batch_size, 1, query_seq_len, key_seq_len]
 	return BroadcastPrefix(mask, batchSize, 1, querySeqLen)
+}
+
+// BatchedKVCacheUpdate writes new keys/values to the cache where each batch element
+// has an independent position. This is the key primitive for continuous batching:
+// multiple requests at different generation stages share one forward pass.
+//
+// Parameters:
+//   - ctx: Context for storing/retrieving cache variables
+//   - g: Graph for building the computation
+//   - cacheShape: Shape [batchSize, numHeads, maxSeqLen, headDim]
+//   - positions: [batchSize] int32 tensor — per-element absolute position
+//   - newKeysSlice: New key projections [batchSize, numHeads, seqLen, headDim]
+//   - newValuesSlice: New value projections [batchSize, numHeads, seqLen, headDim]
+func BatchedKVCacheUpdate(ctx *context.Context, g *Graph, cacheShape shapes.Shape, positions *Node, newKeysSlice, newValuesSlice *Node) {
+	keyVar, valueVar := KVCacheGetVars(ctx, cacheShape)
+
+	keyCache := keyVar.ValueGraph(g)
+	valueCache := valueVar.ValueGraph(g)
+
+	batchSize := cacheShape.Dimensions[0]
+	maxSeqLen := cacheShape.Dimensions[2]
+	updateSeqLen := newKeysSlice.Shape().Dimensions[2]
+
+	// Convert positions to int32: [batchSize]
+	positionsI32 := ConvertDType(positions, dtypes.Int32)
+
+	headsIdx := Const(g, int32(0))
+	dimIdx := Const(g, int32(0))
+
+	// Process each batch element independently since DynamicUpdateSlice
+	// takes scalar start indices.
+	for b := range batchSize {
+		batchIdxNode := Const(g, int32(b))
+
+		// Get this batch element's position (scalar).
+		batchPos := Reshape(Slice(positionsI32, AxisElem(b)))
+		wrappedPos := ModScalar(batchPos, maxSeqLen)
+
+		// Extract this batch element's new keys/values: [1, numHeads, seqLen, headDim]
+		batchKeys := Slice(newKeysSlice, AxisElem(b), AxisRange(), AxisRange(), AxisRange())
+		batchValues := Slice(newValuesSlice, AxisElem(b), AxisRange(), AxisRange(), AxisRange())
+
+		keyCache, valueCache = kvCacheWriteElement(
+			keyCache, valueCache,
+			batchIdxNode, headsIdx, dimIdx, wrappedPos,
+			batchKeys, batchValues,
+			maxSeqLen, updateSeqLen,
+		)
+	}
+
+	keyVar.SetValueGraph(keyCache)
+	valueVar.SetValueGraph(valueCache)
+}
+
+// createBatchedKVCacheAttentionMask creates a validity mask where each batch element
+// has an independent effective position. Used with BatchedKVCacheUpdate for
+// continuous batching.
+//
+// Parameters:
+//   - g: Graph for building the computation
+//   - cacheShape: Shape [batchSize, numHeads, maxSeqLen, headDim]
+//   - positions: [batchSize] int32 tensor — per-element current position
+//   - querySeqLen: Length of the query sequence
+//   - keySeqLen: Length of the key sequence (typically maxSeqLen)
+//
+// Returns:
+//   - Boolean mask shaped [batchSize, 1, querySeqLen, keySeqLen]
+func createBatchedKVCacheAttentionMask(g *Graph, cacheShape shapes.Shape, positions *Node, querySeqLen, keySeqLen int) *Node {
+	maxSeqLen := cacheShape.Dimensions[2]
+
+	// Use Int32 for position arithmetic regardless of cache DType.
+	// BFloat16 caches would lose integer precision past ~256, corrupting masks.
+	posI32 := ConvertDType(positions, dtypes.Int32)
+
+	// effectivePositions = min(positions, maxSeqLen): [batchSize]
+	effectivePositions := MinScalar(posI32, maxSeqLen)
+
+	// Key indices: [keySeqLen]
+	keyPositions := Iota(g, shapes.Make(dtypes.Int32, keySeqLen), 0)
+
+	// Broadcast for comparison:
+	//   effectivePositions: [batchSize] → [batchSize, 1]
+	//   keyPositions:       [keySeqLen] → [1, keySeqLen]
+	// Result: [batchSize, keySeqLen]
+	effectivePositions = ExpandDims(effectivePositions, -1) // [batchSize, 1]
+	keyPositions = ExpandDims(keyPositions, 0)              // [1, keySeqLen]
+	mask := LessThan(keyPositions, effectivePositions)       // [batchSize, keySeqLen]
+
+	// Reshape to [batchSize, 1, 1, keySeqLen] then broadcast to [batchSize, 1, querySeqLen, keySeqLen]
+	mask = ExpandDims(mask, 1)
+	mask = ExpandDims(mask, 2)
+	mask = BroadcastToShape(mask, shapes.Make(dtypes.Bool, mask.Shape().Dimensions[0], 1, querySeqLen, keySeqLen))
+	return mask
 }

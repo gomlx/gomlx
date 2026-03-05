@@ -398,3 +398,123 @@ func TestKVCacheCircular(t *testing.T) {
 		assert.InDelta(t, 10.0, cachedKeys[0][0][3][0], 0.01, "Slot 3 should have 10.0 (first token)")
 	})
 }
+
+// TestBatchedKVCacheFunctions tests the batched (per-element positions) KV cache.
+func TestBatchedKVCacheFunctions(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+
+	t.Run("PerElementPositions", func(t *testing.T) {
+		ctx := context.New()
+		batchSize := 2
+		numHeads := 1
+		maxSeqLen := 8
+		headDim := 2
+		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
+
+		exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, positions, keys, values *Node) *Node {
+			g := positions.Graph()
+			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
+
+			BatchedKVCacheUpdate(cacheCtx, g, cacheShape, positions, keys, values)
+			cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
+			return cachedKeys
+		})
+
+		// Batch 0 writes at position 2, batch 1 writes at position 5.
+		// Keys shape: [2, 1, 1, 2]
+		keys := [][][][]float32{
+			{{{10.0, 11.0}}}, // batch 0
+			{{{20.0, 21.0}}}, // batch 1
+		}
+		values := [][][][]float32{
+			{{{10.0, 11.0}}},
+			{{{20.0, 21.0}}},
+		}
+		positions := []int32{2, 5}
+
+		results := exec.MustExec(positions, keys, values)
+		cached := results[0].Value().([][][][]float32)
+
+		// Batch 0, head 0, position 2 should have 10.0
+		assert.InDelta(t, 10.0, cached[0][0][2][0], 0.01, "Batch 0 at pos 2")
+		assert.InDelta(t, 11.0, cached[0][0][2][1], 0.01, "Batch 0 at pos 2 dim 1")
+		// Batch 0, position 5 should be zero (untouched).
+		assert.InDelta(t, 0.0, cached[0][0][5][0], 0.01, "Batch 0 at pos 5 should be zero")
+
+		// Batch 1, head 0, position 5 should have 20.0
+		assert.InDelta(t, 20.0, cached[1][0][5][0], 0.01, "Batch 1 at pos 5")
+		assert.InDelta(t, 21.0, cached[1][0][5][1], 0.01, "Batch 1 at pos 5 dim 1")
+		// Batch 1, position 2 should be zero (untouched).
+		assert.InDelta(t, 0.0, cached[1][0][2][0], 0.01, "Batch 1 at pos 2 should be zero")
+	})
+
+	t.Run("PerElementPositionsWrapAround", func(t *testing.T) {
+		ctx := context.New()
+		batchSize := 2
+		numHeads := 1
+		maxSeqLen := 4
+		headDim := 2
+		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
+
+		exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, positions, keys, values *Node) *Node {
+			g := positions.Graph()
+			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
+
+			BatchedKVCacheUpdate(cacheCtx, g, cacheShape, positions, keys, values)
+			cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
+			return cachedKeys
+		})
+
+		// Batch 0 at position 1 (no wrap), batch 1 at position 5 (wraps to slot 1).
+		keys := [][][][]float32{
+			{{{1.0, 1.0}}},
+			{{{2.0, 2.0}}},
+		}
+		values := [][][][]float32{
+			{{{1.0, 1.0}}},
+			{{{2.0, 2.0}}},
+		}
+		positions := []int32{1, 5}
+
+		results := exec.MustExec(positions, keys, values)
+		cached := results[0].Value().([][][][]float32)
+
+		// Batch 0 at slot 1
+		assert.InDelta(t, 1.0, cached[0][0][1][0], 0.01, "Batch 0 at slot 1")
+		// Batch 1 at slot 1 (5 % 4 = 1)
+		assert.InDelta(t, 2.0, cached[1][0][1][0], 0.01, "Batch 1 at slot 1 (wrapped)")
+	})
+
+	t.Run("BatchedAttentionMask", func(t *testing.T) {
+		ctx := context.New()
+		batchSize := 2
+		numHeads := 1
+		maxSeqLen := 8
+		headDim := 2
+		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
+
+		exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, positions *Node) *Node {
+			g := positions.Graph()
+			mask := createBatchedKVCacheAttentionMask(g, cacheShape, positions, 1, maxSeqLen)
+			// Convert bool to float for easier assertion.
+			return ConvertDType(mask, dtypes.Float32)
+		})
+
+		// Batch 0 at position 3 (3 slots filled), batch 1 at position 6 (6 slots filled).
+		positions := []int32{3, 6}
+		results := exec.MustExec(positions)
+		maskVal := results[0].Value().([][][][]float32)
+
+		// Mask shape: [2, 1, 1, 8]
+		// Batch 0: positions 0,1,2 should be 1 (filled), 3-7 should be 0
+		assert.InDelta(t, 1.0, maskVal[0][0][0][0], 0.01, "Batch 0 pos 0 filled")
+		assert.InDelta(t, 1.0, maskVal[0][0][0][2], 0.01, "Batch 0 pos 2 filled")
+		assert.InDelta(t, 0.0, maskVal[0][0][0][3], 0.01, "Batch 0 pos 3 not filled")
+		assert.InDelta(t, 0.0, maskVal[0][0][0][7], 0.01, "Batch 0 pos 7 not filled")
+
+		// Batch 1: positions 0-5 filled, 6-7 not filled
+		assert.InDelta(t, 1.0, maskVal[1][0][0][0], 0.01, "Batch 1 pos 0 filled")
+		assert.InDelta(t, 1.0, maskVal[1][0][0][5], 0.01, "Batch 1 pos 5 filled")
+		assert.InDelta(t, 0.0, maskVal[1][0][0][6], 0.01, "Batch 1 pos 6 not filled")
+	})
+}

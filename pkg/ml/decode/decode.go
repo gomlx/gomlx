@@ -60,6 +60,24 @@ type IterativeModelFn func(ctx *context.Context, tokens *Node) *Node
 //   - logits: Output logits [batch, newLen, vocabSize]
 type IncrementalModelFn func(ctx *context.Context, newTokens *Node, position int) *Node
 
+// BatchedModelFn processes tokens with per-element positions as tensors.
+// This enables batching requests at different generation positions in one
+// forward pass, which is the key primitive for continuous batching engines.
+//
+// Unlike IncrementalModelFn (where position is a Go int baked into the
+// compiled graph), positions here are a graph Parameter. This means one
+// compiled graph serves all positions for a given (batchSize, seqLen) shape,
+// dramatically reducing compilation overhead.
+//
+// Parameters:
+//   - ctx: Model context (weights + KV cache variables).
+//   - newTokens: [batchSize, newLen] int32 — new tokens to process.
+//   - positions: [batchSize] int32 — per-element absolute position in sequence.
+//
+// Returns:
+//   - logits: [batchSize, newLen, vocabSize]
+type BatchedModelFn func(ctx *context.Context, newTokens *Node, positions *Node) *Node
+
 // Decoder configures and executes autoregressive text generation.
 // Supports multiple sampling strategies (greedy, temperature, top-k, nucleus, beam search)
 // and incremeantal models, usually using some form of cache (e.g.: a "KV-cache").
@@ -600,7 +618,7 @@ func (dec *Decoder) generateSamplingIncremental(
 	}
 
 	currentPosition := promptLen
-	for step := 0; step < numTokensToGenerate; step++ {
+	for step := range numTokensToGenerate {
 		position := currentPosition + step
 
 		// Get or create cached executor for this position
@@ -751,7 +769,7 @@ func (dec *Decoder) generateBeamSearchNonCached(
 
 	// Initialize beam scores: first beam 0, others -1e10
 	initialScores := make([]float32, batchBeamSize)
-	for i := 0; i < batchBeamSize; i++ {
+	for i := range batchBeamSize {
 		if i%beamSize == 0 {
 			initialScores[i] = 0.0
 		} else {
@@ -770,7 +788,7 @@ func (dec *Decoder) generateBeamSearchNonCached(
 	predCtx := ctx.Reuse()
 	numSteps := dec.MaxLength - promptLen
 
-	for step := 0; step < numSteps; step++ {
+	for step := range numSteps {
 		currentLength := promptLen + step
 
 		// TODO: It seems I cannot cache this exec because currentLength changes each iteration
@@ -914,7 +932,7 @@ func (dec *Decoder) generateBeamSearchCached(
 	genCtx := ctx.Reuse()
 	numSteps := dec.MaxLength - promptLen
 
-	for step := 0; step < numSteps; step++ {
+	for step := range numSteps {
 		position := promptLen + step
 
 		// Note: Cannot cache extractExec across decode calls because it would need
