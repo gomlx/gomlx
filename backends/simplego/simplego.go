@@ -60,7 +60,8 @@ func New(config string) (backends.Backend, error) {
 		case "parallelism":
 			vInt, err := strconv.Atoi(value)
 			if err != nil {
-				return nil, errors.Wrapf(err, "invalid value for %q in SimpleGo backend config: needs an int, got %q", key, value)
+				return nil, errors.Wrapf(err,
+					"invalid value for %q in SimpleGo backend config: needs an int, got %q", key, value)
 			}
 			b.workers.SetMaxParallelism(vInt)
 			fmt.Printf("SimpleGo backend: parallelism set to %d\n", vInt)
@@ -166,11 +167,11 @@ func (b *Backend) NumDevices() int {
 }
 
 // DeviceDescription returns a description of the device with the given deviceNum.
-func (b *Backend) DeviceDescription(deviceNum backends.DeviceNum) string {
+func (b *Backend) DeviceDescription(_ backends.DeviceNum) string {
 	return "device#0"
 }
 
-// Capabilities returns information about what is supported by this backend.
+// Capabilities method returns information about what is supported by this backend.
 func (b *Backend) Capabilities() backends.Capabilities {
 	return Capabilities
 }

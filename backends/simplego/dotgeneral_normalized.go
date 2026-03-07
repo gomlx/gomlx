@@ -137,10 +137,10 @@ func dgNormalizeShape[T interface {
 	rank := source.shape.Rank()
 
 	// Indices we are going to iterate.
-	sourceData := source.flat.([]T)
-	outputData := output.flat.([]T)
+	sourceData := source.flat.([]T) //nolint:errcheck
+	outputData := output.flat.([]T) //nolint:errcheck
 	sourceIdx := make([]int, rank)
-	for sourceFlatIdx := range len(sourceData) {
+	for sourceFlatIdx := range sourceData {
 		// Copy value at current index:
 		outputFlatIdx := outputStrides[0]*outputIdx[0] + outputStrides[1]*outputIdx[1] + outputStrides[2]*outputIdx[2]
 		outputData[outputFlatIdx] = sourceData[sourceFlatIdx]
@@ -170,7 +170,7 @@ func dgNormalizeShape[T interface {
 }
 
 // execDotGeneralNormalized executes the dot general operation for normalized shapes:
-// both rhs and lhs are shaped [batchSize, crossSize, contractingSize]
+// both rhs and lhs are shaped [batchSize, crossSize, contractingSize].
 func execDotGeneralNormalized(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
 	dtype := lhs.shape.DType
 	normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer,
@@ -235,7 +235,7 @@ func execDotGeneralNormalized(backend *Backend, lhs, rhs *Buffer, params *dotGen
 
 	// If we created a temporary float32 output, convert it back to the original dtype.
 	if castToFloat32 {
-		convertFn := convertDTypePairMap.Get(dtypes.Float32, output.shape.DType).(convertFnType)
+		convertFn := convertDTypePairMap.Get(dtypes.Float32, output.shape.DType).(convertFnType) //nolint:errcheck
 		convertFn(tmpOutput, output)
 		backend.putBuffer(tmpOutput) // Return the temporary buffer to the pool.
 	}

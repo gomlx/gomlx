@@ -19,15 +19,15 @@ func init() {
 
 // execIf executes the If operation by evaluating the predicate and running one branch.
 // closureInputs[0] = true branch captured values, closureInputs[1] = false branch captured values.
-func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs []ClosureInputs) ([]*Buffer, error) {
+func execIf(backend *Backend, node *Node, inputs []*Buffer, _ []bool, closureInputs []ClosureInputs) ([]*Buffer, error) {
 	predBuffer := inputs[0]
-	predFlat := predBuffer.flat.([]bool)
+	predFlat := predBuffer.flat.([]bool) //nolint:errcheck
 	if len(predFlat) != 1 {
 		return nil, errors.Errorf("If: predicate must be scalar, got %d elements", len(predFlat))
 	}
 	pred := predFlat[0]
 
-	data := node.data.(*ifNode)
+	data := node.data.(*ifNode) //nolint:errcheck
 
 	// Select the branch to execute based on predicate
 	var branchFn *Function
@@ -59,7 +59,7 @@ func execIf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, 
 // Note on captured input donation: Captured values are reused across all iterations,
 // so we never donate them to the closure calls. The executor handles freeing them.
 func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool, closureInputs []ClosureInputs) ([]*Buffer, error) {
-	data := node.data.(*whileNode)
+	data := node.data.(*whileNode) //nolint:errcheck
 	condFn := data.cond
 	bodyFn := data.body
 
@@ -97,7 +97,7 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 		}
 
 		// Check condition result
-		condResult := condOutputs[0].flat.([]bool)[0]
+		condResult := condOutputs[0].flat.([]bool)[0] //nolint:errcheck
 		backend.putBuffer(condOutputs[0])
 
 		if !condResult {
@@ -136,7 +136,7 @@ func execWhile(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 // sorting, so we never donate captured inputs. The executor handles freeing them.
 func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool,
 	closureInputs []ClosureInputs) ([]*Buffer, error) {
-	data := node.data.(*sortNode)
+	data := node.data.(*sortNode) //nolint:errcheck
 	axis := data.axis
 	isStable := data.isStable
 	compFn := data.comparator
@@ -217,8 +217,8 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 	axisStride := innerSize
 
 	// Sort each "row" along the axis
-	for outer := 0; outer < outerSize; outer++ {
-		for inner := 0; inner < innerSize; inner++ {
+	for outer := range outerSize {
+		for inner := range innerSize {
 			baseOffset := outer*axisSize*innerSize + inner
 
 			// Reset indices
@@ -257,7 +257,7 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 						panic(err) // Abort sort immediately
 					}
 
-					result := compOutputs[0].flat.([]bool)[0]
+					result := compOutputs[0].flat.([]bool)[0] //nolint:errcheck
 					backend.putBuffer(compOutputs[0])
 					return result
 				}
@@ -298,12 +298,12 @@ var applyPermutationDTypeMap = NewDTypeMap("ApplyPermutation")
 
 // applyPermutation reorders elements along the sort axis according to the given indices.
 func applyPermutation(buf *Buffer, indices []int, baseOffset, axisStride, axisSize int) {
-	fn := applyPermutationDTypeMap.Get(buf.shape.DType).(func(buf *Buffer, indices []int, baseOffset, axisStride, axisSize int))
+	fn := applyPermutationDTypeMap.Get(buf.shape.DType).(func(buf *Buffer, indices []int, baseOffset, axisStride, axisSize int)) //nolint:errcheck
 	fn(buf, indices, baseOffset, axisStride, axisSize)
 }
 
 func applyPermutationGeneric[T SupportedTypesConstraints](buf *Buffer, indices []int, baseOffset, axisStride, axisSize int) {
-	flat := buf.flat.([]T)
+	flat := buf.flat.([]T) //nolint:errcheck
 	// Extract values to temp slice
 	temp := make([]T, axisSize)
 	for i := range axisSize {
@@ -319,7 +319,7 @@ func applyPermutationGeneric[T SupportedTypesConstraints](buf *Buffer, indices [
 // execCall executes a Call operation by running the target function with the given inputs.
 // Regular inputs are the arguments to the called function.
 func execCall(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
-	data := node.data.(*callNode)
+	data := node.data.(*callNode) //nolint:errcheck
 	targetFn := data.target
 
 	outputs, err := targetFn.compiled.Execute(backend, inputs, inputsOwned, nil, nil)
