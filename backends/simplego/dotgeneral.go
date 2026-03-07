@@ -500,13 +500,10 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		// Custom GEMM path for large "malmul" order.
 		inputDType := lhs.shape.DType
 		outputDType := output.shape.DType
-		if err = packgemm.GEMMDynamic(inputDType, outputDType, 1, 0, lhs.flat.([]float32), rhs.flat.([]float32),
+		err = packgemm.GEMMDynamic(inputDType, outputDType, 1, 0, lhs.flat.([]float32), rhs.flat.([]float32),
 			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 			output.flat.([]float32),
-			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), backend.workers); err != nil {
-			return nil, err
-		}
-		return output, nil
+			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), backend.workers)
 
 	case highwayPath:
 		// Highway MatMul path for large "malmul" order.
@@ -516,7 +513,6 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 			output.flat,
 			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), backend.workers)
-		return output, nil
 
 	default:
 		err = errors.Errorf("unknown execution path %d for DotGeneral", params.execPath)
