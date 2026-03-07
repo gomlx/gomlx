@@ -746,8 +746,9 @@ func (f *Function) Concatenate(axis int, operandOps ...backends.Value) (backends
 // Bitcast reinterprets the bits of operandOp as targetDType. It implements the backends.Builder interface.
 //
 // If the element sizes differ, the last dimension is adjusted:
-//   - Smaller target: a new trailing axis of size (srcBits / dstBits) is appended.
-//   - Larger target: the last axis must be divisible by (dstBits / srcBits) and is collapsed.
+//   - Smaller target: a new trailing axis of size (srcBits / dstBits) is appended, so rank is increased by 1.
+//   - Larger target: the last axis must be divisible by (dstBits / srcBits) and is divided by this ratio,
+//     but not "squeezed", the rank is always preserved in this case.
 func (f *Function) Bitcast(operandOp backends.Value, targetDType dtypes.DType) (backends.Value, error) {
 	opType := backends.OpTypeBitcast
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
