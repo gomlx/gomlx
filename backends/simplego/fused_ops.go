@@ -4,6 +4,7 @@ package simplego
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 )
@@ -76,6 +77,26 @@ type nodeFusedAttentionQKVProjection struct {
 	hasBiasK bool
 	hasBiasV bool
 }
+
+type nodeFusedQuantizedDense struct {
+	scheme    backends.QuantizationScheme
+	blockAxis int // Always 1 (output-features axis); validated in builder. Stored for EqualNodeData.
+	blockSize    int
+	activation   backends.ActivationType
+	hasZeroPoint bool
+	hasBias      bool
+}
+
+func (d *nodeFusedQuantizedDense) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*nodeFusedQuantizedDense)
+	return d.scheme == o.scheme && d.blockAxis == o.blockAxis &&
+		d.blockSize == o.blockSize && d.activation == o.activation &&
+		d.hasZeroPoint == o.hasZeroPoint && d.hasBias == o.hasBias
+}
+
+// nodeFusedQuantizedScaledDotProductAttention is identical to nodeFusedScaledDotProductAttention;
+// the quantized SDPA scalar fallback delegates to the same sdpaMultiHeadGeneric kernel.
+type nodeFusedQuantizedScaledDotProductAttention = nodeFusedScaledDotProductAttention
 
 // FusedSoftmax computes softmax along the specified axis.
 // The axis must be non-negative (the caller normalizes negative indices).
@@ -202,27 +223,127 @@ func (f *Function) FusedDense(x, weight, bias backends.Value, activation backend
 // Both AxesLayoutBHSD and AxesLayoutBSHD are supported; the executor transposes
 // BSHD inputs to BHSD internally.
 func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backends.Value, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (backends.Value, error) {
+	return f.buildSDPANode(backends.OpTypeFusedScaledDotProductAttention, "FusedScaledDotProductAttention",
+		query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal)
+}
+
+// FusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
+//
+// Unlike FusedDense, this does not create a DotGeneral sub-node — the quantized matmul
+// is fundamentally different (mixed-dtype with per-group scales). The inputs to the
+// executor are [x, weights, scales, zeroPoints?, bias?] directly.
+//
+// Weights should have their dtype set to reflect the actual storage type (e.g. Int4, Int8).
+// For sub-byte types, the caller should Bitcast packed uint8 data to the correct dtype.
+func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value,
+	weightsQuantization *backends.Quantization,
+	activation backends.ActivationType) (backends.Value, error) {
+
+	scales := weightsQuantization.Scale
+	zeroPoints := weightsQuantization.ZeroPoint
+	blockAxis := weightsQuantization.BlockAxis
+	blockSize := weightsQuantization.BlockSize
+	scheme := weightsQuantization.Scheme
+
+	values := []backends.Value{x, weights, scales}
+	if zeroPoints != nil {
+		values = append(values, zeroPoints)
+	}
+	if bias != nil {
+		values = append(values, bias)
+	}
+	inputs, err := f.verifyAndCastValues("FusedQuantizedDense", values...)
+	if err != nil {
+		return nil, err
+	}
+	xNode := inputs[0]
+	wNode := inputs[1]
+	sNode := inputs[2]
+
+	// Validate x dtype: only float32 is supported.
+	if xNode.shape.DType != dtypes.Float32 {
+		return nil, errors.Errorf("FusedQuantizedDense: x must be float32, got %s", xNode.shape.DType)
+	}
+
+	// Validate x shape: [batch..., K]
+	if xNode.shape.Rank() < 1 {
+		return nil, errors.Errorf("FusedQuantizedDense: x must have rank >= 1, got %d", xNode.shape.Rank())
+	}
+	K := xNode.shape.Dimensions[xNode.shape.Rank()-1]
+
+	// Derive N from weights shape. The weights dtype reflects the storage type.
+	if wNode.shape.Rank() != 2 || wNode.shape.Dimensions[0] != K {
+		return nil, errors.Errorf("FusedQuantizedDense: weights must be [%d, N], got %v", K, wNode.shape.Dimensions)
+	}
+	N := wNode.shape.Dimensions[1]
+
+	// Validate scales shape: [K, numBlocks]
+	numBlocks := (N + blockSize - 1) / blockSize
+	if sNode.shape.Rank() != 2 || sNode.shape.Dimensions[0] != K || sNode.shape.Dimensions[1] != numBlocks {
+		return nil, errors.Errorf("FusedQuantizedDense: scales must be [%d, %d], got %v",
+			K, numBlocks, sNode.shape.Dimensions)
+	}
+
+	// Output shape: [batch..., N]
+	outDims := make([]int, xNode.shape.Rank())
+	copy(outDims, xNode.shape.Dimensions[:xNode.shape.Rank()-1])
+	outDims[xNode.shape.Rank()-1] = N
+	outShape := shapes.Make(xNode.shape.DType, outDims...)
+
+	// Only blockAxis=1 (output-features axis) is currently supported.
+	if blockAxis != 1 {
+		return nil, errors.Errorf("FusedQuantizedDense: only Axis=1 is supported, got %d", blockAxis)
+	}
+
+	// NF4 quantization uses a fixed lookup table and does not support zero points.
+	if scheme == backends.QuantNF4 && zeroPoints != nil {
+		return nil, errors.Errorf("FusedQuantizedDense: ZeroPoint must be nil for NF4 quantization scheme")
+	}
+
+	data := &nodeFusedQuantizedDense{
+		scheme:       scheme,
+		blockAxis:    blockAxis,
+		blockSize:    blockSize,
+		activation:   activation,
+		hasZeroPoint: zeroPoints != nil,
+		hasBias:      bias != nil,
+	}
+	node, _ := f.getOrCreateNode(backends.OpTypeFusedQuantizedDense, outShape, inputs, data)
+	return node, nil
+}
+
+// FusedQuantizedScaledDotProductAttention computes multi-head SDPA using int8×int8
+// matmuls for Q@K^T and attn@V. Inputs are float32; quantization is internal.
+func (f *Function) FusedQuantizedScaledDotProductAttention(query, key, value, mask backends.Value, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (backends.Value, error) {
+	return f.buildSDPANode(backends.OpTypeFusedQuantizedScaledDotProductAttention, "FusedQuantizedScaledDotProductAttention",
+		query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal)
+}
+
+// buildSDPANode is the shared builder for both FusedScaledDotProductAttention and
+// FusedQuantizedScaledDotProductAttention, which differ only in OpType and error prefix.
+func (f *Function) buildSDPANode(opType backends.OpType, opName string,
+	query, key, value, mask backends.Value,
+	numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool,
+) (backends.Value, error) {
 	values := []backends.Value{query, key, value}
 	if mask != nil {
 		values = append(values, mask)
 	}
-	inputs, err := f.verifyAndCastValues("FusedScaledDotProductAttention", values...)
+	inputs, err := f.verifyAndCastValues(opName, values...)
 	if err != nil {
 		return nil, err
 	}
 	qNode := inputs[0]
 
-	// Validate shapes: query [batch, numHeads, seqLen, headDim]
 	if qNode.shape.Rank() != 4 {
-		return nil, errors.Errorf("FusedScaledDotProductAttention: query must have rank 4, got %d", qNode.shape.Rank())
+		return nil, errors.Errorf("%s: query must have rank 4, got %d", opName, qNode.shape.Rank())
 	}
 	if numHeads <= 0 || numKVHeads <= 0 || numHeads%numKVHeads != 0 {
-		return nil, errors.Errorf("FusedScaledDotProductAttention: numHeads (%d) must be positive and divisible by numKVHeads (%d)", numHeads, numKVHeads)
+		return nil, errors.Errorf("%s: numHeads (%d) must be positive and divisible by numKVHeads (%d)", opName, numHeads, numKVHeads)
 	}
 
-	// Output shape is the same as query.
 	data := &nodeFusedScaledDotProductAttention{numHeads: numHeads, numKVHeads: numKVHeads, axesLayout: axesLayout, scale: scale, causal: causal}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedScaledDotProductAttention, qNode.shape.Clone(), inputs, data)
+	node, _ := f.getOrCreateNode(opType, qNode.shape.Clone(), inputs, data)
 	return node, nil
 }
 
@@ -275,21 +396,8 @@ func (f *Function) FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV back
 
 	// FusedAttentionQKVProjection inputs: [dotResult, biasQ?, biasK?, biasV?].
 	// The matmul is already computed by the DotGeneral sub-node (inputs[0]).
-	fusedInputs := []*Node{dotNode}
-	if biasQ != nil {
-		fusedInputs = append(fusedInputs, inputs[2])
-	}
-	biasIdx := 2
-	if biasQ != nil {
-		biasIdx++
-	}
-	if biasK != nil {
-		fusedInputs = append(fusedInputs, inputs[biasIdx])
-		biasIdx++
-	}
-	if biasV != nil {
-		fusedInputs = append(fusedInputs, inputs[biasIdx])
-	}
+	// Bias nodes are at inputs[2:] in the same order they were appended.
+	fusedInputs := append([]*Node{dotNode}, inputs[2:]...)
 
 	data := &nodeFusedAttentionQKVProjection{qDim: queryDim, kvDim: keyValueDim, hasBiasQ: biasQ != nil, hasBiasK: biasK != nil, hasBiasV: biasV != nil}
 	node := f.newMultiOutputsNode(backends.OpTypeFusedAttentionQKVProjection, []shapes.Shape{qShape, kShape, vShape}, fusedInputs...)

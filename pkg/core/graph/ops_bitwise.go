@@ -263,7 +263,8 @@ func unpackUint4(x *Node) *Node {
 // before transferring.
 func Pack(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
-	if x.DType() != dtypes.Int2 {
+	if x.DType() != dtypes.Int2 && x.DType() != dtypes.Int4 &&
+		x.DType() != dtypes.Uint2 && x.DType() != dtypes.Uint4 {
 		Panicf("Pack: input must be Int2, Int4, Uint2 or Uint4, got %s", x.DType())
 	}
 	shape := x.Shape()

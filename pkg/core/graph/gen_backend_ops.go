@@ -66,6 +66,8 @@ const (
 	NodeTypeFusedDense
 	NodeTypeFusedGelu
 	NodeTypeFusedLayerNorm
+	NodeTypeFusedQuantizedDense
+	NodeTypeFusedQuantizedScaledDotProductAttention
 	NodeTypeFusedScaledDotProductAttention
 	NodeTypeFusedSoftmax
 	NodeTypeGather
@@ -2034,6 +2036,78 @@ func backendFusedLayerNorm(x *Node, axes []int, epsilon float64, gamma *Node, be
 		betaVal = beta.outputOps[0]
 	}
 	result, err := g.currentFunc.backendFunc.FusedLayerNorm(x.outputOps[0], inputs.axes, inputs.epsilon, gammaVal, betaVal)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsFusedQuantizedScaledDotProductAttention holds the inputs used for the call to backends.FusedQuantizedScaledDotProductAttention.
+type nodeInputsFusedQuantizedScaledDotProductAttention struct {
+	query      *Node
+	key        *Node
+	value      *Node
+	mask       *Node
+	numHeads   int
+	numKVHeads int
+	axesLayout backends.AxesLayout
+	scale      float64
+	causal     bool
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedQuantizedScaledDotProductAttention) Type() NodeType {
+	return NodeTypeFusedQuantizedScaledDotProductAttention
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedQuantizedScaledDotProductAttention) String() string {
+	return fmt.Sprintf("%s(query=[#%d], key=[#%d], value=[#%d], mask=%s, numHeads=%v, numKVHeads=%v, axesLayout=%s, scale=%v, causal=%v)",
+		ni.Type(),
+		ni.query.Id(),
+		ni.key.Id(),
+		ni.value.Id(),
+		strNillableNode(ni.mask),
+		ni.numHeads,
+		ni.numKVHeads,
+		ni.axesLayout,
+		ni.scale,
+		ni.causal,
+	)
+}
+
+// backendFusedQuantizedScaledDotProductAttention is a Graph wrapper for the backend.Builder.FusedQuantizedScaledDotProductAttention method.
+func backendFusedQuantizedScaledDotProductAttention(query *Node, key *Node, value *Node, mask *Node, numHeads int, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (
+	node *Node) {
+	inputNodes := []*Node{query, key, value}
+	if mask != nil {
+		inputNodes = append(inputNodes, mask)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedQuantizedScaledDotProductAttention{
+		query:      query,
+		key:        key,
+		value:      value,
+		mask:       mask,
+		numHeads:   numHeads,
+		numKVHeads: numKVHeads,
+		axesLayout: axesLayout,
+		scale:      scale,
+		causal:     causal,
+	}
+	var maskVal backends.Value
+	if mask != nil {
+		maskVal = mask.outputOps[0]
+	}
+	result, err := g.currentFunc.backendFunc.FusedQuantizedScaledDotProductAttention(query.outputOps[0], key.outputOps[0], value.outputOps[0], maskVal, inputs.numHeads, inputs.numKVHeads, inputs.axesLayout, inputs.scale, inputs.causal)
 	if err != nil {
 		panic(err)
 	}

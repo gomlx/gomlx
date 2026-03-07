@@ -47,6 +47,65 @@ func (l AxesLayout) HeadsAxis() int {
 	}
 }
 
+// QuantizationScheme specifies how quantized integer values map to floating-point values.
+type QuantizationScheme int
+
+const (
+	// QuantLinear is standard affine quantization: float_value = int_value * scale + zeroPoint.
+	// Used with Int4 weights (symmetric, zeroPoint=nil) or Int8 weights.
+	QuantLinear QuantizationScheme = iota
+
+	// QuantNF4 is 4-bit NormalFloat from QLoRA: nibble indices are looked up in a fixed
+	// 16-entry table, then multiplied by scale.
+	QuantNF4
+)
+
+// String returns the name of the quantization scheme.
+func (q QuantizationScheme) String() string {
+	switch q {
+	case QuantLinear:
+		return "Linear"
+	case QuantNF4:
+		return "NF4"
+	default:
+		return "unknown"
+	}
+}
+
+// NF4LookupTable contains the 16 fixed QLoRA NormalFloat4 dequantization values.
+// Used by both the fused executor and the decomposed graph-level fallback.
+var NF4LookupTable = [16]float32{
+	-1.0, -0.6961928009986877, -0.5250730514526367, -0.39491748809814453,
+	-0.28444138169288635, -0.18477343022823334, -0.09105003625154495, 0,
+	0.07958029955625534, 0.16093020141124725, 0.24611230194568634, 0.33791524171829224,
+	0.44070982933044434, 0.5626170039176941, 0.7229568362236023, 1.0,
+}
+
+// Quantization describes how a value is quantized, and holds the information to dequantize it.
+type Quantization struct {
+	// Scheme: Linear (standard) or NF4.
+	Scheme QuantizationScheme
+
+	// Scale is the multiplicative factor.
+	// Shape: [K, NumBlocks] (block-wise), where K is the input-features
+	// (contracting) dimension of the [K, N] weight matrix and
+	// NumBlocks = ceil(N / BlockSize).
+	Scale Value
+
+	// ZeroPoint is the additive offset (only for Linear).
+	// If nil, the quantization is assumed symmetric.
+	ZeroPoint Value
+
+	// BlockAxis is the dimension of the quantized tensor that is blocked.
+	// This is the output-features dimension (axis 1) of a [K, N] weight matrix.
+	// Currently only BlockAxis=1 is supported.
+	BlockAxis int
+
+	// BlockSize is the number of elements in BlockAxis that share one scale.
+	// If BlockSize == N, it's effectively per-axis quantization.
+	BlockSize int
+}
+
 // ActivationType specifies the activation function for fused operations.
 type ActivationType int
 
@@ -141,6 +200,38 @@ type FusedOps interface {
 	//
 	// Output: same shape as query.
 	FusedScaledDotProductAttention(
+		query, key, value, mask Value,
+		numHeads, numKVHeads int,
+		axesLayout AxesLayout,
+		scale float64,
+		causal bool) (Value, error)
+
+	// FusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
+	//
+	// It computes y = activation(x @ dequant(weights, weightsQuantization) + bias), where the
+	// dequantization and matmul are fused into a single pass to avoid materializing the
+	// full float32 weight matrix.
+	//
+	// Inputs:
+	//   - x: [batch..., K] float32 input activations.
+	//   - weights: [K, N] with dtype reflecting storage precision (e.g. Int4, Int8).
+	//     For sub-byte types the caller should Bitcast packed uint8 data to the correct dtype
+	//     before calling.
+	//   - bias: [N] float32 (nil-able), added after matmul but before activation.
+	//   - weightsQuantization: describes how to dequantize the weights tensor. Must not be nil.
+	//   - activation: applied after matmul+bias; set to ActivationNone for no activation.
+	//
+	// Future: inputQuantization, outputQuantization, and biasQuantization parameters may be
+	// added to support fully quantized operations where the activations and/or output are
+	// also quantized.
+	FusedQuantizedDense(x, weights, bias Value,
+		weightsQuantization *Quantization,
+		activation ActivationType) (Value, error)
+
+	// FusedQuantizedScaledDotProductAttention computes multi-head SDPA using int8×int8
+	// matmuls for Q@K^T and attn@V. Inputs are float32; quantization is internal.
+	// Same interface as FusedScaledDotProductAttention.
+	FusedQuantizedScaledDotProductAttention(
 		query, key, value, mask Value,
 		numHeads, numKVHeads int,
 		axesLayout AxesLayout,
