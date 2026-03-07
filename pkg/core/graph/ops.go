@@ -508,10 +508,24 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 //
 // Notice that the dtype of shape is ignored, the returned value preserves the dtype of x.
 //
-// This is equivalent to BroadcastToDims(x, shape.Dimensions...).
+// Unlike BroadcastToDims, this preserves axis names from the target shape,
+// which is required when the target shape contains DynamicDim values that need
+// named axes for specialization to resolve them to concrete values.
 func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 	_ = validateBuildingGraphFromInputs(x)
-	return BroadcastToDims(x, shape.Dimensions...)
+	// Override dtype to match x (shape's dtype is ignored).
+	shape.DType = x.DType()
+	if x.Shape().IsScalar() && shape.IsScalar() {
+		return x
+	}
+	if x.Shape().IsScalar() {
+		return backendBroadcastInDim(x, shape, nil)
+	}
+	broadcastDims := make([]int, x.Rank())
+	for ii := range x.Rank() {
+		broadcastDims[ii] = ii
+	}
+	return backendBroadcastInDim(x, shape, broadcastDims)
 }
 
 // BroadcastToDims broadcasts x to the given dimensions.
@@ -614,8 +628,18 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 
 // Reshape x to the given dimensions. Total size cannot change. One dimension can be left as -1,
 // in which case it will be set to match the size, if possible.
+//
+// When x has dynamic dimensions (shapes.DynamicDim), the -1 auto-infer logic uses only
+// static dimension products: if the products of non-dynamic source and target dimensions
+// match, the -1 position inherits DynamicDim; otherwise the missing dimension is computed
+// from the static ratio. Validation is deferred to specialization time.
 func Reshape(x *Node, dimensions ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
+
+	if x.Shape().HasDynamicDims() {
+		return reshapeDynamic(x, dimensions...)
+	}
+
 	totalSize := x.Shape().Size()
 	newSize := 1
 	missingIdx := -1
@@ -653,23 +677,81 @@ func Reshape(x *Node, dimensions ...int) *Node {
 	return backendReshape(x, dimensions...)
 }
 
+// reshapeDynamic handles Reshape when the source has dynamic dimensions.
+// DynamicDim and -1 (auto-infer) share the same value (-1). When the source
+// has dynamic dims, any -1 in the target is resolved using static dimension
+// products: if they match, the position inherits DynamicDim.
+func reshapeDynamic(x *Node, dimensions ...int) *Node {
+	// Count -1 positions (could be DynamicDim or auto-infer).
+	missingIdx := -1
+	numMissing := 0
+	for idx, dim := range dimensions {
+		if dim == -1 {
+			missingIdx = idx
+			numMissing++
+		}
+	}
+	if numMissing > 1 {
+		exceptions.Panicf("Reshape with dynamic source %s: at most one -1 dimension allowed in target %v",
+			x.Shape(), dimensions)
+	}
+
+	if numMissing == 0 {
+		// All target dims fully specified (no -1/DynamicDim). Pass through.
+		return backendReshape(x, dimensions...)
+	}
+
+	// Resolve the single -1 using static dimension products.
+	srcStaticProduct := 1
+	for _, d := range x.Shape().Dimensions {
+		if d != shapes.DynamicDim {
+			srcStaticProduct *= d
+		}
+	}
+	tgtStaticProduct := 1
+	for i, d := range dimensions {
+		if i != missingIdx {
+			tgtStaticProduct *= d
+		}
+	}
+
+	resolved := slices.Clone(dimensions)
+	if srcStaticProduct == tgtStaticProduct {
+		// Static products match: the -1 position absorbs the dynamic dimension.
+		resolved[missingIdx] = shapes.DynamicDim
+	} else if tgtStaticProduct > 0 && srcStaticProduct%tgtStaticProduct == 0 {
+		// Static products differ by a constant factor: the -1 is a concrete dimension.
+		resolved[missingIdx] = srcStaticProduct / tgtStaticProduct
+	} else {
+		exceptions.Panicf(
+			"Reshape: cannot infer -1 dimension for dynamic source %s → target %v (static products: src=%d, tgt=%d)",
+			x.Shape(), dimensions, srcStaticProduct, tgtStaticProduct)
+	}
+	return backendReshape(x, resolved...)
+}
+
 // ReshapeWithShape reshapes x to the dimensions given by shape.
 // Total size cannot change, neither the DType is allowed to change.
 // Conceptually, this is a limited form of "shape casting."
+//
+// When either shape has dynamic dimensions, size validation is skipped
+// and deferred to specialization time.
 func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	if shape.DType != x.DType() {
 		exceptions.Panicf("cannot change dtype (from %s to %s) with ReshapeWithShape",
 			x.DType(), shape.DType)
 	}
-	if shape.Size() != x.Shape().Size() {
-		exceptions.Panicf(
-			"shapes (x.shape=%s, shape=%s) have different total sizes (from %d to %d), reshape not possible",
-			x.Shape(),
-			shape,
-			x.Shape().Size(),
-			shape.Size(),
-		)
+	if !x.Shape().HasDynamicDims() && !shape.HasDynamicDims() {
+		if shape.Size() != x.Shape().Size() {
+			exceptions.Panicf(
+				"shapes (x.shape=%s, shape=%s) have different total sizes (from %d to %d), reshape not possible",
+				x.Shape(),
+				shape,
+				x.Shape().Size(),
+				shape.Size(),
+			)
+		}
 	}
 	return backendReshape(x, shape.Dimensions...)
 }
@@ -948,9 +1030,35 @@ func MaskedReduceAllSum(x, mask *Node) *Node {
 //
 // The reduced axes of `x` are removed in the output -- so the rank is reduced.
 // See ReduceAndKeep for a version to preserve the reduced axes.
+//
+// When x has dynamic dimensions, the denominator is computed from the reduced
+// axes' concrete dimensions. The reduced axes themselves must not be dynamic.
 func ReduceMean(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	sum := ReduceSum(x, reduceAxes...)
+	if x.Shape().HasDynamicDims() || sum.Shape().HasDynamicDims() {
+		// Compute denominator from the reduced axes' dimensions directly.
+		// When reduceAxes is empty (reduce all), use all axes.
+		axes := reduceAxes
+		if len(axes) == 0 {
+			axes = make([]int, x.Rank())
+			for i := range axes {
+				axes[i] = i
+			}
+		}
+		denom := 1
+		for _, axis := range axes {
+			if axis < 0 {
+				axis += x.Rank()
+			}
+			d := x.Shape().Dim(axis)
+			if d == shapes.DynamicDim {
+				exceptions.Panicf("ReduceMean: cannot reduce along dynamic axis %d of shape %s", axis, x.Shape())
+			}
+			denom *= d
+		}
+		return MulScalar(sum, 1.0/float64(denom))
+	}
 	denominator := x.Shape().Size() / sum.Shape().Size()
 	return MulScalar(sum, 1.0/float64(denominator))
 }
@@ -1383,7 +1491,10 @@ func Concatenate(operands []*Node, axis int) *Node {
 				// Dimension being concatenated can be different.
 				continue
 			}
-			if baseShape.Dimensions[ii] != nodeDim {
+			baseDim := baseShape.Dimensions[ii]
+			if baseDim != nodeDim &&
+				baseDim != shapes.DynamicDim && nodeDim != shapes.DynamicDim &&
+				baseDim != 0 && nodeDim != 0 {
 				exceptions.Panicf(
 					"Concatenate(axis=%d) operand #%d has incompatible shape (%s) with operand 0's shape (%s) "+
 						"-- except for axis %d, the dimensions on all other axes must match",

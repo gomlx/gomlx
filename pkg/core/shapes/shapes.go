@@ -73,7 +73,14 @@ type Shape struct {
 	DType dtypes.DType
 
 	// Dimensions is the size of each axis. Its length determines the rank.
+	// A value of DynamicDim (-1) indicates a dynamic axis whose size is unknown at graph build time.
 	Dimensions []int
+
+	// AxisNames holds optional names for each axis. nil means no axis names (the default).
+	// When non-nil, len(AxisNames) must equal len(Dimensions).
+	// An empty string "" means the axis is unnamed. A non-empty string names the axis.
+	AxisNames []string `json:"axis_names,omitempty"`
+
 	// TupleShapes is used if this Shape represents a tuple of elements.
 	// Internal use only.
 	TupleShapes []Shape `json:"tuple,omitempty"` // Shapes of the tuple, if this is a tuple.
@@ -141,15 +148,32 @@ func (s Shape) String() string {
 	if s.Rank() == 0 {
 		return fmt.Sprintf("(%s)", s.DType)
 	}
+	if s.AxisNames != nil {
+		parts := make([]string, s.Rank())
+		for i, dim := range s.Dimensions {
+			name := s.AxisNames[i]
+			if name != "" {
+				parts[i] = fmt.Sprintf("%s=%d", name, dim)
+			} else {
+				parts[i] = fmt.Sprintf("%d", dim)
+			}
+		}
+		return fmt.Sprintf("(%s)[%s]", s.DType, strings.Join(parts, " "))
+	}
 	return fmt.Sprintf("(%s)%v", s.DType, s.Dimensions)
 }
 
 // Size returns the number of elements (not bytes) for this shape. It's the product of all dimensions.
 //
+// Panics if any dimension is dynamic (DynamicDim). Use HasDynamicDims to check first.
+//
 // For the number of bytes used to store this shape, see Shape.Memory.
 func (s Shape) Size() (size int) {
 	size = 1
 	for _, d := range s.Dimensions {
+		if d == DynamicDim {
+			panic(errors.Errorf("Shape.Size() called on shape with dynamic dimensions: %s", s))
+		}
 		size *= d
 	}
 	return
@@ -185,7 +209,8 @@ func (s Shape) TupleSize() int {
 	return len(s.TupleShapes)
 }
 
-// Equal compares two shapes for equality: dtype and dimensions are compared.
+// Equal compares two shapes for equality: dtype, dimensions, and axis names are compared.
+// Shapes with nil AxisNames are considered equal to shapes with all-empty AxisNames.
 func (s Shape) Equal(s2 Shape) bool {
 	if s.DType != s2.DType {
 		return false
@@ -207,8 +232,12 @@ func (s Shape) Equal(s2 Shape) bool {
 	if s.IsScalar() {
 		return true
 	}
-	// For normal shapes just compare dimensions.
-	return slices.Equal(s.Dimensions, s2.Dimensions)
+	// Compare dimensions.
+	if !slices.Equal(s.Dimensions, s2.Dimensions) {
+		return false
+	}
+	// Compare axis names.
+	return axisNamesEqual(s.AxisNames, s2.AxisNames)
 }
 
 // EqualDimensions compares two shapes for equality of dimensions. Dtypes can be different.
@@ -241,6 +270,7 @@ func (s Shape) EqualDimensions(s2 Shape) bool {
 func (s Shape) Clone() (s2 Shape) {
 	s2.DType = s.DType
 	s2.Dimensions = slices.Clone(s.Dimensions)
+	s2.AxisNames = slices.Clone(s.AxisNames)
 	if s.TupleSize() > 0 {
 		s2.TupleShapes = make([]Shape, 0, len(s.TupleShapes))
 		for _, subShape := range s.TupleShapes {
@@ -250,7 +280,19 @@ func (s Shape) Clone() (s2 Shape) {
 	return
 }
 
+// gobFormatV1 is a marker value used to distinguish the new gob format (with AxisNames)
+// from the old format (without). In the old format, this position held numTuples (>= 0).
+const gobFormatV1 = -1
+
 // GobSerialize shape in binary format.
+//
+// Format v1 (current): DType, Dimensions, -1 (version marker), hasAxisNames (bool),
+// [AxisNames if hasAxisNames], numTuples, [sub-shapes...].
+//
+// Old format: DType, Dimensions, numTuples, [sub-shapes...].
+// GobDeserialize handles both formats for backward compatibility (old data → new code).
+// Note: new-format data cannot be read by old code (the -1 marker would be interpreted
+// as numTuples, causing a panic). This is forward-compatible only.
 func (s Shape) GobSerialize(encoder *gob.Encoder) (err error) {
 	enc := func(e any) {
 		if err != nil {
@@ -263,6 +305,12 @@ func (s Shape) GobSerialize(encoder *gob.Encoder) (err error) {
 	}
 	enc(s.DType)
 	enc(s.Dimensions)
+	enc(gobFormatV1)
+	hasAxisNames := s.AxisNames != nil
+	enc(hasAxisNames)
+	if hasAxisNames {
+		enc(s.AxisNames)
+	}
 	enc(len(s.TupleShapes))
 	if err != nil {
 		return
@@ -277,6 +325,7 @@ func (s Shape) GobSerialize(encoder *gob.Encoder) (err error) {
 }
 
 // GobDeserialize a Shape. Returns new Shape or an error.
+// Handles both the old format (without AxisNames) and the v1 format (with AxisNames).
 func GobDeserialize(decoder *gob.Decoder) (s Shape, err error) {
 	dec := func(data any) {
 		if err != nil {
@@ -289,8 +338,27 @@ func GobDeserialize(decoder *gob.Decoder) (s Shape, err error) {
 	}
 	dec(&s.DType)
 	dec(&s.Dimensions)
+
+	// Read version marker or numTuples (for backward compat).
+	// Old format: this int is numTuples (>= 0).
+	// New format (v1): this int is -1, followed by hasAxisNames, [axisNames], numTuples.
+	var marker int
+	dec(&marker)
+
 	var numTuples int
-	dec(&numTuples)
+	if marker == gobFormatV1 {
+		// New format: read axis names, then numTuples.
+		var hasAxisNames bool
+		dec(&hasAxisNames)
+		if hasAxisNames {
+			dec(&s.AxisNames)
+		}
+		dec(&numTuples)
+	} else {
+		// Old format: marker is numTuples directly.
+		numTuples = marker
+	}
+
 	if err != nil {
 		return
 	}
@@ -326,6 +394,15 @@ func ConcatenateDimensions(s1, s2 Shape) (shape Shape) {
 	shape.Dimensions = make([]int, s1.Rank()+s2.Rank())
 	copy(shape.Dimensions, s1.Dimensions)
 	copy(shape.Dimensions[s1.Rank():], s2.Dimensions)
+	if s1.AxisNames != nil || s2.AxisNames != nil {
+		shape.AxisNames = make([]string, s1.Rank()+s2.Rank())
+		if s1.AxisNames != nil {
+			copy(shape.AxisNames, s1.AxisNames)
+		}
+		if s2.AxisNames != nil {
+			copy(shape.AxisNames[s1.Rank():], s2.AxisNames)
+		}
+	}
 	return
 }
 

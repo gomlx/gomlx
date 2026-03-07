@@ -36,6 +36,10 @@ var Capabilities = backends.Capabilities{
 	// This enables control flow operations like While, If, Sort that take closures as parameters.
 	Functions: true,
 
+	// DynamicAxes indicates that SimpleGo supports named dynamic axes with
+	// lazy shape specialization (two-level JIT).
+	DynamicAxes: true,
+
 	Operations: map[backends.OpType]bool{
 		// Graph inputs (leaf nodes)
 		backends.OpTypeParameter: true,

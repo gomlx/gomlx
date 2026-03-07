@@ -3,6 +3,8 @@
 package simplego
 
 import (
+	"sync"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
@@ -23,10 +25,16 @@ type Executable struct {
 
 	// mainFn is the compiled main function.
 	mainFn *FunctionExecutable
-}
 
-// Compile time check.
-var _ backends.Executable = (*Executable)(nil)
+	// hasDynamicAxes is true if any parameter node has dynamic dimensions.
+	// Set once at construction time. When false, the static execution path
+	// is used with zero overhead.
+	hasDynamicAxes bool
+
+	// specializations caches ShapeSpecialization keyed by AxisBindings.Key().
+	// Only used when hasDynamicAxes is true.
+	specializations sync.Map // string -> *ShapeSpecialization
+}
 
 // Finalize immediately frees resources associated with the executable.
 //
@@ -76,11 +84,13 @@ func (e *Executable) Outputs() (outputShapes []shapes.Shape) {
 // The main function must have been compiled (via Return() and then any
 // duplicate output handling in Builder.Compile()).
 func newExecutable(builder *Builder, mainFn *FunctionExecutable) *Executable {
-	return &Executable{
+	e := &Executable{
 		backend: builder.backend,
 		builder: builder,
 		mainFn:  mainFn,
 	}
+	e.hasDynamicAxes = hasDynamicParameters(builder.mainFn.parameters)
+	return e
 }
 
 // nodeExecutor for the given operation type.
@@ -182,7 +192,7 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, _ backends
 		donate = make([]bool, len(inputs))
 	}
 
-	// Check input shapes and convert to *Buffer
+	// Validate and convert inputs to *Buffer.
 	bufInputs := make([]*Buffer, len(inputs))
 	for ii, input := range inputs {
 		if input == nil {
@@ -200,23 +210,52 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, _ backends
 		if inputBuffer.flat == nil {
 			return nil, errors.Errorf("Execute: input buffer #%d flat data is set to nil (!?)", ii)
 		}
-		nodeInput := params[ii]
-		if !inputBuffer.shape.Equal(nodeInput.shape) {
-			paramName := nodeInput.data.(*nodeParameter).name
-			return nil, errors.Errorf("Execute: parameter %q (input #%d) for %q: expected shape %s, got %s",
-				paramName, ii, e.builder.name, nodeInput.shape, inputBuffer.shape)
-		}
 		bufInputs[ii] = inputBuffer
 	}
 
-	// Delegate to FunctionExecutable
-	// Main function doesn't have captured values, so pass nil for both
-	outputs, err := e.mainFn.Execute(e.backend, bufInputs, donate, nil, nil)
+	if !e.hasDynamicAxes {
+		// STATIC PATH: unchanged, zero overhead.
+		for ii, inputBuffer := range bufInputs {
+			nodeInput := params[ii]
+			if !inputBuffer.shape.Equal(nodeInput.shape) {
+				paramName := nodeInput.data.(*nodeParameter).name
+				return nil, errors.Errorf("Execute: parameter %q (input #%d) for %q: expected shape %s, got %s",
+					paramName, ii, e.builder.name, nodeInput.shape, inputBuffer.shape)
+			}
+		}
+		return e.executeAndConvert(e.mainFn.Execute(e.backend, bufInputs, donate, nil, nil))
+	}
+
+	// DYNAMIC PATH: extract bindings, get/create specialization, execute with resolved nodes.
+	bindings, err := extractBindingsFromInputs(params, bufInputs)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "Execute %q: extracting axis bindings", e.builder.name)
+	}
+	spec, err := e.getOrCreateSpecialization(bindings)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "Execute %q: creating specialization", e.builder.name)
+	}
+
+	// Validate concrete shapes match resolved parameter shapes.
+	// Use DType + EqualDimensions rather than Equal, because the resolved shape
+	// retains axis names from Resolve() while the input buffer shape has none.
+	for ii, inputBuffer := range bufInputs {
+		resolvedParam := spec.resolvedNodes[params[ii].idx]
+		if inputBuffer.shape.DType != resolvedParam.shape.DType || !inputBuffer.shape.EqualDimensions(resolvedParam.shape) {
+			paramName := params[ii].data.(*nodeParameter).name
+			return nil, errors.Errorf("Execute: parameter %q (input #%d) for %q: expected resolved shape %s, got %s",
+				paramName, ii, e.builder.name, resolvedParam.shape, inputBuffer.shape)
+		}
+	}
+
+	return e.executeAndConvert(e.mainFn.ExecuteWithResolvedNodes(e.backend, bufInputs, donate, nil, nil, spec.resolvedNodes))
+}
+
+// executeAndConvert converts []*Buffer outputs to []backends.Buffer.
+func (e *Executable) executeAndConvert(outputs []*Buffer, err error) ([]backends.Buffer, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// Convert outputs to backends.Buffer
 	result := make([]backends.Buffer, len(outputs))
 	for i, out := range outputs {
 		result[i] = out
