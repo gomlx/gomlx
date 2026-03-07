@@ -860,18 +860,18 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 		// NF4 weights are Int4/Uint4 with unpacked nibble indices [0..15].
 		switch wBuf.shape.DType {
 		case dtypes.Int4:
-			quantizedDenseNF4(x, wBuf.flat.([]int8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
+			quantizedDenseNF4(backend, x, wBuf.flat.([]int8), scales, bias, out, M, K, N, blockSize, numBlocks)
 		case dtypes.Uint4:
-			quantizedDenseNF4(x, wBuf.flat.([]uint8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
+			quantizedDenseNF4(backend, x, wBuf.flat.([]uint8), scales, bias, out, M, K, N, blockSize, numBlocks)
 		default:
 			return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: NF4 unsupported weight dtype %s", wBuf.shape.DType)
 		}
 	case backends.QuantLinear:
 		switch wBuf.shape.DType {
 		case dtypes.Int4, dtypes.Int8:
-			quantizedDenseLinearInt(x, wBuf.flat.([]int8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
+			quantizedDenseLinearInt(backend, x, wBuf.flat.([]int8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
 		case dtypes.Uint4, dtypes.Uint8:
-			quantizedDenseLinearInt(x, wBuf.flat.([]uint8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
+			quantizedDenseLinearInt(backend, x, wBuf.flat.([]uint8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
 		default:
 			return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: Linear unsupported weight dtype %s", wBuf.shape.DType)
 		}
@@ -883,49 +883,113 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 	return output, nil
 }
 
-// quantizedDenseNF4 performs NF4 dequant + matmul + bias for Int4 (int8) or Uint4 (uint8) weights.
-// The weight values are nibble indices masked to [0..15] for lookup in the NF4 table.
-func quantizedDenseNF4[T int8 | uint8](x []float32, weights []T, scales, zeroPoints, bias, out []float32, M, K, N, blockSize, numBlocks int) {
-	for m := range M {
-		for n := range N {
-			blockIdx := n / blockSize
-			var sum float32
-			for k := range K {
-				nibble := uint8(weights[k*N+n]) & 0x0F
-				w := nf4LookupTable[nibble] * scales[k*numBlocks+blockIdx]
-				if zeroPoints != nil {
-					w += zeroPoints[k*numBlocks+blockIdx]
-				}
-				sum += x[m*K+k] * w
-			}
-			if bias != nil {
-				sum += bias[n]
-			}
-			out[m*N+n] = sum
+// quantizedDenseParallel runs rowFn(m) for each row m in [0, M), parallelizing over M rows
+// when workers are available. For M=1 with large workloads, it tiles over N columns instead.
+func quantizedDenseParallel(backend *Backend, M, K, N int, rowFn func(m, nStart, nEnd int)) {
+	totalWork := M * K * N
+	if backend == nil || !backend.workers.IsEnabled() || totalWork <= minParallelizeChunk {
+		for m := range M {
+			rowFn(m, 0, N)
 		}
+		return
 	}
+
+	if M > 1 {
+		// Parallelize over M rows.
+		var wg sync.WaitGroup
+		for m := range M {
+			wg.Add(1)
+			backend.workers.WaitToStart(func() {
+				rowFn(m, 0, N)
+				wg.Done()
+			})
+		}
+		wg.Wait()
+	} else {
+		// M=1: tile over N columns for single-token inference.
+		tileSize := max(minParallelizeChunk/K, 1)
+		var wg sync.WaitGroup
+		for nStart := 0; nStart < N; nStart += tileSize {
+			nEnd := min(nStart+tileSize, N)
+			wg.Add(1)
+			backend.workers.WaitToStart(func() {
+				rowFn(0, nStart, nEnd)
+				wg.Done()
+			})
+		}
+		wg.Wait()
+	}
+}
+
+// quantizedDenseNF4 performs NF4 dequant + matmul + bias for Int4 (int8) or Uint4 (uint8) weights.
+// NF4 does not support zeroPoints (validated by the builder).
+//
+// Uses cache-friendly (m, k, n) loop order so both weights[k*N+n] and out[m*N+n] are
+// accessed with stride-1 in the innermost loop.
+func quantizedDenseNF4[T int8 | uint8](backend *Backend, x []float32, weights []T, scales, bias, out []float32, M, K, N, blockSize, numBlocks int) {
+	quantizedDenseParallel(backend, M, K, N, func(m, nStart, nEnd int) {
+		outSlice := out[m*N+nStart : m*N+nEnd]
+		if bias != nil {
+			copy(outSlice, bias[nStart:nEnd])
+		} else {
+			clear(outSlice)
+		}
+		for k := range K {
+			xVal := x[m*K+k]
+			wRow := weights[k*N:]
+			sRow := scales[k*numBlocks:]
+			blockIdx := nStart / blockSize
+			nextBlock := (blockIdx + 1) * blockSize
+			for n := nStart; n < nEnd; n++ {
+				if n >= nextBlock {
+					blockIdx++
+					nextBlock += blockSize
+				}
+				outSlice[n-nStart] += xVal * nf4LookupTable[uint8(wRow[n])&0x0F] * sRow[blockIdx]
+			}
+		}
+	})
 }
 
 // quantizedDenseLinearInt performs linear dequant + matmul + bias for integer weights.
 // float_value = int_value * scale + zeroPoint
-func quantizedDenseLinearInt[T int8 | uint8](x []float32, weights []T, scales, zeroPoints, bias, out []float32, M, K, N, blockSize, numBlocks int) {
-	for m := range M {
-		for n := range N {
-			blockIdx := n / blockSize
-			var sum float32
-			for k := range K {
-				w := float32(weights[k*N+n]) * scales[k*numBlocks+blockIdx]
-				if zeroPoints != nil {
-					w += zeroPoints[k*numBlocks+blockIdx]
-				}
-				sum += x[m*K+k] * w
-			}
-			if bias != nil {
-				sum += bias[n]
-			}
-			out[m*N+n] = sum
+//
+// Uses cache-friendly (m, k, n) loop order so both weights[k*N+n] and out[m*N+n] are
+// accessed with stride-1 in the innermost loop.
+func quantizedDenseLinearInt[T int8 | uint8](backend *Backend, x []float32, weights []T, scales, zeroPoints, bias, out []float32, M, K, N, blockSize, numBlocks int) {
+	quantizedDenseParallel(backend, M, K, N, func(m, nStart, nEnd int) {
+		outSlice := out[m*N+nStart : m*N+nEnd]
+		if bias != nil {
+			copy(outSlice, bias[nStart:nEnd])
+		} else {
+			clear(outSlice)
 		}
-	}
+		for k := range K {
+			xVal := x[m*K+k]
+			wRow := weights[k*N:]
+			sRow := scales[k*numBlocks:]
+			blockIdx := nStart / blockSize
+			nextBlock := (blockIdx + 1) * blockSize
+			if zeroPoints != nil {
+				zpRow := zeroPoints[k*numBlocks:]
+				for n := nStart; n < nEnd; n++ {
+					if n >= nextBlock {
+						blockIdx++
+						nextBlock += blockSize
+					}
+					outSlice[n-nStart] += xVal * (float32(wRow[n])*sRow[blockIdx] + zpRow[blockIdx])
+				}
+			} else {
+				for n := nStart; n < nEnd; n++ {
+					if n >= nextBlock {
+						blockIdx++
+						nextBlock += blockSize
+					}
+					outSlice[n-nStart] += xVal * float32(wRow[n]) * sRow[blockIdx]
+				}
+			}
+		}
+	})
 }
 
 // FusedQuantizedScaledDotProductAttention ======================================================================

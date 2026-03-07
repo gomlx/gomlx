@@ -81,6 +81,31 @@ var NF4LookupTable = [16]float32{
 	0.44070982933044434, 0.5626170039176941, 0.7229568362236023, 1.0,
 }
 
+// Quantization describes how a value is quantized, and holds the information to dequantize it.
+type Quantization struct {
+	// Scheme: Linear (standard) or NF4.
+	Scheme QuantizationScheme
+
+	// Scale is the multiplicative factor.
+	// Shape: [K, NumBlocks] (block-wise), where K is the input-features
+	// (contracting) dimension of the [K, N] weight matrix and
+	// NumBlocks = ceil(N / BlockSize).
+	Scale Value
+
+	// ZeroPoint is the additive offset (only for Linear).
+	// If nil, the quantization is assumed symmetric.
+	ZeroPoint Value
+
+	// BlockAxis is the dimension of the quantized tensor that is blocked.
+	// This is the output-features dimension (axis 1) of a [K, N] weight matrix.
+	// Currently only BlockAxis=1 is supported.
+	BlockAxis int
+
+	// BlockSize is the number of elements in BlockAxis that share one scale.
+	// If BlockSize == N, it's effectively per-axis quantization.
+	BlockSize int
+}
+
 // ActivationType specifies the activation function for fused operations.
 type ActivationType int
 
@@ -183,7 +208,7 @@ type FusedOps interface {
 
 	// FusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
 	//
-	// It computes y = activation(x @ dequant(weights, scales, zeroPoints) + bias), where the
+	// It computes y = activation(x @ dequant(weights, weightsQuantization) + bias), where the
 	// dequantization and matmul are fused into a single pass to avoid materializing the
 	// full float32 weight matrix.
 	//
@@ -192,20 +217,15 @@ type FusedOps interface {
 	//   - weights: [K, N] with dtype reflecting storage precision (e.g. Int4, Int8).
 	//     For sub-byte types the caller should Bitcast packed uint8 data to the correct dtype
 	//     before calling.
-	//   - scales: [K, numBlocks] float32, where numBlocks = ceil(N / blockSize).
-	//     Each scale covers a contiguous block of blockSize output columns for one row.
-	//   - zeroPoints: [K, numBlocks] float32 (nil-able). Additive offset applied after
-	//     scaling: float_value = int_value * scale + zeroPoint. Nil for symmetric / NF4.
 	//   - bias: [N] float32 (nil-able), added after matmul but before activation.
-	//
-	// Parameters:
-	//   - scheme: QuantLinear or QuantNF4.
-	//   - blockAxis: the dimension of the weights tensor along which blocking is applied
-	//     (typically 1, the output-features axis).
-	//   - blockSize: number of output columns sharing a single scale factor.
+	//   - weightsQuantization: describes how to dequantize the weights tensor. Must not be nil.
 	//   - activation: applied after matmul+bias; set to ActivationNone for no activation.
-	FusedQuantizedDense(x, weights, scales, zeroPoints, bias Value,
-		scheme QuantizationScheme, blockAxis int, blockSize int,
+	//
+	// Future: inputQuantization, outputQuantization, and biasQuantization parameters may be
+	// added to support fully quantized operations where the activations and/or output are
+	// also quantized.
+	FusedQuantizedDense(x, weights, bias Value,
+		weightsQuantization *Quantization,
 		activation ActivationType) (Value, error)
 
 	// FusedQuantizedScaledDotProductAttention computes multi-head SDPA using int8×int8

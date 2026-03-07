@@ -39,7 +39,7 @@ func TestQuantizedDense_Int8(t *testing.T) {
 			w := Const(g, weightsData)
 			s := Const(g, scalesData)
 			b := Const(g, biasData)
-			quant := &nn.Quantization{
+			quant := &Quantization{
 				Scheme:    backends.QuantLinear,
 				Scale:     s,
 				BlockAxis: 1,
@@ -53,7 +53,7 @@ func TestQuantizedDense_Int8(t *testing.T) {
 			x := Const(g, xData)
 			w := Const(g, weightsData)
 			s := Const(g, scalesData)
-			quant := &nn.Quantization{
+			quant := &Quantization{
 				Scheme:    backends.QuantLinear,
 				Scale:     s,
 				BlockAxis: 1,
@@ -69,7 +69,7 @@ func TestQuantizedDense_Int8(t *testing.T) {
 			w := Const(g, weightsData)
 			s := Const(g, scalesData)
 			b := Const(g, biasData)
-			quant := &nn.Quantization{
+			quant := &Quantization{
 				Scheme:    backends.QuantLinear,
 				Scale:     s,
 				BlockAxis: 1,
@@ -107,7 +107,7 @@ func TestQuantizedDense_NF4(t *testing.T) {
 			// Bitcast uint8 [2, 2] → Uint4 [2, 2, 2], then reshape to [2, 4].
 			weights := Bitcast(packed, dtypes.Uint4)     // [2, 2, 2]
 			weights = Reshape(weights, 2, N)              // [2, 4]
-			quant := &nn.Quantization{
+			quant := &Quantization{
 				Scheme:    backends.QuantNF4,
 				Scale:     s,
 				BlockAxis: 1,
@@ -150,7 +150,7 @@ func TestQuantizedDense_MultiBlock(t *testing.T) {
 			x := Const(g, xData)
 			w := Const(g, weightsData)
 			s := Const(g, scalesData)
-			quant := &nn.Quantization{
+			quant := &Quantization{
 				Scheme:    backends.QuantLinear,
 				Scale:     s,
 				BlockAxis: 1,
@@ -167,7 +167,7 @@ func TestQuantizedDense_MultiBlock(t *testing.T) {
 			w := Const(g, weightsData)
 			s := Const(g, scalesData)
 			b := Const(g, biasData)
-			quant := &nn.Quantization{
+			quant := &Quantization{
 				Scheme:    backends.QuantLinear,
 				Scale:     s,
 				BlockAxis: 1,
@@ -184,7 +184,7 @@ func TestQuantizedDense_MultiBlock(t *testing.T) {
 			x := Const(g, xData2)
 			w := Const(g, weightsData)
 			s := Const(g, scalesData)
-			quant := &nn.Quantization{
+			quant := &Quantization{
 				Scheme:    backends.QuantLinear,
 				Scale:     s,
 				BlockAxis: 1,
@@ -195,6 +195,67 @@ func TestQuantizedDense_MultiBlock(t *testing.T) {
 		}, []any{[][]float32{{2.0, 4.0, 9.0, 12.0}, {20.0, 24.0, 35.0, 40.0}}}, 1e-4)
 		_ = K
 		_ = N
+	})
+}
+
+// TestQuantizedDense_ZeroPoint exercises asymmetric quantization with non-nil ZeroPoint,
+// testing both the fused executor and decomposed graph-level fallback.
+func TestQuantizedDense_ZeroPoint(t *testing.T) {
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+		// M=1, K=2, N=2, blockSize=2 → numBlocks=1, scales [2,1], zeroPoints [2,1].
+		//
+		// weights [2, 2] int8:
+		//   row 0: [1, 2]
+		//   row 1: [3, 4]
+		//
+		// scales [2, 1]:  row 0: [2.0], row 1: [3.0]
+		// zeroPoints [2, 1]: row 0: [0.5], row 1: [-0.5]
+		//
+		// Dequantized: float = int * scale + zeroPoint
+		//   [0][0] = 1*2 + 0.5 = 2.5    [0][1] = 2*2 + 0.5 = 4.5
+		//   [1][0] = 3*3 + (-0.5) = 8.5  [1][1] = 4*3 + (-0.5) = 11.5
+		//
+		// x = [1, 1] → y = [2.5+8.5, 4.5+11.5] = [11, 16]
+		blockSize := 2
+		xData := [][]float32{{1.0, 1.0}}
+		weightsData := [][]int8{{1, 2}, {3, 4}}
+		scalesData := [][]float32{{2.0}, {3.0}}
+		zpData := [][]float32{{0.5}, {-0.5}}
+
+		graphtest.RunTestGraphFnWithBackend(t, "with_zero_point", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, xData)
+			w := Const(g, weightsData)
+			s := Const(g, scalesData)
+			zp := Const(g, zpData)
+			quant := &Quantization{
+				Scheme:    backends.QuantLinear,
+				Scale:     s,
+				ZeroPoint: zp,
+				BlockAxis: 1,
+				BlockSize: blockSize,
+			}
+			y := nn.QuantizedDense(x, w, quant, nil)
+			return []*Node{x}, []*Node{y}
+		}, []any{[][]float32{{11.0, 16.0}}}, 1e-4)
+
+		// Same test with bias.
+		biasData := []float32{0.1, 0.2}
+		graphtest.RunTestGraphFnWithBackend(t, "with_zero_point_and_bias", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, xData)
+			w := Const(g, weightsData)
+			s := Const(g, scalesData)
+			zp := Const(g, zpData)
+			b := Const(g, biasData)
+			quant := &Quantization{
+				Scheme:    backends.QuantLinear,
+				Scale:     s,
+				ZeroPoint: zp,
+				BlockAxis: 1,
+				BlockSize: blockSize,
+			}
+			y := nn.QuantizedDense(x, w, quant, b)
+			return []*Node{x}, []*Node{y}
+		}, []any{[][]float32{{11.1, 16.2}}}, 1e-4)
 	})
 }
 
@@ -226,7 +287,7 @@ func TestQuantizedDense_Int4(t *testing.T) {
 			// Bitcast uint8 [2, 2] → Int4 [2, 2, 2], then reshape to [2, 4].
 			weights := Bitcast(packed, dtypes.Int4)      // [2, 2, 2]
 			weights = Reshape(weights, 2, N)              // [2, 4]
-			quant := &nn.Quantization{
+			quant := &Quantization{
 				Scheme:    backends.QuantLinear,
 				Scale:     s,
 				BlockAxis: 1,

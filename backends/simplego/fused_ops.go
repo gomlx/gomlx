@@ -79,8 +79,8 @@ type nodeFusedAttentionQKVProjection struct {
 }
 
 type nodeFusedQuantizedDense struct {
-	scheme       backends.QuantizationScheme
-	blockAxis    int
+	scheme    backends.QuantizationScheme
+	blockAxis int // Always 1 (output-features axis); validated in builder. Stored for EqualNodeData.
 	blockSize    int
 	activation   backends.ActivationType
 	hasZeroPoint bool
@@ -235,9 +235,15 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backen
 //
 // Weights should have their dtype set to reflect the actual storage type (e.g. Int4, Int8).
 // For sub-byte types, the caller should Bitcast packed uint8 data to the correct dtype.
-func (f *Function) FusedQuantizedDense(x, weights, scales, zeroPoints, bias backends.Value,
-	scheme backends.QuantizationScheme, blockAxis int, blockSize int,
+func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value,
+	weightsQuantization *backends.Quantization,
 	activation backends.ActivationType) (backends.Value, error) {
+
+	scales := weightsQuantization.Scale
+	zeroPoints := weightsQuantization.ZeroPoint
+	blockAxis := weightsQuantization.BlockAxis
+	blockSize := weightsQuantization.BlockSize
+	scheme := weightsQuantization.Scheme
 
 	values := []backends.Value{x, weights, scales}
 	if zeroPoints != nil {
@@ -286,12 +292,12 @@ func (f *Function) FusedQuantizedDense(x, weights, scales, zeroPoints, bias back
 
 	// Only blockAxis=1 (output-features axis) is currently supported.
 	if blockAxis != 1 {
-		return nil, errors.Errorf("FusedQuantizedDense: only blockAxis=1 is supported, got %d", blockAxis)
+		return nil, errors.Errorf("FusedQuantizedDense: only Axis=1 is supported, got %d", blockAxis)
 	}
 
 	// NF4 quantization uses a fixed lookup table and does not support zero points.
 	if scheme == backends.QuantNF4 && zeroPoints != nil {
-		return nil, errors.Errorf("FusedQuantizedDense: zeroPoints must be nil for NF4 quantization scheme")
+		return nil, errors.Errorf("FusedQuantizedDense: ZeroPoint must be nil for NF4 quantization scheme")
 	}
 
 	data := &nodeFusedQuantizedDense{

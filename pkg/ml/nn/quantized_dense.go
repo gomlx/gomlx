@@ -13,35 +13,6 @@ import (
 // nf4LookupValues is a local alias for the shared NF4 lookup table.
 var nf4LookupValues = backends.NF4LookupTable
 
-// Quantization bundles the metadata needed to dequantize a weight tensor.
-//
-// For typical usage:
-//   - QuantLinear with Int4/Int8 weights: float_value = int_value * Scale + ZeroPoint
-//   - QuantNF4 with Uint4/Int4 weights: float_value = nf4_table[nibble_index] * Scale
-//
-// The weights tensor should have its DType set to reflect the actual storage type
-// (e.g. dtypes.Int4, dtypes.Int8). For sub-byte types, the caller should
-// Bitcast packed uint8 data to the correct dtype before passing to QuantizedDense.
-type Quantization struct {
-	// Scheme specifies how integer values map to float values.
-	Scheme backends.QuantizationScheme
-
-	// Scale holds per-block scale factors: [K, numBlocks] float32,
-	// where numBlocks = ceil(N / BlockSize).
-	Scale *Node
-
-	// ZeroPoint holds per-block additive offsets: [K, numBlocks] float32.
-	// Nil for symmetric quantization and NF4.
-	ZeroPoint *Node
-
-	// BlockAxis is the dimension of the weights tensor along which blocking is applied
-	// (typically 1, the output-features axis).
-	BlockAxis int
-
-	// BlockSize is the number of output columns sharing a single scale factor.
-	BlockSize int
-}
-
 // QuantizedDense performs a quantized dense (linear) transformation with optional activation:
 //
 //	y = activation(x @ dequant(weights, quant) + bias)
@@ -77,8 +48,7 @@ func QuantizedDense(x, weights *Node, quant *Quantization, bias *Node,
 	backendAct := act.ToBackend()
 	return InternalFusedOpCaller(
 		func() *Node {
-			return BackendFusedQuantizedDense(x, weights, quant.Scale, quant.ZeroPoint, bias,
-				quant.Scheme, quant.BlockAxis, quant.BlockSize, backendAct)
+			return BackendFusedQuantizedDense(x, weights, bias, quant, backendAct)
 		},
 		decomposed,
 	)
