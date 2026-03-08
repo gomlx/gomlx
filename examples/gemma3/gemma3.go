@@ -154,32 +154,8 @@ func main() {
 
 		prefillExec := context.MustNewExec(backend, ctx.Reuse(),
 			func(ctx *context.Context, idNode, maskNode, posNode, seqLenNode *Node) []*Node {
-				g := idNode.Graph()
-				inputs := map[string]*Node{"input_ids": idNode}
-				if hasAttentionMask {
-					inputs["attention_mask"] = maskNode
-				}
-				if hasPositionIDs {
-					inputs["position_ids"] = posNode
-				}
-				for i := range kv.numLayers {
-					inputs[kv.inputKeyNames[i]] = Zeros(g, shapes.Make(kv.kvDType, 1, kv.kvHeads, 0, kv.headDim))
-					inputs[kv.inputValueNames[i]] = Zeros(g, shapes.Make(kv.kvDType, 1, kv.kvHeads, 0, kv.headDim))
-				}
-
-				allOutputs := model.CallGraph(ctx, g, inputs)
-
-				// Extract last-token logits: [1, seqLen, vocabSize] -> [vocabSize]
-				logits := allOutputs[kv.logitsIndex]
-				lastPos := SubScalar(seqLenNode, int32(1))
-				vocabSize := logits.Shape().Dimensions[2]
-				lastLogits := DynamicSlice(logits, []*Node{
-					Const(g, int32(0)), lastPos, Const(g, int32(0)),
-				}, []int{1, 1, vocabSize})
-				lastLogits = Reshape(lastLogits, vocabSize)
-
-				concatKeys, concatValues := kv.extractOutputs(allOutputs)
-				return []*Node{lastLogits, concatKeys, concatValues}
+				return prefillKVCacheGraph(ctx, model, kv, hasAttentionMask, hasPositionIDs,
+					idNode, maskNode, posNode, seqLenNode)
 			},
 		)
 		prefillExec.SetMaxCache(cacheSize)
@@ -187,48 +163,8 @@ func main() {
 
 		decodeExec := context.MustNewExec(backend, ctx.Reuse(),
 			func(ctx *context.Context, idNode, maskNode, posNode, concatKeysNode, concatValuesNode, kvInsertPosNode *Node) []*Node {
-				g := idNode.Graph()
-				inputs := map[string]*Node{"input_ids": idNode}
-				if hasAttentionMask {
-					inputs["attention_mask"] = maskNode
-				}
-				if hasPositionIDs {
-					inputs["position_ids"] = posNode
-				}
-				kv.setInputs(inputs, concatKeysNode, concatValuesNode)
-
-				allOutputs := model.CallGraph(ctx, g, inputs)
-
-				// Logits for the single new token: [1, 1, vocabSize] -> [vocabSize]
-				logits := allOutputs[kv.logitsIndex]
-				vocabSize := logits.Shape().Dimensions[2]
-				lastLogits := Reshape(logits, vocabSize)
-
-				presentKeys, presentValues := kv.extractOutputs(allOutputs)
-				// presentKeys shape: [numLayers, 1, kvHeads, P+1, headDim]
-				// Extract new token's KV at position P (last along seq dim).
-				paddedSize := concatKeysNode.Shape().Dimensions[3]
-				sliceDims := []int{kv.numLayers, 1, kv.kvHeads, 1, kv.headDim}
-				newKeys := DynamicSlice(presentKeys, []*Node{
-					Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(0)),
-					Const(g, int32(paddedSize)), Const(g, int32(0)),
-				}, sliceDims)
-				newValues := DynamicSlice(presentValues, []*Node{
-					Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(0)),
-					Const(g, int32(paddedSize)), Const(g, int32(0)),
-				}, sliceDims)
-
-				// Insert new KV at kvInsertPos in the padded buffer.
-				updatedKeys := DynamicUpdateSlice(concatKeysNode, newKeys, []*Node{
-					Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(0)),
-					kvInsertPosNode, Const(g, int32(0)),
-				})
-				updatedValues := DynamicUpdateSlice(concatValuesNode, newValues, []*Node{
-					Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(0)),
-					kvInsertPosNode, Const(g, int32(0)),
-				})
-
-				return []*Node{lastLogits, updatedKeys, updatedValues}
+				return decodeWithKVCacheGraph(ctx, model, kv, hasAttentionMask, hasPositionIDs,
+					idNode, maskNode, posNode, concatKeysNode, concatValuesNode, kvInsertPosNode)
 			},
 		)
 		// Power-of-2 padding means O(log(maxSeqLen)) unique graph shapes.
@@ -418,7 +354,9 @@ func (kv *kvStructure) hasOutputs() bool {
 }
 
 // extractOutputs collects per-layer KV outputs from the model and concatenates them
-// into [numLayers, 1, kvHeads, seqLen, headDim] tensors.
+// across layers into [numLayers, 1, kvHeads, seqLen, headDim] tensors.
+// Each layer's output contains the past concatenated KV (the full KV history for that layer),
+// and we stack them along a new leading axis so all layers can be carried as a single tensor.
 func (kv *kvStructure) extractOutputs(allOutputs []*Node) (concatKeys, concatValues *Node) {
 	keys := make([]*Node, kv.numLayers)
 	values := make([]*Node, kv.numLayers)
@@ -514,6 +452,106 @@ func parseKVStructure(model *onnx.Model) *kvStructure {
 	}
 
 	return kv
+}
+
+// prefillKVCacheGraph builds the computation graph for the prefill step.
+// It takes the full prompt tokens (padded to power-of-2), runs them through the model
+// with empty KV caches, and returns:
+//   - lastLogits [vocabSize]: logits for the last real token position, used to sample the first generated token.
+//   - concatKeys [numLayers, 1, kvHeads, seqLen, headDim]: per-layer key caches concatenated across layers.
+//   - concatValues [numLayers, 1, kvHeads, seqLen, headDim]: per-layer value caches concatenated across layers.
+//
+// The returned KV caches initialize the decode loop. The attention mask must mark
+// which positions are real tokens vs padding so the model attends only to valid positions.
+func prefillKVCacheGraph(
+	ctx *context.Context, model *onnx.Model, kv *kvStructure,
+	hasAttentionMask, hasPositionIDs bool,
+	idNode, maskNode, posNode, seqLenNode *Node,
+) []*Node {
+	g := idNode.Graph()
+	inputs := map[string]*Node{"input_ids": idNode}
+	if hasAttentionMask {
+		inputs["attention_mask"] = maskNode
+	}
+	if hasPositionIDs {
+		inputs["position_ids"] = posNode
+	}
+	for i := range kv.numLayers {
+		inputs[kv.inputKeyNames[i]] = Zeros(g, shapes.Make(kv.kvDType, 1, kv.kvHeads, 0, kv.headDim))
+		inputs[kv.inputValueNames[i]] = Zeros(g, shapes.Make(kv.kvDType, 1, kv.kvHeads, 0, kv.headDim))
+	}
+
+	allOutputs := model.CallGraph(ctx, g, inputs)
+
+	// Extract last-token logits: [1, seqLen, vocabSize] -> [vocabSize]
+	logits := allOutputs[kv.logitsIndex]
+	lastPos := SubScalar(seqLenNode, int32(1))
+	vocabSize := logits.Shape().Dimensions[2]
+	lastLogits := DynamicSlice(logits, []*Node{
+		Const(g, int32(0)), lastPos, Const(g, int32(0)),
+	}, []int{1, 1, vocabSize})
+	lastLogits = Reshape(lastLogits, vocabSize)
+
+	concatKeys, concatValues := kv.extractOutputs(allOutputs)
+	return []*Node{lastLogits, concatKeys, concatValues}
+}
+
+// decodeWithKVCacheGraph builds the computation graph for a single decode step.
+// It takes one new token and the accumulated KV cache, runs the model, extracts the
+// newly computed KV entry, and inserts it into the padded cache buffer at kvInsertPos.
+//
+// The attention mask is obligatory: it tells the model which columns of the KV cache
+// contain valid past tokens (masking out unused padding slots).
+//
+// Returns:
+//   - lastLogits [vocabSize]: logits for the new token.
+//   - updatedKeys [numLayers, 1, kvHeads, paddedSize, headDim]: cache with the new key inserted.
+//   - updatedValues [numLayers, 1, kvHeads, paddedSize, headDim]: cache with the new value inserted.
+func decodeWithKVCacheGraph(
+	ctx *context.Context, model *onnx.Model, kv *kvStructure,
+	hasAttentionMask, hasPositionIDs bool,
+	idNode, maskNode, posNode, concatKeysNode, concatValuesNode, kvInsertPosNode *Node,
+) []*Node {
+	g := idNode.Graph()
+	inputs := map[string]*Node{"input_ids": idNode}
+	inputs["attention_mask"] = maskNode
+	if hasPositionIDs {
+		inputs["position_ids"] = posNode
+	}
+	kv.setInputs(inputs, concatKeysNode, concatValuesNode)
+
+	allOutputs := model.CallGraph(ctx, g, inputs)
+
+	// Logits for the single new token: [1, 1, vocabSize] -> [vocabSize]
+	logits := allOutputs[kv.logitsIndex]
+	vocabSize := logits.Shape().Dimensions[2]
+	lastLogits := Reshape(logits, vocabSize)
+
+	presentKeys, presentValues := kv.extractOutputs(allOutputs)
+	// presentKeys shape: [numLayers, 1, kvHeads, P+1, headDim] where P = paddedSize.
+	// The model appends the new token's KV at position P (after the padded past cache).
+	paddedSize := concatKeysNode.Shape().Dimensions[3]
+	sliceDims := []int{kv.numLayers, 1, kv.kvHeads, 1, kv.headDim}
+	newKeys := DynamicSlice(presentKeys, []*Node{
+		Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(0)),
+		Const(g, int32(paddedSize)), Const(g, int32(0)),
+	}, sliceDims)
+	newValues := DynamicSlice(presentValues, []*Node{
+		Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(0)),
+		Const(g, int32(paddedSize)), Const(g, int32(0)),
+	}, sliceDims)
+
+	// Insert new KV at kvInsertPos in the padded buffer.
+	updatedKeys := DynamicUpdateSlice(concatKeysNode, newKeys, []*Node{
+		Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(0)),
+		kvInsertPosNode, Const(g, int32(0)),
+	})
+	updatedValues := DynamicUpdateSlice(concatValuesNode, newValues, []*Node{
+		Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(0)),
+		kvInsertPosNode, Const(g, int32(0)),
+	})
+
+	return []*Node{lastLogits, updatedKeys, updatedValues}
 }
 
 // generateOne runs a single prompt through prefill and decode with KV cache,
