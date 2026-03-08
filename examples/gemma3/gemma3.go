@@ -152,14 +152,6 @@ func main() {
 		fmt.Printf("Using KV cache: %d layers, %d heads, dim=%d\n\n", kv.numLayers, kv.kvHeads, kv.headDim)
 		cacheSize := int(math.Log2(float64(maxSeqLen))) + 2
 
-		// Create persistent prefill Exec (empty KV as constants).
-		emptyKV := make(map[string]any)
-		for i := range kv.numLayers {
-			emptyKV[kv.inputKeyNames[i]] = tensors.FromShape(shapes.Make(dtypes.Float32, 1, kv.kvHeads, 0, kv.headDim))
-			emptyKV[kv.inputValueNames[i]] = tensors.FromShape(shapes.Make(dtypes.Float32, 1, kv.kvHeads, 0, kv.headDim))
-		}
-		model.WithInputsAsConstants(emptyKV)
-
 		prefillExec := context.MustNewExec(backend, ctx.Reuse(),
 			func(ctx *context.Context, idNode, maskNode, posNode, seqLenNode *Node) []*Node {
 				g := idNode.Graph()
@@ -169,6 +161,10 @@ func main() {
 				}
 				if hasPositionIDs {
 					inputs["position_ids"] = posNode
+				}
+				for i := range kv.numLayers {
+					inputs[kv.inputKeyNames[i]] = Zeros(g, shapes.Make(kv.kvDType, 1, kv.kvHeads, 0, kv.headDim))
+					inputs[kv.inputValueNames[i]] = Zeros(g, shapes.Make(kv.kvDType, 1, kv.kvHeads, 0, kv.headDim))
 				}
 
 				allOutputs := model.CallGraph(ctx, g, inputs)
@@ -188,9 +184,6 @@ func main() {
 		)
 		prefillExec.SetMaxCache(cacheSize)
 		defer prefillExec.Finalize()
-
-		// Clear KV constants for decode (KV passed as dynamic inputs).
-		model.WithInputsAsConstants(nil)
 
 		decodeExec := context.MustNewExec(backend, ctx.Reuse(),
 			func(ctx *context.Context, idNode, maskNode, posNode, concatKeysNode, concatValuesNode, kvInsertPosNode *Node) []*Node {
@@ -298,13 +291,7 @@ func main() {
 	} else {
 		// Non-KV-cache fallback.
 		if kv.numLayers > 0 {
-			emptyKV := make(map[string]any)
-			for i := range kv.numLayers {
-				emptyKV[kv.inputKeyNames[i]] = tensors.FromShape(shapes.Make(dtypes.Float32, 1, kv.kvHeads, 0, kv.headDim))
-				emptyKV[kv.inputValueNames[i]] = tensors.FromShape(shapes.Make(dtypes.Float32, 1, kv.kvHeads, 0, kv.headDim))
-			}
-			model.WithInputsAsConstants(emptyKV)
-			fmt.Printf("KV cache: %d past_key_values inputs marked as empty constants\n", len(emptyKV))
+			fmt.Printf("KV cache: %d past_key_values inputs will be provided as empty zeros\n", kv.numLayers*2)
 		}
 
 		for _, prompt := range prompts {
@@ -320,7 +307,7 @@ func main() {
 			fmt.Println("---")
 			startTime := time.Now()
 			n := generateWithoutKVCache(backend, ctx, model, tok, promptTokens,
-				padID, eosID, maxSeqLen, maxTokens, hasAttentionMask, hasPositionIDs)
+				padID, eosID, maxSeqLen, maxTokens, hasAttentionMask, hasPositionIDs, kv)
 			duration := time.Since(startTime)
 			fmt.Println("\n---")
 			if n > 0 {
@@ -420,8 +407,9 @@ type kvStructure struct {
 	// outputValueIndices are indices into the model's output list for the present value tensors.
 	outputValueIndices []int
 	logitsIndex        int // index of logits in model.Outputs()
-	kvHeads            int // number of KV attention heads
-	headDim            int // head dimension
+	kvHeads            int          // number of KV attention heads
+	headDim            int          // head dimension
+	kvDType            dtypes.DType // DType for KV tensors
 }
 
 // hasOutputs returns true if the model has KV cache outputs (present_key_values).
@@ -469,6 +457,7 @@ func parseKVStructure(model *onnx.Model) *kvStructure {
 			dims := inputShapes[i].Dimensions
 			kv.kvHeads = dims[1]
 			kv.headDim = dims[3]
+			kv.kvDType = inputShapes[i].DType
 		}
 		if n, _ := fmt.Sscanf(name, "past_key_values.%d.value", &layerIdx); n == 1 && name == fmt.Sprintf("past_key_values.%d.value", layerIdx) {
 			layerValues[layerIdx] = name
@@ -651,6 +640,7 @@ func generateWithoutKVCache(
 	backend backends.Backend, ctx *context.Context, model *onnx.Model, tok api.Tokenizer,
 	promptTokens []int32,
 	padID, eosID, maxSeqLen, maxTokens int, hasAttentionMask, hasPositionIDs bool,
+	kv *kvStructure,
 ) int {
 	// Create the Exec outside the loop. The seqLen parameter is passed dynamically
 	// so the same compiled graph works for different sequence lengths within the
@@ -664,6 +654,12 @@ func generateWithoutKVCache(
 			}
 			if hasPositionIDs {
 				inputs["position_ids"] = posNode
+			}
+			if kv.numLayers > 0 {
+				for i := range kv.numLayers {
+					inputs[kv.inputKeyNames[i]] = Zeros(g, shapes.Make(kv.kvDType, 1, kv.kvHeads, 0, kv.headDim))
+					inputs[kv.inputValueNames[i]] = Zeros(g, shapes.Make(kv.kvDType, 1, kv.kvHeads, 0, kv.headDim))
+				}
 			}
 
 			outputs := model.CallGraph(ctx, g, inputs)
