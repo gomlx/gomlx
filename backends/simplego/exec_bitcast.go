@@ -19,17 +19,30 @@ func execBitcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	srcBits := srcDType.Bits()
 	dstBits := targetDType.Bits()
 
-	output, err := backend.getBufferForShape(node.shape)
-	if err != nil {
-		return nil, err
-	}
-
 	switch {
 	case srcBits == dstBits:
+		// Same bit-width: reuse the input buffer if owned and the Go storage
+		// type matches (e.g. Int4↔Int8 both use []int8, Uint4↔Uint8 both use []uint8).
+		if inputsOwned[0] && srcDType.GoType() == targetDType.GoType() {
+			src.shape = node.shape
+			return src, nil
+		}
+		output, err := backend.getBufferForShape(node.shape)
+		if err != nil {
+			return nil, err
+		}
 		return execBitcastSameSize(src, output)
 	case srcBits > dstBits:
+		output, err := backend.getBufferForShape(node.shape)
+		if err != nil {
+			return nil, err
+		}
 		return execBitcastUnpack(src, output, srcDType, targetDType)
 	default:
+		output, err := backend.getBufferForShape(node.shape)
+		if err != nil {
+			return nil, err
+		}
 		return execBitcastPack(src, output, srcDType, targetDType)
 	}
 }

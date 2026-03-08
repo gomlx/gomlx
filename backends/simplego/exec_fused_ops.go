@@ -19,7 +19,6 @@ func init() {
 	setNodeExecutor(backends.OpTypeFusedDense, priorityTyped, execFusedDense)
 	setNodeExecutor(backends.OpTypeFusedScaledDotProductAttention, priorityTyped, execFusedScaledDotProductAttention)
 	setNodeExecutor(backends.OpTypeFusedQuantizedDense, priorityTyped, execFusedQuantizedDense)
-	setNodeExecutor(backends.OpTypeFusedQuantizedScaledDotProductAttention, priorityTyped, execFusedQuantizedScaledDotProductAttention)
 	multiOutputsNodeExecutors[backends.OpTypeFusedAttentionQKVProjection] = execFusedAttentionQKVProjection
 }
 
@@ -474,6 +473,10 @@ func fusedDenseApplyActivation[T float32 | float64](backend *Backend, data []T, 
 // sdpaGeneric/sdpaMultiHeadGeneric, avoiding expensive transpose operations.
 // mask: optional additive mask of rank 2–4 (broadcasting via strides). Boolean masks are not
 // supported; the graph-level caller must convert them to additive form before reaching here.
+//
+// The quantizedMatmuls flag in the node data is currently ignored by this scalar fallback;
+// quantized int8 matmuls are only used by the go-highway SIMD executor. When quantizedMatmuls
+// is true but no SIMD path is available, the fallback uses standard float32 arithmetic.
 func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 	*Buffer, error) {
 	data := node.data.(*nodeFusedScaledDotProductAttention)
@@ -990,18 +993,6 @@ func quantizedDenseLinearInt[T int8 | uint8](backend *Backend, x []float32, weig
 			}
 		}
 	})
-}
-
-// FusedQuantizedScaledDotProductAttention ======================================================================
-
-// execFusedQuantizedScaledDotProductAttention implements quantized SDPA as a scalar fallback.
-// Inputs are float32 Q/K/V; quantization to int8 is an optimization done by the highway
-// executor. The scalar fallback simply delegates to the float SDPA implementation.
-func execFusedQuantizedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (
-	*Buffer, error) {
-	// nodeFusedQuantizedScaledDotProductAttention is a type alias for nodeFusedScaledDotProductAttention,
-	// so the data is already the correct type for the float SDPA executor.
-	return execFusedScaledDotProductAttention(backend, node, inputs, inputsOwned)
 }
 
 // FusedAttentionQKVProjection ===================================================================================

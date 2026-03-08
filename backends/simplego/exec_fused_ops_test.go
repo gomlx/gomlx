@@ -476,7 +476,7 @@ func testFusedScaledDotProductAttention_SingleHead(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBHSD, scale, false)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBHSD, scale, false, false)
 		},
 	)
 
@@ -511,7 +511,7 @@ func testFusedScaledDotProductAttention_Causal(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBHSD, 1.0, true)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBHSD, 1.0, true, false)
 		},
 	)
 
@@ -537,7 +537,7 @@ func testFusedScaledDotProductAttention_MultiHead(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBHSD, 1.0, false)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBHSD, 1.0, false, false)
 		},
 	)
 
@@ -562,7 +562,7 @@ func testFusedScaledDotProductAttention_GQA(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 1, backends.AxesLayoutBHSD, 1.0, false)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 1, backends.AxesLayoutBHSD, 1.0, false, false)
 		},
 	)
 
@@ -589,7 +589,7 @@ func testFusedScaledDotProductAttention_WithAdditiveMask(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape, maskShape},
 		[]any{q, k, v, mask},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], params[3], 1, 1, backends.AxesLayoutBHSD, 1.0, false)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], params[3], 1, 1, backends.AxesLayoutBHSD, 1.0, false, false)
 		},
 	)
 
@@ -617,7 +617,7 @@ func testFusedScaledDotProductAttention_WithBooleanMask(t *testing.T) {
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
 			return f.FusedScaledDotProductAttention(
 				params[0], params[1], params[2], params[3], 1, 1,
-				backends.AxesLayoutBHSD, 1.0, false)
+				backends.AxesLayoutBHSD, 1.0, false, false)
 		},
 	)
 
@@ -644,7 +644,7 @@ func testFusedScaledDotProductAttention_BSHD_Causal(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBSHD, 1.0, true)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBSHD, 1.0, true, false)
 		},
 	)
 
@@ -672,7 +672,7 @@ func testFusedScaledDotProductAttention_BSHD_MultiHead(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBSHD, 1.0, false)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBSHD, 1.0, false, false)
 		},
 	)
 
@@ -703,7 +703,7 @@ func testFusedScaledDotProductAttention_BSHD_MultiSeq(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBSHD, 1.0, false)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBSHD, 1.0, false, false)
 		},
 	)
 
@@ -717,7 +717,7 @@ func testFusedScaledDotProductAttention_BSHD_MultiSeq(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{qBHSD, kBHSD, vBHSD},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBHSD, 1.0, false)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBHSD, 1.0, false, false)
 		},
 	)
 
@@ -754,7 +754,7 @@ func testFusedScaledDotProductAttention_BSHD_WithAdditiveMask4D(t *testing.T) {
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
 			return f.FusedScaledDotProductAttention(
 				params[0], params[1], params[2], params[3], 1, 1,
-				backends.AxesLayoutBSHD, 1.0, false)
+				backends.AxesLayoutBSHD, 1.0, false, false)
 		},
 	)
 
@@ -782,7 +782,7 @@ func testFusedScaledDotProductAttention_BSHD_WithBooleanMask4D(t *testing.T) {
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
 			return f.FusedScaledDotProductAttention(
 				params[0], params[1], params[2], params[3], 1, 1,
-				backends.AxesLayoutBSHD, 1.0, false)
+				backends.AxesLayoutBSHD, 1.0, false, false)
 		},
 	)
 
@@ -791,16 +791,16 @@ func testFusedScaledDotProductAttention_BSHD_WithBooleanMask4D(t *testing.T) {
 	assert.InDelta(t, 10.0, got[0], fusedTestTol)
 }
 
-// ---- FusedQuantizedScaledDotProductAttention tests ----
+// ---- FusedScaledDotProductAttention with quantizedMatmuls=true tests ----
 
-func TestFusedQuantizedScaledDotProductAttention(t *testing.T) {
-	t.Run("SingleHead", testFusedQuantizedSDPA_SingleHead)
-	t.Run("Causal", testFusedQuantizedSDPA_Causal)
+func TestFusedScaledDotProductAttention_QuantizedMatmuls(t *testing.T) {
+	t.Run("SingleHead", testFusedSDPA_QuantizedMatmuls_SingleHead)
+	t.Run("Causal", testFusedSDPA_QuantizedMatmuls_Causal)
 }
 
-func testFusedQuantizedSDPA_SingleHead(t *testing.T) {
-	// Same as FusedScaledDotProductAttention_SingleHead — the quantized variant
-	// delegates to the same float SDPA kernel in the simplego backend.
+func testFusedSDPA_QuantizedMatmuls_SingleHead(t *testing.T) {
+	// Same as SingleHead — the quantizedMatmuls flag is a no-op in the
+	// simplego scalar fallback; it only affects the go-highway SIMD path.
 	q := []float32{1, 0, 0, 1}
 	k := []float32{1, 0, 0, 1}
 	v := []float32{10, 20, 30, 40}
@@ -815,7 +815,7 @@ func testFusedQuantizedSDPA_SingleHead(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedQuantizedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBHSD, scale, false)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBHSD, scale, false, true)
 		},
 	)
 
@@ -830,8 +830,7 @@ func testFusedQuantizedSDPA_SingleHead(t *testing.T) {
 	}
 }
 
-func testFusedQuantizedSDPA_Causal(t *testing.T) {
-	// Same as FusedScaledDotProductAttention_Causal.
+func testFusedSDPA_QuantizedMatmuls_Causal(t *testing.T) {
 	q := []float32{1, 1}
 	k := []float32{1, 1}
 	v := []float32{10, 20}
@@ -844,7 +843,7 @@ func testFusedQuantizedSDPA_Causal(t *testing.T) {
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
 		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedQuantizedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBHSD, 1.0, true)
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBHSD, 1.0, true, true)
 		},
 	)
 

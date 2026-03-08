@@ -54,17 +54,19 @@ func (d *nodeFusedDense) EqualNodeData(other nodeDataComparable) bool {
 }
 
 type nodeFusedScaledDotProductAttention struct {
-	numHeads   int
-	numKVHeads int
-	axesLayout backends.AxesLayout
-	scale      float64
-	causal     bool
+	numHeads         int
+	numKVHeads       int
+	axesLayout       backends.AxesLayout
+	scale            float64
+	causal           bool
+	quantizedMatmuls bool
 }
 
 func (d *nodeFusedScaledDotProductAttention) EqualNodeData(other nodeDataComparable) bool {
 	o := other.(*nodeFusedScaledDotProductAttention)
 	return d.numHeads == o.numHeads && d.numKVHeads == o.numKVHeads &&
-		d.axesLayout == o.axesLayout && d.scale == o.scale && d.causal == o.causal
+		d.axesLayout == o.axesLayout && d.scale == o.scale && d.causal == o.causal &&
+		d.quantizedMatmuls == o.quantizedMatmuls
 }
 
 // nodeFusedAttentionQKVProjection stores parameters for the fused QKV projection.
@@ -93,10 +95,6 @@ func (d *nodeFusedQuantizedDense) EqualNodeData(other nodeDataComparable) bool {
 		d.blockSize == o.blockSize && d.activation == o.activation &&
 		d.hasZeroPoint == o.hasZeroPoint && d.hasBias == o.hasBias
 }
-
-// nodeFusedQuantizedScaledDotProductAttention is identical to nodeFusedScaledDotProductAttention;
-// the quantized SDPA scalar fallback delegates to the same sdpaMultiHeadGeneric kernel.
-type nodeFusedQuantizedScaledDotProductAttention = nodeFusedScaledDotProductAttention
 
 // FusedSoftmax computes softmax along the specified axis.
 // The axis must be non-negative (the caller normalizes negative indices).
@@ -222,9 +220,9 @@ func (f *Function) FusedDense(x, weight, bias backends.Value, activation backend
 // FusedScaledDotProductAttention computes multi-head scaled dot-product attention.
 // Both AxesLayoutBHSD and AxesLayoutBSHD are supported; the executor transposes
 // BSHD inputs to BHSD internally.
-func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backends.Value, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (backends.Value, error) {
+func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backends.Value, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool, quantizedMatmuls bool) (backends.Value, error) {
 	return f.buildSDPANode(backends.OpTypeFusedScaledDotProductAttention, "FusedScaledDotProductAttention",
-		query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal)
+		query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal, quantizedMatmuls)
 }
 
 // FusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
@@ -312,18 +310,10 @@ func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value,
 	return node, nil
 }
 
-// FusedQuantizedScaledDotProductAttention computes multi-head SDPA using int8×int8
-// matmuls for Q@K^T and attn@V. Inputs are float32; quantization is internal.
-func (f *Function) FusedQuantizedScaledDotProductAttention(query, key, value, mask backends.Value, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (backends.Value, error) {
-	return f.buildSDPANode(backends.OpTypeFusedQuantizedScaledDotProductAttention, "FusedQuantizedScaledDotProductAttention",
-		query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal)
-}
-
-// buildSDPANode is the shared builder for both FusedScaledDotProductAttention and
-// FusedQuantizedScaledDotProductAttention, which differ only in OpType and error prefix.
+// buildSDPANode builds the SDPA computation node.
 func (f *Function) buildSDPANode(opType backends.OpType, opName string,
 	query, key, value, mask backends.Value,
-	numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool,
+	numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool, quantizedMatmuls bool,
 ) (backends.Value, error) {
 	values := []backends.Value{query, key, value}
 	if mask != nil {
@@ -342,7 +332,7 @@ func (f *Function) buildSDPANode(opType backends.OpType, opName string,
 		return nil, errors.Errorf("%s: numHeads (%d) must be positive and divisible by numKVHeads (%d)", opName, numHeads, numKVHeads)
 	}
 
-	data := &nodeFusedScaledDotProductAttention{numHeads: numHeads, numKVHeads: numKVHeads, axesLayout: axesLayout, scale: scale, causal: causal}
+	data := &nodeFusedScaledDotProductAttention{numHeads: numHeads, numKVHeads: numKVHeads, axesLayout: axesLayout, scale: scale, causal: causal, quantizedMatmuls: quantizedMatmuls}
 	node, _ := f.getOrCreateNode(opType, qNode.shape.Clone(), inputs, data)
 	return node, nil
 }

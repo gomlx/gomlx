@@ -197,6 +197,12 @@ type FusedOps interface {
 	//   - causal: if true, apply causal (lower-triangular) mask. Callers (e.g. attention.Core)
 	//     treat causal and mask as mutually exclusive, folding causal into the mask before calling
 	//     this method when both are needed. Backends may assume they won't both be set.
+	//   - quantizedMatmuls: if true, the backend may use per-head affine quantization
+	//     (float32 → uint8) for the Q@K^T and attn@V matmul stages, computing accumulation
+	//     in int32 and dequantizing back to float32. Softmax and masking remain in float32.
+	//     This trades some numerical precision for throughput on hardware with fast integer
+	//     dot-product instructions (e.g. ARM SDOT/UDOT, x86 VNNI). Backends that do not
+	//     support quantized matmuls ignore this flag and use float arithmetic.
 	//
 	// Output: same shape as query.
 	FusedScaledDotProductAttention(
@@ -204,7 +210,8 @@ type FusedOps interface {
 		numHeads, numKVHeads int,
 		axesLayout AxesLayout,
 		scale float64,
-		causal bool) (Value, error)
+		causal bool,
+		quantizedMatmuls bool) (Value, error)
 
 	// FusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
 	//
@@ -227,16 +234,6 @@ type FusedOps interface {
 	FusedQuantizedDense(x, weights, bias Value,
 		weightsQuantization *Quantization,
 		activation ActivationType) (Value, error)
-
-	// FusedQuantizedScaledDotProductAttention computes multi-head SDPA using int8×int8
-	// matmuls for Q@K^T and attn@V. Inputs are float32; quantization is internal.
-	// Same interface as FusedScaledDotProductAttention.
-	FusedQuantizedScaledDotProductAttention(
-		query, key, value, mask Value,
-		numHeads, numKVHeads int,
-		axesLayout AxesLayout,
-		scale float64,
-		causal bool) (Value, error)
 
 	// FusedAttentionQKVProjection performs fused Query-Key-Value projection: a single large matmul
 	// merged with a scatter into separate query (Q), key (K), value (V) outputs with optional
