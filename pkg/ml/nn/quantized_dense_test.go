@@ -104,7 +104,8 @@ func TestQuantizedDense_NF4(t *testing.T) {
 			x := Const(g, xData)
 			packed := Const(g, packedData)
 			s := Const(g, scalesData)
-			// Bitcast uint8 [2, 2] → Uint4 [2, 2, 2], then reshape to [2, 4].
+			// Bitcast uint8 [2, 2] → Uint4 [2, 2, 2] (packed: 2 nibbles per byte).
+			// FusedQuantizedDense handles packed sub-byte weights internally.
 			weights := Bitcast(packed, dtypes.Uint4)     // [2, 2, 2]
 			weights = Reshape(weights, 2, N)              // [2, 4]
 			quant := &Quantization{

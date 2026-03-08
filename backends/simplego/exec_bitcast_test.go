@@ -11,61 +11,82 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBitcastNibbleRoundtrip_Uint4(t *testing.T) {
-	// Pack nibbles into uint8, then unpack back; verify roundtrip.
-	// Logical nibbles: [0, 15, 7, 8] → packed: [0xF0, 0x87] → unpacked: [0, 15, 7, 8]
-	nibbles := []uint8{0, 15, 7, 8}
-	nibbleShape := shapes.Make(dtypes.Uint4, 4)
+func TestBitcast_Uint8ToUint4_PureReinterpret(t *testing.T) {
+	// Bitcast uint8[2] → Uint4[4]: raw bytes stay the same.
+	// Byte 0xF0 = low nibble 0, high nibble 15.
+	// Byte 0x87 = low nibble 7, high nibble 8.
+	srcData := []uint8{0xF0, 0x87}
+	srcShape := shapes.Make(dtypes.Uint8, 2)
+	srcBuf := &Buffer{shape: srcShape, flat: srcData, inUse: true}
 
-	srcBuf := &Buffer{shape: nibbleShape, flat: nibbles}
-	packShape := shapes.Make(dtypes.Uint8, 2)
-	packBuf := &Buffer{shape: packShape, flat: make([]uint8, 2)}
-	packed, err := execBitcastNibblesToUint8(srcBuf, packBuf, dtypes.Uint4)
+	dstShape := shapes.Make(dtypes.Uint4, 4)
+	node := &Node{shape: dstShape}
+
+	// Not owned: should copy bytes without unpacking.
+	result, err := execBitcast(nil, node, []*Buffer{srcBuf}, []bool{false})
 	require.NoError(t, err)
+	assert.Equal(t, dstShape, result.shape)
 
-	// Verify packed bytes.
-	packedData := packed.flat.([]uint8)
-	assert.Equal(t, uint8(0xF0), packedData[0]) // low=0, high=15
-	assert.Equal(t, uint8(0x87), packedData[1]) // low=7, high=8
-
-	// Unpack back.
-	unpackShape := shapes.Make(dtypes.Uint4, 4)
-	unpackBuf := &Buffer{shape: unpackShape, flat: make([]uint8, 4)}
-	unpacked, err := execBitcastUint8ToNibbles(packed, unpackBuf, dtypes.Uint4)
-	require.NoError(t, err)
-
-	unpackedData := unpacked.flat.([]uint8)
-	for i := range nibbles {
-		assert.Equal(t, nibbles[i], unpackedData[i], "index %d", i)
-	}
+	// Raw bytes should be identical to source.
+	resultData := result.flat.([]uint8)
+	assert.Equal(t, srcData, resultData)
 }
 
-func TestBitcastNibbleRoundtrip_Int4(t *testing.T) {
-	// Int4 nibbles: [0, -1, 7, -8] → packed → unpacked should roundtrip.
-	nibbles := []int8{0, -1, 7, -8}
-	nibbleShape := shapes.Make(dtypes.Int4, 4)
+func TestBitcast_Uint8ToInt4_PureReinterpret(t *testing.T) {
+	// Bitcast uint8[2] → Int4[4]: raw bytes stay the same.
+	srcData := []uint8{0xF0, 0x87}
+	srcShape := shapes.Make(dtypes.Uint8, 2)
+	srcBuf := &Buffer{shape: srcShape, flat: srcData, inUse: true}
 
-	srcBuf := &Buffer{shape: nibbleShape, flat: nibbles}
-	packShape := shapes.Make(dtypes.Uint8, 2)
-	packBuf := &Buffer{shape: packShape, flat: make([]uint8, 2)}
-	packed, err := execBitcastNibblesToUint8(srcBuf, packBuf, dtypes.Int4)
+	dstShape := shapes.Make(dtypes.Int4, 4)
+	node := &Node{shape: dstShape}
+
+	result, err := execBitcast(nil, node, []*Buffer{srcBuf}, []bool{false})
 	require.NoError(t, err)
+	assert.Equal(t, dstShape, result.shape)
 
-	// Verify packed bytes.
-	packedData := packed.flat.([]uint8)
-	// nibble 0 → 0x0, nibble -1 → 0xF (unsigned representation): byte = 0xF0
-	assert.Equal(t, uint8(0xF0), packedData[0])
-	// nibble 7 → 0x7, nibble -8 → 0x8: byte = 0x87
-	assert.Equal(t, uint8(0x87), packedData[1])
+	// Raw bytes should be identical — Bitcast doesn't unpack.
+	resultData := result.flat.([]uint8)
+	assert.Equal(t, srcData, resultData)
+}
 
-	// Unpack back.
-	unpackShape := shapes.Make(dtypes.Int4, 4)
-	unpackBuf := &Buffer{shape: unpackShape, flat: make([]int8, 4)}
-	unpacked, err := execBitcastUint8ToNibbles(packed, unpackBuf, dtypes.Int4)
+func TestBitcast_Uint8ToInt4_OwnedReuse(t *testing.T) {
+	// When owned, Bitcast should reuse the buffer.
+	srcData := []uint8{0xAB, 0xCD}
+	srcShape := shapes.Make(dtypes.Uint8, 2)
+	srcBuf := &Buffer{shape: srcShape, flat: srcData, inUse: true}
+
+	dstShape := shapes.Make(dtypes.Int4, 4)
+	node := &Node{shape: dstShape}
+
+	result, err := execBitcast(nil, node, []*Buffer{srcBuf}, []bool{true})
 	require.NoError(t, err)
+	assert.Equal(t, dstShape, result.shape)
+	// Should be the exact same buffer (reused).
+	assert.Same(t, srcBuf, result)
+	assert.Equal(t, srcData, result.flat.([]uint8))
+}
 
-	unpackedData := unpacked.flat.([]int8)
-	for i := range nibbles {
-		assert.Equal(t, nibbles[i], unpackedData[i], "index %d", i)
-	}
+func TestBitcast_SameSize_Uint8ToInt8(t *testing.T) {
+	// Same bit-width, different Go type: should copy bytes.
+	backend, err := New("")
+	require.NoError(t, err)
+	defer backend.Finalize()
+
+	srcData := []uint8{0xFF, 0x80, 0x01}
+	srcShape := shapes.Make(dtypes.Uint8, 3)
+	srcBuf := &Buffer{shape: srcShape, flat: srcData, inUse: true}
+
+	dstShape := shapes.Make(dtypes.Int8, 3)
+	node := &Node{shape: dstShape}
+
+	result, err := execBitcast(backend.(*Backend), node, []*Buffer{srcBuf}, []bool{false})
+	require.NoError(t, err)
+	assert.Equal(t, dstShape, result.shape)
+
+	// Verify byte-level identity.
+	resultData := result.flat.([]int8)
+	assert.Equal(t, int8(-1), resultData[0])  // 0xFF
+	assert.Equal(t, int8(-128), resultData[1]) // 0x80
+	assert.Equal(t, int8(1), resultData[2])    // 0x01
 }

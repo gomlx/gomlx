@@ -471,12 +471,12 @@ func fusedDenseApplyActivation[T float32 | float64](backend *Backend, data []T, 
 // execFusedScaledDotProductAttention implements multi-head scaled dot-product attention.
 // Both BHSD and BSHD layouts are handled directly via stride-based indexing in
 // sdpaGeneric/sdpaMultiHeadGeneric, avoiding expensive transpose operations.
-// mask: optional additive mask of rank 2–4 (broadcasting via strides). Boolean masks are not
-// supported; the graph-level caller must convert them to additive form before reaching here.
+// mask: optional mask of rank 2–4 (broadcasting via strides). Can be boolean (true = attend,
+// false = ignore) or additive (any float dtype, added to scores before softmax).
 //
-// The quantizedMatmuls flag in the node data is currently ignored by this scalar fallback;
-// quantized int8 matmuls are only used by the go-highway SIMD executor. When quantizedMatmuls
-// is true but no SIMD path is available, the fallback uses standard float32 arithmetic.
+// Quantized matmuls are not yet implemented (awaiting go-highway release). When
+// quantizedMatmuls is true, this scalar fallback falls back to the non-quantized
+// FusedScaledDotProductAttention using standard float32 arithmetic.
 func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 	*Buffer, error) {
 	data := node.data.(*nodeFusedScaledDotProductAttention)
@@ -810,8 +810,9 @@ var nf4LookupTable = backends.NF4LookupTable
 // inputs layout: [x, weights, scales, zeroPoints?, bias?]
 //
 // Weights have their dtype set to reflect the storage type (Int4, Int8, etc.).
-// For sub-byte types (Int4/Uint4), weights are already unpacked: one int8/uint8 per element.
-// The Bitcast from packed uint8 to Int4/Uint4 should have been done by the caller.
+// Int4/Uint4 weights may be in packed form ([]uint8, 2 nibbles per byte) when
+// produced by Bitcast, or unpacked ([]int8/[]uint8, one value per element) when
+// produced by ConvertDType. Both forms are supported.
 func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	data := node.data.(*nodeFusedQuantizedDense)
 
@@ -858,25 +859,29 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 		zeroPoints = zeroPointsBuf.flat.([]float32)
 	}
 
+	// For packed sub-byte weights (from Bitcast), unpack nibbles before processing.
+	// Packed buffers have len(flat) < shape.Size() (2 nibbles per byte).
+	wFlat := unpackWeightsIfPacked(wBuf)
+
 	switch data.scheme {
 	case backends.QuantNF4:
-		// NF4 weights are Int4/Uint4 with unpacked nibble indices [0..15].
-		switch wBuf.shape.DType {
-		case dtypes.Int4:
-			quantizedDenseNF4(backend, x, wBuf.flat.([]int8), scales, bias, out, M, K, N, blockSize, numBlocks)
-		case dtypes.Uint4:
-			quantizedDenseNF4(backend, x, wBuf.flat.([]uint8), scales, bias, out, M, K, N, blockSize, numBlocks)
+		// NF4 weights are nibble indices [0..15]. Supports Int4/Int8/Uint4/Uint8.
+		switch wFlat.(type) {
+		case []uint8:
+			quantizedDenseNF4(backend, x, wFlat.([]uint8), scales, bias, out, M, K, N, blockSize, numBlocks)
+		case []int8:
+			quantizedDenseNF4(backend, x, wFlat.([]int8), scales, bias, out, M, K, N, blockSize, numBlocks)
 		default:
-			return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: NF4 unsupported weight dtype %s", wBuf.shape.DType)
+			return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: NF4 unsupported weight type %T", wFlat)
 		}
 	case backends.QuantLinear:
-		switch wBuf.shape.DType {
-		case dtypes.Int4, dtypes.Int8:
-			quantizedDenseLinearInt(backend, x, wBuf.flat.([]int8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
-		case dtypes.Uint4, dtypes.Uint8:
-			quantizedDenseLinearInt(backend, x, wBuf.flat.([]uint8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
+		switch wFlat.(type) {
+		case []int8:
+			quantizedDenseLinearInt(backend, x, wFlat.([]int8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
+		case []uint8:
+			quantizedDenseLinearInt(backend, x, wFlat.([]uint8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
 		default:
-			return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: Linear unsupported weight dtype %s", wBuf.shape.DType)
+			return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: Linear unsupported weight type %T", wFlat)
 		}
 	default:
 		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: unknown quantization scheme %d", data.scheme)
@@ -884,6 +889,43 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 
 	fusedDenseApplyActivation[float32](backend, out, data.activation)
 	return output, nil
+}
+
+// unpackWeightsIfPacked checks if a weight buffer contains packed sub-byte data
+// (from Bitcast, where flat is []uint8 with 2 nibbles per byte) and unpacks
+// nibbles into a temporary slice. Returns the flat data (original or unpacked).
+//
+// For Int4, packed buffers have flat.([]uint8) while unpacked buffers have
+// flat.([]int8). For Uint4, both forms use []uint8 so packed vs unpacked is
+// distinguished by length.
+func unpackWeightsIfPacked(wBuf *Buffer) any {
+	wDType := wBuf.shape.DType
+	expectedSize := wBuf.shape.Size()
+
+	switch wDType {
+	case dtypes.Uint4:
+		wFlat := wBuf.flat.([]uint8)
+		if len(wFlat) == expectedSize {
+			return wFlat // already unpacked
+		}
+		unpacked := make([]uint8, expectedSize)
+		unpackUint4Nibbles(wFlat, unpacked)
+		return unpacked
+	case dtypes.Int4:
+		switch wFlat := wBuf.flat.(type) {
+		case []int8:
+			// Already unpacked: one signed value per element.
+			return wFlat
+		case []uint8:
+			// Packed: unpack with sign extension.
+			unpacked := make([]int8, expectedSize)
+			unpackInt4Nibbles(wFlat, unpacked)
+			return unpacked
+		}
+		return wBuf.flat
+	default:
+		return wBuf.flat
+	}
 }
 
 // quantizedDenseParallel runs rowFn(m) for each row m in [0, M), parallelizing over M rows

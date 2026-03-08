@@ -34,24 +34,26 @@ var convertDTypePairMap = NewDTypePairMap("ConvertDType")
 
 func init() {
 	// Register sub-byte type conversions (Int4, Uint4).
-	// In simplego, Int4 values are stored unpacked as int8 (one value per element),
-	// Uint4 values as uint8. The generic converter works because the Go slice
-	// element type matches the container type.
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Float32, priorityTyped, execConvertDTypeGeneric[int8, float32])
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Float64, priorityTyped, execConvertDTypeGeneric[int8, float64])
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int32, priorityTyped, execConvertDTypeGeneric[int8, int32])
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int64, priorityTyped, execConvertDTypeGeneric[int8, int64])
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int8, priorityTyped, execConvertDTypeGeneric[int8, int8])
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Float32, priorityTyped, execConvertDTypeGeneric[uint8, float32])
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Float64, priorityTyped, execConvertDTypeGeneric[uint8, float64])
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int32, priorityTyped, execConvertDTypeGeneric[uint8, int32])
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int64, priorityTyped, execConvertDTypeGeneric[uint8, int64])
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Uint8, priorityTyped, execConvertDTypeGeneric[uint8, uint8])
+	// In simplego, Int4/Uint4 values are stored packed: 2 nibbles per uint8 byte.
+	// Bitcast from uint8 produces packed buffers (flat = []uint8). ConvertDType
+	// unpacks them into one value per element of the target type.
+	// Low nibble (bits 0-3) is the first element, high nibble (bits 4-7) is the second.
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Float32, priorityTyped, execConvertPackedInt4[float32])
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Float64, priorityTyped, execConvertPackedInt4[float64])
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int32, priorityTyped, execConvertPackedInt4[int32])
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int64, priorityTyped, execConvertPackedInt4[int64])
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int8, priorityTyped, execConvertPackedInt4[int8])
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Float32, priorityTyped, execConvertPackedUint4[float32])
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Float64, priorityTyped, execConvertPackedUint4[float64])
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int32, priorityTyped, execConvertPackedUint4[int32])
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int64, priorityTyped, execConvertPackedUint4[int64])
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Uint8, priorityTyped, execConvertPackedUint4[uint8])
 
 	// Register mutableBytes and fillBuffer for sub-byte types.
-	mutableBytesDTypeMap.Register(dtypes.Int4, priorityTyped, mutableBytesGeneric[int8])
+	// Packed Int4/Uint4 buffers use []uint8 as the Go storage type.
+	mutableBytesDTypeMap.Register(dtypes.Int4, priorityTyped, mutableBytesGeneric[uint8])
 	mutableBytesDTypeMap.Register(dtypes.Uint4, priorityTyped, mutableBytesGeneric[uint8])
-	fillBufferDTypeMap.Register(dtypes.Int4, priorityTyped, fillBufferGeneric[int8])
+	fillBufferDTypeMap.Register(dtypes.Int4, priorityTyped, fillBufferGeneric[uint8])
 	fillBufferDTypeMap.Register(dtypes.Uint4, priorityTyped, fillBufferGeneric[uint8])
 
 	// Manually register bool x bfloat16 conversion functions.
@@ -182,5 +184,76 @@ func execConvertDTypeBFloat16ToFloat16(operand, output *Buffer) {
 	outputFlat := output.flat.([]float16.Float16)
 	for idx, value := range operandFlat {
 		outputFlat[idx] = float16.Fromfloat32(value.Float32())
+	}
+}
+
+// unpackInt4Nibbles unpacks packed Int4 data ([]uint8, 2 signed nibbles per byte)
+// into dst (one value per element). Low nibble (bits 0-3) is the first element,
+// high nibble (bits 4-7) is the second. Values 8-15 are sign-extended to -8 to -1.
+func unpackInt4Nibbles(packed []uint8, dst []int8) {
+	for i, b := range packed {
+		lo := int8(b & 0x0F)
+		hi := int8(b >> 4)
+		if lo >= 8 {
+			lo -= 16
+		}
+		if hi >= 8 {
+			hi -= 16
+		}
+		dst[2*i] = lo
+		dst[2*i+1] = hi
+	}
+}
+
+// unpackUint4Nibbles unpacks packed Uint4 data ([]uint8, 2 unsigned nibbles per byte)
+// into dst (one value per element). Low nibble (bits 0-3) is the first element,
+// high nibble (bits 4-7) is the second.
+func unpackUint4Nibbles(packed []uint8, dst []uint8) {
+	for i, b := range packed {
+		dst[2*i] = b & 0x0F
+		dst[2*i+1] = b >> 4
+	}
+}
+
+// execConvertPackedInt4 converts Int4 values to the target numeric type with sign extension.
+// Handles both packed ([]uint8, 2 nibbles per byte, from Bitcast) and unpacked ([]int8,
+// one value per element, from getBuffer) source buffers.
+func execConvertPackedInt4[ToT PODNumericConstraints](operand, output *Buffer) {
+	dstData := output.flat.([]ToT)
+	switch src := operand.flat.(type) {
+	case []uint8:
+		// Packed: unpack nibbles then convert.
+		tmp := make([]int8, len(dstData))
+		unpackInt4Nibbles(src, tmp)
+		for i, v := range tmp {
+			dstData[i] = ToT(v)
+		}
+	case []int8:
+		// Unpacked: one signed value per element.
+		for i, v := range src {
+			dstData[i] = ToT(v)
+		}
+	}
+}
+
+// execConvertPackedUint4 converts Uint4 values to the target numeric type.
+// Handles both packed ([]uint8, 2 nibbles per byte, from Bitcast) and unpacked ([]uint8,
+// one value per element, from getBuffer) source buffers. Since both forms use []uint8,
+// packed vs unpacked is distinguished by length: packed has len == Size()/2.
+func execConvertPackedUint4[ToT PODNumericConstraints](operand, output *Buffer) {
+	srcData := operand.flat.([]uint8)
+	dstData := output.flat.([]ToT)
+	if len(srcData) == len(dstData) {
+		// Unpacked: one value per element.
+		for i, v := range srcData {
+			dstData[i] = ToT(v)
+		}
+	} else {
+		// Packed: unpack nibbles then convert.
+		tmp := make([]uint8, len(dstData))
+		unpackUint4Nibbles(srcData, tmp)
+		for i, v := range tmp {
+			dstData[i] = ToT(v)
+		}
 	}
 }
