@@ -182,6 +182,9 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			case "*Quantization":
 				pi.BackendType = "*backends.Quantization"
 				pi.Format = "%+v"
+			case "*ScaledDotProductAttentionConfig":
+				pi.BackendType = "*backends.ScaledDotProductAttentionConfig"
+				pi.Format = "%+v"
 			default:
 				switch {
 				case strings.HasPrefix(pi.BackendType, "..."):

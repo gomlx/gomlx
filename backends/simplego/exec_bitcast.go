@@ -4,7 +4,6 @@ package simplego
 
 import (
 	"github.com/gomlx/gomlx/backends"
-	"github.com/pkg/errors"
 )
 
 func init() {
@@ -25,48 +24,37 @@ func execBitcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	src := inputs[0]
 	targetDType := node.shape.DType
 	srcDType := src.shape.DType
-	srcBits := srcDType.Bits()
-	dstBits := targetDType.Bits()
+	sameBitWidth := srcDType.Bits() == targetDType.Bits()
 
-	switch {
-	case srcBits == dstBits:
-		// Same bit-width: reuse the input buffer if owned and the Go storage
-		// type matches (e.g. Int4↔Int8 both use []int8, Uint4↔Uint8 both use []uint8).
-		if inputsOwned[0] && srcDType.GoType() == targetDType.GoType() {
-			src.shape = node.shape
-			return src, nil
-		}
+	// If owned, reuse the buffer directly. For same-bit-width types we also
+	// require matching Go storage types (e.g. int8 vs uint8) since downstream
+	// code type-asserts the flat slice. For different-bit-width types the raw
+	// bytes stay as-is and downstream code (ConvertDType, FusedQuantizedDense)
+	// handles both slice types via type-switch.
+	if inputsOwned[0] && (!sameBitWidth || srcDType.GoType() == targetDType.GoType()) {
+		src.shape = node.shape
+		return src, nil
+	}
+
+	if sameBitWidth {
+		// Same bit-width, not owned or Go type mismatch: allocate via the
+		// standard pool and copy raw bytes.
 		output, err := backend.getBufferForShape(node.shape)
 		if err != nil {
 			return nil, err
 		}
-		return execBitcastSameSize(src, output)
-	default:
-		// Different bit-widths: pure bit reinterpretation.
-		// The raw bytes stay the same, only shape/dtype changes.
-		// E.g., uint8[N] → Int4[2*N]: the N bytes now represent 2*N packed nibbles.
-		if inputsOwned[0] {
-			src.shape = node.shape
-			return src, nil
-		}
-		// Not owned: copy raw bytes into a new buffer with the same flat type.
-		srcBytes := src.mutableBytes()
-		if len(srcBytes) == 0 {
-			return &Buffer{shape: node.shape, flat: make([]uint8, 0), inUse: true}, nil
-		}
-		newFlat := make([]uint8, len(srcBytes))
-		copy(newFlat, srcBytes)
-		return &Buffer{shape: node.shape, flat: newFlat, inUse: true}, nil
+		copy(output.mutableBytes(), src.mutableBytes())
+		return output, nil
 	}
-}
 
-// execBitcastSameSize handles bitcast between types with the same bit-width (e.g., uint8 ↔ int8).
-func execBitcastSameSize(src, output *Buffer) (*Buffer, error) {
+	// Different bit-widths (e.g. uint8[N] → Int4[2*N]): the raw byte count
+	// differs from the logical element count, so getBufferForShape would
+	// allocate the wrong size. Create the buffer manually.
 	srcBytes := src.mutableBytes()
-	dstBytes := output.mutableBytes()
-	if len(srcBytes) != len(dstBytes) {
-		return nil, errors.Errorf("Bitcast: source (%d bytes) and destination (%d bytes) size mismatch", len(srcBytes), len(dstBytes))
+	if len(srcBytes) == 0 {
+		return &Buffer{shape: node.shape, flat: make([]uint8, 0), inUse: true}, nil
 	}
-	copy(dstBytes, srcBytes)
-	return output, nil
+	newFlat := make([]uint8, len(srcBytes))
+	copy(newFlat, srcBytes)
+	return &Buffer{shape: node.shape, flat: newFlat, inUse: true}, nil
 }

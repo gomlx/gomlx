@@ -474,9 +474,9 @@ func fusedDenseApplyActivation[T float32 | float64](backend *Backend, data []T, 
 // mask: optional mask of rank 2–4 (broadcasting via strides). Can be boolean (true = attend,
 // false = ignore) or additive (any float dtype, added to scores before softmax).
 //
-// Quantized matmuls are not yet implemented (awaiting go-highway release). When
-// quantizedMatmuls is true, this scalar fallback falls back to the non-quantized
-// FusedScaledDotProductAttention using standard float32 arithmetic.
+// Currently, quantized matmuls are not implemented (awaiting go-highway release),
+// falling back to the non-quantized FusedScaledDotProductAttention using standard
+// float32 arithmetic when QuantizedMatmuls is set in the options config.
 func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 	*Buffer, error) {
 	data := node.data.(*nodeFusedScaledDotProductAttention)
@@ -908,7 +908,7 @@ func unpackWeightsIfPacked(wBuf *Buffer) any {
 		if len(wFlat) == expectedSize {
 			return wFlat // already unpacked
 		}
-		unpacked := make([]uint8, expectedSize)
+		unpacked := make([]int8, expectedSize)
 		unpackUint4Nibbles(wFlat, unpacked)
 		return unpacked
 	case dtypes.Int4:

@@ -106,6 +106,20 @@ type Quantization struct {
 	BlockSize int
 }
 
+// ScaledDotProductAttentionConfig holds optional optimization hints for FusedScaledDotProductAttention.
+// A nil *ScaledDotProductAttentionConfig means "use defaults" (all optimizations disabled).
+type ScaledDotProductAttentionConfig struct {
+	// QuantizedMatmuls: if true, the backend may use dynamic per-head symmetric
+	// affine quantization (scale-only, no zero point) to convert float32 Q/K/V slices
+	// to uint8 for the Q@K^T and attn@V matmul stages. Accumulation is done in int32,
+	// then dequantized back to float32. Softmax and masking remain in float32.
+	// This matches ONNX DynamicQuantizeLinear semantics and trades some numerical
+	// precision for throughput on hardware with fast integer dot-product instructions
+	// (e.g. ARM SDOT/UDOT, x86 VNNI). Backends that do not support quantized matmuls
+	// ignore this flag and use float arithmetic.
+	QuantizedMatmuls bool
+}
+
 // ActivationType specifies the activation function for fused operations.
 type ActivationType int
 
@@ -197,14 +211,7 @@ type FusedOps interface {
 	//   - causal: if true, apply causal (lower-triangular) mask. Callers (e.g. attention.Core)
 	//     treat causal and mask as mutually exclusive, folding causal into the mask before calling
 	//     this method when both are needed. Backends may assume they won't both be set.
-	//   - quantizedMatmuls: if true, the backend may use dynamic per-head symmetric
-	//     affine quantization (scale-only, no zero point) to convert float32 Q/K/V slices
-	//     to uint8 for the Q@K^T and attn@V matmul stages. Accumulation is done in int32,
-	//     then dequantized back to float32. Softmax and masking remain in float32.
-	//     This matches ONNX DynamicQuantizeLinear semantics and trades some numerical
-	//     precision for throughput on hardware with fast integer dot-product instructions
-	//     (e.g. ARM SDOT/UDOT, x86 VNNI). Backends that do not support quantized matmuls
-	//     ignore this flag and use float arithmetic.
+	//   - options: optional optimization hints (nil uses defaults). See ScaledDotProductAttentionConfig.
 	//
 	// Output: same shape as query.
 	FusedScaledDotProductAttention(
@@ -213,7 +220,7 @@ type FusedOps interface {
 		axesLayout AxesLayout,
 		scale float64,
 		causal bool,
-		quantizedMatmuls bool) (Value, error)
+		options *ScaledDotProductAttentionConfig) (Value, error)
 
 	// FusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
 	//

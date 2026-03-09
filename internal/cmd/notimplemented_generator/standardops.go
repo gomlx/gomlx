@@ -100,6 +100,8 @@ func GenerateStandardOpsInterface(methods []backendparser.Method) {
 				pi.Type = "backends.DotGeneralConfig"
 			case "*Quantization":
 				pi.Type = "*backends.Quantization"
+			case "*ScaledDotProductAttentionConfig":
+				pi.Type = "*backends.ScaledDotProductAttentionConfig"
 			}
 		}
 		newMethods = append(newMethods, method)

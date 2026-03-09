@@ -26,7 +26,7 @@ func (f *Function) FusedDense(x, weight, bias backends.Value, activation backend
 	return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedDense not implemented in XLA backend")
 }
 
-func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backends.Value, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool, quantizedMatmuls bool) (backends.Value, error) {
+func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backends.Value, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool, options *backends.ScaledDotProductAttentionConfig) (backends.Value, error) {
 	return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedScaledDotProductAttention not implemented in XLA backend")
 }
 

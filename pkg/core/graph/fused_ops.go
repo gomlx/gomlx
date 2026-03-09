@@ -106,8 +106,8 @@ func BackendFusedDense(x, weight, bias *Node, activation backends.ActivationType
 
 // BackendFusedScaledDotProductAttention computes multi-head scaled dot-product attention.
 // Internal: prefer the InternalFusedOpCaller wrapper in layers which handles fallback and gradients.
-func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool, quantizedMatmuls bool) *Node {
-	return backendFusedScaledDotProductAttention(query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal, quantizedMatmuls)
+func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool, options *backends.ScaledDotProductAttentionConfig) *Node {
+	return backendFusedScaledDotProductAttention(query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal, options)
 }
 
 // BackendFusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
