@@ -21,7 +21,7 @@
   - Funtions/closures support (thx @ajroetker)
   - Added `Reverse` operation.
   - Added fused operations: `FusedGelu`, `FusedDense`, `FusedSoftmax`, `FusedLayerNorm`, 
-    `FusedScaledDotProductAttention`, `FusedAttentionQKVProjection`.
+    `FusedScaledDotProductAttention`, `FusedAttentionQKVProjection`, `FusedQuantizedDense`.
 - New package `bucketing`:
   - Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
 - Package `dtypes`:
@@ -47,6 +47,8 @@
   - Separated in its own sub-modules, to separate its dependencies.
   - Added `gpt2`: A simple GPT-2 implementation using the new transformers and decode packages. It downloads the model from HuggingFace.
   - Added `textgen`: a minimal transformer text generation model that can be trained.
+  - Added `gemma3`: A simple Gemma 3 implementation using the new transformers and decode packages. It downloads the model from HuggingFace.
+  - Added `BERT-base-NER`: A BERT-base model fine-tuned for Named Entity Recognition.
 
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 
