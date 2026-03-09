@@ -66,6 +66,12 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 
 **Examples developed using GoMLX:**
 
+  * **🚀 NEW 🚀** [Gemma 3 270M](https://github.com/gomlx/gomlx/tree/main/examples/gemma3): Demonstrates ONNX-converted
+    text generation (LLM) using the [onnx-community/gemma-3-270m-it-ONNX](https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX) 
+    model with GoMLX.
+  * **🚀 NEW 🚀** [BERT-base-NER](https://github.com/gomlx/gomlx/tree/main/examples/BERT-base-NER): A BERT-base model fine-tuned
+    for Named Entity Recognition. It's also a ONNX-converted model from [dslim/bert-base-NER model](https://huggingface.co/dslim/bert-base-NER) from HuggingFace.
+
   * [Adult/Census model](https://gomlx.github.io/gomlx/notebooks/uci-adult.html);
   * [How do KANs learn ?](https://gomlx.github.io/gomlx/notebooks/kan_shapes.html); 
   * [Cifar-10 demo](https://gomlx.github.io/gomlx/notebooks/cifar.html); 
@@ -74,8 +80,6 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
   * [IMDB Movie Review demo](https://gomlx.github.io/gomlx/notebooks/imdb.html); 
   * [Diffusion model for Oxford Flowers 102 dataset (generates random flowers)](examples/oxfordflowers102/OxfordFlowers102_Diffusion.ipynb);
     * [Flow Matching Study Notebook](https://gomlx.github.io/gomlx/notebooks/flow_matching.html) based on Meta's ["Flow Matching Guide and Code"](https://ai.meta.com/research/publications/flow-matching-guide-and-code/).
-  * [GoMLX/Gemma](https://github.com/gomlx/gemma), a **GoMLX** implementation of 
-    [Google DeepMind's Gemma v2 model](https://github.com/google-deepmind/gemma) ([blog post](https://ai.google.dev/gemma))
   * [GNN model for OGBN-MAG (experimental)](examples/ogbnmag/ogbn-mag.ipynb).
   * Last, a trivial [synthetic linear model](https://github.com/gomlx/gomlx/blob/main/examples/linear/linear.go), for those curious to see a barebones simple model.
   * Neural Style Transfer 10-year Celebration: [see a demo written using GoMLX](https://github.com/janpfeifer/styletransfer/blob/main/demo.ipynb) of the [original paper](https://arxiv.org/abs/1508.06576).
@@ -85,30 +89,18 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 
 **Highlights:**
 
-> **🚀 NEW 🚀**: **Auto-installation of XLA PJRT plugins** (for CPU, GPU and TPUs; Linux and Macs)
-> in the user'slocal lib directory (`$HOME/.local/lib` in Linux and `$HOME/Library/Application Support/XLA` in Mac).
-> It can be disabled by setting `GOMLX_NO_AUTO_INSTALL` or programmatically by 
-> calling `xla.EnableAutoInstall(false)`).
-
-> **🚀 NEW 🚀**: **Windows/amd64 (EXPERIMENTAL) and Linux/arm64 XLA PJRT CPU plugins**.
-> Linux/arm64 should work, and windows passes some tests, and in many cases should be functional.
-> Please report any issues you may find.
-
-> **🚀 NEW 🚀**: **Distributed Execution** (across multiple GPUs or TPUs) with little hints from the user.
-> One only needs to configure a distributed dataset, and the trainer picks up from there.
-> See code change in [UCI-Adult demo](https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/main.go#L222)
-
-> **🚀 NEW 🚀**: Fixed Mac support for the XLA backend, including installer. Only CPU for now, 
-> see [jax/issues/32800](https://github.com/jax-ml/jax/issues/32800) for the request to Apple developers 
-> to update their support for GPU XLA.
+> **🚀 NEW 🚀** **[go-coreml](https://github.com/gomlx/go-coreml)**: Go bindings to Apple's CoreML, supporting Metal acceleration.
 
 * Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
 * [Docker "gomlx_jupyterlab"](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab) with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
-* Two backends:
-   1. **`xla`**: [OpenXLA](https://github.com/openxla/xla) backend for CPUs, GPUs, and TPUs. State-of-the-art as these things go. Only linux/amd64 for now. Using the [go-xla](https://github.com/gomlx/go-xla) Go version of the APIs.
+* Three backends:
+   1. **`xla`**: [OpenXLA](https://github.com/openxla/xla) backend for CPUs, GPUs, and TPUs. State-of-the-art as these things go. 
+      For linux/amd64, linux/arm64 (CPU) and darwin/arm64 (CPU) for now. Using the [go-xla](https://github.com/gomlx/go-xla) Go version of the APIs.
    2. **`go`**: a pure Go backend (no C/C++ dependencies): slower but very portable (compiles to WASM/Windows/etc.): 
-      SIMD support is planned [when it becomes available](https://github.com/golang/go/issues/73787); See also [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
+      * SIMD support is underway (see [SIMD for Go](https://github.com/golang/go/issues/73787) and under-development [go-highway](https://github.com/ajroetker/go-highway)); 
+      * See also [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
+   3. **🚀 NEW 🚀** **[go-coreml](https://github.com/gomlx/go-coreml)**: Go bindings to Apple's CoreML, supporting Metal acceleration.
 * Autodiff: automatic differentiation—only gradients for now, no jacobian.
 * Context: automatic variable management for ML models.
 * ML layers library with some of the most popular machine learning "layers": FFN layers,  
@@ -132,6 +124,15 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 * Read Numpy arrays into GoMLX tensors -- see package `github.com/gomlx/gomlx/pkg/core/tensors/numpy`.
 * (**Experimental**) Support static linking of PJRT: slower to build the Go program, but deploying it doesn't require installing a PJRT plugin in the machine you are deploying it. It requires you to compile your own static PJRT plugin from XLA sources.
   Use `go build --tags=pjrt_cpu_static` or include `import _ "github.com/gomlx/gomlx/backends/xla/cpu/static"`.
+* **Auto-installation of XLA PJRT plugins** (for CPU, GPU and TPUs; Linux and Macs)
+  in the user'slocal lib directory (`$HOME/.local/lib` in Linux and `$HOME/Library/Application Support/XLA` in Mac).
+  It can be disabled by setting `GOMLX_NO_AUTO_INSTALL` or programmatically by 
+  calling `xla.EnableAutoInstall(false)`).
+* **Distributed Execution** (across multiple GPUs or TPUs) with little hints from the user.
+  One only needs to configure a distributed dataset, and the trainer picks up from there.
+  See code change in [UCI-Adult demo](https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/main.go#L222). **Experimental**, 
+  pls report any issues and help us improve it.
+
 
 ## 👥 Support
 
