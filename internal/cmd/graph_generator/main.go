@@ -51,12 +51,13 @@ var (
 
 		// Fused ops: exported wrappers with "Internal:" comments are hand-written in fused_ops.go.
 		"FusedDense", "FusedGelu", "FusedLayerNorm", "FusedSoftmax",
-		"FusedScaledDotProductAttention", "FusedAttentionQKVProjection")
+		"FusedScaledDotProductAttention", "FusedAttentionQKVProjection",
+		"FusedQuantizedDense")
 
 	// methodsNotGenerated get a NodeType but no auto-generated wrapper
 	// (hand-written implementations).
 	methodsNotGenerated = sets.MakeWith(
-		"Constant", "Parameter")
+		"Constant", "Parameter", "FusedQuantizedDense")
 
 	// nillableParams lists Value parameters that can be nil (passed as *Node).
 	// Key format: "MethodName.paramName"
@@ -172,8 +173,17 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			case "AxesLayout":
 				pi.BackendType = "backends." + pi.BackendType
 				pi.Format = "%s"
+			case "QuantizationScheme":
+				pi.BackendType = "backends." + pi.BackendType
+				pi.Format = "%s"
 			case "DotGeneralConfig":
 				pi.BackendType = "backends." + pi.BackendType
+				pi.Format = "%+v"
+			case "*Quantization":
+				pi.BackendType = "*backends.Quantization"
+				pi.Format = "%+v"
+			case "*ScaledDotProductAttentionConfig":
+				pi.BackendType = "*backends.ScaledDotProductAttentionConfig"
 				pi.Format = "%+v"
 			default:
 				switch {

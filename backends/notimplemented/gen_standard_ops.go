@@ -294,6 +294,28 @@ func (f Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, 
 	return nil, f.baseErrFn(backends.OpTypeFusedLayerNorm)
 }
 
+// FusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
+//
+// It computes y = activation(x @ dequant(weights, weightsQuantization) + bias), where the
+// dequantization and matmul are fused into a single pass to avoid materializing the
+// full float32 weight matrix.
+//
+// Inputs:
+//   - x: [batch..., K] float32 input activations.
+//   - weights: [K, N] with dtype reflecting storage precision (e.g. Int4, Int8).
+//     For sub-byte types the caller should Bitcast packed uint8 data to the correct dtype
+//     before calling.
+//   - bias: [N] float32 (nil-able), added after matmul but before activation.
+//   - weightsQuantization: describes how to dequantize the weights tensor. Must not be nil.
+//   - activation: applied after matmul+bias; set to ActivationNone for no activation.
+//
+// Future: inputQuantization, outputQuantization, and biasQuantization parameters may be
+// added to support fully quantized operations where the activations and/or output are
+// also quantized.
+func (f Function) FusedQuantizedDense(x backends.Value, weights backends.Value, bias backends.Value, weightsQuantization *backends.Quantization, activation backends.ActivationType) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedQuantizedDense)
+}
+
 // FusedScaledDotProductAttention computes multi-head scaled dot-product attention.
 //
 // output = softmax(query @ key^T * scale + mask) @ value, computed per-head with GQA support.
@@ -318,9 +340,10 @@ func (f Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, 
 //   - causal: if true, apply causal (lower-triangular) mask. Callers (e.g. attention.Core)
 //     treat causal and mask as mutually exclusive, folding causal into the mask before calling
 //     this method when both are needed. Backends may assume they won't both be set.
+//   - options: optional optimization hints (nil uses defaults). See ScaledDotProductAttentionConfig.
 //
 // Output: same shape as query.
-func (f Function) FusedScaledDotProductAttention(query backends.Value, key backends.Value, value backends.Value, mask backends.Value, numHeads int, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (backends.Value, error) {
+func (f Function) FusedScaledDotProductAttention(query backends.Value, key backends.Value, value backends.Value, mask backends.Value, numHeads int, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool, options *backends.ScaledDotProductAttentionConfig) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFusedScaledDotProductAttention)
 }
 

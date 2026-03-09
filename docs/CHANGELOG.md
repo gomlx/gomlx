@@ -9,6 +9,7 @@
   - Added `FusedOps`, allowing backends to expose fused (more efficient) operations -- with proper/automatic
     fallback to decomposed operations when not supported or for gradients.
   - Added `ErrNotImplemented` error and `IsNotImplemented(err)` function.
+  - Added `Quantization` struct, `QuantizationScheme` (Linear, NF4), and `NF4LookupTable`.
   - Removed `Dot()` operation (redundant with `DotGeneral`).
   - `DotGeneral()` now takes a `DotGeneralConfig` struct, with options for setting the accumulator and output dtypes.
 - Package `simplego`:
@@ -20,8 +21,14 @@
   - Experimental `packgemm` support leveraging simd operations (@ajroetker, @janpfeifer)
   - Funtions/closures support (thx @ajroetker)
   - Added `Reverse` operation.
-  - Added fused operations: `FusedGelu`, `FusedDense`, `FusedSoftmax`, `FusedLayerNorm`, 
-    `FusedScaledDotProductAttention`, `FusedAttentionQKVProjection`, `FusedQuantizedDense`.
+  - Added fused operations: `FusedGelu`, `FusedDense`, `FusedSoftmax`, `FusedLayerNorm`,
+    `FusedScaledDotProductAttention`, `FusedAttentionQKVProjection`.
+  - Added `FusedQuantizedDense`: fused dequantization + matmul + bias + activation for Int4/Int8 weights
+    with Linear and NF4 quantization schemes, block-wise scales, and optional zero points.
+  - `FusedScaledDotProductAttention`: added `ScaledDotProductAttentionConfig` options struct with
+    `QuantizedMatmuls` flag for optional uint8 quantized Q@K/attn@V matmuls (awaiting go-highway
+    release for actual acceleration).
+  - `Bitcast` refactored to pure bit reinterpretation; sub-byte unpacking moved to `ConvertDType`.
 - New package `bucketing`:
   - Tools to manage bucketing of tensors (or anything else) -- thx @ajroetker
 - Package `dtypes`:
