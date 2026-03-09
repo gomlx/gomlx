@@ -36,25 +36,13 @@ func execBitcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 		return src, nil
 	}
 
-	if sameBitWidth {
-		// Same bit-width, not owned or Go type mismatch: allocate via the
-		// standard pool and copy raw bytes.
-		output, err := backend.getBufferForShape(node.shape)
-		if err != nil {
-			return nil, err
-		}
-		copy(output.mutableBytes(), src.mutableBytes())
-		return output, nil
+	// Not owned or Go type mismatch: allocate via the standard pool and copy
+	// raw bytes. For sub-byte types, getBufferForShape allocates packed storage
+	// (e.g. Int4[2N] gets []uint8 of length N), matching the source byte count.
+	output, err := backend.getBufferForShape(node.shape)
+	if err != nil {
+		return nil, err
 	}
-
-	// Different bit-widths (e.g. uint8[N] → Int4[2*N]): the raw byte count
-	// differs from the logical element count, so getBufferForShape would
-	// allocate the wrong size. Create the buffer manually.
-	srcBytes := src.mutableBytes()
-	if len(srcBytes) == 0 {
-		return &Buffer{shape: node.shape, flat: make([]uint8, 0), inUse: true}, nil
-	}
-	newFlat := make([]uint8, len(srcBytes))
-	copy(newFlat, srcBytes)
-	return &Buffer{shape: node.shape, flat: newFlat, inUse: true}, nil
+	copy(output.mutableBytes(), src.mutableBytes())
+	return output, nil
 }

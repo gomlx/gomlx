@@ -861,7 +861,7 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 
 	// For packed sub-byte weights (from Bitcast), unpack nibbles before processing.
 	// Packed buffers have len(flat) < shape.Size() (2 nibbles per byte).
-	wFlat := unpackWeightsIfPacked(wBuf)
+	wFlat := unpackWeightsToInt8(wBuf)
 
 	switch data.scheme {
 	case backends.QuantNF4:
@@ -891,41 +891,22 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 	return output, nil
 }
 
-// unpackWeightsIfPacked checks if a weight buffer contains packed sub-byte data
-// (from Bitcast, where flat is []uint8 with 2 nibbles per byte) and unpacks
-// nibbles into a temporary slice. Returns the flat data (original or unpacked).
-//
-// For Int4, packed buffers have flat.([]uint8) while unpacked buffers have
-// flat.([]int8). For Uint4, both forms use []uint8 so packed vs unpacked is
-// distinguished by length.
-func unpackWeightsIfPacked(wBuf *Buffer) any {
-	wDType := wBuf.shape.DType
-	expectedSize := wBuf.shape.Size()
-
-	switch wDType {
+// unpackWeightsToInt8 unpacks sub-byte weight data (Int4, Uint4) from packed
+// []uint8 storage into []int8 (one value per element) for the matmul kernel.
+// For non-sub-byte types, returns the flat data as-is.
+func unpackWeightsToInt8(wBuf *Buffer) any {
+	var unpackFn unpackNibblesFn
+	switch wBuf.shape.DType {
 	case dtypes.Uint4:
-		wFlat := wBuf.flat.([]uint8)
-		if len(wFlat) == expectedSize {
-			return wFlat // already unpacked
-		}
-		unpacked := make([]int8, expectedSize)
-		unpackUint4Nibbles(wFlat, unpacked)
-		return unpacked
+		unpackFn = unpackUint4Nibbles
 	case dtypes.Int4:
-		switch wFlat := wBuf.flat.(type) {
-		case []int8:
-			// Already unpacked: one signed value per element.
-			return wFlat
-		case []uint8:
-			// Packed: unpack with sign extension.
-			unpacked := make([]int8, expectedSize)
-			unpackInt4Nibbles(wFlat, unpacked)
-			return unpacked
-		}
-		return wBuf.flat
+		unpackFn = unpackInt4Nibbles
 	default:
 		return wBuf.flat
 	}
+	unpacked := make([]int8, wBuf.shape.Size())
+	unpackFn(wBuf.flat.([]uint8), unpacked)
+	return unpacked
 }
 
 // quantizedDenseParallel runs rowFn(m) for each row m in [0, M), parallelizing over M rows

@@ -15,6 +15,10 @@ func TestBitcast_Uint8ToUint4_PureReinterpret(t *testing.T) {
 	// Bitcast uint8[2] → Uint4[4]: raw bytes stay the same.
 	// Byte 0xF0 = low nibble 0, high nibble 15.
 	// Byte 0x87 = low nibble 7, high nibble 8.
+	backend, err := New("")
+	require.NoError(t, err)
+	defer backend.Finalize()
+
 	srcData := []uint8{0xF0, 0x87}
 	srcShape := shapes.Make(dtypes.Uint8, 2)
 	srcBuf := &Buffer{shape: srcShape, flat: srcData, inUse: true}
@@ -23,7 +27,7 @@ func TestBitcast_Uint8ToUint4_PureReinterpret(t *testing.T) {
 	node := &Node{shape: dstShape}
 
 	// Not owned: should copy bytes without unpacking.
-	result, err := execBitcast(nil, node, []*Buffer{srcBuf}, []bool{false})
+	result, err := execBitcast(backend.(*Backend), node, []*Buffer{srcBuf}, []bool{false})
 	require.NoError(t, err)
 	assert.Equal(t, dstShape, result.shape)
 
@@ -34,6 +38,10 @@ func TestBitcast_Uint8ToUint4_PureReinterpret(t *testing.T) {
 
 func TestBitcast_Uint8ToInt4_PureReinterpret(t *testing.T) {
 	// Bitcast uint8[2] → Int4[4]: raw bytes stay the same.
+	backend, err := New("")
+	require.NoError(t, err)
+	defer backend.Finalize()
+
 	srcData := []uint8{0xF0, 0x87}
 	srcShape := shapes.Make(dtypes.Uint8, 2)
 	srcBuf := &Buffer{shape: srcShape, flat: srcData, inUse: true}
@@ -41,7 +49,7 @@ func TestBitcast_Uint8ToInt4_PureReinterpret(t *testing.T) {
 	dstShape := shapes.Make(dtypes.Int4, 4)
 	node := &Node{shape: dstShape}
 
-	result, err := execBitcast(nil, node, []*Buffer{srcBuf}, []bool{false})
+	result, err := execBitcast(backend.(*Backend), node, []*Buffer{srcBuf}, []bool{false})
 	require.NoError(t, err)
 	assert.Equal(t, dstShape, result.shape)
 

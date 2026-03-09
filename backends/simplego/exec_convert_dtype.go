@@ -226,24 +226,15 @@ func unpackUint4Nibbles(packed []uint8, dst []int8) {
 
 // execConvertPackedSubByte returns a converter for packed sub-byte types (Int4, Uint4).
 // The unpackFn parameter selects signed vs unsigned nibble interpretation.
-// Handles both packed ([]uint8, 2 nibbles per byte, from Bitcast) and unpacked ([]int8,
-// one value per element) source buffers.
+// Sub-byte types are always stored packed as []uint8 (2 nibbles per byte).
 func execConvertPackedSubByte[ToT PODNumericConstraints](unpackFn unpackNibblesFn) convertFnType {
 	return func(operand, output *Buffer) {
 		dstData := output.flat.([]ToT)
-		switch src := operand.flat.(type) {
-		case []uint8:
-			// Packed: unpack nibbles to int8, then convert to target type.
-			tmp := make([]int8, len(dstData))
-			unpackFn(src, tmp)
-			for i, v := range tmp {
-				dstData[i] = ToT(v)
-			}
-		case []int8:
-			// Already unpacked: one value per element.
-			for i, v := range src {
-				dstData[i] = ToT(v)
-			}
+		src := operand.flat.([]uint8)
+		tmp := make([]int8, len(dstData))
+		unpackFn(src, tmp)
+		for i, v := range tmp {
+			dstData[i] = ToT(v)
 		}
 	}
 }
