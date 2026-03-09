@@ -91,8 +91,8 @@ type nodeFusedAttentionQKVProjection struct {
 }
 
 type nodeFusedQuantizedDense struct {
-	scheme    backends.QuantizationScheme
-	blockAxis int // Always 1 (output-features axis); validated in builder. Stored for EqualNodeData.
+	scheme       backends.QuantizationScheme
+	blockAxis    int // Always 1 (output-features axis); validated in builder. Stored for EqualNodeData.
 	blockSize    int
 	activation   backends.ActivationType
 	hasZeroPoint bool

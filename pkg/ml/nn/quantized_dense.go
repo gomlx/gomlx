@@ -10,9 +10,6 @@ import (
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
-// nf4LookupValues is a local alias for the shared NF4 lookup table.
-var nf4LookupValues = backends.NF4LookupTable
-
 // QuantizedDense performs a quantized dense (linear) transformation with optional activation:
 //
 //	y = activation(x @ dequant(weights, quant) + bias)
@@ -155,7 +152,7 @@ func dequantNF4FromTyped(g *Graph, weights *Node, K, N int) *Node {
 	default:
 		Panicf("dequantNF4FromTyped: expected Int4 or Uint4 weights, got %s", wDType)
 	}
-	nf4Table := Const(g, nf4LookupValues[:])       // [16] float32
+	nf4Table := Const(g, backends.NF4LookupTable[:])       // [16] float32
 	indicesForGather := Reshape(indices, K, N, 1)   // [K, N, 1]
 	return Gather(nf4Table, indicesForGather)        // [K, N] float32
 }

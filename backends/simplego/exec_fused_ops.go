@@ -109,24 +109,21 @@ func execFusedGelu(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*B
 		return nil, err
 	}
 
-	if data.exact {
-		switch input.shape.DType {
-		case dtypes.Float32:
-			gelu(backend, input.flat.([]float32), output.flat.([]float32))
-		case dtypes.Float64:
-			gelu(backend, input.flat.([]float64), output.flat.([]float64))
-		default:
-			return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedGelu: dtype %s", input.shape.DType)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		if data.exact {
+			parallelizeChunked(backend, input.flat.([]float32), output.flat.([]float32), geluChunk[float32])
+		} else {
+			parallelizeChunked(backend, input.flat.([]float32), output.flat.([]float32), geluApproxChunk[float32])
 		}
-	} else {
-		switch input.shape.DType {
-		case dtypes.Float32:
-			geluApprox(backend, input.flat.([]float32), output.flat.([]float32))
-		case dtypes.Float64:
-			geluApprox(backend, input.flat.([]float64), output.flat.([]float64))
-		default:
-			return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedGelu: dtype %s", input.shape.DType)
+	case dtypes.Float64:
+		if data.exact {
+			parallelizeChunked(backend, input.flat.([]float64), output.flat.([]float64), geluChunk[float64])
+		} else {
+			parallelizeChunked(backend, input.flat.([]float64), output.flat.([]float64), geluApproxChunk[float64])
 		}
+	default:
+		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedGelu: dtype %s", input.shape.DType)
 	}
 	return output, nil
 }
@@ -134,7 +131,10 @@ func execFusedGelu(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*B
 // minParallelizeChunk is the minimum number of elements to parallelize over.
 const minParallelizeChunk = 4096
 
-func gelu[T float32 | float64](backend *Backend, input, output []T) {
+// parallelizeChunked runs chunkFn over [0, n) in minParallelizeChunk-sized chunks
+// using the backend worker pool. Falls back to sequential if workers are unavailable
+// or n is small.
+func parallelizeChunked[T float32 | float64](backend *Backend, input, output []T, chunkFn func(input, output []T)) {
 	n := len(input)
 	if backend != nil && backend.workers.IsEnabled() && n > minParallelizeChunk {
 		var wg sync.WaitGroup
@@ -142,13 +142,13 @@ func gelu[T float32 | float64](backend *Backend, input, output []T) {
 			iiEnd := min(ii+minParallelizeChunk, n)
 			wg.Add(1)
 			backend.workers.WaitToStart(func() {
-				geluChunk(input[ii:iiEnd], output[ii:iiEnd])
+				chunkFn(input[ii:iiEnd], output[ii:iiEnd])
 				wg.Done()
 			})
 		}
 		wg.Wait()
 	} else {
-		geluChunk(input, output)
+		chunkFn(input, output)
 	}
 }
 
@@ -156,24 +156,6 @@ func geluChunk[T float32 | float64](input, output []T) {
 	sqrt2Inv := T(1.0 / math.Sqrt(2.0))
 	for i, x := range input {
 		output[i] = x * 0.5 * (1.0 + T(math.Erf(float64(x*sqrt2Inv))))
-	}
-}
-
-func geluApprox[T float32 | float64](backend *Backend, input, output []T) {
-	n := len(input)
-	if backend != nil && backend.workers.IsEnabled() && n > minParallelizeChunk {
-		var wg sync.WaitGroup
-		for ii := 0; ii < n; ii += minParallelizeChunk {
-			iiEnd := min(ii+minParallelizeChunk, n)
-			wg.Add(1)
-			backend.workers.WaitToStart(func() {
-				geluApproxChunk(input[ii:iiEnd], output[ii:iiEnd])
-				wg.Done()
-			})
-		}
-		wg.Wait()
-	} else {
-		geluApproxChunk(input, output)
 	}
 }
 
@@ -441,7 +423,7 @@ func fusedDenseApplyActivation[T float32 | float64](backend *Backend, data []T, 
 	case backends.ActivationNone:
 		// No-op.
 	case backends.ActivationGelu:
-		gelu(backend, data, data) // in-place
+		parallelizeChunked(backend, data, data, geluChunk[T]) // in-place
 	case backends.ActivationRelu:
 		for i, x := range data {
 			if x < 0 {
@@ -608,11 +590,12 @@ func sdpaGeneric[T float32 | float64](
 				kvLenUnmasked = min(kvLen, qIdx+1)
 			}
 
-			// Zero out scores for this row to prevent stale data from previous
-			// (batchIdx, kvHeadIdx) iterations when boolean mask or causal mask
-			// skips positions.
-			for i := scoreIdxBase; i < scoreIdxBase+kvLen; i++ {
-				scores[i] = 0
+			// Zero out scores to prevent stale data from previous iterations
+			// when boolean mask or causal mask skips positions.
+			if causal || len(booleanMask) > 0 {
+				for i := scoreIdxBase; i < scoreIdxBase+kvLen; i++ {
+					scores[i] = 0
+				}
 			}
 
 			for kvIdx := range kvLenUnmasked {
@@ -803,9 +786,6 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 
 // FusedQuantizedDense =============================================================================================
 
-// nf4LookupTable is a local alias for backends.NF4LookupTable.
-var nf4LookupTable = backends.NF4LookupTable
-
 // execFusedQuantizedDense implements scalar dequant + matmul + bias + activation.
 // inputs layout: [x, weights, scales, zeroPoints?, bias?]
 //
@@ -971,7 +951,7 @@ func quantizedDenseNF4[T int8 | uint8](backend *Backend, x []float32, weights []
 					blockIdx++
 					nextBlock += blockSize
 				}
-				outSlice[n-nStart] += xVal * nf4LookupTable[uint8(wRow[n])&0x0F] * sRow[blockIdx]
+				outSlice[n-nStart] += xVal * backends.NF4LookupTable[uint8(wRow[n])&0x0F] * sRow[blockIdx]
 			}
 		}
 	})
