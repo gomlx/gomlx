@@ -34,10 +34,11 @@
 - Package `dtypes`:
   - Added 'Uint2', 'Uint4', 'Int2', 'Int4'. 
 - Package `graph`:
-  - Added `Unpack()` and `Pack()` for sub-byte dtypes.
   - Added `Function` concept (and support for closures) and the `Function.Call` operation.
   - Control Flow: Added `While` and `If` operations.
   - Order operations: Added `Sort`, `SortFunc`, `TopK`, `BottomK`.
+  - Fixed `Bitcast` for packed sub-byte types: `Int4`, `Int2`, `Uint4` and `Uint2`, so they can be "bitcast"
+    back and forth from/to `uint8` (bytes), to ease quantization.
   - Added `Atan2` function.
   - Added test helper functions to test various backends at once.
 - Package `ml/layers/attention`: Improved `MultiHeadAttention`; Added `KVCache` support.
