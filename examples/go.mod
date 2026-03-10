@@ -9,7 +9,7 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/dustin/go-humanize v1.0.1
 	github.com/go-gota/gota v0.12.0
-	github.com/gomlx/gomlx v0.26.1-0.20260205133009-58d4161931e5
+	github.com/gomlx/gomlx v0.26.1-0.20260310154955-4e81b35dea62
 	github.com/janpfeifer/gonb v0.11.1
 	github.com/janpfeifer/must v0.2.0
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
@@ -32,7 +32,7 @@ require (
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/gomlx/bsplines v0.2.0 // indirect
 	github.com/gomlx/exceptions v0.0.3 // indirect
-	github.com/gomlx/go-xla v0.1.5-0.20260107152240-2890a4924d88 // indirect
+	github.com/gomlx/go-xla v0.1.5-0.20260310154803-9d35c669f92c // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect

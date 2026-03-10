@@ -1,10 +1,10 @@
 module github.com/gomlx/gomlx/examples/bert-base-ner
 
-go 1.24.3
+go 1.25
 
 require (
 	github.com/gomlx/go-huggingface v0.3.1
-	github.com/gomlx/gomlx v0.26.1-0.20260131161033-fde190ebb2c3
+	github.com/gomlx/gomlx v0.26.1-0.20260310154955-4e81b35dea62
 	github.com/gomlx/onnx-gomlx v0.3.5-0.20260130173634-2497f2c7652f
 	github.com/janpfeifer/must v0.2.0
 	k8s.io/klog/v2 v2.130.1
