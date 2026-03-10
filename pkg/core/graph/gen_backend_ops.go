@@ -67,6 +67,7 @@ const (
 	NodeTypeFusedGelu
 	NodeTypeFusedLayerNorm
 	NodeTypeFusedQuantizedDense
+	NodeTypeFusedQuantizedGather
 	NodeTypeFusedScaledDotProductAttention
 	NodeTypeFusedSoftmax
 	NodeTypeGather
@@ -2035,6 +2036,67 @@ func backendFusedLayerNorm(x *Node, axes []int, epsilon float64, gamma *Node, be
 		betaVal = beta.outputOps[0]
 	}
 	result, err := g.currentFunc.backendFunc.FusedLayerNorm(x.outputOps[0], inputs.axes, inputs.epsilon, gammaVal, betaVal)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsFusedQuantizedGather holds the inputs used for the call to backends.FusedQuantizedGather.
+type nodeInputsFusedQuantizedGather struct {
+	table               *Node
+	indices             *Node
+	weightsQuantization *backends.Quantization
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedQuantizedGather) Type() NodeType {
+	return NodeTypeFusedQuantizedGather
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedQuantizedGather) String() string {
+	return fmt.Sprintf("%s(table=[#%d], indices=[#%d], weightsQuantization=%+v)",
+		ni.Type(),
+		ni.table.Id(),
+		ni.indices.Id(),
+		ni.weightsQuantization,
+	)
+}
+
+// FusedQuantizedGather performs a quantized embedding lookup: it gathers rows from a
+// quantized embedding table and dequantizes only the selected rows on-the-fly.
+// This is the quantized analogue of Gather for embedding lookups, similar to
+// llama.cpp's ggml_get_rows.
+//
+// Inputs:
+//   - table: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
+//   - indices: integer tensor with last dimension = 1 (same as Gather convention).
+//     For embeddings: [batch, seqLen, 1].
+//   - weightsQuantization: describes how to dequantize the table rows. Must not be nil.
+//     Only QuantGGML scheme is supported.
+//
+// Output: float32 tensor with shape [batch..., K] where K = (bytesPerRow / bytesPerBlock) * valuesPerBlock.
+//
+//	For embeddings with indices [batch, seqLen, 1]: output is [batch, seqLen, K].
+func FusedQuantizedGather(table *Node, indices *Node, weightsQuantization *backends.Quantization) (
+	node *Node) {
+	inputNodes := []*Node{table, indices}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedQuantizedGather{
+		table:               table,
+		indices:             indices,
+		weightsQuantization: weightsQuantization,
+	}
+	result, err := g.currentFunc.backendFunc.FusedQuantizedGather(table.outputOps[0], indices.outputOps[0], inputs.weightsQuantization)
 	if err != nil {
 		panic(err)
 	}

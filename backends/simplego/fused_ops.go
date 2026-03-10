@@ -97,13 +97,17 @@ type nodeFusedQuantizedDense struct {
 	activation   backends.ActivationType
 	hasZeroPoint bool
 	hasBias      bool
+	ggmlType     backends.GGMLQuantType // Only used when scheme == QuantGGML.
+	ggmlN        int                    // Output features (rows in GGML layout). Only for QuantGGML.
+	ggmlK        int                    // Input features (logical columns). Only for QuantGGML.
 }
 
 func (d *nodeFusedQuantizedDense) EqualNodeData(other nodeDataComparable) bool {
 	o := other.(*nodeFusedQuantizedDense)
 	return d.scheme == o.scheme && d.blockAxis == o.blockAxis &&
 		d.blockSize == o.blockSize && d.activation == o.activation &&
-		d.hasZeroPoint == o.hasZeroPoint && d.hasBias == o.hasBias
+		d.hasZeroPoint == o.hasZeroPoint && d.hasBias == o.hasBias &&
+		d.ggmlType == o.ggmlType && d.ggmlN == o.ggmlN && d.ggmlK == o.ggmlK
 }
 
 // FusedSoftmax computes softmax along the specified axis.
@@ -247,11 +251,18 @@ func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value,
 	weightsQuantization *backends.Quantization,
 	activation backends.ActivationType) (backends.Value, error) {
 
+	scheme := weightsQuantization.Scheme
+
+	// GGML weights have scales embedded in their native block format.
+	// The weight layout is [N, bytesPerRow] Uint8 instead of [K, N].
+	if scheme == backends.QuantGGML {
+		return f.fusedQuantizedDenseGGML(x, weights, bias, weightsQuantization, activation)
+	}
+
 	scales := weightsQuantization.Scale
 	zeroPoints := weightsQuantization.ZeroPoint
 	blockAxis := weightsQuantization.BlockAxis
 	blockSize := weightsQuantization.BlockSize
-	scheme := weightsQuantization.Scheme
 
 	values := []backends.Value{x, weights, scales}
 	if zeroPoints != nil {
@@ -317,6 +328,155 @@ func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value,
 		hasBias:      bias != nil,
 	}
 	node, _ := f.getOrCreateNode(backends.OpTypeFusedQuantizedDense, outShape, inputs, data)
+	return node, nil
+}
+
+// fusedQuantizedDenseGGML handles the GGML path for FusedQuantizedDense.
+// GGML weights are [N, bytesPerRow] Uint8 with native block layout.
+// Scales and zero points are embedded in the blocks.
+func (f *Function) fusedQuantizedDenseGGML(x, weights, bias backends.Value,
+	wq *backends.Quantization,
+	activation backends.ActivationType) (backends.Value, error) {
+
+	values := []backends.Value{x, weights}
+	if bias != nil {
+		values = append(values, bias)
+	}
+	inputs, err := f.verifyAndCastValues("FusedQuantizedDense(GGML)", values...)
+	if err != nil {
+		return nil, err
+	}
+	xNode := inputs[0]
+	wNode := inputs[1]
+
+	// Validate x dtype: only float32 is supported.
+	if xNode.shape.DType != dtypes.Float32 {
+		return nil, errors.Errorf("FusedQuantizedDense(GGML): x must be float32, got %s", xNode.shape.DType)
+	}
+	if xNode.shape.Rank() < 1 {
+		return nil, errors.Errorf("FusedQuantizedDense(GGML): x must have rank >= 1, got %d", xNode.shape.Rank())
+	}
+
+	// GGML weights: [N, bytesPerRow] Uint8.
+	if wNode.shape.Rank() != 2 || wNode.shape.DType != dtypes.Uint8 {
+		return nil, errors.Errorf("FusedQuantizedDense(GGML): weights must be [N, bytesPerRow] Uint8, got %v %s",
+			wNode.shape.Dimensions, wNode.shape.DType)
+	}
+	N := wNode.shape.Dimensions[0]
+	bytesPerRow := wNode.shape.Dimensions[1]
+
+	ggmlType := wq.GGMLType
+	vpb := ggmlType.ValuesPerBlock()
+	bpb := ggmlType.BytesPerBlock()
+	if vpb == 0 || bpb == 0 {
+		return nil, errors.Errorf("FusedQuantizedDense(GGML): unsupported GGML type %s", ggmlType)
+	}
+
+	// Derive K from bytesPerRow: K = (bytesPerRow / bytesPerBlock) * valuesPerBlock.
+	if bytesPerRow%bpb != 0 {
+		return nil, errors.Errorf("FusedQuantizedDense(GGML): bytesPerRow %d is not a multiple of bytesPerBlock %d for %s",
+			bytesPerRow, bpb, ggmlType)
+	}
+	K := (bytesPerRow / bpb) * vpb
+
+	// Validate that x's last dimension matches K.
+	xK := xNode.shape.Dimensions[xNode.shape.Rank()-1]
+	if xK != K {
+		return nil, errors.Errorf("FusedQuantizedDense(GGML): x's last dim (%d) must match K=%d derived from weights", xK, K)
+	}
+
+	// Zero points are not supported for GGML (embedded in blocks).
+	if wq.ZeroPoint != nil {
+		return nil, errors.Errorf("FusedQuantizedDense(GGML): ZeroPoint must be nil for GGML scheme")
+	}
+
+	// Output shape: [batch..., N]
+	outDims := make([]int, xNode.shape.Rank())
+	copy(outDims, xNode.shape.Dimensions[:xNode.shape.Rank()-1])
+	outDims[xNode.shape.Rank()-1] = N
+	outShape := shapes.Make(xNode.shape.DType, outDims...)
+
+	data := &nodeFusedQuantizedDense{
+		scheme:     backends.QuantGGML,
+		activation: activation,
+		hasBias:    bias != nil,
+		ggmlType:   ggmlType,
+		ggmlN:      N,
+		ggmlK:      K,
+	}
+	node, _ := f.getOrCreateNode(backends.OpTypeFusedQuantizedDense, outShape, inputs, data)
+	return node, nil
+}
+
+// nodeFusedQuantizedGather stores parameters for the GGML quantized gather op.
+type nodeFusedQuantizedGather struct {
+	ggmlType backends.GGMLQuantType
+	ggmlK    int // Logical embedding dimension (valuesPerBlock * numBlocks).
+}
+
+func (d *nodeFusedQuantizedGather) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*nodeFusedQuantizedGather)
+	return d.ggmlType == o.ggmlType && d.ggmlK == o.ggmlK
+}
+
+// FusedQuantizedGather performs a quantized embedding lookup.
+// table: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
+// indices: integer tensor with last dim = 1 (same as Gather convention).
+// Output: [batch..., K] Float32 where K is derived from the block format.
+func (f *Function) FusedQuantizedGather(table, indices backends.Value,
+	wq *backends.Quantization) (backends.Value, error) {
+
+	if wq.Scheme != backends.QuantGGML {
+		return nil, errors.Errorf("FusedQuantizedGather: only QuantGGML scheme is supported, got %s", wq.Scheme)
+	}
+
+	inputs, err := f.verifyAndCastValues("FusedQuantizedGather", table, indices)
+	if err != nil {
+		return nil, err
+	}
+	tNode := inputs[0]
+	iNode := inputs[1]
+
+	// Validate table: [vocabSize, bytesPerRow] Uint8.
+	if tNode.shape.Rank() != 2 || tNode.shape.DType != dtypes.Uint8 {
+		return nil, errors.Errorf("FusedQuantizedGather: table must be [vocabSize, bytesPerRow] Uint8, got %v %s",
+			tNode.shape.Dimensions, tNode.shape.DType)
+	}
+	bytesPerRow := tNode.shape.Dimensions[1]
+
+	// Validate indices: must be integer, last dim = 1.
+	if !iNode.shape.DType.IsInt() {
+		return nil, errors.Errorf("FusedQuantizedGather: indices must be integer, got %s", iNode.shape.DType)
+	}
+	if iNode.shape.Rank() < 1 || iNode.shape.Dimensions[iNode.shape.Rank()-1] != 1 {
+		return nil, errors.Errorf("FusedQuantizedGather: indices last dim must be 1, got shape %v", iNode.shape.Dimensions)
+	}
+
+	// Derive K from bytesPerRow.
+	ggmlType := wq.GGMLType
+	vpb := ggmlType.ValuesPerBlock()
+	bpb := ggmlType.BytesPerBlock()
+	if vpb == 0 || bpb == 0 {
+		return nil, errors.Errorf("FusedQuantizedGather: unsupported GGML type %s", ggmlType)
+	}
+	if bytesPerRow%bpb != 0 {
+		return nil, errors.Errorf("FusedQuantizedGather: bytesPerRow %d not divisible by bytesPerBlock %d for %s",
+			bytesPerRow, bpb, ggmlType)
+	}
+	K := (bytesPerRow / bpb) * vpb
+
+	// Output shape: [batch..., K] Float32.
+	// indices shape is [batch..., 1]. Output replaces the last dim with K.
+	outDims := make([]int, iNode.shape.Rank())
+	copy(outDims, iNode.shape.Dimensions)
+	outDims[len(outDims)-1] = K
+	outShape := shapes.Make(dtypes.Float32, outDims...)
+
+	data := &nodeFusedQuantizedGather{
+		ggmlType: ggmlType,
+		ggmlK:    K,
+	}
+	node, _ := f.getOrCreateNode(backends.OpTypeFusedQuantizedGather, outShape, inputs, data)
 	return node, nil
 }
 

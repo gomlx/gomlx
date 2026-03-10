@@ -260,6 +260,140 @@ func TestQuantizedDense_ZeroPoint(t *testing.T) {
 	})
 }
 
+// TestQuantizedDense_GGML_Q8_0 tests QuantGGML with Q8_0 block format.
+// Q8_0 blocks: 2-byte fp16 scale + 32 int8 quants. dequant: output[i] = scale * int8(qs[i]).
+// GGML is only supported by the simplego backend.
+func TestQuantizedDense_GGML_Q8_0(t *testing.T) {
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+		// K=32 (one block), N=2.
+		// Row 0: scale=2.0 (fp16 0x4000), quants=[1, 0, 0, ...] → dequant=[2.0, 0, 0, ...]
+		// Row 1: scale=3.0 (fp16 0x4200), quants=[0, 1, 0, ...] → dequant=[0, 3.0, 0, ...]
+		const bytesPerRow = 34 // one Q8_0 block
+
+		row0 := make([]uint8, bytesPerRow)
+		row0[0], row0[1] = 0x00, 0x40 // fp16 LE for 2.0
+		row0[2] = 1                    // quant[0] = 1
+
+		row1 := make([]uint8, bytesPerRow)
+		row1[0], row1[1] = 0x00, 0x42 // fp16 LE for 3.0
+		row1[3] = 1                    // quant[1] = 1
+
+		weightData := [][]uint8{row0, row1}
+
+		// x = [1, 1, 0, ..., 0] (K=32)
+		xData := make([]float32, 32)
+		xData[0] = 1.0
+		xData[1] = 1.0
+
+		// y[0] = 1*2.0 + 1*0 = 2.0
+		// y[1] = 1*0 + 1*3.0 = 3.0
+		graphtest.RunTestGraphFnWithBackend(t, "basic", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, [][]float32{xData})
+			w := Const(g, weightData)
+			quant := &Quantization{
+				Scheme:   backends.QuantGGML,
+				GGMLType: backends.GGMLQ8_0,
+			}
+			y := nn.QuantizedDense(x, w, quant, nil)
+			return []*Node{x}, []*Node{y}
+		}, []any{[][]float32{{2.0, 3.0}}}, 1e-4)
+
+		// Test with bias.
+		graphtest.RunTestGraphFnWithBackend(t, "with_bias", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, [][]float32{xData})
+			w := Const(g, weightData)
+			b := Const(g, []float32{0.5, -0.5})
+			quant := &Quantization{
+				Scheme:   backends.QuantGGML,
+				GGMLType: backends.GGMLQ8_0,
+			}
+			y := nn.QuantizedDense(x, w, quant, b)
+			return []*Node{x}, []*Node{y}
+		}, []any{[][]float32{{2.5, 2.5}}}, 1e-4)
+
+		// Test with batch (M=2).
+		graphtest.RunTestGraphFnWithBackend(t, "batch", backend, func(g *Graph) (inputs, outputs []*Node) {
+			xData2 := make([]float32, 32)
+			xData2[0] = 0.5
+			x := Const(g, [][]float32{xData, xData2})
+			w := Const(g, weightData)
+			quant := &Quantization{
+				Scheme:   backends.QuantGGML,
+				GGMLType: backends.GGMLQ8_0,
+			}
+			y := nn.QuantizedDense(x, w, quant, nil)
+			return []*Node{x}, []*Node{y}
+		}, []any{[][]float32{{2.0, 3.0}, {1.0, 0.0}}}, 1e-4)
+	}, "xla:cpu", "xla:cuda")
+}
+
+// TestQuantizedDense_GGML_Q4_0 tests QuantGGML with Q4_0 block format.
+// Q4_0 blocks: 2-byte fp16 scale + 16 nibble bytes.
+// Split layout: low nibbles → first 16 values, high nibbles → last 16 values.
+// dequant: output[j] = scale * (lo_nibble - 8), output[j+16] = scale * (hi_nibble - 8).
+func TestQuantizedDense_GGML_Q4_0(t *testing.T) {
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+		// K=32 (one block), N=2.
+		// Row 0: scale=2.0, nibble byte0 = lo=9,hi=8 → 0x89, rest = 0x88
+		//   dequant[0] = 2*(9-8) = 2.0, all others = 2*(8-8) = 0
+		// Row 1: scale=3.0, nibble byte0 = 0x88, byte1 = lo=9,hi=8 → 0x89, rest = 0x88
+		//   dequant[1] = 3*(9-8) = 3.0, all others = 0
+		const bytesPerRow = 18 // one Q4_0 block
+
+		row0 := make([]uint8, bytesPerRow)
+		row0[0], row0[1] = 0x00, 0x40 // fp16 LE for 2.0
+		row0[2] = 0x89                 // byte0: lo=9 (val=+1*scale), hi=8 (val=0)
+		for i := 3; i < bytesPerRow; i++ {
+			row0[i] = 0x88 // nibble 8 → (8-8)=0
+		}
+
+		row1 := make([]uint8, bytesPerRow)
+		row1[0], row1[1] = 0x00, 0x42 // fp16 LE for 3.0
+		row1[2] = 0x88                 // byte0: both nibbles = 8 → 0
+		row1[3] = 0x89                 // byte1: lo=9 (val=+1*scale), hi=8
+		for i := 4; i < bytesPerRow; i++ {
+			row1[i] = 0x88
+		}
+
+		weightData := [][]uint8{row0, row1}
+
+		// x = [1, 1, 0, ..., 0] (K=32)
+		xData := make([]float32, 32)
+		xData[0] = 1.0
+		xData[1] = 1.0
+
+		// y[0] = 1*2.0 + 1*0 = 2.0
+		// y[1] = 1*0 + 1*3.0 = 3.0
+		graphtest.RunTestGraphFnWithBackend(t, "basic", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, [][]float32{xData})
+			w := Const(g, weightData)
+			quant := &Quantization{
+				Scheme:   backends.QuantGGML,
+				GGMLType: backends.GGMLQ4_0,
+			}
+			y := nn.QuantizedDense(x, w, quant, nil)
+			return []*Node{x}, []*Node{y}
+		}, []any{[][]float32{{2.0, 3.0}}}, 1e-4)
+
+		// Test with activation (SiLU).
+		graphtest.RunTestGraphFnWithBackend(t, "with_silu", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, [][]float32{xData})
+			w := Const(g, weightData)
+			quant := &Quantization{
+				Scheme:   backends.QuantGGML,
+				GGMLType: backends.GGMLQ4_0,
+			}
+			y := nn.QuantizedDense(x, w, quant, nil, activations.TypeSilu)
+			return []*Node{x}, []*Node{y}
+		}, []any{
+			// SiLU(x) = x * sigmoid(x) = x / (1 + exp(-x))
+			// SiLU(2.0) = 2 / (1 + exp(-2)) ≈ 1.7616
+			// SiLU(3.0) = 3 / (1 + exp(-3)) ≈ 2.8577
+			[][]float32{{1.7616, 2.8577}},
+		}, 1e-3)
+	}, "xla:cpu", "xla:cuda")
+}
+
 func TestQuantizedDense_Int4(t *testing.T) {
 	// Sub-byte dtypes (Int4) are only supported by the simplego backend; exclude XLA.
 	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {

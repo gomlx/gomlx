@@ -302,9 +302,11 @@ func (f Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, 
 //
 // Inputs:
 //   - x: [batch..., K] float32 input activations.
-//   - weights: [K, N] with dtype reflecting storage precision (e.g. Int4, Int8).
+//   - weights: For Linear/NF4: [K, N] with dtype reflecting storage precision (e.g. Int4, Int8).
 //     For sub-byte types the caller should Bitcast packed uint8 data to the correct dtype
 //     before calling.
+//     For GGML: [N, bytesPerRow] Uint8 with native GGML block layout, where N is the
+//     output-features dimension and bytesPerRow = (K / valuesPerBlock) * bytesPerBlock.
 //   - bias: [N] float32 (nil-able), added after matmul but before activation.
 //   - weightsQuantization: describes how to dequantize the weights tensor. Must not be nil.
 //   - activation: applied after matmul+bias; set to ActivationNone for no activation.
@@ -314,6 +316,25 @@ func (f Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, 
 // also quantized.
 func (f Function) FusedQuantizedDense(x backends.Value, weights backends.Value, bias backends.Value, weightsQuantization *backends.Quantization, activation backends.ActivationType) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFusedQuantizedDense)
+}
+
+// FusedQuantizedGather performs a quantized embedding lookup: it gathers rows from a
+// quantized embedding table and dequantizes only the selected rows on-the-fly.
+// This is the quantized analogue of Gather for embedding lookups, similar to
+// llama.cpp's ggml_get_rows.
+//
+// Inputs:
+//   - table: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
+//   - indices: integer tensor with last dimension = 1 (same as Gather convention).
+//     For embeddings: [batch, seqLen, 1].
+//   - weightsQuantization: describes how to dequantize the table rows. Must not be nil.
+//     Only QuantGGML scheme is supported.
+//
+// Output: float32 tensor with shape [batch..., K] where K = (bytesPerRow / bytesPerBlock) * valuesPerBlock.
+//
+//	For embeddings with indices [batch, seqLen, 1]: output is [batch, seqLen, K].
+func (f Function) FusedQuantizedGather(table backends.Value, indices backends.Value, weightsQuantization *backends.Quantization) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeFusedQuantizedGather)
 }
 
 // FusedScaledDotProductAttention computes multi-head scaled dot-product attention.

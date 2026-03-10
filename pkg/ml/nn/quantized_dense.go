@@ -38,11 +38,19 @@ func QuantizedDense(x, weights *Node, quant *Quantization, bias *Node,
 		act = activation[0]
 	}
 
+	backendAct := act.ToBackend()
+
+	// GGML weights have scales embedded in their native block format and cannot be
+	// decomposed into graph-level ops (byte-level block manipulation). Go directly
+	// to the backend without InternalFusedOpCaller.
+	if quant.Scheme == backends.QuantGGML {
+		return BackendFusedQuantizedDense(x, weights, bias, quant, backendAct)
+	}
+
 	decomposed := func() *Node {
 		return quantizedDenseDecomposed(x, weights, quant, bias, act)
 	}
 
-	backendAct := act.ToBackend()
 	return InternalFusedOpCaller(
 		func() *Node {
 			return BackendFusedQuantizedDense(x, weights, bias, quant, backendAct)

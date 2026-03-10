@@ -151,6 +151,7 @@ const (
 	OpTypeFusedScaledDotProductAttention
 	OpTypeFusedAttentionQKVProjection
 	OpTypeFusedQuantizedDense
+	OpTypeFusedQuantizedGather
 
 	// OpTypeLast should always be kept the last, it is used as a counter/marker for OpType.
 	OpTypeLast

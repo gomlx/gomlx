@@ -19,6 +19,7 @@ func init() {
 	setNodeExecutor(backends.OpTypeFusedDense, priorityTyped, execFusedDense)
 	setNodeExecutor(backends.OpTypeFusedScaledDotProductAttention, priorityTyped, execFusedScaledDotProductAttention)
 	setNodeExecutor(backends.OpTypeFusedQuantizedDense, priorityTyped, execFusedQuantizedDense)
+	setNodeExecutor(backends.OpTypeFusedQuantizedGather, priorityTyped, execFusedQuantizedGather)
 	multiOutputsNodeExecutors[backends.OpTypeFusedAttentionQKVProjection] = execFusedAttentionQKVProjection
 }
 
@@ -796,6 +797,11 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	data := node.data.(*nodeFusedQuantizedDense)
 
+	// GGML has a different input layout: [x, weights, bias?] (no scales/zeroPoints).
+	if data.scheme == backends.QuantGGML {
+		return execFusedQuantizedDenseGGML(backend, node, inputs, data)
+	}
+
 	xBuf := inputs[0]
 	wBuf := inputs[1]
 	sBuf := inputs[2]
@@ -887,6 +893,328 @@ func unpackWeightsToInt8(wBuf *Buffer) any {
 	unpacked := make([]int8, wBuf.shape.Size())
 	unpackFn(wBuf.flat.([]uint8), unpacked)
 	return unpacked
+}
+
+// execFusedQuantizedDenseGGML handles GGML-quantized weights.
+// Inputs: [x, weights, bias?]. Weights are [N, bytesPerRow] Uint8.
+func execFusedQuantizedDenseGGML(backend *Backend, node *Node, inputs []*Buffer, data *nodeFusedQuantizedDense) (*Buffer, error) {
+	xBuf := inputs[0]
+	wBuf := inputs[1]
+
+	var biasBuf *Buffer
+	if data.hasBias {
+		biasBuf = inputs[2]
+	}
+
+	if xBuf.shape.DType != dtypes.Float32 {
+		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense(GGML): only float32 input supported, got %s", xBuf.shape.DType)
+	}
+
+	output, err := backend.getBufferForShape(node.shape)
+	if err != nil {
+		return nil, err
+	}
+	x := xBuf.flat.([]float32)
+	weights := wBuf.flat.([]uint8)
+	out := output.flat.([]float32)
+
+	N := data.ggmlN
+	K := data.ggmlK
+	M := xBuf.shape.Size() / K
+	bytesPerRow := wBuf.shape.Dimensions[1]
+	ggmlType := data.ggmlType
+
+	var bias []float32
+	if biasBuf != nil {
+		bias = biasBuf.flat.([]float32)
+	}
+
+	if err := quantizedDenseGGML(backend, x, weights, bias, out, M, K, N, bytesPerRow, ggmlType); err != nil {
+		return nil, err
+	}
+
+	fusedDenseApplyActivation[float32](backend, out, data.activation)
+	return output, nil
+}
+
+// quantizedDenseGGML performs GGML dequant + matmul + bias.
+func quantizedDenseGGML(backend *Backend, x []float32, weights []uint8, bias, out []float32,
+	M, K, N, bytesPerRow int, ggmlType backends.GGMLQuantType) error {
+
+	dequantFn, err := ggmlDequantFunc(ggmlType)
+	if err != nil {
+		return err
+	}
+
+	totalWork := M * K * N
+	if backend == nil || !backend.workers.IsEnabled() || totalWork <= minParallelizeChunk {
+		dequantRow := make([]float32, K)
+		for n := range N {
+			rowData := weights[n*bytesPerRow : (n+1)*bytesPerRow]
+			dequantFn(rowData, dequantRow)
+			for m := range M {
+				var dot float32
+				xRow := x[m*K:]
+				for k := range K {
+					dot += xRow[k] * dequantRow[k]
+				}
+				outIdx := m*N + n
+				out[outIdx] = dot
+				if bias != nil {
+					out[outIdx] += bias[n]
+				}
+			}
+		}
+	} else {
+		var wg sync.WaitGroup
+		for n := range N {
+			n := n
+			wg.Add(1)
+			backend.workers.WaitToStart(func() {
+				dequantRow := make([]float32, K)
+				rowData := weights[n*bytesPerRow : (n+1)*bytesPerRow]
+				dequantFn(rowData, dequantRow)
+				for m := range M {
+					var dot float32
+					xRow := x[m*K:]
+					for k := range K {
+						dot += xRow[k] * dequantRow[k]
+					}
+					outIdx := m*N + n
+					out[outIdx] = dot
+					if bias != nil {
+						out[outIdx] += bias[n]
+					}
+				}
+				wg.Done()
+			})
+		}
+		wg.Wait()
+	}
+
+	return nil
+}
+
+// ggmlDequantFunc returns the dequantization function for the given GGML type.
+func ggmlDequantFunc(ggmlType backends.GGMLQuantType) (func(data []uint8, output []float32), error) {
+	switch ggmlType {
+	case backends.GGMLQ4_0:
+		return dequantQ4_0Row, nil
+	case backends.GGMLQ8_0:
+		return dequantQ8_0Row, nil
+	case backends.GGMLQ4_K:
+		return dequantQ4_KRow, nil
+	case backends.GGMLQ6_K:
+		return dequantQ6_KRow, nil
+	default:
+		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense(GGML): type %s not yet supported", ggmlType)
+	}
+}
+
+// ggmlFp16LE decodes a little-endian fp16 value from two bytes into float32.
+func ggmlFp16LE(lo, hi uint8) float32 {
+	raw := uint32(lo) | uint32(hi)<<8
+	sign := raw >> 15
+	exp := (raw >> 10) & 0x1F
+	mant := raw & 0x3FF
+	if exp == 0 {
+		if mant == 0 {
+			return math.Float32frombits(sign << 31)
+		}
+		exp = 1
+		for mant&0x400 == 0 {
+			mant <<= 1
+			exp--
+		}
+		mant &= 0x3FF
+		exp = uint32(int32(exp) + 127 - 15)
+	} else if exp == 31 {
+		return math.Float32frombits((sign << 31) | 0x7F800000 | (mant << 13))
+	} else {
+		exp = exp + 127 - 15
+	}
+	return math.Float32frombits((sign << 31) | (exp << 23) | (mant << 13))
+}
+
+// dequantQ8_0Row converts Q8_0 quantized blocks to float32.
+// Each block is 34 bytes: 2-byte fp16 scale + 32 int8 quants.
+func dequantQ8_0Row(data []uint8, output []float32) {
+	const blockSize = 34
+	const qk = 32
+	nblocks := len(data) / blockSize
+	for b := range nblocks {
+		blockData := data[b*blockSize : (b+1)*blockSize]
+		d := ggmlFp16LE(blockData[0], blockData[1])
+		qs := blockData[2:]
+		outOff := b * qk
+		for i := range qk {
+			output[outOff+i] = d * float32(int8(qs[i]))
+		}
+	}
+}
+
+// dequantQ4_0Row converts Q4_0 quantized blocks to float32.
+// Each block is 18 bytes: 2-byte fp16 scale + 16 nibble bytes.
+func dequantQ4_0Row(data []uint8, output []float32) {
+	const blockSize = 18
+	const qk = 32
+	nblocks := len(data) / blockSize
+	for b := range nblocks {
+		blockData := data[b*blockSize : (b+1)*blockSize]
+		d := ggmlFp16LE(blockData[0], blockData[1])
+		qs := blockData[2:]
+		outOff := b * qk
+		for i := range 16 {
+			lo := int(qs[i] & 0x0F)
+			output[outOff+i] = d * float32(lo-8)
+			hi := int((qs[i] >> 4) & 0x0F)
+			output[outOff+16+i] = d * float32(hi-8)
+		}
+	}
+}
+
+// getScaleMinK4 extracts a 6-bit scale and min value from the Q4_K/Q5_K
+// 12-byte packed scales array.
+func getScaleMinK4(j int, scales []byte) (sc, m uint8) {
+	if j < 4 {
+		sc = scales[j] & 63
+		m = scales[j+4] & 63
+	} else {
+		sc = (scales[j+4] & 0xF) | ((scales[j-4] >> 6) << 4)
+		m = (scales[j+4] >> 4) | ((scales[j] >> 6) << 4)
+	}
+	return
+}
+
+// dequantQ4_KRow converts Q4_K quantized blocks to float32.
+// Each block is 144 bytes: fp16 d (2) + fp16 dmin (2) + 12 bytes packed scales + 128 bytes nibbles.
+func dequantQ4_KRow(data []uint8, output []float32) {
+	const blockSize = 144
+	const qk = 256
+	nblocks := len(data) / blockSize
+	for b := range nblocks {
+		blockData := data[b*blockSize : (b+1)*blockSize]
+		d := ggmlFp16LE(blockData[0], blockData[1])
+		dmin := ggmlFp16LE(blockData[2], blockData[3])
+		scales := blockData[4:16]
+		qs := blockData[16:]
+		outOff := b * qk
+		idx := 0
+		for chunk := range 4 {
+			is := chunk * 2
+			sc1, m1 := getScaleMinK4(is, scales)
+			d1 := d * float32(sc1)
+			min1 := dmin * float32(m1)
+
+			sc2, m2 := getScaleMinK4(is+1, scales)
+			d2 := d * float32(sc2)
+			min2 := dmin * float32(m2)
+
+			qOff := chunk * 32
+			for l := range 32 {
+				output[outOff+idx] = d1*float32(qs[qOff+l]&0xF) - min1
+				idx++
+			}
+			for l := range 32 {
+				output[outOff+idx] = d2*float32(qs[qOff+l]>>4) - min2
+				idx++
+			}
+		}
+	}
+}
+
+// dequantQ6_KRow converts Q6_K quantized blocks to float32.
+// Each block is 210 bytes: ql (128) + qh (64) + scales (16) + fp16 d (2).
+func dequantQ6_KRow(data []uint8, output []float32) {
+	const blockSize = 210
+	const qk = 256
+	nblocks := len(data) / blockSize
+	for b := range nblocks {
+		blockData := data[b*blockSize : (b+1)*blockSize]
+		ql := blockData[0:128]
+		qh := blockData[128:192]
+		sc := blockData[192:208]
+		d := ggmlFp16LE(blockData[208], blockData[209])
+		outOff := b * qk
+		idx := 0
+		qlOff := 0
+		qhOff := 0
+		scOff := 0
+		for range 2 {
+			for l := range 32 {
+				is := l / 16
+				q1 := int8((ql[qlOff+l]&0xF)|((qh[qhOff+l]&3)<<4)) - 32
+				q2 := int8((ql[qlOff+l+32]&0xF)|(((qh[qhOff+l]>>2)&3)<<4)) - 32
+				q3 := int8((ql[qlOff+l]>>4)|(((qh[qhOff+l]>>4)&3)<<4)) - 32
+				q4 := int8((ql[qlOff+l+32]>>4)|(((qh[qhOff+l]>>6)&3)<<4)) - 32
+				output[outOff+idx+l] = d * float32(int8(sc[scOff+is])) * float32(q1)
+				output[outOff+idx+l+32] = d * float32(int8(sc[scOff+is+2])) * float32(q2)
+				output[outOff+idx+l+64] = d * float32(int8(sc[scOff+is+4])) * float32(q3)
+				output[outOff+idx+l+96] = d * float32(int8(sc[scOff+is+6])) * float32(q4)
+			}
+			idx += 128
+			qlOff += 64
+			qhOff += 32
+			scOff += 8
+		}
+	}
+}
+
+// FusedQuantizedGather =======================================================================================
+
+// execFusedQuantizedGather performs quantized embedding lookup.
+// Inputs: [table, indices]. Table is [vocabSize, bytesPerRow] Uint8.
+// Indices are integer with last dim = 1. Output is [batch..., K] Float32.
+func execFusedQuantizedGather(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
+	data := node.data.(*nodeFusedQuantizedGather)
+	tableBuf := inputs[0]
+	indicesBuf := inputs[1]
+
+	output, err := backend.getBufferForShape(node.shape)
+	if err != nil {
+		return nil, err
+	}
+
+	tableBytes := tableBuf.flat.([]uint8)
+	out := output.flat.([]float32)
+	K := data.ggmlK
+	bytesPerRow := tableBuf.shape.Dimensions[1]
+
+	dequantFn, err := ggmlDequantFunc(data.ggmlType)
+	if err != nil {
+		return nil, err
+	}
+
+	numIndices := indicesBuf.shape.Size() / indicesBuf.shape.Dimensions[indicesBuf.shape.Rank()-1]
+	dequantRow := make([]float32, K)
+
+	switch idxFlat := indicesBuf.flat.(type) {
+	case []int32:
+		for i := range numIndices {
+			rowIdx := int(idxFlat[i])
+			rowData := tableBytes[rowIdx*bytesPerRow : (rowIdx+1)*bytesPerRow]
+			dequantFn(rowData, dequantRow)
+			copy(out[i*K:(i+1)*K], dequantRow)
+		}
+	case []int64:
+		for i := range numIndices {
+			rowIdx := int(idxFlat[i])
+			rowData := tableBytes[rowIdx*bytesPerRow : (rowIdx+1)*bytesPerRow]
+			dequantFn(rowData, dequantRow)
+			copy(out[i*K:(i+1)*K], dequantRow)
+		}
+	case []int:
+		for i := range numIndices {
+			rowIdx := idxFlat[i]
+			rowData := tableBytes[rowIdx*bytesPerRow : (rowIdx+1)*bytesPerRow]
+			dequantFn(rowData, dequantRow)
+			copy(out[i*K:(i+1)*K], dequantRow)
+		}
+	default:
+		return nil, errors.Errorf("FusedQuantizedGather: unsupported indices type %T", indicesBuf.flat)
+	}
+
+	return output, nil
 }
 
 // quantizedDenseParallel runs rowFn(m) for each row m in [0, M), parallelizing over M rows
