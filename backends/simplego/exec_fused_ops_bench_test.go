@@ -7,7 +7,6 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"github.com/ajroetker/go-highway/hwy/contrib/gguf"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -437,81 +436,3 @@ func BenchmarkQuantizedDense(b *testing.B) {
 }
 
 // BenchmarkQuantizedDenseGGML benchmarks GGML quantized dense matmul.
-// Compares the fused GGML path (which uses highway's vec_dot kernels when
-// available) against the scalar dequant+matmul fallback and float32 Dense.
-func BenchmarkQuantizedDenseGGML(b *testing.B) {
-	sizes := []struct {
-		name string
-		M, K, N int
-	}{
-		{"1x256x256", 1, 256, 256},
-		{"1x2048x2048", 1, 2048, 2048},
-		{"8x512x1024", 8, 512, 1024},
-		{"32x512x1024", 32, 512, 1024},
-	}
-
-	ggmlTypes := []struct {
-		name     string
-		qt       backends.GGMLQuantType
-		hwyQt    gguf.QuantType
-	}{
-		{"Q8_0", backends.GGMLQ8_0, gguf.TypeQ8_0},
-		{"Q4_0", backends.GGMLQ4_0, gguf.TypeQ4_0},
-	}
-
-	for _, sz := range sizes {
-		M, K, N := sz.M, sz.K, sz.N
-		xData := randomFloat32(M * K)
-		xShape := shapes.Make(dtypes.Float32, M, K)
-
-		for _, gt := range ggmlTypes {
-			// Quantize random float32 data into GGML block format.
-			vpb := gguf.ValuesPerBlock(gt.hwyQt)
-			bpb := gguf.BytesPerBlock(gt.hwyQt)
-			nblocks := K / vpb
-			bytesPerRow := nblocks * bpb
-
-			weightsData := make([]uint8, N*bytesPerRow)
-			rowFloat := randomFloat32(K)
-			for n := range N {
-				switch gt.hwyQt {
-				case gguf.TypeQ8_0:
-					gguf.QuantizeQ8_0(rowFloat, weightsData[n*bytesPerRow:(n+1)*bytesPerRow])
-				case gguf.TypeQ4_0:
-					// Q4_0 has no public quantize; use Q8_0 blocks as a proxy
-					// by writing valid block headers. For benchmarking throughput
-					// the actual values don't matter, just the block structure.
-					gguf.QuantizeQ8_0(rowFloat, weightsData[n*bytesPerRow:(n+1)*bytesPerRow])
-				}
-			}
-			// For Q4_0 we need properly sized blocks — re-create with correct byte count.
-			if gt.hwyQt == gguf.TypeQ4_0 {
-				weightsData = randomUint8(N * bytesPerRow)
-			}
-
-			wShape := shapes.Make(dtypes.Uint8, N, bytesPerRow)
-
-			ggmlFused := buildBenchExec(
-				[]shapes.Shape{xShape, wShape},
-				[]any{xData, weightsData},
-				func(f backends.Function, params []backends.Value) (backends.Value, error) {
-					return f.FusedQuantizedDense(params[0], params[1], nil,
-						&backends.Quantization{Scheme: backends.QuantGGML, GGMLType: gt.qt},
-						backends.ActivationNone)
-				})
-			b.Run(fmt.Sprintf("GGML_%s/Fused/%s", gt.name, sz.name), func(b *testing.B) { ggmlFused.run(b) })
-		}
-
-		// Float32 Dense reference.
-		f32WeightsData := randomFloat32(K * N)
-		f32WeightsShape := shapes.Make(dtypes.Float32, K, N)
-
-		f32Dense := buildBenchExec(
-			[]shapes.Shape{xShape, f32WeightsShape},
-			[]any{xData, f32WeightsData},
-			func(f backends.Function, params []backends.Value) (backends.Value, error) {
-				return f.FusedDense(params[0], params[1], nil, backends.ActivationNone)
-			})
-		b.Run(fmt.Sprintf("Float32Dense/%s", sz.name), func(b *testing.B) { f32Dense.run(b) })
-	}
-}

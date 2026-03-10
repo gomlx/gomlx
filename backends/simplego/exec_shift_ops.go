@@ -17,7 +17,7 @@ func init() {
 
 // execShiftLeft executes lhs << rhs for integer types.
 func execShiftLeft(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	lhs, rhs, output, _, _ := BinaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+	lhs, rhs, output, _, _ := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 	switch lhs.shape.DType {
 	case dtypes.Uint8:
 		shiftOp(lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8), lhs.shape, rhs.shape, output.shape,
@@ -51,7 +51,7 @@ func execShiftLeft(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 
 // execShiftRightArithmetic executes arithmetic right shift (preserves sign bit for signed types).
 func execShiftRightArithmetic(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	lhs, rhs, output, _, _ := BinaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+	lhs, rhs, output, _, _ := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 	switch lhs.shape.DType {
 	case dtypes.Uint8:
 		shiftOp(lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8), lhs.shape, rhs.shape, output.shape,
@@ -86,7 +86,7 @@ func execShiftRightArithmetic(backend *Backend, node *Node, inputs []*Buffer, in
 // execShiftRightLogical executes logical right shift (zero-fills from the left, ignoring sign).
 // For signed types, we reinterpret as unsigned, shift, then reinterpret back.
 func execShiftRightLogical(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
-	lhs, rhs, output, _, _ := BinaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+	lhs, rhs, output, _, _ := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 	switch lhs.shape.DType {
 	case dtypes.Uint8:
 		shiftOp(lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8), lhs.shape, rhs.shape, output.shape,
@@ -137,8 +137,8 @@ func shiftOp[T PODIntegerConstraints](lhs, rhs, output []T,
 			output[i] = op(v, rhs[i])
 		}
 	default:
-		lhsIter := NewBroadcastIterator(lhsShape, outputShape)
-		rhsIter := NewBroadcastIterator(rhsShape, outputShape)
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
 		for i := range output {
 			lhsIdx := lhsIter.Next()
 			rhsIdx := rhsIter.Next()
