@@ -2,122 +2,126 @@
 
 package dtypes
 
-// File copied from github.com/gomlx/go-xla/pkg/types/dtypes/gen_dtype_enum.go.
-// As much as possible, to keep data types aligned, we should upate it accordingly,
-// but they may diverge if new dtypes are introduced by other backends.
+// File originally copied from github.com/gomlx/go-xla/pkg/types/dtypes/gen_dtype_enum.go.
+// As much as possible, keep data types aligned (same values for same types).
+// But they may diverge if new dtypes are introduced by other backends.
 
 // DType is an enum represents the data type of a buffer or a scalar.
 //
-// The names were populated from the XLA C/C++ constants, so they are not Go idiomatic.
-// The package provides some aliases.
+// Not all DType are supported by all backends. This is a collection of all data types GoMLX
+// know about and some more it doesn't yet handle.
 type DType int32
 
 const (
-	// InvalidDType is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_INVALID).
-	// Invalid primitive type to serve as default.
+	// InvalidDType is an invalid primitive type to serve as default.
 	InvalidDType DType = 0
 
-	// Bool is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_PRED).
-	// Predicates are two-state booleans.
+	// Bool represents predicates which are two-state booleans.
 	Bool DType = 1
 
-	// Int8 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_S8).
-	// Signed integral values of fixed width.
+	// Int8 represents signed 8-bit integral values.
 	Int8 DType = 2
 
-	// Int16 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_S16).
+	// Int16 represents signed 16-bit integral values.
 	Int16 DType = 3
 
-	// Int32 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_S32).
+	// Int32 represents signed 32-bit integral values.
 	Int32 DType = 4
 
-	// Int64 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_S64).
+	// Int64 represents signed 64-bit integral values.
 	Int64 DType = 5
 
-	// Uint8 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_U8).
-	// Unsigned integral values of fixed width.
+	// Uint8 represents unsigned 8-bit integral values.
 	Uint8 DType = 6
 
-	// Uint16 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_U16).
+	// Uint16 represents unsigned 16-bit integral values.
 	Uint16 DType = 7
 
-	// Uint32 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_U32).
+	// Uint32 represents unsigned 32-bit integral values.
 	Uint32 DType = 8
 
-	// Uint64 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_U64).
+	// Uint64 represents unsigned 64-bit integral values.
 	Uint64 DType = 9
 
-	// Float16 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_F16).
-	// Floating-point values of fixed width.
+	// Float16 represents 16-bit floating-point values, a "half-precision" floating-point format.
+	// It is referred to as IEEE 754 2008 "binary16", see https://en.wikipedia.org/wiki/Half-precision_floating-point_format
 	Float16 DType = 10
 
-	// Float32 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_F32).
+	// Float32 represents 32-bit floating-point values.
 	Float32 DType = 11
 
-	// Float64 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_F64).
+	// Float64 represents 64-bit floating-point values, also known as "double-precision" floating-point format.
 	Float64 DType = 12
 
-	// BFloat16 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_BF16).
-	// Truncated 16 bit floating-point format. This is similar to IEEE's 16 bit
-	// floating-point format, but uses 1 bit for the sign, 8 bits for the exponent
+	// BFloat16 represents truncated 16-bit floating-point format, a "half-precision" floating-point format.
+	// This is similar to IEEE's 16 bit floating-point format, but uses 1 bit for the sign, 8 bits for the exponent
 	// and 7 bits for the mantissa.
+	//
+	// This format is a shortened (16-bit) version of the 32-bit IEEE 754 single-precision floating-point format (binary32)
+	// https://en.wikipedia.org/wiki/Tensor_Processing_Unit.
 	BFloat16 DType = 13
 
-	// Complex64 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_C64).
-	// Complex values of fixed width.
+	// Complex64 represents complex values.
 	//
 	// Paired F32 (real, imag), as in std::complex<float>.
 	Complex64 DType = 14
 
-	// Complex128 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_C128).
+	// Complex128 represents complex values.
 	// Paired F64 (real, imag), as in std::complex<double>.
 	Complex128 DType = 15
 
-	// F8E5M2 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_F8E5M2).
-	// Truncated 8 bit floating-point formats.
+	// F8E5M2 represents truncated 8-bit floating-point formats.
 	F8E5M2 DType = 16
 
-	// F8E4M3FN is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_F8E4M3FN).
+	// F8E4M3FN represents truncated 8-bit floating-point formats.
 	F8E4M3FN DType = 17
 
-	// F8E4M3B11FNUZ is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_F8E4M3B11FNUZ).
+	// F8E4M3B11FNUZ represents truncated 8-bit floating-point formats.
 	F8E4M3B11FNUZ DType = 18
 
-	// F8E5M2FNUZ is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_F8E5M2FNUZ).
+	// F8E5M2FNUZ represents truncated 8-bit floating-point formats.
 	F8E5M2FNUZ DType = 19
 
-	// F8E4M3FNUZ is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_F8E4M3FNUZ).
+	// F8E4M3FNUZ represents truncated 8-bit floating-point formats.
 	F8E4M3FNUZ DType = 20
 
-	// Int4 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_S4).
-	// 4-bit integer types
+	// Int4 represents a 4-bit integer type.
+	//
+	// This is assumed to be a "packet" type (multiple 4-bit "nibbles" per byte): at least this is how it is stored
+	// in Go tensors (in a slice of bytes), different backends may have their own varying internal representation.
 	Int4 DType = 21
 
-	// Uint4 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_U4).
+	// Uint4 represents a 4-bit unsigned integer type.
+	//
+	// This is assumed to be a "packet" type (multiple 4-bit "nibbles" per byte): at least this is how it is stored
+	// in Go tensors (in a slice of bytes), different backends may have their own varying internal representation.
 	Uint4 DType = 22
 
-	// TOKEN is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_TOKEN).
+	// TOKEN represents a token type.
 	TOKEN DType = 23
 
-	// Int2 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_S2).
-	// 2-bit integer types
+	// Int2 represents a 2-bit integer type.
+	//
+	// This is assumed to be a "packet" type (multiple 2-bit "crumbs" per byte): at least this is how it is stored
+	// in Go tensors (in a slice of bytes), different backends may have their own varying internal representation.
 	Int2 DType = 24
 
-	// Uint2 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_U2).
+	// Uint2 represents a 2-bit unsigned integer type.
+	//
+	// This is assumed to be a "packet" type (multiple 2-bit "crumbs" per byte): at least this is how it is stored
+	// in Go tensors (in a slice of bytes), different backends may have their own varying internal representation.
 	Uint2 DType = 25
 
-	// F8E4M3 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_F8E4M3).
-	// More truncated 8 bit floating-point formats.
+	// F8E4M3 represents truncated 8-bit floating-point formats.
 	F8E4M3 DType = 26
 
-	// F8E3M4 is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_F8E3M4).
+	// F8E3M4 represents truncated 8-bit floating-point formats.
 	F8E3M4 DType = 27
 
-	// F8E8M0FNU is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_F8E8M0FNU).
+	// F8E8M0FNU represents truncated 8-bit floating-point formats.
 	F8E8M0FNU DType = 28
 
-	// F4E2M1FN is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h (as PJRT_Buffer_Type_F4E2M1FN).
-	// 4-bit MX floating-point format.
+	// F4E2M1FN represents 4-bit MX floating-point format.
 	F4E2M1FN DType = 29
 )
 
