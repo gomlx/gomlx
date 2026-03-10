@@ -151,12 +151,15 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 	}
 	klog.V(1).Infof("created new plugin %q for backend %q", pluginName, BackendName)
 	backend := &Backend{
-		plugin:            plugin,
-		client:            client,
-		pluginName:        pluginName,
-		capabilities:      Capabilities.Clone(),
-		numDevices:        len(client.AddressableDevices()),
-		DotGeneralUseTF32: plugin.IsCUDA(), // Attempt to enable it if it thinks it's a CUDA backend.
+		plugin:       plugin,
+		client:       client,
+		pluginName:   pluginName,
+		capabilities: Capabilities.Clone(),
+		numDevices:   len(client.AddressableDevices()),
+
+		// Use plugin.IsCUDA() to attempt to enable it if it thinks it's a CUDA backend.
+		// But since Jax PJRT 0.9.X it hasn't been working anymore.
+		DotGeneralUseTF32: false,
 	}
 
 	// Support "shared buffers":
