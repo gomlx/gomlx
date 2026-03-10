@@ -484,8 +484,12 @@ func (t *Tensor) ValueSafe() (any, error) {
 		}
 
 		// Create a copy of the flat slice with all data.
-		flatCopyV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), t.Size(), t.Size())
-		reflect.Copy(flatCopyV, reflect.ValueOf(flat))
+		// Use the actual element type of the flat data, which may differ from DType.GoType()
+		// for packed sub-byte types (Int2, Int4, Uint2, Uint4) where flat is []uint8.
+		srcV := reflect.ValueOf(flat)
+		elemType := srcV.Type().Elem()
+		flatCopyV := reflect.MakeSlice(reflect.SliceOf(elemType), srcV.Len(), srcV.Len())
+		reflect.Copy(flatCopyV, srcV)
 		if t.shape.Rank() == 1 {
 			mdSlice = flatCopyV.Interface()
 			return
