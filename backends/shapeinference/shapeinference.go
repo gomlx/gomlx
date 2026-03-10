@@ -125,6 +125,9 @@ var (
 		backends.OpTypeLogicalXor,
 		backends.OpTypeMax,
 		backends.OpTypeMin,
+		backends.OpTypeShiftLeft,
+		backends.OpTypeShiftRightArithmetic,
+		backends.OpTypeShiftRightLogical,
 	)
 
 	// ComparisonOperations include all operations that take two inputs and returns booleans with the results of

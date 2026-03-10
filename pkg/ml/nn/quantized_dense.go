@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/ml/ggml"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
@@ -40,10 +41,15 @@ func QuantizedDense(x, weights *Node, quant *Quantization, bias *Node,
 
 	backendAct := act.ToBackend()
 
-	// GGML weights have scales embedded in their native block format and cannot be
-	// decomposed into graph-level ops (byte-level block manipulation). Go directly
-	// to the backend without InternalFusedOpCaller.
+	// GGML weights: Tier 1 types (Q4_0, Q8_0, IQ4_NL) have a decomposed graph-level
+	// fallback so they work on any backend (including XLA). K-quant types are fused-only.
 	if quant.Scheme == backends.QuantGGML {
+		if ggml.CanDecompose(quant.GGMLType) {
+			return InternalFusedOpCaller(
+				func() *Node { return BackendFusedQuantizedDense(x, weights, bias, quant, backendAct) },
+				func() *Node { return ggml.DenseDecomposed(x, weights, quant.GGMLType, bias, act) },
+			)
+		}
 		return BackendFusedQuantizedDense(x, weights, bias, quant, backendAct)
 	}
 

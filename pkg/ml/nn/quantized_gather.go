@@ -5,6 +5,7 @@ package nn
 import (
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/ml/ggml"
 )
 
 // QuantizedGather performs a quantized embedding lookup: gathers rows from a quantized
@@ -30,6 +31,12 @@ func QuantizedGather(table, indices *Node, quant *Quantization) *Node {
 	bq := &backends.Quantization{
 		Scheme:   quant.Scheme,
 		GGMLType: quant.GGMLType,
+	}
+	if ggml.CanDecompose(quant.GGMLType) {
+		return InternalFusedOpCaller(
+			func() *Node { return FusedQuantizedGather(table, indices, bq) },
+			func() *Node { return ggml.GatherDecomposed(table, indices, quant.GGMLType) },
+		)
 	}
 	return FusedQuantizedGather(table, indices, bq)
 }

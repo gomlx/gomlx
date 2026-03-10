@@ -483,9 +483,24 @@ func (t *Tensor) ValueSafe() (any, error) {
 			return
 		}
 
+		// Sub-byte integer types (Int2, Uint2, Int4, Uint4) are stored packed as
+		// []uint8 by the simplego backend. Copy the packed bytes as-is since they
+		// can't be unpacked into individual Go scalars at this level.
+		// Sub-byte integer types (Int2, Uint2, Int4, Uint4) are stored packed as
+		// []uint8 by the simplego backend. The flat slice type ([]uint8) won't
+		// match GoType (int8/uint8 per-element), so return packed bytes as-is.
+		flatV := reflect.ValueOf(flat)
+		expectedElemType := t.shape.DType.GoType()
+		if flatV.Type().Elem() != expectedElemType {
+			flatCopyV := reflect.MakeSlice(flatV.Type(), flatV.Len(), flatV.Len())
+			reflect.Copy(flatCopyV, flatV)
+			mdSlice = flatCopyV.Interface()
+			return
+		}
+
 		// Create a copy of the flat slice with all data.
-		flatCopyV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), t.Size(), t.Size())
-		reflect.Copy(flatCopyV, reflect.ValueOf(flat))
+		flatCopyV := reflect.MakeSlice(reflect.SliceOf(expectedElemType), t.Size(), t.Size())
+		reflect.Copy(flatCopyV, flatV)
 		if t.shape.Rank() == 1 {
 			mdSlice = flatCopyV.Interface()
 			return

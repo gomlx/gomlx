@@ -324,7 +324,7 @@ func TestQuantizedDense_GGML_Q8_0(t *testing.T) {
 			y := nn.QuantizedDense(x, w, quant, nil)
 			return []*Node{x}, []*Node{y}
 		}, []any{[][]float32{{2.0, 3.0}, {1.0, 0.0}}}, 1e-4)
-	}, "xla:cpu", "xla:cuda")
+	})
 }
 
 // TestQuantizedDense_GGML_Q4_0 tests QuantGGML with Q4_0 block format.
@@ -391,7 +391,58 @@ func TestQuantizedDense_GGML_Q4_0(t *testing.T) {
 			// SiLU(3.0) = 3 / (1 + exp(-3)) ≈ 2.8577
 			[][]float32{{1.7616, 2.8577}},
 		}, 1e-3)
-	}, "xla:cpu", "xla:cuda")
+	})
+}
+
+// TestQuantizedDense_GGML_IQ4NL tests QuantGGML with IQ4_NL block format.
+// Same layout as Q4_0 (2-byte fp16 scale + 16 nibble bytes), but nibbles
+// are indices into a non-linear lookup table instead of linear (nibble - 8).
+func TestQuantizedDense_GGML_IQ4NL(t *testing.T) {
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+		// K=32 (one block), N=2.
+		// LUT[8]=1, LUT[9]=13 (from IQ4NLLookupTable).
+		//
+		// Row 0: scale=1.0, byte0 = 0x89 (lo=9→LUT[9]=13, hi=8→LUT[8]=1), rest = 0x88
+		//   dequant[0]=13, dequant[1..15]=1, dequant[16]=1, dequant[17..31]=1
+		// Row 1: scale=2.0, byte0 = 0x88, byte1 = 0x89 (lo=9→LUT[9]=13), rest = 0x88
+		//   dequant[0]=2*1=2, dequant[1]=2*13=26, rest=2*1=2
+		const bytesPerRow = 18
+
+		row0 := make([]uint8, bytesPerRow)
+		row0[0], row0[1] = 0x00, 0x3C // fp16 LE for 1.0
+		row0[2] = 0x89                 // lo=9 (LUT[9]=13), hi=8 (LUT[8]=1)
+		for i := 3; i < bytesPerRow; i++ {
+			row0[i] = 0x88 // nibble 8 → LUT[8]=1
+		}
+
+		row1 := make([]uint8, bytesPerRow)
+		row1[0], row1[1] = 0x00, 0x40 // fp16 LE for 2.0
+		row1[2] = 0x88
+		row1[3] = 0x89 // byte1: lo=9 (LUT[9]=13), hi=8 (LUT[8]=1)
+		for i := 4; i < bytesPerRow; i++ {
+			row1[i] = 0x88
+		}
+
+		weightData := [][]uint8{row0, row1}
+
+		// x = [1, 1, 0, ..., 0] (K=32)
+		xData := make([]float32, 32)
+		xData[0] = 1.0
+		xData[1] = 1.0
+
+		// y[0] = 1*13 + 1*1 = 14.0
+		// y[1] = 1*2 + 1*26 = 28.0
+		graphtest.RunTestGraphFnWithBackend(t, "basic", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, [][]float32{xData})
+			w := Const(g, weightData)
+			quant := &Quantization{
+				Scheme:   backends.QuantGGML,
+				GGMLType: backends.GGMLIQ4NL,
+			}
+			y := nn.QuantizedDense(x, w, quant, nil)
+			return []*Node{x}, []*Node{y}
+		}, []any{[][]float32{{14.0, 28.0}}}, 1e-4)
+	})
 }
 
 func TestQuantizedDense_Int4(t *testing.T) {

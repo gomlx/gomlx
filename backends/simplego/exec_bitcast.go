@@ -4,6 +4,7 @@ package simplego
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 func init() {
@@ -31,8 +32,28 @@ func execBitcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	// code type-asserts the flat slice. For different-bit-width types the raw
 	// bytes stay as-is and downstream code (ConvertDType, FusedQuantizedDense)
 	// handles both slice types via type-switch.
-	if inputsOwned[0] && (!sameBitWidth || srcDType.GoType() == targetDType.GoType()) {
+	// Reuse owned buffer only when the flat slice's Go element type is compatible
+	// with downstream operations on the target dtype. For same-bit-width types
+	// with matching Go types this is trivially true. For different-bit-width types
+	// involving sub-byte types (e.g. Uint8 ↔ Int4), both use []uint8 storage so
+	// reuse is safe. But Uint8 → Float16 must allocate because Float16 operations
+	// expect []float16.Float16, not []uint8.
+	canReuse := false
+	if inputsOwned[0] {
+		if sameBitWidth && srcDType.GoType() == targetDType.GoType() {
+			canReuse = true
+		} else if !sameBitWidth {
+			// For different-bit-width bitcasts, reuse only when both source and
+			// target use the same underlying Go storage type. Sub-byte types
+			// (Int2, Uint2, Int4, Uint4) and Uint8 all store as []uint8.
+			_, srcIsUint8 := src.flat.([]uint8)
+			dstIsUint8Storage := targetDType == dtypes.Uint8 || targetDType.Bits() < 8
+			canReuse = srcIsUint8 && dstIsUint8Storage
+		}
+	}
+	if canReuse {
 		src.shape = node.shape
+		inputs[0] = nil // signal to executor that input buffer was reused
 		return src, nil
 	}
 
