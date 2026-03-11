@@ -13,7 +13,11 @@ import (
 //
 // This is the quantized analogue of graph.Gather for embedding lookups, similar to
 // llama.cpp's ggml_get_rows. The full embedding table stays in native quantized format
-// (e.g. GGML Q6_K), and only the rows selected by indices are dequantized to float32.
+// and only the rows selected by indices are dequantized to float32.
+//
+// Types with a decomposed graph-level fallback (Q4_0, Q8_0, IQ4_NL) work on any backend
+// (including XLA). K-quant types (Q4_K, Q6_K, etc.) require a backend with a fused
+// executor (e.g. simplego); other backends will panic.
 //
 // Parameters:
 //   - table: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
@@ -27,16 +31,11 @@ func QuantizedGather(table, indices *Node, quant *Quantization) *Node {
 	if quant.Scheme != backends.QuantGGML {
 		panic("nn.QuantizedGather: only QuantGGML scheme is supported")
 	}
-	// Convert graph-level Quantization to backend-level for the generated function.
-	bq := &backends.Quantization{
-		Scheme:   quant.Scheme,
-		GGMLType: quant.GGMLType,
-	}
 	if ggml.CanDecompose(quant.GGMLType) {
 		return InternalFusedOpCaller(
-			func() *Node { return FusedQuantizedGather(table, indices, bq) },
+			func() *Node { return BackendFusedQuantizedGather(table, indices, quant) },
 			func() *Node { return ggml.GatherDecomposed(table, indices, quant.GGMLType) },
 		)
 	}
-	return FusedQuantizedGather(table, indices, bq)
+	return BackendFusedQuantizedGather(table, indices, quant)
 }

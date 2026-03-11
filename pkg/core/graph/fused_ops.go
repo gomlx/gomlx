@@ -176,6 +176,64 @@ func BackendFusedQuantizedDense(x, weights, bias *Node,
 	return node
 }
 
+// nodeInputsFusedQuantizedGather holds the inputs used for the call to backends.FusedQuantizedGather.
+// Hand-written (not generated) to match the pattern of BackendFusedQuantizedDense: it accepts
+// a graph-level *Quantization and converts it to backends.Quantization via toBackend().
+type nodeInputsFusedQuantizedGather struct {
+	table   *Node
+	indices *Node
+	tq      *Quantization
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedQuantizedGather) Type() NodeType {
+	return NodeTypeFusedQuantizedGather
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedQuantizedGather) String() string {
+	return fmt.Sprintf("%s(table=[#%d], indices=[#%d], scheme=%s, ggmlType=%s)",
+		ni.Type(),
+		ni.table.Id(),
+		ni.indices.Id(),
+		ni.tq.Scheme,
+		ni.tq.GGMLType,
+	)
+}
+
+// BackendFusedQuantizedGather performs a quantized embedding lookup: gathers rows from a
+// quantized embedding table and dequantizes only the selected rows on-the-fly.
+// Internal: prefer nn.QuantizedGather which handles fallback and gradients.
+func BackendFusedQuantizedGather(table, indices *Node, tq *Quantization) *Node {
+	if tq == nil {
+		exceptions.Panicf("BackendFusedQuantizedGather: tq must not be nil")
+	}
+
+	inputNodes := []*Node{table, indices}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+
+	inputs := &nodeInputsFusedQuantizedGather{
+		table:   table,
+		indices: indices,
+		tq:      tq,
+	}
+
+	result, err := g.currentFunc.backendFunc.FusedQuantizedGather(
+		table.outputOps[0], indices.outputOps[0], tq.toBackend())
+	if err != nil {
+		panic(err)
+	}
+	node := &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return node
+}
+
 // BackendFusedAttentionQKVProjection performs fused Query-Key-Value projection.
 // Internal: prefer attention.QKVProjection which handles fallback and gradients.
 func BackendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int) (query, key, value *Node) {

@@ -91,8 +91,9 @@ var NF4LookupTable = [16]float32{
 }
 
 // IQ4NLLookupTable contains the 16 fixed IQ4_NL non-linear dequantization values.
-// These map 4-bit nibble indices to float32 values using a non-uniform quantization grid.
-// Values from llama.cpp's iq4nl.
+// These map 4-bit nibble indices to pre-normalization integer values (not final floats).
+// Final dequantized value = per-block scale * IQ4NLLookupTable[nibble].
+// Values from llama.cpp's kvalues_iq4nl.
 var IQ4NLLookupTable = [16]float32{
 	-127, -104, -83, -65, -49, -35, -22, -10,
 	1, 13, 25, 38, 53, 69, 89, 113,

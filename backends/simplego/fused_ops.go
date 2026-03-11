@@ -381,11 +381,9 @@ func (f *Function) fusedQuantizedDenseGGML(x, weights, bias backends.Value,
 	bytesPerRow := wNode.shape.Dimensions[1]
 
 	ggmlType := wq.GGMLType
-	// Check if this GGML type has a fused executor. Types without one
-	// (e.g. IQ4_NL) return ErrNotImplemented so InternalFusedOpCaller
-	// falls back to the decomposed graph path.
+	// Check if this GGML type has a fused executor.
 	switch ggmlType {
-	case backends.GGMLQ4_0, backends.GGMLQ8_0, backends.GGMLQ4_K, backends.GGMLQ6_K:
+	case backends.GGMLQ4_0, backends.GGMLQ8_0, backends.GGMLIQ4NL, backends.GGMLQ4_K, backends.GGMLQ6_K:
 		// Supported by fused executor.
 	default:
 		return nil, errors.Wrapf(backends.ErrNotImplemented,
@@ -472,7 +470,7 @@ func (f *Function) FusedQuantizedGather(table, indices backends.Value,
 	// Check if this GGML type has a fused executor.
 	ggmlType := wq.GGMLType
 	switch ggmlType {
-	case backends.GGMLQ4_0, backends.GGMLQ8_0, backends.GGMLQ4_K, backends.GGMLQ6_K:
+	case backends.GGMLQ4_0, backends.GGMLQ8_0, backends.GGMLIQ4NL, backends.GGMLQ4_K, backends.GGMLQ6_K:
 		// Supported by fused executor.
 	default:
 		return nil, errors.Wrapf(backends.ErrNotImplemented,
