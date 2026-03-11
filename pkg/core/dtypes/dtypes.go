@@ -165,7 +165,8 @@ func (dtype DType) Size() int {
 }
 
 // Bits returns the number of bits for the given DType.
-// This is only used for "packed" storage version -- e.g.: bool by default will be transferred as one byte per value (like in Go)
+// This is only used for "packed" storage version (Int4, Int2, Uint4, Uint2).
+// Bool is never packed and hence returns 8.
 func (dtype DType) Bits() int {
 	switch dtype {
 	case Int4, Uint4:
@@ -173,16 +174,26 @@ func (dtype DType) Bits() int {
 	case Int2, Uint2:
 		return 2
 	case Bool:
-		return 1
+		return 8
 	default:
 		return dtype.Size() * 8
 	}
+}
+
+// IsPacked returns whether the dtype uses less than a byte and is "packed" into bytes into memory.
+// It is always "little-endian": the lower bits represent the first values in a sequence.
+// E.g.: Int4, Int2, Uint4, Uint2.
+func (dtype DType) IsPacked() bool {
+	return dtype.Bits() < 8
 }
 
 // SizeForDimensions returns the size in bytes used for the given dimensions.
 // This is a safer method than Size in case the dtype uses an underlying size that is not multiple of 8 bits.
 //
 // It works also for scalar (one element) shapes where the list of dimensions is empty.
+//
+// For packed types, it assumes padding the last byte where needed. E.g.: Int4.SizeForDiemensions(1) -> 1,
+// even though only 4 bits are used for the one byte.
 func (dtype DType) SizeForDimensions(dimensions ...int) int {
 	numElements := 1
 	for _, dim := range dimensions {
@@ -191,6 +202,10 @@ func (dtype DType) SizeForDimensions(dimensions ...int) int {
 		}
 		numElements *= dim
 	}
+	if dtype.IsPacked() {
+		return (numElements*dtype.Bits() + 7) / 8
+	}
+	// Not packed.
 	return numElements * dtype.Size()
 }
 
