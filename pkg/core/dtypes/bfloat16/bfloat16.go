@@ -17,7 +17,7 @@ import (
 //
 // bfloat16 and patents:
 //
-//   - https://en.wikipedia.org/wiki/Tensor_Processing_Unit#Lawsuit
+//   - https://en.wikipedia.org/wiki/Tensor_Processing_Unit
 //   - https://www.reddit.com/r/MachineLearning/comments/193zpyi/d_does_patent_lawsuit_against_googles_tpu_imperil/
 type BFloat16 uint16
 
