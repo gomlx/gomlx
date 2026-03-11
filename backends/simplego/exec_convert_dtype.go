@@ -42,16 +42,16 @@ func init() {
 	// Both Int4 and Uint4 unpack to []int8 first (int8 is a common denominator
 	// that fits both signed [-8,7] and unsigned [0,15] 4-bit values), then the
 	// shared converter promotes to the target type.
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Float32, priorityTyped, execConvertPackedSubByte[float32](unpackInt4Nibbles))
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Float64, priorityTyped, execConvertPackedSubByte[float64](unpackInt4Nibbles))
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int32, priorityTyped, execConvertPackedSubByte[int32](unpackInt4Nibbles))
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int64, priorityTyped, execConvertPackedSubByte[int64](unpackInt4Nibbles))
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int8, priorityTyped, execConvertPackedSubByte[int8](unpackInt4Nibbles))
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Float32, priorityTyped, execConvertPackedSubByte[float32](unpackUint4Nibbles))
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Float64, priorityTyped, execConvertPackedSubByte[float64](unpackUint4Nibbles))
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int32, priorityTyped, execConvertPackedSubByte[int32](unpackUint4Nibbles))
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int64, priorityTyped, execConvertPackedSubByte[int64](unpackUint4Nibbles))
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Uint8, priorityTyped, execConvertPackedSubByte[uint8](unpackUint4Nibbles))
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Float32, priorityTyped, execConvertPackedSubByte[float32](unpackInt4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Float64, priorityTyped, execConvertPackedSubByte[float64](unpackInt4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int32, priorityTyped, execConvertPackedSubByte[int32](unpackInt4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int64, priorityTyped, execConvertPackedSubByte[int64](unpackInt4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int8, priorityTyped, execConvertPackedSubByte[int8](unpackInt4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Float32, priorityTyped, execConvertPackedSubByte[float32](unpackUint4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Float64, priorityTyped, execConvertPackedSubByte[float64](unpackUint4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int32, priorityTyped, execConvertPackedSubByte[int32](unpackUint4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int64, priorityTyped, execConvertPackedSubByte[int64](unpackUint4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Uint8, priorityTyped, execConvertPackedSubByte[uint8](unpackUint4Nibbles, 2))
 
 	// Register mutableBytes and fillBuffer for sub-byte types.
 	// Packed Int4/Uint4 buffers use []byte as the Go storage type.
@@ -223,13 +223,14 @@ func unpackUint4Nibbles(packed []byte, dst []int8) {
 
 // execConvertPackedSubByte returns a converter for packed sub-byte types (Int4, Uint4).
 // The unpackFn parameter selects signed vs unsigned nibble interpretation.
-// Sub-byte types are always stored packed as []byte (2 nibbles per byte).
+// Sub-byte types are always stored packed as []byte.
+// valuesPerByte is the number of logical values per packed byte (e.g. 2 for 4-bit, 4 for 2-bit).
 //
 // To avoid allocating a temporary slice as large as the output, we process in
 // fixed-size blocks that stay on the stack.
-func execConvertPackedSubByte[OutT PODNumericConstraints](unpackFn unpackNibblesFn) convertFnType {
+func execConvertPackedSubByte[OutT PODNumericConstraints](unpackFn unpackNibblesFn, valuesPerByte int) convertFnType {
 	const dstBlockSize = 64
-	const srcBlockSize = dstBlockSize / 2 // 2 values per byte for 4-bit types.
+	srcBlockSize := dstBlockSize / valuesPerByte
 
 	return func(operand, output *Buffer) {
 		dstFlat := output.flat.([]OutT)
@@ -237,23 +238,16 @@ func execConvertPackedSubByte[OutT PODNumericConstraints](unpackFn unpackNibbles
 		var tmp [dstBlockSize]int8
 
 		var srcIdx, dstIdx int
-		for srcIdx+srcBlockSize <= len(srcFlat) {
-			unpackFn(srcFlat[srcIdx:srcIdx+srcBlockSize], tmp[:])
-			for _, v := range tmp[:] {
-				dstFlat[dstIdx] = OutT(v)
-				dstIdx++
+		for srcIdx < len(srcFlat) {
+			n := min(srcBlockSize, len(srcFlat)-srcIdx)
+			dstN := n * valuesPerByte
+			unpackFn(srcFlat[srcIdx:srcIdx+n], tmp[:dstN])
+			block := dstFlat[dstIdx : dstIdx+dstN]
+			for i, v := range tmp[:dstN] {
+				block[i] = OutT(v)
 			}
-			srcIdx += srcBlockSize
-		}
-		// Handle the tail.
-		if srcIdx < len(srcFlat) {
-			tailSrc := len(srcFlat) - srcIdx
-			tailDst := tailSrc * 2
-			unpackFn(srcFlat[srcIdx:], tmp[:tailDst])
-			for _, v := range tmp[:tailDst] {
-				dstFlat[dstIdx] = OutT(v)
-				dstIdx++
-			}
+			srcIdx += n
+			dstIdx += dstN
 		}
 	}
 }
