@@ -946,24 +946,28 @@ func quantizedDenseGGML(backend *Backend, x []float32, weights []uint8, bias, ou
 		return err
 	}
 
+	processColumn := func(n int) {
+		dequantRow := make([]float32, K)
+		rowData := weights[n*bytesPerRow : (n+1)*bytesPerRow]
+		dequantFn(rowData, dequantRow)
+		for m := range M {
+			var dot float32
+			xRow := x[m*K:]
+			for k := range K {
+				dot += xRow[k] * dequantRow[k]
+			}
+			outIdx := m*N + n
+			out[outIdx] = dot
+			if bias != nil {
+				out[outIdx] += bias[n]
+			}
+		}
+	}
+
 	totalWork := M * K * N
 	if backend == nil || !backend.workers.IsEnabled() || totalWork <= minParallelizeChunk {
-		dequantRow := make([]float32, K)
 		for n := range N {
-			rowData := weights[n*bytesPerRow : (n+1)*bytesPerRow]
-			dequantFn(rowData, dequantRow)
-			for m := range M {
-				var dot float32
-				xRow := x[m*K:]
-				for k := range K {
-					dot += xRow[k] * dequantRow[k]
-				}
-				outIdx := m*N + n
-				out[outIdx] = dot
-				if bias != nil {
-					out[outIdx] += bias[n]
-				}
-			}
+			processColumn(n)
 		}
 	} else {
 		var wg sync.WaitGroup
@@ -971,21 +975,7 @@ func quantizedDenseGGML(backend *Backend, x []float32, weights []uint8, bias, ou
 			n := n
 			wg.Add(1)
 			backend.workers.WaitToStart(func() {
-				dequantRow := make([]float32, K)
-				rowData := weights[n*bytesPerRow : (n+1)*bytesPerRow]
-				dequantFn(rowData, dequantRow)
-				for m := range M {
-					var dot float32
-					xRow := x[m*K:]
-					for k := range K {
-						dot += xRow[k] * dequantRow[k]
-					}
-					outIdx := m*N + n
-					out[outIdx] = dot
-					if bias != nil {
-						out[outIdx] += bias[n]
-					}
-				}
+				processColumn(n)
 				wg.Done()
 			})
 		}
@@ -1015,7 +1005,7 @@ func ggmlDequantFunc(ggmlType backends.GGMLQuantType) (func(data []uint8, output
 func ggmlFp16LE(lo, hi uint8) float32 {
 	raw := uint32(lo) | uint32(hi)<<8
 	sign := raw >> 15
-	exp := (raw >> 10) & 0x1F
+	exp := int32((raw >> 10) & 0x1F)
 	mant := raw & 0x3FF
 	if exp == 0 {
 		if mant == 0 {
@@ -1027,13 +1017,13 @@ func ggmlFp16LE(lo, hi uint8) float32 {
 			exp--
 		}
 		mant &= 0x3FF
-		exp = uint32(int32(exp) + 127 - 15)
+		exp += 127 - 15
 	} else if exp == 31 {
 		return math.Float32frombits((sign << 31) | 0x7F800000 | (mant << 13))
 	} else {
-		exp = exp + 127 - 15
+		exp += 127 - 15
 	}
-	return math.Float32frombits((sign << 31) | (exp << 23) | (mant << 13))
+	return math.Float32frombits((sign << 31) | (uint32(exp) << 23) | (mant << 13))
 }
 
 // dequantQ8_0Row converts Q8_0 quantized blocks to float32.
@@ -1188,33 +1178,39 @@ func execFusedQuantizedGather(backend *Backend, node *Node, inputs []*Buffer, _ 
 	numIndices := indicesBuf.shape.Size() / indicesBuf.shape.Dimensions[indicesBuf.shape.Rank()-1]
 	dequantRow := make([]float32, K)
 
-	switch idxFlat := indicesBuf.flat.(type) {
-	case []int32:
-		for i := range numIndices {
-			rowIdx := int(idxFlat[i])
-			rowData := tableBytes[rowIdx*bytesPerRow : (rowIdx+1)*bytesPerRow]
-			dequantFn(rowData, dequantRow)
-			copy(out[i*K:(i+1)*K], dequantRow)
-		}
-	case []int64:
-		for i := range numIndices {
-			rowIdx := int(idxFlat[i])
-			rowData := tableBytes[rowIdx*bytesPerRow : (rowIdx+1)*bytesPerRow]
-			dequantFn(rowData, dequantRow)
-			copy(out[i*K:(i+1)*K], dequantRow)
-		}
-	case []int:
-		for i := range numIndices {
-			rowIdx := idxFlat[i]
-			rowData := tableBytes[rowIdx*bytesPerRow : (rowIdx+1)*bytesPerRow]
-			dequantFn(rowData, dequantRow)
-			copy(out[i*K:(i+1)*K], dequantRow)
-		}
-	default:
-		return nil, errors.Errorf("FusedQuantizedGather: unsupported indices type %T", indicesBuf.flat)
+	indices, err := flatToIntSlice(indicesBuf.flat, numIndices)
+	if err != nil {
+		return nil, errors.Wrapf(err, "FusedQuantizedGather")
+	}
+	for i, rowIdx := range indices {
+		rowData := tableBytes[rowIdx*bytesPerRow : (rowIdx+1)*bytesPerRow]
+		dequantFn(rowData, dequantRow)
+		copy(out[i*K:(i+1)*K], dequantRow)
 	}
 
 	return output, nil
+}
+
+// flatToIntSlice converts a flat index slice ([]int32, []int64, or []int) to []int.
+func flatToIntSlice(flat any, n int) ([]int, error) {
+	switch s := flat.(type) {
+	case []int32:
+		out := make([]int, n)
+		for i := range n {
+			out[i] = int(s[i])
+		}
+		return out, nil
+	case []int64:
+		out := make([]int, n)
+		for i := range n {
+			out[i] = int(s[i])
+		}
+		return out, nil
+	case []int:
+		return s[:n], nil
+	default:
+		return nil, errors.Errorf("unsupported indices type %T", flat)
+	}
 }
 
 // quantizedDenseParallel runs rowFn(m) for each row m in [0, M), parallelizing over M rows

@@ -126,12 +126,10 @@ func (t GGMLQuantType) ValuesPerBlock() int {
 // BytesPerBlock returns the byte size of one quantized block.
 func (t GGMLQuantType) BytesPerBlock() int {
 	switch t {
-	case GGMLQ4_0:
+	case GGMLQ4_0, GGMLIQ4NL:
 		return 18
 	case GGMLQ8_0:
 		return 34
-	case GGMLIQ4NL:
-		return 18
 	case GGMLQ2_K:
 		return 84
 	case GGMLQ3_K:

@@ -331,6 +331,21 @@ func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value,
 	return node, nil
 }
 
+// deriveGGMLK computes the logical dimension K from bytesPerRow and the GGML type,
+// validating that bytesPerRow is a multiple of bytesPerBlock.
+func deriveGGMLK(opName string, bytesPerRow int, ggmlType backends.GGMLQuantType) (int, error) {
+	vpb := ggmlType.ValuesPerBlock()
+	bpb := ggmlType.BytesPerBlock()
+	if vpb == 0 || bpb == 0 {
+		return 0, errors.Errorf("%s: unsupported GGML type %s", opName, ggmlType)
+	}
+	if bytesPerRow%bpb != 0 {
+		return 0, errors.Errorf("%s: bytesPerRow %d not divisible by bytesPerBlock %d for %s",
+			opName, bytesPerRow, bpb, ggmlType)
+	}
+	return (bytesPerRow / bpb) * vpb, nil
+}
+
 // fusedQuantizedDenseGGML handles the GGML path for FusedQuantizedDense.
 // GGML weights are [N, bytesPerRow] Uint8 with native block layout.
 // Scales and zero points are embedded in the blocks.
@@ -376,18 +391,10 @@ func (f *Function) fusedQuantizedDenseGGML(x, weights, bias backends.Value,
 		return nil, errors.Wrapf(backends.ErrNotImplemented,
 			"FusedQuantizedDense(GGML): type %s not supported in fused path", ggmlType)
 	}
-	vpb := ggmlType.ValuesPerBlock()
-	bpb := ggmlType.BytesPerBlock()
-	if vpb == 0 || bpb == 0 {
-		return nil, errors.Errorf("FusedQuantizedDense(GGML): unsupported GGML type %s", ggmlType)
+	K, err := deriveGGMLK("FusedQuantizedDense(GGML)", bytesPerRow, ggmlType)
+	if err != nil {
+		return nil, err
 	}
-
-	// Derive K from bytesPerRow: K = (bytesPerRow / bytesPerBlock) * valuesPerBlock.
-	if bytesPerRow%bpb != 0 {
-		return nil, errors.Errorf("FusedQuantizedDense(GGML): bytesPerRow %d is not a multiple of bytesPerBlock %d for %s",
-			bytesPerRow, bpb, ggmlType)
-	}
-	K := (bytesPerRow / bpb) * vpb
 
 	// Validate that x's last dimension matches K.
 	xK := xNode.shape.Dimensions[xNode.shape.Rank()-1]
@@ -462,18 +469,21 @@ func (f *Function) FusedQuantizedGather(table, indices backends.Value,
 		return nil, errors.Errorf("FusedQuantizedGather: indices last dim must be 1, got shape %v", iNode.shape.Dimensions)
 	}
 
-	// Derive K from bytesPerRow.
+	// Check if this GGML type has a fused executor.
 	ggmlType := wq.GGMLType
-	vpb := ggmlType.ValuesPerBlock()
-	bpb := ggmlType.BytesPerBlock()
-	if vpb == 0 || bpb == 0 {
-		return nil, errors.Errorf("FusedQuantizedGather: unsupported GGML type %s", ggmlType)
+	switch ggmlType {
+	case backends.GGMLQ4_0, backends.GGMLQ8_0, backends.GGMLQ4_K, backends.GGMLQ6_K:
+		// Supported by fused executor.
+	default:
+		return nil, errors.Wrapf(backends.ErrNotImplemented,
+			"FusedQuantizedGather: type %s not supported in fused path", ggmlType)
 	}
-	if bytesPerRow%bpb != 0 {
-		return nil, errors.Errorf("FusedQuantizedGather: bytesPerRow %d not divisible by bytesPerBlock %d for %s",
-			bytesPerRow, bpb, ggmlType)
+
+	// Derive K from bytesPerRow.
+	K, err := deriveGGMLK("FusedQuantizedGather", bytesPerRow, ggmlType)
+	if err != nil {
+		return nil, err
 	}
-	K := (bytesPerRow / bpb) * vpb
 
 	// Output shape: [batch..., K] Float32.
 	// indices shape is [batch..., 1]. Output replaces the last dim with K.

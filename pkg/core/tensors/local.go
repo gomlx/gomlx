@@ -484,9 +484,6 @@ func (t *Tensor) ValueSafe() (any, error) {
 		}
 
 		// Sub-byte integer types (Int2, Uint2, Int4, Uint4) are stored packed as
-		// []uint8 by the simplego backend. Copy the packed bytes as-is since they
-		// can't be unpacked into individual Go scalars at this level.
-		// Sub-byte integer types (Int2, Uint2, Int4, Uint4) are stored packed as
 		// []uint8 by the simplego backend. The flat slice type ([]uint8) won't
 		// match GoType (int8/uint8 per-element), so return packed bytes as-is.
 		flatV := reflect.ValueOf(flat)
