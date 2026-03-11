@@ -790,7 +790,7 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 // inputs layout: [x, weights, scales, zeroPoints?, bias?]
 //
 // Weights have their dtype set to reflect the storage type (Int4, Int8, etc.).
-// Int4/Uint4 weights may be in packed form ([]uint8, 2 nibbles per byte) when
+// Int4/Uint4 weights may be in packed form ([]byte, 2 nibbles per byte) when
 // produced by Bitcast, or unpacked ([]int8/[]uint8, one value per element) when
 // produced by ConvertDType. Both forms are supported.
 func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
@@ -872,7 +872,7 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 }
 
 // unpackWeightsToInt8 unpacks sub-byte weight data (Int4, Uint4) from packed
-// []uint8 storage into []int8 (one value per element) for the matmul kernel.
+// []byte storage into []int8 (one value per element) for the matmul kernel.
 // For non-sub-byte types, returns the flat data as-is.
 func unpackWeightsToInt8(wBuf *Buffer) any {
 	var unpackFn unpackNibblesFn
@@ -885,7 +885,7 @@ func unpackWeightsToInt8(wBuf *Buffer) any {
 		return wBuf.flat
 	}
 	unpacked := make([]int8, wBuf.shape.Size())
-	unpackFn(wBuf.flat.([]uint8), unpacked)
+	unpackFn(wBuf.flat.([]byte), unpacked)
 	return unpacked
 }
 

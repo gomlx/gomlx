@@ -32,8 +32,8 @@ func TestBitcast_Uint8ToUint4_PureReinterpret(t *testing.T) {
 	assert.Equal(t, dstShape, result.shape)
 
 	// Raw bytes should be identical to source.
-	resultData := result.flat.([]uint8)
-	assert.Equal(t, srcData, resultData)
+	resultData := result.flat.([]byte)
+	assert.Equal(t, []byte(srcData), resultData)
 }
 
 func TestBitcast_Uint8ToInt4_PureReinterpret(t *testing.T) {
@@ -54,8 +54,8 @@ func TestBitcast_Uint8ToInt4_PureReinterpret(t *testing.T) {
 	assert.Equal(t, dstShape, result.shape)
 
 	// Raw bytes should be identical — Bitcast doesn't unpack.
-	resultData := result.flat.([]uint8)
-	assert.Equal(t, srcData, resultData)
+	resultData := result.flat.([]byte)
+	assert.Equal(t, []byte(srcData), resultData)
 }
 
 func TestBitcast_Uint8ToInt4_OwnedReuse(t *testing.T) {
@@ -72,7 +72,7 @@ func TestBitcast_Uint8ToInt4_OwnedReuse(t *testing.T) {
 	assert.Equal(t, dstShape, result.shape)
 	// Should be the exact same buffer (reused).
 	assert.Same(t, srcBuf, result)
-	assert.Equal(t, srcData, result.flat.([]uint8))
+	assert.Equal(t, []byte(srcData), result.flat.([]byte))
 }
 
 func TestBitcast_SameSize_Uint8ToInt8(t *testing.T) {
