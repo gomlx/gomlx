@@ -34,7 +34,12 @@
     back and forth from/to `uint8` (bytes), to ease quantization.
   - Added `Atan2` function.
   - Added test helper functions to test various backends at once.
+  - Fixed `Gather` validation of `indexVectorAxis` to check against `startIndices` rank instead of `operand` rank.
+  - `Exec` graph compilation is now concurrent, avoiding redundant compilations for the same graph shape.
 - Package `ml/layers/attention`: Improved `MultiHeadAttention`; Added `KVCache` support.
+  - Added Grouped Query Attention (GQA) support.
+  - Added `UseQKVProjection()` option for fused Q/K/V Dense projection.
+  - `FusedScaledDotProductAttention` now supports boolean masks.
 - Package `ml/layers/attention/pos`: Added `PositionalEncoder` interface, and "RoPE" (Rotary Positional Encoding) implementation.
 - Package `ml/models/transformers`: 
   - Added a `Transformer` "model": a collection of transformer layers are setup based on given configuration.
