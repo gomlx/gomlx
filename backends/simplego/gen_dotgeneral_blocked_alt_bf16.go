@@ -70,7 +70,7 @@ func dgCopyOutputBlockToFlatF32ToBF16( //alt:bf16
 				outputBlockOffset := outputLhsOffset + rhsStart*outputRhsStride
 
 				// Copy valid elements from the block
-				for i := 0; i < lhsEnd-lhsStart; i++ {
+				for i := range lhsEnd - lhsStart {
 					sourceRowOffset := sourceBlockOffset + i*blockDim
 					outputRowOffset := outputBlockOffset + i*outputLhsStride
 					//alt:base copy(outputData[outputRowOffset:outputRowOffset+rhsEnd-rhsStart],

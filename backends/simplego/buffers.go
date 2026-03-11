@@ -77,6 +77,10 @@ type bufferPoolKey struct {
 
 // makeSliceForDType creates a slice of the appropriate type for the given dtype and length.
 // Fast paths for common dtypes avoid reflection overhead.
+//
+// For sub-byte types (Int4, Uint4, Int2, Uint2), the returned slice is []byte
+// with packed storage (multiple values per byte). The `length` parameter is the
+// logical element count; the actual slice length is dtype.SizeForDimensions(length).
 func makeSliceForDType(dtype dtypes.DType, length int) any {
 	switch dtype { //nolint:exhaustive
 	case dtypes.Float32:
@@ -105,6 +109,9 @@ func makeSliceForDType(dtype dtypes.DType, length int) any {
 		return make([]complex64, length)
 	case dtypes.Complex128:
 		return make([]complex128, length)
+	case dtypes.Int4, dtypes.Uint4, dtypes.Int2, dtypes.Uint2:
+		// Sub-byte types are always stored packed: multiple values per byte.
+		return make([]byte, dtype.SizeForDimensions(length))
 	default:
 		// Fallback to reflection for less common types (BFloat16, Float16, etc.).
 		return reflect.MakeSlice(reflect.SliceOf(dtype.GoType()), length, length).Interface()
@@ -385,7 +392,15 @@ func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, sha
 			errors.Errorf("backend (%s) only supports deviceNum 0, cannot create buffer on deviceNum %d (shape=%s)",
 				b.Name(), deviceNum, shape)
 	}
-	if dtypes.FromGoType(reflect.TypeOf(flat).Elem()) != shape.DType {
+	// For packed sub-byte types (Int4, Uint4, Int2, Uint2), flat data is []byte (packed bytes).
+	// dtypes.FromGoType(byte) returns Uint8, not Int4, so we validate the element
+	// type directly rather than round-tripping through FromGoType.
+	if shape.DType.IsPacked() {
+		if reflect.TypeOf(flat).Elem() != reflect.TypeFor[byte]() {
+			return nil, errors.Errorf("sub-byte dtype %s requires []byte packed flat data, got %s",
+				shape.DType, reflect.TypeOf(flat).Elem())
+		}
+	} else if dtypes.FromGoType(reflect.TypeOf(flat).Elem()) != shape.DType {
 		return nil, errors.Errorf("flat data type (%s) does not match shape DType (%s)",
 			reflect.TypeOf(flat).Elem(), shape.DType)
 	}

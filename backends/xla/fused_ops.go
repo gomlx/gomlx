@@ -26,11 +26,15 @@ func (f *Function) FusedDense(x, weight, bias backends.Value, activation backend
 	return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedDense not implemented in XLA backend")
 }
 
-func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backends.Value, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool) (backends.Value, error) {
+func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backends.Value, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool, options *backends.ScaledDotProductAttentionConfig) (backends.Value, error) {
 	return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedScaledDotProductAttention not implemented in XLA backend")
 }
 
 func (f *Function) FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV backends.Value, queryDim, keyValueDim int) (query, key, value backends.Value, err error) {
 	err = errors.Wrapf(backends.ErrNotImplemented, "FusedAttentionQKVProjection not implemented in XLA backend")
 	return
+}
+
+func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value, weightsQuantization *backends.Quantization, activation backends.ActivationType) (backends.Value, error) {
+	return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense not implemented in XLA backend")
 }

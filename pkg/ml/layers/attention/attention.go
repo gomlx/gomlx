@@ -261,7 +261,7 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 			func() *Node {
 				return BackendFusedScaledDotProductAttention(
 					query, key, value, mask,
-					numQueryHeads, numKVHeads, layout, scale, causal)
+					numQueryHeads, numKVHeads, layout, scale, causal, nil)
 			},
 			func() *Node {
 				output, _ := decomposedFn()
