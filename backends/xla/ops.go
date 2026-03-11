@@ -443,7 +443,7 @@ func (f *Function) Bitcast(x backends.Value, targetDType dtypes.DType) (backends
 		return nil, err
 	}
 	xValue := nodes[0].value
-	if targetDType != dtypes.Bool && targetDType.Bits() < 8 && xValue.OpName() == stableHLOConstantOp {
+	if targetDType.IsPacked() && xValue.OpName() == stableHLOConstantOp {
 		return nil, errors.Errorf("Cannot bitcast constant value to packed sub-byte type %s (x.Shape is %s): see details in "+
 			"https://github.com/openxla/xla/issues/38964", targetDType, xValue.Shape())
 	}
