@@ -329,13 +329,13 @@ type FusedOps interface {
 	//   - table: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
 	//   - indices: integer tensor with last dimension = 1 (same as Gather convention).
 	//     For embeddings: [batch, seqLen, 1].
-	//   - weightsQuantization: describes how to dequantize the table rows. Must not be nil.
+	//   - tableQuantization: describes how to dequantize the table rows. Must not be nil.
 	//     Only QuantGGML scheme is supported.
 	//
 	// Output: float32 tensor with shape [batch..., K] where K = (bytesPerRow / bytesPerBlock) * valuesPerBlock.
 	//   For embeddings with indices [batch, seqLen, 1]: output is [batch, seqLen, K].
 	FusedQuantizedGather(table, indices Value,
-		weightsQuantization *Quantization) (Value, error)
+		tableQuantization *Quantization) (Value, error)
 
 	// FusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
 	//

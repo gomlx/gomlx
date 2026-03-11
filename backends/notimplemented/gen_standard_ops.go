@@ -327,13 +327,13 @@ func (f Function) FusedQuantizedDense(x backends.Value, weights backends.Value, 
 //   - table: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
 //   - indices: integer tensor with last dimension = 1 (same as Gather convention).
 //     For embeddings: [batch, seqLen, 1].
-//   - weightsQuantization: describes how to dequantize the table rows. Must not be nil.
+//   - tableQuantization: describes how to dequantize the table rows. Must not be nil.
 //     Only QuantGGML scheme is supported.
 //
 // Output: float32 tensor with shape [batch..., K] where K = (bytesPerRow / bytesPerBlock) * valuesPerBlock.
 //
 //	For embeddings with indices [batch, seqLen, 1]: output is [batch, seqLen, K].
-func (f Function) FusedQuantizedGather(table backends.Value, indices backends.Value, weightsQuantization *backends.Quantization) (backends.Value, error) {
+func (f Function) FusedQuantizedGather(table backends.Value, indices backends.Value, tableQuantization *backends.Quantization) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFusedQuantizedGather)
 }
 

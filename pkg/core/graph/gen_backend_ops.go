@@ -2052,9 +2052,9 @@ func backendFusedLayerNorm(x *Node, axes []int, epsilon float64, gamma *Node, be
 
 // nodeInputsFusedQuantizedGather holds the inputs used for the call to backends.FusedQuantizedGather.
 type nodeInputsFusedQuantizedGather struct {
-	table               *Node
-	indices             *Node
-	weightsQuantization *backends.Quantization
+	table             *Node
+	indices           *Node
+	tableQuantization *backends.Quantization
 }
 
 // Type implements the interface NodeInputs.
@@ -2064,11 +2064,11 @@ func (ni *nodeInputsFusedQuantizedGather) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsFusedQuantizedGather) String() string {
-	return fmt.Sprintf("%s(table=[#%d], indices=[#%d], weightsQuantization=%+v)",
+	return fmt.Sprintf("%s(table=[#%d], indices=[#%d], tableQuantization=%+v)",
 		ni.Type(),
 		ni.table.Id(),
 		ni.indices.Id(),
-		ni.weightsQuantization,
+		ni.tableQuantization,
 	)
 }
 
@@ -2081,22 +2081,22 @@ func (ni *nodeInputsFusedQuantizedGather) String() string {
 //   - table: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
 //   - indices: integer tensor with last dimension = 1 (same as Gather convention).
 //     For embeddings: [batch, seqLen, 1].
-//   - weightsQuantization: describes how to dequantize the table rows. Must not be nil.
+//   - tableQuantization: describes how to dequantize the table rows. Must not be nil.
 //     Only QuantGGML scheme is supported.
 //
 // Output: float32 tensor with shape [batch..., K] where K = (bytesPerRow / bytesPerBlock) * valuesPerBlock.
 //
 //	For embeddings with indices [batch, seqLen, 1]: output is [batch, seqLen, K].
-func FusedQuantizedGather(table *Node, indices *Node, weightsQuantization *backends.Quantization) (
+func FusedQuantizedGather(table *Node, indices *Node, tableQuantization *backends.Quantization) (
 	node *Node) {
 	inputNodes := []*Node{table, indices}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsFusedQuantizedGather{
-		table:               table,
-		indices:             indices,
-		weightsQuantization: weightsQuantization,
+		table:             table,
+		indices:           indices,
+		tableQuantization: tableQuantization,
 	}
-	result, err := g.currentFunc.backendFunc.FusedQuantizedGather(table.outputOps[0], indices.outputOps[0], inputs.weightsQuantization)
+	result, err := g.currentFunc.backendFunc.FusedQuantizedGather(table.outputOps[0], indices.outputOps[0], inputs.tableQuantization)
 	if err != nil {
 		panic(err)
 	}
