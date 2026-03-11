@@ -246,7 +246,7 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backen
 // executor are [x, weights, scales, zeroPoints?, bias?] directly.
 //
 // Weights should have their dtype set to reflect the actual storage type (e.g. Int4, Int8).
-// For sub-byte types, the caller should Bitcast packed uint8 data to the correct dtype.
+// For sub-byte types, the caller should Bitcast packed byte data to the correct dtype.
 func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value,
 	weightsQuantization *backends.Quantization,
 	activation backends.ActivationType) (backends.Value, error) {

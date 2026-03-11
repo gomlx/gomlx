@@ -18,7 +18,7 @@ func init() {
 // and the Go storage type matches, otherwise a byte-level copy is performed.
 //
 // For different-bit-width types (e.g. uint8 → Int4), the raw bytes stay identical.
-// A uint8[N] buffer bitcast to Int4[2*N] keeps its []uint8 flat data — the 2*N
+// A uint8[N] buffer bitcast to Int4[2*N] keeps its []byte flat data — the 2*N
 // nibbles are stored packed (2 per byte). To unpack into one value per element,
 // use ConvertDType (e.g. ConvertDType(Int4 → Int8)).
 func execBitcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
@@ -59,7 +59,7 @@ func execBitcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 
 	// Not owned or Go type mismatch: allocate via the standard pool and copy
 	// raw bytes. For sub-byte types, getBufferForShape allocates packed storage
-	// (e.g. Int4[2N] gets []uint8 of length N), matching the source byte count.
+	// (e.g. Int4[2N] gets []byte of length N), matching the source byte count.
 	output, err := backend.getBufferForShape(node.shape)
 	if err != nil {
 		return nil, err

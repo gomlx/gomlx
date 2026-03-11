@@ -34,31 +34,31 @@ var convertDTypePairMap = NewDTypePairMap("ConvertDType")
 
 func init() {
 	// Register sub-byte type conversions (Int4, Uint4).
-	// In simplego, Int4/Uint4 values are stored packed: 2 nibbles per uint8 byte.
-	// Bitcast from uint8 produces packed buffers (flat = []uint8). ConvertDType
+	// In simplego, Int4/Uint4 values are stored packed: 2 nibbles per byte.
+	// Bitcast from uint8 produces packed buffers (flat = []byte). ConvertDType
 	// unpacks them into one value per element of the target type.
 	// Low nibble (bits 0-3) is the first element, high nibble (bits 4-7) is the second.
 	//
 	// Both Int4 and Uint4 unpack to []int8 first (int8 is a common denominator
 	// that fits both signed [-8,7] and unsigned [0,15] 4-bit values), then the
 	// shared converter promotes to the target type.
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Float32, priorityTyped, execConvertPackedSubByte[float32](unpackInt4Nibbles))
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Float64, priorityTyped, execConvertPackedSubByte[float64](unpackInt4Nibbles))
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int32, priorityTyped, execConvertPackedSubByte[int32](unpackInt4Nibbles))
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int64, priorityTyped, execConvertPackedSubByte[int64](unpackInt4Nibbles))
-	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int8, priorityTyped, execConvertPackedSubByte[int8](unpackInt4Nibbles))
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Float32, priorityTyped, execConvertPackedSubByte[float32](unpackUint4Nibbles))
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Float64, priorityTyped, execConvertPackedSubByte[float64](unpackUint4Nibbles))
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int32, priorityTyped, execConvertPackedSubByte[int32](unpackUint4Nibbles))
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int64, priorityTyped, execConvertPackedSubByte[int64](unpackUint4Nibbles))
-	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Uint8, priorityTyped, execConvertPackedSubByte[uint8](unpackUint4Nibbles))
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Float32, priorityTyped, execConvertPackedSubByte[float32](unpackInt4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Float64, priorityTyped, execConvertPackedSubByte[float64](unpackInt4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int32, priorityTyped, execConvertPackedSubByte[int32](unpackInt4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int64, priorityTyped, execConvertPackedSubByte[int64](unpackInt4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Int4, dtypes.Int8, priorityTyped, execConvertPackedSubByte[int8](unpackInt4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Float32, priorityTyped, execConvertPackedSubByte[float32](unpackUint4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Float64, priorityTyped, execConvertPackedSubByte[float64](unpackUint4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int32, priorityTyped, execConvertPackedSubByte[int32](unpackUint4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int64, priorityTyped, execConvertPackedSubByte[int64](unpackUint4Nibbles, 2))
+	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Uint8, priorityTyped, execConvertPackedSubByte[uint8](unpackUint4Nibbles, 2))
 
 	// Register mutableBytes and fillBuffer for sub-byte types.
-	// Packed Int4/Uint4 buffers use []uint8 as the Go storage type.
-	mutableBytesDTypeMap.Register(dtypes.Int4, priorityTyped, mutableBytesGeneric[uint8])
-	mutableBytesDTypeMap.Register(dtypes.Uint4, priorityTyped, mutableBytesGeneric[uint8])
-	fillBufferDTypeMap.Register(dtypes.Int4, priorityTyped, fillBufferGeneric[uint8])
-	fillBufferDTypeMap.Register(dtypes.Uint4, priorityTyped, fillBufferGeneric[uint8])
+	// Packed Int4/Uint4 buffers use []byte as the Go storage type.
+	mutableBytesDTypeMap.Register(dtypes.Int4, priorityTyped, mutableBytesGeneric[byte])
+	mutableBytesDTypeMap.Register(dtypes.Uint4, priorityTyped, mutableBytesGeneric[byte])
+	fillBufferDTypeMap.Register(dtypes.Int4, priorityTyped, fillBufferGeneric[byte])
+	fillBufferDTypeMap.Register(dtypes.Uint4, priorityTyped, fillBufferGeneric[byte])
 
 	// Manually register bool x bfloat16 conversion functions.
 	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Bool, priorityTyped, execConvertDTypeBFloat16ToBool)
@@ -194,30 +194,27 @@ func execConvertDTypeBFloat16ToFloat16(operand, output *Buffer) {
 // unpackNibblesFn is the signature for nibble unpack functions.
 // All sub-byte unpack functions output []int8 as a common denominator that fits
 // both signed [-8,7] and unsigned [0,15] 4-bit values.
-type unpackNibblesFn = func(packed []uint8, dst []int8)
+type unpackNibblesFn = func(packed []byte, dst []int8)
 
-// unpackInt4Nibbles unpacks packed Int4 data ([]uint8, 2 signed nibbles per byte)
+// unpackInt4Nibbles unpacks packed Int4 data ([]byte, 2 signed nibbles per byte)
 // into dst []int8 (one value per element). Low nibble (bits 0-3) is the first element,
 // high nibble (bits 4-7) is the second. Values 8-15 are sign-extended to -8 to -1.
-func unpackInt4Nibbles(packed []uint8, dst []int8) {
+func unpackInt4Nibbles(packed []byte, dst []int8) {
 	for i, b := range packed {
 		lo := int8(b & 0x0F)
-		hi := int8(b >> 4)
 		if lo >= 8 {
 			lo -= 16
 		}
-		if hi >= 8 {
-			hi -= 16
-		}
+		hi := int8(b) >> 4 // Arithmetic right-shift preserves sign bit.
 		dst[2*i] = lo
 		dst[2*i+1] = hi
 	}
 }
 
-// unpackUint4Nibbles unpacks packed Uint4 data ([]uint8, 2 unsigned nibbles per byte)
+// unpackUint4Nibbles unpacks packed Uint4 data ([]byte, 2 unsigned nibbles per byte)
 // into dst []int8 (one value per element). Low nibble (bits 0-3) is the first element,
 // high nibble (bits 4-7) is the second. Values 0-15 fit in int8.
-func unpackUint4Nibbles(packed []uint8, dst []int8) {
+func unpackUint4Nibbles(packed []byte, dst []int8) {
 	for i, b := range packed {
 		dst[2*i] = int8(b & 0x0F)
 		dst[2*i+1] = int8(b >> 4)
@@ -226,15 +223,31 @@ func unpackUint4Nibbles(packed []uint8, dst []int8) {
 
 // execConvertPackedSubByte returns a converter for packed sub-byte types (Int4, Uint4).
 // The unpackFn parameter selects signed vs unsigned nibble interpretation.
-// Sub-byte types are always stored packed as []uint8 (2 nibbles per byte).
-func execConvertPackedSubByte[ToT PODNumericConstraints](unpackFn unpackNibblesFn) convertFnType {
+// Sub-byte types are always stored packed as []byte.
+// valuesPerByte is the number of logical values per packed byte (e.g. 2 for 4-bit, 4 for 2-bit).
+//
+// To avoid allocating a temporary slice as large as the output, we process in
+// fixed-size blocks that stay on the stack.
+func execConvertPackedSubByte[OutT PODNumericConstraints](unpackFn unpackNibblesFn, valuesPerByte int) convertFnType {
+	const dstBlockSize = 64
+	srcBlockSize := dstBlockSize / valuesPerByte
+
 	return func(operand, output *Buffer) {
-		dstData := output.flat.([]ToT)
-		src := operand.flat.([]uint8)
-		tmp := make([]int8, len(dstData))
-		unpackFn(src, tmp)
-		for i, v := range tmp {
-			dstData[i] = ToT(v)
+		dstFlat := output.flat.([]OutT)
+		srcFlat := operand.flat.([]byte)
+		var tmp [dstBlockSize]int8
+
+		var srcIdx, dstIdx int
+		for srcIdx < len(srcFlat) {
+			n := min(srcBlockSize, len(srcFlat)-srcIdx)
+			dstN := n * valuesPerByte
+			unpackFn(srcFlat[srcIdx:srcIdx+n], tmp[:dstN])
+			block := dstFlat[dstIdx : dstIdx+dstN]
+			for i, v := range tmp[:dstN] {
+				block[i] = OutT(v)
+			}
+			srcIdx += n
+			dstIdx += dstN
 		}
 	}
 }
