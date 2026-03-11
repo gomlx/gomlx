@@ -103,6 +103,42 @@ func TestSizeForDimensions(t *testing.T) {
 	if BFloat16.SizeForDimensions(1, 1, 1) != 2 {
 		t.Fatalf("expected BFloat16.SizeForDimensions(1, 1, 1) to be 2, got %d", BFloat16.SizeForDimensions(1, 1, 1))
 	}
+	if Int4.SizeForDimensions() != 1 {
+		t.Fatalf("expected Int4.SizeForDimensions() to be 1, got %d", Int4.SizeForDimensions())
+	}
+	if Int4.SizeForDimensions(3) != 2 {
+		t.Fatalf("expected Int4.SizeForDimensions(3) to be 2, got %d", Int4.SizeForDimensions(3))
+	}
+}
+
+func TestBits(t *testing.T) {
+	if Int4.Bits() != 4 {
+		t.Fatalf("expected Int4.Bits() to be 4, got %d", Int4.Bits())
+	}
+	if Uint2.Bits() != 2 {
+		t.Fatalf("expected Uint2.Bits() to be 2, got %d", Uint2.Bits())
+	}
+	if Bool.Bits() != 8 {
+		t.Fatalf("expected Bool.Bits() to be 8, got %d", Bool.Bits())
+	}
+	if Float32.Bits() != 32 {
+		t.Fatalf("expected Float32.Bits() to be 32, got %d", Float32.Bits())
+	}
+}
+
+func TestIsPacked(t *testing.T) {
+	if !Int4.IsPacked() {
+		t.Fatal("expected Int4 to be packed")
+	}
+	if !Uint2.IsPacked() {
+		t.Fatal("expected Uint2 to be packed")
+	}
+	if Float32.IsPacked() {
+		t.Fatal("expected Float32 not to be packed")
+	}
+	if Bool.IsPacked() {
+		t.Fatal("expected Bool not to be packed")
+	}
 }
 
 func TestIsPromotableTo(t *testing.T) {
