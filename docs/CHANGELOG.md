@@ -57,10 +57,11 @@
 - Package `ml/layers/activations`: 
   - Added `HardSwish`.
 - Package `examples`:
-  - Separated in its own sub-modules, to separate its dependencies.
+  - Separated in its own sub-module, to separate its dependencies.
   - Added `gpt2`: A simple GPT-2 implementation using the new transformers and decode packages. It downloads the model from HuggingFace.
   - Added `textgen`: a minimal transformer text generation model that can be trained.
-  - Added `gemma3`: A simple Gemma 3 implementation using the new transformers and decode packages. It downloads the model from HuggingFace.
+  - Added `gemma3`: A simple Gemma 3 implementation using the `onnx-gomlx` package to convert the model, and `go-huggingface` to download the model and run the tokenizer.
+  - Added `mxbai-rerank`: A cross-encoder reranking example using the [MixedBread Reranker v1](https://huggingface.co/mixedbread-ai/mxbai-rerank-base-v1). It uses the `onnx-gomlx` package to convert the model, and `go-huggingface` to download the model and run the tokenizer.
   - Added `BERT-base-NER`: A BERT-base model fine-tuned for Named Entity Recognition.
 
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
