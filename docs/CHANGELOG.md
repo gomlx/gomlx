@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next
+# v0.27.0: Graph functions; Improved Go backend (fusion ops); Quantization dtypes; more ML layers & fixes
 
 - Package `backends`: major refactoring to add support for functions/closures.
   - Added `backends.Function`, which now holds all the "ops" methods.
