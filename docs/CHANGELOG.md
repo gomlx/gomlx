@@ -63,6 +63,7 @@
   - Added `gemma3`: A simple Gemma 3 implementation using the `onnx-gomlx` package to convert the model, and `go-huggingface` to download the model and run the tokenizer.
   - Added `mxbai-rerank`: A cross-encoder reranking example using the [MixedBread Reranker v1](https://huggingface.co/mixedbread-ai/mxbai-rerank-base-v1). It uses the `onnx-gomlx` package to convert the model, and `go-huggingface` to download the model and run the tokenizer.
   - Added `BERT-base-NER`: A BERT-base model fine-tuned for Named Entity Recognition.
+- Bumped github actions versions to the new "Node24" ones.
 
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 
