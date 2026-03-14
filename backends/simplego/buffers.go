@@ -214,7 +214,11 @@ func copyFlat(flatDst, flatSrc any) {
 
 // mutableBytes returns the slice of the bytes used by the flat given -- it works with any of the supported data types for buffers.
 func (b *Buffer) mutableBytes() []byte {
-	fn := mutableBytesDTypeMap.Get(b.shape.DType).(func(b *Buffer) []byte) //nolint:errcheck
+	tmpAny, tmpErr := mutableBytesDTypeMap.Get(b.shape.DType)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	fn := tmpAny.(func(b *Buffer) []byte) //nolint:errcheck
 	return fn(b)
 }
 
@@ -240,7 +244,11 @@ func (b *Buffer) Fill(value any) error {
 	if value != nil && dtypes.FromAny(value) != dtype {
 		return errors.Errorf("fillBuffer: invalid value type %T for buffer of dtype %s", value, dtype)
 	}
-	fillFn := fillBufferDTypeMap.Get(dtype).(func(*Buffer, any)) //nolint:errcheck
+	tmpAny, tmpErr := fillBufferDTypeMap.Get(dtype)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	fillFn := tmpAny.(func(*Buffer, any)) //nolint:errcheck
 	fillFn(b, value)
 	return nil
 }

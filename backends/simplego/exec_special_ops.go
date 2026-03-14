@@ -109,7 +109,11 @@ func execWhere(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 		}
 		output.shape = outputShape
 	}
-	fn := whereDTypeMap.Get(outputShape.DType).(func(conditionBuf, onTrueBuf, onFalseBuf, outputBuf *Buffer))
+	tmpAny, tmpErr := whereDTypeMap.Get(outputShape.DType)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	fn := tmpAny.(func(conditionBuf, onTrueBuf, onFalseBuf, outputBuf *Buffer))
 	fn(condition, onTrue, onFalse, output)
 	return output, nil
 }
@@ -212,19 +216,47 @@ func execReduce(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 	var reduceFn genericReduceFn
 	switch node.opType { //nolint:exhaustive
 	case backends.OpTypeReduceMax:
-		reduceFn = reduceMaxDTypeMap.Get(dtype).(genericReduceFn)
+		tmpAny, tmpErr := reduceMaxDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		reduceFn = tmpAny.(genericReduceFn)
 	case backends.OpTypeReduceMin:
-		reduceFn = reduceMinDTypeMap.Get(dtype).(genericReduceFn)
+		tmpAny, tmpErr := reduceMinDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		reduceFn = tmpAny.(genericReduceFn)
 	case backends.OpTypeReduceSum:
-		reduceFn = reduceSumDTypeMap.Get(dtype).(genericReduceFn)
+		tmpAny, tmpErr := reduceSumDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		reduceFn = tmpAny.(genericReduceFn)
 	case backends.OpTypeReduceProduct:
-		reduceFn = reduceProductDTypeMap.Get(dtype).(genericReduceFn)
+		tmpAny, tmpErr := reduceProductDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		reduceFn = tmpAny.(genericReduceFn)
 	case backends.OpTypeReduceBitwiseAnd:
-		reduceFn = reduceBitwiseAndDTypeMap.Get(dtype).(genericReduceFn)
+		tmpAny, tmpErr := reduceBitwiseAndDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		reduceFn = tmpAny.(genericReduceFn)
 	case backends.OpTypeReduceBitwiseOr:
-		reduceFn = reduceBitwiseOrDTypeMap.Get(dtype).(genericReduceFn)
+		tmpAny, tmpErr := reduceBitwiseOrDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		reduceFn = tmpAny.(genericReduceFn)
 	case backends.OpTypeReduceBitwiseXor:
-		reduceFn = reduceBitwiseXorDTypeMap.Get(dtype).(genericReduceFn)
+		tmpAny, tmpErr := reduceBitwiseXorDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		reduceFn = tmpAny.(genericReduceFn)
 	case backends.OpTypeReduceLogicalAnd:
 		// Logical reduction only works on boolean variables, so there is no need for a generic implementation.
 		reduceFn = execReduceLogicalAnd
@@ -548,7 +580,11 @@ func execTranspose(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 	output.shape = node.shape
 	it := newTransposeIterator(operand.shape, permutations)
 	dtype := node.shape.DType
-	transposeFn := transposeDTypeMap.Get(dtype).(func(operand, output *Buffer, it *transposeIterator))
+	tmpAny, tmpErr := transposeDTypeMap.Get(dtype)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	transposeFn := tmpAny.(func(operand, output *Buffer, it *transposeIterator))
 	transposeFn(operand, output, it)
 	return output, nil
 }
@@ -1259,7 +1295,11 @@ func execScatter(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	// Dispatch to a type-specific scatter loop based on the operation type.
 	dtype := output.shape.DType
 	type scatterFnT = func(opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode) error
-	scatterFn := scatterDTypeMap.Get(dtype).(scatterFnT)
+	tmpAny, tmpErr := scatterDTypeMap.Get(dtype)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	scatterFn := tmpAny.(scatterFnT)
 	err = scatterFn(node.opType, output, indices, updates, scatterParams)
 	if err != nil {
 		return nil, err
@@ -1278,11 +1318,23 @@ func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, out
 	var combineFn combineFnT
 	switch opType { //nolint:exhaustive
 	case backends.OpTypeScatterMax:
-		combineFn = combineMaxDTypeMap.Get(dtype).(combineFnT) //nolint:errcheck
+		tmpAny, tmpErr := combineMaxDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		combineFn = tmpAny.(combineFnT) //nolint:errcheck
 	case backends.OpTypeScatterMin:
-		combineFn = combineMinDTypeMap.Get(dtype).(combineFnT) //nolint:errcheck
+		tmpAny, tmpErr := combineMinDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		combineFn = tmpAny.(combineFnT) //nolint:errcheck
 	case backends.OpTypeScatterSum:
-		combineFn = combineSumDTypeMap.Get(dtype).(combineFnT) //nolint:errcheck
+		tmpAny, tmpErr := combineSumDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		combineFn = tmpAny.(combineFnT) //nolint:errcheck
 	default:
 		return errors.Errorf("unsupported scatter op type %q", opType)
 	}
@@ -1296,7 +1348,11 @@ func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, out
 
 	// Initialize gather of the scatter indices.
 	indicesShape := indices.shape
-	deferenceIndicesFn := dereferenceIntsDTypeMap.Get(indicesShape.DType).(func(flat any, in, out []int))
+	tmpAny, tmpErr := dereferenceIntsDTypeMap.Get(indicesShape.DType)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	deferenceIndicesFn := tmpAny.(func(flat any, in, out []int))
 	_, _ = indicesFlat, deferenceIndicesFn
 	indicesIt := newSubIndicesIterator(indices.shape, scatterParams.indexVectorAxis)
 	indexVectorStride := 1
@@ -1498,7 +1554,11 @@ func execSlice(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffe
 
 	// Dispatch to the generic implementation based on DType.
 	// Note: limits are not used in the generic exec function but passed for potential future use or consistency.
-	fn := sliceDTypeMap.Get(node.shape.DType).(func(operand, output *Buffer, params *sliceNode)) //nolint:errcheck
+	tmpAny, tmpErr := sliceDTypeMap.Get(node.shape.DType)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	fn := tmpAny.(func(operand, output *Buffer, params *sliceNode)) //nolint:errcheck
 	fn(operand, output, sliceParams)
 	return output, nil
 }
@@ -1641,11 +1701,19 @@ func execArgMinMax(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*B
 	}
 
 	// Instantiate the function to copy over results from ints:
-	buildCopyIntsFn := argMinMaxCopyIntsDTypeMap.Get(output.shape.DType).(func(output *Buffer) func(flatIdx int, values []int32))
+	tmpAny, tmpErr := argMinMaxCopyIntsDTypeMap.Get(output.shape.DType)
+	if tmpErr != nil {
+		return nil, tmpErr
+	}
+	buildCopyIntsFn := tmpAny.(func(output *Buffer) func(flatIdx int, values []int32))
 	copyIntsFn := buildCopyIntsFn(output)
 
 	// Dispatch to the generic implementation based on DType.
-	argMinMaxFn := argMinMaxDTypeMap.Get(operand.shape.DType).(func(backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize, suffixSize int, isMin bool))
+	tmpAny2, tmpErr2 := argMinMaxDTypeMap.Get(operand.shape.DType)
+	if tmpErr2 != nil {
+		return nil, tmpErr2
+	}
+	argMinMaxFn := tmpAny2.(func(backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize, suffixSize int, isMin bool))
 	argMinMaxFn(backend, operand, copyIntsFn, prefixSize, reduceSize, suffixSize, isMin)
 	return output, nil
 }
@@ -1853,7 +1921,11 @@ func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, _ []bool) 
 		return nil, errors.Errorf("ReduceWindow: invalid reduction type: %s", opData.reductionType)
 	}
 	// updateFn will aggregate the operand value into the corresponding output value.
-	updateFn := buildUpdateFnMap.Get(dtype).(func(operand, output *Buffer) reduceWindowUpdateFn)(operand, output)
+	updateFnAny, tmpErr := buildUpdateFnMap.Get(dtype)
+	if tmpErr != nil {
+		return nil, tmpErr
+	}
+	updateFn := updateFnAny.(func(operand, output *Buffer) reduceWindowUpdateFn)(operand, output)
 
 	// Find the window effective sizes, accounting for the diffusion.
 	windowSizes := make([]int, rank)

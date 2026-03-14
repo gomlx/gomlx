@@ -430,7 +430,11 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 				isMatMulOrder(lhsRaw.shape, params.lhsContractingAxes, params.lhsBatchAxes,
 					rhsRaw.shape, params.rhsContractingAxes, params.rhsBatchAxes) {
 				output2.Zeros()
-				execSmallMatMulFn := dotGeneralSmallMatMulDTypeMap.Get(rawDType).(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
+				execSmallMatMulFnAny, err := dotGeneralSmallMatMulDTypeMap.Get(rawDType)
+				if err != nil {
+					return nil, err
+				}
+				execSmallMatMulFn := execSmallMatMulFnAny.(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
 				// BFloat16/Float16 implementations accumulate in float32 internally but write to native output
 				execSmallMatMulFn(backend, lhsRaw, rhsRaw, params, output2)
 				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
@@ -487,7 +491,11 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		// Supports all numeric dtypes via DTypeMap registration.
 		// BFloat16/Float16 implementations accumulate in float32 internally but write to native output.
 		dtype := lhs.shape.DType
-		execSmallMatMulFn := dotGeneralSmallMatMulDTypeMap.Get(dtype).(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
+		execSmallMatMulFnAny, err := dotGeneralSmallMatMulDTypeMap.Get(dtype)
+		if err != nil {
+			return nil, err
+		}
+		execSmallMatMulFn := execSmallMatMulFnAny.(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
 		execSmallMatMulFn(backend, lhs, rhs, params, output)
 		return output, nil
 
