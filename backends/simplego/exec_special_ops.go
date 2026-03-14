@@ -689,7 +689,15 @@ func execReverse(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	output.shape = shape
 	if len(reverseAxes) == 0 {
 		// No-op, simply copy over bytes.
-		copy(output.mutableBytes(), operand.mutableBytes())
+		dstBytes, err := output.mutableBytes()
+		if err != nil {
+			return nil, err
+		}
+		srcBytes, err := operand.mutableBytes()
+		if err != nil {
+			return nil, err
+		}
+		copy(dstBytes, srcBytes)
 		return output, nil
 	}
 
@@ -738,12 +746,26 @@ func execReverse(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 
 	// Scalar or empty tensor: just copy.
 	if operand.shape.IsScalar() || operand.shape.Size() <= 1 {
-		copy(output.mutableBytes(), operand.mutableBytes())
+		dstBytes, err := output.mutableBytes()
+		if err != nil {
+			return nil, err
+		}
+		srcBytes, err := operand.mutableBytes()
+		if err != nil {
+			return nil, err
+		}
+		copy(dstBytes, srcBytes)
 		return output, nil
 	}
 
-	srcBytes := operand.mutableBytes()
-	dstBytes := output.mutableBytes()
+	srcBytes, err := operand.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
+	dstBytes, err := output.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
 	strides := mergedShape.Strides()
 	dims := mergedShape.Dimensions
 
@@ -931,8 +953,14 @@ func execGather(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 	output.shape = node.shape
 
 	// Where to read/write the data.
-	operandBytes := operand.mutableBytes()
-	outputBytes := output.mutableBytes()
+	operandBytes, err := operand.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
+	outputBytes, err := output.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
 
 	// Outer-loop: loop over the start indices and outputBytesIdx to gather from:
 	gatherIt := newGatherIterator(
@@ -1213,7 +1241,10 @@ func execConcatenate(backend *Backend, node *Node, inputs []*Buffer, inputsOwned
 		return nil, err
 	}
 	output.shape = outputShape
-	outputBytes := output.mutableBytes()
+	outputBytes, err := output.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
 
 	// Calculate the size of the blocks before and after the concatenation axis.
 	outerBlockSize := 1 // Number of independent blocks to copy
@@ -1237,7 +1268,10 @@ func execConcatenate(backend *Backend, node *Node, inputs []*Buffer, inputsOwned
 	for _, inputBuf := range inputs {
 		inputShape := inputBuf.shape
 		inputDims := inputShape.Dimensions
-		inputBytes := inputBuf.mutableBytes() // Use mutableBytes() for input
+		inputBytes, err := inputBuf.mutableBytes() // Use mutableBytes() for input
+		if err != nil {
+			return nil, err
+		}
 
 		// Size of the concatenation axis for this specific input.
 		inputConcatAxisSize := inputDims[axis]
@@ -1625,7 +1659,10 @@ func execRNGBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsO
 		return nil, err
 	}
 	rngData.shape = node.multiOutputsShapes[1].Clone()
-	rngDataBytes := rngData.mutableBytes()
+	rngDataBytes, err := rngData.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
 
 	// Generate random using rand/v2:
 	rng := rand.NewPCG(stateFlat[0], stateFlat[1]) // Use state and increment as seed

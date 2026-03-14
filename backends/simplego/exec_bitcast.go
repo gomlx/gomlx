@@ -43,6 +43,14 @@ func execBitcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	if err != nil {
 		return nil, err
 	}
-	copy(output.mutableBytes(), src.mutableBytes())
+	outputBytes, err := output.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
+	srcBytes, err := src.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
+	copy(outputBytes, srcBytes)
 	return output, nil
 }

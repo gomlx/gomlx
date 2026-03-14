@@ -213,26 +213,26 @@ func copyFlat(flatDst, flatSrc any) {
 }
 
 // mutableBytes returns the slice of the bytes used by the flat given -- it works with any of the supported data types for buffers.
-func (b *Buffer) mutableBytes() []byte {
+func (b *Buffer) mutableBytes() ([]byte, error) {
 	tmpAny, tmpErr := mutableBytesDTypeMap.Get(b.shape.DType)
 	if tmpErr != nil {
-		panic(tmpErr)
+		return nil, tmpErr
 	}
-	fn := tmpAny.(func(b *Buffer) []byte) //nolint:errcheck
+	fn := tmpAny.(func(b *Buffer) ([]byte, error)) //nolint:errcheck
 	return fn(b)
 }
 
 var mutableBytesDTypeMap = NewDTypeMap("MutableBytes")
 
 // mutableBytesGeneric is the generic implementation of mutableBytes.
-func mutableBytesGeneric[T SupportedTypesConstraints](b *Buffer) []byte {
+func mutableBytesGeneric[T SupportedTypesConstraints](b *Buffer) ([]byte, error) {
 	flat := b.flat.([]T) //nolint:errcheck
 	if len(flat) == 0 {
-		return nil // Handle empty tensors
+		return nil, nil // Handle empty tensors
 	}
 	bytePointer := (*byte)(unsafe.Pointer(&flat[0]))
 	var t T
-	return unsafe.Slice(bytePointer, len(flat)*int(unsafe.Sizeof(t)))
+	return unsafe.Slice(bytePointer, len(flat)*int(unsafe.Sizeof(t))), nil
 }
 
 // Fill the buffer with the given value.
