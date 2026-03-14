@@ -17,7 +17,8 @@ func TestBuffers_Bytes(t *testing.T) {
 	buf.shape = shapes.Make(dtypes.Int32, 3)
 	buf.Zeros()
 	require.Len(t, buf.flat.([]int32), 3)
-	flatBytes := buf.mutableBytes()
+	flatBytes, err := buf.mutableBytes()
+	require.NoError(t, err)
 	require.Len(t, flatBytes, 3*int(dtypes.Int32.Size()))
 	flatBytes[0] = 1
 	flatBytes[4] = 7

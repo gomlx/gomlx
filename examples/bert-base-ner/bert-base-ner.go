@@ -24,7 +24,7 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/onnx-gomlx/onnx"
+	onnxparser "github.com/gomlx/onnx-gomlx/onnx/parser"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 )
@@ -74,7 +74,7 @@ func main() {
 
 	// Load ONNX model
 	onnxPath := must.M1(repo.DownloadFile("onnx/model.onnx"))
-	onnxModel := must.M1(onnx.ReadFile(onnxPath))
+	onnxModel := must.M1(onnxparser.FromFile(onnxPath))
 
 	// Create context and load model weights
 	ctx := context.New()

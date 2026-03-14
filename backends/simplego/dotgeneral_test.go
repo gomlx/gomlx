@@ -71,7 +71,11 @@ func TestDotGeneral_LargeShapesAndCopy(t *testing.T) {
 		require.NoError(t, err)
 		outBlocks.shape = outShape
 		outBlocks.Zeros()
-		copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
+		tmpAny, tmpErr := dotGeneralFlatToBlockDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		copyFlatToBlock := tmpAny.(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
 		copyFlatToBlock(
 			source,
 			outBlocks,
@@ -140,7 +144,11 @@ func TestDotGeneral_LargeShapesAndCopy(t *testing.T) {
 		require.NoError(t, err)
 		outBlocks.shape = outShape
 		outBlocks.Zeros()
-		copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
+		tmpAny, tmpErr := dotGeneralFlatToBlockDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		copyFlatToBlock := tmpAny.(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
 		copyFlatToBlock(
 			source,
 			outBlocks,
@@ -202,7 +210,11 @@ func TestDotGeneral_SmallNormalize(t *testing.T) {
 		for i := range sourceFlat {
 			sourceFlat[i] = float64(i + 1)
 		}
-		normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) *Buffer)
+		tmpAny, tmpErr := dotGeneralNormalizeShapeDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		normalizeFn := tmpAny.(func(backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) *Buffer)
 		info := dgNormalizePrepare(source.shape, contractingAxes, batchAxes)
 		output := normalizeFn(
 			backend.(*Backend),
@@ -236,7 +248,11 @@ func TestDotGeneral_SmallNormalize(t *testing.T) {
 		for i := range sourceFlat {
 			sourceFlat[i] = float32(i + 1)
 		}
-		normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) *Buffer)
+		tmpAny, tmpErr := dotGeneralNormalizeShapeDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		normalizeFn := tmpAny.(func(backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) *Buffer)
 		info := dgNormalizePrepare(source.shape, contractingAxes, batchAxes)
 		output := normalizeFn(
 			backend.(*Backend),
@@ -279,7 +295,11 @@ func TestDotGeneral_SmallNormalize(t *testing.T) {
 		sourceIf, _, err := backend.NewSharedBuffer(0, sourceShape)
 		require.NoError(t, err)
 		source := sourceIf.(*Buffer)
-		normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) *Buffer)
+		tmpAny, tmpErr := dotGeneralNormalizeShapeDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		normalizeFn := tmpAny.(func(backend *Backend, source *Buffer, info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) *Buffer)
 		info := dgNormalizePrepare(source.shape, contractingAxes, batchAxes)
 		output := normalizeFn(
 			backend.(*Backend),

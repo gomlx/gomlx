@@ -2,8 +2,15 @@
 
 # Next:
 
+- Package `examples/...`:
+  - Updated `gemma3`, `mxbai-rerank` and `bert-base-ner` to use the new `onnx-gomlx` v0.4.0 API, bumped dependency.
+
 - Package `graph`:
   - `Floor` and `Ceil` operations now are identity for integer dtypes.
+
+- Package `simplego`:
+  - Removed panics during execution: return errors instead.
+  - Fixed missing annotation/stacktrace on not-implemented errors. 
 
 # v0.27.0: Graph functions; Improved Go backend (fusion ops); Quantization dtypes; more ML layers & fixes
 

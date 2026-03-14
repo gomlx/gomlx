@@ -547,7 +547,11 @@ func transposeBuffer(backend *Backend, buf *Buffer, permutations []int) (*Buffer
 	}
 	output.shape = shapes.Make(buf.shape.DType, outDims...)
 	it := newTransposeIterator(buf.shape, permutations)
-	transposeFn := transposeDTypeMap.Get(buf.shape.DType).(func(operand, output *Buffer, it *transposeIterator))
+	transposeFnAny, err := transposeDTypeMap.Get(buf.shape.DType)
+	if err != nil {
+		return nil, err
+	}
+	transposeFn := transposeFnAny.(func(operand, output *Buffer, it *transposeIterator))
 	transposeFn(buf, output, it)
 	return output, nil
 }
@@ -846,20 +850,20 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 	switch data.scheme {
 	case backends.QuantNF4:
 		// NF4 weights are nibble indices [0..15]. Supports Int4/Int8/Uint4/Uint8.
-		switch wFlat.(type) {
+		switch wFlat := wFlat.(type) {
 		case []uint8:
-			quantizedDenseNF4(backend, x, wFlat.([]uint8), scales, bias, out, M, K, N, blockSize, numBlocks)
+			quantizedDenseNF4(backend, x, wFlat, scales, bias, out, M, K, N, blockSize, numBlocks)
 		case []int8:
-			quantizedDenseNF4(backend, x, wFlat.([]int8), scales, bias, out, M, K, N, blockSize, numBlocks)
+			quantizedDenseNF4(backend, x, wFlat, scales, bias, out, M, K, N, blockSize, numBlocks)
 		default:
 			return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: NF4 unsupported weight type %T", wFlat)
 		}
 	case backends.QuantLinear:
-		switch wFlat.(type) {
+		switch wFlat := wFlat.(type) {
 		case []int8:
-			quantizedDenseLinearInt(backend, x, wFlat.([]int8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
+			quantizedDenseLinearInt(backend, x, wFlat, scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
 		case []uint8:
-			quantizedDenseLinearInt(backend, x, wFlat.([]uint8), scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
+			quantizedDenseLinearInt(backend, x, wFlat, scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
 		default:
 			return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: Linear unsupported weight type %T", wFlat)
 		}
@@ -867,7 +871,7 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: unknown quantization scheme %d", data.scheme)
 	}
 
-	fusedDenseApplyActivation[float32](backend, out, data.activation)
+	fusedDenseApplyActivation(backend, out, data.activation)
 	return output, nil
 }
 

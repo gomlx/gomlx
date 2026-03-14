@@ -27,6 +27,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/onnx-gomlx/onnx"
+	onnxparser "github.com/gomlx/onnx-gomlx/onnx/parser"
 	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -78,7 +79,7 @@ func main() {
 	}
 
 	// Load ONNX model.
-	model, err := onnx.ReadFile(onnxPath)
+	model, err := onnxparser.FromFile(onnxPath)
 	if err != nil {
 		klog.Fatalf("Failed to load ONNX model: %+v", err)
 	}
@@ -130,7 +131,7 @@ func main() {
 
 // rerank computes relevance scores for a query against multiple documents
 // using a cross-encoder model.
-func rerank(backend backends.Backend, ctx *context.Context, model *onnx.Model, tok tokenizers.Tokenizer, query string, documents []string) []float32 {
+func rerank(backend backends.Backend, ctx *context.Context, model onnx.Model, tok tokenizers.Tokenizer, query string, documents []string) []float32 {
 	// Tokenize each query-document pair.
 	pairs := encodePairs(tok, query, documents, *flagMaxLength)
 
@@ -293,12 +294,13 @@ func extractScores(output *tensors.Tensor) []float32 {
 	scores := make([]float32, batchSize)
 	for i := range batchSize {
 		offset := i * numLabels
-		if numLabels == 1 {
+		switch numLabels {
+		case 1:
 			scores[i] = flat[offset]
-		} else if numLabels == 2 {
+		case 2:
 			// Softmax over [negative, positive] and take positive class.
 			scores[i] = softmax(flat[offset], flat[offset+1])
-		} else {
+		default:
 			scores[i] = flat[offset]
 		}
 	}
