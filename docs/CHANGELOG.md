@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+# Next:
+
+- Package `graph`:
+  - `Floor` and `Ceil` operations now are identity for integer dtypes.
+
 # v0.27.0: Graph functions; Improved Go backend (fusion ops); Quantization dtypes; more ML layers & fixes
 
 - Package `backends`: major refactoring to add support for functions/closures.
