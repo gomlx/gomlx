@@ -320,83 +320,94 @@ type OneArgTestCase[T dtypes.Supported] struct {
 }
 
 func TestOneArgOps(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
 
-	casesFloat64 := []OneArgTestCase[float64]{
-		{Abs, func(x float64) float64 { return math.Abs(x) }},
-		{Neg, func(x float64) float64 { return -x }},
-		{Exp, func(x float64) float64 { return math.Exp(x) }},
-		{Expm1, func(x float64) float64 { return math.Expm1(x) }},
-		{Floor, func(x float64) float64 { return math.Floor(x) }},
-		{Ceil, func(x float64) float64 { return math.Ceil(x) }},
-		{Round, func(x float64) float64 { return math.Round(x) }},
-		{Log, func(x float64) float64 { return math.Log(x) }},
-		{Log1P, func(x float64) float64 { return math.Log1p(x) }},
-		{Sign, func(x float64) float64 {
-			if math.Signbit(x) {
-				return -1
-			} else {
-				return 1
+		casesFloat64 := []OneArgTestCase[float64]{
+			{Abs, func(x float64) float64 { return math.Abs(x) }},
+			{Neg, func(x float64) float64 { return -x }},
+			{Exp, func(x float64) float64 { return math.Exp(x) }},
+			{Expm1, func(x float64) float64 { return math.Expm1(x) }},
+			{Floor, func(x float64) float64 { return math.Floor(x) }},
+			{Ceil, func(x float64) float64 { return math.Ceil(x) }},
+			{Round, func(x float64) float64 { return math.Round(x) }},
+			{Log, func(x float64) float64 { return math.Log(x) }},
+			{Log1P, func(x float64) float64 { return math.Log1p(x) }},
+			{Sign, func(x float64) float64 {
+				if math.Signbit(x) {
+					return -1
+				} else {
+					return 1
+				}
+			}},
+			{Logistic, func(x float64) float64 { return 1 / (1 + math.Exp(-x)) }},
+			{Sigmoid, func(x float64) float64 { return 1 / (1 + math.Exp(-x)) }},
+			{Cos, func(x float64) float64 { return math.Cos(x) }},
+			{Sin, func(x float64) float64 { return math.Sin(x) }},
+			{Tanh, func(x float64) float64 { return math.Tanh(x) }},
+			{Sqrt, func(x float64) float64 { return math.Sqrt(x) }},
+			{Rsqrt, func(x float64) float64 { return 1.0 / math.Sqrt(x) }},
+		}
+		xSlices := [][]float64{{11.1, 12.8}, {-13.2, -14.9}}
+		for _, test := range casesFloat64 {
+			g := NewGraph(backend, "[2, 2] graph for one-arg operation")
+			x := Const(g, xSlices)
+			n := test.fnGraph(x)
+			wantShape := shapes.Make(dtypes.Float64, 2, 2)
+			if !n.Shape().Equal(wantShape) {
+				t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 			}
-		}},
-		{Logistic, func(x float64) float64 { return 1 / (1 + math.Exp(-x)) }},
-		{Sigmoid, func(x float64) float64 { return 1 / (1 + math.Exp(-x)) }},
-		{Cos, func(x float64) float64 { return math.Cos(x) }},
-		{Sin, func(x float64) float64 { return math.Sin(x) }},
-		{Tanh, func(x float64) float64 { return math.Tanh(x) }},
-		{Sqrt, func(x float64) float64 { return math.Sqrt(x) }},
-		{Rsqrt, func(x float64) float64 { return 1.0 / math.Sqrt(x) }},
-	}
-	xSlices := [][]float64{{11.1, 12.8}, {-13.2, -14.9}}
-	for _, test := range casesFloat64 {
-		g := NewGraph(backend, "[2, 2] graph for one-arg operation")
-		x := Const(g, xSlices)
-		n := test.fnGraph(x)
-		wantShape := shapes.Make(dtypes.Float64, 2, 2)
-		if !n.Shape().Equal(wantShape) {
-			t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
-		}
-		local := compileRunAndTakeFirst(t, g)
-		got := local.Value().([][]float64)
-		want := [][]float64{{0, 0}, {0, 0}}
-		for i0, x0Slice := range xSlices {
-			for i1, value := range x0Slice {
-				want[i0][i1] = test.goFnScalar(value)
+			local := compileRunAndTakeFirst(t, g)
+			got := local.Value().([][]float64)
+			want := [][]float64{{0, 0}, {0, 0}}
+			for i0, x0Slice := range xSlices {
+				for i1, value := range x0Slice {
+					want[i0][i1] = test.goFnScalar(value)
+				}
+			}
+			if !xslices.DeepSliceCmp(got, want, xslices.Close[float64]) {
+				fmt.Printf("%s\n", g)
+				fmt.Printf("\tResult: %v %s\n", got, local.Shape())
+				t.Errorf("Wanted %v, got %v", want, got)
 			}
 		}
-		if !xslices.DeepSliceCmp(got, want, xslices.Close[float64]) {
-			fmt.Printf("%s\n", g)
-			fmt.Printf("\tResult: %v %s\n", got, local.Shape())
-			t.Errorf("Wanted %v, got %v", want, got)
-		}
-	}
 
-	// Test imag/real for complex numbers.
-	graphtest.RunTestGraphFn(t, "RealImagConj()", func(g *Graph) (inputs, outputs []*Node) {
-		inputs = []*Node{Const(g, []complex64{1.0, 0.0 - 1.0i, -2.0 + 2.0i})}
-		outputs = []*Node{Real(inputs[0]), Imag(inputs[0]), Conj(inputs[0])}
-		return
-	}, []any{
-		[]float32{1.0, 0.0, -2.0},
-		[]float32{0.0, -1.0, 2.0},
-		[]complex64{1.0, 0.0 + 1.0i, -2.0 - 2.0i},
-	}, -1)
+		// Test imag/real for complex numbers.
+		graphtest.RunTestGraphFn(t, "RealImagConj()", func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{Const(g, []complex64{1.0, 0.0 - 1.0i, -2.0 + 2.0i})}
+			outputs = []*Node{Real(inputs[0]), Imag(inputs[0]), Conj(inputs[0])}
+			return
+		}, []any{
+			[]float32{1.0, 0.0, -2.0},
+			[]float32{0.0, -1.0, 2.0},
+			[]complex64{1.0, 0.0 + 1.0i, -2.0 - 2.0i},
+		}, -1)
 
-	// Test Not ops
-	graphtest.RunTestGraphFn(t, "LogicalNot", func(g *Graph) (inputs, outputs []*Node) {
-		inputs = []*Node{Const(g, []bool{false, true})}
-		outputs = []*Node{LogicalNot(inputs[0])}
-		return
-	}, []any{
-		[]bool{true, false},
-	}, -1)
-	graphtest.RunTestGraphFn(t, "BitwiseNot", func(g *Graph) (inputs, outputs []*Node) {
-		inputs = []*Node{Const(g, []uint8{12, 255, 243, 0})}
-		outputs = []*Node{BitwiseNot(inputs[0])}
-		return
-	}, []any{
-		[]uint8{243, 0, 12, 255},
-	}, -1)
+		// Test Not ops
+		graphtest.RunTestGraphFn(t, "LogicalNot", func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{Const(g, []bool{false, true})}
+			outputs = []*Node{LogicalNot(inputs[0])}
+			return
+		}, []any{
+			[]bool{true, false},
+		}, -1)
+		graphtest.RunTestGraphFn(t, "BitwiseNot", func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{Const(g, []uint8{12, 255, 243, 0})}
+			outputs = []*Node{BitwiseNot(inputs[0])}
+			return
+		}, []any{
+			[]uint8{243, 0, 12, 255},
+		}, -1)
+
+		// Test integer Floor/Ceil ops become identity.
+		graphtest.RunTestGraphFn(t, "integer Floor/Ceil", func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{Const(g, []int8{1, -7, 13})}
+			outputs = []*Node{Floor(inputs[0]), Ceil(inputs[0])}
+			return
+		}, []any{
+			[]int8{1, -7, 13},
+			[]int8{1, -7, 13},
+		}, -1)
+	})
 }
 
 func TestClzOp(t *testing.T) {
