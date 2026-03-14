@@ -52,6 +52,9 @@ func (b *Builder) NewFunction(name string) (backends.Function, error) {
 		return nil, errors.Errorf("function name cannot be empty")
 	}
 	f := &Function{
+		Function: notimplemented.Function{
+			ErrFn: notImplementedError,
+		},
 		builder:   b,
 		name:      name,
 		parent:    nil, // Top-level functions have no parent
@@ -148,7 +151,6 @@ type Node struct {
 	// data for the specific node type.
 	data any
 }
-
 
 // MultiOutputValues converts a multi-output node's outputs to []backends.Value.
 func (node *Node) MultiOutputValues() []backends.Value {

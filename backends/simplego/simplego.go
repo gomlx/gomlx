@@ -179,22 +179,28 @@ func (b *Backend) Capabilities() backends.Capabilities {
 // Builder creates a new builder used to construct a named computation.
 func (b *Backend) Builder(name string) backends.Builder {
 	builder := &Builder{
+		Builder: notimplemented.Builder{
+			ErrFn: notImplementedError,
+		},
 		backend: b,
 		name:    name,
 	}
+
 	// Create the main function
 	builder.mainFn = &Function{
+		Function: notimplemented.Function{
+			ErrFn: notImplementedError,
+		},
 		builder:   builder,
 		name:      "main",
 		nodeDedup: make(map[nodeDedupKey][]*Node),
 	}
 	// Set the "not implemented" custom message:
-	builder.Builder.ErrFn = notImplementedError
 	return builder
 }
 
 func notImplementedError(opType backends.OpType) error {
-	return errors.Wrapf(notimplemented.NotImplementedError, "sorry, op %q not implemented in SimpleGo yet "+
+	return errors.Wrapf(notimplemented.NotImplementedError, "sorry, op %q not implemented in SimpleGo (the \"go\" backend) yet "+
 		"-- reach out to github.com/gomlx/gomlx and open an issue if you need this op, this helps us prioritize the work",
 		opType)
 }
