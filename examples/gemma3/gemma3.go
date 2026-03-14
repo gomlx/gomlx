@@ -36,6 +36,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/onnx-gomlx/onnx"
+	onnxparser "github.com/gomlx/onnx-gomlx/onnx/parser"
 	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -98,7 +99,7 @@ func main() {
 	}
 
 	// Load ONNX model.
-	model, err := onnx.ReadFile(onnxPath)
+	model, err := onnxparser.FromFile(onnxPath)
 	if err != nil {
 		klog.Fatalf("Failed to load ONNX model: %+v", err)
 	}
@@ -342,7 +343,7 @@ type kvStructure struct {
 	outputKeyIndices []int
 	// outputValueIndices are indices into the model's output list for the present value tensors.
 	outputValueIndices []int
-	logitsIndex        int // index of logits in model.Outputs()
+	logitsIndex        int          // index of logits in model.Outputs()
 	kvHeads            int          // number of KV attention heads
 	headDim            int          // head dimension
 	kvDType            dtypes.DType // DType for KV tensors
@@ -377,7 +378,7 @@ func (kv *kvStructure) setInputs(inputs map[string]*Node, concatKeys, concatValu
 
 // parseKVStructure inspects the ONNX model's inputs and outputs to identify
 // the KV cache layout: layer count, input/output names, and shapes.
-func parseKVStructure(model *onnx.Model) *kvStructure {
+func parseKVStructure(model onnx.Model) *kvStructure {
 	inputNames, inputShapes := model.Inputs()
 	outputNames, _ := model.Outputs()
 
@@ -464,7 +465,7 @@ func parseKVStructure(model *onnx.Model) *kvStructure {
 // The returned KV caches initialize the decode loop. The attention mask must mark
 // which positions are real tokens vs padding so the model attends only to valid positions.
 func prefillKVCacheGraph(
-	ctx *context.Context, model *onnx.Model, kv *kvStructure,
+	ctx *context.Context, model onnx.Model, kv *kvStructure,
 	hasAttentionMask, hasPositionIDs bool,
 	idNode, maskNode, posNode, seqLenNode *Node,
 ) []*Node {
@@ -508,7 +509,7 @@ func prefillKVCacheGraph(
 //   - updatedKeys [numLayers, 1, kvHeads, paddedSize, headDim]: cache with the new key inserted.
 //   - updatedValues [numLayers, 1, kvHeads, paddedSize, headDim]: cache with the new value inserted.
 func decodeWithKVCacheGraph(
-	ctx *context.Context, model *onnx.Model, kv *kvStructure,
+	ctx *context.Context, model onnx.Model, kv *kvStructure,
 	hasAttentionMask, hasPositionIDs bool,
 	idNode, maskNode, posNode, concatKeysNode, concatValuesNode, kvInsertPosNode *Node,
 ) []*Node {
@@ -675,7 +676,7 @@ func growKVBuffer(backend backends.Backend, kv *tensors.Tensor, targetSeqLen int
 // the full sequence with power-of-2 padding. A persistent Exec is created
 // outside the loop to enable compilation caching across steps.
 func generateWithoutKVCache(
-	backend backends.Backend, ctx *context.Context, model *onnx.Model, tok api.Tokenizer,
+	backend backends.Backend, ctx *context.Context, model onnx.Model, tok api.Tokenizer,
 	promptTokens []int32,
 	padID, eosID, maxSeqLen, maxTokens int, hasAttentionMask, hasPositionIDs bool,
 	kv *kvStructure,
