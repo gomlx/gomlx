@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 )
 
 // Function implements backends.Function and returns NotImplementedError for every operation.
@@ -21,6 +22,7 @@ var _ backends.Function = Function{}
 // It falls back to Function.ErrFn if it is defined.
 func (f Function) baseErrFn(op backends.OpType) error {
 	if f.ErrFn == nil {
+		klog.Errorf("NotImplementedError without ErrFn for op %s, please open an issue for a ErrFn to be set", op)
 		return NotImplementedError
 	}
 	return f.ErrFn(op)
@@ -51,7 +53,7 @@ func (f Function) Return(outputs []backends.Value, shardings []*backends.Shardin
 }
 
 func (f Function) Call(target backends.Function, inputs ...backends.Value) ([]backends.Value, error) {
-	return nil, errors.New("Call not implemented")
+	return nil, errors.Wrapf(NotImplementedError, "in Call()")
 }
 
 func (f Function) Identity(x backends.Value) (backends.Value, error) {

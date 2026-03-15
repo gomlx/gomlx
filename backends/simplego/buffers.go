@@ -188,9 +188,9 @@ func packedLen(dtype dtypes.DType, logicalSize int) int {
 // makeSliceForDType creates a slice of the appropriate type for the given dtype and length.
 // Fast paths for common dtypes avoid reflection overhead.
 //
-// For sub-byte types (Int4, Uint4, Int2, Uint2), the returned slice is []uint8
+// For sub-byte types (Int4, Uint4, Int2, Uint2), the returned slice is []byte
 // with packed storage (multiple values per byte). The `length` parameter is the
-// logical element count; the actual slice length is packedLen(dtype, length).
+// logical element count; the actual slice length is dtype.SizeForDimensions(length).
 func makeSliceForDType(dtype dtypes.DType, length int) any {
 	switch dtype { //nolint:exhaustive
 	case dtypes.Float32:
@@ -221,7 +221,7 @@ func makeSliceForDType(dtype dtypes.DType, length int) any {
 		return make([]complex128, length)
 	case dtypes.Int4, dtypes.Uint4, dtypes.Int2, dtypes.Uint2:
 		// Sub-byte types are always stored packed: multiple values per byte.
-		return make([]uint8, packedLen(dtype, length))
+		return make([]byte, dtype.SizeForDimensions(length))
 	default:
 		// Fallback to reflection for less common types (BFloat16, Float16, etc.).
 		return reflect.MakeSlice(reflect.SliceOf(dtype.GoType()), length, length).Interface()
@@ -269,8 +269,14 @@ func (b *Backend) getBuffer(dtype dtypes.DType, length int) (*Buffer, error) {
 	// see len(flat) == length, not the bucketed capacity.
 	// Also reset the 1D shape to match the actual length (the pool's New function
 	// creates shapes at the bucketed size).
+	// For packed sub-byte types (Uint4 etc.), the flat is []byte and its length
+	// is the packed byte count, not the logical element count.
 	if length > 0 {
-		buf.flat = subSliceFlat(buf.flat, length)
+		flatLen := length
+		if isPackedSubByteDType(dtype) {
+			flatLen = packedLen(dtype, length)
+		}
+		buf.flat = subSliceFlat(buf.flat, flatLen)
 	}
 	buf.shape = shapes.Make(dtype, length)
 	// buf.randomize() // Useful to find where zero-initialized is needed but missing.
@@ -342,22 +348,26 @@ func copyFlat(flatDst, flatSrc any) {
 }
 
 // mutableBytes returns the slice of the bytes used by the flat given -- it works with any of the supported data types for buffers.
-func (b *Buffer) mutableBytes() []byte {
-	fn := mutableBytesDTypeMap.Get(b.shape.DType).(func(b *Buffer) []byte) //nolint:errcheck
+func (b *Buffer) mutableBytes() ([]byte, error) {
+	tmpAny, tmpErr := mutableBytesDTypeMap.Get(b.shape.DType)
+	if tmpErr != nil {
+		return nil, tmpErr
+	}
+	fn := tmpAny.(func(b *Buffer) ([]byte, error)) //nolint:errcheck
 	return fn(b)
 }
 
 var mutableBytesDTypeMap = NewDTypeMap("MutableBytes")
 
 // mutableBytesGeneric is the generic implementation of mutableBytes.
-func mutableBytesGeneric[T SupportedTypesConstraints](b *Buffer) []byte {
+func mutableBytesGeneric[T SupportedTypesConstraints](b *Buffer) ([]byte, error) {
 	flat := b.flat.([]T) //nolint:errcheck
 	if len(flat) == 0 {
-		return nil // Handle empty tensors
+		return nil, nil // Handle empty tensors
 	}
 	bytePointer := (*byte)(unsafe.Pointer(&flat[0]))
 	var t T
-	return unsafe.Slice(bytePointer, len(flat)*int(unsafe.Sizeof(t)))
+	return unsafe.Slice(bytePointer, len(flat)*int(unsafe.Sizeof(t))), nil
 }
 
 // Fill the buffer with the given value.
@@ -369,7 +379,11 @@ func (b *Buffer) Fill(value any) error {
 	if value != nil && dtypes.FromAny(value) != dtype {
 		return errors.Errorf("fillBuffer: invalid value type %T for buffer of dtype %s", value, dtype)
 	}
-	fillFn := fillBufferDTypeMap.Get(dtype).(func(*Buffer, any)) //nolint:errcheck
+	tmpAny, tmpErr := fillBufferDTypeMap.Get(dtype)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	fillFn := tmpAny.(func(*Buffer, any)) //nolint:errcheck
 	fillFn(b, value)
 	return nil
 }
@@ -521,12 +535,12 @@ func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, sha
 			errors.Errorf("backend (%s) only supports deviceNum 0, cannot create buffer on deviceNum %d (shape=%s)",
 				b.Name(), deviceNum, shape)
 	}
-	// For packed sub-byte types (Int4, Uint4, Int2, Uint2), flat data is []uint8 (packed bytes).
-	// dtypes.FromGoType(uint8) returns Uint8, not Int4, so we validate the element
+	// For packed sub-byte types (Int4, Uint4, Int2, Uint2), flat data is []byte (packed bytes).
+	// dtypes.FromGoType(byte) returns Uint8, not Int4, so we validate the element
 	// type directly rather than round-tripping through FromGoType.
-	if isPackedSubByteDType(shape.DType) {
-		if reflect.TypeOf(flat).Elem() != reflect.TypeFor[uint8]() {
-			return nil, errors.Errorf("sub-byte dtype %s requires []uint8 packed flat data, got %s",
+	if shape.DType.IsPacked() {
+		if reflect.TypeOf(flat).Elem() != reflect.TypeFor[byte]() {
+			return nil, errors.Errorf("sub-byte dtype %s requires []byte packed flat data, got %s",
 				shape.DType, reflect.TypeOf(flat).Elem())
 		}
 	} else if dtypes.FromGoType(reflect.TypeOf(flat).Elem()) != shape.DType {

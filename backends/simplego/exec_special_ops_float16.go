@@ -91,10 +91,10 @@ func execReduceProductFloat16(operand, output *Buffer, it *reduceOutputIterator,
 
 // Float16 buffer operations
 
-func mutableBytesFloat16(b *Buffer) []byte {
+func mutableBytesFloat16(b *Buffer) ([]byte, error) {
 	flat := b.flat.([]float16.Float16)
 	bytePointer := (*byte)(unsafe.Pointer(&flat[0]))
-	return unsafe.Slice(bytePointer, len(flat)*2) // Float16 is 2 bytes
+	return unsafe.Slice(bytePointer, len(flat)*2), nil // Float16 is 2 bytes
 }
 
 func fillBufferFloat16(b *Buffer, valueAny any) {

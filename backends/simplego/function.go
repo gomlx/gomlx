@@ -156,6 +156,9 @@ func (f *Function) Closure() (backends.Function, error) {
 		return nil, err
 	}
 	closure := &Function{
+		Function: notimplemented.Function{
+			ErrFn: notImplementedError,
+		},
 		builder:   f.builder,
 		name:      "", // Closures have empty names
 		parent:    f,

@@ -15,14 +15,18 @@ func TestConvertPackedInt4ToInt8(t *testing.T) {
 	// Packed Int4 → Int8: unpacks nibbles with sign extension.
 	// Byte 0xF0 = low nibble 0x0 (0), high nibble 0xF (-1).
 	// Byte 0x87 = low nibble 0x7 (7), high nibble 0x8 (-8).
-	srcData := []uint8{0xF0, 0x87}
+	srcData := []byte{0xF0, 0x87}
 	srcShape := shapes.Make(dtypes.Int4, 4) // 4 Int4 elements packed in 2 bytes
 	srcBuf := &Buffer{shape: srcShape, flat: srcData, inUse: true}
 
 	dstShape := shapes.Make(dtypes.Int8, 4)
 	dstBuf := &Buffer{shape: dstShape, flat: make([]int8, 4), inUse: true}
 
-	convertFn := convertDTypePairMap.Get(dtypes.Int4, dtypes.Int8).(convertFnType)
+	tmpAny, tmpErr := convertDTypePairMap.Get(dtypes.Int4, dtypes.Int8)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	convertFn := tmpAny.(convertFnType)
 	convertFn(srcBuf, dstBuf)
 
 	result := dstBuf.flat.([]int8)
@@ -36,14 +40,18 @@ func TestConvertPackedUint4ToUint8(t *testing.T) {
 	// Packed Uint4 → Uint8: unpacks nibbles (no sign extension).
 	// Byte 0xF0 = low nibble 0, high nibble 15.
 	// Byte 0x87 = low nibble 7, high nibble 8.
-	srcData := []uint8{0xF0, 0x87}
+	srcData := []byte{0xF0, 0x87}
 	srcShape := shapes.Make(dtypes.Uint4, 4) // 4 Uint4 elements packed in 2 bytes
 	srcBuf := &Buffer{shape: srcShape, flat: srcData, inUse: true}
 
 	dstShape := shapes.Make(dtypes.Uint8, 4)
 	dstBuf := &Buffer{shape: dstShape, flat: make([]uint8, 4), inUse: true}
 
-	convertFn := convertDTypePairMap.Get(dtypes.Uint4, dtypes.Uint8).(convertFnType)
+	tmpAny, tmpErr := convertDTypePairMap.Get(dtypes.Uint4, dtypes.Uint8)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	convertFn := tmpAny.(convertFnType)
 	convertFn(srcBuf, dstBuf)
 
 	result := dstBuf.flat.([]uint8)
@@ -55,14 +63,18 @@ func TestConvertPackedUint4ToUint8(t *testing.T) {
 
 func TestConvertPackedInt4ToFloat32(t *testing.T) {
 	// Packed Int4 → Float32: unpacks and converts.
-	srcData := []uint8{0xF0, 0x87}
+	srcData := []byte{0xF0, 0x87}
 	srcShape := shapes.Make(dtypes.Int4, 4)
 	srcBuf := &Buffer{shape: srcShape, flat: srcData, inUse: true}
 
 	dstShape := shapes.Make(dtypes.Float32, 4)
 	dstBuf := &Buffer{shape: dstShape, flat: make([]float32, 4), inUse: true}
 
-	convertFn := convertDTypePairMap.Get(dtypes.Int4, dtypes.Float32).(convertFnType)
+	tmpAny, tmpErr := convertDTypePairMap.Get(dtypes.Int4, dtypes.Float32)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	convertFn := tmpAny.(convertFnType)
 	convertFn(srcBuf, dstBuf)
 
 	result := dstBuf.flat.([]float32)

@@ -877,8 +877,8 @@ func (ni *nodeInputsCeil) String() string {
 	)
 }
 
-// Ceil returns the Op that represents the output of the corresponding operation.
-func Ceil(x *Node) (
+// backendCeil is a Graph wrapper for the backend.Builder.Ceil method.
+func backendCeil(x *Node) (
 	node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1776,8 +1776,8 @@ func (ni *nodeInputsFloor) String() string {
 	)
 }
 
-// Floor returns the Op that represents the output of the corresponding operation.
-func Floor(x *Node) (
+// backendFloor is a Graph wrapper for the backend.Builder.Floor method.
+func backendFloor(x *Node) (
 	node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)

@@ -279,7 +279,10 @@ func execSort(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 
 			// Apply permutation to outputs
 			for _, output := range outputs {
-				applyPermutation(output, indices, baseOffset, axisStride, axisSize)
+				err = applyPermutation(output, indices, baseOffset, axisStride, axisSize)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -297,9 +300,14 @@ func setScalarFromFlat(scalar *Buffer, flat any, offset int) {
 var applyPermutationDTypeMap = NewDTypeMap("ApplyPermutation")
 
 // applyPermutation reorders elements along the sort axis according to the given indices.
-func applyPermutation(buf *Buffer, indices []int, baseOffset, axisStride, axisSize int) {
-	fn := applyPermutationDTypeMap.Get(buf.shape.DType).(func(buf *Buffer, indices []int, baseOffset, axisStride, axisSize int)) //nolint:errcheck
+func applyPermutation(buf *Buffer, indices []int, baseOffset, axisStride, axisSize int) error {
+	fnAny, err := applyPermutationDTypeMap.Get(buf.shape.DType) //nolint:errcheck
+	if err != nil {
+		return err
+	}
+	fn := fnAny.(func(buf *Buffer, indices []int, baseOffset, axisStride, axisSize int))
 	fn(buf, indices, baseOffset, axisStride, axisSize)
+	return nil
 }
 
 func applyPermutationGeneric[T SupportedTypesConstraints](buf *Buffer, indices []int, baseOffset, axisStride, axisSize int) {

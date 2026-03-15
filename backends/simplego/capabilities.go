@@ -174,6 +174,8 @@ var Capabilities = backends.Capabilities{
 
 	DTypes: map[dtypes.DType]bool{
 		dtypes.Bool:     true,
+		dtypes.Int2:     true,
+		dtypes.Uint2:    true,
 		dtypes.Int4:     true,
 		dtypes.Uint4:    true,
 		dtypes.Int8:     true,

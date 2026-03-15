@@ -233,14 +233,19 @@ func execConvGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 		outputShape: outputShape,
 		params:      params,
 	}
-	var convFn func(convGeneralExecPlan) error
+	var convFnAny any
 	if params.hasInputDilations || params.hasKernelDilations || params.channelGroupCount > 1 || params.batchGroupCount > 1 {
 		// Full version.
-		convFn = convDTypeMap.Get(dtype).(func(convGeneralExecPlan) error)
+		convFnAny, err = convDTypeMap.Get(dtype)
 	} else {
 		// Faster, but no dilation or grouping version.
-		convFn = convNoDilationDTypeMap.Get(dtype).(func(plan convGeneralExecPlan) error)
+		convFnAny, err = convNoDilationDTypeMap.Get(dtype)
 	}
+	if err != nil {
+		backend.putBuffer(output)
+		return nil, err
+	}
+	convFn := convFnAny.(func(convGeneralExecPlan) error)
 
 	if err := convFn(plan); err != nil {
 		backend.putBuffer(output)

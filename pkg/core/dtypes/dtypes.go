@@ -165,7 +165,8 @@ func (dtype DType) Size() int {
 }
 
 // Bits returns the number of bits for the given DType.
-// This is only used for "packed" storage version -- e.g.: bool by default will be transferred as one byte per value (like in Go)
+// This is only used for "packed" storage version (Int4, Int2, Uint4, Uint2).
+// Bool is never packed and hence returns 8.
 func (dtype DType) Bits() int {
 	switch dtype {
 	case Int4, Uint4:
@@ -173,16 +174,26 @@ func (dtype DType) Bits() int {
 	case Int2, Uint2:
 		return 2
 	case Bool:
-		return 1
+		return 8
 	default:
 		return dtype.Size() * 8
 	}
+}
+
+// IsPacked returns whether the dtype uses less than a byte and is "packed" into bytes into memory.
+// It is always "little-endian": the lower bits represent the first values in a sequence.
+// E.g.: Int4, Int2, Uint4, Uint2.
+func (dtype DType) IsPacked() bool {
+	return dtype.Bits() < 8
 }
 
 // SizeForDimensions returns the size in bytes used for the given dimensions.
 // This is a safer method than Size in case the dtype uses an underlying size that is not multiple of 8 bits.
 //
 // It works also for scalar (one element) shapes where the list of dimensions is empty.
+//
+// For packed types, it assumes padding the last byte where needed. E.g.: Int4.SizeForDiemensions(1) -> 1,
+// even though only 4 bits are used for the one byte.
 func (dtype DType) SizeForDimensions(dimensions ...int) int {
 	numElements := 1
 	for _, dim := range dimensions {
@@ -191,6 +202,10 @@ func (dtype DType) SizeForDimensions(dimensions ...int) int {
 		}
 		numElements *= dim
 	}
+	if dtype.IsPacked() {
+		return (numElements*dtype.Bits() + 7) / 8
+	}
+	// Not packed.
 	return numElements * dtype.Size()
 }
 
@@ -217,8 +232,7 @@ func (dtype DType) GoType() reflect.Type {
 		return reflect.TypeFor[int32]()
 	case Int16:
 		return reflect.TypeFor[int16]()
-	case Int8, Int4, Int2:
-		// Int4 and Int2 are converted in the host to int8 by default.
+	case Int8:
 		return reflect.TypeFor[int8]()
 
 	case Uint64:
@@ -227,9 +241,12 @@ func (dtype DType) GoType() reflect.Type {
 		return reflect.TypeFor[uint32]()
 	case Uint16:
 		return reflect.TypeFor[uint16]()
-	case Uint8, Uint4, Uint2:
-		// Uint4 and Uint2 are converted in the host to int8 by default.
+	case Uint8:
 		return reflect.TypeFor[uint8]()
+
+	case Uint4, Uint2, Int4, Int2:
+		// Packed sub-byte types have a Go type `byte`.
+		return reflect.TypeFor[byte]()
 
 	case Bool:
 		return reflect.TypeFor[bool]()
@@ -265,6 +282,9 @@ func (dtype DType) GoStr() string {
 // LowestValue for dtype converted to the corresponding Go type.
 // For float values it will return negative infinite.
 // There is no lowest value for complex numbers, since they are not ordered.
+//
+// For the packed sub-byte types (Int4, Int2, Uint4, Uint2), the lowest value is returned as a byte,
+// with all values ("nibbles" for 4 bits, and "crumbs" for 2 bits) set to the lowest value.
 func (dtype DType) LowestValue() any {
 	switch dtype {
 	case Int64:
@@ -276,9 +296,9 @@ func (dtype DType) LowestValue() any {
 	case Int8:
 		return int8(math.MinInt8)
 	case Int4:
-		return int8(-8)
+		return byte(0x88) // Two nibbles: [-8, -8]
 	case Int2:
-		return int8(-2)
+		return byte(0xEE) // Four crumbs: [-2, -2, -2, -2]
 
 	case Uint64:
 		return uint64(0)
@@ -286,8 +306,10 @@ func (dtype DType) LowestValue() any {
 		return uint32(0)
 	case Uint16:
 		return uint16(0)
-	case Uint8, Uint4, Uint2:
+	case Uint8:
 		return uint8(0)
+	case Uint4, Uint2:
+		return byte(0)
 
 	case Bool:
 		return false
@@ -310,6 +332,9 @@ func (dtype DType) LowestValue() any {
 // HighestValue for dtype converted to the corresponding Go type.
 // For float values it will return infinite.
 // There is no lowest value for complex numbers, since they are not ordered.
+//
+// For the packed sub-byte types (Int4, Int2, Uint4, Uint2), the highest value is returned as a byte,
+// with all values ("nibbles" for 4 bits, and "crumbs" for 2 bits) set to the highest value.
 func (dtype DType) HighestValue() any {
 	switch dtype {
 	case Int64:
@@ -321,9 +346,9 @@ func (dtype DType) HighestValue() any {
 	case Int8:
 		return int8(math.MaxInt8)
 	case Int4:
-		return int8(7)
+		return byte(0x77) // Two "nibbles": [7, 7]
 	case Int2:
-		return int8(1)
+		return byte(0x55) // Four "crumbs": [1, 1, 1, 1]
 
 	case Uint64:
 		return uint64(math.MaxUint64)
@@ -334,9 +359,9 @@ func (dtype DType) HighestValue() any {
 	case Uint8:
 		return uint8(math.MaxUint8)
 	case Uint4:
-		return uint8(15)
+		return byte(0xFF) // Two "nibbles": [15, 15]
 	case Uint2:
-		return uint8(3)
+		return byte(0xFF) // Four "crumbs": [3, 3, 3, 3]
 
 	case Bool:
 		return true
@@ -360,6 +385,9 @@ func (dtype DType) HighestValue() any {
 // Only useful for float types.
 // The return value is converted to the corresponding Go type.
 // There is no smallest non-zero value for complex numbers, since they are not ordered.
+//
+// For the packed sub-byte types (Int4, Int2, Uint4, Uint2), the value is returned as a byte,
+// with all values ("nibbles" for 4 bits, and "crumbs" for 2 bits) set to the lowest non-zero value.
 func (dtype DType) SmallestNonZeroValueForDType() any {
 	switch dtype {
 	case Int64:
@@ -368,8 +396,12 @@ func (dtype DType) SmallestNonZeroValueForDType() any {
 		return int32(1)
 	case Int16:
 		return int16(1)
-	case Int8, Int4, Int2:
+	case Int8:
 		return int8(1)
+	case Int4:
+		return byte(0x11) // Two "nibbles": [1, 1]
+	case Int2:
+		return byte(0x33) // Four "crumbs": [1, 1, 1, 1]
 
 	case Uint64:
 		return uint64(1)
@@ -377,8 +409,12 @@ func (dtype DType) SmallestNonZeroValueForDType() any {
 		return uint32(1)
 	case Uint16:
 		return uint16(1)
-	case Uint8, Uint4, Uint2:
+	case Uint8:
 		return uint8(1)
+	case Uint4:
+		return byte(0x11) // Two "nibbles": [1, 1]
+	case Uint2:
+		return byte(0x33) // Four "crumbs": [1, 1, 1, 1]
 
 	case Bool:
 		return true
@@ -462,6 +498,7 @@ func (dtype DType) RealDType() DType {
 }
 
 // IsInt returns whether dtype is a supported integer type -- float types not yet supported will return false.
+// This include the unsigned integer types.
 func (dtype DType) IsInt() bool {
 	return IntDTypes[dtype]
 }

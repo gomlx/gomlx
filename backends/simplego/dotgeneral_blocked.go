@@ -185,7 +185,11 @@ func execBlockForDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []
 	// output.Zeros()
 
 	// Copy data from flat to blocked format using the generic copy function
-	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes,
+	copyFlatToBlockAny, err := dotGeneralFlatToBlockDTypeMap.Get(dtype)
+	if err != nil {
+		return nil, err
+	}
+	copyFlatToBlock := copyFlatToBlockAny.(func(source, blkOutput *Buffer, contractingAxes,
 		batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
 	copyFlatToBlock(input, output, data.contractingAxes, data.batchAxes, data.batchSize, data.crossSize,
 		data.contractingSize, data.blockLog2Dim)
@@ -229,7 +233,11 @@ func execDotGeneralBlocked(backend *Backend, lhsBlocks, rhsBlocks *Buffer, hasBa
 	recursive.backend = backend
 
 	// Get the matrix multiplication kernel for a block
-	kernelBuilder := dotGeneralKernelDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, blockDim int) kernelFuncType)
+	kernelBuilderAny, err := dotGeneralKernelDTypeMap.Get(dtype)
+	if err != nil {
+		return err
+	}
+	kernelBuilder := kernelBuilderAny.(func(lhs, rhs, output *Buffer, blockDim int) kernelFuncType)
 	recursive.kernelFn = kernelBuilder(lhsBlocks, rhsBlocks, outputBlocks, blockDim)
 
 	// Set block counts from blocked buffer dimensions
@@ -242,7 +250,11 @@ func execDotGeneralBlocked(backend *Backend, lhsBlocks, rhsBlocks *Buffer, hasBa
 
 	// Copy output from blocked to flat format
 	finalOutputDType := output.shape.DType
-	copyOutputBlockToFlat := dotGeneralOutputBlockToFlatDTypeMap.Get(finalOutputDType).(func(blockedSource, output *Buffer))
+	copyOutputBlockToFlatAny, err := dotGeneralOutputBlockToFlatDTypeMap.Get(finalOutputDType)
+	if err != nil {
+		return err
+	}
+	copyOutputBlockToFlat := copyOutputBlockToFlatAny.(func(blockedSource, output *Buffer))
 	copyOutputBlockToFlat(outputBlocks, output)
 	backend.putBuffer(outputBlocks)
 	return nil

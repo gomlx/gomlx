@@ -1,6 +1,18 @@
 # GoMLX changelog
 
-# Next
+# Next:
+
+- Package `examples/...`:
+  - Updated `gemma3`, `mxbai-rerank` and `bert-base-ner` to use the new `onnx-gomlx` v0.4.0 API, bumped dependency.
+
+- Package `graph`:
+  - `Floor` and `Ceil` operations now are identity for integer dtypes.
+
+- Package `simplego`:
+  - Removed panics during execution: return errors instead.
+  - Fixed missing annotation/stacktrace on not-implemented errors. 
+
+# v0.27.0: Graph functions; Improved Go backend (fusion ops); Quantization dtypes; more ML layers & fixes
 
 - Package `backends`: major refactoring to add support for functions/closures.
   - Added `backends.Function`, which now holds all the "ops" methods.
@@ -34,13 +46,19 @@
 - Package `dtypes`:
   - Added 'Uint2', 'Uint4', 'Int2', 'Int4'. 
 - Package `graph`:
-  - Added `Unpack()` and `Pack()` for sub-byte dtypes.
   - Added `Function` concept (and support for closures) and the `Function.Call` operation.
   - Control Flow: Added `While` and `If` operations.
   - Order operations: Added `Sort`, `SortFunc`, `TopK`, `BottomK`.
+  - Fixed `Bitcast` for packed sub-byte types: `Int4`, `Int2`, `Uint4` and `Uint2`, so they can be "bitcast"
+    back and forth from/to `uint8` (bytes), to ease quantization.
   - Added `Atan2` function.
   - Added test helper functions to test various backends at once.
+  - Fixed `Gather` validation of `indexVectorAxis` to check against `startIndices` rank instead of `operand` rank.
+  - `Exec` graph compilation is now concurrent, avoiding redundant compilations for the same graph shape.
 - Package `ml/layers/attention`: Improved `MultiHeadAttention`; Added `KVCache` support.
+  - Added Grouped Query Attention (GQA) support.
+  - Added `UseQKVProjection()` option for fused Q/K/V Dense projection.
+  - `FusedScaledDotProductAttention` now supports boolean masks.
 - Package `ml/layers/attention/pos`: Added `PositionalEncoder` interface, and "RoPE" (Rotary Positional Encoding) implementation.
 - Package `ml/models/transformers`: 
   - Added a `Transformer` "model": a collection of transformer layers are setup based on given configuration.
@@ -51,11 +69,13 @@
 - Package `ml/layers/activations`: 
   - Added `HardSwish`.
 - Package `examples`:
-  - Separated in its own sub-modules, to separate its dependencies.
+  - Separated in its own sub-module, to separate its dependencies.
   - Added `gpt2`: A simple GPT-2 implementation using the new transformers and decode packages. It downloads the model from HuggingFace.
   - Added `textgen`: a minimal transformer text generation model that can be trained.
-  - Added `gemma3`: A simple Gemma 3 implementation using the new transformers and decode packages. It downloads the model from HuggingFace.
+  - Added `gemma3`: A simple Gemma 3 implementation using the `onnx-gomlx` package to convert the model, and `go-huggingface` to download the model and run the tokenizer.
+  - Added `mxbai-rerank`: A cross-encoder reranking example using the [MixedBread Reranker v1](https://huggingface.co/mixedbread-ai/mxbai-rerank-base-v1). It uses the `onnx-gomlx` package to convert the model, and `go-huggingface` to download the model and run the tokenizer.
   - Added `BERT-base-NER`: A BERT-base model fine-tuned for Named Entity Recognition.
+- Bumped github actions versions to the new "Node24" ones.
 
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 

@@ -406,6 +406,24 @@ func Mod(x, y *Node) *Node {
 	return Rem(x, y)
 }
 
+// Floor returns the floor of x, i.e., the largest integer less than or equal to x.
+// For integer dtypes, it returns x unchanged.
+func Floor(x *Node) *Node {
+	if x.DType().IsInt() {
+		return Identity(x)
+	}
+	return backendFloor(x)
+}
+
+// Ceil returns the ceil of x, i.e., the smallest integer greater than or equal to x.
+// For integer dtypes, it returns x unchanged.
+func Ceil(x *Node) *Node {
+	if x.DType().IsInt() {
+		return Identity(x)
+	}
+	return backendCeil(x)
+}
+
 // BroadcastPrefix adds dimensions to an array by duplicating the data in the array.
 //
 // The new dimensions dims are inserted on the left, i.e., if
