@@ -599,7 +599,7 @@ func BroadcastToCommonShape(operands ...*Node) []*Node {
 		expanded[i] = ExpandLeftToRank(op, maxRank)
 	}
 
-	// Step 2: Find the common dimension for each axis.
+	// Step 2: Find the common dimension and unified axis name for each axis.
 	commonDims := make([]int, maxRank)
 	axisNames := make([]string, maxRank)
 	hasNames := false
@@ -613,20 +613,10 @@ func BroadcastToCommonShape(operands ...*Node) []*Node {
 			}
 			if d == shapes.DynamicDim {
 				hasDynamic = true
-			} else {
-				if d > maxConcrete {
-					maxConcrete = d
-				}
+			} else if d > maxConcrete {
+				maxConcrete = d
 			}
-		}
-		if hasDynamic {
-			commonDims[axis] = shapes.DynamicDim
-		} else {
-			commonDims[axis] = maxConcrete
-		}
-
-		// Unify axis names from all operands for this axis.
-		for _, op := range expanded {
+			// Unify axis names from all operands for this axis.
 			name := op.Shape().AxisName(axis)
 			if name != "" {
 				unified, err := shapes.UnifyAxisName(axisNames[axis], name)
@@ -636,6 +626,11 @@ func BroadcastToCommonShape(operands ...*Node) []*Node {
 				axisNames[axis] = unified
 				hasNames = true
 			}
+		}
+		if hasDynamic {
+			commonDims[axis] = shapes.DynamicDim
+		} else {
+			commonDims[axis] = maxConcrete
 		}
 	}
 
