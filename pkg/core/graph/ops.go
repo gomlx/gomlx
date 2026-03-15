@@ -554,6 +554,92 @@ func BroadcastToDims(x *Node, dimensions ...int) *Node {
 	return backendBroadcastInDim(x, shape, broadcastDims)
 }
 
+// BroadcastToCommonShape broadcasts all operands to a common shape using numpy-style broadcasting rules.
+// Operands are first expanded to the same rank by prepending axes of dimension 1 (via ExpandLeftToRank),
+// then each operand is broadcast to the common shape where each axis takes the maximum dimension across all operands.
+//
+// DynamicDim (-1) is handled: if any operand has DynamicDim on an axis, the common dimension for that axis
+// is DynamicDim (since the concrete value is unknown at graph build time and 1-dims will be broadcast to match
+// at execution time). Axis names are unified across operands using shapes.UnifyAxisName.
+//
+// Panics if any non-1 concrete dimensions conflict on the same axis.
+func BroadcastToCommonShape(operands ...*Node) []*Node {
+	if len(operands) == 0 {
+		return nil
+	}
+	_ = validateBuildingGraphFromInputs(operands[0])
+
+	// Step 1: Expand to common rank.
+	maxRank := 0
+	for _, op := range operands {
+		if op.Rank() > maxRank {
+			maxRank = op.Rank()
+		}
+	}
+	expanded := make([]*Node, len(operands))
+	for i, op := range operands {
+		expanded[i] = ExpandLeftToRank(op, maxRank)
+	}
+
+	// Step 2: Find the common dimension for each axis.
+	commonDims := make([]int, maxRank)
+	axisNames := make([]string, maxRank)
+	hasNames := false
+	for axis := range maxRank {
+		hasDynamic := false
+		maxConcrete := 0
+		for _, op := range expanded {
+			d := 1
+			if !op.IsScalar() {
+				d = op.Shape().Dim(axis)
+			}
+			if d == shapes.DynamicDim {
+				hasDynamic = true
+			} else {
+				if d > maxConcrete {
+					maxConcrete = d
+				}
+			}
+		}
+		if hasDynamic {
+			commonDims[axis] = shapes.DynamicDim
+		} else {
+			commonDims[axis] = maxConcrete
+		}
+
+		// Unify axis names from all operands for this axis.
+		for _, op := range expanded {
+			name := op.Shape().AxisName(axis)
+			if name != "" {
+				unified, err := shapes.UnifyAxisName(axisNames[axis], name)
+				if err != nil {
+					exceptions.Panicf("BroadcastToCommonShape: axis %d: %v", axis, err)
+				}
+				axisNames[axis] = unified
+				hasNames = true
+			}
+		}
+	}
+
+	// Step 3: Broadcast each operand to the common shape.
+	result := make([]*Node, len(expanded))
+	for i, op := range expanded {
+		if !op.IsScalar() && slices.Equal(op.Shape().Dimensions, commonDims) {
+			result[i] = op
+			continue
+		}
+		targetShape := shapes.Shape{
+			DType:      op.DType(),
+			Dimensions: slices.Clone(commonDims),
+		}
+		if hasNames {
+			targetShape.AxisNames = slices.Clone(axisNames)
+		}
+		result[i] = BroadcastToShape(op, targetShape)
+	}
+	return result
+}
+
 // ConvertType is an alias to ConvertDType.
 // Deprecated: use ConvertDType instead.
 func ConvertType(x *Node, dtype dtypes.DType) *Node {
@@ -1386,6 +1472,23 @@ func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 		starts[ii] = 0
 		limits[ii] = dim
 		strides[ii] = 1
+		if dim == shapes.DynamicDim {
+			// Dynamic axis: negative indices can't be resolved without a concrete dim size.
+			// Allow full range or non-negative concrete bounds only.
+			if len(axesSpec) > ii && !axesSpec[ii].Full {
+				if axesSpec[ii].Start < 0 || (!axesSpec[ii].NoEnd && axesSpec[ii].End < 0) {
+					exceptions.Panicf("Slice: negative indices on dynamic axis %d require concrete dim size", ii)
+				}
+				starts[ii] = axesSpec[ii].Start
+				if !axesSpec[ii].NoEnd {
+					limits[ii] = axesSpec[ii].End
+				}
+			}
+			if len(axesSpec) > ii && axesSpec[ii].StrideValue > 0 {
+				strides[ii] = axesSpec[ii].StrideValue
+			}
+			continue
+		}
 		if len(axesSpec) > ii && !axesSpec[ii].Full {
 			starts[ii] = adjustAxisToRank(axesSpec[ii].Start, dim)
 			if !axesSpec[ii].NoEnd {

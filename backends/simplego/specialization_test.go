@@ -998,6 +998,137 @@ func TestExecWithDynamicAxes_Attention(t *testing.T) {
 	t.Logf("Static vs dynamic attention: all values match (batch=3 and batch=1)")
 }
 
+// TestExecWithDynamicAxes_BroadcastToCommonShape tests that BroadcastToCommonShape
+// correctly propagates DynamicDim and produces identical results for static vs dynamic.
+func TestExecWithDynamicAxes_BroadcastToCommonShape(t *testing.T) {
+	const featureSize = 4
+
+	// A function that broadcasts two differently-ranked operands to a common shape and adds them.
+	broadcastAddFn := func(a, b *graph.Node) *graph.Node {
+		broadcasted := graph.BroadcastToCommonShape(a, b)
+		return graph.Add(broadcasted[0], broadcasted[1])
+	}
+
+	// a: [batch, featureSize], b: [featureSize] (scalar-like broadcast on first axis)
+	batchSize := 3
+	aData := make([]float32, batchSize*featureSize)
+	bData := make([]float32, featureSize)
+	for i := range aData {
+		aData[i] = float32(i)
+	}
+	for i := range bData {
+		bData[i] = float32(i * 10)
+	}
+	aT := tensors.FromFlatDataAndDimensions(aData, batchSize, featureSize)
+	bT := tensors.FromFlatDataAndDimensions(bData, featureSize)
+
+	// Static execution.
+	staticExec := graph.MustNewExec(backend, broadcastAddFn)
+	defer staticExec.Finalize()
+	staticOutputs := staticExec.MustExec(aT, bT)
+	staticData, err := tensors.CopyFlatData[float32](staticOutputs[0])
+	require.NoError(t, err)
+
+	// Dynamic execution (batch axis dynamic on first input, second input is static).
+	dynamicExec := graph.MustNewExec(backend, broadcastAddFn).
+		WithDynamicAxes([]string{"batch", ""}, []string{""})
+	defer dynamicExec.Finalize()
+	dynamicOutputs := dynamicExec.MustExec(aT, bT)
+	dynamicData, err := tensors.CopyFlatData[float32](dynamicOutputs[0])
+	require.NoError(t, err)
+
+	require.Equal(t, len(staticData), len(dynamicData))
+	for i := range staticData {
+		require.InDelta(t, staticData[i], dynamicData[i], 1e-6,
+			"mismatch at %d: static=%f, dynamic=%f", i, staticData[i], dynamicData[i])
+	}
+
+	// Re-execute with different batch size.
+	aData2 := make([]float32, 5*featureSize)
+	for i := range aData2 {
+		aData2[i] = float32(i + 100)
+	}
+	aT2 := tensors.FromFlatDataAndDimensions(aData2, 5, featureSize)
+	staticExec2 := graph.MustNewExec(backend, broadcastAddFn)
+	defer staticExec2.Finalize()
+	staticOutputs2 := staticExec2.MustExec(aT2, bT)
+	staticData2, err := tensors.CopyFlatData[float32](staticOutputs2[0])
+	require.NoError(t, err)
+
+	dynamicOutputs2 := dynamicExec.MustExec(aT2, bT)
+	dynamicData2, err := tensors.CopyFlatData[float32](dynamicOutputs2[0])
+	require.NoError(t, err)
+
+	require.Equal(t, len(staticData2), len(dynamicData2))
+	for i := range staticData2 {
+		require.InDelta(t, staticData2[i], dynamicData2[i], 1e-6)
+	}
+}
+
+// TestExecWithDynamicAxes_Slice tests that Slice on a dynamic axis produces
+// identical results for static vs dynamic execution.
+func TestExecWithDynamicAxes_Slice(t *testing.T) {
+	const featureSize = 8
+
+	// Full-range slice on the dynamic axis + concrete sub-range on static axis.
+	sliceFn := func(input *graph.Node) *graph.Node {
+		// Slice: keep all of axis 0 (dynamic batch), take elements [2:6] of axis 1.
+		return graph.Slice(input, graph.AxisRange(), graph.AxisRange(2, 6))
+	}
+
+	batchSize := 3
+	data := make([]float32, batchSize*featureSize)
+	for i := range data {
+		data[i] = float32(i)
+	}
+	inputT := tensors.FromFlatDataAndDimensions(data, batchSize, featureSize)
+
+	// Static execution.
+	staticExec := graph.MustNewExec(backend, sliceFn)
+	defer staticExec.Finalize()
+	staticOutputs := staticExec.MustExec(inputT)
+	staticData, err := tensors.CopyFlatData[float32](staticOutputs[0])
+	require.NoError(t, err)
+	require.Equal(t, []int{batchSize, 4}, staticOutputs[0].Shape().Dimensions)
+
+	// Dynamic execution (batch axis dynamic).
+	dynamicExec := graph.MustNewExec(backend, sliceFn).
+		WithDynamicAxes([]string{"batch", ""})
+	defer dynamicExec.Finalize()
+	dynamicOutputs := dynamicExec.MustExec(inputT)
+	dynamicData, err := tensors.CopyFlatData[float32](dynamicOutputs[0])
+	require.NoError(t, err)
+
+	require.Equal(t, []int{batchSize, 4}, dynamicOutputs[0].Shape().Dimensions)
+	require.Equal(t, len(staticData), len(dynamicData))
+	for i := range staticData {
+		require.InDelta(t, staticData[i], dynamicData[i], 1e-6,
+			"mismatch at %d: static=%f, dynamic=%f", i, staticData[i], dynamicData[i])
+	}
+
+	// Re-execute with different batch size.
+	data2 := make([]float32, 5*featureSize)
+	for i := range data2 {
+		data2[i] = float32(i + 100)
+	}
+	inputT2 := tensors.FromFlatDataAndDimensions(data2, 5, featureSize)
+
+	staticExec2 := graph.MustNewExec(backend, sliceFn)
+	defer staticExec2.Finalize()
+	staticOutputs2 := staticExec2.MustExec(inputT2)
+	staticData2, err := tensors.CopyFlatData[float32](staticOutputs2[0])
+	require.NoError(t, err)
+
+	dynamicOutputs2 := dynamicExec.MustExec(inputT2)
+	dynamicData2, err := tensors.CopyFlatData[float32](dynamicOutputs2[0])
+	require.NoError(t, err)
+
+	require.Equal(t, []int{5, 4}, dynamicOutputs2[0].Shape().Dimensions)
+	for i := range staticData2 {
+		require.InDelta(t, staticData2[i], dynamicData2[i], 1e-6)
+	}
+}
+
 // TestExecWithDynamicAxes_LayerNorm tests that a LayerNorm-like computation
 // produces identical results for static vs dynamic batch execution.
 func TestExecWithDynamicAxes_LayerNorm(t *testing.T) {

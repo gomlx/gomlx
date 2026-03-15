@@ -161,6 +161,11 @@ func (e *Executable) createSpecialization(bindings shapes.AxisBindings) (spec *S
 			if newData != nil {
 				resolved[i].data = newData
 			}
+		case backends.OpTypeSlice:
+			newData := recomputeSliceData(resolved, orig)
+			if newData != nil {
+				resolved[i].data = newData
+			}
 		}
 	}
 
@@ -265,6 +270,38 @@ func recomputeGatherData(resolved []*Node, orig *Node) *gatherNode {
 	for i, s := range newData.sliceSizes {
 		if s == shapes.DynamicDim {
 			newData.sliceSizes[i] = operandShape.Dimensions[i]
+		}
+	}
+	return newData
+}
+
+// recomputeSliceData updates the Slice node's limits from the resolved operand
+// shape. When the operand has DynamicDim at build time, limits entries contain
+// DynamicDim (-1) as a sentinel for "full range". These must be replaced with
+// the concrete dimension from the resolved input. Returns nil if no update is needed.
+func recomputeSliceData(resolved []*Node, orig *Node) *sliceNode {
+	origData := orig.data.(*sliceNode)
+	operandShape := resolved[orig.inputs[0].idx].shape
+
+	needsUpdate := false
+	for _, lim := range origData.limits {
+		if lim == shapes.DynamicDim {
+			needsUpdate = true
+			break
+		}
+	}
+	if !needsUpdate {
+		return nil
+	}
+
+	newData := &sliceNode{
+		starts:  origData.starts,
+		limits:  slices.Clone(origData.limits),
+		strides: origData.strides,
+	}
+	for i, lim := range newData.limits {
+		if lim == shapes.DynamicDim {
+			newData.limits[i] = operandShape.Dimensions[i]
 		}
 	}
 	return newData
