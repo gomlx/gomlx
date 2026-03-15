@@ -211,6 +211,18 @@ func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([
 	return nodes, nil
 }
 
+// nodeParameter data.
+type nodeParameter struct {
+	name     string
+	inputIdx int
+}
+
+// EqualNodeData implements nodeDataComparable for nodeParameter.
+func (n *nodeParameter) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*nodeParameter)
+	return n.name == o.name && n.inputIdx == o.inputIdx
+}
+
 // Parameter creates an input parameter for this function.
 func (f *Function) Parameter(name string, shape shapes.Shape, sharding *backends.ShardingSpec) (backends.Value, error) {
 	dtype := shape.DType
@@ -555,6 +567,24 @@ func (f *Function) reduceImpls(reduceOpType backends.OpType, operandOp backends.
 	return node, nil
 }
 
+type gatherNode struct {
+	indexVectorAxis                                                  int
+	offsetOutputAxes, collapsedSlicesAxes, startIndexMap, sliceSizes []int
+	indicesAreSorted                                                 bool
+}
+
+// EqualNodeData implements nodeDataComparable for gatherNode.
+func (g *gatherNode) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*gatherNode)
+	if g.indexVectorAxis != o.indexVectorAxis || g.indicesAreSorted != o.indicesAreSorted {
+		return false
+	}
+	return slices.Equal(g.offsetOutputAxes, o.offsetOutputAxes) &&
+		slices.Equal(g.collapsedSlicesAxes, o.collapsedSlicesAxes) &&
+		slices.Equal(g.startIndexMap, o.startIndexMap) &&
+		slices.Equal(g.sliceSizes, o.sliceSizes)
+}
+
 // Gather implements the backends.Builder.
 // It's a complex operation, fully described in the backends.Builder.Gather documentation.
 func (f *Function) Gather(
@@ -743,6 +773,26 @@ func (f *Function) ScatterSum(
 	)
 }
 
+// scatterNode is attached to the Node.data field for ScatterMax, ScatterMin, ScatterSum.
+type scatterNode struct {
+	indexVectorAxis                                                int
+	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int
+	indicesAreSorted, uniqueIndices                                bool
+}
+
+// EqualNodeData implements nodeDataComparable for scatterNode.
+func (s *scatterNode) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*scatterNode)
+	if s.indexVectorAxis != o.indexVectorAxis ||
+		s.indicesAreSorted != o.indicesAreSorted ||
+		s.uniqueIndices != o.uniqueIndices {
+		return false
+	}
+	return slices.Equal(s.updateWindowAxes, o.updateWindowAxes) &&
+		slices.Equal(s.insertedWindowAxes, o.insertedWindowAxes) &&
+		slices.Equal(s.scatterAxesToOperandAxes, o.scatterAxesToOperandAxes)
+}
+
 func (f *Function) scatterImpls(
 	scatterOpType backends.OpType,
 	operandOp, scatterIndicesOp, updatesOp backends.Value,
@@ -781,6 +831,19 @@ func (f *Function) scatterImpls(
 	}
 	node, _ := f.getOrCreateNode(scatterOpType, outputShape, []*Node{operand, indices, updates}, data)
 	return node, nil
+}
+
+// sliceNode is attached to the Node.data field for Slice.
+type sliceNode struct {
+	starts, limits, strides []int
+}
+
+// EqualNodeData implements nodeDataComparable for sliceNode.
+func (s *sliceNode) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*sliceNode)
+	return slices.Equal(s.starts, o.starts) &&
+		slices.Equal(s.limits, o.limits) &&
+		slices.Equal(s.strides, o.strides)
 }
 
 // Slice extracts a subarray from the input array.
@@ -842,6 +905,18 @@ func (f *Function) RNGBitGenerator(stateOp backends.Value, shape shapes.Shape) (
 	return
 }
 
+// argMinMaxNode with the axis and isMin fields.
+type argMinMaxNode struct {
+	axis  int
+	isMin bool
+}
+
+// EqualNodeData implements nodeDataComparable for argMinMaxNode.
+func (a *argMinMaxNode) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*argMinMaxNode)
+	return a.axis == o.axis && a.isMin == o.isMin
+}
+
 // ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
 // outputDType defines the output of the argmin/argmax, it doesn't need to be the same as the input.
 // It's a form of reduction on the given axis, and that axis goes away. So the rank of the result is one less than
@@ -872,6 +947,25 @@ func (f *Function) ArgMinMax(
 	}
 	node, _ := f.getOrCreateNode(opType, outputShape, []*Node{operand}, data)
 	return node, nil
+}
+
+type reduceWindowNode struct {
+	reductionType                                             backends.ReduceOpType
+	windowDimensions, strides, baseDilations, windowDilations []int
+	paddings                                                  [][2]int
+}
+
+// EqualNodeData implements nodeDataComparable for reduceWindowNode.
+func (r *reduceWindowNode) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*reduceWindowNode)
+	if r.reductionType != o.reductionType {
+		return false
+	}
+	return slices.Equal(r.windowDimensions, o.windowDimensions) &&
+		slices.Equal(r.strides, o.strides) &&
+		slices.Equal(r.baseDilations, o.baseDilations) &&
+		slices.Equal(r.windowDilations, o.windowDilations) &&
+		slices.Equal(r.paddings, o.paddings)
 }
 
 // ReduceWindow runs a reduction function of reduceType (backends.ReduceOpMax, backends.ReduceOpSum or backends.ReduceOpProduct).
@@ -1349,4 +1443,33 @@ func shapesEqualDimensions(a, b shapes.Shape) bool {
 		}
 	}
 	return true
+}
+
+// Pad implements the backends.Builder interface.
+func (f *Function) Pad(operandOp, fillValueOp backends.Value, axesConfig ...backends.PadAxis) (backends.Value, error) {
+	opType := backends.OpTypePad
+	inputs, err := f.verifyAndCastValues(opType.String(), operandOp, fillValueOp)
+	if err != nil {
+		return nil, err
+	}
+	operand, fillValue := inputs[0], inputs[1]
+
+	outputShape, err := shapeinference.PadOp(operand.shape, axesConfig...)
+	if err != nil {
+		return nil, err
+	}
+
+	data := &padNode{axesConfig: slices.Clone(axesConfig)}
+	node, _ := f.getOrCreateNode(opType, outputShape, []*Node{operand, fillValue}, data)
+	return node, nil
+}
+
+type padNode struct {
+	axesConfig []backends.PadAxis
+}
+
+// EqualNodeData implements nodeDataComparable for padNode.
+func (p *padNode) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*padNode)
+	return slices.Equal(p.axesConfig, o.axesConfig)
 }
