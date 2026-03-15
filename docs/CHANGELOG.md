@@ -12,6 +12,9 @@
   - Removed panics during execution: return errors instead.
   - Fixed missing annotation/stacktrace on not-implemented errors. 
 
+- Package `xla`:
+  - Changed `TF_CPP_MIN_LOG_LEVEL` to default to 3. See https://github.com/openxla/xla/issues/26466
+
 # v0.27.0: Graph functions; Improved Go backend (fusion ops); Quantization dtypes; more ML layers & fixes
 
 - Package `backends`: major refactoring to add support for functions/closures.
