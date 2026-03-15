@@ -248,8 +248,7 @@ func recomputeGatherData(resolved []*Node, orig *Node) *gatherNode {
 	for i, s := range origData.sliceSizes {
 		if s == shapes.DynamicDim {
 			if operandShape.Dimensions[i] == shapes.DynamicDim {
-				// Still dynamic after resolution — shouldn't happen but guard anyway.
-				continue
+				panic(errors.Errorf("recomputeGatherData: operand axis %d is still DynamicDim after resolution", i))
 			}
 			needsUpdate = true
 			break

@@ -637,7 +637,8 @@ func BroadcastToCommonShape(operands ...*Node) []*Node {
 	// Step 3: Broadcast each operand to the common shape.
 	result := make([]*Node, len(expanded))
 	for i, op := range expanded {
-		if !op.IsScalar() && slices.Equal(op.Shape().Dimensions, commonDims) {
+		if !op.IsScalar() && slices.Equal(op.Shape().Dimensions, commonDims) &&
+			(!hasNames || slices.Equal(op.Shape().AxisNames, axisNames)) {
 			result[i] = op
 			continue
 		}

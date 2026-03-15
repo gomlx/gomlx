@@ -86,10 +86,9 @@ func bucketSize(size int) int {
 	return 1 << bits.Len(uint(size-1))
 }
 
-// subSliceFlat returns flat[:length], preserving the underlying capacity.
-// Used to present operators with a flat slice of the actual (non-bucketed) length
-// while the backing array retains full bucketed capacity for pool reuse.
-func subSliceFlat(flat any, length int) any {
+// resliceFlat returns flat[:length] for common slice types, falling back to
+// reflection for less common types (BFloat16, Float16, etc.).
+func resliceFlat(flat any, length int) any {
 	switch s := flat.(type) {
 	case []float32:
 		return s[:length]
@@ -118,46 +117,55 @@ func subSliceFlat(flat any, length int) any {
 	case []complex128:
 		return s[:length]
 	default:
-		// Fallback to reflection for less common types (BFloat16, Float16, etc.).
 		return reflect.ValueOf(flat).Slice(0, length).Interface()
 	}
+}
+
+// subSliceFlat returns flat[:length], preserving the underlying capacity.
+// Used to present operators with a flat slice of the actual (non-bucketed) length
+// while the backing array retains full bucketed capacity for pool reuse.
+func subSliceFlat(flat any, length int) any {
+	return resliceFlat(flat, length)
 }
 
 // fullCapFlat restores flat to its full backing-array capacity: flat[:cap(flat)].
 // Used before returning a buffer to the pool so the next consumer can sub-slice
 // to any length up to the bucketed capacity.
 func fullCapFlat(flat any) any {
+	return resliceFlat(flat, sliceCap(flat))
+}
+
+// sliceCap returns cap(flat) for common slice types, falling back to reflection.
+func sliceCap(flat any) int {
 	switch s := flat.(type) {
 	case []float32:
-		return s[:cap(s)]
+		return cap(s)
 	case []float64:
-		return s[:cap(s)]
+		return cap(s)
 	case []int32:
-		return s[:cap(s)]
+		return cap(s)
 	case []int64:
-		return s[:cap(s)]
+		return cap(s)
 	case []int8:
-		return s[:cap(s)]
+		return cap(s)
 	case []int16:
-		return s[:cap(s)]
+		return cap(s)
 	case []uint8:
-		return s[:cap(s)]
+		return cap(s)
 	case []uint16:
-		return s[:cap(s)]
+		return cap(s)
 	case []uint32:
-		return s[:cap(s)]
+		return cap(s)
 	case []uint64:
-		return s[:cap(s)]
+		return cap(s)
 	case []bool:
-		return s[:cap(s)]
+		return cap(s)
 	case []complex64:
-		return s[:cap(s)]
+		return cap(s)
 	case []complex128:
-		return s[:cap(s)]
+		return cap(s)
 	default:
-		// Fallback to reflection for less common types (BFloat16, Float16, etc.).
-		v := reflect.ValueOf(flat)
-		return v.Slice(0, v.Cap()).Interface()
+		return reflect.ValueOf(flat).Cap()
 	}
 }
 
