@@ -1113,3 +1113,33 @@ func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 
 	return output, nil
 }
+
+// PadOp returns the expected output shape for the Pad operation.
+func PadOp(operand shapes.Shape, axesConfig ...backends.PadAxis) (output shapes.Shape, err error) {
+	if !operand.Ok() {
+		return shapes.Invalid(), errors.Errorf("PadOp: invalid operand shape %s", operand)
+	}
+	rank := operand.Rank()
+	if len(axesConfig) > rank {
+		return shapes.Invalid(), errors.Errorf("PadOp: too many PadAxis given (%d) for operand rank %d", len(axesConfig), rank)
+	}
+
+	output = operand.Clone()
+	for axis, config := range axesConfig {
+		if config.Interior < 0 {
+			return shapes.Invalid(), errors.Errorf("PadOp: interior padding must be non-negative, got %d for axis %d", config.Interior, axis)
+		}
+		dim := operand.Dimensions[axis]
+		interiorPadding := 0
+		if dim > 0 {
+			interiorPadding = (dim - 1) * config.Interior
+		}
+
+		outDim := dim + config.Start + config.End + interiorPadding
+		if outDim < 0 {
+			return shapes.Invalid(), errors.Errorf("PadOp: resulting dimension for axis %d is negative (%d)", axis, outDim)
+		}
+		output.Dimensions[axis] = outDim
+	}
+	return output, nil
+}
