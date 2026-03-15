@@ -161,30 +161,6 @@ func fullCapFlat(flat any) any {
 	}
 }
 
-// isPackedSubByteDType returns true for types that are stored packed (multiple
-// values per byte): Int4, Uint4, Int2, Uint2. Bool also has Bits()<8 but uses
-// []bool storage, not packed bytes.
-func isPackedSubByteDType(dtype dtypes.DType) bool {
-	switch dtype { //nolint:exhaustive
-	case dtypes.Int4, dtypes.Uint4, dtypes.Int2, dtypes.Uint2:
-		return true
-	default:
-		return false
-	}
-}
-
-// packedLen returns the number of bytes needed to store `logicalSize` elements
-// of the given dtype. For sub-byte types (Int4, Uint4, Int2, Uint2), multiple
-// values are packed per byte. For standard types, returns logicalSize unchanged.
-func packedLen(dtype dtypes.DType, logicalSize int) int {
-	bitsPerElem := dtype.Bits()
-	if bitsPerElem >= 8 {
-		return logicalSize
-	}
-	valuesPerByte := 8 / bitsPerElem
-	return (logicalSize + valuesPerByte - 1) / valuesPerByte
-}
-
 // makeSliceForDType creates a slice of the appropriate type for the given dtype and length.
 // Fast paths for common dtypes avoid reflection overhead.
 //
@@ -273,8 +249,8 @@ func (b *Backend) getBuffer(dtype dtypes.DType, length int) (*Buffer, error) {
 	// is the packed byte count, not the logical element count.
 	if length > 0 {
 		flatLen := length
-		if isPackedSubByteDType(dtype) {
-			flatLen = packedLen(dtype, length)
+		if dtype.IsPacked() {
+			flatLen = dtype.SizeForDimensions(length)
 		}
 		buf.flat = subSliceFlat(buf.flat, flatLen)
 	}

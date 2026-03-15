@@ -295,9 +295,9 @@ func recomputeSliceData(resolved []*Node, orig *Node) *sliceNode {
 	}
 
 	newData := &sliceNode{
-		starts:  origData.starts,
+		starts:  slices.Clone(origData.starts),
 		limits:  slices.Clone(origData.limits),
-		strides: origData.strides,
+		strides: slices.Clone(origData.strides),
 	}
 	for i, lim := range newData.limits {
 		if lim == shapes.DynamicDim {
