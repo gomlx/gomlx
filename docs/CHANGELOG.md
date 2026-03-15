@@ -11,6 +11,7 @@
 - Package `simplego`:
   - Removed panics during execution: return errors instead.
   - Fixed missing annotation/stacktrace on not-implemented errors. 
+  - Implemented `Pad()` operation (and add some more tests in `graph.TestPad`).
 
 - Package `xla`:
   - Changed `TF_CPP_MIN_LOG_LEVEL` to default to 3. See https://github.com/openxla/xla/issues/26466
