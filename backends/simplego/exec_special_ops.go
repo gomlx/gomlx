@@ -44,6 +44,7 @@ func init() {
 	setNodeExecutor(backends.OpTypeSlice, priorityGeneric, execSlice)
 	setNodeExecutor(backends.OpTypeArgMinMax, priorityGeneric, execArgMinMax)
 	setNodeExecutor(backends.OpTypeReduceWindow, priorityGeneric, execReduceWindow)
+	setNodeExecutor(backends.OpTypePad, priorityGeneric, execPad)
 
 	// For nodes with multiple outputs:
 	multiOutputsNodeExecutors[backends.OpTypeRNGBitGenerator] = execRNGBitGenerator
@@ -2117,4 +2118,149 @@ func reduceWindowProductBuildUpdateFnBFloat16(operand, output *Buffer) reduceWin
 		outputFlat[outputFlatIdx] = bfloat16.FromFloat32(
 			outputFlat[outputFlatIdx].Float32() * operandFlat[operandFlatIdx].Float32())
 	}
+}
+
+func execPad(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
+	operand := inputs[0]
+	fillValue := inputs[1]
+
+	if node.shape.DType.Size() < 1 {
+		return nil, errors.Errorf("Pad operation does not support sub-byte types like %s", node.shape.DType)
+	}
+	elementSize := node.shape.DType.Size()
+
+	output, err := backend.getBufferForShape(node.shape)
+	if err != nil {
+		return nil, err
+	}
+
+	params := node.data.(*padNode)
+	axesConfig := params.axesConfig
+
+	operandBytes, err := operand.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
+	outputBytes, err := output.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
+	fillValueBytes, err := fillValue.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	// Fill output buffer
+	// Check if fillValue is all zeroes
+	isZero := true
+	for _, b := range fillValueBytes {
+		if b != 0 {
+			isZero = false
+			break
+		}
+	}
+
+	if isZero {
+		// Fast path: just zero the output buffer
+		output.Zeros()
+	} else if len(outputBytes) > 0 {
+		// Fill output buffer with the repeated fill value
+		copy(outputBytes, fillValueBytes)
+		for i := len(fillValueBytes); i < len(outputBytes); i *= 2 {
+			copy(outputBytes[i:], outputBytes[:i])
+		}
+	}
+
+	if len(operandBytes) == 0 {
+		return output, nil // Nothing to copy
+	}
+
+	// Merge consecutive untouched axes
+	type mergedAxis struct {
+		operandDim int
+		outputDim  int
+		config     backends.PadAxis
+	}
+	var mergedAxes []mergedAxis
+
+	isUntouched := func(config backends.PadAxis) bool {
+		return config.Start == 0 && config.End == 0 && config.Interior == 0
+	}
+
+	rank := operand.shape.Rank()
+	for i := 0; i < rank; {
+		if i >= len(axesConfig) || isUntouched(axesConfig[i]) {
+			// Find how many consecutive untouched axes there are
+			operandDim := operand.shape.Dimensions[i]
+			j := i + 1
+			for j < rank && (j >= len(axesConfig) || isUntouched(axesConfig[j])) {
+				operandDim *= operand.shape.Dimensions[j]
+				j++
+			}
+			mergedAxes = append(mergedAxes, mergedAxis{
+				operandDim: operandDim,
+				outputDim:  operandDim,
+				config:     backends.PadAxis{Start: 0, End: 0, Interior: 0},
+			})
+			i = j
+		} else {
+			outDim := operand.shape.Dimensions[i] + axesConfig[i].Start + axesConfig[i].End
+			if operand.shape.Dimensions[i] > 0 {
+				outDim += (operand.shape.Dimensions[i] - 1) * axesConfig[i].Interior
+			}
+			mergedAxes = append(mergedAxes, mergedAxis{
+				operandDim: operand.shape.Dimensions[i],
+				outputDim:  outDim,
+				config:     axesConfig[i],
+			})
+			i++
+		}
+	}
+
+	// Calculate element stride in bytes: if the last merged axis is untouched, we can copy it altogether.
+	virtualElementSize := elementSize
+	numMerged := len(mergedAxes)
+	if numMerged > 0 && isUntouched(mergedAxes[numMerged-1].config) {
+		virtualElementSize *= mergedAxes[numMerged-1].operandDim
+		mergedAxes = mergedAxes[:numMerged-1]
+		numMerged--
+	}
+
+	// Compute strides for operand and output
+	operandStrides := make([]int, numMerged)
+	outputStrides := make([]int, numMerged)
+	opStride := virtualElementSize
+	outStride := virtualElementSize
+	for i := numMerged - 1; i >= 0; i-- {
+		operandStrides[i] = opStride
+		outputStrides[i] = outStride
+		opStride *= mergedAxes[i].operandDim
+		outStride *= mergedAxes[i].outputDim
+	}
+
+	// Recursive copy
+	var copyND func(axis int, operandOffset, outputOffset int)
+	copyND = func(axis int, operandOffset, outputOffset int) {
+		if axis == numMerged {
+			// Copy virtual element
+			copy(outputBytes[outputOffset:outputOffset+virtualElementSize], operandBytes[operandOffset:operandOffset+virtualElementSize])
+			return
+		}
+
+		mAxis := mergedAxes[axis]
+		outStride := outputStrides[axis]
+
+		outOffset := outputOffset + mAxis.config.Start*outStride
+		opOffset := operandOffset
+
+		for i := 0; i < mAxis.operandDim; i++ {
+			copyND(axis+1, opOffset, outOffset)
+			opOffset += operandStrides[axis]
+			outOffset += outStride * (1 + mAxis.config.Interior)
+		}
+	}
+
+	copyND(0, 0, 0)
+
+	return output, nil
 }
