@@ -2,16 +2,35 @@
 
 # Next:
 
+- Package `backends`:
+  - Added `QuantGGML` quantization scheme with `GGMLQuantType` enum for native GGML block formats
+    (Q4_0, Q8_0, IQ4_NL, Q4_K, Q6_K).
+  - Added `IQ4NLLookupTable` for IQ4_NL non-linear dequantization.
+  - Added `FusedQuantizedGather` to `FusedOps` interface for quantized embedding lookups.
+  - Added `ShiftLeft`, `ShiftRightArithmetic`, `ShiftRightLogical` operations.
+
 - Package `examples/...`:
   - Updated `gemma3`, `mxbai-rerank` and `bert-base-ner` to use the new `onnx-gomlx` v0.4.0 API, bumped dependency.
 
 - Package `graph`:
   - `Floor` and `Ceil` operations now are identity for integer dtypes.
+  - Added `BackendFusedQuantizedGather` graph-level op.
+  - Added `LogicalShiftLeft`, `LogicalShiftRight` ops for sub-byte unpacking.
+
+- Package `nn`:
+  - Added `QuantizedGather` layer for quantized embedding lookups with automatic fallback.
 
 - Package `simplego`:
   - Removed panics during execution: return errors instead.
-  - Fixed missing annotation/stacktrace on not-implemented errors. 
+  - Fixed missing annotation/stacktrace on not-implemented errors.
   - Implemented `Pad()` operation (and add some more tests in `graph.TestPad`).
+  - Added `FusedQuantizedDense` support for GGML-quantized weights (Q4_0, Q8_0, IQ4_NL, Q4_K, Q6_K).
+  - Added `FusedQuantizedGather` for quantized embedding lookups with on-the-fly dequantization.
+  - Added shift operation executors.
+  - Fixed `execBitcast` buffer reuse for cross-bit-width types (e.g. Uint8 → Float16). See #374.
+
+- Package `ggml`:
+  - Added `dense.go`, `dequant.go`, `gather.go` for GGML model weight handling.
 
 - Package `xla`:
   - Changed `TF_CPP_MIN_LOG_LEVEL` to default to 3. See https://github.com/openxla/xla/issues/26466
