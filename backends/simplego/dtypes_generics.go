@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/pkg/errors"
 	"github.com/x448/float16"
 )
 
@@ -27,18 +28,18 @@ func NewDTypeMap(name string) *DTypeMap {
 	}
 }
 
-// Get retrieves the value for the given dtype, or throw an exception if none was registered.
-func (d *DTypeMap) Get(dtype dtypes.DType) any {
+// Get retrieves the value for the given dtype, or return an error if none was registered.
+func (d *DTypeMap) Get(dtype dtypes.DType) (any, error) {
 	if dtype >= MaxDTypes {
-		exceptions.Panicf("dtype %s not supported by %s", dtype, d.Name)
+		return nil, errors.Errorf("dtype %s not supported by %s", dtype, d.Name)
 	}
 	value := d.Map[dtype]
 	if value == nil {
-		exceptions.Panicf("dtype %s not supported by %s -- "+
+		return nil, errors.Errorf("dtype %s not supported by %s -- "+
 			"if you need it, consider creating an issue to add support in github.com/gomlx/gomlx",
 			dtype, d.Name)
 	}
-	return value
+	return value, nil
 }
 
 // Register a value for a dtype with the specified priority.
@@ -119,18 +120,18 @@ func NewDTypePairMap(name string) *DTypePairMap {
 	}
 }
 
-// Get retrieves the value for the given dtype pair, or throw an exception if none was registered.
-func (d *DTypePairMap) Get(dtype1, dtype2 dtypes.DType) any {
+// Get retrieves the value for the given dtype pair, or return an error if none was registered.
+func (d *DTypePairMap) Get(dtype1, dtype2 dtypes.DType) (any, error) {
 	if dtype1 >= MaxDTypes || dtype2 >= MaxDTypes {
-		exceptions.Panicf("dtypes %s or %s not supported by %s", dtype1, dtype2, d.Name)
+		return nil, errors.Errorf("dtypes %s or %s not supported by %s", dtype1, dtype2, d.Name)
 	}
 	value := d.Map[dtype1][dtype2]
 	if value == nil {
-		exceptions.Panicf("dtype pair (%s, %s) not supported by %s -- "+
+		return nil, errors.Errorf("dtype pair (%s, %s) not supported by %s -- "+
 			"if you need it, consider creating an issue to add support in github.com/gomlx/gomlx",
 			dtype1, dtype2, d.Name)
 	}
-	return value
+	return value, nil
 }
 
 // Register a value for a dtype pair with the specified priority.

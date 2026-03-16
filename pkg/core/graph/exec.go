@@ -224,7 +224,7 @@ type Exec struct {
 // pendingCompilation tracks an in-flight graph compilation.
 type pendingCompilation struct {
 	argsShapes []shapes.Shape       // shapes being compiled
-	done       chan struct{}         // closed when compilation finishes
+	done       chan struct{}        // closed when compilation finishes
 	entry      *execGraphCacheEntry // result (nil if failed)
 	err        error                // compilation error, if any
 }
@@ -709,7 +709,7 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum,
 	// Get or build the graph.
 	entry, err := e.findOrCreateGraph(argsShapes)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithMessagef(err, "failed during graph construction/compilation")
 	}
 	if entry == nil {
 		return nil, nil, errors.Errorf(

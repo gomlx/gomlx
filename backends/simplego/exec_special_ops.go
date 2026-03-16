@@ -44,6 +44,7 @@ func init() {
 	setNodeExecutor(backends.OpTypeSlice, priorityGeneric, execSlice)
 	setNodeExecutor(backends.OpTypeArgMinMax, priorityGeneric, execArgMinMax)
 	setNodeExecutor(backends.OpTypeReduceWindow, priorityGeneric, execReduceWindow)
+	setNodeExecutor(backends.OpTypePad, priorityGeneric, execPad)
 
 	// For nodes with multiple outputs:
 	multiOutputsNodeExecutors[backends.OpTypeRNGBitGenerator] = execRNGBitGenerator
@@ -109,7 +110,11 @@ func execWhere(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 		}
 		output.shape = outputShape
 	}
-	fn := whereDTypeMap.Get(outputShape.DType).(func(conditionBuf, onTrueBuf, onFalseBuf, outputBuf *Buffer))
+	tmpAny, tmpErr := whereDTypeMap.Get(outputShape.DType)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	fn := tmpAny.(func(conditionBuf, onTrueBuf, onFalseBuf, outputBuf *Buffer))
 	fn(condition, onTrue, onFalse, output)
 	return output, nil
 }
@@ -212,19 +217,47 @@ func execReduce(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 	var reduceFn genericReduceFn
 	switch node.opType { //nolint:exhaustive
 	case backends.OpTypeReduceMax:
-		reduceFn = reduceMaxDTypeMap.Get(dtype).(genericReduceFn)
+		tmpAny, tmpErr := reduceMaxDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		reduceFn = tmpAny.(genericReduceFn)
 	case backends.OpTypeReduceMin:
-		reduceFn = reduceMinDTypeMap.Get(dtype).(genericReduceFn)
+		tmpAny, tmpErr := reduceMinDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		reduceFn = tmpAny.(genericReduceFn)
 	case backends.OpTypeReduceSum:
-		reduceFn = reduceSumDTypeMap.Get(dtype).(genericReduceFn)
+		tmpAny, tmpErr := reduceSumDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		reduceFn = tmpAny.(genericReduceFn)
 	case backends.OpTypeReduceProduct:
-		reduceFn = reduceProductDTypeMap.Get(dtype).(genericReduceFn)
+		tmpAny, tmpErr := reduceProductDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		reduceFn = tmpAny.(genericReduceFn)
 	case backends.OpTypeReduceBitwiseAnd:
-		reduceFn = reduceBitwiseAndDTypeMap.Get(dtype).(genericReduceFn)
+		tmpAny, tmpErr := reduceBitwiseAndDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		reduceFn = tmpAny.(genericReduceFn)
 	case backends.OpTypeReduceBitwiseOr:
-		reduceFn = reduceBitwiseOrDTypeMap.Get(dtype).(genericReduceFn)
+		tmpAny, tmpErr := reduceBitwiseOrDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		reduceFn = tmpAny.(genericReduceFn)
 	case backends.OpTypeReduceBitwiseXor:
-		reduceFn = reduceBitwiseXorDTypeMap.Get(dtype).(genericReduceFn)
+		tmpAny, tmpErr := reduceBitwiseXorDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		reduceFn = tmpAny.(genericReduceFn)
 	case backends.OpTypeReduceLogicalAnd:
 		// Logical reduction only works on boolean variables, so there is no need for a generic implementation.
 		reduceFn = execReduceLogicalAnd
@@ -548,7 +581,11 @@ func execTranspose(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 	output.shape = node.shape
 	it := newTransposeIterator(operand.shape, permutations)
 	dtype := node.shape.DType
-	transposeFn := transposeDTypeMap.Get(dtype).(func(operand, output *Buffer, it *transposeIterator))
+	tmpAny, tmpErr := transposeDTypeMap.Get(dtype)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	transposeFn := tmpAny.(func(operand, output *Buffer, it *transposeIterator))
 	transposeFn(operand, output, it)
 	return output, nil
 }
@@ -653,7 +690,15 @@ func execReverse(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	output.shape = shape
 	if len(reverseAxes) == 0 {
 		// No-op, simply copy over bytes.
-		copy(output.mutableBytes(), operand.mutableBytes())
+		dstBytes, err := output.mutableBytes()
+		if err != nil {
+			return nil, err
+		}
+		srcBytes, err := operand.mutableBytes()
+		if err != nil {
+			return nil, err
+		}
+		copy(dstBytes, srcBytes)
 		return output, nil
 	}
 
@@ -702,12 +747,26 @@ func execReverse(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 
 	// Scalar or empty tensor: just copy.
 	if operand.shape.IsScalar() || operand.shape.Size() <= 1 {
-		copy(output.mutableBytes(), operand.mutableBytes())
+		dstBytes, err := output.mutableBytes()
+		if err != nil {
+			return nil, err
+		}
+		srcBytes, err := operand.mutableBytes()
+		if err != nil {
+			return nil, err
+		}
+		copy(dstBytes, srcBytes)
 		return output, nil
 	}
 
-	srcBytes := operand.mutableBytes()
-	dstBytes := output.mutableBytes()
+	srcBytes, err := operand.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
+	dstBytes, err := output.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
 	strides := mergedShape.Strides()
 	dims := mergedShape.Dimensions
 
@@ -895,8 +954,14 @@ func execGather(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 	output.shape = node.shape
 
 	// Where to read/write the data.
-	operandBytes := operand.mutableBytes()
-	outputBytes := output.mutableBytes()
+	operandBytes, err := operand.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
+	outputBytes, err := output.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
 
 	// Outer-loop: loop over the start indices and outputBytesIdx to gather from:
 	gatherIt := newGatherIterator(
@@ -1177,7 +1242,10 @@ func execConcatenate(backend *Backend, node *Node, inputs []*Buffer, inputsOwned
 		return nil, err
 	}
 	output.shape = outputShape
-	outputBytes := output.mutableBytes()
+	outputBytes, err := output.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
 
 	// Calculate the size of the blocks before and after the concatenation axis.
 	outerBlockSize := 1 // Number of independent blocks to copy
@@ -1201,7 +1269,10 @@ func execConcatenate(backend *Backend, node *Node, inputs []*Buffer, inputsOwned
 	for _, inputBuf := range inputs {
 		inputShape := inputBuf.shape
 		inputDims := inputShape.Dimensions
-		inputBytes := inputBuf.mutableBytes() // Use mutableBytes() for input
+		inputBytes, err := inputBuf.mutableBytes() // Use mutableBytes() for input
+		if err != nil {
+			return nil, err
+		}
 
 		// Size of the concatenation axis for this specific input.
 		inputConcatAxisSize := inputDims[axis]
@@ -1259,7 +1330,11 @@ func execScatter(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	// Dispatch to a type-specific scatter loop based on the operation type.
 	dtype := output.shape.DType
 	type scatterFnT = func(opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode) error
-	scatterFn := scatterDTypeMap.Get(dtype).(scatterFnT)
+	tmpAny, tmpErr := scatterDTypeMap.Get(dtype)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	scatterFn := tmpAny.(scatterFnT)
 	err = scatterFn(node.opType, output, indices, updates, scatterParams)
 	if err != nil {
 		return nil, err
@@ -1278,11 +1353,23 @@ func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, out
 	var combineFn combineFnT
 	switch opType { //nolint:exhaustive
 	case backends.OpTypeScatterMax:
-		combineFn = combineMaxDTypeMap.Get(dtype).(combineFnT) //nolint:errcheck
+		tmpAny, tmpErr := combineMaxDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		combineFn = tmpAny.(combineFnT) //nolint:errcheck
 	case backends.OpTypeScatterMin:
-		combineFn = combineMinDTypeMap.Get(dtype).(combineFnT) //nolint:errcheck
+		tmpAny, tmpErr := combineMinDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		combineFn = tmpAny.(combineFnT) //nolint:errcheck
 	case backends.OpTypeScatterSum:
-		combineFn = combineSumDTypeMap.Get(dtype).(combineFnT) //nolint:errcheck
+		tmpAny, tmpErr := combineSumDTypeMap.Get(dtype)
+		if tmpErr != nil {
+			panic(tmpErr)
+		}
+		combineFn = tmpAny.(combineFnT) //nolint:errcheck
 	default:
 		return errors.Errorf("unsupported scatter op type %q", opType)
 	}
@@ -1296,7 +1383,11 @@ func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, out
 
 	// Initialize gather of the scatter indices.
 	indicesShape := indices.shape
-	deferenceIndicesFn := dereferenceIntsDTypeMap.Get(indicesShape.DType).(func(flat any, in, out []int))
+	tmpAny, tmpErr := dereferenceIntsDTypeMap.Get(indicesShape.DType)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	deferenceIndicesFn := tmpAny.(func(flat any, in, out []int))
 	_, _ = indicesFlat, deferenceIndicesFn
 	indicesIt := newSubIndicesIterator(indices.shape, scatterParams.indexVectorAxis)
 	indexVectorStride := 1
@@ -1498,7 +1589,11 @@ func execSlice(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffe
 
 	// Dispatch to the generic implementation based on DType.
 	// Note: limits are not used in the generic exec function but passed for potential future use or consistency.
-	fn := sliceDTypeMap.Get(node.shape.DType).(func(operand, output *Buffer, params *sliceNode)) //nolint:errcheck
+	tmpAny, tmpErr := sliceDTypeMap.Get(node.shape.DType)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	fn := tmpAny.(func(operand, output *Buffer, params *sliceNode)) //nolint:errcheck
 	fn(operand, output, sliceParams)
 	return output, nil
 }
@@ -1565,7 +1660,10 @@ func execRNGBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsO
 		return nil, err
 	}
 	rngData.shape = node.multiOutputsShapes[1].Clone()
-	rngDataBytes := rngData.mutableBytes()
+	rngDataBytes, err := rngData.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
 
 	// Generate random using rand/v2:
 	rng := rand.NewPCG(stateFlat[0], stateFlat[1]) // Use state and increment as seed
@@ -1641,11 +1739,19 @@ func execArgMinMax(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*B
 	}
 
 	// Instantiate the function to copy over results from ints:
-	buildCopyIntsFn := argMinMaxCopyIntsDTypeMap.Get(output.shape.DType).(func(output *Buffer) func(flatIdx int, values []int32))
+	tmpAny, tmpErr := argMinMaxCopyIntsDTypeMap.Get(output.shape.DType)
+	if tmpErr != nil {
+		return nil, tmpErr
+	}
+	buildCopyIntsFn := tmpAny.(func(output *Buffer) func(flatIdx int, values []int32))
 	copyIntsFn := buildCopyIntsFn(output)
 
 	// Dispatch to the generic implementation based on DType.
-	argMinMaxFn := argMinMaxDTypeMap.Get(operand.shape.DType).(func(backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize, suffixSize int, isMin bool))
+	tmpAny2, tmpErr2 := argMinMaxDTypeMap.Get(operand.shape.DType)
+	if tmpErr2 != nil {
+		return nil, tmpErr2
+	}
+	argMinMaxFn := tmpAny2.(func(backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize, suffixSize int, isMin bool))
 	argMinMaxFn(backend, operand, copyIntsFn, prefixSize, reduceSize, suffixSize, isMin)
 	return output, nil
 }
@@ -1853,7 +1959,11 @@ func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, _ []bool) 
 		return nil, errors.Errorf("ReduceWindow: invalid reduction type: %s", opData.reductionType)
 	}
 	// updateFn will aggregate the operand value into the corresponding output value.
-	updateFn := buildUpdateFnMap.Get(dtype).(func(operand, output *Buffer) reduceWindowUpdateFn)(operand, output)
+	updateFnAny, tmpErr := buildUpdateFnMap.Get(dtype)
+	if tmpErr != nil {
+		return nil, tmpErr
+	}
+	updateFn := updateFnAny.(func(operand, output *Buffer) reduceWindowUpdateFn)(operand, output)
 
 	// Find the window effective sizes, accounting for the diffusion.
 	windowSizes := make([]int, rank)
@@ -2008,4 +2118,149 @@ func reduceWindowProductBuildUpdateFnBFloat16(operand, output *Buffer) reduceWin
 		outputFlat[outputFlatIdx] = bfloat16.FromFloat32(
 			outputFlat[outputFlatIdx].Float32() * operandFlat[operandFlatIdx].Float32())
 	}
+}
+
+func execPad(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
+	operand := inputs[0]
+	fillValue := inputs[1]
+
+	if node.shape.DType.Size() < 1 {
+		return nil, errors.Errorf("Pad operation does not support sub-byte types like %s", node.shape.DType)
+	}
+	elementSize := node.shape.DType.Size()
+
+	output, err := backend.getBufferForShape(node.shape)
+	if err != nil {
+		return nil, err
+	}
+
+	params := node.data.(*padNode)
+	axesConfig := params.axesConfig
+
+	operandBytes, err := operand.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
+	outputBytes, err := output.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
+	fillValueBytes, err := fillValue.mutableBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	// Fill output buffer
+	// Check if fillValue is all zeroes
+	isZero := true
+	for _, b := range fillValueBytes {
+		if b != 0 {
+			isZero = false
+			break
+		}
+	}
+
+	if isZero {
+		// Fast path: just zero the output buffer
+		output.Zeros()
+	} else if len(outputBytes) > 0 {
+		// Fill output buffer with the repeated fill value
+		copy(outputBytes, fillValueBytes)
+		for i := len(fillValueBytes); i < len(outputBytes); i *= 2 {
+			copy(outputBytes[i:], outputBytes[:i])
+		}
+	}
+
+	if len(operandBytes) == 0 {
+		return output, nil // Nothing to copy
+	}
+
+	// Merge consecutive untouched axes
+	type mergedAxis struct {
+		operandDim int
+		outputDim  int
+		config     backends.PadAxis
+	}
+	var mergedAxes []mergedAxis
+
+	isUntouched := func(config backends.PadAxis) bool {
+		return config.Start == 0 && config.End == 0 && config.Interior == 0
+	}
+
+	rank := operand.shape.Rank()
+	for i := 0; i < rank; {
+		if i >= len(axesConfig) || isUntouched(axesConfig[i]) {
+			// Find how many consecutive untouched axes there are
+			operandDim := operand.shape.Dimensions[i]
+			j := i + 1
+			for j < rank && (j >= len(axesConfig) || isUntouched(axesConfig[j])) {
+				operandDim *= operand.shape.Dimensions[j]
+				j++
+			}
+			mergedAxes = append(mergedAxes, mergedAxis{
+				operandDim: operandDim,
+				outputDim:  operandDim,
+				config:     backends.PadAxis{Start: 0, End: 0, Interior: 0},
+			})
+			i = j
+		} else {
+			outDim := operand.shape.Dimensions[i] + axesConfig[i].Start + axesConfig[i].End
+			if operand.shape.Dimensions[i] > 0 {
+				outDim += (operand.shape.Dimensions[i] - 1) * axesConfig[i].Interior
+			}
+			mergedAxes = append(mergedAxes, mergedAxis{
+				operandDim: operand.shape.Dimensions[i],
+				outputDim:  outDim,
+				config:     axesConfig[i],
+			})
+			i++
+		}
+	}
+
+	// Calculate element stride in bytes: if the last merged axis is untouched, we can copy it altogether.
+	virtualElementSize := elementSize
+	numMerged := len(mergedAxes)
+	if numMerged > 0 && isUntouched(mergedAxes[numMerged-1].config) {
+		virtualElementSize *= mergedAxes[numMerged-1].operandDim
+		mergedAxes = mergedAxes[:numMerged-1]
+		numMerged--
+	}
+
+	// Compute strides for operand and output
+	operandStrides := make([]int, numMerged)
+	outputStrides := make([]int, numMerged)
+	opStride := virtualElementSize
+	outStride := virtualElementSize
+	for i := numMerged - 1; i >= 0; i-- {
+		operandStrides[i] = opStride
+		outputStrides[i] = outStride
+		opStride *= mergedAxes[i].operandDim
+		outStride *= mergedAxes[i].outputDim
+	}
+
+	// Recursive copy
+	var copyND func(axis int, operandOffset, outputOffset int)
+	copyND = func(axis int, operandOffset, outputOffset int) {
+		if axis == numMerged {
+			// Copy virtual element
+			copy(outputBytes[outputOffset:outputOffset+virtualElementSize], operandBytes[operandOffset:operandOffset+virtualElementSize])
+			return
+		}
+
+		mAxis := mergedAxes[axis]
+		outStride := outputStrides[axis]
+
+		outOffset := outputOffset + mAxis.config.Start*outStride
+		opOffset := operandOffset
+
+		for i := 0; i < mAxis.operandDim; i++ {
+			copyND(axis+1, opOffset, outOffset)
+			opOffset += operandStrides[axis]
+			outOffset += outStride * (1 + mAxis.config.Interior)
+		}
+	}
+
+	copyND(0, 0, 0)
+
+	return output, nil
 }

@@ -90,6 +90,13 @@ type nodeFusedAttentionQKVProjection struct {
 	hasBiasV bool
 }
 
+// nodeFusedQuantizedDense stores parameters for the quantized dense op.
+//
+// For the QuantGGML scheme, weights are stored in native GGML block format
+// (see exec_fused_quantized_ggml.go for format details). The weight tensor is
+// [N, bytesPerRow] Uint8, where N is the output-features dimension and
+// bytesPerRow = (K / valuesPerBlock) * bytesPerBlock. K (input-features) is
+// derived from bytesPerRow at build time via deriveGGMLK.
 type nodeFusedQuantizedDense struct {
 	scheme       backends.QuantizationScheme
 	blockAxis    int // Always 1 (output-features axis); validated in builder. Stored for EqualNodeData.
@@ -331,8 +338,15 @@ func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value,
 	return node, nil
 }
 
-// deriveGGMLK computes the logical dimension K from bytesPerRow and the GGML type,
-// validating that bytesPerRow is a multiple of bytesPerBlock.
+// deriveGGMLK computes the logical input-features dimension K from bytesPerRow
+// and the GGML block format. GGML weights are stored as [N, bytesPerRow] Uint8,
+// where each row consists of consecutive quantization blocks. Each block packs
+// valuesPerBlock logical float32 values into bytesPerBlock bytes (see
+// exec_fused_quantized_ggml.go for block layouts). K is therefore:
+//
+//	K = (bytesPerRow / bytesPerBlock) * valuesPerBlock
+//
+// This function validates that bytesPerRow is an exact multiple of bytesPerBlock.
 func deriveGGMLK(opName string, bytesPerRow int, ggmlType backends.GGMLQuantType) (int, error) {
 	vpb := ggmlType.ValuesPerBlock()
 	bpb := ggmlType.BytesPerBlock()
@@ -434,30 +448,32 @@ func (d *nodeFusedQuantizedGather) EqualNodeData(other nodeDataComparable) bool 
 	return d.ggmlType == o.ggmlType && d.ggmlK == o.ggmlK
 }
 
-// FusedQuantizedGather performs a quantized embedding lookup.
-// table: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
+// FusedQuantizedGather performs a quantized gather (row lookup) with on-the-fly dequantization.
+// data: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
 // indices: integer tensor with last dim = 1 (same as Gather convention).
 // Output: [batch..., K] Float32 where K is derived from the block format.
-func (f *Function) FusedQuantizedGather(table, indices backends.Value,
+func (f *Function) FusedQuantizedGather(data, indices backends.Value,
 	wq *backends.Quantization) (backends.Value, error) {
 
 	if wq.Scheme != backends.QuantGGML {
-		return nil, errors.Errorf("FusedQuantizedGather: only QuantGGML scheme is supported, got %s", wq.Scheme)
+		return nil, errors.Wrapf(backends.ErrNotImplemented,
+			"FusedQuantizedGather: only QuantGGML scheme is supported, got %s -- "+
+				"please create a feature request if you need support for a different quantization scheme", wq.Scheme)
 	}
 
-	inputs, err := f.verifyAndCastValues("FusedQuantizedGather", table, indices)
+	inputs, err := f.verifyAndCastValues("FusedQuantizedGather", data, indices)
 	if err != nil {
 		return nil, err
 	}
-	tNode := inputs[0]
+	dNode := inputs[0]
 	iNode := inputs[1]
 
-	// Validate table: [vocabSize, bytesPerRow] Uint8.
-	if tNode.shape.Rank() != 2 || tNode.shape.DType != dtypes.Uint8 {
-		return nil, errors.Errorf("FusedQuantizedGather: table must be [vocabSize, bytesPerRow] Uint8, got %v %s",
-			tNode.shape.Dimensions, tNode.shape.DType)
+	// Validate data: [vocabSize, bytesPerRow] Uint8.
+	if dNode.shape.Rank() != 2 || dNode.shape.DType != dtypes.Uint8 {
+		return nil, errors.Errorf("FusedQuantizedGather: data must be [vocabSize, bytesPerRow] Uint8, got %v %s",
+			dNode.shape.Dimensions, dNode.shape.DType)
 	}
-	bytesPerRow := tNode.shape.Dimensions[1]
+	bytesPerRow := dNode.shape.Dimensions[1]
 
 	// Validate indices: must be integer, last dim = 1.
 	if !iNode.shape.DType.IsInt() {
@@ -490,11 +506,11 @@ func (f *Function) FusedQuantizedGather(table, indices backends.Value,
 	outDims[len(outDims)-1] = K
 	outShape := shapes.Make(dtypes.Float32, outDims...)
 
-	data := &nodeFusedQuantizedGather{
+	nodeData := &nodeFusedQuantizedGather{
 		ggmlType: ggmlType,
 		ggmlK:    K,
 	}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedQuantizedGather, outShape, inputs, data)
+	node, _ := f.getOrCreateNode(backends.OpTypeFusedQuantizedGather, outShape, inputs, nodeData)
 	return node, nil
 }
 

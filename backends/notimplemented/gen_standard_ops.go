@@ -318,22 +318,23 @@ func (f Function) FusedQuantizedDense(x backends.Value, weights backends.Value, 
 	return nil, f.baseErrFn(backends.OpTypeFusedQuantizedDense)
 }
 
-// FusedQuantizedGather performs a quantized embedding lookup: it gathers rows from a
-// quantized embedding table and dequantizes only the selected rows on-the-fly.
-// This is the quantized analogue of Gather for embedding lookups, similar to
-// llama.cpp's ggml_get_rows.
+// FusedQuantizedGather performs a quantized gather (row lookup) with on-the-fly dequantization.
+//
+// This is the quantized analogue of Gather for embedding lookups, inspired by
+// llama.cpp's ggml_get_rows. For now it is only implemented for the GGML
+// quantization scheme, but could be extended for others if/when needed.
 //
 // Inputs:
-//   - table: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
+//   - data: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
 //   - indices: integer tensor with last dimension = 1 (same as Gather convention).
 //     For embeddings: [batch, seqLen, 1].
-//   - tableQuantization: describes how to dequantize the table rows. Must not be nil.
-//     Only QuantGGML scheme is supported.
+//   - dataQuantization: describes how to dequantize the data rows. Must not be nil.
+//     Only QuantGGML scheme is currently supported.
 //
 // Output: float32 tensor with shape [batch..., K] where K = (bytesPerRow / bytesPerBlock) * valuesPerBlock.
 //
 //	For embeddings with indices [batch, seqLen, 1]: output is [batch, seqLen, K].
-func (f Function) FusedQuantizedGather(table backends.Value, indices backends.Value, tableQuantization *backends.Quantization) (backends.Value, error) {
+func (f Function) FusedQuantizedGather(data backends.Value, indices backends.Value, dataQuantization *backends.Quantization) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypeFusedQuantizedGather)
 }
 

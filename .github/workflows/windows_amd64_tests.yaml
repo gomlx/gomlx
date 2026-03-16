@@ -34,16 +34,16 @@ jobs:
         shell: bash
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "1.25.x"
 
       - name: Install PJRT plugin
         run: |
-          export CPU_VERSION="v0.83.4"
+          export CPU_VERSION="latest"
           env GH_TOKEN=$GH_TOKEN go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin cpu -version "${CPU_VERSION}" -path '~\AppData\Local\go-xla'
           echo "Contents for go-xla:"
           ls -la "${HOME}/AppData/Local/go-xla"

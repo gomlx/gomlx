@@ -23,7 +23,11 @@ func execConvertDType(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 		return nil, err
 	}
 	output.shape = node.shape
-	convertFn := convertDTypePairMap.Get(operand.shape.DType, output.shape.DType).(convertFnType)
+	convertFnAny, err := convertDTypePairMap.Get(operand.shape.DType, output.shape.DType)
+	if err != nil {
+		return nil, err
+	}
+	convertFn := convertFnAny.(convertFnType)
 	convertFn(operand, output)
 	return output, nil
 }

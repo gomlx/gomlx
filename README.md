@@ -66,11 +66,17 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 
 **Examples developed using GoMLX:**
 
+  * **🚀 NEW 🚀** [GPT-2](https://github.com/gomlx/gomlx/tree/main/examples/gpt2): Demonstrates text generation using the
+    the new (experimental) transformer and generator packages.
   * **🚀 NEW 🚀** [Gemma 3 270M](https://github.com/gomlx/gomlx/tree/main/examples/gemma3): Demonstrates ONNX-converted
     text generation (LLM) using the [onnx-community/gemma-3-270m-it-ONNX](https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX) 
-    model with GoMLX.
+    model with GoMLX. 
+    It uses the [`gomlx/onnx-gomlx`](https://github.com/gomlx/onnx-gomlx) package to convert the model, and [`gomlx/go-huggingface`](https://github.com/gomlx/go-huggingface) to download the model and run the tokenizer.
   * **🚀 NEW 🚀** [BERT-base-NER](https://github.com/gomlx/gomlx/tree/main/examples/BERT-base-NER): A BERT-base model fine-tuned
     for Named Entity Recognition. It's also a ONNX-converted model from [dslim/bert-base-NER model](https://huggingface.co/dslim/bert-base-NER) from HuggingFace.
+  - **🚀 NEW 🚀** [MixedBread Reranker v1](https://github.com/gomlx/gomlx/tree/main/examples/mxbai-rerank): A cross-encoder reranking 
+    example, see [HuggingFace MixedBread Reranker v1 page](https://huggingface.co/mixedbread-ai/mxbai-rerank-base-v1).
+    It uses the [`gomlx/onnx-gomlx`](https://github.com/gomlx/onnx-gomlx) package to convert the model, and [`gomlx/go-huggingface`](https://github.com/gomlx/go-huggingface) to download the model and run the tokenizer.
 
   * [Adult/Census model](https://gomlx.github.io/gomlx/notebooks/uci-adult.html);
   * [How do KANs learn ?](https://gomlx.github.io/gomlx/notebooks/kan_shapes.html); 
@@ -99,6 +105,8 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
       For linux/amd64, linux/arm64 (CPU) and darwin/arm64 (CPU) for now. Using the [go-xla](https://github.com/gomlx/go-xla) Go version of the APIs.
    2. **`go`**: a pure Go backend (no C/C++ dependencies): slower but very portable (compiles to WASM/Windows/etc.): 
       * SIMD support is underway (see [SIMD for Go](https://github.com/golang/go/issues/73787) and under-development [go-highway](https://github.com/ajroetker/go-highway)); 
+      * **🚀 NEW 🚀**: added support for some **fused operations** and for some types of quantization, greatly improving performance
+        in some cases.
       * See also [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
    3. **🚀 NEW 🚀** **[go-coreml](https://github.com/gomlx/go-coreml)**: Go bindings to Apple's CoreML, supporting Metal acceleration.
 * Autodiff: automatic differentiation—only gradients for now, no jacobian.

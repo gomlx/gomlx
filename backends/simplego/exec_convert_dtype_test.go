@@ -22,7 +22,11 @@ func TestConvertPackedInt4ToInt8(t *testing.T) {
 	dstShape := shapes.Make(dtypes.Int8, 4)
 	dstBuf := &Buffer{shape: dstShape, flat: make([]int8, 4), inUse: true}
 
-	convertFn := convertDTypePairMap.Get(dtypes.Int4, dtypes.Int8).(convertFnType)
+	tmpAny, tmpErr := convertDTypePairMap.Get(dtypes.Int4, dtypes.Int8)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	convertFn := tmpAny.(convertFnType)
 	convertFn(srcBuf, dstBuf)
 
 	result := dstBuf.flat.([]int8)
@@ -43,7 +47,11 @@ func TestConvertPackedUint4ToUint8(t *testing.T) {
 	dstShape := shapes.Make(dtypes.Uint8, 4)
 	dstBuf := &Buffer{shape: dstShape, flat: make([]uint8, 4), inUse: true}
 
-	convertFn := convertDTypePairMap.Get(dtypes.Uint4, dtypes.Uint8).(convertFnType)
+	tmpAny, tmpErr := convertDTypePairMap.Get(dtypes.Uint4, dtypes.Uint8)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	convertFn := tmpAny.(convertFnType)
 	convertFn(srcBuf, dstBuf)
 
 	result := dstBuf.flat.([]uint8)
@@ -62,7 +70,11 @@ func TestConvertPackedInt4ToFloat32(t *testing.T) {
 	dstShape := shapes.Make(dtypes.Float32, 4)
 	dstBuf := &Buffer{shape: dstShape, flat: make([]float32, 4), inUse: true}
 
-	convertFn := convertDTypePairMap.Get(dtypes.Int4, dtypes.Float32).(convertFnType)
+	tmpAny, tmpErr := convertDTypePairMap.Get(dtypes.Int4, dtypes.Float32)
+	if tmpErr != nil {
+		panic(tmpErr)
+	}
+	convertFn := tmpAny.(convertFnType)
 	convertFn(srcBuf, dstBuf)
 
 	result := dstBuf.flat.([]float32)

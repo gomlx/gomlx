@@ -1,6 +1,22 @@
 # GoMLX changelog
 
-# Next
+# Next:
+
+- Package `examples/...`:
+  - Updated `gemma3`, `mxbai-rerank` and `bert-base-ner` to use the new `onnx-gomlx` v0.4.0 API, bumped dependency.
+
+- Package `graph`:
+  - `Floor` and `Ceil` operations now are identity for integer dtypes.
+
+- Package `simplego`:
+  - Removed panics during execution: return errors instead.
+  - Fixed missing annotation/stacktrace on not-implemented errors. 
+  - Implemented `Pad()` operation (and add some more tests in `graph.TestPad`).
+
+- Package `xla`:
+  - Changed `TF_CPP_MIN_LOG_LEVEL` to default to 3. See https://github.com/openxla/xla/issues/26466
+
+# v0.27.0: Graph functions; Improved Go backend (fusion ops); Quantization dtypes; more ML layers & fixes
 
 - Package `backends`: major refactoring to add support for functions/closures.
   - Added `backends.Function`, which now holds all the "ops" methods.
@@ -57,11 +73,13 @@
 - Package `ml/layers/activations`: 
   - Added `HardSwish`.
 - Package `examples`:
-  - Separated in its own sub-modules, to separate its dependencies.
+  - Separated in its own sub-module, to separate its dependencies.
   - Added `gpt2`: A simple GPT-2 implementation using the new transformers and decode packages. It downloads the model from HuggingFace.
   - Added `textgen`: a minimal transformer text generation model that can be trained.
-  - Added `gemma3`: A simple Gemma 3 implementation using the new transformers and decode packages. It downloads the model from HuggingFace.
+  - Added `gemma3`: A simple Gemma 3 implementation using the `onnx-gomlx` package to convert the model, and `go-huggingface` to download the model and run the tokenizer.
+  - Added `mxbai-rerank`: A cross-encoder reranking example using the [MixedBread Reranker v1](https://huggingface.co/mixedbread-ai/mxbai-rerank-base-v1). It uses the `onnx-gomlx` package to convert the model, and `go-huggingface` to download the model and run the tokenizer.
   - Added `BERT-base-NER`: A BERT-base model fine-tuned for Named Entity Recognition.
+- Bumped github actions versions to the new "Node24" ones.
 
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 

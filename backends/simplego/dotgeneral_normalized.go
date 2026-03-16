@@ -173,7 +173,11 @@ func dgNormalizeShape[T interface {
 // both rhs and lhs are shaped [batchSize, crossSize, contractingSize].
 func execDotGeneralNormalized(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
 	dtype := lhs.shape.DType
-	normalizeFn := dotGeneralNormalizeShapeDTypeMap.Get(dtype).(func(backend *Backend, source *Buffer,
+	normalizeFnAny, err := dotGeneralNormalizeShapeDTypeMap.Get(dtype)
+	if err != nil {
+		return err
+	}
+	normalizeFn := normalizeFnAny.(func(backend *Backend, source *Buffer,
 		info *dgNormalizationInfo, batchSize, crossSize, contractingSize int) *Buffer)
 
 	batchSize := params.batchSize
@@ -205,7 +209,11 @@ func execDotGeneralNormalized(backend *Backend, lhs, rhs *Buffer, params *dotGen
 		tmpOutput.Zeros()
 	}
 
-	normalizeDotGeneral := dotGeneralNormalizedDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer,
+	normalizeDotGeneralAny, err := dotGeneralNormalizedDTypeMap.Get(dtype)
+	if err != nil {
+		return err
+	}
+	normalizeDotGeneral := normalizeDotGeneralAny.(func(lhs, rhs, output *Buffer,
 		params *dotGeneralNodeData, batchStartIdx, batchEndIdx int))
 
 	// Decide on using parallelism across the batch -- each example is started on a separate worker.
@@ -235,7 +243,11 @@ func execDotGeneralNormalized(backend *Backend, lhs, rhs *Buffer, params *dotGen
 
 	// If we created a temporary float32 output, convert it back to the original dtype.
 	if castToFloat32 {
-		convertFn := convertDTypePairMap.Get(dtypes.Float32, output.shape.DType).(convertFnType) //nolint:errcheck
+		convertFnAny, err := convertDTypePairMap.Get(dtypes.Float32, output.shape.DType) //nolint:errcheck
+		if err != nil {
+			return err
+		}
+		convertFn := convertFnAny.(convertFnType)
 		convertFn(tmpOutput, output)
 		backend.putBuffer(tmpOutput) // Return the temporary buffer to the pool.
 	}

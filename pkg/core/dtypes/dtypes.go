@@ -498,6 +498,7 @@ func (dtype DType) RealDType() DType {
 }
 
 // IsInt returns whether dtype is a supported integer type -- float types not yet supported will return false.
+// This include the unsigned integer types.
 func (dtype DType) IsInt() bool {
 	return IntDTypes[dtype]
 }

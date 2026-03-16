@@ -33,7 +33,8 @@ var (
 	methodsNotExported = sets.MakeWith(
 		"AllReduce", "ArgMinMax", "Broadcast", "BroadcastInDim",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
-		"Concatenate", "ConvertDType", "ConvGeneral", "DotGeneral", "FFT", "Gather", "Iota",
+		"Ceil", "Concatenate", "ConvertDType", "ConvGeneral", "DotGeneral",
+		"FFT", "Floor", "Gather", "Iota",
 		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum", "ReduceWindow",
 
 		// Reduce of logical/bitwise operators:
