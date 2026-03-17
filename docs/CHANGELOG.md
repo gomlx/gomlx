@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next:
+v0.27.1: Minor fixes and updates; ONNX-GoMLX examples now use v0.4.1.
 
 - Package `examples/...`:
   - Updated `gemma3`, `mxbai-rerank` and `bert-base-ner` to use the new `onnx-gomlx` v0.4.1 API, bumped dependency.
