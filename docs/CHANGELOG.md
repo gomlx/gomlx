@@ -3,7 +3,7 @@
 # Next:
 
 - Package `examples/...`:
-  - Updated `gemma3`, `mxbai-rerank` and `bert-base-ner` to use the new `onnx-gomlx` v0.4.0 API, bumped dependency.
+  - Updated `gemma3`, `mxbai-rerank` and `bert-base-ner` to use the new `onnx-gomlx` v0.4.1 API, bumped dependency.
 
 - Package `graph`:
   - `Floor` and `Ceil` operations now are identity for integer dtypes.
