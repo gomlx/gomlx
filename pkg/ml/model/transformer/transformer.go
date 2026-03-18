@@ -78,6 +78,10 @@ type Model struct {
 	NumKVHeads    int              // For Grouped Query Attention (GQA), 0 means equal to NumHeads
 
 	PosEmbed pos.Encoder // Positional encoder (e.g. RoPE). If nil, standard absolute positional embeddings are used.
+
+	// TransposedProjections indicates whether to assume linear weights are transposed (as [out_features, in_features]),
+	// which is standard for PyTorch nn.Linear. This enables dropping in PyTorch models directly.
+	TransposedProjections bool
 }
 
 // New creates a default transformer configuration.
@@ -304,6 +308,13 @@ func (m *Model) WithNumKVHeads(num int) *Model {
 	return m
 }
 
+// WithTransposedWeights configures the model to assume linear weights are transposed (as [out_features, in_features]),
+// which is the format used by PyTorch nn.Linear. This enables loading PyTorch models directly.
+func (m *Model) WithTransposedWeights(transposed bool) *Model {
+	m.TransposedProjections = transposed
+	return m
+}
+
 // ForTraining returns a model function for training (full-sequence forward, no KV cache).
 func (m *Model) ForTraining() decode.IterativeModelFn {
 	return func(ctx *context.Context, tokens *Node) *Node {
@@ -379,7 +390,8 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCach
 	if useCache {
 		positionNode := Const(x.Graph(), int32(position))
 		attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, cfg.NumHeads, cfg.HeadDim).
-			WithKVCache(cfg.MaxPosEmbed, positionNode)
+			WithKVCache(cfg.MaxPosEmbed, positionNode).
+			UseTransposedWeights(cfg.TransposedProjections)
 
 		if cfg.PosEmbed != nil {
 			attnBuilder = attnBuilder.WithPositionalEncoder(cfg.PosEmbed)
@@ -393,7 +405,8 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCach
 		attn = attnBuilder.Done()
 	} else {
 		attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, cfg.NumHeads, cfg.HeadDim).
-			UseCausalMask()
+			UseCausalMask().
+			UseTransposedWeights(cfg.TransposedProjections)
 
 		if cfg.PosEmbed != nil {
 			attnBuilder = attnBuilder.WithPositionalEncoder(cfg.PosEmbed)
@@ -420,12 +433,12 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCach
 	}
 
 	residual = x
-	ff := layers.Dense(layerCtx.In("ff1"), x, cfg.UseBias, cfg.FFNDim)
+	ff := m.Dense(layerCtx.In("ff1"), x, cfg.UseBias, cfg.FFNDim)
 	ff = activations.Apply(cfg.Activation, ff)
 	if cfg.Dropout > 0 {
 		ff = layers.Dropout(layerCtx.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), cfg.Dropout))
 	}
-	ff = layers.Dense(layerCtx.In("ff2"), ff, cfg.UseBias, cfg.EmbedDim)
+	ff = m.Dense(layerCtx.In("ff2"), ff, cfg.UseBias, cfg.EmbedDim)
 
 	x = Add(residual, ff)
 	if cfg.Normalization != "none" && cfg.Normalization != "" {
@@ -443,6 +456,38 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCach
 }
 
 // normalize according to configuration.
+// Dense behaves like layers.Dense but checks whether the model is configured to use transposed projections.
+// If it is, it computes the dense layer using DotGeneral (Einsum), expecting weights in the format [outDim, inDim].
+// PyTorch nn.Linear stores its matrix in this transposed format.
+func (m *Model) Dense(ctx *context.Context, op *Node, useBias bool, outputDims ...int) *Node {
+	if !m.TransposedProjections {
+		return layers.Dense(ctx, op, useBias, outputDims...)
+	}
+	ctx = ctx.In("dense")
+	g := op.Graph()
+	inDim := op.Shape().Dim(-1)
+	outDim := 1
+	for _, d := range outputDims {
+		outDim *= d
+	}
+	wVar := ctx.VariableWithShape("weights", shapes.Make(op.DType(), outDim, inDim))
+	w := wVar.ValueGraph(g)
+	y := DotGeneral(op, []int{-1}, nil, w, []int{1}, nil)
+
+	if useBias {
+		bVar := ctx.VariableWithShape("biases", shapes.Make(op.DType(), outDim))
+		y = Add(y, bVar.ValueGraph(g))
+	}
+
+	if len(outputDims) > 1 {
+		newDims := make([]int, op.Rank()-1+len(outputDims))
+		copy(newDims, op.Shape().Dimensions[:op.Rank()-1])
+		copy(newDims[op.Rank()-1:], outputDims)
+		y = Reshape(y, newDims...)
+	}
+	return y
+}
+
 func (m *Model) normalize(ctx *context.Context, operand *Node) *Node {
 	if m.Normalization == layers.NormalizationNone {
 		return operand
@@ -467,7 +512,8 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x *Node, useCache b
 
 	// Attention.
 	var attn *Node
-	attnBuilder := attention.SelfAttention(layerCtx.In("self_attn"), x, cfg.NumHeads, cfg.HeadDim)
+	attnBuilder := attention.SelfAttention(layerCtx.In("self_attn"), x, cfg.NumHeads, cfg.HeadDim).
+		UseTransposedWeights(m.TransposedProjections)
 	if cfg.NumKVHeads > 0 && cfg.NumKVHeads != cfg.NumHeads {
 		attnBuilder.SetNumKVHeads(cfg.NumKVHeads)
 	}
@@ -482,6 +528,9 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x *Node, useCache b
 	}
 	if !cfg.UseBias {
 		attnBuilder = attnBuilder.UseProjectionBias(false)
+	}
+	if m.Architecture == ArchitectureGemma3 {
+		attnBuilder = attnBuilder.WithQKRMSNorm(cfg.NormEpsilon)
 	}
 	if cfg.Dropout > 0 {
 		attnBuilder = attnBuilder.Dropout(cfg.Dropout)
@@ -498,15 +547,15 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x *Node, useCache b
 
 	// Gemma uses SwiGLU: gate_proj, up_proj, down_proj
 	ffCtx := layerCtx.In("mlp")
-	gate := layers.Dense(ffCtx.In("gate_proj"), x, cfg.UseBias, cfg.FFNDim)
-	up := layers.Dense(ffCtx.In("up_proj"), x, cfg.UseBias, cfg.FFNDim)
+	gate := m.Dense(ffCtx.In("gate_proj"), x, cfg.UseBias, cfg.FFNDim)
+	up := m.Dense(ffCtx.In("up_proj"), x, cfg.UseBias, cfg.FFNDim)
 	switchedNode := activations.Apply(cfg.Activation, gate)
 	ff := Mul(switchedNode, up)
 
 	if cfg.Dropout > 0 {
 		ff = layers.Dropout(ffCtx.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), cfg.Dropout))
 	}
-	ff = layers.Dense(ffCtx.In("down_proj"), ff, cfg.UseBias, cfg.EmbedDim)
+	ff = m.Dense(ffCtx.In("down_proj"), ff, cfg.UseBias, cfg.EmbedDim)
 
 	// Post-feedforward normalization
 	ff = m.normalize(layerCtx.In("post_feedforward_norm"), ff)
