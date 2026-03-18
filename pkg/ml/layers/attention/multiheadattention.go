@@ -60,6 +60,11 @@ type MultiHeadAttentionBuilder struct {
 	// useQKVProjection replaces separate Dense Q/K/V projections with a single fused
 	// QKVProjection (one large matmul + split). Only valid for self-attention.
 	useQKVProjection bool
+
+	withQKRMSNorm bool
+	qkNormEpsilon float64
+
+	useTransposedWeights bool
 }
 
 // MultiHeadAttention defines a multi-head attention layers, as described in the paper
@@ -441,6 +446,20 @@ func (b *MultiHeadAttentionBuilder) UseQKVProjection() *MultiHeadAttentionBuilde
 	return b
 }
 
+// UseTransposedWeights configures the builder to assume the query, key, value, and output projection weights
+// are stored transposed (as [out_features, in_features]).
+func (b *MultiHeadAttentionBuilder) UseTransposedWeights(transposed bool) *MultiHeadAttentionBuilder {
+	b.useTransposedWeights = transposed
+	return b
+}
+
+// WithQKRMSNorm applies RMSNorm to the query and key projections before attention (used by models like Gemma 2 and Gemma 3).
+func (b *MultiHeadAttentionBuilder) WithQKRMSNorm(epsilon float64) *MultiHeadAttentionBuilder {
+	b.withQKRMSNorm = true
+	b.qkNormEpsilon = epsilon
+	return b
+}
+
 // DoneWithCoefficients or Done should be called after all optional settings are configured.
 // It returns both the attention output and the attention coefficients (matrix) used.
 //
@@ -495,12 +514,18 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 
 	kvHeads := b.effectiveNumKVHeads()
 	var projectedQuery, projectedKey, projectedValue *Node
+
 	if b.useQKVProjection {
 		projectedQuery, projectedKey, projectedValue = b.qkvProject(flatQuery)
 	} else {
-		projectedKey = layers.Dense(b.ctx.In("key"), flatKey, true, kvHeads, b.keyQueryDim)
-		projectedQuery = layers.Dense(b.ctx.In("query"), flatQuery, true, b.numHeads, b.keyQueryDim)
-		projectedValue = layers.Dense(b.ctx.In("value"), flatValue, true, kvHeads, b.valueDim)
+		projectedKey = b.dense(b.ctx.In("key"), flatKey, b.useProjectionBias, kvHeads, b.keyQueryDim)
+		projectedQuery = b.dense(b.ctx.In("query"), flatQuery, b.useProjectionBias, b.numHeads, b.keyQueryDim)
+		projectedValue = b.dense(b.ctx.In("value"), flatValue, b.useProjectionBias, kvHeads, b.valueDim)
+	}
+
+	if b.withQKRMSNorm {
+		projectedQuery = layers.RMSNorm(b.ctx.In("query"), projectedQuery).WithEpsilon(b.qkNormEpsilon).WithNormalizationAxes(-1).Done()
+		projectedKey = layers.RMSNorm(b.ctx.In("key"), projectedKey).WithEpsilon(b.qkNormEpsilon).WithNormalizationAxes(-1).Done()
 	}
 
 	// Apply positional encoding (e.g. RoPE) if enabled.
@@ -578,9 +603,42 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	}
 
 	// Final shape: `[batch, <query_elements>, outputDim]`
-	attentionOutput = layers.Dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
+	attentionOutput = b.dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
 
 	return attentionOutput, attentionCoefficients
+}
+
+// dense executes a Dense projection layer.
+// If UseTransposedWeights() has been called, it uses Einsum to compute the projection
+// using PyTorch's default transposed weight schema ([outDim, inDim]).
+func (b *MultiHeadAttentionBuilder) dense(ctx *context.Context, x *Node, useBias bool, outputDims ...int) *Node {
+	if !b.useTransposedWeights {
+		return layers.Dense(ctx, x, useBias, outputDims...)
+	}
+	ctx = ctx.In("dense")
+	g := x.Graph()
+	inDim := x.Shape().Dim(-1)
+	outDim := 1
+	for _, d := range outputDims {
+		outDim *= d
+	}
+	wVar := ctx.VariableWithShape("weights", shapes.Make(x.DType(), outDim, inDim))
+	w := wVar.ValueGraph(g)
+
+	y := DotGeneral(x, []int{-1}, nil, w, []int{1}, nil)
+
+	if useBias {
+		bVar := ctx.VariableWithShape("biases", shapes.Make(x.DType(), outDim))
+		y = Add(y, bVar.ValueGraph(g))
+	}
+
+	if len(outputDims) > 1 {
+		newDims := make([]int, x.Rank()-1+len(outputDims))
+		copy(newDims, x.Shape().Dimensions[:x.Rank()-1])
+		copy(newDims[x.Rank()-1:], outputDims)
+		y = Reshape(y, newDims...)
+	}
+	return y
 }
 
 // qkvProject performs a fused QKV projection using a single weight matrix.
