@@ -114,6 +114,13 @@ func Apply(activation Type, x *Node) *Node {
 	return nil
 }
 
+var (
+	// Aliases are alternative names to activations.
+	Aliases = map[string]Type{
+		"gelu_pytorch_tanh": TypeGeluApprox,
+	}
+)
+
 // FromName converts the name of an activation to its type.
 // It panics with a helpful message if name is invalid.
 //
@@ -121,6 +128,9 @@ func Apply(activation Type, x *Node) *Node {
 func FromName(activationName string) Type {
 	if activationName == "" {
 		return TypeNone
+	}
+	if act, ok := Aliases[activationName]; ok {
+		return act
 	}
 	activation, err := TypeString(activationName)
 	if err != nil {

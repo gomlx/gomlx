@@ -14,21 +14,31 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // Hyperparameter keys for context configuration
 const (
-	ParamVocabSize    = "transformer_vocab_size"
-	ParamEmbedDim     = "transformer_embed_dim"
-	ParamNumLayers    = "transformer_num_layers"
-	ParamNumHeads     = "transformer_num_heads"
-	ParamHeadDim      = "transformer_head_dim"
-	ParamFFNDim       = "transformer_ffn_dim"
-	ParamMaxPosEmbed  = "transformer_max_pos_embed"
-	ParamDType        = "transformer_dtype"
-	ParamDropout      = "transformer_dropout"
+	ParamVocabSize   = "transformer_vocab_size"
+	ParamEmbedDim    = "transformer_embed_dim"
+	ParamNumLayers   = "transformer_num_layers"
+	ParamNumHeads    = "transformer_num_heads"
+	ParamHeadDim     = "transformer_head_dim"
+	ParamFFNDim      = "transformer_ffn_dim"
+	ParamMaxPosEmbed = "transformer_max_pos_embed"
+	ParamDType       = "transformer_dtype"
+	ParamDropout     = "transformer_dropout"
+
+	// ParamUseLayerNorm
+	// Deprecated: use ParamNormalization instead.
 	ParamUseLayerNorm = "transformer_use_layer_norm"
-	ParamUseBias      = "transformer_use_bias"
+
+	ParamUseBias       = "transformer_use_bias"
+	ParamArchitecture  = "transformer_architecture"
+	ParamNormalization = "transformer_normalization"
+	ParamNormEpsilon   = "transformer_norm_epsilon"
+	ParamActivation    = "transformer_activation"
+	ParamNumKVHeads    = "transformer_num_kv_heads"
 
 	// Legacy RoPE parameters, used to configure PosEmbed if set.
 	ParamUseRoPE      = "transformer_use_rope"
@@ -36,19 +46,36 @@ const (
 )
 
 // Model holds configuration for building a cached transformer model.
+// Architecture is an enum for the supported transformer architectures.
+//
+// It is converted to and from string by using the generated ArchitectureString function.
+type Architecture int
+
+const (
+	ArchitectureStandard Architecture = iota
+	ArchitectureGemma
+	ArchitectureGemma3
+)
+
+//go:generate go tool enumer -type Architecture -trimprefix=Architecture -output=gen_architecture_enumer.go transformer.go
+
 // Model configures a cached transformer model.
 type Model struct {
-	VocabSize    int          // Vocabulary size
-	EmbedDim     int          // Embedding dimension
-	NumLayers    int          // Transformer layers
-	NumHeads     int          // Attention heads per layer
-	HeadDim      int          // Head dimension
-	FFNDim       int          // Feed-forward hidden dimension
-	MaxPosEmbed  int          // Max positional embedding length
-	DType        dtypes.DType // Data type
-	Dropout      float64      // Dropout rate (0.0 = none)
-	UseLayerNorm bool         // Use layer normalization
-	UseBias      bool         // Use bias in dense layers
+	VocabSize     int              // Vocabulary size
+	EmbedDim      int              // Embedding dimension
+	NumLayers     int              // Transformer layers
+	NumHeads      int              // Attention heads per layer
+	HeadDim       int              // Head dimension
+	FFNDim        int              // Feed-forward hidden dimension
+	MaxPosEmbed   int              // Max positional embedding length
+	DType         dtypes.DType     // Data type
+	Dropout       float64          // Dropout rate (0.0 = none)
+	UseBias       bool             // Use bias in dense layers
+	Architecture  Architecture     // e.g. ArchitectureStandard, ArchitectureGemma
+	Normalization string           // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
+	NormEpsilon   float64          // Epsilon for normalization
+	Activation    activations.Type // e.g. "gelu", "silu", "gelu_approximate"
+	NumKVHeads    int              // For Grouped Query Attention (GQA), 0 means equal to NumHeads
 
 	PosEmbed pos.Encoder // Positional encoder (e.g. RoPE). If nil, standard absolute positional embeddings are used.
 }
@@ -56,18 +83,22 @@ type Model struct {
 // New creates a default transformer configuration.
 func New(vocabSize, embedDim, numLayers, numHeads, headDim int) *Model {
 	return &Model{
-		VocabSize:    vocabSize,
-		EmbedDim:     embedDim,
-		NumLayers:    numLayers,
-		NumHeads:     numHeads,
-		HeadDim:      headDim,
-		FFNDim:       embedDim * 4, // 4x expansion
-		MaxPosEmbed:  512,
-		DType:        dtypes.Float32,
-		Dropout:      0.0,
-		UseLayerNorm: true,
-		UseBias:      true,
-		PosEmbed:     nil,
+		VocabSize:     vocabSize,
+		EmbedDim:      embedDim,
+		NumLayers:     numLayers,
+		NumHeads:      numHeads,
+		HeadDim:       headDim,
+		FFNDim:        embedDim * 4, // 4x expansion
+		MaxPosEmbed:   512,
+		DType:         dtypes.Float32,
+		Dropout:       0.0,
+		UseBias:       true,
+		Architecture:  ArchitectureStandard,
+		Normalization: layers.NormalizationLayerNorm,
+		NormEpsilon:   1e-5,
+		Activation:    activations.TypeGelu,
+		NumKVHeads:    0,
+		PosEmbed:      nil,
 	}
 }
 
@@ -142,8 +173,24 @@ func (m *Model) FromContext(ctx *context.Context) *Model {
 	m.FFNDim = context.GetParamOr(ctx, ParamFFNDim, m.FFNDim)
 	m.MaxPosEmbed = context.GetParamOr(ctx, ParamMaxPosEmbed, m.MaxPosEmbed)
 	m.Dropout = context.GetParamOr(ctx, ParamDropout, m.Dropout)
-	m.UseLayerNorm = context.GetParamOr(ctx, ParamUseLayerNorm, m.UseLayerNorm)
+
+	// Deprecated way to specify LayerNorm:
+	useLayerNorm := context.GetParamOr(ctx, ParamUseLayerNorm, true)
+	if useLayerNorm {
+		m.WithLayerNorm(true)
+	}
+	m.Normalization = context.GetParamOr(ctx, ParamNormalization, m.Normalization)
+	m.WithNormalization(m.Normalization)
 	m.UseBias = context.GetParamOr(ctx, ParamUseBias, m.UseBias)
+	archStr := context.GetParamOr(ctx, ParamArchitecture, m.Architecture.String())
+	if arch, err := ArchitectureString(archStr); err == nil {
+		m.Architecture = arch
+	} else {
+		exceptions.Panicf("invalid architecture name %q: options are %v", archStr, ArchitectureValues())
+	}
+	m.NormEpsilon = context.GetParamOr(ctx, ParamNormEpsilon, m.NormEpsilon)
+	m.Activation = activations.FromName(context.GetParamOr(ctx, ParamActivation, m.Activation.String()))
+	m.NumKVHeads = context.GetParamOr(ctx, ParamNumKVHeads, m.NumKVHeads)
 
 	// Legacy RoPE configuration from context
 	useRoPE := context.GetParamOr(ctx, ParamUseRoPE, false)
@@ -202,14 +249,58 @@ func (m *Model) WithPositionalEmbedding(encoder pos.Encoder) *Model {
 }
 
 // WithLayerNorm toggles layer normalization.
+//
+// Deprecated: use WithNormalization("layer"), WithNormalization("none") or some other value instead.
 func (m *Model) WithLayerNorm(use bool) *Model {
-	m.UseLayerNorm = use
+	if use {
+		m.Normalization = layers.NormalizationLayerNorm
+	} else {
+		m.Normalization = layers.NormalizationNone
+	}
 	return m
 }
 
 // WithBias toggles dense bias.
 func (m *Model) WithBias(use bool) *Model {
 	m.UseBias = use
+	return m
+}
+
+// WithArchitecture sets the architectural style.
+func (m *Model) WithArchitecture(arch Architecture) *Model {
+	m.Architecture = arch
+	return m
+}
+
+// WithNormalization sets the normalization type ("layer", "rms", "batch", "none" or "").
+//
+// The values "none" or "" mean no normalization.
+//
+// See constants layers.NormalizationLayerNorm ("layer"), layers.NormalizationRMSNorm ("rms"), layers.NormalizationBatchNorm ("batch")
+// and layers.NormalizationNone ("none").
+func (m *Model) WithNormalization(norm string) *Model {
+	if norm == "" {
+		norm = layers.NormalizationNone
+	}
+	m.Normalization = norm
+	return m
+}
+
+// WithNormEpsilon sets the epsilon value used for normalization layers.
+func (m *Model) WithNormEpsilon(eps float64) *Model {
+	m.NormEpsilon = eps
+	return m
+}
+
+// WithActivation sets the activation function type.
+func (m *Model) WithActivation(activation activations.Type) *Model {
+	m.Activation = activation
+	return m
+}
+
+// WithNumKVHeads enables Grouped Query Attention (GQA) if different from NumHeads.
+func (m *Model) WithNumKVHeads(num int) *Model {
+	m.NumKVHeads = num
 	return m
 }
 
@@ -262,73 +353,163 @@ func (m *Model) forwardFull(
 	}
 
 	for layer := 0; layer < cfg.NumLayers; layer++ {
-		layerCtx := ctx.In(fmt.Sprintf("layer_%d", layer))
-
-		residual := x
-		var attn *Node
-
-		if useCache {
-			// Generation mode: use KV cache for efficient incremental decoding
-			// Convert position int to a Node for the WithKVCache API
-			positionNode := Const(x.Graph(), int32(position))
-			attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, cfg.NumHeads, cfg.HeadDim).
-				WithKVCache(cfg.MaxPosEmbed, positionNode)
-
-			if cfg.PosEmbed != nil {
-				attnBuilder = attnBuilder.WithPositionalEncoder(cfg.PosEmbed)
-			}
-
-			if !cfg.UseBias {
-				attnBuilder = attnBuilder.UseProjectionBias(false)
-			}
-
-			if cfg.Dropout > 0 {
-				attnBuilder = attnBuilder.Dropout(cfg.Dropout)
-			}
-
-			attn = attnBuilder.Done()
-		} else {
-			// Training mode: no cache, use causal mask
-			attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, cfg.NumHeads, cfg.HeadDim).
-				UseCausalMask()
-
-			if cfg.PosEmbed != nil {
-				attnBuilder = attnBuilder.WithPositionalEncoder(cfg.PosEmbed)
-			}
-
-			if !cfg.UseBias {
-				attnBuilder = attnBuilder.UseProjectionBias(false)
-			}
-
-			if cfg.Dropout > 0 {
-				attnBuilder = attnBuilder.Dropout(cfg.Dropout)
-			}
-
-			attn = attnBuilder.Done()
-		}
-
-		if cfg.UseLayerNorm {
-			x = layers.LayerNormalization(layerCtx.In("norm1"), Add(residual, attn), -1).Done()
-		} else {
-			x = Add(residual, attn)
-		}
-
-		residual = x
-		ff := layers.Dense(layerCtx.In("ff1"), x, cfg.UseBias, cfg.FFNDim)
-		ff = activations.Gelu(ff)
-		if cfg.Dropout > 0 {
-			ff = layers.Dropout(layerCtx.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), cfg.Dropout))
-		}
-		ff = layers.Dense(layerCtx.In("ff2"), ff, cfg.UseBias, cfg.EmbedDim)
-
-		if cfg.UseLayerNorm {
-			x = layers.LayerNormalization(layerCtx.In("norm2"), Add(residual, ff), -1).Done()
-		} else {
-			x = Add(residual, ff)
-		}
+		x = m.ForwardLayer(ctx, x, layer, useCache, position)
 	}
 
 	logits := layers.Dense(ctx.In("output"), x, false, cfg.VocabSize)
 
 	return logits
+}
+
+// ForwardLayer executes a single transformer layer block depending on the configured architecture.
+func (m *Model) ForwardLayer(ctx *context.Context, x *Node, layerIdx int, useCache bool, position int) *Node {
+	layerCtx := ctx.In(fmt.Sprintf("layer_%d", layerIdx))
+
+	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
+		return m.forwardLayerGemma(layerCtx, x, useCache, position)
+	}
+	return m.forwardLayerStandard(layerCtx, x, useCache, position)
+}
+
+func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCache bool, position int) *Node {
+	cfg := m
+	residual := x
+	var attn *Node
+
+	if useCache {
+		positionNode := Const(x.Graph(), int32(position))
+		attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, cfg.NumHeads, cfg.HeadDim).
+			WithKVCache(cfg.MaxPosEmbed, positionNode)
+
+		if cfg.PosEmbed != nil {
+			attnBuilder = attnBuilder.WithPositionalEncoder(cfg.PosEmbed)
+		}
+		if !cfg.UseBias {
+			attnBuilder = attnBuilder.UseProjectionBias(false)
+		}
+		if cfg.Dropout > 0 {
+			attnBuilder = attnBuilder.Dropout(cfg.Dropout)
+		}
+		attn = attnBuilder.Done()
+	} else {
+		attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, cfg.NumHeads, cfg.HeadDim).
+			UseCausalMask()
+
+		if cfg.PosEmbed != nil {
+			attnBuilder = attnBuilder.WithPositionalEncoder(cfg.PosEmbed)
+		}
+		if !cfg.UseBias {
+			attnBuilder = attnBuilder.UseProjectionBias(false)
+		}
+		if cfg.Dropout > 0 {
+			attnBuilder = attnBuilder.Dropout(cfg.Dropout)
+		}
+		attn = attnBuilder.Done()
+	}
+
+	x = Add(residual, attn)
+	if cfg.Normalization != "none" && cfg.Normalization != "" {
+		switch cfg.Normalization {
+		case layers.NormalizationLayerNorm:
+			x = layers.LayerNormalization(layerCtx.In("norm1"), x, -1).Epsilon(cfg.NormEpsilon).Done()
+		case layers.NormalizationRMSNorm:
+			x = layers.RMSNorm(layerCtx.In("norm1"), x).WithEpsilon(cfg.NormEpsilon).Done()
+		default:
+			exceptions.Panicf("unsupported normalization type: %q", cfg.Normalization)
+		}
+	}
+
+	residual = x
+	ff := layers.Dense(layerCtx.In("ff1"), x, cfg.UseBias, cfg.FFNDim)
+	ff = activations.Apply(cfg.Activation, ff)
+	if cfg.Dropout > 0 {
+		ff = layers.Dropout(layerCtx.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), cfg.Dropout))
+	}
+	ff = layers.Dense(layerCtx.In("ff2"), ff, cfg.UseBias, cfg.EmbedDim)
+
+	x = Add(residual, ff)
+	if cfg.Normalization != "none" && cfg.Normalization != "" {
+		switch cfg.Normalization {
+		case layers.NormalizationLayerNorm:
+			x = layers.LayerNormalization(layerCtx.In("norm2"), x, -1).Epsilon(cfg.NormEpsilon).Done()
+		case layers.NormalizationRMSNorm:
+			x = layers.RMSNorm(layerCtx.In("norm2"), x).WithEpsilon(cfg.NormEpsilon).Done()
+		default:
+			exceptions.Panicf("unsupported normalization type: %q", cfg.Normalization)
+		}
+	}
+
+	return x
+}
+
+// normalize according to configuration.
+func (m *Model) normalize(ctx *context.Context, operand *Node) *Node {
+	if m.Normalization == layers.NormalizationNone {
+		return operand
+	}
+	switch m.Normalization {
+	case layers.NormalizationRMSNorm:
+		return layers.RMSNorm(ctx, operand).WithEpsilon(m.NormEpsilon).Done()
+	case layers.NormalizationLayerNorm:
+		return layers.LayerNormalization(ctx, operand, -1).Epsilon(m.NormEpsilon).Done()
+	default:
+		exceptions.Panicf("unsupported normalization type: %q", m.Normalization)
+		return nil
+	}
+}
+
+func (m *Model) forwardLayerGemma(layerCtx *context.Context, x *Node, useCache bool, position int) *Node {
+	cfg := m
+	residual := x
+
+	// Pre-attention normalization.
+	x = m.normalize(layerCtx.In("input_norm"), x)
+
+	// Attention.
+	var attn *Node
+	attnBuilder := attention.SelfAttention(layerCtx.In("self_attn"), x, cfg.NumHeads, cfg.HeadDim)
+	if cfg.NumKVHeads > 0 && cfg.NumKVHeads != cfg.NumHeads {
+		attnBuilder.SetNumKVHeads(cfg.NumKVHeads)
+	}
+	if useCache {
+		positionNode := Const(x.Graph(), int32(position))
+		attnBuilder = attnBuilder.WithKVCache(cfg.MaxPosEmbed, positionNode)
+	} else {
+		attnBuilder = attnBuilder.UseCausalMask()
+	}
+	if cfg.PosEmbed != nil {
+		attnBuilder = attnBuilder.WithPositionalEncoder(cfg.PosEmbed)
+	}
+	if !cfg.UseBias {
+		attnBuilder = attnBuilder.UseProjectionBias(false)
+	}
+	if cfg.Dropout > 0 {
+		attnBuilder = attnBuilder.Dropout(cfg.Dropout)
+	}
+	attn = attnBuilder.Done()
+
+	// Post-attention normalization.
+	attn = m.normalize(layerCtx.In("post_attention_norm"), attn)
+	x = Add(residual, attn)
+	residual = x
+
+	// Pre-feedforward normalization
+	x = m.normalize(layerCtx.In("pre_feedforward_norm"), x)
+
+	// Gemma uses SwiGLU: gate_proj, up_proj, down_proj
+	ffCtx := layerCtx.In("mlp")
+	gate := layers.Dense(ffCtx.In("gate_proj"), x, cfg.UseBias, cfg.FFNDim)
+	up := layers.Dense(ffCtx.In("up_proj"), x, cfg.UseBias, cfg.FFNDim)
+	switchedNode := activations.Apply(cfg.Activation, gate)
+	ff := Mul(switchedNode, up)
+
+	if cfg.Dropout > 0 {
+		ff = layers.Dropout(ffCtx.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), cfg.Dropout))
+	}
+	ff = layers.Dense(ffCtx.In("down_proj"), ff, cfg.UseBias, cfg.EmbedDim)
+
+	// Post-feedforward normalization
+	ff = m.normalize(layerCtx.In("post_feedforward_norm"), ff)
+	x = Add(residual, ff)
+	return x
 }

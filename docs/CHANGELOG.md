@@ -1,6 +1,15 @@
 # GoMLX changelog
 
-v0.27.1: Minor fixes and updates; ONNX-GoMLX examples now use v0.4.1.
+# Next
+
+- Package `ml/model/transformer`: 
+  - Added architecture parameter ("standard" or "gemma" values).
+  - Activation passed an `activations.Type` values (instead of string) -- but conversion from string as a context hyperparameters still works.
+  - Simplified code.
+- Package `ml/layers`
+  - Added constants to normalization types.
+
+# v0.27.1: Minor fixes and updates; ONNX-GoMLX examples now use v0.4.1.
 
 - Package `examples/...`:
   - Updated `gemma3`, `mxbai-rerank` and `bert-base-ner` to use the new `onnx-gomlx` v0.4.1 API, bumped dependency.
