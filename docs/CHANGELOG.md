@@ -2,6 +2,7 @@
 
 # Next
 
+- Updated dependency to `github.com/gomlx/go-xla` to v0.2.1: with a fix to NVIDIA CUDA drivers path.
 - Package `ml/model/transformer`: 
   - Added architecture parameter ("standard" or "gemma" values).
   - Activation passed an `activations.Type` values (instead of string) -- but conversion from string as a context hyperparameters still works.
