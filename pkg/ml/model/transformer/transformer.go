@@ -421,45 +421,25 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCach
 	}
 
 	x = Add(residual, attn)
-	if cfg.Normalization != "none" && cfg.Normalization != "" {
-		switch cfg.Normalization {
-		case layers.NormalizationLayerNorm:
-			x = layers.LayerNormalization(layerCtx.In("norm1"), x, -1).Epsilon(cfg.NormEpsilon).Done()
-		case layers.NormalizationRMSNorm:
-			x = layers.RMSNorm(layerCtx.In("norm1"), x).WithEpsilon(cfg.NormEpsilon).Done()
-		default:
-			exceptions.Panicf("unsupported normalization type: %q", cfg.Normalization)
-		}
-	}
+	x = m.normalize(layerCtx.In("norm1"), x)
 
 	residual = x
-	ff := m.Dense(layerCtx.In("ff1"), x, cfg.UseBias, cfg.FFNDim)
+	ff := m.dense(layerCtx.In("ff1"), x, cfg.UseBias, cfg.FFNDim)
 	ff = activations.Apply(cfg.Activation, ff)
 	if cfg.Dropout > 0 {
 		ff = layers.Dropout(layerCtx.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), cfg.Dropout))
 	}
-	ff = m.Dense(layerCtx.In("ff2"), ff, cfg.UseBias, cfg.EmbedDim)
-
+	ff = m.dense(layerCtx.In("ff2"), ff, cfg.UseBias, cfg.EmbedDim)
 	x = Add(residual, ff)
-	if cfg.Normalization != "none" && cfg.Normalization != "" {
-		switch cfg.Normalization {
-		case layers.NormalizationLayerNorm:
-			x = layers.LayerNormalization(layerCtx.In("norm2"), x, -1).Epsilon(cfg.NormEpsilon).Done()
-		case layers.NormalizationRMSNorm:
-			x = layers.RMSNorm(layerCtx.In("norm2"), x).WithEpsilon(cfg.NormEpsilon).Done()
-		default:
-			exceptions.Panicf("unsupported normalization type: %q", cfg.Normalization)
-		}
-	}
-
+	x = m.normalize(layerCtx.In("norm2"), x)
 	return x
 }
 
 // normalize according to configuration.
-// Dense behaves like layers.Dense but checks whether the model is configured to use transposed projections.
+// dense behaves like layers.dense but checks whether the model is configured to use transposed projections.
 // If it is, it computes the dense layer using DotGeneral (Einsum), expecting weights in the format [outDim, inDim].
 // PyTorch nn.Linear stores its matrix in this transposed format.
-func (m *Model) Dense(ctx *context.Context, op *Node, useBias bool, outputDims ...int) *Node {
+func (m *Model) dense(ctx *context.Context, op *Node, useBias bool, outputDims ...int) *Node {
 	if !m.TransposedProjections {
 		return layers.Dense(ctx, op, useBias, outputDims...)
 	}
@@ -494,7 +474,11 @@ func (m *Model) normalize(ctx *context.Context, operand *Node) *Node {
 	}
 	switch m.Normalization {
 	case layers.NormalizationRMSNorm:
-		return layers.RMSNorm(ctx, operand).WithEpsilon(m.NormEpsilon).Done()
+		builder := layers.RMSNorm(ctx, operand).WithEpsilon(m.NormEpsilon)
+		if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
+			builder = builder.WithScaleOffset(1.0)
+		}
+		return builder.Done()
 	case layers.NormalizationLayerNorm:
 		return layers.LayerNormalization(ctx, operand, -1).Epsilon(m.NormEpsilon).Done()
 	default:
@@ -547,15 +531,15 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x *Node, useCache b
 
 	// Gemma uses SwiGLU: gate_proj, up_proj, down_proj
 	ffCtx := layerCtx.In("mlp")
-	gate := m.Dense(ffCtx.In("gate_proj"), x, cfg.UseBias, cfg.FFNDim)
-	up := m.Dense(ffCtx.In("up_proj"), x, cfg.UseBias, cfg.FFNDim)
+	gate := m.dense(ffCtx.In("gate_proj"), x, cfg.UseBias, cfg.FFNDim)
+	up := m.dense(ffCtx.In("up_proj"), x, cfg.UseBias, cfg.FFNDim)
 	switchedNode := activations.Apply(cfg.Activation, gate)
 	ff := Mul(switchedNode, up)
 
 	if cfg.Dropout > 0 {
 		ff = layers.Dropout(ffCtx.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), cfg.Dropout))
 	}
-	ff = m.Dense(ffCtx.In("down_proj"), ff, cfg.UseBias, cfg.EmbedDim)
+	ff = m.dense(ffCtx.In("down_proj"), ff, cfg.UseBias, cfg.EmbedDim)
 
 	// Post-feedforward normalization
 	ff = m.normalize(layerCtx.In("post_feedforward_norm"), ff)

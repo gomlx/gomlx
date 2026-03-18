@@ -524,8 +524,8 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	}
 
 	if b.withQKRMSNorm {
-		projectedQuery = layers.RMSNorm(b.ctx.In("query"), projectedQuery).WithEpsilon(b.qkNormEpsilon).WithNormalizationAxes(-1).Done()
-		projectedKey = layers.RMSNorm(b.ctx.In("key"), projectedKey).WithEpsilon(b.qkNormEpsilon).WithNormalizationAxes(-1).Done()
+		projectedQuery = layers.RMSNorm(b.ctx.In("query"), projectedQuery).WithEpsilon(b.qkNormEpsilon).WithNormalizationAxes(-1).WithScaleOffset(1.0).Done()
+		projectedKey = layers.RMSNorm(b.ctx.In("key"), projectedKey).WithEpsilon(b.qkNormEpsilon).WithNormalizationAxes(-1).WithScaleOffset(1.0).Done()
 	}
 
 	// Apply positional encoding (e.g. RoPE) if enabled.
