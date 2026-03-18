@@ -9,6 +9,7 @@
 - Package `ml/model/transformer`: 
   - Added architecture parameter ("standard" or "gemma" values).
   - Activation passed an `activations.Type` values (instead of string) -- but conversion from string as a context hyperparameters still works.
+  - Added `WithTransposedWeights()` and `WithCausalMask()` options.
   - Simplified code.
 - Package `ml/layers`
   - Added constants to normalization types.

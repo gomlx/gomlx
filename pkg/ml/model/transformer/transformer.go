@@ -41,8 +41,9 @@ const (
 	ParamNumKVHeads    = "transformer_num_kv_heads"
 
 	// Legacy RoPE parameters, used to configure PosEmbed if set.
-	ParamUseRoPE      = "transformer_use_rope"
-	ParamRoPEBaseFreq = "transformer_rope_base_freq"
+	ParamUseRoPE       = "transformer_use_rope"
+	ParamRoPEBaseFreq  = "transformer_rope_base_freq"
+	ParamUseCausalMask = "transformer_use_causal_mask"
 )
 
 // Model holds configuration for building a cached transformer model.
@@ -71,6 +72,7 @@ type Model struct {
 	DType         dtypes.DType     // Data type
 	Dropout       float64          // Dropout rate (0.0 = none)
 	UseBias       bool             // Use bias in dense layers
+	UseCausalMask bool             // Use causal masking in attention layers
 	Architecture  Architecture     // e.g. ArchitectureStandard, ArchitectureGemma
 	Normalization string           // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
 	NormEpsilon   float64          // Epsilon for normalization
@@ -97,6 +99,7 @@ func New(vocabSize, embedDim, numLayers, numHeads, headDim int) *Model {
 		DType:         dtypes.Float32,
 		Dropout:       0.0,
 		UseBias:       true,
+		UseCausalMask: true,
 		Architecture:  ArchitectureStandard,
 		Normalization: layers.NormalizationLayerNorm,
 		NormEpsilon:   1e-5,
@@ -186,6 +189,7 @@ func (m *Model) FromContext(ctx *context.Context) *Model {
 	m.Normalization = context.GetParamOr(ctx, ParamNormalization, m.Normalization)
 	m.WithNormalization(m.Normalization)
 	m.UseBias = context.GetParamOr(ctx, ParamUseBias, m.UseBias)
+	m.UseCausalMask = context.GetParamOr(ctx, ParamUseCausalMask, m.UseCausalMask)
 	archStr := context.GetParamOr(ctx, ParamArchitecture, m.Architecture.String())
 	if arch, err := ArchitectureString(archStr); err == nil {
 		m.Architecture = arch
@@ -267,6 +271,12 @@ func (m *Model) WithLayerNorm(use bool) *Model {
 // WithBias toggles dense bias.
 func (m *Model) WithBias(use bool) *Model {
 	m.UseBias = use
+	return m
+}
+
+// WithCausalMask toggles causal masking.
+func (m *Model) WithCausalMask(use bool) *Model {
+	m.UseCausalMask = use
 	return m
 }
 
@@ -364,7 +374,8 @@ func (m *Model) forwardFull(
 	}
 
 	for layer := 0; layer < cfg.NumLayers; layer++ {
-		x = m.ForwardLayer(ctx, x, layer, useCache, position)
+		layerCtx := ctx.In(fmt.Sprintf("layer_%d", layer))
+		x = m.ForwardLayer(layerCtx, x, layer, useCache, position)
 	}
 
 	logits := layers.Dense(ctx.In("output"), x, false, cfg.VocabSize)
@@ -374,12 +385,10 @@ func (m *Model) forwardFull(
 
 // ForwardLayer executes a single transformer layer block depending on the configured architecture.
 func (m *Model) ForwardLayer(ctx *context.Context, x *Node, layerIdx int, useCache bool, position int) *Node {
-	layerCtx := ctx.In(fmt.Sprintf("layer_%d", layerIdx))
-
 	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
-		return m.forwardLayerGemma(layerCtx, x, useCache, position)
+		return m.forwardLayerGemma(ctx, x, useCache, position)
 	}
-	return m.forwardLayerStandard(layerCtx, x, useCache, position)
+	return m.forwardLayerStandard(ctx, x, useCache, position)
 }
 
 func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCache bool, position int) *Node {
@@ -405,8 +414,10 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCach
 		attn = attnBuilder.Done()
 	} else {
 		attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, cfg.NumHeads, cfg.HeadDim).
-			UseCausalMask().
 			UseTransposedWeights(cfg.TransposedProjections)
+		if cfg.UseCausalMask {
+			attnBuilder = attnBuilder.UseCausalMask()
+		}
 
 		if cfg.PosEmbed != nil {
 			attnBuilder = attnBuilder.WithPositionalEncoder(cfg.PosEmbed)
@@ -504,7 +515,7 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x *Node, useCache b
 	if useCache {
 		positionNode := Const(x.Graph(), int32(position))
 		attnBuilder = attnBuilder.WithKVCache(cfg.MaxPosEmbed, positionNode)
-	} else {
+	} else if cfg.UseCausalMask {
 		attnBuilder = attnBuilder.UseCausalMask()
 	}
 	if cfg.PosEmbed != nil {
