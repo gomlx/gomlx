@@ -3,6 +3,9 @@
 # Next
 
 - Updated dependency to `github.com/gomlx/go-xla` to v0.2.1: with a fix to NVIDIA CUDA drivers path.
+- Package `graph`:
+  - `DotGeneral` passing `AccumulatorDType` and `OutputDType` to the backend (instead of assuming it doesn't implement and
+    converting it). Also, by default, half-precision floats use float32 as accumulator.
 - Package `ml/model/transformer`: 
   - Added architecture parameter ("standard" or "gemma" values).
   - Activation passed an `activations.Type` values (instead of string) -- but conversion from string as a context hyperparameters still works.

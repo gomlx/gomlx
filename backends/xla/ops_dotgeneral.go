@@ -47,26 +47,36 @@ func (f *Function) DotGeneral(
 		lhsNode.value, lhsContractingAxes, lhsBatchAxes,
 		rhsNode.value, rhsContractingAxes, rhsBatchAxes)
 
-	// Set algorithm based on config.
+	// Set algorithm based on config: this is tricky, the "dot_algorithm" is only supported by the CPU PJRT,
+	// and not very well supported by CUDA. TPU support is unknown.
+	//
+	// So we make a simplification here: we only set the "dot_algorithm" is the plugin is not CUDA.
 	useTF32 := accumulationDType == dtypes.F32 && f.builder.backend.DotGeneralUseTF32
 	if useTF32 || config.AccumulatorDType != dtypes.InvalidDType {
-		var algo stablehlotypes.DotGeneralAlgorithm
-		algo.LhsComponentCount = 1
-		algo.RhsComponentCount = 1
-		algo.NumPrimitiveOperations = 1
-		algo.AllowImpreciseAccumulation = false
-		algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
+		if !f.builder.backend.plugin.IsCUDA() {
+			// Set "dot_algorithm"
+			var algo stablehlotypes.DotGeneralAlgorithm
+			algo.LhsComponentCount = 1
+			algo.RhsComponentCount = 1
+			algo.NumPrimitiveOperations = 1
+			algo.AllowImpreciseAccumulation = false
+			algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
 
-		useTF32 := f.builder.backend.DotGeneralUseTF32
-		if useTF32 && accumulationDType == dtypes.Float32 {
-			algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
-			algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
-			algo.AccumulationType.TF32 = true
+			useTF32 := f.builder.backend.DotGeneralUseTF32
+			if useTF32 && accumulationDType == dtypes.Float32 {
+				algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
+				algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
+				algo.AccumulationType.TF32 = true
+			} else {
+				algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
+				algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
+			}
+			dotGeneralBuilder.Algorithm(&algo)
 		} else {
-			algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
-			algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
+			// Set "precision_config"
+			precisionConfig := stablehlotypes.DotGeneralPrecisionHighest
+			dotGeneralBuilder.Precision(precisionConfig, precisionConfig)
 		}
-		dotGeneralBuilder.Algorithm(&algo)
 	}
 	if config.OutputDType != dtypes.InvalidDType {
 		dotGeneralBuilder.OutputDType(DTypeToXLA(config.OutputDType))

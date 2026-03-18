@@ -469,7 +469,14 @@ func (dtype DType) IsFloat() bool {
 }
 
 // IsFloat16 returns whether dtype is a supported float with 16 bits: [Float16] or [BFloat16].
+// Same as IsHalfPrecision.
 func (dtype DType) IsFloat16() bool {
+	return Float16DTypes[dtype]
+}
+
+// IsHalfPrecision returns whether dtype is a supported float with 16 bits: [Float16] or [BFloat16].
+// Same as IsFloat16.
+func (dtype DType) IsHalfPrecision() bool {
 	return Float16DTypes[dtype]
 }
 
