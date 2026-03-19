@@ -16,7 +16,11 @@
   - Added constants to normalization types.
 
 - Backend `xla`:
-  - DotGeneral with unsupported accumulation dtypes: it automatically converts the input dtype to the accumulation dtype first.
+  - DotGeneral with unsupported accumulation dtypes (only float32 is supported): it automatically converts the
+   input dtype to the accumulation dtype first.
+- Backend `simplego` ("go"):
+  - DotGeneral with accumulation dtypes: it automatically converts the input dtype to the accumulation dtype first.
+    (With the exception of half-precision types, which use float32 as accumulator by default).
 
 # v0.27.1: Minor fixes and updates; ONNX-GoMLX examples now use v0.4.1.
 

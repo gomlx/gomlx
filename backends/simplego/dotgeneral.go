@@ -88,12 +88,7 @@ func (f *Function) DotGeneral(
 	lhsOp backends.Value, lhsContractingAxes, lhsBatchAxes []int,
 	rhsOp backends.Value, rhsContractingAxes, rhsBatchAxes []int,
 	config backends.DotGeneralConfig) (backends.Value, error) {
-	if config.AccumulatorDType != dtypes.InvalidDType || config.OutputDType != dtypes.InvalidDType {
-		// Not implemented yet.
-		return nil, errors.Wrapf(backends.ErrNotImplemented,
-			"DotGeneral with accumulator or output dtype different from original dtype is not implemented for %s",
-			BackendName)
-	}
+	// Parse the inputs.
 	inputPair, err := f.verifyAndCastValues(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
@@ -104,6 +99,22 @@ func (f *Function) DotGeneral(
 		return nil, errors.Errorf("DotGeneral lhs (left-hand-side) and rhs operands don't match data types: %s and %s",
 			dtype, rhs.shape.DType)
 	}
+
+	// We don't yet support accumulator dtype, so we convert the inputs.
+	// - Exception: Half-Precision types automatically use Float32 for the computation.
+	isHalfPrecisionWithFloat32 := dtype.IsHalfPrecision() && config.AccumulatorDType == dtypes.Float32
+	if !isHalfPrecisionWithFloat32 && config.AccumulatorDType != dtypes.InvalidDType && config.AccumulatorDType != dtype {
+		lhsOp, err = f.ConvertDType(lhsOp, config.AccumulatorDType)
+		if err != nil {
+			return nil, err
+		}
+		rhsOp, err = f.ConvertDType(rhsOp, config.AccumulatorDType)
+		if err != nil {
+			return nil, err
+		}
+		dtype = config.AccumulatorDType
+	}
+
 	if len(lhsContractingAxes) != len(rhsContractingAxes) {
 		return nil, errors.Errorf("DotGeneral number of contracting axes for lhs (%d) doesn't match rhs (%d)",
 			len(lhsContractingAxes), len(rhsContractingAxes))
@@ -241,6 +252,14 @@ func (f *Function) DotGeneral(
 	result, err := f.Reshape(dotGeneral, resultingDims...)
 	if err != nil {
 		return nil, err
+	}
+
+	// If config.OutputDType is different than the input, for now we simply convert it.
+	if config.OutputDType != dtypes.InvalidDType && config.OutputDType != dtype {
+		result, err = f.ConvertDType(result, config.OutputDType)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
