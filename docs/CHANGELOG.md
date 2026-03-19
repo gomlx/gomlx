@@ -3,6 +3,7 @@
 # Next
 
 - Updated dependency to `github.com/gomlx/go-xla` to v0.2.1: with a fix to NVIDIA CUDA drivers path.
+
 - Package `graph`:
   - `DotGeneral` passing `AccumulatorDType` and `OutputDType` to the backend (instead of assuming it doesn't implement and
     converting it). Also, by default, half-precision floats use float32 as accumulator.
@@ -13,6 +14,9 @@
   - Simplified code.
 - Package `ml/layers`
   - Added constants to normalization types.
+
+- Backend `xla`:
+  - DotGeneral with unsupported accumulation dtypes: it automatically converts the input dtype to the accumulation dtype first.
 
 # v0.27.1: Minor fixes and updates; ONNX-GoMLX examples now use v0.4.1.
 

@@ -23,6 +23,9 @@ import (
 // It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
+//
+// The XLA implementation only supports accumulation in F32 (if different than the input dtypes).
+// So when it receives a different accumulation dtype, it simply converts the inputs to F32.
 func (f *Function) DotGeneral(
 	lhs backends.Value, lhsContractingAxes, lhsBatchAxes []int,
 	rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int,
@@ -38,8 +41,18 @@ func (f *Function) DotGeneral(
 	if config.AccumulatorDType != dtypes.InvalidDType {
 		accumulationDType = config.AccumulatorDType
 		if accumulationDType != dtypes.F32 {
-			return nil, errors.Wrapf(backends.ErrNotImplemented,
-				"XLA only supports mixed dtypes if accumulation is in F32")
+			// XLA only supports accumulation in F32 (if different than the input dtypes).
+			// For other accumulation dtypes, we convert the inputs to the type.
+			var err error
+			lhs, err = f.ConvertDType(lhs, accumulationDType)
+			if err != nil {
+				return nil, errors.WithMessagef(err, "failed to convert lhs to accumulation dtype")
+			}
+			rhs, err = f.ConvertDType(rhs, accumulationDType)
+			if err != nil {
+				return nil, errors.WithMessagef(err, "failed to convert rhs to accumulation dtype")
+			}
+			dtype = accumulationDType
 		}
 	}
 
@@ -52,7 +65,7 @@ func (f *Function) DotGeneral(
 	//
 	// So we make a simplification here: we only set the "dot_algorithm" is the plugin is not CUDA.
 	useTF32 := accumulationDType == dtypes.F32 && f.builder.backend.DotGeneralUseTF32
-	if useTF32 || config.AccumulatorDType != dtypes.InvalidDType {
+	if useTF32 || accumulationDType != dtype {
 		if !f.builder.backend.plugin.IsCUDA() {
 			// Set "dot_algorithm"
 			var algo stablehlotypes.DotGeneralAlgorithm
