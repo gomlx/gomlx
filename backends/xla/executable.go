@@ -3,6 +3,8 @@
 package xla
 
 import (
+	"time"
+
 	"github.com/gomlx/go-xla/pkg/pjrt"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
@@ -76,10 +78,18 @@ func (b *Builder) Compile() (backends.Executable, error) {
 			portable = true
 		}
 	}
+	var start time.Time
+	if klog.V(1).Enabled() {
+		start = time.Now()
+		klog.Infof("Compiling %q", b.name)
+	}
 	exec, err := compileConfig.Done()
 	if err != nil {
 		return nil, errors.WithMessagef(err,
 			"backend %q: failed to compile computation %q", BackendName, b.name)
+	}
+	if klog.V(1).Enabled() {
+		klog.Infof("Compiled in %s", time.Since(start))
 	}
 	return &Executable{
 		backend:         b.backend,
