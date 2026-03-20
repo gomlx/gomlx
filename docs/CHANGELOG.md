@@ -2,8 +2,7 @@
 
 # Next
 
-- Updated dependency to `github.com/gomlx/go-xla` to v0.2.1: with a fix to NVIDIA CUDA drivers path.
-
+### Core:
 - Package `graph`:
   - `DotGeneral` passing `AccumulatorDType` and `OutputDType` to the backend (instead of assuming it doesn't implement and
     converting it). Also, by default, half-precision floats use float32 as accumulator.
@@ -15,9 +14,13 @@
 - Package `ml/layers`
   - Added constants to normalization types.
 
+
+### Backends:
 - Backend `xla`:
+  - Updated dependency to `github.com/gomlx/go-xla` to v0.2.1: with a fix to NVIDIA CUDA drivers path.
   - DotGeneral with unsupported accumulation dtypes (only float32 is supported): it automatically converts the
    input dtype to the accumulation dtype first.
+  - Added executable memory consumption logging if passing `-vmodule=executable=1`.
 - Backend `simplego` ("go"):
   - DotGeneral with accumulation dtypes: it automatically converts the input dtype to the accumulation dtype first.
     (With the exception of half-precision types, which use float32 as accumulator by default).
