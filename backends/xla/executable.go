@@ -174,17 +174,19 @@ func (e *Executable) Execute(
 		execBuilder = execBuilder.OnDeviceByNum(int(defaultDevice))
 	}
 
-	var start time.Time
+	var pOutputs []*pjrt.Buffer
+	var err error
 	if klog.V(1).Enabled() {
-		start = time.Now()
 		klog.Infof("Executing %q", e.name)
+		start := time.Now()
+		pOutputs, err = execBuilder.Done()
+		elapsed := time.Since(start)
+		klog.Infof("Executed in %s", elapsed)
+	} else {
+		pOutputs, err = execBuilder.Done()
 	}
-	pOutputs, err := execBuilder.Done()
 	if err != nil {
 		return nil, errors.WithMessagef(err, "backend %q: failed to execute computation %q", BackendName, e.name)
-	}
-	if klog.V(1).Enabled() {
-		klog.Infof("Executed in %s", time.Since(start))
 	}
 	return xslices.Map(pOutputs, func(e *pjrt.Buffer) backends.Buffer { return e }), nil
 }
