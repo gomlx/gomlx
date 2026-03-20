@@ -3,10 +3,12 @@
 package xla
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gomlx/go-xla/pkg/pjrt"
 	"github.com/gomlx/gomlx/backends"
+	humanize "github.com/gomlx/gomlx/internal"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
@@ -90,7 +92,11 @@ func (b *Builder) Compile() (backends.Executable, error) {
 	}
 	if klog.V(1).Enabled() {
 		klog.Infof("Compiled in %s", time.Since(start))
+		klog.Infof("Memory usage: On Device: [%s]; On Host: [%s]",
+			renderMemStats(exec.OnDeviceMemoryUsageStats),
+			renderMemStats(exec.OnHostMemoryUsageStats))
 	}
+
 	return &Executable{
 		backend:         b.backend,
 		exec:            exec,
@@ -105,6 +111,14 @@ func (b *Builder) Compile() (backends.Executable, error) {
 		deviceAssignment: b.deviceAssignment,
 		portable:         portable,
 	}, nil
+}
+
+// renderMemStats renders the memory usage stats in a human-readable format.
+func renderMemStats(stats pjrt.ExecutableMemoryUsageStats) string {
+	return fmt.Sprintf("Code:%s, Inputs:%s, Outputs:%s, Aliases:%s, Temporary:%s",
+		humanize.Bytes(stats.GeneratedCode), humanize.Bytes(stats.Inputs),
+		humanize.Bytes(stats.Outputs), humanize.Bytes(stats.Aliases),
+		humanize.Bytes(stats.Temporary))
 }
 
 // CheckValid returns an error if the backend or the executable are not ok -- e.g.: if they have been finalized or the builder
