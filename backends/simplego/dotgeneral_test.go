@@ -462,15 +462,34 @@ func TestDotGeneral_Exec(t *testing.T) {
 				require.InDelta(t, 0.7392, tensors.MustCopyFlatData[float64](y3)[0], 1e-4)
 			})
 
-			// BFloat16 example.
-			t.Run("BFloat16", func(t *testing.T) {
+			// BFloat16 examples.
+			t.Run("BFloat16-with-f32-acc", func(t *testing.T) {
+				// The defautl accumulator dtype for half-precision (BFloat16 and Float16) is Float32.
 				bf16 := bfloat16.FromFloat32
-				y2 := graph.MustExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+				y2, err := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 					return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
 				},
 					[][]bfloat16.BFloat16{{bf16(1), bf16(2), bf16(3)}},
 					[][]bfloat16.BFloat16{{bf16(10)}, {bf16(11)}, {bf16(12)}},
 				)
+				if err != nil {
+					t.Fatalf("%s failed with an error: %+v", t.Name(), err)
+				}
+				fmt.Printf("\ty2=%s\n", y2)
+				require.NoError(t, y2.Shape().Check(dtypes.BFloat16, 1, 1))
+				require.Equal(t, float32(10+22+36), tensors.MustCopyFlatData[bfloat16.BFloat16](y2)[0].Float32())
+			})
+			t.Run("BFloat16-no-acc-dtype", func(t *testing.T) {
+				bf16 := bfloat16.FromFloat32
+				y2, err := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+					return graph.Dot(lhs, rhs).WithAccumulatorDType(dtypes.BF16).General([]int{1}, []int{}, []int{0}, []int{})
+				},
+					[][]bfloat16.BFloat16{{bf16(1), bf16(2), bf16(3)}},
+					[][]bfloat16.BFloat16{{bf16(10)}, {bf16(11)}, {bf16(12)}},
+				)
+				if err != nil {
+					t.Fatalf("%s failed with an error: %+v", t.Name(), err)
+				}
 				fmt.Printf("\ty2=%s\n", y2)
 				require.NoError(t, y2.Shape().Check(dtypes.BFloat16, 1, 1))
 				require.Equal(t, float32(10+22+36), tensors.MustCopyFlatData[bfloat16.BFloat16](y2)[0].Float32())

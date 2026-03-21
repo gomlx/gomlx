@@ -31,10 +31,16 @@ type DotBuilder struct {
 //   - DotGeneral(): it performs an arbitrary "DotGeneral" operation, where contracting and batch axes can be selected,
 //     the remainder axes are assumed to be cross-product.
 func Dot(lhs, rhs *Node) *DotBuilder {
-	return &DotBuilder{
+	dg := &DotBuilder{
 		lhs: lhs,
 		rhs: rhs,
 	}
+	if lhs.DType().IsHalfPrecision() {
+		// Float16 and BFloat16 accumulator defaults to float32.
+		dg = dg.WithAccumulatorDType(dtypes.Float32)
+	}
+	return dg
+
 }
 
 // WithAccumulatorDType sets the accumulator data type for the DotGeneral operation.
@@ -144,21 +150,10 @@ func (b *DotBuilder) General(
 		panic(err)
 	}
 
-	// Decompose the conversion of accumulator and output dtypes.
 	lhs, rhs := b.lhs, b.rhs
-	if b.config.AccumulatorDType != 0 {
-		lhs = ConvertDType(b.lhs, b.config.AccumulatorDType)
-		rhs = ConvertDType(b.rhs, b.config.AccumulatorDType)
-	}
-	output = backendDotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes,
-		backends.DotGeneralConfig{})
-
-	outputDType := b.lhs.DType() // Default to the same as the input.
-	if b.config.OutputDType != 0 {
-		outputDType = b.config.OutputDType
-	}
-	// Conversion may happen if accumulatorDType != outputDType. It's a no-op if there is no conversion.
-	output = ConvertDType(output, outputDType)
+	output = backendDotGeneral(
+		lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes,
+		b.config)
 	return output
 }
 

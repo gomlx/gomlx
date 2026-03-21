@@ -12,6 +12,7 @@ import (
 	graphtest "github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,7 @@ func TestModel(t *testing.T) {
 		assert.Equal(t, dtypes.Float32, cfg.DType)
 		assert.Equal(t, 0.0, cfg.Dropout)
 		assert.Nil(t, cfg.PosEmbed)
-		assert.True(t, cfg.UseLayerNorm)
+		assert.Equal(t, cfg.Normalization, layers.NormalizationLayerNorm)
 		assert.True(t, cfg.UseBias)
 	})
 
@@ -42,7 +43,7 @@ func TestModel(t *testing.T) {
 			WithDType(dtypes.Float16).
 			WithDropout(0.1).
 			WithRoPE(5000.0).
-			WithLayerNorm(false).
+			WithNormalization("").
 			WithBias(false)
 		assert.Equal(t, 256, cfg.FFNDim)
 		assert.Equal(t, 1024, cfg.MaxPosEmbed)
@@ -54,26 +55,26 @@ func TestModel(t *testing.T) {
 		rope, ok := cfg.PosEmbed.(*pos.RoPE)
 		require.True(t, ok)
 		assert.Equal(t, 5000.0, rope.BaseFreq)
-		assert.False(t, cfg.UseLayerNorm)
+		assert.Equal(t, cfg.Normalization, layers.NormalizationNone)
 		assert.False(t, cfg.UseBias)
 	})
 
 	t.Run("NewFromContext", func(t *testing.T) {
 		ctx := context.New()
 		ctx.SetParams(map[string]any{
-			ParamVocabSize:    1000,
-			ParamEmbedDim:     128,
-			ParamNumLayers:    4,
-			ParamNumHeads:     8,
-			ParamHeadDim:      16,
-			ParamFFNDim:       256,
-			ParamMaxPosEmbed:  1024,
-			ParamDType:        "float16",
-			ParamDropout:      0.1,
-			ParamUseRoPE:      true,
-			ParamRoPEBaseFreq: 5000.0,
-			ParamUseLayerNorm: false,
-			ParamUseBias:      false,
+			ParamVocabSize:     1000,
+			ParamEmbedDim:      128,
+			ParamNumLayers:     4,
+			ParamNumHeads:      8,
+			ParamHeadDim:       16,
+			ParamFFNDim:        256,
+			ParamMaxPosEmbed:   1024,
+			ParamDType:         "float16",
+			ParamDropout:       0.1,
+			ParamUseRoPE:       true,
+			ParamRoPEBaseFreq:  5000.0,
+			ParamUseBias:       false,
+			ParamNormalization: "none", // layers.NormalizationNone or "".
 		})
 
 		cfg := NewFromContext(ctx)
@@ -92,21 +93,21 @@ func TestModel(t *testing.T) {
 		rope, ok := cfg.PosEmbed.(*pos.RoPE)
 		require.True(t, ok)
 		assert.Equal(t, 5000.0, rope.BaseFreq)
-		assert.False(t, cfg.UseLayerNorm)
+		assert.Equal(t, cfg.Normalization, layers.NormalizationNone)
 		assert.False(t, cfg.UseBias)
 	})
 
 	t.Run("FromContext", func(t *testing.T) {
 		ctx := context.New()
 		ctx.SetParams(map[string]any{
-			ParamFFNDim:       256,
-			ParamMaxPosEmbed:  1024,
-			ParamDType:        "float16",
-			ParamDropout:      0.1,
-			ParamUseRoPE:      true,
-			ParamRoPEBaseFreq: 5000.0,
-			ParamUseLayerNorm: false,
-			ParamUseBias:      false,
+			ParamFFNDim:        256,
+			ParamMaxPosEmbed:   1024,
+			ParamDType:         "float16",
+			ParamDropout:       0.1,
+			ParamUseRoPE:       true,
+			ParamRoPEBaseFreq:  5000.0,
+			ParamUseBias:       false,
+			ParamNormalization: "", // or layers.NormalizationNone.
 		})
 
 		cfg := New(1000, 128, 4, 8, 16).FromContext(ctx)
@@ -120,7 +121,7 @@ func TestModel(t *testing.T) {
 		rope, ok := cfg.PosEmbed.(*pos.RoPE)
 		require.True(t, ok)
 		assert.Equal(t, 5000.0, rope.BaseFreq)
-		assert.False(t, cfg.UseLayerNorm)
+		assert.Equal(t, layers.NormalizationNone, cfg.Normalization)
 		assert.False(t, cfg.UseBias)
 	})
 }
@@ -173,7 +174,7 @@ func TestTransformerVariants(t *testing.T) {
 	t.Run("WithoutLayerNorm", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithLayerNorm(false)
+		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithNormalization("none")
 		modelFn := cfg.ForTraining()
 		g := NewGraph(backend, "WithoutLayerNorm")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 2, 8))

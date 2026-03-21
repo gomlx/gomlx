@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 )
 
@@ -736,5 +737,28 @@ func (f *Function) Call(target backends.Function, inputs ...backends.Value) ([]b
 	for i, v := range outputValues {
 		outputNodes[i] = f.newNode(v)
 	}
+	return outputNodes, nil
+}
+
+// OptimizationBarrier returned values are identity to the operands, but they become only available
+// in compilation time once all the inptus are calculated.
+func (f *Function) OptimizationBarrier(operands ...backends.Value) ([]backends.Value, error) {
+	if len(operands) == 0 {
+		return nil, errors.New("OptimizationBarrier requires at least one operand")
+	}
+	if len(operands) == 1 {
+		// No-op: a value already depends on itself.
+		return operands, nil
+	}
+	nodes, err := f.verifyAndCastValues("OptimizationBarrier", operands...)
+	if err != nil {
+		return nil, err
+	}
+	operandValues := xslices.Map(nodes, func(n *Node) *stablehlo.Value { return n.value })
+	values, err := stablehlo.OptimizationBarrier(operandValues...)
+	if err != nil {
+		return nil, err
+	}
+	outputNodes := xslices.Map(values, func(v *stablehlo.Value) backends.Value { return f.newNode(v) })
 	return outputNodes, nil
 }
