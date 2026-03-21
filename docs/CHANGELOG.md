@@ -6,6 +6,10 @@
 - Package `graph`:
   - `DotGeneral` passing `AccumulatorDType` and `OutputDType` to the backend (instead of assuming it doesn't implement and
     converting it). Also, by default, half-precision floats use float32 as accumulator.
+    - For the `xla` backend: added an "hacky" dependency from the variable (weights) to the lhs operand of the `DotGeneral`
+      operation: because XLA CPU creates a temporary re-layout of the weights, this dependency ensures that only one temporary
+      buffer is allocated at a time, along the layers of a model (in a 22Gb model with 48 layers, it saved 48Gb! in temporary memory)
+      
 - Package `ml/model/transformer`: 
   - Added architecture parameter ("standard" or "gemma" values).
   - Activation passed an `activations.Type` values (instead of string) -- but conversion from string as a context hyperparameters still works.
