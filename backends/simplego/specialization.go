@@ -212,13 +212,15 @@ func recomputeDotGeneralData(backend *Backend, resolved []*Node, orig *Node) (*d
 	newData.lhsNormalization = dgNormalizePrepare(lhsShape, origData.lhsContractingAxes, origData.lhsBatchAxes)
 	newData.rhsNormalization = dgNormalizePrepare(rhsShape, origData.rhsContractingAxes, origData.rhsBatchAxes)
 
+	typePlan := newDotGeneralTypePlan(lhsShape.DType, origData.config)
+	newData.config = origData.config
+
 	// Recompute blocked shapes.
-	dtype := lhsShape.DType
-	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
-	newData.lhsBlockedShape = dgCreateBlockedShape(dtype, newData.batchSize, newData.lhsCrossSize, newData.contractingSize, blockLog2Dim)
-	newData.rhsBlockedShape = dgCreateBlockedShape(dtype, newData.batchSize, newData.rhsCrossSize, newData.contractingSize, blockLog2Dim)
-	outputDType := dtype
-	if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
+	blockLog2Dim := DotGeneralTargetBlockLog2Dim[typePlan.computationDType]
+	newData.lhsBlockedShape = dgCreateBlockedShape(typePlan.computationDType, newData.batchSize, newData.lhsCrossSize, newData.contractingSize, blockLog2Dim)
+	newData.rhsBlockedShape = dgCreateBlockedShape(typePlan.computationDType, newData.batchSize, newData.rhsCrossSize, newData.contractingSize, blockLog2Dim)
+	outputDType := typePlan.computationDType
+	if typePlan.computationDType == dtypes.BFloat16 || typePlan.computationDType == dtypes.Float16 {
 		outputDType = dtypes.Float32
 	}
 	newData.outputBlockedShape = dgCreateBlockedShape(outputDType, newData.batchSize, newData.lhsCrossSize, newData.rhsCrossSize, blockLog2Dim)
@@ -227,7 +229,8 @@ func recomputeDotGeneralData(backend *Backend, resolved []*Node, orig *Node) (*d
 	// created at graph build time, which aren't available for dynamic graphs.
 	// Fall back to normalizedPath for those. packgemmPath and highwayPath work
 	// directly on raw inputs and are fine for dynamic graphs.
-	newData.execPath = dgSelectExecPath(backend, lhsShape, rhsShape, newData)
+	typePlan.nodeOutputDType = resolved[orig.idx].shape.DType
+	newData.execPath = typePlan.finalizeExecPath(dgSelectExecPath(backend, lhsShape, rhsShape, newData))
 	if newData.execPath == blockedPath || newData.execPath == checkPath {
 		newData.execPath = normalizedPath
 	}
@@ -259,12 +262,12 @@ func recomputeGatherData(resolved []*Node, orig *Node) *gatherNode {
 	}
 
 	newData := &gatherNode{
-		indexVectorAxis:      origData.indexVectorAxis,
-		offsetOutputAxes:     origData.offsetOutputAxes,
-		collapsedSlicesAxes:  origData.collapsedSlicesAxes,
-		startIndexMap:        origData.startIndexMap,
-		sliceSizes:           slices.Clone(origData.sliceSizes),
-		indicesAreSorted:     origData.indicesAreSorted,
+		indexVectorAxis:     origData.indexVectorAxis,
+		offsetOutputAxes:    origData.offsetOutputAxes,
+		collapsedSlicesAxes: origData.collapsedSlicesAxes,
+		startIndexMap:       origData.startIndexMap,
+		sliceSizes:          slices.Clone(origData.sliceSizes),
+		indicesAreSorted:    origData.indicesAreSorted,
 	}
 	for i, s := range newData.sliceSizes {
 		if s == shapes.DynamicDim {
@@ -357,4 +360,3 @@ func (e *Executable) getOrCreateSpecialization(bindings shapes.AxisBindings) (*S
 	actual, _ := e.specializations.LoadOrStore(key, newSpec)
 	return actual.(*ShapeSpecialization), nil
 }
-

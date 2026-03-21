@@ -327,8 +327,8 @@ func (b *MultiHeadAttentionBuilder) UseCausalMask() *MultiHeadAttentionBuilder {
 	return b
 }
 
-// UseProjectionBias defines whether to use a bias term on the final output projection.
-// Default is true.
+// UseProjectionBias defines whether to use bias terms on the learned attention
+// projections (Q/K/V and final output). Default is true.
 func (b *MultiHeadAttentionBuilder) UseProjectionBias(useProjectionBias bool) *MultiHeadAttentionBuilder {
 	b.useProjectionBias = useProjectionBias
 	return b
@@ -629,7 +629,7 @@ func (b *MultiHeadAttentionBuilder) dense(ctx *context.Context, x *Node, useBias
 
 	if useBias {
 		bVar := ctx.VariableWithShape("biases", shapes.Make(x.DType(), outDim))
-		y = Add(y, bVar.ValueGraph(g))
+		y = Add(y, ExpandLeftToRank(bVar.ValueGraph(g), y.Rank()))
 	}
 
 	if len(outputDims) > 1 {
@@ -641,7 +641,7 @@ func (b *MultiHeadAttentionBuilder) dense(ctx *context.Context, x *Node, useBias
 	return y
 }
 
-// qkvProject performs a fused QKV projection using a single weight matrix.
+// qkvProject performs a fused QKV projection using a single large matmul.
 // x has shape [batch, seq, inFeatures]. Returns projectedQuery, projectedKey, projectedValue
 // each shaped [batch, seq, numHeads, headDim] matching the BSHD layout.
 func (b *MultiHeadAttentionBuilder) qkvProject(x *Node) (projectedQuery, projectedKey, projectedValue *Node) {
@@ -651,23 +651,29 @@ func (b *MultiHeadAttentionBuilder) qkvProject(x *Node) (projectedQuery, project
 	inFeatures := x.Shape().Dim(-1)
 	queryDim := b.numHeads * b.keyQueryDim
 	keyValueDim := b.numHeads * b.valueDim
+	totalOut := queryDim + 2*keyValueDim
 
-	// Single fused weight: [inFeatures, queryDim + 2*keyValueDim].
-	wQKVVar := qkvCtx.VariableWithShape("weights_qkv", shapes.Make(dtype, inFeatures, queryDim+2*keyValueDim))
+	weightShape := shapes.Make(dtype, inFeatures, totalOut)
+	if b.useTransposedWeights {
+		weightShape = shapes.Make(dtype, totalOut, inFeatures)
+	}
+	wQKVVar := qkvCtx.VariableWithShape("weights_qkv", weightShape)
 	if regularizer := regularizers.FromContext(qkvCtx); regularizer != nil {
 		regularizer(qkvCtx, g, wQKVVar)
 	}
 	wQKV := wQKVVar.ValueGraph(g)
 
-	// Separate biases for Q, K, V (always enabled, matching the separate Dense path
-	// which hardcodes useBias=true for Q/K/V projections).
-	biasQ := qkvCtx.VariableWithShape("biases_q", shapes.Make(dtype, queryDim)).ValueGraph(g)
-	biasK := qkvCtx.VariableWithShape("biases_k", shapes.Make(dtype, keyValueDim)).ValueGraph(g)
-	biasV := qkvCtx.VariableWithShape("biases_v", shapes.Make(dtype, keyValueDim)).ValueGraph(g)
-
-	// QKVProjection expects [..., inFeatures] and returns [..., dim] flat outputs.
-	// With x=[batch, seq, inFeatures], outputs are [batch, seq, queryDim] etc.
-	q, k, v := QKVProjection(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
+	var biasQ, biasK, biasV *Node
+	if b.useProjectionBias {
+		biasQ = qkvCtx.VariableWithShape("biases_q", shapes.Make(dtype, queryDim)).ValueGraph(g)
+		biasK = qkvCtx.VariableWithShape("biases_k", shapes.Make(dtype, keyValueDim)).ValueGraph(g)
+		biasV = qkvCtx.VariableWithShape("biases_v", shapes.Make(dtype, keyValueDim)).ValueGraph(g)
+	}
+	q, k, v := qkvProjectConfigured(x, wQKV, biasQ, biasK, biasV, qkvProjectionConfig{
+		queryDim:          queryDim,
+		keyValueDim:       keyValueDim,
+		transposedWeights: b.useTransposedWeights,
+	})
 
 	// Reshape from [batch, seq, numHeads*headDim] to [batch, seq, numHeads, headDim].
 	xDims := x.Shape().Dimensions

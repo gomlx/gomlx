@@ -181,13 +181,13 @@ func (m *Model) FromContext(ctx *context.Context) *Model {
 	m.MaxPosEmbed = context.GetParamOr(ctx, ParamMaxPosEmbed, m.MaxPosEmbed)
 	m.Dropout = context.GetParamOr(ctx, ParamDropout, m.Dropout)
 
-	// Deprecated way to specify LayerNorm:
-	useLayerNorm := context.GetParamOr(ctx, ParamUseLayerNorm, true)
-	if useLayerNorm {
-		m.WithLayerNorm(true)
+	// Prefer the newer normalization parameter. Fall back to the deprecated
+	// boolean only when the new parameter is not set.
+	if normValue, found := ctx.GetParam(ParamNormalization); found {
+		m.WithNormalization(normValue.(string))
+	} else if useLayerNormValue, found := ctx.GetParam(ParamUseLayerNorm); found {
+		m.WithLayerNorm(useLayerNormValue.(bool))
 	}
-	m.Normalization = context.GetParamOr(ctx, ParamNormalization, m.Normalization)
-	m.WithNormalization(m.Normalization)
 	m.UseBias = context.GetParamOr(ctx, ParamUseBias, m.UseBias)
 	m.UseCausalMask = context.GetParamOr(ctx, ParamUseCausalMask, m.UseCausalMask)
 	archStr := context.GetParamOr(ctx, ParamArchitecture, m.Architecture.String())
@@ -467,7 +467,7 @@ func (m *Model) dense(ctx *context.Context, op *Node, useBias bool, outputDims .
 
 	if useBias {
 		bVar := ctx.VariableWithShape("biases", shapes.Make(op.DType(), outDim))
-		y = Add(y, bVar.ValueGraph(g))
+		y = Add(y, ExpandLeftToRank(bVar.ValueGraph(g), y.Rank()))
 	}
 
 	if len(outputDims) > 1 {

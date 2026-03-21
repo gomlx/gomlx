@@ -4,6 +4,7 @@ package simplego
 
 import (
 	"fmt"
+	"math"
 	"sync"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/stretchr/testify/require"
+	"github.com/x448/float16"
 )
 
 func TestHasDynamicParameters(t *testing.T) {
@@ -694,10 +696,10 @@ func TestExecuteDynamic_ConvGeneral_DynamicBatch(t *testing.T) {
 	}
 
 	conv, err := mainFn.ConvGeneral(input, kernel, axes,
-		[]int{1},       // strides
+		[]int{1},         // strides
 		[][2]int{{0, 0}}, // no padding
-		nil, nil,       // no dilations
-		1, 1,           // group counts
+		nil, nil,         // no dilations
+		1, 1, // group counts
 	)
 	require.NoError(t, err)
 
@@ -792,6 +794,84 @@ func TestExecWithDynamicAxes_DotGeneral(t *testing.T) {
 	for i, v := range expected2 {
 		require.InDelta(t, v, got2[i], 1e-4, "batch=1 index %d", i)
 	}
+
+	exec.Finalize()
+}
+
+func TestExecWithDynamicAxes_DotGeneralOutputDType(t *testing.T) {
+	matMulFn := func(x, y *graph.Node) *graph.Node {
+		return graph.Dot(x, y).
+			WithOutputDType(dtypes.Float64).
+			General([]int{2}, nil, []int{0}, nil)
+	}
+	exec := graph.MustNewExec(backend, matMulFn).
+		WithDynamicAxes([]string{"batch", "", ""}, []string{"", ""})
+
+	x := tensors.FromFlatDataAndDimensions([]float32{
+		1, 2, 3,
+		4, 5, 6,
+		10, 20, 30,
+		40, 50, 60,
+	}, 2, 2, 3)
+	y := tensors.FromFlatDataAndDimensions([]float32{
+		1, 2,
+		3, 4,
+		5, 6,
+	}, 3, 2)
+
+	outputs := exec.MustExec(x, y)
+	require.Len(t, outputs, 1)
+	require.Equal(t, dtypes.Float64, outputs[0].Shape().DType)
+	got, err := tensors.CopyFlatData[float64](outputs[0])
+	require.NoError(t, err)
+	expected := []float64{22, 28, 49, 64, 220, 280, 490, 640}
+	require.InDeltaSlice(t, expected, got, 1e-6)
+
+	exec.Finalize()
+}
+
+func TestExecWithDynamicAxes_DotGeneralHalfAccumulatorAndOutputDType(t *testing.T) {
+	goBackend := backend.(*Backend)
+	prevExecPath := goBackend.dotGeneralForceExecutionPath
+	goBackend.dotGeneralForceExecutionPath = smallMatMulPath
+	defer func() { goBackend.dotGeneralForceExecutionPath = prevExecPath }()
+
+	f16 := float16.Fromfloat32
+	const contractingSize = 64
+	xData := make([]float16.Float16, 2*contractingSize)
+	yData := make([]float16.Float16, contractingSize)
+	expected := make([]float32, 2)
+	for i := range yData {
+		yData[i] = f16(0.2 + float32(i%5)*0.01)
+	}
+	for batchIdx := range expected {
+		for j := 0; j < contractingSize; j++ {
+			value := f16(0.1 + float32((batchIdx+j)%3)*0.01)
+			xData[batchIdx*contractingSize+j] = value
+			expected[batchIdx] += value.Float32() * yData[j].Float32()
+		}
+		roundedToHalf := f16(expected[batchIdx]).Float32()
+		require.Greater(t, math.Abs(float64(expected[batchIdx]-roundedToHalf)), 1e-5)
+	}
+
+	matMulFn := func(x, y *graph.Node) *graph.Node {
+		return graph.Dot(x, y).
+			WithAccumulatorDType(dtypes.Float32).
+			WithOutputDType(dtypes.Float32).
+			General([]int{2}, nil, []int{0}, nil)
+	}
+	exec := graph.MustNewExec(goBackend, matMulFn).
+		WithDynamicAxes([]string{"batch", "", ""}, []string{"", ""})
+
+	x := tensors.FromFlatDataAndDimensions(xData, len(expected), 1, contractingSize)
+	y := tensors.FromFlatDataAndDimensions(yData, contractingSize, 1)
+
+	outputs := exec.MustExec(x, y)
+	require.Len(t, outputs, 1)
+	require.Equal(t, dtypes.Float32, outputs[0].Shape().DType)
+	got, err := tensors.CopyFlatData[float32](outputs[0])
+	require.NoError(t, err)
+	require.InDeltaSlice(t, expected, got, 1e-6)
 
 	exec.Finalize()
 }
@@ -1189,10 +1269,10 @@ func TestExecWithDynamicAxes_Gather(t *testing.T) {
 	gatherFn := func(x *graph.Node) *graph.Node {
 		g := x.Graph()
 		// Gather on axis 1: transpose to [3, batch, 4], gather index 1, transpose back.
-		transposed := graph.TransposeAllAxes(x, 1, 0, 2)           // [3, batch, 4]
-		idx := graph.Const(g, []int32{1})                           // index for gather
-		expandedIdx := graph.InsertAxes(idx, -1)                    // [1, 1]
-		gathered := graph.Gather(transposed, expandedIdx)            // [batch, 4]
+		transposed := graph.TransposeAllAxes(x, 1, 0, 2)  // [3, batch, 4]
+		idx := graph.Const(g, []int32{1})                 // index for gather
+		expandedIdx := graph.InsertAxes(idx, -1)          // [1, 1]
+		gathered := graph.Gather(transposed, expandedIdx) // [batch, 4]
 		return gathered
 	}
 

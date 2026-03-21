@@ -29,9 +29,18 @@ type dotGeneralNodeData struct {
 	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int
 	lhsBlockedShape, rhsBlockedShape, outputBlockedShape   shapes.Shape
 	lhsNormalization, rhsNormalization                     *dgNormalizationInfo
+	config                                                 backends.DotGeneralConfig
 
 	// execPath determines which execution strategy to use. Decided at graph-build time.
 	execPath dotGeneralExecutionPath
+}
+
+type dotGeneralTypePlan struct {
+	inputDType             dtypes.DType
+	computationDType       dtypes.DType
+	resultDType            dtypes.DType
+	nodeOutputDType        dtypes.DType
+	convertInputsUpfrontTo dtypes.DType
 }
 
 // EqualNodeData implements nodeDataComparable for dotGeneralNodeData.
@@ -41,6 +50,7 @@ func (d *dotGeneralNodeData) EqualNodeData(other nodeDataComparable) bool {
 		d.lhsCrossSize != o.lhsCrossSize ||
 		d.rhsCrossSize != o.rhsCrossSize ||
 		d.contractingSize != o.contractingSize ||
+		d.config != o.config ||
 		d.execPath != o.execPath {
 		return false
 	}
@@ -94,25 +104,29 @@ func (f *Function) DotGeneral(
 		return nil, err
 	}
 	lhs, rhs := inputPair[0], inputPair[1]
-	dtype := lhs.shape.DType
-	if dtype != rhs.shape.DType {
+	inputDType := lhs.shape.DType
+	if inputDType != rhs.shape.DType {
 		return nil, errors.Errorf("DotGeneral lhs (left-hand-side) and rhs operands don't match data types: %s and %s",
-			dtype, rhs.shape.DType)
+			inputDType, rhs.shape.DType)
 	}
+	typePlan := newDotGeneralTypePlan(inputDType, config)
 
-	// We don't yet support accumulator dtype, so we convert the inputs.
-	// - Exception: Half-Precision types automatically use Float32 for the computation.
-	isHalfPrecisionWithFloat32 := dtype.IsHalfPrecision() && config.AccumulatorDType == dtypes.Float32
-	if !isHalfPrecisionWithFloat32 && config.AccumulatorDType != dtypes.InvalidDType && config.AccumulatorDType != dtype {
-		lhsOp, err = f.ConvertDType(lhsOp, config.AccumulatorDType)
+	// Convert inputs upfront when the requested accumulator dtype cannot be handled
+	// directly by the execution kernels.
+	if typePlan.convertInputsUpfrontTo != dtypes.InvalidDType {
+		lhsOp, err = f.ConvertDType(lhsOp, typePlan.convertInputsUpfrontTo)
 		if err != nil {
 			return nil, err
 		}
-		rhsOp, err = f.ConvertDType(rhsOp, config.AccumulatorDType)
+		rhsOp, err = f.ConvertDType(rhsOp, typePlan.convertInputsUpfrontTo)
 		if err != nil {
 			return nil, err
 		}
-		dtype = config.AccumulatorDType
+		inputPair, err = f.verifyAndCastValues(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
+		if err != nil {
+			return nil, err
+		}
+		lhs, rhs = inputPair[0], inputPair[1]
 	}
 
 	if len(lhsContractingAxes) != len(rhsContractingAxes) {
@@ -131,6 +145,7 @@ func (f *Function) DotGeneral(
 		lhsBatchAxes:       lhsBatchAxes,
 		rhsContractingAxes: rhsContractingAxes,
 		rhsBatchAxes:       rhsBatchAxes,
+		config:             config,
 	}
 
 	// Validate and adjust axes.
@@ -203,7 +218,7 @@ func (f *Function) DotGeneral(
 	}
 
 	if hasDynamic {
-		return f.dotGeneralDynamic(lhs, rhs, dtype, &params, batchDims, batchAxisNames, contractingDims)
+		return f.dotGeneralDynamic(lhs, rhs, typePlan, &params, batchDims, batchAxisNames, contractingDims)
 	}
 
 	// --- STATIC PATH (unchanged) ---
@@ -224,13 +239,13 @@ func (f *Function) DotGeneral(
 	params.lhsNormalization = dgNormalizePrepare(lhs.shape, params.lhsContractingAxes, params.lhsBatchAxes)
 	params.rhsNormalization = dgNormalizePrepare(rhs.shape, params.rhsContractingAxes, params.rhsBatchAxes)
 
-	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
+	blockLog2Dim := DotGeneralTargetBlockLog2Dim[typePlan.computationDType]
 	params.lhsBlockedShape = dgCreateBlockedShape(
-		dtype, params.batchSize, params.lhsCrossSize, params.contractingSize, blockLog2Dim)
+		typePlan.computationDType, params.batchSize, params.lhsCrossSize, params.contractingSize, blockLog2Dim)
 	params.rhsBlockedShape = dgCreateBlockedShape(
-		dtype, params.batchSize, params.rhsCrossSize, params.contractingSize, blockLog2Dim)
-	outputDType := dtype
-	if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
+		typePlan.computationDType, params.batchSize, params.rhsCrossSize, params.contractingSize, blockLog2Dim)
+	outputDType := typePlan.computationDType
+	if typePlan.computationDType == dtypes.BFloat16 || typePlan.computationDType == dtypes.Float16 {
 		// For 16 bits, store the intermediary results as float32 to minimize numerical errors during accumulation.
 		// Notice the blockLog2Dim must be the same, because the block dimensions much match the inputs.
 		outputDType = dtypes.Float32
@@ -240,7 +255,7 @@ func (f *Function) DotGeneral(
 
 	// Select execution path at build time based on problem size and matrix layout.
 	// This enables proper deduplication of pre-blocked inputs via getOrCreateNode.
-	params.execPath = dgSelectExecPath(f.builder.backend, lhs.shape, rhs.shape, &params)
+	params.execPath = typePlan.finalizeExecPath(dgSelectExecPath(f.builder.backend, lhs.shape, rhs.shape, &params))
 	klog.V(1).Infof("DotGeneral execPath: %s\n", params.execPath)
 
 	// For blockedPath, pre-block BOTH inputs at graph-build time.
@@ -265,7 +280,10 @@ func (f *Function) DotGeneral(
 	default:
 		inputs = []*Node{lhs, rhs}
 	}
-	dotGeneral, _ := f.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), inputs, &params)
+	dotGeneral, _ := f.getOrCreateNode(
+		backends.OpTypeDotGeneral,
+		shapes.Make(typePlan.nodeOutputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize),
+		inputs, &params)
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))
@@ -277,9 +295,8 @@ func (f *Function) DotGeneral(
 		return nil, err
 	}
 
-	// If config.OutputDType is different than the input, for now we simply convert it.
-	if config.OutputDType != dtypes.InvalidDType && config.OutputDType != dtype {
-		result, err = f.ConvertDType(result, config.OutputDType)
+	if typePlan.resultDType != typePlan.nodeOutputDType {
+		result, err = f.ConvertDType(result, typePlan.resultDType)
 		if err != nil {
 			return nil, err
 		}
@@ -303,7 +320,7 @@ func unifyDim(a, b int) (int, error) {
 // It stores placeholder data in dotGeneralNodeData (to be recomputed at specialization time)
 // and builds the output shape with proper axis names for dynamic dimensions.
 func (f *Function) dotGeneralDynamic(
-	lhs, rhs *Node, dtype dtypes.DType, params *dotGeneralNodeData,
+	lhs, rhs *Node, typePlan dotGeneralTypePlan, params *dotGeneralNodeData,
 	batchDims []int, batchAxisNames []string, contractingDims []int,
 ) (backends.Value, error) {
 	// Find sizes with dynamic-awareness.
@@ -349,9 +366,9 @@ func (f *Function) dotGeneralDynamic(
 
 	var intermediateShape shapes.Shape
 	if hasDynamicDim(intermediateDims) {
-		intermediateShape = shapes.MakeDynamic(dtype, intermediateDims, intermediateNames)
+		intermediateShape = shapes.MakeDynamic(typePlan.nodeOutputDType, intermediateDims, intermediateNames)
 	} else {
-		intermediateShape = shapes.Make(dtype, intermediateDims...)
+		intermediateShape = shapes.Make(typePlan.nodeOutputDType, intermediateDims...)
 	}
 
 	// Always use 2-input layout for dynamic graphs (no pre-blocking).
@@ -372,12 +389,19 @@ func (f *Function) dotGeneralDynamic(
 	// Instead create the reshape node directly with the correctly-typed output shape.
 	var outputShape shapes.Shape
 	if hasDynamicDim(resultingDims) {
-		outputShape = shapes.MakeDynamic(dtype, resultingDims, resultingAxisNames)
+		outputShape = shapes.MakeDynamic(typePlan.nodeOutputDType, resultingDims, resultingAxisNames)
 	} else {
-		outputShape = shapes.Make(dtype, resultingDims...)
+		outputShape = shapes.Make(typePlan.nodeOutputDType, resultingDims...)
 	}
 
 	result, _ := f.getOrCreateNode(backends.OpTypeReshape, outputShape, []*Node{dotGeneral}, nil)
+	if typePlan.resultDType != typePlan.nodeOutputDType {
+		converted, err := f.ConvertDType(result, typePlan.resultDType)
+		if err != nil {
+			return nil, err
+		}
+		return converted, nil
+	}
 	return result, nil
 }
 
@@ -403,6 +427,64 @@ func dgCombinedAxisName(names []string) string {
 		}
 	}
 	return ""
+}
+
+func newDotGeneralTypePlan(inputDType dtypes.DType, config backends.DotGeneralConfig) dotGeneralTypePlan {
+	plan := dotGeneralTypePlan{
+		inputDType:       inputDType,
+		computationDType: inputDType,
+		resultDType:      inputDType,
+	}
+	if config.AccumulatorDType != dtypes.InvalidDType && config.AccumulatorDType != inputDType {
+		// Half-precision kernels already accumulate in float32 internally, so no
+		// input conversion is needed for the common AccumulatorDType(float32) case.
+		if !(inputDType.IsHalfPrecision() && config.AccumulatorDType == dtypes.Float32) {
+			plan.computationDType = config.AccumulatorDType
+			plan.convertInputsUpfrontTo = config.AccumulatorDType
+		}
+	}
+	if config.OutputDType != dtypes.InvalidDType {
+		plan.resultDType = config.OutputDType
+	}
+	if plan.convertInputsUpfrontTo != dtypes.InvalidDType {
+		plan.nodeOutputDType = plan.computationDType
+		return plan
+	}
+	plan.nodeOutputDType = dgNodeOutputDType(plan.inputDType, plan.computationDType, plan.resultDType)
+	return plan
+}
+
+func (p dotGeneralTypePlan) finalizeExecPath(execPath dotGeneralExecutionPath) dotGeneralExecutionPath {
+	if execPath == smallMatMulPath && !p.smallMatMulSupportsOutput() {
+		return normalizedPath
+	}
+	return execPath
+}
+
+func (p dotGeneralTypePlan) smallMatMulSupportsOutput() bool {
+	return dgSmallMatMulSupportsOutput(p.kernelInputDType(), p.nodeOutputDType)
+}
+
+func (p dotGeneralTypePlan) kernelInputDType() dtypes.DType {
+	if p.convertInputsUpfrontTo != dtypes.InvalidDType {
+		return p.convertInputsUpfrontTo
+	}
+	return p.inputDType
+}
+
+func dgNodeOutputDType(inputDType, computationDType, resultDType dtypes.DType) dtypes.DType {
+	// Half-precision kernels accumulate in float32 internally. When the requested
+	// result dtype differs from the native half output, keep the DotGeneral node in
+	// the requested dtype so the float32 accumulator converts directly to the final
+	// result instead of rounding back to half first.
+	if inputDType.IsHalfPrecision() && resultDType != computationDType {
+		return resultDType
+	}
+	return computationDType
+}
+
+func dgSmallMatMulSupportsOutput(inputDType, nodeOutputDType dtypes.DType) bool {
+	return !inputDType.IsHalfPrecision() || nodeOutputDType == inputDType
 }
 
 // dgFindSizes finds the combined sizes of the 3 types of axes that mather:
@@ -640,6 +722,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			// Also verify SmallMatMul path for matrices in matmul order
 			rawDType := lhsRaw.shape.DType
 			if rawDType < MaxDTypes && dotGeneralSmallMatMulDTypeMap.Map[rawDType] != nil &&
+				dgSmallMatMulSupportsOutput(rawDType, outputShape.DType) &&
 				isMatMulOrder(lhsRaw.shape, params.lhsContractingAxes, params.lhsBatchAxes,
 					rhsRaw.shape, params.rhsContractingAxes, params.rhsBatchAxes) {
 				output2.Zeros()
@@ -702,8 +785,13 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		// SmallMatMul fast path: small matrices in standard [M,K]×[K,N] order.
 		// Path was selected at build time based on matrix layout and size.
 		// Supports all numeric dtypes via DTypeMap registration.
-		// BFloat16/Float16 implementations accumulate in float32 internally but write to native output.
+		// BFloat16/Float16 implementations accumulate in float32 internally but only support native half outputs.
 		dtype := lhs.shape.DType
+		if !dgSmallMatMulSupportsOutput(dtype, output.shape.DType) {
+			backend.putBuffer(output)
+			return nil, errors.Errorf("smallMatMulPath does not support %s inputs with %s outputs",
+				dtype, output.shape.DType)
+		}
 		execSmallMatMulFnAny, err := dotGeneralSmallMatMulDTypeMap.Get(dtype)
 		if err != nil {
 			return nil, err

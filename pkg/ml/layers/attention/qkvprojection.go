@@ -6,6 +6,12 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 )
 
+type qkvProjectionConfig struct {
+	queryDim          int
+	keyValueDim       int
+	transposedWeights bool
+}
+
 // QKVProjection performs a fused Query-Key-Value projection: a single large matmul
 // followed by split into separate query, key, value outputs with optional per-projection bias.
 //
@@ -29,6 +35,43 @@ func QKVProjection(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int
 		},
 	)
 	return results[0], results[1], results[2]
+}
+
+func qkvProjectConfigured(x, wQKV, biasQ, biasK, biasV *Node, cfg qkvProjectionConfig) (query, key, value *Node) {
+	if cfg.transposedWeights {
+		query, key, value = qkvProjectTransposed(x, wQKV, cfg.queryDim, cfg.keyValueDim)
+	} else {
+		query, key, value = QKVProjection(x, wQKV, biasQ, biasK, biasV, cfg.queryDim, cfg.keyValueDim)
+		return
+	}
+	if biasQ != nil {
+		query = Add(query, ExpandLeftToRank(biasQ, query.Rank()))
+	}
+	if biasK != nil {
+		key = Add(key, ExpandLeftToRank(biasK, key.Rank()))
+	}
+	if biasV != nil {
+		value = Add(value, ExpandLeftToRank(biasV, value.Rank()))
+	}
+	return
+}
+
+func qkvProjectTransposed(x, wQKV *Node, queryDim, keyValueDim int) (query, key, value *Node) {
+	totalOut := queryDim + 2*keyValueDim
+	combined := DotGeneral(x, []int{-1}, nil, wQKV, []int{1}, nil)
+	query = Slice(combined, axisRangesForSplit(combined.Rank(), 0, queryDim)...)
+	key = Slice(combined, axisRangesForSplit(combined.Rank(), queryDim, queryDim+keyValueDim)...)
+	value = Slice(combined, axisRangesForSplit(combined.Rank(), queryDim+keyValueDim, totalOut)...)
+	return
+}
+
+func axisRangesForSplit(rank, start, end int) []SliceAxisSpec {
+	ranges := make([]SliceAxisSpec, rank)
+	for ii := 0; ii < rank-1; ii++ {
+		ranges[ii] = AxisRange()
+	}
+	ranges[rank-1] = AxisRange(start, end)
+	return ranges
 }
 
 // QKVProjectionDecomposed implements Query-Key-Value projection using primitive ops.
