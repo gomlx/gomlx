@@ -21,6 +21,7 @@
   - DotGeneral with unsupported accumulation dtypes (only float32 is supported): it automatically converts the
    input dtype to the accumulation dtype first.
   - Added executable memory consumption logging if passing `-vmodule=executable=1`.
+  - Added `OptimizationBarrier` operation. Not exposed in `graph` though.
 - Backend `simplego` ("go"):
   - DotGeneral with accumulation dtypes: it automatically converts the input dtype to the accumulation dtype first.
     (With the exception of half-precision types, which use float32 as accumulator by default).
