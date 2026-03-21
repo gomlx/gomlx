@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next
+# 0.27.2: DotGeneral with AccumulatorDType; Transformer architecture parameter; 
 
 ### Core:
 - Package `graph`:
