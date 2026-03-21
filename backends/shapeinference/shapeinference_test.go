@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	. "github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -671,14 +671,14 @@ func TestGather(t *testing.T) {
 		// operand: F32[3, 4], startIndices: I32[2, 1]
 		// Gather 2 rows from a 3x4 matrix.
 		output, err := Gather(
-			S(F32, 3, 4),       // operand
-			S(I32, 2, 1),       // startIndices
-			1,                  // indexVectorAxis
-			[]int{1},           // offsetOutputAxes
-			[]int{0},           // collapsedSliceAxes
-			[]int{0},           // startIndexMap
-			[]int{1, 4},        // sliceSizes
-			false,              // indicesAreSorted
+			S(F32, 3, 4), // operand
+			S(I32, 2, 1), // startIndices
+			1,            // indexVectorAxis
+			[]int{1},     // offsetOutputAxes
+			[]int{0},     // collapsedSliceAxes
+			[]int{0},     // startIndexMap
+			[]int{1, 4},  // sliceSizes
+			false,        // indicesAreSorted
 		)
 		require.NoError(t, err)
 		assert.True(t, S(F32, 2, 4).Equal(output), "expected F32[2, 4], got %s", output)
@@ -693,14 +693,14 @@ func TestGather(t *testing.T) {
 		// operand: Bool[1, 12], startIndices: I32[1, 1, 12, 1, 1]
 		// indexVectorAxis=4 is valid because startIndices.Rank()=5.
 		output, err := Gather(
-			S(Bool, 1, 12),          // operand
+			S(Bool, 1, 12),         // operand
 			S(I32, 1, 1, 12, 1, 1), // startIndices
-			4,                       // indexVectorAxis (valid: <= startIndices.Rank())
-			[]int{},                 // offsetOutputAxes
-			[]int{0, 1},             // collapsedSliceAxes
-			[]int{0},                // startIndexMap
-			[]int{1, 1},             // sliceSizes
-			false,                   // indicesAreSorted
+			4,                      // indexVectorAxis (valid: <= startIndices.Rank())
+			[]int{},                // offsetOutputAxes
+			[]int{0, 1},            // collapsedSliceAxes
+			[]int{0},               // startIndexMap
+			[]int{1, 1},            // sliceSizes
+			false,                  // indicesAreSorted
 		)
 		require.NoError(t, err)
 		assert.True(t, S(Bool, 1, 1, 12, 1).Equal(output), "expected Bool[1, 1, 12, 1], got %s", output)
@@ -709,14 +709,14 @@ func TestGather(t *testing.T) {
 	t.Run("IndexVectorAxisOutOfRange", func(t *testing.T) {
 		// indexVectorAxis=3 is out of range for startIndices of rank 2.
 		_, err := Gather(
-			S(F32, 3, 4),  // operand
-			S(I32, 2, 1),  // startIndices (rank 2)
-			3,             // indexVectorAxis (invalid: > startIndices.Rank())
-			[]int{1},      // offsetOutputAxes
-			[]int{0},      // collapsedSliceAxes
-			[]int{0},      // startIndexMap
-			[]int{1, 4},   // sliceSizes
-			false,         // indicesAreSorted
+			S(F32, 3, 4), // operand
+			S(I32, 2, 1), // startIndices (rank 2)
+			3,            // indexVectorAxis (invalid: > startIndices.Rank())
+			[]int{1},     // offsetOutputAxes
+			[]int{0},     // collapsedSliceAxes
+			[]int{0},     // startIndexMap
+			[]int{1, 4},  // sliceSizes
+			false,        // indicesAreSorted
 		)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "indexVectorAxis=3 is out of range")
@@ -984,5 +984,62 @@ func TestReduceWindowOp_AxisNames(t *testing.T) {
 		output, err := ReduceWindowOp(s, []int{3}, nil, nil, nil, nil)
 		require.NoError(t, err)
 		require.Nil(t, output.AxisNames)
+	})
+}
+
+func TestPad(t *testing.T) {
+	// 1. Prefixing padding; Infixing padding; Suffix padding.
+	t.Run("PrefixInfixSuffix", func(t *testing.T) {
+		output, err := PadOp(
+			S(F32, 2, 3),                           // operand
+			PadAxis{Start: 1, End: 0, Interior: 0}, // prefix axis 0
+			PadAxis{Start: 0, End: 2, Interior: 1}, // infix / suffix axis 1
+		)
+		require.NoError(t, err)
+		// Axis 0: dim=2, start=1, end=0, interior=0 => 2 + 1 + 0 + (2-1)*0 = 3
+		// Axis 1: dim=3, start=0, end=2, interior=1 => 3 + 0 + 2 + (3-1)*1 = 7
+		assert.True(t, S(F32, 3, 7).Equal(output), "expected F32[3, 7], got %s", output)
+	})
+
+	// 2. Check that padding works when it is on the last axis, and when the last axis is untouched.
+	// 3. That untouched axes remain untouched.
+	t.Run("UntouchedAxes", func(t *testing.T) {
+		output, err := PadOp(
+			S(F32, 4, 5, 2),                        // operand
+			PadAxis{Start: 0, End: 0, Interior: 0}, // padding on first axis is zero
+			PadAxis{Start: 1, End: 1, Interior: 0}, // padding on middle axis
+			// last axis untouched (omitted)
+		)
+		require.NoError(t, err)
+		// Axis 0: 4
+		// Axis 1: 5 + 1 + 1 = 7
+		// Axis 2: 2
+		assert.True(t, S(F32, 4, 7, 2).Equal(output), "expected F32[4, 7, 2], got %s", output)
+	})
+
+	t.Run("LastAxisPadding", func(t *testing.T) {
+		output, err := PadOp(
+			S(F32, 2, 2, 2),                        // operand
+			PadAxis{Start: 0, End: 0, Interior: 0}, // untouched
+			PadAxis{Start: 0, End: 0, Interior: 0}, // untouched
+			PadAxis{Start: 0, End: 0, Interior: 2}, // padding on the last axis
+		)
+		require.NoError(t, err)
+		// Axis 0: 2
+		// Axis 1: 2
+		// Axis 2: 2 + 0 + 0 + (2-1)*2 = 4
+		assert.True(t, S(F32, 2, 2, 4).Equal(output), "expected F32[2, 2, 4], got %s", output)
+	})
+
+	t.Run("MissingAxes", func(t *testing.T) {
+		output, err := PadOp(
+			S(F32, 5, 3), // operand
+			PadAxis{Start: 2, End: 2, Interior: 0},
+			// missing axis
+		)
+		require.NoError(t, err)
+		// Axis 0: 5 + 4 = 9
+		// Axis 1: 3
+		assert.True(t, S(F32, 9, 3).Equal(output), "expected F32[9, 3], got %s", output)
 	})
 }

@@ -96,6 +96,7 @@ var Capabilities = backends.Capabilities{
 
 		// Other operations:
 		backends.OpTypeArgMinMax:        true,
+		backends.OpTypeBitcast:          true,
 		backends.OpTypeBroadcast:        true,
 		backends.OpTypeBroadcastInDim:   true,
 		backends.OpTypeConcatenate:      true,
@@ -105,6 +106,7 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeGather:           true,
 		backends.OpTypeIdentity:         true,
 		backends.OpTypeIota:             true,
+		backends.OpTypePad:              true,
 		backends.OpTypeReduceBitwiseAnd: true,
 		backends.OpTypeReduceBitwiseOr:  true,
 		backends.OpTypeReduceBitwiseXor: true,
@@ -117,6 +119,7 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeReduceSum:        true,
 		backends.OpTypeReduceWindow:     true,
 		backends.OpTypeReshape:          true,
+		backends.OpTypeReverse:          true,
 		backends.OpTypeRNGBitGenerator:  true,
 		backends.OpTypeScatterMax:       true,
 		backends.OpTypeScatterMin:       true,
@@ -132,26 +135,22 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeWhile: true,
 		backends.OpTypeSort:  true,
 
-		backends.OpTypeReverse: true,
-
 		// Fused operations:
-		backends.OpTypeFusedSoftmax:       true,
-		backends.OpTypeFusedLayerNorm:     true,
-		backends.OpTypeFusedGelu:          true,
-		backends.OpTypeFusedDense:         true,
+		backends.OpTypeFusedSoftmax:                   true,
+		backends.OpTypeFusedLayerNorm:                 true,
+		backends.OpTypeFusedGelu:                      true,
+		backends.OpTypeFusedDense:                     true,
 		backends.OpTypeFusedScaledDotProductAttention: true,
 		backends.OpTypeFusedAttentionQKVProjection:    true,
-		backends.OpTypeFusedQuantizedDense:             true,
+		backends.OpTypeFusedQuantizedDense:            true,
 
 		// TODO: not implemented yet:
-		// backends.OpTypePad: true,
 		// backends.OpTypeSelectAndScatterMax: true,
 		// backends.OpTypeSelectAndScatterMin: true,
 		// backends.OpTypeSelectAndScatterSum: true,
 		// backends.OpTypeShiftLeft: true,
 		// backends.OpTypeShiftRightArithmetic: true,
 		// backends.OpTypeShiftRightLogical: true,
-		backends.OpTypeBitcast: true,
 		// backends.OpTypeDynamicSlice: true,
 		// backends.OpTypeDynamicUpdateSlice: true,
 
