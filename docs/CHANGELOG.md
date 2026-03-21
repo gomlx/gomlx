@@ -21,11 +21,14 @@
 
 ### Backends:
 - Backend `xla`:
-  - Updated dependency to `github.com/gomlx/go-xla` to v0.2.1: with a fix to NVIDIA CUDA drivers path.
+  - Updated dependency to `github.com/gomlx/go-xla` to v0.2.2: with a fix to NVIDIA CUDA drivers path.
   - DotGeneral with unsupported accumulation dtypes (only float32 is supported): it automatically converts the
    input dtype to the accumulation dtype first.
   - Added executable memory consumption logging if passing `-vmodule=executable=1`.
   - Added `OptimizationBarrier` operation. Not exposed in `graph` though.
+  - Added "hack" dependency on the weights of a DotGeneral operation to the lhs operand of the DotGeneral operation,
+    to hugely decrease temporary memory usage. See issue in https://github.com/openxla/stablehlo/issues/2923
+    
 - Backend `simplego` ("go"):
   - DotGeneral with accumulation dtypes: it automatically converts the input dtype to the accumulation dtype first.
     (With the exception of half-precision types, which use float32 as accumulator by default).
