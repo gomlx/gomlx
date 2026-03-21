@@ -178,6 +178,22 @@ func Swish(x *Node) *Node {
 	return Mul(x, Sigmoid(x))
 }
 
+// HardSigmoid activation function.
+//
+// It returns max(0, min(1, alpha*x + beta)) with default alpha=0.2, beta=0.5.
+func HardSigmoid(x *Node) *Node {
+	return HardSigmoidWithParams(x, 0.2, 0.5)
+}
+
+// HardSigmoidWithParams activation function with configurable alpha and beta.
+//
+// It returns max(0, min(1, alpha*x + beta)).
+func HardSigmoidWithParams(x *Node, alpha, beta float64) *Node {
+	g := x.Graph()
+	result := AddScalar(MulScalar(x, alpha), beta)
+	return Min(Max(result, ScalarZero(g, x.DType())), ScalarOne(g, x.DType()))
+}
+
 // HardSwish activation function.
 //
 // It returns x·ReLU6(x+3)/6.
