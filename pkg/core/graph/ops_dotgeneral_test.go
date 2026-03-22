@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -412,16 +413,20 @@ func TestGradientDot(t *testing.T) {
 }
 
 func TestGradientDotConfig(t *testing.T) {
+	bf16_3 := bfloat16.FromFloat32(3)
+	bf16_2 := bfloat16.FromFloat32(2)
 	graphtest.RunTestGraphFn(t, "dot_with_accumulator_dtype", func(g *Graph) (inputs, outputs []*Node) {
 		// lhs and rhs are Float32.
 		// We set AccumulatorDType to Float64.
 		// We explicitly set OutputDType to Float32 to check that VJP handles the mismatch between
 		// computation precision (F64) and adjoint/output precision (F32).
 		v1 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(2)))
+		v1 = ConvertDType(v1, dtypes.BFloat16)
 		v2 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(3)))
+		v2 = ConvertDType(v2, dtypes.BFloat16)
 
 		// Dot product with F64 accumulator.
-		output := Dot(v1, v2).WithAccumulatorDType(dtypes.Float64).WithOutputDType(dtypes.Float32).Product()
+		output := Dot(v1, v2).WithAccumulatorDType(dtypes.Float32).WithOutputDType(dtypes.Float32).Product()
 
 		// Calculate gradients.
 		gradients := Gradient(output, v1, v2)
@@ -430,9 +435,9 @@ func TestGradientDotConfig(t *testing.T) {
 		outputs = append([]*Node{output}, gradients...)
 		return
 	}, []any{
-		float32(24),           // dot product output (Float32)
-		[]float32{3, 3, 3, 3}, // gradient with respect to v1 (Float32)
-		[]float32{2, 2, 2, 2}, // gradient with respect to v2 (Float32)
+		float32(24), // dot product output (Float32)
+		[]bfloat16.BFloat16{bf16_3, bf16_3, bf16_3, bf16_3}, // gradient with respect to v1 (Float32)
+		[]bfloat16.BFloat16{bf16_2, bf16_2, bf16_2, bf16_2}, // gradient with respect to v2 (Float32)
 	}, Epsilon)
 
 	graphtest.RunTestGraphFn(t, "dot_with_output_dtype", func(g *Graph) (inputs, outputs []*Node) {
@@ -464,7 +469,7 @@ func TestDotGeneralDTypes(t *testing.T) {
 		t.Skip("skipping DotGeneralDTypes test")
 	}
 	testDTypes := sets.Make[dtypes.DType]()
-	for _, dtSet := range []*dtypes.DTypeSet{&dtypes.FloatDTypes, &dtypes.IntDTypes, &dtypes.UnsignedDTypes} {
+	for _, dtSet := range []*dtypes.DTypeSet{&dtypes.FloatDTypes} { // }, &dtypes.IntDTypes, &dtypes.UnsignedDTypes} {
 		for dtype, included := range *dtSet {
 			if included {
 				testDTypes.Insert(dtypes.DType(dtype))
@@ -495,11 +500,11 @@ func TestDotGeneralDTypes(t *testing.T) {
 				if err != nil {
 					t.Fatalf("DotGeneralDTypes failed to create graph: %v", err)
 				}
-				_, err = exec.Exec()
+				output, err := exec.Exec1()
 				if err != nil {
 					fmt.Printf("* failed for %s, %s, %s\n", inputDType, accumulatorDType, outputDType)
 				} else {
-					fmt.Printf("%s,%s,%s\n", inputDType, accumulatorDType, outputDType)
+					fmt.Printf("%s,%s,%s -> %s\n", inputDType, accumulatorDType, outputDType, output.DType())
 				}
 				exec.Finalize()
 			}

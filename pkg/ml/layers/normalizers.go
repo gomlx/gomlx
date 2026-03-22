@@ -12,6 +12,17 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
+const (
+	// NormalizationLayerNorm is the value for LayerNormalization.
+	NormalizationLayerNorm = "layer"
+	// NormalizationRMSNorm is the value for RMSNorm.
+	NormalizationRMSNorm = "rms"
+	// NormalizationBatchNorm is the value for batchnorm.New.
+	NormalizationBatchNorm = "batch"
+	// NormalizationNone is the value for no normalization.
+	NormalizationNone = "none"
+)
+
 var (
 	// KnownNormalizers is a map of normalizer string to a function that applies them
 	// with the default values, with the feature axis set to -1. This will only work
@@ -24,16 +35,16 @@ var (
 	// in their scope (`Context.In(scope)`) -- except if one wants to deliberately share
 	// normalization variables across more than one application.
 	KnownNormalizers = map[string]func(ctx *context.Context, input *Node) *Node{
-		"batch": func(ctx *context.Context, input *Node) *Node {
+		NormalizationBatchNorm: func(ctx *context.Context, input *Node) *Node {
 			return batchnorm.New(ctx, input, -1).Done()
 		},
-		"layer": func(ctx *context.Context, input *Node) *Node {
+		NormalizationLayerNorm: func(ctx *context.Context, input *Node) *Node {
 			return LayerNormalization(ctx, input, -1).Done()
 		},
-		"rms": func(ctx *context.Context, input *Node) *Node {
+		NormalizationRMSNorm: func(ctx *context.Context, input *Node) *Node {
 			return RMSNorm(ctx, input).Done()
 		},
-		"none": func(ctx *context.Context, input *Node) *Node {
+		NormalizationNone: func(ctx *context.Context, input *Node) *Node {
 			return input
 		},
 	}
@@ -108,13 +119,13 @@ func NormalizeFromContext(ctx *context.Context, input *Node) *Node {
 func MaskedNormalizeFromContext(ctx *context.Context, input, mask *Node) *Node {
 	normType := context.GetParamOr(ctx, ParamNormalization, "layer")
 	switch normType {
-	case "none", "":
+	case NormalizationNone, "":
 		return input
-	case "layer":
+	case NormalizationLayerNorm:
 		return LayerNormalization(ctx, input, -1).Mask(mask).Done()
-	case "rms":
+	case NormalizationRMSNorm:
 		return RMSNorm(ctx, input).Done()
-	case "batch":
+	case NormalizationBatchNorm:
 		if mask != nil {
 			Panicf("'batch' normalization set in context parameter %q does not support usage of mask yet, please open a feature request",
 				ParamNormalization)

@@ -74,7 +74,7 @@ func main() {
 
 	// Load ONNX model
 	onnxPath := must.M1(repo.DownloadFile("onnx/model.onnx"))
-	onnxModel := must.M1(onnxparser.FromFile(onnxPath))
+	onnxModel := must.M1(onnxparser.ParseFile(onnxPath))
 
 	// Create context and load model weights
 	ctx := context.New()

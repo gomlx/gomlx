@@ -38,7 +38,8 @@ func FromShape(shape shapes.Shape) *Tensor {
 		panic(errors.New("invalid shape"))
 	}
 	t := newEmptyTensor(shape)
-	flatV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), t.Size(), t.Size())
+	sliceLen := t.StorageSize()
+	flatV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), sliceLen, sliceLen)
 	t.local = &local{
 		t:    t,
 		flat: flatV.Interface(),

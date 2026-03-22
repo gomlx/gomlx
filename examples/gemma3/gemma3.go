@@ -99,7 +99,7 @@ func main() {
 	}
 
 	// Load ONNX model.
-	model, err := onnxparser.FromFile(onnxPath)
+	model, err := onnxparser.ParseFile(onnxPath)
 	if err != nil {
 		klog.Fatalf("Failed to load ONNX model: %+v", err)
 	}

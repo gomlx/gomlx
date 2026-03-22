@@ -1,6 +1,46 @@
 # GoMLX changelog
 
-# Next:
+# Next
+
+- Package `ml/activations`
+  - Added `HardSigmoid` activation.
+  - Modified the parametrized activations to be suffixed with `With`: `LeakyReluWith`, `HardSigmoidWith`, `HardSwishWith`.
+- Package `tensors`
+  - Improving support for sub-byte data types (`Int4`, `Int2`, `Uint4`, `Uint2`)
+
+# 0.27.2: DotGeneral with AccumulatorDType; Transformer architecture parameter; 
+
+### Core:
+- Package `graph`:
+  - `DotGeneral` passing `AccumulatorDType` and `OutputDType` to the backend (instead of assuming it doesn't implement and
+    converting it). Also, by default, half-precision floats use float32 as accumulator.
+    - For the `xla` backend: added an "hacky" dependency from the variable (weights) to the lhs operand of the `DotGeneral`
+      operation: because XLA CPU creates a temporary re-layout of the weights, this dependency ensures that only one temporary
+      buffer is allocated at a time, along the layers of a model (in a 22Gb model with 48 layers, it saved 48Gb! in temporary memory)
+      
+- Package `ml/model/transformer`: 
+  - Added architecture parameter ("standard" or "gemma" values).
+  - Activation passed an `activations.Type` values (instead of string) -- but conversion from string as a context hyperparameters still works.
+  - Added `WithTransposedWeights()` and `WithCausalMask()` options.
+  - Simplified code.
+- Package `ml/layers`
+  - Added constants to normalization types.
+
+### Backends:
+- Backend `xla`:
+  - Updated dependency to `github.com/gomlx/go-xla` to v0.2.2: with a fix to NVIDIA CUDA drivers path.
+  - DotGeneral with unsupported accumulation dtypes (only float32 is supported): it automatically converts the
+   input dtype to the accumulation dtype first.
+  - Added executable memory consumption logging if passing `-vmodule=executable=1`.
+  - Added `OptimizationBarrier` operation. Not exposed in `graph` though.
+  - Added "hack" dependency on the weights of a DotGeneral operation to the lhs operand of the DotGeneral operation,
+    to hugely decrease temporary memory usage. See issue in https://github.com/openxla/stablehlo/issues/2923
+    
+- Backend `simplego` ("go"):
+  - DotGeneral with accumulation dtypes: it automatically converts the input dtype to the accumulation dtype first.
+    (With the exception of half-precision types, which use float32 as accumulator by default).
+
+# v0.27.1: Minor fixes and updates; ONNX-GoMLX examples now use v0.4.1.
 
 - Package `backends`:
   - Added `QuantGGML` quantization scheme with `GGMLQuantType` enum for native GGML block formats
@@ -10,7 +50,7 @@
   - Added `ShiftLeft`, `ShiftRightArithmetic`, `ShiftRightLogical` operations.
 
 - Package `examples/...`:
-  - Updated `gemma3`, `mxbai-rerank` and `bert-base-ner` to use the new `onnx-gomlx` v0.4.0 API, bumped dependency.
+  - Updated `gemma3`, `mxbai-rerank` and `bert-base-ner` to use the new `onnx-gomlx` v0.4.1 API, bumped dependency.
 
 - Package `graph`:
   - `Floor` and `Ceil` operations now are identity for integer dtypes.

@@ -68,8 +68,8 @@ import (
 	"sync"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 )
 
@@ -158,8 +158,22 @@ func (t *Tensor) Rank() int { return t.shape.Rank() }
 func (t *Tensor) IsScalar() bool { return t.shape.IsScalar() }
 
 // Size returns the number of elements in the tensor.
-// It is a shortcut to `Tensor.Shape().IsScalar()`.
 func (t *Tensor) Size() int { return t.shape.Size() }
+
+// StorageSize returns the number of storage units used to store the tensor.
+// This in most cases is equal to Size(), but for packed dtypes it is smaller.
+func (t *Tensor) StorageSize() int {
+	if t.shape.DType == dtypes.InvalidDType {
+		return 0
+	}
+	flatLen := t.Size()
+	if !t.shape.DType.IsPacked() {
+		return flatLen
+	}
+	perUnit := t.shape.DType.ValuesPerStorageUnit()
+	flatLen = (flatLen + (perUnit - 1)) / perUnit
+	return flatLen
+}
 
 // Memory returns the number of bytes used to store the tensor. An alias to Tensor.Shape().Memory().
 func (t *Tensor) Memory() uintptr { return t.shape.Memory() }

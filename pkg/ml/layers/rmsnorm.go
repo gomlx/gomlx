@@ -19,6 +19,7 @@ type RMSNormBuilder struct {
 	ctx               *context.Context
 	operand           *Node
 	useScale          bool
+	scaleOffset       float64
 	normalizationAxes []int
 	epsilon           float64
 }
@@ -47,6 +48,12 @@ func RMSNorm(ctx *context.Context, operand *Node) *RMSNormBuilder {
 // WithScale sets whether to use the gain parameter in the RMSNorm configuration and returns the updated builder.
 func (rms *RMSNormBuilder) WithScale(useScale bool) *RMSNormBuilder {
 	rms.useScale = useScale
+	return rms
+}
+
+// WithScaleOffset sets a fixed value to be added to the learned scale. Some models like Gemma and Gemma-2 add 1.0 to the scale.
+func (rms *RMSNormBuilder) WithScaleOffset(offset float64) *RMSNormBuilder {
+	rms.scaleOffset = offset
 	return rms
 }
 
@@ -89,6 +96,9 @@ func (rms *RMSNormBuilder) Done() *Node {
 		scaleShape := shapes.Make(dtype, dims...)
 		scaleVar := ctx.WithInitializer(initializers.One).VariableWithShape("scale", scaleShape)
 		scale := scaleVar.ValueGraph(g)
+		if rms.scaleOffset != 0 {
+			scale = AddScalar(scale, rms.scaleOffset)
+		}
 
 		// Apply scale variable: broadcast to all axes not in normAxes.
 		scaleToXShape := slices.Repeat([]int{1}, rank)
