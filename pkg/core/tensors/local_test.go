@@ -455,3 +455,32 @@ func TestAssign(t *testing.T) {
 	require.NoError(t, AssignFlatData(tensor, values))
 	require.Equal(t, values, MustCopyFlatData[float64](tensor))
 }
+
+func TestFromShape(t *testing.T) {
+	testCases := []struct {
+		dtype   dtypes.DType
+		size    int
+		wantLen int
+	}{
+		{dtypes.Uint2, 10, 3},
+		{dtypes.Int2, 10, 3},
+		{dtypes.Uint4, 10, 5},
+		{dtypes.Int4, 10, 5},
+		{dtypes.Uint2, 12, 3},
+		{dtypes.Uint4, 11, 6},
+		{dtypes.Uint2, 0, 0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s_size_%d", tc.dtype, tc.size), func(t *testing.T) {
+			shape := shapes.Make(tc.dtype, tc.size)
+			tensor := FromShape(shape)
+			err := tensor.ConstFlatData(func(flat any) {
+				slice, ok := flat.([]byte)
+				require.Truef(t, ok, "expected []byte flat data for packed dtype %s", tc.dtype)
+				require.Equalf(t, tc.wantLen, len(slice), "invalid flat data length for %s", tc.dtype)
+			})
+			require.NoError(t, err)
+		})
+	}
+}
