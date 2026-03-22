@@ -33,7 +33,7 @@ func TestLeakyReluWithAlpha(t *testing.T) {
 			func(g *Graph) (inputs, outputs []*Node) {
 				x := Const(g, []float32{0, -1, 2, -3, 4, -5, 6})
 				inputs = []*Node{x}
-				outputs = []*Node{LeakyReluWithAlpha(x, 0.1)}
+				outputs = []*Node{LeakyReluWith(x, 0.1)}
 				return
 			}, []any{
 				[]float32{0, -0.1, 2, -0.3, 4, -0.5, 6},

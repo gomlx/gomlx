@@ -1,5 +1,11 @@
 # GoMLX changelog
 
+# Next
+
+- Package `ml/activations`
+  - Added `HardSigmoid` activation.
+  - Modified the activations that take parameters to be suffixed with `With`: `LeakyReluWith`, `HardSigmoidWith`, `HardSwishWith`.
+
 # 0.27.2: DotGeneral with AccumulatorDType; Transformer architecture parameter; 
 
 ### Core:
@@ -17,7 +23,6 @@
   - Simplified code.
 - Package `ml/layers`
   - Added constants to normalization types.
-
 
 ### Backends:
 - Backend `xla`:

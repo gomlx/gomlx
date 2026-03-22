@@ -36,6 +36,7 @@ const (
 	TypeNone Type = iota
 	TypeRelu
 	TypeSigmoid
+	TypeHardSigmoid
 	TypeLeakyRelu
 	TypeSelu
 	TypeSwish
@@ -96,6 +97,8 @@ func Apply(activation Type, x *Node) *Node {
 		return LeakyRelu(x)
 	case TypeSigmoid:
 		return Sigmoid(x)
+	case TypeHardSigmoid:
+		return HardSigmoid(x)
 	case TypeTanh:
 		return Tanh(x)
 	case TypeSwish, TypeSilu:
@@ -149,13 +152,13 @@ func Relu(x *Node) *Node {
 //
 // It returns `x if x >= 0; alpha*x if x < 0`.
 func LeakyRelu(x *Node) *Node {
-	return LeakyReluWithAlpha(x, 0.3)
+	return LeakyReluWith(x, 0.3)
 }
 
-// LeakyReluWithAlpha activation function. It allows a small gradient when the unit is not active (x < 0).
+// LeakyReluWith activation function. It allows a small gradient when the unit is not active (x < 0).
 //
 // It returns `x if x >= 0; alpha*x if x < 0`.
-func LeakyReluWithAlpha(x *Node, alpha float64) *Node {
+func LeakyReluWith(x *Node, alpha float64) *Node {
 	g := x.Graph()
 	return Where(
 		GreaterOrEqual(x, ScalarZero(g, x.DType())),
@@ -182,13 +185,13 @@ func Swish(x *Node) *Node {
 //
 // It returns max(0, min(1, alpha*x + beta)) with default alpha=0.2, beta=0.5.
 func HardSigmoid(x *Node) *Node {
-	return HardSigmoidWithParams(x, 0.2, 0.5)
+	return HardSigmoidWith(x, 0.2, 0.5)
 }
 
-// HardSigmoidWithParams activation function with configurable alpha and beta.
+// HardSigmoidWith activation function with configurable alpha and beta.
 //
 // It returns max(0, min(1, alpha*x + beta)).
-func HardSigmoidWithParams(x *Node, alpha, beta float64) *Node {
+func HardSigmoidWith(x *Node, alpha, beta float64) *Node {
 	g := x.Graph()
 	result := AddScalar(MulScalar(x, alpha), beta)
 	return Min(Max(result, ScalarZero(g, x.DType())), ScalarOne(g, x.DType()))
@@ -205,10 +208,10 @@ func HardSwish(x *Node) *Node {
 	g := x.Graph()
 	scale := Scalar(g, x.DType(), 1.0/6.0)
 	bias := Scalar(g, x.DType(), 0.5)
-	return ParameterizedHardSwish(x, scale, bias)
+	return HardSwishWith(x, scale, bias)
 }
 
-// ParameterizedHardSwish activation function, it allows more flexibility in setting the HardSwish bias
+// HardSwishWith activation function, it allows more flexibility in setting the HardSwish bias
 // and scale parameters.
 //
 // It returns x·Clip((x·scale+bias), 0, 1).
@@ -220,7 +223,7 @@ func HardSwish(x *Node) *Node {
 // See HardSwish for the default parameters and [1] for details and analysis.
 //
 // [1]: "Evaluating Model Performance with Hard-Swish Activation Function Adjustments", https://arxiv.org/abs/2410.06879
-func ParameterizedHardSwish(x, scale, bias *Node) *Node {
+func HardSwishWith(x, scale, bias *Node) *Node {
 	return Mul(x,
 		ClipScalar(Add(Mul(x, scale), bias), 0, 1)) // (x·scale+bias) cliped to [0, 1].
 }
