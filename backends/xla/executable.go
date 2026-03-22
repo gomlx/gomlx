@@ -8,7 +8,7 @@ import (
 
 	"github.com/gomlx/go-xla/pkg/pjrt"
 	"github.com/gomlx/gomlx/backends"
-	humanize "github.com/gomlx/gomlx/internal"
+	"github.com/gomlx/gomlx/internal/humanize"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
