@@ -5,6 +5,8 @@
 - Package `ml/activations`
   - Added `HardSigmoid` activation.
   - Modified the parametrized activations to be suffixed with `With`: `LeakyReluWith`, `HardSigmoidWith`, `HardSwishWith`.
+- Package `tensors`
+  - Improving support for sub-byte data types (`Int4`, `Int2`, `Uint4`, `Uint2`)
 
 # 0.27.2: DotGeneral with AccumulatorDType; Transformer architecture parameter; 
 

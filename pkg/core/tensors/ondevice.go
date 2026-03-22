@@ -420,7 +420,7 @@ func (t *Tensor) lockedMaterializeLocal() error {
 	}
 
 	// Create a flat slice.
-	flatV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), t.Size(), t.Size())
+	flatV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), t.StorageSize(), t.StorageSize())
 	t.local = &local{
 		t:    t,
 		flat: flatV.Interface(),
@@ -455,7 +455,7 @@ func (t *Tensor) ToLocal() error {
 	}
 
 	// Shared tensor: copy data.
-	flatV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), t.Size(), t.Size())
+	flatV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), t.StorageSize(), t.StorageSize())
 	t.local = &local{
 		t:    t,
 		flat: flatV.Interface(),

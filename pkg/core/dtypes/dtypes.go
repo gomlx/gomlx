@@ -187,6 +187,21 @@ func (dtype DType) IsPacked() bool {
 	return dtype.Bits() < 8
 }
 
+// ValuesPerStorageUnit returns the number of values that fit in a storage unit for packed dtypes (uint8/byte for Int2, Int4, etc.).
+// The "storage unit" is returned by dtype.GoType().
+func (dtype DType) ValuesPerStorageUnit() int {
+	switch dtype {
+	case Int4, Uint4:
+		return 2
+	case Int2, Uint2:
+		return 4
+	case Bool:
+		return 1
+	default:
+		return 1
+	}
+}
+
 // SizeForDimensions returns the size in bytes used for the given dimensions.
 // This is a safer method than Size in case the dtype uses an underlying size that is not multiple of 8 bits.
 //
@@ -246,7 +261,7 @@ func (dtype DType) GoType() reflect.Type {
 
 	case Uint4, Uint2, Int4, Int2:
 		// Packed sub-byte types have a Go type `byte`.
-		return reflect.TypeFor[byte]()
+		return reflect.TypeFor[uint8]()
 
 	case Bool:
 		return reflect.TypeFor[bool]()
@@ -296,9 +311,9 @@ func (dtype DType) LowestValue() any {
 	case Int8:
 		return int8(math.MinInt8)
 	case Int4:
-		return byte(0x88) // Two nibbles: [-8, -8]
+		return uint8(0x88) // Two nibbles: [-8, -8]
 	case Int2:
-		return byte(0xEE) // Four crumbs: [-2, -2, -2, -2]
+		return uint8(0xEE) // Four crumbs: [-2, -2, -2, -2]
 
 	case Uint64:
 		return uint64(0)
@@ -309,7 +324,7 @@ func (dtype DType) LowestValue() any {
 	case Uint8:
 		return uint8(0)
 	case Uint4, Uint2:
-		return byte(0)
+		return uint8(0)
 
 	case Bool:
 		return false
@@ -399,9 +414,9 @@ func (dtype DType) SmallestNonZeroValueForDType() any {
 	case Int8:
 		return int8(1)
 	case Int4:
-		return byte(0x11) // Two "nibbles": [1, 1]
+		return uint8(0x11) // Two "nibbles": [1, 1]
 	case Int2:
-		return byte(0x33) // Four "crumbs": [1, 1, 1, 1]
+		return uint8(0x33) // Four "crumbs": [1, 1, 1, 1]
 
 	case Uint64:
 		return uint64(1)
