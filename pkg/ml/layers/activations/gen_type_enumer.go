@@ -7,11 +7,11 @@ import (
 	"strings"
 )
 
-const _TypeName = "NoneReluSigmoidLeakyReluSeluSwishHardSwishSiluTanhGeluGeluApprox"
+const _TypeName = "NoneReluSigmoidHardSigmoidLeakyReluSeluSwishHardSwishSiluTanhGeluGeluApprox"
 
-var _TypeIndex = [...]uint8{0, 4, 8, 15, 24, 28, 33, 42, 46, 50, 54, 64}
+var _TypeIndex = [...]uint8{0, 4, 8, 15, 26, 35, 39, 44, 53, 57, 61, 65, 75}
 
-const _TypeLowerName = "nonerelusigmoidleakyreluseluswishhardswishsilutanhgelugeluapprox"
+const _TypeLowerName = "nonerelusigmoidhardsigmoidleakyreluseluswishhardswishsilutanhgelugeluapprox"
 
 func (i Type) String() string {
 	if i < 0 || i >= Type(len(_TypeIndex)-1) {
@@ -27,17 +27,18 @@ func _TypeNoOp() {
 	_ = x[TypeNone-(0)]
 	_ = x[TypeRelu-(1)]
 	_ = x[TypeSigmoid-(2)]
-	_ = x[TypeLeakyRelu-(3)]
-	_ = x[TypeSelu-(4)]
-	_ = x[TypeSwish-(5)]
-	_ = x[TypeHardSwish-(6)]
-	_ = x[TypeSilu-(7)]
-	_ = x[TypeTanh-(8)]
-	_ = x[TypeGelu-(9)]
-	_ = x[TypeGeluApprox-(10)]
+	_ = x[TypeHardSigmoid-(3)]
+	_ = x[TypeLeakyRelu-(4)]
+	_ = x[TypeSelu-(5)]
+	_ = x[TypeSwish-(6)]
+	_ = x[TypeHardSwish-(7)]
+	_ = x[TypeSilu-(8)]
+	_ = x[TypeTanh-(9)]
+	_ = x[TypeGelu-(10)]
+	_ = x[TypeGeluApprox-(11)]
 }
 
-var _TypeValues = []Type{TypeNone, TypeRelu, TypeSigmoid, TypeLeakyRelu, TypeSelu, TypeSwish, TypeHardSwish, TypeSilu, TypeTanh, TypeGelu, TypeGeluApprox}
+var _TypeValues = []Type{TypeNone, TypeRelu, TypeSigmoid, TypeHardSigmoid, TypeLeakyRelu, TypeSelu, TypeSwish, TypeHardSwish, TypeSilu, TypeTanh, TypeGelu, TypeGeluApprox}
 
 var _TypeNameToValueMap = map[string]Type{
 	_TypeName[0:4]:        TypeNone,
@@ -46,36 +47,39 @@ var _TypeNameToValueMap = map[string]Type{
 	_TypeLowerName[4:8]:   TypeRelu,
 	_TypeName[8:15]:       TypeSigmoid,
 	_TypeLowerName[8:15]:  TypeSigmoid,
-	_TypeName[15:24]:      TypeLeakyRelu,
-	_TypeLowerName[15:24]: TypeLeakyRelu,
-	_TypeName[24:28]:      TypeSelu,
-	_TypeLowerName[24:28]: TypeSelu,
-	_TypeName[28:33]:      TypeSwish,
-	_TypeLowerName[28:33]: TypeSwish,
-	_TypeName[33:42]:      TypeHardSwish,
-	_TypeLowerName[33:42]: TypeHardSwish,
-	_TypeName[42:46]:      TypeSilu,
-	_TypeLowerName[42:46]: TypeSilu,
-	_TypeName[46:50]:      TypeTanh,
-	_TypeLowerName[46:50]: TypeTanh,
-	_TypeName[50:54]:      TypeGelu,
-	_TypeLowerName[50:54]: TypeGelu,
-	_TypeName[54:64]:      TypeGeluApprox,
-	_TypeLowerName[54:64]: TypeGeluApprox,
+	_TypeName[15:26]:      TypeHardSigmoid,
+	_TypeLowerName[15:26]: TypeHardSigmoid,
+	_TypeName[26:35]:      TypeLeakyRelu,
+	_TypeLowerName[26:35]: TypeLeakyRelu,
+	_TypeName[35:39]:      TypeSelu,
+	_TypeLowerName[35:39]: TypeSelu,
+	_TypeName[39:44]:      TypeSwish,
+	_TypeLowerName[39:44]: TypeSwish,
+	_TypeName[44:53]:      TypeHardSwish,
+	_TypeLowerName[44:53]: TypeHardSwish,
+	_TypeName[53:57]:      TypeSilu,
+	_TypeLowerName[53:57]: TypeSilu,
+	_TypeName[57:61]:      TypeTanh,
+	_TypeLowerName[57:61]: TypeTanh,
+	_TypeName[61:65]:      TypeGelu,
+	_TypeLowerName[61:65]: TypeGelu,
+	_TypeName[65:75]:      TypeGeluApprox,
+	_TypeLowerName[65:75]: TypeGeluApprox,
 }
 
 var _TypeNames = []string{
 	_TypeName[0:4],
 	_TypeName[4:8],
 	_TypeName[8:15],
-	_TypeName[15:24],
-	_TypeName[24:28],
-	_TypeName[28:33],
-	_TypeName[33:42],
-	_TypeName[42:46],
-	_TypeName[46:50],
-	_TypeName[50:54],
-	_TypeName[54:64],
+	_TypeName[15:26],
+	_TypeName[26:35],
+	_TypeName[35:39],
+	_TypeName[39:44],
+	_TypeName[44:53],
+	_TypeName[53:57],
+	_TypeName[57:61],
+	_TypeName[61:65],
+	_TypeName[65:75],
 }
 
 // TypeString retrieves an enum value from the enum constants string name.
