@@ -187,13 +187,27 @@ func convertToIntSlice[T int32 | int64](s []T, n int) []int {
 	return out
 }
 
-// quantizedDenseParallel runs rowFn(m) for each row m in [0, M), parallelizing over M rows
-// when workers are available. For M=1 with large workloads, it tiles over N columns instead.
-func quantizedDenseParallel(backend *Backend, M, K, N int, rowFn func(m, nStart, nEnd int)) {
+// parallelTileCount returns the number of parallel work units that
+// quantizedDenseParallel will dispatch for the given dimensions.
+func parallelTileCount(backend *Backend, M, K, N int) int {
+	totalWork := M * K * N
+	if backend == nil || !backend.workers.IsEnabled() || totalWork <= minParallelizeChunk {
+		return M
+	}
+	if M > 1 {
+		return M
+	}
+	tileSize := max(minParallelizeChunk/K, 1)
+	return (N + tileSize - 1) / tileSize
+}
+
+// quantizedDenseParallel parallelizes over M rows, or tiles over N columns when M=1.
+// workerIdx is a dense index in [0, parallelTileCount) identifying the work unit.
+func quantizedDenseParallel(backend *Backend, M, K, N int, rowFn func(workerIdx, m, nStart, nEnd int)) {
 	totalWork := M * K * N
 	if backend == nil || !backend.workers.IsEnabled() || totalWork <= minParallelizeChunk {
 		for m := range M {
-			rowFn(m, 0, N)
+			rowFn(m, m, 0, N)
 		}
 		return
 	}
@@ -204,7 +218,7 @@ func quantizedDenseParallel(backend *Backend, M, K, N int, rowFn func(m, nStart,
 		for m := range M {
 			wg.Add(1)
 			backend.workers.WaitToStart(func() {
-				rowFn(m, 0, N)
+				rowFn(m, m, 0, N)
 				wg.Done()
 			})
 		}
@@ -213,13 +227,16 @@ func quantizedDenseParallel(backend *Backend, M, K, N int, rowFn func(m, nStart,
 		// M=1: tile over N columns for single-token inference.
 		tileSize := max(minParallelizeChunk/K, 1)
 		var wg sync.WaitGroup
+		workerIdx := 0
 		for nStart := 0; nStart < N; nStart += tileSize {
 			nEnd := min(nStart+tileSize, N)
+			idx := workerIdx
 			wg.Add(1)
 			backend.workers.WaitToStart(func() {
-				rowFn(0, nStart, nEnd)
+				rowFn(idx, 0, nStart, nEnd)
 				wg.Done()
 			})
+			workerIdx++
 		}
 		wg.Wait()
 	}
@@ -231,7 +248,7 @@ func quantizedDenseParallel(backend *Backend, M, K, N int, rowFn func(m, nStart,
 // Uses cache-friendly (m, k, n) loop order so both weights[k*N+n] and out[m*N+n] are
 // accessed with stride-1 in the innermost loop.
 func quantizedDenseNF4[T int8 | uint8](backend *Backend, x []float32, weights []T, scales, bias, out []float32, M, K, N, blockSize, numBlocks int) {
-	quantizedDenseParallel(backend, M, K, N, func(m, nStart, nEnd int) {
+	quantizedDenseParallel(backend, M, K, N, func(_, m, nStart, nEnd int) {
 		outSlice := out[m*N+nStart : m*N+nEnd]
 		if bias != nil {
 			copy(outSlice, bias[nStart:nEnd])
@@ -261,7 +278,7 @@ func quantizedDenseNF4[T int8 | uint8](backend *Backend, x []float32, weights []
 // Uses cache-friendly (m, k, n) loop order so both weights[k*N+n] and out[m*N+n] are
 // accessed with stride-1 in the innermost loop.
 func quantizedDenseLinearInt[T int8 | uint8](backend *Backend, x []float32, weights []T, scales, zeroPoints, bias, out []float32, M, K, N, blockSize, numBlocks int) {
-	quantizedDenseParallel(backend, M, K, N, func(m, nStart, nEnd int) {
+	quantizedDenseParallel(backend, M, K, N, func(_, m, nStart, nEnd int) {
 		outSlice := out[m*N+nStart : m*N+nEnd]
 		if bias != nil {
 			copy(outSlice, bias[nStart:nEnd])

@@ -103,22 +103,14 @@ func quantizedDenseGGML(backend *Backend, x []float32, weights []uint8, bias, ou
 	}
 
 	// Pre-allocate per-worker scratch buffers to avoid heap allocation per tile invocation.
-	tileSize := max(minParallelizeChunk/K, 1)
-	numWorkers := M
-	if M == 1 {
-		numWorkers = (N + tileSize - 1) / tileSize
-	}
+	numWorkers := parallelTileCount(backend, M, K, N)
 	scratchBufs := make([][]float32, numWorkers)
 	for i := range scratchBufs {
 		scratchBufs[i] = make([]float32, K)
 	}
 
-	quantizedDenseParallel(backend, M, K, N, func(m, nStart, nEnd int) {
-		bufIdx := m
-		if M == 1 {
-			bufIdx = nStart / tileSize
-		}
-		dequantRow := scratchBufs[bufIdx]
+	quantizedDenseParallel(backend, M, K, N, func(workerIdx, m, nStart, nEnd int) {
+		dequantRow := scratchBufs[workerIdx]
 		for n := nStart; n < nEnd; n++ {
 			rowData := weights[n*bytesPerRow : (n+1)*bytesPerRow]
 			dequantFn(rowData, dequantRow)
