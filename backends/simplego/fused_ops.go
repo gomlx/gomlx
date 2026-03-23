@@ -338,6 +338,16 @@ func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value,
 	return node, nil
 }
 
+// validateGGMLTypeSupported checks that the given GGML type has a fused executor implementation.
+func validateGGMLTypeSupported(opName string, ggmlType backends.GGMLQuantType) error {
+	switch ggmlType {
+	case backends.GGMLQ4_0, backends.GGMLQ8_0, backends.GGMLIQ4NL, backends.GGMLQ4_K, backends.GGMLQ6_K:
+		return nil
+	default:
+		return errors.Wrapf(backends.ErrNotImplemented, "%s: GGML type %s not supported in fused path", opName, ggmlType)
+	}
+}
+
 // deriveGGMLK computes the logical input-features dimension K from bytesPerRow
 // and the GGML block format. GGML weights are stored as [N, bytesPerRow] Uint8,
 // where each row consists of consecutive quantization blocks. Each block packs
@@ -395,13 +405,8 @@ func (f *Function) fusedQuantizedDenseGGML(x, weights, bias backends.Value,
 	bytesPerRow := wNode.shape.Dimensions[1]
 
 	ggmlType := wq.GGMLType
-	// Check if this GGML type has a fused executor.
-	switch ggmlType {
-	case backends.GGMLQ4_0, backends.GGMLQ8_0, backends.GGMLIQ4NL, backends.GGMLQ4_K, backends.GGMLQ6_K:
-		// Supported by fused executor.
-	default:
-		return nil, errors.Wrapf(backends.ErrNotImplemented,
-			"FusedQuantizedDense(GGML): type %s not supported in fused path", ggmlType)
+	if err := validateGGMLTypeSupported("FusedQuantizedDense(GGML)", ggmlType); err != nil {
+		return nil, err
 	}
 	K, err := deriveGGMLK("FusedQuantizedDense(GGML)", bytesPerRow, ggmlType)
 	if err != nil {
@@ -437,31 +442,32 @@ func (f *Function) fusedQuantizedDenseGGML(x, weights, bias backends.Value,
 	return node, nil
 }
 
-// nodeFusedQuantizedGather stores parameters for the GGML quantized gather op.
-type nodeFusedQuantizedGather struct {
+// nodeQuantizedEmbeddingLookup stores parameters for the quantized embedding lookup op.
+type nodeQuantizedEmbeddingLookup struct {
 	ggmlType backends.GGMLQuantType
 	ggmlK    int // Logical embedding dimension (valuesPerBlock * numBlocks).
 }
 
-func (d *nodeFusedQuantizedGather) EqualNodeData(other nodeDataComparable) bool {
-	o := other.(*nodeFusedQuantizedGather)
+func (d *nodeQuantizedEmbeddingLookup) EqualNodeData(other nodeDataComparable) bool {
+	o := other.(*nodeQuantizedEmbeddingLookup)
 	return d.ggmlType == o.ggmlType && d.ggmlK == o.ggmlK
 }
 
-// FusedQuantizedGather performs a quantized gather (row lookup) with on-the-fly dequantization.
+// QuantizedEmbeddingLookup performs a quantized embedding lookup (row gather)
+// with on-the-fly dequantization.
 // data: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
 // indices: integer tensor with last dim = 1 (same as Gather convention).
 // Output: [batch..., K] Float32 where K is derived from the block format.
-func (f *Function) FusedQuantizedGather(data, indices backends.Value,
+func (f *Function) QuantizedEmbeddingLookup(data, indices backends.Value,
 	wq *backends.Quantization) (backends.Value, error) {
 
 	if wq.Scheme != backends.QuantGGML {
 		return nil, errors.Wrapf(backends.ErrNotImplemented,
-			"FusedQuantizedGather: only QuantGGML scheme is supported, got %s -- "+
+			"QuantizedEmbeddingLookup: only QuantGGML scheme is supported, got %s -- "+
 				"please create a feature request if you need support for a different quantization scheme", wq.Scheme)
 	}
 
-	inputs, err := f.verifyAndCastValues("FusedQuantizedGather", data, indices)
+	inputs, err := f.verifyAndCastValues("QuantizedEmbeddingLookup", data, indices)
 	if err != nil {
 		return nil, err
 	}
@@ -470,31 +476,26 @@ func (f *Function) FusedQuantizedGather(data, indices backends.Value,
 
 	// Validate data: [vocabSize, bytesPerRow] Uint8.
 	if dNode.shape.Rank() != 2 || dNode.shape.DType != dtypes.Uint8 {
-		return nil, errors.Errorf("FusedQuantizedGather: data must be [vocabSize, bytesPerRow] Uint8, got %v %s",
+		return nil, errors.Errorf("QuantizedEmbeddingLookup: data must be [vocabSize, bytesPerRow] Uint8, got %v %s",
 			dNode.shape.Dimensions, dNode.shape.DType)
 	}
 	bytesPerRow := dNode.shape.Dimensions[1]
 
 	// Validate indices: must be integer, last dim = 1.
 	if !iNode.shape.DType.IsInt() {
-		return nil, errors.Errorf("FusedQuantizedGather: indices must be integer, got %s", iNode.shape.DType)
+		return nil, errors.Errorf("QuantizedEmbeddingLookup: indices must be integer, got %s", iNode.shape.DType)
 	}
 	if iNode.shape.Rank() < 1 || iNode.shape.Dimensions[iNode.shape.Rank()-1] != 1 {
-		return nil, errors.Errorf("FusedQuantizedGather: indices last dim must be 1, got shape %v", iNode.shape.Dimensions)
+		return nil, errors.Errorf("QuantizedEmbeddingLookup: indices last dim must be 1, got shape %v", iNode.shape.Dimensions)
 	}
 
-	// Check if this GGML type has a fused executor.
 	ggmlType := wq.GGMLType
-	switch ggmlType {
-	case backends.GGMLQ4_0, backends.GGMLQ8_0, backends.GGMLIQ4NL, backends.GGMLQ4_K, backends.GGMLQ6_K:
-		// Supported by fused executor.
-	default:
-		return nil, errors.Wrapf(backends.ErrNotImplemented,
-			"FusedQuantizedGather: type %s not supported in fused path", ggmlType)
+	if err := validateGGMLTypeSupported("QuantizedEmbeddingLookup", ggmlType); err != nil {
+		return nil, err
 	}
 
 	// Derive K from bytesPerRow.
-	K, err := deriveGGMLK("FusedQuantizedGather", bytesPerRow, ggmlType)
+	K, err := deriveGGMLK("QuantizedEmbeddingLookup", bytesPerRow, ggmlType)
 	if err != nil {
 		return nil, err
 	}
@@ -506,11 +507,11 @@ func (f *Function) FusedQuantizedGather(data, indices backends.Value,
 	outDims[len(outDims)-1] = K
 	outShape := shapes.Make(dtypes.Float32, outDims...)
 
-	nodeData := &nodeFusedQuantizedGather{
+	nodeData := &nodeQuantizedEmbeddingLookup{
 		ggmlType: ggmlType,
 		ggmlK:    K,
 	}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedQuantizedGather, outShape, inputs, nodeData)
+	node, _ := f.getOrCreateNode(backends.OpTypeQuantizedEmbeddingLookup, outShape, inputs, nodeData)
 	return node, nil
 }
 

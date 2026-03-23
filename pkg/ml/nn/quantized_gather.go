@@ -33,9 +33,9 @@ func QuantizedGather(table, indices *Node, quant *Quantization) *Node {
 	}
 	if ggml.CanDecompose(quant.GGMLType) {
 		return InternalFusedOpCaller(
-			func() *Node { return BackendFusedQuantizedGather(table, indices, quant) },
-			func() *Node { return ggml.GatherDecomposed(table, indices, quant.GGMLType) },
+			func() *Node { return BackendQuantizedEmbeddingLookup(table, indices, quant) },
+			func() *Node { return ggml.EmbeddingLookupDecomposed(table, indices, quant.GGMLType) },
 		)
 	}
-	return BackendFusedQuantizedGather(table, indices, quant)
+	return BackendQuantizedEmbeddingLookup(table, indices, quant)
 }

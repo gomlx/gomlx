@@ -26,11 +26,17 @@ func CanDecompose(t backends.GGMLQuantType) bool {
 	}
 }
 
-// Dequant dequantizes GGML block-format weights to [N, K] Float32 using graph primitives.
+// Dequantize dequantizes GGML block-format weights to [N, K] Float32 using graph primitives.
 //
-// weights must be [N, bytesPerRow] Uint8 in native GGML block layout.
-// N is the number of output rows (output features for dense, vocab size for gather).
-func Dequant(weights *Node, ggmlType backends.GGMLQuantType, N int) *Node {
+// weights is shaped [N, numBlocks * bytesPerBlock] Uint8 in native GGML block layout,
+// where N is the number of output rows (output features for dense, vocab size for embedding lookup).
+// K is the logical feature dimension: K = numBlocks * valuesPerBlock, and is fixed per
+// quantization type (e.g. Q4_0 has 32 values per 18-byte block).
+//
+// N is passed explicitly rather than inferred from weights.Shape() because the caller may
+// have reshaped gathered rows into [totalRows, bytesPerRow] where totalRows differs from
+// the original table's first dimension.
+func Dequantize(weights *Node, ggmlType backends.GGMLQuantType, N int) *Node {
 	bytesPerRow := weights.Shape().Dimensions[1]
 	bpb := ggmlType.BytesPerBlock()
 	numBlocks := bytesPerRow / bpb
@@ -43,7 +49,7 @@ func Dequant(weights *Node, ggmlType backends.GGMLQuantType, N int) *Node {
 	case backends.GGMLIQ4NL:
 		return dequantIQ4NL(weights, N, numBlocks)
 	default:
-		panic("ggml.Dequant: unsupported type " + ggmlType.String())
+		panic("ggml.Dequantize: unsupported type " + ggmlType.String())
 	}
 }
 
@@ -93,7 +99,7 @@ func extractNibbleBlock(weights *Node, N, numBlocks int) (scale, combined *Node)
 
 // dequantQ4_0 dequantizes Q4_0 blocks: 2-byte fp16 scale + 16 packed nibble bytes per block.
 // Each byte holds two 4-bit values: low nibble → first 16 values, high nibble → last 16.
-// Dequant: output[i] = scale * (nibble - 8).
+// Dequantize: output[i] = scale * (nibble - 8).
 // Returns [N, K] Float32 where K = numBlocks * 32.
 func dequantQ4_0(weights *Node, N, numBlocks int) *Node {
 	g := weights.Graph()

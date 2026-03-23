@@ -176,22 +176,22 @@ func BackendFusedQuantizedDense(x, weights, bias *Node,
 	return node
 }
 
-// nodeInputsFusedQuantizedGather holds the inputs used for the call to backends.FusedQuantizedGather.
+// nodeInputsQuantizedEmbeddingLookup holds the inputs used for the call to backends.QuantizedEmbeddingLookup.
 // Hand-written (not generated) to match the pattern of BackendFusedQuantizedDense: it accepts
 // a graph-level *Quantization and converts it to backends.Quantization via toBackend().
-type nodeInputsFusedQuantizedGather struct {
+type nodeInputsQuantizedEmbeddingLookup struct {
 	data    *Node
 	indices *Node
 	tq      *Quantization
 }
 
 // Type implements the interface NodeInputs.
-func (ni *nodeInputsFusedQuantizedGather) Type() NodeType {
-	return NodeTypeFusedQuantizedGather
+func (ni *nodeInputsQuantizedEmbeddingLookup) Type() NodeType {
+	return NodeTypeQuantizedEmbeddingLookup
 }
 
 // String implements the interface NodeInputs.
-func (ni *nodeInputsFusedQuantizedGather) String() string {
+func (ni *nodeInputsQuantizedEmbeddingLookup) String() string {
 	return fmt.Sprintf("%s(data=[#%d], indices=[#%d], scheme=%s, ggmlType=%s)",
 		ni.Type(),
 		ni.data.Id(),
@@ -201,23 +201,24 @@ func (ni *nodeInputsFusedQuantizedGather) String() string {
 	)
 }
 
-// BackendFusedQuantizedGather performs a quantized gather (row lookup) with on-the-fly dequantization.
+// BackendQuantizedEmbeddingLookup performs a quantized embedding lookup (row gather)
+// with on-the-fly dequantization.
 // Internal: prefer nn.QuantizedGather which handles fallback and gradients.
-func BackendFusedQuantizedGather(data, indices *Node, tq *Quantization) *Node {
+func BackendQuantizedEmbeddingLookup(data, indices *Node, tq *Quantization) *Node {
 	if tq == nil {
-		exceptions.Panicf("BackendFusedQuantizedGather: tq must not be nil")
+		exceptions.Panicf("BackendQuantizedEmbeddingLookup: tq must not be nil")
 	}
 
 	inputNodes := []*Node{data, indices}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 
-	inputs := &nodeInputsFusedQuantizedGather{
+	inputs := &nodeInputsQuantizedEmbeddingLookup{
 		data:    data,
 		indices: indices,
 		tq:      tq,
 	}
 
-	result, err := g.currentFunc.backendFunc.FusedQuantizedGather(
+	result, err := g.currentFunc.backendFunc.QuantizedEmbeddingLookup(
 		data.outputOps[0], indices.outputOps[0], tq.toBackend())
 	if err != nil {
 		panic(err)

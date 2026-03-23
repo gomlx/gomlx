@@ -7,7 +7,7 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 )
 
-// GatherDecomposed performs a quantized embedding lookup using graph-level dequantization.
+// EmbeddingLookupDecomposed performs a quantized embedding lookup using graph-level dequantization.
 //
 // It gathers raw Uint8 rows from the quantized table, then dequantizes only the
 // selected rows to Float32.
@@ -18,7 +18,7 @@ import (
 //   - ggmlType: the GGML block format (Q4_0, Q8_0, IQ4_NL).
 //
 // Output: Float32 tensor with shape [batch..., K] where K is the logical embedding dimension.
-func GatherDecomposed(table, indices *Node, ggmlType backends.GGMLQuantType) *Node {
+func EmbeddingLookupDecomposed(table, indices *Node, ggmlType backends.GGMLQuantType) *Node {
 	tableShape := table.Shape()
 	bytesPerRow := tableShape.Dimensions[1]
 	bpb := ggmlType.BytesPerBlock()
@@ -39,7 +39,7 @@ func GatherDecomposed(table, indices *Node, ggmlType backends.GGMLQuantType) *No
 	gathered = Reshape(gathered, totalRows, bytesPerRow)
 
 	// Dequantize: [totalRows, K] Float32
-	dequantized := Dequant(gathered, ggmlType, totalRows)
+	dequantized := Dequantize(gathered, ggmlType, totalRows)
 
 	// Reshape back to [batch..., K]
 	outDims := make([]int, len(batchDims)+1)

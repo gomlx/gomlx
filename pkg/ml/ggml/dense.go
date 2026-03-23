@@ -31,7 +31,7 @@ func DenseDecomposed(x, weights *Node, ggmlType backends.GGMLQuantType,
 	N := weights.Shape().Dimensions[0]
 
 	// Dequantize weights → [N, K] Float32.
-	dequantW := Dequant(weights, ggmlType, N)
+	dequantW := Dequantize(weights, ggmlType, N)
 
 	// Transpose to [K, N] for matmul.
 	dequantW = Transpose(dequantW, 0, 1) // [K, N]

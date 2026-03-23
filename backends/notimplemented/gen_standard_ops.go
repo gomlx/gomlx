@@ -318,26 +318,6 @@ func (f Function) FusedQuantizedDense(x backends.Value, weights backends.Value, 
 	return nil, f.baseErrFn(backends.OpTypeFusedQuantizedDense)
 }
 
-// FusedQuantizedGather performs a quantized gather (row lookup) with on-the-fly dequantization.
-//
-// This is the quantized analogue of Gather for embedding lookups, inspired by
-// llama.cpp's ggml_get_rows. For now it is only implemented for the GGML
-// quantization scheme, but could be extended for others if/when needed.
-//
-// Inputs:
-//   - data: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
-//   - indices: integer tensor with last dimension = 1 (same as Gather convention).
-//     For embeddings: [batch, seqLen, 1].
-//   - dataQuantization: describes how to dequantize the data rows. Must not be nil.
-//     Only QuantGGML scheme is currently supported.
-//
-// Output: float32 tensor with shape [batch..., K] where K = (bytesPerRow / bytesPerBlock) * valuesPerBlock.
-//
-//	For embeddings with indices [batch, seqLen, 1]: output is [batch, seqLen, K].
-func (f Function) FusedQuantizedGather(data backends.Value, indices backends.Value, dataQuantization *backends.Quantization) (backends.Value, error) {
-	return nil, f.baseErrFn(backends.OpTypeFusedQuantizedGather)
-}
-
 // FusedScaledDotProductAttention computes multi-head scaled dot-product attention.
 //
 // output = softmax(query @ key^T * scale + mask) @ value, computed per-head with GQA support.
@@ -593,6 +573,27 @@ func (f Function) Pad(x backends.Value, fillValue backends.Value, axesConfig ...
 // Pow returns the Op that represents the output of the corresponding operation.
 func (f Function) Pow(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypePow)
+}
+
+// QuantizedEmbeddingLookup performs a quantized embedding lookup (row gather)
+// with on-the-fly dequantization.
+//
+// This is the quantized analogue of embedding lookup, inspired by
+// llama.cpp's ggml_get_rows. For now it is only implemented for the GGML
+// quantization scheme, but could be extended for others if/when needed.
+//
+// Inputs:
+//   - data: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
+//   - indices: integer tensor with last dimension = 1 (same as Gather convention).
+//     For embeddings: [batch, seqLen, 1].
+//   - dataQuantization: describes how to dequantize the data rows. Must not be nil.
+//     Only QuantGGML scheme is currently supported.
+//
+// Output: float32 tensor with shape [batch..., K] where K = (bytesPerRow / bytesPerBlock) * valuesPerBlock.
+//
+//	For embeddings with indices [batch, seqLen, 1]: output is [batch, seqLen, K].
+func (f Function) QuantizedEmbeddingLookup(data backends.Value, indices backends.Value, dataQuantization *backends.Quantization) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeQuantizedEmbeddingLookup)
 }
 
 // Real return the real part of a complex number. It returns x if the x is a float number.

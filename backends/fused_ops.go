@@ -319,9 +319,10 @@ type FusedOps interface {
 		causal bool,
 		options *ScaledDotProductAttentionConfig) (Value, error)
 
-	// FusedQuantizedGather performs a quantized gather (row lookup) with on-the-fly dequantization.
+	// QuantizedEmbeddingLookup performs a quantized embedding lookup (row gather)
+	// with on-the-fly dequantization.
 	//
-	// This is the quantized analogue of Gather for embedding lookups, inspired by
+	// This is the quantized analogue of embedding lookup, inspired by
 	// llama.cpp's ggml_get_rows. For now it is only implemented for the GGML
 	// quantization scheme, but could be extended for others if/when needed.
 	//
@@ -334,7 +335,7 @@ type FusedOps interface {
 	//
 	// Output: float32 tensor with shape [batch..., K] where K = (bytesPerRow / bytesPerBlock) * valuesPerBlock.
 	//   For embeddings with indices [batch, seqLen, 1]: output is [batch, seqLen, K].
-	FusedQuantizedGather(data, indices Value,
+	QuantizedEmbeddingLookup(data, indices Value,
 		dataQuantization *Quantization) (Value, error)
 
 	// FusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.

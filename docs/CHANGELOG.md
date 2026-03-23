@@ -46,7 +46,7 @@
   - Added `QuantGGML` quantization scheme with `GGMLQuantType` enum for native GGML block formats
     (Q4_0, Q8_0, IQ4_NL, Q4_K, Q6_K).
   - Added `IQ4NLLookupTable` for IQ4_NL non-linear dequantization.
-  - Added `FusedQuantizedGather` to `FusedOps` interface for quantized embedding lookups.
+  - Added `QuantizedEmbeddingLookup` to `FusedOps` interface for quantized embedding lookups.
   - Added `ShiftLeft`, `ShiftRightArithmetic`, `ShiftRightLogical` operations.
 
 - Package `examples/...`:
@@ -54,7 +54,7 @@
 
 - Package `graph`:
   - `Floor` and `Ceil` operations now are identity for integer dtypes.
-  - Added `BackendFusedQuantizedGather` graph-level op.
+  - Added `BackendQuantizedEmbeddingLookup` graph-level op.
   - Added `LogicalShiftLeft`, `LogicalShiftRight` ops for sub-byte unpacking.
 
 - Package `nn`:
@@ -65,7 +65,7 @@
   - Fixed missing annotation/stacktrace on not-implemented errors.
   - Implemented `Pad()` operation (and add some more tests in `graph.TestPad`).
   - Added `FusedQuantizedDense` support for GGML-quantized weights (Q4_0, Q8_0, IQ4_NL, Q4_K, Q6_K).
-  - Added `FusedQuantizedGather` for quantized embedding lookups with on-the-fly dequantization.
+  - Added `QuantizedEmbeddingLookup` for quantized embedding lookups with on-the-fly dequantization.
   - Added shift operation executors.
   - Fixed `execBitcast` buffer reuse for cross-bit-width types (e.g. Uint8 → Float16). See #374.
 

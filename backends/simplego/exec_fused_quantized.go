@@ -12,7 +12,7 @@ import (
 
 func init() {
 	setNodeExecutor(backends.OpTypeFusedQuantizedDense, priorityTyped, execFusedQuantizedDense)
-	setNodeExecutor(backends.OpTypeFusedQuantizedGather, priorityTyped, execFusedQuantizedGather)
+	setNodeExecutor(backends.OpTypeQuantizedEmbeddingLookup, priorityTyped, execQuantizedEmbeddingLookup)
 }
 
 // execFusedQuantizedDense implements scalar dequant + matmul + bias + activation.
@@ -123,11 +123,11 @@ func unpackWeightsToInt8(wBuf *Buffer) any {
 	return unpacked
 }
 
-// execFusedQuantizedGather performs quantized embedding lookup.
+// execQuantizedEmbeddingLookup performs quantized embedding lookup.
 // Inputs: [data, indices]. Data is [vocabSize, bytesPerRow] Uint8.
 // Indices are integer with last dim = 1. Output is [batch..., K] Float32.
-func execFusedQuantizedGather(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
-	data := node.data.(*nodeFusedQuantizedGather)
+func execQuantizedEmbeddingLookup(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
+	data := node.data.(*nodeQuantizedEmbeddingLookup)
 	dataBuf := inputs[0]
 	indicesBuf := inputs[1]
 
@@ -149,14 +149,14 @@ func execFusedQuantizedGather(backend *Backend, node *Node, inputs []*Buffer, _ 
 	numIndices := indicesBuf.shape.Size() / indicesBuf.shape.Dimensions[indicesBuf.shape.Rank()-1]
 	dequantRow := make([]float32, K)
 
-	indices, err := flatToIntSlice(indicesBuf.flat, numIndices)
+	indices, err := quantGatherIntSliceOfFlat(indicesBuf.flat, numIndices)
 	if err != nil {
-		return nil, errors.Wrapf(err, "FusedQuantizedGather")
+		return nil, errors.Wrapf(err, "QuantizedEmbeddingLookup")
 	}
 	vocabSize := dataBuf.shape.Dimensions[0]
 	for i, rowIdx := range indices {
 		if rowIdx < 0 || rowIdx >= vocabSize {
-			return nil, errors.Errorf("FusedQuantizedGather: index %d out of range [0, %d)", rowIdx, vocabSize)
+			return nil, errors.Errorf("QuantizedEmbeddingLookup: index %d out of range [0, %d)", rowIdx, vocabSize)
 		}
 		rowData := dataBytes[rowIdx*bytesPerRow : (rowIdx+1)*bytesPerRow]
 		dequantFn(rowData, dequantRow)
@@ -166,26 +166,27 @@ func execFusedQuantizedGather(backend *Backend, node *Node, inputs []*Buffer, _ 
 	return output, nil
 }
 
-// flatToIntSlice converts a flat index slice ([]int32, []int64, or []int) to []int.
-func flatToIntSlice(flat any, n int) ([]int, error) {
+// quantGatherIntSliceOfFlat converts a flat index slice ([]int32, []int64, or []int) to []int.
+func quantGatherIntSliceOfFlat(flat any, n int) ([]int, error) {
 	switch s := flat.(type) {
 	case []int32:
-		out := make([]int, n)
-		for i := range n {
-			out[i] = int(s[i])
-		}
-		return out, nil
+		return convertToIntSlice(s, n), nil
 	case []int64:
-		out := make([]int, n)
-		for i := range n {
-			out[i] = int(s[i])
-		}
-		return out, nil
+		return convertToIntSlice(s, n), nil
 	case []int:
 		return s[:n], nil
 	default:
 		return nil, errors.Errorf("unsupported indices type %T", flat)
 	}
+}
+
+// convertToIntSlice converts the first n elements of an integer slice to []int.
+func convertToIntSlice[T int32 | int64](s []T, n int) []int {
+	out := make([]int, n)
+	for i := range n {
+		out[i] = int(s[i])
+	}
+	return out
 }
 
 // quantizedDenseParallel runs rowFn(m) for each row m in [0, M), parallelizing over M rows

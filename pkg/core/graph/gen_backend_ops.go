@@ -67,7 +67,6 @@ const (
 	NodeTypeFusedGelu
 	NodeTypeFusedLayerNorm
 	NodeTypeFusedQuantizedDense
-	NodeTypeFusedQuantizedGather
 	NodeTypeFusedScaledDotProductAttention
 	NodeTypeFusedSoftmax
 	NodeTypeGather
@@ -100,6 +99,7 @@ const (
 	NodeTypePad
 	NodeTypeParameter
 	NodeTypePow
+	NodeTypeQuantizedEmbeddingLookup
 	NodeTypeRNGBitGenerator
 	NodeTypeReal
 	NodeTypeReduceBitwiseAnd
