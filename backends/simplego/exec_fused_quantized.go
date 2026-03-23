@@ -147,7 +147,6 @@ func execQuantizedEmbeddingLookup(backend *Backend, node *Node, inputs []*Buffer
 	}
 
 	numIndices := indicesBuf.shape.Size() / indicesBuf.shape.Dimensions[indicesBuf.shape.Rank()-1]
-	dequantRow := make([]float32, K)
 
 	indices, err := quantGatherIntSliceOfFlat(indicesBuf.flat, numIndices)
 	if err != nil {
@@ -159,8 +158,7 @@ func execQuantizedEmbeddingLookup(backend *Backend, node *Node, inputs []*Buffer
 			return nil, errors.Errorf("QuantizedEmbeddingLookup: index %d out of range [0, %d)", rowIdx, vocabSize)
 		}
 		rowData := dataBytes[rowIdx*bytesPerRow : (rowIdx+1)*bytesPerRow]
-		dequantFn(rowData, dequantRow)
-		copy(out[i*K:(i+1)*K], dequantRow)
+		dequantFn(rowData, out[i*K:(i+1)*K])
 	}
 
 	return output, nil

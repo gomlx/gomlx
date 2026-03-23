@@ -4,7 +4,6 @@ package simplego
 
 import (
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 func init() {
@@ -40,10 +39,9 @@ func execBitcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 		} else if !sameBitWidth {
 			// For different-bit-width bitcasts, reuse only when both source and
 			// target use the same underlying Go storage type. Sub-byte types
-			// (Int2, Uint2, Int4, Uint4) and Uint8 all store as []uint8.
+			// (Int2, Uint2, Int4, Uint4) all store as []uint8.
 			_, srcIsUint8 := src.flat.([]uint8)
-			dstIsUint8Storage := targetDType == dtypes.Uint8 || targetDType.Bits() < 8
-			canReuse = srcIsUint8 && dstIsUint8Storage
+			canReuse = srcIsUint8 && targetDType.Bits() < 8
 		}
 	}
 	if canReuse {

@@ -43,11 +43,10 @@
 package simplego
 
 import (
-	"math"
-
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
+	"github.com/x448/float16"
 )
 
 // execFusedQuantizedDenseGGML handles GGML-quantized weights.
@@ -103,8 +102,23 @@ func quantizedDenseGGML(backend *Backend, x []float32, weights []uint8, bias, ou
 		return err
 	}
 
+	// Pre-allocate per-worker scratch buffers to avoid heap allocation per tile invocation.
+	tileSize := max(minParallelizeChunk/K, 1)
+	numWorkers := M
+	if M == 1 {
+		numWorkers = (N + tileSize - 1) / tileSize
+	}
+	scratchBufs := make([][]float32, numWorkers)
+	for i := range scratchBufs {
+		scratchBufs[i] = make([]float32, K)
+	}
+
 	quantizedDenseParallel(backend, M, K, N, func(m, nStart, nEnd int) {
-		dequantRow := make([]float32, K)
+		bufIdx := m
+		if M == 1 {
+			bufIdx = nStart / tileSize
+		}
+		dequantRow := scratchBufs[bufIdx]
 		for n := nStart; n < nEnd; n++ {
 			rowData := weights[n*bytesPerRow : (n+1)*bytesPerRow]
 			dequantFn(rowData, dequantRow)
@@ -144,27 +158,7 @@ func ggmlDequantFunc(ggmlType backends.GGMLQuantType) (func(data []uint8, output
 
 // ggmlFp16LE decodes a little-endian fp16 value from two bytes into float32.
 func ggmlFp16LE(lo, hi uint8) float32 {
-	raw := uint32(lo) | uint32(hi)<<8
-	sign := raw >> 15
-	exp := int32((raw >> 10) & 0x1F)
-	mant := raw & 0x3FF
-	if exp == 0 {
-		if mant == 0 {
-			return math.Float32frombits(sign << 31)
-		}
-		exp = 1
-		for mant&0x400 == 0 {
-			mant <<= 1
-			exp--
-		}
-		mant &= 0x3FF
-		exp += 127 - 15
-	} else if exp == 31 {
-		return math.Float32frombits((sign << 31) | 0x7F800000 | (mant << 13))
-	} else {
-		exp += 127 - 15
-	}
-	return math.Float32frombits((sign << 31) | (uint32(exp) << 23) | (mant << 13))
+	return float16.Frombits(uint16(lo) | uint16(hi)<<8).Float32()
 }
 
 // dequantQ8_0Row converts Q8_0 quantized blocks to float32.
