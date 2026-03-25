@@ -3,6 +3,8 @@
 package simplego
 
 import (
+	"reflect"
+
 	"github.com/gomlx/gomlx/backends"
 )
 
@@ -41,7 +43,8 @@ func execBitcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 			// target use the same underlying Go storage type. Sub-byte types
 			// (Int2, Uint2, Int4, Uint4) all store as []uint8.
 			_, srcIsUint8 := src.flat.([]uint8)
-			canReuse = srcIsUint8 && targetDType.Bits() < 8
+			tgtIsUint8 := targetDType.GoType().Kind() == reflect.Uint8
+			canReuse = srcIsUint8 && tgtIsUint8
 		}
 	}
 	if canReuse {

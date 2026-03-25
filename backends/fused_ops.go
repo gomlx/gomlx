@@ -322,7 +322,7 @@ type FusedOps interface {
 	// QuantizedEmbeddingLookup performs a quantized embedding lookup (row gather)
 	// with on-the-fly dequantization.
 	//
-	// This is the quantized analogue of embedding lookup, inspired by
+	// This is the quantized analogue of Gather for embedding lookups, inspired by
 	// llama.cpp's ggml_get_rows. For now it is only implemented for the GGML
 	// quantization scheme, but could be extended for others if/when needed.
 	//

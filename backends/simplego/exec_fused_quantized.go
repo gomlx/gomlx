@@ -7,6 +7,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 )
 
@@ -73,9 +74,16 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 		zeroPoints = zeroPointsBuf.flat.([]float32)
 	}
 
-	// For packed sub-byte weights (from Bitcast), unpack nibbles before processing.
-	// Packed buffers have len(flat) < shape.Size() (2 nibbles per byte).
-	wFlat := unpackWeightsToInt8(wBuf)
+	// For packed sub-byte weights (from Bitcast), unpack nibbles via the buffer pool
+	// and ConvertDType infrastructure. Non-sub-byte types pass through unchanged.
+	unpackedBuf, unpackedPooled, err := unpackWeightsToBuffer(backend, wBuf)
+	if err != nil {
+		return nil, err
+	}
+	if unpackedPooled {
+		defer backend.putBuffer(unpackedBuf)
+	}
+	wFlat := unpackedBuf.flat
 
 	switch data.scheme {
 	case backends.QuantNF4:
@@ -105,22 +113,37 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 	return output, nil
 }
 
-// unpackWeightsToInt8 unpacks sub-byte weight data (Int4, Uint4) from packed
-// []byte storage into []int8 (one value per element) for the matmul kernel.
-// For non-sub-byte types, returns the flat data as-is.
-func unpackWeightsToInt8(wBuf *Buffer) any {
-	var unpackFn unpackNibblesFn
+// unpackWeightsToBuffer unpacks sub-byte weight data (Int4, Uint4) into a pooled
+// buffer using the ConvertDType infrastructure. For non-sub-byte types, returns the
+// original buffer unchanged.
+//
+// Returns the (possibly new) buffer, whether it was allocated from the pool
+// (caller must putBuffer), and any error.
+func unpackWeightsToBuffer(backend *Backend, wBuf *Buffer) (*Buffer, bool, error) {
+	var targetDType dtypes.DType
 	switch wBuf.shape.DType {
-	case dtypes.Uint4:
-		unpackFn = unpackUint4Nibbles
 	case dtypes.Int4:
-		unpackFn = unpackInt4Nibbles
+		targetDType = dtypes.Int8
+	case dtypes.Uint4:
+		targetDType = dtypes.Uint8
 	default:
-		return wBuf.flat
+		return wBuf, false, nil
 	}
-	unpacked := make([]int8, wBuf.shape.Size())
-	unpackFn(wBuf.flat.([]byte), unpacked)
-	return unpacked
+
+	outBuf, err := backend.getBuffer(targetDType, wBuf.shape.Size())
+	if err != nil {
+		return nil, false, err
+	}
+	outBuf.shape = shapes.Make(targetDType, wBuf.shape.Dimensions...)
+
+	convertFnAny, err := convertDTypePairMap.Get(wBuf.shape.DType, targetDType)
+	if err != nil {
+		backend.putBuffer(outBuf)
+		return nil, false, err
+	}
+	convertFn := convertFnAny.(convertFnType)
+	convertFn(wBuf, outBuf)
+	return outBuf, true, nil
 }
 
 // execQuantizedEmbeddingLookup performs quantized embedding lookup.
@@ -146,50 +169,61 @@ func execQuantizedEmbeddingLookup(backend *Backend, node *Node, inputs []*Buffer
 		return nil, err
 	}
 
-	numIndices := indicesBuf.shape.Size() / indicesBuf.shape.Dimensions[indicesBuf.shape.Rank()-1]
+	// Last dim is pre-validated to be 1, so total elements == number of indices.
+	numIndices := indicesBuf.shape.Size()
 
-	indices, err := quantGatherIntSliceOfFlat(indicesBuf.flat, numIndices)
+	// Convert indices to int64 via the buffer pool and ConvertDType infrastructure.
+	idxBuf, idxPooled, err := convertIndicesToInt64(backend, indicesBuf)
 	if err != nil {
 		return nil, errors.Wrapf(err, "QuantizedEmbeddingLookup")
 	}
-	vocabSize := dataBuf.shape.Dimensions[0]
-	for i, rowIdx := range indices {
+	if idxPooled {
+		defer backend.putBuffer(idxBuf)
+	}
+	indices := idxBuf.flat.([]int64)
+
+	vocabSize := int64(dataBuf.shape.Dimensions[0])
+	for i, rowIdx := range indices[:numIndices] {
 		if rowIdx < 0 || rowIdx >= vocabSize {
 			return nil, errors.Errorf("QuantizedEmbeddingLookup: index %d out of range [0, %d)", rowIdx, vocabSize)
 		}
-		rowData := dataBytes[rowIdx*bytesPerRow : (rowIdx+1)*bytesPerRow]
+		rowStart := rowIdx * int64(bytesPerRow)
+		rowData := dataBytes[rowStart : rowStart+int64(bytesPerRow)]
 		dequantFn(rowData, out[i*K:(i+1)*K])
 	}
 
 	return output, nil
 }
 
-// quantGatherIntSliceOfFlat converts a flat index slice ([]int32, []int64, or []int) to []int.
-func quantGatherIntSliceOfFlat(flat any, n int) ([]int, error) {
-	switch s := flat.(type) {
-	case []int32:
-		return convertToIntSlice(s, n), nil
-	case []int64:
-		return convertToIntSlice(s, n), nil
-	case []int:
-		return s[:n], nil
-	default:
-		return nil, errors.Errorf("unsupported indices type %T", flat)
+// convertIndicesToInt64 converts an integer index buffer to int64 via the buffer
+// pool and ConvertDType infrastructure. If the buffer is already int64, it is
+// returned as-is.
+//
+// Returns the (possibly new) buffer, whether it was allocated from the pool
+// (caller must putBuffer), and any error.
+func convertIndicesToInt64(backend *Backend, indicesBuf *Buffer) (*Buffer, bool, error) {
+	if indicesBuf.shape.DType == dtypes.Int64 {
+		return indicesBuf, false, nil
 	}
+	outBuf, err := backend.getBuffer(dtypes.Int64, indicesBuf.shape.Size())
+	if err != nil {
+		return nil, false, err
+	}
+	outBuf.shape = shapes.Make(dtypes.Int64, indicesBuf.shape.Dimensions...)
+
+	convertFnAny, err := convertDTypePairMap.Get(indicesBuf.shape.DType, dtypes.Int64)
+	if err != nil {
+		backend.putBuffer(outBuf)
+		return nil, false, err
+	}
+	convertFn := convertFnAny.(convertFnType)
+	convertFn(indicesBuf, outBuf)
+	return outBuf, true, nil
 }
 
-// convertToIntSlice converts the first n elements of an integer slice to []int.
-func convertToIntSlice[T int32 | int64](s []T, n int) []int {
-	out := make([]int, n)
-	for i := range n {
-		out[i] = int(s[i])
-	}
-	return out
-}
-
-// parallelTileCount returns the number of parallel work units that
+// quantizedDenseParallelTileCount returns the number of parallel work units that
 // quantizedDenseParallel will dispatch for the given dimensions.
-func parallelTileCount(backend *Backend, M, K, N int) int {
+func quantizedDenseParallelTileCount(backend *Backend, M, K, N int) int {
 	totalWork := M * K * N
 	if backend == nil || !backend.workers.IsEnabled() || totalWork <= minParallelizeChunk {
 		return M
@@ -202,7 +236,7 @@ func parallelTileCount(backend *Backend, M, K, N int) int {
 }
 
 // quantizedDenseParallel parallelizes over M rows, or tiles over N columns when M=1.
-// workerIdx is a dense index in [0, parallelTileCount) identifying the work unit.
+// workerIdx is a dense index in [0, quantizedDenseParallelTileCount) identifying the work unit.
 func quantizedDenseParallel(backend *Backend, M, K, N int, rowFn func(workerIdx, m, nStart, nEnd int)) {
 	totalWork := M * K * N
 	if backend == nil || !backend.workers.IsEnabled() || totalWork <= minParallelizeChunk {

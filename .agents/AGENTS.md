@@ -82,6 +82,13 @@ an error, to simplify the code. But everywhere else, use standard Go error handl
 - Use `any` instead of `interface{}`.
 - Organize tests in hierarchies using `t.Run()` to group related tests.
 
+### Follow Existing Patterns
+
+Before writing new code, read neighboring files in the same package to understand the established
+patterns (buffer management, dtype dispatch, parallelization, etc.). Reuse existing infrastructure
+rather than writing ad-hoc implementations. When in doubt, match the style and approach of the
+closest existing operation.
+
 ### Copyright Notes
 
 Normal code files are prefixed with the following copyright line:

@@ -104,6 +104,8 @@ type nodeFusedQuantizedDense struct {
 	activation   backends.ActivationType
 	hasZeroPoint bool
 	hasBias      bool
+	// ggmlType specifies the concrete GGML block format (Q4_0, Q8_0, etc.).
+	// See exec_fused_quantized_ggml.go for block layouts and references.
 	ggmlType     backends.GGMLQuantType // Only used when scheme == QuantGGML.
 	ggmlN        int                    // Output features (rows in GGML layout). Only for QuantGGML.
 	ggmlK        int                    // Input features (logical columns). Only for QuantGGML.
@@ -351,12 +353,14 @@ func validateGGMLTypeSupported(opName string, ggmlType backends.GGMLQuantType) e
 // deriveGGMLK computes the logical input-features dimension K from bytesPerRow
 // and the GGML block format. GGML weights are stored as [N, bytesPerRow] Uint8,
 // where each row consists of consecutive quantization blocks. Each block packs
-// valuesPerBlock logical float32 values into bytesPerBlock bytes (see
-// exec_fused_quantized_ggml.go for block layouts). K is therefore:
+// valuesPerBlock logical float32 values into bytesPerBlock bytes. K is therefore:
 //
 //	K = (bytesPerRow / bytesPerBlock) * valuesPerBlock
 //
 // This function validates that bytesPerRow is an exact multiple of bytesPerBlock.
+//
+// See exec_fused_quantized_ggml.go for per-type block layouts.
+// Ref: https://github.com/ggerganov/ggml/blob/master/docs/gguf.md
 func deriveGGMLK(opName string, bytesPerRow int, ggmlType backends.GGMLQuantType) (int, error) {
 	vpb := ggmlType.ValuesPerBlock()
 	bpb := ggmlType.BytesPerBlock()
