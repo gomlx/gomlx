@@ -76,11 +76,11 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 
 	// For packed sub-byte weights (from Bitcast), unpack nibbles via the buffer pool
 	// and ConvertDType infrastructure. Non-sub-byte types pass through unchanged.
-	unpackedBuf, unpackedPooled, err := unpackWeightsToBuffer(backend, wBuf)
+	unpackedBuf, isUnpackedOwned, err := unpackWeightsToBuffer(backend, wBuf)
 	if err != nil {
 		return nil, err
 	}
-	if unpackedPooled {
+	if isUnpackedOwned {
 		defer backend.putBuffer(unpackedBuf)
 	}
 	wFlat := unpackedBuf.flat
@@ -122,9 +122,9 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 func unpackWeightsToBuffer(backend *Backend, wBuf *Buffer) (*Buffer, bool, error) {
 	var targetDType dtypes.DType
 	switch wBuf.shape.DType {
-	case dtypes.Int4:
+	case dtypes.Int4, dtypes.Int2:
 		targetDType = dtypes.Int8
-	case dtypes.Uint4:
+	case dtypes.Uint4, dtypes.Uint2:
 		targetDType = dtypes.Uint8
 	default:
 		return wBuf, false, nil
@@ -173,11 +173,11 @@ func execQuantizedEmbeddingLookup(backend *Backend, node *Node, inputs []*Buffer
 	numIndices := indicesBuf.shape.Size()
 
 	// Convert indices to int64 via the buffer pool and ConvertDType infrastructure.
-	idxBuf, idxPooled, err := convertIndicesToInt64(backend, indicesBuf)
+	idxBuf, isIdxOwned, err := convertIndicesToInt64(backend, indicesBuf)
 	if err != nil {
 		return nil, errors.Wrapf(err, "QuantizedEmbeddingLookup")
 	}
-	if idxPooled {
+	if isIdxOwned {
 		defer backend.putBuffer(idxBuf)
 	}
 	indices := idxBuf.flat.([]int64)
