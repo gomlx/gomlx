@@ -2,7 +2,12 @@
 
 # Next
 
-- Package `ml/activations`
+### Core:
+- Package `tensors`
+  - Improving support for sub-byte data types (`Int4`, `Int2`, `Uint4`, `Uint2`)
+
+### Under `pkg/ml`:
+- Package `activations`
   - Added `HardSigmoid` activation.
   - Modified the parametrized activations to be suffixed with `With`: `LeakyReluWith`, `HardSigmoidWith`, `HardSwishWith`.
 - Package `attention`:
@@ -11,10 +16,9 @@
   - Dropout now takes a `*Node` instead of a float64, allowing dynamic dropout control.
 - Package `attention/pos`:
   - Split `Encoder` API into `QKEncoder` and `PreEncoder`, to support different types of positional encoders.
-- Pacakge `ml/models/transfromers`:
-  - Fixes and clean ups of the API; Updated positional-encoder support.
-- Package `tensors`
-  - Improving support for sub-byte data types (`Int4`, `Int2`, `Uint4`, `Uint2`)
+- Package `transfromers`:
+  - Updates and fixes to the API;
+  - Updated positional-encoder support.
 
 # 0.27.2: DotGeneral with AccumulatorDType; Transformer architecture parameter; 
 

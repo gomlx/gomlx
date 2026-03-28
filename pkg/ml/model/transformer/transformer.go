@@ -325,8 +325,8 @@ func (m *Model) WithTransposedWeights(transposed bool) *Model {
 	return m
 }
 
-// BuildGraph returns the forward path of the transformer model applied to the full sequence of tokens, without using any KV cache,
-// meaning the attention is only within the sequence.
+// PredictNextTokens builds the model including the last logits projection to predict the next token,
+// for each element of the sequence.
 //
 // This form can be used to embed full sentences or for training.
 //
@@ -335,75 +335,114 @@ func (m *Model) WithTransposedWeights(transposed bool) *Model {
 //     which tokens are valid (1) and which are padding (0). The attention mask (causal or not)
 //     is computed taking into consideration the mask.
 //
-// It returns the logits of the last layer.
-func (m *Model) BuildGraph(ctx *context.Context, tokens, mask *Node) *Node {
-	return m.forwardFull(ctx, tokens, mask, false, 0)
+// It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize]
+func (m *Model) PredictNextTokens(ctx *context.Context, tokens, mask *Node) *Node {
+	embeddings, _ := m.EmbeddingLayers(ctx, tokens, mask, false, 0)
+	return m.LogitsFromEmbeddings(ctx, embeddings)
 }
 
 // MakeIterativeModelFn returns a "iterative" model function for iteratively (increasing sequence length, no KVCache)
 // generation, using the decode package.
 func MakeIterativeModelFn(m *Model) decode.IterativeModelFn {
 	return func(ctx *context.Context, tokens *Node) *Node {
-		return m.BuildGraph(ctx, tokens, nil)
+		return m.PredictNextTokens(ctx, tokens, nil)
 	}
 }
 
-// BuildGraphWithKVCache returns the forward path for the newTokens sequence, using the KV cache.
+// PredictNextTokensWithKVCache returns the forward path for the newTokens sequence, using the KV cache.
 //
 // Experimental: likely the KVCache will change in the future.
-func (m *Model) BuildGraphWithKVCache(ctx *context.Context, newTokens *Node, position int) *Node {
-	return m.forwardFull(ctx, newTokens, nil, true, position)
+//
+// It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize]
+func (m *Model) PredictNextTokensWithKVCache(ctx *context.Context, newTokens *Node, position int) *Node {
+	embeddings, _ := m.EmbeddingLayers(ctx, newTokens, nil, true, position)
+	return m.LogitsFromEmbeddings(ctx, embeddings)
 }
 
 // MakeIncrementalModelFn returns a model function used by the decoder for incremental generation with KVCache,
 // using the decode package.
 func MakeIncrementalModelFn(m *Model) decode.IncrementalModelFn {
 	return func(ctx *context.Context, newTokens *Node, position int) *Node {
-		return m.BuildGraphWithKVCache(ctx, newTokens, position)
+		return m.PredictNextTokensWithKVCache(ctx, newTokens, position)
 	}
 }
 
-// forwardFull: shared path for training and generation.
-func (m *Model) forwardFull(
-	ctx *context.Context,
-	tokens, mask *Node,
-	useCache bool,
-	position int,
-) *Node {
-	g := tokens.Graph()
-	currentSeqLen := tokens.Shape().Dimensions[1]
+// EmbeddingLayers runs most of the model from the tokens all the way to the last attention layer.
+//
+// It returns:
+//
+//   - lastLayer: the output of the last transformer layer, which is usually what one wants if embedding a sentence.
+//     You can feed this to LogitsFromEmbeddings() to get the logits for predicting the next token.
+//   - allLayers: the embeddings after each layer, including the one after the token embedding table and the pre-positional embedder,
+//     so NumLayers+2 in total. Used for debugging for any reason.
+func (m *Model) EmbeddingLayers(ctx *context.Context, tokens, mask *Node, useKVCache bool, position int) (lastLayer *Node, allLayers []*Node) {
+	allLayers = make([]*Node, 0, m.NumLayers+2)
+	x := m.EmbedTokens(ctx, tokens)
+	allLayers = append(allLayers, x)
+	x = m.PrePositionalEncoder(ctx, x, position, useKVCache)
+	allLayers = append(allLayers, x)
+	// Apply all layers.
+	for layer := range m.NumLayers {
+		layerCtx := ctx.In(fmt.Sprintf("layer_%d", layer))
+		x = m.ForwardLayer(layerCtx, x, mask, useKVCache, position)
+		allLayers = append(allLayers, x)
+	}
+	return x, allLayers
+}
 
+// EmbedTokens returns the token embeddings for the given tokens using a lookup table.
+// This is the very first step of the transformer model.
+//
+// If you want the model embeddings after of the full model, take the last layer of EmbeddingLayers.
+//
+// This step is done automatically by EmbeddingLayers or PredictNextTokens, but if needed, it can
+// be used separately by calling this method.
+func (m *Model) EmbedTokens(ctx *context.Context, tokens *Node) *Node {
 	// Tokens embedding table lookup.
 	embedded := layers.Embedding(ctx.In("token_embed"), tokens, m.DType, m.VocabSize, m.EmbedDim)
 	if embedded.Rank() == 2 {
 		embedded = ExpandDims(embedded, 1)
 	}
+	return embedded
+}
 
-	x := embedded
+// PrePositionalEncoder applies the positional encoder to the given embeddings before
+// the first transformer layer: this only applies if the positional encoder implements
+// the pos.PreEncoder interface (some positional encoders run later).
+//
+// This step is done automatically by EmbeddingLayers or PredictNextTokens, but if needed, it can
+// be used separately by calling this method.
+func (m *Model) PrePositionalEncoder(ctx *context.Context, x *Node, position int, useKVCache bool) *Node {
 	if m.PosEmbed == nil {
+		g := x.Graph()
+		// Variable with all the positional embeddings: created if it doesn't exist yet.
 		posEmbedFull := ctx.In("pos_embed").VariableWithShape("embeddings",
 			shapes.Make(m.DType, m.MaxPosEmbed, m.EmbedDim)).ValueGraph(g)
 
+		// Take the slice of the full positional embeddings corresponding to the current sequence length.
+		currentSeqLen := x.Shape().Dimensions[1]
 		var posEmbed *Node
-		if useCache {
+		if useKVCache {
 			posEmbed = Slice(posEmbedFull, AxisRange(position, position+currentSeqLen))
 		} else {
 			posEmbed = Slice(posEmbedFull, AxisRange(0, currentSeqLen))
 		}
 
-		posEmbed = ExpandDims(posEmbed, 0)
-		posEmbed = BroadcastToShape(posEmbed, embedded.Shape())
-		x = Add(embedded, posEmbed)
+		// Broadcast to the whole batch and add to the current value of x.
+		batchSize := x.Shape().Dimensions[0]
+		posEmbed = BroadcastPrefix(posEmbed, batchSize)
+		x = Add(x, posEmbed)
 	}
+	return x
+}
 
-	for layer := 0; layer < m.NumLayers; layer++ {
-		layerCtx := ctx.In(fmt.Sprintf("layer_%d", layer))
-		x = m.ForwardLayer(layerCtx, x, mask, useCache, position)
-	}
-
-	logits := layers.Dense(ctx.In("output"), x, false, m.VocabSize)
-
-	return logits
+// LogitsFromEmbeddings takes the embeddings of the later attention layer and computes the logits over
+// the vocabulary size.
+//
+// This step is done automatically by EmbeddingLayers or PredictNextTokens, but if needed, it can
+// be used separately by calling this method.
+func (m *Model) LogitsFromEmbeddings(ctx *context.Context, embeddings *Node) *Node {
+	return layers.Dense(ctx.In("output"), embeddings, false, m.VocabSize)
 }
 
 // ForwardLayer executes a single transformer layer block depending on the configured architecture.
@@ -417,12 +456,12 @@ func (m *Model) forwardFull(
 // It returns the output of the layer, shape [batchSize, seqLen, embedDim].
 func (m *Model) ForwardLayer(ctx *context.Context, x, mask *Node, useCache bool, position int) *Node {
 	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
-		return m.forwardLayerGemma(ctx, x, useCache, position)
+		return m.forwardLayerGemma(ctx, x, mask, useCache, position)
 	}
-	return m.forwardLayerStandard(ctx, x, useCache, position)
+	return m.forwardLayerStandard(ctx, x, mask, useCache, position)
 }
 
-func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCache bool, position int) *Node {
+func (m *Model) forwardLayerStandard(layerCtx *context.Context, x, mask *Node, useCache bool, position int) *Node {
 	residual := x
 	var attn *Node
 
@@ -431,6 +470,9 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCach
 		attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, m.NumHeads, m.HeadDim).
 			WithKVCache(m.MaxPosEmbed, positionNode).
 			UseTransposedWeights(m.TransposedProjections)
+		if mask != nil {
+			attnBuilder = attnBuilder.WithMask(mask)
+		}
 
 		if m.PosEmbed != nil {
 			attnBuilder = attnBuilder.WithPositionalEncoder(m.PosEmbed)
@@ -446,6 +488,9 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCach
 	} else {
 		attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, m.NumHeads, m.HeadDim).
 			UseTransposedWeights(m.TransposedProjections)
+		if mask != nil {
+			attnBuilder = attnBuilder.WithMask(mask)
+		}
 		if m.UseCausalMask {
 			attnBuilder = attnBuilder.WithCausalMask(true)
 		}
@@ -530,7 +575,7 @@ func (m *Model) normalize(ctx *context.Context, operand *Node) *Node {
 	}
 }
 
-func (m *Model) forwardLayerGemma(layerCtx *context.Context, x *Node, useCache bool, position int) *Node {
+func (m *Model) forwardLayerGemma(layerCtx *context.Context, x, mask *Node, useCache bool, position int) *Node {
 	residual := x
 
 	// Pre-attention normalization.
@@ -540,27 +585,30 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x *Node, useCache b
 	var attn *Node
 	attnBuilder := attention.SelfAttention(layerCtx.In("self_attn"), x, m.NumHeads, m.HeadDim).
 		UseTransposedWeights(m.TransposedProjections)
+	if mask != nil {
+		attnBuilder.WithMask(mask)
+	}
 	if m.NumKVHeads > 0 && m.NumKVHeads != m.NumHeads {
 		attnBuilder.WithNumKVHeads(m.NumKVHeads)
 	}
 	if useCache {
 		positionNode := Const(x.Graph(), int32(position))
-		attnBuilder = attnBuilder.WithKVCache(m.MaxPosEmbed, positionNode)
+		attnBuilder.WithKVCache(m.MaxPosEmbed, positionNode)
 	} else if m.UseCausalMask {
-		attnBuilder = attnBuilder.WithCausalMask(true)
+		attnBuilder.WithCausalMask(true)
 	}
 	if m.PosEmbed != nil {
-		attnBuilder = attnBuilder.WithPositionalEncoder(m.PosEmbed)
+		attnBuilder.WithPositionalEncoder(m.PosEmbed)
 	}
 	if !m.UseBias {
-		attnBuilder = attnBuilder.UseProjectionBias(false)
+		attnBuilder.UseProjectionBias(false)
 	}
 	if m.Architecture == ArchitectureGemma3 {
-		attnBuilder = attnBuilder.WithQKRMSNorm(m.NormEpsilon)
+		attnBuilder.WithQKRMSNorm(m.NormEpsilon)
 	}
 	if m.Dropout > 0 {
 		dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
-		attnBuilder = attnBuilder.WithDropout(dropoutRate)
+		attnBuilder.WithDropout(dropoutRate)
 	}
 	attn = attnBuilder.Done()
 

@@ -151,7 +151,7 @@ func trainModel(backend backends.Backend, ctx *context.Context) {
 	modelFn := func(ctx *context.Context, _ any, inputs []*graph.Node) []*graph.Node {
 		tokens := inputs[0]
 		tranformerModel := transformer.NewFromContext(ctx)
-		return []*graph.Node{tranformerModel.BuildGraph(ctx, tokens, nil)}
+		return []*graph.Node{tranformerModel.PredictNextTokens(ctx, tokens, nil)}
 	}
 
 	trainer := train.NewTrainer(backend, ctx, modelFn,
