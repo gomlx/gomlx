@@ -276,9 +276,9 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 
 			input5 := make([][][]float32, 1)
 			input5[0] = make([][]float32, 5)
-			for i := 0; i < 5; i++ {
+			for i := range 5 {
 				input5[0][i] = make([]float32, 8)
-				for j := 0; j < 8; j++ {
+				for j := range 8 {
 					input5[0][i][j] = float32(i*8 + j + 1)
 				}
 			}
@@ -304,8 +304,8 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 			assert.Equal(t, []int{1, 5, 8}, []int{len(output5), len(output5[0]), len(output5[0][0])})
 			assert.Equal(t, []int{1, 3, 8}, []int{len(output3), len(output3[0]), len(output3[0][0])})
 
-			for i := 0; i < 3; i++ {
-				for j := 0; j < 8; j++ {
+			for i := range 3 {
+				for j := range 8 {
 					assert.InDelta(t, output3[0][i][j], output5[0][i][j], 1e-4)
 				}
 			}
