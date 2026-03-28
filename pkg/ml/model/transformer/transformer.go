@@ -449,14 +449,14 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCach
 		}
 		if m.Dropout > 0 {
 			dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
-			attnBuilder = attnBuilder.Dropout(dropoutRate)
+			attnBuilder = attnBuilder.WithDropout(dropoutRate)
 		}
 		attn = attnBuilder.Done()
 	} else {
 		attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, m.NumHeads, m.HeadDim).
 			UseTransposedWeights(m.TransposedProjections)
 		if m.UseCausalMask {
-			attnBuilder = attnBuilder.UseCausalMask()
+			attnBuilder = attnBuilder.WithCausalMask(true)
 		}
 
 		if m.PosEmbed != nil {
@@ -467,7 +467,7 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCach
 		}
 		if m.Dropout > 0 {
 			dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
-			attnBuilder = attnBuilder.Dropout(dropoutRate)
+			attnBuilder = attnBuilder.WithDropout(dropoutRate)
 		}
 		attn = attnBuilder.Done()
 	}
@@ -550,13 +550,13 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x *Node, useCache b
 	attnBuilder := attention.SelfAttention(layerCtx.In("self_attn"), x, m.NumHeads, m.HeadDim).
 		UseTransposedWeights(m.TransposedProjections)
 	if m.NumKVHeads > 0 && m.NumKVHeads != m.NumHeads {
-		attnBuilder.SetNumKVHeads(m.NumKVHeads)
+		attnBuilder.WithNumKVHeads(m.NumKVHeads)
 	}
 	if useCache {
 		positionNode := Const(x.Graph(), int32(position))
 		attnBuilder = attnBuilder.WithKVCache(m.MaxPosEmbed, positionNode)
 	} else if m.UseCausalMask {
-		attnBuilder = attnBuilder.UseCausalMask()
+		attnBuilder = attnBuilder.WithCausalMask(true)
 	}
 	if m.PosEmbed != nil {
 		attnBuilder = attnBuilder.WithPositionalEncoder(m.PosEmbed)
@@ -569,7 +569,7 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x *Node, useCache b
 	}
 	if m.Dropout > 0 {
 		dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
-		attnBuilder = attnBuilder.Dropout(dropoutRate)
+		attnBuilder = attnBuilder.WithDropout(dropoutRate)
 	}
 	attn = attnBuilder.Done()
 

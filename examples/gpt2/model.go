@@ -96,7 +96,7 @@ func (m *GPT2Model) forwardGPT2(ctx *context.Context, tokens *Node, position *No
 		attn := attention.SelfAttention(layerCtx.In("attn"), attnInput, model.NumHeads, model.HeadDim).
 			WithKVCache(model.MaxPosEmbed, position).
 			UseProjectionBias(true).
-			UseCausalMask().
+			WithCausalMask(true).
 			Done()
 		x = Add(x, attn)
 
