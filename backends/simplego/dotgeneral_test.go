@@ -689,6 +689,89 @@ func TestDotGeneral_ConfigDTypes(t *testing.T) {
 		gotFloat32 := xslices.Map(gotFlat, func(f bfloat16.BFloat16) float32 { return f.Float32() })
 		require.InDeltaSlice(t, expectedFloat32, gotFloat32, 1e-2)
 	})
+
+	t.Run("HalfPrecisionAccumulatorAndOutputDTypeAvoidsNativeSmallMatMulOutput", func(t *testing.T) {
+		prevExecPath := goBackend.dotGeneralForceExecutionPath
+		goBackend.dotGeneralForceExecutionPath = smallMatMulPath
+		defer func() { goBackend.dotGeneralForceExecutionPath = prevExecPath }()
+
+		lhsData := make([]float16.Float16, 64)
+		rhsData := make([]float16.Float16, 64)
+		var expected float32
+		for i := range lhsData {
+			lhsData[i] = f16(0.1 + float32(i%3)*0.01)
+			rhsData[i] = f16(0.2 + float32(i%5)*0.01)
+			expected += lhsData[i].Float32() * rhsData[i].Float32()
+		}
+		roundedToHalf := f16(expected).Float32()
+		require.Greater(t, math.Abs(float64(expected-roundedToHalf)), 1e-5)
+
+		exec := graph.MustNewExec(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+			return graph.Dot(lhs, rhs).
+				WithAccumulatorDType(dtypes.Float32).
+				WithOutputDType(dtypes.Float32).
+				General([]int{1}, nil, []int{0}, nil)
+		})
+
+		result := exec.MustExec(
+			tensors.FromFlatDataAndDimensions(lhsData, 1, len(lhsData)),
+			tensors.FromFlatDataAndDimensions(rhsData, len(rhsData), 1),
+		)[0]
+
+		require.Equal(t, dtypes.Float32, result.Shape().DType)
+		got := tensors.MustCopyFlatData[float32](result)
+		require.Len(t, got, 1)
+		require.InDelta(t, expected, got[0], 1e-6)
+	})
+
+	t.Run("AccumulatorDTypeFloat64PreservesOutputDType", func(t *testing.T) {
+		exec := graph.MustNewExec(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+			return graph.Dot(lhs, rhs).WithAccumulatorDType(dtypes.Float64).Product()
+		})
+
+		lhs := tensors.FromValue([]float32{1e8, 1, -1e8})
+		rhs := tensors.FromValue([]float32{1, 1, 1})
+		result := exec.MustExec(lhs, rhs)[0]
+
+		require.Equal(t, dtypes.Float32, result.Shape().DType)
+		require.InDelta(t, float32(1), result.Value(), 1e-3)
+	})
+
+	t.Run("HalfPrecisionAccumulatorDTypeFloat64PreservesOutputDType", func(t *testing.T) {
+		prevExecPath := goBackend.dotGeneralForceExecutionPath
+		defer func() { goBackend.dotGeneralForceExecutionPath = prevExecPath }()
+
+		lhsData := make([]float16.Float16, 64)
+		rhsData := make([]float16.Float16, 64)
+		var expectedFloat64 float64
+		for i := range lhsData {
+			lhsData[i] = f16(0.1 + float32(i%3)*0.01)
+			rhsData[i] = f16(0.2 + float32(i%5)*0.01)
+			expectedFloat64 += float64(lhsData[i].Float32()) * float64(rhsData[i].Float32())
+		}
+		expectedFloat16 := f16(float32(expectedFloat64)).Float32()
+
+		run := func(execPath dotGeneralExecutionPath) *tensors.Tensor {
+			goBackend.dotGeneralForceExecutionPath = execPath
+			exec := graph.MustNewExec(goBackend, func(lhs, rhs *graph.Node) *graph.Node {
+				return graph.Dot(lhs, rhs).
+					WithAccumulatorDType(dtypes.Float64).
+					General([]int{1}, nil, []int{0}, nil)
+			})
+			return exec.MustExec(
+				tensors.FromFlatDataAndDimensions(lhsData, 1, len(lhsData)),
+				tensors.FromFlatDataAndDimensions(rhsData, len(rhsData), 1),
+			)[0]
+		}
+
+		resultSmallMatMul := run(smallMatMulPath)
+		resultNormalized := run(normalizedPath)
+
+		require.Equal(t, dtypes.Float16, resultSmallMatMul.Shape().DType)
+		require.Equal(t, dtypes.Float16, resultNormalized.Shape().DType)
+		require.InDelta(t, expectedFloat16, tensors.MustCopyFlatData[float16.Float16](resultSmallMatMul)[0].Float32(), 1e-3)
+		require.InDelta(t, expectedFloat16, tensors.MustCopyFlatData[float16.Float16](resultNormalized)[0].Float32(), 1e-3)
+	})
 }
 
 func TestDotGeneral_Dot(t *testing.T) {
@@ -858,6 +941,83 @@ func TestDotGeneral_PreBlockedCorrectness(t *testing.T) {
 	// Compare results
 	require.True(t, gotResult.Shape().Equal(wantResult.Shape()))
 	requireSameTensorsFloat32(t, wantResult, gotResult, 1e-4)
+}
+
+// TestDotGeneralNodeData_Equal tests the Equal method for deduplication.
+func TestDotGeneralNodeData_Equal(t *testing.T) {
+	base := &dotGeneralNodeData{
+		lhsContractingAxes: []int{1},
+		lhsBatchAxes:       []int{0},
+		rhsContractingAxes: []int{0},
+		rhsBatchAxes:       []int{0},
+		batchSize:          2,
+		lhsCrossSize:       3,
+		rhsCrossSize:       5,
+		contractingSize:    7,
+		lhsBlockedShape:    shapes.Make(dtypes.Float32, 2, 1, 1, 8, 8),
+		rhsBlockedShape:    shapes.Make(dtypes.Float32, 2, 1, 1, 8, 8),
+		outputBlockedShape: shapes.Make(dtypes.Float32, 2, 1, 1, 8, 8),
+		config: backends.DotGeneralConfig{
+			AccumulatorDType: dtypes.Float32,
+		},
+		execPath: normalizedPath,
+	}
+
+	tests := []struct {
+		name  string
+		other *dotGeneralNodeData
+		want  bool
+	}{
+		{
+			name: "Identical",
+			other: &dotGeneralNodeData{
+				lhsContractingAxes: []int{1},
+				lhsBatchAxes:       []int{0},
+				rhsContractingAxes: []int{0},
+				rhsBatchAxes:       []int{0},
+				batchSize:          2,
+				lhsCrossSize:       3,
+				rhsCrossSize:       5,
+				contractingSize:    7,
+				lhsBlockedShape:    shapes.Make(dtypes.Float32, 2, 1, 1, 8, 8),
+				rhsBlockedShape:    shapes.Make(dtypes.Float32, 2, 1, 1, 8, 8),
+				outputBlockedShape: shapes.Make(dtypes.Float32, 2, 1, 1, 8, 8),
+				config: backends.DotGeneralConfig{
+					AccumulatorDType: dtypes.Float32,
+				},
+				execPath: normalizedPath,
+			},
+			want: true,
+		},
+		{
+			name: "DifferentConfig",
+			other: &dotGeneralNodeData{
+				lhsContractingAxes: []int{1},
+				lhsBatchAxes:       []int{0},
+				rhsContractingAxes: []int{0},
+				rhsBatchAxes:       []int{0},
+				batchSize:          2,
+				lhsCrossSize:       3,
+				rhsCrossSize:       5,
+				contractingSize:    7,
+				lhsBlockedShape:    shapes.Make(dtypes.Float32, 2, 1, 1, 8, 8),
+				rhsBlockedShape:    shapes.Make(dtypes.Float32, 2, 1, 1, 8, 8),
+				outputBlockedShape: shapes.Make(dtypes.Float32, 2, 1, 1, 8, 8),
+				config: backends.DotGeneralConfig{
+					OutputDType: dtypes.Float32,
+				},
+				execPath: normalizedPath,
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := base.EqualNodeData(tt.other)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 // TestBlockForDotGeneralData_Equal tests the Equal method for deduplication.

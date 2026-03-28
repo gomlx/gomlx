@@ -27,6 +27,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func setAttentionVar(t *testing.T, ctx *context.Context, name string, shape shapes.Shape, flat []float32) {
+	t.Helper()
+	v := ctx.VariableWithShape(name, shape)
+	err := v.SetValue(tensors.FromFlatDataAndDimensions(flat, shape.Dimensions...))
+	require.NoError(t, err)
+}
+
 func TestMultiHeadAttentionGraph(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	{
@@ -243,9 +250,8 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 		assert.Equal(t, []int{1, 3, 2, 3}, outputs[1].Shape().Dimensions)
 	})
 
-	t.Run("no_output_bias", func(t *testing.T) {
-		// UseProjectionBias(false) disables only the output projection bias;
-		// QKV biases are always present (matching the separate Dense path).
+	t.Run("no_projection_bias", func(t *testing.T) {
+		// UseProjectionBias(false) disables all learned attention projection biases.
 		ctx := context.New()
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
 			return SelfAttention(ctx, x, 2, 4).
@@ -259,6 +265,100 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 		}
 		output := exec.MustExec(input)[0]
 		assert.Equal(t, []int{1, 3, 8}, output.Shape().Dimensions)
+	})
+
+	t.Run("no_projection_bias_matches_separate_projections", func(t *testing.T) {
+		input := [][][]float32{{{1, 2}, {3, 4}}}
+
+		separateCtx := context.New()
+		separateMHA := separateCtx.In("MultiHeadAttention")
+		setAttentionVar(t, separateMHA.In("query").In("dense"), "weights", shapes.Make(dtypes.Float32, 1, 2), []float32{1.0, -0.5})
+		setAttentionVar(t, separateMHA.In("query").In("dense"), "biases", shapes.Make(dtypes.Float32, 1), []float32{0.9})
+		setAttentionVar(t, separateMHA.In("key").In("dense"), "weights", shapes.Make(dtypes.Float32, 1, 2), []float32{0.75, 0.25})
+		setAttentionVar(t, separateMHA.In("key").In("dense"), "biases", shapes.Make(dtypes.Float32, 1), []float32{-0.8})
+		setAttentionVar(t, separateMHA.In("value").In("dense"), "weights", shapes.Make(dtypes.Float32, 1, 2), []float32{-1.0, 2.0})
+		setAttentionVar(t, separateMHA.In("value").In("dense"), "biases", shapes.Make(dtypes.Float32, 1), []float32{0.7})
+		setAttentionVar(t, separateMHA.In("output").In("dense"), "weights", shapes.Make(dtypes.Float32, 2, 1), []float32{2.0, -1.5})
+		setAttentionVar(t, separateMHA.In("output").In("dense"), "biases", shapes.Make(dtypes.Float32, 2), []float32{0.6, -0.4})
+
+		fusedCtx := context.New()
+		fusedMHA := fusedCtx.In("MultiHeadAttention")
+		setAttentionVar(t, fusedMHA.In("qkv"), "weights_qkv", shapes.Make(dtypes.Float32, 3, 2), []float32{
+			1.0, -0.5,
+			0.75, 0.25,
+			-1.0, 2.0,
+		})
+		setAttentionVar(t, fusedMHA.In("qkv"), "biases_q", shapes.Make(dtypes.Float32, 1), []float32{0.9})
+		setAttentionVar(t, fusedMHA.In("qkv"), "biases_k", shapes.Make(dtypes.Float32, 1), []float32{-0.8})
+		setAttentionVar(t, fusedMHA.In("qkv"), "biases_v", shapes.Make(dtypes.Float32, 1), []float32{0.7})
+		setAttentionVar(t, fusedMHA.In("output").In("dense"), "weights", shapes.Make(dtypes.Float32, 2, 1), []float32{2.0, -1.5})
+		setAttentionVar(t, fusedMHA.In("output").In("dense"), "biases", shapes.Make(dtypes.Float32, 2), []float32{0.6, -0.4})
+
+		separateExec := context.MustNewExec(backend, separateCtx.Reuse(), func(ctx *context.Context, x *Node) *Node {
+			return SelfAttention(ctx, x, 1, 1).
+				UseTransposedWeights(true).
+				UseProjectionBias(false).
+				Done()
+		})
+		fusedExec := context.MustNewExec(backend, fusedCtx.Reuse(), func(ctx *context.Context, x *Node) *Node {
+			return SelfAttention(ctx, x, 1, 1).
+				UseQKVProjection().
+				UseTransposedWeights(true).
+				UseProjectionBias(false).
+				Done()
+		})
+
+		separateOut := separateExec.MustExec(input)[0]
+		fusedOut := fusedExec.MustExec(input)[0]
+		require.Equal(t, separateOut.Shape(), fusedOut.Shape())
+		require.Truef(t, xslices.SlicesInDelta(separateOut.Value(), fusedOut.Value(), 1e-5),
+			"separate=%v fused=%v", separateOut.Value(), fusedOut.Value())
+	})
+
+	t.Run("transposed_weights_matches_separate_projections", func(t *testing.T) {
+		input := [][][]float32{{{1, 2}, {3, 4}}}
+
+		separateCtx := context.New()
+		separateMHA := separateCtx.In("MultiHeadAttention")
+		setAttentionVar(t, separateMHA.In("query").In("dense"), "weights", shapes.Make(dtypes.Float32, 1, 2), []float32{1.0, -0.5})
+		setAttentionVar(t, separateMHA.In("query").In("dense"), "biases", shapes.Make(dtypes.Float32, 1), []float32{0.1})
+		setAttentionVar(t, separateMHA.In("key").In("dense"), "weights", shapes.Make(dtypes.Float32, 1, 2), []float32{0.75, 0.25})
+		setAttentionVar(t, separateMHA.In("key").In("dense"), "biases", shapes.Make(dtypes.Float32, 1), []float32{-0.2})
+		setAttentionVar(t, separateMHA.In("value").In("dense"), "weights", shapes.Make(dtypes.Float32, 1, 2), []float32{-1.0, 2.0})
+		setAttentionVar(t, separateMHA.In("value").In("dense"), "biases", shapes.Make(dtypes.Float32, 1), []float32{0.3})
+		setAttentionVar(t, separateMHA.In("output").In("dense"), "weights", shapes.Make(dtypes.Float32, 2, 1), []float32{2.0, -1.5})
+		setAttentionVar(t, separateMHA.In("output").In("dense"), "biases", shapes.Make(dtypes.Float32, 2), []float32{0.2, -0.3})
+
+		fusedCtx := context.New()
+		fusedMHA := fusedCtx.In("MultiHeadAttention")
+		setAttentionVar(t, fusedMHA.In("qkv"), "weights_qkv", shapes.Make(dtypes.Float32, 3, 2), []float32{
+			1.0, -0.5,
+			0.75, 0.25,
+			-1.0, 2.0,
+		})
+		setAttentionVar(t, fusedMHA.In("qkv"), "biases_q", shapes.Make(dtypes.Float32, 1), []float32{0.1})
+		setAttentionVar(t, fusedMHA.In("qkv"), "biases_k", shapes.Make(dtypes.Float32, 1), []float32{-0.2})
+		setAttentionVar(t, fusedMHA.In("qkv"), "biases_v", shapes.Make(dtypes.Float32, 1), []float32{0.3})
+		setAttentionVar(t, fusedMHA.In("output").In("dense"), "weights", shapes.Make(dtypes.Float32, 2, 1), []float32{2.0, -1.5})
+		setAttentionVar(t, fusedMHA.In("output").In("dense"), "biases", shapes.Make(dtypes.Float32, 2), []float32{0.2, -0.3})
+
+		separateExec := context.MustNewExec(backend, separateCtx.Reuse(), func(ctx *context.Context, x *Node) *Node {
+			return SelfAttention(ctx, x, 1, 1).
+				UseTransposedWeights(true).
+				Done()
+		})
+		fusedExec := context.MustNewExec(backend, fusedCtx.Reuse(), func(ctx *context.Context, x *Node) *Node {
+			return SelfAttention(ctx, x, 1, 1).
+				UseQKVProjection().
+				UseTransposedWeights(true).
+				Done()
+		})
+
+		separateOut := separateExec.MustExec(input)[0]
+		fusedOut := fusedExec.MustExec(input)[0]
+		require.Equal(t, separateOut.Shape(), fusedOut.Shape())
+		require.Truef(t, xslices.SlicesInDelta(separateOut.Value(), fusedOut.Value(), 1e-5),
+			"separate=%v fused=%v", separateOut.Value(), fusedOut.Value())
 	})
 }
 

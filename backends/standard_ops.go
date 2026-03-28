@@ -101,7 +101,8 @@ type DotGeneralConfig struct {
 
 	// OutputDType is the data type of the output of the matrix multiplication.
 	//
-	// If left empty, it defaults to the same dtype as the AccumulatorDType.
+	// If left empty, it defaults to the same dtype as the inputs, even when
+	// AccumulatorDType widens the computation.
 	//
 	// Some backends may not support this option and this will cause it to simply convert the input to the output
 	// type upfront, which is less efficient.

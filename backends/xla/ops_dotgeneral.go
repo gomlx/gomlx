@@ -27,8 +27,11 @@ import (
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
 //
-// The XLA implementation only supports accumulation in F32 (if different than the input dtypes).
-// So when it receives a different accumulation dtype, it simply converts the inputs to F32.
+// The XLA implementation natively supports accumulation in F32 when requested. For
+// other non-native accumulation dtypes, it falls back to converting the inputs to
+// the requested accumulation dtype before issuing DotGeneral. If OutputDType is
+// omitted, the public DotGeneral semantics are preserved: the result keeps the
+// original input dtype even when the operands are pre-converted.
 func (f *Function) DotGeneral(
 	lhs backends.Value, lhsContractingAxes, lhsBatchAxes []int,
 	rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int,
@@ -39,7 +42,8 @@ func (f *Function) DotGeneral(
 	}
 	lhsNode := nodes[0]
 	rhsNode := nodes[1]
-	dtype := lhsNode.shape.DType
+	inputDType := lhsNode.shape.DType
+	dtype := inputDType
 	accumulationDType := dtype
 	if config.AccumulatorDType != dtypes.InvalidDType {
 		accumulationDType = config.AccumulatorDType
@@ -64,8 +68,9 @@ func (f *Function) DotGeneral(
 
 	if accumulationDType != dtype {
 		if accumulationDType != dtypes.F32 {
-			// XLA only supports accumulation in F32 (if different than the input dtypes).
-			// For other accumulation dtypes, we convert the inputs to the type.
+			// XLA only supports non-input accumulation natively for F32. For other
+			// accumulation dtypes, convert the operands first and then preserve the
+			// original output dtype unless OutputDType overrides it.
 			var err error
 			lhsReadyValue, err := f.ConvertDType(lhsReady, accumulationDType)
 			if err != nil {
@@ -78,6 +83,14 @@ func (f *Function) DotGeneral(
 			lhsReady, rhsReady = lhsReadyValue.(*Node), rhsReadyValue.(*Node)
 			dtype = accumulationDType
 		}
+	}
+
+	outputDType := config.OutputDType
+	if outputDType == dtypes.InvalidDType && dtype != inputDType {
+		// When XLA falls back to pre-converting the operands to the accumulation
+		// dtype, preserve the public DotGeneral semantics: omitted OutputDType keeps
+		// the original input dtype.
+		outputDType = inputDType
 	}
 
 	dotGeneralBuilder := stablehlo.DotGeneral(
@@ -118,8 +131,8 @@ func (f *Function) DotGeneral(
 
 		}
 	}
-	if config.OutputDType != dtypes.InvalidDType {
-		dotGeneralBuilder.OutputDType(DTypeToXLA(config.OutputDType))
+	if outputDType != dtypes.InvalidDType {
+		dotGeneralBuilder.OutputDType(DTypeToXLA(outputDType))
 	}
 	value, err := dotGeneralBuilder.Done()
 	if err != nil {

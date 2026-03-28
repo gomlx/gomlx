@@ -97,6 +97,21 @@ func TestModel(t *testing.T) {
 		assert.False(t, cfg.UseBias)
 	})
 
+	t.Run("NewFromContextDeprecatedLayerNorm", func(t *testing.T) {
+		ctx := context.New()
+		ctx.SetParams(map[string]any{
+			ParamVocabSize:    1000,
+			ParamEmbedDim:     128,
+			ParamNumLayers:    4,
+			ParamNumHeads:     8,
+			ParamHeadDim:      16,
+			ParamUseLayerNorm: false,
+		})
+
+		cfg := NewFromContext(ctx)
+		assert.Equal(t, layers.NormalizationNone, cfg.Normalization)
+	})
+
 	t.Run("FromContext", func(t *testing.T) {
 		ctx := context.New()
 		ctx.SetParams(map[string]any{
@@ -123,6 +138,17 @@ func TestModel(t *testing.T) {
 		assert.Equal(t, 5000.0, rope.BaseFreq)
 		assert.Equal(t, layers.NormalizationNone, cfg.Normalization)
 		assert.False(t, cfg.UseBias)
+	})
+
+	t.Run("FromContextNormalizationTakesPrecedence", func(t *testing.T) {
+		ctx := context.New()
+		ctx.SetParams(map[string]any{
+			ParamUseLayerNorm:  false,
+			ParamNormalization: layers.NormalizationRMSNorm,
+		})
+
+		cfg := New(1000, 128, 4, 8, 16).FromContext(ctx)
+		assert.Equal(t, layers.NormalizationRMSNorm, cfg.Normalization)
 	})
 }
 

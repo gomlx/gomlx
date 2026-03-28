@@ -85,6 +85,12 @@ func (f *Function) getOrCreateNode(
 			opType, i, node.function.name, f.name))
 	}
 
+	// Propagate axis names from inputs to output for dynamic dimensions.
+	// Shape inference ops may produce shapes with DynamicDim but without axis
+	// names. For specialization to work, every DynamicDim needs an axis name.
+	// If the output has unnamed dynamic dims, inherit names from inputs.
+	propagateDynamicAxisNames(&shape, inputs)
+
 	// Try to find existing node using function-local dedup.
 	key := makeNodeDedupKey(opType, inputs)
 	candidates := f.nodeDedup[key]
@@ -146,4 +152,39 @@ func dataEqual(a, b any) bool {
 
 	// For non-comparable data, don't de-duplicate
 	return false
+}
+
+// propagateDynamicAxisNames ensures that every DynamicDim in the output shape
+// has an axis name, inheriting from input nodes if needed. Shape inference ops
+// may produce shapes with DynamicDim but no axis names; this function fills
+// the gaps so specialization can resolve dynamic dims to concrete values.
+//
+// Axis names are matched by position: output axis i inherits from input axis i.
+// This prevents incorrect name assignment when multiple differently-named
+// dynamic axes exist (e.g., "batch" at axis 0, "seq" at axis 1).
+func propagateDynamicAxisNames(shape *shapes.Shape, inputs []*Node) {
+	if !shape.HasDynamicDims() {
+		return
+	}
+	for i, d := range shape.Dimensions {
+		if d != shapes.DynamicDim {
+			continue
+		}
+		if i < len(shape.AxisNames) && shape.AxisNames[i] != "" {
+			continue // Already named.
+		}
+		// Find a matching axis name from any input at the same position.
+		for _, input := range inputs {
+			if i >= len(input.shape.Dimensions) || input.shape.Dimensions[i] != shapes.DynamicDim {
+				continue
+			}
+			if i < len(input.shape.AxisNames) && input.shape.AxisNames[i] != "" {
+				if len(shape.AxisNames) == 0 {
+					shape.AxisNames = make([]string, len(shape.Dimensions))
+				}
+				shape.AxisNames[i] = input.shape.AxisNames[i]
+				break
+			}
+		}
+	}
 }

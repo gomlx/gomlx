@@ -4,6 +4,7 @@ package simplego
 
 import (
 	stderrors "errors"
+	"math/bits"
 	"reflect"
 	"strings"
 	"sync"
@@ -75,6 +76,99 @@ type bufferPoolKey struct {
 	length int
 }
 
+// bucketSize rounds size up to the next power of 2 for buffer pool bucketing.
+// Special cases: bucketSize(0) == 0, bucketSize(1) == 1.
+// For sizes already a power of 2, returns the same value.
+func bucketSize(size int) int {
+	if size <= 1 {
+		return size
+	}
+	return 1 << bits.Len(uint(size-1))
+}
+
+// resliceFlat returns flat[:length] for common slice types, falling back to
+// reflection for less common types (BFloat16, Float16, etc.).
+func resliceFlat(flat any, length int) any {
+	switch s := flat.(type) {
+	case []float32:
+		return s[:length]
+	case []float64:
+		return s[:length]
+	case []int32:
+		return s[:length]
+	case []int64:
+		return s[:length]
+	case []int8:
+		return s[:length]
+	case []int16:
+		return s[:length]
+	case []uint8:
+		return s[:length]
+	case []uint16:
+		return s[:length]
+	case []uint32:
+		return s[:length]
+	case []uint64:
+		return s[:length]
+	case []bool:
+		return s[:length]
+	case []complex64:
+		return s[:length]
+	case []complex128:
+		return s[:length]
+	default:
+		return reflect.ValueOf(flat).Slice(0, length).Interface()
+	}
+}
+
+// subSliceFlat returns flat[:length], preserving the underlying capacity.
+// Used to present operators with a flat slice of the actual (non-bucketed) length
+// while the backing array retains full bucketed capacity for pool reuse.
+func subSliceFlat(flat any, length int) any {
+	return resliceFlat(flat, length)
+}
+
+// fullCapFlat restores flat to its full backing-array capacity: flat[:cap(flat)].
+// Used before returning a buffer to the pool so the next consumer can sub-slice
+// to any length up to the bucketed capacity.
+func fullCapFlat(flat any) any {
+	return resliceFlat(flat, sliceCap(flat))
+}
+
+// sliceCap returns cap(flat) for common slice types, falling back to reflection.
+func sliceCap(flat any) int {
+	switch s := flat.(type) {
+	case []float32:
+		return cap(s)
+	case []float64:
+		return cap(s)
+	case []int32:
+		return cap(s)
+	case []int64:
+		return cap(s)
+	case []int8:
+		return cap(s)
+	case []int16:
+		return cap(s)
+	case []uint8:
+		return cap(s)
+	case []uint16:
+		return cap(s)
+	case []uint32:
+		return cap(s)
+	case []uint64:
+		return cap(s)
+	case []bool:
+		return cap(s)
+	case []complex64:
+		return cap(s)
+	case []complex128:
+		return cap(s)
+	default:
+		return reflect.ValueOf(flat).Cap()
+	}
+}
+
 // makeSliceForDType creates a slice of the appropriate type for the given dtype and length.
 // Fast paths for common dtypes avoid reflection overhead.
 //
@@ -119,15 +213,19 @@ func makeSliceForDType(dtype dtypes.DType, length int) any {
 }
 
 // getBufferPool for given dtype/length.
+// The length is rounded up to the next power of 2 (bucketed) for the pool key,
+// so buffers of similar sizes share the same pool and can be reused across
+// different concrete sizes in dynamic-shape workloads.
 func (b *Backend) getBufferPool(dtype dtypes.DType, length int) *sync.Pool {
-	key := bufferPoolKey{dtype: dtype, length: length}
+	bucketed := bucketSize(length)
+	key := bufferPoolKey{dtype: dtype, length: bucketed}
 	poolInterface, ok := b.bufferPools.Load(key)
 	if !ok {
 		poolInterface, _ = b.bufferPools.LoadOrStore(key, &sync.Pool{
 			New: func() any {
 				return &Buffer{
-					flat:  makeSliceForDType(dtype, length),
-					shape: shapes.Make(dtype, length),
+					flat:  makeSliceForDType(dtype, bucketed),
+					shape: shapes.Make(dtype, bucketed),
 				}
 			},
 		})
@@ -139,6 +237,10 @@ func (b *Backend) getBufferPool(dtype dtypes.DType, length int) *sync.Pool {
 // initialized.
 // Important: it's not necessarily initialized with zero, since it can reuse old buffers.
 //
+// The pool uses power-of-2 bucketing, so the underlying flat slice may have more capacity
+// than length. The flat is sub-sliced to exactly length elements before returning, so
+// callers always see len(flat) == length.
+//
 // See also Buffer.Zeros to initialize it with zeros, if needed.
 func (b *Backend) getBuffer(dtype dtypes.DType, length int) (*Buffer, error) {
 	if b.isFinalized {
@@ -147,6 +249,20 @@ func (b *Backend) getBuffer(dtype dtypes.DType, length int) (*Buffer, error) {
 	pool := b.getBufferPool(dtype, length)
 	buf := pool.Get().(*Buffer) //nolint:errcheck
 	buf.inUse = true
+	// Sub-slice flat to the actual requested length so operators
+	// see len(flat) == length, not the bucketed capacity.
+	// Also reset the 1D shape to match the actual length (the pool's New function
+	// creates shapes at the bucketed size).
+	// For packed sub-byte types (Uint4 etc.), the flat is []byte and its length
+	// is the packed byte count, not the logical element count.
+	if length > 0 {
+		flatLen := length
+		if dtype.IsPacked() {
+			flatLen = dtype.SizeForDimensions(length)
+		}
+		buf.flat = subSliceFlat(buf.flat, flatLen)
+	}
+	buf.shape = shapes.Make(dtype, length)
 	// buf.randomize() // Useful to find where zero-initialized is needed but missing.
 	return buf, nil
 }
@@ -183,6 +299,9 @@ func (b *Backend) putBuffer(buffer *Buffer) {
 		panic(errors.New("double-freeing simplego buffer"))
 	}
 	buffer.inUse = false
+	// Restore flat to full bucketed capacity before returning to pool,
+	// so the next consumer can sub-slice to any length up to the capacity.
+	buffer.flat = fullCapFlat(buffer.flat)
 	pool := b.getBufferPool(buffer.shape.DType, buffer.shape.Size())
 	pool.Put(buffer)
 }

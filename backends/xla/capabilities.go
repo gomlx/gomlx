@@ -7,7 +7,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
-// Capabilities of the SimpleGo backends: the set of supported operations and data types.
+// Capabilities of the XLA backend: the set of supported operations and data types.
 var Capabilities = backends.Capabilities{
 	Operations: map[backends.OpType]bool{
 		// Graph inputs (leaf nodes)

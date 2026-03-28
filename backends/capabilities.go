@@ -23,6 +23,12 @@ type Capabilities struct {
 	// If not listed, it's assumed to be false, hence not supported.
 	DTypes map[dtypes.DType]bool
 
+	// DynamicAxes indicates whether the backend supports named dynamic axes
+	// and shape specialization. When true, graph parameters can have symbolic
+	// dimensions (shapes.DynamicDim) with named axes, and the backend will
+	// lazily specialize execution for each concrete axis binding.
+	DynamicAxes bool
+
 	// PreferConstantsForVariables indicates that the backend prefers context variables
 	// (model weights) to be embedded as constants in the computation graph rather than
 	// passed as parameters (inputs) at execution time. This enables optimizations like

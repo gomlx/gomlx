@@ -88,7 +88,23 @@ func (f *Function) ConvGeneral(inputOp, kernelOp backends.Value, axes backends.C
 				kernelDilations[i] = 1
 			}
 		}
+	} else {
+		kernelDilations = xslices.SliceWithValue(spatialRank, 1)
 	}
+	// Validate that dynamic dims are only on the batch axis (spatial dynamic dims are not supported).
+	if input.shape.HasDynamicDims() {
+		for _, spatialAxis := range axes.InputSpatial {
+			if input.shape.Dimensions[spatialAxis] == shapes.DynamicDim {
+				return nil, fmt.Errorf("ConvGeneral: dynamic spatial dimensions are not supported; "+
+					"input spatial axis %d has DynamicDim (shape %s)", spatialAxis, input.shape)
+			}
+		}
+		if input.shape.Dimensions[axes.InputChannels] == shapes.DynamicDim {
+			return nil, fmt.Errorf("ConvGeneral: dynamic input channels dimension is not supported; "+
+				"input channel axis %d has DynamicDim (shape %s)", axes.InputChannels, input.shape)
+		}
+	}
+
 	params := &convNode{
 		axes:              axes.Clone(),
 		strides:           strides,
@@ -98,21 +114,29 @@ func (f *Function) ConvGeneral(inputOp, kernelOp backends.Value, axes backends.C
 		channelGroupCount: max(channelGroupCount, 1),
 		batchGroupCount:   max(batchGroupCount, 1),
 
-		hasInputDilations:       len(inputDilations) > 0 && slices.Max(inputDilations) > 1,
-		hasKernelDilations:      len(kernelDilations) > 0 && slices.Max(kernelDilations) > 1,
-		inputStrides:            input.shape.Strides(),
-		kernelStrides:           kernel.shape.Strides(),
-		dilatedInputSpatialDims: outputShape.Dimensions,
+		hasInputDilations:  len(inputDilations) > 0 && slices.Max(inputDilations) > 1,
+		hasKernelDilations: len(kernelDilations) > 0 && slices.Max(kernelDilations) > 1,
 	}
 
 	// Generate static derived data that will be used during execution.
-	params.dilatedInputSpatialDims = make([]int, spatialRank)
-	params.inputSpatialStrides = make([]int, spatialRank)
-	for spatialIdx, inputAxis := range axes.InputSpatial {
-		params.inputSpatialStrides[spatialIdx] = params.inputStrides[inputAxis]
-		dim := input.shape.Dimensions[inputAxis]
-		if dim > 0 {
-			params.dilatedInputSpatialDims[spatialIdx] = (dim-1)*inputDilations[spatialIdx] + 1
+	// When the input has dynamic dims, skip stride computation (Strides() panics on DynamicDim).
+	// The strides will be recomputed at specialization time in recomputeConvGeneralData.
+	if input.shape.HasDynamicDims() {
+		params.inputStrides = nil
+		params.kernelStrides = kernel.shape.Strides()
+		params.inputSpatialStrides = nil
+		params.dilatedInputSpatialDims = nil
+	} else {
+		params.inputStrides = input.shape.Strides()
+		params.kernelStrides = kernel.shape.Strides()
+		params.dilatedInputSpatialDims = make([]int, spatialRank)
+		params.inputSpatialStrides = make([]int, spatialRank)
+		for spatialIdx, inputAxis := range axes.InputSpatial {
+			params.inputSpatialStrides[spatialIdx] = params.inputStrides[inputAxis]
+			dim := input.shape.Dimensions[inputAxis]
+			if dim > 0 {
+				params.dilatedInputSpatialDims[spatialIdx] = (dim-1)*inputDilations[spatialIdx] + 1
+			}
 		}
 	}
 	node, _ := f.getOrCreateNode(opType, outputShape, []*Node{input, kernel}, params)

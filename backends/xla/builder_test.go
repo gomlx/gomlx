@@ -5,8 +5,11 @@ package xla_test
 import (
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/stretchr/testify/require"
+	"github.com/x448/float16"
 )
 
 // TestBinaryOp covers the different types of automatic broadcasting for binary operations.
@@ -47,4 +50,42 @@ func TestBinaryOp(t *testing.T) {
 			result.Value())
 
 	})
+}
+
+func TestDotGeneralAccumulatorDTypePreservesOutputDType(t *testing.T) {
+	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
+		return graph.Dot(lhs, rhs).
+			WithAccumulatorDType(dtypes.Float64).
+			Product()
+	})
+
+	results, err := exec.Exec([]float32{1e8, 1, -1e8}, []float32{1, 1, 1})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.Equal(t, dtypes.Float32, results[0].Shape().DType)
+	require.InDelta(t, float32(1), results[0].Value(), 1e-3)
+}
+
+func TestDotGeneralHalfPrecisionDefaultAccumulatorPreservesOutputDType(t *testing.T) {
+	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
+		return graph.Dot(lhs, rhs).Product()
+	})
+
+	lhs := []float16.Float16{
+		float16.Fromfloat32(1),
+		float16.Fromfloat32(2),
+		float16.Fromfloat32(3),
+	}
+	rhs := []float16.Float16{
+		float16.Fromfloat32(4),
+		float16.Fromfloat32(5),
+		float16.Fromfloat32(6),
+	}
+	results, err := exec.Exec(lhs, rhs)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.Equal(t, dtypes.Float16, results[0].Shape().DType)
+	got := tensors.MustCopyFlatData[float16.Float16](results[0])
+	require.Len(t, got, 1)
+	require.InDelta(t, float32(32), got[0].Float32(), 1e-3)
 }

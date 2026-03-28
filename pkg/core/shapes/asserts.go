@@ -11,6 +11,10 @@ import (
 
 // UncheckedAxis can be used in CheckDims or AssertDims functions for an axis
 // whose dimension doesn't matter.
+//
+// Note: this has the same numeric value as DynamicDim (-1), but is used in a different context.
+// UncheckedAxis is used in assertion arguments to mean "don't check this axis".
+// DynamicDim is used in Shape.Dimensions to indicate an axis whose size is unknown at graph build time.
 const UncheckedAxis = int(-1)
 
 // HasShape is an interface for objects that have an associated Shape.
