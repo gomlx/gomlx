@@ -187,7 +187,8 @@ func generateText(backend backends.Backend, ctx *context.Context, prompt string)
 		promptTokens = []int{32}
 	}
 
-	modelFn := transformer.NewFromContext(ctx).ForGeneration()
+	model := transformer.NewFromContext(ctx)
+	modelFn := transformer.MakeIncrementalModelFn(model)
 
 	decoder := decode.New(modelFn).FromContext(ctx)
 	fmt.Printf("\nGeneration\nStrategy: %s  Temp: %.2f  MaxLen: %d\nPrompt: %q\n\n",
