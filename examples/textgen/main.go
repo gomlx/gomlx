@@ -149,8 +149,9 @@ func trainModel(backend backends.Backend, ctx *context.Context) {
 
 	// Simple model function wrapper
 	modelFn := func(ctx *context.Context, _ any, inputs []*graph.Node) []*graph.Node {
-		tFn := transformer.NewFromContext(ctx).ForTraining()
-		return []*graph.Node{tFn(ctx, inputs[0])}
+		tokens := inputs[0]
+		tranformerModel := transformer.NewFromContext(ctx)
+		return []*graph.Node{tranformerModel.BuildGraph(ctx, tokens, nil)}
 	}
 
 	trainer := train.NewTrainer(backend, ctx, modelFn,

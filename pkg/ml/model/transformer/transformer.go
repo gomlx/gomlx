@@ -325,41 +325,73 @@ func (m *Model) WithTransposedWeights(transposed bool) *Model {
 	return m
 }
 
-// ForTraining returns a model function for training (full-sequence forward, no KV cache).
-func (m *Model) ForTraining() decode.IterativeModelFn {
+// BuildGraph returns the forward path of the transformer model applied to the full sequence of tokens, without using any KV cache,
+// meaning the attention is only within the sequence.
+//
+// This form can be used to embed full sentences or for training.
+//
+//   - tokens: shaped [batchSize, seqLen], or simply [seqLen]
+//   - mask: optional, if provided the shape must match tokens.Shape(), and it indicates
+//     which tokens are valid (1) and which are padding (0). The attention mask (causal or not)
+//     is computed taking into consideration the mask.
+//
+// It returns the logits of the last layer.
+func (m *Model) BuildGraph(ctx *context.Context, tokens, mask *Node) *Node {
+	return m.forwardFull(ctx, tokens, mask, false, 0)
+}
+
+// MakeIterativeModelFn returns a "iterative" model function for iteratively (increasing sequence length, no KVCache)
+// generation, using the decode package.
+func MakeIterativeModelFn(m *Model) decode.IterativeModelFn {
 	return func(ctx *context.Context, tokens *Node) *Node {
-		return m.forwardFull(ctx, tokens, false, 0)
+		return m.BuildGraph(ctx, tokens, nil)
 	}
 }
 
+// BuildGraphWithKVCache returns the forward path for the newTokens sequence, using the KV cache.
+//
+// Experimental: likely the KVCache will change in the future.
+func (m *Model) BuildGraphWithKVCache(ctx *context.Context, newTokens *Node, position int) *Node {
+	return m.forwardFull(ctx, newTokens, nil, true, position)
+}
+
 // ForGeneration returns a model function for generation (incremental forward with KV cache).
+//
+// Experimental: likely the KVCache will change in the future.
 func (m *Model) ForGeneration() decode.IncrementalModelFn {
 	return func(ctx *context.Context, newTokens *Node, position int) *Node {
-		return m.forwardFull(ctx, newTokens, true, position)
+		return m.forwardFull(ctx, newTokens, nil, true, position)
+	}
+}
+
+// MakeIncrementalModelFn returns a model function used by the decoder for incremental generation with KVCache,
+// using the decode package.
+func MakeIncrementalModelFn(m *Model) decode.IncrementalModelFn {
+	return func(ctx *context.Context, newTokens *Node, position int) *Node {
+		return m.ForGeneration()(ctx, newTokens, position)
 	}
 }
 
 // forwardFull: shared path for training and generation.
 func (m *Model) forwardFull(
 	ctx *context.Context,
-	tokens *Node,
+	tokens, mask *Node,
 	useCache bool,
 	position int,
 ) *Node {
-	cfg := m
 	g := tokens.Graph()
 	currentSeqLen := tokens.Shape().Dimensions[1]
 
-	embedded := layers.Embedding(ctx.In("token_embed"), tokens, cfg.DType, cfg.VocabSize, cfg.EmbedDim)
-
+	// Tokens embedding table lookup.
+	embedded := layers.Embedding(ctx.In("token_embed"), tokens, m.DType, m.VocabSize, m.EmbedDim)
 	if embedded.Rank() == 2 {
 		embedded = ExpandDims(embedded, 1)
 	}
 
 	x := embedded
-	if cfg.PosEmbed == nil {
+	if m.PosEmbed == nil {
 		posEmbedFull := ctx.In("pos_embed").VariableWithShape("embeddings",
-			shapes.Make(cfg.DType, cfg.MaxPosEmbed, cfg.EmbedDim)).ValueGraph(g)
+			shapes.Make(m.DType, m.MaxPosEmbed, m.EmbedDim)).ValueGraph(g)
 
 		var posEmbed *Node
 		if useCache {
@@ -373,18 +405,26 @@ func (m *Model) forwardFull(
 		x = Add(embedded, posEmbed)
 	}
 
-	for layer := 0; layer < cfg.NumLayers; layer++ {
+	for layer := 0; layer < m.NumLayers; layer++ {
 		layerCtx := ctx.In(fmt.Sprintf("layer_%d", layer))
-		x = m.ForwardLayer(layerCtx, x, layer, useCache, position)
+		x = m.ForwardLayer(layerCtx, x, mask, useCache, position)
 	}
 
-	logits := layers.Dense(ctx.In("output"), x, false, cfg.VocabSize)
+	logits := layers.Dense(ctx.In("output"), x, false, m.VocabSize)
 
 	return logits
 }
 
 // ForwardLayer executes a single transformer layer block depending on the configured architecture.
-func (m *Model) ForwardLayer(ctx *context.Context, x *Node, layerIdx int, useCache bool, position int) *Node {
+//
+// - ctx: context must be already scoped for the layer, e.g. ctx.In("layer_0")
+// - x: features coming from the previous layer (or token embedding table), shape [batchSize, seqLen, embedDim]
+// - mask: (optional, can be nil) shaped [batchSize, seqLen]
+// - useCache: if true, use KV cache -- Experimental: KVCache will change.
+// - position: position of the first token in the sequence, used only if using KV cache, otherwise we assum 0.
+//
+// It returns the output of the layer, shape [batchSize, seqLen, embedDim].
+func (m *Model) ForwardLayer(ctx *context.Context, x, mask *Node, useCache bool, position int) *Node {
 	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
 		return m.forwardLayerGemma(ctx, x, useCache, position)
 	}
@@ -392,41 +432,40 @@ func (m *Model) ForwardLayer(ctx *context.Context, x *Node, layerIdx int, useCac
 }
 
 func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCache bool, position int) *Node {
-	cfg := m
 	residual := x
 	var attn *Node
 
 	if useCache {
 		positionNode := Const(x.Graph(), int32(position))
-		attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, cfg.NumHeads, cfg.HeadDim).
-			WithKVCache(cfg.MaxPosEmbed, positionNode).
-			UseTransposedWeights(cfg.TransposedProjections)
+		attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, m.NumHeads, m.HeadDim).
+			WithKVCache(m.MaxPosEmbed, positionNode).
+			UseTransposedWeights(m.TransposedProjections)
 
-		if cfg.PosEmbed != nil {
-			attnBuilder = attnBuilder.WithPositionalEncoder(cfg.PosEmbed)
+		if m.PosEmbed != nil {
+			attnBuilder = attnBuilder.WithPositionalEncoder(m.PosEmbed)
 		}
-		if !cfg.UseBias {
+		if !m.UseBias {
 			attnBuilder = attnBuilder.UseProjectionBias(false)
 		}
-		if cfg.Dropout > 0 {
-			attnBuilder = attnBuilder.Dropout(cfg.Dropout)
+		if m.Dropout > 0 {
+			attnBuilder = attnBuilder.Dropout(m.Dropout)
 		}
 		attn = attnBuilder.Done()
 	} else {
-		attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, cfg.NumHeads, cfg.HeadDim).
-			UseTransposedWeights(cfg.TransposedProjections)
-		if cfg.UseCausalMask {
+		attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, m.NumHeads, m.HeadDim).
+			UseTransposedWeights(m.TransposedProjections)
+		if m.UseCausalMask {
 			attnBuilder = attnBuilder.UseCausalMask()
 		}
 
-		if cfg.PosEmbed != nil {
-			attnBuilder = attnBuilder.WithPositionalEncoder(cfg.PosEmbed)
+		if m.PosEmbed != nil {
+			attnBuilder = attnBuilder.WithPositionalEncoder(m.PosEmbed)
 		}
-		if !cfg.UseBias {
+		if !m.UseBias {
 			attnBuilder = attnBuilder.UseProjectionBias(false)
 		}
-		if cfg.Dropout > 0 {
-			attnBuilder = attnBuilder.Dropout(cfg.Dropout)
+		if m.Dropout > 0 {
+			attnBuilder = attnBuilder.Dropout(m.Dropout)
 		}
 		attn = attnBuilder.Done()
 	}
@@ -435,12 +474,12 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCach
 	x = m.normalize(layerCtx.In("norm1"), x)
 
 	residual = x
-	ff := m.dense(layerCtx.In("ff1"), x, cfg.UseBias, cfg.FFNDim)
-	ff = activations.Apply(cfg.Activation, ff)
-	if cfg.Dropout > 0 {
-		ff = layers.Dropout(layerCtx.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), cfg.Dropout))
+	ff := m.dense(layerCtx.In("ff1"), x, m.UseBias, m.FFNDim)
+	ff = activations.Apply(m.Activation, ff)
+	if m.Dropout > 0 {
+		ff = layers.Dropout(layerCtx.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), m.Dropout))
 	}
-	ff = m.dense(layerCtx.In("ff2"), ff, cfg.UseBias, cfg.EmbedDim)
+	ff = m.dense(layerCtx.In("ff2"), ff, m.UseBias, m.EmbedDim)
 	x = Add(residual, ff)
 	x = m.normalize(layerCtx.In("norm2"), x)
 	return x
@@ -499,7 +538,6 @@ func (m *Model) normalize(ctx *context.Context, operand *Node) *Node {
 }
 
 func (m *Model) forwardLayerGemma(layerCtx *context.Context, x *Node, useCache bool, position int) *Node {
-	cfg := m
 	residual := x
 
 	// Pre-attention normalization.
@@ -507,28 +545,28 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x *Node, useCache b
 
 	// Attention.
 	var attn *Node
-	attnBuilder := attention.SelfAttention(layerCtx.In("self_attn"), x, cfg.NumHeads, cfg.HeadDim).
+	attnBuilder := attention.SelfAttention(layerCtx.In("self_attn"), x, m.NumHeads, m.HeadDim).
 		UseTransposedWeights(m.TransposedProjections)
-	if cfg.NumKVHeads > 0 && cfg.NumKVHeads != cfg.NumHeads {
-		attnBuilder.SetNumKVHeads(cfg.NumKVHeads)
+	if m.NumKVHeads > 0 && m.NumKVHeads != m.NumHeads {
+		attnBuilder.SetNumKVHeads(m.NumKVHeads)
 	}
 	if useCache {
 		positionNode := Const(x.Graph(), int32(position))
-		attnBuilder = attnBuilder.WithKVCache(cfg.MaxPosEmbed, positionNode)
-	} else if cfg.UseCausalMask {
+		attnBuilder = attnBuilder.WithKVCache(m.MaxPosEmbed, positionNode)
+	} else if m.UseCausalMask {
 		attnBuilder = attnBuilder.UseCausalMask()
 	}
-	if cfg.PosEmbed != nil {
-		attnBuilder = attnBuilder.WithPositionalEncoder(cfg.PosEmbed)
+	if m.PosEmbed != nil {
+		attnBuilder = attnBuilder.WithPositionalEncoder(m.PosEmbed)
 	}
-	if !cfg.UseBias {
+	if !m.UseBias {
 		attnBuilder = attnBuilder.UseProjectionBias(false)
 	}
 	if m.Architecture == ArchitectureGemma3 {
-		attnBuilder = attnBuilder.WithQKRMSNorm(cfg.NormEpsilon)
+		attnBuilder = attnBuilder.WithQKRMSNorm(m.NormEpsilon)
 	}
-	if cfg.Dropout > 0 {
-		attnBuilder = attnBuilder.Dropout(cfg.Dropout)
+	if m.Dropout > 0 {
+		attnBuilder = attnBuilder.Dropout(m.Dropout)
 	}
 	attn = attnBuilder.Done()
 
@@ -542,15 +580,15 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x *Node, useCache b
 
 	// Gemma uses SwiGLU: gate_proj, up_proj, down_proj
 	ffCtx := layerCtx.In("mlp")
-	gate := m.dense(ffCtx.In("gate_proj"), x, cfg.UseBias, cfg.FFNDim)
-	up := m.dense(ffCtx.In("up_proj"), x, cfg.UseBias, cfg.FFNDim)
-	switchedNode := activations.Apply(cfg.Activation, gate)
+	gate := m.dense(ffCtx.In("gate_proj"), x, m.UseBias, m.FFNDim)
+	up := m.dense(ffCtx.In("up_proj"), x, m.UseBias, m.FFNDim)
+	switchedNode := activations.Apply(m.Activation, gate)
 	ff := Mul(switchedNode, up)
 
-	if cfg.Dropout > 0 {
-		ff = layers.Dropout(ffCtx.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), cfg.Dropout))
+	if m.Dropout > 0 {
+		ff = layers.Dropout(ffCtx.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), m.Dropout))
 	}
-	ff = m.dense(ffCtx.In("down_proj"), ff, cfg.UseBias, cfg.EmbedDim)
+	ff = m.dense(ffCtx.In("down_proj"), ff, m.UseBias, m.EmbedDim)
 
 	// Post-feedforward normalization
 	ff = m.normalize(layerCtx.In("post_feedforward_norm"), ff)
