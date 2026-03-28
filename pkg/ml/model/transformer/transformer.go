@@ -436,10 +436,10 @@ func (m *Model) PrePositionalEncoder(ctx *context.Context, x *Node, position int
 	return x
 }
 
-// LogitsFromEmbeddings takes the embeddings of the later attention layer and computes the logits over
-// the vocabulary size.
+// LogitsFromEmbeddings takes the embeddings of the later attention layer (returned by EmbeddingLayers) and computes
+// the logits over the vocabulary size.
 //
-// This step is done automatically by EmbeddingLayers or PredictNextTokens, but if needed, it can
+// This step is done automatically by PredictNextTokens, but if needed, it can
 // be used separately by calling this method.
 func (m *Model) LogitsFromEmbeddings(ctx *context.Context, embeddings *Node) *Node {
 	return layers.Dense(ctx.In("output"), embeddings, false, m.VocabSize)
@@ -454,6 +454,9 @@ func (m *Model) LogitsFromEmbeddings(ctx *context.Context, embeddings *Node) *No
 // - position: position of the first token in the sequence, used only if using KV cache, otherwise we assum 0.
 //
 // It returns the output of the layer, shape [batchSize, seqLen, embedDim].
+//
+// This step is done automatically by EmbeddingLayers or PredictNextTokens, but if needed, it can
+// be used separately by calling this method.
 func (m *Model) ForwardLayer(ctx *context.Context, x, mask *Node, useCache bool, position int) *Node {
 	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
 		return m.forwardLayerGemma(ctx, x, mask, useCache, position)
