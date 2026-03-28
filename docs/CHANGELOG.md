@@ -7,6 +7,7 @@
   - Modified the parametrized activations to be suffixed with `With`: `LeakyReluWith`, `HardSigmoidWith`, `HardSwishWith`.
 - Package `attention`:
   - API clean up.
+  - Added `WithMask`, a simplified mask input for when only using padding.
   - Dropout now takes a `*Node` instead of a float64, allowing dynamic dropout control.
 - Package `attention/pos`:
   - Split `Encoder` API into `QKEncoder` and `PreEncoder`, to support different types of positional encoders.

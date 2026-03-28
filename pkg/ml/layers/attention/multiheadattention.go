@@ -497,7 +497,6 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 
 	// Final shape: `[batch, <query_elements>, outputDim]`
 	attentionOutput = b.dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
-
 	return attentionOutput, attentionCoefficients
 }
 
@@ -614,13 +613,6 @@ func (b *MultiHeadAttentionBuilder) buildAttentionShape() {
 //	output := attention.SelfAttention(ctx, x, numHeads, headDim).
 //	    UseCausalMask().
 //	    Dropout(0.1).
-//	    Done()
-//
-// Example usage for generation with KV cache:
-//
-//	output := attention.SelfAttention(ctx, x, numHeads, headDim).
-//	    WithKVCache(maxCacheLen, position).
-//	    WithRoPE(10000.0).
 //	    Done()
 func SelfAttention(ctx *context.Context, x *Node, numHeads int, headDim int) *MultiHeadAttentionBuilder {
 	return MultiHeadAttention(ctx, x, x, x, numHeads, headDim)

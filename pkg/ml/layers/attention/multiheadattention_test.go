@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
@@ -190,78 +191,127 @@ func TestMultiHeadAttentionWithRoPE(t *testing.T) {
 }
 
 func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
 
-	t.Run("basic", func(t *testing.T) {
-		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
-			return SelfAttention(ctx, x, 2, 4).
-				UseQKVProjection().
-				Done()
+		t.Run("basic", func(t *testing.T) {
+			ctx := context.New()
+			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
+				return SelfAttention(ctx, x, 2, 4).
+					UseQKVProjection().
+					Done()
+			})
+
+			// [batch=2, seq=3, embed=8]
+			input := [][][]float32{
+				{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16}, {17, 18, 19, 20, 21, 22, 23, 24}},
+				{{25, 26, 27, 28, 29, 30, 31, 32}, {33, 34, 35, 36, 37, 38, 39, 40}, {41, 42, 43, 44, 45, 46, 47, 48}},
+			}
+			output := exec.MustExec(input)[0]
+			assert.Equal(t, []int{2, 3, 8}, output.Shape().Dimensions)
 		})
 
-		// [batch=2, seq=3, embed=8]
-		input := [][][]float32{
-			{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16}, {17, 18, 19, 20, 21, 22, 23, 24}},
-			{{25, 26, 27, 28, 29, 30, 31, 32}, {33, 34, 35, 36, 37, 38, 39, 40}, {41, 42, 43, 44, 45, 46, 47, 48}},
-		}
-		output := exec.MustExec(input)[0]
-		assert.Equal(t, []int{2, 3, 8}, output.Shape().Dimensions)
-	})
+		t.Run("with_causal_mask", func(t *testing.T) {
+			ctx := context.New()
+			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
+				return SelfAttention(ctx, x, 2, 4).
+					UseQKVProjection().
+					WithCausalMask(true).
+					Done()
+			})
 
-	t.Run("with_causal_mask", func(t *testing.T) {
-		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
-			return SelfAttention(ctx, x, 2, 4).
-				UseQKVProjection().
-				WithCausalMask(true).
-				Done()
+			input := [][][]float32{
+				{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16}, {17, 18, 19, 20, 21, 22, 23, 24}},
+			}
+			output := exec.MustExec(input)[0]
+			assert.Equal(t, []int{1, 3, 8}, output.Shape().Dimensions)
 		})
 
-		input := [][][]float32{
-			{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16}, {17, 18, 19, 20, 21, 22, 23, 24}},
-		}
-		output := exec.MustExec(input)[0]
-		assert.Equal(t, []int{1, 3, 8}, output.Shape().Dimensions)
-	})
+		t.Run("with_coefficients", func(t *testing.T) {
+			ctx := context.New()
+			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) []*Node {
+				output, coef := SelfAttention(ctx, x, 2, 4).
+					UseQKVProjection().
+					DoneWithCoefficients()
+				return []*Node{output, coef}
+			})
 
-	t.Run("with_coefficients", func(t *testing.T) {
-		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) []*Node {
-			output, coef := SelfAttention(ctx, x, 2, 4).
-				UseQKVProjection().
-				DoneWithCoefficients()
-			return []*Node{output, coef}
+			input := [][][]float32{
+				{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16}, {17, 18, 19, 20, 21, 22, 23, 24}},
+			}
+			outputs := exec.MustExec(input)
+			assert.Equal(t, []int{1, 3, 8}, outputs[0].Shape().Dimensions)
+			// coefficients: [batch, query_seq, num_heads, key_seq]
+			assert.Equal(t, []int{1, 3, 2, 3}, outputs[1].Shape().Dimensions)
 		})
 
-		input := [][][]float32{
-			{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16}, {17, 18, 19, 20, 21, 22, 23, 24}},
-		}
-		outputs := exec.MustExec(input)
-		assert.Equal(t, []int{1, 3, 8}, outputs[0].Shape().Dimensions)
-		// coefficients: [batch, query_seq, num_heads, key_seq]
-		assert.Equal(t, []int{1, 3, 2, 3}, outputs[1].Shape().Dimensions)
-	})
+		t.Run("no_output_bias", func(t *testing.T) {
+			// UseProjectionBias(false) disables only the output projection bias;
+			// QKV biases are always present (matching the separate Dense path).
+			ctx := context.New()
+			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
+				return SelfAttention(ctx, x, 2, 4).
+					UseQKVProjection().
+					UseProjectionBias(false).
+					Done()
+			})
 
-	t.Run("no_output_bias", func(t *testing.T) {
-		// UseProjectionBias(false) disables only the output projection bias;
-		// QKV biases are always present (matching the separate Dense path).
-		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
-			return SelfAttention(ctx, x, 2, 4).
-				UseQKVProjection().
-				UseProjectionBias(false).
-				Done()
+			input := [][][]float32{
+				{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16}, {17, 18, 19, 20, 21, 22, 23, 24}},
+			}
+			output := exec.MustExec(input)[0]
+			assert.Equal(t, []int{1, 3, 8}, output.Shape().Dimensions)
 		})
 
-		input := [][][]float32{
-			{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16}, {17, 18, 19, 20, 21, 22, 23, 24}},
-		}
-		output := exec.MustExec(input)[0]
-		assert.Equal(t, []int{1, 3, 8}, output.Shape().Dimensions)
+		t.Run("with_mask", func(t *testing.T) {
+			ctx := context.New()
+			ctx = ctx.WithInitializer(initializers.RandomNormalFn(ctx, 1.0)) // Random initialization
+
+			// 1. exec for sequence 5 and masked as 3.
+			exec5 := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node, mask *Node) *Node {
+				return SelfAttention(ctx, x, 2, 4).
+					UseQKVProjection().
+					WithMask(mask).
+					Done()
+			})
+
+			input5 := make([][][]float32, 1)
+			input5[0] = make([][]float32, 5)
+			for i := 0; i < 5; i++ {
+				input5[0][i] = make([]float32, 8)
+				for j := 0; j < 8; j++ {
+					input5[0][i][j] = float32(i*8 + j + 1)
+				}
+			}
+
+			mask5 := [][]bool{{true, true, true, false, false}}
+
+			output5 := exec5.MustExec(input5, mask5)[0].Value().([][][]float32)
+
+			// 2. exec for sequence 3 (slice of the original)
+			exec3 := context.MustNewExec(backend, ctx.Reuse(), func(ctx *context.Context, x *Node, mask *Node) *Node {
+				return SelfAttention(ctx, x, 2, 4).
+					UseQKVProjection().
+					WithMask(mask).
+					Done()
+			})
+
+			input3 := [][][]float32{input5[0][:3]}
+			mask3 := [][]bool{{true, true, true}}
+
+			output3 := exec3.MustExec(input3, mask3)[0].Value().([][][]float32)
+
+			// 3. verify that first 3 elements of output5 match output3
+			assert.Equal(t, []int{1, 5, 8}, []int{len(output5), len(output5[0]), len(output5[0][0])})
+			assert.Equal(t, []int{1, 3, 8}, []int{len(output3), len(output3[0]), len(output3[0][0])})
+
+			for i := 0; i < 3; i++ {
+				for j := 0; j < 8; j++ {
+					assert.InDelta(t, output3[0][i][j], output5[0][i][j], 1e-4)
+				}
+			}
+		})
 	})
 }
-
 func TestMultiHeadAttentionGQA(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 

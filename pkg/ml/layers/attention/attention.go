@@ -153,7 +153,7 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 //     This avoids the -1e9 additive trick which causes gradient and low-precision issues.
 //   - Float mask: added to scores before softmax (additive mask).
 //
-// The mask must be broadcastable to the score tensor layout (using numHeads, not numKVHeads):
+// The attentionMask must be broadcastable to the score tensor layout (using numHeads, not numKVHeads):
 //   - LayoutBHSD: broadcastable to [batch, numHeads, q_seq, kv_seq]
 //   - LayoutBSHD: broadcastable to [batch, q_seq, numHeads, kv_seq]
 //
@@ -175,13 +175,13 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 //   - coefficients: attention coefficients (nil when wantCoefficients is false) shaped
 //     [batch, heads, q_seq, kv_seq] for LayoutBHSD or
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
-func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate *Node,
+func Core(ctx *context.Context, query, key, value *Node, scale float64, attentionMask *Node, dropoutRate *Node,
 	layout AxesLayout, useCausalMask, wantCoefficients bool) (output, coefficients *Node) {
 	g := query.Graph()
 	numQueryHeads := query.Shape().Dimensions[layout.HeadsAxis()]
 	numKVHeads := key.Shape().Dimensions[layout.HeadsAxis()]
 
-	if useCausalMask && mask != nil {
+	if useCausalMask && attentionMask != nil {
 		Panicf("attention.Core: useCausalMask and mask are mutually exclusive; combine them into a single mask before calling Core")
 	}
 	if numQueryHeads <= 0 || numKVHeads <= 0 || numQueryHeads%numKVHeads != 0 {
@@ -195,7 +195,7 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 	// by InternalFusedOpCaller() below.
 	decomposedFn := func() (output *Node, coefficients *Node) {
 		// Build causal mask for the decomposed path.
-		decomposedMask := mask
+		decomposedMask := attentionMask
 		if useCausalMask {
 			seqLen := query.Shape().Dimensions[layout.SeqAxis()]
 			causalBool := LowerTriangular(g, seqLen)
@@ -260,7 +260,7 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 		output = InternalFusedOpCaller(
 			func() *Node {
 				return BackendFusedScaledDotProductAttention(
-					query, key, value, mask,
+					query, key, value, attentionMask,
 					numQueryHeads, numKVHeads, layout, scale, useCausalMask, nil)
 			},
 			func() *Node {

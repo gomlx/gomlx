@@ -12,6 +12,14 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
+// WithMask is a simple shortcut to call WithKeyMask and WithQueryMask.
+// Typically, it's used to handle padding in the input sequences, and can be combined with WithCausalMask.
+//
+// Do not use it with KVCache.
+func (b *MultiHeadAttentionBuilder) WithMask(mask *Node) *MultiHeadAttentionBuilder {
+	return b.WithKeyMask(mask).WithQueryMask(mask)
+}
+
 // WithKeyMask sets a mask for keys that are actually valid and can be attended.
 //
 // It defaults to no mask, meaning all keys are accessible. See also WithQueryMask.
@@ -21,12 +29,8 @@ import (
 // for every head.
 //
 // Either use WithKeyMask and WithQueryMask separately or use WithKeyQueryMatrixMask, but not both.
-// Optionally, one can also UseCausalMask, which is combined (logical-and) to any given mask.
+// Optionally, one can also WithCausalMask, which is combined (logical-and) to any given mask.
 func (b *MultiHeadAttentionBuilder) WithKeyMask(keyMask *Node) *MultiHeadAttentionBuilder {
-	if b.useCausalMask {
-		Panicf("MultiHeadAttention: SetKeyMask is mutually exclusive with UseCausalMask; " +
-			"combine them into a single mask if both causal and explicit masks are needed")
-	}
 	if b.queryKeyMatrixMask != nil {
 		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
 	}
@@ -49,14 +53,10 @@ func (b *MultiHeadAttentionBuilder) WithKeyMask(keyMask *Node) *MultiHeadAttenti
 //
 // Either use WithKeyMask and WithQueryMask separately or use WithKeyQueryMatrixMask, but
 // not both.
-// Optionally, one can also UseCausalMask, which is combined (logical-and) to any given mask.
+// Optionally, one can also WithCausalMask, which is combined (logical-and) to any given mask.
 func (b *MultiHeadAttentionBuilder) WithQueryMask(queryMask *Node) *MultiHeadAttentionBuilder {
-	if b.useCausalMask {
-		Panicf("MultiHeadAttention: SetQueryMask is mutually exclusive with UseCausalMask; " +
-			"combine them into a single mask if both causal and explicit masks are needed")
-	}
 	if b.queryKeyMatrixMask != nil {
-		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
+		Panicf("a mask can be set either with WithKeyMask and WithQueryMask separately or with WithKeyQueryMatrixMask, but not both")
 	}
 	shape := queryMask.Shape()
 	if shape.Rank() < 1+b.innerQueryAxes || shape.Rank() > 2+b.innerQueryAxes {
@@ -75,12 +75,13 @@ func (b *MultiHeadAttentionBuilder) WithQueryMask(queryMask *Node) *MultiHeadAtt
 // or `[batch_size, <query_elements>, <key_elements>]` if the mask is the same
 // for every head.
 //
-// Either use SetKeyMask and SetQueryMask separately or use WithKeyQueryMatrixMask, but
+// Either use WithKeyMask and WithQueryMask separately or use WithKeyQueryMatrixMask, but
 // not both.
-// Optionally, one can also UseCausalMask, which is combined (logical-and) to any given mask.
+//
+// Optionally, one can also WithCausalMask, which is combined (logical-and) to any given mask.
 func (b *MultiHeadAttentionBuilder) WithQueryKeyMatrixMask(queryKeyMatrixMask *Node) *MultiHeadAttentionBuilder {
 	if b.useCausalMask {
-		Panicf("MultiHeadAttention: SetQueryKeyMatrixMask is mutually exclusive with UseCausalMask; " +
+		Panicf("MultiHeadAttention: SetQueryKeyMatrixMask is mutually exclusive with WithCausalMask; " +
 			"combine them into a single mask if both causal and explicit masks are needed")
 	}
 	if b.keyMask != nil || b.queryMask != nil {
@@ -123,8 +124,8 @@ func (b *MultiHeadAttentionBuilder) WithCausalMask(useCausalMask bool) *MultiHea
 		// Nothing to check.
 		return b
 	}
-	if b.keyMask != nil || b.queryMask != nil || b.queryKeyMatrixMask != nil {
-		Panicf("MultiHeadAttention: WithCausalMask is mutually exclusive with WithKeyMask/WithQueryMask/WithQueryKeyMatrixMask; " +
+	if b.queryKeyMatrixMask != nil {
+		Panicf("MultiHeadAttention: WithCausalMask is mutually exclusive with WithQueryKeyMatrixMask; " +
 			"combine them into a single mask if both causal and explicit masks are needed")
 	}
 	queryShape := b.query.Shape()
@@ -154,8 +155,9 @@ func (b *MultiHeadAttentionBuilder) buildAttentionMask() (mask *Node) {
 		mask = b.queryKeyMatrixMask
 	}
 
-	// KV cache causal mask: position-aware, built here since Core doesn't know about cache.
-	if b.useCausalMask && b.kvCacheShape.Ok() {
+	// Causal mask is usually left to be calculated by Core, but if KV cache is used, or if it needs to be combined
+	// with another mask, it is built here.
+	if b.useCausalMask && (b.kvCacheShape.Ok() || mask != nil) {
 		causalMask := b.buildCausalAttentionMask()
 		if mask == nil {
 			mask = causalMask
@@ -205,11 +207,11 @@ func (b *MultiHeadAttentionBuilder) buildCausalAttentionMask() (mask *Node) {
 	keyLen := keyShape.Dimensions[1]
 
 	if queryShape.Rank() != 3 || keyShape.Rank() != 3 {
-		Panicf("MultiHeadAttention's UseCausalMask requires key and query to be rank-3,"+
+		Panicf("MultiHeadAttention's WithCausalMask requires key and query to be rank-3,"+
 			" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
 	}
 	if !reflect.DeepEqual(keyShape.Dimensions[:keyShape.Rank()-1], queryShape.Dimensions[:queryShape.Rank()-1]) {
-		Panicf("MultiHeadAttention's UseCausalMask requires inner shapes of query and key be the same,"+
+		Panicf("MultiHeadAttention's WithCausalMask requires inner shapes of query and key be the same,"+
 			" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
 	}
 	if queryLen != keyLen {
