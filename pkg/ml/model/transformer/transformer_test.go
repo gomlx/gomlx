@@ -141,15 +141,14 @@ func TestTransformerBuilder(t *testing.T) {
 		assert.Equal(t, dtypes.Float32, logits.DType())
 	})
 
-	t.Run("ForGenerationPrompt", func(t *testing.T) {
+	t.Run("BuildGraphWithKVCache", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
-		modelFn := cfg.ForGeneration()
-		g := NewGraph(backend, "ForGenerationPrompt")
+		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
+		g := NewGraph(backend, "BuildGraphWithKVCache")
 		prompt := IotaFull(g, shapes.Make(dtypes.Int32, 2, 5))
-		prompt = Mod(prompt, Const(g, int32(cfg.VocabSize)))
-		logits := modelFn(ctx, prompt, 0)
+		prompt = Mod(prompt, Const(g, int32(model.VocabSize)))
+		logits := model.BuildGraphWithKVCache(ctx, prompt, 0)
 		require.NotNil(t, logits)
 		assert.Equal(t, []int{2, 5, 100}, logits.Shape().Dimensions)
 	})

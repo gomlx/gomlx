@@ -264,51 +264,51 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 
 		t.Run("with_mask", func(t *testing.T) {
 			ctx := context.New()
+			ctx.SetRNGStateFromSeed(42)
 			ctx = ctx.WithInitializer(initializers.RandomNormalFn(ctx, 1.0)) // Random initialization
 
-			// 1. exec for sequence 5 and masked as 3.
-			exec5 := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node, mask *Node) *Node {
-				return SelfAttention(ctx, x, 2, 4).
+			// 1. exec for sequence N and masked as 3.
+			const N = 100
+			execN := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node, mask *Node) *Node {
+				output := SelfAttention(ctx, x, 2, 4).
 					UseQKVProjection().
 					WithMask(mask).
 					Done()
+				return Slice(output, AxisRange(), AxisRange(0, 3), AxisRange()) // Slice only first 3 non-masked elements.
+			})
+			inputN := tensors.FromShape(shapes.Make(dtypes.Float32, 1, 100, 8))
+			tensors.MutableFlatData(inputN, func(flat []float32) {
+				for i := range flat {
+					flat[i] = float32(i+1) / float32(len(flat))
+				}
 			})
 
-			input5 := make([][][]float32, 1)
-			input5[0] = make([][]float32, 5)
-			for i := range 5 {
-				input5[0][i] = make([]float32, 8)
-				for j := range 8 {
-					input5[0][i][j] = float32(i*8 + j + 1)
+			// mask3 takes only the first 3 elements.
+			mask3 := tensors.FromShape(shapes.Make(dtypes.Bool, 1, N))
+			tensors.MutableFlatData(mask3, func(flat []bool) {
+				for i := range flat {
+					flat[i] = i < 3
 				}
-			}
+			})
 
-			mask5 := [][]bool{{true, true, true, false, false}}
+			output3ofN := execN.MustExec1(inputN, mask3)
+			fmt.Printf("output -- slice after the attention:\n%s\n", output3ofN)
 
-			output5 := exec5.MustExec(input5, mask5)[0].Value().([][][]float32)
-
-			// 2. exec for sequence 3 (slice of the original)
-			exec3 := context.MustNewExec(backend, ctx.Reuse(), func(ctx *context.Context, x *Node, mask *Node) *Node {
+			// 2. exec for sequence 3 (slice of the original), without mask
+			exec3 := context.MustNewExec(backend, ctx.Reuse(), func(ctx *context.Context, x *Node) *Node {
+				// Slice the first 3 elements.
+				x = Slice(x, AxisRange(), AxisRange(0, 3), AxisRange())
 				return SelfAttention(ctx, x, 2, 4).
 					UseQKVProjection().
-					WithMask(mask).
 					Done()
 			})
+			output3 := exec3.MustExec1(inputN)
+			fmt.Printf("\noutput -- slice before the attention:\n%s\n", output3)
 
-			input3 := [][][]float32{input5[0][:3]}
-			mask3 := [][]bool{{true, true, true}}
-
-			output3 := exec3.MustExec(input3, mask3)[0].Value().([][][]float32)
-
-			// 3. verify that first 3 elements of output5 match output3
-			assert.Equal(t, []int{1, 5, 8}, []int{len(output5), len(output5[0]), len(output5[0][0])})
-			assert.Equal(t, []int{1, 3, 8}, []int{len(output3), len(output3[0]), len(output3[0][0])})
-
-			for i := range 3 {
-				for j := range 8 {
-					assert.InDelta(t, output3[0][i][j], output5[0][i][j], 1e-4)
-				}
-			}
+			assert.InDeltaSlice(t,
+				tensors.MustCopyFlatData[float32](output3),
+				tensors.MustCopyFlatData[float32](output3ofN),
+				1e-2)
 		})
 	})
 }

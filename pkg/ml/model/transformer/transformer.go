@@ -355,20 +355,11 @@ func (m *Model) BuildGraphWithKVCache(ctx *context.Context, newTokens *Node, pos
 	return m.forwardFull(ctx, newTokens, nil, true, position)
 }
 
-// ForGeneration returns a model function for generation (incremental forward with KV cache).
-//
-// Experimental: likely the KVCache will change in the future.
-func (m *Model) ForGeneration() decode.IncrementalModelFn {
-	return func(ctx *context.Context, newTokens *Node, position int) *Node {
-		return m.forwardFull(ctx, newTokens, nil, true, position)
-	}
-}
-
 // MakeIncrementalModelFn returns a model function used by the decoder for incremental generation with KVCache,
 // using the decode package.
 func MakeIncrementalModelFn(m *Model) decode.IncrementalModelFn {
 	return func(ctx *context.Context, newTokens *Node, position int) *Node {
-		return m.ForGeneration()(ctx, newTokens, position)
+		return m.BuildGraphWithKVCache(ctx, newTokens, position)
 	}
 }
 
