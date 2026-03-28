@@ -24,7 +24,8 @@ func TestRoPE(t *testing.T) {
 			// Create position indices using helper function
 			seqLen := x.Shape().Dimensions[0]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			return rope.Apply(x, posIndices, x.Rank()-2)
+			output, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
+			return output
 		})
 
 		input := [][]float32{
@@ -48,7 +49,8 @@ func TestRoPE(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[0]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			return rope.Apply(x, posIndices, x.Rank()-2)
+			q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
+			return q
 		})
 
 		input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
@@ -66,7 +68,8 @@ func TestRoPE(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			return rope.Apply(x, posIndices, x.Rank()-2)
+			q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
+			return q
 		})
 
 		input := [][]float32{
@@ -87,7 +90,7 @@ func TestRoPE(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			rotated := rope.Apply(x, posIndices, x.Rank()-2)
+			rotated, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
 			return ReduceAllSum(Abs(rotated))
 		})
 
@@ -112,7 +115,8 @@ func TestRoPE(t *testing.T) {
 			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 				seqLen := x.Shape().Dimensions[x.Rank()-2]
 				posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-				return rope.Apply(x, posIndices, x.Rank()-2)
+				q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
+				return q
 			})
 
 			input := [][]float32{
@@ -137,7 +141,8 @@ func TestRoPEWithCustomDim(t *testing.T) {
 			// Apply RoPE only to middle dimensions [2:6]
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			return rope.Apply(x, posIndices, x.Rank()-2)
+			q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
+			return q
 		})
 
 		input := [][]float32{
@@ -160,7 +165,8 @@ func TestRoPEWithCustomDim(t *testing.T) {
 			// Apply RoPE to the full embedding range [0:8]
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			return rope.Apply(x, posIndices, x.Rank()-2)
+			q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
+			return q
 		})
 
 		input := [][]float32{
@@ -183,7 +189,8 @@ func TestRoPEWithCustomDim(t *testing.T) {
 			// Apply RoPE to tail half with different startPos and baseFreq
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			return rope.Apply(x, posIndices, x.Rank()-2)
+			q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
+			return q
 		})
 
 		input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
@@ -203,7 +210,8 @@ func TestRoPEWithCustomDim(t *testing.T) {
 			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 				seqLen := x.Shape().Dimensions[x.Rank()-2]
 				posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-				return rope.Apply(x, posIndices, x.Rank()-2)
+				q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
+				return q
 			})
 
 			input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
@@ -222,7 +230,8 @@ func TestRoPEWithCustomDim(t *testing.T) {
 			exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 				seqLen := x.Shape().Dimensions[x.Rank()-2]
 				posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-				return rope.Apply(x, posIndices, x.Rank()-2)
+				q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
+				return q
 			})
 
 			input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
@@ -242,7 +251,8 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
-			return rope.Apply(x, posIndices, x.Rank()-2)
+			q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
+			return q
 		})
 
 		// Input shape: [batch=2, seq_len=3, embed_dim=8]
@@ -312,7 +322,7 @@ func TestApplyWithCosSin(t *testing.T) {
 			posIndices := SequentialPositions(g, startPos, seqLen)
 
 			// Result from RoPE.Apply
-			ropeResult := rope.Apply(x, posIndices, x.Rank()-2)
+			ropeResult, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
 
 			// Compute cos/sin manually (replicating what applyRoPE does internally)
 			positions := ConvertDType(posIndices, dtype)
@@ -329,7 +339,7 @@ func TestApplyWithCosSin(t *testing.T) {
 			sinAngles := Sin(angles)
 
 			// Result from RoPEWithCosSin (non-interleaved, matching RoPE.Apply)
-			cossinResult := NewRoPEWithCosSin(cosAngles, sinAngles).Apply(x, nil, x.Rank()-2)
+			cossinResult, _ := NewRoPEWithCosSin(cosAngles, sinAngles).EncodeQK(x, x, nil, x.Rank()-2)
 
 			return []*Node{ropeResult, cossinResult}
 		})
@@ -362,7 +372,8 @@ func TestApplyWithCosSin(t *testing.T) {
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, cos, sin *Node) *Node {
-			return NewRoPEWithCosSin(cos, sin).WithInterleaved(true).Apply(x, nil, x.Rank()-2)
+			q, _ := NewRoPEWithCosSin(cos, sin).WithInterleaved(true).EncodeQK(x, x, nil, x.Rank()-2)
+			return q
 		})
 
 		// x: [2, 4] (seq_len=2, head_dim=4)
@@ -404,7 +415,8 @@ func TestApplyWithCosSin(t *testing.T) {
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, cos, sin *Node) *Node {
-			return NewRoPEWithCosSin(cos, sin).Apply(x, nil, x.Rank()-2)
+			q, _ := NewRoPEWithCosSin(cos, sin).EncodeQK(x, x, nil, x.Rank()-2)
+			return q
 		})
 
 		// x: [1, 6] - head_dim=6, but only rotary_dim=4
@@ -442,11 +454,11 @@ func TestRoPEWithSeqAxis1(t *testing.T) {
 			posIndices := SequentialPositions(g, startPos, seqLen)
 
 			// Apply with seqAxis=1 (BSHD layout)
-			bshdResult := rope.Apply(x, posIndices, 1)
+			bshdResult, _ := rope.EncodeQK(x, x, posIndices, 1)
 
 			// Transpose to BHSD, apply with seqAxis=rank-2=2, transpose back
 			xBHSD := TransposeAllDims(x, 0, 2, 1, 3)
-			bhsdResult := rope.Apply(xBHSD, posIndices, 2)
+			bhsdResult, _ := rope.EncodeQK(xBHSD, xBHSD, posIndices, 2)
 			bhsdResultBack := TransposeAllDims(bhsdResult, 0, 2, 1, 3)
 
 			return []*Node{bshdResult, bhsdResultBack}

@@ -448,7 +448,8 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCach
 			attnBuilder = attnBuilder.UseProjectionBias(false)
 		}
 		if m.Dropout > 0 {
-			attnBuilder = attnBuilder.Dropout(m.Dropout)
+			dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
+			attnBuilder = attnBuilder.Dropout(dropoutRate)
 		}
 		attn = attnBuilder.Done()
 	} else {
@@ -465,7 +466,8 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x *Node, useCach
 			attnBuilder = attnBuilder.UseProjectionBias(false)
 		}
 		if m.Dropout > 0 {
-			attnBuilder = attnBuilder.Dropout(m.Dropout)
+			dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
+			attnBuilder = attnBuilder.Dropout(dropoutRate)
 		}
 		attn = attnBuilder.Done()
 	}
@@ -566,7 +568,8 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x *Node, useCache b
 		attnBuilder = attnBuilder.WithQKRMSNorm(m.NormEpsilon)
 	}
 	if m.Dropout > 0 {
-		attnBuilder = attnBuilder.Dropout(m.Dropout)
+		dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
+		attnBuilder = attnBuilder.Dropout(dropoutRate)
 	}
 	attn = attnBuilder.Done()
 

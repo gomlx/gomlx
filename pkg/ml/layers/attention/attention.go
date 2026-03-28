@@ -157,7 +157,7 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 //   - LayoutBHSD: broadcastable to [batch, numHeads, q_seq, kv_seq]
 //   - LayoutBSHD: broadcastable to [batch, q_seq, numHeads, kv_seq]
 //
-// The causal and mask parameters are mutually exclusive: providing both will panic.
+// The useCausalMask and mask parameters are mutually exclusive: providing both will panic.
 // If you need both causal masking and an explicit mask, combine them into a single mask
 // before calling Core (e.g. LogicalAnd a lower-triangular boolean mask with your mask).
 //
@@ -175,20 +175,20 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 //   - coefficients: attention coefficients (nil when wantCoefficients is false) shaped
 //     [batch, heads, q_seq, kv_seq] for LayoutBHSD or
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
-func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate float64,
-	layout AxesLayout, causal, wantCoefficients bool) (output, coefficients *Node) {
+func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *Node, dropoutRate *Node,
+	layout AxesLayout, useCausalMask, wantCoefficients bool) (output, coefficients *Node) {
 	g := query.Graph()
 	numQueryHeads := query.Shape().Dimensions[layout.HeadsAxis()]
 	numKVHeads := key.Shape().Dimensions[layout.HeadsAxis()]
 
-	if causal && mask != nil {
-		Panicf("attention.Core: causal and mask are mutually exclusive; combine them into a single mask before calling Core")
+	if useCausalMask && mask != nil {
+		Panicf("attention.Core: useCausalMask and mask are mutually exclusive; combine them into a single mask before calling Core")
 	}
 	if numQueryHeads <= 0 || numKVHeads <= 0 || numQueryHeads%numKVHeads != 0 {
 		Panicf("attention.Core: numQueryHeads (%d) must be positive and divisible by numKVHeads (%d)", numQueryHeads, numKVHeads)
 	}
 
-	dropoutActive := layers.IsDropoutActive(ctx, g) && dropoutRate > 0
+	dropoutActive := layers.IsDropoutActive(ctx, g) && dropoutRate != nil
 
 	// Function to compute the attention "decomposed" (as in not-fused).
 	// We use this as a closure (as opposed to calculating it directly), because it's required
@@ -196,7 +196,7 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 	decomposedFn := func() (output *Node, coefficients *Node) {
 		// Build causal mask for the decomposed path.
 		decomposedMask := mask
-		if causal {
+		if useCausalMask {
 			seqLen := query.Shape().Dimensions[layout.SeqAxis()]
 			causalBool := LowerTriangular(g, seqLen)
 			// Reshape for correct broadcasting with score layout.
@@ -238,7 +238,7 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 			coefficients = MaskedSoftmax(scores, decomposedMask, -1)
 		}
 		if dropoutActive {
-			coefficients = layers.DropoutStatic(ctx, coefficients, dropoutRate)
+			coefficients = layers.Dropout(ctx, coefficients, dropoutRate)
 		}
 
 		decomposedOutput := Einsum(outputEquation(layout, isGQA), coefficients, value)
@@ -261,7 +261,7 @@ func Core(ctx *context.Context, query, key, value *Node, scale float64, mask *No
 			func() *Node {
 				return BackendFusedScaledDotProductAttention(
 					query, key, value, mask,
-					numQueryHeads, numKVHeads, layout, scale, causal, nil)
+					numQueryHeads, numKVHeads, layout, scale, useCausalMask, nil)
 			},
 			func() *Node {
 				output, _ := decomposedFn()

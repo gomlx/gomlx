@@ -1,5 +1,12 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
+// Package attention implements multi-head attention and related utilities.
+//
+// The multi-head attention implements one attention layer, as described in the paper
+// "Attention Is All You Need" (https://arxiv.org/abs/1706.03762), with some of the
+// modern extensions.
+//
+// See MultiHeadAttention to create a builder for the the attention layer.
 package attention
 
 import (
@@ -36,7 +43,7 @@ type MultiHeadAttentionBuilder struct {
 	attentionShape               shapes.Shape
 
 	useProjectionBias bool
-	dropoutRate       float64
+	dropoutRate       *Node
 
 	// layout records the internal layout used for the attention core.
 	// Defaults to LayoutBSHD (Dense projections produce [batch, seq, heads, dim]).
@@ -67,10 +74,7 @@ type MultiHeadAttentionBuilder struct {
 	useTransposedWeights bool
 }
 
-// MultiHeadAttention defines a multi-head attention layers, as described in the paper
-// "Attention Is All You Need", https://arxiv.org/abs/1706.03762,
-// by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez,
-// Lukasz Kaiser, Illia Polosukhin.
+// MultiHeadAttention defines a multi-head attention layers, as described in [1], plus some modern extensions.
 //
 // It takes query, key, and value and project them numHead times, to a headDim sized embeddings.
 // Then it uses the dot-product of query and key as weights, and returns a softmax sum
@@ -93,6 +97,21 @@ type MultiHeadAttentionBuilder struct {
 // and the resulting Node is returned when MultiHeadAttentionBuilder.Done is called.
 // Alternatively one can call MultiHeadAttentionBuilder.DoneWithCoefficients, in which
 // case it returns both the updated state and the attention coefficients.
+//
+// Example:
+//
+//	positionEncoder := pos.NewRoPE(10000.0)
+//	for layer := range numLayers {
+//		ctx := ctx.In(fmt.Sprintf("layer_%d", layer))
+//		// Use x for the source of query/key/values (self-attention).
+//		x := attention.MultiHeadAttention(ctx, x, x, x, numHeads, headDim).
+//		    WithPositionalEncoder(positionEncoder)
+//		logits := attention.Done()
+//		...  // normalization, residual connection, etc.
+//	}
+//
+// [1] "Attention Is All You Need", https://arxiv.org/abs/1706.03762, by Ashish Vaswani, Noam Shazeer,
+// Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin.
 func MultiHeadAttention(ctx *context.Context, query, key, value *Node, numHeads int, headDim int) *MultiHeadAttentionBuilder {
 	g := query.Graph()
 
@@ -335,12 +354,12 @@ func (b *MultiHeadAttentionBuilder) UseProjectionBias(useProjectionBias bool) *M
 }
 
 // Dropout defines how much dropout to use in the attention coefficients calculation.
-// If set to 0 or lower, it's simply disabled. Default is 0.
-func (b *MultiHeadAttentionBuilder) Dropout(rate float64) *MultiHeadAttentionBuilder {
+//
+// If set to nil to disable it (the default). Values <= 0 are a no-op, and values > 1 are invalid.
+//
+// Notice the dropout rate is a *Node, since it can be set dynamically if needed.
+func (b *MultiHeadAttentionBuilder) Dropout(rate *Node) *MultiHeadAttentionBuilder {
 	b.dropoutRate = rate
-	if b.dropoutRate >= 1 {
-		Panicf("dropout rate %g >= 1 is undefined", rate)
-	}
 	return b
 }
 
@@ -367,18 +386,18 @@ func (b *MultiHeadAttentionBuilder) Dropout(rate float64) *MultiHeadAttentionBui
 //
 // Usage pattern:
 //
-//	// Build generation graph:
-//	builder := attention.MultiHeadAttention(ctx, embeddings, embeddings, embeddings, numHeads, headDim).
-//	    WithKVCache(maxSeqLen, position).
-//	    WithRoPE(10000.0).
-//	    Done()
+//		// Build generation graph:
+//		attention := attention.MultiHeadAttention(ctx, embeddings, embeddings, embeddings, numHeads, headDim).
+//		    WithKVCache(maxSeqLen, position).
+//		    WithPositionalEncoder(pos.NewRoPE(10000.0))
+//	 logits := attention.Done()
 //
-//	// Generate tokens:
-//	// 1. First call with full prompt (e.g., 10 tokens), position=0
-//	// 2. Each subsequent call with 1 new token, position=10, 11, 12, ...
+//		// Generate tokens:
+//		// 1. First call with full prompt (e.g., 10 tokens), position=0
+//		// 2. Each subsequent call with 1 new token, position=10, 11, 12, ...
 //
-//	// Before generating a new response, reset all caches in the model:
-//	attention.KVCacheReset(ctx)
+//		// Before generating a new response, reset all caches in the model:
+//		attention.KVCacheReset(ctx)
 //
 // The cache supports circular/rotating mode: when position exceeds maxSeqLen,
 // new entries wrap around and overwrite the oldest entries. This allows efficient
@@ -414,7 +433,10 @@ func (b *MultiHeadAttentionBuilder) WithRoPE(baseFreq float64) *MultiHeadAttenti
 	return b
 }
 
-// WithPositionalEncoder sets the positional encoder to use.
+// WithPositionalEncoder sets a positional encoder to use.
+//
+// Note: Only pos.QKEncoder is actually called. A pos.PreEncoder is ignored, since they should be applied
+// before the first MultiHeadAttention layer.
 func (b *MultiHeadAttentionBuilder) WithPositionalEncoder(encoder pos.Encoder) *MultiHeadAttentionBuilder {
 	b.positionalEncoder = encoder
 	return b
@@ -532,15 +554,17 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	// Applied before KV cache so that rotated embeddings are cached.
 	// projectedQuery/Key shape: [batch, seq, heads, dim] (BSHD layout).
 	if b.positionalEncoder != nil {
-		seqLen := projectedQuery.Shape().Dimensions[seqAxis]
-		var posIndices *Node
-		if b.position != nil {
-			posIndices = pos.SequentialPositions(b.g, b.position, seqLen)
-		} else {
-			posIndices = pos.SequentialPositions(b.g, Const(b.g, int32(0)), seqLen)
+		qkEncoder, ok := b.positionalEncoder.(pos.QKEncoder)
+		if ok {
+			seqLen := projectedQuery.Shape().Dimensions[seqAxis]
+			var posIndices *Node
+			if b.position != nil {
+				posIndices = pos.SequentialPositions(b.g, b.position, seqLen)
+			} else {
+				posIndices = pos.SequentialPositions(b.g, Const(b.g, int32(0)), seqLen)
+			}
+			projectedQuery, projectedKey = qkEncoder.EncodeQK(projectedQuery, projectedKey, posIndices, seqAxis)
 		}
-		projectedQuery = b.positionalEncoder.Apply(projectedQuery, posIndices, seqAxis)
-		projectedKey = b.positionalEncoder.Apply(projectedKey, posIndices, seqAxis)
 	}
 
 	// Handle KV cache if in incremental generation mode
@@ -581,8 +605,8 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
 	// Pass causal to Core only when not using KV cache (Core builds a simple lower-triangular mask).
 	// When using KV cache, the position-aware causal mask is already built in buildMask above.
-	passCausal := b.useCausalMask && !b.kvCacheShape.Ok()
-	attentionOutput, attentionCoefficients = Core(b.ctx, projectedQuery, projectedKey, projectedValue, scale, mask, b.dropoutRate, b.layout, passCausal, wantCoefficients)
+	useCausalMask := b.useCausalMask && !b.kvCacheShape.Ok()
+	attentionOutput, attentionCoefficients = Core(b.ctx, projectedQuery, projectedKey, projectedValue, scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients)
 
 	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.
 	// attentionOutput: [batch, q_flat, heads, value_dim] -> [batch, <query_elements>, numHeads*valueDim]

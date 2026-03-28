@@ -17,6 +17,8 @@
 package pos
 
 import (
+	"fmt"
+
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
@@ -81,6 +83,11 @@ func NewRoPEWithDimRange(baseFreq float64, dimStart, dimEnd int) *RoPE {
 	}
 }
 
+// Name returns the name of the encoder.
+func (r *RoPE) Name() string {
+	return fmt.Sprintf("RoPE(baseFreq=%.1f, dimStart=%d, dimEnd=%d, interleaved=%t)", r.BaseFreq, r.DimStart, r.DimEnd, r.Interleaved)
+}
+
 // WithInterleaved sets whether rotation pairs are at interleaved indices.
 // If true, pairs are at even/odd indices (x[..., 0], x[..., 1]).
 // If false (default), pairs are split first-half/second-half (x[..., :dim/2], x[..., dim/2:]).
@@ -91,44 +98,47 @@ func (r *RoPE) WithInterleaved(interleaved bool) *RoPE {
 	return r
 }
 
-// Apply implements the Encoder interface.
-// It applies rotary position embeddings to x using the provided position indices.
+// EncodeQK implements the QKEncoder interface.
+// It applies rotary position embeddings to query and key tensors using the provided position indices.
 // The rotation is applied on a range of frequencies multiplied by the position
 // of each element, as specified by positionIndices.
 //
 // Parameters:
-//   - x: Input tensor, shaped [batchSize..., sequenceLength, ...].
+//   - q, k: Input tensors, shaped [batchSize..., sequenceLength, ...].
 //   - positionIndices: Position indices tensor shaped [[batchSize...,] seqLen] where each element
 //     contains the position value for that token. The batchSize dimension
-//     is broadcast to match x's batch dimensions if not set. Examples:
+//     is broadcast to match q's batch dimensions if not set. Examples:
 //   - Sequential positions: [0, 1, 2, 3]
 //   - Rotating cache with wrap: [1022, 1023, 0, 1, 2]
 //   - Batched multi-client: [[5,6,7], [127,128,129]]
-//   - seqAxis: The axis index in x that represents the sequence dimension.
-//     For standard [..., seq_len, head_dim] tensors this is x.Rank()-2.
+//   - seqAxis: The axis index in q and k that represents the sequence dimension.
+//     For standard [..., seq_len, head_dim] tensors this is q.Rank()-2.
 //     For BSHD layout [batch, seq, heads, dim] this is 1.
 //     This makes the encoder layout-proof: callers specify which axis is seq.
 //     Negative values are ok, they are counted from the end.
 //
 // Returns:
-//   - Tensor with positional information applied, same shape as x.
+//   - Tensors with positional information applied, same shape as q and k.
 //
 // Example:
 //
 //	rope := NewRoPE(10000.0)
-//	// x has shape [batch, seq_len, embed_dim]
+//	// q, k have shape [batch, seq_len, embed_dim]
 //	// positions has shape [batch, seq_len] with values like [0, 1, 2, ...]
-//	embedded := rope.Apply(x, positions, x.Rank()-2)
-func (r *RoPE) Apply(x *Node, positionIndices *Node, seqAxis int) *Node {
+//	q_rot, k_rot := rope.EncodeQK(q, k, positions, q.Rank()-2)
+func (r *RoPE) EncodeQK(q, k *Node, positionIndices *Node, seqAxis int) (*Node, *Node) {
 	if r.DimStart == 0 && r.DimEnd == -1 {
-		return applyRoPE(x, positionIndices, r.BaseFreq, seqAxis, r.Interleaved)
+		return applyRoPE(q, positionIndices, r.BaseFreq, seqAxis, r.Interleaved),
+			applyRoPE(k, positionIndices, r.BaseFreq, seqAxis, r.Interleaved)
 	}
 	dimEnd := r.DimEnd
 	if dimEnd == -1 {
-		dimEnd = x.Shape().Dimensions[x.Shape().Rank()-1]
+		dimEnd = q.Shape().Dimensions[q.Shape().Rank()-1]
 	}
-	seqAxis = graph.MustAdjustAxis(seqAxis, x) // Adjust negative axis values to corresponding positive.
-	return applyRoPEWithCustomDim(x, positionIndices, r.BaseFreq, r.DimStart, dimEnd, seqAxis, r.Interleaved)
+	qSeqAxis := graph.MustAdjustAxis(seqAxis, q) // Adjust negative axis values to corresponding positive.
+	kSeqAxis := graph.MustAdjustAxis(seqAxis, k)
+	return applyRoPEWithCustomDim(q, positionIndices, r.BaseFreq, r.DimStart, dimEnd, qSeqAxis, r.Interleaved),
+		applyRoPEWithCustomDim(k, positionIndices, r.BaseFreq, r.DimStart, dimEnd, kSeqAxis, r.Interleaved)
 }
 
 // RoPEWithCosSin implements the Encoder interface using pre-computed cos and sin tensors.
@@ -164,6 +174,11 @@ func NewRoPEWithCosSin(cos, sin *Node) *RoPEWithCosSin {
 	}
 }
 
+// Name implements the Encoder interface.
+func (r *RoPEWithCosSin) Name() string {
+	return fmt.Sprintf("RoPEWithCosSin(interleaved=%t)", r.interleaved)
+}
+
 // WithInterleaved sets whether rotation pairs are at interleaved indices.
 // If true, pairs are at even/odd indices (x[..., 0], x[..., 1]).
 // If false (default), pairs are split first-half/second-half (x[..., :dim/2], x[..., dim/2:]).
@@ -174,19 +189,19 @@ func (r *RoPEWithCosSin) WithInterleaved(interleaved bool) *RoPEWithCosSin {
 	return r
 }
 
-// Apply implements the Encoder interface.
+// EncodeQK implements the QKEncoder interface.
 // For RoPEWithCosSin, the positionIndices parameter is ignored since cos/sin are pre-computed.
 // Pass nil for positionIndices.
 //
 // Parameters:
-//   - x: Input tensor with shape [..., seqLen, ..., headDim], where seqAxis identifies the sequence dimension.
+//   - q, k: Input tensors with shape [..., seqLen, ..., headDim], where seqAxis identifies the sequence dimension.
 //   - positionIndices: Ignored (pass nil). Position information is already baked into cos/sin.
-//   - seqAxis: The axis in x that represents the sequence dimension.
+//   - seqAxis: The axis in q and k that represents the sequence dimension.
 //
 // Returns:
-//   - Tensor with rotary embeddings applied, same shape as x.
-func (r *RoPEWithCosSin) Apply(x *Node, _ *Node, seqAxis int) *Node {
-	return applyWithCosSin(x, r.cos, r.sin, seqAxis, r.interleaved)
+//   - Tensors with rotary embeddings applied, same shape as q and k.
+func (r *RoPEWithCosSin) EncodeQK(q, k *Node, _ *Node, seqAxis int) (*Node, *Node) {
+	return applyWithCosSin(q, r.cos, r.sin, seqAxis, r.interleaved), applyWithCosSin(k, r.cos, r.sin, seqAxis, r.interleaved)
 }
 
 // applyWithCosSin applies rotary position embeddings using pre-computed cos and sin tensors.
