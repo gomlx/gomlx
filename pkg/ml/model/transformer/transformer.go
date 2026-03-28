@@ -79,7 +79,7 @@ type Model struct {
 	Activation    activations.Type // e.g. "gelu", "silu", "gelu_approximate"
 	NumKVHeads    int              // For Grouped Query Attention (GQA), 0 means equal to NumHeads
 
-	PosEmbed pos.Encoder // Positional encoder (e.g. RoPE). If nil, standard absolute positional embeddings are used.
+	posEncoder pos.Encoder // Positional encoder (e.g. RoPE). If nil, standard absolute positional embeddings are used.
 
 	// TransposedProjections indicates whether to assume linear weights are transposed (as [out_features, in_features]),
 	// which is standard for PyTorch nn.Linear. This enables dropping in PyTorch models directly.
@@ -105,7 +105,7 @@ func New(vocabSize, embedDim, numLayers, numHeads, headDim int) *Model {
 		NormEpsilon:   1e-5,
 		Activation:    activations.TypeGelu,
 		NumKVHeads:    0,
-		PosEmbed:      nil,
+		posEncoder:    nil,
 	}
 }
 
@@ -204,7 +204,7 @@ func (m *Model) FromContext(ctx *context.Context) *Model {
 	useRoPE := context.GetParamOr(ctx, ParamUseRoPE, false)
 	if useRoPE {
 		baseFreq := context.GetParamOr(ctx, ParamRoPEBaseFreq, 10000.0)
-		m.PosEmbed = pos.NewRoPE(baseFreq)
+		m.posEncoder = pos.NewRoPE(baseFreq)
 	}
 
 	// Handle dtype separately since it's a string
@@ -246,13 +246,13 @@ func (m *Model) WithDropout(rate float64) *Model {
 
 // WithRoPE enables RoPE with base frequency.
 func (m *Model) WithRoPE(baseFreq float64) *Model {
-	m.PosEmbed = pos.NewRoPE(baseFreq)
+	m.posEncoder = pos.NewRoPE(baseFreq)
 	return m
 }
 
-// WithPositionalEmbedding sets the positional encoder.
-func (m *Model) WithPositionalEmbedding(encoder pos.Encoder) *Model {
-	m.PosEmbed = encoder
+// WithPositionalEncoder sets the positional encoder.
+func (m *Model) WithPositionalEncoder(encoder pos.Encoder) *Model {
+	m.posEncoder = encoder
 	return m
 }
 
@@ -413,27 +413,20 @@ func (m *Model) EmbedTokens(ctx *context.Context, tokens *Node) *Node {
 // This step is done automatically by EmbeddingLayers or PredictNextTokens, but if needed, it can
 // be used separately by calling this method.
 func (m *Model) PrePositionalEncoder(ctx *context.Context, x *Node, position int, useKVCache bool) *Node {
-	if m.PosEmbed == nil {
-		g := x.Graph()
-		// Variable with all the positional embeddings: created if it doesn't exist yet.
-		posEmbedFull := ctx.In("pos_embed").VariableWithShape("embeddings",
-			shapes.Make(m.DType, m.MaxPosEmbed, m.EmbedDim)).ValueGraph(g)
-
-		// Take the slice of the full positional embeddings corresponding to the current sequence length.
-		currentSeqLen := x.Shape().Dimensions[1]
-		var posEmbed *Node
-		if useKVCache {
-			posEmbed = Slice(posEmbedFull, AxisRange(position, position+currentSeqLen))
-		} else {
-			posEmbed = Slice(posEmbedFull, AxisRange(0, currentSeqLen))
-		}
-
-		// Broadcast to the whole batch and add to the current value of x.
-		batchSize := x.Shape().Dimensions[0]
-		posEmbed = BroadcastPrefix(posEmbed, batchSize)
-		x = Add(x, posEmbed)
+	if m.posEncoder == nil {
+		return x
 	}
-	return x
+	preEnc, ok := m.posEncoder.(pos.PreEncoder)
+	if !ok {
+		// Positional encoder is not a pre-enconder.
+		return x
+	}
+
+	g := x.Graph()
+	seqAxis := 1 // Sequence is always the axis 1 for now.
+	seqLen := x.Shape().Dimensions[seqAxis]
+	posIndices := pos.SequentialPositions(g, Scalar(g, dtypes.Int32, position), seqLen)
+	return preEnc.PreEncode(x, posIndices, seqAxis)
 }
 
 // LogitsFromEmbeddings takes the embeddings of the later attention layer (returned by EmbeddingLayers) and computes
@@ -477,8 +470,8 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x, mask *Node, u
 			attnBuilder = attnBuilder.WithMask(mask)
 		}
 
-		if m.PosEmbed != nil {
-			attnBuilder = attnBuilder.WithPositionalEncoder(m.PosEmbed)
+		if m.posEncoder != nil {
+			attnBuilder = attnBuilder.WithPositionalEncoder(m.posEncoder)
 		}
 		if !m.UseBias {
 			attnBuilder = attnBuilder.UseProjectionBias(false)
@@ -498,8 +491,8 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x, mask *Node, u
 			attnBuilder = attnBuilder.WithCausalMask(true)
 		}
 
-		if m.PosEmbed != nil {
-			attnBuilder = attnBuilder.WithPositionalEncoder(m.PosEmbed)
+		if m.posEncoder != nil {
+			attnBuilder = attnBuilder.WithPositionalEncoder(m.posEncoder)
 		}
 		if !m.UseBias {
 			attnBuilder = attnBuilder.UseProjectionBias(false)
@@ -600,8 +593,8 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x, mask *Node, useC
 	} else if m.UseCausalMask {
 		attnBuilder.WithCausalMask(true)
 	}
-	if m.PosEmbed != nil {
-		attnBuilder.WithPositionalEncoder(m.PosEmbed)
+	if m.posEncoder != nil {
+		attnBuilder.WithPositionalEncoder(m.posEncoder)
 	}
 	if !m.UseBias {
 		attnBuilder.UseProjectionBias(false)

@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -430,7 +431,7 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 			if b.position != nil {
 				posIndices = pos.SequentialPositions(b.g, b.position, seqLen)
 			} else {
-				posIndices = pos.SequentialPositions(b.g, Const(b.g, int32(0)), seqLen)
+				posIndices = pos.SequentialPositions(b.g, ScalarZero(b.g, dtypes.Int32), seqLen)
 			}
 			projectedQuery, projectedKey = qkEncoder.EncodeQK(projectedQuery, projectedKey, posIndices, seqAxis)
 		}

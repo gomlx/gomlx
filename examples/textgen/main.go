@@ -28,6 +28,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/decode"
+	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/pkg/ml/model/transformer"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
@@ -150,8 +151,10 @@ func trainModel(backend backends.Backend, ctx *context.Context) {
 	// Simple model function wrapper
 	modelFn := func(ctx *context.Context, _ any, inputs []*graph.Node) []*graph.Node {
 		tokens := inputs[0]
-		tranformerModel := transformer.NewFromContext(ctx)
-		return []*graph.Node{tranformerModel.PredictNextTokens(ctx, tokens, nil)}
+		transformerModel := transformer.NewFromContext(ctx)
+		posEmbeder := pos.NewLearned(ctx, transformerModel.MaxPosEmbed, transformerModel.EmbedDim)
+		transformerModel.WithPositionalEncoder(posEmbeder)
+		return []*graph.Node{transformerModel.PredictNextTokens(ctx, tokens, nil)}
 	}
 
 	trainer := train.NewTrainer(backend, ctx, modelFn,
