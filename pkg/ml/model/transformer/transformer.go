@@ -407,8 +407,11 @@ func (m *Model) EmbedTokens(ctx *context.Context, tokens *Node) *Node {
 }
 
 // PrePositionalEncoder applies the positional encoder to the given embeddings before
-// the first transformer layer: this only applies if the positional encoder implements
+// the first transformer layer.
+//
+// This only applies if the positional encoder implements
 // the pos.PreEncoder interface (some positional encoders run later).
+// Otherwise, or if the encoder is nil, it simply returns x.
 //
 // This step is done automatically by EmbeddingLayers or PredictNextTokens, but if needed, it can
 // be used separately by calling this method.
