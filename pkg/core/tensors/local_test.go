@@ -456,6 +456,84 @@ func TestAssign(t *testing.T) {
 	require.Equal(t, values, MustCopyFlatData[float64](tensor))
 }
 
+func TestPackedSubByteValueSafe(t *testing.T) {
+	t.Run("Int4", func(t *testing.T) {
+		// Shape [2, 4]: 8 values packed into 4 bytes, 2 nibbles per byte (little-endian).
+		tensor := FromShape(shapes.Make(dtypes.Int4, 2, 4))
+		require.NoError(t, tensor.MutableBytes(func(data []byte) {
+			data[0] = 0x21 // values: 1, 2
+			data[1] = 0x43 // values: 3, 4
+			data[2] = 0x65 // values: 5, 6
+			data[3] = 0xF7 // values: 7, -1 (0xF sign-extended)
+		}))
+		val, err := tensor.ValueSafe()
+		require.NoError(t, err)
+		got, ok := val.([][]int8)
+		require.True(t, ok, "expected [][]int8, got %T", val)
+		assert.Equal(t, [][]int8{{1, 2, 3, 4}, {5, 6, 7, -1}}, got)
+
+		s := tensor.Summary(4)
+		assert.Contains(t, s, dtypes.Int4.String())
+	})
+
+	t.Run("Uint4", func(t *testing.T) {
+		// Shape [2, 2]: 4 values in 2 bytes.
+		tensor := FromShape(shapes.Make(dtypes.Uint4, 2, 2))
+		require.NoError(t, tensor.MutableBytes(func(data []byte) {
+			data[0] = 0xBA // values: 0xA, 0xB
+			data[1] = 0xDC // values: 0xC, 0xD
+		}))
+		val, err := tensor.ValueSafe()
+		require.NoError(t, err)
+		got, ok := val.([][]uint8)
+		require.True(t, ok, "expected [][]uint8, got %T", val)
+		assert.Equal(t, [][]uint8{{0xA, 0xB}, {0xC, 0xD}}, got)
+	})
+
+	t.Run("Int2", func(t *testing.T) {
+		// Shape [2, 4]: 8 values packed into 2 bytes, 4 crumbs per byte.
+		// Byte layout: bits [1:0]=val0, [3:2]=val1, [5:4]=val2, [7:6]=val3.
+		tensor := FromShape(shapes.Make(dtypes.Int2, 2, 4))
+		require.NoError(t, tensor.MutableBytes(func(data []byte) {
+			// Row 0: values 0, 1, -2, -1 → crumbs 00, 01, 10, 11 → 0b11_10_01_00 = 0xE4
+			data[0] = 0xE4
+			// Row 1: values 1, 0, -1, -2 → crumbs 01, 00, 11, 10 → 0b10_11_00_01 = 0xB1
+			data[1] = 0xB1
+		}))
+		val, err := tensor.ValueSafe()
+		require.NoError(t, err)
+		got, ok := val.([][]int8)
+		require.True(t, ok, "expected [][]int8, got %T", val)
+		assert.Equal(t, [][]int8{{0, 1, -2, -1}, {1, 0, -1, -2}}, got)
+	})
+
+	t.Run("Uint2", func(t *testing.T) {
+		// Shape [2, 4]: 8 values packed into 2 bytes.
+		tensor := FromShape(shapes.Make(dtypes.Uint2, 2, 4))
+		require.NoError(t, tensor.MutableBytes(func(data []byte) {
+			// Row 0: values 0, 1, 2, 3 → crumbs 00, 01, 10, 11 → 0xE4
+			data[0] = 0xE4
+			// Row 1: values 3, 2, 1, 0 → crumbs 11, 10, 01, 00 → 0x1B
+			data[1] = 0x1B
+		}))
+		val, err := tensor.ValueSafe()
+		require.NoError(t, err)
+		got, ok := val.([][]uint8)
+		require.True(t, ok, "expected [][]uint8, got %T", val)
+		assert.Equal(t, [][]uint8{{0, 1, 2, 3}, {3, 2, 1, 0}}, got)
+	})
+
+	t.Run("ScalarInt4", func(t *testing.T) {
+		tensor := FromShape(shapes.Make(dtypes.Int4))
+		require.NoError(t, tensor.MutableBytes(func(data []byte) {
+			data[0] = 0xF5 // low nibble = 5, high nibble unused for scalar
+		}))
+		val, err := tensor.ValueSafe()
+		require.NoError(t, err)
+		assert.Equal(t, int8(5), val)
+	})
+}
+
 func TestFromShape(t *testing.T) {
 	testCases := []struct {
 		dtype   dtypes.DType

@@ -1208,6 +1208,21 @@ func (f *Function) BitwiseXor(lhsOp, rhsOp backends.Value) (backends.Value, erro
 	return f.addBinaryOp(backends.OpTypeBitwiseXor, lhsOp, rhsOp)
 }
 
+// ShiftLeft implements the backends.Builder interface.
+func (f *Function) ShiftLeft(lhsOp, rhsOp backends.Value) (backends.Value, error) {
+	return f.addBinaryOp(backends.OpTypeShiftLeft, lhsOp, rhsOp)
+}
+
+// ShiftRightArithmetic implements the backends.Builder interface.
+func (f *Function) ShiftRightArithmetic(lhsOp, rhsOp backends.Value) (backends.Value, error) {
+	return f.addBinaryOp(backends.OpTypeShiftRightArithmetic, lhsOp, rhsOp)
+}
+
+// ShiftRightLogical implements the backends.Builder interface.
+func (f *Function) ShiftRightLogical(lhsOp, rhsOp backends.Value) (backends.Value, error) {
+	return f.addBinaryOp(backends.OpTypeShiftRightLogical, lhsOp, rhsOp)
+}
+
 // LogicalAnd implements the backends.Builder interface.
 func (f *Function) LogicalAnd(lhsOp, rhsOp backends.Value) (backends.Value, error) {
 	return f.addBinaryOp(backends.OpTypeLogicalAnd, lhsOp, rhsOp)

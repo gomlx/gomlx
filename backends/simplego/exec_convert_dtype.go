@@ -57,12 +57,30 @@ func init() {
 	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Int64, priorityTyped, execConvertPackedSubByte[int64](unpackUint4Nibbles, 2))
 	convertDTypePairMap.Register(dtypes.Uint4, dtypes.Uint8, priorityTyped, execConvertPackedSubByte[uint8](unpackUint4Nibbles, 2))
 
+	// Register sub-byte type conversions (Int2, Uint2).
+	// Each byte packs 4 values (2 bits each). Bit layout: bits 0-1 = first value,
+	// bits 2-3 = second, bits 4-5 = third, bits 6-7 = fourth.
+	convertDTypePairMap.Register(dtypes.Int2, dtypes.Float32, priorityTyped, execConvertPackedSubByte[float32](unpackInt2Bits, 4))
+	convertDTypePairMap.Register(dtypes.Int2, dtypes.Float64, priorityTyped, execConvertPackedSubByte[float64](unpackInt2Bits, 4))
+	convertDTypePairMap.Register(dtypes.Int2, dtypes.Int32, priorityTyped, execConvertPackedSubByte[int32](unpackInt2Bits, 4))
+	convertDTypePairMap.Register(dtypes.Int2, dtypes.Int64, priorityTyped, execConvertPackedSubByte[int64](unpackInt2Bits, 4))
+	convertDTypePairMap.Register(dtypes.Int2, dtypes.Int8, priorityTyped, execConvertPackedSubByte[int8](unpackInt2Bits, 4))
+	convertDTypePairMap.Register(dtypes.Uint2, dtypes.Float32, priorityTyped, execConvertPackedSubByte[float32](unpackUint2Bits, 4))
+	convertDTypePairMap.Register(dtypes.Uint2, dtypes.Float64, priorityTyped, execConvertPackedSubByte[float64](unpackUint2Bits, 4))
+	convertDTypePairMap.Register(dtypes.Uint2, dtypes.Int32, priorityTyped, execConvertPackedSubByte[int32](unpackUint2Bits, 4))
+	convertDTypePairMap.Register(dtypes.Uint2, dtypes.Int64, priorityTyped, execConvertPackedSubByte[int64](unpackUint2Bits, 4))
+	convertDTypePairMap.Register(dtypes.Uint2, dtypes.Uint8, priorityTyped, execConvertPackedSubByte[uint8](unpackUint2Bits, 4))
+
 	// Register mutableBytes and fillBuffer for sub-byte types.
-	// Packed Int4/Uint4 buffers use []byte as the Go storage type.
+	// Packed sub-byte buffers use []byte as the Go storage type.
 	mutableBytesDTypeMap.Register(dtypes.Int4, priorityTyped, mutableBytesGeneric[byte])
 	mutableBytesDTypeMap.Register(dtypes.Uint4, priorityTyped, mutableBytesGeneric[byte])
+	mutableBytesDTypeMap.Register(dtypes.Int2, priorityTyped, mutableBytesGeneric[byte])
+	mutableBytesDTypeMap.Register(dtypes.Uint2, priorityTyped, mutableBytesGeneric[byte])
 	fillBufferDTypeMap.Register(dtypes.Int4, priorityTyped, fillBufferGeneric[byte])
 	fillBufferDTypeMap.Register(dtypes.Uint4, priorityTyped, fillBufferGeneric[byte])
+	fillBufferDTypeMap.Register(dtypes.Int2, priorityTyped, fillBufferGeneric[byte])
+	fillBufferDTypeMap.Register(dtypes.Uint2, priorityTyped, fillBufferGeneric[byte])
 
 	// Manually register bool x bfloat16 conversion functions.
 	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Bool, priorityTyped, execConvertDTypeBFloat16ToBool)
@@ -225,7 +243,34 @@ func unpackUint4Nibbles(packed []byte, dst []int8) {
 	}
 }
 
-// execConvertPackedSubByte returns a converter for packed sub-byte types (Int4, Uint4).
+// unpackInt2Bits unpacks packed Int2 data ([]byte, 4 signed 2-bit values per byte)
+// into dst []int8 (one value per element). Bit layout per byte:
+// bits 0-1 = first, bits 2-3 = second, bits 4-5 = third, bits 6-7 = fourth.
+// Signed range: [-2, 1] (values 2,3 sign-extend to -2,-1).
+func unpackInt2Bits(packed []byte, dst []int8) {
+	for i, b := range packed {
+		for j := range 4 {
+			v := int8((b >> uint(2*j)) & 0x03)
+			if v >= 2 {
+				v -= 4
+			}
+			dst[4*i+j] = v
+		}
+	}
+}
+
+// unpackUint2Bits unpacks packed Uint2 data ([]byte, 4 unsigned 2-bit values per byte)
+// into dst []int8 (one value per element). Unsigned range: [0, 3].
+func unpackUint2Bits(packed []byte, dst []int8) {
+	for i, b := range packed {
+		dst[4*i] = int8(b & 0x03)
+		dst[4*i+1] = int8((b >> 2) & 0x03)
+		dst[4*i+2] = int8((b >> 4) & 0x03)
+		dst[4*i+3] = int8((b >> 6) & 0x03)
+	}
+}
+
+// execConvertPackedSubByte returns a converter for packed sub-byte types (Int4, Uint4, Int2, Uint2).
 // The unpackFn parameter selects signed vs unsigned nibble interpretation.
 // Sub-byte types are always stored packed as []byte.
 // valuesPerByte is the number of logical values per packed byte (e.g. 2 for 4-bit, 4 for 2-bit).

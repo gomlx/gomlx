@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/ml/ggml"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
@@ -38,11 +39,25 @@ func QuantizedDense(x, weights *Node, quant *Quantization, bias *Node,
 		act = activation[0]
 	}
 
+	backendAct := act.ToBackend()
+
+	// GGML weights: types with a decomposed graph-level fallback (Q4_0, Q8_0, IQ4_NL)
+	// work on any backend (including XLA). K-quant types (Q4_K, Q6_K, etc.) require
+	// a backend with a fused executor (e.g. simplego); other backends will panic here.
+	if quant.Scheme == backends.QuantGGML {
+		if ggml.CanDecompose(quant.GGMLType) {
+			return InternalFusedOpCaller(
+				func() *Node { return BackendFusedQuantizedDense(x, weights, bias, quant, backendAct) },
+				func() *Node { return ggml.DenseDecomposed(x, weights, quant.GGMLType, bias, act) },
+			)
+		}
+		return BackendFusedQuantizedDense(x, weights, bias, quant, backendAct)
+	}
+
 	decomposed := func() *Node {
 		return quantizedDenseDecomposed(x, weights, quant, bias, act)
 	}
 
-	backendAct := act.ToBackend()
 	return InternalFusedOpCaller(
 		func() *Node {
 			return BackendFusedQuantizedDense(x, weights, bias, quant, backendAct)

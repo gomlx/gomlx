@@ -14,27 +14,35 @@ import (
 // This is the graph-layer counterpart of backends.Quantization, holding *Node
 // references for Scale and ZeroPoint instead of backends.Value.
 type Quantization struct {
-	// Scheme: Linear (standard) or NF4.
+	// Scheme: Linear, NF4, or GGML.
 	Scheme backends.QuantizationScheme
 
 	// Scale is the multiplicative factor.
 	// Shape: [K, NumBlocks] (block-wise), where K is the input-features
 	// (contracting) dimension of the [K, N] weight matrix and
 	// NumBlocks = ceil(N / BlockSize).
+	// Nil for QuantGGML (scales are embedded in the blocks).
 	Scale *Node
 
 	// ZeroPoint is the additive offset (only for Linear).
 	// If nil, the quantization is assumed symmetric.
+	// Unused for QuantGGML and QuantNF4.
 	ZeroPoint *Node
 
 	// BlockAxis is the dimension of the quantized tensor that is blocked.
 	// This is the output-features dimension (axis 1) of a [K, N] weight matrix.
 	// Currently only BlockAxis=1 is supported.
+	// Unused for QuantGGML.
 	BlockAxis int
 
 	// BlockSize is the number of elements in BlockAxis that share one scale.
 	// If BlockSize == values.Shape()[BlockAxis], it's effectively per-axis quantization.
+	// Unused for QuantGGML.
 	BlockSize int
+
+	// GGMLType specifies the concrete GGML block format (Q4_0, Q8_0, etc.).
+	// Only used when Scheme == QuantGGML.
+	GGMLType backends.GGMLQuantType
 }
 
 // toBackend converts the graph-level Quantization to a backends.Quantization
@@ -42,9 +50,12 @@ type Quantization struct {
 func (q *Quantization) toBackend() *backends.Quantization {
 	bq := &backends.Quantization{
 		Scheme:    q.Scheme,
-		Scale:     q.Scale.outputOps[0],
 		BlockAxis: q.BlockAxis,
 		BlockSize: q.BlockSize,
+		GGMLType:  q.GGMLType,
+	}
+	if q.Scale != nil {
+		bq.Scale = q.Scale.outputOps[0]
 	}
 	if q.ZeroPoint != nil {
 		bq.ZeroPoint = q.ZeroPoint.outputOps[0]
@@ -70,16 +81,17 @@ func (ni *nodeInputsFusedQuantizedDense) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsFusedQuantizedDense) String() string {
-	return fmt.Sprintf("%s(x=[#%d], weights=[#%d], bias=%s, scale=[#%d], zeroPoint=%s, scheme=%s, blockAxis=%v, blockSize=%v, activation=%s)",
+	return fmt.Sprintf("%s(x=[#%d], weights=[#%d], bias=%s, scale=%s, zeroPoint=%s, scheme=%s, blockAxis=%v, blockSize=%v, ggmlType=%s, activation=%s)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.weights.Id(),
 		strNillableNode(ni.bias),
-		ni.wq.Scale.Id(),
+		strNillableNode(ni.wq.Scale),
 		strNillableNode(ni.wq.ZeroPoint),
 		ni.wq.Scheme,
 		ni.wq.BlockAxis,
 		ni.wq.BlockSize,
+		ni.wq.GGMLType,
 		ni.activation,
 	)
 }
@@ -115,12 +127,18 @@ func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHea
 func BackendFusedQuantizedDense(x, weights, bias *Node,
 	wq *Quantization, activation backends.ActivationType) *Node {
 
-	if wq == nil || wq.Scale == nil {
-		exceptions.Panicf("BackendFusedQuantizedDense: wq and wq.Scale must not be nil")
+	if wq == nil {
+		exceptions.Panicf("BackendFusedQuantizedDense: wq must not be nil")
+	}
+	if wq.Scale == nil && wq.Scheme != backends.QuantGGML {
+		exceptions.Panicf("BackendFusedQuantizedDense: wq.Scale must not be nil for scheme %s", wq.Scheme)
 	}
 
-	// inputNodes ordering matches the builder: [x, weights, scale, zeroPoint?, bias?].
-	inputNodes := []*Node{x, weights, wq.Scale}
+	// inputNodes ordering: [x, weights, scale?, zeroPoint?, bias?].
+	inputNodes := []*Node{x, weights}
+	if wq.Scale != nil {
+		inputNodes = append(inputNodes, wq.Scale)
+	}
 	if wq.ZeroPoint != nil {
 		inputNodes = append(inputNodes, wq.ZeroPoint)
 	}
@@ -144,6 +162,64 @@ func BackendFusedQuantizedDense(x, weights, bias *Node,
 
 	result, err := g.currentFunc.backendFunc.FusedQuantizedDense(
 		x.outputOps[0], weights.outputOps[0], biasVal, wq.toBackend(), activation)
+	if err != nil {
+		panic(err)
+	}
+	node := &Node{
+		outputOps:    []backends.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return node
+}
+
+// nodeInputsQuantizedEmbeddingLookup holds the inputs used for the call to backends.QuantizedEmbeddingLookup.
+// Hand-written (not generated) to match the pattern of BackendFusedQuantizedDense: it accepts
+// a graph-level *Quantization and converts it to backends.Quantization via toBackend().
+type nodeInputsQuantizedEmbeddingLookup struct {
+	data    *Node
+	indices *Node
+	tq      *Quantization
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsQuantizedEmbeddingLookup) Type() NodeType {
+	return NodeTypeQuantizedEmbeddingLookup
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsQuantizedEmbeddingLookup) String() string {
+	return fmt.Sprintf("%s(data=[#%d], indices=[#%d], scheme=%s, ggmlType=%s)",
+		ni.Type(),
+		ni.data.Id(),
+		ni.indices.Id(),
+		ni.tq.Scheme,
+		ni.tq.GGMLType,
+	)
+}
+
+// BackendQuantizedEmbeddingLookup performs a quantized embedding lookup (row gather)
+// with on-the-fly dequantization.
+// Internal: prefer nn.QuantizedGather which handles fallback and gradients.
+func BackendQuantizedEmbeddingLookup(data, indices *Node, tq *Quantization) *Node {
+	if tq == nil {
+		exceptions.Panicf("BackendQuantizedEmbeddingLookup: tq must not be nil")
+	}
+
+	inputNodes := []*Node{data, indices}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+
+	inputs := &nodeInputsQuantizedEmbeddingLookup{
+		data:    data,
+		indices: indices,
+		tq:      tq,
+	}
+
+	result, err := g.currentFunc.backendFunc.QuantizedEmbeddingLookup(
+		data.outputOps[0], indices.outputOps[0], tq.toBackend())
 	if err != nil {
 		panic(err)
 	}

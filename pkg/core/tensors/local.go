@@ -477,28 +477,81 @@ func (t *Tensor) Value() any {
 func (t *Tensor) ValueSafe() (any, error) {
 	var mdSlice any
 	err := t.ConstFlatData(func(flat any) {
+		// Packed sub-byte types (Int2, Uint2, Int4, Uint4) are stored as []uint8
+		// with multiple values per byte. Unpack before any further processing.
+		if t.shape.DType.IsPacked() {
+			unpacked := unpackFlatValues(flat.([]uint8), t.shape.DType, t.Size())
+			unpackedV := reflect.ValueOf(unpacked)
+			if t.shape.IsScalar() {
+				mdSlice = unpackedV.Index(0).Interface()
+				return
+			}
+			if t.shape.Rank() == 1 {
+				mdSlice = unpacked
+				return
+			}
+			mdSlice = convertDataToSlices(unpackedV, t.shape.Dimensions...).Interface()
+			return
+		}
+
 		if t.shape.IsScalar() {
-			// Avoid creating yet another slice:
 			srcV := reflect.ValueOf(flat)
 			mdSlice = srcV.Index(0).Interface()
 			return
 		}
 
-		// Create a copy of the flat slice with all data.
-		flatCopyV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), t.Size(), t.Size())
-		reflect.Copy(flatCopyV, reflect.ValueOf(flat))
+		flatV := reflect.ValueOf(flat)
+		flatCopyV := reflect.MakeSlice(flatV.Type(), flatV.Len(), flatV.Len())
+		reflect.Copy(flatCopyV, flatV)
 		if t.shape.Rank() == 1 {
 			mdSlice = flatCopyV.Interface()
 			return
 		}
-
-		// If multi-dimensional slice, returns slice pointing to the flatCopy.
 		mdSlice = convertDataToSlices(flatCopyV, t.shape.Dimensions...).Interface()
 	})
 	if err != nil {
 		return nil, err
 	}
 	return mdSlice, nil
+}
+
+// unpackFlatValues unpacks packed sub-byte data ([]uint8) into a one-value-per-element
+// slice. For unsigned types (Uint4, Uint2) it returns []uint8; for signed types (Int4, Int2)
+// it returns []int8 with sign extension.
+func unpackFlatValues(packed []uint8, dtype dtypes.DType, numValues int) any {
+	bitsPerValue := dtype.Bits()
+	valuesPerUnit := dtype.ValuesPerStorageUnit()
+	mask := uint8((1 << bitsPerValue) - 1) // 0x0F for 4-bit, 0x03 for 2-bit
+	signBit := uint8(1 << (bitsPerValue - 1))
+	signExtend := ^mask // 0xF0 for 4-bit, 0xFC for 2-bit
+
+	// Extract the raw unsigned value at logical index i.
+	extract := func(i int) uint8 {
+		b := packed[i/valuesPerUnit]
+		shift := uint(i%valuesPerUnit) * uint(bitsPerValue)
+		return (b >> shift) & mask
+	}
+
+	switch dtype {
+	case dtypes.Uint4, dtypes.Uint2:
+		out := make([]uint8, numValues)
+		for i := range numValues {
+			out[i] = extract(i)
+		}
+		return out
+	case dtypes.Int4, dtypes.Int2:
+		out := make([]int8, numValues)
+		for i := range numValues {
+			val := extract(i)
+			if val&signBit != 0 {
+				val |= signExtend
+			}
+			out[i] = int8(val)
+		}
+		return out
+	default:
+		panic(fmt.Sprintf("unpackFlatValues: unsupported packed dtype %s", dtype))
+	}
 }
 
 // GobSerialize Tensor in binary format.
