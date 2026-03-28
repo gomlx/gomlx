@@ -453,7 +453,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 				if err != nil {
 					return nil, err
 				}
-				execSmallMatMulFn := execSmallMatMulFnAny.(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
+				execSmallMatMulFn, _ := execSmallMatMulFnAny.(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
 				// BFloat16/Float16 implementations accumulate in float32 internally but write to native output
 				execSmallMatMulFn(backend, lhsRaw, rhsRaw, params, output2)
 				err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
@@ -468,10 +468,16 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			if backend.enablePackgemm && isMatMulOrder(lhsRaw.shape, params.lhsContractingAxes, params.lhsBatchAxes,
 				rhsRaw.shape, params.rhsContractingAxes, params.rhsBatchAxes) &&
 				packgemm.HasDTypeSupport(inputDType, inputDType) {
-				err = packgemm.GEMM(float32(1), float32(0), lhsRaw.flat.([]float32), rhsRaw.flat.([]float32),
+				bufAllocFn, err1 := getBufAllocator[float32](backend)
+				if err1 != nil {
+					return nil, err1
+				}
+				err = packgemm.GEMM(float32(1), float32(0),
+					lhsRaw.flat.([]float32), //nolint:errcheck // Is []float32.
+					rhsRaw.flat.([]float32), //nolint:errcheck // Is []float32.
 					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
-					output2.flat.([]float32),
-					getBufAllocator[float32](backend), getBufReleaser(backend), backend.workers)
+					output2.flat.([]float32), //nolint:errcheck // Is []float32.
+					bufAllocFn, getBufReleaser(backend), backend.workers)
 				if err == nil {
 					err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
 				}
@@ -486,10 +492,14 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			if backend.enableHighway && isMatMulOrder(lhsRaw.shape, params.lhsContractingAxes, params.lhsBatchAxes,
 				rhsRaw.shape, params.rhsContractingAxes, params.rhsBatchAxes) &&
 				highway.HasDTypeSupport(inputDType, inputDType) {
+				bufAllocAnyFn, err1 := getAnyBufAllocator(backend, inputDType)
+				if err1 != nil {
+					return nil, err1
+				}
 				err = highway.MatMulDynamic(inputDType, outputShape.DType, lhsRaw.flat, rhsRaw.flat,
 					params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 					output2.flat,
-					getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), backend.workers)
+					bufAllocAnyFn, getBufReleaser(backend), backend.workers)
 				if err == nil {
 					err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
 				}
@@ -514,7 +524,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		if err != nil {
 			return nil, err
 		}
-		execSmallMatMulFn := execSmallMatMulFnAny.(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
+		execSmallMatMulFn, _ := execSmallMatMulFnAny.(func(*Backend, *Buffer, *Buffer, *dotGeneralNodeData, *Buffer))
 		execSmallMatMulFn(backend, lhs, rhs, params, output)
 		return output, nil
 
@@ -527,10 +537,16 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		// Custom GEMM path for large "malmul" order.
 		inputDType := lhs.shape.DType
 		outputDType := output.shape.DType
-		if err = packgemm.GEMMDynamic(inputDType, outputDType, 1, 0, lhs.flat.([]float32), rhs.flat.([]float32),
+		bufAllocAnyFn, err1 := getAnyBufAllocator(backend, inputDType)
+		if err1 != nil {
+			return nil, err1
+		}
+		if err = packgemm.GEMMDynamic(inputDType, outputDType, 1, 0,
+			lhs.flat.([]float32), //nolint:errcheck // Is []float32.
+			rhs.flat.([]float32), //nolint:errcheck // Is []float32.
 			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
-			output.flat.([]float32),
-			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), backend.workers); err != nil {
+			output.flat.([]float32), //nolint:errcheck // Is []float32.
+			bufAllocAnyFn, getBufReleaser(backend), backend.workers); err != nil {
 			return nil, err
 		}
 		return output, nil
@@ -539,10 +555,16 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		// Highway MatMul path for large "malmul" order.
 		inputDType := lhs.shape.DType
 		outputDType := output.shape.DType
-		err = highway.MatMulDynamic(inputDType, outputDType, lhs.flat, rhs.flat,
+		bufAllocAnyFn, err1 := getAnyBufAllocator(backend, inputDType)
+		if err1 != nil {
+			return nil, err1
+		}
+		if err = highway.MatMulDynamic(inputDType, outputDType, lhs.flat, rhs.flat,
 			params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize,
 			output.flat,
-			getAnyBufAllocator(backend, inputDType), getBufReleaser(backend), backend.workers)
+			bufAllocAnyFn, getBufReleaser(backend), backend.workers); err != nil {
+			return nil, err
+		}
 		return output, nil
 
 	default:
@@ -570,11 +592,11 @@ func dotGeneralCheckVersions(_ *Backend, lhs, rhs *Buffer, params *dotGeneralNod
 		dtype := outputLarge.shape.DType
 		switch dtype {
 		case dtypes.Float32:
-			value0 = float64(outputLarge.flat.([]float32)[0])
+			value0 = float64(outputLarge.flat.([]float32)[0]) //nolint:errcheck // Is []floa32.
 		case dtypes.Float64:
-			value0 = outputLarge.flat.([]float64)[0]
+			value0 = outputLarge.flat.([]float64)[0] //nolint:errcheck // Is []floa32.
 		case dtypes.BFloat16:
-			value0 = float64(outputLarge.flat.([]bfloat16.BFloat16)[0].Float32())
+			value0 = float64(outputLarge.flat.([]bfloat16.BFloat16)[0].Float32()) //nolint:errcheck // Is []floa32.
 		}
 
 		fmt.Printf("> %s x %s -> %s (output[...0]=%.5f)\n", lhs.shape, rhs.shape, outputLarge.shape, value0)
@@ -605,8 +627,8 @@ func dotGeneralCheckVersionsCmp(outputLarge, outputSmall *Buffer) (messages []st
 	var mismatches int
 	switch dtype {
 	case dtypes.Float32:
-		largeFlat := outputLarge.flat.([]float32)
-		smallFlat := outputSmall.flat.([]float32)
+		largeFlat, _ := outputLarge.flat.([]float32)
+		smallFlat, _ := outputSmall.flat.([]float32)
 		for indices := range outputLarge.shape.Iter() {
 			largeValue := largeFlat[flatIdx]
 			smallValue := smallFlat[flatIdx]
@@ -634,33 +656,44 @@ func dotGeneralCheckVersionsCmp(outputLarge, outputSmall *Buffer) (messages []st
 }
 
 // getBufAllocator returns a buffer allocator for the given numeric type.
-// TODO: change signature to return the error
-func getBufAllocator[T dtypes.NumberNotComplex](backend *Backend) packgemm.BufAllocFn[T] {
+func getBufAllocator[T dtypes.NumberNotComplex](backend *Backend) (packgemm.BufAllocFn[T], error) {
 	dtype := dtypes.FromGenericsType[T]()
-	return func(size int) (ref any, data []T) {
+	var fnErr error
+	resFn := func(size int) (ref any, data []T) {
 		buf, err := backend.getBuffer(dtype, size)
 		if err != nil {
+			fnErr = err
 			return nil, nil
 		}
-		return buf, buf.flat.([]T)
+		return buf, buf.flat.([]T) //nolint:errcheck // Should work.
 	}
+	if fnErr != nil {
+		return nil, fnErr
+	}
+	return resFn, nil
 }
 
 // getAnyBufAllocator returns a buffer allocator for the given dtype.
 // TODO: change signature to return the error
-func getAnyBufAllocator(backend *Backend, dtype dtypes.DType) packgemm.BufAllocAnyFn {
-	return func(size int) (ref any, data any) {
+func getAnyBufAllocator(backend *Backend, dtype dtypes.DType) (packgemm.BufAllocAnyFn, error) {
+	var fnErr error
+	resFn := func(size int) (ref any, data any) {
 		buf, err := backend.getBuffer(dtype, size)
 		if err != nil {
+			fnErr = err
 			return nil, nil
 		}
 		return buf, buf.flat
 	}
+	if fnErr != nil {
+		return nil, fnErr
+	}
+	return resFn, nil
 }
 
 // getBufReleaser returns a buffer releaser for the given numeric type.
 func getBufReleaser(backend *Backend) packgemm.BufReleaseFn {
 	return func(ref any) {
-		backend.putBuffer(ref.(*Buffer))
+		backend.putBuffer(ref.(*Buffer)) //nolint:errcheck // Should work.
 	}
 }
