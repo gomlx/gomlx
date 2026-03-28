@@ -17,6 +17,7 @@
 package pos
 
 import (
+	"github.com/gomlx/gomlx/pkg/core/graph"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
@@ -96,12 +97,21 @@ func (r *RoPE) WithInterleaved(interleaved bool) *RoPE {
 // of each element, as specified by positionIndices.
 //
 // Parameters:
-//   - x: Input tensor with sequence and embedding dimensions.
-//   - positionIndices: Position indices shaped [..., seq_len] with position values for each token.
-//   - seqAxis: The axis in x that represents the sequence dimension.
+//   - x: Input tensor, shaped [batchSize..., sequenceLength, ...].
+//   - positionIndices: Position indices tensor shaped [[batchSize...,] seqLen] where each element
+//     contains the position value for that token. The batchSize dimension
+//     is broadcast to match x's batch dimensions if not set. Examples:
+//   - Sequential positions: [0, 1, 2, 3]
+//   - Rotating cache with wrap: [1022, 1023, 0, 1, 2]
+//   - Batched multi-client: [[5,6,7], [127,128,129]]
+//   - seqAxis: The axis index in x that represents the sequence dimension.
+//     For standard [..., seq_len, head_dim] tensors this is x.Rank()-2.
+//     For BSHD layout [batch, seq, heads, dim] this is 1.
+//     This makes the encoder layout-proof: callers specify which axis is seq.
+//     Negative values are ok, they are counted from the end.
 //
 // Returns:
-//   - Tensor with rotary position embeddings applied, same shape as x
+//   - Tensor with positional information applied, same shape as x.
 //
 // Example:
 //
@@ -117,6 +127,7 @@ func (r *RoPE) Apply(x *Node, positionIndices *Node, seqAxis int) *Node {
 	if dimEnd == -1 {
 		dimEnd = x.Shape().Dimensions[x.Shape().Rank()-1]
 	}
+	seqAxis = graph.MustAdjustAxis(seqAxis, x) // Adjust negative axis values to corresponding positive.
 	return applyRoPEWithCustomDim(x, positionIndices, r.BaseFreq, r.DimStart, dimEnd, seqAxis, r.Interleaved)
 }
 
@@ -291,7 +302,7 @@ func applyWithCosSin(x, cos, sin *Node, seqAxis int, interleaved bool) *Node {
 //     The last dim must be even.
 //   - positionIndices: Position indices shaped [..., seq_len]
 //   - baseFreq: Base frequency for computing rotation angles
-//   - seqAxis: The axis in x that represents the sequence dimension.
+//   - seqAxis: The axis in x that represents the sequence dimension: it must be already normalized to positive.
 //   - interleaved: If true, rotation pairs are at even/odd indices; if false, split first-half/second-half
 //
 // Returns:
@@ -302,14 +313,8 @@ func applyRoPE(x *Node, positionIndices *Node, baseFreq float64, seqAxis int, in
 	dtype := shape.DType
 	rank := shape.Rank()
 
-	// Normalise seqAxis.
-	canonicalSeqAxis := seqAxis
-	if canonicalSeqAxis < 0 {
-		canonicalSeqAxis += rank
-	}
-
 	// Extract dimensions
-	seqLen := shape.Dimensions[canonicalSeqAxis]
+	seqLen := shape.Dimensions[seqAxis]
 	embedDim := shape.Dimensions[rank-1]
 
 	// RoPE is applied to pairs of dimensions, so embedDim must be even

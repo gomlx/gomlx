@@ -35,10 +35,10 @@ type Encoder interface {
 	// Apply applies the positional embedding to the input tensor.
 	//
 	// Parameters:
-	//   - x: Input tensor with a sequence axis and an embedding/head_dim axis.
-	//   - positionIndices: Position indices tensor shaped [..., seq_len] where each element
-	//                      contains the position value for that token. The leading dimensions
-	//                      are broadcast to match x's batch dimensions. This allows:
+	//   - x: Input tensor, shaped [batchSize..., sequenceLength, ...].
+	//   - positionIndices: Position indices tensor shaped [[batchSize...,] seqLen] where each element
+	//                      contains the position value for that token. The batchSize dimension
+	//                      is broadcast to match x's batch dimensions if not set. Examples:
 	//                      - Sequential positions: [0, 1, 2, 3]
 	//                      - Rotating cache with wrap: [1022, 1023, 0, 1, 2]
 	//                      - Batched multi-client: [[5,6,7], [127,128,129]]
@@ -46,6 +46,7 @@ type Encoder interface {
 	//              For standard [..., seq_len, head_dim] tensors this is x.Rank()-2.
 	//              For BSHD layout [batch, seq, heads, dim] this is 1.
 	//              This makes the encoder layout-proof: callers specify which axis is seq.
+	//              Negative values are ok, they are counted from the end.
 	//
 	// Returns:
 	//   - Tensor with positional information applied, same shape as x.
@@ -62,9 +63,9 @@ type Encoder interface {
 // Parameters:
 //   - g: Graph to create the computation in
 //   - startPos: Starting position as a *Node. Can be either:
-//   - Scalar: Returns [seqLen] positions for all batches
-//   - Shape [batchSize]: Returns [batchSize, seqLen] with each batch at different position
-//   - seqLen: Sequence length
+//     Scalar: Returns [seqLen] positions for all batches;
+//     Shape [batchSize]: Returns [batchSize, seqLen] with each batch at different position;
+//     seqLen: Sequence length.
 //
 // Returns:
 //   - Position indices with values [startPos, startPos+1, ..., startPos+seqLen-1]
