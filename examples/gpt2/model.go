@@ -20,6 +20,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
+	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/pkg/ml/model/transformer"
 )
 
@@ -96,7 +97,7 @@ func (m *GPT2Model) forwardGPT2(ctx *context.Context, tokens *Node, position *No
 		attn := attention.SelfAttention(layerCtx.In("attn"), attnInput, model.NumHeads, model.HeadDim).
 			WithKVCache(model.MaxPosEmbed, position).
 			UseProjectionBias(true).
-			UseCausalMask().
+			WithCausalMask(true).
 			Done()
 		x = Add(x, attn)
 
@@ -123,10 +124,20 @@ func (m *GPT2Model) forwardGPT2(ctx *context.Context, tokens *Node, position *No
 func LoadGPT2(backend backends.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenizer, error) {
 	config := DefaultGPT2Config()
 
-	// Create context for model parameters
+	// Create context for model parameters and load them.
 	ctx := context.New()
+	fmt.Println("Loading checkpoint weights...")
+	if err := loadCheckpoint(ctx, repo); err != nil {
+		fmt.Printf("Warning: Failed to load checkpoint: %v\n", err)
+		fmt.Println("Continuing with random initialization...")
+	} else {
+		fmt.Println("✓ Checkpoint loaded successfully")
+	}
 
-	// Build the transformer configuration
+	// GPT2 uses a learned embedding:
+	posEmbedder := pos.NewLearned(ctx, config.MaxPosEmbed, config.HiddenSize)
+
+	// Build the transformer model and wrap it in our GPT2Model.
 	transformerModel := transformer.New(
 		config.VocabSize,
 		config.HiddenSize,
@@ -136,17 +147,8 @@ func LoadGPT2(backend backends.Backend, repo *hub.Repo) (*GPT2Model, api.Tokeniz
 	).
 		WithFFNDim(config.HiddenSize * 4). // GPT-2 uses 4x expansion
 		WithMaxPosEmbed(config.MaxPosEmbed).
-		WithDType(config.DType)
-
-	// Load checkpoint weights
-	fmt.Println("Loading checkpoint weights...")
-	if err := loadCheckpoint(ctx, repo); err != nil {
-		fmt.Printf("Warning: Failed to load checkpoint: %v\n", err)
-		fmt.Println("Continuing with random initialization...")
-	} else {
-		fmt.Println("✓ Checkpoint loaded successfully")
-	}
-
+		WithDType(config.DType).
+		WithPositionalEncoder(posEmbedder)
 	model := &GPT2Model{
 		backend: backend,
 		ctx:     ctx,

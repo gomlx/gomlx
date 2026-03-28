@@ -10,7 +10,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/go-huggingface v0.3.3-0.20260321150816-d7dfbf1d4808
-	github.com/gomlx/gomlx v0.27.2-0.20260321114321-1da5fbc20971
+	github.com/gomlx/gomlx v0.27.3-0.20260328112604-9aa78d319f56
 	github.com/gomlx/onnx-gomlx v0.4.1-0.20260317082335-7aa7031467b8
 	github.com/janpfeifer/gonb v0.11.3
 	github.com/janpfeifer/must v0.2.0

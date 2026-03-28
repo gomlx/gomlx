@@ -520,8 +520,8 @@ func TransformerBlock(ctx *context.Context, nanLogger *nanlogger.NanLogger, x *N
 		residual := embed
 		embed = Concatenate([]*Node{embed, posEmbed}, -1)
 		embed = attention.MultiHeadAttention(scopedCtx, embed, embed, embed, numHeads, keyQueryDim).
-			SetOutputDim(embedDim).
-			SetValueHeadDim(embedDim).Done()
+			WithOutputDim(embedDim).
+			WithValueHeadDim(embedDim).Done()
 		nanLogger.TraceFirstNaN(embed)
 		embed = layers.DropoutFromContext(scopedCtx, embed)
 		embed = NormalizeLayer(scopedCtx.In("normalization_1"), embed)

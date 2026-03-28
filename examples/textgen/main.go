@@ -28,6 +28,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/decode"
+	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/pkg/ml/model/transformer"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
@@ -149,8 +150,11 @@ func trainModel(backend backends.Backend, ctx *context.Context) {
 
 	// Simple model function wrapper
 	modelFn := func(ctx *context.Context, _ any, inputs []*graph.Node) []*graph.Node {
-		tFn := transformer.NewFromContext(ctx).ForTraining()
-		return []*graph.Node{tFn(ctx, inputs[0])}
+		tokens := inputs[0]
+		transformerModel := transformer.NewFromContext(ctx)
+		posEmbeder := pos.NewLearned(ctx, transformerModel.MaxPosEmbed, transformerModel.EmbedDim)
+		transformerModel.WithPositionalEncoder(posEmbeder)
+		return []*graph.Node{transformerModel.PredictNextTokens(ctx, tokens, nil)}
 	}
 
 	trainer := train.NewTrainer(backend, ctx, modelFn,
@@ -186,7 +190,8 @@ func generateText(backend backends.Backend, ctx *context.Context, prompt string)
 		promptTokens = []int{32}
 	}
 
-	modelFn := transformer.NewFromContext(ctx).ForGeneration()
+	model := transformer.NewFromContext(ctx)
+	modelFn := transformer.MakeIncrementalModelFn(model)
 
 	decoder := decode.New(modelFn).FromContext(ctx)
 	fmt.Printf("\nGeneration\nStrategy: %s  Temp: %.2f  MaxLen: %d\nPrompt: %q\n\n",
