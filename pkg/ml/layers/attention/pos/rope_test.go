@@ -339,7 +339,7 @@ func TestApplyWithCosSin(t *testing.T) {
 			sinAngles := Sin(angles)
 
 			// Result from RoPEWithCosSin (non-interleaved, matching RoPE.Apply)
-			cossinResult, _ := NewRoPEWithCosSin(cosAngles, sinAngles).EncodeQK(x, x, nil, x.Rank()-2)
+			cossinResult := NewRoPEWithCosSin(cosAngles, sinAngles).Encode(x, x.Rank()-2)
 
 			return []*Node{ropeResult, cossinResult}
 		})
@@ -372,8 +372,7 @@ func TestApplyWithCosSin(t *testing.T) {
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, cos, sin *Node) *Node {
-			q, _ := NewRoPEWithCosSin(cos, sin).WithInterleaved(true).EncodeQK(x, x, nil, x.Rank()-2)
-			return q
+			return NewRoPEWithCosSin(cos, sin).WithInterleaved(true).Encode(x, x.Rank()-2)
 		})
 
 		// x: [2, 4] (seq_len=2, head_dim=4)
@@ -415,8 +414,7 @@ func TestApplyWithCosSin(t *testing.T) {
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, cos, sin *Node) *Node {
-			q, _ := NewRoPEWithCosSin(cos, sin).EncodeQK(x, x, nil, x.Rank()-2)
-			return q
+			return NewRoPEWithCosSin(cos, sin).Encode(x, x.Rank()-2)
 		})
 
 		// x: [1, 6] - head_dim=6, but only rotary_dim=4

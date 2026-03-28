@@ -154,6 +154,8 @@ type RoPEWithCosSin struct {
 // NewRoPEWithCosSin creates a RoPE encoder using pre-computed cos and sin tensors.
 // This is useful for ONNX inference where cos/sin are provided as cached inputs.
 //
+// This **does not implement any of the Encoder interfaces**, it's just a direct RoPE implementation.
+//
 // Parameters:
 //   - cos: Pre-computed cosine values, broadcastable to [..., seq_len, rotary_dim/2]
 //   - sin: Pre-computed sine values, same shape as cos
@@ -189,19 +191,11 @@ func (r *RoPEWithCosSin) WithInterleaved(interleaved bool) *RoPEWithCosSin {
 	return r
 }
 
-// EncodeQK implements the QKEncoder interface.
-// For RoPEWithCosSin, the positionIndices parameter is ignored since cos/sin are pre-computed.
-// Pass nil for positionIndices.
+// Encode applies rotary position embeddings to a single tensor (as opposed to the usual EncodeQK).
 //
-// Parameters:
-//   - q, k: Input tensors with shape [..., seqLen, ..., headDim], where seqAxis identifies the sequence dimension.
-//   - positionIndices: Ignored (pass nil). Position information is already baked into cos/sin.
-//   - seqAxis: The axis in q and k that represents the sequence dimension.
-//
-// Returns:
-//   - Tensors with rotary embeddings applied, same shape as q and k.
-func (r *RoPEWithCosSin) EncodeQK(q, k *Node, _ *Node, seqAxis int) (*Node, *Node) {
-	return applyWithCosSin(q, r.cos, r.sin, seqAxis, r.interleaved), applyWithCosSin(k, r.cos, r.sin, seqAxis, r.interleaved)
+// It's not part of the Encoder interface, but it's provided to direct RoPE implementation.
+func (r *RoPEWithCosSin) Encode(x *Node, seqAxis int) *Node {
+	return applyWithCosSin(x, r.cos, r.sin, seqAxis, r.interleaved)
 }
 
 // applyWithCosSin applies rotary position embeddings using pre-computed cos and sin tensors.
