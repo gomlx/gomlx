@@ -61,6 +61,14 @@ const (
 
 //go:generate go tool enumer -type Architecture -trimprefix=Architecture -output=gen_architecture_enumer.go transformer.go
 
+// LayerType represents the type of attention mechanism used in a transformer layer.
+type LayerType int
+
+const (
+	FullAttention LayerType = iota
+	SlidingAttention
+)
+
 // Model configures a cached transformer model.
 type Model struct {
 	VocabSize            int              // Vocabulary size
@@ -82,7 +90,11 @@ type Model struct {
 	Activation           activations.Type // e.g. "gelu", "silu", "gelu_approximate"
 	NumKVHeads           int              // For Grouped Query Attention (GQA), 0 means equal to NumHeads
 
-	posEncoder pos.Encoder // Positional encoder (e.g. RoPE). If nil, standard absolute positional embeddings are used.
+	posEncoder          pos.Encoder      // Positional encoder (e.g. RoPE). If nil, standard absolute positional embeddings are used.
+	layerPosEncoders    map[int]pos.Encoder // Custom positional encoders per layer
+
+	LayerTypes    []LayerType // Defines the type per layer (e.g. FullAttention, SlidingAttention)
+	SlidingWindow int         // Size of the sliding window for SlidingAttention layers
 
 	// TransposedProjections indicates whether to assume linear weights are transposed (as [out_features, in_features]),
 	// which is standard for PyTorch nn.Linear. This enables dropping in PyTorch models directly.
@@ -255,9 +267,30 @@ func (m *Model) WithRoPE(baseFreq float64) *Model {
 	return m
 }
 
-// WithPositionalEncoder sets the positional encoder.
+// WithPositionalEncoder sets the default positional encoder.
 func (m *Model) WithPositionalEncoder(encoder pos.Encoder) *Model {
 	m.posEncoder = encoder
+	return m
+}
+
+// WithLayerPositionalEncoder sets the positional encoder for a specific layer.
+func (m *Model) WithLayerPositionalEncoder(layerNum int, encoder pos.Encoder) *Model {
+	if m.layerPosEncoders == nil {
+		m.layerPosEncoders = make(map[int]pos.Encoder)
+	}
+	m.layerPosEncoders[layerNum] = encoder
+	return m
+}
+
+// WithLayerTypes sets the layer types (FullAttention, SlidingAttention) for each layer.
+func (m *Model) WithLayerTypes(layerTypes []LayerType) *Model {
+	m.LayerTypes = layerTypes
+	return m
+}
+
+// WithSlidingWindow sets the sliding window size for local attention layers.
+func (m *Model) WithSlidingWindow(window int) *Model {
+	m.SlidingWindow = window
 	return m
 }
 
@@ -422,9 +455,9 @@ func (m *Model) AllLayers(ctx *context.Context, tokens, mask *Node, useKVCache b
 	x = m.PrePositionalEncoder(ctx, x, position, useKVCache)
 	allLayers = append(allLayers, x)
 	// Apply all layers.
-	for layer := range m.NumLayers {
-		layerCtx := ctx.In(fmt.Sprintf("layer_%d", layer))
-		x = m.ForwardLayer(layerCtx, x, mask, useKVCache, position)
+	for layerNum := range m.NumLayers {
+		layerCtx := ctx.In(fmt.Sprintf("layer_%d", layerNum))
+		x = m.ForwardLayer(layerCtx, layerNum, x, mask, useKVCache, position)
 		allLayers = append(allLayers, x)
 	}
 	if m.FinalNormalization != layers.NormalizationNone {
@@ -503,16 +536,17 @@ func (m *Model) LogitsFromEmbeddings(ctx *context.Context, embeddings *Node) *No
 //
 // This step is done automatically by AllLayers or Logits, but if needed, it can
 // be used separately by calling this method.
-func (m *Model) ForwardLayer(ctx *context.Context, x, mask *Node, useCache bool, position int) *Node {
+func (m *Model) ForwardLayer(ctx *context.Context, layerNum int, x, mask *Node, useCache bool, position int) *Node {
 	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
-		return m.forwardLayerGemma(ctx, x, mask, useCache, position)
+		return m.forwardLayerGemma(ctx, layerNum, x, mask, useCache, position)
 	}
-	return m.forwardLayerStandard(ctx, x, mask, useCache, position)
+	return m.forwardLayerStandard(ctx, layerNum, x, mask, useCache, position)
 }
 
-func (m *Model) forwardLayerStandard(layerCtx *context.Context, x, mask *Node, useCache bool, position int) *Node {
+func (m *Model) forwardLayerStandard(layerCtx *context.Context, layerNum int, x, mask *Node, useCache bool, position int) *Node {
 	residual := x
 	var attn *Node
+
 
 	if useCache {
 		positionNode := Const(x.Graph(), int32(position))
@@ -523,9 +557,21 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x, mask *Node, u
 			attnBuilder = attnBuilder.WithMask(mask)
 		}
 
-		if m.posEncoder != nil {
-			attnBuilder = attnBuilder.WithPositionalEncoder(m.posEncoder)
+		posEncoder := m.posEncoder
+		if enc := m.layerPosEncoders[layerNum]; enc != nil {
+			posEncoder = enc
 		}
+		if posEncoder != nil {
+			attnBuilder = attnBuilder.WithPositionalEncoder(posEncoder)
+		}
+		layerType := FullAttention
+		if layerNum < len(m.LayerTypes) {
+			layerType = m.LayerTypes[layerNum]
+		}
+		if layerType == SlidingAttention && m.SlidingWindow > 0 {
+			attnBuilder = attnBuilder.WithSlidingWindow(m.SlidingWindow)
+		}
+
 		if !m.UseBias {
 			attnBuilder = attnBuilder.UseProjectionBias(false)
 		}
@@ -544,9 +590,21 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x, mask *Node, u
 			attnBuilder = attnBuilder.WithCausalMask(true)
 		}
 
-		if m.posEncoder != nil {
-			attnBuilder = attnBuilder.WithPositionalEncoder(m.posEncoder)
+		posEncoder := m.posEncoder
+		if enc := m.layerPosEncoders[layerNum]; enc != nil {
+			posEncoder = enc
 		}
+		if posEncoder != nil {
+			attnBuilder = attnBuilder.WithPositionalEncoder(posEncoder)
+		}
+		layerType := FullAttention
+		if layerNum < len(m.LayerTypes) {
+			layerType = m.LayerTypes[layerNum]
+		}
+		if layerType == SlidingAttention && m.SlidingWindow > 0 {
+			attnBuilder = attnBuilder.WithSlidingWindow(m.SlidingWindow)
+		}
+
 		if !m.UseBias {
 			attnBuilder = attnBuilder.UseProjectionBias(false)
 		}
@@ -624,7 +682,7 @@ func (m *Model) normalize(ctx *context.Context, operand *Node, normType string) 
 	}
 }
 
-func (m *Model) forwardLayerGemma(layerCtx *context.Context, x, mask *Node, useCache bool, position int) *Node {
+func (m *Model) forwardLayerGemma(layerCtx *context.Context, layerNum int, x, mask *Node, useCache bool, position int) *Node {
 	residual := x
 
 	// Pre-attention normalization.
@@ -646,9 +704,22 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x, mask *Node, useC
 	} else if m.UseCausalMask {
 		attnBuilder.WithCausalMask(true)
 	}
-	if m.posEncoder != nil {
-		attnBuilder.WithPositionalEncoder(m.posEncoder)
+
+	posEncoder := m.posEncoder
+	if enc := m.layerPosEncoders[layerNum]; enc != nil {
+		posEncoder = enc
 	}
+	if posEncoder != nil {
+		attnBuilder.WithPositionalEncoder(posEncoder)
+	}
+	layerType := FullAttention
+	if layerNum < len(m.LayerTypes) {
+		layerType = m.LayerTypes[layerNum]
+	}
+	if layerType == SlidingAttention && m.SlidingWindow > 0 {
+		attnBuilder.WithSlidingWindow(m.SlidingWindow)
+	}
+
 	if !m.UseBias {
 		attnBuilder.UseProjectionBias(false)
 	}
