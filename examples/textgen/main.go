@@ -63,7 +63,7 @@ func createDefaultContext() *context.Context {
 		transformer.ParamDType:       "float32",
 
 		// Training hyperparameters
-		ParamTrainSteps:              200,
+		ParamTrainSteps:              1000,
 		optimizers.ParamLearningRate: 0.001,
 
 		// Generation hyperparameters
@@ -154,7 +154,7 @@ func trainModel(backend backends.Backend, ctx *context.Context) {
 		transformerModel := transformer.NewFromContext(ctx)
 		posEmbeder := pos.NewLearned(ctx, transformerModel.MaxPosEmbed, transformerModel.EmbedDim)
 		transformerModel.WithPositionalEncoder(posEmbeder)
-		return []*graph.Node{transformerModel.PredictNextTokens(ctx, tokens, nil)}
+		return []*graph.Node{transformerModel.Logits(ctx, tokens, nil)}
 	}
 
 	trainer := train.NewTrainer(backend, ctx, modelFn,
