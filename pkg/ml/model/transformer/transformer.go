@@ -4,6 +4,7 @@ package transformer
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
@@ -62,22 +63,23 @@ const (
 
 // Model configures a cached transformer model.
 type Model struct {
-	VocabSize     int              // Vocabulary size
-	EmbedDim      int              // Embedding dimension
-	NumLayers     int              // Transformer layers
-	NumHeads      int              // Attention heads per layer
-	HeadDim       int              // Head dimension
-	FFNDim        int              // Feed-forward hidden dimension
-	MaxPosEmbed   int              // Max positional embedding length
-	DType         dtypes.DType     // Data type
-	Dropout       float64          // Dropout rate (0.0 = none)
-	UseBias       bool             // Use bias in dense layers
-	UseCausalMask bool             // Use causal masking in attention layers
-	Architecture  Architecture     // e.g. ArchitectureStandard, ArchitectureGemma
-	Normalization string           // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
-	NormEpsilon   float64          // Epsilon for normalization
-	Activation    activations.Type // e.g. "gelu", "silu", "gelu_approximate"
-	NumKVHeads    int              // For Grouped Query Attention (GQA), 0 means equal to NumHeads
+	VocabSize          int              // Vocabulary size
+	EmbedDim           int              // Embedding dimension
+	NumLayers          int              // Transformer layers
+	NumHeads           int              // Attention heads per layer
+	HeadDim            int              // Head dimension
+	FFNDim             int              // Feed-forward hidden dimension
+	MaxPosEmbed        int              // Max positional embedding length
+	DType              dtypes.DType     // Data type
+	Dropout            float64          // Dropout rate (0.0 = none)
+	UseBias            bool             // Use bias in dense layers
+	UseCausalMask      bool             // Use causal masking in attention layers
+	FinalNormalization string           // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
+	Architecture       Architecture     // e.g. ArchitectureStandard, ArchitectureGemma
+	Normalization      string           // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
+	NormEpsilon        float64          // Epsilon for normalization
+	Activation         activations.Type // e.g. "gelu", "silu", "gelu_approximate"
+	NumKVHeads         int              // For Grouped Query Attention (GQA), 0 means equal to NumHeads
 
 	posEncoder pos.Encoder // Positional encoder (e.g. RoPE). If nil, standard absolute positional embeddings are used.
 
@@ -89,23 +91,24 @@ type Model struct {
 // New creates a default transformer configuration.
 func New(vocabSize, embedDim, numLayers, numHeads, headDim int) *Model {
 	return &Model{
-		VocabSize:     vocabSize,
-		EmbedDim:      embedDim,
-		NumLayers:     numLayers,
-		NumHeads:      numHeads,
-		HeadDim:       headDim,
-		FFNDim:        embedDim * 4, // 4x expansion
-		MaxPosEmbed:   512,
-		DType:         dtypes.Float32,
-		Dropout:       0.0,
-		UseBias:       true,
-		UseCausalMask: true,
-		Architecture:  ArchitectureStandard,
-		Normalization: layers.NormalizationLayerNorm,
-		NormEpsilon:   1e-5,
-		Activation:    activations.TypeGelu,
-		NumKVHeads:    0,
-		posEncoder:    nil,
+		VocabSize:          vocabSize,
+		EmbedDim:           embedDim,
+		NumLayers:          numLayers,
+		NumHeads:           numHeads,
+		HeadDim:            headDim,
+		FFNDim:             embedDim * 4, // 4x expansion
+		MaxPosEmbed:        512,
+		DType:              dtypes.Float32,
+		Dropout:            0.0,
+		UseBias:            true,
+		UseCausalMask:      true,
+		FinalNormalization: layers.NormalizationNone,
+		Architecture:       ArchitectureStandard,
+		Normalization:      layers.NormalizationLayerNorm,
+		NormEpsilon:        1e-5,
+		Activation:         activations.TypeGelu,
+		NumKVHeads:         0,
+		posEncoder:         nil,
 	}
 }
 
@@ -280,6 +283,16 @@ func (m *Model) WithCausalMask(use bool) *Model {
 	return m
 }
 
+// WithFinalNormalization toggles the final normalization after all attention layers.
+// The values "none" or "" mean no final normalization.
+func (m *Model) WithFinalNormalization(norm string) *Model {
+	if norm == "" {
+		norm = layers.NormalizationNone
+	}
+	m.FinalNormalization = norm
+	return m
+}
+
 // WithArchitecture sets the architectural style.
 func (m *Model) WithArchitecture(arch Architecture) *Model {
 	m.Architecture = arch
@@ -371,7 +384,8 @@ func MakeIncrementalModelFn(m *Model) decode.IncrementalModelFn {
 	}
 }
 
-// AllLayers runs most of the model from the tokens all the way to the last attention layer.
+// AllLayers takes the input tokens and creates the forward graph for the transformer model,
+// returning the last layer and all the intermediate layers.
 //
 //   - tokens: shaped [batchSize, seqLen], or simply [seqLen]
 //   - mask: optional, if provided the shape must match tokens.Shape(), and it indicates
@@ -380,12 +394,14 @@ func MakeIncrementalModelFn(m *Model) decode.IncrementalModelFn {
 //   - useKVCache: whether to use KV cache for the attention layers.
 //   - position: the position of the new tokens in the sequence, only used for KV cache.
 //
+// See also Logits() or LogitsFromEmbeddings()if you want to get the logits for predicting the next token.
+//
 // It returns:
 //
-//   - lastLayer: the output of the last transformer layer, which is usually what one wants if embedding a sentence.
-//     You can feed this to LogitsFromEmbeddings() to get the logits for predicting the next token.
-//   - allLayers: the embeddings after each layer, including the one after the token embedding table and the pre-positional embedder,
-//     so NumLayers+2 in total. Used for debugging for any reason.
+//   - lastLayer: the final hidden state of the last layer, shaped [batchSize, seqLen,hiddenSize].
+//   - allLayers: the input to the first layer and the output of each layer.
+//     It follows the HuggingFace convention, where the allLayers[0] is the input to the first attention layer,
+//     and the following nodes in allLayers are the outputs of all NumHiddenLayers attention layers.
 func (m *Model) AllLayers(ctx *context.Context, tokens, mask *Node, useKVCache bool, position int) (lastLayer *Node, allLayers []*Node) {
 	allLayers = make([]*Node, 0, m.NumLayers+2)
 	x := m.EmbedTokens(ctx, tokens)
@@ -397,6 +413,12 @@ func (m *Model) AllLayers(ctx *context.Context, tokens, mask *Node, useKVCache b
 		layerCtx := ctx.In(fmt.Sprintf("layer_%d", layer))
 		x = m.ForwardLayer(layerCtx, x, mask, useKVCache, position)
 		allLayers = append(allLayers, x)
+	}
+	if m.FinalNormalization != layers.NormalizationNone {
+		x = m.normalize(ctx.In("final_norm"), x, m.FinalNormalization)
+		if len(allLayers) > 0 {
+			allLayers[len(allLayers)-1] = x
+		}
 	}
 	return x, allLayers
 }
@@ -413,6 +435,10 @@ func (m *Model) EmbedTokens(ctx *context.Context, tokens *Node) *Node {
 	embedded := layers.Embedding(ctx.In("token_embed"), tokens, m.DType, m.VocabSize, m.EmbedDim)
 	if embedded.Rank() == 2 {
 		embedded = ExpandDims(embedded, 1)
+	}
+	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
+		scale := Scalar(embedded.Graph(), m.DType, math.Sqrt(float64(m.EmbedDim)))
+		embedded = Mul(embedded, scale)
 	}
 	return embedded
 }
@@ -443,7 +469,7 @@ func (m *Model) PrePositionalEncoder(ctx *context.Context, x *Node, position int
 	return preEnc.PreEncode(x, posIndices, seqAxis)
 }
 
-// LogitsFromEmbeddings takes the embeddings of the later attention layer (returned by AllLayers) and computes
+// LogitsFromEmbeddings takes the embeddings of the last attention layer (returned by AllLayers) and computes
 // the logits over the vocabulary size. This is the last step of the model.
 //
 // This step is done automatically by Logits (which builds the full forward path from the tokens), but if needed, it can
@@ -519,7 +545,7 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x, mask *Node, u
 	}
 
 	x = Add(residual, attn)
-	x = m.normalize(layerCtx.In("norm1"), x)
+	x = m.normalize(layerCtx.In("norm1"), x, m.Normalization)
 
 	residual = x
 	ff := m.dense(layerCtx.In("ff1"), x, m.UseBias, m.FFNDim)
@@ -529,7 +555,7 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, x, mask *Node, u
 	}
 	ff = m.dense(layerCtx.In("ff2"), ff, m.UseBias, m.EmbedDim)
 	x = Add(residual, ff)
-	x = m.normalize(layerCtx.In("norm2"), x)
+	x = m.normalize(layerCtx.In("norm2"), x, m.Normalization)
 	return x
 }
 
@@ -566,11 +592,11 @@ func (m *Model) dense(ctx *context.Context, op *Node, useBias bool, outputDims .
 	return y
 }
 
-func (m *Model) normalize(ctx *context.Context, operand *Node) *Node {
-	if m.Normalization == layers.NormalizationNone {
+func (m *Model) normalize(ctx *context.Context, operand *Node, normType string) *Node {
+	if normType == layers.NormalizationNone {
 		return operand
 	}
-	switch m.Normalization {
+	switch normType {
 	case layers.NormalizationRMSNorm:
 		builder := layers.RMSNorm(ctx, operand).WithEpsilon(m.NormEpsilon)
 		if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
@@ -580,7 +606,7 @@ func (m *Model) normalize(ctx *context.Context, operand *Node) *Node {
 	case layers.NormalizationLayerNorm:
 		return layers.LayerNormalization(ctx, operand, -1).Epsilon(m.NormEpsilon).Done()
 	default:
-		exceptions.Panicf("unsupported normalization type: %q", m.Normalization)
+		exceptions.Panicf("unsupported normalization type: %q", normType)
 		return nil
 	}
 }
@@ -589,7 +615,7 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x, mask *Node, useC
 	residual := x
 
 	// Pre-attention normalization.
-	x = m.normalize(layerCtx.In("input_norm"), x)
+	x = m.normalize(layerCtx.In("input_norm"), x, m.Normalization)
 
 	// Attention.
 	var attn *Node
@@ -623,12 +649,12 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x, mask *Node, useC
 	attn = attnBuilder.Done()
 
 	// Post-attention normalization.
-	attn = m.normalize(layerCtx.In("post_attention_norm"), attn)
+	attn = m.normalize(layerCtx.In("post_attention_norm"), attn, m.Normalization)
 	x = Add(residual, attn)
 	residual = x
 
 	// Pre-feedforward normalization
-	x = m.normalize(layerCtx.In("pre_feedforward_norm"), x)
+	x = m.normalize(layerCtx.In("pre_feedforward_norm"), x, m.Normalization)
 
 	// Gemma uses SwiGLU: gate_proj, up_proj, down_proj
 	ffCtx := layerCtx.In("mlp")
@@ -643,7 +669,7 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, x, mask *Node, useC
 	ff = m.dense(ffCtx.In("down_proj"), ff, m.UseBias, m.EmbedDim)
 
 	// Post-feedforward normalization
-	ff = m.normalize(layerCtx.In("post_feedforward_norm"), ff)
+	ff = m.normalize(layerCtx.In("post_feedforward_norm"), ff, m.Normalization)
 	x = Add(residual, ff)
 	return x
 }
