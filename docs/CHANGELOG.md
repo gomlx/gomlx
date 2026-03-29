@@ -2,11 +2,24 @@
 
 # Next
 
-- Package `ml/activations`
-  - Added `HardSigmoid` activation.
-  - Modified the parametrized activations to be suffixed with `With`: `LeakyReluWith`, `HardSigmoidWith`, `HardSwishWith`.
+### Core:
 - Package `tensors`
   - Improving support for sub-byte data types (`Int4`, `Int2`, `Uint4`, `Uint2`)
+
+### Under `pkg/ml`:
+- Package `activations`
+  - Added `HardSigmoid` activation.
+  - Modified the parametrized activations to be suffixed with `With`: `LeakyReluWith`, `HardSigmoidWith`, `HardSwishWith`.
+- Package `attention`:
+  - API clean up.
+  - Added `WithMask`, a simplified mask input for when only using padding.
+  - Dropout now takes a `*Node` instead of a float64, allowing dynamic dropout control.
+- Package `attention/pos`:
+  - Split `Encoder` API into `QKEncoder` and `PreEncoder`, to support different types of positional encoders.
+- Package `transfromers`:
+  - Updates and fixes to the API; Added methods to build partial models: `AllLayers`, `ForwardLayer`, `LogitsFromEmbeddings`, `EmbedTokesn`, etc.
+  - Updated positional-encoder support.
+  - Added options `WithFinalNormalization`, `WithScalingOfTokenEmbeddings` and `WithArchitecture`.
 
 # 0.27.2: DotGeneral with AccumulatorDType; Transformer architecture parameter; 
 

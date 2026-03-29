@@ -6,6 +6,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
@@ -14,22 +15,59 @@ import (
 )
 
 func TestScalar(t *testing.T) {
-	graphtest.RunTestGraphFn(t, "EinsumMatrixMul",
-		func(g *Graph) (inputs, outputs []*Node) {
-			inputs = []*Node{
-				Scalar(g, dtypes.Float32, uint8(3)),
-				Scalar(g, dtypes.Float64, int16(-2)),
-				Scalar(g, dtypes.Int64, float32(7)),
-				Scalar(g, dtypes.Uint8, float64(3)),
-			}
-			outputs = inputs
-			return
-		}, []any{
-			float32(3),
-			float64(-2),
-			int64(7),
-			uint8(3),
-		}, -1)
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+		graphtest.RunTestGraphFnWithBackend(t, "EinsumMatrixMul", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				inputs = []*Node{
+					Scalar(g, dtypes.Float32, uint8(3)),
+					Scalar(g, dtypes.Float64, int16(-2)),
+					Scalar(g, dtypes.Int64, float32(7)),
+					Scalar(g, dtypes.Uint8, float64(3)),
+				}
+				outputs = inputs
+				return
+			}, []any{
+				float32(3),
+				float64(-2),
+				int64(7),
+				uint8(3),
+			}, -1)
+
+		graphtest.RunTestGraphFnWithBackend(t, "ScalarOne", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				inputs = []*Node{
+					ScalarOne(g, dtypes.Float32),
+					ScalarOne(g, dtypes.Float64),
+					ScalarOne(g, dtypes.Int64),
+					ScalarOne(g, dtypes.Bool),
+				}
+				outputs = inputs
+				return
+			}, []any{
+				float32(1),
+				float64(1),
+				int64(1),
+				true,
+			}, -1)
+
+		graphtest.RunTestGraphFnWithBackend(t, "ScalarZero", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				inputs = []*Node{
+					ScalarZero(g, dtypes.Float32),
+					ScalarZero(g, dtypes.Float64),
+					ScalarZero(g, dtypes.Int64),
+					ScalarZero(g, dtypes.Bool),
+				}
+				outputs = inputs
+				return
+			}, []any{
+				float32(0),
+				float64(0),
+				int64(0),
+				false,
+			}, -1)
+
+	})
 }
 
 func TestIsZero(t *testing.T) {

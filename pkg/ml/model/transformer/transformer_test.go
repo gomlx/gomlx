@@ -31,7 +31,7 @@ func TestModel(t *testing.T) {
 		assert.Equal(t, 512, cfg.MaxPosEmbed)
 		assert.Equal(t, dtypes.Float32, cfg.DType)
 		assert.Equal(t, 0.0, cfg.Dropout)
-		assert.Nil(t, cfg.PosEmbed)
+		assert.Nil(t, cfg.posEncoder)
 		assert.Equal(t, cfg.Normalization, layers.NormalizationLayerNorm)
 		assert.True(t, cfg.UseBias)
 	})
@@ -51,8 +51,8 @@ func TestModel(t *testing.T) {
 		assert.Equal(t, 0.1, cfg.Dropout)
 		assert.Equal(t, dtypes.Float16, cfg.DType)
 		assert.Equal(t, 0.1, cfg.Dropout)
-		require.NotNil(t, cfg.PosEmbed)
-		rope, ok := cfg.PosEmbed.(*pos.RoPE)
+		require.NotNil(t, cfg.posEncoder)
+		rope, ok := cfg.posEncoder.(*pos.RoPE)
 		require.True(t, ok)
 		assert.Equal(t, 5000.0, rope.BaseFreq)
 		assert.Equal(t, cfg.Normalization, layers.NormalizationNone)
@@ -89,8 +89,8 @@ func TestModel(t *testing.T) {
 		assert.Equal(t, 0.1, cfg.Dropout)
 		assert.Equal(t, dtypes.Float16, cfg.DType)
 		assert.Equal(t, 0.1, cfg.Dropout)
-		require.NotNil(t, cfg.PosEmbed)
-		rope, ok := cfg.PosEmbed.(*pos.RoPE)
+		require.NotNil(t, cfg.posEncoder)
+		rope, ok := cfg.posEncoder.(*pos.RoPE)
 		require.True(t, ok)
 		assert.Equal(t, 5000.0, rope.BaseFreq)
 		assert.Equal(t, cfg.Normalization, layers.NormalizationNone)
@@ -117,8 +117,8 @@ func TestModel(t *testing.T) {
 		assert.Equal(t, 0.1, cfg.Dropout)
 		assert.Equal(t, dtypes.Float16, cfg.DType)
 		assert.Equal(t, 0.1, cfg.Dropout)
-		require.NotNil(t, cfg.PosEmbed)
-		rope, ok := cfg.PosEmbed.(*pos.RoPE)
+		require.NotNil(t, cfg.posEncoder)
+		rope, ok := cfg.posEncoder.(*pos.RoPE)
 		require.True(t, ok)
 		assert.Equal(t, 5000.0, rope.BaseFreq)
 		assert.Equal(t, layers.NormalizationNone, cfg.Normalization)
@@ -128,29 +128,27 @@ func TestModel(t *testing.T) {
 
 // TestTransformerBuilder groups transformer builder/exposed functions tests.
 func TestTransformerBuilder(t *testing.T) {
-	t.Run("ForTrainingForward", func(t *testing.T) {
+	t.Run("BuildGraph", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
 		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
-		modelFn := cfg.ForTraining()
-		g := NewGraph(backend, "ForTrainingForward")
+		g := NewGraph(backend, "BuildGraph")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 2, 8))
 		tokens = Mod(tokens, Const(g, int32(cfg.VocabSize)))
-		logits := modelFn(ctx, tokens)
+		logits := cfg.Logits(ctx, tokens, nil)
 		require.NotNil(t, logits)
 		assert.Equal(t, []int{2, 8, 100}, logits.Shape().Dimensions)
 		assert.Equal(t, dtypes.Float32, logits.DType())
 	})
 
-	t.Run("ForGenerationPrompt", func(t *testing.T) {
+	t.Run("BuildGraphWithKVCache", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
-		modelFn := cfg.ForGeneration()
-		g := NewGraph(backend, "ForGenerationPrompt")
+		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
+		g := NewGraph(backend, "BuildGraphWithKVCache")
 		prompt := IotaFull(g, shapes.Make(dtypes.Int32, 2, 5))
-		prompt = Mod(prompt, Const(g, int32(cfg.VocabSize)))
-		logits := modelFn(ctx, prompt, 0)
+		prompt = Mod(prompt, Const(g, int32(model.VocabSize)))
+		logits := model.LogitsWithKVCache(ctx, prompt, 0)
 		require.NotNil(t, logits)
 		assert.Equal(t, []int{2, 5, 100}, logits.Shape().Dimensions)
 	})
@@ -161,12 +159,11 @@ func TestTransformerVariants(t *testing.T) {
 	t.Run("WithRoPE", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithRoPE(10000.0)
-		modelFn := cfg.ForGeneration()
+		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithRoPE(10000.0)
 		g := NewGraph(backend, "WithRoPE")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 1, 4))
-		tokens = Mod(tokens, Const(g, int32(cfg.VocabSize)))
-		logits := modelFn(ctx, tokens, 0)
+		tokens = Mod(tokens, Const(g, int32(model.VocabSize)))
+		logits := model.LogitsWithKVCache(ctx, tokens, 0)
 		require.NotNil(t, logits)
 		assert.Equal(t, []int{1, 4, 100}, logits.Shape().Dimensions)
 	})
@@ -174,12 +171,11 @@ func TestTransformerVariants(t *testing.T) {
 	t.Run("WithoutLayerNorm", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithNormalization("none")
-		modelFn := cfg.ForTraining()
+		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithNormalization("none")
 		g := NewGraph(backend, "WithoutLayerNorm")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 2, 8))
-		tokens = Mod(tokens, Const(g, int32(cfg.VocabSize)))
-		logits := modelFn(ctx, tokens)
+		tokens = Mod(tokens, Const(g, int32(model.VocabSize)))
+		logits := model.Logits(ctx, tokens, nil)
 		require.NotNil(t, logits)
 		assert.Equal(t, []int{2, 8, 100}, logits.Shape().Dimensions)
 	})
@@ -187,12 +183,11 @@ func TestTransformerVariants(t *testing.T) {
 	t.Run("WithoutBias", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithBias(false)
-		modelFn := cfg.ForTraining()
+		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithBias(false)
 		g := NewGraph(backend, "WithoutBias")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 2, 8))
-		tokens = Mod(tokens, Const(g, int32(cfg.VocabSize)))
-		logits := modelFn(ctx, tokens)
+		tokens = Mod(tokens, Const(g, int32(model.VocabSize)))
+		logits := model.Logits(ctx, tokens, nil)
 		require.NotNil(t, logits)
 		assert.Equal(t, []int{2, 8, 100}, logits.Shape().Dimensions)
 	})
@@ -200,12 +195,11 @@ func TestTransformerVariants(t *testing.T) {
 	t.Run("WithDropout", func(t *testing.T) {
 		backend := graphtest.BuildTestBackend()
 		ctx := context.New()
-		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithDropout(0.1)
-		modelFn := cfg.ForTraining()
+		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithDropout(0.1)
 		g := NewGraph(backend, "WithDropout")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 2, 8))
-		tokens = Mod(tokens, Const(g, int32(cfg.VocabSize)))
-		logits := modelFn(ctx, tokens)
+		tokens = Mod(tokens, Const(g, int32(model.VocabSize)))
+		logits := model.Logits(ctx, tokens, nil)
 		require.NotNil(t, logits)
 		assert.Equal(t, []int{2, 8, 100}, logits.Shape().Dimensions)
 	})
@@ -220,11 +214,9 @@ func TestTransformerBatchSizes(t *testing.T) {
 		t.Run(fmt.Sprintf("BatchSize%d", batchSize), func(t *testing.T) {
 			ctx := context.New()
 
-			cfg := New(100, 64, 2, 4, 16).
+			model := New(100, 64, 2, 4, 16).
 				WithFFNDim(128).
 				WithMaxPosEmbed(128)
-
-			modelFn := cfg.ForTraining()
 
 			seqLen := 8
 
@@ -232,9 +224,9 @@ func TestTransformerBatchSizes(t *testing.T) {
 			g := NewGraph(manager, "TestTransformerBatchSize")
 
 			tokens := IotaFull(g, shapes.Make(dtypes.Int32, batchSize, seqLen))
-			tokens = Mod(tokens, Const(g, int32(cfg.VocabSize)))
+			tokens = Mod(tokens, Const(g, int32(model.VocabSize)))
 
-			logits := modelFn(ctx, tokens)
+			logits := model.Logits(ctx, tokens, nil)
 			require.NotNil(t, logits)
 			assert.Equal(t, []int{batchSize, seqLen, 100}, logits.Shape().Dimensions)
 		})

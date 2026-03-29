@@ -28,6 +28,8 @@ func FillScalar(g *Graph, shape shapes.Shape, value float64) *Node {
 }
 
 // ScalarZero returns a scalar constant 0 for the given DType.
+//
+// It also work for booleans (so it's also a "ScalarFalse").
 func ScalarZero(g *Graph, dtype dtypes.DType) *Node {
 	return Scalar(g, dtype, 0)
 }
@@ -39,6 +41,8 @@ func IsZero(x *Node) *Node {
 }
 
 // ScalarOne returns a scalar constant 1 for the given DType.
+//
+// It also work for booleans (so it's also a "ScalarTrue").
 func ScalarOne(g *Graph, dtype dtypes.DType) *Node {
 	return Scalar(g, dtype, 1)
 }
@@ -125,6 +129,8 @@ func OnesLike(x *Node) *Node {
 
 // Ones creates a computation with the same shape as the input, but with the value 1.
 // It's implemented indirectly using other nodes.
+//
+// It also works for booleans, so it can create a tensor filled with true values.
 func Ones(g *Graph, shape shapes.Shape) *Node {
 	g.AssertBuilding()
 	scalar := ScalarOne(g, shape.DType)
@@ -142,6 +148,8 @@ func ZerosLike(x *Node) *Node {
 
 // Zeros creates a computation with the same shape as the input, but with the value 0.
 // It's implemented indirectly using other nodes.
+//
+// It also works for booleans, so it can create a tensor filled with false values.
 func Zeros(g *Graph, shape shapes.Shape) *Node {
 	g.AssertBuilding()
 	return BroadcastPrefix(ScalarZero(g, shape.DType), shape.Dimensions...)

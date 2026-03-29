@@ -119,9 +119,9 @@ func TransformerLayers(ctx *context.Context, embed, mask *Node) *Node {
 		ctx := ctx.Inf("%03d_attention_layer", layerNum)
 		residual := embed
 		embed = attention.MultiHeadAttention(ctx.In("000_attention"), embed, embed, embed, numAttHeads, attKeySize).
-			SetKeyMask(mask).SetQueryMask(mask).
-			SetOutputDim(embedSize).
-			SetValueHeadDim(embedSize).Done()
+			WithKeyMask(mask).WithQueryMask(mask).
+			WithOutputDim(embedSize).
+			WithValueHeadDim(embedSize).Done()
 		if dropoutNode != nil {
 			embed = layers.Dropout(ctx.In("001_dropout"), embed, dropoutNode)
 		}

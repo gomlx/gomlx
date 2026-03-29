@@ -1,5 +1,12 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
+// Package attention implements multi-head attention and related utilities.
+//
+// The multi-head attention implements one attention layer, as described in the paper
+// "Attention Is All You Need" (https://arxiv.org/abs/1706.03762), with some of the
+// modern extensions.
+//
+// See MultiHeadAttention to create a builder for the the attention layer.
 package attention
 
 import (
@@ -15,7 +22,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 // This file contains all parts of the layers.MultiHeadAttention implementation.
@@ -36,7 +42,7 @@ type MultiHeadAttentionBuilder struct {
 	attentionShape               shapes.Shape
 
 	useProjectionBias bool
-	dropoutRate       float64
+	dropoutRate       *Node
 
 	// layout records the internal layout used for the attention core.
 	// Defaults to LayoutBSHD (Dense projections produce [batch, seq, heads, dim]).
@@ -67,10 +73,7 @@ type MultiHeadAttentionBuilder struct {
 	useTransposedWeights bool
 }
 
-// MultiHeadAttention defines a multi-head attention layers, as described in the paper
-// "Attention Is All You Need", https://arxiv.org/abs/1706.03762,
-// by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez,
-// Lukasz Kaiser, Illia Polosukhin.
+// MultiHeadAttention defines a multi-head attention layers, as described in [1], plus some modern extensions.
 //
 // It takes query, key, and value and project them numHead times, to a headDim sized embeddings.
 // Then it uses the dot-product of query and key as weights, and returns a softmax sum
@@ -93,30 +96,27 @@ type MultiHeadAttentionBuilder struct {
 // and the resulting Node is returned when MultiHeadAttentionBuilder.Done is called.
 // Alternatively one can call MultiHeadAttentionBuilder.DoneWithCoefficients, in which
 // case it returns both the updated state and the attention coefficients.
+//
+// Example:
+//
+//	positionEncoder := pos.NewRoPE(10000.0)
+//	for layer := range numLayers {
+//		ctx := ctx.In(fmt.Sprintf("layer_%d", layer))
+//		// Use x for the source of query/key/values (self-attention).
+//		x := attention.MultiHeadAttention(ctx, x, x, x, numHeads, headDim).
+//		    WithPositionalEncoder(positionEncoder)
+//		logits := attention.Done()
+//		...  // normalization, residual connection, etc.
+//	}
+//
+// [1] "Attention Is All You Need", https://arxiv.org/abs/1706.03762, by Ashish Vaswani, Noam Shazeer,
+// Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin.
 func MultiHeadAttention(ctx *context.Context, query, key, value *Node, numHeads int, headDim int) *MultiHeadAttentionBuilder {
 	g := query.Graph()
 
 	queryShape := query.Shape()
 	keyShape := key.Shape()
 	valueShape := value.Shape()
-	innerKeyAxes := keyShape.Rank() - 2
-	innerQueryAxes := queryShape.Rank() - 2
-
-	b := &MultiHeadAttentionBuilder{
-		ctx:               ctx.In("MultiHeadAttention"),
-		g:                 g,
-		query:             query,
-		key:               key,
-		value:             value,
-		numHeads:          numHeads,
-		valueDim:          headDim,
-		keyQueryDim:       headDim,
-		innerKeyAxes:      innerKeyAxes,
-		innerQueryAxes:    innerQueryAxes,
-		useProjectionBias: true,
-		layout:            LayoutBSHD,
-	}
-
 	if queryShape.Rank() < 3 {
 		Panicf("query rank is %d (shape=%s), but MultiHeadAttention requires at least rank 3",
 			queryShape.Rank(), queryShape)
@@ -137,8 +137,20 @@ func MultiHeadAttention(ctx *context.Context, query, key, value *Node, numHeads 
 		Panicf("key and value shapes must be the same up to the one-before-last axis, instead got shapes key=%s, value=%s",
 			keyShape, valueShape)
 	}
-	if valueShape.Ok() && valueShape.Rank() > 0 {
-		b.outputDim = valueShape.Dimensions[valueShape.Rank()-1]
+	b := &MultiHeadAttentionBuilder{
+		ctx:               ctx.In("MultiHeadAttention"),
+		g:                 g,
+		query:             query,
+		key:               key,
+		value:             value,
+		outputDim:         valueShape.Dimensions[valueShape.Rank()-1],
+		numHeads:          numHeads,
+		valueDim:          headDim,
+		keyQueryDim:       headDim,
+		innerKeyAxes:      keyShape.Rank() - 2,
+		innerQueryAxes:    queryShape.Rank() - 2,
+		useProjectionBias: true,
+		layout:            LayoutBSHD,
 	}
 	b.buildAttentionShape()
 	return b
@@ -152,7 +164,7 @@ func (b *MultiHeadAttentionBuilder) effectiveNumKVHeads() int {
 	return b.numHeads
 }
 
-// SetNumKVHeads sets the number of key/value heads for Grouped Query Attention (GQA).
+// WithNumKVHeads sets the number of key/value heads for Grouped Query Attention (GQA).
 //
 // When numKVHeads < numHeads, each group of numHeads/numKVHeads query heads shares the
 // same key/value head. This reduces the KV projection and KV cache size while retaining
@@ -165,7 +177,7 @@ func (b *MultiHeadAttentionBuilder) effectiveNumKVHeads() int {
 // numHeads must be divisible by numKVHeads. This method is incompatible with
 // UseQKVProjection when query == key == value and numKVHeads != numHeads,
 // since the fused QKV path assumes equal head counts for Q and KV.
-func (b *MultiHeadAttentionBuilder) SetNumKVHeads(numKVHeads int) *MultiHeadAttentionBuilder {
+func (b *MultiHeadAttentionBuilder) WithNumKVHeads(numKVHeads int) *MultiHeadAttentionBuilder {
 	if numKVHeads <= 0 {
 		Panicf("MultiHeadAttention: numKVHeads (%d) must be positive", numKVHeads)
 	}
@@ -180,150 +192,27 @@ func (b *MultiHeadAttentionBuilder) SetNumKVHeads(numKVHeads int) *MultiHeadAtte
 	return b
 }
 
-// SetKeyQueryDim allows finer configuration on the dimension of the projection used for the
+// WithKeyQueryDim allows finer configuration on the dimension of the projection used for the
 // query/key pairs for each head. It defaults to the value given by `headDim`.
-func (b *MultiHeadAttentionBuilder) SetKeyQueryDim(keyQueryDim int) *MultiHeadAttentionBuilder {
+func (b *MultiHeadAttentionBuilder) WithKeyQueryDim(keyQueryDim int) *MultiHeadAttentionBuilder {
 	b.keyQueryDim = keyQueryDim
 	return b
 }
 
-// SetValueHeadDim allows finer configuration on the dimension of the projection used for the
+// WithValueHeadDim allows finer configuration on the dimension of the projection used for the
 // value for each head. It defaults to the value given by `headDim`.
-func (b *MultiHeadAttentionBuilder) SetValueHeadDim(valueDim int) *MultiHeadAttentionBuilder {
+func (b *MultiHeadAttentionBuilder) WithValueHeadDim(valueDim int) *MultiHeadAttentionBuilder {
 	b.valueDim = valueDim
 	return b
 }
 
-// SetOutputDim defines the output dimension of the final projection, from the flattened
-// attention heads. It defaults to the value of the last dimension of `values` passed as input
+// WithOutputDim defines the output dimension of the final projection, from the flattened
+// attention heads.
+//
+// It defaults to the value of the last dimension of `values` passed as input
 // (`inputValueDim`).
-func (b *MultiHeadAttentionBuilder) SetOutputDim(outputDim int) *MultiHeadAttentionBuilder {
+func (b *MultiHeadAttentionBuilder) WithOutputDim(outputDim int) *MultiHeadAttentionBuilder {
 	b.outputDim = outputDim
-	return b
-}
-
-// SetKeyMask sets a mask for keys that are actually valid and can be attended.
-// Defaults to no mask, meaning all keys are accessible. See also SetQueryMask.
-//
-// Shape should be `[batch_size, numHeads, <key_elements>]`,
-// or `[batch_size, <key_elements>]` if the mask is the same
-// for every head.
-//
-// Either use SetKeyMask and SetQueryMask separately or use SetKeyQueryMatrixMask, but
-// not both. Optionally, one can also UseCausalMask, which is combined (logical-and) to
-// any given mask.
-func (b *MultiHeadAttentionBuilder) SetKeyMask(keyMask *Node) *MultiHeadAttentionBuilder {
-	if b.useCausalMask {
-		Panicf("MultiHeadAttention: SetKeyMask is mutually exclusive with UseCausalMask; " +
-			"combine them into a single mask if both causal and explicit masks are needed")
-	}
-	if b.queryKeyMatrixMask != nil {
-		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
-	}
-	shape := keyMask.Shape()
-	if shape.Rank() < 1+b.innerKeyAxes || shape.Rank() > 2+b.innerKeyAxes {
-		Panicf("invalid keyMask shape (%s), expected rank to be %d or %d -- "+
-			"`[batch_size, numHeads, <key_elements>]` or `[batch_size, <key_elements>]`",
-			shape, 1+b.innerKeyAxes, 2+b.innerKeyAxes)
-	}
-	b.keyMask = keyMask
-	return b
-}
-
-// SetQueryMask sets a mask for queries that are actually valid and should be used.
-// Defaults to no mask, meaning all queries are accessible. See also SetKeyMask.
-//
-// Shape should be `[batch_size, numHeads, <query_elements>]`,
-// or `[batch_size, <query_elements>]` if the mask is the same
-// for every head.
-//
-// Either use SetKeyMask and SetQueryMask separately or use SetKeyQueryMatrixMask, but
-// not both.
-// Optionally, one can also UseCausalMask, which is combined (logical-and) to any given mask.
-func (b *MultiHeadAttentionBuilder) SetQueryMask(queryMask *Node) *MultiHeadAttentionBuilder {
-	if b.useCausalMask {
-		Panicf("MultiHeadAttention: SetQueryMask is mutually exclusive with UseCausalMask; " +
-			"combine them into a single mask if both causal and explicit masks are needed")
-	}
-	if b.queryKeyMatrixMask != nil {
-		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
-	}
-	shape := queryMask.Shape()
-	if shape.Rank() < 1+b.innerQueryAxes || shape.Rank() > 2+b.innerQueryAxes {
-		Panicf("invalid keyMask shape (%s), expected rank to be %d or %d -- "+
-			"`[batch_size, numHeads, <query_elements>]` or `[batch_size, <query_elements>]`",
-			shape, 1+b.innerQueryAxes, 2+b.innerQueryAxes)
-	}
-	b.queryMask = queryMask
-	return b
-}
-
-// SetQueryKeyMatrixMask sets a mask matrix that defines which queries can attend to which
-// keys. Defaults to no mask, meaning all queries are accessible.
-//
-// Shape should be `[batch_size, numHeads, <query_elements>, <key_elements>]`,
-// or `[batch_size, <query_elements>, <key_elements>]` if the mask is the same
-// for every head.
-//
-// Either use SetKeyMask and SetQueryMask separately or use SetKeyQueryMatrixMask, but
-// not both.
-// Optionally, one can also UseCausalMask, which is combined (logical-and) to any given mask.
-func (b *MultiHeadAttentionBuilder) SetQueryKeyMatrixMask(queryKeyMatrixMask *Node) *MultiHeadAttentionBuilder {
-	if b.useCausalMask {
-		Panicf("MultiHeadAttention: SetQueryKeyMatrixMask is mutually exclusive with UseCausalMask; " +
-			"combine them into a single mask if both causal and explicit masks are needed")
-	}
-	if b.keyMask != nil || b.queryMask != nil {
-		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
-	}
-	if queryKeyMatrixMask.Shape().Equal(b.attentionShape) {
-		// Simplest case: queryKeyMatrixMask provided with attentionShape.
-		b.queryKeyMatrixMask = queryKeyMatrixMask
-		return b
-	}
-
-	// shapeWithoutHeads = '[batch, <query_elements>, <key_elements>]` (without numHeads).
-	shapeWithoutHeads := b.attentionShape.Clone()
-	for ii := 1 + b.innerQueryAxes; ii < b.attentionShape.Rank()-1; ii++ {
-		shapeWithoutHeads.Dimensions[ii] = shapeWithoutHeads.Dimensions[ii+1]
-	}
-	shapeWithoutHeads.Dimensions = shapeWithoutHeads.Dimensions[0 : b.attentionShape.Rank()-1]
-	if !queryKeyMatrixMask.Shape().Equal(shapeWithoutHeads) {
-		Panicf("invalid shape for queryKeyMatrixMask %s: expected either %s (with per-head mask) or %s",
-			queryKeyMatrixMask.Shape(), b.attentionShape, shapeWithoutHeads)
-	}
-
-	// Broadcast numHeads axes.
-	queryKeyMatrixMask = InsertAxes(queryKeyMatrixMask, 1+b.innerQueryAxes)
-	queryKeyMatrixMask = BroadcastToDims(queryKeyMatrixMask, b.attentionShape.Dimensions...)
-	b.queryKeyMatrixMask = queryKeyMatrixMask
-	return b
-}
-
-// UseCausalMask adds a mask where a query can only attend to keys with lower indices than itself.
-// It assumes that query and key are either the same or have the same inner shape, and there is
-// only one inner rank -- so key/query should have rank-3 shape `[batch, inner_dim, key/query_dim]`.
-//
-// UseCausalMask is mutually exclusive with SetKeyMask, SetQueryMask, and SetQueryKeyMatrixMask.
-// If you need both causal masking and an explicit mask, combine them into a single mask
-// before passing it (e.g. LogicalAnd a lower-triangular boolean mask with your mask).
-func (b *MultiHeadAttentionBuilder) UseCausalMask() *MultiHeadAttentionBuilder {
-	if b.keyMask != nil || b.queryMask != nil || b.queryKeyMatrixMask != nil {
-		Panicf("MultiHeadAttention: UseCausalMask is mutually exclusive with SetKeyMask/SetQueryMask/SetQueryKeyMatrixMask; " +
-			"combine them into a single mask if both causal and explicit masks are needed")
-	}
-	queryShape := b.query.Shape()
-	keyShape := b.key.Shape()
-	if queryShape.Rank() != 3 || keyShape.Rank() != 3 {
-		// TODO: we could extrapolate and make this work for higher ranked tensors.
-		Panicf("MultiHeadAttention's UseCausalMask requires key and query to be rank-3,"+
-			" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
-	}
-	if !reflect.DeepEqual(keyShape.Dimensions[:keyShape.Rank()-1], queryShape.Dimensions[:queryShape.Rank()-1]) {
-		Panicf("MultiHeadAttention's UseCausalMask requires inner shapes of query and key be the same,"+
-			" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
-	}
-	b.useCausalMask = true
 	return b
 }
 
@@ -334,13 +223,13 @@ func (b *MultiHeadAttentionBuilder) UseProjectionBias(useProjectionBias bool) *M
 	return b
 }
 
-// Dropout defines how much dropout to use in the attention coefficients calculation.
-// If set to 0 or lower, it's simply disabled. Default is 0.
-func (b *MultiHeadAttentionBuilder) Dropout(rate float64) *MultiHeadAttentionBuilder {
+// WithDropout defines how much dropout to use in the attention coefficients calculation.
+//
+// If set to nil to disable it (the default). Values <= 0 are a no-op, and values > 1 are invalid.
+//
+// Notice the dropout rate is a *Node, since it can be set dynamically if needed.
+func (b *MultiHeadAttentionBuilder) WithDropout(rate *Node) *MultiHeadAttentionBuilder {
 	b.dropoutRate = rate
-	if b.dropoutRate >= 1 {
-		Panicf("dropout rate %g >= 1 is undefined", rate)
-	}
 	return b
 }
 
@@ -367,18 +256,18 @@ func (b *MultiHeadAttentionBuilder) Dropout(rate float64) *MultiHeadAttentionBui
 //
 // Usage pattern:
 //
-//	// Build generation graph:
-//	builder := attention.MultiHeadAttention(ctx, embeddings, embeddings, embeddings, numHeads, headDim).
-//	    WithKVCache(maxSeqLen, position).
-//	    WithRoPE(10000.0).
-//	    Done()
+//		// Build generation graph:
+//		attention := attention.MultiHeadAttention(ctx, embeddings, embeddings, embeddings, numHeads, headDim).
+//		    WithKVCache(maxSeqLen, position).
+//		    WithPositionalEncoder(pos.NewRoPE(10000.0))
+//	 logits := attention.Done()
 //
-//	// Generate tokens:
-//	// 1. First call with full prompt (e.g., 10 tokens), position=0
-//	// 2. Each subsequent call with 1 new token, position=10, 11, 12, ...
+//		// Generate tokens:
+//		// 1. First call with full prompt (e.g., 10 tokens), position=0
+//		// 2. Each subsequent call with 1 new token, position=10, 11, 12, ...
 //
-//	// Before generating a new response, reset all caches in the model:
-//	attention.KVCacheReset(ctx)
+//		// Before generating a new response, reset all caches in the model:
+//		attention.KVCacheReset(ctx)
 //
 // The cache supports circular/rotating mode: when position exceeds maxSeqLen,
 // new entries wrap around and overwrite the oldest entries. This allows efficient
@@ -414,7 +303,10 @@ func (b *MultiHeadAttentionBuilder) WithRoPE(baseFreq float64) *MultiHeadAttenti
 	return b
 }
 
-// WithPositionalEncoder sets the positional encoder to use.
+// WithPositionalEncoder sets a positional encoder to use.
+//
+// Note: Only pos.QKEncoder is actually called. A pos.PreEncoder is ignored, since they should be applied
+// before the first MultiHeadAttention layer.
 func (b *MultiHeadAttentionBuilder) WithPositionalEncoder(encoder pos.Encoder) *MultiHeadAttentionBuilder {
 	b.positionalEncoder = encoder
 	return b
@@ -532,15 +424,17 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	// Applied before KV cache so that rotated embeddings are cached.
 	// projectedQuery/Key shape: [batch, seq, heads, dim] (BSHD layout).
 	if b.positionalEncoder != nil {
-		seqLen := projectedQuery.Shape().Dimensions[seqAxis]
-		var posIndices *Node
-		if b.position != nil {
-			posIndices = pos.SequentialPositions(b.g, b.position, seqLen)
-		} else {
-			posIndices = pos.SequentialPositions(b.g, Const(b.g, int32(0)), seqLen)
+		qkEncoder, ok := b.positionalEncoder.(pos.QKEncoder)
+		if ok {
+			seqLen := projectedQuery.Shape().Dimensions[seqAxis]
+			var posIndices *Node
+			if b.position != nil {
+				posIndices = pos.SequentialPositions(b.g, b.position, seqLen)
+			} else {
+				posIndices = pos.SequentialPositions(b.g, ScalarZero(b.g, dtypes.Int32), seqLen)
+			}
+			projectedQuery, projectedKey = qkEncoder.EncodeQK(projectedQuery, projectedKey, posIndices, seqAxis)
 		}
-		projectedQuery = b.positionalEncoder.Apply(projectedQuery, posIndices, seqAxis)
-		projectedKey = b.positionalEncoder.Apply(projectedKey, posIndices, seqAxis)
 	}
 
 	// Handle KV cache if in incremental generation mode
@@ -569,7 +463,7 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 
 	// Build the mask before any flattening, since buildMask uses the original attentionShape.
 	// Mask shape: [batch, <query_elements>, num_heads, <key_elements>]
-	mask := b.buildMask()
+	mask := b.buildAttentionMask()
 
 	// Flatten the mask to match the now-flat Q/K/V when inner axes > 1.
 	if needsUnflatten && mask != nil {
@@ -581,8 +475,8 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
 	// Pass causal to Core only when not using KV cache (Core builds a simple lower-triangular mask).
 	// When using KV cache, the position-aware causal mask is already built in buildMask above.
-	passCausal := b.useCausalMask && !b.kvCacheShape.Ok()
-	attentionOutput, attentionCoefficients = Core(b.ctx, projectedQuery, projectedKey, projectedValue, scale, mask, b.dropoutRate, b.layout, passCausal, wantCoefficients)
+	useCausalMask := b.useCausalMask && !b.kvCacheShape.Ok()
+	attentionOutput, attentionCoefficients = Core(b.ctx, projectedQuery, projectedKey, projectedValue, scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients)
 
 	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.
 	// attentionOutput: [batch, q_flat, heads, value_dim] -> [batch, <query_elements>, numHeads*valueDim]
@@ -604,7 +498,6 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 
 	// Final shape: `[batch, <query_elements>, outputDim]`
 	attentionOutput = b.dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
-
 	return attentionOutput, attentionCoefficients
 }
 
@@ -709,151 +602,6 @@ func (b *MultiHeadAttentionBuilder) buildAttentionShape() {
 	b.attentionShape = shapes.Make(b.key.DType(), finalDims...)
 }
 
-// buildMask returns a normalized mask for shape `[batch, <query_elements>, num_heads, <key_elements>]`.
-//
-// When not using KV cache, the simple causal mask is handled by Core (via the causal flag),
-// so buildMask only includes user-provided masks. When using KV cache, the position-aware
-// causal mask is built here because Core doesn't know about cache positions.
-func (b *MultiHeadAttentionBuilder) buildMask() (mask *Node) {
-	// User-provided masks.
-	if b.queryMask != nil || b.keyMask != nil {
-		mask = b.buildMaskFromSplitMasks()
-	} else if b.queryKeyMatrixMask != nil {
-		mask = b.queryKeyMatrixMask
-	}
-
-	// KV cache causal mask: position-aware, built here since Core doesn't know about cache.
-	if b.useCausalMask && b.kvCacheShape.Ok() {
-		causalMask := b.buildCausalMask()
-		if mask == nil {
-			mask = causalMask
-		} else {
-			mask = LogicalAnd(mask, causalMask)
-		}
-	}
-	return
-}
-
-// buildMaskFromSplitMasks creates cross mask from split queryMask and keyMask.
-// The shape should be `[batch, <query_elements>, num_heads, <key_elements>]`.
-func (b *MultiHeadAttentionBuilder) buildMaskFromSplitMasks() (mask *Node) {
-	trueNode := Const(b.g, true)
-	var keyMask *Node
-	if b.keyMask == nil {
-		// keyMask nil, create a skeleton (to be broadcast) keyMask filled with `true`.
-		keyMask = Reshape(trueNode, xslices.SliceWithValue(b.attentionShape.Rank(), 1)...)
-		keyMask = BroadcastToDims(keyMask, b.attentionShape.Dimensions...)
-	} else {
-		// Expand dims after the batch axis.
-		// attentionShape=`[batch, <query_elements>, num_heads, <key_elements>]`
-		// b.keyMask.shape=`[batch, <key_elements>]`
-		keyMask = InsertAxes(b.keyMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.keyMask.Rank(), 1)...)
-		keyMask = BroadcastToDims(keyMask, b.attentionShape.Dimensions...)
-	}
-	var queryMask *Node
-	if b.queryMask == nil {
-		// queryMask nil, create a skeleton (to be broadcast) queryMask filled with `true`.
-		queryMask = Reshape(trueNode, xslices.SliceWithValue(b.attentionShape.Rank(), 1)...)
-		queryMask = BroadcastToDims(queryMask, b.attentionShape.Dimensions...)
-	} else {
-		// Expand dims at the end.
-		queryMask = InsertAxes(b.queryMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.queryMask.Rank(), -1)...)
-		queryMask = BroadcastToDims(queryMask, b.attentionShape.Dimensions...)
-	}
-	return LogicalAnd(queryMask, keyMask)
-}
-
-// buildCausalMask creates a mask where queries can only attend to keys with "smaller index" than itself.
-// When using KV cache (incremental generation), the mask accounts for the current position.
-func (b *MultiHeadAttentionBuilder) buildCausalMask() (mask *Node) {
-	queryShape := b.query.Shape()
-	queryLen := queryShape.Dimensions[1]
-
-	var keyLen int
-	if b.kvCacheShape.Ok() {
-		// In incremental mode: queries are at position [position:position+queryLen]
-		// keys span the cache [0:actualCacheLen] (not maxSeqLen!)
-		// We'll use the actual length from the cache (kvCacheShape is [batch, heads, maxSeqLen, headDim])
-		keyLen = b.kvCacheShape.Dimensions[2] // Static shape for graph building
-	} else {
-		// Training mode: key and query have same length
-		keyShape := b.key.Shape()
-		keyLen = keyShape.Dimensions[1]
-	}
-
-	if b.kvCacheShape.Ok() {
-		// Build position-aware causal mask for incremental generation
-		// Query positions: [position, position+1, ..., position+queryLen-1]
-		// Key positions: [0, 1, ..., actualCacheLen-1]
-		// mask[q, k] = (q_pos >= k_pos) AND (k < actualCacheLen)
-
-		queryPositions := Iota(b.g, shapes.Make(dtypes.Int32, queryLen), 0)
-		// Add position offset using the position Node
-		positionInt32 := ConvertDType(b.position, dtypes.Int32)
-		if positionInt32.Rank() > 0 {
-			positionInt32 = Squeeze(positionInt32) // Ensure scalar
-		}
-		positionBroadcast := ExpandDims(positionInt32, 0) // [1]
-		positionBroadcast = BroadcastToShape(positionBroadcast, shapes.Make(dtypes.Int32, queryLen))
-		queryPositions = Add(queryPositions, positionBroadcast)
-		queryPositions = ExpandDims(queryPositions, -1) // [queryLen, 1]
-
-		keyPositions := Iota(b.g, shapes.Make(dtypes.Int32, keyLen), 0)
-		keyPositions = ExpandDims(keyPositions, 0) // [1, keyLen]
-
-		causalMask := GreaterOrEqual(queryPositions, keyPositions) // [queryLen, keyLen]
-
-		// Additional mask for valid cached positions: k < actualCacheLen
-		// actualCacheLen is scalar, broadcast to [keyLen]
-		keyIndices := Iota(b.g, shapes.Make(dtypes.Int32, keyLen), 0)
-		actualLenBroadcast := BroadcastToShape(b.actualCacheLen, keyIndices.Shape())
-		validMask := LessThan(keyIndices, actualLenBroadcast) // [keyLen]
-
-		// Broadcast to [queryLen, keyLen] and combine with causal mask
-		validMask = ExpandDims(validMask, 0) // [1, keyLen]
-		validMask = BroadcastToShape(validMask, causalMask.Shape())
-
-		mask = LogicalAnd(causalMask, validMask) // [queryLen, keyLen]
-	} else {
-		// Original training mode logic
-		keyShape := b.key.Shape()
-		if queryShape.Rank() != 3 || keyShape.Rank() != 3 {
-			Panicf("MultiHeadAttention's UseCausalMask requires key and query to be rank-3,"+
-				" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
-		}
-		if !reflect.DeepEqual(keyShape.Dimensions[:keyShape.Rank()-1], queryShape.Dimensions[:queryShape.Rank()-1]) {
-			Panicf("MultiHeadAttention's UseCausalMask requires inner shapes of query and key be the same,"+
-				" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
-		}
-		if queryLen != keyLen {
-			Panicf("causal mask in training mode requires query and key lengths to match, got query=%d, key=%d",
-				queryLen, keyLen)
-		}
-		mask = LowerTriangular(b.g, queryLen)
-	}
-
-	// Broadcast mask to target shape: [batch, <query_elements>, numHeads, <key_elements>]
-	// mask is currently [queryLen, keyLen], need to add batch and numHeads dimensions
-	// InsertAxes at beginning for batch dimension
-	mask = ExpandDims(mask, 0) // [1, queryLen, keyLen]
-	// Add dimension for numHeads at position 2 (after batch and query)
-	mask = ExpandDims(mask, 2)                                   // [1, queryLen, 1, keyLen]
-	mask = BroadcastToDims(mask, b.attentionShape.Dimensions...) // Broadcast to target dimensions
-
-	// Combine with cache validity mask if using cache
-	if b.kvCacheShape.Ok() {
-		cacheValidMask := createKVCacheAttentionMask(b.g, b.kvCacheShape, b.position, queryLen, keyLen)
-		// cacheValidMask shape: [batch, 1, queryLen, keyLen]
-		// Remove the '1' dimension at position 1 and add numHeads dimension at position 2
-		cacheValidMask = Squeeze(cacheValidMask, 1)    // [batch, queryLen, keyLen]
-		cacheValidMask = ExpandDims(cacheValidMask, 2) // [batch, queryLen, 1, keyLen]
-		cacheValidMask = BroadcastToDims(cacheValidMask, b.attentionShape.Dimensions...)
-		mask = LogicalAnd(mask, cacheValidMask)
-	}
-
-	return
-}
-
 // SelfAttention is a convenience wrapper for MultiHeadAttention where query, key, and value
 // are all the same tensor (self-attention).
 //
@@ -866,13 +614,6 @@ func (b *MultiHeadAttentionBuilder) buildCausalMask() (mask *Node) {
 //	output := attention.SelfAttention(ctx, x, numHeads, headDim).
 //	    UseCausalMask().
 //	    Dropout(0.1).
-//	    Done()
-//
-// Example usage for generation with KV cache:
-//
-//	output := attention.SelfAttention(ctx, x, numHeads, headDim).
-//	    WithKVCache(maxCacheLen, position).
-//	    WithRoPE(10000.0).
 //	    Done()
 func SelfAttention(ctx *context.Context, x *Node, numHeads int, headDim int) *MultiHeadAttentionBuilder {
 	return MultiHeadAttention(ctx, x, x, x, numHeads, headDim)
