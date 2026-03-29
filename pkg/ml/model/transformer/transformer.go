@@ -63,23 +63,24 @@ const (
 
 // Model configures a cached transformer model.
 type Model struct {
-	VocabSize          int              // Vocabulary size
-	EmbedDim           int              // Embedding dimension
-	NumLayers          int              // Transformer layers
-	NumHeads           int              // Attention heads per layer
-	HeadDim            int              // Head dimension
-	FFNDim             int              // Feed-forward hidden dimension
-	MaxPosEmbed        int              // Max positional embedding length
-	DType              dtypes.DType     // Data type
-	Dropout            float64          // Dropout rate (0.0 = none)
-	UseBias            bool             // Use bias in dense layers
-	UseCausalMask      bool             // Use causal masking in attention layers
-	FinalNormalization string           // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
-	Architecture       Architecture     // e.g. ArchitectureStandard, ArchitectureGemma
-	Normalization      string           // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
-	NormEpsilon        float64          // Epsilon for normalization
-	Activation         activations.Type // e.g. "gelu", "silu", "gelu_approximate"
-	NumKVHeads         int              // For Grouped Query Attention (GQA), 0 means equal to NumHeads
+	VocabSize            int              // Vocabulary size
+	EmbedDim             int              // Embedding dimension
+	NumLayers            int              // Transformer layers
+	NumHeads             int              // Attention heads per layer
+	HeadDim              int              // Head dimension
+	FFNDim               int              // Feed-forward hidden dimension
+	MaxPosEmbed          int              // Max positional embedding length
+	DType                dtypes.DType     // Data type
+	Dropout              float64          // Dropout rate (0.0 = none)
+	UseBias              bool             // Use bias in dense layers
+	UseCausalMask        bool             // Use causal masking in attention layers
+	ScaleTokenEmbeddings bool             // Whether to scale token embeddings by sqrt(m.EmbedDim).
+	FinalNormalization   string           // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
+	Architecture         Architecture     // e.g. ArchitectureStandard, ArchitectureGemma
+	Normalization        string           // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
+	NormEpsilon          float64          // Epsilon for normalization
+	Activation           activations.Type // e.g. "gelu", "silu", "gelu_approximate"
+	NumKVHeads           int              // For Grouped Query Attention (GQA), 0 means equal to NumHeads
 
 	posEncoder pos.Encoder // Positional encoder (e.g. RoPE). If nil, standard absolute positional embeddings are used.
 
@@ -91,24 +92,25 @@ type Model struct {
 // New creates a default transformer configuration.
 func New(vocabSize, embedDim, numLayers, numHeads, headDim int) *Model {
 	return &Model{
-		VocabSize:          vocabSize,
-		EmbedDim:           embedDim,
-		NumLayers:          numLayers,
-		NumHeads:           numHeads,
-		HeadDim:            headDim,
-		FFNDim:             embedDim * 4, // 4x expansion
-		MaxPosEmbed:        512,
-		DType:              dtypes.Float32,
-		Dropout:            0.0,
-		UseBias:            true,
-		UseCausalMask:      true,
-		FinalNormalization: layers.NormalizationNone,
-		Architecture:       ArchitectureStandard,
-		Normalization:      layers.NormalizationLayerNorm,
-		NormEpsilon:        1e-5,
-		Activation:         activations.TypeGelu,
-		NumKVHeads:         0,
-		posEncoder:         nil,
+		VocabSize:            vocabSize,
+		EmbedDim:             embedDim,
+		NumLayers:            numLayers,
+		NumHeads:             numHeads,
+		HeadDim:              headDim,
+		FFNDim:               embedDim * 4, // 4x expansion
+		MaxPosEmbed:          512,
+		DType:                dtypes.Float32,
+		Dropout:              0.0,
+		UseBias:              true,
+		UseCausalMask:        true,
+		ScaleTokenEmbeddings: false,
+		FinalNormalization:   layers.NormalizationNone,
+		Architecture:         ArchitectureStandard,
+		Normalization:        layers.NormalizationLayerNorm,
+		NormEpsilon:          1e-5,
+		Activation:           activations.TypeGelu,
+		NumKVHeads:           0,
+		posEncoder:           nil,
 	}
 }
 
@@ -293,9 +295,21 @@ func (m *Model) WithFinalNormalization(norm string) *Model {
 	return m
 }
 
+// WithScalingOfTokenEmbeddings configuration method configures whether to scale token
+// embeddings by the square root of the embedding dimension. If true, it multiplies
+// the token embeddings by math.Sqrt(m.EmbedDim). Some models (like Gemma and Llama)
+// use this scaling factor.
+func (m *Model) WithScalingOfTokenEmbeddings(useScaling bool) *Model {
+	m.ScaleTokenEmbeddings = useScaling
+	return m
+}
+
 // WithArchitecture sets the architectural style.
 func (m *Model) WithArchitecture(arch Architecture) *Model {
 	m.Architecture = arch
+	if arch == ArchitectureGemma || arch == ArchitectureGemma3 {
+		m.WithScalingOfTokenEmbeddings(true)
+	}
 	return m
 }
 
@@ -436,7 +450,7 @@ func (m *Model) EmbedTokens(ctx *context.Context, tokens *Node) *Node {
 	if embedded.Rank() == 2 {
 		embedded = ExpandDims(embedded, 1)
 	}
-	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
+	if m.ScaleTokenEmbeddings {
 		scale := Scalar(embedded.Graph(), m.DType, math.Sqrt(float64(m.EmbedDim)))
 		embedded = Mul(embedded, scale)
 	}
