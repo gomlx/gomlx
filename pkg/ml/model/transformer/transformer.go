@@ -417,9 +417,8 @@ func MakeIncrementalModelFn(m *Model) decode.IncrementalModelFn {
 //     It follows the HuggingFace convention, where the allLayers[0] is the input to the first attention layer,
 //     and the following nodes in allLayers are the outputs of all NumHiddenLayers attention layers.
 func (m *Model) AllLayers(ctx *context.Context, tokens, mask *Node, useKVCache bool, position int) (lastLayer *Node, allLayers []*Node) {
-	allLayers = make([]*Node, 0, m.NumLayers+2)
+	allLayers = make([]*Node, 0, m.NumLayers+1)
 	x := m.EmbedTokens(ctx, tokens)
-	allLayers = append(allLayers, x)
 	x = m.PrePositionalEncoder(ctx, x, position, useKVCache)
 	allLayers = append(allLayers, x)
 	// Apply all layers.

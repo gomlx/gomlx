@@ -19,7 +19,7 @@
 - Package `transfromers`:
   - Updates and fixes to the API; Added methods to build partial models: `AllLayers`, `ForwardLayer`, `LogitsFromEmbeddings`, `EmbedTokesn`, etc.
   - Updated positional-encoder support.
-  - Added options `WithFinalNormalization` and `WithScalingOfTokenEmbeddings`.
+  - Added options `WithFinalNormalization`, `WithScalingOfTokenEmbeddings` and `WithArchitecture`.
 
 # 0.27.2: DotGeneral with AccumulatorDType; Transformer architecture parameter; 
 
