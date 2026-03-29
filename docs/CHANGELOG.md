@@ -17,8 +17,9 @@
 - Package `attention/pos`:
   - Split `Encoder` API into `QKEncoder` and `PreEncoder`, to support different types of positional encoders.
 - Package `transfromers`:
-  - Updates and fixes to the API;
+  - Updates and fixes to the API; Added methods to build partial models: `AllLayers`, `ForwardLayer`, `LogitsFromEmbeddings`, `EmbedTokesn`, etc.
   - Updated positional-encoder support.
+  - Added options `WithFinalNormalization` and `WithScalingOfTokenEmbeddings`.
 
 # 0.27.2: DotGeneral with AccumulatorDType; Transformer architecture parameter; 
 
