@@ -325,7 +325,7 @@ func (m *Model) WithTransposedWeights(transposed bool) *Model {
 	return m
 }
 
-// PredictNextTokens builds the model including the last logits projection to predict the next token,
+// Logits builds the model including the last logits projection to predict the next token,
 // for each element of the sequence.
 //
 // This form can be used to embed full sentences or for training.
@@ -336,8 +336,8 @@ func (m *Model) WithTransposedWeights(transposed bool) *Model {
 //     is computed taking into consideration the mask.
 //
 // It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize]
-func (m *Model) PredictNextTokens(ctx *context.Context, tokens, mask *Node) *Node {
-	embeddings, _ := m.EmbeddingLayers(ctx, tokens, mask, false, 0)
+func (m *Model) Logits(ctx *context.Context, tokens, mask *Node) *Node {
+	embeddings, _ := m.AllLayers(ctx, tokens, mask, false, 0)
 	return m.LogitsFromEmbeddings(ctx, embeddings)
 }
 
@@ -345,17 +345,21 @@ func (m *Model) PredictNextTokens(ctx *context.Context, tokens, mask *Node) *Nod
 // generation, using the decode package.
 func MakeIterativeModelFn(m *Model) decode.IterativeModelFn {
 	return func(ctx *context.Context, tokens *Node) *Node {
-		return m.PredictNextTokens(ctx, tokens, nil)
+		return m.Logits(ctx, tokens, nil)
 	}
 }
 
-// PredictNextTokensWithKVCache returns the forward path for the newTokens sequence, using the KV cache.
+// LogitsWithKVCache returns the forward path for the newTokens sequence, using the KV cache.
 //
-// Experimental: likely the KVCache will change in the future.
+// - newTokens: shaped [batchSize, 1] with the new tokens to be processed.
+// - position: the position of the new tokens in the sequence, only used for KV cache.
 //
-// It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize]
-func (m *Model) PredictNextTokensWithKVCache(ctx *context.Context, newTokens *Node, position int) *Node {
-	embeddings, _ := m.EmbeddingLayers(ctx, newTokens, nil, true, position)
+// **Experimental**: likely the KVCache will change in the future.
+//
+// It returns the logits of the last layer, typically shaped [batchSize, 1, vocabSize],
+// and updates the KVCache stored as variables in the cache.
+func (m *Model) LogitsWithKVCache(ctx *context.Context, newTokens *Node, position int) *Node {
+	embeddings, _ := m.AllLayers(ctx, newTokens, nil, true, position)
 	return m.LogitsFromEmbeddings(ctx, embeddings)
 }
 
@@ -363,11 +367,18 @@ func (m *Model) PredictNextTokensWithKVCache(ctx *context.Context, newTokens *No
 // using the decode package.
 func MakeIncrementalModelFn(m *Model) decode.IncrementalModelFn {
 	return func(ctx *context.Context, newTokens *Node, position int) *Node {
-		return m.PredictNextTokensWithKVCache(ctx, newTokens, position)
+		return m.LogitsWithKVCache(ctx, newTokens, position)
 	}
 }
 
-// EmbeddingLayers runs most of the model from the tokens all the way to the last attention layer.
+// AllLayers runs most of the model from the tokens all the way to the last attention layer.
+//
+//   - tokens: shaped [batchSize, seqLen], or simply [seqLen]
+//   - mask: optional, if provided the shape must match tokens.Shape(), and it indicates
+//     which tokens are valid (1) and which are padding (0). The attention mask (causal or not)
+//     is computed taking into consideration the mask.
+//   - useKVCache: whether to use KV cache for the attention layers.
+//   - position: the position of the new tokens in the sequence, only used for KV cache.
 //
 // It returns:
 //
@@ -375,7 +386,7 @@ func MakeIncrementalModelFn(m *Model) decode.IncrementalModelFn {
 //     You can feed this to LogitsFromEmbeddings() to get the logits for predicting the next token.
 //   - allLayers: the embeddings after each layer, including the one after the token embedding table and the pre-positional embedder,
 //     so NumLayers+2 in total. Used for debugging for any reason.
-func (m *Model) EmbeddingLayers(ctx *context.Context, tokens, mask *Node, useKVCache bool, position int) (lastLayer *Node, allLayers []*Node) {
+func (m *Model) AllLayers(ctx *context.Context, tokens, mask *Node, useKVCache bool, position int) (lastLayer *Node, allLayers []*Node) {
 	allLayers = make([]*Node, 0, m.NumLayers+2)
 	x := m.EmbedTokens(ctx, tokens)
 	allLayers = append(allLayers, x)
@@ -393,9 +404,9 @@ func (m *Model) EmbeddingLayers(ctx *context.Context, tokens, mask *Node, useKVC
 // EmbedTokens returns the token embeddings for the given tokens using a lookup table.
 // This is the very first step of the transformer model.
 //
-// If you want the model embeddings after of the full model, take the last layer of EmbeddingLayers.
+// If you want the model embeddings after of the full model, take the last layer of AllLayers.
 //
-// This step is done automatically by EmbeddingLayers or PredictNextTokens, but if needed, it can
+// This step is done automatically by AllLayers or Logits, but if needed, it can
 // be used separately by calling this method.
 func (m *Model) EmbedTokens(ctx *context.Context, tokens *Node) *Node {
 	// Tokens embedding table lookup.
@@ -413,7 +424,7 @@ func (m *Model) EmbedTokens(ctx *context.Context, tokens *Node) *Node {
 // the pos.PreEncoder interface (some positional encoders run later).
 // Otherwise, or if the encoder is nil, it simply returns x.
 //
-// This step is done automatically by EmbeddingLayers or PredictNextTokens, but if needed, it can
+// This step is done automatically by AllLayers or Logits, but if needed, it can
 // be used separately by calling this method.
 func (m *Model) PrePositionalEncoder(ctx *context.Context, x *Node, position int, useKVCache bool) *Node {
 	if m.posEncoder == nil {
@@ -432,10 +443,10 @@ func (m *Model) PrePositionalEncoder(ctx *context.Context, x *Node, position int
 	return preEnc.PreEncode(x, posIndices, seqAxis)
 }
 
-// LogitsFromEmbeddings takes the embeddings of the later attention layer (returned by EmbeddingLayers) and computes
-// the logits over the vocabulary size.
+// LogitsFromEmbeddings takes the embeddings of the later attention layer (returned by AllLayers) and computes
+// the logits over the vocabulary size. This is the last step of the model.
 //
-// This step is done automatically by PredictNextTokens, but if needed, it can
+// This step is done automatically by Logits (which builds the full forward path from the tokens), but if needed, it can
 // be used separately by calling this method.
 func (m *Model) LogitsFromEmbeddings(ctx *context.Context, embeddings *Node) *Node {
 	return layers.Dense(ctx.In("output"), embeddings, false, m.VocabSize)
@@ -451,7 +462,7 @@ func (m *Model) LogitsFromEmbeddings(ctx *context.Context, embeddings *Node) *No
 //
 // It returns the output of the layer, shape [batchSize, seqLen, embedDim].
 //
-// This step is done automatically by EmbeddingLayers or PredictNextTokens, but if needed, it can
+// This step is done automatically by AllLayers or Logits, but if needed, it can
 // be used separately by calling this method.
 func (m *Model) ForwardLayer(ctx *context.Context, x, mask *Node, useCache bool, position int) *Node {
 	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
