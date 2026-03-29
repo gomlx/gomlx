@@ -9,16 +9,16 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/dustin/go-humanize v1.0.1
 	github.com/go-gota/gota v0.12.0
-	github.com/gomlx/go-huggingface v0.3.3-0.20260321150816-d7dfbf1d4808
-	github.com/gomlx/gomlx v0.27.3-0.20260328112604-9aa78d319f56
-	github.com/gomlx/onnx-gomlx v0.4.1-0.20260317082335-7aa7031467b8
+	github.com/gomlx/go-huggingface v0.3.5-0.20260329071155-3b55f80db416
+	github.com/gomlx/gomlx v0.27.3-0.20260329065442-fff6979cb6b3
+	github.com/gomlx/onnx-gomlx v0.4.2-0.20260329071313-0b8b7e4d5a02
 	github.com/janpfeifer/gonb v0.11.3
 	github.com/janpfeifer/must v0.2.0
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/pkg/errors v0.9.1
 	github.com/schollz/progressbar/v3 v3.19.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa
+	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
 	k8s.io/klog/v2 v2.140.0
 )
 
@@ -53,7 +53,7 @@ require (
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/term v0.40.0 // indirect
-	golang.org/x/text v0.34.0 // indirect
+	golang.org/x/text v0.35.0 // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
