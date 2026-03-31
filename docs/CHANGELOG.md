@@ -21,10 +21,12 @@
   - Dropout now takes a `*Node` instead of a float64, allowing dynamic dropout control.
 - Package `attention/pos`:
   - Split `Encoder` API into `QKEncoder` and `PreEncoder`, to support different types of positional encoders.
+  - Added `WithSlidingWindow` to support "sliding attention" (the slow way).
 - Package `transfromers`:
   - Updates and fixes to the API; Added methods to build partial models: `AllLayers`, `ForwardLayer`, `LogitsFromEmbeddings`, `EmbedTokesn`, etc.
   - Updated positional-encoder support.
-  - Added options `WithFinalNormalization`, `WithScalingOfTokenEmbeddings` and `WithArchitecture`.
+  - Added options `WithFinalNormalization`, `WithScalingOfTokenEmbeddings`, `WithArchitecture`, `WithSlidingWindow`
+    and `WithLayerTypes`.
 
 ### Backends:
 

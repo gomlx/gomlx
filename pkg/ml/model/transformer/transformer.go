@@ -90,8 +90,8 @@ type Model struct {
 	Activation           activations.Type // e.g. "gelu", "silu", "gelu_approximate"
 	NumKVHeads           int              // For Grouped Query Attention (GQA), 0 means equal to NumHeads
 
-	posEncoder          pos.Encoder      // Positional encoder (e.g. RoPE). If nil, standard absolute positional embeddings are used.
-	layerPosEncoders    map[int]pos.Encoder // Custom positional encoders per layer
+	posEncoder       pos.Encoder         // Positional encoder (e.g. RoPE). If nil, standard absolute positional embeddings are used.
+	layerPosEncoders map[int]pos.Encoder // Custom positional encoders per layer
 
 	LayerTypes    []LayerType // Defines the type per layer (e.g. FullAttention, SlidingAttention)
 	SlidingWindow int         // Size of the sliding window for SlidingAttention layers
@@ -289,6 +289,7 @@ func (m *Model) WithLayerTypes(layerTypes []LayerType) *Model {
 }
 
 // WithSlidingWindow sets the sliding window size for local attention layers.
+// This is applied for all layers of type SlidingAttention.
 func (m *Model) WithSlidingWindow(window int) *Model {
 	m.SlidingWindow = window
 	return m
@@ -546,7 +547,6 @@ func (m *Model) ForwardLayer(ctx *context.Context, layerNum int, x, mask *Node, 
 func (m *Model) forwardLayerStandard(layerCtx *context.Context, layerNum int, x, mask *Node, useCache bool, position int) *Node {
 	residual := x
 	var attn *Node
-
 
 	if useCache {
 		positionNode := Const(x.Graph(), int32(position))
