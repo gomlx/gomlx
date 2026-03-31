@@ -220,6 +220,18 @@ func (b *MultiHeadAttentionBuilder) buildCausalAttentionMask() (mask *Node) {
 	}
 	mask = LowerTriangular(b.g, queryLen)
 
+	// If using a sliding window, we must also apply a band mask.
+	// Since queryLen == keyLen, the difference q - k should be < slidingWindow.
+	if b.slidingWindow > 0 {
+		qIndices := Iota(b.g, shapes.Make(dtypes.Int32, queryLen), 0)
+		kIndices := Iota(b.g, shapes.Make(dtypes.Int32, keyLen), 0)
+		qIndices = ExpandDims(qIndices, -1) // [queryLen, 1]
+		kIndices = ExpandDims(kIndices, 0)  // [1, keyLen]
+		qMinusK := Sub(qIndices, kIndices)
+		slidingMask := LessThan(qMinusK, Const(b.g, int32(b.slidingWindow)))
+		mask = LogicalAnd(mask, slidingMask)
+	}
+
 	// Broadcast mask to target shape: [batch, <query_elements>, numHeads, <key_elements>]
 	// mask is currently [queryLen, keyLen], need to add batch and numHeads dimensions
 	// InsertAxes at beginning for batch dimension
@@ -257,6 +269,13 @@ func (b *MultiHeadAttentionBuilder) buildCausalAttentionMaskForKVCache() (mask *
 	keyPositions = ExpandDims(keyPositions, 0) // [1, keyLen]
 
 	causalMask := GreaterOrEqual(queryPositions, keyPositions) // [queryLen, keyLen]
+
+	// If using a sliding window, add distance mask: (q - k) < slidingWindow
+	if b.slidingWindow > 0 {
+		qMinusK := Sub(queryPositions, keyPositions)
+		slidingMask := LessThan(qMinusK, Const(b.g, int32(b.slidingWindow)))
+		causalMask = LogicalAnd(causalMask, slidingMask)
+	}
 
 	// Additional mask for valid cached positions: k < actualCacheLen
 	// actualCacheLen is scalar, broadcast to [keyLen]

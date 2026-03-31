@@ -12,6 +12,9 @@
 //
 //   - FromShape(shape shapes.Shape): creates a tensor with the given shape, and zero values.
 //
+//   - FromShapeForBackend(backend backends.Backend, shape shapes.Shape): creates a tensor with the given shape,
+//     using a shared buffer if the backend supports it.
+//
 //   - FromScalarAndDimensions[T shapes.Supported](value T, dimensions ...int): creates a Tensor with the
 //     given dimensions, filled with the scalar value given. `T` must be one of the supported types.
 //

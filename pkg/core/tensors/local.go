@@ -30,7 +30,10 @@ type local struct {
 	flat any // Slice of the type for the dtype of the given shape.
 }
 
-// FromShape returns a Tensor with the given shape, with the data initialized with zeros.
+// FromShape returns a new Tensor with the given shape with local (host) memory, with the data initialized with zeros.
+//
+// If you know the backend you're going to use, prefer FromShapeForBackend, which
+// will leverage shared buffers if available.
 //
 // It panics if you provide an invalid shape.
 func FromShape(shape shapes.Shape) *Tensor {
@@ -280,6 +283,10 @@ func (t *Tensor) MutableFlatData(accessFn func(flat any)) error {
 	if err := t.CheckValid(); err != nil {
 		return err
 	}
+	return t.lockedMutableFlatData(accessFn)
+}
+
+func (t *Tensor) lockedMutableFlatData(accessFn func(flat any)) error {
 	if t.isShared {
 		accessFn(t.sharedFlat)
 		return nil
@@ -296,6 +303,20 @@ func (t *Tensor) MutableFlatData(accessFn func(flat any)) error {
 	return nil
 }
 
+// flatBytes returns a byte slice view of the flat data.
+func flatBytes(flat any) []byte {
+	v := reflect.ValueOf(flat)
+	length := v.Len()
+	if length == 0 {
+		return nil
+	}
+
+	sizeBytes := uintptr(length) * v.Type().Elem().Size()
+
+	// v.UnsafePointer() returns a pointer to the slice's underlying array directly
+	return unsafe.Slice((*byte)(v.UnsafePointer()), sizeBytes)
+}
+
 // MutableBytes gives mutable access to the local storage of the values for the tensor.
 // It's similar to MutableFlatData but provides a bytes view to the same data.
 //
@@ -308,12 +329,7 @@ func (t *Tensor) MutableFlatData(accessFn func(flat any)) error {
 // See Tensor.ConstBytes for constant access to the data as bytes -- that doesn't invalidate the device storage.
 func (t *Tensor) MutableBytes(accessFn func(data []byte)) error {
 	return t.MutableFlatData(func(flat any) {
-		flatV := reflect.ValueOf(flat)
-		element0 := flatV.Index(0)
-		flatValuesPtr := element0.Addr().UnsafePointer()
-		sizeBytes := uintptr(flatV.Len()) * element0.Type().Size()
-		data := unsafe.Slice((*byte)(flatValuesPtr), sizeBytes)
-		accessFn(data)
+		accessFn(flatBytes(flat))
 	})
 }
 
@@ -1003,6 +1019,12 @@ func (t *Tensor) FinalizeLocal() {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.lockedFinalizeLocal()
+}
+
+// lockedFinalizeLocal is a helper function that finalizes the local storage of the tensor.
+// It assumes the tensor is valid and the mutex is locked.
+func (t *Tensor) lockedFinalizeLocal() {
 	if t.local != nil {
 		t.local.flat = nil
 		t.local.t = nil

@@ -67,10 +67,11 @@ type MultiHeadAttentionBuilder struct {
 	// QKVProjection (one large matmul + split). Only valid for self-attention.
 	useQKVProjection bool
 
+	useTransposedWeights bool
+	slidingWindow        int
+
 	withQKRMSNorm bool
 	qkNormEpsilon float64
-
-	useTransposedWeights bool
 }
 
 // MultiHeadAttention defines a multi-head attention layers, as described in [1], plus some modern extensions.
@@ -349,6 +350,14 @@ func (b *MultiHeadAttentionBuilder) UseTransposedWeights(transposed bool) *Multi
 func (b *MultiHeadAttentionBuilder) WithQKRMSNorm(epsilon float64) *MultiHeadAttentionBuilder {
 	b.withQKRMSNorm = true
 	b.qkNormEpsilon = epsilon
+	return b
+}
+
+// WithSlidingWindow sets the sliding window size for local attention.
+// When > 0, it restricts the maximum distance between query and key tokens that can be attended to.
+// This is used for sliding window attention architectures (like Gemma 3 sliding layers).
+func (b *MultiHeadAttentionBuilder) WithSlidingWindow(window int) *MultiHeadAttentionBuilder {
+	b.slidingWindow = window
 	return b
 }
 

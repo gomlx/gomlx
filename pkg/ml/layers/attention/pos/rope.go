@@ -35,8 +35,9 @@ import (
 type RoPE struct {
 	BaseFreq    float64
 	DimStart    int
-	DimEnd      int
-	Interleaved bool // If true, rotation pairs are at even/odd indices; if false, split first-half/second-half
+	DimEnd              int
+	Interleaved         bool    // If true, rotation pairs are at even/odd indices; if false, split first-half/second-half
+	LinearScalingFactor float64 // If > 0 and != 1.0, positions are divided by this factor before RoPE.
 }
 
 // NewRoPE creates a RoPE positional embedding that applies to the entire embedding axis.
@@ -98,6 +99,16 @@ func (r *RoPE) WithInterleaved(interleaved bool) *RoPE {
 	return r
 }
 
+// WithLinearScaling sets the linear scaling factor for the positional indices.
+// This is used by models that use linear RoPE scaling (e.g. Gemma 3 full-attention layers).
+// The positional indices are divided by this factor before applying the rotary embedding.
+//
+// Returns the modified RoPE for method chaining.
+func (r *RoPE) WithLinearScaling(factor float64) *RoPE {
+	r.LinearScalingFactor = factor
+	return r
+}
+
 // EncodeQK implements the QKEncoder interface.
 // It applies rotary position embeddings to query and key tensors using the provided position indices.
 // The rotation is applied on a range of frequencies multiplied by the position
@@ -127,6 +138,9 @@ func (r *RoPE) WithInterleaved(interleaved bool) *RoPE {
 //	// positions has shape [batch, seq_len] with values like [0, 1, 2, ...]
 //	q_rot, k_rot := rope.EncodeQK(q, k, positions, q.Rank()-2)
 func (r *RoPE) EncodeQK(q, k *Node, positionIndices *Node, seqAxis int) (*Node, *Node) {
+	if r.LinearScalingFactor > 0 && r.LinearScalingFactor != 1.0 {
+		positionIndices = DivScalar(positionIndices, r.LinearScalingFactor)
+	}
 	if r.DimStart == 0 && r.DimEnd == -1 {
 		return applyRoPE(q, positionIndices, r.BaseFreq, seqAxis, r.Interleaved),
 			applyRoPE(k, positionIndices, r.BaseFreq, seqAxis, r.Interleaved)

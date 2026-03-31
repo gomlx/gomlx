@@ -54,6 +54,8 @@ type DataInterface interface {
 	//
 	// It returns a handle to the buffer and a slice of the corresponding data type pointing
 	// to the shared data.
+	//
+	// The buffer cannot be assumed to be zero-initialized.
 	NewSharedBuffer(deviceNum DeviceNum, shape shapes.Shape) (buffer Buffer, flat any, err error)
 
 	// BufferData returns a slice pointing to the buffer storage memory directly.
