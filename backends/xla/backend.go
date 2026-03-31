@@ -169,6 +169,20 @@ func (backend *Backend) BufferDeviceNum(buffer backends.Buffer) (backends.Device
 	return backends.DeviceNum(num), nil
 }
 
+// flatBytes returns a byte slice view of the flat data.
+func flatBytes(flat any) []byte {
+	v := reflect.ValueOf(flat)
+	length := v.Len()
+	if length == 0 {
+		return nil
+	}
+
+	sizeBytes := uintptr(length) * v.Type().Elem().Size()
+
+	// v.UnsafePointer() returns a pointer to the slice's underlying array directly
+	return unsafe.Slice((*byte)(v.UnsafePointer()), sizeBytes)
+}
+
 // BufferToFlatData transfers the flat values of buffer to the Go flat array.
 // The slice flat must have the exact number of elements required to store the Buffer shape.
 //
@@ -186,26 +200,12 @@ func (backend *Backend) BufferToFlatData(buffer backends.Buffer, flat any) error
 		return nil
 	}
 
-	flatV := reflect.ValueOf(flat)
-	if flatV.Kind() != reflect.Slice {
-		return errors.Errorf("backend %q: BufferToFlatData, but flat is not a slice, instead it is %T", BackendName, flat)
-	}
-	flatDType := dtypes.FromGoType(flatV.Type().Elem())
-	if flatDType != shape.DType {
-		return errors.Errorf("backend %q: BufferToFlatData with buffer of shape %s, but flat with incompatible dtype, it is %T", BackendName, shape, flat)
-	}
-
+	dstData := flatBytes(flat)
 	pBuffer := castToPJRT(buffer)
-	element0 := flatV.Index(0)
-	flatValuesPtr := element0.Addr().UnsafePointer()
-	sizeBytes := uintptr(flatV.Len()) * element0.Type().Size()
-
 	var pinner runtime.Pinner
 	pinner.Pin(pBuffer)
-	pinner.Pin(flatValuesPtr)
 	defer pinner.Unpin()
-	dst := unsafe.Slice((*byte)(flatValuesPtr), sizeBytes)
-	err = pBuffer.ToHost(dst)
+	err = pBuffer.ToHost(dstData)
 	if err != nil {
 		return errors.WithMessagef(err, "backend %q: BuffferToFlatData", BackendName)
 	}
@@ -215,6 +215,7 @@ func (backend *Backend) BufferToFlatData(buffer backends.Buffer, flat any) error
 // BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)
 // to the deviceNum, and returns the corresponding Buffer.
 func (backend *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) (backends.Buffer, error) {
+	srcData := flatBytes(flat)
 	flatV := reflect.ValueOf(flat)
 	if flatV.Kind() != reflect.Slice {
 		return nil, errors.Errorf("backend %q: BuffferFromFlatData, but flat is not a slice, instead it is %T", BackendName, flat)
@@ -230,7 +231,7 @@ func (backend *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat an
 	}
 
 	buffer, err := backend.client.BufferFromHost().
-		FromFlatDataWithDimensions(flat, shape.Dimensions).
+		FromRawData(srcData, DTypeToXLA(shape.DType), shape.Dimensions).
 		ToDeviceNum(int(deviceNum)).
 		Done()
 	if err != nil {

@@ -7,8 +7,11 @@
   - Improving support for sub-byte data types (`Int4`, `Int2`, `Uint4`, `Uint2`)
   - Added `FromShapeForBackend()` to create new tensors with shared memory
     if possible.
+  - Added `ToDevice()` and improved performance of MaterializeOnDevice when copying to shared buffers.
+  - Improved `MutableBytes()`, should improve the performance in some cases.
 
-### Under `pkg/ml`:
+### Packages in `pkg/ml`
+
 - Package `activations`
   - Added `HardSigmoid` activation.
   - Modified the parametrized activations to be suffixed with `With`: `LeakyReluWith`, `HardSigmoidWith`, `HardSwishWith`.
@@ -22,6 +25,11 @@
   - Updates and fixes to the API; Added methods to build partial models: `AllLayers`, `ForwardLayer`, `LogitsFromEmbeddings`, `EmbedTokesn`, etc.
   - Updated positional-encoder support.
   - Added options `WithFinalNormalization`, `WithScalingOfTokenEmbeddings` and `WithArchitecture`.
+
+### Backends:
+
+- Package `xla`:
+  - `BufferToFlatData` and `BufferFromFlatData` now transfer using raw-bytes, for a slight gain in performance.
 
 # 0.27.2: DotGeneral with AccumulatorDType; Transformer architecture parameter; 
 
