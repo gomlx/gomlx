@@ -180,6 +180,36 @@ func (t *Tensor) MaterializeOnDevice(backend backends.Backend, share bool, devic
 	return t.lockedMaterializeOnDevice(backend, share, deviceNum)
 }
 
+// ToDevice is a convenience function to make the tensor available only on device, freeing the local (on-host) storage.
+//
+// It calls MaterializeOnDevice and using shared buffers if possible and frees the local tensor storage by calling
+// FinalizeLoca().
+//
+// It's a no-op if the tensor is already on the device.
+func (t *Tensor) ToDevice(backend backends.Backend, deviceNum backends.DeviceNum) error {
+	if backend == nil {
+		return errors.New("backend cannot be nil")
+	}
+
+	// Lock tensor.
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	err := t.CheckValid()
+	if err != nil {
+		return err
+	}
+
+	// Materialize on device, use shared buffers if possible.
+	err = t.lockedMaterializeOnDevice(backend, backend.HasSharedBuffers(), deviceNum)
+	if err != nil {
+		return err
+	}
+
+	// Free local storage.
+	t.lockedFinalizeLocal()
+	return nil
+}
+
 // defaultDeviceNums is used whenever `deviceNums` is not provided.
 var defaultDeviceNums = []backends.DeviceNum{0}
 
@@ -188,6 +218,9 @@ var defaultDeviceNums = []backends.DeviceNum{0}
 // If share is true, it will attempt to materialize to a shared buffer if available.
 // In this case, it frees the local tensor storage and starts using the shared data instead.
 func (t *Tensor) lockedMaterializeOnDevice(backend backends.Backend, share bool, deviceNum backends.DeviceNum) error {
+	if backend == nil || backend.IsFinalized() {
+		return errors.New("backend cannot be nil or finalized")
+	}
 	if t.backend == nil {
 		t.backend = backend
 	} else if t.backend != backend {
@@ -200,11 +233,9 @@ func (t *Tensor) lockedMaterializeOnDevice(backend backends.Backend, share bool,
 				"tensor.OnDeviceClone(newBackend)",
 			t.shape, backend.Name())
 	}
-	if t.backend == nil || t.backend.IsFinalized() {
-		return errors.New("cannot MustMaterializeOnDevice with a nil or finalized backend")
-	}
+
+	// For the case where the tensor is already on device:
 	if !t.onDevice.IsFinalized() {
-		// Tensor already on-device:
 		if t.onDevice.deviceNum == deviceNum {
 			// Nothing to do.
 			return nil
@@ -243,7 +274,9 @@ func (t *Tensor) lockedMaterializeOnDevice(backend backends.Backend, share bool,
 		if err != nil {
 			return errors.WithMessagef(err, "Tensor.MustMaterializeOnDevice: failed to create a shared buffer")
 		}
-		reflect.Copy(reflect.ValueOf(t.sharedFlat), reflect.ValueOf(t.local.flat))
+		sharedBytes := flatBytes(t.sharedFlat)
+		localBytes := flatBytes(t.local.flat)
+		copy(sharedBytes, localBytes)
 		t.local = nil // Free local storage.
 		t.isShared = true
 		t.sharedDevice = deviceNum
