@@ -30,7 +30,10 @@ type local struct {
 	flat any // Slice of the type for the dtype of the given shape.
 }
 
-// FromShape returns a Tensor with the given shape, with the data initialized with zeros.
+// FromShape returns a new Tensor with the given shape with local (host) memory, with the data initialized with zeros.
+//
+// If you know the backend you're going to use, prefer FromShapeForBackend, which
+// will leverage shared buffers if available.
 //
 // It panics if you provide an invalid shape.
 func FromShape(shape shapes.Shape) *Tensor {

@@ -5,6 +5,8 @@
 ### Core:
 - Package `tensors`
   - Improving support for sub-byte data types (`Int4`, `Int2`, `Uint4`, `Uint2`)
+  - Added `FromShapeForBackend()` to create new tensors with shared memory
+    if possible.
 
 ### Under `pkg/ml`:
 - Package `activations`

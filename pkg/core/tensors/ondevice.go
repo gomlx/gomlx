@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 )
@@ -588,4 +589,40 @@ func (t *Tensor) Device() (backends.DeviceNum, error) {
 		return 0, errors.Errorf("Tensor.Device() called on a local only tensor")
 	}
 	return t.onDevice.deviceNum, nil
+}
+
+// FromShapeForBackend creates a new tensor with the given shape, to be used with the given backend.
+//
+// If the backend supports shared buffers, it creates the tensor using a shared buffer.
+// Otherwise, or if the backend is nil, it creates a local copy of the tensor, and works just like FromShape().
+func FromShapeForBackend(backend backends.Backend, shape shapes.Shape) (*Tensor, error) {
+	if backend == nil || !backend.HasSharedBuffers() {
+		return FromShape(shape), nil
+	}
+	if !shape.Ok() {
+		return nil, errors.New("invalid shape")
+	}
+
+	deviceNum := defaultDeviceNums[0]
+	buffer, sharedFlat, err := backend.NewSharedBuffer(deviceNum, shape)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "FromShapeForBackend: failed to create shared buffer")
+	}
+
+	t := newEmptyTensor(shape)
+	t.backend = backend
+	t.isShared = true
+	t.sharedFlat = sharedFlat
+	t.sharedDevice = deviceNum
+	t.onDevice = &onDevice{
+		t:         t,
+		buffer:    buffer,
+		deviceNum: deviceNum,
+	}
+
+	// Initialize the shared memory with zeros to match FromShape.
+	t.MutableBytes(func(buf []byte) {
+		clear(buf)
+	})
+	return t, nil
 }
