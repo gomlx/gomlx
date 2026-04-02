@@ -441,11 +441,12 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 		Panicf("gradient of ReduceWindow with base or window dilations is not defined")
 	}
 	var vjpX *Node
-	if params.reductionType == backends.ReduceOpMax || params.reductionType == backends.ReduceOpMin {
+	switch params.reductionType {
+	case backends.ReduceOpMax, backends.ReduceOpMin:
 		vjpX = checkedSelectAndScatter(params.x, v, params.reductionType, params.windowDimensions, params.strides, params.paddings)
-	} else if params.reductionType == backends.ReduceOpSum {
+	case backends.ReduceOpSum:
 		vjpX = dilateConvolveToMatchSumPooling(params.x, v, params.windowDimensions, params.strides, params.paddings)
-	} else {
+	default:
 		Panicf("ReduceWindow gradient not defined for reduction %q, pls create an issue in github if you need this", params.reductionType)
 	}
 	return []*Node{vjpX}
