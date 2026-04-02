@@ -482,10 +482,12 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	}
 
 	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
+
 	// Pass causal to Core only when not using KV cache (Core builds a simple lower-triangular mask).
 	// When using KV cache, the position-aware causal mask is already built in buildMask above.
-	useCausalMask := b.useCausalMask && !b.kvCacheShape.Ok()
-	attentionOutput, attentionCoefficients = Core(b.ctx, projectedQuery, projectedKey, projectedValue, scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients)
+	useCausalMask := b.useCausalMask && mask == nil
+	attentionOutput, attentionCoefficients = Core(b.ctx, projectedQuery, projectedKey, projectedValue,
+		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients)
 
 	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.
 	// attentionOutput: [batch, q_flat, heads, value_dim] -> [batch, <query_elements>, numHeads*valueDim]
