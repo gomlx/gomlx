@@ -872,11 +872,12 @@ func growImpl(x *Node, axis int, dir ShiftDirection, n int, fillValue float64) *
 
 	// Fill slice with given value.
 	var fill *Node
-	if fillValue == 0 {
+	switch fillValue {
+	case 0:
 		fill = Zeros(g, shapes.Make(dtype, fillDims...))
-	} else if fillValue == 1 {
+	case 1:
 		fill = Ones(g, shapes.Make(dtype, fillDims...))
-	} else {
+	default:
 		fill = Scalar(g, dtype, fillValue)
 		expandDims := xslices.Iota(int(0), rank)
 		fill = ExpandAndBroadcast(fill, fillDims, expandDims)

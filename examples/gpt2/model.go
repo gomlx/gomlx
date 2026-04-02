@@ -127,7 +127,7 @@ func LoadGPT2(backend backends.Backend, repo *hub.Repo) (*GPT2Model, api.Tokeniz
 	// Create context for model parameters and load them.
 	ctx := context.New()
 	fmt.Println("Loading checkpoint weights...")
-	if err := loadCheckpoint(ctx, repo); err != nil {
+	if err := loadCheckpoint(backend, ctx, repo); err != nil {
 		fmt.Printf("Warning: Failed to load checkpoint: %v\n", err)
 		fmt.Println("Continuing with random initialization...")
 	} else {
@@ -262,7 +262,7 @@ func (m *GPT2Model) Generate(
 }
 
 // loadCheckpoint loads model weights from the HuggingFace repository.
-func loadCheckpoint(ctx *context.Context, repo *hub.Repo) error {
+func loadCheckpoint(backend backends.Backend, ctx *context.Context, repo *hub.Repo) error {
 	// Get repo info for validation (includes SafeTensorsInfo)
 	info := repo.Info()
 	if info != nil && info.SafeTensors.Total > 0 {
@@ -273,7 +273,7 @@ func loadCheckpoint(ctx *context.Context, repo *hub.Repo) error {
 	count := 0
 	skipped := 0
 
-	for tensorAndName, err := range safetensors.IterTensorsFromRepo(repo) {
+	for tensorAndName, err := range safetensors.IterTensorsFromRepo(backend, repo) {
 		if err != nil {
 			return fmt.Errorf("failed to iterate tensors: %w", err)
 		}
