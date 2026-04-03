@@ -42,10 +42,9 @@ func FromShape(shape shapes.Shape) *Tensor {
 	}
 	t := newEmptyTensor(shape)
 	sliceLen := t.StorageSize()
-	flatV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), sliceLen, sliceLen)
 	t.local = &local{
 		t:    t,
-		flat: flatV.Interface(),
+		flat: dtypes.MakeAnySlice(t.shape.DType, sliceLen),
 	}
 	return t
 }

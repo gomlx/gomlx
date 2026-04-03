@@ -104,3 +104,42 @@ func UnsafeAnySliceFromBytes(bytesPtr unsafe.Pointer, dtype DType, length int) a
 func UnsafeSliceFromBytes[E Supported](bytesPtr unsafe.Pointer, length int) []E {
 	return unsafe.Slice((*E)(bytesPtr), length)
 }
+
+// MakeAnySlice creates a slice of the given dtype and length, casted to any.
+func MakeAnySlice(dtype DType, length int) any {
+	switch dtype {
+	case Float64:
+		return make([]float64, length)
+	case Float32:
+		return make([]float32, length)
+	case Float16:
+		return make([]float16.Float16, length)
+	case BFloat16:
+		return make([]bfloat16.BFloat16, length)
+	case Int64:
+		return make([]int64, length)
+	case Int32:
+		return make([]int32, length)
+	case Int16:
+		return make([]int16, length)
+	case Int8:
+		return make([]int8, length)
+	case Uint64:
+		return make([]uint64, length)
+	case Uint32:
+		return make([]uint32, length)
+	case Uint16:
+		return make([]uint16, length)
+	case Uint8:
+		return make([]uint8, length)
+	case Bool:
+		return make([]bool, length)
+	case Complex64:
+		return make([]complex64, length)
+	case Complex128:
+		return make([]complex128, length)
+	default:
+		panicf("unsupported dtype for MakeAnySlice: %s", dtype)
+	}
+	panic(nil)
+}
