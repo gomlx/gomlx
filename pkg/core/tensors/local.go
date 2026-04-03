@@ -10,8 +10,10 @@ import (
 	"strconv"
 	"unsafe"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/x448/float16"
 	"k8s.io/klog/v2"
 
 	"github.com/gomlx/gomlx/backends"
@@ -590,11 +592,10 @@ func GobDeserializeToDevice(
 	}
 
 	// Deserialize tensor contents.
-	flatV := reflect.ValueOf(flatAny)
-	// Since flatV.Addr() doesn't work,  we create a pointer to a new Slice and assign flatAny to it.
-	flatPtrV := reflect.New(flatV.Type())
-	flatPtrV.Elem().Set(flatV)
-	err = decoder.Decode(flatPtrV.Interface())
+	ptrAny, err := pointerToAnySlice(flatAny)
+	if err == nil {
+		err = decoder.Decode(ptrAny)
+	}
 	if err != nil {
 		err = errors.Wrapf(err, "failed to deserialize Tensor data")
 		// Destroy the buffer since it's not going to be used.
@@ -617,6 +618,43 @@ func GobDeserializeToDevice(
 		deviceNum: deviceNum,
 	}
 	return t, nil
+}
+
+// pointerToAnySlice is a helper function that returns a pointer to a slice of any type.
+// It uses a switch over the known DTypes, which is faster than using reflection.
+func pointerToAnySlice(flatAny any) (any, error) {
+	switch flat := flatAny.(type) {
+	case []float32:
+		return &flat, nil
+	case []float64:
+		return &flat, nil
+	case []float16.Float16:
+		return &flat, nil
+	case []bfloat16.BFloat16:
+		return &flat, nil
+	case []int8:
+		return &flat, nil
+	case []int16:
+		return &flat, nil
+	case []int32:
+		return &flat, nil
+	case []int64:
+		return &flat, nil
+	case []uint8:
+		return &flat, nil
+	case []uint16:
+		return &flat, nil
+	case []uint32:
+		return &flat, nil
+	case []uint64:
+		return &flat, nil
+	case []complex64:
+		return &flat, nil
+	case []complex128:
+		return &flat, nil
+	default:
+		return nil, errors.Errorf("unsupported dtype for pointerToAnySlice: %T", flatAny)
+	}
 }
 
 // Save the Local tensor to the given file path.
