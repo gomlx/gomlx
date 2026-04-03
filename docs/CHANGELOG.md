@@ -19,6 +19,7 @@
   - API clean up.
   - Added `WithMask`, a simplified mask input for when only using padding.
   - Dropout now takes a `*Node` instead of a float64, allowing dynamic dropout control.
+  - Fixed mask and causal mask handling.
 - Package `attention/pos`:
   - Split `Encoder` API into `QKEncoder` and `PreEncoder`, to support different types of positional encoders.
   - Added `WithSlidingWindow` to support "sliding attention" (the slow way).

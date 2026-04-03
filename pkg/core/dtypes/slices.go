@@ -1,0 +1,106 @@
+package dtypes
+
+import (
+	"unsafe"
+
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/x448/float16"
+)
+
+// UnsafeByteSliceFromAny casts a slice of any of the supported Go types (feed as type any) to a slice of bytes.
+func UnsafeByteSliceFromAny(flatAny any) []byte {
+	switch flat := flatAny.(type) {
+	case []float64:
+		return UnsafeByteSlice(flat)
+	case []float32:
+		return UnsafeByteSlice(flat)
+	case []float16.Float16:
+		return UnsafeByteSlice(flat)
+	case []bfloat16.BFloat16:
+		return UnsafeByteSlice(flat)
+	case []int:
+		return UnsafeByteSlice(flat)
+	case []int64:
+		return UnsafeByteSlice(flat)
+	case []int32:
+		return UnsafeByteSlice(flat)
+	case []int16:
+		return UnsafeByteSlice(flat)
+	case []int8:
+		return UnsafeByteSlice(flat)
+	case []uint64:
+		return UnsafeByteSlice(flat)
+	case []uint32:
+		return UnsafeByteSlice(flat)
+	case []uint16:
+		return UnsafeByteSlice(flat)
+	case []uint8:
+		return UnsafeByteSlice(flat)
+	case []bool:
+		return UnsafeByteSlice(flat)
+	case []complex64:
+		return UnsafeByteSlice(flat)
+	case []complex128:
+		return UnsafeByteSlice(flat)
+	default:
+		panicf("unsupported dtype for UnsafeByteSliceFromAny: %T", flat)
+	}
+	panic(nil)
+}
+
+// UnsafeByteSlice casts a slice of any of the supported Go types to a slice of bytes.
+func UnsafeByteSlice[E Supported](flat []E) []byte {
+	var e E
+	elementSize := int(unsafe.Sizeof(e))
+	return unsafe.Slice((*byte)(unsafe.Pointer(&flat[0])), len(flat)*elementSize)
+}
+
+// UnsafeAnySliceFromBytes casts a pointer to a buffer of bytes to a slice of the given dtype and length
+// pointing to the same data.
+//
+// Unsafe: bytesPtr must have enough data to hold the []dtype of the given length.
+func UnsafeAnySliceFromBytes(bytesPtr unsafe.Pointer, dtype DType, length int) any {
+	switch dtype {
+	case Float64:
+		return UnsafeSliceFromBytes[float64](bytesPtr, length)
+	case Float32:
+		return UnsafeSliceFromBytes[float32](bytesPtr, length)
+	case Float16:
+		return UnsafeSliceFromBytes[float16.Float16](bytesPtr, length)
+	case BFloat16:
+		return UnsafeSliceFromBytes[bfloat16.BFloat16](bytesPtr, length)
+	case Int64:
+		return UnsafeSliceFromBytes[int64](bytesPtr, length)
+	case Int32:
+		return UnsafeSliceFromBytes[int32](bytesPtr, length)
+	case Int16:
+		return UnsafeSliceFromBytes[int16](bytesPtr, length)
+	case Int8:
+		return UnsafeSliceFromBytes[int8](bytesPtr, length)
+	case Uint64:
+		return UnsafeSliceFromBytes[uint64](bytesPtr, length)
+	case Uint32:
+		return UnsafeSliceFromBytes[uint32](bytesPtr, length)
+	case Uint16:
+		return UnsafeSliceFromBytes[uint16](bytesPtr, length)
+	case Uint8:
+		return UnsafeSliceFromBytes[uint8](bytesPtr, length)
+	case Bool:
+		return UnsafeSliceFromBytes[bool](bytesPtr, length)
+	case Complex64:
+		return UnsafeSliceFromBytes[complex64](bytesPtr, length)
+	case Complex128:
+		return UnsafeSliceFromBytes[complex128](bytesPtr, length)
+	default:
+		panicf("unsupported dtype for UnsafeByteSliceFromAny: %s", dtype)
+	}
+	panic(nil)
+}
+
+// UnsafeSliceFromBytes casts a pointer to a buffer of bytes to a slice of the given E type and length
+// pointing to the same data.
+//
+// Unsafe: bytesPtr must have enough data to hold the []E of the given length.
+func UnsafeSliceFromBytes[E Supported](bytesPtr unsafe.Pointer, length int) []E {
+	return unsafe.Slice((*E)(bytesPtr), length)
+}

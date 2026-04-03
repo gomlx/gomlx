@@ -303,20 +303,6 @@ func (t *Tensor) lockedMutableFlatData(accessFn func(flat any)) error {
 	return nil
 }
 
-// flatBytes returns a byte slice view of the flat data.
-func flatBytes(flat any) []byte {
-	v := reflect.ValueOf(flat)
-	length := v.Len()
-	if length == 0 {
-		return nil
-	}
-
-	sizeBytes := uintptr(length) * v.Type().Elem().Size()
-
-	// v.UnsafePointer() returns a pointer to the slice's underlying array directly
-	return unsafe.Slice((*byte)(v.UnsafePointer()), sizeBytes)
-}
-
 // MutableBytes gives mutable access to the local storage of the values for the tensor.
 // It's similar to MutableFlatData but provides a bytes view to the same data.
 //
@@ -329,7 +315,7 @@ func flatBytes(flat any) []byte {
 // See Tensor.ConstBytes for constant access to the data as bytes -- that doesn't invalidate the device storage.
 func (t *Tensor) MutableBytes(accessFn func(data []byte)) error {
 	return t.MutableFlatData(func(flat any) {
-		accessFn(flatBytes(flat))
+		accessFn(dtypes.UnsafeByteSliceFromAny(flat))
 	})
 }
 
