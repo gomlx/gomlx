@@ -138,8 +138,51 @@ func MakeAnySlice(dtype DType, length int) any {
 		return make([]complex64, length)
 	case Complex128:
 		return make([]complex128, length)
+	case Uint2, Uint4, Int2, Int4:
+		// Sub-byte packed types are stored as uint8.
+		return make([]uint8, length)
 	default:
 		panicf("unsupported dtype for MakeAnySlice: %s", dtype)
 	}
 	panic(nil)
+}
+
+// CopyAnySlice copies the contents of src to dst, both should be slices of the same DType.
+//
+// Unsafe: dst and src must be slices of the same dtype.
+func CopyAnySlice(dst, src any) {
+	switch dst := dst.(type) {
+	case []float64:
+		copy(dst, src.([]float64))
+	case []float32:
+		copy(dst, src.([]float32))
+	case []float16.Float16:
+		copy(dst, src.([]float16.Float16))
+	case []bfloat16.BFloat16:
+		copy(dst, src.([]bfloat16.BFloat16))
+	case []int64:
+		copy(dst, src.([]int64))
+	case []int32:
+		copy(dst, src.([]int32))
+	case []int16:
+		copy(dst, src.([]int16))
+	case []int8:
+		copy(dst, src.([]int8))
+	case []uint64:
+		copy(dst, src.([]uint64))
+	case []uint32:
+		copy(dst, src.([]uint32))
+	case []uint16:
+		copy(dst, src.([]uint16))
+	case []uint8:
+		copy(dst, src.([]uint8))
+	case []bool:
+		copy(dst, src.([]bool))
+	case []complex64:
+		copy(dst, src.([]complex64))
+	case []complex128:
+		copy(dst, src.([]complex128))
+	default:
+		panicf("unsupported dtype for CopyAnySlices: %T", dst)
+	}
 }

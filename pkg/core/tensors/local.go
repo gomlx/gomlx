@@ -55,13 +55,12 @@ func (t *Tensor) LocalClone() (*Tensor, error) {
 	var clone *Tensor
 	err := t.ConstFlatData(func(flat any) {
 		clone = newEmptyTensor(t.shape)
-		flatV := reflect.ValueOf(flat)
-		size := flatV.Len()
-		cloneFlatV := reflect.MakeSlice(flatV.Type(), size, size)
-		reflect.Copy(cloneFlatV, flatV)
+		sliceLen := t.StorageSize()
+		cloneFlat := dtypes.MakeAnySlice(t.shape.DType, sliceLen)
+		dtypes.CopyAnySlice(cloneFlat, flat)
 		clone.local = &local{
 			t:    clone,
-			flat: cloneFlatV.Interface(),
+			flat: cloneFlat,
 		}
 	})
 	if err != nil {
@@ -223,12 +222,7 @@ func MustConstFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) {
 // It panics if the tensor is in an invalid state (if it was finalized), or if it is a tuple.
 func (t *Tensor) ConstBytes(accessFn func(data []byte)) error {
 	return t.ConstFlatData(func(flat any) {
-		flatV := reflect.ValueOf(flat)
-		element0 := flatV.Index(0)
-		flatValuesPtr := element0.Addr().UnsafePointer()
-		sizeBytes := uintptr(flatV.Len()) * element0.Type().Size()
-		data := unsafe.Slice((*byte)(flatValuesPtr), sizeBytes)
-		accessFn(data)
+		accessFn(dtypes.UnsafeByteSliceFromAny(flat))
 	})
 }
 

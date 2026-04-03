@@ -69,3 +69,47 @@ func TestUnsafeAnySliceFromBytes(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, i32s, recoveredI32s)
 }
+
+func TestMakeAnySlice(t *testing.T) {
+	// Test with Float32
+	f32sAny := MakeAnySlice(Float32, 5)
+	f32s, ok := f32sAny.([]float32)
+	require.True(t, ok)
+	require.Len(t, f32s, 5)
+
+	// Test with Int64
+	i64sAny := MakeAnySlice(Int64, 3)
+	i64s, ok := i64sAny.([]int64)
+	require.True(t, ok)
+	require.Len(t, i64s, 3)
+
+	// Test with sub-byte packed types
+	uint4sAny := MakeAnySlice(Uint4, 10)
+	uint4s, ok := uint4sAny.([]uint8)
+	require.True(t, ok)
+	require.Len(t, uint4s, 10)
+
+	// Test panic
+	require.Panics(t, func() { MakeAnySlice(InvalidDType, 10) })
+}
+
+func TestCopyAnySlice(t *testing.T) {
+	// Test with Float32
+	srcF32 := []float32{1.0, 2.0, 3.0}
+	dstF32 := make([]float32, 3)
+	CopyAnySlice(dstF32, srcF32)
+	require.Equal(t, srcF32, dstF32)
+
+	// Test with Int64
+	srcI64 := []int64{10, 20, 30}
+	dstI64 := make([]int64, 3)
+	CopyAnySlice(dstI64, srcI64)
+	require.Equal(t, srcI64, dstI64)
+
+	// Test panic
+	require.Panics(t, func() {
+		src := []string{"a"}
+		dst := make([]string, 1)
+		CopyAnySlice(dst, src)
+	})
+}
