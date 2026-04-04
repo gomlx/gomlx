@@ -226,6 +226,8 @@ func (dtype DType) SizeForDimensions(dimensions ...int) int {
 
 // Memory returns the number of bytes for the given DType.
 // It's an alias to Size, converted to uintptr.
+//
+// Deprecated: use Size() instead.
 func (dtype DType) Memory() uintptr {
 	return uintptr(dtype.Size())
 }

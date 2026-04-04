@@ -230,7 +230,7 @@ func (c *Config) DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSt
 		noise.Shape(),
 	)
 	fmt.Printf("\tModel #params:\t%d\n", ctx.NumParameters())
-	fmt.Printf("\t Model memory:\t%s\n", fsutil.ByteCountIEC(ctx.Memory()))
+	fmt.Printf("\t Model memory:\t%s\n", fsutil.ByteCountIEC(ctx.ByteSize()))
 	gonbui.DisplayHtml("<p><b>Noise</b></p>")
 	PlotImagesTensor(noise)
 

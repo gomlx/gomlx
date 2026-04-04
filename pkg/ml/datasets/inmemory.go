@@ -351,11 +351,11 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 	return
 }
 
-// Memory returns an approximation of the memory being used.
-func (mds *InMemoryDataset) Memory() uintptr {
-	var mem uintptr
+// ByteSize returns an approximation of the memory being used.
+func (mds *InMemoryDataset) ByteSize() int64 {
+	var mem int64
 	for _, t := range mds.inputsAndLabelsData {
-		mem += t.Shape().Memory()
+		mem += t.Shape().ByteSize()
 	}
 	return mem
 }

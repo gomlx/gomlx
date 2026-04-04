@@ -9,12 +9,12 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 )
@@ -75,8 +75,8 @@ func NewBalancedDataset(backend backends.Backend, baseDir string, size int) (bds
 		}
 	}
 	bds.buildPerFlowerIndices()
-	fmt.Printf("\timages: %s, %s\n", bds.AllImages.Shape(), humanize.Bytes(uint64(bds.AllImages.Shape().Memory())))
-	fmt.Printf("\tlabels: %s, %s\n", bds.AllLabels.Shape(), humanize.Bytes(uint64(bds.AllLabels.Shape().Memory())))
+	fmt.Printf("\timages: %s, %s\n", bds.AllImages.Shape(), humanize.Bytes(uint64(bds.AllImages.Shape().ByteSize())))
+	fmt.Printf("\tlabels: %s, %s\n", bds.AllLabels.Shape(), humanize.Bytes(uint64(bds.AllLabels.Shape().ByteSize())))
 	return
 }
 

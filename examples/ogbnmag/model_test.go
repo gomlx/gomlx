@@ -15,6 +15,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/pbnjay/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,11 +58,11 @@ func TestModel(t *testing.T) {
 
 	var inputs []*tensors.Tensor
 	spec, inputs, _, err = trainDS.Yield()
-	totalSizeBytes := uint64(0)
+	totalSizeBytes := int64(0)
 	for _, input := range inputs {
-		totalSizeBytes += uint64(input.Shape().Memory())
+		totalSizeBytes += input.Shape().ByteSize()
 	}
-	fmt.Printf("One sample (batch) size is %s bytes\n", humanize.Bytes(totalSizeBytes))
+	fmt.Printf("One sample (batch) size is %s bytes\n", fsutil.ByteCountIEC(totalSizeBytes))
 	require.NoError(t, err)
 	outputs := testGraphExec.MustExec(inputs)
 	for ii, output := range outputs {

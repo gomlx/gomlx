@@ -12,10 +12,11 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/simplego"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/support/fsutil"
 )
 
 var (
@@ -58,7 +59,7 @@ func ListVariables(ctx *context.Context) {
 		rows = append(rows, []string{
 			v.Scope(), v.Name(), shape.String(),
 			humanize.Comma(int64(shape.Size())),
-			humanize.Bytes(uint64(shape.Memory())),
+			fsutil.ByteCountIEC(shape.ByteSize()),
 			mav, rms, maxAV,
 		})
 	})

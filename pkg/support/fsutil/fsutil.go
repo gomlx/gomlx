@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	stderrors "errors"
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/gomlx/gomlx/internal/humanize"
 	"github.com/pkg/errors"
 )
 
@@ -168,17 +168,7 @@ func ValidateChecksum(path, checkHash string) error {
 
 // ByteCountIEC converts a byte count to string using the appropriate unit (B, Kb, MiB, GiB, ...).
 // It uses the binary prefix system from IEC -- so powers of 1024 (as opposed to powers 1000).
-func ByteCountIEC[T interface {
-	int | int64 | uint64 | uint | uintptr
-}](count T) string {
-	const unit = 1024
-	if count < unit {
-		return fmt.Sprintf("%d B", count)
-	}
-	div, exp := int64(unit), 0
-	for n := count / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %ciB", float64(count)/float64(div), "KMGTPE"[exp])
+func ByteCountIEC[T ~int64 | ~uint64 | ~int | ~uint | ~int32 | ~uint32 | ~int16 | ~uint16 | ~int8 | ~uint8 | ~uintptr](
+	count T) string {
+	return humanize.Bytes(count)
 }

@@ -50,7 +50,7 @@ func TestUNetModelGraph(t *testing.T) {
 	assert.True(t, noisyImages.Shape().Equal(filtered.Shape()), "Filtered images after UNetModelGraph should have the same shape as its input images")
 	fmt.Printf("     filtered.shape:\t%s\n", filtered.Shape())
 	fmt.Printf("U-Net Model #params:\t%d\n", ctx.NumParameters())
-	fmt.Printf(" U-Net Model memory:\t%s\n", fsutil.ByteCountIEC(ctx.Memory()))
+	fmt.Printf(" U-Net Model memory:\t%s\n", fsutil.ByteCountIEC(ctx.ByteSize()))
 }
 
 // getZeroPredictions calls the model with some placeholder images.
@@ -84,7 +84,7 @@ func TestTrainingModelGraph(t *testing.T) {
 	fmt.Printf("predictedImages.shape:\t%s\n", predictions[0].Shape())
 	fmt.Printf("           loss.shape:\t%s\n", predictions[1].Shape())
 	fmt.Printf("        Model #params:\t%d\n", ctx.NumParameters())
-	fmt.Printf("         Model memory:\t%s\n", fsutil.ByteCountIEC(ctx.Memory()))
+	fmt.Printf("         Model memory:\t%s\n", fsutil.ByteCountIEC(ctx.ByteSize()))
 }
 
 func TestImagesGenerator(t *testing.T) {

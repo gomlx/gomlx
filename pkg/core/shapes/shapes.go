@@ -164,10 +164,20 @@ func (s Shape) IsZeroSize() bool {
 
 }
 
-// Memory returns the memory used to store an array of the given shape, the same as the size in bytes.
-// Careful, so far all types in Go and on device seem to use the same sizes, but future type this is not guaranteed.
+// ByteSize returns the number of bytes used to store an array of the given shape.
+func (s Shape) ByteSize() int64 {
+	size64 := int64(s.DType.Size()) * int64(s.Size())
+	if !s.DType.IsPacked() {
+		return size64
+	}
+	return (size64 + (int64(s.DType.ValuesPerStorageUnit()) - 1)) / int64(s.DType.ValuesPerStorageUnit())
+}
+
+// Memory is an old alias to ByteSize, kept for backward compatibility.
+//
+// Deprecated: use ByteSize() instead.
 func (s Shape) Memory() uintptr {
-	return s.DType.Memory() * uintptr(s.Size())
+	return uintptr(s.ByteSize())
 }
 
 // MakeTuple returns a shape representing a tuple of elements with the given shapes.

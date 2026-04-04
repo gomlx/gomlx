@@ -15,7 +15,10 @@
   - Added several slice creation/copying/casting functions for dtypes, using switch on types as opposed to
     the slower `reflect` package. Incorporated that into the `tensors` implementations, as well as exposed
     it publicly (`go-huggingface` project uses it).
-
+  - Deprecated `dtypes.Memory()`.
+- Package `shapes`
+  - Added `ByteSize()` method, with proper support for packed dtypes.
+  - Deprecated `shapes.Memory()`.
 ### Packages in `pkg/ml`
 
 - Package `activations`

@@ -693,8 +693,8 @@ func fromShapeForBackendUninitialized(backend backends.Backend, deviceNum backen
 // It works well with mmap (memory-mapped) files, where data can be accessed directly from kernel buffers
 // (saving a copy to a temporary buffer that is initialized to 0 in Go, etc.)
 func FromRaw(backend backends.Backend, deviceNum backends.DeviceNum, shape shapes.Shape, data []byte) (*Tensor, error) {
-	if int(shape.Memory()) != len(data) {
-		return nil, errors.Errorf("shape %s has %d bytes, but data has %d bytes", shape, shape.Memory(), len(data))
+	if int(shape.ByteSize()) != len(data) {
+		return nil, errors.Errorf("shape %s has %d bytes, but data has %d bytes", shape, shape.ByteSize(), len(data))
 	}
 
 	switch {

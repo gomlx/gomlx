@@ -225,7 +225,7 @@ func (n *Node) String() (str string) {
 	}
 
 	memory := xslices.Map(n.outputShapes, func(shape shapes.Shape) string {
-		return humanize.Bytes(uint64(shape.Memory()))
+		return humanize.Bytes(uint64(shape.ByteSize()))
 	})
 
 	str = fmt.Sprintf("%s -> %s - mem: %v", strings.Join(parts, " "), n.outputShapes, memory)
