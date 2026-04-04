@@ -58,6 +58,10 @@ func UnsafeByteSlice[E Supported](flat []E) []byte {
 // UnsafeAnySliceFromBytes casts a pointer to a buffer of bytes to a slice of the given dtype and length
 // pointing to the same data.
 //
+// For sub-byte types (Uint2, Uint4, Int2, Int4) it returns a slice of uint8 of
+// the given length -- that is, the length is in bytes in this case
+// (not in number of sub-byte elements) -- use DType.ValuesPerStorageUnit() to get the number of elements.
+//
 // Unsafe: bytesPtr must have enough data to hold the []dtype of the given length.
 func UnsafeAnySliceFromBytes(bytesPtr unsafe.Pointer, dtype DType, length int) any {
 	switch dtype {
@@ -91,6 +95,9 @@ func UnsafeAnySliceFromBytes(bytesPtr unsafe.Pointer, dtype DType, length int) a
 		return UnsafeSliceFromBytes[complex64](bytesPtr, length)
 	case Complex128:
 		return UnsafeSliceFromBytes[complex128](bytesPtr, length)
+	case Uint2, Uint4, Int2, Int4:
+		// Sub-byte packed types are stored as uint8.
+		return UnsafeSliceFromBytes[uint8](bytesPtr, length)
 	default:
 		panicf("unsupported dtype for UnsafeByteSliceFromAny: %s", dtype)
 	}
@@ -106,6 +113,10 @@ func UnsafeSliceFromBytes[E Supported](bytesPtr unsafe.Pointer, length int) []E 
 }
 
 // MakeAnySlice creates a slice of the given dtype and length, casted to any.
+//
+// For sub-byte types (Uint2, Uint4, Int2, Int4) it returns a slice of uint8 of
+// the given length -- that is, the length is in bytes in this case
+// (not in number of sub-byte elements).
 func MakeAnySlice(dtype DType, length int) any {
 	switch dtype {
 	case Float64:
