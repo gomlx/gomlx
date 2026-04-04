@@ -679,19 +679,20 @@ func fromShapeForBackendUninitialized(backend backends.Backend, deviceNum backen
 	return t, nil
 }
 
-// FromShapeAndBytesForBackend returns a tensor with the given shape and dtype, filled with the flattened values given
-// in `data` as the raw bytes -- it's up to the user to use the correct endianess for the backend.
+// FromRaw returns a tensor with the given shape and dtype, initialized with the raw bytes given in data --
+// it's up to the user to use the correct endianess for the backend.
 //
-// The data is copied to the Tensor.
-// And it panics if the size of data is wrong for the shape.
+// It panics if the size of data is wrong for the shape.
 //
-// If the backend supports shared buffers, it creates the tensor using a shared buffer.
+// If the backend is nil, it creates a local tensor and data is copied to a newly allocated local tensor storage.
 //
-// This is the most performant way to upload a backend tensor with some data, avoiding unnecessary copies.
+// If the backend supports shared buffers, it creates the shared buffer tensor and copies over the data.
+//
+// For backends with accelerators, this is the most performant way to upload a backend tensor with some data,
+// avoiding unnecessary copies.
 // It works well with mmap (memory-mapped) files, where data can be accessed directly from kernel buffers
 // (saving a copy to a temporary buffer that is initialized to 0 in Go, etc.)
-func FromShapeAndBytesForBackend(
-	backend backends.Backend, deviceNum backends.DeviceNum, shape shapes.Shape, data []byte) (*Tensor, error) {
+func FromRaw(backend backends.Backend, deviceNum backends.DeviceNum, shape shapes.Shape, data []byte) (*Tensor, error) {
 	if int(shape.Memory()) != len(data) {
 		return nil, errors.Errorf("shape %s has %d bytes, but data has %d bytes", shape, shape.Memory(), len(data))
 	}
