@@ -24,3 +24,8 @@ Untitled.ipynb
 /GEMINI.md
 /CLAUDE.md
 /conductor
+
+*.air
+*.metallib
+
+Makefile
