@@ -125,6 +125,12 @@ type funcExecBuffers struct {
 	numUsed []atomic.Int32
 
 	// owned indicates whether the corresponding buffer is owned by the executor.
+	//
+	// Notice different rows are written by different threads in parallel mode, but since
+	// each row is 1 byte, and Go's thread sanitizer has an 8-bytes resolution, it may trigger
+	// false race conditions. See discussion in github.com/gomlx/gomlx/issues/387
+	//
+	// Future: use a []int (int is 64 bits/8 bytes) instead of bool to avoid the issue?
 	owned []bool
 
 	// remainingDeps is the number of remaining dependencies for each node.
@@ -330,8 +336,8 @@ func (fe *FunctionExecutable) executeParallel(backend *Backend, execBuf *funcExe
 					return
 				}
 
-				// Handle multi-output nodes
 				if node.IsMultiOutputs() {
+					// Handle multi-output nodes: update dependents of each output.
 					for _, outputNode := range node.multiOutputsNodes {
 						outputIdx := outputNode.idx
 						if outputIdx >= fe.numNodesToProcess || fe.numUses[outputIdx] == 0 {
@@ -350,6 +356,7 @@ func (fe *FunctionExecutable) executeParallel(backend *Backend, execBuf *funcExe
 						}
 					}
 				} else {
+					// Single output node.
 					for _, depIdx := range fe.dependents[nodeIdx] {
 						execBuf.remainingDeps[depIdx]--
 						if execBuf.remainingDeps[depIdx] == 0 {
@@ -573,8 +580,11 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 		}
 	}
 	if execBuf.opsExecutionType == opsExecutionParallel {
+		// Unlock if it's a parallel execution.
 		execBuf.mu.Unlock()
 	} else {
+		// For sequential execution, we store the input buffers and ownership slices
+		// to save an allocation for these slices in the next time it is executed.
 		execBuf.opInputBuffers = inputBuffers
 		execBuf.opInputsOwned = inputsOwned
 	}
