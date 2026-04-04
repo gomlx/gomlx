@@ -320,8 +320,11 @@ func (fe *FunctionExecutable) executeParallel(backend *Backend, execBuf *funcExe
 		stopExecutionFn()
 	}
 
+	var wg sync.WaitGroup
 	for nodeIdx := range readyToExecute {
+		// Closure that executes one node.
 		nodeExecFn := func() {
+			defer wg.Done()
 			node := fe.function.nodes[nodeIdx]
 
 			defer func(nodeIdx int) {
@@ -379,8 +382,13 @@ func (fe *FunctionExecutable) executeParallel(backend *Backend, execBuf *funcExe
 			}
 		}
 
+		wg.Add(1)
 		backend.workers.WaitToStart(nodeExecFn)
 	}
+
+	// Wait for all nodes to complete before exit (to avoid race condition where some execution
+	// is cleaning up while execBuf is being reused).
+	wg.Wait()
 
 	if len(collectErrors) > 0 {
 		return collectErrors[0]
@@ -573,7 +581,7 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 				continue
 			}
 			if int(newCount) == fe.numUses[capturedIdx] && execBuf.owned[capturedIdx] {
-				// Release the captured buffer - all users have finished.
+				// Release the captured buffer - all uses have finished.
 				backend.putBuffer(capturedBuf)
 				execBuf.results[capturedIdx] = nil
 			}
