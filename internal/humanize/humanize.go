@@ -24,3 +24,23 @@ func Bytes[T ~int64 | ~uint64 | ~int | ~uint | ~int32 | ~uint32 | ~int16 | ~uint
 	}
 	return fmt.Sprintf("%s%.1f %ciB", sign, float64(num)/float64(div), "KMGTPE"[exp])
 }
+
+// Underscores returns the rendering of an integer with underscores as thousands separators.
+func Underscores[T ~int64 | ~uint64 | ~int | ~uint | ~int32 | ~uint32 | ~int16 | ~uint16 | ~int8 | ~uint8 | ~uintptr](numAny T) string {
+	s := fmt.Sprintf("%d", numAny)
+	start := 0
+	if s[0] == '-' {
+		start = 1
+	}
+	var result []byte
+	if start == 1 {
+		result = append(result, '-')
+	}
+	for i := start; i < len(s); i++ {
+		if i > start && (len(s)-i)%3 == 0 {
+			result = append(result, '_')
+		}
+		result = append(result, s[i])
+	}
+	return string(result)
+}

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dustin/go-humanize"
+	"github.com/gomlx/gomlx/internal/humanize"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/graph"
@@ -363,7 +363,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				dtype,
 				batchSize,
 				commandline.FormatDuration(avgDurationPerRun),
-				humanize.Comma(int64(numOps)),
+				humanize.Underscores(numOps),
 				gOpsPerSecond)
 			if *flagMarkdown {
 				// No color styles for markdown.

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/internal/humanize"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
