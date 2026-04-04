@@ -241,6 +241,14 @@ func execDotGeneralNormalized(backend *Backend, lhs, rhs *Buffer, params *dotGen
 		wg.Wait()
 	}
 
+	// Free temporary normalized buffers, if they were used.
+	if lhs != lhsNormalized {
+		backend.putBuffer(lhsNormalized)
+	}
+	if rhs != rhsNormalized {
+		backend.putBuffer(rhsNormalized)
+	}
+
 	// If we created a temporary float32 output, convert it back to the original dtype.
 	if castToFloat32 {
 		convertFnAny, err := convertDTypePairMap.Get(dtypes.Float32, output.shape.DType) //nolint:errcheck
