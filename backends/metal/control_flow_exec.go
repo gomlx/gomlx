@@ -34,14 +34,17 @@ func closureCaptureBufs(node *Node, results []*Buffer, closureIdx int) ([]*Buffe
 	if closureIdx >= len(node.capturedInputs) {
 		return nil, errors.Errorf("missing captured inputs group %d for %s", closureIdx, node.opType)
 	}
+
 	caps := node.capturedInputs[closureIdx]
 	out := make([]*Buffer, len(caps))
+
 	for i, cn := range caps {
 		out[i] = results[cn.idx]
 		if out[i] == nil {
 			return nil, errors.Errorf("captured node idx %d not computed for %s", cn.idx, node.opType)
 		}
 	}
+
 	return out, nil
 }
 
@@ -133,7 +136,8 @@ func metalExecWhile(b *Backend, node *Node, results []*Buffer, inputBufs []*Buff
 			return errors.WithMessagef(err, "While: cond at iter %d", iter)
 		}
 
-		condProtect := append(append(append(make([]*Buffer, 0, len(state)+len(capCond)+len(capBody)+len(initialState)),
+		condProtect := append(append(append(
+			make([]*Buffer, 0, len(state)+len(capCond)+len(capBody)+len(initialState)),
 			state...), capCond...), capBody...)
 		condProtect = append(condProtect, initialState...)
 		releaseTmpBufferUnlessAliased(condBuf, condProtect)
@@ -153,9 +157,10 @@ func metalExecWhile(b *Backend, node *Node, results []*Buffer, inputBufs []*Buff
 			newState...), capCond...), capBody...)
 		nextProtect = append(nextProtect, initialState...)
 
-		for i := 0; i < stateCount; i++ {
+		for i := range stateCount {
 			oldState := state[i]
 			state[i] = newState[i]
+
 			if oldState != state[i] {
 				releaseTmpBufferUnlessAliased(oldState, nextProtect)
 			}
@@ -249,8 +254,10 @@ func metalSortRowGPUBitonic(
 		indexFlat[i] = int32(i)
 	}
 
-	sortBaseProtect := append(append(append(make([]*Buffer, 0,
-		len(tensors)+len(outputs)+len(compParams)+len(capComp)+1), tensors...), outputs...), compParams...)
+	sortBaseProtect := append(append(append(
+		make([]*Buffer, 0, len(tensors)+len(outputs)+len(compParams)+len(capComp)+1),
+		tensors...,
+	), outputs...), compParams...)
 	sortBaseProtect = append(sortBaseProtect, capComp...)
 	sortBaseProtect = append(sortBaseProtect, idxBuf)
 
@@ -265,7 +272,7 @@ func metalSortRowGPUBitonic(
 					continue
 				}
 
-				for t := 0; t < inputCount; t++ {
+				for t := range inputCount {
 					es := uint32(outputs[t].shape.DType.Size())
 					if err := metalSortLoadPairBytes(outputs[t], compParams[2*t], compParams[2*t+1], idxBuf,
 						uint32(baseOffset), uint32(axisStride), es, gid, ix); err != nil {
@@ -303,6 +310,15 @@ func metalSortRowGPUOddEven(
 	stable bool,
 ) error {
 	const maxOddEvenSortAxis = 4096
+
+	// Odd-even transposition sort performs O(axisSize^2) comparator evaluations.
+	// Guard large fibers instead of silently running a quadratic fallback that can
+	// stall execution for stable sorts or non-power-of-two unstable sorts.
+	if axisSize > maxOddEvenSortAxis {
+		return errors.Errorf("Sort: odd-even GPU sort is O(n^2) and limited to axis size <= %d, got %d",
+			maxOddEvenSortAxis, axisSize)
+	}
+
 	indexFlat := flatFromBuffer(idxBuf).([]int32)
 
 	for i := range indexFlat {
@@ -316,20 +332,13 @@ func metalSortRowGPUOddEven(
 
 	var cmpTrash []*Buffer
 
-	// Odd-even transposition sort performs O(axisSize^2) comparator evaluations.
-	// Guard large fibers instead of silently running a quadratic fallback that can
-	// stall execution for stable sorts or non-power-of-two unstable sorts.
-	if axisSize > maxOddEvenSortAxis {
-		return errors.Errorf("Sort: odd-even GPU sort is O(n^2) and limited to axis size <= %d, got %d",
-			maxOddEvenSortAxis, axisSize)
-	}
-
 	for range axisSize {
 		for parity := range 2 {
 			for i := parity; i+1 < axisSize; i += 2 {
 				for t := range inputCount {
 					es := uint32(outputs[t].shape.DType.Size())
 					si, sj := uint32(i), uint32(i+1)
+
 					if stable {
 						// lhs = keys at i+1, rhs = keys at i => pred means strict inversion (stable).
 						si, sj = uint32(i+1), uint32(i)
@@ -416,9 +425,11 @@ func metalExecSort(b *Backend, node *Node, results []*Buffer, inputBufs []*Buffe
 		outputs[i] = allocDuringExec(t.shape)
 		es := int(t.shape.DType.Size())
 		n := t.shape.Size() * es
+
 		if n > 0 {
 			copy(tensorBufferBytes(outputs[i]), tensorBufferBytes(t))
 		}
+
 		rowTemps[i] = allocDuringExec(shapes.Make(dtypes.Uint8, axisSize*es))
 	}
 
@@ -426,6 +437,7 @@ func metalExecSort(b *Backend, node *Node, results []*Buffer, inputBufs []*Buffe
 
 	defer func() {
 		releaseTmpBuffer(idxBuf)
+
 		for _, rt := range rowTemps {
 			releaseTmpBuffer(rt)
 		}
