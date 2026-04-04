@@ -10,8 +10,10 @@ import (
 	"strconv"
 	"unsafe"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/x448/float16"
 	"k8s.io/klog/v2"
 
 	"github.com/gomlx/gomlx/backends"
@@ -42,10 +44,9 @@ func FromShape(shape shapes.Shape) *Tensor {
 	}
 	t := newEmptyTensor(shape)
 	sliceLen := t.StorageSize()
-	flatV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), sliceLen, sliceLen)
 	t.local = &local{
 		t:    t,
-		flat: flatV.Interface(),
+		flat: dtypes.MakeAnySlice(t.shape.DType, sliceLen),
 	}
 	return t
 }
@@ -56,13 +57,12 @@ func (t *Tensor) LocalClone() (*Tensor, error) {
 	var clone *Tensor
 	err := t.ConstFlatData(func(flat any) {
 		clone = newEmptyTensor(t.shape)
-		flatV := reflect.ValueOf(flat)
-		size := flatV.Len()
-		cloneFlatV := reflect.MakeSlice(flatV.Type(), size, size)
-		reflect.Copy(cloneFlatV, flatV)
+		sliceLen := t.StorageSize()
+		cloneFlat := dtypes.MakeAnySlice(t.shape.DType, sliceLen)
+		dtypes.CopyAnySlice(cloneFlat, flat)
 		clone.local = &local{
 			t:    clone,
-			flat: cloneFlatV.Interface(),
+			flat: cloneFlat,
 		}
 	})
 	if err != nil {
@@ -224,12 +224,7 @@ func MustConstFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) {
 // It panics if the tensor is in an invalid state (if it was finalized), or if it is a tuple.
 func (t *Tensor) ConstBytes(accessFn func(data []byte)) error {
 	return t.ConstFlatData(func(flat any) {
-		flatV := reflect.ValueOf(flat)
-		element0 := flatV.Index(0)
-		flatValuesPtr := element0.Addr().UnsafePointer()
-		sizeBytes := uintptr(flatV.Len()) * element0.Type().Size()
-		data := unsafe.Slice((*byte)(flatValuesPtr), sizeBytes)
-		accessFn(data)
+		accessFn(dtypes.UnsafeByteSliceFromAny(flat))
 	})
 }
 
@@ -303,20 +298,6 @@ func (t *Tensor) lockedMutableFlatData(accessFn func(flat any)) error {
 	return nil
 }
 
-// flatBytes returns a byte slice view of the flat data.
-func flatBytes(flat any) []byte {
-	v := reflect.ValueOf(flat)
-	length := v.Len()
-	if length == 0 {
-		return nil
-	}
-
-	sizeBytes := uintptr(length) * v.Type().Elem().Size()
-
-	// v.UnsafePointer() returns a pointer to the slice's underlying array directly
-	return unsafe.Slice((*byte)(v.UnsafePointer()), sizeBytes)
-}
-
 // MutableBytes gives mutable access to the local storage of the values for the tensor.
 // It's similar to MutableFlatData but provides a bytes view to the same data.
 //
@@ -329,7 +310,7 @@ func flatBytes(flat any) []byte {
 // See Tensor.ConstBytes for constant access to the data as bytes -- that doesn't invalidate the device storage.
 func (t *Tensor) MutableBytes(accessFn func(data []byte)) error {
 	return t.MutableFlatData(func(flat any) {
-		accessFn(flatBytes(flat))
+		accessFn(dtypes.UnsafeByteSliceFromAny(flat))
 	})
 }
 
@@ -611,11 +592,10 @@ func GobDeserializeToDevice(
 	}
 
 	// Deserialize tensor contents.
-	flatV := reflect.ValueOf(flatAny)
-	// Since flatV.Addr() doesn't work,  we create a pointer to a new Slice and assign flatAny to it.
-	flatPtrV := reflect.New(flatV.Type())
-	flatPtrV.Elem().Set(flatV)
-	err = decoder.Decode(flatPtrV.Interface())
+	ptrAny, err := pointerToAnySlice(flatAny)
+	if err == nil {
+		err = decoder.Decode(ptrAny)
+	}
 	if err != nil {
 		err = errors.Wrapf(err, "failed to deserialize Tensor data")
 		// Destroy the buffer since it's not going to be used.
@@ -638,6 +618,43 @@ func GobDeserializeToDevice(
 		deviceNum: deviceNum,
 	}
 	return t, nil
+}
+
+// pointerToAnySlice is a helper function that returns a pointer to a slice of any type.
+// It uses a switch over the known DTypes, which is faster than using reflection.
+func pointerToAnySlice(flatAny any) (any, error) {
+	switch flat := flatAny.(type) {
+	case []float32:
+		return &flat, nil
+	case []float64:
+		return &flat, nil
+	case []float16.Float16:
+		return &flat, nil
+	case []bfloat16.BFloat16:
+		return &flat, nil
+	case []int8:
+		return &flat, nil
+	case []int16:
+		return &flat, nil
+	case []int32:
+		return &flat, nil
+	case []int64:
+		return &flat, nil
+	case []uint8:
+		return &flat, nil
+	case []uint16:
+		return &flat, nil
+	case []uint32:
+		return &flat, nil
+	case []uint64:
+		return &flat, nil
+	case []complex64:
+		return &flat, nil
+	case []complex128:
+		return &flat, nil
+	default:
+		return nil, errors.Errorf("unsupported dtype for pointerToAnySlice: %T", flatAny)
+	}
 }
 
 // Save the Local tensor to the given file path.

@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
@@ -274,8 +275,8 @@ func (t *Tensor) lockedMaterializeOnDevice(backend backends.Backend, share bool,
 		if err != nil {
 			return errors.WithMessagef(err, "Tensor.MustMaterializeOnDevice: failed to create a shared buffer")
 		}
-		sharedBytes := flatBytes(t.sharedFlat)
-		localBytes := flatBytes(t.local.flat)
+		sharedBytes := dtypes.UnsafeByteSliceFromAny(t.sharedFlat)
+		localBytes := dtypes.UnsafeByteSliceFromAny(t.local.flat)
 		copy(sharedBytes, localBytes)
 		t.local = nil // Free local storage.
 		t.isShared = true
