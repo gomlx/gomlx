@@ -9,7 +9,7 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/dustin/go-humanize v1.0.1
 	github.com/go-gota/gota v0.12.0
-	github.com/gomlx/go-huggingface v0.3.5-0.20260402114304-72eaf97b2ffb
+	github.com/gomlx/go-huggingface v0.3.5-0.20260404090402-31d6be6ff68d
 	github.com/gomlx/gomlx v0.27.3-0.20260404085421-21303d6f55f6
 	github.com/gomlx/onnx-gomlx v0.4.2-0.20260329071313-0b8b7e4d5a02
 	github.com/janpfeifer/gonb v0.11.3
@@ -31,6 +31,7 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/edsrzf/mmap-go v1.2.0 // indirect
 	github.com/eliben/go-sentencepiece v0.7.0 // indirect
 	github.com/erkkah/margaid v0.3.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
