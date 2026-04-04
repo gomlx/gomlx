@@ -4,6 +4,7 @@ package tensors
 
 import (
 	"reflect"
+	"unsafe"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
@@ -625,11 +626,33 @@ func (t *Tensor) Device() (backends.DeviceNum, error) {
 	return t.onDevice.deviceNum, nil
 }
 
-// FromShapeForBackend creates a new tensor with the given shape, to be used with the given backend.
+// FromShapeForBackend creates a new tensor with the given shape, to be used with the given backend and deviceNum
+// (usually 0 if you only have one device).
 //
 // If the backend supports shared buffers, it creates the tensor using a shared buffer.
-// Otherwise, or if the backend is nil, it creates a local copy of the tensor, and works just like FromShape().
-func FromShapeForBackend(backend backends.Backend, shape shapes.Shape) (*Tensor, error) {
+//
+// If the backend is nil or if the backend does not support shared buffers, it creates a local copy of the tensor,
+// and works just like FromShape().
+//
+// Notice, there is no point in simply creating a tensor on-device without shared buffers, since one cannot edit
+// data directly on-device (simply copy the whole tensor over). See FromShapeAndBytesForBackend instead if you
+// have data to transfer directly to the backend.
+func FromShapeForBackend(backend backends.Backend, deviceNum backends.DeviceNum, shape shapes.Shape) (*Tensor, error) {
+	t, err := fromShapeForBackendUninitialized(backend, deviceNum, shape)
+	if err != nil {
+		return nil, err
+	}
+
+	// Initialize the shared memory with zeros to match FromShape.
+	t.MutableBytes(func(buf []byte) {
+		clear(buf)
+	})
+	return t, nil
+}
+
+// fromShapeForBackendUninitialized implements FromShapeForBackend() but doesn't initialize the shared buffer with
+// zeros -- although some backends may initialize it anyway.
+func fromShapeForBackendUninitialized(backend backends.Backend, deviceNum backends.DeviceNum, shape shapes.Shape) (*Tensor, error) {
 	if backend == nil || !backend.HasSharedBuffers() {
 		return FromShape(shape), nil
 	}
@@ -637,10 +660,10 @@ func FromShapeForBackend(backend backends.Backend, shape shapes.Shape) (*Tensor,
 		return nil, errors.New("invalid shape")
 	}
 
-	deviceNum := defaultDeviceNums[0]
 	buffer, sharedFlat, err := backend.NewSharedBuffer(deviceNum, shape)
 	if err != nil {
-		return nil, errors.WithMessagef(err, "FromShapeForBackend: failed to create shared buffer")
+		return nil, errors.WithMessagef(err, "failed to create shared buffer for shape %s on device %d, on backend %s",
+			shape, deviceNum, backend.Name())
 	}
 
 	t := newEmptyTensor(shape)
@@ -653,10 +676,59 @@ func FromShapeForBackend(backend backends.Backend, shape shapes.Shape) (*Tensor,
 		buffer:    buffer,
 		deviceNum: deviceNum,
 	}
-
-	// Initialize the shared memory with zeros to match FromShape.
-	t.MutableBytes(func(buf []byte) {
-		clear(buf)
-	})
 	return t, nil
+}
+
+// FromShapeAndBytesForBackend returns a tensor with the given shape and dtype, filled with the flattened values given
+// in `data` as the raw bytes -- it's up to the user to use the correct endianess for the backend.
+//
+// The data is copied to the Tensor.
+// And it panics if the size of data is wrong for the shape.
+//
+// If the backend supports shared buffers, it creates the tensor using a shared buffer.
+//
+// This is the most performant way to upload a backend tensor with some data, avoiding unnecessary copies.
+// It works well with mmap (memory-mapped) files, where data can be accessed directly from kernel buffers
+// (saving a copy to a temporary buffer that is initialized to 0 in Go, etc.)
+func FromShapeAndBytesForBackend(
+	backend backends.Backend, deviceNum backends.DeviceNum, shape shapes.Shape, data []byte) (*Tensor, error) {
+	if int(shape.Memory()) != len(data) {
+		return nil, errors.Errorf("shape %s has %d bytes, but data has %d bytes", shape, shape.Memory(), len(data))
+	}
+
+	switch {
+	case backend == nil:
+		// Local copy:
+		t := FromShape(shape)
+		t.MutableBytes(func(buf []byte) {
+			copy(buf, data)
+		})
+		return t, nil
+
+	case backend.HasSharedBuffers():
+		// Create a (uninitialized) shared buffer and copy the data over it.
+		t, err := fromShapeForBackendUninitialized(backend, deviceNum, shape)
+		if err != nil {
+			return nil, err
+		}
+		t.MutableBytes(func(buf []byte) {
+			copy(buf, data)
+		})
+		return t, nil
+
+	default:
+		// Create buffer directly on backend.
+		var length int
+		var bytesPtr unsafe.Pointer
+		if len(data) > 0 {
+			bytesPtr = unsafe.Pointer(&data[0])
+			length = shape.Size() / shape.DType.ValuesPerStorageUnit()
+		}
+		flatAny := dtypes.UnsafeAnySliceFromBytes(bytesPtr, shape.DType, length)
+		backendBuf, err := backend.BufferFromFlatData(0, flatAny, shape)
+		if err != nil {
+			return nil, err
+		}
+		return FromBuffer(backend, backendBuf)
+	}
 }
