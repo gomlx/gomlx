@@ -165,7 +165,7 @@ func metalExecWhile(b *Backend, node *Node, results []*Buffer, inputBufs []*Buff
 	for i := range stateCount {
 		results[node.multiOutputsNodes[i].idx] = state[i]
 	}
-	
+
 	return nil
 }
 
@@ -173,28 +173,28 @@ func scalarBoolFromBuffer(buf *Buffer, opName string) (bool, error) {
 	if err := metalHostGPUSync(); err != nil {
 		return false, errors.WithMessagef(err, "%s: sync predicate", opName)
 	}
-	
+
 	predAny := flatFromBuffer(buf)
 	predBools, ok := predAny.([]bool)
-	
+
 	if !ok {
 		return false, errors.Errorf("%s: need scalar bool buffer, got %T", opName, predAny)
 	}
-	
+
 	if len(predBools) != 1 {
 		return false, errors.Errorf("%s: need scalar bool, got %d elements", opName, len(predBools))
 	}
-	
+
 	return predBools[0], nil
 }
 
 func tensorBufferBytes(buf *Buffer) []byte {
 	n := buf.shape.Size() * int(buf.shape.DType.Size())
-	
+
 	if n <= 0 {
 		return nil
 	}
-	
+
 	return unsafe.Slice((*byte)(buf.contents()), n)
 }
 
@@ -209,17 +209,17 @@ func bufferAliasedIn(buf *Buffer, protected []*Buffer) bool {
 	if buf == nil {
 		return false
 	}
-	
+
 	for _, p := range protected {
 		if p == nil {
 			continue
 		}
-	
+
 		if p == buf || (p.mtl != nil && buf.mtl != nil && p.mtl == buf.mtl) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -230,11 +230,11 @@ func releaseTmpBufferUnlessAliased(buf *Buffer, protected []*Buffer) {
 	if buf == nil || buf.mtl == nil {
 		return
 	}
-	
+
 	if bufferAliasedIn(buf, protected) {
 		return
 	}
-	
+
 	mtlRelease(buf.mtl)
 	buf.mtl = nil
 }
@@ -244,27 +244,27 @@ func metalSortRowGPUBitonic(
 	idxBuf *Buffer, baseOffset, axisStride, axisSize, inputCount int,
 ) error {
 	indexFlat := flatFromBuffer(idxBuf).([]int32)
-	
+
 	for i := range indexFlat {
 		indexFlat[i] = int32(i)
 	}
-	
+
 	sortBaseProtect := append(append(append(make([]*Buffer, 0,
 		len(tensors)+len(outputs)+len(compParams)+len(capComp)+1), tensors...), outputs...), compParams...)
 	sortBaseProtect = append(sortBaseProtect, capComp...)
 	sortBaseProtect = append(sortBaseProtect, idxBuf)
 
 	var cmpTrash []*Buffer
-	
+
 	for k := uint32(2); k <= uint32(axisSize); k <<= 1 {
 		for j := k >> 1; j > 0; j >>= 1 {
 			for gid := uint32(0); gid < uint32(axisSize); gid++ {
 				ix := gid ^ j
-	
+
 				if ix <= gid {
 					continue
 				}
-	
+
 				for t := 0; t < inputCount; t++ {
 					es := uint32(outputs[t].shape.DType.Size())
 					if err := metalSortLoadPairBytes(outputs[t], compParams[2*t], compParams[2*t+1], idxBuf,
@@ -272,28 +272,28 @@ func metalSortRowGPUBitonic(
 						return errors.WithMessage(err, "Sort: load pair")
 					}
 				}
-	
+
 				compOut, err := data.comparator.compiled.run(b, compParams, capComp)
-	
+
 				if err != nil {
 					return errors.WithMessage(err, "Sort: comparator")
 				}
-	
+
 				bb := compOut[0]
-	
+
 				if err := metalSortBitonicSwapIdx(idxBuf, bb, k, j, uint32(axisSize)); err != nil {
 					return errors.WithMessage(err, "Sort: bitonic swap")
 				}
-	
+
 				cmpTrash = append(cmpTrash, bb)
 			}
 		}
 	}
-	
+
 	for _, bb := range cmpTrash {
 		releaseTmpBufferUnlessAliased(bb, sortBaseProtect)
 	}
-	
+
 	return nil
 }
 
@@ -302,19 +302,28 @@ func metalSortRowGPUOddEven(
 	idxBuf *Buffer, baseOffset, axisStride, axisSize, inputCount int,
 	stable bool,
 ) error {
+	const maxOddEvenSortAxis = 4096
 	indexFlat := flatFromBuffer(idxBuf).([]int32)
-	
+
 	for i := range indexFlat {
 		indexFlat[i] = int32(i)
 	}
-	
+
 	sortBaseProtect := append(append(append(make([]*Buffer, 0,
 		len(tensors)+len(outputs)+len(compParams)+len(capComp)+1), tensors...), outputs...), compParams...)
 	sortBaseProtect = append(sortBaseProtect, capComp...)
 	sortBaseProtect = append(sortBaseProtect, idxBuf)
 
 	var cmpTrash []*Buffer
-	
+
+	// Odd-even transposition sort performs O(axisSize^2) comparator evaluations.
+	// Guard large fibers instead of silently running a quadratic fallback that can
+	// stall execution for stable sorts or non-power-of-two unstable sorts.
+	if axisSize > maxOddEvenSortAxis {
+		return errors.Errorf("Sort: odd-even GPU sort is O(n^2) and limited to axis size <= %d, got %d",
+			maxOddEvenSortAxis, axisSize)
+	}
+
 	for range axisSize {
 		for parity := range 2 {
 			for i := parity; i+1 < axisSize; i += 2 {
@@ -325,25 +334,25 @@ func metalSortRowGPUOddEven(
 						// lhs = keys at i+1, rhs = keys at i => pred means strict inversion (stable).
 						si, sj = uint32(i+1), uint32(i)
 					}
-	
+
 					if err := metalSortLoadPairBytes(outputs[t], compParams[2*t], compParams[2*t+1], idxBuf,
 						uint32(baseOffset), uint32(axisStride), es, si, sj); err != nil {
 						return errors.WithMessage(err, "Sort: load pair")
 					}
 				}
-	
+
 				compOut, err := data.comparator.compiled.run(b, compParams, capComp)
-	
+
 				if err != nil {
 					return errors.WithMessage(err, "Sort: comparator")
 				}
-	
+
 				bb := compOut[0]
-	
+
 				if err := metalSortAdjacentSwapIdx(idxBuf, bb, uint32(i), uint32(axisSize), stable); err != nil {
 					return errors.WithMessage(err, "Sort: adjacent swap")
 				}
-	
+
 				cmpTrash = append(cmpTrash, bb)
 			}
 		}
@@ -352,7 +361,7 @@ func metalSortRowGPUOddEven(
 	for _, bb := range cmpTrash {
 		releaseTmpBufferUnlessAliased(bb, sortBaseProtect)
 	}
-	
+
 	return nil
 }
 
@@ -361,19 +370,19 @@ func metalExecSort(b *Backend, node *Node, results []*Buffer, inputBufs []*Buffe
 	axis := data.axis
 	isStable := data.isStable
 	inputCount := data.inputCount
-	
+
 	if len(inputBufs) < inputCount {
 		return errors.Errorf("Sort: expected %d tensor inputs", inputCount)
 	}
-	
+
 	tensors := inputBufs[:inputCount]
 
 	capComp, err := closureCaptureBufs(node, results, 0)
-	
+
 	if err != nil {
 		return err
 	}
-	
+
 	if data.comparator.compiled == nil {
 		return errors.New("Sort: comparator not compiled")
 	}
@@ -383,17 +392,17 @@ func metalExecSort(b *Backend, node *Node, results []*Buffer, inputBufs []*Buffe
 	axisSize := shape.Dimensions[axis]
 
 	outerSize := 1
-	
+
 	for i := range axis {
 		outerSize *= shape.Dimensions[i]
 	}
-	
+
 	innerSize := 1
-	
+
 	for i := axis + 1; i < rank; i++ {
 		innerSize *= shape.Dimensions[i]
 	}
-	
+
 	axisStride := innerSize
 
 	useGPUBitonic := !isStable && axisSize >= 2 && sortAxisIsPow2(axisSize)
@@ -402,7 +411,7 @@ func metalExecSort(b *Backend, node *Node, results []*Buffer, inputBufs []*Buffe
 
 	outputs := make([]*Buffer, inputCount)
 	rowTemps := make([]*Buffer, inputCount)
-	
+
 	for i, t := range tensors {
 		outputs[i] = allocDuringExec(t.shape)
 		es := int(t.shape.DType.Size())
@@ -412,9 +421,9 @@ func metalExecSort(b *Backend, node *Node, results []*Buffer, inputBufs []*Buffe
 		}
 		rowTemps[i] = allocDuringExec(shapes.Make(dtypes.Uint8, axisSize*es))
 	}
-	
+
 	idxBuf := allocDuringExec(shapes.Make(dtypes.Int32, axisSize))
-	
+
 	defer func() {
 		releaseTmpBuffer(idxBuf)
 		for _, rt := range rowTemps {
@@ -423,13 +432,13 @@ func metalExecSort(b *Backend, node *Node, results []*Buffer, inputBufs []*Buffe
 	}()
 
 	compParams := make([]*Buffer, 2*inputCount)
-	
+
 	for i := range inputCount {
 		sc := shapesScalar(tensors[i].shape.DType)
 		compParams[2*i] = allocDuringExec(sc)
 		compParams[2*i+1] = allocDuringExec(sc)
 	}
-	
+
 	defer func() {
 		for _, p := range compParams {
 			releaseTmpBuffer(p)
@@ -439,27 +448,27 @@ func metalExecSort(b *Backend, node *Node, results []*Buffer, inputBufs []*Buffe
 	for outer := 0; outer < outerSize; outer++ {
 		for inner := 0; inner < innerSize; inner++ {
 			baseOffset := outer*axisSize*innerSize + inner
-	
+
 			if axisSize < 2 {
 				continue
 			}
-	
+
 			if useGPUBitonic {
 				if err := metalSortRowGPUBitonic(b, data, tensors, outputs, compParams, capComp, idxBuf,
 					baseOffset, axisStride, axisSize, inputCount); err != nil {
 					return err
 				}
-	
+
 				be := uint32(baseOffset)
 				ast := uint32(axisStride)
 				asz := uint32(axisSize)
-	
+
 				for k, ob := range outputs {
 					if err := metalGatherScatterAxisPermute(ob, rowTemps[k], idxBuf, be, ast, asz); err != nil {
 						return errors.WithMessage(err, "Sort: axis permute")
 					}
 				}
-	
+
 				continue
 			}
 			if useGPUOddEven {
@@ -467,17 +476,17 @@ func metalExecSort(b *Backend, node *Node, results []*Buffer, inputBufs []*Buffe
 					baseOffset, axisStride, axisSize, inputCount, false); err != nil {
 					return err
 				}
-	
+
 				be := uint32(baseOffset)
 				ast := uint32(axisStride)
 				asz := uint32(axisSize)
-	
+
 				for k, ob := range outputs {
 					if err := metalGatherScatterAxisPermute(ob, rowTemps[k], idxBuf, be, ast, asz); err != nil {
 						return errors.WithMessage(err, "Sort: axis permute")
 					}
 				}
-	
+
 				continue
 			}
 			if useGPUStableOddEven {
@@ -485,17 +494,17 @@ func metalExecSort(b *Backend, node *Node, results []*Buffer, inputBufs []*Buffe
 					baseOffset, axisStride, axisSize, inputCount, true); err != nil {
 					return err
 				}
-	
+
 				be := uint32(baseOffset)
 				ast := uint32(axisStride)
 				asz := uint32(axisSize)
-	
+
 				for k, ob := range outputs {
 					if err := metalGatherScatterAxisPermute(ob, rowTemps[k], idxBuf, be, ast, asz); err != nil {
 						return errors.WithMessage(err, "Sort: axis permute")
 					}
 				}
-	
+
 				continue
 			}
 

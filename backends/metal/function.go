@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
+	"github.com/x448/float16"
 )
 
 // Function implements backends.Function for the Metal backend.
@@ -145,9 +146,10 @@ func (f *Function) addNode(opType backends.OpType, shape shapes.Shape, inputs []
 	return node
 }
 
-// checkValues validates inputs belong to this builder.
+// checkValues validates inputs, rejects post-compile mutations, and canonicalizes
+// ancestor references into captured nodes for closures.
 func (f *Function) checkValues(opName string, values ...backends.Value) ([]*Node, error) {
-	return f.builder.checkValues(opName, values...)
+	return f.verifyAndCastValues(opName, values...)
 }
 
 // ─── Parameter & Constant ───────────────────────────────────────────────────
@@ -640,13 +642,9 @@ func (f *Function) Concatenate(axis int, operands ...backends.Value) (backends.V
 	if len(operands) == 0 {
 		return nil, errors.New("Concatenate: no operands")
 	}
-	nodes := make([]*Node, len(operands))
-	for i, v := range operands {
-		node, ok := v.(*Node)
-		if !ok {
-			return nil, errors.Errorf("Concatenate: operand #%d is not a metal node", i)
-		}
-		nodes[i] = node
+	nodes, err := f.verifyAndCastValues("Concatenate", operands...)
+	if err != nil {
+		return nil, err
 	}
 	inputShapes := make([]shapes.Shape, len(nodes))
 	for i, n := range nodes {
@@ -1566,7 +1564,7 @@ func (f *Function) applyDenseActivation(x backends.Value, act backends.Activatio
 	case backends.ActivationNone:
 		return x, nil
 	case backends.ActivationRelu:
-		z, err := f.Constant([]float32{0})
+		z, err := f.scalarConstantForDType(sh.DType, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -1589,19 +1587,19 @@ func (f *Function) applyDenseActivation(x backends.Value, act backends.Activatio
 		// Match simplego fusedDenseApplyActivation (scale 1/6, bias 0.5, clamp to [0,1], then x * clamped).
 		xN := inputs[0]
 		sh := xN.shape
-		scaleConst, err := f.Constant([]float32{float32(1.0 / 6.0)})
+		scaleConst, err := f.scalarConstantForDType(sh.DType, float32(1.0/6.0))
 		if err != nil {
 			return nil, err
 		}
-		biasConst, err := f.Constant([]float32{0.5})
+		biasConst, err := f.scalarConstantForDType(sh.DType, 0.5)
 		if err != nil {
 			return nil, err
 		}
-		zeroConst, err := f.Constant([]float32{0})
+		zeroConst, err := f.scalarConstantForDType(sh.DType, 0)
 		if err != nil {
 			return nil, err
 		}
-		oneConst, err := f.Constant([]float32{1})
+		oneConst, err := f.scalarConstantForDType(sh.DType, 1)
 		if err != nil {
 			return nil, err
 		}
@@ -1636,6 +1634,17 @@ func (f *Function) applyDenseActivation(x backends.Value, act backends.Activatio
 		return f.Mul(xN, clamped)
 	default:
 		return nil, errors.Errorf("metal FusedDense: unknown activation %v", act)
+	}
+}
+
+func (f *Function) scalarConstantForDType(dtype dtypes.DType, value float32) (backends.Value, error) {
+	switch dtype {
+	case dtypes.Float16:
+		return f.Constant([]float16.Float16{float16.Fromfloat32(value)})
+	case dtypes.Float32:
+		return f.Constant([]float32{value})
+	default:
+		return nil, errors.Errorf("metal activation: unsupported scalar dtype %s", dtype)
 	}
 }
 
@@ -1808,6 +1817,9 @@ type nodeFusedQuantizedDense struct {
 func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value,
 	weightsQuantization *backends.Quantization,
 	activation backends.ActivationType) (backends.Value, error) {
+	if weightsQuantization == nil {
+		return nil, errors.New("FusedQuantizedDense: weightsQuantization must not be nil")
+	}
 
 	scales := weightsQuantization.Scale
 	zeroPoints := weightsQuantization.ZeroPoint
@@ -1878,21 +1890,37 @@ func (f *Function) Bitcast(x backends.Value, targetDType dtypes.DType) (backends
 		return nil, err
 	}
 	inShape := inputs[0].shape
+	if inShape.Rank() == 0 {
+		return nil, errors.New("Bitcast: rank-0 tensors are not supported")
+	}
 	srcSize := int(inShape.DType.Size())
 	dstSize := int(targetDType.Size())
 	var outDims []int
 	if srcSize == dstSize {
 		outDims = inShape.Dimensions
 	} else if srcSize > dstSize {
+		if srcSize%dstSize != 0 {
+			return nil, errors.Errorf("Bitcast: source element size %d is not divisible by target size %d", srcSize, dstSize)
+		}
 		// Last dim expands: e.g. f32 -> f16 doubles last dim
 		outDims = make([]int, inShape.Rank())
 		copy(outDims, inShape.Dimensions)
-		outDims[len(outDims)-1] *= srcSize / dstSize
+		factor := srcSize / dstSize
+		outDims[len(outDims)-1] *= factor
 	} else {
+		if dstSize%srcSize != 0 {
+			return nil, errors.Errorf("Bitcast: target element size %d is not divisible by source size %d", dstSize, srcSize)
+		}
 		// Last dim contracts
 		outDims = make([]int, inShape.Rank())
 		copy(outDims, inShape.Dimensions)
-		outDims[len(outDims)-1] /= dstSize / srcSize
+		factor := dstSize / srcSize
+		last := len(outDims) - 1
+		if outDims[last]%factor != 0 {
+			return nil, errors.Errorf("Bitcast: last dimension %d is not divisible by contraction factor %d",
+				outDims[last], factor)
+		}
+		outDims[last] /= factor
 	}
 	outShape := shapes.Make(targetDType, outDims...)
 	// Bitcast is zero-copy — same bits, different type interpretation

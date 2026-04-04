@@ -5,6 +5,7 @@
 #import <Metal/Metal.h>
 #import <CoreFoundation/CoreFoundation.h>
 #include "metal.h"
+#include <stdio.h>
 #include <string.h>
 
 // ─── Global state ───────────────────────────────────────────────────────────
@@ -12,6 +13,7 @@
 static id<MTLDevice>       g_device       = nil;
 static id<MTLCommandQueue> g_commandQueue = nil;
 static id<MTLLibrary>      g_library      = nil;
+static id<MTLBuffer>       g_dummyParamBuffer = nil;
 
 // Pipeline cache: we lazily create pipelines on first use.
 static NSMutableDictionary<NSString*, id<MTLComputePipelineState>>* g_pipelines = nil;
@@ -51,13 +53,25 @@ int metal_init(const char* metallib_path) {
             return -3;
         }
 
+        g_dummyParamBuffer = [g_device newBufferWithLength:sizeof(float)
+                                                   options:MTLResourceStorageModeShared];
+        if (!g_dummyParamBuffer) {
+            g_library = nil;
+            g_pipelines = nil;
+            g_pipelineLock = nil;
+            g_commandQueue = nil;
+            g_device = nil;
+            return -4;
+        }
+        memset([g_dummyParamBuffer contents], 0, sizeof(float));
+
         return 0;
     }
 }
 
 const char* metal_device_name(void) {
-    if (!g_device) return "unavailable";
-    return [[g_device name] UTF8String];
+    if (!g_device) return strdup("unavailable");
+    return strdup([[g_device name] UTF8String]);
 }
 
 void metal_finalize(void) {
@@ -70,6 +84,7 @@ void metal_finalize(void) {
         [g_pipelines removeAllObjects];
         g_pipelines = nil;
         g_pipelineLock = nil;
+        g_dummyParamBuffer = nil;
         g_library = nil;
         g_commandQueue = nil;
         g_device = nil;
@@ -79,11 +94,20 @@ void metal_finalize(void) {
 // ─── Pipeline cache ─────────────────────────────────────────────────────────
 
 static id<MTLComputePipelineState> get_pipeline(NSString* name) {
+    if (!name) return nil;
+    if (!g_pipelineLock || !g_pipelines) {
+        NSLog(@"gomlx-metal: pipeline cache unavailable for %@", name);
+        return nil;
+    }
     [g_pipelineLock lock];
     id<MTLComputePipelineState> pipeline = g_pipelines[name];
     [g_pipelineLock unlock];
 
     if (pipeline) return pipeline;
+    if (!g_library || !g_device) {
+        NSLog(@"gomlx-metal: pipeline lookup after shutdown for %@", name);
+        return nil;
+    }
 
     id<MTLFunction> fn = [g_library newFunctionWithName:name];
     if (!fn) {
@@ -99,6 +123,11 @@ static id<MTLComputePipelineState> get_pipeline(NSString* name) {
     }
 
     [g_pipelineLock lock];
+    id<MTLComputePipelineState> existing = g_pipelines[name];
+    if (existing) {
+        [g_pipelineLock unlock];
+        return existing;
+    }
     g_pipelines[name] = pipeline;
     [g_pipelineLock unlock];
 
@@ -377,18 +406,20 @@ int metal_fused_layernorm(MetalBuffer x, MetalBuffer gamma, MetalBuffer beta,
 
         id<MTLCommandBuffer> cb = (g_encode_cb != nil) ? g_encode_cb : [g_commandQueue commandBuffer];
         id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+        id<MTLBuffer> dummy = g_dummyParamBuffer;
+        if (!dummy) return -1;
 
         [enc setBuffer:(__bridge id<MTLBuffer>)x     offset:0 atIndex:0];
         // gamma/beta may be NULL — set a dummy buffer if so
         if (has_gamma && gamma) {
             [enc setBuffer:(__bridge id<MTLBuffer>)gamma offset:0 atIndex:1];
         } else {
-            [enc setBuffer:(__bridge id<MTLBuffer>)x offset:0 atIndex:1]; // dummy
+            [enc setBuffer:dummy offset:0 atIndex:1];
         }
         if (has_beta && beta) {
             [enc setBuffer:(__bridge id<MTLBuffer>)beta offset:0 atIndex:2];
         } else {
-            [enc setBuffer:(__bridge id<MTLBuffer>)x offset:0 atIndex:2]; // dummy
+            [enc setBuffer:dummy offset:0 atIndex:2];
         }
         [enc setBuffer:(__bridge id<MTLBuffer>)dst offset:0 atIndex:3];
         [enc setBytes:&batch_size length:sizeof(uint32_t) atIndex:4];
@@ -782,19 +813,6 @@ int metal_reverse_inner(MetalBuffer src, MetalBuffer dst,
     }
 }
 
-// ─── Generic config-buffer dispatch helper ──────────────────────────────────
-// Many complex ops share the pattern: src + dst + config buffer + total_elements.
-// This helper creates a temp Metal buffer from raw bytes for the config.
-
-static MetalBuffer create_config_buffer(const void* data, size_t bytes) {
-    if (!g_device || bytes == 0) return NULL;
-    id<MTLBuffer> buf = [g_device newBufferWithBytes:data
-                                              length:bytes
-                                             options:MTLResourceStorageModeShared];
-    if (!buf) return NULL;
-    return (MetalBuffer)CFBridgingRetain(buf);
-}
-
 // ─── BroadcastInDim ─────────────────────────────────────────────────────────
 
 int metal_broadcast_in_dim(MetalBuffer src, MetalBuffer dst,
@@ -1185,7 +1203,12 @@ static size_t scatter_elem_size(int sk) {
 static int scatter_cb_commit_wait(id<MTLCommandBuffer> cb) {
     [cb commit];
     [cb waitUntilCompleted];
-    return ([cb error] != nil) ? -1 : 0;
+    return ([cb error] != nil) ? -5 : 0;
+}
+
+static int scatter_stage_finish(id<MTLCommandBuffer> cb) {
+    if (g_encode_cb != nil && cb == g_encode_cb) return 0;
+    return scatter_cb_commit_wait(cb);
 }
 
 // Parallel int64/uint64 scatter: radix sort + segmented scan + parallel writes.
@@ -1267,7 +1290,7 @@ static int metal_run_scatter_64_fast(
         return -1;
 
     {
-        id<MTLCommandBuffer> cb = [g_commandQueue commandBuffer];
+        id<MTLCommandBuffer> cb = (g_encode_cb != nil) ? g_encode_cb : [g_commandQueue commandBuffer];
         id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
         [enc setComputePipelineState:pipeProj];
         [enc setBuffer:k0 offset:0 atIndex:0];
@@ -1288,7 +1311,7 @@ static int metal_run_scatter_64_fast(
         [enc setBytes:&pad_key_base length:sizeof(uint32_t) atIndex:4];
         dispatch_1d(pipePad, enc, npad);
         [enc endEncoding];
-        if (scatter_cb_commit_wait(cb) != 0) return -1;
+        if (scatter_stage_finish(cb) != 0) return -5;
     }
 
     id<MTLBuffer> kIn = k0;
@@ -1299,7 +1322,7 @@ static int metal_run_scatter_64_fast(
     for (int pass = 0; pass < 4; pass++) {
         uint32_t shift = (uint32_t)(pass * 8);
 
-        id<MTLCommandBuffer> cb = [g_commandQueue commandBuffer];
+        id<MTLCommandBuffer> cb = (g_encode_cb != nil) ? g_encode_cb : [g_commandQueue commandBuffer];
         id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
 
         [enc setComputePipelineState:pipeRadixPrep];
@@ -1331,7 +1354,7 @@ static int metal_run_scatter_64_fast(
         [enc setBytes:&npad length:sizeof(uint32_t) atIndex:5];
         dispatch_1d(pipeGather, enc, npad);
         [enc endEncoding];
-        if (scatter_cb_commit_wait(cb) != 0) return -1;
+        if (scatter_stage_finish(cb) != 0) return -5;
 
         id<MTLBuffer> kt = kIn;
         kIn = kOut;
@@ -1347,7 +1370,7 @@ static int metal_run_scatter_64_fast(
     id<MTLBuffer> inBuf = vSorted;
     id<MTLBuffer> outBuf = sa;
     for (uint32_t stride = 1u; stride < npad; stride <<= 1u) {
-        id<MTLCommandBuffer> cb = [g_commandQueue commandBuffer];
+        id<MTLCommandBuffer> cb = (g_encode_cb != nil) ? g_encode_cb : [g_commandQueue commandBuffer];
         id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
         [enc setComputePipelineState:pipeScan];
         [enc setBuffer:kSorted offset:0 atIndex:0];
@@ -1357,7 +1380,7 @@ static int metal_run_scatter_64_fast(
         [enc setBytes:&npad length:sizeof(uint32_t) atIndex:4];
         dispatch_1d(pipeScan, enc, npad);
         [enc endEncoding];
-        if (scatter_cb_commit_wait(cb) != 0) return -1;
+        if (scatter_stage_finish(cb) != 0) return -5;
         id<MTLBuffer> tmp = inBuf;
         inBuf = outBuf;
         outBuf = tmp;
@@ -1365,7 +1388,7 @@ static int metal_run_scatter_64_fast(
     id<MTLBuffer> vFinal = inBuf;
 
     {
-        id<MTLCommandBuffer> cb = [g_commandQueue commandBuffer];
+        id<MTLCommandBuffer> cb = (g_encode_cb != nil) ? g_encode_cb : [g_commandQueue commandBuffer];
         id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
         [enc setComputePipelineState:pipeApply];
         [enc setBuffer:dstBuf offset:0 atIndex:0];
@@ -1375,7 +1398,7 @@ static int metal_run_scatter_64_fast(
         [enc setBytes:&npad length:sizeof(uint32_t) atIndex:4];
         dispatch_1d(pipeApply, enc, npad);
         [enc endEncoding];
-        if (scatter_cb_commit_wait(cb) != 0) return -1;
+        if (scatter_stage_finish(cb) != 0) return -5;
     }
     return 0;
 }
@@ -1727,10 +1750,12 @@ int metal_bn_gradient(
 }
 
 // ─── AdamW step ─────────────────────────────────────────────────────────────
+// Deliberate stub: optimizer updates are applied at the graph level in GoMLX.
 
 int metal_adamw_step(MetalBuffer param, MetalBuffer grad,
                      MetalBuffer m_buf, MetalBuffer v_buf, MetalBuffer dst,
                      uint32_t num_elements, float lr, float beta1, float beta2,
                      float epsilon, float weight_decay, int step, int dtype) {
-    return -1; // Optimizers are handled at the graph level in GoMLX.
+    fprintf(stderr, "gomlx-metal: metal_adamw_step is unsupported; optimizers are handled at the graph level in GoMLX\n");
+    return -5;
 }

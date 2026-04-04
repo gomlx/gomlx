@@ -25,7 +25,8 @@ Untitled.ipynb
 /CLAUDE.md
 /conductor
 
+# Metal backend build artifacts
 *.air
 *.metallib
 
-Makefile
+/Makefile

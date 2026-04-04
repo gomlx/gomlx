@@ -114,7 +114,7 @@ kernel void fused_sdpa_f32(
         threadgroup_barrier(mem_flags::mem_threadgroup);
     }
     float global_sum = shared_sum[0];
-    float inv_sum = 1.0f / global_sum;
+    float inv_sum = (global_sum > 0.0f) ? (1.0f / global_sum) : 0.0f;
 
     // Pass 2: accumulate weighted V
     // Each thread writes to its portion of the output head_dim vector.
@@ -231,7 +231,8 @@ kernel void fused_sdpa_f16(
         if (tid < s2) shared_sum[tid] += shared_sum[tid + s2];
         threadgroup_barrier(mem_flags::mem_threadgroup);
     }
-    float inv_sum = 1.0f / shared_sum[0];
+    float global_sum = shared_sum[0];
+    float inv_sum = (global_sum > 0.0f) ? (1.0f / global_sum) : 0.0f;
 
     for (uint d = tid; d < head_dim; d += tg_size) {
         float acc = 0.0f;

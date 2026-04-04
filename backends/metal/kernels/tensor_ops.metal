@@ -667,6 +667,7 @@ kernel void gather_f32(
     uint num_offset_axes   = config[4];
     uint num_collapsed     = config[5];
     uint num_start_idx_map = config[6];
+    if (operand_rank > 16 || indices_rank > 16 || output_rank > 16) return;
 
     uint offset = 7;
     device const uint* operand_dims    = config + offset; offset += operand_rank;
@@ -776,6 +777,7 @@ kernel void gather_bytes(
     uint num_offset_axes   = config[4];
     uint num_collapsed     = config[5];
     uint num_start_idx_map = config[6];
+    if (operand_rank > 16 || indices_rank > 16 || output_rank > 16) return;
 
     uint offset = 7;
     device const uint* operand_dims    = config + offset; offset += operand_rank;
@@ -880,6 +882,7 @@ kernel void scatter_sum_f32(
     uint num_update_window = config[4];
     uint num_inserted      = config[5];
     uint num_scatter_map   = config[6];
+    if (operand_rank > 16 || indices_rank > 16 || updates_rank > 16) return;
 
     uint off = 7;
     device const uint* operand_dims    = config + off; off += operand_rank;
@@ -973,6 +976,7 @@ kernel void scatter_sum_f32(
     uint num_update_window = config[4];                                         \
     uint num_inserted      = config[5];                                         \
     uint num_scatter_map   = config[6];                                         \
+    if (operand_rank > 16 || indices_rank > 16 || updates_rank > 16) return;   \
     uint off = 7;                                                               \
     device const uint* operand_dims    = config + off; off += operand_rank;   \
     device const uint* operand_strides = config + off; off += operand_rank;     \
@@ -1085,6 +1089,7 @@ kernel void scatter_max_f32(
     uint num_update_window = config[4];
     uint num_inserted      = config[5];
     uint num_scatter_map   = config[6];
+    if (operand_rank > 16 || indices_rank > 16 || updates_rank > 16) return;
 
     uint off = 7;
     device const uint* operand_dims    = config + off; off += operand_rank;
@@ -1192,6 +1197,7 @@ kernel void scatter_min_f32(
     uint num_update_window = config[4];
     uint num_inserted      = config[5];
     uint num_scatter_map   = config[6];
+    if (operand_rank > 16 || indices_rank > 16 || updates_rank > 16) return;
 
     uint off = 7;
     device const uint* operand_dims    = config + off; off += operand_rank;
@@ -1291,6 +1297,7 @@ kernel void scatter_min_f32(
     uint num_update_window = config[4];                                         \
     uint num_inserted      = config[5];                                         \
     uint num_scatter_map   = config[6];                                         \
+    if (operand_rank > 16 || indices_rank > 16 || updates_rank > 16) return;   \
     uint off = 7;                                                               \
     device const uint* operand_dims    = config + off; off += operand_rank;   \
     device const uint* operand_strides = config + off; off += operand_rank;     \
@@ -1366,6 +1373,7 @@ kernel void scatter_min_f32(
     uint num_update_window = config[4];                                         \
     uint num_inserted      = config[5];                                         \
     uint num_scatter_map   = config[6];                                         \
+    if (operand_rank > 16 || indices_rank > 16 || updates_rank > 16) continue; \
     uint off = 7;                                                               \
     device const uint* operand_dims    = config + off; off += operand_rank;   \
     device const uint* operand_strides = config + off; off += operand_rank;     \
@@ -1441,6 +1449,7 @@ kernel void scatter_min_f32(
     uint num_update_window = config[4];                                         \
     uint num_inserted      = config[5];                                         \
     uint num_scatter_map   = config[6];                                         \
+    if (operand_rank > 16 || indices_rank > 16 || updates_rank > 16) return;   \
     uint off = 7;                                                               \
     device const uint* operand_dims    = config + off; off += operand_rank;   \
     device const uint* operand_strides = config + off; off += operand_rank;     \
@@ -2046,6 +2055,7 @@ kernel void conv_general_f32(
     if (id >= total_elements) return;
 
     uint spatial_rank = config[0];
+    if (spatial_rank > 8) return;
     uint batch_size   = config[1];
     uint in_channels  = config[2];
     uint out_channels = config[3];
@@ -2154,6 +2164,7 @@ kernel void conv_general_f16(
     if (id >= total_elements) return;
 
     uint spatial_rank = config[0];
+    if (spatial_rank > 8) return;
     uint batch_size   = config[1];
     uint in_channels  = config[2];
     uint out_channels = config[3];
@@ -2264,6 +2275,7 @@ kernel void reduce_window_f32(
 
     uint rank         = config[0];
     uint reduce_type  = config[1];
+    if (rank > 16) return;
 
     uint off = 2;
     device const uint* in_dims      = config + off; off += rank;
@@ -2349,6 +2361,7 @@ kernel void reduce_window_f16(
 
     uint rank         = config[0];
     uint reduce_type  = config[1];
+    if (rank > 16) return;
 
     uint off = 2;
     device const uint* in_dims      = config + off; off += rank;

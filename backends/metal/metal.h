@@ -12,6 +12,7 @@ extern "C" {
 
 int metal_device_count(void);
 int metal_init(const char* metallib_path);
+// The returned string is heap-allocated; callers must free() it.
 const char* metal_device_name(void);
 void metal_finalize(void);
 
@@ -249,7 +250,7 @@ int metal_bn_gradient(
     MetalBnGeom geom, float epsilon, int elem_dtype);
 
 // ─── Optimizer steps ────────────────────────────────────────────────────────
-
+// Deliberate stub: GoMLX applies optimizer updates at the graph level, not here.
 int metal_adamw_step(MetalBuffer param, MetalBuffer grad,
                      MetalBuffer m, MetalBuffer v, MetalBuffer dst,
                      uint32_t num_elements, float lr, float beta1, float beta2,

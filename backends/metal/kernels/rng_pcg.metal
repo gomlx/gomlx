@@ -32,7 +32,9 @@ ulong pcg_uint64(thread ulong& hi, thread ulong& lo) {
     return out_hi;
 }
 
-// Thread 0 consumes the PCG stream identically to simplego/RNGBitGenerator (fill bytes from uint64s, LE).
+// Thread 0 intentionally consumes state_in/state_out through a single PCG stream so
+// pcg_uint64 byte ordering matches simplego/RNGBitGenerator exactly. Other tids exit
+// immediately to preserve deterministic sequential output.
 kernel void rng_pcg_fill_bytes(
     device const ulong* state_in  [[buffer(0)]],
     device ulong* state_out        [[buffer(1)]],
@@ -44,7 +46,7 @@ kernel void rng_pcg_fill_bytes(
     ulong hi = state_in[0];
     ulong lo = state_in[1];
     ulong word = 0;
-    int have = 0;
+    uint have = 0;
     for (uint i = 0; i < num_bytes; i++) {
         if (have == 0) {
             word = pcg_uint64(hi, lo);

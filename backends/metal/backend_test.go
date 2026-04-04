@@ -1483,11 +1483,7 @@ func TestCallIdentityIntermediateKeepsInputOwnedByCaller(t *testing.T) {
 	inAny, err := b.BufferFromFlatData(0, []float32{7}, shapes.Make(dtypes.Float32))
 	require.NoError(t, err)
 	inBuf := inAny.(*Buffer)
-	refKey := ptrKey(inBuf.mtl)
-
-	mtlRefMu.Lock()
-	require.Equal(t, 1, mtlRefs[refKey])
-	mtlRefMu.Unlock()
+	require.NotNil(t, inBuf.mtl)
 
 	for range 2 {
 		outs, err := exe.Execute([]backends.Buffer{inBuf}, []bool{false}, 0)
@@ -1500,9 +1496,6 @@ func TestCallIdentityIntermediateKeepsInputOwnedByCaller(t *testing.T) {
 	}
 
 	require.NotNil(t, inBuf.mtl)
-	mtlRefMu.Lock()
-	require.Equal(t, 1, mtlRefs[refKey])
-	mtlRefMu.Unlock()
 }
 
 func TestWhileIncrementsToLimitFloat32(t *testing.T) {

@@ -23,7 +23,7 @@ import (
 // execScratch tracks owned buffer references created during a single Execute.
 // Each entry represents one refcount the current execution is responsible for.
 type execScratch struct {
-	owned []*Buffer
+	owned map[*Buffer]struct{}
 }
 
 func (s *execScratch) alloc(shape shapes.Shape) *Buffer {
@@ -36,24 +36,21 @@ func (s *execScratch) own(buf *Buffer) {
 	if s == nil || buf == nil || buf.mtl == nil {
 		return
 	}
-	for _, owned := range s.owned {
-		if owned == buf {
-			return
-		}
+	if s.owned == nil {
+		s.owned = make(map[*Buffer]struct{})
 	}
-	s.owned = append(s.owned, buf)
+	if _, found := s.owned[buf]; found {
+		return
+	}
+	s.owned[buf] = struct{}{}
 }
 
 func (s *execScratch) owns(buf *Buffer) bool {
 	if s == nil || buf == nil {
 		return false
 	}
-	for _, owned := range s.owned {
-		if owned == buf {
-			return true
-		}
-	}
-	return false
+	_, found := s.owned[buf]
+	return found
 }
 
 func (s *execScratch) transferOutputsTo(parent *execScratch, outputs []*Buffer) {
@@ -92,7 +89,7 @@ func (s *execScratch) releaseExcept(keep map[uintptr]struct{}, buffers []*Buffer
 		}
 	}
 
-	for _, b := range s.owned {
+	for b := range s.owned {
 		if b == nil || b.mtl == nil {
 			continue
 		}
@@ -154,6 +151,8 @@ func (e *Executable) Outputs() (outputShapes []shapes.Shape) {
 func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, defaultDevice backends.DeviceNum) (res []backends.Buffer, err error) {
 	_ = defaultDevice
 	b := e.backend
+	metalExecuteMu.Lock()
+	defer metalExecuteMu.Unlock()
 	b.execMu.Lock()
 	defer b.execMu.Unlock()
 
@@ -581,9 +580,6 @@ func executeReduce(node *Node, input *Buffer) (*Buffer, error) {
 		}
 
 		newDims := currentDims[:len(currentDims)-1]
-		if len(newDims) == 0 {
-			newDims = []int{}
-		}
 		dst := allocDuringExec(shapes.Make(inShape.DType, newDims...))
 
 		if ret := C.metal_reduce_op(cName, current.mtl, dst.mtl,
@@ -2040,7 +2036,7 @@ func computeStrides(dims []int) []int {
 		strides[i] = stride
 		stride *= dims[i]
 	}
-	
+
 	return strides
 }
 
@@ -2107,7 +2103,7 @@ func metalBnGeomFrom(xShape, scaleShape shapes.Shape, fa int) (C.MetalBnGeom, er
 	if xShape.DType != dtypes.Float16 && xShape.DType != dtypes.Float32 {
 		return C.MetalBnGeom{}, errors.New("metal batch norm: float16/float32 only")
 	}
-	
+
 	if scaleShape.DType != xShape.DType {
 		return C.MetalBnGeom{}, errors.Errorf(
 			"metal batch norm: scale dtype %s must match operand %s",
@@ -2115,22 +2111,22 @@ func metalBnGeomFrom(xShape, scaleShape shapes.Shape, fa int) (C.MetalBnGeom, er
 	}
 
 	inner := 1
-	
+
 	for i := fa + 1; i < rank; i++ {
 		inner *= xShape.Dimensions[i]
 	}
-	
+
 	ch := xShape.Dimensions[fa]
 	outer := xShape.Size() / (ch * inner)
 
 	if outer*ch*inner != xShape.Size() {
 		return C.MetalBnGeom{}, errors.New("metal batch norm: unsupported layout (merge outer*channels*inner != numel)")
 	}
-	
+
 	if scaleShape.Size() != ch {
 		return C.MetalBnGeom{}, errors.Errorf("metal batch norm: scale elements %d != feature size %d", scaleShape.Size(), ch)
 	}
-	
+
 	return C.MetalBnGeom{
 		channels: C.uint32_t(ch),
 		inner:    C.uint32_t(inner),
@@ -2144,13 +2140,13 @@ func executeBatchNormTrainingGPU(node *Node, inputs []*Buffer) ([]*Buffer, error
 	data := node.data.(*batchNormTrainingData)
 	x, scale, offset := inputs[0], inputs[1], inputs[2]
 	geom, err := metalBnGeomFrom(x.shape, scale.shape, data.featureAxis)
-	
+
 	if err != nil {
 		return nil, err
 	}
 
 	mdt := dtypeToMetal(x.shape.DType)
-	
+
 	if mdt < 0 || mdt > 1 {
 		return nil, errors.New("metal batch norm training: expected float16 or float32 operand")
 	}
@@ -2158,12 +2154,12 @@ func executeBatchNormTrainingGPU(node *Node, inputs []*Buffer) ([]*Buffer, error
 	outNorm := allocDuringExec(node.multiOutputsShapes[0])
 	outMean := allocDuringExec(node.multiOutputsShapes[1])
 	outVar := allocDuringExec(node.multiOutputsShapes[2])
-	
+
 	if ret := C.metal_bn_training_forward(x.mtl, scale.mtl, offset.mtl,
 		outNorm.mtl, outMean.mtl, outVar.mtl, geom, C.float(data.epsilon), mdt); ret != 0 {
 		return nil, errors.Errorf("metal_bn_training_forward failed: %d", ret)
 	}
-	
+
 	return []*Buffer{outNorm, outMean, outVar}, nil
 }
 
@@ -2246,16 +2242,16 @@ func flatFromBuffer(buf *Buffer) any {
 // checkFlat validates that flat is a typed slice.
 func checkFlat(flat any) (dtypes.DType, int, error) {
 	v := reflect.ValueOf(flat)
-	
+
 	if v.Kind() != reflect.Slice {
 		return dtypes.InvalidDType, 0, errors.Errorf("flat should be a slice, got %T", flat)
 	}
 
 	dtype := dtypes.FromGoType(v.Type().Elem())
-	
+
 	if dtype == dtypes.InvalidDType {
 		return dtype, 0, errors.Errorf("unsupported element type %s", v.Type().Elem())
 	}
-	
+
 	return dtype, v.Len(), nil
 }

@@ -46,6 +46,8 @@ import (
 var embeddedMetallib []byte
 
 var metalReady atomic.Bool
+var metalRuntimeMu sync.Mutex
+var metalExecuteMu sync.Mutex
 
 // BackendName is the name used to register and select this backend.
 const BackendName = "metal"
@@ -54,7 +56,10 @@ func init() {
 	backends.Register(BackendName, New)
 }
 
-func initMetal() {
+func initMetalLocked() {
+	if metalReady.Load() {
+		return
+	}
 	tmpFile, err := os.CreateTemp("", "gomlx-metal-*.metallib")
 	if err != nil {
 		reportInitError(err)
@@ -84,6 +89,12 @@ func initMetal() {
 	metalReady.Store(true)
 }
 
+func initMetal() {
+	metalRuntimeMu.Lock()
+	defer metalRuntimeMu.Unlock()
+	initMetalLocked()
+}
+
 func reportInitError(err error) {
 	_, _ = fmt.Fprintf(os.Stderr, "gomlx-metal: init: %v\n", err)
 }
@@ -110,8 +121,10 @@ var metalBackendUsers atomic.Int32
 
 // New constructs a new Metal backend. Config is currently ignored.
 func New(config string) (backends.Backend, error) {
+	metalRuntimeMu.Lock()
+	defer metalRuntimeMu.Unlock()
 	if !metalReady.Load() {
-		initMetal()
+		initMetalLocked()
 	}
 	if !metalReady.Load() {
 		return nil, errors.New("metal backend not available")
@@ -138,7 +151,12 @@ func (b *Backend) NumDevices() int   { return 1 }
 func (b *Backend) IsFinalized() bool { return b.isFinalized }
 
 func (b *Backend) DeviceDescription(deviceNum backends.DeviceNum) string {
-	return C.GoString(C.metal_device_name())
+	name := C.metal_device_name()
+	if name == nil {
+		return "unavailable"
+	}
+	defer C.free(unsafe.Pointer(name))
+	return C.GoString(name)
 }
 
 func (b *Backend) Capabilities() backends.Capabilities {
@@ -146,6 +164,8 @@ func (b *Backend) Capabilities() backends.Capabilities {
 }
 
 func (b *Backend) Finalize() {
+	metalRuntimeMu.Lock()
+	defer metalRuntimeMu.Unlock()
 	if b.isFinalized {
 		return
 	}
