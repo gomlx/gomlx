@@ -356,14 +356,14 @@ func (c *UnpackToTensorsConfig) Done() (err error) {
 	// ProgressBar: collect total size.
 	var bar *progressbar.ProgressBar
 	if c.showProgressBar {
-		var totalSize uintptr
+		var totalSize int64
 		for _, ds := range h5 {
 			if !ds.Shape.Ok() {
 				continue
 			}
-			totalSize += ds.Shape.Memory()
+			totalSize += ds.Shape.ByteSize()
 		}
-		bar = progressbar.DefaultBytesSilent(int64(totalSize), "")
+		bar = progressbar.DefaultBytesSilent(totalSize, "")
 	}
 
 	// Prepare clean up in case of error.
@@ -419,7 +419,7 @@ func (c *UnpackToTensorsConfig) Done() (err error) {
 		}
 
 		if bar != nil {
-			_ = bar.Add64(int64(ds.Shape.Memory()))
+			_ = bar.Add64(ds.Shape.ByteSize())
 			fmt.Printf("\r%s", bar.String())
 		}
 	}

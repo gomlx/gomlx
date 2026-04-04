@@ -97,14 +97,14 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	if klog.V(2).Enabled() {
 		// Log the largest non-parameter node.
 		var largest *Node
-		var largestSize uintptr
+		var largestSize int64
 		for _, node := range g.Nodes() {
 			if node.Type() == NodeTypeParameter || node.NumOutputs() > 1 {
 				continue
 			}
-			if largest == nil || node.Shape().Memory() > largestSize {
+			if largest == nil || node.Shape().ByteSize() > largestSize {
 				largest = node
-				largestSize = node.Shape().Memory()
+				largestSize = node.Shape().ByteSize()
 			}
 		}
 		if largest != nil {

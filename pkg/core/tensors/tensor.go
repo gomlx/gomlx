@@ -178,8 +178,13 @@ func (t *Tensor) StorageSize() int {
 	return flatLen
 }
 
-// Memory returns the number of bytes used to store the tensor. An alias to Tensor.Shape().Memory().
-func (t *Tensor) Memory() uintptr { return t.shape.Memory() }
+// ByteSize returns the number of bytes used to store the tensor. An alias to Tensor.Shape().ByteSize().
+func (t *Tensor) ByteSize() int64 { return t.shape.ByteSize() }
+
+// Memory returns the number of bytes used to store the tensor. An alias to Tensor.Shape().ByteSize().
+//
+// Deprecated: use ByteSize() instead.
+func (t *Tensor) Memory() uintptr { return uintptr(t.shape.ByteSize()) }
 
 // Ok returns whether the Tensor is in a valid state: it is not nil, and it hasn't been finalized.
 func (t *Tensor) Ok() bool {

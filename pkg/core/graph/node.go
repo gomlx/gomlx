@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/internal/humanize"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
@@ -225,7 +225,7 @@ func (n *Node) String() (str string) {
 	}
 
 	memory := xslices.Map(n.outputShapes, func(shape shapes.Shape) string {
-		return humanize.Bytes(uint64(shape.Memory()))
+		return humanize.Bytes(uint64(shape.ByteSize()))
 	})
 
 	str = fmt.Sprintf("%s -> %s - mem: %v", strings.Join(parts, " "), n.outputShapes, memory)

@@ -54,11 +54,11 @@ func Summary(ctxs, scopedCtxs []*context.Context, names []string) {
 	memoryRow[0] = "# bytes"
 	for ii, scopedCtx := range scopedCtxs {
 		var numVars, totalSize int
-		var totalMemory uintptr
+		var totalMemory int64
 		scopedCtx.EnumerateVariablesInScope(func(v *context.Variable) {
 			numVars++
 			totalSize += v.Shape().Size()
-			totalMemory += v.Shape().Memory()
+			totalMemory += v.Shape().ByteSize()
 		})
 		variablesRow[ii+1] = humanize.Comma(int64(numVars))
 		parametersRow[ii+1] = humanize.Comma(int64(totalSize))

@@ -9,7 +9,16 @@
     if possible.
   - Added `ToDevice()` and improved performance of MaterializeOnDevice when copying to shared buffers.
   - Improved `MutableBytes()`, should improve the performance in some cases.
-
+  - Added `FromRaw()` to upload a tensor to a backend with the given raw data -- this is the most performant
+    way to upload raw data to the backend accelerator.
+- Package `dtypes`
+  - Added several slice creation/copying/casting functions for dtypes, using switch on types as opposed to
+    the slower `reflect` package. Incorporated that into the `tensors` implementations, as well as exposed
+    it publicly (`go-huggingface` project uses it).
+  - Deprecated `dtypes.Memory()`.
+- Package `shapes`
+  - Added `ByteSize()` method, with proper support for packed dtypes.
+  - Deprecated `shapes.Memory()`.
 ### Packages in `pkg/ml`
 
 - Package `activations`

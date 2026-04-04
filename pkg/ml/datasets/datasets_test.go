@@ -151,7 +151,7 @@ func TestInMemoryDataset(t *testing.T) {
 	require.Equal(t, 2, len(mds.inputsAndLabelsData))
 	require.Equal(t, 1, mds.numInputsTensors)
 	require.Equal(t, ds.numExamples, mds.numExamples)
-	require.Equal(t, uintptr(2*ds.numExamples*valuesPerExample*bytesPerValue), mds.Memory())
+	require.Equal(t, int64(2*ds.numExamples*valuesPerExample*bytesPerValue), mds.ByteSize())
 	require.True(
 		t,
 		shapes.Make(dtypes.Int64, ds.numExamples, valuesPerExample).Equal(mds.inputsAndLabelsData[0].Shape()),
@@ -168,7 +168,7 @@ func TestInMemoryDataset(t *testing.T) {
 	require.Equal(t, 2, len(mds.inputsAndLabelsData))
 	require.Equal(t, 1, mds.numInputsTensors)
 	require.Equal(t, ds.numExamples*valuesPerExample, mds.numExamples)
-	require.Equal(t, uintptr(2*ds.numExamples*valuesPerExample*bytesPerValue), mds.Memory())
+	require.Equal(t, int64(2*ds.numExamples*valuesPerExample*bytesPerValue), mds.ByteSize())
 	require.True(
 		t,
 		shapes.Make(dtypes.Int64, ds.numExamples*valuesPerExample).Equal(mds.inputsAndLabelsData[0].Shape()),

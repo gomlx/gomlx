@@ -1148,18 +1148,25 @@ func (ctx *Context) NumParameters() int {
 	return total
 }
 
-// Memory returns the total number of bytes summed across all variables.
+// ByteSize returns the total number of bytes summed across all variables.
 // It does not include associated pointers and structures, just the bytes used by the raw data.
 //
 // Example:
 //
-//	fmt.Printf("Model memory usage: %s", data.ByteCountIEC(ctx.Memory()))
-func (ctx *Context) Memory() uintptr {
-	total := uintptr(0)
+//	fmt.Printf("Model memory usage: %s", data.ByteCountIEC(ctx.ByteSize()))
+func (ctx *Context) ByteSize() int64 {
+	total := int64(0)
 	ctx.EnumerateVariables(func(v *Variable) {
-		total += v.Shape().Memory()
+		total += v.Shape().ByteSize()
 	})
 	return total
+}
+
+// Memory is a deprecated alias to ByteSize.
+//
+// Deprecated: use ByteSize() instead.
+func (ctx *Context) Memory() uintptr {
+	return uintptr(ctx.ByteSize())
 }
 
 // Loader returns the current configured Loader for this context. See SetLoader for details on how the

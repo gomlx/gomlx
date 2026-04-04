@@ -36,7 +36,7 @@ func TestShape(t *testing.T) {
 	require.Equal(t, 0, shape0.Rank())
 	require.Len(t, shape0.Dimensions, 0)
 	require.Equal(t, 1, shape0.Size())
-	require.Equal(t, 8, int(shape0.Memory()))
+	require.Equal(t, 8, int(shape0.ByteSize()))
 
 	shape1 := Make(dtypes.Float32, 4, 3, 2)
 	require.True(t, shape1.Ok())
@@ -45,7 +45,13 @@ func TestShape(t *testing.T) {
 	require.Equal(t, 3, shape1.Rank())
 	require.Len(t, shape1.Dimensions, 3)
 	require.Equal(t, 4*3*2, shape1.Size())
-	require.Equal(t, 4*4*3*2, int(shape1.Memory()))
+	require.Equal(t, 4*4*3*2, int(shape1.ByteSize()))
+
+	shapeInt2 := Make(dtypes.Int2, 5)
+	require.Equal(t, 2, int(shapeInt2.ByteSize()))
+
+	shapeUint4 := Make(dtypes.Uint4, 3, 3)
+	require.Equal(t, 5, int(shapeUint4.ByteSize()))
 }
 
 func TestDim(t *testing.T) {
