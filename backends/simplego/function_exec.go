@@ -444,6 +444,15 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			fe.numUses[inputIdx]-int(execBuf.numUsed[inputIdx].Load()) == 1
 	}
 
+	// lockIfNeededFn should be called before the execBuf slices are updated.
+	// It's refactored here is a closure so the code doens't need to be duplicated in the
+	// switch clause below.
+	lockIfNeededFn := func() {
+		if execBuf.opsExecutionType == opsExecutionParallel {
+			execBuf.mu.Lock()
+		}
+	}
+
 	// Check for closure executor first (If, While, Sort).
 	// Closure executors receive captured inputs separately with explicit ownership tracking.
 	closureExecutor := nodeClosureExecutors[node.opType]
@@ -484,7 +493,9 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			}
 		}
 
-		// Handle outputs (closure ops are always multi-output style)
+		// Write outputs to execBuf (closure ops are always multi-output style), or free those no longer
+		// needed.
+		lockIfNeededFn()
 		for outputIdx, outputBuf := range outputBuffers {
 			outputNode := node.multiOutputsNodes[outputIdx]
 			outputNodeIdx := outputNode.idx
@@ -495,6 +506,7 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			execBuf.results[outputNodeIdx] = outputBuf
 			execBuf.owned[outputNodeIdx] = true
 		}
+
 	case node.IsMultiOutputs():
 		// Execute the node
 		multiExecutor := multiOutputsNodeExecutors[node.opType]
@@ -507,6 +519,9 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			return errors.WithMessagef(err, "executing multi-output %s", node.opType)
 		}
 
+		// Write outputs to execBuf (multi-output ops are always multi-output style), or free those no longer
+		// needed.
+		lockIfNeededFn()
 		for outputIdx, outputBuf := range outputBuffers {
 			outputNode := node.multiOutputsNodes[outputIdx]
 			outputNodeIdx := outputNode.idx
@@ -518,7 +533,9 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 			execBuf.results[outputNodeIdx] = outputBuf
 			execBuf.owned[outputNodeIdx] = true
 		}
+
 	default:
+		// Single output node:
 		executor := nodeExecutors[node.opType]
 		if executor == nil {
 			return errors.Errorf("no executor for op %s", node.opType)
@@ -528,15 +545,16 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 		if err != nil {
 			return errors.WithMessagef(err, "executing %s", node.opType)
 		}
+
+		// Write result to execBuf (single output node), or free it if not needed.
+		lockIfNeededFn()
 		execBuf.results[nodeIdx] = result
 		execBuf.owned[nodeIdx] = true
 	}
+	// At the exit of the switch statement, lockIfNeededFn() must have been called,
+	// so we can write further updates to execBuf
 
 	// Update usage counts and free unused buffers.
-	// The lock protects results in parallel mode; numUsed uses atomics for safe reads.
-	if execBuf.opsExecutionType == opsExecutionParallel {
-		execBuf.mu.Lock()
-	}
 	for i, input := range node.inputs {
 		inputIdx := input.idx
 		newCount := execBuf.numUsed[inputIdx].Add(1) // Mark this input as used.
