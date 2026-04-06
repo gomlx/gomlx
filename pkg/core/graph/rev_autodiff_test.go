@@ -7,6 +7,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
@@ -131,16 +132,24 @@ type gradTestFunc func(g *Graph) (output *Node, nodesForGrad []*Node)
 //
 // It will print out the inputNodes and outputs to help debugging.
 func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad []any) {
-	testGradientsInDelta(t, name, testFn, wantForGrad, Epsilon)
+	backend := graphtest.BuildTestBackend()
+	testGradientsInDelta(t, name, backend, testFn, wantForGrad, Epsilon)
+}
+
+// testGradients run testFn to build a graph, calculates the gradients of the ReduceAllSum(output) with respect
+// to the nodesForGrad, and check that it gets close to the corresponding values in wantForGrad.
+//
+// It will print out the inputNodes and outputs to help debugging.
+func testGradientsWithBackend(t *testing.T, name string, backend backends.Backend, testFn gradTestFunc, wantForGrad []any) {
+	testGradientsInDelta(t, name, backend, testFn, wantForGrad, Epsilon)
 }
 
 // testGradientsInDelta run testFn to build a graph, calculates the gradients of the ReduceAllSum(output) with respect
 // to the nodesForGrad, and check that it gets the corresponding values in wantForGrad, withing a delta-margin (at every element).
 //
 // It will print out the inputNodes and outputs to help debugging.
-func testGradientsInDelta(t *testing.T, name string, testFn gradTestFunc, wantForGrad []any, delta float64) {
+func testGradientsInDelta(t *testing.T, name string, backend backends.Backend, testFn gradTestFunc, wantForGrad []any, delta float64) {
 	t.Run(name, func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
 		// Create a function that can be used by computation.Exec.
 		fn := func(g *Graph) []*Node {
 			output, nodesForGrad := testFn(g)
@@ -277,9 +286,10 @@ func TestGradientExp(t *testing.T) {
 }
 
 func TestGradientPow(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
 	a := []float64{3, 1, 0.5}
 	b := []float64{3, 1, -2}
-	testGradientsInDelta(t, "gradient_of_pow",
+	testGradientsInDelta(t, "gradient_of_pow", backend,
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			aNode, bNode := Const(g, a), Const(g, b)
 			aNode = BroadcastToDims(Reshape(aNode, 1, 3), 3, 3)
