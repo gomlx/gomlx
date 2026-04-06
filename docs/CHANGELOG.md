@@ -19,6 +19,9 @@
 - Package `shapes`
   - Added `ByteSize()` method, with proper support for packed dtypes.
   - Deprecated `shapes.Memory()`.
+- Package `graph`
+  - Added `CrossCompileSimilarity()` operation.
+
 ### Packages in `pkg/ml`
 
 - Package `activations`
