@@ -160,7 +160,7 @@ func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args 
 //
 // See ExecOnce for a more convenient version if you have only one output.
 // Also, see MustExecOnceN or MustExecOnce if you want it to panic on error.
-func ExecOnceN[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args ...any) ([]*tensors.Tensor, error) {
+func ExecOnceN[F ExecGraphFn](backend backends.Backend, graphFn F, args ...any) ([]*tensors.Tensor, error) {
 	e := MustNewExec(backend, graphFn)
 	defer e.Finalize()
 	results, err := e.Exec(args...)
