@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
@@ -1015,9 +1016,17 @@ func Skewness(x *Node, axes ...int) *Node {
 // A typical value for axis is -1, it calculates the cosine similarity for the last dimension.
 //
 // The output will have the same rank, but the axis is contracted to 1, and will hold the similarity.
+//
+// Notice, this expects both lhs and rhs to have the same shape, it's a "element-wise" cosine similarity
+// of lhs and rhs.
+// See also CrossCosineSimilarity to calculate the cosine similarty "of all elements of lhs x all elements of rhs"
 func CosineSimilarity(lhs *Node, rhs *Node, axis int) *Node {
 	g := lhs.Graph()
 	dtype := lhs.DType()
+	if !lhs.Shape().Equal(rhs.Shape()) {
+		exceptions.Panicf("CosineSimilarity expects lhs and rhs to have the same shape, got %s and %s -- "+
+			"maybe you want to do CrossCosineSimilarity ?", lhs.Shape(), rhs.Shape())
+	}
 
 	// Mask for rows that are fully zero, for which cosine similary is not normally defined.
 	lhsAxisZeroMask := ReduceAndKeep(IsZero(lhs), ReduceLogicalAnd, axis)
@@ -1053,5 +1062,76 @@ func CosineSimilarity(lhs *Node, rhs *Node, axis int) *Node {
 	// Arbitrarily set the similarity of the zero-rows (lhsMask or rhsMask) to zero.
 	zero := ScalarZero(g, dtype)
 	similarity = Where(LogicalOr(lhsAxisZeroMask, rhsAxisZeroMask), zero, similarity)
+	return similarity
+}
+
+// CrossCosineSimilarity calculates the cosine similarity on the cross of the elements of lhs and rhs.
+//
+// Let's say lhs has shape [BatchSize, NumLHS, EmbeddingDim) and rhs has shape [BatchSize, NumRHS, EmbeddingDim).
+// The output of CrossCosineSimilarity(lhs, rhs, contractingAxis=-1, crossAxis=1) will have shape
+// [BatchSize, NumLHS, NumRHS] (the cosine similariy of all LHS elements cross all RHS elements).
+//
+// Notice axes that are not contracting or cross are considered "batch" and preserved in the output.
+//
+// The rank and the order of the axes of lhs and rhs must match -- so the contracting axis is the
+// same on both.
+//
+// A typical value for axis is -1, it calculates the cosine similarity for the last dimension.
+//
+// The output will have the same rank, but the axis is contracted to 1, and will hold the similarity.
+//
+// See also CosineSimilarity if you want to do element-wise cosine similarity.
+func CrossCosineSimilarity(lhs *Node, rhs *Node, constractingAxis, crossAxis int) *Node {
+	g := lhs.Graph()
+	dtype := lhs.DType()
+	if lhs.Rank() != rhs.Rank() {
+		exceptions.Panicf("CrossCosineSimilarity expects lhs and rhs to have the same rank, got %s and %s -- ",
+			lhs.Shape(), rhs.Shape())
+	}
+
+	// Mask for rows that are fully zero, for which cosine similary is not normally defined.
+	lhsAxisZeroMask := ReduceAndKeep(IsZero(lhs), ReduceLogicalAnd, constractingAxis)
+	rhsAxisZeroMask := ReduceAndKeep(IsZero(rhs), ReduceLogicalAnd, constractingAxis)
+
+	// Recover original shape, by broadcasting the mask where we just reduced.
+	lhsMask := BroadcastToShape(ConvertDType(lhsAxisZeroMask, dtypes.Bool), lhs.Shape())
+	rhsMask := BroadcastToShape(ConvertDType(rhsAxisZeroMask, dtypes.Bool), rhs.Shape())
+
+	// Replace rows with all zeroes (lhsMask/rhsMask) with 1.
+	// Any positive numerical safe number would work, since the final computation for
+	// those rows won't be used, as long as they are not NaNs.
+	one := ScalarOne(g, dtype)
+	lhs = Where(lhsMask, one, lhs)
+	rhs = Where(rhsMask, one, rhs)
+
+	// Set up contracting axis and the remaining batch axes.
+	adjustedContractingAxis := MustAdjustAxis(constractingAxis, lhs)
+	adjustedCrossAxis := MustAdjustAxis(crossAxis, lhs)
+	contractingAxes := [][2]int{{adjustedContractingAxis, adjustedContractingAxis}}
+	var batchAxes [][2]int
+	if lhs.Rank() > 2 {
+		batchAxes = make([][2]int, 0, lhs.Rank()-2)
+		for batchAxis := range lhs.Rank() {
+			if batchAxis == adjustedContractingAxis || batchAxis == adjustedCrossAxis {
+				continue
+			}
+			batchAxes = append(batchAxes, [2]int{batchAxis, batchAxis})
+		}
+	}
+	dotProduct := EinsumAxes(lhs, rhs, contractingAxes, batchAxes) // Shaped [...batchDims..., lhsCrossDim, rhsCrossDim, ...batchDims...]
+
+	// Normalization
+	lhsNorm := L2Norm(lhs, adjustedContractingAxis)                                      // Same shape as LHS, but for contracting axis is 1
+	rhsNorm := L2Norm(rhs, adjustedContractingAxis)                                      // Same shape as RHS, but for contracting axis is 1
+	normalisationDenominator := EinsumAxes(lhsNorm, rhsNorm, contractingAxes, batchAxes) // Shaped [...batchDims..., lhsCrossDim, rhsCrossDim, ...batchDims...]
+
+	similarity := Div(dotProduct, normalisationDenominator)
+
+	// Arbitrarily set the similarity of the zero-rows (lhsMask or rhsMask) to zero.
+	zero := ScalarZero(g, dtype)
+	lhsNotZeros := ConvertDType(LogicalNot(lhsAxisZeroMask), dtypes.Int8)
+	rhsNotZeros := ConvertDType(LogicalNot(rhsAxisZeroMask), dtypes.Int8)
+	crossMaskNotZeros := EinsumAxes(lhsNotZeros, rhsNotZeros, contractingAxes, batchAxes)
+	similarity = Where(ConvertDType(crossMaskNotZeros, dtypes.Bool), similarity, zero)
 	return similarity
 }

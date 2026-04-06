@@ -545,37 +545,78 @@ func TestL2Normalize(t *testing.T) {
 }
 
 func TestCosineSimilarity(t *testing.T) {
-	graphtest.RunTestGraphFn(t, t.Name(),
-		func(g *Graph) (inputs, outputs []*Node) {
-			x := Const(g, [][]float32{
-				{0, 0, 0},
-				{7, 0, 0},
-				{0, 0, 13},
-			})
-			y := Const(g, [][]float32{
-				{10, 20, 30},
-				{2, 0, 0},
-				{0, 0, -11},
-			})
-			inputs = []*Node{x, y}
-			outputs = []*Node{
-				CosineSimilarity(x, y, -1), // Rows: Axis -1
-				CosineSimilarity(x, y, 0),  // Columns: Axis 0
-			}
-			return
-		}, []any{
-			[][]float32{{0}, {1}, {-1}},
-			[][]float32{{0.19611612, 0, -0.34425467}},
-		}, 0.0001)
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+		graphtest.RunTestGraphFnWithBackend(t, t.Name(), backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, [][]float32{
+					{0, 0, 0},
+					{7, 0, 0},
+					{0, 0, 13},
+				})
+				y := Const(g, [][]float32{
+					{10, 20, 30},
+					{2, 0, 0},
+					{0, 0, -11},
+				})
+				inputs = []*Node{x, y}
+				outputs = []*Node{
+					CosineSimilarity(x, y, -1), // Rows: Axis -1
+					CosineSimilarity(x, y, 0),  // Columns: Axis 0
+				}
+				return
+			}, []any{
+				[][]float32{{0}, {1}, {-1}},
+				[][]float32{{0.19611612, 0, -0.34425467}},
+			}, 0.0001)
 
-	// Check the gradient of zero vectors won't yield NaNs.
-	testGradients(t, "CosineSimilarity Gradient", func(g *Graph) (output *Node, nodesForGrad []*Node) {
-		x := Const(g, [][]float32{{0, 0, 0}})
-		y := Const(g, [][]float32{{10, 20, 30}})
-		output = CosineSimilarity(x, y, -1)
-		return output, []*Node{x}
-	}, []any{
-		[][]float32{{0, 0, 0}},
+		// Check the gradient of zero vectors won't yield NaNs.
+		testGradientsWithBackend(t, "CosineSimilarity Gradient", backend, func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			x := Const(g, [][]float32{{0, 0, 0}})
+			y := Const(g, [][]float32{{10, 20, 30}})
+			output = CosineSimilarity(x, y, -1)
+			return output, []*Node{x}
+		}, []any{
+			[][]float32{{0, 0, 0}},
+		})
+	})
+}
+
+func TestCrossCosineSimilarity(t *testing.T) {
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+		graphtest.RunTestGraphFnWithBackend(t, t.Name(), backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, [][]float32{
+					{0, 0, 0},
+					{7, 0, 0},
+					{0, 0, 13},
+				})
+				y := Const(g, [][]float32{
+					{10, 20, 30},
+					{0, 0, 0},
+					{0, 0, -11},
+				})
+				inputs = []*Node{x, y}
+				outputs = []*Node{
+					CrossCosineSimilarity(x, y, -1, 0),
+				}
+				return
+			}, []any{
+				[][]float32{
+					{0, 0, 0},
+					{0.26726124, 0, 0},
+					{0.8017837, 0, -1},
+				},
+			}, 0.0001)
+
+		// Check the gradient of zero vectors won't yield NaNs.
+		testGradientsWithBackend(t, "CrossCosineSimilarity Gradient", backend, func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			x := Const(g, [][]float32{{0, 0, 0}})
+			y := Const(g, [][]float32{{10, 20, 30}})
+			output = CrossCosineSimilarity(x, y, -1, 0)
+			return output, []*Node{x}
+		}, []any{
+			[][]float32{{0, 0, 0}},
+		})
 	})
 }
 
