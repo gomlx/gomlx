@@ -15,8 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gomlx/gomlx/internal/humanize"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/pkg/support/humanize"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 )
