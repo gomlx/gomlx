@@ -43,6 +43,12 @@
   - Added options `WithFinalNormalization`, `WithScalingOfTokenEmbeddings`, `WithArchitecture`, `WithSlidingWindow`
     and `WithLayerTypes`.
 
+### Packages in `pkg/support`
+
+- Added `humanize` package:
+  - It includes `Bytes()`, `Count()`, `Speed()`, `Underscores()` and `Duration()`.
+  - Replaces `fsutil.BytesETC` and `dustin/go-humanize`.
+
 ### Backends:
 
 - Package `xla`:
