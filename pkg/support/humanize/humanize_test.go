@@ -85,6 +85,11 @@ func TestDuration(t *testing.T) {
 			want:     "2h31m",
 		},
 		{
+			name:     "minutes and seconds",
+			duration: 21*time.Minute + 7*time.Second + 123*time.Millisecond,
+			want:     "21m7s",
+		},
+		{
 			name:     "microseconds",
 			duration: 12*time.Microsecond + 345*time.Nanosecond,
 			want:     "12.3µs",
