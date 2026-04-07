@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/support/humanize"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/plots"
@@ -170,7 +170,7 @@ func ReportMetrics(names []string, metricsOrder map[ModelNameAndMetric]int, poin
 	for !isFinished() {
 		currentGlobalStep := nextGlobalStep()
 		row := make([]string, 1+len(metricsOrder))
-		row[0] = humanize.Comma(currentGlobalStep)
+		row[0] = humanize.Underscores(currentGlobalStep)
 		for modelIdx, pointsPerModel := range points {
 			// Consume all points for the currentGlobalStep.
 			nameMetric := ModelNameAndMetric{ModelName: names[modelIdx]}

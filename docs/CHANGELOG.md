@@ -21,6 +21,8 @@
   - Deprecated `shapes.Memory()`.
 - Package `graph`
   - Added `CrossCosineSimilarity()` operation.
+  - `Graph.Compile()` now returns an error instead of panicking -- **API change**: it's not a common way to compile
+    graphs (in GoMLX it's only used in tests), but it requires change for anyone using it directly.
 
 ### Packages in `pkg/ml`
 
@@ -40,6 +42,12 @@
   - Updated positional-encoder support.
   - Added options `WithFinalNormalization`, `WithScalingOfTokenEmbeddings`, `WithArchitecture`, `WithSlidingWindow`
     and `WithLayerTypes`.
+
+### Packages in `pkg/support`
+
+- Added `humanize` package:
+  - It includes `Bytes()`, `Count()`, `Speed()`, `Underscores()` and `Duration()`.
+  - Replaces `fsutil.BytesETC` and `dustin/go-humanize`.
 
 ### Backends:
 

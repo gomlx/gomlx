@@ -954,7 +954,10 @@ func (e *Exec) buildAndCompileGraph(argsShapes []shapes.Shape, cacheIndex int) (
 	}
 
 	// Compile graph.
-	g.CompileWithSharding(outputs, outputShardingSpecs)
+	err = g.CompileWithSharding(outputs, outputShardingSpecs)
+	if err != nil {
+		return nil, err
+	}
 	entry.argsShapes = make([]shapes.Shape, len(argsShapes))
 	copy(entry.argsShapes, argsShapes)
 	entry.numAllOutputs = len(outputs)

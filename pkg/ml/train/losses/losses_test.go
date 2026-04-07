@@ -32,7 +32,8 @@ func testGradientsInDelta[T interface{ float32 | float64 }](t *testing.T, name s
 	all := make([]*Node, len(grads)+1)
 	all[0] = output
 	copy(all[1:], grads)
-	g.Compile(all...)
+	err := g.Compile(all...)
+	require.NoError(t, err)
 	results := g.Run()
 	fmt.Printf("\toutput=%v\n", results[0])
 	for ii, want := range wantForGrad {
@@ -49,7 +50,8 @@ func testSomeFunc[T interface{ float32 | float64 }](t *testing.T, name string, f
 	manager := graphtest.BuildTestBackend()
 	g := NewGraph(manager, name)
 	input, output := fn(g)
-	g.Compile(input, output)
+	err := g.Compile(input, output)
+	require.NoError(t, err)
 	results := g.Run()
 	fmt.Printf("\t%s(%s) = %s\n", name, results[0], results[1])
 	if inDelta {

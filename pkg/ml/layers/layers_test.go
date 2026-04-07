@@ -84,7 +84,8 @@ func TestDense(t *testing.T) {
 		inputNode, ctx.GetVariableByScopeAndName("/dense", "weights").ValueGraph(g),
 		ctx.GetVariableByScopeAndName("/dense", "biases").ValueGraph(g))
 	outputs := append([]*Node{sum, output}, gradients...)
-	g.Compile(outputs...)
+	err := g.Compile(outputs...)
+	require.NoError(t, err)
 
 	// Before running the graph initialize the variables.
 	ctx.InitializeVariables(backend, nil)
@@ -188,7 +189,8 @@ func TestPieceWiseLinearCalibration(t *testing.T) {
 		keypoints = Mul(keypoints, keypoints)
 		keypoints = Mul(keypoints, Const(g, float32(maxInput)))
 		calibrated := PieceWiseLinearCalibrationCascaded(ctx, input, keypoints, true)
-		g.Compile(keypoints, calibrated)
+		err := g.Compile(keypoints, calibrated)
+		require.NoError(t, err)
 		params := make(ParamsMap)
 		ctx.ExecSetVariablesInParams(params, g)
 

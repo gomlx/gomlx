@@ -15,7 +15,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/gomlx/gomlx/internal/humanize"
+	"github.com/gomlx/gomlx/pkg/support/humanize"
 	"github.com/pkg/errors"
 )
 
@@ -168,6 +168,8 @@ func ValidateChecksum(path, checkHash string) error {
 
 // ByteCountIEC converts a byte count to string using the appropriate unit (B, Kb, MiB, GiB, ...).
 // It uses the binary prefix system from IEC -- so powers of 1024 (as opposed to powers 1000).
+//
+// Deprecated: use humanize.Bytes() instead.
 func ByteCountIEC[T ~int64 | ~uint64 | ~int | ~uint | ~int32 | ~uint32 | ~int16 | ~uint16 | ~int8 | ~uint8 | ~uintptr](
 	count T) string {
 	return humanize.Bytes(count)

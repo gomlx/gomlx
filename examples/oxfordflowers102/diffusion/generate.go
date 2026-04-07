@@ -27,7 +27,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/pkg/support/humanize"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/janpfeifer/gonb/cache"
@@ -230,7 +230,7 @@ func (c *Config) DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSt
 		noise.Shape(),
 	)
 	fmt.Printf("\tModel #params:\t%d\n", ctx.NumParameters())
-	fmt.Printf("\t Model memory:\t%s\n", fsutil.ByteCountIEC(ctx.ByteSize()))
+	fmt.Printf("\t Model memory:\t%s\n", humanize.Bytes(ctx.ByteSize()))
 	gonbui.DisplayHtml("<p><b>Noise</b></p>")
 	PlotImagesTensor(noise)
 
