@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	lgtable "github.com/charmbracelet/lipgloss/table"
+	"github.com/gomlx/gomlx/internal/humanize"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/ui/notebooks"
@@ -228,7 +229,7 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 				} else {
 					pBar.statsTable.Row("Global Step", update.metrics[0])
 				}
-				pBar.statsTable.Row("Median train step duration", FormatDuration(loop.MedianTrainStepDuration()))
+				pBar.statsTable.Row("Median train step duration", humanize.Duration(loop.MedianTrainStepDuration()))
 				for metricIdx, metricObj := range loop.Trainer.TrainMetrics() {
 					pBar.statsTable.Row(metricObj.Name(), update.metrics[1+metricIdx])
 				}
