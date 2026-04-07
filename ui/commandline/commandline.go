@@ -5,7 +5,9 @@ package commandline
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/gomlx/gomlx/internal/humanize"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 )
 
@@ -24,4 +26,9 @@ func ReportEval(trainer *train.Trainer, datasets ...train.Dataset) error {
 		ds.Reset()
 	}
 	return nil
+}
+
+// FormatDuration pretty prints a duration (without a long list of decimal points).
+func FormatDuration(d time.Duration) string {
+	return humanize.Duration(d)
 }
