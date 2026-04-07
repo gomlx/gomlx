@@ -40,7 +40,8 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 		backend := graphtest.BuildTestBackend()
 		g := NewGraph(backend, testName)
 		inputNode, outputNode := graphFn(g)
-		g.Compile(inputNode, outputNode)
+		err := g.Compile(inputNode, outputNode)
+		require.NoError(t, err)
 		results := g.Run()
 		input, got := results[0], results[1]
 		if !wantTensor.InDelta(got, Epsilon) {
@@ -79,10 +80,9 @@ func TestConstant(t *testing.T) {
 
 func compileRunAndTakeFirst(t *testing.T, g *Graph) *tensors.Tensor {
 	var output *tensors.Tensor
-	require.NotPanics(t, func() {
-		g.Compile(g.LastNode())
-		output = g.Run()[0]
-	})
+	err := g.Compile(g.LastNode())
+	require.NoError(t, err)
+	output = g.Run()[0]
 	return output
 }
 
@@ -175,7 +175,8 @@ func TestParameter(t *testing.T) {
 		if x.GetParameterHandle() == InvalidParameterHandle || y.GetParameterHandle() == InvalidParameterHandle || x.GetParameterHandle() == y.GetParameterHandle() {
 			t.Fatalf("Invalid parameter handles: x=%d, y=%d", x.GetParameterHandle(), y.GetParameterHandle())
 		}
-		g.Compile(g.LastNode())
+		err := g.Compile(g.LastNode())
+		require.NoError(t, err)
 
 		// Tests for various parameters.
 		for xV := float32(0); xV < 3; xV += 1 {
@@ -514,14 +515,16 @@ func TestFill(t *testing.T) {
 
 func reduceSumGraph(t *testing.T, backend backends.Backend, reduceDims []int) *Graph {
 	var g *Graph
+	var o0 *Node
 	require.NotPanics(t, func() {
 		g = NewGraph(backend, "main")
 		n0 := Const(g, [][]float64{{5.0, 1.0}})
 		n1 := Ones(g, shapes.Make(dtypes.Float64, 2, 1))
 		n2 := Add(n1, n0)
-		o0 := ReduceSum(n2, reduceDims...)
-		g.Compile(o0)
+		o0 = ReduceSum(n2, reduceDims...)
 	})
+	err := g.Compile(o0)
+	require.NoError(t, err)
 	return g
 }
 
@@ -742,7 +745,7 @@ func TestIota(t *testing.T) {
 	{
 		g := NewGraph(backend, "").WithName("iota0")
 		Iota(g, MakeShape(F64, 2, 2), 0)
-		g.Compile(g.LastNode())
+		require.NoError(t, g.Compile(g.LastNode()))
 		got := g.Run()[0]
 		want := tensors.FromValue([][]float64{{0, 0}, {1, 1}})
 		if !want.Equal(got) {
@@ -752,7 +755,7 @@ func TestIota(t *testing.T) {
 	{
 		g := NewGraph(backend, "").WithName("iota0")
 		Iota(g, MakeShape(F64, 2, 2), 1)
-		g.Compile(g.LastNode())
+		require.NoError(t, g.Compile(g.LastNode()))
 		got := g.Run()[0]
 		want := tensors.FromValue([][]float64{{0, 1}, {0, 1}})
 		if !want.Equal(got) {
@@ -890,7 +893,8 @@ func TestConcatenate(t *testing.T) {
 		x1 := IotaFull(g, MakeShape(F64, 3))
 		x2 := Add(IotaFull(g, MakeShape(F64, 5)), Const(g, float64(3)))
 		concat := Concatenate([]*Node{x1, x2}, 0)
-		g.Compile(concat)
+		err := g.Compile(concat)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\t\tresult=%s\n", got.GoStr())
 		want := tensors.FromValue([]float64{0, 1, 2, 3, 4, 5, 6, 7})
@@ -905,7 +909,8 @@ func TestConcatenate(t *testing.T) {
 		x1 := IotaFull(g, MakeShape(F64, 2, 2, 2))
 		x2 := Add(IotaFull(g, MakeShape(F64, 2, 1, 2)), Const(g, float64(8)))
 		concat := Concatenate([]*Node{x1, x2}, 1)
-		g.Compile(concat)
+		err := g.Compile(concat)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\t\tresult=%s\n", got.GoStr())
 		want := tensors.FromValue([][][]float64{{{0, 1}, {2, 3}, {8, 9}}, {{4, 5}, {6, 7}, {10, 11}}})

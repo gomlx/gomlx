@@ -27,7 +27,8 @@ func TestGradientAdd(t *testing.T) {
 		gradients := Gradient(output, c1, c2)
 		outputs := []*Node{output}
 		outputs = append(outputs, gradients...)
-		g.Compile(outputs...)
+		err := g.Compile(outputs...)
+		require.NoError(t, err)
 	}
 	outputs := g.Run()
 

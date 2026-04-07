@@ -449,8 +449,8 @@ func (g *Graph) Nodes() []*Node {
 // Compile just-in-time (JIT) compiles the Graph into a Computation that can be executed.
 //
 // At least one output must be given.
-func (g *Graph) Compile(outputs ...*Node) {
-	g.CompileWithSharding(outputs, nil)
+func (g *Graph) Compile(outputs ...*Node) error {
+	return g.CompileWithSharding(outputs, nil)
 }
 
 // CompileWithSharding compiles the graph with the given outputs and optionally with the sharding specifications
@@ -459,15 +459,16 @@ func (g *Graph) Compile(outputs ...*Node) {
 // At least one output must be given.
 //
 // This is an advanced version of Compile, used for distributed computation with AutoSharding.
-func (g *Graph) CompileWithSharding(outputs []*Node, outputShardings []*distributed.ShardingSpec) {
+func (g *Graph) CompileWithSharding(outputs []*Node, outputShardings []*distributed.ShardingSpec) error {
 	g.currentFunc.Return(outputs, outputShardings)
 
 	// Compile the builder (which now takes no arguments)
 	var err error
 	g.executable, err = g.builder.Compile()
 	if err != nil {
-		panic(errors.WithMessagef(err, "Graph failed to compile for the backend"))
+		return errors.WithMessagef(err, "graph %q failed to compile for the backend %q", g.name, g.backend.Name())
 	}
+	return nil
 }
 
 // donateBuffer holds a buffer to be donated to the execution of a graph.

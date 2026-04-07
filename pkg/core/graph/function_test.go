@@ -110,7 +110,8 @@ func TestFunction(t *testing.T) {
 		b := graph.Const(g, float32(32))
 		sum := addFn.Call(a, b)[0]
 
-		g.Compile(sum)
+		err := g.Compile(sum)
+		require.NoError(t, err)
 		result := g.Run()[0]
 		assert.Equal(t, float32(42), result.Value().(float32))
 	})

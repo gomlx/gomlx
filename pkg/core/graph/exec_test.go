@@ -125,7 +125,8 @@ func TestDonate(t *testing.T) {
 	g := NewGraph(backend, "TestDonate")
 	x := Parameter(g, "x", shapes.Make(dtypes.Float64))
 	p1 := AddScalar(x, 1)
-	require.NotPanics(t, func() { g.Compile(p1) })
+	err := g.Compile(p1)
+	require.NoError(t, err)
 
 	input := tensors.FromValue(5.0)
 

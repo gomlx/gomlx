@@ -33,7 +33,8 @@ func TestPortable(t *testing.T) {
 		g := graph.NewGraph(backend, "portable")
 		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
 		negX := graph.Neg(x)
-		g.Compile(negX)
+		err := g.Compile(negX)
+		require.NoError(t, err)
 
 		numDevices := backend.NumDevices()
 		for deviceNum := range numDevices {
@@ -75,7 +76,8 @@ func TestCollective(t *testing.T) {
 		require.NoError(t, g.SetSPMD(mesh))
 		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
 		reduced := g.Distributed().AllReduceOne(x, backends.ReduceOpSum)
-		g.Compile(reduced)
+		err := g.Compile(reduced)
+		require.NoError(t, err)
 		outputs := g.Run(float32(1), float32(3))
 		require.Len(t, outputs, mesh.NumDevices())
 		for i, output := range outputs {
@@ -92,7 +94,8 @@ func TestCollective(t *testing.T) {
 		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
 		y := graph.Parameter(g, "y", shapes.Make(dtypes.Float32, 2))
 		reduced := g.Distributed().AllReduce([]*graph.Node{x, y}, backends.ReduceOpSum)
-		g.Compile(reduced...)
+		err := g.Compile(reduced...)
+		require.NoError(t, err)
 		outputs := g.Run(
 			float32(1), []float32{10, 11}, // Replica 0
 			float32(3), []float32{20, 21}) // Replica 1
@@ -122,7 +125,8 @@ func TestCollective(t *testing.T) {
 		y := graph.Parameter(g, "y", shapes.Make(dtypes.Float32, 2))
 		z := graph.Parameter(g, "z", shapes.Make(dtypes.Float64, 3))
 		reduced := g.Distributed().AllReduce([]*graph.Node{x, y, z}, backends.ReduceOpSum)
-		g.Compile(reduced...)
+		err := g.Compile(reduced...)
+		require.NoError(t, err)
 		outputs := g.Run(
 			float32(1), []float32{10, 11}, []float64{0.1, 0.2, 0.3}, // Replica 0
 			float32(3), []float32{20, 21}, []float64{10, 100, 1000}) // Replica 1
@@ -173,7 +177,8 @@ func TestAutoSharding(t *testing.T) {
 		x := graph.ShardedParameter(g, "x", shapes.Make(dtypes.Float32, 4),
 			must1(distributed.BuildSpec(mesh).S("sharded").Done()))
 		y := graph.ReduceAllSum(x)
-		g.Compile(y)
+		err := g.Compile(y)
+		require.NoError(t, err)
 		outputs := g.Run([]float32{1, 2}, []float32{0.1, 0.2})
 		require.Len(t, outputs, mesh.NumDevices())
 		for i, output := range outputs {
@@ -190,10 +195,11 @@ func TestAutoSharding(t *testing.T) {
 		x := graph.ShardedParameter(g, "x", shapes.Make(dtypes.Float32, 2, 2),
 			must1(distributed.BuildSpec(mesh).S("sharded").R().Done()))
 		y := graph.ReduceSum(x, 0) // Force an AllReduce
-		g.CompileWithSharding([]*graph.Node{y},
+		err := g.CompileWithSharding([]*graph.Node{y},
 			[]*distributed.ShardingSpec{
 				must1(distributed.BuildSpec(mesh).S("sharded").Done()),
 			})
+		require.NoError(t, err)
 		outputs := g.Run([][]float32{{1, 2}}, [][]float32{{0.1, 0.2}})
 		require.Len(t, outputs, mesh.NumDevices())
 		want := []any{[]float32{1.1}, []float32{2.2}} // Sharded output, reduce-summed on axis 0.

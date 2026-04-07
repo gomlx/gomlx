@@ -22,7 +22,8 @@ func TestIndicesForShape(t *testing.T) {
 	g := NewGraph(backend, t.Name())
 	shape := MakeShape(F64, 2, 3, 4)
 	numbers := IndicesForShape(g, shape)
-	g.Compile(numbers)
+	err := g.Compile(numbers)
+	require.NoError(t, err)
 	got := g.Run()[0]
 	fmt.Printf("\tIndicesForShape(%s)=%v\n", shape, got)
 	want := [][]int64{
@@ -46,7 +47,8 @@ func TestGather(t *testing.T) {
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, 1)
 		gather := Gather(numbers, indices, true)
-		g.Compile(gather)
+		err := g.Compile(gather)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := []float64{3, 4, 5}
@@ -59,7 +61,8 @@ func TestGather(t *testing.T) {
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, [][]int{{2}, {0}})
 		gather := Gather(numbers, indices)
-		g.Compile(gather)
+		err := g.Compile(gather)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][]float64{{6, 7, 8}, {0, 1, 2}}
@@ -72,7 +75,8 @@ func TestGather(t *testing.T) {
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, [][][]int{{{2}, {0}}, {{2}, {1}}})
 		gather := Gather(numbers, indices, false)
-		g.Compile(gather)
+		err := g.Compile(gather)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][][]float64{{{6, 7, 8}, {0, 1, 2}}, {{6, 7, 8}, {3, 4, 5}}}
@@ -85,7 +89,8 @@ func TestGather(t *testing.T) {
 		numbers := IotaFull(g, MakeShape(F64, 5, 2, 2))
 		indices := Const(g, [][]int{{2}, {0}, {1}, {3}})
 		gather := Gather(numbers, indices)
-		g.Compile(gather)
+		err := g.Compile(gather)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][][]float64{{{8, 9}, {10, 11}}, {{0, 1}, {2, 3}}, {{4, 5}, {6, 7}}, {{12, 13}, {14, 15}}}
@@ -98,7 +103,8 @@ func TestGather(t *testing.T) {
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, [][]int{{-2}, {10}})
 		gather := Gather(numbers, indices)
-		g.Compile(gather)
+		err := g.Compile(gather)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][]float64{
@@ -119,7 +125,8 @@ func TestNormalizeIndices(t *testing.T) {
 		data := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, []int32{-1, -2, 0, 2, -5})
 		normalized := NormalizeIndices(data, indices, 0)
-		g.Compile(normalized)
+		err := g.Compile(normalized)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\tNormalizeIndices=%v\n", got)
 		// -1 -> 4, -2 -> 3, 0 -> 0, 2 -> 2, -5 -> 0
@@ -134,7 +141,8 @@ func TestNormalizeIndices(t *testing.T) {
 		data := IotaFull(g, MakeShape(F64, 3, 5))
 		indices := Const(g, []int32{-1, -3, 2})
 		normalized := NormalizeIndices(data, indices, -1) // axis -1 = axis 1
-		g.Compile(normalized)
+		err := g.Compile(normalized)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\tNormalizeIndices (negative axis)=%v\n", got)
 		// -1 -> 4, -3 -> 2, 2 -> 2
@@ -148,7 +156,8 @@ func TestNormalizeIndices(t *testing.T) {
 		data := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, [][]int32{{-1, 0}, {-2, 1}})
 		normalized := NormalizeIndices(data, indices, 0)
-		g.Compile(normalized)
+		err := g.Compile(normalized)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\tNormalizeIndices (2D)=%v\n", got)
 		// -1 -> 4, 0 -> 0, -2 -> 3, 1 -> 1
@@ -164,7 +173,8 @@ func TestNormalizeIndices(t *testing.T) {
 		indices := Const(g, [][]int{{-1}, {-2}}) // Python: -1 = last row, -2 = second to last
 		normalizedIndices := NormalizeIndices(numbers, indices, 0)
 		gather := Gather(numbers, normalizedIndices)
-		g.Compile(gather)
+		err := g.Compile(gather)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\tGather with NormalizeIndices=%v\n", got)
 		// -1 -> row 4 = [12, 13, 14], -2 -> row 3 = [9, 10, 11]
@@ -178,7 +188,8 @@ func TestNormalizeIndices(t *testing.T) {
 		data := IotaFull(g, MakeShape(F64, 10, 3))
 		indices := Const(g, []int64{-1, -5, 0, 9})
 		normalized := NormalizeIndices(data, indices, 0)
-		g.Compile(normalized)
+		err := g.Compile(normalized)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\tNormalizeIndices (int64)=%v\n", got)
 		// -1 -> 9, -5 -> 5, 0 -> 0, 9 -> 9
@@ -196,7 +207,8 @@ func TestNormalizeIndices(t *testing.T) {
 		// These will be clamped by Gather to valid range, but NormalizeIndices just converts
 		indices := Const(g, []int32{-6, -10, 10})
 		normalized := NormalizeIndices(data, indices, 0)
-		g.Compile(normalized)
+		err := g.Compile(normalized)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\tNormalizeIndices (out-of-bounds)=%v\n", got)
 		// -6 -> -1 (still negative, will be clamped by Gather)
@@ -245,7 +257,8 @@ func TestScatter(t *testing.T) {
 		numbers := Add(IotaFull(g, MakeShape(F64, 3)), Const(g, float64(2)))
 		indices := Const(g, 1)
 		scatter := Scatter(indices, numbers, MakeShape(F64, 2, 3), true, true)
-		g.Compile(scatter)
+		err := g.Compile(scatter)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\t\tscatter=%v\n", got)
 		want := [][]float64{{0, 0, 0}, {2, 3, 4}}
@@ -260,7 +273,8 @@ func TestScatter(t *testing.T) {
 		indices := Const(g, [][]int{{2}, {0}})
 		operand := Ones(g, MakeShape(F64, 3, 3, 1))
 		scatter := ScatterSum(operand, indices, numbers, false, true)
-		g.Compile(scatter)
+		err := g.Compile(scatter)
+		require.NoError(t, err)
 		got := g.Run()[0]
 		fmt.Printf("\t\tscatter=%s\n", got)
 		want := [][][]float64{{{4}, {5}, {6}}, {{1}, {1}, {1}}, {{1}, {2}, {3}}}
