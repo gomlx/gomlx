@@ -181,6 +181,10 @@ func ConstFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) error
 		return errors.Errorf("MustConstFlatData[%T] is incompatible with Tensor's dtype %s -- expected dtype %s",
 			v, t.shape.DType, dtypes.FromGenericsType[T]())
 	}
+	if t.shape.Size() == 0 {
+		accessFn(nil)
+		return nil
+	}
 	return t.ConstFlatData(func(anyFlat any) {
 		flat := anyFlat.([]T)
 		accessFn(flat)
@@ -310,6 +314,11 @@ func (t *Tensor) lockedMutableFlatData(accessFn func(flat any)) error {
 // See Tensor.ConstBytes for constant access to the data as bytes -- that doesn't invalidate the device storage.
 func (t *Tensor) MutableBytes(accessFn func(data []byte)) error {
 	return t.MutableFlatData(func(flat any) {
+		if flat == nil {
+			// For empty sized tensors, the flat data is nil.
+			accessFn(nil)
+			return
+		}
 		accessFn(dtypes.UnsafeByteSliceFromAny(flat))
 	})
 }
@@ -339,6 +348,10 @@ func MustMutableFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T))
 // This returns the actual Tensor data (not a copy), and the data owned by the Tensor, and should only be changed
 // inside accessFn.
 func MutableFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) error {
+	if t.shape.Size() == 0 {
+		accessFn(nil)
+		return nil
+	}
 	if t.shape.DType != dtypes.FromGenericsType[T]() {
 		var v T
 		return errors.Errorf("MustMutableFlatData[%T] is incompatible with Tensor's dtype %s",
@@ -378,6 +391,9 @@ func AssignFlatData[T dtypes.Supported](toTensor *Tensor, fromFlat []T) error {
 			)
 			return
 		}
+		if len(toFlat) == 0 {
+			return // Empty tensors.
+		}
 		copy(toFlat, fromFlat)
 	})
 	if accessErr != nil {
@@ -396,14 +412,14 @@ func ToScalar[T dtypes.Supported](t *Tensor) T {
 	defer t.mu.Unlock()
 	t.AssertValid()
 	t.mustLockedMaterializeLocal()
+	if !t.shape.IsScalar() {
+		var v T
+		exceptions.Panicf("ToScalar[%T] requires scalar Tensor, got shape %s instead", v, t.shape)
+	}
 	if t.shape.DType != dtypes.FromGenericsType[T]() {
 		var v T
 		exceptions.Panicf("ToScalar[%T] is incompatible with Tensor's dtype %s",
 			v, t.shape.DType)
-	}
-	if !t.shape.IsScalar() {
-		var v T
-		exceptions.Panicf("ToScalar[%T] requires scalar Tensor, got shape %s instead", v, t.shape)
 	}
 	return t.local.flat.([]T)[0]
 }
