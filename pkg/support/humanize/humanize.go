@@ -6,6 +6,9 @@ import (
 	"time"
 )
 
+// EraseToEndOfLine is the ANSI control sequence to erase the current line from the cursor to the end.
+const EraseToEndOfLine = "\033[K"
+
 // Bytes returns the rendering of bytes aproximated to the nearest power of 1024 (Kb, Mb, Gb, Tb, etc.)
 // with one decimal place.
 func Bytes[T ~int64 | ~uint64 | ~int | ~uint | ~int32 | ~uint32 | ~int16 | ~uint16 | ~int8 | ~uint8 | ~uintptr](numAny T) string {
