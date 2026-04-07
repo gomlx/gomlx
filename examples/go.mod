@@ -7,10 +7,9 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/daniellowtw/matlab v0.0.0-20190528220746-1ed1d96a6637
 	github.com/disintegration/imaging v1.6.2
-	github.com/dustin/go-humanize v1.0.1
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/go-huggingface v0.3.5-0.20260404100917-78e247e007b5
-	github.com/gomlx/gomlx v0.27.3-0.20260404100428-4094c2b5f72d
+	github.com/gomlx/gomlx v0.27.3-0.20260407135345-88904d01b731
 	github.com/gomlx/onnx-gomlx v0.4.2-0.20260329071313-0b8b7e4d5a02
 	github.com/janpfeifer/gonb v0.11.3
 	github.com/janpfeifer/must v0.2.0
@@ -31,6 +30,7 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/edsrzf/mmap-go v1.2.0 // indirect
 	github.com/eliben/go-sentencepiece v0.7.0 // indirect
 	github.com/erkkah/margaid v0.3.0 // indirect
