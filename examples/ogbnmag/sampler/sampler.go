@@ -10,10 +10,10 @@ import (
 	"sort"
 	"strings"
 
-	humanize "github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/pkg/support/humanize"
 	"github.com/pkg/errors"
 )
 
@@ -300,12 +300,12 @@ func (s *Sampler) String() string {
 		len(s.NodeTypesToCount), len(s.EdgeTypes), frozenDesc))
 	for name, count := range s.NodeTypesToCount {
 		parts = append(parts, fmt.Sprintf(
-			"\tNodeType %q: %s items", name, humanize.Comma(int64(count))))
+			"\tNodeType %q: %s items", name, humanize.Underscores(count)))
 	}
 	for name, edge := range s.EdgeTypes {
 		parts = append(parts, fmt.Sprintf(
 			"\tEdgeType %q: [%q]->[%q], %s edges",
-			name, edge.SourceNodeType, edge.TargetNodeType, humanize.Comma(int64(edge.NumEdges()))))
+			name, edge.SourceNodeType, edge.TargetNodeType, humanize.Underscores(edge.NumEdges())))
 	}
 	return strings.Join(parts, "\n")
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/gomlx/gomlx/examples/inceptionv3"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
+	"github.com/gomlx/gomlx/internal/humanize"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -27,7 +28,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/janpfeifer/gonb/cache"
@@ -382,7 +382,7 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 	fmt.Printf("DisplayImagesAcrossDiffusionSteps(%d images, %d steps): noise.shape=%s\n",
 		numImages, numSteps, noise.Shape())
 	fmt.Printf("\tModel #params:\t%d\n", ctx.NumParameters())
-	fmt.Printf("\t Model memory:\t%s\n", fsutil.ByteCountIEC(ctx.ByteSize()))
+	fmt.Printf("\t Model memory:\t%s\n", humanize.Bytes(ctx.ByteSize()))
 	for ii, generatedImage := range generatedImages {
 		gonbui.DisplayHTMLF("<p>%.2f%% Transformed</p>", generationTimes[ii]*100.0)
 		PlotImagesTensor(generatedImage)

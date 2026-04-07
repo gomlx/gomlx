@@ -6,11 +6,11 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/support/humanize"
 )
 
 func Summary(ctxs, scopedCtxs []*context.Context, names []string) {
@@ -38,7 +38,7 @@ func Summary(ctxs, scopedCtxs []*context.Context, names []string) {
 		if globalStepVar != nil {
 			haveGlobalStep = true
 			globalStepT := must.M1(globalStepVar.Value())
-			globalStepRow[ii+1] = humanize.Comma(tensors.ToScalar[int64](globalStepT))
+			globalStepRow[ii+1] = humanize.Underscores(tensors.ToScalar[int64](globalStepT))
 		}
 	}
 	if haveGlobalStep {
@@ -60,9 +60,9 @@ func Summary(ctxs, scopedCtxs []*context.Context, names []string) {
 			totalSize += v.Shape().Size()
 			totalMemory += v.Shape().ByteSize()
 		})
-		variablesRow[ii+1] = humanize.Comma(int64(numVars))
-		parametersRow[ii+1] = humanize.Comma(int64(totalSize))
-		memoryRow[ii+1] = humanize.Bytes(uint64(totalMemory))
+		variablesRow[ii+1] = humanize.Underscores(numVars)
+		parametersRow[ii+1] = humanize.Count(totalSize)
+		memoryRow[ii+1] = humanize.Bytes(totalMemory)
 	}
 	table.Row(variablesRow...)
 	table.Row(parametersRow...)

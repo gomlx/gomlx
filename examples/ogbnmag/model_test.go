@@ -9,13 +9,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/pkg/support/humanize"
 	"github.com/pbnjay/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -62,7 +61,7 @@ func TestModel(t *testing.T) {
 	for _, input := range inputs {
 		totalSizeBytes += input.Shape().ByteSize()
 	}
-	fmt.Printf("One sample (batch) size is %s bytes\n", fsutil.ByteCountIEC(totalSizeBytes))
+	fmt.Printf("One sample (batch) size is %s bytes\n", humanize.Bytes(totalSizeBytes))
 	require.NoError(t, err)
 	outputs := testGraphExec.MustExec(inputs)
 	for ii, output := range outputs {

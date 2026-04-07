@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gomlx/gomlx/internal/humanize"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
@@ -38,7 +39,7 @@ func newCopyBytesBar(w io.Writer, contentLength int64) *copyBytesBar {
 	}
 	bar.numUnits = (contentLength + bar.barUnit - 1) / bar.barUnit
 	bar.bar = progressbar.NewOptions(int(bar.numUnits),
-		progressbar.OptionSetDescription(fmt.Sprintf("%s", fsutil.ByteCountIEC(contentLength))),
+		progressbar.OptionSetDescription(fmt.Sprintf("%s", humanize.Bytes(contentLength))),
 		progressbar.OptionUseANSICodes(true),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionSetTheme(progressbar.ThemeUnicode),

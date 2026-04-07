@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/simplego"
 	"github.com/gomlx/gomlx/internal/must"
@@ -16,7 +15,7 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/pkg/support/humanize"
 )
 
 var (
@@ -59,7 +58,7 @@ func ListVariables(ctx *context.Context) {
 		rows = append(rows, []string{
 			v.Scope(), v.Name(), shape.String(),
 			humanize.Comma(int64(shape.Size())),
-			fsutil.ByteCountIEC(shape.ByteSize()),
+			humanize.Bytes(shape.ByteSize()),
 			mav, rms, maxAV,
 		})
 	})
