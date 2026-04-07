@@ -643,10 +643,13 @@ func FromShapeForBackend(backend backends.Backend, deviceNum backends.DeviceNum,
 		return nil, err
 	}
 
-	// Initialize the shared memory with zeros to match FromShape.
-	t.MutableBytes(func(buf []byte) {
-		clear(buf)
-	})
+	// If not shared, it's already initialized with zeros by FromShape.
+	if t.isShared && t.Size() > 0 {
+		// Initialize the shared memory with zeros to match FromShape.
+		t.MutableBytes(func(buf []byte) {
+			clear(buf)
+		})
+	}
 	return t, nil
 }
 
