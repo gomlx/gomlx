@@ -484,3 +484,77 @@ func TestFromShape(t *testing.T) {
 		})
 	}
 }
+
+func TestEmptySizeAccess(t *testing.T) {
+	testCases := []struct {
+		dtype dtypes.DType
+	}{
+		{dtypes.Float32},
+		{dtypes.Int8},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s", tc.dtype), func(t *testing.T) {
+			shape := shapes.Make(tc.dtype, 10, 0, 3)
+			tensor := FromShape(shape)
+
+			// t.MutableFlatData
+			err := tensor.MutableFlatData(func(flat any) {
+				switch tc.dtype {
+				case dtypes.Float32:
+					slice := flat.([]float32)
+					require.Len(t, slice, 0)
+				case dtypes.Int8:
+					slice := flat.([]int8)
+					require.Len(t, slice, 0)
+				}
+			})
+			require.NoError(t, err)
+
+			// t.ConstFlatData
+			err = tensor.ConstFlatData(func(flat any) {
+				switch tc.dtype {
+				case dtypes.Float32:
+					slice := flat.([]float32)
+					require.Len(t, slice, 0)
+				case dtypes.Int8:
+					slice := flat.([]int8)
+					require.Len(t, slice, 0)
+				}
+			})
+			require.NoError(t, err)
+
+			// t.MutableBytes
+			err = tensor.MutableBytes(func(data []byte) {
+				require.Len(t, data, 0)
+			})
+			require.NoError(t, err)
+
+			// tensors.MutableFlatData[T]
+			if tc.dtype == dtypes.Float32 {
+				err = MutableFlatData(tensor, func(flat []float32) {
+					require.Len(t, flat, 0)
+				})
+				require.NoError(t, err)
+			} else if tc.dtype == dtypes.Int8 {
+				err = MutableFlatData(tensor, func(flat []int8) {
+					require.Len(t, flat, 0)
+				})
+				require.NoError(t, err)
+			}
+
+			// tensors.ConstFlatData[T]
+			if tc.dtype == dtypes.Float32 {
+				err = ConstFlatData(tensor, func(flat []float32) {
+					require.Len(t, flat, 0)
+				})
+				require.NoError(t, err)
+			} else if tc.dtype == dtypes.Int8 {
+				err = ConstFlatData(tensor, func(flat []int8) {
+					require.Len(t, flat, 0)
+				})
+				require.NoError(t, err)
+			}
+		})
+	}
+}

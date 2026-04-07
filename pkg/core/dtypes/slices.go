@@ -50,6 +50,9 @@ func UnsafeByteSliceFromAny(flatAny any) []byte {
 
 // UnsafeByteSlice casts a slice of any of the supported Go types to a slice of bytes.
 func UnsafeByteSlice[E Supported](flat []E) []byte {
+	if len(flat) == 0 {
+		return nil
+	}
 	var e E
 	elementSize := int(unsafe.Sizeof(e))
 	return unsafe.Slice((*byte)(unsafe.Pointer(&flat[0])), len(flat)*elementSize)
