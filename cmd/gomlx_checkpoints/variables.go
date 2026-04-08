@@ -57,7 +57,7 @@ func ListVariables(ctx *context.Context) {
 		}
 		rows = append(rows, []string{
 			v.Scope(), v.Name(), shape.String(),
-			humanize.Comma(int64(shape.Size())),
+			humanize.Underscores(int64(shape.Size())),
 			humanize.Bytes(shape.ByteSize()),
 			mav, rms, maxAV,
 		})
