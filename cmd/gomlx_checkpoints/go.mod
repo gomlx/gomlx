@@ -5,8 +5,7 @@ go 1.25.0
 require (
 	github.com/MetalBlueberry/go-plotly v0.7.0
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/dustin/go-humanize v1.0.1
-	github.com/gomlx/gomlx v0.27.2-0.20260321114321-1da5fbc20971
+	github.com/gomlx/gomlx v0.27.3-0.20260407155239-beda390e695f
 	github.com/janpfeifer/gonb v0.11.3
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.11.1
@@ -21,7 +20,7 @@ require (
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
@@ -31,11 +30,11 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.21 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa // indirect
+	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/term v0.40.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
