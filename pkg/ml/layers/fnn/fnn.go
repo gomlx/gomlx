@@ -213,8 +213,8 @@ func (c *Config) Regularizer(regularizer regularizers.Regularizer) *Config {
 // The default is 0.0, but it can be overridden by setting the hyperparameter layers.ParamDropoutRate (="dropout_rate")
 // in the context.
 func (c *Config) Dropout(ratio float64) *Config {
-	if ratio < 0 || ratio >= 1.0 {
-		exceptions.Panicf("fnn: invalid dropout ratio %f -- set to 0.0 to disable it, and it must be < 1.0 otherwise everything is dropped out",
+	if ratio >= 1.0 {
+		exceptions.Panicf("fnn: invalid dropout ratio %f -- set to <= 0.0 to disable it, and it must be < 1.0 otherwise everything is dropped out",
 			ratio)
 	}
 	c.dropoutRatio = ratio
