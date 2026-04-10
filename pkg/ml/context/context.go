@@ -389,6 +389,11 @@ func (ctx *Context) WithInitializer(initializer VariableInitializer) *Context {
 	return ctx2
 }
 
+// Initializer returns the initializer configured for the context.
+func (ctx *Context) Initializer() VariableInitializer {
+	return ctx.initializer
+}
+
 // GetParam returns the value for the given param key, searching successively from
 // the current scope back to the root scope ("/"), in case the key is not found.
 //
@@ -1115,7 +1120,7 @@ func (ctx *Context) EnumerateVariablesInScope(fn func(v *Variable)) {
 }
 
 // IterVariablesInScope is similar to IterVariables, but enumerate only those under the current
-// context scope.
+// context scope -- including sub-scopes.
 func (ctx *Context) IterVariablesInScope() iter.Seq[*Variable] {
 	baseScope := ctx.Scope()
 	return func(yield func(*Variable) bool) {
