@@ -203,3 +203,29 @@ func TestFNNRegularized(t *testing.T) {
 		numZeros,
 	)
 }
+
+func TestFNNEnsembleShapes(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+
+	for _, numHiddenLayers := range []int{0, 1, 2} {
+		for _, useBias := range []bool{false, true} {
+			for _, useResidual := range []bool{false, true} {
+				t.Run(fmt.Sprintf("hidden=%d_bias=%t_residual=%t", numHiddenLayers, useBias, useResidual), func(t *testing.T) {
+					ctx := context.New()
+					g := NewGraph(backend, "test_ensemble_shapes")
+					input := Ones(g, shapes.Make(dtypes.Float32, 3, 2, 4)) // batch=[3, 2], F=4
+
+					fnnOutput := New(ctx.In("model"), input, 5, 6).
+						NumHiddenLayers(numHiddenLayers, 8). // 8 nodes in hidden layers
+						WithEnsembleSize(7).
+						UseBias(useBias).
+						Residual(useResidual).
+						Done()
+
+					assert.Equal(t, shapes.Make(dtypes.Float32, 3, 2, 7, 5, 6), fnnOutput.Shape())
+					ctx.Finalize()
+				})
+			}
+		}
+	}
+}

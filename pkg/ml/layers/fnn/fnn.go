@@ -69,6 +69,7 @@ type Config struct {
 	input                           *Node
 	outputDimensions                []int
 	numHiddenLayers, numHiddenNodes int
+	ensembleSize                    int
 	activation                      activations.Type
 	normalization                   string
 	dropoutRatio                    float64
@@ -134,6 +135,13 @@ func New(ctx *context.Context, input *Node, outputDimensions ...int) *Config {
 	if c.dropoutRatio < 0 {
 		c.dropoutRatio = context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
 	}
+	return c
+}
+
+// WithEnsembleSize configure an ensemble size greater than 1, which adds an extra "ensemble axis"
+// to the variables and intermediary layers, executing the FNN as an ensemble.
+func (c *Config) WithEnsembleSize(ensembleSize int) *Config {
+	c.ensembleSize = ensembleSize
 	return c
 }
 
@@ -228,6 +236,8 @@ func (c *Config) Done() *Node {
 	g := x.Graph()
 	dtype := x.DType()
 
+	isEnsemble := c.ensembleSize > 1
+
 	var dropoutRatio *Node
 	if c.dropoutRatio > 0.0 {
 		dropoutRatio = Scalar(g, dtype, c.dropoutRatio)
@@ -266,13 +276,31 @@ func (c *Config) Done() *Node {
 				x = Add(x, residual)
 			}
 			residual = x
+
+			// Adjust residual shape alignment to match the structural shape
+			// transition executed by DotGeneral for layers passing from ii=1 to ii>1
+			if isEnsemble && ii == 1 {
+				perm := make([]int, residual.Rank())
+				batchRank := residual.Rank() - 1 - len(outputDims)
+				perm[0] = batchRank
+				for j := 0; j < batchRank; j++ {
+					perm[j+1] = j
+				}
+				for j := batchRank + 1; j < residual.Rank(); j++ {
+					perm[j] = j
+				}
+				residual = TransposeAllAxes(residual, perm...)
+			}
 		}
 
 		// Linear transformation
 		inputLastDimension := x.Shape().Dimensions[x.Rank()-1]
-		weightsDims := make([]int, 1+len(outputDims))
-		weightsDims[0] = inputLastDimension
-		copy(weightsDims[1:], outputDims)
+		weightsDims := make([]int, 0, 2+len(outputDims))
+		if isEnsemble {
+			weightsDims = append(weightsDims, c.ensembleSize)
+		}
+		weightsDims = append(weightsDims, inputLastDimension)
+		weightsDims = append(weightsDims, outputDims...)
 		weightsVar := layerCtx.VariableWithShape("weights", shapes.Make(dtype, weightsDims...))
 		if c.regularizer != nil {
 			// Only for the weights, not for the bias.
@@ -281,10 +309,62 @@ func (c *Config) Done() *Node {
 		weights := weightsVar.ValueGraph(g)
 		var biasNode *Node
 		if c.useBias {
-			biasVar := layerCtx.VariableWithShape("biases", shapes.Make(dtype, outputDims...))
+			biasDims := make([]int, 0, 1+len(outputDims))
+			if isEnsemble {
+				biasDims = append(biasDims, c.ensembleSize)
+			}
+			biasDims = append(biasDims, outputDims...)
+			biasVar := layerCtx.VariableWithShape("biases", shapes.Make(dtype, biasDims...))
 			biasNode = biasVar.ValueGraph(g)
 		}
-		x = nn.Dense(x, weights, biasNode)
+
+		if !isEnsemble {
+			x = nn.Dense(x, weights, biasNode)
+		} else {
+			switch ii {
+			case 0:
+				x = Dot(x, weights).General([]int{x.Rank() - 1}, nil, []int{1}, nil)
+				if biasNode != nil {
+					x = Add(x, ExpandLeftToRank(biasNode, x.Rank()))
+				}
+			case 1:
+				x = Dot(x, weights).General([]int{x.Rank() - 1}, []int{x.Rank() - 2}, []int{1}, []int{0})
+				if biasNode != nil {
+					batchRank := x.Rank() - 1 - len(outputDims)
+					axesToInsert := make([]int, batchRank)
+					for j := 0; j < batchRank; j++ {
+						axesToInsert[j] = 1 + j
+					}
+					x = Add(x, ExpandAxes(biasNode, axesToInsert...))
+				}
+			default:
+				x = Dot(x, weights).General([]int{x.Rank() - 1}, []int{0}, []int{1}, []int{0})
+				if biasNode != nil {
+					batchRank := x.Rank() - 1 - len(outputDims)
+					axesToInsert := make([]int, batchRank)
+					for j := 0; j < batchRank; j++ {
+						axesToInsert[j] = 1 + j
+					}
+					x = Add(x, ExpandAxes(biasNode, axesToInsert...))
+				}
+			}
+		}
 	}
+
+	if isEnsemble && c.numHiddenLayers > 0 {
+		// x is currently [E, B..., Out...].
+		// Transpose back to [B..., E, Out...]
+		perm := make([]int, x.Rank())
+		batchRank := x.Rank() - 1 - len(c.outputDimensions)
+		for j := 0; j < batchRank; j++ {
+			perm[j] = j + 1
+		}
+		perm[batchRank] = 0
+		for j := batchRank + 1; j < x.Rank(); j++ {
+			perm[j] = j
+		}
+		x = TransposeAllAxes(x, perm...)
+	}
+
 	return x
 }
