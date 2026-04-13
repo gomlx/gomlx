@@ -7,6 +7,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
@@ -186,7 +187,7 @@ func TestFNNRegularized(t *testing.T) {
 		require.NotNilf(t, v, "failed to inspect variable scope=%q, name=%q", scope, vName)
 		tensor := v.MustValue()
 		fmt.Printf("\t%s : %s -> %v\n", v.Scope(), v.Name(), tensor)
-		tensors.MustConstFlatData[float64](tensor, func(flat []float64) {
+		tensors.MustConstFlatData(tensor, func(flat []float64) {
 			for _, element := range flat {
 				if element == 0.0 {
 					numZeros++
@@ -205,27 +206,48 @@ func TestFNNRegularized(t *testing.T) {
 }
 
 func TestFNNEnsembleShapes(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+		for _, hasEnsembleAxis := range []bool{false, true} {
+			for _, numHiddenLayers := range []int{0, 1, 2} {
+				for _, useBias := range []bool{false, true} {
+					for _, useResidual := range []bool{false, true} {
+						t.Run(fmt.Sprintf("ensembleAxis=%t_hidden=%d_bias=%t_residual=%t", hasEnsembleAxis, numHiddenLayers, useBias, useResidual), func(t *testing.T) {
+							ctx := context.New()
+							g := NewGraph(backend, "test_ensemble_shapes")
 
-	for _, numHiddenLayers := range []int{0, 1, 2} {
-		for _, useBias := range []bool{false, true} {
-			for _, useResidual := range []bool{false, true} {
-				t.Run(fmt.Sprintf("hidden=%d_bias=%t_residual=%t", numHiddenLayers, useBias, useResidual), func(t *testing.T) {
-					ctx := context.New()
-					g := NewGraph(backend, "test_ensemble_shapes")
-					input := Ones(g, shapes.Make(dtypes.Float32, 3, 2, 4)) // batch=[3, 2], F=4
+							var input *Node
+							if hasEnsembleAxis {
+								// Insert ensemble axis at index 1 -> [3, 7, 2, 4]
+								input = Ones(g, shapes.Make(dtypes.Float32, 3, 7, 2, 4))
+							} else {
+								input = Ones(g, shapes.Make(dtypes.Float32, 3, 2, 4)) // batch=[3, 2], F=4
+							}
 
-					fnnOutput := New(ctx.In("model"), input, 5, 6).
-						NumHiddenLayers(numHiddenLayers, 8). // 8 nodes in hidden layers
-						WithEnsembleSize(7).
-						UseBias(useBias).
-						Residual(useResidual).
-						Done()
+							config := New(ctx.In("model"), input, 5, 6).
+								NumHiddenLayers(numHiddenLayers, 8). // 8 nodes in hidden layers
+								UseBias(useBias).
+								Residual(useResidual)
 
-					assert.Equal(t, shapes.Make(dtypes.Float32, 3, 2, 7, 5, 6), fnnOutput.Shape())
-					ctx.Finalize()
-				})
+							if hasEnsembleAxis {
+								config.WithEnsembleAxis(1)
+							} else {
+								config.WithEnsembleSize(7)
+							}
+
+							fnnOutput := config.Done()
+
+							var expectedShape shapes.Shape
+							if hasEnsembleAxis {
+								expectedShape = shapes.Make(dtypes.Float32, 3, 7, 2, 5, 6)
+							} else {
+								expectedShape = shapes.Make(dtypes.Float32, 3, 2, 7, 5, 6)
+							}
+							assert.Equal(t, expectedShape, fnnOutput.Shape())
+							ctx.Finalize()
+						})
+					}
+				}
 			}
 		}
-	}
+	}, "xla:cuda") // No need to test xla:cuda, we are only checking the shape logic.
 }

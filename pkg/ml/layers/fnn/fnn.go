@@ -70,6 +70,7 @@ type Config struct {
 	outputDimensions                []int
 	numHiddenLayers, numHiddenNodes int
 	ensembleSize                    int
+	ensembleAxis                    int
 	activation                      activations.Type
 	normalization                   string
 	dropoutRatio                    float64
@@ -118,6 +119,7 @@ func New(ctx *context.Context, input *Node, outputDimensions ...int) *Config {
 		ctx:              ctx,
 		input:            input,
 		outputDimensions: outputDimensions,
+		ensembleAxis:     -1,
 		numHiddenLayers:  context.GetParamOr(ctx, ParamNumHiddenLayers, 0),
 		numHiddenNodes:   context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
 		activation:       activations.FromName(context.GetParamOr(ctx, activations.ParamActivation, "relu")),
@@ -140,8 +142,35 @@ func New(ctx *context.Context, input *Node, outputDimensions ...int) *Config {
 
 // WithEnsembleSize configure an ensemble size greater than 1, which adds an extra "ensemble axis"
 // to the variables and intermediary layers, executing the FNN as an ensemble.
+//
+// See WithEnsembleAxis for an alternative way to configure ensembles, when your input is already
+// split into the ensemble.
 func (c *Config) WithEnsembleSize(ensembleSize int) *Config {
 	c.ensembleSize = ensembleSize
+	return c
+}
+
+// WithEnsembleAxis defined an axis from the input operand that should be
+// considered as separate per model of the ensemble.
+//
+// It initializes the ensemble size from the input shape's given axis.
+//
+// This is used when constructing upper layers of an ensemble model, when the input has
+// already been transformer be per model of the ensemble -- hence it already has an ensemble axis.
+//
+// See WithEnsembleSize if you want to configure an ensemble for a plain input, which hasn't been
+// transformed per model of the ensemble, and hence doesn't have an ensemble axis.
+func (c *Config) WithEnsembleAxis(ensembleAxis int) *Config {
+	if ensembleAxis < 0 {
+		ensembleAxis = MustAdjustAxis(ensembleAxis, c.input)
+	}
+	c.ensembleAxis = ensembleAxis
+	dim := c.input.Shape().Dimensions[ensembleAxis]
+	if c.ensembleSize > 0 && c.ensembleSize != dim {
+		exceptions.Panicf("fnn: WithEnsembleAxis(%d), input shape is %s, corresponding dimension is %d, but ensembleSize is already %d",
+			ensembleAxis, c.input.Shape(), dim, c.ensembleSize)
+	}
+	c.ensembleSize = dim
 	return c
 }
 
@@ -279,7 +308,7 @@ func (c *Config) Done() *Node {
 
 			// Adjust residual shape alignment to match the structural shape
 			// transition executed by DotGeneral for layers passing from ii=1 to ii>1
-			if isEnsemble && ii == 1 {
+			if isEnsemble && c.ensembleAxis < 0 && ii == 1 {
 				perm := make([]int, residual.Rank())
 				batchRank := residual.Rank() - 1 - len(outputDims)
 				perm[0] = batchRank
@@ -320,6 +349,20 @@ func (c *Config) Done() *Node {
 
 		if !isEnsemble {
 			x = nn.Dense(x, weights, biasNode)
+		} else if c.ensembleAxis >= 0 {
+			if ii == 0 {
+				x = Dot(x, weights).General([]int{x.Rank() - 1}, []int{c.ensembleAxis}, []int{1}, []int{0})
+			} else {
+				x = Dot(x, weights).General([]int{x.Rank() - 1}, []int{0}, []int{1}, []int{0})
+			}
+			if biasNode != nil {
+				batchRank := x.Rank() - 1 - len(outputDims)
+				axesToInsert := make([]int, batchRank)
+				for j := 0; j < batchRank; j++ {
+					axesToInsert[j] = 1 + j
+				}
+				x = Add(x, ExpandAxes(biasNode, axesToInsert...))
+			}
 		} else {
 			switch ii {
 			case 0:
@@ -351,19 +394,27 @@ func (c *Config) Done() *Node {
 		}
 	}
 
-	if isEnsemble && c.numHiddenLayers > 0 {
-		// x is currently [E, B..., Out...].
-		// Transpose back to [B..., E, Out...]
-		perm := make([]int, x.Rank())
-		batchRank := x.Rank() - 1 - len(c.outputDimensions)
-		for j := 0; j < batchRank; j++ {
-			perm[j] = j + 1
+	if isEnsemble {
+		needsTranspose := false
+		pos := x.Rank() - 1 - len(c.outputDimensions)
+		if c.ensembleAxis >= 0 {
+			pos = c.ensembleAxis
+			needsTranspose = true
+		} else if c.numHiddenLayers > 0 {
+			needsTranspose = true
 		}
-		perm[batchRank] = 0
-		for j := batchRank + 1; j < x.Rank(); j++ {
-			perm[j] = j
+
+		if needsTranspose {
+			perm := make([]int, x.Rank())
+			for j := 0; j < pos; j++ {
+				perm[j] = j + 1
+			}
+			perm[pos] = 0
+			for j := pos + 1; j < x.Rank(); j++ {
+				perm[j] = j
+			}
+			x = TransposeAllAxes(x, perm...)
 		}
-		x = TransposeAllAxes(x, perm...)
 	}
 
 	return x

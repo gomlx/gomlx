@@ -38,7 +38,7 @@
   - Split `Encoder` API into `QKEncoder` and `PreEncoder`, to support different types of positional encoders.
   - Added `WithSlidingWindow` to support "sliding attention" (the slow way).
 - Package `layers/fnn`:
-  - Added `WithEnsembleSize` method for configuring parallel independent executions via ensembles.
+  - Added `WithEnsembleSize` and `WithEnsembleAxis` methods for configuring parallel independent executions via ensembles.
 - Package `transfromers`:
   - Updates and fixes to the API; Added methods to build partial models: `AllLayers`, `ForwardLayer`, `LogitsFromEmbeddings`, `EmbedTokesn`, etc.
   - Updated positional-encoder support.
