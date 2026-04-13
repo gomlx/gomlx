@@ -53,6 +53,7 @@ This table maps common functions from the `pkg/core/graph` package to their PyTo
 | `MaxPool(x).Done()` | Max pooling operation using a builder API. Chain methods like `Window`, `Strides`, then `Done()`. | `torch.nn.functional.max_pool1d`, `max_pool2d`, `max_pool3d` |
 | `MeanPool(x).Done()` | Average pooling operation using a builder API. Chain methods like `Window`, `Strides`, then `Done()`. | `torch.nn.functional.avg_pool1d`, `avg_pool2d`, `avg_pool3d` |
 | **Constants & Generation** | | |
+| `Const(g, value)` | Creates a constant node in the graph `g` from a given value (scalar, slice, tensor, etc). | `torch.tensor(value)` |
 | `Scalar(g, dtype, value)` | Creates a scalar node in the graph `g`. | `torch.tensor(value, dtype=dtype)` |
 | `Zeros(g, shape)` | Creates a tensor of zeros. | `torch.zeros(shape)` |
 | `Ones(g, shape)` | Creates a tensor of ones. | `torch.ones(shape)` |
@@ -78,4 +79,6 @@ This table maps common functions from the `pkg/core/graph` package to their PyTo
 | `If(pred, trueBranch, falseBranch)` | Conditional execution inside the graph. `trueBranch` and `falseBranch` are `*Function` instances (e.g. from `NewClosure`). | `torch.cond(pred, trueBranch, falseBranch)` |
 | `While(cond, body, initialState...)` | Loop execution inside the graph. `cond` and `body` are `*Function` instances. | `torch.while_loop` equivalent / native Python `while` |
 | `NewClosure(g, func)` | Creates a `*Function` representing a sub-graph computation, used for `If` and `While`. | N/A (Tracing/JIT captures Python functions directly in PyTorch) |
+| **Autograd / Differentiation** | | |
+| `Gradient(output, gradientNodes...)` | Computes the gradients of `output` with respect to the given `gradientNodes`. | `torch.autograd.grad(output, gradientNodes)` |
 | `StopGradient(x)` | Prevents gradients from flowing through `x` during backpropagation. | `x.detach()` |
