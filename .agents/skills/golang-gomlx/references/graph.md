@@ -44,8 +44,8 @@ This table maps common functions from the `pkg/core/graph` package to their PyTo
 | `ReduceMin(x, axes...)` | Computes the minimum along the specified axes. | `torch.amin(x, dim=axes)` |
 | `ArgMax(x, axis)` | Returns the index of the maximum value along an axis. | `torch.argmax(x, dim=axis)` |
 | **Linear Algebra** | | |
-| `Dot(a, b)` | Matrix multiplication (or dot product for 1D). | `torch.matmul(a, b)` or `a @ b` |
-| `DotGeneral(a, axesA, b, axesB)` | Generalized dot product / tensor contraction. | `torch.tensordot(a, b, dims)` |
+| `Dot(a, b).Product()` | Matrix multiplication (or dot product for 1D). Uses the `Dot` builder pattern. | `torch.matmul(a, b)` or `a @ b` |
+| `Dot(a, b).General(aContAxes, aBatchAxes, bContAxes, bBatchAxes)` | Generalized dot product / tensor contraction. Uses the `Dot` builder pattern. | `torch.tensordot(a, b, dims)` |
 | `Einsum(equation, operands...)` | Einstein summation convention. | `torch.einsum(equation, operands)` |
 | **Constants & Generation** | | |
 | `Scalar(g, dtype, value)` | Creates a scalar node in the graph `g`. | `torch.tensor(value, dtype=dtype)` |
@@ -63,4 +63,7 @@ This table maps common functions from the `pkg/core/graph` package to their PyTo
 | `LogicalAnd(a, b)` | Element-wise logical AND. | `torch.logical_and(a, b)` |
 | `LogicalOr(a, b)` | Element-wise logical OR. | `torch.logical_or(a, b)` |
 | `LogicalNot(x)` | Element-wise logical NOT. | `torch.logical_not(x)` |
+| `If(pred, trueBranch, falseBranch)` | Conditional execution inside the graph. `trueBranch` and `falseBranch` are `*Function` instances (e.g. from `NewClosure`). | `torch.cond(pred, trueBranch, falseBranch)` |
+| `While(cond, body, initialState...)` | Loop execution inside the graph. `cond` and `body` are `*Function` instances. | `torch.while_loop` equivalent / native Python `while` |
+| `NewClosure(g, func)` | Creates a `*Function` representing a sub-graph computation, used for `If` and `While`. | N/A (Tracing/JIT captures Python functions directly in PyTorch) |
 | `StopGradient(x)` | Prevents gradients from flowing through `x` during backpropagation. | `x.detach()` |
