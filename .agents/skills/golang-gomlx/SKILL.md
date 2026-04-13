@@ -115,7 +115,7 @@ func DenseLayer(ctx *context.Context, x *Node, outputDim int) *Node {
 	weightsVar := ctx.VariableWithShape("weights", shapes.Make(x.DType(), inputDim, outputDim))
 	biasVar := ctx.VariableWithShape("bias", shapes.Make(x.DType(), outputDim))
 
-	x = Dot(x, weightsVar.ValueGraph(x.Graph()))
+	x = Dot(x, weightsVar.ValueGraph(x.Graph())).Product()
 	return Add(x, biasVar.ValueGraph(x.Graph()))
 }
 ```
@@ -136,5 +136,34 @@ func DenseLayer(ctx *context.Context, x *Node, outputDim int) *Node {
   - Metrics are provided as lists during `train.NewTrainer` initialization (one list for train metrics, one for eval metrics).
   - Common metrics include `metrics.NewMeanBinaryLogitsAccuracy()`, `metrics.NewSparseCategoricalAccuracy()`.
 - `train.Loop` manages the iterative process, feeding datasets to the `Trainer` and calling callbacks (e.g., checkpoint saving, plotting).
-  - Use `loop.RunSteps(...)` or `loop.RunEpochs(...)` to execute the training process.
+
+Example Training Pipeline:
+
+```go
+// 1. Create dataset
+trainDS := CreateDataset(...)
+
+// 2. Metrics we are interested in.
+meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
+movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
+
+// 3. Create a train.Trainer: orchestrates running the model, feeding results to the optimizer, evaluating metrics.
+trainer := train.NewTrainer(backend, ctx, Model, losses.BinaryCrossentropyLogits,
+	optimizers.FromContext(ctx),
+	[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
+	[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+
+// 4. Create a standard training loop
+loop := train.NewLoop(trainer)
+
+// 5. Attach a progress bar to the loop.
+commandline.AttachProgressBar(loop)
+
+// 6. Get hyperparameters and run the training loop
+trainSteps := context.GetParamOr(ctx, "train_steps", 1000)
+_, err := loop.RunToGlobalStep(trainDS, trainSteps)
+if err != nil {
+	return err
+}
+```
 
