@@ -18,9 +18,6 @@ This table maps common machine learning layers and functions from `pkg/ml/layers
 | **Convolutional Layers** (`pkg/ml/layers`) | | |
 | `layers.Convolution(ctx, x)` | Builder for a convolutional layer (1D, 2D, or 3D inferred from input shape). Use chained methods (e.g., `Filters(n)`, `KernelSize(k)`) and call `Done()` to build. | `torch.nn.Conv1d`, `torch.nn.Conv2d`, `torch.nn.Conv3d` |
 | `layers.Conv2D(ctx, x, filters, kernelSize, strides, padding)` | Shorthand for a 2D convolution. | `torch.nn.Conv2d` |
-| **Pooling Layers** (`pkg/core/graph`) | | |
-| `graph.MaxPool(x)` | Builder for max pooling operation. Use chained methods like `Window(w)`, `Strides(s)`, and `Done()`. | `torch.nn.MaxPool1d`, `torch.nn.MaxPool2d`, `torch.nn.MaxPool3d` |
-| `graph.MeanPool(x)` | Builder for average pooling operation. Use chained methods and `Done()`. | `torch.nn.AvgPool1d`, `torch.nn.AvgPool2d`, `torch.nn.AvgPool3d` |
 | **Normalization Layers** (`pkg/ml/layers/batchnorm`, `pkg/ml/layers/layernorm`) | | |
 | `batchnorm.New(ctx, x, axis)` | Batch Normalization. Use chained methods and `Done()`. The `axis` specifies the feature dimension. | `torch.nn.BatchNorm1d`, `torch.nn.BatchNorm2d`, `torch.nn.BatchNorm3d` |
 | `layernorm.New(ctx, x, axes...)` | Layer Normalization applied over the given axes. Use chained methods and `Done()`. | `torch.nn.LayerNorm` |
