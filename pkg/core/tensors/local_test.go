@@ -15,6 +15,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/x448/float16"
@@ -485,9 +486,9 @@ func TestPackedSubByteValueSafe(t *testing.T) {
 		}))
 		val, err := tensor.ValueSafe()
 		require.NoError(t, err)
-		got, ok := val.([][]uint8)
+		got, ok := val.([][]int8)
 		require.True(t, ok, "expected [][]uint8, got %T", val)
-		assert.Equal(t, [][]uint8{{0xA, 0xB}, {0xC, 0xD}}, got)
+		assert.Equal(t, [][]int8{{0xA, 0xB}, {0xC, 0xD}}, got)
 	})
 
 	t.Run("Int2", func(t *testing.T) {
@@ -518,9 +519,9 @@ func TestPackedSubByteValueSafe(t *testing.T) {
 		}))
 		val, err := tensor.ValueSafe()
 		require.NoError(t, err)
-		got, ok := val.([][]uint8)
+		got, ok := val.([][]int8)
 		require.True(t, ok, "expected [][]uint8, got %T", val)
-		assert.Equal(t, [][]uint8{{0, 1, 2, 3}, {3, 2, 1, 0}}, got)
+		assert.Equal(t, [][]int8{{0, 1, 2, 3}, {3, 2, 1, 0}}, got)
 	})
 
 	t.Run("ScalarInt4", func(t *testing.T) {
@@ -531,6 +532,30 @@ func TestPackedSubByteValueSafe(t *testing.T) {
 		val, err := tensor.ValueSafe()
 		require.NoError(t, err)
 		assert.Equal(t, int8(5), val)
+	})
+
+	t.Run("Summary()", func(t *testing.T) {
+		raw := xslices.Iota(byte(0), 256)
+		tensor, err := FromRaw(nil, 0, shapes.Make(dtypes.Uint4, 16, 16, 2), raw)
+		require.NoError(t, err)
+		summary := tensor.Summary(1)
+		want := `[16][16][2]U4{
+ {{0, 0},
+  {1, 0},
+  {2, 0},
+  ...,
+  {13, 0},
+  {14, 0},
+  {15, 0}},
+ ...,
+ {{0, 15},
+  {1, 15},
+  {2, 15},
+  ...,
+  {13, 15},
+  {14, 15},
+  {15, 15}}}`
+		assert.Equal(t, want, summary)
 	})
 }
 

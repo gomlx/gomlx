@@ -292,6 +292,8 @@ func (dtype DType) GoType() reflect.Type {
 
 // GoStr converts dtype to the corresponding Go type and convert that to string.
 // Notice the names are different from the Dtype (so `Int64` dtype is simply `int` in Go).
+//
+// Sub-byte packed values (Int2, Uint2, Int4, Uint4) are packed as "uint8", so that's what is returned.
 func (dtype DType) GoStr() string {
 	return dtype.GoType().Name()
 }

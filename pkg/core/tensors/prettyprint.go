@@ -53,22 +53,34 @@ func (t *Tensor) Summary(precision int) string {
 		}
 	}
 
+	// Access the contents of the tensor without copy:
 	dims := t.Shape().Dimensions
+	dtype := t.shape.DType
+	isPacked := dtype.IsPacked()
 	t.MustConstFlatData(func(flat any) {
+		var packed []uint8
 		for _, dim := range dims {
 			w("[%d]", dim)
 		}
-		if t.shape.DType.IsPacked() {
+		if isPacked {
 			w("%s", t.shape.DType)
-			flat = unpackFlatValues(flat.([]uint8), t.shape.DType, t.Size())
+			packed = flat.([]uint8)
 		} else {
 			w("%s", reflect.ValueOf(flat).Type().Elem())
 		}
 		values := reflect.ValueOf(flat)
+		wValueAt := func(at int) {
+			if isPacked {
+				v := UnpackSubByteAt(packed, dtype, at)
+				w("%d", v)
+			} else {
+				wValue(values.Index(at))
+			}
+		}
 		if len(dims) == 0 {
 			// Scalar value.
 			w("(")
-			wValue(values.Index(0))
+			wValueAt(0)
 			w(")")
 			return
 		}
@@ -85,14 +97,14 @@ func (t *Tensor) Summary(precision int) string {
 						if i > 0 {
 							w(", ")
 						}
-						wValue(values.Index(index + i))
+						wValueAt(index + i)
 					}
 					w(", ..., ")
 					for i := currentShape[0] - 3; i < currentShape[0]; i++ {
 						if i > currentShape[0]-3 {
 							w(", ")
 						}
-						wValue(values.Index(index + i))
+						wValueAt(index + i)
 					}
 
 				} else {
@@ -101,7 +113,7 @@ func (t *Tensor) Summary(precision int) string {
 						if i > 0 {
 							w(", ")
 						}
-						wValue(values.Index(index + i))
+						wValueAt(index + i)
 					}
 				}
 				w("}")
@@ -185,6 +197,8 @@ func (t *Tensor) Summary(precision int) string {
 }
 
 // GoStr converts to string, using a Go-syntax representation that can be copied&pasted back to code.
+//
+// Sub-byte packed values (Int2, Uint2, Int4, Uint4) are unpacked to int8 before being printed as Go values.
 func (t *Tensor) GoStr() string {
 	t.AssertValid()
 	if t.Shape().IsZeroSize() {
@@ -193,7 +207,7 @@ func (t *Tensor) GoStr() string {
 	}
 	value := t.Value()
 	if t.IsScalar() {
-		return fmt.Sprintf("%s(%v)", t.shape.DType.GoStr(), value)
+		return fmt.Sprintf("%s: %v", t.shape.DType, value)
 	}
 	return fmt.Sprintf("%s: %s", t.shape, xslices.SliceToGoStr(value))
 }
