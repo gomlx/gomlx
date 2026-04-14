@@ -81,6 +81,9 @@ var (
 			{"convDTypeMap", "execConvGeneric", makeDTypes(true, true, true, false, false)},
 			{"dotGeneralSmallMatMulDTypeMap", "execDotGeneralSmallMatMulGeneric", makeDTypes(true, true, true, false, false)},
 			{"applyPermutationDTypeMap", "applyPermutationGeneric", makeDTypes(true, true, true, true, true)},
+			{"shiftLeftDTypeMap", "shiftLeftGeneric", makeDTypes(true, true, false, false, false)},
+			{"shiftRightArithmeticDTypeMap", "shiftRightArithmeticGeneric", makeDTypes(true, true, false, false, false)},
+			{"shiftRightLogicalDTypeMap", "shiftRightLogicalGeneric", makeDTypes(true, true, false, false, false)},
 		},
 		PairMaps: []MapPairInfo{
 			// Various ConvertDType instantiations.

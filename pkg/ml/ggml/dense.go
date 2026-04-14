@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // DenseDecomposed performs quantized dense (linear) transformation using graph-level
@@ -27,26 +28,21 @@ func DenseDecomposed(x, weights *Node, ggmlType backends.GGMLQuantType,
 		act = activation[0]
 	}
 
-	xShape := x.Shape()
-	N := weights.Shape().Dimensions[0]
-
 	// Dequantize weights → [N, K] Float32.
+	N := weights.Shape().Dimensions[0]
 	dequantW := Dequantize(weights, ggmlType, N)
-
-	// Transpose to [K, N] for matmul.
-	dequantW = Transpose(dequantW, 0, 1) // [K, N]
-
-	K := dequantW.Shape().Dimensions[0]
+	K := dequantW.Shape().Dimensions[1]
 
 	// Flatten x to [M, K] if needed.
-	M := xShape.Size() / K
-	x2d := x
-	if xShape.Rank() > 2 {
-		x2d = Reshape(x, M, K)
+	xShape := x.Shape()
+	if xShape.Dim(-1) != K {
+		exceptions.Panicf("ggml.DenseDecomposed expects x to be shaped [batch..., K] and (decomposed) weights [N, K], "+
+			"but got x.shape=%s and weight.shape=%s", xShape, dequantW.Shape())
 	}
+	x2d := Reshape(x, -1, K)
 
-	// Matmul: [M, K] @ [K, N] → [M, N]
-	y := Dot(x2d, dequantW).Product()
+	// Tansposed matmul: [M, K] x [N, K] → [M, N]
+	y := Dot(x2d, dequantW).EinsumAxes([][2]int{{1, 1}}, nil) // Contract the axis 1 of both sides.
 
 	// Reshape back if x had more than 2 dimensions.
 	if xShape.Rank() > 2 {

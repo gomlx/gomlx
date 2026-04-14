@@ -129,6 +129,9 @@ func (t *Tensor) MustConstFlatData(accessFn func(flat any)) {
 // positions, given the indices at each axis.
 //
 // Even scalar values have a flattened data representation of one element.
+//
+// Notice that for packed sub-byte packed values (Int2, Uint2, Int4, Uint4), this gives access to the raw bytes,
+// a []uint8, and it's up to the caller to interpret it correctly.
 func (t *Tensor) ConstFlatData(accessFn func(flat any)) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -478,6 +481,9 @@ func (t *Tensor) LayoutStrides() (strides []int) {
 // This is expensive and usually only used for smaller tensors in tests and to print results.
 //
 // If the local tensor is empty, it panics with the corresponding error.
+//
+// Sub-byte packed values (Int2, Uint2, Int4, Uint4) are unpacked to int8 before being returned,
+// so they can more easily be printed or used.
 func (t *Tensor) Value() any {
 	v, err := t.ValueSafe()
 	must(err)
@@ -487,23 +493,25 @@ func (t *Tensor) Value() any {
 // ValueSafe returns a multidimensional slice (except if the shape is a scalar) containing a copy of the values stored
 // in the tensor.
 // This is expensive and usually only used for smaller tensors in tests and to print results.
+//
+// Sub-byte packed values (Int2, Uint2, Int4, Uint4) are unpacked to int8 before being returned,
+// so they can more easily be printed or used.
 func (t *Tensor) ValueSafe() (any, error) {
 	var mdSlice any
 	err := t.ConstFlatData(func(flat any) {
 		// Packed sub-byte types (Int2, Uint2, Int4, Uint4) are stored as []uint8
 		// with multiple values per byte. Unpack before any further processing.
 		if t.shape.DType.IsPacked() {
-			unpacked := unpackFlatValues(flat.([]uint8), t.shape.DType, t.Size())
-			unpackedV := reflect.ValueOf(unpacked)
+			unpacked := UnpackSubBytes(flat.([]uint8), t.shape.DType, t.Size())
 			if t.shape.IsScalar() {
-				mdSlice = unpackedV.Index(0).Interface()
+				mdSlice = unpacked[0]
 				return
 			}
 			if t.shape.Rank() == 1 {
 				mdSlice = unpacked
 				return
 			}
-			mdSlice = convertDataToSlices(unpackedV, t.shape.Dimensions...).Interface()
+			mdSlice = convertDataToSlices(reflect.ValueOf(unpacked), t.shape.Dimensions...).Interface()
 			return
 		}
 
@@ -526,45 +534,6 @@ func (t *Tensor) ValueSafe() (any, error) {
 		return nil, err
 	}
 	return mdSlice, nil
-}
-
-// unpackFlatValues unpacks packed sub-byte data ([]uint8) into a one-value-per-element
-// slice. For unsigned types (Uint4, Uint2) it returns []uint8; for signed types (Int4, Int2)
-// it returns []int8 with sign extension.
-func unpackFlatValues(packed []uint8, dtype dtypes.DType, numValues int) any {
-	bitsPerValue := dtype.Bits()
-	valuesPerUnit := dtype.ValuesPerStorageUnit()
-	mask := uint8((1 << bitsPerValue) - 1) // 0x0F for 4-bit, 0x03 for 2-bit
-	signBit := uint8(1 << (bitsPerValue - 1))
-	signExtend := ^mask // 0xF0 for 4-bit, 0xFC for 2-bit
-
-	// Extract the raw unsigned value at logical index i.
-	extract := func(i int) uint8 {
-		b := packed[i/valuesPerUnit]
-		shift := uint(i%valuesPerUnit) * uint(bitsPerValue)
-		return (b >> shift) & mask
-	}
-
-	switch dtype {
-	case dtypes.Uint4, dtypes.Uint2:
-		out := make([]uint8, numValues)
-		for i := range numValues {
-			out[i] = extract(i)
-		}
-		return out
-	case dtypes.Int4, dtypes.Int2:
-		out := make([]int8, numValues)
-		for i := range numValues {
-			val := extract(i)
-			if val&signBit != 0 {
-				val |= signExtend
-			}
-			out[i] = int8(val)
-		}
-		return out
-	default:
-		panic(fmt.Sprintf("unpackFlatValues: unsupported packed dtype %s", dtype))
-	}
 }
 
 // GobSerialize Tensor in binary format.

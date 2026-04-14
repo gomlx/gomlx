@@ -57,12 +57,16 @@ func (d *DTypeMap) Register(dtype dtypes.DType, priority registerPriority, value
 }
 
 // DTypeDispatcher --------------------------------------------------------------------------------------------------
+//
+// Deprecated: use DTypeMap instead.
 
 // FuncForDispatcher is type of functions that the DTypeDispatcher can handle.
 type FuncForDispatcher func(params ...any) any
 
 // DTypeDispatcher manages dispatching functions to handle specific DTypes.
 // Often, these functions will be instances of a generic function.
+//
+// Deprecated: use DTypeMap instead.
 type DTypeDispatcher struct {
 	Name     string
 	fnMap    [MaxDTypes]FuncForDispatcher
@@ -70,6 +74,8 @@ type DTypeDispatcher struct {
 }
 
 // NewDTypeDispatcher creates a new dispatcher for a class of functions.
+//
+// Deprecated: use DTypeMap instead.
 func NewDTypeDispatcher(name string) *DTypeDispatcher {
 	return &DTypeDispatcher{
 		Name: name,
