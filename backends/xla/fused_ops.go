@@ -38,3 +38,7 @@ func (f *Function) FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV back
 func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value, weightsQuantization *backends.Quantization, activation backends.ActivationType) (backends.Value, error) {
 	return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense not implemented in XLA backend")
 }
+
+func (f *Function) QuantizedEmbeddingLookup(data, indices backends.Value, dataQuantization *backends.Quantization) (backends.Value, error) {
+	return nil, errors.Wrapf(backends.ErrNotImplemented, "QuantizedEmbeddingLookup not implemented in XLA backend")
+}

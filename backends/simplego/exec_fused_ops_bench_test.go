@@ -295,3 +295,144 @@ func BenchmarkDense(b *testing.B) {
 		b.Run(fmt.Sprintf("Decomposed/%s", sz.name), func(b *testing.B) { decomposed.run(b) })
 	}
 }
+
+// --- QuantizedDense Benchmarks ---
+
+func randomInt8(n int) []int8 {
+	data := make([]int8, n)
+	for i := range data {
+		data[i] = int8(rand.IntN(256) - 128)
+	}
+	return data
+}
+
+func randomUint8(n int) []uint8 {
+	data := make([]uint8, n)
+	for i := range data {
+		data[i] = uint8(rand.IntN(256))
+	}
+	return data
+}
+
+// BenchmarkQuantizedDense compares fused quantized-dense (which uses highway SIMD
+// when available) against a decomposed path and float32 Dense as a reference.
+//
+// The decomposed path is only benchmarked for Int8 because the simplego backend
+// does not support bitwise shift ops needed for NF4/Int4 nibble extraction.
+func BenchmarkQuantizedDense(b *testing.B) {
+	sizes := []struct {
+		name        string
+		batch       int
+		inFeatures  int
+		outFeatures int
+		groupSize   int
+	}{
+		{"1x64x64_g64", 1, 64, 64, 64},
+		{"8x128x256_g128", 8, 128, 256, 128},
+		{"32x512x1024_g128", 32, 512, 1024, 128},
+	}
+
+	for _, sz := range sizes {
+		M, K, N := sz.batch, sz.inFeatures, sz.outFeatures
+		groupSize := sz.groupSize
+		numGroups := (N + groupSize - 1) / groupSize
+		xData := randomFloat32(M * K)
+		biasData := randomFloat32(N)
+		scalesData := randomFloat32(K * numGroups)
+
+		xShape := shapes.Make(dtypes.Float32, M, K)
+		biasShape := shapes.Make(dtypes.Float32, N)
+		scalesShape := shapes.Make(dtypes.Float32, K, numGroups)
+		outShape := shapes.Make(dtypes.Float32, M, N)
+
+		// --- NF4 ---
+		nf4Data := randomUint8(K * N)
+		nf4Shape := shapes.Make(dtypes.Uint8, K, N)
+
+		nf4Fused := buildBenchExec(
+			[]shapes.Shape{xShape, nf4Shape, scalesShape, biasShape},
+			[]any{xData, nf4Data, scalesData, biasData},
+			func(f backends.Function, params []backends.Value) (backends.Value, error) {
+				return f.FusedQuantizedDense(params[0], params[1], params[3],
+					&backends.Quantization{Scheme: backends.QuantNF4, Scale: params[2], BlockAxis: 1, BlockSize: groupSize},
+					backends.ActivationNone)
+			})
+		b.Run(fmt.Sprintf("NF4/Fused/%s", sz.name), func(b *testing.B) { nf4Fused.run(b) })
+
+		// --- Linear Int8 (second set) ---
+		int4WeightsData := randomInt8(K * N)
+		int4WeightsShape := shapes.Make(dtypes.Int8, K, N)
+
+		int4Fused := buildBenchExec(
+			[]shapes.Shape{xShape, int4WeightsShape, scalesShape, biasShape},
+			[]any{xData, int4WeightsData, scalesData, biasData},
+			func(f backends.Function, params []backends.Value) (backends.Value, error) {
+				return f.FusedQuantizedDense(params[0], params[1], params[3],
+					&backends.Quantization{Scheme: backends.QuantLinear, Scale: params[2], BlockAxis: 1, BlockSize: groupSize},
+					backends.ActivationNone)
+			})
+		b.Run(fmt.Sprintf("LinearInt8_2/Fused/%s", sz.name), func(b *testing.B) { int4Fused.run(b) })
+
+		// --- Int8 ---
+		int8WeightsData := randomInt8(K * N)
+		int8WeightsShape := shapes.Make(dtypes.Int8, K, N)
+
+		int8Fused := buildBenchExec(
+			[]shapes.Shape{xShape, int8WeightsShape, scalesShape, biasShape},
+			[]any{xData, int8WeightsData, scalesData, biasData},
+			func(f backends.Function, params []backends.Value) (backends.Value, error) {
+				return f.FusedQuantizedDense(params[0], params[1], params[3],
+					&backends.Quantization{Scheme: backends.QuantLinear, Scale: params[2], BlockAxis: 1, BlockSize: groupSize},
+					backends.ActivationNone)
+			})
+		b.Run(fmt.Sprintf("Int8/Fused/%s", sz.name), func(b *testing.B) { int8Fused.run(b) })
+
+		// Int8 Decomposed: ConvertDType + Mul(scales) + DotGeneral + bias.
+		// Scales are pre-expanded from [K, numGroups] to [K, N] in Go because
+		// the Gather-based expansion is a small fraction of total cost and
+		// keeps the benchmark focused on the materialization overhead.
+		expandedScalesData := make([]float32, K*N)
+		for k := range K {
+			for n := range N {
+				expandedScalesData[k*N+n] = scalesData[k*numGroups+n/groupSize]
+			}
+		}
+		expandedScalesShape := shapes.Make(dtypes.Float32, K, N)
+
+		int8Decomposed := buildBenchExec(
+			[]shapes.Shape{xShape, int8WeightsShape, expandedScalesShape, biasShape},
+			[]any{xData, int8WeightsData, expandedScalesData, biasData},
+			func(f backends.Function, params []backends.Value) (backends.Value, error) {
+				x := params[0]
+				weights := params[1]
+				expandedScales := params[2]
+				bias := params[3]
+
+				// Dequantize: float32(int8) * scales → [K, N] float32.
+				wFloat := benchMust(f.ConvertDType(weights, dtypes.Float32))
+				wDequant := benchMust(f.Mul(wFloat, expandedScales))
+
+				// Matmul: x [M, K] @ wDequant [K, N] → [M, N].
+				y := benchMust(f.DotGeneral(x, []int{1}, nil, wDequant, []int{0}, nil, backends.DotGeneralConfig{}))
+
+				// Add bias.
+				biasBroadcast := benchMust(f.BroadcastInDim(bias, outShape, []int{1}))
+				return f.Add(y, biasBroadcast)
+			})
+		b.Run(fmt.Sprintf("Int8/Decomposed/%s", sz.name), func(b *testing.B) { int8Decomposed.run(b) })
+
+		// Float32 Dense reference (same M×K×N, full-precision weights).
+		f32WeightsData := randomFloat32(K * N)
+		f32WeightsShape := shapes.Make(dtypes.Float32, K, N)
+
+		f32Dense := buildBenchExec(
+			[]shapes.Shape{xShape, f32WeightsShape, biasShape},
+			[]any{xData, f32WeightsData, biasData},
+			func(f backends.Function, params []backends.Value) (backends.Value, error) {
+				return f.FusedDense(params[0], params[1], params[2], backends.ActivationNone)
+			})
+		b.Run(fmt.Sprintf("Float32Dense/%s", sz.name), func(b *testing.B) { f32Dense.run(b) })
+	}
+}
+
+// BenchmarkQuantizedDenseGGML benchmarks GGML quantized dense matmul.

@@ -58,6 +58,13 @@ const (
 	// QuantNF4 is 4-bit NormalFloat from QLoRA: nibble indices are looked up in a fixed
 	// 16-entry table, then multiplied by scale.
 	QuantNF4
+
+	// QuantGGML indicates that the weights are stored in native GGML block format
+	// (e.g. Q4_0, Q8_0, K-quants). The scales and zero points are embedded in the
+	// blocks themselves, so Scale/ZeroPoint/BlockAxis/BlockSize in Quantization are
+	// unused; the GGMLType field specifies the concrete block format.
+	// Weights must be [N, bytesPerRow] Uint8 with native GGML block layout.
+	QuantGGML
 )
 
 // String returns the name of the quantization scheme.
@@ -67,6 +74,8 @@ func (q QuantizationScheme) String() string {
 		return "Linear"
 	case QuantNF4:
 		return "NF4"
+	case QuantGGML:
+		return "GGML"
 	default:
 		return "unknown"
 	}
@@ -81,29 +90,117 @@ var NF4LookupTable = [16]float32{
 	0.44070982933044434, 0.5626170039176941, 0.7229568362236023, 1.0,
 }
 
+// IQ4NLLookupTable contains the 16 fixed IQ4_NL non-linear dequantization values.
+// These map 4-bit nibble indices to pre-normalization integer values (not final floats).
+// Final dequantized value = per-block scale * IQ4NLLookupTable[nibble].
+// Values from llama.cpp's kvalues_iq4nl.
+var IQ4NLLookupTable = [16]float32{
+	-127, -104, -83, -65, -49, -35, -22, -10,
+	1, 13, 25, 38, 53, 69, 89, 113,
+}
+
+// GGMLQuantType identifies the specific GGML block quantization format.
+// Enum values are aligned with go-highway's gguf.QuantType for future integration.
+type GGMLQuantType int
+
+const (
+	GGMLQ4_0  GGMLQuantType = iota // 18 bytes/block, 32 values
+	GGMLQ8_0                       // 34 bytes/block, 32 values
+	GGMLIQ4NL                      // 18 bytes/block, 32 values (non-linear lookup)
+	GGMLQ2_K                       // 84 bytes/block, 256 values
+	GGMLQ3_K                       // 110 bytes/block, 256 values
+	GGMLQ4_K                       // 144 bytes/block, 256 values
+	GGMLQ5_K                       // 176 bytes/block, 256 values
+	GGMLQ6_K                       // 210 bytes/block, 256 values
+)
+
+// ValuesPerBlock returns the number of float32 values represented by one block.
+func (t GGMLQuantType) ValuesPerBlock() int {
+	switch t {
+	case GGMLQ4_0, GGMLQ8_0, GGMLIQ4NL:
+		return 32
+	default: // K-quant types
+		return 256
+	}
+}
+
+// BytesPerBlock returns the byte size of one quantized block.
+func (t GGMLQuantType) BytesPerBlock() int {
+	switch t {
+	case GGMLQ4_0, GGMLIQ4NL:
+		return 18
+	case GGMLQ8_0:
+		return 34
+	case GGMLQ2_K:
+		return 84
+	case GGMLQ3_K:
+		return 110
+	case GGMLQ4_K:
+		return 144
+	case GGMLQ5_K:
+		return 176
+	case GGMLQ6_K:
+		return 210
+	default:
+		return 0
+	}
+}
+
+// String returns the name of the GGML quantization type.
+func (t GGMLQuantType) String() string {
+	switch t {
+	case GGMLQ4_0:
+		return "Q4_0"
+	case GGMLQ8_0:
+		return "Q8_0"
+	case GGMLIQ4NL:
+		return "IQ4_NL"
+	case GGMLQ2_K:
+		return "Q2_K"
+	case GGMLQ3_K:
+		return "Q3_K"
+	case GGMLQ4_K:
+		return "Q4_K"
+	case GGMLQ5_K:
+		return "Q5_K"
+	case GGMLQ6_K:
+		return "Q6_K"
+	default:
+		return "unknown"
+	}
+}
+
 // Quantization describes how a value is quantized, and holds the information to dequantize it.
 type Quantization struct {
-	// Scheme: Linear (standard) or NF4.
+	// Scheme: Linear, NF4, or GGML.
 	Scheme QuantizationScheme
 
 	// Scale is the multiplicative factor.
 	// Shape: [K, NumBlocks] (block-wise), where K is the input-features
 	// (contracting) dimension of the [K, N] weight matrix and
 	// NumBlocks = ceil(N / BlockSize).
+	// Unused for QuantGGML (scales are embedded in the blocks).
 	Scale Value
 
 	// ZeroPoint is the additive offset (only for Linear).
 	// If nil, the quantization is assumed symmetric.
+	// Unused for QuantGGML and QuantNF4.
 	ZeroPoint Value
 
 	// BlockAxis is the dimension of the quantized tensor that is blocked.
 	// This is the output-features dimension (axis 1) of a [K, N] weight matrix.
 	// Currently only BlockAxis=1 is supported.
+	// Unused for QuantGGML.
 	BlockAxis int
 
 	// BlockSize is the number of elements in BlockAxis that share one scale.
 	// If BlockSize == N, it's effectively per-axis quantization.
+	// Unused for QuantGGML.
 	BlockSize int
+
+	// GGMLType specifies the concrete GGML block format (Q4_0, Q8_0, etc.).
+	// Only used when Scheme == QuantGGML.
+	GGMLType GGMLQuantType
 }
 
 // ScaledDotProductAttentionConfig holds optional optimization hints for FusedScaledDotProductAttention.
@@ -222,6 +319,25 @@ type FusedOps interface {
 		causal bool,
 		options *ScaledDotProductAttentionConfig) (Value, error)
 
+	// QuantizedEmbeddingLookup performs a quantized embedding lookup (row gather)
+	// with on-the-fly dequantization.
+	//
+	// This is the quantized analogue of Gather for embedding lookups, inspired by
+	// llama.cpp's ggml_get_rows. For now it is only implemented for the GGML
+	// quantization scheme, but could be extended for others if/when needed.
+	//
+	// Inputs:
+	//   - data: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
+	//   - indices: integer tensor with last dimension = 1 (same as Gather convention).
+	//     For embeddings: [batch, seqLen, 1].
+	//   - dataQuantization: describes how to dequantize the data rows. Must not be nil.
+	//     Only QuantGGML scheme is currently supported.
+	//
+	// Output: float32 tensor with shape [batch..., K] where K = (bytesPerRow / bytesPerBlock) * valuesPerBlock.
+	//   For embeddings with indices [batch, seqLen, 1]: output is [batch, seqLen, K].
+	QuantizedEmbeddingLookup(data, indices Value,
+		dataQuantization *Quantization) (Value, error)
+
 	// FusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
 	//
 	// It computes y = activation(x @ dequant(weights, weightsQuantization) + bias), where the
@@ -230,9 +346,11 @@ type FusedOps interface {
 	//
 	// Inputs:
 	//   - x: [batch..., K] float32 input activations.
-	//   - weights: [K, N] with dtype reflecting storage precision (e.g. Int4, Int8).
+	//   - weights: For Linear/NF4: [K, N] with dtype reflecting storage precision (e.g. Int4, Int8).
 	//     For sub-byte types the caller should Bitcast packed uint8 data to the correct dtype
 	//     before calling.
+	//     For GGML: [N, bytesPerRow] Uint8 with native GGML block layout, where N is the
+	//     output-features dimension and bytesPerRow = (K / valuesPerBlock) * bytesPerBlock.
 	//   - bias: [N] float32 (nil-able), added after matmul but before activation.
 	//   - weightsQuantization: describes how to dequantize the weights tensor. Must not be nil.
 	//   - activation: applied after matmul+bias; set to ActivationNone for no activation.

@@ -53,16 +53,18 @@ func (t *Tensor) Summary(precision int) string {
 		}
 	}
 
-	// Access the contents of the tensor without copy:
 	dims := t.Shape().Dimensions
 	t.MustConstFlatData(func(flat any) {
-		values := reflect.ValueOf(flat)
-
-		// Print Go type equivalent
 		for _, dim := range dims {
 			w("[%d]", dim)
 		}
-		w("%s", values.Type().Elem())
+		if t.shape.DType.IsPacked() {
+			w("%s", t.shape.DType)
+			flat = unpackFlatValues(flat.([]uint8), t.shape.DType, t.Size())
+		} else {
+			w("%s", reflect.ValueOf(flat).Type().Elem())
+		}
+		values := reflect.ValueOf(flat)
 		if len(dims) == 0 {
 			// Scalar value.
 			w("(")

@@ -302,9 +302,11 @@ func (f Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, 
 //
 // Inputs:
 //   - x: [batch..., K] float32 input activations.
-//   - weights: [K, N] with dtype reflecting storage precision (e.g. Int4, Int8).
+//   - weights: For Linear/NF4: [K, N] with dtype reflecting storage precision (e.g. Int4, Int8).
 //     For sub-byte types the caller should Bitcast packed uint8 data to the correct dtype
 //     before calling.
+//     For GGML: [N, bytesPerRow] Uint8 with native GGML block layout, where N is the
+//     output-features dimension and bytesPerRow = (K / valuesPerBlock) * bytesPerBlock.
 //   - bias: [N] float32 (nil-able), added after matmul but before activation.
 //   - weightsQuantization: describes how to dequantize the weights tensor. Must not be nil.
 //   - activation: applied after matmul+bias; set to ActivationNone for no activation.
@@ -571,6 +573,27 @@ func (f Function) Pad(x backends.Value, fillValue backends.Value, axesConfig ...
 // Pow returns the Op that represents the output of the corresponding operation.
 func (f Function) Pow(lhs backends.Value, rhs backends.Value) (backends.Value, error) {
 	return nil, f.baseErrFn(backends.OpTypePow)
+}
+
+// QuantizedEmbeddingLookup performs a quantized embedding lookup (row gather)
+// with on-the-fly dequantization.
+//
+// This is the quantized analogue of embedding lookup, inspired by
+// llama.cpp's ggml_get_rows. For now it is only implemented for the GGML
+// quantization scheme, but could be extended for others if/when needed.
+//
+// Inputs:
+//   - data: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
+//   - indices: integer tensor with last dimension = 1 (same as Gather convention).
+//     For embeddings: [batch, seqLen, 1].
+//   - dataQuantization: describes how to dequantize the data rows. Must not be nil.
+//     Only QuantGGML scheme is currently supported.
+//
+// Output: float32 tensor with shape [batch..., K] where K = (bytesPerRow / bytesPerBlock) * valuesPerBlock.
+//
+//	For embeddings with indices [batch, seqLen, 1]: output is [batch, seqLen, K].
+func (f Function) QuantizedEmbeddingLookup(data backends.Value, indices backends.Value, dataQuantization *backends.Quantization) (backends.Value, error) {
+	return nil, f.baseErrFn(backends.OpTypeQuantizedEmbeddingLookup)
 }
 
 // Real return the real part of a complex number. It returns x if the x is a float number.
