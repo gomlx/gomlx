@@ -39,7 +39,7 @@ func DenseDecomposed(x, weights *Node, ggmlType backends.GGMLQuantType,
 		exceptions.Panicf("ggml.DenseDecomposed expects x to be shaped [batch..., K] and (decomposed) weights [N, K], "+
 			"but got x.shape=%s and weight.shape=%s", xShape, dequantW.Shape())
 	}
-	x2d := Reshape(x, -1)
+	x2d := Reshape(x, -1, K)
 
 	// Tansposed matmul: [M, K] x [N, K] → [M, N]
 	y := Dot(x2d, dequantW).EinsumAxes([][2]int{{1, 1}}, nil) // Contract the axis 1 of both sides.
