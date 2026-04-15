@@ -85,6 +85,8 @@ type Model struct {
 	ScaleTokenEmbeddings bool             // Whether to scale token embeddings by sqrt(m.EmbedDim).
 	FinalNormalization   string           // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
 	Architecture         Architecture     // e.g. ArchitectureStandard, ArchitectureGemma
+	EmbedNormalization   string           // e.g. "layer", "rms", "none" or ""
+	TokenTypeEmbedSize   int              // e.g. Number of token types, 2 for BERT. See WithTokenTypeEmbedding.
 	Normalization        string           // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
 	NormEpsilon          float64          // Epsilon for normalization
 	Activation           activations.Type // e.g. "gelu", "silu", "gelu_approximate"
@@ -116,6 +118,7 @@ func New(vocabSize, embedDim, numLayers, numHeads, headDim int) *Model {
 		UseBias:              true,
 		UseCausalMask:        true,
 		ScaleTokenEmbeddings: false,
+		EmbedNormalization:   layers.NormalizationNone,
 		FinalNormalization:   layers.NormalizationNone,
 		Architecture:         ArchitectureStandard,
 		Normalization:        layers.NormalizationLayerNorm,
@@ -454,6 +457,9 @@ func (m *Model) AllLayers(ctx *context.Context, tokens, mask *Node, useKVCache b
 	allLayers = make([]*Node, 0, m.NumLayers+1)
 	x := m.EmbedTokens(ctx, tokens)
 	x = m.PrePositionalEncoder(ctx, x, position, useKVCache)
+	if m.EmbedNormalization != layers.NormalizationNone {
+		x = m.normalize(ctx.In("embed_norm"), x, m.EmbedNormalization)
+	}
 	allLayers = append(allLayers, x)
 	// Apply all layers.
 	for layerNum := range m.NumLayers {
@@ -477,7 +483,30 @@ func (m *Model) AllLayers(ctx *context.Context, tokens, mask *Node, useKVCache b
 //
 // This step is done automatically by AllLayers or Logits, but if needed, it can
 // be used separately by calling this method.
+//
+// - tokens: shaped [batchSize, seqLen] or [seqLen]
+//
+// Returns: [batchSize, seqLen, EmbedDim]. Notice if no batchSize was given, a batch axis with size of 1 is created.
+// EmbedTokens returns the token embeddings for the given tokens using a lookup table.
+// This is the very first step of the transformer model.
+//
+// It defaults to TokenType 0 for all tokens if TokenTypeEmbedSize > 0.
+// Use EmbedTokensWithType to select a different index.
 func (m *Model) EmbedTokens(ctx *context.Context, tokens *Node) *Node {
+	return m.EmbedTokensWithType(ctx, tokens, nil)
+}
+
+// EmbedTokensWithType returns the token embeddings for the given tokens and tokenTypes using lookup tables.
+//
+// It requires WithTokenTypeEmbedding configuration.
+//
+// The tokenTypes define an extra constant embedding added to all tokens based on the "token type".
+// For BERT models, there are two different sentences, which gets a different "token type".
+//
+// tokenTypes must be a scalar int (limited to the vocabSize set in WithTokenTypeEmbedding).
+// Or it can be nil, in which case it defaults to TokenType 0 for all tokens if TokenTypeEmbedSize > 0.
+func (m *Model) EmbedTokensWithType(ctx *context.Context, tokens, tokenTypes *Node) *Node {
+	g := tokens.Graph()
 	// Tokens embedding table lookup.
 	embedded := layers.Embedding(ctx.In("token_embed"), tokens, m.DType, m.VocabSize, m.EmbedDim)
 	if embedded.Rank() == 2 {
@@ -486,6 +515,13 @@ func (m *Model) EmbedTokens(ctx *context.Context, tokens *Node) *Node {
 	if m.ScaleTokenEmbeddings {
 		scale := Scalar(embedded.Graph(), m.DType, math.Sqrt(float64(m.EmbedDim)))
 		embedded = Mul(embedded, scale)
+	}
+	if m.TokenTypeEmbedSize > 0 {
+		if tokenTypes == nil {
+			tokenTypes = ScalarZero(g, dtypes.Int32)
+		}
+		tokenTypeEmbed := layers.Embedding(ctx.In("token_type_embed"), tokenTypes, m.DType, m.TokenTypeEmbedSize, m.EmbedDim)
+		embedded = Add(embedded, broadcastPrefixToMatch(tokenTypeEmbed, embedded))
 	}
 	return embedded
 }
@@ -651,7 +687,7 @@ func (m *Model) dense(ctx *context.Context, op *Node, useBias bool, outputDims .
 
 	if useBias {
 		bVar := ctx.VariableWithShape("biases", shapes.Make(op.DType(), outDim))
-		y = Add(y, bVar.ValueGraph(g))
+		y = Add(y, broadcastPrefixToMatch(bVar.ValueGraph(g), y))
 	}
 
 	if len(outputDims) > 1 {
@@ -756,4 +792,32 @@ func (m *Model) forwardLayerGemma(layerCtx *context.Context, layerNum int, x, ma
 	ff = m.normalize(layerCtx.In("post_feedforward_norm"), ff, m.Normalization)
 	x = Add(residual, ff)
 	return x
+}
+
+// WithEmbedNormalization sets the normalization type ("layer", "rms", "none" or "")
+// to be applied only once after the token embeddings and before the first transformer layer.
+func (m *Model) WithEmbedNormalization(norm string) *Model {
+	if norm == "" {
+		norm = layers.NormalizationNone
+	}
+	m.EmbedNormalization = norm
+	return m
+}
+
+func broadcastPrefixToMatch(x, target *Node) *Node {
+	for x.Rank() < target.Rank() {
+		x = ExpandAxes(x, 0)
+	}
+	return BroadcastToShape(x, target.Shape())
+}
+
+// WithTokenTypeEmbedding an extra constant embedding based on the "token type".
+//
+// In BERT models it is the sentence id, when classifying two sentences, and the vocabSize defaults to 2.
+//
+// The EmbedTokens will default to use the TokenType 0 (the default), but you can use EmbedTokensWithType to
+// select a different index.
+func (m *Model) WithTokenTypeEmbedding(vocabSize int) *Model {
+	m.TokenTypeEmbedSize = vocabSize
+	return m
 }
