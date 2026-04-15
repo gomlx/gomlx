@@ -118,6 +118,7 @@ func New(vocabSize, embedDim, numLayers, numHeads, headDim int) *Model {
 		UseBias:              true,
 		UseCausalMask:        true,
 		ScaleTokenEmbeddings: false,
+		EmbedNormalization:   layers.NormalizationNone,
 		FinalNormalization:   layers.NormalizationNone,
 		Architecture:         ArchitectureStandard,
 		Normalization:        layers.NormalizationLayerNorm,
