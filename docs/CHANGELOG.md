@@ -43,7 +43,8 @@
   - Updates and fixes to the API; Added methods to build partial models: `AllLayers`, `ForwardLayer`, `LogitsFromEmbeddings`, `EmbedTokesn`, etc.
   - Updated positional-encoder support.
   - Added options `WithFinalNormalization`, `WithScalingOfTokenEmbeddings`, `WithArchitecture`, `WithSlidingWindow`
-    and `WithLayerTypes`.
+    and `WithLayerTypes`, `WithEmbedNormalization`, `WithTokenTypeEmbedding`.
+  - Added BERT and Gemma types of models.
 
 ### Packages in `pkg/support`
 
