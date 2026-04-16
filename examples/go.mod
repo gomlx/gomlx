@@ -8,9 +8,9 @@ require (
 	github.com/daniellowtw/matlab v0.0.0-20190528220746-1ed1d96a6637
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-gota/gota v0.12.0
-	github.com/gomlx/go-huggingface v0.3.5-0.20260404100917-78e247e007b5
-	github.com/gomlx/gomlx v0.27.3-0.20260407140637-36aec8245f10
-	github.com/gomlx/onnx-gomlx v0.4.2-0.20260329071313-0b8b7e4d5a02
+	github.com/gomlx/go-huggingface v0.3.5-0.20260416060721-afdeaad73e81
+	github.com/gomlx/gomlx v0.27.3-0.20260415090640-b453aed981ef
+	github.com/gomlx/onnx-gomlx v0.4.2-0.20260416060941-53661bbd02c5
 	github.com/janpfeifer/gonb v0.11.3
 	github.com/janpfeifer/must v0.2.0
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58

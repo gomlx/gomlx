@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/MetalBlueberry/go-plotly v0.7.0
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/gomlx/gomlx v0.27.3-0.20260407155239-beda390e695f
+	github.com/gomlx/gomlx v0.27.3-0.20260415090640-b453aed981ef
 	github.com/janpfeifer/gonb v0.11.3
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.11.1
