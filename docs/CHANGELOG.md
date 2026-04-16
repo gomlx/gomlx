@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next
+# 0.27.3: Improves sub-byte support, optimized raw-byte data transfers, FNN ensembles, and major transformer updates including BERT and Gemma models.
 
 ### Core:
 - Package `tensors`
