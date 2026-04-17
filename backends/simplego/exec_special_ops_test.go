@@ -10,10 +10,10 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"

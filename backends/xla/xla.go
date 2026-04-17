@@ -56,6 +56,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/go-xla/pkg/installer"
 	"github.com/gomlx/go-xla/pkg/pjrt"
 	xladtypes "github.com/gomlx/go-xla/pkg/types/dtypes"
@@ -63,7 +64,6 @@ import (
 	xlashapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"

@@ -3,9 +3,9 @@
 package packgemm
 
 import (
+	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/pkg/errors"
 	"github.com/x448/float16"
 )

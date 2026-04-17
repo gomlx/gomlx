@@ -20,12 +20,12 @@ import (
 
 // Element IDs in the HTML page.
 const (
-	idInputA  = "a"
-	idInputB  = "b"
-	idOp      = "op"
-	idRun     = "run"
-	idOutput  = "out"
-	opAdd     = "add"
+	idInputA   = "a"
+	idInputB   = "b"
+	idOp       = "op"
+	idRun      = "run"
+	idOutput   = "out"
+	opAdd      = "add"
 	opMultiply = "mul"
 )
 
@@ -71,7 +71,7 @@ func main() {
 
 	compute := func() {
 		doc := js.Global().Get("document")
-		
+
 		// Get operation type.
 		opEl := doc.Call("getElementById", idOp)
 		if !opEl.Truthy() {

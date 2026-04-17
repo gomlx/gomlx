@@ -106,9 +106,9 @@ type nodeFusedQuantizedDense struct {
 	hasBias      bool
 	// ggmlType specifies the concrete GGML block format (Q4_0, Q8_0, etc.).
 	// See exec_fused_quantized_ggml.go for block layouts and references.
-	ggmlType     backends.GGMLQuantType // Only used when scheme == QuantGGML.
-	ggmlN        int                    // Output features (rows in GGML layout). Only for QuantGGML.
-	ggmlK        int                    // Input features (logical columns). Only for QuantGGML.
+	ggmlType backends.GGMLQuantType // Only used when scheme == QuantGGML.
+	ggmlN    int                    // Output features (rows in GGML layout). Only for QuantGGML.
+	ggmlK    int                    // Input features (logical columns). Only for QuantGGML.
 }
 
 func (d *nodeFusedQuantizedDense) EqualNodeData(other nodeDataComparable) bool {

@@ -107,8 +107,8 @@ func TestQuantizedDense_NF4(t *testing.T) {
 			s := Const(g, scalesData)
 			// Bitcast uint8 [2, 2] → Uint4 [2, 2, 2] (packed: 2 nibbles per byte).
 			// FusedQuantizedDense handles packed sub-byte weights internally.
-			weights := Bitcast(packed, dtypes.Uint4)     // [2, 2, 2]
-			weights = Reshape(weights, 2, N)              // [2, 4]
+			weights := Bitcast(packed, dtypes.Uint4) // [2, 2, 2]
+			weights = Reshape(weights, 2, N)         // [2, 4]
 			quant := &Quantization{
 				Scheme:    backends.QuantNF4,
 				Scale:     s,
@@ -273,11 +273,11 @@ func TestQuantizedDense_GGML_Q8_0(t *testing.T) {
 
 		row0 := make([]uint8, bytesPerRow)
 		row0[0], row0[1] = 0x00, 0x40 // fp16 LE for 2.0
-		row0[2] = 1                    // quant[0] = 1
+		row0[2] = 1                   // quant[0] = 1
 
 		row1 := make([]uint8, bytesPerRow)
 		row1[0], row1[1] = 0x00, 0x42 // fp16 LE for 3.0
-		row1[3] = 1                    // quant[1] = 1
+		row1[3] = 1                   // quant[1] = 1
 
 		weightData := [][]uint8{row0, row1}
 
@@ -343,15 +343,15 @@ func TestQuantizedDense_GGML_Q4_0(t *testing.T) {
 
 		row0 := make([]uint8, bytesPerRow)
 		row0[0], row0[1] = 0x00, 0x40 // fp16 LE for 2.0
-		row0[2] = 0x89                 // byte0: lo=9 (val=+1*scale), hi=8 (val=0)
+		row0[2] = 0x89                // byte0: lo=9 (val=+1*scale), hi=8 (val=0)
 		for i := 3; i < bytesPerRow; i++ {
 			row0[i] = 0x88 // nibble 8 → (8-8)=0
 		}
 
 		row1 := make([]uint8, bytesPerRow)
 		row1[0], row1[1] = 0x00, 0x42 // fp16 LE for 3.0
-		row1[2] = 0x88                 // byte0: both nibbles = 8 → 0
-		row1[3] = 0x89                 // byte1: lo=9 (val=+1*scale), hi=8
+		row1[2] = 0x88                // byte0: both nibbles = 8 → 0
+		row1[3] = 0x89                // byte1: lo=9 (val=+1*scale), hi=8
 		for i := 4; i < bytesPerRow; i++ {
 			row1[i] = 0x88
 		}
@@ -411,7 +411,7 @@ func TestQuantizedDense_GGML_IQ4NL(t *testing.T) {
 
 		row0 := make([]uint8, bytesPerRow)
 		row0[0], row0[1] = 0x00, 0x3C // fp16 LE for 1.0
-		row0[2] = 0x89                 // lo=9 (LUT[9]=13), hi=8 (LUT[8]=1)
+		row0[2] = 0x89                // lo=9 (LUT[9]=13), hi=8 (LUT[8]=1)
 		for i := 3; i < bytesPerRow; i++ {
 			row0[i] = 0x88 // nibble 8 → LUT[8]=1
 		}
@@ -472,8 +472,8 @@ func TestQuantizedDense_Int4(t *testing.T) {
 			packed := Const(g, packedData)
 			s := Const(g, scalesData)
 			// Bitcast uint8 [2, 2] → Int4 [2, 2, 2], then reshape to [2, 4].
-			weights := Bitcast(packed, dtypes.Int4)      // [2, 2, 2]
-			weights = Reshape(weights, 2, N)              // [2, 4]
+			weights := Bitcast(packed, dtypes.Int4) // [2, 2, 2]
+			weights = Reshape(weights, 2, N)        // [2, 4]
 			quant := &Quantization{
 				Scheme:    backends.QuantLinear,
 				Scale:     s,

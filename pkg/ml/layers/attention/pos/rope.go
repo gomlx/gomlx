@@ -33,8 +33,8 @@ import (
 //
 // [1] "RoFormer: Enhanced Transformer with Rotary Position Embedding", https://arxiv.org/abs/2104.09864
 type RoPE struct {
-	BaseFreq    float64
-	DimStart    int
+	BaseFreq            float64
+	DimStart            int
 	DimEnd              int
 	Interleaved         bool    // If true, rotation pairs are at even/odd indices; if false, split first-half/second-half
 	LinearScalingFactor float64 // If > 0 and != 1.0, positions are divided by this factor before RoPE.

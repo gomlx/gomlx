@@ -12,8 +12,8 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/stretchr/testify/assert"

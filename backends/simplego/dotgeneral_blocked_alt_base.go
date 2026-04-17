@@ -3,8 +3,8 @@
 package simplego
 
 import ( //alt:base
-	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16" //alt:base
-	"github.com/x448/float16"                         //alt:base
+	"github.com/gomlx/compute/dtypes/bfloat16" //alt:base
+	"github.com/x448/float16"                  //alt:base
 ) //alt:base
 //alt:bf16 import	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
 //alt:f16 import	"github.com/x448/float16"

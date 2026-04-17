@@ -23,16 +23,16 @@ func TestQuantizedGather_GGML_Q8_0(t *testing.T) {
 
 		row0 := make([]uint8, bytesPerRow)
 		row0[0], row0[1] = 0x00, 0x40 // fp16 LE for 2.0
-		row0[2] = 1                    // quant[0] = 1
+		row0[2] = 1                   // quant[0] = 1
 
 		row1 := make([]uint8, bytesPerRow)
 		row1[0], row1[1] = 0x00, 0x42 // fp16 LE for 3.0
-		row1[3] = 1                    // quant[1] = 1
+		row1[3] = 1                   // quant[1] = 1
 
 		row2 := make([]uint8, bytesPerRow)
 		row2[0], row2[1] = 0x00, 0x3C // fp16 LE for 1.0
-		row2[2] = 1                    // quant[0] = 1
-		row2[3] = 1                    // quant[1] = 1
+		row2[2] = 1                   // quant[0] = 1
+		row2[3] = 1                   // quant[1] = 1
 
 		tableData := [][]uint8{row0, row1, row2}
 

@@ -7,6 +7,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -14,7 +15,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

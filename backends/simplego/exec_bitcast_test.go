@@ -94,7 +94,7 @@ func TestBitcast_SameSize_Uint8ToInt8(t *testing.T) {
 
 	// Verify byte-level identity.
 	resultData := result.flat.([]int8)
-	assert.Equal(t, int8(-1), resultData[0])  // 0xFF
+	assert.Equal(t, int8(-1), resultData[0])   // 0xFF
 	assert.Equal(t, int8(-128), resultData[1]) // 0x80
 	assert.Equal(t, int8(1), resultData[2])    // 0x01
 }

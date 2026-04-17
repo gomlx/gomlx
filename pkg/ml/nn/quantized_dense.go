@@ -104,20 +104,20 @@ func quantizedDenseDecomposed(x, weights *Node, quant *Quantization, bias *Node,
 	for j := range N {
 		groupIdxSlice[j] = int32(j / blockSize)
 	}
-	groupIdx := Const(g, groupIdxSlice)                       // [N] int32
-	scalesT := Transpose(quant.Scale, 0, 1)                   // [numBlocks, K]
-	groupIdxForGather := Reshape(groupIdx, N, 1)               // [N, 1]
-	expandedScales := Gather(scalesT, groupIdxForGather)       // [N, K]
-	expandedScales = Transpose(expandedScales, 0, 1)           // [K, N]
+	groupIdx := Const(g, groupIdxSlice)                  // [N] int32
+	scalesT := Transpose(quant.Scale, 0, 1)              // [numBlocks, K]
+	groupIdxForGather := Reshape(groupIdx, N, 1)         // [N, 1]
+	expandedScales := Gather(scalesT, groupIdxForGather) // [N, K]
+	expandedScales = Transpose(expandedScales, 0, 1)     // [K, N]
 
 	// Step C: Apply scales.
 	dequant = Mul(dequant, expandedScales) // [K, N]
 
 	// Step C2: Apply zero points if present.
 	if quant.ZeroPoint != nil {
-		zpT := Transpose(quant.ZeroPoint, 0, 1)           // [numBlocks, K]
-		expandedZP := Gather(zpT, groupIdxForGather)       // [N, K]
-		expandedZP = Transpose(expandedZP, 0, 1)           // [K, N]
+		zpT := Transpose(quant.ZeroPoint, 0, 1)      // [numBlocks, K]
+		expandedZP := Gather(zpT, groupIdxForGather) // [N, K]
+		expandedZP = Transpose(expandedZP, 0, 1)     // [K, N]
 		dequant = Add(dequant, expandedZP)
 	}
 
@@ -167,7 +167,7 @@ func dequantNF4FromTyped(g *Graph, weights *Node, K, N int) *Node {
 	default:
 		Panicf("dequantNF4FromTyped: expected Int4 or Uint4 weights, got %s", wDType)
 	}
-	nf4Table := Const(g, backends.NF4LookupTable[:])       // [16] float32
-	indicesForGather := Reshape(indices, K, N, 1)   // [K, N, 1]
+	nf4Table := Const(g, backends.NF4LookupTable[:]) // [16] float32
+	indicesForGather := Reshape(indices, K, N, 1)    // [K, N, 1]
 	return Gather(nf4Table, indicesForGather)        // [K, N] float32
 }

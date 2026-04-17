@@ -30,4 +30,3 @@ func adjustAxisToRank(axis, rank int) int {
 	}
 	return axis
 }
-

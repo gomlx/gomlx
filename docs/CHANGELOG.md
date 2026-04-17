@@ -1,5 +1,13 @@
 # GoMLX changelog
 
+# Next:
+
+## API Changes: `backends`, `dtypes` and `shapes` moving to `github.com/gomlx/compute`
+
+- New `github.com/gomlx/compute` repo will host what was in package `backends`.
+
+
+
 # 0.27.3: Improves sub-byte support, optimized raw-byte data transfers, FNN ensembles, and major transformer updates including BERT and Gemma models.
 
 ### Core:
