@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/backends"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"

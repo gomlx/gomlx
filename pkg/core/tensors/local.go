@@ -16,8 +16,8 @@ import (
 	"github.com/x448/float16"
 	"k8s.io/klog/v2"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 )

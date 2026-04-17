@@ -3,8 +3,8 @@
 package nn
 
 import (
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/ggml"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"

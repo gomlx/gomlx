@@ -9,7 +9,7 @@ package cosineschedule
 import (
 	"math"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/train"

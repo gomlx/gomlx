@@ -26,8 +26,8 @@ import (
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"

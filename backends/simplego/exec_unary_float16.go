@@ -8,8 +8,8 @@ package simplego
 import (
 	"math"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/x448/float16"
 )
 

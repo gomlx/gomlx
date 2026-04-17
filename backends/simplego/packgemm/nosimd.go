@@ -3,8 +3,8 @@
 package packgemm
 
 import (
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/internal/workerspool"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"k8s.io/klog/v2"
 )
 

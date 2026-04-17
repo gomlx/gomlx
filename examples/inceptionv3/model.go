@@ -66,7 +66,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/core/tensors/images"

@@ -5,8 +5,8 @@ package packgemm
 import (
 	"slices"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/internal/workerspool"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/pkg/errors"
 )
 

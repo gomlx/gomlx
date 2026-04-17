@@ -7,9 +7,9 @@ import (
 	"path"
 	"time"
 
+	"github.com/gomlx/compute/dtypes"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"

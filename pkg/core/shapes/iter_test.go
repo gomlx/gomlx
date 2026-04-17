@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/stretchr/testify/require"
 )
 

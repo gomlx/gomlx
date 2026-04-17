@@ -9,8 +9,8 @@ import (
 
 	grob "github.com/MetalBlueberry/go-plotly/generated/v2.34.0/graph_objects"
 	ptypes "github.com/MetalBlueberry/go-plotly/pkg/types"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	gonbplotly "github.com/janpfeifer/gonb/gonbui/plotly"

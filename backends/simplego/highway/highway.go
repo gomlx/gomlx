@@ -5,9 +5,9 @@ package highway
 import (
 	"errors"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/internal/workerspool"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 )
 
 // HasDTypeSupport returns true if a MatMulDynamic function is registered for the given dtypes.

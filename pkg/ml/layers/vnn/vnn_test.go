@@ -8,7 +8,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/shapes"

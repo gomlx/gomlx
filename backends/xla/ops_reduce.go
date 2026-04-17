@@ -5,12 +5,12 @@ package xla
 import (
 	"reflect"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
 	stablehloshapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 	"github.com/x448/float16"

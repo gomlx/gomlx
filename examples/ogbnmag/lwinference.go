@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"

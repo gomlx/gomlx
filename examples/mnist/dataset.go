@@ -31,9 +31,9 @@ import (
 	"os"
 	"path"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"

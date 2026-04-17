@@ -8,8 +8,8 @@ import (
 	"path"
 	"text/template"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"k8s.io/klog/v2"
 )
 

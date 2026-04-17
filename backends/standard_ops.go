@@ -5,7 +5,7 @@ package backends
 import (
 	"slices"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 

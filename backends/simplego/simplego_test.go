@@ -7,9 +7,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"

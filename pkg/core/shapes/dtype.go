@@ -8,7 +8,7 @@ import (
 
 	"github.com/gomlx/compute/dtypes/bfloat16"
 
-	. "github.com/gomlx/gomlx/pkg/core/dtypes"
+	. "github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/x448/float16"
 )

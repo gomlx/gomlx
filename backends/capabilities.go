@@ -5,7 +5,7 @@ package backends
 import (
 	"maps"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
 )
 
 // Capabilities holds mappings of what is supported by a backend.
