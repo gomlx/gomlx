@@ -317,10 +317,10 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				lhsFlatF16 := lhsFlatAny.([]float16.Float16)
 				rhsFlatF16 := rhsFlatAny.([]float16.Float16)
 				for i := range lhsFlatF16 {
-					lhsFlatF16[i] = float16.Fromfloat32(float32(i%10 + 1))
+					lhsFlatF16[i] = float16.FromFloat32(float32(i%10 + 1))
 				}
 				for i := range rhsFlatF16 {
-					rhsFlatF16[i] = float16.Fromfloat32(float32(i%10 + 1))
+					rhsFlatF16[i] = float16.FromFloat32(float32(i%10 + 1))
 				}
 			}
 			lhsTensor := must.M1(tensors.FromBuffer(backend, lhsBuffer))

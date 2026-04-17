@@ -262,7 +262,7 @@ func scalarToFlat[T interface{ float64 | int | int64 }](value T, dtype dtypes.DT
 	case dtypes.BFloat16:
 		return []bfloat16.BFloat16{bfloat16.FromFloat32(float32(value))}
 	case dtypes.Float16:
-		return []float16.Float16{float16.Fromfloat32(float32(value))}
+		return []float16.Float16{float16.FromFloat32(float32(value))}
 	case dtypes.Bool:
 		return []bool{value != 0}
 	default:

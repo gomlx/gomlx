@@ -209,7 +209,7 @@ func toTensorGenericsImpl[T dtypes.NumberNotComplex | float16.Float16 | bfloat16
 	if dtype == dtypes.Float16 {
 		convertToDType = func(val uint32) T {
 			// color.RGBA() returns 16 bits values packaged in uint32.
-			return T(float16.Fromfloat32(float32(val) * float32(tt.maxValue) / float32(0xFFFF)))
+			return T(float16.FromFloat32(float32(val) * float32(tt.maxValue) / float32(0xFFFF)))
 		}
 	} else if dtype == dtypes.BFloat16 {
 		convertToDType = func(val uint32) T {

@@ -96,7 +96,7 @@ func execDotGeneralSmallMatMulGeneric[T PODNumericConstraints]( //alt:base
 
 				outputFlat[outputRowStart+n] = sum //alt:base
 				//alt:bf16 outputFlat[outputRowStart+n] = bfloat16.FromFloat32(sum)
-				//alt:f16 outputFlat[outputRowStart+n] = float16.Fromfloat32(sum)
+				//alt:f16 outputFlat[outputRowStart+n] = float16.FromFloat32(sum)
 			}
 		}
 	}

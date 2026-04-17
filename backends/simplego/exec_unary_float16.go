@@ -17,7 +17,7 @@ import (
 
 func execNegF16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
-		outputs[ii] = float16.Fromfloat32(-input.Float32())
+		outputs[ii] = float16.FromFloat32(-input.Float32())
 	}
 }
 
@@ -25,7 +25,7 @@ func execAbsF16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
 		f := input.Float32()
 		if f < 0 {
-			outputs[ii] = float16.Fromfloat32(-f)
+			outputs[ii] = float16.FromFloat32(-f)
 		} else {
 			outputs[ii] = input
 		}
@@ -37,78 +37,78 @@ func execSignF16(inputs, outputs []float16.Float16) {
 		f := input.Float32()
 		switch {
 		case f < 0:
-			outputs[ii] = float16.Fromfloat32(-1.0)
+			outputs[ii] = float16.FromFloat32(-1.0)
 		case f > 0:
-			outputs[ii] = float16.Fromfloat32(1.0)
+			outputs[ii] = float16.FromFloat32(1.0)
 		default:
-			outputs[ii] = float16.Fromfloat32(0.0)
+			outputs[ii] = float16.FromFloat32(0.0)
 		}
 	}
 }
 
 func execExpF16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
-		outputs[ii] = float16.Fromfloat32(float32(math.Exp(float64(input.Float32()))))
+		outputs[ii] = float16.FromFloat32(float32(math.Exp(float64(input.Float32()))))
 	}
 }
 
 func execExpm1F16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
-		outputs[ii] = float16.Fromfloat32(float32(math.Expm1(float64(input.Float32()))))
+		outputs[ii] = float16.FromFloat32(float32(math.Expm1(float64(input.Float32()))))
 	}
 }
 
 func execLogF16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
-		outputs[ii] = float16.Fromfloat32(float32(math.Log(float64(input.Float32()))))
+		outputs[ii] = float16.FromFloat32(float32(math.Log(float64(input.Float32()))))
 	}
 }
 
 func execLog1pF16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
-		outputs[ii] = float16.Fromfloat32(float32(math.Log1p(float64(input.Float32()))))
+		outputs[ii] = float16.FromFloat32(float32(math.Log1p(float64(input.Float32()))))
 	}
 }
 
 func execCeilF16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
-		outputs[ii] = float16.Fromfloat32(float32(math.Ceil(float64(input.Float32()))))
+		outputs[ii] = float16.FromFloat32(float32(math.Ceil(float64(input.Float32()))))
 	}
 }
 
 func execFloorF16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
-		outputs[ii] = float16.Fromfloat32(float32(math.Floor(float64(input.Float32()))))
+		outputs[ii] = float16.FromFloat32(float32(math.Floor(float64(input.Float32()))))
 	}
 }
 
 func execRoundF16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
-		outputs[ii] = float16.Fromfloat32(float32(math.Round(float64(input.Float32()))))
+		outputs[ii] = float16.FromFloat32(float32(math.Round(float64(input.Float32()))))
 	}
 }
 
 func execRsqrtF16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
-		outputs[ii] = float16.Fromfloat32(float32(1.0 / math.Sqrt(float64(input.Float32()))))
+		outputs[ii] = float16.FromFloat32(float32(1.0 / math.Sqrt(float64(input.Float32()))))
 	}
 }
 
 func execCosF16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
-		outputs[ii] = float16.Fromfloat32(float32(math.Cos(float64(input.Float32()))))
+		outputs[ii] = float16.FromFloat32(float32(math.Cos(float64(input.Float32()))))
 	}
 }
 
 func execSinF16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
-		outputs[ii] = float16.Fromfloat32(float32(math.Sin(float64(input.Float32()))))
+		outputs[ii] = float16.FromFloat32(float32(math.Sin(float64(input.Float32()))))
 	}
 }
 
 func execTanhF16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
-		outputs[ii] = float16.Fromfloat32(float32(math.Tanh(float64(input.Float32()))))
+		outputs[ii] = float16.FromFloat32(float32(math.Tanh(float64(input.Float32()))))
 	}
 }
 
@@ -122,7 +122,7 @@ func execLogisticF16(inputs, outputs []float16.Float16) {
 			e_x := math.Exp(input64)
 			output64 = e_x / (1.0 + e_x)
 		}
-		outputs[ii] = float16.Fromfloat32(float32(output64))
+		outputs[ii] = float16.FromFloat32(float32(output64))
 	}
 }
 
@@ -135,7 +135,7 @@ func execIsFiniteF16(inputs []float16.Float16, outputs []bool) {
 
 func execErfF16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
-		outputs[ii] = float16.Fromfloat32(float32(math.Erf(float64(input.Float32()))))
+		outputs[ii] = float16.FromFloat32(float32(math.Erf(float64(input.Float32()))))
 	}
 }
 

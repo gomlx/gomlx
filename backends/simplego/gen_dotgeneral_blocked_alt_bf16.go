@@ -77,7 +77,7 @@ func dgCopyOutputBlockToFlatF32ToBF16( //alt:bf16
 					//alt:base sourceData[sourceRowOffset:sourceRowOffset+rhsEnd-rhsStart])
 					for blockCol := range rhsEnd - rhsStart { //alt:bf16|f16
 						outputData[outputRowOffset+blockCol] = bfloat16.FromFloat32(sourceData[sourceRowOffset+blockCol]) //alt:bf16
-						//alt:f16  outputData[outputRowOffset+blockCol] = float16.Fromfloat32(sourceData[sourceRowOffset+blockCol])
+						//alt:f16  outputData[outputRowOffset+blockCol] = float16.FromFloat32(sourceData[sourceRowOffset+blockCol])
 					} //alt:bf16|f16
 
 				}

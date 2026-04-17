@@ -172,7 +172,7 @@ func execConvertDTypeToFloat16[FromT PODNumericConstraints, _ float16.Float16](o
 	operandFlat := operand.flat.([]FromT)
 	outputFlat := output.flat.([]float16.Float16)
 	for idx, value := range operandFlat {
-		outputFlat[idx] = float16.Fromfloat32(float32(value))
+		outputFlat[idx] = float16.FromFloat32(float32(value))
 	}
 }
 
@@ -187,7 +187,7 @@ func execConvertDTypeFloat16ToBool(operand, output *Buffer) {
 func execConvertDTypeBoolToFloat16(operand, output *Buffer) {
 	operandFlat := operand.flat.([]bool)
 	outputFlat := output.flat.([]float16.Float16)
-	zero, one := float16.Fromfloat32(0), float16.Fromfloat32(1)
+	zero, one := float16.FromFloat32(0), float16.FromFloat32(1)
 	for idx, value := range operandFlat {
 		if value {
 			outputFlat[idx] = one
@@ -209,7 +209,7 @@ func execConvertDTypeBFloat16ToFloat16(operand, output *Buffer) {
 	operandFlat := operand.flat.([]bfloat16.BFloat16)
 	outputFlat := output.flat.([]float16.Float16)
 	for idx, value := range operandFlat {
-		outputFlat[idx] = float16.Fromfloat32(value.Float32())
+		outputFlat[idx] = float16.FromFloat32(value.Float32())
 	}
 }
 

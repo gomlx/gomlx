@@ -48,7 +48,7 @@ func newDTypePair(inputDType, outputDType dtypes.DType) DTypePair {
 	case dtypes.Complex128:
 		pair.CastFormat = "complex(%s, 0)"
 	case dtypes.Float16:
-		pair.CastFormat = "float16.Fromfloat32(float32(%s))"
+		pair.CastFormat = "float16.FromFloat32(float32(%s))"
 	case dtypes.BFloat16:
 		pair.CastFormat = "bfloat16.FromFloat32(float32(%s))"
 	default:

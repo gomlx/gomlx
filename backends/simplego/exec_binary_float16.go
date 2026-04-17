@@ -24,7 +24,7 @@ func execBinaryFloat16[OpFn func(a, b float32) float32](opFn OpFn, lhs, rhs []fl
 		c := rhs[0].Float32()
 		for ii, input := range lhs {
 			a := input.Float32()
-			output[ii] = float16.Fromfloat32(opFn(a, c))
+			output[ii] = float16.FromFloat32(opFn(a, c))
 		}
 	case len(lhs) == 1:
 		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
@@ -32,14 +32,14 @@ func execBinaryFloat16[OpFn func(a, b float32) float32](opFn OpFn, lhs, rhs []fl
 		c := lhs[0].Float32()
 		for ii, input := range rhs {
 			b := input.Float32()
-			output[ii] = float16.Fromfloat32(opFn(c, b))
+			output[ii] = float16.FromFloat32(opFn(c, b))
 		}
 	case lhsShape.Equal(rhsShape):
 		// Case 2: Exact same shapes, no broadcasting.
 		for outputIdx := range output {
 			a := lhs[outputIdx].Float32()
 			b := rhs[outputIdx].Float32()
-			output[outputIdx] = float16.Fromfloat32(opFn(a, b))
+			output[outputIdx] = float16.FromFloat32(opFn(a, b))
 		}
 	default:
 		// Case 3: with broadcasting non-scalar tensors:
@@ -50,7 +50,7 @@ func execBinaryFloat16[OpFn func(a, b float32) float32](opFn OpFn, lhs, rhs []fl
 			rhsIdx := rhsIter.Next()
 			a := lhs[lhsIdx].Float32()
 			b := rhs[rhsIdx].Float32()
-			output[outputIdx] = float16.Fromfloat32(opFn(a, b))
+			output[outputIdx] = float16.FromFloat32(opFn(a, b))
 		}
 	}
 }

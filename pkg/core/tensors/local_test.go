@@ -341,7 +341,7 @@ func testSaveLoadBool(t *testing.T) {
 func testSaveLoadFloat16(t *testing.T) {
 	values := make([]float16.Float16, 6)
 	for ii, v := range []float32{0, 1, 2, 3, 4, 11} {
-		values[ii] = float16.Fromfloat32(v)
+		values[ii] = float16.FromFloat32(v)
 	}
 	var tensor *Tensor
 	require.NotPanics(t, func() { tensor = FromFlatDataAndDimensions(values, 3, 2) })

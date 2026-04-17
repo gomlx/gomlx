@@ -35,7 +35,7 @@ func execReduceMaxFloat16(operand, output *Buffer, it *reduceOutputIterator, dty
 	for _, value := range operandFlat {
 		outputIdx := it.next()
 		a, b := outputFlat[outputIdx].Float32(), value.Float32()
-		outputFlat[outputIdx] = float16.Fromfloat32(max(a, b))
+		outputFlat[outputIdx] = float16.FromFloat32(max(a, b))
 	}
 }
 
@@ -51,13 +51,13 @@ func execReduceMinFloat16(operand, output *Buffer, it *reduceOutputIterator, dty
 	for _, value := range operandFlat {
 		outputIdx := it.next()
 		a, b := outputFlat[outputIdx].Float32(), value.Float32()
-		outputFlat[outputIdx] = float16.Fromfloat32(min(a, b))
+		outputFlat[outputIdx] = float16.FromFloat32(min(a, b))
 	}
 }
 
 func execReduceSumFloat16(operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 0.
-	initialValue := float16.Fromfloat32(0)
+	initialValue := float16.FromFloat32(0)
 	outputFlat := output.flat.([]float16.Float16)
 	for outputIdx := range outputFlat {
 		outputFlat[outputIdx] = initialValue
@@ -67,13 +67,13 @@ func execReduceSumFloat16(operand, output *Buffer, it *reduceOutputIterator, _ d
 	for _, value := range operandFlat {
 		outputIdx := it.next()
 		a, b := outputFlat[outputIdx].Float32(), value.Float32()
-		outputFlat[outputIdx] = float16.Fromfloat32(a + b)
+		outputFlat[outputIdx] = float16.FromFloat32(a + b)
 	}
 }
 
 func execReduceProductFloat16(operand, output *Buffer, it *reduceOutputIterator, _ dtypes.DType) {
 	// Initialize with 1.
-	initialValue := float16.Fromfloat32(1)
+	initialValue := float16.FromFloat32(1)
 	outputFlat := output.flat.([]float16.Float16)
 	for outputIdx := range outputFlat {
 		outputFlat[outputIdx] = initialValue
@@ -83,7 +83,7 @@ func execReduceProductFloat16(operand, output *Buffer, it *reduceOutputIterator,
 	for _, value := range operandFlat {
 		outputIdx := it.next()
 		a, b := outputFlat[outputIdx].Float32(), value.Float32()
-		outputFlat[outputIdx] = float16.Fromfloat32(a * b)
+		outputFlat[outputIdx] = float16.FromFloat32(a * b)
 	}
 }
 

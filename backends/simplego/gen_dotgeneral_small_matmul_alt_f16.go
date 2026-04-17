@@ -101,7 +101,7 @@ func execDotGeneralSmallMatMulFloat16( //alt:f16
 
 				//alt:base outputFlat[outputRowStart+n] = sum
 				//alt:bf16  outputFlat[outputRowStart+n] = bfloat16.FromFloat32(sum)
-				outputFlat[outputRowStart+n] = float16.Fromfloat32(sum) //alt:f16
+				outputFlat[outputRowStart+n] = float16.FromFloat32(sum) //alt:f16
 			}
 		}
 	}

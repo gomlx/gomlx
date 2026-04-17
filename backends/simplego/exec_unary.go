@@ -668,7 +668,7 @@ func execSqrtBF16(inputs, outputs []bfloat16.BFloat16) {
 
 func execSqrtF16(inputs, outputs []float16.Float16) {
 	for ii, input := range inputs {
-		outputs[ii] = float16.Fromfloat32(float32(math.Sqrt(float64(input.Float32()))))
+		outputs[ii] = float16.FromFloat32(float32(math.Sqrt(float64(input.Float32()))))
 	}
 }
 

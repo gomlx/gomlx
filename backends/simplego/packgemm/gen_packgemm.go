@@ -99,7 +99,7 @@ func GEMMDynamic(inputDType, outputDType dtypes.DType,
 			ref, dataAny := bufAllocAnyFn(size)
 			return ref, dataAny.([]float16.Float16)
 		}
-		return GEMM(float16.Fromfloat32(float32(alpha)), float16.Fromfloat32(float32(beta)),
+		return GEMM(float16.FromFloat32(float32(alpha)), float16.FromFloat32(float32(beta)),
 			lhsFlat.([]float16.Float16), rhsFlat.([]float16.Float16), batchSize,
 			lhsCrossSize, rhsCrossSize, contractingSize, outputFlat.([]float16.Float16),
 			bufAllocFn, bufReleaseFn, pool)

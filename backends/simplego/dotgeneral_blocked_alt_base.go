@@ -72,7 +72,7 @@ func dgCopyOutputBlockToFlat[T interface { //alt:base
 						sourceData[sourceRowOffset:sourceRowOffset+rhsEnd-rhsStart]) //alt:base
 					//alt:bf16|f16 for blockCol := range rhsEnd - rhsStart {
 					//alt:bf16 	outputData[outputRowOffset+blockCol] = bfloat16.FromFloat32(sourceData[sourceRowOffset+blockCol])
-					//alt:f16 	outputData[outputRowOffset+blockCol] = float16.Fromfloat32(sourceData[sourceRowOffset+blockCol])
+					//alt:f16 	outputData[outputRowOffset+blockCol] = float16.FromFloat32(sourceData[sourceRowOffset+blockCol])
 					//alt:bf16|f16 }
 
 				}

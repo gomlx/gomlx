@@ -497,7 +497,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 
 			// Float16 example.
 			t.Run("Float16", func(t *testing.T) {
-				f16 := float16.Fromfloat32
+				f16 := float16.FromFloat32
 				y2 := graph.MustExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 					return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
 				},
@@ -619,7 +619,7 @@ func TestDotGeneral_ConfigDTypes(t *testing.T) {
 
 	// Define common input shapes and values
 	F16 := dtypes.Float16
-	f16 := float16.Fromfloat32
+	f16 := float16.FromFloat32
 	lhsData := []float16.Float16{f16(1), f16(2), f16(3), f16(4), f16(5), f16(6)}
 	rhsData := []float16.Float16{f16(7), f16(8), f16(9), f16(10), f16(11), f16(12)}
 	lhsTensor := tensors.FromFlatDataAndDimensions(lhsData, 2, 3)
@@ -1229,7 +1229,7 @@ func TestSmallMatMulCorrectness(t *testing.T) {
 
 	t.Run("Float16", func(t *testing.T) {
 		// Simple 4x8 × 8x6 matrix multiplication with Float16
-		f16 := float16.Fromfloat32
+		f16 := float16.FromFloat32
 		lhsData := make([]float16.Float16, 4*8)
 		for i := range lhsData {
 			lhsData[i] = f16(float32(i+1) * 0.1)
