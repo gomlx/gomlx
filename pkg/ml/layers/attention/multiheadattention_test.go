@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
@@ -22,7 +23,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

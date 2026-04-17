@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -25,7 +26,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"k8s.io/klog/v2"

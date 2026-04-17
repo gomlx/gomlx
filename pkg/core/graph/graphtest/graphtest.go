@@ -10,13 +10,13 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/pkg/installer"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/xla"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
 )

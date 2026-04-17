@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/backends"
 	_ "github.com/gomlx/gomlx/backends/default"
 	"github.com/gomlx/gomlx/pkg/core/graph"
@@ -33,7 +34,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/commandline"
 )
 

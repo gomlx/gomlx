@@ -3,11 +3,11 @@
 package gnn
 
 import (
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 )
 

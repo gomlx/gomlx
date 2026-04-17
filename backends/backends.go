@@ -25,8 +25,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 // DeviceNum represents which device holds a buffer or should execute a computation.

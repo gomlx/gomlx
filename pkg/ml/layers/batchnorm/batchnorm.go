@@ -12,6 +12,7 @@ package batchnorm
 import (
 	"strings"
 
+	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -19,7 +20,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 // Config for a batch normalization layer.

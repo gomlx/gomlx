@@ -6,10 +6,10 @@ import (
 	"slices"
 
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 // NormalizeIndices converts Python-style negative indices to positive indices

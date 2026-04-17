@@ -22,12 +22,12 @@ import (
 
 	grob "github.com/MetalBlueberry/go-plotly/generated/v2.34.0/graph_objects"
 	ptypes "github.com/MetalBlueberry/go-plotly/pkg/types"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/plots"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/janpfeifer/gonb/gonbui/dom"

@@ -6,11 +6,11 @@ import (
 	"slices"
 
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 )
 

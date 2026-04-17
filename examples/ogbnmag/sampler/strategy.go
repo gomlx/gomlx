@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 // Strategy is created by [Sampler]. A [Sampler] can create multiple [Strategy]s, a typical

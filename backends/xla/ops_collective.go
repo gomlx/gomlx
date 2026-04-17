@@ -4,9 +4,9 @@ package xla
 
 import (
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 )
 

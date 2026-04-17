@@ -9,7 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/x448/float16"
 )
 

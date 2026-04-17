@@ -5,9 +5,9 @@ package activations
 import (
 	"testing"
 
+	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 
 	"github.com/gomlx/gomlx/backends"
 	_ "github.com/gomlx/gomlx/backends/default"

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/examples/inceptionv3"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
@@ -28,7 +29,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/humanize"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/janpfeifer/gonb/cache"
 	"github.com/janpfeifer/gonb/gonbui"

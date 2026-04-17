@@ -6,12 +6,12 @@ package xla
 
 import (
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
 	stablehloshapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 )
 

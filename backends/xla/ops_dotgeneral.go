@@ -6,10 +6,10 @@ import (
 	"reflect"
 
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 )
 
