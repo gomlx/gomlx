@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/pkg/pjrt"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/humanize"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"

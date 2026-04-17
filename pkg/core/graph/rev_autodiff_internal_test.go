@@ -5,7 +5,7 @@ package graph
 import (
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute/shapes"
 )
 
 func testState(t *testing.T, rg *reverseGraph, node *Node, selected, included, useful bool) {

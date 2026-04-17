@@ -6,7 +6,7 @@ import (
 	"slices"
 
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute/shapes"
 )
 
 // ConvolveAxesConfig defines the interpretation of the input/kernel/output tensor axes.

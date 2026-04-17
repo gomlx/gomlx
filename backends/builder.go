@@ -3,7 +3,7 @@
 package backends
 
 import (
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute/shapes"
 )
 
 // Value represents the output of an operation, during the computation graph building time.

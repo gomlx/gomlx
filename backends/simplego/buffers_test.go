@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute/shapes"
 	"github.com/stretchr/testify/require"
 )
 

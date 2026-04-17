@@ -6,10 +6,10 @@ import (
 	"slices"
 
 	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	"github.com/gomlx/go-xla/pkg/types/shardy"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 )
 

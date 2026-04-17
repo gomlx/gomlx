@@ -5,7 +5,7 @@ package simplego
 import (
 	"slices"
 
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 

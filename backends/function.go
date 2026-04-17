@@ -2,7 +2,7 @@
 
 package backends
 
-import "github.com/gomlx/gomlx/pkg/core/shapes"
+import "github.com/gomlx/compute/shapes"
 
 // Function represents a computation function within a Builder.
 //

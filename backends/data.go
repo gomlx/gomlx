@@ -3,7 +3,7 @@
 package backends
 
 import (
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute/shapes"
 )
 
 // Buffer represents actual data (a tensor) stored in the accelerator that is actually going to execute the graph.

@@ -3,8 +3,8 @@
 package notimplemented
 
 import (
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )

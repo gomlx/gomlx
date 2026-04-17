@@ -3,7 +3,7 @@
 package backends
 
 import (
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute/shapes"
 )
 
 // Executable is the API for compiled programs ready to execute.

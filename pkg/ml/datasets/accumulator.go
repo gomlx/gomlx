@@ -8,9 +8,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/pkg/errors"

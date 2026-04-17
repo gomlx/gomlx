@@ -2,7 +2,7 @@ package simplego
 
 import (
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute/shapes"
 )
 
 // isMatMulOrder checks if the DotGeneral operands are in standard matrix multiplication order:
