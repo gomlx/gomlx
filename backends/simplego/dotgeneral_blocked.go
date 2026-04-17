@@ -7,10 +7,10 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
-	"github.com/x448/float16"
 )
 
 // This file contains the implementation for the blocked (cache-tiled) DotGeneral algorithm.

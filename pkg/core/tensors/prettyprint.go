@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/x448/float16"
 )
 
 var (

@@ -9,8 +9,8 @@ import (
 	"unsafe"
 
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/x448/float16"
 )
 
 // Float16 reduce operations

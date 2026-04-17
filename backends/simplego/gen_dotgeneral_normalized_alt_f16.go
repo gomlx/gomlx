@@ -7,7 +7,7 @@
 package simplego
 
 //alt:bf16  import "github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-import "github.com/x448/float16" //alt:f16
+import "github.com/gomlx/compute/dtypes/float16" //alt:f16
 
 // This file serves as a base version of the `execDotGeneralNormalized*` functions, as well as a template
 // for other versions.

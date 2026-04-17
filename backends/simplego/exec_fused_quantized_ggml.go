@@ -44,9 +44,9 @@ package simplego
 
 import (
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
-	"github.com/x448/float16"
 )
 
 // execFusedQuantizedDenseGGML handles GGML-quantized weights.

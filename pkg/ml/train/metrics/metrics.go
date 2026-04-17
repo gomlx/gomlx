@@ -8,6 +8,7 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -16,7 +17,6 @@ import (
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"github.com/x448/float16"
 )
 
 // Interface for a Metric.

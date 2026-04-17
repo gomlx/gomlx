@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/core/graph"
@@ -25,7 +26,6 @@ import (
 	"github.com/janpfeifer/must"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
-	"github.com/x448/float16"
 
 	_ "github.com/gomlx/gomlx/backends/xla" // We also want xla backend included for tests.
 )

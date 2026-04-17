@@ -11,9 +11,9 @@ import (
 	"unsafe"
 
 	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/x448/float16"
 	"k8s.io/klog/v2"
 
 	"github.com/gomlx/compute/dtypes"

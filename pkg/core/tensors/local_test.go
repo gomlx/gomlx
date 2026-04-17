@@ -14,11 +14,11 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/x448/float16"
 )
 
 func cmpShapes(t *testing.T, shape, wantShape shapes.Shape, err error) {

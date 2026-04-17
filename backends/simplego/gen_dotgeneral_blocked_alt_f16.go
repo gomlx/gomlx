@@ -11,7 +11,7 @@ package simplego
 //alt:base "github.com/x448/float16"
 //alt:base )
 //alt:bf16  import	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-import "github.com/x448/float16" //alt:f16
+import "github.com/gomlx/compute/dtypes/float16" //alt:f16
 
 // dgCopyOutputBlockToFlat* copies the blocked output to a flat output, removing the padding.
 // The base version works for cases where the blockSource and output have the same dtype.
