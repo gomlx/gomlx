@@ -59,7 +59,7 @@ RUN wget --quiet --output-document=- "https://go.dev/dl/go${GO_VERSION}.linux-am
 RUN go install github.com/janpfeifer/gonb@latest \
     && go install golang.org/x/tools/cmd/goimports@latest \
     && go install golang.org/x/tools/gopls@latest \
-    && gonb --install --alsologtostderr
+    && gonb --install --alsologtostderr -go_work "${HOME}/Projects/gomlx,${HOME}/Projects/go-huggingface,${HOME}/Projects/onnx-gomlx,${HOME}/Projects/go-xla"
 
 # Install dlv for debugging.
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
