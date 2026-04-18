@@ -7,9 +7,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -21,14 +21,14 @@ import (
 
 var (
 	backendOnce   sync.Once
-	cachedBackend backends.Backend
+	cachedBackend compute.Backend
 )
 
-// BuildTestBackend and sets backends.DefaultConfig to "xla:cpu" -- it can be overwritten by GOMLX_BACKEND environment variable.
-func BuildTestBackend() backends.Backend {
-	backends.DefaultConfig = "xla:cpu"
+// BuildTestBackend and sets compute.DefaultConfig to "xla:cpu" -- it can be overwritten by GOMLX_BACKEND environment variable.
+func BuildTestBackend() compute.Backend {
+	compute.DefaultConfig = "xla:cpu"
 	backendOnce.Do(func() {
-		cachedBackend = backends.MustNew()
+		cachedBackend = compute.MustNew()
 		fmt.Printf("Backend: %s\n", cachedBackend.Description())
 	})
 	return cachedBackend

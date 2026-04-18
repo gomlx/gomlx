@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/pkg/errors"
 )
@@ -157,7 +157,7 @@ func (dt *Tensor) validateShards() error {
 	}
 
 	// Make sure all on-device shards are on the same backend, if any is on-device.
-	var refBackend backends.Backend
+	var refBackend compute.Backend
 	for i, shard := range shards {
 		if shard.IsOnAnyDevice() {
 			backend, err := shard.Backend()

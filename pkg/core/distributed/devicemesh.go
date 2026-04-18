@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/pkg/errors"
 )
@@ -285,9 +285,9 @@ func (m *DeviceMesh) ComputeReplicaGroups(axes []string) ([][]int, error) {
 	return groups, nil
 }
 
-// ToBackendsMesh converts mesh to a backends.Mesh.
-func (m *DeviceMesh) ToBackendsMesh() backends.Mesh {
-	return backends.Mesh{
+// ToBackendsMesh converts mesh to a compute.Mesh.
+func (m *DeviceMesh) ToBackendsMesh() compute.Mesh {
+	return compute.Mesh{
 		Name:                    m.Name(),
 		AxesSizes:               m.AxesSizes(),
 		AxesNames:               m.AxesNames(),

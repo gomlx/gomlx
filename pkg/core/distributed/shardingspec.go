@@ -5,8 +5,8 @@ package distributed
 import (
 	"strings"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
@@ -196,13 +196,13 @@ func (s *ShardingSpec) NumDevicesShardingAxis(axis int) int {
 	return size
 }
 
-// ToBackendsSpec converts the ShardingSpec to a backends.ShardingSpec.
+// ToBackendsSpec converts the ShardingSpec to a compute.ShardingSpec.
 // It works if the ShardingSpec is nil as well.
-func (s *ShardingSpec) ToBackendsSpec() *backends.ShardingSpec {
+func (s *ShardingSpec) ToBackendsSpec() *compute.ShardingSpec {
 	if s == nil {
 		return nil
 	}
-	spec := &backends.ShardingSpec{
+	spec := &compute.ShardingSpec{
 		Mesh: s.Mesh.name,
 		Axes: make([][]string, len(s.Axes)),
 	}
