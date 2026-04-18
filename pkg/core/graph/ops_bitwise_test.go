@@ -7,8 +7,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -16,7 +16,7 @@ import (
 )
 
 func TestBitwiseShifts(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		graphtest.RunTestGraphFnWithBackend(t, "Shifts", backend, func(g *Graph) (inputs, outputs []*Node) {
 			operand := Const(g, []int8{-3, -2, -1, 1, 2, 4})
 			inputs = []*Node{operand}
@@ -93,7 +93,7 @@ func TestBitcastSubByteDTypes(t *testing.T) {
 	genericUint2Converted := []uint8{2, 0, 1, 0}
 	genericUint4Converted := []uint8{2, 1}
 
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		t.Run("Int2-AsInputParam", func(t *testing.T) {
 			output := MustExecOnce(backend, func(packed *Node) *Node {
 				return ConvertDType(Bitcast(packed, dtypes.Int2), dtypes.Int8)

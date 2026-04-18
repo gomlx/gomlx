@@ -3,9 +3,9 @@
 package simplego
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
@@ -46,7 +46,7 @@ func (d *nodeFusedGelu) EqualNodeData(other nodeDataComparable) bool {
 }
 
 type nodeFusedDense struct {
-	activation backends.ActivationType
+	activation compute.ActivationType
 }
 
 func (d *nodeFusedDense) EqualNodeData(other nodeDataComparable) bool {
@@ -56,10 +56,10 @@ func (d *nodeFusedDense) EqualNodeData(other nodeDataComparable) bool {
 type nodeFusedScaledDotProductAttention struct {
 	numHeads   int
 	numKVHeads int
-	axesLayout backends.AxesLayout
+	axesLayout compute.AxesLayout
 	scale      float64
 	causal     bool
-	options    *backends.ScaledDotProductAttentionConfig
+	options    *compute.ScaledDotProductAttentionConfig
 }
 
 func (d *nodeFusedScaledDotProductAttention) EqualNodeData(other nodeDataComparable) bool {
@@ -98,17 +98,17 @@ type nodeFusedAttentionQKVProjection struct {
 // bytesPerRow = (K / valuesPerBlock) * bytesPerBlock. K (input-features) is
 // derived from bytesPerRow at build time via deriveGGMLK.
 type nodeFusedQuantizedDense struct {
-	scheme       backends.QuantizationScheme
+	scheme       compute.QuantizationScheme
 	blockAxis    int // Always 1 (output-features axis); validated in builder. Stored for EqualNodeData.
 	blockSize    int
-	activation   backends.ActivationType
+	activation   compute.ActivationType
 	hasZeroPoint bool
 	hasBias      bool
 	// ggmlType specifies the concrete GGML block format (Q4_0, Q8_0, etc.).
 	// See exec_fused_quantized_ggml.go for block layouts and references.
-	ggmlType backends.GGMLQuantType // Only used when scheme == QuantGGML.
-	ggmlN    int                    // Output features (rows in GGML layout). Only for QuantGGML.
-	ggmlK    int                    // Input features (logical columns). Only for QuantGGML.
+	ggmlType compute.GGMLQuantType // Only used when scheme == QuantGGML.
+	ggmlN    int                   // Output features (rows in GGML layout). Only for QuantGGML.
+	ggmlK    int                   // Input features (logical columns). Only for QuantGGML.
 }
 
 func (d *nodeFusedQuantizedDense) EqualNodeData(other nodeDataComparable) bool {
@@ -121,7 +121,7 @@ func (d *nodeFusedQuantizedDense) EqualNodeData(other nodeDataComparable) bool {
 
 // FusedSoftmax computes softmax along the specified axis.
 // The axis must be non-negative (the caller normalizes negative indices).
-func (f *Function) FusedSoftmax(x backends.Value, axis int) (backends.Value, error) {
+func (f *Function) FusedSoftmax(x compute.Value, axis int) (compute.Value, error) {
 	inputs, err := f.verifyAndCastValues("FusedSoftmax", x)
 	if err != nil {
 		return nil, err
@@ -134,13 +134,13 @@ func (f *Function) FusedSoftmax(x backends.Value, axis int) (backends.Value, err
 	}
 
 	data := &nodeFusedSoftmax{axis: axis}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedSoftmax, xNode.shape.Clone(), []*Node{xNode}, data)
+	node, _ := f.getOrCreateNode(compute.OpTypeFusedSoftmax, xNode.shape.Clone(), []*Node{xNode}, data)
 	return node, nil
 }
 
 // FusedLayerNorm applies layer normalization.
-func (f *Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64, gamma, beta backends.Value) (backends.Value, error) {
-	values := []backends.Value{x}
+func (f *Function) FusedLayerNorm(x compute.Value, axes []int, epsilon float64, gamma, beta compute.Value) (compute.Value, error) {
+	values := []compute.Value{x}
 	if gamma != nil {
 		values = append(values, gamma)
 	}
@@ -167,13 +167,13 @@ func (f *Function) FusedLayerNorm(x backends.Value, axes []int, epsilon float64,
 	}
 
 	data := &nodeFusedLayerNorm{axes: normalizedAxes, epsilon: epsilon}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedLayerNorm, xNode.shape.Clone(), inputs, data)
+	node, _ := f.getOrCreateNode(compute.OpTypeFusedLayerNorm, xNode.shape.Clone(), inputs, data)
 	return node, nil
 }
 
 // FusedGelu computes Gaussian Error Linear Unit activation.
 // If exact is true, uses the exact GELU (erf); otherwise uses the tanh approximation.
-func (f *Function) FusedGelu(x backends.Value, exact bool) (backends.Value, error) {
+func (f *Function) FusedGelu(x compute.Value, exact bool) (compute.Value, error) {
 	inputs, err := f.verifyAndCastValues("FusedGelu", x)
 	if err != nil {
 		return nil, err
@@ -181,7 +181,7 @@ func (f *Function) FusedGelu(x backends.Value, exact bool) (backends.Value, erro
 	xNode := inputs[0]
 
 	data := &nodeFusedGelu{exact: exact}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedGelu, xNode.shape.Clone(), []*Node{xNode}, data)
+	node, _ := f.getOrCreateNode(compute.OpTypeFusedGelu, xNode.shape.Clone(), []*Node{xNode}, data)
 	return node, nil
 }
 
@@ -192,8 +192,8 @@ func (f *Function) FusedGelu(x backends.Value, exact bool) (backends.Value, erro
 // The matmul is delegated to DotGeneral (which selects the optimal execution
 // path at build time). FusedDense then adds bias and applies activation on top
 // of the DotGeneral result.
-func (f *Function) FusedDense(x, weight, bias backends.Value, activation backends.ActivationType) (backends.Value, error) {
-	values := []backends.Value{x, weight}
+func (f *Function) FusedDense(x, weight, bias compute.Value, activation compute.ActivationType) (compute.Value, error) {
+	values := []compute.Value{x, weight}
 	if bias != nil {
 		values = append(values, bias)
 	}
@@ -220,7 +220,7 @@ func (f *Function) FusedDense(x, weight, bias backends.Value, activation backend
 	outShape := shapes.Make(xNode.shape.DType, outDims...)
 
 	// Build DotGeneral sub-node for the matmul: contract x's last axis with weight's first.
-	dotResult, err := f.DotGeneral(xNode, []int{xNode.shape.Rank() - 1}, nil, wNode, []int{0}, nil, backends.DotGeneralConfig{})
+	dotResult, err := f.DotGeneral(xNode, []int{xNode.shape.Rank() - 1}, nil, wNode, []int{0}, nil, compute.DotGeneralConfig{})
 	if err != nil {
 		return nil, errors.WithMessagef(err, "FusedDense: DotGeneral")
 	}
@@ -236,15 +236,15 @@ func (f *Function) FusedDense(x, weight, bias backends.Value, activation backend
 	}
 
 	data := &nodeFusedDense{activation: activation}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedDense, outShape, fusedInputs, data)
+	node, _ := f.getOrCreateNode(compute.OpTypeFusedDense, outShape, fusedInputs, data)
 	return node, nil
 }
 
 // FusedScaledDotProductAttention computes multi-head scaled dot-product attention.
 // Both AxesLayoutBHSD and AxesLayoutBSHD are supported; the executor transposes
 // BSHD inputs to BHSD internally.
-func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backends.Value, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool, options *backends.ScaledDotProductAttentionConfig) (backends.Value, error) {
-	return f.buildSDPANode(backends.OpTypeFusedScaledDotProductAttention, "FusedScaledDotProductAttention",
+func (f *Function) FusedScaledDotProductAttention(query, key, value, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (compute.Value, error) {
+	return f.buildSDPANode(compute.OpTypeFusedScaledDotProductAttention, "FusedScaledDotProductAttention",
 		query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal, options)
 }
 
@@ -256,15 +256,15 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask backen
 //
 // Weights should have their dtype set to reflect the actual storage type (e.g. Int4, Int8).
 // For sub-byte types, the caller should Bitcast packed byte data to the correct dtype.
-func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value,
-	weightsQuantization *backends.Quantization,
-	activation backends.ActivationType) (backends.Value, error) {
+func (f *Function) FusedQuantizedDense(x, weights, bias compute.Value,
+	weightsQuantization *compute.Quantization,
+	activation compute.ActivationType) (compute.Value, error) {
 
 	scheme := weightsQuantization.Scheme
 
 	// GGML weights have scales embedded in their native block format.
 	// The weight layout is [N, bytesPerRow] Uint8 instead of [K, N].
-	if scheme == backends.QuantGGML {
+	if scheme == compute.QuantGGML {
 		return f.fusedQuantizedDenseGGML(x, weights, bias, weightsQuantization, activation)
 	}
 
@@ -273,7 +273,7 @@ func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value,
 	blockAxis := weightsQuantization.BlockAxis
 	blockSize := weightsQuantization.BlockSize
 
-	values := []backends.Value{x, weights, scales}
+	values := []compute.Value{x, weights, scales}
 	if zeroPoints != nil {
 		values = append(values, zeroPoints)
 	}
@@ -324,7 +324,7 @@ func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value,
 	}
 
 	// NF4 quantization uses a fixed lookup table and does not support zero points.
-	if scheme == backends.QuantNF4 && zeroPoints != nil {
+	if scheme == compute.QuantNF4 && zeroPoints != nil {
 		return nil, errors.Errorf("FusedQuantizedDense: ZeroPoint must be nil for NF4 quantization scheme")
 	}
 
@@ -336,17 +336,17 @@ func (f *Function) FusedQuantizedDense(x, weights, bias backends.Value,
 		hasZeroPoint: zeroPoints != nil,
 		hasBias:      bias != nil,
 	}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedQuantizedDense, outShape, inputs, data)
+	node, _ := f.getOrCreateNode(compute.OpTypeFusedQuantizedDense, outShape, inputs, data)
 	return node, nil
 }
 
 // validateGGMLTypeSupported checks that the given GGML type has a fused executor implementation.
-func validateGGMLTypeSupported(opName string, ggmlType backends.GGMLQuantType) error {
+func validateGGMLTypeSupported(opName string, ggmlType compute.GGMLQuantType) error {
 	switch ggmlType {
-	case backends.GGMLQ4_0, backends.GGMLQ8_0, backends.GGMLIQ4NL, backends.GGMLQ4_K, backends.GGMLQ6_K:
+	case compute.GGMLQ4_0, compute.GGMLQ8_0, compute.GGMLIQ4NL, compute.GGMLQ4_K, compute.GGMLQ6_K:
 		return nil
 	default:
-		return errors.Wrapf(backends.ErrNotImplemented, "%s: GGML type %s not supported in fused path", opName, ggmlType)
+		return errors.Wrapf(compute.ErrNotImplemented, "%s: GGML type %s not supported in fused path", opName, ggmlType)
 	}
 }
 
@@ -361,7 +361,7 @@ func validateGGMLTypeSupported(opName string, ggmlType backends.GGMLQuantType) e
 //
 // See exec_fused_quantized_ggml.go for per-type block layouts.
 // Ref: https://github.com/ggerganov/ggml/blob/master/docs/gguf.md
-func deriveGGMLK(opName string, bytesPerRow int, ggmlType backends.GGMLQuantType) (int, error) {
+func deriveGGMLK(opName string, bytesPerRow int, ggmlType compute.GGMLQuantType) (int, error) {
 	vpb := ggmlType.ValuesPerBlock()
 	bpb := ggmlType.BytesPerBlock()
 	if vpb == 0 || bpb == 0 {
@@ -377,11 +377,11 @@ func deriveGGMLK(opName string, bytesPerRow int, ggmlType backends.GGMLQuantType
 // fusedQuantizedDenseGGML handles the GGML path for FusedQuantizedDense.
 // GGML weights are [N, bytesPerRow] Uint8 with native block layout.
 // Scales and zero points are embedded in the blocks.
-func (f *Function) fusedQuantizedDenseGGML(x, weights, bias backends.Value,
-	wq *backends.Quantization,
-	activation backends.ActivationType) (backends.Value, error) {
+func (f *Function) fusedQuantizedDenseGGML(x, weights, bias compute.Value,
+	wq *compute.Quantization,
+	activation compute.ActivationType) (compute.Value, error) {
 
-	values := []backends.Value{x, weights}
+	values := []compute.Value{x, weights}
 	if bias != nil {
 		values = append(values, bias)
 	}
@@ -435,20 +435,20 @@ func (f *Function) fusedQuantizedDenseGGML(x, weights, bias backends.Value,
 	outShape := shapes.Make(xNode.shape.DType, outDims...)
 
 	data := &nodeFusedQuantizedDense{
-		scheme:     backends.QuantGGML,
+		scheme:     compute.QuantGGML,
 		activation: activation,
 		hasBias:    bias != nil,
 		ggmlType:   ggmlType,
 		ggmlN:      N,
 		ggmlK:      K,
 	}
-	node, _ := f.getOrCreateNode(backends.OpTypeFusedQuantizedDense, outShape, inputs, data)
+	node, _ := f.getOrCreateNode(compute.OpTypeFusedQuantizedDense, outShape, inputs, data)
 	return node, nil
 }
 
 // nodeQuantizedEmbeddingLookup stores parameters for the quantized embedding lookup op.
 type nodeQuantizedEmbeddingLookup struct {
-	ggmlType backends.GGMLQuantType
+	ggmlType compute.GGMLQuantType
 	ggmlK    int // Logical embedding dimension (valuesPerBlock * numBlocks).
 }
 
@@ -462,11 +462,11 @@ func (d *nodeQuantizedEmbeddingLookup) EqualNodeData(other nodeDataComparable) b
 // data: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
 // indices: integer tensor with last dim = 1 (same as Gather convention).
 // Output: [batch..., K] Float32 where K is derived from the block format.
-func (f *Function) QuantizedEmbeddingLookup(data, indices backends.Value,
-	wq *backends.Quantization) (backends.Value, error) {
+func (f *Function) QuantizedEmbeddingLookup(data, indices compute.Value,
+	wq *compute.Quantization) (compute.Value, error) {
 
-	if wq.Scheme != backends.QuantGGML {
-		return nil, errors.Wrapf(backends.ErrNotImplemented,
+	if wq.Scheme != compute.QuantGGML {
+		return nil, errors.Wrapf(compute.ErrNotImplemented,
 			"QuantizedEmbeddingLookup: only QuantGGML scheme is supported, got %s -- "+
 				"please create a feature request if you need support for a different quantization scheme", wq.Scheme)
 	}
@@ -515,16 +515,16 @@ func (f *Function) QuantizedEmbeddingLookup(data, indices backends.Value,
 		ggmlType: ggmlType,
 		ggmlK:    K,
 	}
-	node, _ := f.getOrCreateNode(backends.OpTypeQuantizedEmbeddingLookup, outShape, inputs, nodeData)
+	node, _ := f.getOrCreateNode(compute.OpTypeQuantizedEmbeddingLookup, outShape, inputs, nodeData)
 	return node, nil
 }
 
 // buildSDPANode builds the SDPA computation node.
-func (f *Function) buildSDPANode(opType backends.OpType, opName string,
-	query, key, value, mask backends.Value,
-	numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool, options *backends.ScaledDotProductAttentionConfig,
-) (backends.Value, error) {
-	values := []backends.Value{query, key, value}
+func (f *Function) buildSDPANode(opType compute.OpType, opName string,
+	query, key, value, mask compute.Value,
+	numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig,
+) (compute.Value, error) {
+	values := []compute.Value{query, key, value}
 	if mask != nil {
 		values = append(values, mask)
 	}
@@ -551,8 +551,8 @@ func (f *Function) buildSDPANode(opType backends.OpType, opName string,
 // The matmul (x @ wQKV) is delegated to DotGeneral, which selects the optimal
 // execution path (blocked, packgemm, highway, etc.) at build time. The fused
 // executor then splits the result into Q/K/V and adds biases.
-func (f *Function) FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV backends.Value, queryDim, keyValueDim int) (queryOut, keyOut, valueOut backends.Value, err error) {
-	values := []backends.Value{x, wQKV}
+func (f *Function) FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV compute.Value, queryDim, keyValueDim int) (queryOut, keyOut, valueOut compute.Value, err error) {
+	values := []compute.Value{x, wQKV}
 	if biasQ != nil {
 		values = append(values, biasQ)
 	}
@@ -587,7 +587,7 @@ func (f *Function) FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV back
 
 	// Build DotGeneral sub-node for the matmul: x @ wQKV.
 	// This delegates to the optimized matmul infrastructure (blocked, packgemm, highway, etc.).
-	dotResult, dotErr := f.DotGeneral(xNode, []int{xNode.shape.Rank() - 1}, nil, wNode, []int{0}, nil, backends.DotGeneralConfig{})
+	dotResult, dotErr := f.DotGeneral(xNode, []int{xNode.shape.Rank() - 1}, nil, wNode, []int{0}, nil, compute.DotGeneralConfig{})
 	if dotErr != nil {
 		return nil, nil, nil, errors.WithMessagef(dotErr, "FusedAttentionQKVProjection: DotGeneral")
 	}
@@ -599,7 +599,7 @@ func (f *Function) FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV back
 	fusedInputs := append([]*Node{dotNode}, inputs[2:]...)
 
 	data := &nodeFusedAttentionQKVProjection{qDim: queryDim, kvDim: keyValueDim, hasBiasQ: biasQ != nil, hasBiasK: biasK != nil, hasBiasV: biasV != nil}
-	node := f.newMultiOutputsNode(backends.OpTypeFusedAttentionQKVProjection, []shapes.Shape{qShape, kShape, vShape}, fusedInputs...)
+	node := f.newMultiOutputsNode(compute.OpTypeFusedAttentionQKVProjection, []shapes.Shape{qShape, kShape, vShape}, fusedInputs...)
 	node.data = data
 	queryOut = node.multiOutputsNodes[0]
 	keyOut = node.multiOutputsNodes[1]

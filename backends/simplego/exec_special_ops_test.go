@@ -10,11 +10,11 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -614,7 +614,7 @@ type reduceWindowGraphTestCase struct { // T is the Go type for data, e.g., floa
 	// If specific dtype/shape control is needed beyond inference, it's more complex.
 	// For now, assume operandData's type and structure define the input tensor.
 	operandData      any // e.g., []float32{1,2,3,4,5} or [][]int32{{1,2},{3,4}}
-	reductionType    backends.ReduceOpType
+	reductionType    compute.ReduceOpType
 	windowDimensions []int
 	strides          []int    // Can be nil, graph.BackendReduceWindow should handle defaults.
 	paddings         [][2]int // Can be nil.
@@ -639,7 +639,7 @@ func TestExecSpecialOps_ReduceWindow(t *testing.T) { // Renamed for common Go te
 		{
 			name:             "F32_1D_Sum_Win2_Stride1_DefaultPadDil",
 			operandData:      []float32{1, 2, 3, 4, 5},
-			reductionType:    backends.ReduceOpSum,
+			reductionType:    compute.ReduceOpSum,
 			windowDimensions: []int{2},
 			strides:          []int{1},
 			// Nil for paddings, baseDilations, windowDilations will use graph.BackendReduceWindow defaults
@@ -649,7 +649,7 @@ func TestExecSpecialOps_ReduceWindow(t *testing.T) { // Renamed for common Go te
 		{
 			name:             "F32_1D_Product_Win2_Stride2_Pad1_1",
 			operandData:      []float32{1, 2, 3, 4},
-			reductionType:    backends.ReduceOpProduct,
+			reductionType:    compute.ReduceOpProduct,
 			windowDimensions: []int{2},
 			strides:          []int{2},
 			paddings:         [][2]int{{1, 1}},
@@ -668,7 +668,7 @@ func TestExecSpecialOps_ReduceWindow(t *testing.T) { // Renamed for common Go te
 		{
 			name:             "F32_1D_Max_Win3_WindowDilation2",
 			operandData:      []float32{1, 2, 3, 4, 5, 6, 7},
-			reductionType:    backends.ReduceOpMax,
+			reductionType:    compute.ReduceOpMax,
 			windowDimensions: []int{3},
 			strides:          []int{1},
 			windowDilations:  []int{2}, // Effective window elements indices: k, k+2, k+4 related to input
@@ -683,7 +683,7 @@ func TestExecSpecialOps_ReduceWindow(t *testing.T) { // Renamed for common Go te
 		{
 			name:             "F32_2D_Sum_NoPadDilStride1",
 			operandData:      [][]float32{{1, 2, 3}, {4, 5, 6}}, // Shape [2,3]
-			reductionType:    backends.ReduceOpSum,
+			reductionType:    compute.ReduceOpSum,
 			windowDimensions: []int{2, 2},
 			strides:          []int{1, 1},
 			// Output shape: Dim0: (2-2)/1+1 = 1. Dim1: (3-2)/1+1 = 2. Shape [1,2]
@@ -695,7 +695,7 @@ func TestExecSpecialOps_ReduceWindow(t *testing.T) { // Renamed for common Go te
 		{
 			name:             "I32_1D_Min_Win3_Stride2_BaseDil2",
 			operandData:      []int32{10, 2, 5, 1, 8, 3, 9, 4}, // Shape [8]
-			reductionType:    backends.ReduceOpMin,
+			reductionType:    compute.ReduceOpMin,
 			windowDimensions: []int{3},
 			strides:          []int{2}, // Stride in the conceptually base-dilated input
 			baseDilations:    []int{2}, // Conceptual input len (8-1)*2+1 = 15. Data: 10 H 2 H 5 H 1 H 8 H 3 H 9 H 4
@@ -707,7 +707,7 @@ func TestExecSpecialOps_ReduceWindow(t *testing.T) { // Renamed for common Go te
 		{
 			name:             "I32_2D_Max",
 			operandData:      [][]int32{{1, 5, 2}, {6, 3, 7}, {4, 9, 0}}, // Shape [3,3]
-			reductionType:    backends.ReduceOpMax,
+			reductionType:    compute.ReduceOpMax,
 			windowDimensions: []int{2, 2},
 			strides:          []int{1, 1},
 			paddings:         [][2]int{{0, 1}, {1, 0}},
@@ -716,7 +716,7 @@ func TestExecSpecialOps_ReduceWindow(t *testing.T) { // Renamed for common Go te
 		}, {
 			name:             "I32_2D_Max_Win2x2_Stride1x1_NoPadDil",
 			operandData:      [][]int32{{1, 2, 3}, {4, 5, 6}},
-			reductionType:    backends.ReduceOpMax,
+			reductionType:    compute.ReduceOpMax,
 			windowDimensions: []int{2, 2},
 			strides:          []int{1, 1},
 			expectedOutput:   [][]int32{{5, 6}},
@@ -725,7 +725,7 @@ func TestExecSpecialOps_ReduceWindow(t *testing.T) { // Renamed for common Go te
 		{
 			name:             "BF16_1D_Sum_Win2_NoParams",
 			operandData:      bf16Values(1, 2, 3, 4), // Input as []bfloat16.Type
-			reductionType:    backends.ReduceOpSum,
+			reductionType:    compute.ReduceOpSum,
 			windowDimensions: []int{2},
 			strides:          []int{1},            // graph.ReduceWindow likely requires explicit strides
 			expectedOutput:   bf16Values(3, 5, 7), // 1+2, 2+3, 3+4
@@ -734,7 +734,7 @@ func TestExecSpecialOps_ReduceWindow(t *testing.T) { // Renamed for common Go te
 		{
 			name:             "BF16_1D_Product_Win2_BaseDil2_Pad1",
 			operandData:      bf16Values(2, 3, 4), // Shape [3]
-			reductionType:    backends.ReduceOpProduct,
+			reductionType:    compute.ReduceOpProduct,
 			windowDimensions: []int{2},
 			strides:          []int{1},
 			paddings:         [][2]int{{1, 0}}, // Pad low by 1

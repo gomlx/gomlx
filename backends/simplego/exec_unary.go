@@ -7,36 +7,36 @@ import (
 	"math/bits"
 	"sync"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 func init() {
-	setNodeExecutor(backends.OpTypeNeg, priorityGeneric, execNeg)
-	setNodeExecutor(backends.OpTypeAbs, priorityGeneric, execAbs)
-	setNodeExecutor(backends.OpTypeSign, priorityGeneric, execSign)
-	setNodeExecutor(backends.OpTypeLogicalNot, priorityGeneric, execLogicalNot)
-	setNodeExecutor(backends.OpTypeBitwiseNot, priorityGeneric, execBitwiseNot)
-	setNodeExecutor(backends.OpTypeBitCount, priorityGeneric, execBitCount)
-	setNodeExecutor(backends.OpTypeClz, priorityGeneric, execClz)
-	setNodeExecutor(backends.OpTypeExp, priorityGeneric, execExp)
-	setNodeExecutor(backends.OpTypeExpm1, priorityGeneric, execExpm1)
-	setNodeExecutor(backends.OpTypeLog, priorityGeneric, execLog)
-	setNodeExecutor(backends.OpTypeLog1p, priorityGeneric, execLog1p)
-	setNodeExecutor(backends.OpTypeCeil, priorityGeneric, execCeil)
-	setNodeExecutor(backends.OpTypeFloor, priorityGeneric, execFloor)
-	setNodeExecutor(backends.OpTypeRound, priorityGeneric, execRound)
-	setNodeExecutor(backends.OpTypeRsqrt, priorityGeneric, execRsqrt)
-	setNodeExecutor(backends.OpTypeSqrt, priorityGeneric, execSqrt)
-	setNodeExecutor(backends.OpTypeCos, priorityGeneric, execCos)
-	setNodeExecutor(backends.OpTypeSin, priorityGeneric, execSin)
-	setNodeExecutor(backends.OpTypeTanh, priorityGeneric, execTanh)
-	setNodeExecutor(backends.OpTypeIsFinite, priorityGeneric, execIsFinite)
-	setNodeExecutor(backends.OpTypeLogistic, priorityGeneric, execLogistic)
-	setNodeExecutor(backends.OpTypeErf, priorityGeneric, execErf)
+	setNodeExecutor(compute.OpTypeNeg, priorityGeneric, execNeg)
+	setNodeExecutor(compute.OpTypeAbs, priorityGeneric, execAbs)
+	setNodeExecutor(compute.OpTypeSign, priorityGeneric, execSign)
+	setNodeExecutor(compute.OpTypeLogicalNot, priorityGeneric, execLogicalNot)
+	setNodeExecutor(compute.OpTypeBitwiseNot, priorityGeneric, execBitwiseNot)
+	setNodeExecutor(compute.OpTypeBitCount, priorityGeneric, execBitCount)
+	setNodeExecutor(compute.OpTypeClz, priorityGeneric, execClz)
+	setNodeExecutor(compute.OpTypeExp, priorityGeneric, execExp)
+	setNodeExecutor(compute.OpTypeExpm1, priorityGeneric, execExpm1)
+	setNodeExecutor(compute.OpTypeLog, priorityGeneric, execLog)
+	setNodeExecutor(compute.OpTypeLog1p, priorityGeneric, execLog1p)
+	setNodeExecutor(compute.OpTypeCeil, priorityGeneric, execCeil)
+	setNodeExecutor(compute.OpTypeFloor, priorityGeneric, execFloor)
+	setNodeExecutor(compute.OpTypeRound, priorityGeneric, execRound)
+	setNodeExecutor(compute.OpTypeRsqrt, priorityGeneric, execRsqrt)
+	setNodeExecutor(compute.OpTypeSqrt, priorityGeneric, execSqrt)
+	setNodeExecutor(compute.OpTypeCos, priorityGeneric, execCos)
+	setNodeExecutor(compute.OpTypeSin, priorityGeneric, execSin)
+	setNodeExecutor(compute.OpTypeTanh, priorityGeneric, execTanh)
+	setNodeExecutor(compute.OpTypeIsFinite, priorityGeneric, execIsFinite)
+	setNodeExecutor(compute.OpTypeLogistic, priorityGeneric, execLogistic)
+	setNodeExecutor(compute.OpTypeErf, priorityGeneric, execErf)
 }
 
 // unaryOperandAndOutput is a convenience function to get the input and output -- which may be the reuse of the input

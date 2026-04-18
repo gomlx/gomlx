@@ -43,9 +43,9 @@
 package simplego
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/float16"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
@@ -61,7 +61,7 @@ func execFusedQuantizedDenseGGML(backend *Backend, node *Node, inputs []*Buffer,
 	}
 
 	if xBuf.shape.DType != dtypes.Float32 {
-		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense(GGML): only float32 input supported, got %s", xBuf.shape.DType)
+		return nil, errors.Wrapf(compute.ErrNotImplemented, "FusedQuantizedDense(GGML): only float32 input supported, got %s", xBuf.shape.DType)
 	}
 
 	output, err := backend.getBufferForShape(node.shape)
@@ -95,7 +95,7 @@ func execFusedQuantizedDenseGGML(backend *Backend, node *Node, inputs []*Buffer,
 // Uses quantizedDenseParallel for consistent parallelism with the other quantized paths,
 // including M=1 column tiling for single-token inference.
 func quantizedDenseGGML(backend *Backend, x []float32, weights []uint8, bias, out []float32,
-	M, K, N, bytesPerRow int, ggmlType backends.GGMLQuantType) error {
+	M, K, N, bytesPerRow int, ggmlType compute.GGMLQuantType) error {
 
 	dequantFn, err := ggmlDequantFunc(ggmlType)
 	if err != nil {
@@ -131,20 +131,20 @@ func quantizedDenseGGML(backend *Backend, x []float32, weights []uint8, bias, ou
 }
 
 // ggmlDequantFunc returns the dequantization function for the given GGML type.
-func ggmlDequantFunc(ggmlType backends.GGMLQuantType) (func(data []uint8, output []float32), error) {
+func ggmlDequantFunc(ggmlType compute.GGMLQuantType) (func(data []uint8, output []float32), error) {
 	switch ggmlType {
-	case backends.GGMLQ4_0:
+	case compute.GGMLQ4_0:
 		return dequantQ4_0Row, nil
-	case backends.GGMLQ8_0:
+	case compute.GGMLQ8_0:
 		return dequantQ8_0Row, nil
-	case backends.GGMLIQ4NL:
+	case compute.GGMLIQ4NL:
 		return dequantIQ4NLRow, nil
-	case backends.GGMLQ4_K:
+	case compute.GGMLQ4_K:
 		return dequantQ4_KRow, nil
-	case backends.GGMLQ6_K:
+	case compute.GGMLQ6_K:
 		return dequantQ6_KRow, nil
 	default:
-		return nil, errors.Wrapf(backends.ErrNotImplemented, "GGML type %s not yet supported in fused path", ggmlType)
+		return nil, errors.Wrapf(compute.ErrNotImplemented, "GGML type %s not yet supported in fused path", ggmlType)
 	}
 }
 
@@ -197,7 +197,7 @@ func dequantQ4_0Row(data []uint8, output []float32) {
 func dequantIQ4NLRow(data []uint8, output []float32) {
 	const blockSize = 18
 	const qk = 32
-	lut := &backends.IQ4NLLookupTable
+	lut := &compute.IQ4NLLookupTable
 	nblocks := len(data) / blockSize
 	for b := range nblocks {
 		blockData := data[b*blockSize : (b+1)*blockSize]

@@ -2,14 +2,12 @@
 
 package simplego
 
-import (
-	"github.com/gomlx/gomlx/backends"
-)
+import "github.com/gomlx/compute"
 
 func init() {
-	setNodeExecutor(backends.OpTypeShiftLeft, priorityGeneric, execShiftLeft)
-	setNodeExecutor(backends.OpTypeShiftRightArithmetic, priorityGeneric, execShiftRightArithmetic)
-	setNodeExecutor(backends.OpTypeShiftRightLogical, priorityGeneric, execShiftRightLogical)
+	setNodeExecutor(compute.OpTypeShiftLeft, priorityGeneric, execShiftLeft)
+	setNodeExecutor(compute.OpTypeShiftRightArithmetic, priorityGeneric, execShiftRightArithmetic)
+	setNodeExecutor(compute.OpTypeShiftRightLogical, priorityGeneric, execShiftRightLogical)
 }
 
 var (

@@ -7,12 +7,12 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/simplego/highway"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/gomlx/gomlx/pkg/core/graph"
@@ -339,7 +339,7 @@ func TestDotGeneral_Shape(t *testing.T) {
 	gotOp, err := mainFn.DotGeneral(
 		lhs, []int{1}, []int{3, 0},
 		rhs, []int{3}, []int{0, 2},
-		backends.DotGeneralConfig{},
+		compute.DotGeneralConfig{},
 	)
 	require.NoError(t, err)
 	got := gotOp.(*Node)

@@ -8,10 +8,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -321,7 +321,7 @@ type OneArgTestCase[T dtypes.Supported] struct {
 }
 
 func TestOneArgOps(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 
 		casesFloat64 := []OneArgTestCase[float64]{
 			{Abs, func(x float64) float64 { return math.Abs(x) }},
@@ -513,7 +513,7 @@ func TestFill(t *testing.T) {
 	}, [][]float64{{0}, {0}, {0}})
 }
 
-func reduceSumGraph(t *testing.T, backend backends.Backend, reduceDims []int) *Graph {
+func reduceSumGraph(t *testing.T, backend compute.Backend, reduceDims []int) *Graph {
 	var g *Graph
 	var o0 *Node
 	require.NotPanics(t, func() {
@@ -825,7 +825,7 @@ func TestSlice(t *testing.T) {
 }
 
 func TestPad(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		graphtest.RunTestGraphFnWithBackend(t, "Pad Tests with Rank 1", backend,
 			func(g *Graph) (inputs, outputs []*Node) {
 				x := Const(g, [][]int64{{1, 2}, {3, 4}})
@@ -998,7 +998,7 @@ func TestReduceAndKeep(t *testing.T) {
 }
 
 func TestReverse(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		graphtest.RunTestGraphFnWithBackend(t, "Reverse(dimensions={1,2})", backend,
 			func(g *Graph) (inputs, outputs []*Node) {
 				input := Iota(g, MakeShape(dtypes.Float32, 9), 0)

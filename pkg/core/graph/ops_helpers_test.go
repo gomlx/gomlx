@@ -6,19 +6,19 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/stretchr/testify/require"
 )
 
 const margin = 1e-4
 
-// buildTestBackend and sets backends.DefaultConfig to "xla:cpu" -- it can be overwritten by GOMLX_BACKEND environment variable.
-func buildTestBackend() backends.Backend {
-	backends.DefaultConfig = "xla:cpu"
-	return backends.MustNew()
+// buildTestBackend and sets compute.DefaultConfig to "xla:cpu" -- it can be overwritten by GOMLX_BACKEND environment variable.
+func buildTestBackend() compute.Backend {
+	compute.DefaultConfig = "xla:cpu"
+	return compute.MustNew()
 }
 
 type graphFnOneInputToTest func(g *Graph) (input, output *Node)
@@ -70,7 +70,7 @@ func TestCheckedSelectAndScatter(t *testing.T) {
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(dtypes.Float64, 1, 6, 1))
 			source := Add(IotaFull(g, shapes.Make(dtypes.Float64, 1, 2, 1)), Const(g, 1.0))
-			output = checkedSelectAndScatter(input, source, backends.ReduceOpMax, []int{1, 3, 1}, []int{1, 3, 1}, nil)
+			output = checkedSelectAndScatter(input, source, compute.ReduceOpMax, []int{1, 3, 1}, []int{1, 3, 1}, nil)
 			return
 		}, [][][]float64{{{0}, {0}, {1}, {0}, {0}, {2}}})
 }

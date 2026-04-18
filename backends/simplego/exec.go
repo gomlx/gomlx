@@ -3,12 +3,12 @@
 package simplego
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
-var _ backends.Executable = (*Executable)(nil)
+var _ compute.Executable = (*Executable)(nil)
 
 // Executable holds a frozen Builder. It assumes the graph in Builder is valid and has been properly
 // checked that all the shapes and data types are valid.
@@ -26,7 +26,7 @@ type Executable struct {
 }
 
 // Compile time check.
-var _ backends.Executable = (*Executable)(nil)
+var _ compute.Executable = (*Executable)(nil)
 
 // Finalize immediately frees resources associated with the executable.
 //
@@ -114,17 +114,17 @@ var (
 	//
 	// nodeExecutors should be populated with a priority (see setNodeExecutor), which can conctorl whether
 	// to overwrite a nodeExecutors configuration independent of the order of settting.
-	nodeExecutors         [backends.OpTypeLast]nodeExecutor
-	nodeExecutorsPriority [backends.OpTypeLast]registerPriority
+	nodeExecutors         [compute.OpTypeLast]nodeExecutor
+	nodeExecutorsPriority [compute.OpTypeLast]registerPriority
 
 	// multiOutputsNodeExecutors should be populated during initialization for the multi-output ops
 	// implemented. E.g.: RNGBitGenerator.
-	multiOutputsNodeExecutors [backends.OpTypeLast]nodeMultiOutputExecutor
+	multiOutputsNodeExecutors [compute.OpTypeLast]nodeMultiOutputExecutor
 
 	// nodeClosureExecutors should be populated during initialization for ops that call closures.
 	// E.g.: If, While, Sort.
 	// These executors receive captured inputs separately with explicit ownership tracking.
-	nodeClosureExecutors [backends.OpTypeLast]nodeClosureExecutor
+	nodeClosureExecutors [compute.OpTypeLast]nodeClosureExecutor
 )
 
 // registerPriority defines the priority of a node executor. Highest priority takes precedence.
@@ -140,7 +140,7 @@ const (
 
 // setNodeExecutor sets the node executor for the given operation type with the specified priority.
 // If the priority is lower than the current priority for the operation type, the executor is ignored.
-func setNodeExecutor(opType backends.OpType, priority registerPriority, executor nodeExecutor) {
+func setNodeExecutor(opType compute.OpType, priority registerPriority, executor nodeExecutor) {
 	if priority < nodeExecutorsPriority[opType] {
 		// We have soemthing registered with higher priority, ignore.
 		return
@@ -166,7 +166,7 @@ const (
 //
 // Donated buffers are no longer valid after the call.
 // If donate is nil, it is assumed to be false for all buffers, and no buffer is donated.
-func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, _ backends.DeviceNum) ([]backends.Buffer, error) {
+func (e *Executable) Execute(inputs []compute.Buffer, donate []bool, _ compute.DeviceNum) ([]compute.Buffer, error) {
 	// Keep the live executions count.
 	e.backend.numLiveExecutions.Add(1)
 	defer e.backend.numLiveExecutions.Add(-1)
@@ -216,8 +216,8 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool, _ backends
 		return nil, err
 	}
 
-	// Convert outputs to backends.Buffer
-	result := make([]backends.Buffer, len(outputs))
+	// Convert outputs to compute.Buffer
+	result := make([]compute.Buffer, len(outputs))
 	for i, out := range outputs {
 		result[i] = out
 	}

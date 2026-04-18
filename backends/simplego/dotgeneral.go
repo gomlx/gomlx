@@ -9,10 +9,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/simplego/highway"
 	"github.com/gomlx/gomlx/backends/simplego/packgemm"
 	"github.com/pkg/errors"
@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	setNodeExecutor(backends.OpTypeDotGeneral, priorityGeneric, execDotGeneral)
+	setNodeExecutor(compute.OpTypeDotGeneral, priorityGeneric, execDotGeneral)
 }
 
 type dotGeneralNodeData struct {
@@ -77,7 +77,7 @@ func adjustAxisToRank(rank, axis int) (int, error) {
 // non-contracting/non-batch dimension and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
 //
-// This function implements backends.Builder interface.
+// This function implements compute.Builder interface.
 //
 // This is the graph building part of DotGeneral. It first transposes the operands to a normalized
 // shape with rank=3 ([batchSize, crossSize, contractingSize]), and then it issues the DotGeneral
@@ -85,11 +85,11 @@ func adjustAxisToRank(rank, axis int) (int, error) {
 //
 // See execDotGeneral for the implementation.
 func (f *Function) DotGeneral(
-	lhsOp backends.Value, lhsContractingAxes, lhsBatchAxes []int,
-	rhsOp backends.Value, rhsContractingAxes, rhsBatchAxes []int,
-	config backends.DotGeneralConfig) (backends.Value, error) {
+	lhsOp compute.Value, lhsContractingAxes, lhsBatchAxes []int,
+	rhsOp compute.Value, rhsContractingAxes, rhsBatchAxes []int,
+	config compute.DotGeneralConfig) (compute.Value, error) {
 	// Parse the inputs.
-	inputPair, err := f.verifyAndCastValues(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
+	inputPair, err := f.verifyAndCastValues(compute.OpTypeDotGeneral.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +242,7 @@ func (f *Function) DotGeneral(
 	default:
 		inputs = []*Node{lhs, rhs}
 	}
-	dotGeneral, _ := f.getOrCreateNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), inputs, &params)
+	dotGeneral, _ := f.getOrCreateNode(compute.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), inputs, &params)
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))

@@ -3,16 +3,16 @@
 package simplego
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
-	"github.com/gomlx/gomlx/backends"
 )
 
 // ConvertDType ====================================================================================================
 
 func init() {
-	setNodeExecutor(backends.OpTypeConvertDType, priorityGeneric, execConvertDType)
+	setNodeExecutor(compute.OpTypeConvertDType, priorityGeneric, execConvertDType)
 }
 
 func execConvertDType(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {

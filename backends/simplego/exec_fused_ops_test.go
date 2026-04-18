@@ -6,9 +6,9 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +21,7 @@ func TestFusedSoftmax(t *testing.T) {
 		input := []float32{1.0, 2.0, 3.0, 4.0}
 		shape := shapes.Make(dtypes.Float32, 4)
 
-		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+		result := testBackend(t, shape, input, func(f compute.Function, param compute.Value) (compute.Value, error) {
 			return f.FusedSoftmax(param, 0)
 		})
 
@@ -46,7 +46,7 @@ func TestFusedSoftmax(t *testing.T) {
 		input := []float32{1, 2, 3, 4, 5, 6}
 		shape := shapes.Make(dtypes.Float32, 2, 3)
 
-		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+		result := testBackend(t, shape, input, func(f compute.Function, param compute.Value) (compute.Value, error) {
 			return f.FusedSoftmax(param, 1)
 		})
 
@@ -64,7 +64,7 @@ func TestFusedSoftmax(t *testing.T) {
 		input := []float32{1, 2, 3, 4, 5, 6}
 		shape := shapes.Make(dtypes.Float32, 2, 3)
 
-		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+		result := testBackend(t, shape, input, func(f compute.Function, param compute.Value) (compute.Value, error) {
 			return f.FusedSoftmax(param, 0)
 		})
 
@@ -93,7 +93,7 @@ func TestFusedSoftmax(t *testing.T) {
 		input := []float64{1.0, 2.0, 3.0}
 		shape := shapes.Make(dtypes.Float64, 3)
 
-		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+		result := testBackend(t, shape, input, func(f compute.Function, param compute.Value) (compute.Value, error) {
 			return f.FusedSoftmax(param, 0)
 		})
 
@@ -113,7 +113,7 @@ func TestFusedSoftmax(t *testing.T) {
 		input := []float32{1000, 1001, 1002}
 		shape := shapes.Make(dtypes.Float32, 3)
 
-		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+		result := testBackend(t, shape, input, func(f compute.Function, param compute.Value) (compute.Value, error) {
 			return f.FusedSoftmax(param, 0)
 		})
 
@@ -139,7 +139,7 @@ func TestFusedSoftmax(t *testing.T) {
 		}
 		shape := shapes.Make(dtypes.Float32, 2, 2, 3)
 
-		result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+		result := testBackend(t, shape, input, func(f compute.Function, param compute.Value) (compute.Value, error) {
 			return f.FusedSoftmax(param, 2)
 		})
 
@@ -157,7 +157,7 @@ func TestFusedGelu(t *testing.T) {
 	input := []float32{-2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0}
 	shape := shapes.Make(dtypes.Float32, 7)
 
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+	result := testBackend(t, shape, input, func(f compute.Function, param compute.Value) (compute.Value, error) {
 		return f.FusedGelu(param, true)
 	})
 
@@ -181,7 +181,7 @@ func TestFusedGelu_Float64(t *testing.T) {
 	input := []float64{-1.0, 0.0, 1.0}
 	shape := shapes.Make(dtypes.Float64, 3)
 
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+	result := testBackend(t, shape, input, func(f compute.Function, param compute.Value) (compute.Value, error) {
 		return f.FusedGelu(param, true)
 	})
 
@@ -197,7 +197,7 @@ func TestFusedGelu_Approximate(t *testing.T) {
 	input := []float32{-2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0}
 	shape := shapes.Make(dtypes.Float32, 7)
 
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+	result := testBackend(t, shape, input, func(f compute.Function, param compute.Value) (compute.Value, error) {
 		return f.FusedGelu(param, false) // exact=false → tanh approximation
 	})
 
@@ -211,7 +211,7 @@ func TestFusedGelu_Approximate(t *testing.T) {
 	}
 
 	// Check that approximate differs from exact for non-zero inputs.
-	exactResult := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+	exactResult := testBackend(t, shape, input, func(f compute.Function, param compute.Value) (compute.Value, error) {
 		return f.FusedGelu(param, true)
 	})
 	exactGot := exactResult.flat.([]float32)
@@ -230,7 +230,7 @@ func TestFusedLayerNorm_Simple(t *testing.T) {
 	shape := shapes.Make(dtypes.Float32, 2, 4)
 	epsilon := 1e-5
 
-	result := testBackend(t, shape, input, func(f backends.Function, param backends.Value) (backends.Value, error) {
+	result := testBackend(t, shape, input, func(f compute.Function, param compute.Value) (compute.Value, error) {
 		return f.FusedLayerNorm(param, []int{1}, epsilon, nil, nil)
 	})
 
@@ -268,7 +268,7 @@ func TestFusedLayerNorm_WithGammaBeta(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{shape, gammaShape, betaShape},
 		[]any{input, gamma, beta},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
 			return f.FusedLayerNorm(params[0], []int{1}, epsilon, params[1], params[2])
 		},
 	)
@@ -309,8 +309,8 @@ func TestFusedDense(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]any{x, w, b},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedDense(params[0], params[1], params[2], backends.ActivationNone)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedDense(params[0], params[1], params[2], compute.ActivationNone)
 		},
 	)
 
@@ -335,8 +335,8 @@ func TestFusedDense_NoBias(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{xShape, wShape},
 		[]any{x, w},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedDense(params[0], params[1], nil, backends.ActivationNone)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedDense(params[0], params[1], nil, compute.ActivationNone)
 		},
 	)
 
@@ -362,8 +362,8 @@ func TestFusedDense_Relu(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]any{x, w, b},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedDense(params[0], params[1], params[2], backends.ActivationRelu)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedDense(params[0], params[1], params[2], compute.ActivationRelu)
 		},
 	)
 
@@ -386,8 +386,8 @@ func TestFusedDense_Gelu(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]any{x, w, b},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedDense(params[0], params[1], params[2], backends.ActivationGelu)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedDense(params[0], params[1], params[2], compute.ActivationGelu)
 		},
 	)
 
@@ -409,8 +409,8 @@ func TestFusedDense_Silu(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]any{x, w, b},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedDense(params[0], params[1], params[2], backends.ActivationSilu)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedDense(params[0], params[1], params[2], compute.ActivationSilu)
 		},
 	)
 
@@ -431,8 +431,8 @@ func TestFusedDense_Tanh(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{xShape, wShape, bShape},
 		[]any{x, w, b},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedDense(params[0], params[1], params[2], backends.ActivationTanh)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedDense(params[0], params[1], params[2], compute.ActivationTanh)
 		},
 	)
 
@@ -475,8 +475,8 @@ func testFusedScaledDotProductAttention_SingleHead(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBHSD, scale, false, nil)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, compute.AxesLayoutBHSD, scale, false, nil)
 		},
 	)
 
@@ -510,8 +510,8 @@ func testFusedScaledDotProductAttention_Causal(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBHSD, 1.0, true, nil)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, compute.AxesLayoutBHSD, 1.0, true, nil)
 		},
 	)
 
@@ -536,8 +536,8 @@ func testFusedScaledDotProductAttention_MultiHead(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBHSD, 1.0, false, nil)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, compute.AxesLayoutBHSD, 1.0, false, nil)
 		},
 	)
 
@@ -561,8 +561,8 @@ func testFusedScaledDotProductAttention_GQA(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 1, backends.AxesLayoutBHSD, 1.0, false, nil)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 1, compute.AxesLayoutBHSD, 1.0, false, nil)
 		},
 	)
 
@@ -588,8 +588,8 @@ func testFusedScaledDotProductAttention_WithAdditiveMask(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{qShape, kShape, vShape, maskShape},
 		[]any{q, k, v, mask},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], params[3], 1, 1, backends.AxesLayoutBHSD, 1.0, false, nil)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], params[3], 1, 1, compute.AxesLayoutBHSD, 1.0, false, nil)
 		},
 	)
 
@@ -614,10 +614,10 @@ func testFusedScaledDotProductAttention_WithBooleanMask(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{qShape, kShape, vShape, maskShape},
 		[]any{q, k, v, mask},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
 			return f.FusedScaledDotProductAttention(
 				params[0], params[1], params[2], params[3], 1, 1,
-				backends.AxesLayoutBHSD, 1.0, false, nil)
+				compute.AxesLayoutBHSD, 1.0, false, nil)
 		},
 	)
 
@@ -643,8 +643,8 @@ func testFusedScaledDotProductAttention_BSHD_Causal(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBSHD, 1.0, true, nil)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, compute.AxesLayoutBSHD, 1.0, true, nil)
 		},
 	)
 
@@ -671,8 +671,8 @@ func testFusedScaledDotProductAttention_BSHD_MultiHead(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBSHD, 1.0, false, nil)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, compute.AxesLayoutBSHD, 1.0, false, nil)
 		},
 	)
 
@@ -702,8 +702,8 @@ func testFusedScaledDotProductAttention_BSHD_MultiSeq(t *testing.T) {
 	bshdResult := testBackendMultiInput(t,
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBSHD, 1.0, false, nil)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, compute.AxesLayoutBSHD, 1.0, false, nil)
 		},
 	)
 
@@ -716,8 +716,8 @@ func testFusedScaledDotProductAttention_BSHD_MultiSeq(t *testing.T) {
 	bhsdResult := testBackendMultiInput(t,
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{qBHSD, kBHSD, vBHSD},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, backends.AxesLayoutBHSD, 1.0, false, nil)
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 2, 2, compute.AxesLayoutBHSD, 1.0, false, nil)
 		},
 	)
 
@@ -751,10 +751,10 @@ func testFusedScaledDotProductAttention_BSHD_WithAdditiveMask4D(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{qShape, kShape, vShape, maskShape},
 		[]any{q, k, v, mask},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
 			return f.FusedScaledDotProductAttention(
 				params[0], params[1], params[2], params[3], 1, 1,
-				backends.AxesLayoutBSHD, 1.0, false, nil)
+				compute.AxesLayoutBSHD, 1.0, false, nil)
 		},
 	)
 
@@ -779,10 +779,10 @@ func testFusedScaledDotProductAttention_BSHD_WithBooleanMask4D(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{qShape, kShape, vShape, maskShape},
 		[]any{q, k, v, mask},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
 			return f.FusedScaledDotProductAttention(
 				params[0], params[1], params[2], params[3], 1, 1,
-				backends.AxesLayoutBSHD, 1.0, false, nil)
+				compute.AxesLayoutBSHD, 1.0, false, nil)
 		},
 	)
 
@@ -814,8 +814,8 @@ func testFusedSDPA_QuantizedMatmuls_SingleHead(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBHSD, scale, false, &backends.ScaledDotProductAttentionConfig{QuantizedMatmuls: true})
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, compute.AxesLayoutBHSD, scale, false, &compute.ScaledDotProductAttentionConfig{QuantizedMatmuls: true})
 		},
 	)
 
@@ -842,8 +842,8 @@ func testFusedSDPA_QuantizedMatmuls_Causal(t *testing.T) {
 	result := testBackendMultiInput(t,
 		[]shapes.Shape{qShape, kShape, vShape},
 		[]any{q, k, v},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
-			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, backends.AxesLayoutBHSD, 1.0, true, &backends.ScaledDotProductAttentionConfig{QuantizedMatmuls: true})
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.FusedScaledDotProductAttention(params[0], params[1], params[2], nil, 1, 1, compute.AxesLayoutBHSD, 1.0, true, &compute.ScaledDotProductAttentionConfig{QuantizedMatmuls: true})
 		},
 	)
 
@@ -863,13 +863,13 @@ func TestFusedAttentionQKVProjection(t *testing.T) {
 // execFusedOpMultiOutput builds, compiles and executes a multi-output fused op graph.
 // buildFn receives the Function and the parameter Values, and returns 3 output Values.
 func execFusedOpMultiOutput3(t *testing.T, inputShapes []shapes.Shape, inputDatas []any,
-	buildFn func(f backends.Function, params []backends.Value) (backends.Value, backends.Value, backends.Value, error),
+	buildFn func(f compute.Function, params []compute.Value) (compute.Value, compute.Value, compute.Value, error),
 ) [3]*Buffer {
 	t.Helper()
 	builder := backend.Builder("fused_test_multiout")
 	mainFn := builder.Main()
 
-	params := make([]backends.Value, len(inputShapes))
+	params := make([]compute.Value, len(inputShapes))
 	for i, s := range inputShapes {
 		p, err := mainFn.Parameter("x"+string(rune('0'+i)), s, nil)
 		require.NoError(t, err)
@@ -879,13 +879,13 @@ func execFusedOpMultiOutput3(t *testing.T, inputShapes []shapes.Shape, inputData
 	o0, o1, o2, err := buildFn(mainFn, params)
 	require.NoError(t, err)
 
-	err = mainFn.Return([]backends.Value{o0, o1, o2}, nil)
+	err = mainFn.Return([]compute.Value{o0, o1, o2}, nil)
 	require.NoError(t, err)
 
 	exec, err := builder.Compile()
 	require.NoError(t, err)
 
-	inputBufs := make([]backends.Buffer, len(inputDatas))
+	inputBufs := make([]compute.Buffer, len(inputDatas))
 	for i, data := range inputDatas {
 		buf, err := backend.BufferFromFlatData(0, data, inputShapes[i])
 		require.NoError(t, err)
@@ -925,7 +925,7 @@ func testFusedAttentionQKVProjection_Identity(t *testing.T) {
 	results := execFusedOpMultiOutput3(t,
 		[]shapes.Shape{xShape, wShape, bqShape, bkShape, bvShape},
 		[]any{x, wQKV, biasQ, biasK, biasV},
-		func(f backends.Function, params []backends.Value) (backends.Value, backends.Value, backends.Value, error) {
+		func(f compute.Function, params []compute.Value) (compute.Value, compute.Value, compute.Value, error) {
 			return f.FusedAttentionQKVProjection(params[0], params[1], params[2], params[3], params[4], 2, 1)
 		},
 	)
@@ -962,7 +962,7 @@ func testFusedAttentionQKVProjection_NoBias(t *testing.T) {
 	results := execFusedOpMultiOutput3(t,
 		[]shapes.Shape{xShape, wShape},
 		[]any{x, wQKV},
-		func(f backends.Function, params []backends.Value) (backends.Value, backends.Value, backends.Value, error) {
+		func(f compute.Function, params []compute.Value) (compute.Value, compute.Value, compute.Value, error) {
 			return f.FusedAttentionQKVProjection(params[0], params[1], nil, nil, nil, 2, 1)
 		},
 	)
@@ -1007,7 +1007,7 @@ func testFusedAttentionQKVProjection_EqualDims(t *testing.T) {
 	results := execFusedOpMultiOutput3(t,
 		[]shapes.Shape{xShape, wShape},
 		[]any{x, wQKV},
-		func(f backends.Function, params []backends.Value) (backends.Value, backends.Value, backends.Value, error) {
+		func(f compute.Function, params []compute.Value) (compute.Value, compute.Value, compute.Value, error) {
 			return f.FusedAttentionQKVProjection(params[0], params[1], nil, nil, nil, 2, 2)
 		},
 	)

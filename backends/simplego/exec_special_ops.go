@@ -7,47 +7,47 @@ import (
 	"math/rand/v2"
 	"slices"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/pkg/errors"
 )
 
 func init() {
-	setNodeExecutor(backends.OpTypeIdentity, priorityGeneric, execIdentity)
-	setNodeExecutor(backends.OpTypeWhere, priorityGeneric, execWhere)
-	setNodeExecutor(backends.OpTypeReshape, priorityGeneric, execReshape)
-	setNodeExecutor(backends.OpTypeTranspose, priorityGeneric, execTranspose)
-	setNodeExecutor(backends.OpTypeReverse, priorityGeneric, execReverse)
-	setNodeExecutor(backends.OpTypeBroadcast, priorityGeneric, execBroadcast)
-	setNodeExecutor(backends.OpTypeBroadcastInDim, priorityGeneric, execBroadcastInDim)
-	setNodeExecutor(backends.OpTypeReduceMax, priorityGeneric, execReduce)
-	setNodeExecutor(backends.OpTypeReduceMin, priorityGeneric, execReduce)
-	setNodeExecutor(backends.OpTypeReduceSum, priorityGeneric, execReduce)
-	setNodeExecutor(backends.OpTypeReduceProduct, priorityGeneric, execReduce)
-	setNodeExecutor(backends.OpTypeReduceBitwiseAnd, priorityGeneric, execReduce)
-	setNodeExecutor(backends.OpTypeReduceBitwiseOr, priorityGeneric, execReduce)
-	setNodeExecutor(backends.OpTypeReduceBitwiseXor, priorityGeneric, execReduce)
-	setNodeExecutor(backends.OpTypeReduceLogicalAnd, priorityGeneric, execReduce)
-	setNodeExecutor(backends.OpTypeReduceLogicalOr, priorityGeneric, execReduce)
-	setNodeExecutor(backends.OpTypeReduceLogicalXor, priorityGeneric, execReduce)
-	setNodeExecutor(backends.OpTypeIota, priorityGeneric, execIota)
-	setNodeExecutor(backends.OpTypeGather, priorityGeneric, execGather)
-	setNodeExecutor(backends.OpTypeConcatenate, priorityGeneric, execConcatenate)
-	setNodeExecutor(backends.OpTypeConvertDType, priorityGeneric, execConvertDType)
-	setNodeExecutor(backends.OpTypeScatterMax, priorityGeneric, execScatter)
-	setNodeExecutor(backends.OpTypeScatterMin, priorityGeneric, execScatter)
-	setNodeExecutor(backends.OpTypeScatterSum, priorityGeneric, execScatter)
-	setNodeExecutor(backends.OpTypeSlice, priorityGeneric, execSlice)
-	setNodeExecutor(backends.OpTypeArgMinMax, priorityGeneric, execArgMinMax)
-	setNodeExecutor(backends.OpTypeReduceWindow, priorityGeneric, execReduceWindow)
-	setNodeExecutor(backends.OpTypePad, priorityGeneric, execPad)
+	setNodeExecutor(compute.OpTypeIdentity, priorityGeneric, execIdentity)
+	setNodeExecutor(compute.OpTypeWhere, priorityGeneric, execWhere)
+	setNodeExecutor(compute.OpTypeReshape, priorityGeneric, execReshape)
+	setNodeExecutor(compute.OpTypeTranspose, priorityGeneric, execTranspose)
+	setNodeExecutor(compute.OpTypeReverse, priorityGeneric, execReverse)
+	setNodeExecutor(compute.OpTypeBroadcast, priorityGeneric, execBroadcast)
+	setNodeExecutor(compute.OpTypeBroadcastInDim, priorityGeneric, execBroadcastInDim)
+	setNodeExecutor(compute.OpTypeReduceMax, priorityGeneric, execReduce)
+	setNodeExecutor(compute.OpTypeReduceMin, priorityGeneric, execReduce)
+	setNodeExecutor(compute.OpTypeReduceSum, priorityGeneric, execReduce)
+	setNodeExecutor(compute.OpTypeReduceProduct, priorityGeneric, execReduce)
+	setNodeExecutor(compute.OpTypeReduceBitwiseAnd, priorityGeneric, execReduce)
+	setNodeExecutor(compute.OpTypeReduceBitwiseOr, priorityGeneric, execReduce)
+	setNodeExecutor(compute.OpTypeReduceBitwiseXor, priorityGeneric, execReduce)
+	setNodeExecutor(compute.OpTypeReduceLogicalAnd, priorityGeneric, execReduce)
+	setNodeExecutor(compute.OpTypeReduceLogicalOr, priorityGeneric, execReduce)
+	setNodeExecutor(compute.OpTypeReduceLogicalXor, priorityGeneric, execReduce)
+	setNodeExecutor(compute.OpTypeIota, priorityGeneric, execIota)
+	setNodeExecutor(compute.OpTypeGather, priorityGeneric, execGather)
+	setNodeExecutor(compute.OpTypeConcatenate, priorityGeneric, execConcatenate)
+	setNodeExecutor(compute.OpTypeConvertDType, priorityGeneric, execConvertDType)
+	setNodeExecutor(compute.OpTypeScatterMax, priorityGeneric, execScatter)
+	setNodeExecutor(compute.OpTypeScatterMin, priorityGeneric, execScatter)
+	setNodeExecutor(compute.OpTypeScatterSum, priorityGeneric, execScatter)
+	setNodeExecutor(compute.OpTypeSlice, priorityGeneric, execSlice)
+	setNodeExecutor(compute.OpTypeArgMinMax, priorityGeneric, execArgMinMax)
+	setNodeExecutor(compute.OpTypeReduceWindow, priorityGeneric, execReduceWindow)
+	setNodeExecutor(compute.OpTypePad, priorityGeneric, execPad)
 
 	// For nodes with multiple outputs:
-	multiOutputsNodeExecutors[backends.OpTypeRNGBitGenerator] = execRNGBitGenerator
+	multiOutputsNodeExecutors[compute.OpTypeRNGBitGenerator] = execRNGBitGenerator
 }
 
 // calculateStrides of a tensor assuming row-major order of the flat data.
@@ -177,7 +177,7 @@ func execWhereSetOutputWithValue[T SupportedTypesConstraints](outputBuf, valueBu
 
 // execReshape implements Reshape.
 //
-// Notice the backends.Reshape doesn't support auto-scaling dimensions (set to -1), as graph.Reshape does.
+// Notice the compute.Reshape doesn't support auto-scaling dimensions (set to -1), as graph.Reshape does.
 func execReshape(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	operand := inputs[0]
 	var output *Buffer
@@ -216,55 +216,55 @@ func execReduce(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 
 	var reduceFn genericReduceFn
 	switch node.opType { //nolint:exhaustive
-	case backends.OpTypeReduceMax:
+	case compute.OpTypeReduceMax:
 		tmpAny, tmpErr := reduceMaxDTypeMap.Get(dtype)
 		if tmpErr != nil {
 			panic(tmpErr)
 		}
 		reduceFn = tmpAny.(genericReduceFn)
-	case backends.OpTypeReduceMin:
+	case compute.OpTypeReduceMin:
 		tmpAny, tmpErr := reduceMinDTypeMap.Get(dtype)
 		if tmpErr != nil {
 			panic(tmpErr)
 		}
 		reduceFn = tmpAny.(genericReduceFn)
-	case backends.OpTypeReduceSum:
+	case compute.OpTypeReduceSum:
 		tmpAny, tmpErr := reduceSumDTypeMap.Get(dtype)
 		if tmpErr != nil {
 			panic(tmpErr)
 		}
 		reduceFn = tmpAny.(genericReduceFn)
-	case backends.OpTypeReduceProduct:
+	case compute.OpTypeReduceProduct:
 		tmpAny, tmpErr := reduceProductDTypeMap.Get(dtype)
 		if tmpErr != nil {
 			panic(tmpErr)
 		}
 		reduceFn = tmpAny.(genericReduceFn)
-	case backends.OpTypeReduceBitwiseAnd:
+	case compute.OpTypeReduceBitwiseAnd:
 		tmpAny, tmpErr := reduceBitwiseAndDTypeMap.Get(dtype)
 		if tmpErr != nil {
 			panic(tmpErr)
 		}
 		reduceFn = tmpAny.(genericReduceFn)
-	case backends.OpTypeReduceBitwiseOr:
+	case compute.OpTypeReduceBitwiseOr:
 		tmpAny, tmpErr := reduceBitwiseOrDTypeMap.Get(dtype)
 		if tmpErr != nil {
 			panic(tmpErr)
 		}
 		reduceFn = tmpAny.(genericReduceFn)
-	case backends.OpTypeReduceBitwiseXor:
+	case compute.OpTypeReduceBitwiseXor:
 		tmpAny, tmpErr := reduceBitwiseXorDTypeMap.Get(dtype)
 		if tmpErr != nil {
 			panic(tmpErr)
 		}
 		reduceFn = tmpAny.(genericReduceFn)
-	case backends.OpTypeReduceLogicalAnd:
+	case compute.OpTypeReduceLogicalAnd:
 		// Logical reduction only works on boolean variables, so there is no need for a generic implementation.
 		reduceFn = execReduceLogicalAnd
-	case backends.OpTypeReduceLogicalOr:
+	case compute.OpTypeReduceLogicalOr:
 		// Logical reduction only works on boolean variables, so there is no need for a generic implementation.
 		reduceFn = execReduceLogicalOr
-	case backends.OpTypeReduceLogicalXor:
+	case compute.OpTypeReduceLogicalXor:
 		// Logical reduction only works on boolean variables, so there is no need for a generic implementation.
 		reduceFn = execReduceLogicalXor
 	default:
@@ -1329,7 +1329,7 @@ func execScatter(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 
 	// Dispatch to a type-specific scatter loop based on the operation type.
 	dtype := output.shape.DType
-	type scatterFnT = func(opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode) error
+	type scatterFnT = func(opType compute.OpType, output, indices, updates *Buffer, scatterParams *scatterNode) error
 	tmpAny, tmpErr := scatterDTypeMap.Get(dtype)
 	if tmpErr != nil {
 		panic(tmpErr)
@@ -1345,26 +1345,26 @@ func execScatter(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 var scatterDTypeMap = NewDTypeMap("ScatterMax")
 
 // execScatterGeneric assumes the operand is already copied to the output.
-func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, output, indices, updates *Buffer,
+func execScatterGeneric[T SupportedTypesConstraints](opType compute.OpType, output, indices, updates *Buffer,
 	scatterParams *scatterNode) error {
 	// Get combineFn for operand's dtype.
 	dtype := output.shape.DType
 	type combineFnT = func(a, b T) T
 	var combineFn combineFnT
 	switch opType { //nolint:exhaustive
-	case backends.OpTypeScatterMax:
+	case compute.OpTypeScatterMax:
 		tmpAny, tmpErr := combineMaxDTypeMap.Get(dtype)
 		if tmpErr != nil {
 			panic(tmpErr)
 		}
 		combineFn = tmpAny.(combineFnT) //nolint:errcheck
-	case backends.OpTypeScatterMin:
+	case compute.OpTypeScatterMin:
 		tmpAny, tmpErr := combineMinDTypeMap.Get(dtype)
 		if tmpErr != nil {
 			panic(tmpErr)
 		}
 		combineFn = tmpAny.(combineFnT) //nolint:errcheck
-	case backends.OpTypeScatterSum:
+	case compute.OpTypeScatterSum:
 		tmpAny, tmpErr := combineSumDTypeMap.Get(dtype)
 		if tmpErr != nil {
 			panic(tmpErr)
@@ -1571,7 +1571,7 @@ func combineForScatterSumBFloat16(a, b bfloat16.BFloat16) bfloat16.BFloat16 {
 
 // SliceOp ========================================================================================================
 
-// execSlice is the executor function registered for backends.OpTypeSlice.
+// execSlice is the executor function registered for compute.OpTypeSlice.
 func execSlice(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	operand := inputs[0]
 	sliceParams, ok := node.data.(*sliceNode)
@@ -1649,7 +1649,7 @@ func execSliceGeneric[T SupportedTypesConstraints](operand, output *Buffer, para
 
 // RNGBitGenerator ====================================================================================================
 
-// execRNGBitGenerator is the executor function registered for backends.OpTypeRngBitGenerator.
+// execRNGBitGenerator is the executor function registered for compute.OpTypeRngBitGenerator.
 func execRNGBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error) {
 	state := inputs[0]
 	stateFlat := state.flat.([]uint64)
@@ -1709,7 +1709,7 @@ func execRNGBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsO
 
 const MaxArgMinMaxReductionSize = 0x8000_0000
 
-// execArgMinMax is the executor function registered for backends.OpTypeArgMinMax.
+// execArgMinMax is the executor function registered for compute.OpTypeArgMinMax.
 func execArgMinMax(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	operand := inputs[0]
 	reduceAxis := node.data.(*argMinMaxNode).axis
@@ -1937,22 +1937,22 @@ func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, _ []bool) 
 	// Initialize output and updateFn according to the reduction type
 	var buildUpdateFnMap *DTypeMap
 	switch opData.reductionType { //nolint:exhaustive
-	case backends.ReduceOpMax:
+	case compute.ReduceOpMax:
 		err := output.Fill(dtype.LowestValue())
 		if err != nil {
 			return nil, err
 		}
 		buildUpdateFnMap = reduceWindowMaxDTypeMap
-	case backends.ReduceOpMin:
+	case compute.ReduceOpMin:
 		err := output.Fill(dtype.HighestValue())
 		if err != nil {
 			return nil, err
 		}
 		buildUpdateFnMap = reduceWindowMinDTypeMap
-	case backends.ReduceOpProduct:
+	case compute.ReduceOpProduct:
 		output.Ones()
 		buildUpdateFnMap = reduceWindowProductDTypeMap
-	case backends.ReduceOpSum:
+	case compute.ReduceOpSum:
 		output.Zeros()
 		buildUpdateFnMap = reduceWindowSumDTypeMap
 	default:
@@ -2179,11 +2179,11 @@ func execPad(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer,
 	type mergedAxis struct {
 		operandDim int
 		outputDim  int
-		config     backends.PadAxis
+		config     compute.PadAxis
 	}
 	var mergedAxes []mergedAxis
 
-	isUntouched := func(config backends.PadAxis) bool {
+	isUntouched := func(config compute.PadAxis) bool {
 		return config.Start == 0 && config.End == 0 && config.Interior == 0
 	}
 
@@ -2200,7 +2200,7 @@ func execPad(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer,
 			mergedAxes = append(mergedAxes, mergedAxis{
 				operandDim: operandDim,
 				outputDim:  operandDim,
-				config:     backends.PadAxis{Start: 0, End: 0, Interior: 0},
+				config:     compute.PadAxis{Start: 0, End: 0, Interior: 0},
 			})
 			i = j
 		} else {

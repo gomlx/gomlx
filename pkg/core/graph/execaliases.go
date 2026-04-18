@@ -3,7 +3,7 @@
 package graph
 
 import (
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -104,14 +104,14 @@ func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*distributed.Tensor,
 //
 // Errors (with full stack-traces) are returned on failure.
 func (e *Exec) ExecWithGraph(args ...any) ([]*tensors.Tensor, *Graph, error) {
-	return e.ExecWithGraphOnDevice(backends.DeviceNum(0), args...)
+	return e.ExecWithGraphOnDevice(compute.DeviceNum(0), args...)
 }
 
 // ExecOnDevice behaves like Exec but for portable computations uses the given device for execution.
 //
 // deafultDevice is used for single-device computations that are portable (no fixed device assignment set
 // WithDeviceAssignment). Otherwise, it is ignored.
-func (e *Exec) ExecOnDevice(defaultDevice backends.DeviceNum, args ...any) ([]*tensors.Tensor, error) {
+func (e *Exec) ExecOnDevice(defaultDevice compute.DeviceNum, args ...any) ([]*tensors.Tensor, error) {
 	outputs, _, err := e.ExecWithGraph(args...)
 	return outputs, err
 }
@@ -125,7 +125,7 @@ func (e *Exec) ExecOnDevice(defaultDevice backends.DeviceNum, args ...any) ([]*t
 // It panics if the inputs are invalid.
 //
 // See also the generics MustNewExec (or MustNewExec for returning an error), which checks for valid graphFn in compile time.
-func MustNewExecAny(backend backends.Backend, graphFn any) *Exec {
+func MustNewExecAny(backend compute.Backend, graphFn any) *Exec {
 	return must.M1(NewExecAny(backend, graphFn))
 }
 
@@ -137,14 +137,14 @@ func MustNewExecAny(backend backends.Backend, graphFn any) *Exec {
 //
 // It's a wrapper for MustNewExecAny, but uses generics to type check that
 // graphFn is valid.
-func MustNewExec[F ExecGraphFn](backend backends.Backend, graphFn F) *Exec {
+func MustNewExec[F ExecGraphFn](backend compute.Backend, graphFn F) *Exec {
 	return MustNewExecAny(backend, graphFn)
 }
 
 // ExecOnce builds the graph and executes it with the given arguments and returns the one output.
 //
 // It's short for a call to MustNewExec, Exec.Exec and Exec.Finalize for functions that return only one output.
-func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args ...any) (*tensors.Tensor, error) {
+func ExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, graphFn F, args ...any) (*tensors.Tensor, error) {
 	e := MustNewExec(backend, graphFn)
 	defer e.Finalize()
 	results, err := e.Exec(args...)
@@ -160,7 +160,7 @@ func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args 
 //
 // See ExecOnce for a more convenient version if you have only one output.
 // Also, see MustExecOnceN or MustExecOnce if you want it to panic on error.
-func ExecOnceN[F ExecGraphFn](backend backends.Backend, graphFn F, args ...any) ([]*tensors.Tensor, error) {
+func ExecOnceN[F ExecGraphFn](backend compute.Backend, graphFn F, args ...any) ([]*tensors.Tensor, error) {
 	e := MustNewExec(backend, graphFn)
 	defer e.Finalize()
 	results, err := e.Exec(args...)
@@ -177,7 +177,7 @@ func ExecOnceN[F ExecGraphFn](backend backends.Backend, graphFn F, args ...any) 
 //
 // See MustExecOnceN if you have multiple outputs.
 // Also, see ExecOnceN or ExecOnce if you want any errors returned.
-func MustExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args ...any) *tensors.Tensor {
+func MustExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, graphFn F, args ...any) *tensors.Tensor {
 	return MustExecOnceN(backend, graphFn, args...)[0]
 }
 
@@ -188,7 +188,7 @@ func MustExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, a
 //
 // See MustExecOnce for a more convenient version if you have only one output.
 // Also, see ExecOnceN or ExecOnce if you want any errors returned.
-func MustExecOnceN[F ExecGraphFn](backend backends.Backend, graphFn F, args ...any) []*tensors.Tensor {
+func MustExecOnceN[F ExecGraphFn](backend compute.Backend, graphFn F, args ...any) []*tensors.Tensor {
 	e := MustNewExec(backend, graphFn)
 	defer e.Finalize()
 	return e.MustExec(args...)

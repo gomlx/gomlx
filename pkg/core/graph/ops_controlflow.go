@@ -3,9 +3,9 @@
 package graph
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 )
@@ -87,7 +87,7 @@ func While(cond, body *Function, initialState ...*Node) []*Node {
 	validateBuildingGraphFromInputs(initialState...)
 
 	// Convert inputs to backend values
-	inputValues := make([]backends.Value, len(initialState))
+	inputValues := make([]compute.Value, len(initialState))
 	for i, input := range initialState {
 		inputValues[i] = input.outputOps[0]
 	}
@@ -106,7 +106,7 @@ func While(cond, body *Function, initialState ...*Node) []*Node {
 	}
 
 	outputShapes := make([]shapes.Shape, len(results))
-	outputOps := make([]backends.Value, len(results))
+	outputOps := make([]compute.Value, len(results))
 	for i, res := range results {
 		outputShapes[i] = mustNoError(g.builder.OpShape(res))
 		outputOps[i] = res
@@ -209,7 +209,7 @@ func If(pred *Node, trueBranch, falseBranch *Function) []*Node {
 	}
 
 	outputShapes := make([]shapes.Shape, len(results))
-	outputOps := make([]backends.Value, len(results))
+	outputOps := make([]compute.Value, len(results))
 	for i, res := range results {
 		outputShapes[i] = mustNoError(g.builder.OpShape(res))
 		outputOps[i] = res

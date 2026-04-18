@@ -5,9 +5,9 @@ package simplego
 import (
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/stretchr/testify/require"
 )
 
@@ -129,7 +129,7 @@ func TestClosureOperations(t *testing.T) {
 	require.NotNil(t, sum)
 
 	// Return from closure
-	err = closure.Return([]backends.Value{sum}, nil)
+	err = closure.Return([]compute.Value{sum}, nil)
 	require.NoError(t, err)
 }
 
@@ -147,7 +147,7 @@ func TestClosureReturn(t *testing.T) {
 	require.NoError(t, err)
 
 	// Return from closure
-	err = closure.Return([]backends.Value{constant}, nil)
+	err = closure.Return([]compute.Value{constant}, nil)
 	require.NoError(t, err)
 }
 
@@ -267,7 +267,7 @@ func TestClosurePreCompilation(t *testing.T) {
 	require.Nil(t, closureFn.compiled, "Closure should not be compiled before Return()")
 
 	// Return from closure
-	err = closure.Return([]backends.Value{sum}, nil)
+	err = closure.Return([]compute.Value{sum}, nil)
 	require.NoError(t, err)
 
 	// After Return, compiled should be set
@@ -298,7 +298,7 @@ func TestCompiledClosureExecute(t *testing.T) {
 	sum, err := closure.Add(x, y)
 	require.NoError(t, err)
 
-	err = closure.Return([]backends.Value{sum}, nil)
+	err = closure.Return([]compute.Value{sum}, nil)
 	require.NoError(t, err)
 
 	// Get the compiled closure
@@ -351,7 +351,7 @@ func TestCompiledClosureMultipleExecutions(t *testing.T) {
 	product, err := closure.Mul(x, two)
 	require.NoError(t, err)
 
-	err = closure.Return([]backends.Value{product}, nil)
+	err = closure.Return([]compute.Value{product}, nil)
 	require.NoError(t, err)
 
 	cc := closure.(*Function).Compiled()
@@ -403,7 +403,7 @@ func TestCompiledClosureWithConstants(t *testing.T) {
 	sum, err := closure.Add(a, b)
 	require.NoError(t, err)
 
-	err = closure.Return([]backends.Value{sum}, nil)
+	err = closure.Return([]compute.Value{sum}, nil)
 	require.NoError(t, err)
 
 	cc := closure.(*Function).Compiled()
@@ -443,7 +443,7 @@ func TestCompiledClosureMultipleOutputs(t *testing.T) {
 	product, err := closure.Mul(x, two)
 	require.NoError(t, err)
 
-	err = closure.Return([]backends.Value{sum, product}, nil)
+	err = closure.Return([]compute.Value{sum, product}, nil)
 	require.NoError(t, err)
 
 	cc := closure.(*Function).Compiled()
@@ -499,7 +499,7 @@ func TestCompiledClosureChainedOperations(t *testing.T) {
 	diff, err := closure.Sub(product, three)
 	require.NoError(t, err)
 
-	err = closure.Return([]backends.Value{diff}, nil)
+	err = closure.Return([]compute.Value{diff}, nil)
 	require.NoError(t, err)
 
 	cc := closure.(*Function).Compiled()
@@ -542,7 +542,7 @@ func TestCompiledClosureInputValidation(t *testing.T) {
 	sum, err := closure.Add(x, y)
 	require.NoError(t, err)
 
-	err = closure.Return([]backends.Value{sum}, nil)
+	err = closure.Return([]compute.Value{sum}, nil)
 	require.NoError(t, err)
 
 	cc := closure.(*Function).Compiled()
@@ -577,7 +577,7 @@ func TestMainFunctionNotCompiled(t *testing.T) {
 	c, err := mainFn.Constant([]float32{1.0}, 1)
 	require.NoError(t, err)
 
-	err = mainFn.Return([]backends.Value{c}, nil)
+	err = mainFn.Return([]compute.Value{c}, nil)
 	require.NoError(t, err)
 
 	// Main function should not have a compiled closure
@@ -609,7 +609,7 @@ func TestClosureCapturingParentNode(t *testing.T) {
 	require.NotNil(t, sum)
 
 	// Return the sum
-	err = closure.Return([]backends.Value{sum}, nil)
+	err = closure.Return([]compute.Value{sum}, nil)
 	require.NoError(t, err)
 
 	// Verify the closure has captured the parent node
@@ -642,7 +642,7 @@ func TestClosureExecuteWithCapturedValues(t *testing.T) {
 	require.NoError(t, err)
 
 	// Return the sum
-	err = closure.Return([]backends.Value{sum}, nil)
+	err = closure.Return([]compute.Value{sum}, nil)
 	require.NoError(t, err)
 
 	// Get the compiled closure
@@ -704,7 +704,7 @@ func TestClosureExecuteWithNestedCapturedValues(t *testing.T) {
 	require.NoError(t, err)
 
 	// Return the product
-	err = closure2.Return([]backends.Value{product}, nil)
+	err = closure2.Return([]compute.Value{product}, nil)
 	require.NoError(t, err)
 
 	// Verify capture chain: grandparent -> parent capture -> child capture
@@ -776,7 +776,7 @@ func TestClosureCapturingGrandparentNode(t *testing.T) {
 	require.NotNil(t, sum)
 
 	// Return from closure2
-	err = closure2.Return([]backends.Value{sum}, nil)
+	err = closure2.Return([]compute.Value{sum}, nil)
 	require.NoError(t, err)
 
 	// Verify the nested closure has captured the grandparent node
@@ -807,7 +807,7 @@ func TestClosureSameFunctionNodesAllowed(t *testing.T) {
 	require.NotNil(t, sum)
 
 	// Return should also work
-	err = closure.Return([]backends.Value{sum}, nil)
+	err = closure.Return([]compute.Value{sum}, nil)
 	require.NoError(t, err)
 }
 
@@ -833,7 +833,7 @@ func TestCapturedParentNodesPropagation(t *testing.T) {
 	sum, err := closure.Add(parentValue, y)
 	require.NoError(t, err)
 
-	err = closure.Return([]backends.Value{sum}, nil)
+	err = closure.Return([]compute.Value{sum}, nil)
 	require.NoError(t, err)
 
 	// Verify the closure's captured values
@@ -867,7 +867,7 @@ func TestAddNodeCapturedInputs(t *testing.T) {
 	sum, err := closure.Add(parentValue, y)
 	require.NoError(t, err)
 
-	err = closure.Return([]backends.Value{sum}, nil)
+	err = closure.Return([]compute.Value{sum}, nil)
 	require.NoError(t, err)
 
 	closureFn := closure.(*Function)
@@ -875,7 +875,7 @@ func TestAddNodeCapturedInputs(t *testing.T) {
 	// Create a dummy node (simulating an If/While op that uses the closure)
 	dummyNode := &Node{
 		idx:      999,
-		opType:   backends.OpTypeIdentity,
+		opType:   compute.OpTypeIdentity,
 		function: mainFnImpl,
 	}
 
@@ -915,7 +915,7 @@ func TestNestedClosureCaptureChain(t *testing.T) {
 	sum, err := closure2.Add(grandparentValue, y)
 	require.NoError(t, err)
 
-	err = closure2.Return([]backends.Value{sum}, nil)
+	err = closure2.Return([]compute.Value{sum}, nil)
 	require.NoError(t, err)
 
 	// Verify the chain:
@@ -941,7 +941,7 @@ func TestIfOperation(t *testing.T) {
 	require.NoError(t, err)
 	trueConst, err := trueBranch.Constant([]int32{10})
 	require.NoError(t, err)
-	err = trueBranch.Return([]backends.Value{trueConst}, nil)
+	err = trueBranch.Return([]compute.Value{trueConst}, nil)
 	require.NoError(t, err)
 
 	// Create false branch: returns constant 20
@@ -949,7 +949,7 @@ func TestIfOperation(t *testing.T) {
 	require.NoError(t, err)
 	falseConst, err := falseBranch.Constant([]int32{20})
 	require.NoError(t, err)
-	err = falseBranch.Return([]backends.Value{falseConst}, nil)
+	err = falseBranch.Return([]compute.Value{falseConst}, nil)
 	require.NoError(t, err)
 
 	// Create predicate parameter
@@ -970,14 +970,14 @@ func TestIfOperation(t *testing.T) {
 	require.NoError(t, err)
 
 	trueInput := &Buffer{shape: shapes.Make(dtypes.Bool), flat: []bool{true}, inUse: true}
-	outputs, err := exec.Execute([]backends.Buffer{trueInput}, nil, 0)
+	outputs, err := exec.Execute([]compute.Buffer{trueInput}, nil, 0)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)
 	require.Equal(t, []int32{10}, outputs[0].(*Buffer).flat)
 
 	// Execute with false
 	falseInput := &Buffer{shape: shapes.Make(dtypes.Bool), flat: []bool{false}, inUse: true}
-	outputs, err = exec.Execute([]backends.Buffer{falseInput}, nil, 0)
+	outputs, err = exec.Execute([]compute.Buffer{falseInput}, nil, 0)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)
 	require.Equal(t, []int32{20}, outputs[0].(*Buffer).flat)
@@ -997,7 +997,7 @@ func TestWhileOperation(t *testing.T) {
 	require.NoError(t, err)
 	condResult, err := cond.LessThan(condCounter, condLimit)
 	require.NoError(t, err)
-	err = cond.Return([]backends.Value{condResult}, nil)
+	err = cond.Return([]compute.Value{condResult}, nil)
 	require.NoError(t, err)
 
 	// Create body closure: counter + 1
@@ -1009,7 +1009,7 @@ func TestWhileOperation(t *testing.T) {
 	require.NoError(t, err)
 	bodyResult, err := body.Add(bodyCounter, bodyOne)
 	require.NoError(t, err)
-	err = body.Return([]backends.Value{bodyResult}, nil)
+	err = body.Return([]compute.Value{bodyResult}, nil)
 	require.NoError(t, err)
 
 	// Create initial state
@@ -1049,7 +1049,7 @@ func TestSortOperation(t *testing.T) {
 	require.NoError(t, err)
 	compResult, err := comp.LessThan(lhs, rhs)
 	require.NoError(t, err)
-	err = comp.Return([]backends.Value{compResult}, nil)
+	err = comp.Return([]compute.Value{compResult}, nil)
 	require.NoError(t, err)
 
 	// Create input parameter
@@ -1074,7 +1074,7 @@ func TestSortOperation(t *testing.T) {
 		flat:  []float32{5.0, 2.0, 8.0, 1.0, 3.0},
 		inUse: true,
 	}
-	outputs, err := exec.Execute([]backends.Buffer{inputBuf}, nil, 0)
+	outputs, err := exec.Execute([]compute.Buffer{inputBuf}, nil, 0)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)
 	require.Equal(t, []float32{1.0, 2.0, 3.0, 5.0, 8.0}, outputs[0].(*Buffer).flat)
@@ -1102,7 +1102,7 @@ func TestClosureCaptureExecutionWithIf(t *testing.T) {
 	require.NoError(t, err)
 	trueResult, err := trueBranch.Mul(capturedConst, two)
 	require.NoError(t, err)
-	err = trueBranch.Return([]backends.Value{trueResult}, nil)
+	err = trueBranch.Return([]compute.Value{trueResult}, nil)
 	require.NoError(t, err)
 
 	// Create false branch that uses the captured constant
@@ -1114,7 +1114,7 @@ func TestClosureCaptureExecutionWithIf(t *testing.T) {
 	require.NoError(t, err)
 	falseResult, err := falseBranch.Mul(capturedConst, half)
 	require.NoError(t, err)
-	err = falseBranch.Return([]backends.Value{falseResult}, nil)
+	err = falseBranch.Return([]compute.Value{falseResult}, nil)
 	require.NoError(t, err)
 
 	// Create If operation
@@ -1131,7 +1131,7 @@ func TestClosureCaptureExecutionWithIf(t *testing.T) {
 
 	// Test with pred = true
 	trueInput := &Buffer{shape: shapes.Make(dtypes.Bool), flat: []bool{true}, inUse: true}
-	outputs, err := exec.Execute([]backends.Buffer{trueInput}, nil, 0)
+	outputs, err := exec.Execute([]compute.Buffer{trueInput}, nil, 0)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)
 	resultFlat := outputs[0].(*Buffer).flat.([]float32)
@@ -1139,7 +1139,7 @@ func TestClosureCaptureExecutionWithIf(t *testing.T) {
 
 	// Test with pred = false
 	falseInput := &Buffer{shape: shapes.Make(dtypes.Bool), flat: []bool{false}, inUse: true}
-	outputs, err = exec.Execute([]backends.Buffer{falseInput}, nil, 0)
+	outputs, err = exec.Execute([]compute.Buffer{falseInput}, nil, 0)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)
 	resultFlat = outputs[0].(*Buffer).flat.([]float32)
@@ -1170,7 +1170,7 @@ func TestClosureCaptureExecutionWithWhile(t *testing.T) {
 	require.NoError(t, err)
 	condResult, err := cond.LessThan(condCounter, threshold) // Uses captured threshold
 	require.NoError(t, err)
-	err = cond.Return([]backends.Value{condResult}, nil)
+	err = cond.Return([]compute.Value{condResult}, nil)
 	require.NoError(t, err)
 
 	// Create body: counter + addAmount (uses captured addAmount)
@@ -1180,7 +1180,7 @@ func TestClosureCaptureExecutionWithWhile(t *testing.T) {
 	require.NoError(t, err)
 	newCounter, err := body.Add(bodyCounter, addAmount) // Uses captured addAmount
 	require.NoError(t, err)
-	err = body.Return([]backends.Value{newCounter}, nil)
+	err = body.Return([]compute.Value{newCounter}, nil)
 	require.NoError(t, err)
 
 	// Create While operation
@@ -1197,7 +1197,7 @@ func TestClosureCaptureExecutionWithWhile(t *testing.T) {
 
 	// Test with initial counter = 0 (scalar)
 	counterInput := &Buffer{shape: shapes.Make(dtypes.Float32), flat: []float32{0.0}, inUse: true}
-	outputs, err := exec.Execute([]backends.Buffer{counterInput}, nil, 0)
+	outputs, err := exec.Execute([]compute.Buffer{counterInput}, nil, 0)
 	require.NoError(t, err)
 	require.Len(t, outputs, 1)
 	resultFlat := outputs[0].(*Buffer).flat.([]float32)

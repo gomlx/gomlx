@@ -5,16 +5,16 @@ package simplego
 import (
 	"slices"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/notimplemented"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/pkg/errors"
 )
 
-// Function implements backends.Function for SimpleGo.
+// Function implements compute.Function for SimpleGo.
 type Function struct {
 	notimplemented.Function
 
@@ -59,7 +59,7 @@ type Function struct {
 // via f.capturedParentNodes[captureIdx].
 type capturedNodeData int
 
-var _ backends.Function = (*Function)(nil)
+var _ compute.Function = (*Function)(nil)
 
 // CheckValid returns an error if the builder or the function are not ok.
 func (f *Function) CheckValid() error {
@@ -80,7 +80,7 @@ func (f *Function) Name() string {
 
 // Parent returns the parent function if this is a closure.
 // Returns nil for top-level functions (including main).
-func (f *Function) Parent() backends.Function {
+func (f *Function) Parent() compute.Function {
 	if f.parent == nil {
 		return nil
 	}
@@ -102,7 +102,7 @@ func (f *Function) IsAncestorOf(leafFunc *Function) bool {
 
 // Closure creates a new closure function within this function.
 // Closures can access values from their parent function's scope.
-func (f *Function) Closure() (backends.Function, error) {
+func (f *Function) Closure() (compute.Function, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (f *Function) Closure() (backends.Function, error) {
 // Nodes are added to the function's nodes slice.
 //
 // Use getOrCreateNode instead for most operations.
-func (f *Function) newNode(opType backends.OpType, shape shapes.Shape, inputs ...*Node) *Node {
+func (f *Function) newNode(opType compute.OpType, shape shapes.Shape, inputs ...*Node) *Node {
 	n := &Node{
 		builder:  f.builder,
 		opType:   opType,
@@ -143,7 +143,7 @@ func (f *Function) newNode(opType backends.OpType, shape shapes.Shape, inputs ..
 //
 // Note: no de-duplication of multi-output nodes.
 func (f *Function) newMultiOutputsNode(
-	opType backends.OpType,
+	opType compute.OpType,
 	outputShapes []shapes.Shape,
 	inputs ...*Node,
 ) (node *Node) {
@@ -166,10 +166,10 @@ func (f *Function) newMultiOutputsNode(
 	return node
 }
 
-// verifyAndCastValues sanity checks that the values (backends.Op) are valid and created with this builder.
+// verifyAndCastValues sanity checks that the values (compute.Op) are valid and created with this builder.
 // If a node belongs to a parent function, it creates a capture node to access the value.
 // It returns the underlying *Node of the values (with capture nodes substituted for parent values).
-func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([]*Node, error) {
+func (f *Function) verifyAndCastValues(name string, values ...compute.Value) ([]*Node, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func (n *nodeParameter) EqualNodeData(other nodeDataComparable) bool {
 }
 
 // Parameter creates an input parameter for this function.
-func (f *Function) Parameter(name string, shape shapes.Shape, sharding *backends.ShardingSpec) (backends.Value, error) {
+func (f *Function) Parameter(name string, shape shapes.Shape, sharding *compute.ShardingSpec) (compute.Value, error) {
 	dtype := shape.DType
 	if dtype == dtypes.InvalidDType {
 		return nil, errors.Errorf("invalid shape %s for Parameter", shape)
@@ -242,13 +242,13 @@ func (f *Function) Parameter(name string, shape shapes.Shape, sharding *backends
 		name:     name,
 		inputIdx: len(f.parameters), // Index within this function's parameters
 	}
-	n, _ := f.getOrCreateNode(backends.OpTypeParameter, shape, nil, data)
+	n, _ := f.getOrCreateNode(compute.OpTypeParameter, shape, nil, data)
 	f.parameters = append(f.parameters, n)
 	return n, nil
 }
 
 // Constant creates a constant in the function with the given flat values and the shape defined by the dimensions.
-func (f *Function) Constant(flat any, dims ...int) (backends.Value, error) {
+func (f *Function) Constant(flat any, dims ...int) (compute.Value, error) {
 	_, err := f.verifyAndCastValues("Constant")
 	if err != nil {
 		return nil, err
@@ -271,12 +271,12 @@ func (f *Function) Constant(flat any, dims ...int) (backends.Value, error) {
 		flat:  flat,
 		inUse: true,
 	}
-	n, _ := f.getOrCreateNode(backends.OpTypeConstant, shape, nil, data)
+	n, _ := f.getOrCreateNode(compute.OpTypeConstant, shape, nil, data)
 	return n, nil
 }
 
 // Return marks the outputs of this function.
-func (f *Function) Return(outputs []backends.Value, shardings []*backends.ShardingSpec) error {
+func (f *Function) Return(outputs []compute.Value, shardings []*compute.ShardingSpec) error {
 	if err := f.CheckValid(); err != nil {
 		return err
 	}
@@ -311,7 +311,7 @@ func (f *Function) Return(outputs []backends.Value, shardings []*backends.Shardi
 	// If this is a closure or a named function (not main), pre-compile it for efficient execution.
 	// Main functions are compiled later in Builder.Compile() after
 	// duplicate output handling.
-	if f.parent != nil || f.name != backends.MainName {
+	if f.parent != nil || f.name != compute.MainName {
 		compiled, err := newFunctionExecutable(f)
 		if err != nil {
 			return errors.WithMessagef(err, "failed to compile function %q", f.name)
@@ -337,7 +337,7 @@ func (f *Function) CapturedParentNodes() []*Node {
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
 // on the given axis. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
 // returns [[0 0][1 1]].
-func (f *Function) Iota(shape shapes.Shape, iotaAxis int) (backends.Value, error) {
+func (f *Function) Iota(shape shapes.Shape, iotaAxis int) (compute.Value, error) {
 	_, err := f.verifyAndCastValues("Iota")
 	if err != nil {
 		return nil, err
@@ -348,24 +348,24 @@ func (f *Function) Iota(shape shapes.Shape, iotaAxis int) (backends.Value, error
 	if iotaAxis < 0 || iotaAxis >= shape.Rank() {
 		return nil, errors.Errorf("Iota: iotaAxis (%d) must be in the range [0,%d)", iotaAxis, shape.Rank()-1)
 	}
-	node, _ := f.getOrCreateNode(backends.OpTypeIota, shape, nil, iotaAxis)
+	node, _ := f.getOrCreateNode(compute.OpTypeIota, shape, nil, iotaAxis)
 	return node, nil
 }
 
-// Identity implements the backends.Identity interface.
+// Identity implements the compute.Identity interface.
 // This operation is not de-duplicated: if you issue it twice, it will not reuse the previous instance.
-func (f *Function) Identity(operandOp backends.Value) (backends.Value, error) {
+func (f *Function) Identity(operandOp compute.Value) (compute.Value, error) {
 	inputs, err := f.verifyAndCastValues("Reshape", operandOp)
 	if err != nil {
 		return nil, err
 	}
 	operand := inputs[0]
-	node := f.newNode(backends.OpTypeIdentity, operand.shape, operand)
+	node := f.newNode(compute.OpTypeIdentity, operand.shape, operand)
 	return node, nil
 }
 
-// Where implements the backends.Builder interface.
-func (f *Function) Where(conditionOp, onTrueOp, onFalseOp backends.Value) (backends.Value, error) {
+// Where implements the compute.Builder interface.
+func (f *Function) Where(conditionOp, onTrueOp, onFalseOp compute.Value) (compute.Value, error) {
 	inputs, err := f.verifyAndCastValues("Where", conditionOp, onTrueOp, onFalseOp)
 	if err != nil {
 		return nil, err
@@ -375,15 +375,15 @@ func (f *Function) Where(conditionOp, onTrueOp, onFalseOp backends.Value) (backe
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.getOrCreateNode(backends.OpTypeWhere, outputShape, []*Node{condition, onTrue, onFalse}, nil)
+	node, _ := f.getOrCreateNode(compute.OpTypeWhere, outputShape, []*Node{condition, onTrue, onFalse}, nil)
 	return node, nil
 }
 
-// Reshape implements the backends.Builder interface.
+// Reshape implements the compute.Builder interface.
 //
-// Notice the backends.Reshape doesn't support auto-scaling dimensions (set to -1), as graph.Reshape does.
-func (f *Function) Reshape(operandOp backends.Value, dims ...int) (backends.Value, error) {
-	opType := backends.OpTypeReshape
+// Notice the compute.Reshape doesn't support auto-scaling dimensions (set to -1), as graph.Reshape does.
+func (f *Function) Reshape(operandOp compute.Value, dims ...int) (compute.Value, error) {
+	opType := compute.OpTypeReshape
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
@@ -400,8 +400,8 @@ func (f *Function) Reshape(operandOp backends.Value, dims ...int) (backends.Valu
 // Reverse returns x with the values for the given dimensions reversed, that is,
 // the value indexed at `i` will be swapped with the value at indexed `(dimension_size - 1 - i)`.
 // The shape remains the same.
-func (f *Function) Reverse(operandOp backends.Value, axes ...int) (backends.Value, error) {
-	opType := backends.OpTypeReverse
+func (f *Function) Reverse(operandOp compute.Value, axes ...int) (compute.Value, error) {
+	opType := compute.OpTypeReverse
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
@@ -421,8 +421,8 @@ func (f *Function) Reverse(operandOp backends.Value, axes ...int) (backends.Valu
 // Transpose axes of x.
 // There must be one value in permutations for each axis in the operand.
 // The output will have: output.Shape.Dimension[ii] = operand.Shape.Dimension[permutations[i]].
-func (f *Function) Transpose(operandOp backends.Value, permutations ...int) (backends.Value, error) {
-	opType := backends.OpTypeTranspose
+func (f *Function) Transpose(operandOp compute.Value, permutations ...int) (compute.Value, error) {
+	opType := compute.OpTypeTranspose
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
@@ -445,8 +445,8 @@ func (f *Function) Transpose(operandOp backends.Value, permutations ...int) (bac
 // The new dimensions id into copies of the operand, i.e.
 //
 //	output[i0, ..., iN, j0, ..., jM] = operand[j0, ..., jM]
-func (f *Function) Broadcast(operandOp backends.Value, prefixDims ...int) (backends.Value, error) {
-	opType := backends.OpTypeBroadcast
+func (f *Function) Broadcast(operandOp compute.Value, prefixDims ...int) (compute.Value, error) {
+	opType := compute.OpTypeBroadcast
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
@@ -480,11 +480,11 @@ func (f *Function) Broadcast(operandOp backends.Value, prefixDims ...int) (backe
 //     {{1 , 1},
 //     {2 , 2}}
 func (f *Function) BroadcastInDim(
-	operandOp backends.Value,
+	operandOp compute.Value,
 	outputShape shapes.Shape,
 	broadcastAxes []int,
-) (backends.Value, error) {
-	opType := backends.OpTypeBroadcastInDim
+) (compute.Value, error) {
+	opType := compute.OpTypeBroadcastInDim
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
@@ -498,57 +498,57 @@ func (f *Function) BroadcastInDim(
 	return node, nil
 }
 
-// ReduceMax implements the backends.Builder interface.
-func (f *Function) ReduceMax(operandOp backends.Value, axis ...int) (backends.Value, error) {
-	return f.reduceImpls(backends.OpTypeReduceMax, operandOp, axis...)
+// ReduceMax implements the compute.Builder interface.
+func (f *Function) ReduceMax(operandOp compute.Value, axis ...int) (compute.Value, error) {
+	return f.reduceImpls(compute.OpTypeReduceMax, operandOp, axis...)
 }
 
-// ReduceMin implements the backends.Builder interface.
-func (f *Function) ReduceMin(operandOp backends.Value, axis ...int) (backends.Value, error) {
-	return f.reduceImpls(backends.OpTypeReduceMin, operandOp, axis...)
+// ReduceMin implements the compute.Builder interface.
+func (f *Function) ReduceMin(operandOp compute.Value, axis ...int) (compute.Value, error) {
+	return f.reduceImpls(compute.OpTypeReduceMin, operandOp, axis...)
 }
 
-// ReduceSum implements the backends.Builder interface.
-func (f *Function) ReduceSum(operandOp backends.Value, axis ...int) (backends.Value, error) {
-	return f.reduceImpls(backends.OpTypeReduceSum, operandOp, axis...)
+// ReduceSum implements the compute.Builder interface.
+func (f *Function) ReduceSum(operandOp compute.Value, axis ...int) (compute.Value, error) {
+	return f.reduceImpls(compute.OpTypeReduceSum, operandOp, axis...)
 }
 
-// ReduceProduct implements the backends.Builder interface.
-func (f *Function) ReduceProduct(operandOp backends.Value, axis ...int) (backends.Value, error) {
-	return f.reduceImpls(backends.OpTypeReduceProduct, operandOp, axis...)
+// ReduceProduct implements the compute.Builder interface.
+func (f *Function) ReduceProduct(operandOp compute.Value, axis ...int) (compute.Value, error) {
+	return f.reduceImpls(compute.OpTypeReduceProduct, operandOp, axis...)
 }
 
-// ReduceBitwiseAnd implements the backends.Builder interface.
-func (f *Function) ReduceBitwiseAnd(operandOp backends.Value, axis ...int) (backends.Value, error) {
-	return f.reduceImpls(backends.OpTypeReduceBitwiseAnd, operandOp, axis...)
+// ReduceBitwiseAnd implements the compute.Builder interface.
+func (f *Function) ReduceBitwiseAnd(operandOp compute.Value, axis ...int) (compute.Value, error) {
+	return f.reduceImpls(compute.OpTypeReduceBitwiseAnd, operandOp, axis...)
 }
 
-// ReduceBitwiseOr implements the backends.Builder interface.
-func (f *Function) ReduceBitwiseOr(operandOp backends.Value, axis ...int) (backends.Value, error) {
-	return f.reduceImpls(backends.OpTypeReduceBitwiseOr, operandOp, axis...)
+// ReduceBitwiseOr implements the compute.Builder interface.
+func (f *Function) ReduceBitwiseOr(operandOp compute.Value, axis ...int) (compute.Value, error) {
+	return f.reduceImpls(compute.OpTypeReduceBitwiseOr, operandOp, axis...)
 }
 
-// ReduceBitwiseXor implements the backends.Builder interface.
-func (f *Function) ReduceBitwiseXor(operandOp backends.Value, axis ...int) (backends.Value, error) {
-	return f.reduceImpls(backends.OpTypeReduceBitwiseXor, operandOp, axis...)
+// ReduceBitwiseXor implements the compute.Builder interface.
+func (f *Function) ReduceBitwiseXor(operandOp compute.Value, axis ...int) (compute.Value, error) {
+	return f.reduceImpls(compute.OpTypeReduceBitwiseXor, operandOp, axis...)
 }
 
-// ReduceLogicalAnd implements the backends.Builder interface.
-func (f *Function) ReduceLogicalAnd(operandOp backends.Value, axis ...int) (backends.Value, error) {
-	return f.reduceImpls(backends.OpTypeReduceLogicalAnd, operandOp, axis...)
+// ReduceLogicalAnd implements the compute.Builder interface.
+func (f *Function) ReduceLogicalAnd(operandOp compute.Value, axis ...int) (compute.Value, error) {
+	return f.reduceImpls(compute.OpTypeReduceLogicalAnd, operandOp, axis...)
 }
 
-// ReduceLogicalOr implements the backends.Builder interface.
-func (f *Function) ReduceLogicalOr(operandOp backends.Value, axis ...int) (backends.Value, error) {
-	return f.reduceImpls(backends.OpTypeReduceLogicalOr, operandOp, axis...)
+// ReduceLogicalOr implements the compute.Builder interface.
+func (f *Function) ReduceLogicalOr(operandOp compute.Value, axis ...int) (compute.Value, error) {
+	return f.reduceImpls(compute.OpTypeReduceLogicalOr, operandOp, axis...)
 }
 
-// ReduceLogicalXor implements the backends.Builder interface.
-func (f *Function) ReduceLogicalXor(operandOp backends.Value, axis ...int) (backends.Value, error) {
-	return f.reduceImpls(backends.OpTypeReduceLogicalXor, operandOp, axis...)
+// ReduceLogicalXor implements the compute.Builder interface.
+func (f *Function) ReduceLogicalXor(operandOp compute.Value, axis ...int) (compute.Value, error) {
+	return f.reduceImpls(compute.OpTypeReduceLogicalXor, operandOp, axis...)
 }
 
-func (f *Function) reduceImpls(reduceOpType backends.OpType, operandOp backends.Value, axes ...int) (backends.Value, error) {
+func (f *Function) reduceImpls(reduceOpType compute.OpType, operandOp compute.Value, axes ...int) (compute.Value, error) {
 	inputs, err := f.verifyAndCastValues("ReduceOp", operandOp)
 	if err != nil {
 		return nil, err
@@ -585,15 +585,15 @@ func (g *gatherNode) EqualNodeData(other nodeDataComparable) bool {
 		slices.Equal(g.sliceSizes, o.sliceSizes)
 }
 
-// Gather implements the backends.Builder.
-// It's a complex operation, fully described in the backends.Builder.Gather documentation.
+// Gather implements the compute.Builder.
+// It's a complex operation, fully described in the compute.Builder.Gather documentation.
 func (f *Function) Gather(
-	operandOp, startIndicesOp backends.Value,
+	operandOp, startIndicesOp compute.Value,
 	indexVectorAxis int,
 	offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int,
 	indicesAreSorted bool,
-) (backends.Value, error) {
-	opType := backends.OpTypeGather
+) (compute.Value, error) {
+	opType := compute.OpTypeGather
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp, startIndicesOp)
 	if err != nil {
 		return nil, err
@@ -628,7 +628,7 @@ func (f *Function) Gather(
 // All input tensors must have the same shape, except potentially in the concatenation dimension.
 // They must also have the same data type (DType).
 // It returns an error if inputs are invalid (e.g., no inputs, mismatched graphs, shapes, dtypes, or invalid dimension).
-func (f *Function) Concatenate(axis int, operandOps ...backends.Value) (backends.Value, error) {
+func (f *Function) Concatenate(axis int, operandOps ...compute.Value) (compute.Value, error) {
 	if len(operandOps) == 0 {
 		return nil, errors.Errorf("Concatenate requires at least one input tensor")
 	}
@@ -646,18 +646,18 @@ func (f *Function) Concatenate(axis int, operandOps ...backends.Value) (backends
 	if err != nil {
 		return nil, err
 	}
-	node, _ := f.getOrCreateNode(backends.OpTypeConcatenate, outputShape, operands, axis)
+	node, _ := f.getOrCreateNode(compute.OpTypeConcatenate, outputShape, operands, axis)
 	return node, nil
 }
 
-// Bitcast reinterprets the bits of operandOp as targetDType. It implements the backends.Builder interface.
+// Bitcast reinterprets the bits of operandOp as targetDType. It implements the compute.Builder interface.
 //
 // If the element sizes differ, the last dimension is adjusted:
 //   - Smaller target: a new trailing axis of size (srcBits / dstBits) is appended, so rank is increased by 1.
 //   - Larger target: the last axis must be divisible by (dstBits / srcBits) and is divided by this ratio,
 //     but not "squeezed", the rank is always preserved in this case.
-func (f *Function) Bitcast(operandOp backends.Value, targetDType dtypes.DType) (backends.Value, error) {
-	opType := backends.OpTypeBitcast
+func (f *Function) Bitcast(operandOp compute.Value, targetDType dtypes.DType) (compute.Value, error) {
+	opType := compute.OpTypeBitcast
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
@@ -692,9 +692,9 @@ func (f *Function) Bitcast(operandOp backends.Value, targetDType dtypes.DType) (
 	return node, nil
 }
 
-// ConvertDType converts operandOp to the given dtype. It implements the backends.Builder interface.
-func (f *Function) ConvertDType(operandOp backends.Value, dtype dtypes.DType) (backends.Value, error) {
-	opType := backends.OpTypeConvertDType
+// ConvertDType converts operandOp to the given dtype. It implements the compute.Builder interface.
+func (f *Function) ConvertDType(operandOp compute.Value, dtype dtypes.DType) (compute.Value, error) {
+	opType := compute.OpTypeConvertDType
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
@@ -710,15 +710,15 @@ func (f *Function) ConvertDType(operandOp backends.Value, dtype dtypes.DType) (b
 	return node, nil
 }
 
-// ScatterMax implements the backends.Builder interface.
+// ScatterMax implements the compute.Builder interface.
 func (f *Function) ScatterMax(
-	operandOp, scatterIndicesOp, updatesOp backends.Value,
+	operandOp, scatterIndicesOp, updatesOp compute.Value,
 	indexVectorAxis int,
 	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int,
 	indicesAreSorted, uniqueIndices bool,
-) (backends.Value, error) {
+) (compute.Value, error) {
 	return f.scatterImpls(
-		backends.OpTypeScatterMax,
+		compute.OpTypeScatterMax,
 		operandOp,
 		scatterIndicesOp,
 		updatesOp,
@@ -731,15 +731,15 @@ func (f *Function) ScatterMax(
 	)
 }
 
-// ScatterMin implements the backends.Builder interface.
+// ScatterMin implements the compute.Builder interface.
 func (f *Function) ScatterMin(
-	operandOp, scatterIndicesOp, updatesOp backends.Value,
+	operandOp, scatterIndicesOp, updatesOp compute.Value,
 	indexVectorAxis int,
 	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int,
 	indicesAreSorted, uniqueIndices bool,
-) (backends.Value, error) {
+) (compute.Value, error) {
 	return f.scatterImpls(
-		backends.OpTypeScatterMin,
+		compute.OpTypeScatterMin,
 		operandOp,
 		scatterIndicesOp,
 		updatesOp,
@@ -752,15 +752,15 @@ func (f *Function) ScatterMin(
 	)
 }
 
-// ScatterSum implements the backends.Builder interface.
+// ScatterSum implements the compute.Builder interface.
 func (f *Function) ScatterSum(
-	operandOp, scatterIndicesOp, updatesOp backends.Value,
+	operandOp, scatterIndicesOp, updatesOp compute.Value,
 	indexVectorAxis int,
 	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int,
 	indicesAreSorted, uniqueIndices bool,
-) (backends.Value, error) {
+) (compute.Value, error) {
 	return f.scatterImpls(
-		backends.OpTypeScatterSum,
+		compute.OpTypeScatterSum,
 		operandOp,
 		scatterIndicesOp,
 		updatesOp,
@@ -794,13 +794,13 @@ func (s *scatterNode) EqualNodeData(other nodeDataComparable) bool {
 }
 
 func (f *Function) scatterImpls(
-	scatterOpType backends.OpType,
-	operandOp, scatterIndicesOp, updatesOp backends.Value,
+	scatterOpType compute.OpType,
+	operandOp, scatterIndicesOp, updatesOp compute.Value,
 	indexVectorAxis int,
 	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int,
 	indicesAreSorted, uniqueIndices bool,
 ) (
-	backends.Value, error) {
+	compute.Value, error) {
 	inputs, err := f.verifyAndCastValues(scatterOpType.String(), operandOp, scatterIndicesOp, updatesOp)
 	if err != nil {
 		return nil, err
@@ -855,8 +855,8 @@ func (s *sliceNode) EqualNodeData(other nodeDataComparable) bool {
 //
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={4}, strides=nil) -> {2, 3}
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={5}, strides={2}) -> {2, 4}
-func (f *Function) Slice(operandOp backends.Value, starts, limits, strides []int) (backends.Value, error) {
-	opType := backends.OpTypeSlice
+func (f *Function) Slice(operandOp compute.Value, starts, limits, strides []int) (compute.Value, error) {
+	opType := compute.OpTypeSlice
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
@@ -880,17 +880,17 @@ func (f *Function) Slice(operandOp backends.Value, starts, limits, strides []int
 // The algorithm is hard-coded to use Philox algorithm for now.
 //
 // It returns the new state of the RNG and the generated values (with random bits) with the given shape.
-func (f *Function) RNGBitGenerator(stateOp backends.Value, shape shapes.Shape) (newState, values backends.Value, err error) {
-	opType := backends.OpTypeRNGBitGenerator
+func (f *Function) RNGBitGenerator(stateOp compute.Value, shape shapes.Shape) (newState, values compute.Value, err error) {
+	opType := compute.OpTypeRNGBitGenerator
 	inputs, err := f.verifyAndCastValues(opType.String(), stateOp)
 	if err != nil {
 		return nil, nil, err
 	}
 	state := inputs[0]
-	if !state.shape.Equal(backends.RNGStateShape) {
+	if !state.shape.Equal(compute.RNGStateShape) {
 		err := errors.Errorf(
 			"expected random state to be shaped %s, got state.shape=%s instead for RNGBitGenerator",
-			backends.RNGStateShape,
+			compute.RNGStateShape,
 			state.shape,
 		)
 		return nil, nil, err
@@ -926,12 +926,12 @@ func (a *argMinMaxNode) EqualNodeData(other nodeDataComparable) bool {
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
 func (f *Function) ArgMinMax(
-	operandOp backends.Value,
+	operandOp compute.Value,
 	axis int,
 	outputDType dtypes.DType,
 	isMin bool,
-) (backends.Value, error) {
-	opType := backends.OpTypeArgMinMax
+) (compute.Value, error) {
+	opType := compute.OpTypeArgMinMax
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
@@ -950,7 +950,7 @@ func (f *Function) ArgMinMax(
 }
 
 type reduceWindowNode struct {
-	reductionType                                             backends.ReduceOpType
+	reductionType                                             compute.ReduceOpType
 	windowDimensions, strides, baseDilations, windowDilations []int
 	paddings                                                  [][2]int
 }
@@ -968,19 +968,19 @@ func (r *reduceWindowNode) EqualNodeData(other nodeDataComparable) bool {
 		slices.Equal(r.paddings, o.paddings)
 }
 
-// ReduceWindow runs a reduction function of reduceType (backends.ReduceOpMax, backends.ReduceOpSum or backends.ReduceOpProduct).
+// ReduceWindow runs a reduction function of reduceType (compute.ReduceOpMax, compute.ReduceOpSum or compute.ReduceOpProduct).
 //
 // The parameter windowDimensions must be set and have a value for each axis.
 // If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.
 // If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
 // If paddings is nil, they are assumed to be 0.
 func (f *Function) ReduceWindow(
-	operandOp backends.Value,
-	reductionType backends.ReduceOpType,
+	operandOp compute.Value,
+	reductionType compute.ReduceOpType,
 	windowDimensions, strides, baseDilations, windowDilations []int,
 	paddings [][2]int,
-) (backends.Value, error) {
-	opType := backends.OpTypeReduceWindow
+) (compute.Value, error) {
+	opType := compute.OpTypeReduceWindow
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
@@ -1013,114 +1013,114 @@ func (f *Function) ReduceWindow(
 // Unary Operations ----------------------------------------------------------------------------------------------------
 // ======================================================================================================================
 
-// Neg implements the backends.Builder interface.
-func (f *Function) Neg(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeNeg, operand)
+// Neg implements the compute.Builder interface.
+func (f *Function) Neg(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeNeg, operand)
 }
 
-// Sign implements the backends.Builder interface.
-func (f *Function) Sign(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeSign, operand)
+// Sign implements the compute.Builder interface.
+func (f *Function) Sign(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeSign, operand)
 }
 
-// Abs implements the backends.Builder interface.
-func (f *Function) Abs(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeAbs, operand)
+// Abs implements the compute.Builder interface.
+func (f *Function) Abs(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeAbs, operand)
 }
 
-// LogicalNot implements the backends.Builder interface.
-func (f *Function) LogicalNot(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeLogicalNot, operand)
+// LogicalNot implements the compute.Builder interface.
+func (f *Function) LogicalNot(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeLogicalNot, operand)
 }
 
-// BitwiseNot implements the backends.Builder interface.
-func (f *Function) BitwiseNot(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeBitwiseNot, operand)
+// BitwiseNot implements the compute.Builder interface.
+func (f *Function) BitwiseNot(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeBitwiseNot, operand)
 }
 
-// BitCount implements the backends.Builder interface.
-func (f *Function) BitCount(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeBitCount, operand)
+// BitCount implements the compute.Builder interface.
+func (f *Function) BitCount(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeBitCount, operand)
 }
 
-// Clz implements the backends.Builder interface.
-func (f *Function) Clz(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeClz, operand)
+// Clz implements the compute.Builder interface.
+func (f *Function) Clz(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeClz, operand)
 }
 
-// Exp implements the backends.Builder interface.
-func (f *Function) Exp(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeExp, operand)
+// Exp implements the compute.Builder interface.
+func (f *Function) Exp(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeExp, operand)
 }
 
-// Expm1 implements the backends.Builder interface. It returns e(x)-1.
-func (f *Function) Expm1(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeExpm1, operand)
+// Expm1 implements the compute.Builder interface. It returns e(x)-1.
+func (f *Function) Expm1(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeExpm1, operand)
 }
 
-// Log implements the backends.Builder interface.
-func (f *Function) Log(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeLog, operand)
+// Log implements the compute.Builder interface.
+func (f *Function) Log(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeLog, operand)
 }
 
-// Log1p implements the backends.Builder interface.
-func (f *Function) Log1p(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeLog1p, operand)
+// Log1p implements the compute.Builder interface.
+func (f *Function) Log1p(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeLog1p, operand)
 }
 
-// Logistic implements the backends.Builder interface. Aka as sigmoid. It returns 1/(1+exp(-x)).
-func (f *Function) Logistic(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeLogistic, operand)
+// Logistic implements the compute.Builder interface. Aka as sigmoid. It returns 1/(1+exp(-x)).
+func (f *Function) Logistic(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeLogistic, operand)
 }
 
-// Ceil implements the backends.Builder interface.
-func (f *Function) Ceil(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeCeil, operand)
+// Ceil implements the compute.Builder interface.
+func (f *Function) Ceil(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeCeil, operand)
 }
 
-// Floor implements the backends.Builder interface.
-func (f *Function) Floor(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeFloor, operand)
+// Floor implements the compute.Builder interface.
+func (f *Function) Floor(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeFloor, operand)
 }
 
-// Round implements the backends.Builder interface.
-func (f *Function) Round(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeRound, operand)
+// Round implements the compute.Builder interface.
+func (f *Function) Round(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeRound, operand)
 }
 
-// Rsqrt implements the backends.Builder interface.
-func (f *Function) Rsqrt(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeRsqrt, operand)
+// Rsqrt implements the compute.Builder interface.
+func (f *Function) Rsqrt(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeRsqrt, operand)
 }
 
-// Sqrt implements the backends.Builder interface.
-func (f *Function) Sqrt(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeSqrt, operand)
+// Sqrt implements the compute.Builder interface.
+func (f *Function) Sqrt(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeSqrt, operand)
 }
 
-// Cos implements the backends.Builder interface.
-func (f *Function) Cos(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeCos, operand)
+// Cos implements the compute.Builder interface.
+func (f *Function) Cos(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeCos, operand)
 }
 
-// Sin implements the backends.Builder interface.
-func (f *Function) Sin(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeSin, operand)
+// Sin implements the compute.Builder interface.
+func (f *Function) Sin(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeSin, operand)
 }
 
-// Tanh implements the backends.Builder interface.
-func (f *Function) Tanh(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeTanh, operand)
+// Tanh implements the compute.Builder interface.
+func (f *Function) Tanh(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeTanh, operand)
 }
 
-// Erf implements the backends.Builder interface.
-func (f *Function) Erf(operand backends.Value) (backends.Value, error) {
-	return f.addUnaryOp(backends.OpTypeErf, operand)
+// Erf implements the compute.Builder interface.
+func (f *Function) Erf(operand compute.Value) (compute.Value, error) {
+	return f.addUnaryOp(compute.OpTypeErf, operand)
 }
 
-// IsFinite implements the backends.Builder interface.
-func (f *Function) IsFinite(operandOp backends.Value) (backends.Value, error) {
-	opType := backends.OpTypeIsFinite
+// IsFinite implements the compute.Builder interface.
+func (f *Function) IsFinite(operandOp compute.Value) (compute.Value, error) {
+	opType := compute.OpTypeIsFinite
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
@@ -1142,7 +1142,7 @@ func (f *Function) IsFinite(operandOp backends.Value) (backends.Value, error) {
 }
 
 // addUnaryOp adds a generic binary op.
-func (f *Function) addUnaryOp(opType backends.OpType, operandOp backends.Value) (*Node, error) {
+func (f *Function) addUnaryOp(opType compute.OpType, operandOp compute.Value) (*Node, error) {
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp)
 	if err != nil {
 		return nil, err
@@ -1158,128 +1158,128 @@ func (f *Function) addUnaryOp(opType backends.OpType, operandOp backends.Value) 
 
 // Binary Operations:
 
-// Add implements the backends.Builder interface.
-func (f *Function) Add(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeAdd, lhsOp, rhsOp)
+// Add implements the compute.Builder interface.
+func (f *Function) Add(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeAdd, lhsOp, rhsOp)
 }
 
-// Mul implements the backends.Builder interface.
-func (f *Function) Mul(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeMul, lhsOp, rhsOp)
+// Mul implements the compute.Builder interface.
+func (f *Function) Mul(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeMul, lhsOp, rhsOp)
 }
 
-// Sub implements the backends.Builder interface.
-func (f *Function) Sub(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeSub, lhsOp, rhsOp)
+// Sub implements the compute.Builder interface.
+func (f *Function) Sub(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeSub, lhsOp, rhsOp)
 }
 
-// Div implements the backends.Builder interface.
-func (f *Function) Div(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeDiv, lhsOp, rhsOp)
+// Div implements the compute.Builder interface.
+func (f *Function) Div(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeDiv, lhsOp, rhsOp)
 }
 
-// Rem implements the backends.Builder interface.
-func (f *Function) Rem(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeRem, lhsOp, rhsOp)
+// Rem implements the compute.Builder interface.
+func (f *Function) Rem(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeRem, lhsOp, rhsOp)
 }
 
-// Pow implements the backends.Builder interface.
-func (f *Function) Pow(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypePow, lhsOp, rhsOp)
+// Pow implements the compute.Builder interface.
+func (f *Function) Pow(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypePow, lhsOp, rhsOp)
 }
 
-// Atan2 implements the backends.Builder interface.
-func (f *Function) Atan2(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeAtan2, lhsOp, rhsOp)
+// Atan2 implements the compute.Builder interface.
+func (f *Function) Atan2(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeAtan2, lhsOp, rhsOp)
 }
 
-// BitwiseAnd implements the backends.Builder interface.
-func (f *Function) BitwiseAnd(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeBitwiseAnd, lhsOp, rhsOp)
+// BitwiseAnd implements the compute.Builder interface.
+func (f *Function) BitwiseAnd(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeBitwiseAnd, lhsOp, rhsOp)
 }
 
-// BitwiseOr implements the backends.Builder interface.
-func (f *Function) BitwiseOr(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeBitwiseOr, lhsOp, rhsOp)
+// BitwiseOr implements the compute.Builder interface.
+func (f *Function) BitwiseOr(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeBitwiseOr, lhsOp, rhsOp)
 }
 
-// BitwiseXor implements the backends.Builder interface.
-func (f *Function) BitwiseXor(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeBitwiseXor, lhsOp, rhsOp)
+// BitwiseXor implements the compute.Builder interface.
+func (f *Function) BitwiseXor(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeBitwiseXor, lhsOp, rhsOp)
 }
 
-// ShiftLeft implements the backends.Builder interface.
-func (f *Function) ShiftLeft(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeShiftLeft, lhsOp, rhsOp)
+// ShiftLeft implements the compute.Builder interface.
+func (f *Function) ShiftLeft(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeShiftLeft, lhsOp, rhsOp)
 }
 
-// ShiftRightArithmetic implements the backends.Builder interface.
-func (f *Function) ShiftRightArithmetic(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeShiftRightArithmetic, lhsOp, rhsOp)
+// ShiftRightArithmetic implements the compute.Builder interface.
+func (f *Function) ShiftRightArithmetic(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeShiftRightArithmetic, lhsOp, rhsOp)
 }
 
-// ShiftRightLogical implements the backends.Builder interface.
-func (f *Function) ShiftRightLogical(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeShiftRightLogical, lhsOp, rhsOp)
+// ShiftRightLogical implements the compute.Builder interface.
+func (f *Function) ShiftRightLogical(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeShiftRightLogical, lhsOp, rhsOp)
 }
 
-// LogicalAnd implements the backends.Builder interface.
-func (f *Function) LogicalAnd(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeLogicalAnd, lhsOp, rhsOp)
+// LogicalAnd implements the compute.Builder interface.
+func (f *Function) LogicalAnd(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeLogicalAnd, lhsOp, rhsOp)
 }
 
-// LogicalOr implements the backends.Builder interface.
-func (f *Function) LogicalOr(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeLogicalOr, lhsOp, rhsOp)
+// LogicalOr implements the compute.Builder interface.
+func (f *Function) LogicalOr(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeLogicalOr, lhsOp, rhsOp)
 }
 
-// LogicalXor implements the backends.Builder interface.
-func (f *Function) LogicalXor(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeLogicalXor, lhsOp, rhsOp)
+// LogicalXor implements the compute.Builder interface.
+func (f *Function) LogicalXor(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeLogicalXor, lhsOp, rhsOp)
 }
 
-// Max implements the backends.Builder interface.
-func (f *Function) Max(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeMax, lhsOp, rhsOp)
+// Max implements the compute.Builder interface.
+func (f *Function) Max(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeMax, lhsOp, rhsOp)
 }
 
-// Min implements the backends.Builder interface.
-func (f *Function) Min(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addBinaryOp(backends.OpTypeMin, lhsOp, rhsOp)
+// Min implements the compute.Builder interface.
+func (f *Function) Min(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addBinaryOp(compute.OpTypeMin, lhsOp, rhsOp)
 }
 
-// Equal implements the backends.Builder interface.
-func (f *Function) Equal(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addComparisonOp(backends.OpTypeEqual, lhsOp, rhsOp)
+// Equal implements the compute.Builder interface.
+func (f *Function) Equal(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addComparisonOp(compute.OpTypeEqual, lhsOp, rhsOp)
 }
 
-// NotEqual implements the backends.Builder interface.
-func (f *Function) NotEqual(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addComparisonOp(backends.OpTypeNotEqual, lhsOp, rhsOp)
+// NotEqual implements the compute.Builder interface.
+func (f *Function) NotEqual(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addComparisonOp(compute.OpTypeNotEqual, lhsOp, rhsOp)
 }
 
-// GreaterOrEqual implements the backends.Builder interface.
-func (f *Function) GreaterOrEqual(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addComparisonOp(backends.OpTypeGreaterOrEqual, lhsOp, rhsOp)
+// GreaterOrEqual implements the compute.Builder interface.
+func (f *Function) GreaterOrEqual(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addComparisonOp(compute.OpTypeGreaterOrEqual, lhsOp, rhsOp)
 }
 
-// GreaterThan implements the backends.Builder interface.
-func (f *Function) GreaterThan(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addComparisonOp(backends.OpTypeGreaterThan, lhsOp, rhsOp)
+// GreaterThan implements the compute.Builder interface.
+func (f *Function) GreaterThan(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addComparisonOp(compute.OpTypeGreaterThan, lhsOp, rhsOp)
 }
 
-// LessOrEqual implements the backends.Builder interface.
-func (f *Function) LessOrEqual(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addComparisonOp(backends.OpTypeLessOrEqual, lhsOp, rhsOp)
+// LessOrEqual implements the compute.Builder interface.
+func (f *Function) LessOrEqual(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addComparisonOp(compute.OpTypeLessOrEqual, lhsOp, rhsOp)
 }
 
-// LessThan implements the backends.Builder interface.
-func (f *Function) LessThan(lhsOp, rhsOp backends.Value) (backends.Value, error) {
-	return f.addComparisonOp(backends.OpTypeLessThan, lhsOp, rhsOp)
+// LessThan implements the compute.Builder interface.
+func (f *Function) LessThan(lhsOp, rhsOp compute.Value) (compute.Value, error) {
+	return f.addComparisonOp(compute.OpTypeLessThan, lhsOp, rhsOp)
 }
 
 // addBinaryOp adds a generic binary op.
-func (f *Function) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Value) (*Node, error) {
+func (f *Function) addBinaryOp(opType compute.OpType, lhsOp, rhsOp compute.Value) (*Node, error) {
 	inputs, err := f.verifyAndCastValues(opType.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
@@ -1294,7 +1294,7 @@ func (f *Function) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Val
 }
 
 // addComparisonOp adds a generic comparison binary op.
-func (f *Function) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.Value) (*Node, error) {
+func (f *Function) addComparisonOp(opType compute.OpType, lhsOp, rhsOp compute.Value) (*Node, error) {
 	inputs, err := f.verifyAndCastValues(opType.String(), lhsOp, rhsOp)
 	if err != nil {
 		return nil, err
@@ -1311,7 +1311,7 @@ func (f *Function) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends
 // Clamp returns the element-wise clamping operation.
 //
 // The values max and min can either be a scalar or have the same shape as x.
-func (f *Function) Clamp(minV, x, maxV backends.Value) (backends.Value, error) {
+func (f *Function) Clamp(minV, x, maxV compute.Value) (compute.Value, error) {
 	clamped, err := f.Max(minV, x)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "Backend %q: failed Clamp", BackendName)
@@ -1323,8 +1323,8 @@ func (f *Function) Clamp(minV, x, maxV backends.Value) (backends.Value, error) {
 	return clamped, nil
 }
 
-// IsNaN implements backends.Builder interface.
-func (f *Function) IsNaN(x backends.Value) (backends.Value, error) {
+// IsNaN implements compute.Builder interface.
+func (f *Function) IsNaN(x compute.Value) (compute.Value, error) {
 	result, err := f.NotEqual(x, x)
 	if err != nil {
 		return nil, errors.WithMessage(err, "while building op IsNaN")
@@ -1332,8 +1332,8 @@ func (f *Function) IsNaN(x backends.Value) (backends.Value, error) {
 	return result, nil
 }
 
-// AllReduce implements the backends.CollectiveOps interface.
-func (f *Function) AllReduce(_ []backends.Value, _ backends.ReduceOpType, _ [][]int) ([]backends.Value, error) {
+// AllReduce implements the compute.CollectiveOps interface.
+func (f *Function) AllReduce(_ []compute.Value, _ compute.ReduceOpType, _ [][]int) ([]compute.Value, error) {
 	return nil, errors.Wrapf(
 		notimplemented.NotImplementedError,
 		"AllReduce not supported for %q builder", BackendName)
@@ -1344,7 +1344,7 @@ func (f *Function) AllReduce(_ []backends.Value, _ backends.ReduceOpType, _ [][]
 // The comparator closure takes 2*N scalar parameters (lhs_0, rhs_0, lhs_1, rhs_1, ...)
 // where N is the number of input tensors, and returns a scalar boolean indicating
 // whether lhs should come before rhs.
-func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, inputs ...backends.Value) ([]backends.Value, error) {
+func (f *Function) Sort(comparator compute.Function, axis int, isStable bool, inputs ...compute.Value) ([]compute.Value, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -1430,7 +1430,7 @@ func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, i
 
 	// Create multi-output node for Sort with only input tensors as regular inputs.
 	// Captured values are tracked separately via AddNodeCapturedInputs.
-	node := f.newMultiOutputsNode(backends.OpTypeSort, outputShapes, inputNodes...)
+	node := f.newMultiOutputsNode(compute.OpTypeSort, outputShapes, inputNodes...)
 	node.data = data
 
 	// Add captured values from comparator to node.capturedInputs.
@@ -1460,9 +1460,9 @@ func shapesEqualDimensions(a, b shapes.Shape) bool {
 	return true
 }
 
-// Pad implements the backends.Builder interface.
-func (f *Function) Pad(operandOp, fillValueOp backends.Value, axesConfig ...backends.PadAxis) (backends.Value, error) {
-	opType := backends.OpTypePad
+// Pad implements the compute.Builder interface.
+func (f *Function) Pad(operandOp, fillValueOp compute.Value, axesConfig ...compute.PadAxis) (compute.Value, error) {
+	opType := compute.OpTypePad
 	inputs, err := f.verifyAndCastValues(opType.String(), operandOp, fillValueOp)
 	if err != nil {
 		return nil, err
@@ -1480,7 +1480,7 @@ func (f *Function) Pad(operandOp, fillValueOp backends.Value, axesConfig ...back
 }
 
 type padNode struct {
-	axesConfig []backends.PadAxis
+	axesConfig []compute.PadAxis
 }
 
 // EqualNodeData implements nodeDataComparable for padNode.

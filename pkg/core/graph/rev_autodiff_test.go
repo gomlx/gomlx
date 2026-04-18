@@ -7,9 +7,9 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -141,7 +141,7 @@ func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad [
 // to the nodesForGrad, and check that it gets close to the corresponding values in wantForGrad.
 //
 // It will print out the inputNodes and outputs to help debugging.
-func testGradientsWithBackend(t *testing.T, name string, backend backends.Backend, testFn gradTestFunc, wantForGrad []any) {
+func testGradientsWithBackend(t *testing.T, name string, backend compute.Backend, testFn gradTestFunc, wantForGrad []any) {
 	testGradientsInDelta(t, name, backend, testFn, wantForGrad, Epsilon)
 }
 
@@ -149,7 +149,7 @@ func testGradientsWithBackend(t *testing.T, name string, backend backends.Backen
 // to the nodesForGrad, and check that it gets the corresponding values in wantForGrad, withing a delta-margin (at every element).
 //
 // It will print out the inputNodes and outputs to help debugging.
-func testGradientsInDelta(t *testing.T, name string, backend backends.Backend, testFn gradTestFunc, wantForGrad []any, delta float64) {
+func testGradientsInDelta(t *testing.T, name string, backend compute.Backend, testFn gradTestFunc, wantForGrad []any, delta float64) {
 	t.Run(name, func(t *testing.T) {
 		// Create a function that can be used by computation.Exec.
 		fn := func(g *Graph) []*Node {

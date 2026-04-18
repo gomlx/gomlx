@@ -3,9 +3,9 @@
 package simplego
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
@@ -49,7 +49,7 @@ func (f *Function) getOrCreateCaptureNode(parentNode *Node) *Node {
 
 	// Create a new capture node
 	captureIdx := len(f.capturedParentNodes)
-	captureNode := f.newNode(backends.OpTypeCapturedValue, parentNode.shape)
+	captureNode := f.newNode(compute.OpTypeCapturedValue, parentNode.shape)
 	captureNode.data = capturedNodeData(captureIdx)
 
 	f.capturedParentNodes = append(f.capturedParentNodes, nodeToCapture)
@@ -82,7 +82,7 @@ func (n *Node) AddNodeCapturedInputs(closure *Function) {
 
 // Call creates nodes representing a call to the target function with the given inputs.
 // The target function must be a named function from the same builder that has been compiled.
-func (f *Function) Call(target backends.Function, inputs ...backends.Value) ([]backends.Value, error) {
+func (f *Function) Call(target compute.Function, inputs ...compute.Value) ([]compute.Value, error) {
 	inputNodes, err := f.verifyAndCastValues("Call", inputs...)
 	if err != nil {
 		return nil, err
@@ -124,7 +124,7 @@ func (f *Function) Call(target backends.Function, inputs ...backends.Value) ([]b
 		target: targetFn,
 	}
 
-	node := f.newMultiOutputsNode(backends.OpTypeCall, outputShapes, inputNodes...)
+	node := f.newMultiOutputsNode(compute.OpTypeCall, outputShapes, inputNodes...)
 	node.data = data
 
 	return node.MultiOutputValues(), nil
@@ -135,8 +135,8 @@ type callNode struct {
 	target *Function
 }
 
-// validateClosure validates that a backends.Function is a compiled closure of the current function.
-func (f *Function) validateClosure(opName, closureName string, closure backends.Function) (*Function, error) {
+// validateClosure validates that a compute.Function is a compiled closure of the current function.
+func (f *Function) validateClosure(opName, closureName string, closure compute.Function) (*Function, error) {
 	fn, ok := closure.(*Function)
 	if !ok {
 		return nil, errors.Errorf("%s: %s must be a *simplego.Function, got %T", opName, closureName, closure)
@@ -172,7 +172,7 @@ func checkClosureParams(opName, closureName string, fn *Function, expected []*No
 //
 // The predicate must be a scalar boolean. The true and false branches are closures
 // that take no parameters and return the same number of outputs with matching shapes.
-func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Function) ([]backends.Value, error) {
+func (f *Function) If(pred compute.Value, trueBranch, falseBranch compute.Function) ([]compute.Value, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -232,7 +232,7 @@ func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Func
 
 	// Create multi-output node for If with only the predicate as regular input.
 	// Captured values are tracked separately via AddNodeCapturedInputs.
-	node := f.newMultiOutputsNode(backends.OpTypeIf, outputShapes, predNode)
+	node := f.newMultiOutputsNode(compute.OpTypeIf, outputShapes, predNode)
 	node.data = data
 
 	// Add captured values from both branches to node.capturedInputs.
@@ -254,7 +254,7 @@ type ifNode struct {
 // The condition closure takes the current state values and returns a scalar boolean.
 // The body closure takes the current state values and returns new state values.
 // Both must have the same number of parameters matching the initialState count.
-func (f *Function) While(cond, body backends.Function, initialState ...backends.Value) ([]backends.Value, error) {
+func (f *Function) While(cond, body compute.Function, initialState ...compute.Value) ([]compute.Value, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -320,7 +320,7 @@ func (f *Function) While(cond, body backends.Function, initialState ...backends.
 
 	// Create multi-output node for While with only state values as regular inputs.
 	// Captured values are tracked separately via AddNodeCapturedInputs.
-	node := f.newMultiOutputsNode(backends.OpTypeWhile, outputShapes, stateNodes...)
+	node := f.newMultiOutputsNode(compute.OpTypeWhile, outputShapes, stateNodes...)
 	node.data = data
 
 	// Add captured values from both closures to node.capturedInputs.

@@ -6,15 +6,15 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	"github.com/pkg/errors"
 )
 
 func init() {
-	nodeClosureExecutors[backends.OpTypeIf] = execIf
-	nodeClosureExecutors[backends.OpTypeWhile] = execWhile
-	nodeClosureExecutors[backends.OpTypeSort] = execSort
-	multiOutputsNodeExecutors[backends.OpTypeCall] = execCall
+	nodeClosureExecutors[compute.OpTypeIf] = execIf
+	nodeClosureExecutors[compute.OpTypeWhile] = execWhile
+	nodeClosureExecutors[compute.OpTypeSort] = execSort
+	multiOutputsNodeExecutors[compute.OpTypeCall] = execCall
 }
 
 // execIf executes the If operation by evaluating the predicate and running one branch.

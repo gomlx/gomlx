@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
@@ -26,13 +26,13 @@ type nodeDataComparable interface {
 // It provides fast lookup for candidate nodes with the same operation type
 // and input structure.
 type nodeDedupKey struct {
-	opType     backends.OpType
+	opType     compute.OpType
 	inputCount int
 	firstInput *Node // nil if there are no inputs.
 }
 
 // makeNodeDedupKey creates a de-duplication key for a node with the given opType and inputs.
-func makeNodeDedupKey(opType backends.OpType, inputs []*Node) nodeDedupKey {
+func makeNodeDedupKey(opType compute.OpType, inputs []*Node) nodeDedupKey {
 	key := nodeDedupKey{
 		opType:     opType,
 		inputCount: len(inputs),
@@ -50,7 +50,7 @@ func makeNodeDedupKey(opType backends.OpType, inputs []*Node) nodeDedupKey {
 // It also validates that all input nodes belong to this function or one of its ancestors.
 // Using nodes from an ancestor function (closure capture) is not yet supported.
 func (f *Function) getOrCreateNode(
-	opType backends.OpType, shape shapes.Shape, inputs []*Node, data any) (
+	opType compute.OpType, shape shapes.Shape, inputs []*Node, data any) (
 	n *Node, found bool) {
 	// Check that all input nodes belong to this function or an ancestor.
 	for i, node := range inputs {

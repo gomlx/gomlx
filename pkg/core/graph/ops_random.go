@@ -7,9 +7,9 @@ import (
 	"math/rand"
 	"reflect"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"golang.org/x/exp/constraints"
@@ -19,7 +19,7 @@ var (
 	// RNGStateShape is the default shape for random number generators state, used
 	// in all Random* functions.
 	// It dependents on the algorithm, but for now we use the Philox algorithm only.
-	RNGStateShape = backends.RNGStateShape
+	RNGStateShape = compute.RNGStateShape
 )
 
 // RNGStateFromSeed creates a random number generator (RNG) state based on the static seed.

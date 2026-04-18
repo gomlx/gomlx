@@ -6,9 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/gomlx/compute"
 	"github.com/pkg/errors"
-
-	"github.com/gomlx/gomlx/backends"
 )
 
 // FunctionExecutable contains pre-compiled execution information for any function.
@@ -401,7 +400,7 @@ func (fe *FunctionExecutable) executeNode(backend *Backend, node *Node, execBuf 
 	nodeIdx := node.idx
 
 	// Handle constants specially
-	if node.opType == backends.OpTypeConstant {
+	if node.opType == compute.OpTypeConstant {
 		execBuf.owned[nodeIdx] = false
 		execBuf.results[nodeIdx] = node.data.(*Buffer)
 		return nil

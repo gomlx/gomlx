@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
@@ -21,7 +21,7 @@ import (
 //
 // This can be used to manually distribute computation by executing the program concurrently on different devices.
 //
-// Portable compilation may not work on all PJRT types or different backends.
+// Portable compilation may not work on all PJRT types or different compute.
 // Please add a blacklist of backends to skip the test if the backend doesn't support it.
 func TestPortable(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
@@ -38,7 +38,7 @@ func TestPortable(t *testing.T) {
 
 		numDevices := backend.NumDevices()
 		for deviceNum := range numDevices {
-			outputs := g.RunOnDevice(backends.DeviceNum(deviceNum), float32(deviceNum))
+			outputs := g.RunOnDevice(compute.DeviceNum(deviceNum), float32(deviceNum))
 			require.Len(t, outputs, 1)
 			output := outputs[0]
 			outputDevice := must1(output.Device())
@@ -53,7 +53,7 @@ func TestPortable(t *testing.T) {
 		})
 		numDevices := backend.NumDevices()
 		for deviceNum := range numDevices {
-			outputs, err := e.ExecOnDevice(backends.DeviceNum(deviceNum), float32(deviceNum))
+			outputs, err := e.ExecOnDevice(compute.DeviceNum(deviceNum), float32(deviceNum))
 			require.NoError(t, err)
 			require.Len(t, outputs, 1)
 			output := outputs[0]
@@ -75,7 +75,7 @@ func TestCollective(t *testing.T) {
 		g := graph.NewGraph(backend, t.Name())
 		require.NoError(t, g.SetSPMD(mesh))
 		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
-		reduced := g.Distributed().AllReduceOne(x, backends.ReduceOpSum)
+		reduced := g.Distributed().AllReduceOne(x, compute.ReduceOpSum)
 		err := g.Compile(reduced)
 		require.NoError(t, err)
 		outputs := g.Run(float32(1), float32(3))
@@ -93,7 +93,7 @@ func TestCollective(t *testing.T) {
 		g.AssertBuilding()
 		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
 		y := graph.Parameter(g, "y", shapes.Make(dtypes.Float32, 2))
-		reduced := g.Distributed().AllReduce([]*graph.Node{x, y}, backends.ReduceOpSum)
+		reduced := g.Distributed().AllReduce([]*graph.Node{x, y}, compute.ReduceOpSum)
 		err := g.Compile(reduced...)
 		require.NoError(t, err)
 		outputs := g.Run(
@@ -124,7 +124,7 @@ func TestCollective(t *testing.T) {
 		x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32))
 		y := graph.Parameter(g, "y", shapes.Make(dtypes.Float32, 2))
 		z := graph.Parameter(g, "z", shapes.Make(dtypes.Float64, 3))
-		reduced := g.Distributed().AllReduce([]*graph.Node{x, y, z}, backends.ReduceOpSum)
+		reduced := g.Distributed().AllReduce([]*graph.Node{x, y, z}, compute.ReduceOpSum)
 		err := g.Compile(reduced...)
 		require.NoError(t, err)
 		outputs := g.Run(

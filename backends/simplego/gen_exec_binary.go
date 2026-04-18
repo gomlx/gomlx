@@ -5,35 +5,35 @@ package simplego
 import (
 	"math"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
 func init() {
-	setNodeExecutor(backends.OpTypeAdd, priorityGeneric, execAdd)
-	setNodeExecutor(backends.OpTypeMul, priorityGeneric, execMul)
-	setNodeExecutor(backends.OpTypeSub, priorityGeneric, execSub)
-	setNodeExecutor(backends.OpTypeDiv, priorityGeneric, execDiv)
-	setNodeExecutor(backends.OpTypeRem, priorityGeneric, execRem)
-	setNodeExecutor(backends.OpTypePow, priorityGeneric, execPow)
-	setNodeExecutor(backends.OpTypeAtan2, priorityGeneric, execAtan2)
-	setNodeExecutor(backends.OpTypeMax, priorityGeneric, execMax)
-	setNodeExecutor(backends.OpTypeMin, priorityGeneric, execMin)
-	setNodeExecutor(backends.OpTypeBitwiseAnd, priorityGeneric, execBitwiseAnd)
-	setNodeExecutor(backends.OpTypeBitwiseOr, priorityGeneric, execBitwiseOr)
-	setNodeExecutor(backends.OpTypeBitwiseXor, priorityGeneric, execBitwiseXor)
-	setNodeExecutor(backends.OpTypeLogicalAnd, priorityGeneric, execLogicalAnd)
-	setNodeExecutor(backends.OpTypeLogicalOr, priorityGeneric, execLogicalOr)
-	setNodeExecutor(backends.OpTypeLogicalXor, priorityGeneric, execLogicalXor)
-	setNodeExecutor(backends.OpTypeEqual, priorityGeneric, execEqual)
-	setNodeExecutor(backends.OpTypeNotEqual, priorityGeneric, execNotEqual)
-	setNodeExecutor(backends.OpTypeGreaterOrEqual, priorityGeneric, execGreaterOrEqual)
-	setNodeExecutor(backends.OpTypeGreaterThan, priorityGeneric, execGreaterThan)
-	setNodeExecutor(backends.OpTypeLessOrEqual, priorityGeneric, execLessOrEqual)
-	setNodeExecutor(backends.OpTypeLessThan, priorityGeneric, execLessThan)
+	setNodeExecutor(compute.OpTypeAdd, priorityGeneric, execAdd)
+	setNodeExecutor(compute.OpTypeMul, priorityGeneric, execMul)
+	setNodeExecutor(compute.OpTypeSub, priorityGeneric, execSub)
+	setNodeExecutor(compute.OpTypeDiv, priorityGeneric, execDiv)
+	setNodeExecutor(compute.OpTypeRem, priorityGeneric, execRem)
+	setNodeExecutor(compute.OpTypePow, priorityGeneric, execPow)
+	setNodeExecutor(compute.OpTypeAtan2, priorityGeneric, execAtan2)
+	setNodeExecutor(compute.OpTypeMax, priorityGeneric, execMax)
+	setNodeExecutor(compute.OpTypeMin, priorityGeneric, execMin)
+	setNodeExecutor(compute.OpTypeBitwiseAnd, priorityGeneric, execBitwiseAnd)
+	setNodeExecutor(compute.OpTypeBitwiseOr, priorityGeneric, execBitwiseOr)
+	setNodeExecutor(compute.OpTypeBitwiseXor, priorityGeneric, execBitwiseXor)
+	setNodeExecutor(compute.OpTypeLogicalAnd, priorityGeneric, execLogicalAnd)
+	setNodeExecutor(compute.OpTypeLogicalOr, priorityGeneric, execLogicalOr)
+	setNodeExecutor(compute.OpTypeLogicalXor, priorityGeneric, execLogicalXor)
+	setNodeExecutor(compute.OpTypeEqual, priorityGeneric, execEqual)
+	setNodeExecutor(compute.OpTypeNotEqual, priorityGeneric, execNotEqual)
+	setNodeExecutor(compute.OpTypeGreaterOrEqual, priorityGeneric, execGreaterOrEqual)
+	setNodeExecutor(compute.OpTypeGreaterThan, priorityGeneric, execGreaterThan)
+	setNodeExecutor(compute.OpTypeLessOrEqual, priorityGeneric, execLessOrEqual)
+	setNodeExecutor(compute.OpTypeLessThan, priorityGeneric, execLessThan)
 }
 
 // execAdd executes the binary op Add.

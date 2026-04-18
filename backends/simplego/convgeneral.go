@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 )
 
 func init() {
-	setNodeExecutor(backends.OpTypeConvGeneral, priorityGeneric, execConvGeneral)
+	setNodeExecutor(compute.OpTypeConvGeneral, priorityGeneric, execConvGeneral)
 }
 
 // Auto-generate alternate specialized versions of execConvGeneral, with small changes.
@@ -37,15 +37,15 @@ func init() {
 // Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
 //
 // Note: input is aka. operand; kernel is aka. "filters". The input and output "channels" are also known as "features dimensions".
-func (f *Function) ConvGeneral(inputOp, kernelOp backends.Value, axes backends.ConvolveAxesConfig,
+func (f *Function) ConvGeneral(inputOp, kernelOp compute.Value, axes compute.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
-	channelGroupCount, batchGroupCount int) (backends.Value, error) {
+	channelGroupCount, batchGroupCount int) (compute.Value, error) {
 	// Sanitize group count.
 	channelGroupCount = max(channelGroupCount, 1)
 	batchGroupCount = max(batchGroupCount, 1)
 
-	opType := backends.OpTypeConvGeneral
+	opType := compute.OpTypeConvGeneral
 	inputs, err := f.verifyAndCastValues(opType.String(), inputOp, kernelOp)
 	if err != nil {
 		return nil, err
@@ -120,7 +120,7 @@ func (f *Function) ConvGeneral(inputOp, kernelOp backends.Value, axes backends.C
 }
 
 type convNode struct {
-	axes              backends.ConvolveAxesConfig
+	axes              compute.ConvolveAxesConfig
 	strides           []int
 	paddings          [][2]int
 	inputDilations    []int
@@ -170,10 +170,10 @@ func (c *convNode) EqualNodeData(other nodeDataComparable) bool {
 // ConvGeneralDilated is a deprecated an alias to ConvGeneral.
 //
 // Deprecated: use ConvGeneral instead.
-func (f *Function) ConvGeneralDilated(inputOp, kernelOp backends.Value, axes backends.ConvolveAxesConfig,
+func (f *Function) ConvGeneralDilated(inputOp, kernelOp compute.Value, axes compute.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
-	channelGroupCount, batchGroupCount int) (backends.Value, error) {
+	channelGroupCount, batchGroupCount int) (compute.Value, error) {
 	return f.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations,
 		channelGroupCount, batchGroupCount)
 }
@@ -231,7 +231,7 @@ func execConvGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 }
 
 type convGeneralExecPlan struct {
-	backend                              backends.Backend
+	backend                              compute.Backend
 	inputFlat, kernelFlat, outputFlat    any
 	inputShape, kernelShape, outputShape shapes.Shape
 	params                               *convNode

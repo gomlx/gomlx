@@ -5,11 +5,11 @@ package simplego
 import (
 	"slices"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
 )
 
@@ -133,7 +133,7 @@ func (d *blockForDotGeneralData) EqualNodeData(other nodeDataComparable) bool {
 var _ nodeDataComparable = (*blockForDotGeneralData)(nil)
 
 func init() {
-	setNodeExecutor(backends.OpTypeBlockForDotGeneral, priorityGeneric, execBlockForDotGeneral)
+	setNodeExecutor(compute.OpTypeBlockForDotGeneral, priorityGeneric, execBlockForDotGeneral)
 }
 
 // blockForDotGeneral returns a BlockForDotGeneral node for the given input tensor.
@@ -163,7 +163,7 @@ func (f *Function) blockForDotGeneral(input *Node,
 		batchAxes:       slices.Clone(batchAxes),
 	}
 
-	blocked, _ := f.getOrCreateNode(backends.OpTypeBlockForDotGeneral, blockedShape, []*Node{input}, data)
+	blocked, _ := f.getOrCreateNode(compute.OpTypeBlockForDotGeneral, blockedShape, []*Node{input}, data)
 	return blocked
 }
 

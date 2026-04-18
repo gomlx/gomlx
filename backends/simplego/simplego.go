@@ -13,8 +13,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/notimplemented"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/pkg/errors"
 )
@@ -30,14 +30,14 @@ const BackendName = "go"
 
 // Registers New() as the default constructor for "xla" backend.
 func init() {
-	backends.Register(BackendName, New)
+	compute.Register(BackendName, New)
 }
 
 // GetBackend returns a singleton backend for SimpleGo, created with the default configuration.
 // The backend is only created at the first call of the function.
 //
 // The singleton is never destroyed.
-var GetBackend = sync.OnceValue(func() backends.Backend {
+var GetBackend = sync.OnceValue(func() compute.Backend {
 	backend, err := New("")
 	if err != nil {
 		panic(err)
@@ -47,7 +47,7 @@ var GetBackend = sync.OnceValue(func() backends.Backend {
 
 // New constructs a new SimpleGo Backend.
 // There are no configurations, the string is simply ignored.
-func New(config string) (backends.Backend, error) {
+func New(config string) (compute.Backend, error) {
 	b := newDefaultBackend()
 	parts := strings.SplitSeq(config, ",")
 	for part := range parts {
@@ -118,7 +118,7 @@ func newDefaultBackend() *Backend {
 	return b
 }
 
-// Backend implements the backends.Backend interface.
+// Backend implements the compute.Backend interface.
 type Backend struct {
 	// bufferPools are a map to pools of buffers that can be reused.
 	// The underlying type is map[bufferPoolKey]*sync.Pool.
@@ -145,15 +145,15 @@ type Backend struct {
 	isFinalized bool
 }
 
-// Compile-time check that simplego.Backend implements backends.Backend.
-var _ backends.Backend = &Backend{}
+// Compile-time check that simplego.Backend implements compute.Backend.
+var _ compute.Backend = &Backend{}
 
 // Name returns the short name of the backend. E.g.: "xla" for the Xla/PJRT plugin.
 func (b *Backend) Name() string {
 	return "SimpleGo (go)"
 }
 
-// String implement backends.Backend.
+// String implement compute.Backend.
 func (b *Backend) String() string { return BackendName }
 
 // Description is a longer description of the Backend that can be used to pretty-print.
@@ -167,17 +167,17 @@ func (b *Backend) NumDevices() int {
 }
 
 // DeviceDescription returns a description of the device with the given deviceNum.
-func (b *Backend) DeviceDescription(_ backends.DeviceNum) string {
+func (b *Backend) DeviceDescription(_ compute.DeviceNum) string {
 	return "device#0"
 }
 
 // Capabilities method returns information about what is supported by this backend.
-func (b *Backend) Capabilities() backends.Capabilities {
+func (b *Backend) Capabilities() compute.Capabilities {
 	return Capabilities
 }
 
 // Builder creates a new builder used to construct a named computation.
-func (b *Backend) Builder(name string) backends.Builder {
+func (b *Backend) Builder(name string) compute.Builder {
 	builder := &Builder{
 		Builder: notimplemented.Builder{
 			ErrFn: notImplementedError,
@@ -199,7 +199,7 @@ func (b *Backend) Builder(name string) backends.Builder {
 	return builder
 }
 
-func notImplementedError(opType backends.OpType) error {
+func notImplementedError(opType compute.OpType) error {
 	return errors.Wrapf(notimplemented.NotImplementedError, "sorry, op %q not implemented in SimpleGo (the \"go\" backend) yet "+
 		"-- reach out to github.com/gomlx/gomlx and open an issue if you need this op, this helps us prioritize the work",
 		opType)

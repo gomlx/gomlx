@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
@@ -29,7 +29,7 @@ func TestBuilder_Compile(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, c)
 
-	err = mainFn.Return([]backends.Value{x, c}, nil)
+	err = mainFn.Return([]compute.Value{x, c}, nil)
 	require.NoError(t, err)
 	exec, err := builder.Compile()
 	require.NoError(t, err)
@@ -40,25 +40,25 @@ func TestBuilder_Compile(t *testing.T) {
 	require.NoError(t, err)
 	i1, err := backend.BufferFromFlatData(0, []float32{1, 2, 3}, shapes.Make(dtypes.Float32, 3))
 	require.NoError(t, err)
-	_, err = exec.Execute([]backends.Buffer{i0, i1}, []bool{true, true}, 0)
+	_, err = exec.Execute([]compute.Buffer{i0, i1}, []bool{true, true}, 0)
 	require.Error(t, err)
 
 	// Check that it fails if fed incompatible parameters.
 	i0, err = backend.BufferFromFlatData(0, []float32{1, 2, 3, 4}, shapes.Make(dtypes.Float32, 4))
 	require.NoError(t, err)
-	_, err = exec.Execute([]backends.Buffer{i0}, []bool{true}, 0)
+	_, err = exec.Execute([]compute.Buffer{i0}, []bool{true}, 0)
 	require.Error(t, err)
 
 	i0, err = backend.BufferFromFlatData(0, []uint32{1, 2, 3}, shapes.Make(dtypes.Uint32, 3))
 	require.NoError(t, err)
-	_, err = exec.Execute([]backends.Buffer{i0}, []bool{true}, 0)
+	_, err = exec.Execute([]compute.Buffer{i0}, []bool{true}, 0)
 	require.Error(t, err)
 
 	// Checks correct execution with donated inputs, and that the output reused the input buffer.
 	i0, err = backend.BufferFromFlatData(0, []float32{3, 5, 7}, shapes.Make(dtypes.Float32, 3))
 	require.NoError(t, err)
 	i0Data := i0.(*Buffer).flat.([]float32)
-	outputs, err := exec.Execute([]backends.Buffer{i0}, []bool{true}, 0)
+	outputs, err := exec.Execute([]compute.Buffer{i0}, []bool{true}, 0)
 	require.NoError(t, err)
 	require.Len(t, outputs, 2)
 	require.True(t, &i0Data[0] == &(outputs[0].(*Buffer).flat.([]float32))[0])
@@ -70,7 +70,7 @@ func TestBuilder_Compile(t *testing.T) {
 	// Notice the inputs were donated in the last iteration, so we have to set them again.
 	i0, err = backend.BufferFromFlatData(0, []float32{3, 5, 7}, shapes.Make(dtypes.Float32, 3))
 	require.NoError(t, err)
-	outputs, err = exec.Execute([]backends.Buffer{i0}, []bool{false}, 0)
+	outputs, err = exec.Execute([]compute.Buffer{i0}, []bool{false}, 0)
 	require.NoError(t, err)
 	require.Len(t, outputs, 2)
 	require.True(t, i0.(*Buffer) != outputs[0].(*Buffer))
@@ -81,7 +81,7 @@ func TestBuilder_Compile(t *testing.T) {
 
 func TestGomlxIntegration(t *testing.T) {
 	// Makes sure we get a SimpleGo backend.
-	backend, err := backends.NewWithConfig(BackendName)
+	backend, err := compute.NewWithConfig(BackendName)
 	require.NoError(t, err)
 	require.NotPanics(t, func() { _ = backend.(*Backend) })
 

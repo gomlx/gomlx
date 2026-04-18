@@ -5,15 +5,15 @@ package simplego
 import (
 	"sync"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
 func init() {
-	setNodeExecutor(backends.OpTypeFusedQuantizedDense, priorityTyped, execFusedQuantizedDense)
-	setNodeExecutor(backends.OpTypeQuantizedEmbeddingLookup, priorityTyped, execQuantizedEmbeddingLookup)
+	setNodeExecutor(compute.OpTypeFusedQuantizedDense, priorityTyped, execFusedQuantizedDense)
+	setNodeExecutor(compute.OpTypeQuantizedEmbeddingLookup, priorityTyped, execQuantizedEmbeddingLookup)
 }
 
 // execFusedQuantizedDense implements scalar dequant + matmul + bias + activation.
@@ -27,7 +27,7 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 	data := node.data.(*nodeFusedQuantizedDense)
 
 	// GGML has a different input layout: [x, weights, bias?] (no scales/zeroPoints).
-	if data.scheme == backends.QuantGGML {
+	if data.scheme == compute.QuantGGML {
 		return execFusedQuantizedDenseGGML(backend, node, inputs, data)
 	}
 
@@ -48,7 +48,7 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 	}
 
 	if xBuf.shape.DType != dtypes.Float32 {
-		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: only float32 input supported, got %s", xBuf.shape.DType)
+		return nil, errors.Wrapf(compute.ErrNotImplemented, "FusedQuantizedDense: only float32 input supported, got %s", xBuf.shape.DType)
 	}
 
 	output, err := backend.getBufferForShape(node.shape)
@@ -86,7 +86,7 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 	wFlat := unpackedBuf.flat
 
 	switch data.scheme {
-	case backends.QuantNF4:
+	case compute.QuantNF4:
 		// NF4 weights are nibble indices [0..15]. Supports Int4/Int8/Uint4/Uint8.
 		switch wFlat := wFlat.(type) {
 		case []uint8:
@@ -94,19 +94,19 @@ func execFusedQuantizedDense(backend *Backend, node *Node, inputs []*Buffer, inp
 		case []int8:
 			quantizedDenseNF4(backend, x, wFlat, scales, bias, out, M, K, N, blockSize, numBlocks)
 		default:
-			return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: NF4 unsupported weight type %T", wFlat)
+			return nil, errors.Wrapf(compute.ErrNotImplemented, "FusedQuantizedDense: NF4 unsupported weight type %T", wFlat)
 		}
-	case backends.QuantLinear:
+	case compute.QuantLinear:
 		switch wFlat := wFlat.(type) {
 		case []int8:
 			quantizedDenseLinearInt(backend, x, wFlat, scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
 		case []uint8:
 			quantizedDenseLinearInt(backend, x, wFlat, scales, zeroPoints, bias, out, M, K, N, blockSize, numBlocks)
 		default:
-			return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: Linear unsupported weight type %T", wFlat)
+			return nil, errors.Wrapf(compute.ErrNotImplemented, "FusedQuantizedDense: Linear unsupported weight type %T", wFlat)
 		}
 	default:
-		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedQuantizedDense: unknown quantization scheme %d", data.scheme)
+		return nil, errors.Wrapf(compute.ErrNotImplemented, "FusedQuantizedDense: unknown quantization scheme %d", data.scheme)
 	}
 
 	fusedDenseApplyActivation(backend, out, data.activation)
@@ -300,7 +300,7 @@ func quantizedDenseNF4[T int8 | uint8](backend *Backend, x []float32, weights []
 					blockIdx++
 					nextBlock += blockSize
 				}
-				outSlice[n-nStart] += xVal * backends.NF4LookupTable[uint8(wRow[n])&0x0F] * sRow[blockIdx]
+				outSlice[n-nStart] += xVal * compute.NF4LookupTable[uint8(wRow[n])&0x0F] * sRow[blockIdx]
 			}
 		}
 	})

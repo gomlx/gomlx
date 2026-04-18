@@ -8,10 +8,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -121,7 +121,7 @@ func TestExec(t *testing.T) {
 
 func TestDonate(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 	g := NewGraph(backend, "TestDonate")
 	x := Parameter(g, "x", shapes.Make(dtypes.Float64))
 	p1 := AddScalar(x, 1)
@@ -170,7 +170,7 @@ func TestExecWithSideParams(t *testing.T) {
 
 	scalarBuffer, err := tensors.FromValue(3.0).DonateBuffer(backend, 0)
 	require.NoError(t, err)
-	setSideParams := func(g *Graph, inputBuffers []backends.Buffer, donate []bool) error {
+	setSideParams := func(g *Graph, inputBuffers []compute.Buffer, donate []bool) error {
 		node := g.GetParameterByName(scalarParamName)
 		handle := node.GetParameterHandle()
 		inputBuffers[handle] = scalarBuffer

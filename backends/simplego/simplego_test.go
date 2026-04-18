@@ -7,29 +7,29 @@ import (
 	"os"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
 )
 
-var backend backends.Backend
+var backend compute.Backend
 
 func init() {
 	klog.InitFlags(nil)
 }
 
 func setup() {
-	fmt.Printf("Available backends: %q\n", backends.List())
+	fmt.Printf("Available backends: %q\n", compute.List())
 	// Perform your setup logic here
-	if os.Getenv(backends.ConfigEnvVar) == "" {
-		must.M(os.Setenv(backends.ConfigEnvVar, "go"))
+	if os.Getenv(compute.ConfigEnvVar) == "" {
+		must.M(os.Setenv(compute.ConfigEnvVar, "go"))
 	} else {
-		fmt.Printf("\t$%s=%q\n", backends.ConfigEnvVar, os.Getenv(backends.ConfigEnvVar))
+		fmt.Printf("\t$%s=%q\n", compute.ConfigEnvVar, os.Getenv(compute.ConfigEnvVar))
 	}
-	backend = backends.MustNew()
+	backend = compute.MustNew()
 	fmt.Printf("Backend: %s, %s\n", backend.Name(), backend.Description())
 }
 
@@ -47,12 +47,12 @@ func TestMain(m *testing.M) {
 // buildGraph compiles a backend graph from the given input shapes and build function,
 // and creates input buffers from the provided data. Used by both test and benchmark helpers.
 func buildGraph(inputShapes []shapes.Shape, inputDatas []any,
-	buildFn func(f backends.Function, params []backends.Value) (backends.Value, error),
-) (backends.Executable, []backends.Buffer, error) {
+	buildFn func(f compute.Function, params []compute.Value) (compute.Value, error),
+) (compute.Executable, []compute.Buffer, error) {
 	builder := backend.Builder("test")
 	mainFn := builder.Main()
 
-	params := make([]backends.Value, len(inputShapes))
+	params := make([]compute.Value, len(inputShapes))
 	for i, s := range inputShapes {
 		p, err := mainFn.Parameter(fmt.Sprintf("x%d", i), s, nil)
 		if err != nil {
@@ -66,7 +66,7 @@ func buildGraph(inputShapes []shapes.Shape, inputDatas []any,
 		return nil, nil, err
 	}
 
-	if err := mainFn.Return([]backends.Value{out}, nil); err != nil {
+	if err := mainFn.Return([]compute.Value{out}, nil); err != nil {
 		return nil, nil, err
 	}
 
@@ -75,7 +75,7 @@ func buildGraph(inputShapes []shapes.Shape, inputDatas []any,
 		return nil, nil, err
 	}
 
-	inputs := make([]backends.Buffer, len(inputDatas))
+	inputs := make([]compute.Buffer, len(inputDatas))
 	for i, data := range inputDatas {
 		buf, err := backend.BufferFromFlatData(0, data, inputShapes[i])
 		if err != nil {
@@ -89,11 +89,11 @@ func buildGraph(inputShapes []shapes.Shape, inputDatas []any,
 
 // testBackend builds, compiles, and executes a single-input, single-output backend graph.
 func testBackend(t *testing.T, inputShape shapes.Shape, inputData any,
-	buildFn func(f backends.Function, param backends.Value) (backends.Value, error),
+	buildFn func(f compute.Function, param compute.Value) (compute.Value, error),
 ) *Buffer {
 	t.Helper()
 	return testBackendMultiInput(t, []shapes.Shape{inputShape}, []any{inputData},
-		func(f backends.Function, params []backends.Value) (backends.Value, error) {
+		func(f compute.Function, params []compute.Value) (compute.Value, error) {
 			return buildFn(f, params[0])
 		},
 	)
@@ -101,7 +101,7 @@ func testBackend(t *testing.T, inputShape shapes.Shape, inputData any,
 
 // testBackendMultiInput builds, compiles, and executes a multi-input, single-output backend graph.
 func testBackendMultiInput(t *testing.T, inputShapes []shapes.Shape, inputDatas []any,
-	buildFn func(f backends.Function, params []backends.Value) (backends.Value, error),
+	buildFn func(f compute.Function, params []compute.Value) (compute.Value, error),
 ) *Buffer {
 	t.Helper()
 	exec, inputBufs, err := buildGraph(inputShapes, inputDatas, buildFn)
@@ -122,7 +122,7 @@ func TestDuplicatedOutputNodes(t *testing.T) {
 
 	// Compile with the same node duplicated as outputs
 	// This should create Identity nodes for the duplicate
-	err = mainFn.Return([]backends.Value{node, node}, nil)
+	err = mainFn.Return([]compute.Value{node, node}, nil)
 	require.NoError(t, err)
 	exec, err := builder.Compile()
 	require.NoError(t, err)

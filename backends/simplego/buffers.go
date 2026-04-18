@@ -9,9 +9,9 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
@@ -19,7 +19,7 @@ import (
 var ErrBackendAlreadyFinalized = stderrors.New("backend already exists")
 
 // Compile-time check.
-var _ backends.DataInterface = (*Backend)(nil)
+var _ compute.DataInterface = (*Backend)(nil)
 
 // Buffer for SimpleGo backend holds a shape and a reference to the flat data.
 //
@@ -328,7 +328,7 @@ func (b *Backend) NewBuffer(shape shapes.Shape) *Buffer {
 // can be freed immediately.
 //
 // A isFinalized buffer should never be used again. Preferably, the caller should set its references to it to nil.
-func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) error {
+func (b *Backend) BufferFinalize(backendBuffer compute.Buffer) error {
 	buffer := backendBuffer.(*Buffer) //nolint:errcheck
 	if b.isFinalized {
 		buffer.flat = nil // Accelerates GC.
@@ -358,7 +358,7 @@ func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) error {
 }
 
 // BufferShape returns the shape for the buffer.
-func (b *Backend) BufferShape(buffer backends.Buffer) (shapes.Shape, error) {
+func (b *Backend) BufferShape(buffer compute.Buffer) (shapes.Shape, error) {
 	buf, ok := buffer.(*Buffer)
 	if !ok {
 		return shapes.Invalid(), errors.Errorf("buffer is not a %q backend buffer", BackendName)
@@ -367,7 +367,7 @@ func (b *Backend) BufferShape(buffer backends.Buffer) (shapes.Shape, error) {
 }
 
 // BufferDeviceNum returns the deviceNum for the buffer.
-func (b *Backend) BufferDeviceNum(buffer backends.Buffer) (backends.DeviceNum, error) {
+func (b *Backend) BufferDeviceNum(buffer compute.Buffer) (compute.DeviceNum, error) {
 	_, ok := buffer.(*Buffer)
 	if !ok {
 		return 0, errors.Errorf("buffer is not a %q backend buffer", BackendName)
@@ -376,10 +376,10 @@ func (b *Backend) BufferDeviceNum(buffer backends.Buffer) (backends.DeviceNum, e
 }
 
 // BufferToFlatData transfers the flat values of the buffer to the Go flat array.
-// The slice flat must have the exact number of elements required to store the backends.Buffer shape.
+// The slice flat must have the exact number of elements required to store the compute.Buffer shape.
 //
 // See also FlatDataToBuffer, BufferShape, and shapes.Shape.Size.
-func (b *Backend) BufferToFlatData(backendBuffer backends.Buffer, flat any) error {
+func (b *Backend) BufferToFlatData(backendBuffer compute.Buffer, flat any) error {
 	buf, ok := backendBuffer.(*Buffer)
 	if !ok {
 		return errors.Errorf("buffer is not a %q backend buffer", BackendName)
@@ -389,8 +389,8 @@ func (b *Backend) BufferToFlatData(backendBuffer backends.Buffer, flat any) erro
 }
 
 // BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)
-// to the deviceNum, and returns the corresponding backends.Buffer.
-func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) (backends.Buffer,
+// to the deviceNum, and returns the corresponding compute.Buffer.
+func (b *Backend) BufferFromFlatData(deviceNum compute.DeviceNum, flat any, shape shapes.Shape) (compute.Buffer,
 	error) {
 	if b.isFinalized {
 		return nil, errors.WithStack(ErrBackendAlreadyFinalized)
@@ -440,7 +440,7 @@ func (b *Backend) HasSharedBuffers() bool {
 //
 // It returns a handle to the buffer and a slice of the corresponding data type pointing
 // to the shared data.
-func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer,
+func (b *Backend) NewSharedBuffer(deviceNum compute.DeviceNum, shape shapes.Shape) (buffer compute.Buffer,
 	flat any, err error) {
 	if b.isFinalized {
 		return nil, nil, errors.Errorf("backend is already finalized")
@@ -463,7 +463,7 @@ func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Sha
 // shares CPU memory.
 //
 // The returned slice becomes invalid after the buffer is destroyed.
-func (b *Backend) BufferData(buffer backends.Buffer) (flat any, err error) {
+func (b *Backend) BufferData(buffer compute.Buffer) (flat any, err error) {
 	if b.isFinalized {
 		return nil, errors.Errorf("backend is already finalized")
 	}
@@ -474,9 +474,9 @@ func (b *Backend) BufferData(buffer backends.Buffer) (flat any, err error) {
 	return buf.flat, nil
 }
 
-// BufferCopyToDevice implements the backends.Backend interface.
-func (b *Backend) BufferCopyToDevice(_ backends.Buffer, _ backends.DeviceNum) (
-	bufferOnDevice backends.Buffer, err error) {
+// BufferCopyToDevice implements the compute.Backend interface.
+func (b *Backend) BufferCopyToDevice(_ compute.Buffer, _ compute.DeviceNum) (
+	bufferOnDevice compute.Buffer, err error) {
 	return nil, errors.Errorf("backend %q: multi-device not supported on this backend",
 		BackendName)
 }

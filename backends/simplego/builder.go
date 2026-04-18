@@ -5,10 +5,10 @@ package simplego
 import (
 	"reflect"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/notimplemented"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/pkg/errors"
 )
@@ -27,21 +27,21 @@ type Builder struct {
 }
 
 // Compile-time check.
-var _ backends.Builder = (*Builder)(nil)
+var _ compute.Builder = (*Builder)(nil)
 
-// Name implements backends.Builder.
+// Name implements compute.Builder.
 func (b *Builder) Name() string {
 	return b.name
 }
 
 // Main returns the main function of this computation.
-func (b *Builder) Main() backends.Function {
+func (b *Builder) Main() compute.Function {
 	return b.mainFn
 }
 
 // NewFunction creates a new named function within this builder.
 // Named functions can be called with Call() and are independent of the main function.
-func (b *Builder) NewFunction(name string) (backends.Function, error) {
+func (b *Builder) NewFunction(name string) (compute.Function, error) {
 	if b == nil {
 		return nil, errors.Errorf("Builder is nil")
 	}
@@ -63,8 +63,8 @@ func (b *Builder) NewFunction(name string) (backends.Function, error) {
 	return f, nil
 }
 
-// Compile implements backends.Builder.
-func (b *Builder) Compile() (backends.Executable, error) {
+// Compile implements compute.Builder.
+func (b *Builder) Compile() (compute.Executable, error) {
 	if !b.mainFn.returned {
 		return nil, errors.Errorf("Main function must have Return() called before Compile()")
 	}
@@ -133,7 +133,7 @@ type Node struct {
 	capturedInputs [][]*Node
 
 	// shape of the output.
-	opType  backends.OpType
+	opType  compute.OpType
 	shape   shapes.Shape
 	builder *Builder
 
@@ -152,9 +152,9 @@ type Node struct {
 	data any
 }
 
-// MultiOutputValues converts a multi-output node's outputs to []backends.Value.
-func (node *Node) MultiOutputValues() []backends.Value {
-	outputs := make([]backends.Value, len(node.multiOutputsNodes))
+// MultiOutputValues converts a multi-output node's outputs to []compute.Value.
+func (node *Node) MultiOutputValues() []compute.Value {
+	outputs := make([]compute.Value, len(node.multiOutputsNodes))
 	for i, outNode := range node.multiOutputsNodes {
 		outputs[i] = outNode
 	}
@@ -168,7 +168,7 @@ func (n *Node) IsMultiOutputs() bool {
 
 // checkValues validates that the values are from SimpleGo and from this builder.
 // It also checks whether the Builder is not yet compiled.
-func (b *Builder) checkValues(opType string, values ...backends.Value) ([]*Node, error) {
+func (b *Builder) checkValues(opType string, values ...compute.Value) ([]*Node, error) {
 	if b == nil {
 		return nil, errors.Errorf("%s: Builder is nil (!?), cannot build a graph", opType)
 	}
@@ -204,7 +204,7 @@ func (b *Builder) checkValues(opType string, values ...backends.Value) ([]*Node,
 }
 
 // OpShape returns the shape of a computation Op.
-func (b *Builder) OpShape(op backends.Value) (shapes.Shape, error) {
+func (b *Builder) OpShape(op compute.Value) (shapes.Shape, error) {
 	inputs, err := b.checkValues("OpShape", op)
 	if err != nil {
 		return shapes.Invalid(), err

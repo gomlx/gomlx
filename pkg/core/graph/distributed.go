@@ -5,8 +5,8 @@ package graph
 import (
 	"slices"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/sets"
@@ -52,7 +52,7 @@ func (g *Graph) SetAutoSharding(meshes ...*distributed.DeviceMesh) error {
 //
 // The default assignment is simply using the devices in the order they were added to the backend
 // (sequential DeviceNum values, starting from 0).
-func (g *Graph) SetDeviceAssignment(devices []backends.DeviceNum) error {
+func (g *Graph) SetDeviceAssignment(devices []compute.DeviceNum) error {
 	if !g.IsValid() {
 		return errors.New("cannot set device assignment on an invalid graph")
 	}
@@ -67,8 +67,8 @@ func (g *Graph) SetDeviceAssignment(devices []backends.DeviceNum) error {
 		return errors.Errorf("number of devices (%d) doesn't match the number of devices in the largest mesh (%d)",
 			len(devices), g.numDevices)
 	}
-	numDevicesAvailable := backends.DeviceNum(g.backend.NumDevices())
-	seen := sets.Make[backends.DeviceNum]()
+	numDevicesAvailable := compute.DeviceNum(g.backend.NumDevices())
+	seen := sets.Make[compute.DeviceNum]()
 	for _, device := range devices {
 		if device >= numDevicesAvailable {
 			return errors.Errorf("device number (%d) exceeds the number of devices in the backend (%d)",
@@ -107,7 +107,7 @@ func (g *Graph) SetSPMD(mesh *distributed.DeviceMesh) error {
 	return nil
 }
 
-// setupBuilderDistribution should be called as soon as the backends.Builder object is created,
+// setupBuilderDistribution should be called as soon as the compute.Builder object is created,
 // and it will set it up with the Graph configuration for distribution.
 func (g *Graph) setupBuilderDistribution() error {
 	switch g.distStrategy {
@@ -123,7 +123,7 @@ func (g *Graph) setupBuilderDistribution() error {
 	case distributed.AutoSharding:
 		bMeshes := xslices.Map(
 			g.deviceMeshes,
-			func(m *distributed.DeviceMesh) backends.Mesh { return m.ToBackendsMesh() },
+			func(m *distributed.DeviceMesh) compute.Mesh { return m.ToBackendsMesh() },
 		)
 		err := g.builder.DistributedAutoSharding(bMeshes...)
 		if err != nil {
@@ -135,7 +135,7 @@ func (g *Graph) setupBuilderDistribution() error {
 
 	// Create a default device assignment if numDevices > 1 -- computations for one device only may be portable.
 	if g.deviceAssignment == nil && g.numDevices > 1 {
-		g.deviceAssignment = xslices.Iota(backends.DeviceNum(0), g.numDevices)
+		g.deviceAssignment = xslices.Iota(compute.DeviceNum(0), g.numDevices)
 	}
 	if g.deviceAssignment != nil {
 		err := g.builder.DeviceAssignment(g.deviceAssignment...)
@@ -206,7 +206,7 @@ func (g *Graph) Distributed() *DistributedOps {
 //
 // For example:
 //
-//	g.Distributed().Along("data").AllReduceOne(x, backends.ReduceOpSum)
+//	g.Distributed().Along("data").AllReduceOne(x, compute.ReduceOpSum)
 //
 // This will perform an AllReduceOne along the "data" axis of the mesh.
 func (d *DistributedOps) Along(meshAxes ...string) *DistributedOps {
@@ -221,7 +221,7 @@ func (d *DistributedOps) Along(meshAxes ...string) *DistributedOps {
 //
 // If no device axes were specified via DistributedOps.Along(), it performs the operation
 // across *all* devices in the mesh.
-func (d *DistributedOps) AllReduce(operands []*Node, reductionType backends.ReduceOpType) []*Node {
+func (d *DistributedOps) AllReduce(operands []*Node, reductionType compute.ReduceOpType) []*Node {
 	if len(operands) == 0 {
 		return nil // Or panic
 	}
@@ -243,6 +243,6 @@ func (d *DistributedOps) AllReduce(operands []*Node, reductionType backends.Redu
 //
 // If no device axes were specified via DistributedOps.Along(), it performs the operation
 // across *all* devices in the mesh.
-func (d *DistributedOps) AllReduceOne(input *Node, reductionType backends.ReduceOpType) *Node {
+func (d *DistributedOps) AllReduceOne(input *Node, reductionType compute.ReduceOpType) *Node {
 	return d.AllReduce([]*Node{input}, reductionType)[0]
 }

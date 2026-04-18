@@ -6,20 +6,20 @@ import (
 	"math"
 	"sync"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
 func init() {
-	setNodeExecutor(backends.OpTypeFusedSoftmax, priorityTyped, execFusedSoftmax)
-	setNodeExecutor(backends.OpTypeFusedGelu, priorityTyped, execFusedGelu)
-	setNodeExecutor(backends.OpTypeFusedLayerNorm, priorityTyped, execFusedLayerNorm)
-	setNodeExecutor(backends.OpTypeFusedDense, priorityTyped, execFusedDense)
-	setNodeExecutor(backends.OpTypeFusedScaledDotProductAttention, priorityTyped, execFusedScaledDotProductAttention)
+	setNodeExecutor(compute.OpTypeFusedSoftmax, priorityTyped, execFusedSoftmax)
+	setNodeExecutor(compute.OpTypeFusedGelu, priorityTyped, execFusedGelu)
+	setNodeExecutor(compute.OpTypeFusedLayerNorm, priorityTyped, execFusedLayerNorm)
+	setNodeExecutor(compute.OpTypeFusedDense, priorityTyped, execFusedDense)
+	setNodeExecutor(compute.OpTypeFusedScaledDotProductAttention, priorityTyped, execFusedScaledDotProductAttention)
 	// Quantized fused executors registered in exec_fused_quantized.go init().
-	multiOutputsNodeExecutors[backends.OpTypeFusedAttentionQKVProjection] = execFusedAttentionQKVProjection
+	multiOutputsNodeExecutors[compute.OpTypeFusedAttentionQKVProjection] = execFusedAttentionQKVProjection
 }
 
 // FusedSoftmax =====================================================================================================
@@ -41,7 +41,7 @@ func execFusedSoftmax(backend *Backend, node *Node, inputs []*Buffer, _ []bool) 
 	case dtypes.Float64:
 		fusedSoftmax(input.flat.([]float64), output.flat.([]float64), axis, node.shape)
 	default:
-		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedSoftmax: dtype %s", input.shape.DType)
+		return nil, errors.Wrapf(compute.ErrNotImplemented, "FusedSoftmax: dtype %s", input.shape.DType)
 	}
 	return output, nil
 }
@@ -123,7 +123,7 @@ func execFusedGelu(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*B
 			parallelizeChunked(backend, input.flat.([]float64), output.flat.([]float64), geluApproxChunk[float64])
 		}
 	default:
-		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedGelu: dtype %s", input.shape.DType)
+		return nil, errors.Wrapf(compute.ErrNotImplemented, "FusedGelu: dtype %s", input.shape.DType)
 	}
 	return output, nil
 }
@@ -194,7 +194,7 @@ func execFusedLayerNorm(backend *Backend, node *Node, inputs []*Buffer, _ []bool
 	case dtypes.Float64:
 		layerNorm[float64](input, output, gamma, beta, data.axes, data.epsilon)
 	default:
-		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedLayerNorm: dtype %s", input.shape.DType)
+		return nil, errors.Wrapf(compute.ErrNotImplemented, "FusedLayerNorm: dtype %s", input.shape.DType)
 	}
 	return output, nil
 }
@@ -363,7 +363,7 @@ func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 	data := node.data.(*nodeFusedDense)
 
 	// If no bias and no activation, just return the matmul result directly.
-	if bias == nil && data.activation == backends.ActivationNone {
+	if bias == nil && data.activation == compute.ActivationNone {
 		if inputsOwned[0] {
 			inputs[0] = nil // Signal to executor that we reused the input.
 			return matmul, nil
@@ -404,7 +404,7 @@ func execFusedDense(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 		}
 		fusedDenseApplyActivation(backend, outData, data.activation)
 	default:
-		return nil, errors.Wrapf(backends.ErrNotImplemented, "FusedDense: dtype %s", output.shape.DType)
+		return nil, errors.Wrapf(compute.ErrNotImplemented, "FusedDense: dtype %s", output.shape.DType)
 	}
 	return output, nil
 }
@@ -418,30 +418,30 @@ func fusedDenseAddBias[T float32 | float64](output, bias []T) {
 	}
 }
 
-func fusedDenseApplyActivation[T float32 | float64](backend *Backend, data []T, activation backends.ActivationType) {
+func fusedDenseApplyActivation[T float32 | float64](backend *Backend, data []T, activation compute.ActivationType) {
 	switch activation {
-	case backends.ActivationNone:
+	case compute.ActivationNone:
 		// No-op.
-	case backends.ActivationGelu:
+	case compute.ActivationGelu:
 		parallelizeChunked(backend, data, data, geluChunk[T]) // in-place
-	case backends.ActivationRelu:
+	case compute.ActivationRelu:
 		for i, x := range data {
 			if x < 0 {
 				data[i] = 0
 			}
 		}
-	case backends.ActivationSilu:
+	case compute.ActivationSilu:
 		for i, x := range data {
 			data[i] = x / (1.0 + T(math.Exp(float64(-x))))
 		}
-	case backends.ActivationHardSwish:
+	case compute.ActivationHardSwish:
 		const scale = 1.0 / 6.0
 		const bias = 0.5
 		for i, x := range data {
 			shapeX := min(max(x*scale+bias, 0), 1)
 			data[i] = x * shapeX
 		}
-	case backends.ActivationTanh:
+	case compute.ActivationTanh:
 		for i, x := range data {
 			data[i] = T(math.Tanh(float64(x)))
 		}
@@ -473,7 +473,7 @@ func execFusedScaledDotProductAttention(backend *Backend, node *Node, inputs []*
 	// For rank-4 BSHD masks [batch, seq, heads, kvLen], transpose to BHSD so that
 	// per-head mask data is contiguous [seqLen, kvLen]. The mask is small (no headDim
 	// axis), so this is cheap. Rank ≤ 3 masks have no head dimension and work as-is.
-	if data.axesLayout == backends.AxesLayoutBSHD && mask != nil && mask.shape.Rank() == 4 {
+	if data.axesLayout == compute.AxesLayoutBSHD && mask != nil && mask.shape.Rank() == 4 {
 		var err error
 		mask, err = transposeBuffer(backend, mask, []int{0, 2, 1, 3})
 		if err != nil {
@@ -727,7 +727,7 @@ func sdpaMultiHeadGeneric[T float32 | float64](query, key, value, mask, output *
 	var qBatchStride, kvBatchStride int // element stride between consecutive batches
 	var qHeadStride, kvHeadStride int   // element stride between consecutive heads at seq=0
 
-	if data.axesLayout == backends.AxesLayoutBSHD {
+	if data.axesLayout == compute.AxesLayoutBSHD {
 		// [batch, seq, heads, dim]
 		seqLen = dims[1]
 		headDim = dims[3]

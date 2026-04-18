@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/sets"
@@ -19,7 +19,7 @@ import (
 )
 
 // MainName is the name of the main function -- the default function created when the Graph is created.
-const MainName = backends.MainName
+const MainName = compute.MainName
 
 // Function represents a function in the graph.
 //
@@ -30,7 +30,7 @@ const MainName = backends.MainName
 // See NewClosure and NewFunction functions.
 type Function struct {
 	graph       *Graph
-	backendFunc backends.Function
+	backendFunc compute.Function
 
 	name     string
 	parent   *Function
@@ -163,8 +163,8 @@ func (f *Function) Return(outputs []*Node, outputShardings []*distributed.Shardi
 		}()
 	}
 
-	outputsOps := xslices.Map(outputs, func(node *Node) backends.Value { return node.outputOps[0] })
-	backendShardings := xslices.Map(outputShardings, func(s *distributed.ShardingSpec) *backends.ShardingSpec {
+	outputsOps := xslices.Map(outputs, func(node *Node) compute.Value { return node.outputOps[0] })
+	backendShardings := xslices.Map(outputShardings, func(s *distributed.ShardingSpec) *compute.ShardingSpec {
 		return s.ToBackendsSpec()
 	})
 
@@ -393,7 +393,7 @@ func NewFunctionWithSharding(g *Graph, name string, funcDef func(g *Graph) ([]*N
 // We use a large number to avoid conflict with generated NodeTypes in gen_backend_ops.go.
 const NodeTypeCall NodeType = 1000
 
-// nodeInputsCall holds the inputs used for the call to backends.Function.Call.
+// nodeInputsCall holds the inputs used for the call to compute.Function.Call.
 type nodeInputsCall struct {
 	f      *Function
 	inputs []*Node
@@ -449,7 +449,7 @@ func (f *Function) Call(inputs ...*Node) []*Node {
 	}
 
 	// Prepare backend inputs
-	inputOps := make([]backends.Value, len(inputs))
+	inputOps := make([]compute.Value, len(inputs))
 	for i, n := range inputs {
 		inputOps[i] = n.outputOps[0]
 	}

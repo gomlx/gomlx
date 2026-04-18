@@ -5,9 +5,9 @@ package simplego
 import (
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 )
 
 // mockComparableData implements NodeDataComparable for testing.
@@ -34,20 +34,20 @@ func TestMakeNodeDedupKey(t *testing.T) {
 	mainFn := b.Main().(*Function)
 	shape := shapes.Make(dtypes.F32, 2, 3)
 
-	node1 := mainFn.newNode(backends.OpTypeAdd, shape)
-	node2 := mainFn.newNode(backends.OpTypeMul, shape)
+	node1 := mainFn.newNode(compute.OpTypeAdd, shape)
+	node2 := mainFn.newNode(compute.OpTypeMul, shape)
 
 	tests := []struct {
 		name       string
-		opType     backends.OpType
+		opType     compute.OpType
 		inputs     []*Node
 		wantCount  int
 		wantHasPtr bool // whether firstInput should be non-zero
 	}{
-		{"no inputs", backends.OpTypeConstant, nil, 0, false},
-		{"empty inputs", backends.OpTypeConstant, []*Node{}, 0, false},
-		{"one input", backends.OpTypeNeg, []*Node{node1}, 1, true},
-		{"two inputs", backends.OpTypeAdd, []*Node{node1, node2}, 2, true},
+		{"no inputs", compute.OpTypeConstant, nil, 0, false},
+		{"empty inputs", compute.OpTypeConstant, []*Node{}, 0, false},
+		{"one input", compute.OpTypeNeg, []*Node{node1}, 1, true},
+		{"two inputs", compute.OpTypeAdd, []*Node{node1, node2}, 2, true},
 	}
 
 	for _, tt := range tests {
@@ -70,14 +70,14 @@ func TestMakeNodeDedupKey(t *testing.T) {
 	}
 
 	// Verify same inputs produce same key
-	key1 := makeNodeDedupKey(backends.OpTypeAdd, []*Node{node1, node2})
-	key2 := makeNodeDedupKey(backends.OpTypeAdd, []*Node{node1, node2})
+	key1 := makeNodeDedupKey(compute.OpTypeAdd, []*Node{node1, node2})
+	key2 := makeNodeDedupKey(compute.OpTypeAdd, []*Node{node1, node2})
 	if key1 != key2 {
 		t.Error("same inputs should produce identical keys")
 	}
 
 	// Verify different first input produces different key
-	key3 := makeNodeDedupKey(backends.OpTypeAdd, []*Node{node2, node1})
+	key3 := makeNodeDedupKey(compute.OpTypeAdd, []*Node{node2, node1})
 	if key1 == key3 {
 		t.Error("different first input should produce different key")
 	}

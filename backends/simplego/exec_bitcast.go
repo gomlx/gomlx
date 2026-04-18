@@ -5,11 +5,11 @@ package simplego
 import (
 	"reflect"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 )
 
 func init() {
-	setNodeExecutor(backends.OpTypeBitcast, priorityGeneric, execBitcast)
+	setNodeExecutor(compute.OpTypeBitcast, priorityGeneric, execBitcast)
 }
 
 // execBitcast implements Bitcast as a pure bit reinterpretation: the raw bytes are

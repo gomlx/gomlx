@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -124,7 +124,7 @@ func TestGradientFFT(t *testing.T) {
 
 // realFftExample returns (x, y) where: x is a sinusoidal curve with numPoints points,
 // and with `frequency` full cycles; y is the RealFFT(x).
-func realFftExample(backend backends.Backend, realDType dtypes.DType, numPoints int, frequency float64) (x, y *tensors.Tensor) {
+func realFftExample(backend compute.Backend, realDType dtypes.DType, numPoints int, frequency float64) (x, y *tensors.Tensor) {
 	e := MustNewExec(backend, func(g *Graph) (x, y *Node) {
 		x = Iota(g, shapes.Make(realDType, 1, numPoints), 1)
 		x = MulScalar(x, 2.0*math.Pi*frequency/float64(numPoints))

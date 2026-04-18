@@ -3,10 +3,10 @@
 package graph
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
@@ -32,7 +32,7 @@ func FFT(operand *Node, fftLengths ...int) *Node {
 	if len(fftLengths) == 0 {
 		fftLengths = []int{operand.Shape().Dim(-1)}
 	}
-	return backendFFT(operand, backends.FFTForward, fftLengths)
+	return backendFFT(operand, compute.FFTForward, fftLengths)
 }
 
 // InverseFFT computes an inverse fast-fourier transformation of the operand, which is expected to be complex.
@@ -54,7 +54,7 @@ func InverseFFT(operand *Node, fftLengths ...int) *Node {
 	if len(fftLengths) == 0 {
 		fftLengths = []int{operand.Shape().Dim(-1)}
 	}
-	return backendFFT(operand, backends.FFTInverse, fftLengths)
+	return backendFFT(operand, compute.FFTInverse, fftLengths)
 }
 
 // RealFFT computes a forward 1D fast-fourier transformation on a real (float) input.
@@ -79,7 +79,7 @@ func RealFFT(operand *Node, fftLengths ...int) *Node {
 	if len(fftLengths) == 0 {
 		fftLengths = []int{operand.Shape().Dim(-1)}
 	}
-	return backendFFT(operand, backends.FFTForwardReal, fftLengths)
+	return backendFFT(operand, compute.FFTForwardReal, fftLengths)
 }
 
 // InverseRealFFT computes the inverse of a forward 1D fast-fourier transformation.
@@ -102,22 +102,22 @@ func InverseRealFFT(operand *Node, fftLengths ...int) *Node {
 		lastDim := operand.Shape().Dim(-1)
 		fftLengths = []int{(lastDim - 1) * 2}
 	}
-	return backendFFT(operand, backends.FFTInverseReal, fftLengths)
+	return backendFFT(operand, compute.FFTInverseReal, fftLengths)
 }
 
 // fftVJP implements the auto-grad for all the FFT variations.
 func fftVJP(node, v *Node, _ shapes.Shape) []*Node {
 	params := node.inputs.(*nodeInputsFFT)
 	switch params.fftType {
-	case backends.FFTForward:
+	case compute.FFTForward:
 		size := float64(xslices.At(v.Shape().Dimensions, -1))
 		return []*Node{MulScalar(InverseFFT(v), size)}
-	case backends.FFTInverse:
+	case compute.FFTInverse:
 		invSize := 1.0 / float64(xslices.At(v.Shape().Dimensions, -1))
 		return []*Node{MulScalar(FFT(v), invSize)}
-	case backends.FFTForwardReal:
+	case compute.FFTForwardReal:
 		return realFftVJP(node, v)
-	case backends.FFTInverseReal:
+	case compute.FFTInverseReal:
 		return inverseRealFftVJP(node, v)
 	}
 
@@ -161,7 +161,7 @@ func realFftVJP(node, v *Node) []*Node {
 	// The gradient of RFFT is the IRFFT of the incoming gradient times a scaling
 	// factor, plus some additional terms to make up for the components dropped
 	// due to Hermitian symmetry.
-	irFft := backendFFT(v, backends.FFTInverseReal, fftLength)
+	irFft := backendFFT(v, compute.FFTInverseReal, fftLength)
 	newVJP := MulScalar(Add(MulScalar(irFft, float64(operandLastDim)), Real(extraTerms)), 0.5)
 	return []*Node{newVJP}
 }

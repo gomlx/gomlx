@@ -8,9 +8,9 @@ package simplego
 import (
 	"math"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/float16"
-	"github.com/gomlx/gomlx/backends"
 )
 
 // Float16 unary operation helpers
@@ -156,25 +156,25 @@ func makeFloat16UnaryWrapper(
 func init() {
 	// Register Float16 unary wrappers with priorityTyped.
 	// These wrap the generic executors (from exec_unary.go) to handle Float16 dtype.
-	setNodeExecutor(backends.OpTypeNeg, priorityTyped, makeFloat16UnaryWrapper(execNeg, execNegF16))
-	setNodeExecutor(backends.OpTypeAbs, priorityTyped, makeFloat16UnaryWrapper(execAbs, execAbsF16))
-	setNodeExecutor(backends.OpTypeSign, priorityTyped, makeFloat16UnaryWrapper(execSign, execSignF16))
-	setNodeExecutor(backends.OpTypeExp, priorityTyped, makeFloat16UnaryWrapper(execExp, execExpF16))
-	setNodeExecutor(backends.OpTypeExpm1, priorityTyped, makeFloat16UnaryWrapper(execExpm1, execExpm1F16))
-	setNodeExecutor(backends.OpTypeLog, priorityTyped, makeFloat16UnaryWrapper(execLog, execLogF16))
-	setNodeExecutor(backends.OpTypeLog1p, priorityTyped, makeFloat16UnaryWrapper(execLog1p, execLog1pF16))
-	setNodeExecutor(backends.OpTypeCeil, priorityTyped, makeFloat16UnaryWrapper(execCeil, execCeilF16))
-	setNodeExecutor(backends.OpTypeFloor, priorityTyped, makeFloat16UnaryWrapper(execFloor, execFloorF16))
-	setNodeExecutor(backends.OpTypeRound, priorityTyped, makeFloat16UnaryWrapper(execRound, execRoundF16))
-	setNodeExecutor(backends.OpTypeRsqrt, priorityTyped, makeFloat16UnaryWrapper(execRsqrt, execRsqrtF16))
-	setNodeExecutor(backends.OpTypeCos, priorityTyped, makeFloat16UnaryWrapper(execCos, execCosF16))
-	setNodeExecutor(backends.OpTypeSin, priorityTyped, makeFloat16UnaryWrapper(execSin, execSinF16))
-	setNodeExecutor(backends.OpTypeTanh, priorityTyped, makeFloat16UnaryWrapper(execTanh, execTanhF16))
-	setNodeExecutor(backends.OpTypeLogistic, priorityTyped, makeFloat16UnaryWrapper(execLogistic, execLogisticF16))
-	setNodeExecutor(backends.OpTypeErf, priorityTyped, makeFloat16UnaryWrapper(execErf, execErfF16))
+	setNodeExecutor(compute.OpTypeNeg, priorityTyped, makeFloat16UnaryWrapper(execNeg, execNegF16))
+	setNodeExecutor(compute.OpTypeAbs, priorityTyped, makeFloat16UnaryWrapper(execAbs, execAbsF16))
+	setNodeExecutor(compute.OpTypeSign, priorityTyped, makeFloat16UnaryWrapper(execSign, execSignF16))
+	setNodeExecutor(compute.OpTypeExp, priorityTyped, makeFloat16UnaryWrapper(execExp, execExpF16))
+	setNodeExecutor(compute.OpTypeExpm1, priorityTyped, makeFloat16UnaryWrapper(execExpm1, execExpm1F16))
+	setNodeExecutor(compute.OpTypeLog, priorityTyped, makeFloat16UnaryWrapper(execLog, execLogF16))
+	setNodeExecutor(compute.OpTypeLog1p, priorityTyped, makeFloat16UnaryWrapper(execLog1p, execLog1pF16))
+	setNodeExecutor(compute.OpTypeCeil, priorityTyped, makeFloat16UnaryWrapper(execCeil, execCeilF16))
+	setNodeExecutor(compute.OpTypeFloor, priorityTyped, makeFloat16UnaryWrapper(execFloor, execFloorF16))
+	setNodeExecutor(compute.OpTypeRound, priorityTyped, makeFloat16UnaryWrapper(execRound, execRoundF16))
+	setNodeExecutor(compute.OpTypeRsqrt, priorityTyped, makeFloat16UnaryWrapper(execRsqrt, execRsqrtF16))
+	setNodeExecutor(compute.OpTypeCos, priorityTyped, makeFloat16UnaryWrapper(execCos, execCosF16))
+	setNodeExecutor(compute.OpTypeSin, priorityTyped, makeFloat16UnaryWrapper(execSin, execSinF16))
+	setNodeExecutor(compute.OpTypeTanh, priorityTyped, makeFloat16UnaryWrapper(execTanh, execTanhF16))
+	setNodeExecutor(compute.OpTypeLogistic, priorityTyped, makeFloat16UnaryWrapper(execLogistic, execLogisticF16))
+	setNodeExecutor(compute.OpTypeErf, priorityTyped, makeFloat16UnaryWrapper(execErf, execErfF16))
 
 	// IsFinite is special - returns bool
-	setNodeExecutor(backends.OpTypeIsFinite, priorityTyped, func(backend *Backend, node *Node, inputs []*Buffer,
+	setNodeExecutor(compute.OpTypeIsFinite, priorityTyped, func(backend *Backend, node *Node, inputs []*Buffer,
 		inputsOwned []bool) (*Buffer, error) {
 		if inputs[0].shape.DType != dtypes.Float16 {
 			return execIsFinite(backend, node, inputs, inputsOwned)
