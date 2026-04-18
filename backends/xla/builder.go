@@ -3,12 +3,12 @@
 package xla
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	"github.com/gomlx/go-xla/pkg/types/shardy"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -40,7 +40,7 @@ type Builder struct {
 // reductionKey for the cache of inlined functions for reductions.
 type reductionKey struct {
 	dtype  dtypes.DType
-	opType backends.OpType
+	opType compute.OpType
 }
 
 // argMinMaxKey for the cache of inlined functions for ArgMinMax.
@@ -49,10 +49,10 @@ type argMinMaxKey struct {
 	isMin                    bool
 }
 
-var _ backends.Builder = (*Builder)(nil)
+var _ compute.Builder = (*Builder)(nil)
 
 // Builder creates a new builder used to define a new computation.
-func (backend *Backend) Builder(name string) backends.Builder {
+func (backend *Backend) Builder(name string) compute.Builder {
 	if err := backend.CheckValid(); err != nil {
 		klog.Error(err)
 		return nil
@@ -75,20 +75,20 @@ func (b *Builder) Name() string {
 }
 
 // Main returns the main function of this computation.
-func (b *Builder) Main() backends.Function {
+func (b *Builder) Main() compute.Function {
 	if b.mainFn == nil {
 		b.mainFn = &Function{
 			builder: b,
 			fn:      b.builder.Main(),
-			name:    backends.MainName,
+			name:    compute.MainName,
 		}
-		b.topLevelFns[backends.MainName] = b.mainFn
+		b.topLevelFns[compute.MainName] = b.mainFn
 	}
 	return b.mainFn
 }
 
 // NewFunction creates a new named function within this builder.
-func (b *Builder) NewFunction(name string) (backends.Function, error) {
+func (b *Builder) NewFunction(name string) (compute.Function, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (b *Builder) NewFunction(name string) (backends.Function, error) {
 	return f, nil
 }
 
-// Node represents the output of an operation and implements a "backends.Op" interface.
+// Node represents the output of an operation and implements a "compute.Op" interface.
 type Node struct {
 	value   *stablehlo.Value
 	shape   shapes.Shape
@@ -121,9 +121,9 @@ func (b *Builder) CheckValid() error {
 	return b.backend.CheckValid()
 }
 
-// verifyAndCastValues sanity checks that the values (backends.Op) are valid and created with this builder.
+// verifyAndCastValues sanity checks that the values (compute.Op) are valid and created with this builder.
 // It returns the underlying *Node of the values.
-func (b *Builder) verifyAndCastValues(name string, values ...backends.Value) ([]*Node, error) {
+func (b *Builder) verifyAndCastValues(name string, values ...compute.Value) ([]*Node, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (b *Builder) verifyAndCastValues(name string, values ...backends.Value) ([]
 }
 
 // OpShape returns the shape of a computation Op.
-func (b *Builder) OpShape(op backends.Value) (shapes.Shape, error) {
+func (b *Builder) OpShape(op compute.Value) (shapes.Shape, error) {
 	if err := b.CheckValid(); err != nil {
 		return shapes.Invalid(), err
 	}
@@ -189,7 +189,7 @@ func (b *Builder) DistributedSPMD(numDevices int) error {
 // if appropriate.
 //
 // [1] https://github.com/openxla/shardy
-func (b *Builder) DistributedAutoSharding(meshes ...backends.Mesh) error {
+func (b *Builder) DistributedAutoSharding(meshes ...compute.Mesh) error {
 	if err := b.CheckValid(); err != nil {
 		return err
 	}
@@ -227,7 +227,7 @@ func (b *Builder) meshByName(meshName string) (*shardy.DeviceMesh, error) {
 	return nil, errors.Errorf("mesh %q not found", meshName)
 }
 
-func (b *Builder) shardingSpecToShardy(sharding *backends.ShardingSpec) (*shardy.ShardingSpec, error) {
+func (b *Builder) shardingSpecToShardy(sharding *compute.ShardingSpec) (*shardy.ShardingSpec, error) {
 	if sharding == nil {
 		return nil, nil
 	}
@@ -251,7 +251,7 @@ func (b *Builder) shardingSpecToShardy(sharding *backends.ShardingSpec) (*shardy
 //
 // The number of devices must match the number of devices in the computation.
 // Usually, that is 1. But if DistributedSPMD was used, it can be more.
-func (b *Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
+func (b *Builder) DeviceAssignment(devices ...compute.DeviceNum) error {
 	numReplicas := max(1, b.numDevices)
 	if len(devices) != numReplicas {
 		return errors.Errorf("DeviceAssignment expects %d devices, got %d", numReplicas, len(devices))
@@ -269,7 +269,7 @@ func (b *Builder) DeviceAssignment(devices ...backends.DeviceNum) error {
 }
 
 func broadcastShapeForBinaryOps(
-	opType backends.OpType,
+	opType compute.OpType,
 	lhsShape, rhsShape shapes.Shape,
 ) (output shapes.Shape, err error) {
 	if lhsShape.IsScalar() {
@@ -312,8 +312,8 @@ func broadcastShapeForBinaryOps(
 // broadcastForBinaryOps returns the broadcasted versions of the two ops,
 // converting them to Nodes in the process.
 func (b *Builder) broadcastForBinaryOps(
-	opType backends.OpType,
-	lhs, rhs backends.Value,
+	opType compute.OpType,
+	lhs, rhs compute.Value,
 ) (lhsNode, rhsNode *Node, err error) {
 	opName := opType.String()
 	nodes, err := b.verifyAndCastValues(opName, lhs, rhs)

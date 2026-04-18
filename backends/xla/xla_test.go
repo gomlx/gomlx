@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/backends/xla"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/graph"
@@ -15,23 +15,23 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var backend backends.Backend
+var backend compute.Backend
 
 func init() {
 	klog.InitFlags(nil)
 }
 
 func setup() {
-	fmt.Printf("Available backends: %q\n", backends.List())
-	if os.Getenv(backends.ConfigEnvVar) == "" {
-		must.M(os.Setenv(backends.ConfigEnvVar, xla.BackendName))
+	fmt.Printf("Available backends: %q\n", compute.List())
+	if os.Getenv(compute.ConfigEnvVar) == "" {
+		must.M(os.Setenv(compute.ConfigEnvVar, xla.BackendName))
 	} else {
-		fmt.Printf("\t$%s=%q\n", backends.ConfigEnvVar, os.Getenv(backends.ConfigEnvVar))
+		fmt.Printf("\t$%s=%q\n", compute.ConfigEnvVar, os.Getenv(compute.ConfigEnvVar))
 	}
-	backend = backends.MustNew()
+	backend = compute.MustNew()
 	fmt.Printf("Backend: %s, %s\n", backend.Name(), backend.Description())
 	fmt.Printf("\t- Add flag -vmodule=executable=2 to log the StableHLO program being executed.\n")
-	for deviceNum := range backends.DeviceNum(backend.NumDevices()) {
+	for deviceNum := range compute.DeviceNum(backend.NumDevices()) {
 		fmt.Printf("\t- Device #%d: %s\n", deviceNum, backend.DeviceDescription(deviceNum))
 	}
 }

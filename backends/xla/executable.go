@@ -6,26 +6,26 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/pkg/pjrt"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/support/humanize"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
 
-// Executable implements the backends.Executable for XLA/PJRT github.com/gomlx/gopjrt.
+// Executable implements the compute.Executable for XLA/PJRT github.com/gomlx/gopjrt.
 type Executable struct {
 	backend         *Backend
 	exec            *pjrt.LoadedExecutable
 	name            string
 	parameterNames  []string
 	parameterShapes []shapes.Shape
-	parameterSpecs  []*backends.ShardingSpec
+	parameterSpecs  []*compute.ShardingSpec
 	outputShapes    []shapes.Shape
-	outputSpecs     []*backends.ShardingSpec
+	outputSpecs     []*compute.ShardingSpec
 
 	distStrategy     distributed.Strategy
 	numDevices       int
@@ -33,7 +33,7 @@ type Executable struct {
 	portable         bool
 }
 
-func (b *Builder) Compile() (backends.Executable, error) {
+func (b *Builder) Compile() (compute.Executable, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -158,10 +158,10 @@ func (e *Executable) Outputs() (outputShapes []shapes.Shape) {
 
 // Execute the executable on the default device (0). The number and shapes of the inputs must match those returned by Inputs.
 func (e *Executable) Execute(
-	inputs []backends.Buffer,
+	inputs []compute.Buffer,
 	donate []bool,
-	defaultDevice backends.DeviceNum,
-) ([]backends.Buffer, error) {
+	defaultDevice compute.DeviceNum,
+) ([]compute.Buffer, error) {
 	if err := e.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -202,5 +202,5 @@ func (e *Executable) Execute(
 	if err != nil {
 		return nil, errors.WithMessagef(err, "backend %q: failed to execute computation %q", BackendName, e.name)
 	}
-	return xslices.Map(pOutputs, func(e *pjrt.Buffer) backends.Buffer { return e }), nil
+	return xslices.Map(pOutputs, func(e *pjrt.Buffer) compute.Buffer { return e }), nil
 }

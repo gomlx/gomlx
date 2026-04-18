@@ -3,26 +3,26 @@
 package xla
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
-	"github.com/gomlx/gomlx/backends"
 )
 
-func scatterOpToReduceOp(opType backends.OpType) backends.OpType {
+func scatterOpToReduceOp(opType compute.OpType) compute.OpType {
 	switch opType {
-	case backends.OpTypeScatterMax:
-		return backends.OpTypeReduceMax
-	case backends.OpTypeScatterMin:
-		return backends.OpTypeReduceMin
-	case backends.OpTypeScatterSum:
-		return backends.OpTypeReduceSum
+	case compute.OpTypeScatterMax:
+		return compute.OpTypeReduceMax
+	case compute.OpTypeScatterMin:
+		return compute.OpTypeReduceMin
+	case compute.OpTypeScatterSum:
+		return compute.OpTypeReduceSum
 	default:
 		return -1
 	}
 }
 
-func (f *Function) scatter(opType backends.OpType,
-	operandOp, scatterIndicesOp, updatesOp backends.Value, indexVectorAxis int, updateWindowAxes,
-	insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Value, error) {
+func (f *Function) scatter(opType compute.OpType,
+	operandOp, scatterIndicesOp, updatesOp compute.Value, indexVectorAxis int, updateWindowAxes,
+	insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (compute.Value, error) {
 	nodes, err := f.verifyAndCastValues(opType.String(), operandOp, scatterIndicesOp, updatesOp)
 	if err != nil {
 		return nil, err
@@ -53,23 +53,23 @@ func (f *Function) scatter(opType backends.OpType,
 }
 
 // ScatterMax scatter values from updates pointed by scatterIndices to operand, by taking the Max.
-func (f *Function) ScatterMax(operand, scatterIndices, updates backends.Value, indexVectorAxis int,
-	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Value, error) {
-	return f.scatter(backends.OpTypeScatterMax,
+func (f *Function) ScatterMax(operand, scatterIndices, updates compute.Value, indexVectorAxis int,
+	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (compute.Value, error) {
+	return f.scatter(compute.OpTypeScatterMax,
 		operand, scatterIndices, updates, indexVectorAxis,
 		updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
 }
 
 // ScatterMin scatter values from updates pointed by scatterIndices to operand, by taking the Min.
-func (f *Function) ScatterMin(operand, scatterIndices, updates backends.Value, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Value, error) {
-	return f.scatter(backends.OpTypeScatterMin,
+func (f *Function) ScatterMin(operand, scatterIndices, updates compute.Value, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (compute.Value, error) {
+	return f.scatter(compute.OpTypeScatterMin,
 		operand, scatterIndices, updates, indexVectorAxis,
 		updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
 }
 
 // ScatterSum values from updates pointed by scatterIndices to operand.
-func (f *Function) ScatterSum(operand, scatterIndices, updates backends.Value, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Value, error) {
-	return f.scatter(backends.OpTypeScatterSum,
+func (f *Function) ScatterSum(operand, scatterIndices, updates compute.Value, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (compute.Value, error) {
+	return f.scatter(compute.OpTypeScatterSum,
 		operand, scatterIndices, updates, indexVectorAxis,
 		updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
 }

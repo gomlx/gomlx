@@ -8,24 +8,24 @@ import (
 	"runtime"
 	"unsafe"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/go-xla/pkg/pjrt"
 	xlabfloat16 "github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
 
-// Backend implements the XLA/PJRT backends.Backend for GoMLX.
+// Backend implements the XLA/PJRT compute.Backend for GoMLX.
 type Backend struct {
 	plugin           *pjrt.Plugin
 	client           *pjrt.Client
 	pluginName       string
 	hasSharedBuffers bool
-	capabilities     backends.Capabilities
+	capabilities     compute.Capabilities
 	numDevices       int
 
 	// DotGeneralUseTF32 controls whether to use TF32 for DotGeneral operations that are using float32.
@@ -35,8 +35,8 @@ type Backend struct {
 
 // Compile-time check:
 var (
-	_ backends.DataInterface = (*Backend)(nil)
-	_ backends.Backend       = (*Backend)(nil)
+	_ compute.DataInterface = (*Backend)(nil)
+	_ compute.Backend       = (*Backend)(nil)
 )
 
 // CheckValid returns an error if the backend is not valid: if it's nil or has already been finalized.
@@ -77,7 +77,7 @@ func (backend *Backend) NumDevices() int {
 }
 
 // DeviceDescription returns a description of the deviceNum.
-func (backend *Backend) DeviceDescription(deviceNum backends.DeviceNum) string {
+func (backend *Backend) DeviceDescription(deviceNum compute.DeviceNum) string {
 	if backend.CheckValid() != nil {
 		return fmt.Sprintf("%s: in an invalid state!", BackendName)
 	}
@@ -113,7 +113,7 @@ func (backend *Backend) IsFinalized() bool {
 }
 
 // castToPJRT casts the buffer to pjrt.Buffer and panics if not possible.
-func castToPJRT(buffer backends.Buffer) *pjrt.Buffer {
+func castToPJRT(buffer compute.Buffer) *pjrt.Buffer {
 	pb, ok := buffer.(*pjrt.Buffer)
 	if !ok {
 		exceptions.Panicf("buffer given is not a %q backend (pjrt) buffer", BackendName)
@@ -121,8 +121,8 @@ func castToPJRT(buffer backends.Buffer) *pjrt.Buffer {
 	return pb
 }
 
-// BufferFinalize implements backends.DataInterface.
-func (backend *Backend) BufferFinalize(buffer backends.Buffer) error {
+// BufferFinalize implements compute.DataInterface.
+func (backend *Backend) BufferFinalize(buffer compute.Buffer) error {
 	if err := backend.CheckValid(); err != nil {
 		return errors.WithMessagef(err, "backend %q is invalid", BackendName)
 	}
@@ -135,7 +135,7 @@ func (backend *Backend) BufferFinalize(buffer backends.Buffer) error {
 }
 
 // BufferShape returns the shape for the buffer.
-func (backend *Backend) BufferShape(buffer backends.Buffer) (shapes.Shape, error) {
+func (backend *Backend) BufferShape(buffer compute.Buffer) (shapes.Shape, error) {
 	var noShape shapes.Shape
 	if err := backend.CheckValid(); err != nil {
 		return noShape, err
@@ -153,7 +153,7 @@ func (backend *Backend) BufferShape(buffer backends.Buffer) (shapes.Shape, error
 }
 
 // BufferDeviceNum returns the deviceNum for the buffer.
-func (backend *Backend) BufferDeviceNum(buffer backends.Buffer) (backends.DeviceNum, error) {
+func (backend *Backend) BufferDeviceNum(buffer compute.Buffer) (compute.DeviceNum, error) {
 	if err := backend.CheckValid(); err != nil {
 		return 0, err
 	}
@@ -166,7 +166,7 @@ func (backend *Backend) BufferDeviceNum(buffer backends.Buffer) (backends.Device
 	if num == -1 {
 		return 0, errors.Errorf("backend %q: pjrt buffer stored on an unknown device!?", BackendName)
 	}
-	return backends.DeviceNum(num), nil
+	return compute.DeviceNum(num), nil
 }
 
 // flatBytes returns a byte slice view of the flat data.
@@ -187,7 +187,7 @@ func flatBytes(flat any) []byte {
 // The slice flat must have the exact number of elements required to store the Buffer shape.
 //
 // See also FlatDataToBuffer, BufferShape, and shapes.Shape.Size.
-func (backend *Backend) BufferToFlatData(buffer backends.Buffer, flat any) error {
+func (backend *Backend) BufferToFlatData(buffer compute.Buffer, flat any) error {
 	if err := backend.CheckValid(); err != nil {
 		return err
 	}
@@ -214,7 +214,7 @@ func (backend *Backend) BufferToFlatData(buffer backends.Buffer, flat any) error
 
 // BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)
 // to the deviceNum, and returns the corresponding Buffer.
-func (backend *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) (backends.Buffer, error) {
+func (backend *Backend) BufferFromFlatData(deviceNum compute.DeviceNum, flat any, shape shapes.Shape) (compute.Buffer, error) {
 	srcData := flatBytes(flat)
 	flatV := reflect.ValueOf(flat)
 	if flatV.Kind() != reflect.Slice {
@@ -246,11 +246,11 @@ func (backend *Backend) HasSharedBuffers() bool {
 	return backend.hasSharedBuffers
 }
 
-// NewSharedBuffer implements backends.Backend interface.
+// NewSharedBuffer implements compute.Backend interface.
 //
 // For XLA this means allocating the aligned memory and calling pjrt.Client.CreateViewOfDeviceBuffer
 // to create a buffer that shares the memory.
-func (backend *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer, flat any, err error) {
+func (backend *Backend) NewSharedBuffer(deviceNum compute.DeviceNum, shape shapes.Shape) (buffer compute.Buffer, flat any, err error) {
 	if err = backend.CheckValid(); err != nil {
 		return
 	}
@@ -272,11 +272,11 @@ func (backend *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shap
 	return
 }
 
-// BufferData implements backends.Backend interface.
+// BufferData implements compute.Backend interface.
 //
 // For XLA this means allocating the aligned memory and calling pjrt.Client.CreateViewOfDeviceBuffer
 // to create a buffer that shares the memory.
-func (backend *Backend) BufferData(buffer backends.Buffer) (flat any, err error) {
+func (backend *Backend) BufferData(buffer compute.Buffer) (flat any, err error) {
 	if err := backend.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -299,13 +299,13 @@ func (backend *Backend) BufferData(buffer backends.Buffer) (flat any, err error)
 }
 
 // Capabilities returns information about what is supported by this backend.
-func (backend *Backend) Capabilities() backends.Capabilities {
+func (backend *Backend) Capabilities() compute.Capabilities {
 	return backend.capabilities
 }
 
-// BufferCopyToDevice implements the backends.Backend interface.
-func (backend *Backend) BufferCopyToDevice(source backends.Buffer, deviceNum backends.DeviceNum) (
-	bufferOnDevice backends.Buffer, err error) {
+// BufferCopyToDevice implements the compute.Backend interface.
+func (backend *Backend) BufferCopyToDevice(source compute.Buffer, deviceNum compute.DeviceNum) (
+	bufferOnDevice compute.Buffer, err error) {
 	if err := backend.CheckValid(); err != nil {
 		return nil, err
 	}

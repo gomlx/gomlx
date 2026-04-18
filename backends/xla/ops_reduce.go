@@ -5,6 +5,7 @@ package xla
 import (
 	"reflect"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
@@ -12,28 +13,27 @@ import (
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
 	stablehloshapes "github.com/gomlx/go-xla/pkg/types/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
-func (f *Function) getReductionOp(reductionType backends.ReduceOpType) (backends.OpType, error) {
-	var opType backends.OpType
+func (f *Function) getReductionOp(reductionType compute.ReduceOpType) (compute.OpType, error) {
+	var opType compute.OpType
 	switch reductionType {
-	case backends.ReduceOpMax:
-		opType = backends.OpTypeReduceMax
-	case backends.ReduceOpMin:
-		opType = backends.OpTypeReduceMin
-	case backends.ReduceOpSum:
-		opType = backends.OpTypeReduceSum
-	case backends.ReduceOpProduct:
-		opType = backends.OpTypeReduceProduct
+	case compute.ReduceOpMax:
+		opType = compute.OpTypeReduceMax
+	case compute.ReduceOpMin:
+		opType = compute.OpTypeReduceMin
+	case compute.ReduceOpSum:
+		opType = compute.OpTypeReduceSum
+	case compute.ReduceOpProduct:
+		opType = compute.OpTypeReduceProduct
 	default:
-		return backends.OpTypeInvalid, errors.Errorf("unsupported reduction type %s", reductionType)
+		return compute.OpTypeInvalid, errors.Errorf("unsupported reduction type %s", reductionType)
 	}
 	return opType, nil
 }
 
-func (f *Function) getReductionFn(dtype dtypes.DType, opType backends.OpType) (*stablehlo.Function, error) {
+func (f *Function) getReductionFn(dtype dtypes.DType, opType compute.OpType) (*stablehlo.Function, error) {
 	// Create the reduction function for this dtype/op, use cache if possible.
 	rKey := reductionKey{
 		dtype:  dtype,
@@ -56,25 +56,25 @@ func (f *Function) getReductionFn(dtype dtypes.DType, opType backends.OpType) (*
 	}
 	var result *stablehlo.Value
 	switch opType {
-	case backends.OpTypeReduceSum:
+	case compute.OpTypeReduceSum:
 		result, err = stablehlo.Add(lhs, rhs)
-	case backends.OpTypeReduceProduct:
+	case compute.OpTypeReduceProduct:
 		result, err = stablehlo.Multiply(lhs, rhs)
-	case backends.OpTypeReduceMax:
+	case compute.OpTypeReduceMax:
 		result, err = stablehlo.Maximum(lhs, rhs)
-	case backends.OpTypeReduceMin:
+	case compute.OpTypeReduceMin:
 		result, err = stablehlo.Minimum(lhs, rhs)
-	case backends.OpTypeReduceBitwiseAnd:
+	case compute.OpTypeReduceBitwiseAnd:
 		result, err = stablehlo.And(lhs, rhs)
-	case backends.OpTypeReduceBitwiseOr:
+	case compute.OpTypeReduceBitwiseOr:
 		result, err = stablehlo.Or(lhs, rhs)
-	case backends.OpTypeReduceBitwiseXor:
+	case compute.OpTypeReduceBitwiseXor:
 		result, err = stablehlo.Xor(lhs, rhs)
-	case backends.OpTypeReduceLogicalAnd:
+	case compute.OpTypeReduceLogicalAnd:
 		result, err = stablehlo.And(lhs, rhs)
-	case backends.OpTypeReduceLogicalOr:
+	case compute.OpTypeReduceLogicalOr:
 		result, err = stablehlo.Or(lhs, rhs)
-	case backends.OpTypeReduceLogicalXor:
+	case compute.OpTypeReduceLogicalXor:
 		result, err = stablehlo.Xor(lhs, rhs)
 	default:
 		return nil, errors.Errorf("unsupported op type %s", opType)
@@ -90,9 +90,9 @@ func (f *Function) getReductionFn(dtype dtypes.DType, opType backends.OpType) (*
 	return reductionFn, nil
 }
 
-func (f *Function) getInitialValue(dtype dtypes.DType, opType backends.OpType) (*stablehlo.Value, error) {
+func (f *Function) getInitialValue(dtype dtypes.DType, opType compute.OpType) (*stablehlo.Value, error) {
 	switch opType {
-	case backends.OpTypeReduceSum:
+	case compute.OpTypeReduceSum:
 		flat := scalarToFlat(0, dtype)
 		if flat == nil {
 			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
@@ -102,7 +102,7 @@ func (f *Function) getInitialValue(dtype dtypes.DType, opType backends.OpType) (
 			return nil, err
 		}
 		return initialValue.(*Node).value, nil
-	case backends.OpTypeReduceProduct:
+	case compute.OpTypeReduceProduct:
 		flat := scalarToFlat(1, dtype)
 		if flat == nil {
 			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
@@ -112,7 +112,7 @@ func (f *Function) getInitialValue(dtype dtypes.DType, opType backends.OpType) (
 			return nil, err
 		}
 		return initialValue.(*Node).value, nil
-	case backends.OpTypeReduceMax:
+	case compute.OpTypeReduceMax:
 		flat := scalarAnyToFlat(dtype.LowestValue())
 		if flat == nil {
 			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
@@ -122,7 +122,7 @@ func (f *Function) getInitialValue(dtype dtypes.DType, opType backends.OpType) (
 			return nil, err
 		}
 		return initialValue.(*Node).value, nil
-	case backends.OpTypeReduceMin:
+	case compute.OpTypeReduceMin:
 		flat := scalarAnyToFlat(dtype.HighestValue())
 		if flat == nil {
 			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
@@ -132,7 +132,7 @@ func (f *Function) getInitialValue(dtype dtypes.DType, opType backends.OpType) (
 			return nil, err
 		}
 		return initialValue.(*Node).value, nil
-	case backends.OpTypeReduceBitwiseAnd:
+	case compute.OpTypeReduceBitwiseAnd:
 		flat := scalarToFlat(0, dtype)
 		if flat == nil {
 			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
@@ -146,7 +146,7 @@ func (f *Function) getInitialValue(dtype dtypes.DType, opType backends.OpType) (
 			return nil, err
 		}
 		return initialValue.(*Node).value, nil
-	case backends.OpTypeReduceBitwiseOr:
+	case compute.OpTypeReduceBitwiseOr:
 		flat := scalarToFlat(0, dtype)
 		if flat == nil {
 			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
@@ -156,7 +156,7 @@ func (f *Function) getInitialValue(dtype dtypes.DType, opType backends.OpType) (
 			return nil, err
 		}
 		return initialValue.(*Node).value, nil
-	case backends.OpTypeReduceBitwiseXor:
+	case compute.OpTypeReduceBitwiseXor:
 		flat := scalarToFlat(0, dtype)
 		if flat == nil {
 			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
@@ -166,7 +166,7 @@ func (f *Function) getInitialValue(dtype dtypes.DType, opType backends.OpType) (
 			return nil, err
 		}
 		return initialValue.(*Node).value, nil
-	case backends.OpTypeReduceLogicalAnd:
+	case compute.OpTypeReduceLogicalAnd:
 		flat := scalarToFlat(1, dtype)
 		if flat == nil {
 			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
@@ -176,7 +176,7 @@ func (f *Function) getInitialValue(dtype dtypes.DType, opType backends.OpType) (
 			return nil, err
 		}
 		return initialValue.(*Node).value, nil
-	case backends.OpTypeReduceLogicalOr:
+	case compute.OpTypeReduceLogicalOr:
 		flat := scalarToFlat(0, dtype)
 		if flat == nil {
 			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
@@ -186,7 +186,7 @@ func (f *Function) getInitialValue(dtype dtypes.DType, opType backends.OpType) (
 			return nil, err
 		}
 		return initialValue.(*Node).value, nil
-	case backends.OpTypeReduceLogicalXor:
+	case compute.OpTypeReduceLogicalXor:
 		flat := scalarToFlat(0, dtype)
 		if flat == nil {
 			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
@@ -202,7 +202,7 @@ func (f *Function) getInitialValue(dtype dtypes.DType, opType backends.OpType) (
 }
 
 // reduce helper for all Reduce* methods.
-func (f *Function) reduce(opType backends.OpType, x backends.Value, axes ...int) (backends.Value, error) {
+func (f *Function) reduce(opType compute.OpType, x compute.Value, axes ...int) (compute.Value, error) {
 	nodes, err := f.verifyAndCastValues(opType.String(), x)
 	if err != nil {
 		return nil, err
@@ -282,63 +282,63 @@ func scalarAnyToFlat(valueAny any) any {
 	return sliceR.Interface()
 }
 
-// ReduceSum implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceSum(x backends.Value, axes ...int) (backends.Value, error) {
-	opType := backends.OpTypeReduceSum
+// ReduceSum implements the corresponding method of the compute.Function interface.
+func (f *Function) ReduceSum(x compute.Value, axes ...int) (compute.Value, error) {
+	opType := compute.OpTypeReduceSum
 	return f.reduce(opType, x, axes...)
 }
 
-// ReduceProduct implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceProduct(x backends.Value, axes ...int) (backends.Value, error) {
-	opType := backends.OpTypeReduceProduct
+// ReduceProduct implements the corresponding method of the compute.Function interface.
+func (f *Function) ReduceProduct(x compute.Value, axes ...int) (compute.Value, error) {
+	opType := compute.OpTypeReduceProduct
 	return f.reduce(opType, x, axes...)
 }
 
-// ReduceMax implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceMax(x backends.Value, axes ...int) (backends.Value, error) {
-	opType := backends.OpTypeReduceMax
+// ReduceMax implements the corresponding method of the compute.Function interface.
+func (f *Function) ReduceMax(x compute.Value, axes ...int) (compute.Value, error) {
+	opType := compute.OpTypeReduceMax
 	return f.reduce(opType, x, axes...)
 }
 
-// ReduceMin implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceMin(x backends.Value, axes ...int) (backends.Value, error) {
-	opType := backends.OpTypeReduceMin
+// ReduceMin implements the corresponding method of the compute.Function interface.
+func (f *Function) ReduceMin(x compute.Value, axes ...int) (compute.Value, error) {
+	opType := compute.OpTypeReduceMin
 	return f.reduce(opType, x, axes...)
 }
 
-// ReduceBitwiseAnd implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceBitwiseAnd(x backends.Value, axes ...int) (backends.Value, error) {
-	opType := backends.OpTypeReduceBitwiseAnd
+// ReduceBitwiseAnd implements the corresponding method of the compute.Function interface.
+func (f *Function) ReduceBitwiseAnd(x compute.Value, axes ...int) (compute.Value, error) {
+	opType := compute.OpTypeReduceBitwiseAnd
 	return f.reduce(opType, x, axes...)
 }
 
-// ReduceBitwiseOr implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceBitwiseOr(x backends.Value, axes ...int) (backends.Value, error) {
-	opType := backends.OpTypeReduceBitwiseOr
+// ReduceBitwiseOr implements the corresponding method of the compute.Function interface.
+func (f *Function) ReduceBitwiseOr(x compute.Value, axes ...int) (compute.Value, error) {
+	opType := compute.OpTypeReduceBitwiseOr
 	return f.reduce(opType, x, axes...)
 }
 
-// ReduceBitwiseXor implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceBitwiseXor(x backends.Value, axes ...int) (backends.Value, error) {
-	opType := backends.OpTypeReduceBitwiseXor
+// ReduceBitwiseXor implements the corresponding method of the compute.Function interface.
+func (f *Function) ReduceBitwiseXor(x compute.Value, axes ...int) (compute.Value, error) {
+	opType := compute.OpTypeReduceBitwiseXor
 	return f.reduce(opType, x, axes...)
 }
 
-// ReduceLogicalAnd implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceLogicalAnd(x backends.Value, axes ...int) (backends.Value, error) {
-	opType := backends.OpTypeReduceLogicalAnd
+// ReduceLogicalAnd implements the corresponding method of the compute.Function interface.
+func (f *Function) ReduceLogicalAnd(x compute.Value, axes ...int) (compute.Value, error) {
+	opType := compute.OpTypeReduceLogicalAnd
 	return f.reduce(opType, x, axes...)
 }
 
-// ReduceLogicalOr implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceLogicalOr(x backends.Value, axes ...int) (backends.Value, error) {
-	opType := backends.OpTypeReduceLogicalOr
+// ReduceLogicalOr implements the corresponding method of the compute.Function interface.
+func (f *Function) ReduceLogicalOr(x compute.Value, axes ...int) (compute.Value, error) {
+	opType := compute.OpTypeReduceLogicalOr
 	return f.reduce(opType, x, axes...)
 }
 
-// ReduceLogicalXor implements the corresponding method of the backends.Function interface.
-func (f *Function) ReduceLogicalXor(x backends.Value, axes ...int) (backends.Value, error) {
-	opType := backends.OpTypeReduceLogicalXor
+// ReduceLogicalXor implements the corresponding method of the compute.Function interface.
+func (f *Function) ReduceLogicalXor(x compute.Value, axes ...int) (compute.Value, error) {
+	opType := compute.OpTypeReduceLogicalXor
 	return f.reduce(opType, x, axes...)
 }
 
@@ -352,8 +352,8 @@ func (f *Function) ReduceLogicalXor(x backends.Value, axes ...int) (backends.Val
 //
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
-func (f *Function) ArgMinMax(x backends.Value, axis int, outputDType dtypes.DType, isMin bool) (backends.Value, error) {
-	opType := backends.OpTypeArgMinMax
+func (f *Function) ArgMinMax(x compute.Value, axis int, outputDType dtypes.DType, isMin bool) (compute.Value, error) {
+	opType := compute.OpTypeArgMinMax
 	nodes, err := f.verifyAndCastValues(opType.String(), x)
 	if err != nil {
 		return nil, err
@@ -511,8 +511,8 @@ func (f *Function) ArgMinMax(x backends.Value, axis int, outputDType dtypes.DTyp
 // If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.
 // If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
 // If paddings is nil, they are assumed to be 0.
-func (f *Function) ReduceWindow(x backends.Value, reductionType backends.ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Value, error) {
-	opType := backends.OpTypeReduceWindow
+func (f *Function) ReduceWindow(x compute.Value, reductionType compute.ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (compute.Value, error) {
+	opType := compute.OpTypeReduceWindow
 	nodes, err := f.verifyAndCastValues(opType.String(), x)
 	if err != nil {
 		return nil, err
@@ -541,7 +541,7 @@ func (f *Function) ReduceWindow(x backends.Value, reductionType backends.ReduceO
 	return f.newNode(value), nil
 }
 
-func (f *Function) getSelectFn(dtype dtypes.DType, opType backends.OpType) (*stablehlo.Function, error) {
+func (f *Function) getSelectFn(dtype dtypes.DType, opType compute.OpType) (*stablehlo.Function, error) {
 	// Create the reduction function for this dtype/op, use cache if possible.
 	rKey := reductionKey{
 		dtype:  dtype,
@@ -565,9 +565,9 @@ func (f *Function) getSelectFn(dtype dtypes.DType, opType backends.OpType) (*sta
 	var result *stablehlo.Value
 	compareType := compareTypeForDType(dtype)
 	switch opType {
-	case backends.OpTypeSelectAndScatterMax:
+	case compute.OpTypeSelectAndScatterMax:
 		result, err = stablehlo.Compare(lhs, rhs, stablehlotypes.CompareGE, compareType)
-	case backends.OpTypeSelectAndScatterMin:
+	case compute.OpTypeSelectAndScatterMin:
 		result, err = stablehlo.Compare(lhs, rhs, stablehlotypes.CompareLE, compareType)
 	default:
 		return nil, errors.Errorf("unsupported op type %s for selection function", opType)
@@ -591,8 +591,8 @@ func (f *Function) getSelectFn(dtype dtypes.DType, opType backends.OpType) (*sta
 // Note: "Max" refers to the selection. After selected, the values are added into the output position.
 //
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func (f *Function) SelectAndScatterMax(operand, source backends.Value, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Value, error) {
-	return f.selectAndScatterImpl(backends.OpTypeSelectAndScatterMax,
+func (f *Function) SelectAndScatterMax(operand, source compute.Value, windowDimensions, windowStrides []int, paddings [][2]int) (compute.Value, error) {
+	return f.selectAndScatterImpl(compute.OpTypeSelectAndScatterMax,
 		operand, source, windowDimensions, windowStrides, paddings)
 }
 
@@ -604,15 +604,15 @@ func (f *Function) SelectAndScatterMax(operand, source backends.Value, windowDim
 // Note: "Min" refers to the selection. After selected, values are added into the output position.
 //
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func (f *Function) SelectAndScatterMin(operand, source backends.Value, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Value, error) {
-	return f.selectAndScatterImpl(backends.OpTypeSelectAndScatterMin,
+func (f *Function) SelectAndScatterMin(operand, source compute.Value, windowDimensions, windowStrides []int, paddings [][2]int) (compute.Value, error) {
+	return f.selectAndScatterImpl(compute.OpTypeSelectAndScatterMin,
 		operand, source, windowDimensions, windowStrides, paddings)
 }
 
 // selectAndScatterImpl implements SelectAndScatterMax and SelectAndScatterMin.
 //
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func (f *Function) selectAndScatterImpl(opType backends.OpType, operand, source backends.Value, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Value, error) {
+func (f *Function) selectAndScatterImpl(opType compute.OpType, operand, source compute.Value, windowDimensions, windowStrides []int, paddings [][2]int) (compute.Value, error) {
 	nodes, err := f.verifyAndCastValues(opType.String(), operand, source)
 	if err != nil {
 		return nil, err
@@ -624,7 +624,7 @@ func (f *Function) selectAndScatterImpl(opType backends.OpType, operand, source 
 	if err != nil {
 		return nil, err
 	}
-	reductionFn, err := f.getReductionFn(dtype, backends.OpTypeReduceSum)
+	reductionFn, err := f.getReductionFn(dtype, compute.OpTypeReduceSum)
 	if err != nil {
 		return nil, err
 	}

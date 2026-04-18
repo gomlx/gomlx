@@ -5,11 +5,11 @@ package xla
 import (
 	"reflect"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	stablehlotypes "github.com/gomlx/go-xla/pkg/types"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
@@ -30,9 +30,9 @@ import (
 // The XLA implementation only supports accumulation in F32 (if different than the input dtypes).
 // So when it receives a different accumulation dtype, it simply converts the inputs to F32.
 func (f *Function) DotGeneral(
-	lhs backends.Value, lhsContractingAxes, lhsBatchAxes []int,
-	rhs backends.Value, rhsContractingAxes []int, rhsBatchAxes []int,
-	config backends.DotGeneralConfig) (backends.Value, error) {
+	lhs compute.Value, lhsContractingAxes, lhsBatchAxes []int,
+	rhs compute.Value, rhsContractingAxes []int, rhsBatchAxes []int,
+	config compute.DotGeneralConfig) (compute.Value, error) {
 	nodes, err := f.verifyAndCastValues("Dot", lhs, rhs)
 	if err != nil {
 		return nil, err
@@ -167,7 +167,7 @@ func dotGeneralAddDependency(f *Function, lhs, rhs *Node) (*Node, *Node, error) 
 		return nil, nil, errors.WithMessagef(err, "failed to create fake barrier for DotGeneral operands")
 	}
 
-	lhsReady := backends.Value(lhs)
+	lhsReady := compute.Value(lhs)
 	if isSwapped {
 		lhsReady, rhsReady = rhsReady, lhsReady
 	}

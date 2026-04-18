@@ -56,6 +56,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/shapes"
@@ -65,7 +66,6 @@ import (
 	xladtypes "github.com/gomlx/go-xla/pkg/types/dtypes"
 	xlabfloat16 "github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	xlashapes "github.com/gomlx/go-xla/pkg/types/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -97,7 +97,7 @@ func init() {
 // The config string should be the name of the PJRT plugin to use.
 //
 // This function triggers AutoInstall if it is enabled (the default). See EnableAutoInstall to disable it.
-func New(config string) (backends.Backend, error) {
+func New(config string) (compute.Backend, error) {
 	return NewWithOptions(config, nil)
 }
 
@@ -192,12 +192,12 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 
 // Registers New() as the default constructor for "xla" backend.
 func init() {
-	backends.Register(BackendName, New)
+	compute.Register(BackendName, New)
 
 	// Other aliases for this backend.
-	backends.Register("stablehlo", New)
-	backends.Register("hlo", New)
-	backends.Register("shlo", New)
+	compute.Register("stablehlo", New)
+	compute.Register("hlo", New)
+	compute.Register("shlo", New)
 }
 
 var (

@@ -3,16 +3,16 @@
 package xla
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
 // AllReduce implements the collective AllReduce operation.
-func (f *Function) AllReduce(operands []backends.Value, reductionType backends.ReduceOpType,
-	replicaGroups [][]int) ([]backends.Value, error) {
+func (f *Function) AllReduce(operands []compute.Value, reductionType compute.ReduceOpType,
+	replicaGroups [][]int) ([]compute.Value, error) {
 	nodes, err := f.verifyAndCastValues("stablehlo.AllReduce", operands...)
 	if err != nil {
 		return nil, err
@@ -22,7 +22,7 @@ func (f *Function) AllReduce(operands []backends.Value, reductionType backends.R
 	// So we need to split the operands by dtype and later re-merge them.
 	// Also, the reduceFn will be per operand.
 	operandsPerDType, indicesPerDType := splitOperandsByDType(nodes)
-	outputs := make([]backends.Value, len(operands))
+	outputs := make([]compute.Value, len(operands))
 	for dtype, operandsDType := range operandsPerDType {
 		opType, err := f.getReductionOp(reductionType)
 		if err != nil {
@@ -38,7 +38,7 @@ func (f *Function) AllReduce(operands []backends.Value, reductionType backends.R
 		if err != nil {
 			return nil, err
 		}
-		outputsPerDType := xslices.Map(values, func(v *stablehlo.Value) backends.Value {
+		outputsPerDType := xslices.Map(values, func(v *stablehlo.Value) compute.Value {
 			return f.newNode(v)
 		})
 

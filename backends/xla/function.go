@@ -5,15 +5,15 @@ package xla
 import (
 	"slices"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	"github.com/gomlx/go-xla/pkg/types/shardy"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
-// Function implements backends.Function for XLA.
+// Function implements compute.Function for XLA.
 type Function struct {
 	builder *Builder
 	parent  *Function // parent function if this is a closure.
@@ -22,7 +22,7 @@ type Function struct {
 
 	parameterNames  []string
 	parameterShapes []shapes.Shape
-	parameterSpecs  []*backends.ShardingSpec
+	parameterSpecs  []*compute.ShardingSpec
 
 	// returned indicates Return() was called.
 	returned bool
@@ -32,7 +32,7 @@ type Function struct {
 	outputShardings []*shardy.ShardingSpec
 }
 
-var _ backends.Function = (*Function)(nil)
+var _ compute.Function = (*Function)(nil)
 
 // Name returns the name of this function.
 func (f *Function) Name() string {
@@ -40,12 +40,12 @@ func (f *Function) Name() string {
 }
 
 // Parent returns the parent function if this is a closure.
-func (f *Function) Parent() backends.Function {
+func (f *Function) Parent() compute.Function {
 	return f.parent
 }
 
 // Closure creates a new closure function, within this function.
-func (f *Function) Closure() (backends.Function, error) {
+func (f *Function) Closure() (compute.Function, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -65,9 +65,9 @@ func (f *Function) CheckValid() error {
 	return f.builder.CheckValid()
 }
 
-// verifyAndCastValues sanity checks that the values (backends.Op) are valid and created with this builder.
+// verifyAndCastValues sanity checks that the values (compute.Op) are valid and created with this builder.
 // It returns the underlying *Node of the values.
-func (f *Function) verifyAndCastValues(name string, values ...backends.Value) ([]*Node, error) {
+func (f *Function) verifyAndCastValues(name string, values ...compute.Value) ([]*Node, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -102,8 +102,8 @@ func (f *Function) newNode(value *stablehlo.Value) *Node {
 }
 
 // Parameter creates an input parameter for this function.
-func (f *Function) Parameter(name string, shape shapes.Shape, sharding *backends.ShardingSpec) (
-	backends.Value, error) {
+func (f *Function) Parameter(name string, shape shapes.Shape, sharding *compute.ShardingSpec) (
+	compute.Value, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func (f *Function) Parameter(name string, shape shapes.Shape, sharding *backends
 }
 
 // Constant creates a constant in the function with the given flat values and the shape defined by the dimensions.
-func (f *Function) Constant(flat any, dimensions ...int) (backends.Value, error) {
+func (f *Function) Constant(flat any, dimensions ...int) (compute.Value, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (f *Function) Constant(flat any, dimensions ...int) (backends.Value, error)
 }
 
 // Return marks the outputs of this function.
-func (f *Function) Return(outputs []backends.Value, shardings []*backends.ShardingSpec) error {
+func (f *Function) Return(outputs []compute.Value, shardings []*compute.ShardingSpec) error {
 	if err := f.CheckValid(); err != nil {
 		return err
 	}
@@ -198,7 +198,7 @@ func (f *Function) Return(outputs []backends.Value, shardings []*backends.Shardi
 }
 
 // Sort sorts one or more tensors along the specified axis using a comparator function.
-func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, inputs ...backends.Value) ([]backends.Value, error) {
+func (f *Function) Sort(comparator compute.Function, axis int, isStable bool, inputs ...compute.Value) ([]compute.Value, error) {
 	nodes, err := f.verifyAndCastValues("Sort", inputs...)
 	if err != nil {
 		return nil, err
@@ -222,7 +222,7 @@ func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, i
 		return nil, err
 	}
 
-	outputNodes := make([]backends.Value, len(outputValues))
+	outputNodes := make([]compute.Value, len(outputValues))
 	for i, v := range outputValues {
 		outputNodes[i] = f.newNode(v)
 	}
@@ -230,7 +230,7 @@ func (f *Function) Sort(comparator backends.Function, axis int, isStable bool, i
 }
 
 // While executes bodyFn repeatedly while condFn returns true.
-func (f *Function) While(cond, body backends.Function, initialState ...backends.Value) ([]backends.Value, error) {
+func (f *Function) While(cond, body compute.Function, initialState ...compute.Value) ([]compute.Value, error) {
 	nodes, err := f.verifyAndCastValues("While", initialState...)
 	if err != nil {
 		return nil, err
@@ -262,7 +262,7 @@ func (f *Function) While(cond, body backends.Function, initialState ...backends.
 		return nil, err
 	}
 
-	outputNodes := make([]backends.Value, len(outputValues))
+	outputNodes := make([]compute.Value, len(outputValues))
 	for i, v := range outputValues {
 		outputNodes[i] = f.newNode(v)
 	}
@@ -270,7 +270,7 @@ func (f *Function) While(cond, body backends.Function, initialState ...backends.
 }
 
 // If executes one of two branches based on a predicate.
-func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Function) ([]backends.Value, error) {
+func (f *Function) If(pred compute.Value, trueBranch, falseBranch compute.Function) ([]compute.Value, error) {
 	nodes, err := f.verifyAndCastValues("If", pred)
 	if err != nil {
 		return nil, err
@@ -298,7 +298,7 @@ func (f *Function) If(pred backends.Value, trueBranch, falseBranch backends.Func
 		return nil, err
 	}
 
-	outputNodes := make([]backends.Value, len(outputValues))
+	outputNodes := make([]compute.Value, len(outputValues))
 	for i, v := range outputValues {
 		outputNodes[i] = f.newNode(v)
 	}
