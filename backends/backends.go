@@ -1,119 +1,38 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-// Package backends defines the interface to computation building and execution system needs to implement to be used
-// by GoMLX.
+// Package backends is an alias to compute package. It's here for historical reasons.
 //
-// It is based on 4 interfaces:
-//
-//   - DataInterface: handles how data (Tensors) is stored in buffers for the backend. These things are handled
-//     differently by different backends and even by different accelerators with the same backend.
-//   - Builder: how computation graphs are built. Usually composed by a "main" function, and optionally others.
-//   - Function: how functions are defined, it's a sub-unit of a computation.
-//   - Executable: how executable computations are executed.
-//
-// While loosely based on OpenXLA's StableHLO API, it diverges as it supports different APIs.
-//
-// A backend that doesn't implement every operation can simply return an "<op> not implemented" error
-// for any op, and it would still work for computations that don't require those operations.
-// The backend/notimplemented package helps bootstrap any new backend implementation by providing
-// a "Not Implemented" implementation for all methods of the Builder interface.
-// Alternatively, there is a Capabilities method that can be called and inspected.
+// Deprecated: use the [compute] package instead.
 package backends
 
-import (
-	stderrors "errors"
-	"os"
-	"strings"
+import "github.com/gomlx/compute"
 
-	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
-)
-
-// DeviceNum represents which device holds a buffer or should execute a computation.
-// It's up to the backend to interpret it, but it should be between 0 and Backend.NumDevices.
-type DeviceNum int
-
-// Backend is the API that needs to be implemented by a GoMLX backend.
-type Backend interface {
-	// Name returns the short name of the backend. E.g.: "xla" for the Xla/PJRT plugin.
-	Name() string
-
-	// String returns the same as Name.
-	String() string
-
-	// Description is a longer description of the Backend that can be used to pretty-print.
-	Description() string
-
-	// NumDevices return the number of devices available for this Backend.
-	NumDevices() int
-
-	// DeviceDescription returns a description of the device at the given deviceNum.
-	DeviceDescription(deviceNum DeviceNum) string
-
-	// Capabilities returns information about what is supported by this backend.
-	Capabilities() Capabilities
-
-	// Builder creates a new builder used to define a newly named computation.
-	Builder(name string) Builder
-
-	// DataInterface is the sub-interface that defines the API to transfer Buffer to/from accelerators for the backend.
-	DataInterface
-
-	// Finalize releases all the associated resources immediately and makes the backend invalid.
-	// Any operation on a Backend after Finalize is called is undefined, except IsFinalized.
-	Finalize()
-
-	// IsFinalized returns true if the backend is finalized.
-	//
-	// Tensors stored on a backend may hold a reference to a finalized backend, and when being garbage collected,
-	// check whether it is finalized before requesting the backend to finalize its buffers.
-	IsFinalized() bool
-}
-
-// ErrNotImplemented indicates an op is not implemented (typically a fused op, but normal ops may return this
-// as well) for the given configuration (e.g. unsupported dtype or backend). Backends should wrap this
-// error so InternalFusedOpCaller can distinguish "not supported" from genuine
-// bugs and fall back to the decomposed implementation.
+// Backend represents a compute backend, capabable of building, compiling, transferring data to/from and executing a
+// computation graph.
 //
-// It doesn't contain a stack, attach a stack to with with errors.Wrapf(ErrNotImplemented, "...") when using it.
-var ErrNotImplemented = stderrors.New("op not implemented")
+// Deprecated: it's just an alias to [compute.Backend], use that instead.
+type Backend = compute.Backend
 
-// IsNotImplemented returns true if the error is a ErrNotImplemented.
-func IsNotImplemented(err error) bool {
-	return stderrors.Is(err, ErrNotImplemented)
-}
-
-// Constructor takes a config string (optionally empty) and returns a Backend.
-type Constructor func(config string) (Backend, error)
-
-var (
-	registeredConstructors = make(map[string]Constructor)
-	firstRegistered        string
-)
-
-// Register backend with the given name and a default constructor that takes as input a configuration string that is
-// passed along to the backend constructor.
+// DeviceNum represents which device holds a buffer or should execute a computation. It's up to the backend to interpret
+// it, but it should be between 0 and Backend.NumDevices.
 //
-// To be safe, call Register during initialization of a package.
-func Register(name string, constructor Constructor) {
-	if len(registeredConstructors) == 0 {
-		firstRegistered = name
-	}
-	registeredConstructors[name] = constructor
-}
+// Deprecated: it's just an alias to [compute.DeviceNum], use that instead.
+type DeviceNum = compute.DeviceNum
+
+// Buffer represents actual data (a tensor) stored in the accelerator that is actually going to execute the graph.
+// It's used as input/output of computation execution. A Buffer is always associated to a DeviceNum, even if there is
+// only one.
+//
+// It is opaque from GoMLX perspective, but it cannot be mixed -- a Buffer returned by one backend can't be used with
+// another backend.
+//
+// Deprecated: it's just an alias to [compute.Buffer], use that instead.
+type Buffer = compute.Buffer
 
 // DefaultConfig is the name of the default backend configuration to use if specified.
 //
-// See NewWithConfig for the format of the configuration string.
-var DefaultConfig = "xla"
-
-// ConfigEnvVar is the name of the environment variable with the default backend configuration to use:
-// "GOMLX_BACKEND".
-//
-// The format of the configuration is "<backend_name>:<backend_configuration>".
-// The "<backend_name>" is the name of a registered backend (e.g.: "xla") and
-// "<backend_configuration>" is backend-specific (e.g.: for xla backend, it is the pjrt plugin name).
-const ConfigEnvVar = "GOMLX_BACKEND"
+// Deprecated: it's just an alias to [compute.DefaultConfig], use that instead.
+var DefaultConfig = compute.DefaultConfig
 
 // MustNew returns a new default Backend or panics if it fails.
 //
@@ -124,61 +43,17 @@ const ConfigEnvVar = "GOMLX_BACKEND"
 // 3. The first registered backend is used with an empty configuration.
 //
 // It fails if no backends were registered.
-func MustNew() Backend {
-	b, err := New()
-	if err != nil {
-		panic(err)
-	}
-	return b
+//
+// Deprecated: use [compute.MustNew] instead.
+func MustNew() compute.Backend {
+	return compute.MustNew()
 }
 
-// New returns a new default Backend or an error if it fails.
+// New returns a new default backend.
 //
-// The default is:
-//
-// 1. The environment $GOMLX_BACKEND (ConfigEnvVar) is used as a configuration if defined.
-// 2. Next, it uses the variable DefaultConfig as the configuration.
-// 3. The first registered backend is used with an empty configuration.
-//
-// It fails if no backends were registered.
-func New() (Backend, error) {
-	config, found := os.LookupEnv(ConfigEnvVar)
-	if found {
-		return NewWithConfig(config)
-	}
-	if DefaultConfig != "" {
-		backendName, _ := splitConfig(DefaultConfig)
-		if _, found := registeredConstructors[backendName]; found {
-			return NewWithConfig(DefaultConfig)
-		}
-	}
-	return NewWithConfig("")
-}
-
-// NewOrErr returns a new default Backend or an error if it fails.
-//
-// The default is:
-//
-// 1. The environment $GOMLX_BACKEND (ConfigEnvVar) is used as a configuration if defined.
-// 2. Next, it uses the variable DefaultConfig as the configuration.
-// 3. The first registered backend is used with an empty configuration.
-//
-// It fails if no backends were registered.
-//
-// Deprecated: at the next version this function will be removed.
-// Use New instead.
-func NewOrErr() (Backend, error) {
-	return New()
-}
-
-func splitConfig(config string) (string, string) {
-	backendName := config
-	var backendConfig string
-	if before, after, ok := strings.Cut(config, ":"); ok {
-		backendName = before
-		backendConfig = after
-	}
-	return backendName, backendConfig
+// Deprecated: use [compute.New] instead.
+func New() (compute.Backend, error) {
+	return compute.New()
 }
 
 // NewWithConfig takes a configuration string formated as
@@ -186,25 +61,8 @@ func splitConfig(config string) (string, string) {
 // The format of config is "<backend_name>:<backend_configuration>".
 // The "<backend_name>" is the name of a registered backend (e.g.: "xla") and
 // "<backend_configuration>" is backend-specific (e.g.: for xla backend, it is the PJRT plugin name).
-func NewWithConfig(config string) (Backend, error) {
-	if len(registeredConstructors) == 0 {
-		exceptions.Panicf(`no registered backends for GoMLX -- maybe import the default ones (XLA and SimpleGo) with import _ "github.com/gomlx/gomlx/backends/default"?`)
-	}
-	var backendName, backendConfig string
-	if config == "" {
-		backendName = firstRegistered
-	} else {
-		backendName, backendConfig = splitConfig(config)
-	}
-	constructor, found := registeredConstructors[backendName]
-	if !found {
-		exceptions.Panicf("can't find backend %q for configuration %q given, backends available: \"%s\"",
-			backendName, config, strings.Join(List(), "\", \""))
-	}
-	return constructor(backendConfig)
-}
-
-// List the registered (compiled-in) backends.
-func List() []string {
-	return xslices.Keys(registeredConstructors)
+//
+// Deprecated: use [compute.NewWithConfig] instead.
+func NewWithConfig(config string) (compute.Backend, error) {
+	return compute.NewWithConfig(config)
 }

@@ -150,7 +150,7 @@ func ggmlDequantFunc(ggmlType backends.GGMLQuantType) (func(data []uint8, output
 
 // ggmlFp16LE decodes a little-endian fp16 value from two bytes into float32.
 func ggmlFp16LE(lo, hi uint8) float32 {
-	return float16.Frombits(uint16(lo) | uint16(hi)<<8).Float32()
+	return float16.FromBits(uint16(lo) | uint16(hi)<<8).Float32()
 }
 
 // dequantQ8_0Row converts Q8_0 quantized blocks to float32.

@@ -13,8 +13,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/gomlx/compute/notimplemented"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/internal/workerspool"
 	"github.com/pkg/errors"
 )
