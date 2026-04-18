@@ -3,8 +3,6 @@
 // Package xslices provide missing functionality to the slices package.
 //
 // It was created before the standard slices package, so some functionality may be duplicate.
-//
-// Deprecated: use `github.com/gomlx/compute/support/xslices` instead.
 package xslices
 
 import (
