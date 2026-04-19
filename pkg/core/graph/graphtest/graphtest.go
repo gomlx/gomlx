@@ -10,10 +10,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/pkg/installer"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/xla"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -26,19 +26,19 @@ type TestGraphFn func(g *graph.Graph) (inputs, outputs []*graph.Node)
 
 var (
 	backendOnce   sync.Once
-	cachedBackend backends.Backend
+	cachedBackend compute.Backend
 )
 
-// BuildTestBackend and sets backends.DefaultConfig to "xla:cpu" -- it can be overwritten by GOMLX_BACKEND environment variable.
-func BuildTestBackend() backends.Backend {
-	backends.DefaultConfig = officialTestBackendNames[0]
+// BuildTestBackend and sets compute.DefaultConfig to "xla:cpu" -- it can be overwritten by GOMLX_BACKEND environment variable.
+func BuildTestBackend() compute.Backend {
+	compute.DefaultConfig = officialTestBackendNames[0]
 	backendOnce.Do(func() {
 		err := xla.AutoInstall()
 		if err != nil {
 			klog.Fatalf("Failed to auto-install XLA PJRT: %+v", err)
 		}
 		for i, backendName := range officialTestBackendNames {
-			backend, err := backends.NewWithConfig(backendName)
+			backend, err := compute.NewWithConfig(backendName)
 			if err != nil {
 				if i == 0 {
 					klog.Fatalf("Failed to create backend %q: %+v", backendName, err)
@@ -49,7 +49,7 @@ func BuildTestBackend() backends.Backend {
 			officialTestBackends[backendName] = backend
 		}
 	})
-	return officialTestBackends[backends.DefaultConfig]
+	return officialTestBackends[compute.DefaultConfig]
 }
 
 var (
@@ -57,11 +57,11 @@ var (
 		"xla:cpu",
 		"go",
 	}
-	officialTestBackends = make(map[string]backends.Backend)
+	officialTestBackends = make(map[string]compute.Backend)
 )
 
 func init() {
-	if selectedBackendName := os.Getenv(backends.ConfigEnvVar); selectedBackendName != "" {
+	if selectedBackendName := os.Getenv(compute.ConfigEnvVar); selectedBackendName != "" {
 		officialTestBackendNames = []string{selectedBackendName}
 		return
 	}
@@ -74,9 +74,9 @@ func init() {
 
 // TestOfficialBackends iterates over list of backends and calls testFn for each of them.
 // If GOMLX_BACKEND environment variable is set, it will only iterate over the one set.
-// If GOMLX_BACKEND is not set, it will iterate over all official backends, except those in excludeBackends.
+// If GOMLX_BACKEND is not set, it will iterate over all official backends, except those in excludecompute.
 // (for tests known not to work on those backends)
-func TestOfficialBackends(t *testing.T, testFn func(t *testing.T, backend backends.Backend), excludeBackends ...string) {
+func TestOfficialBackends(t *testing.T, testFn func(t *testing.T, backend compute.Backend), excludeBackends ...string) {
 	BuildTestBackend()
 	for backendName, backend := range officialTestBackends {
 		if slices.Contains(excludeBackends, backendName) {
@@ -106,7 +106,7 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestGraphFn, want []a
 //
 // delta is the margin of value on the difference of output and want values that are acceptable.
 // Values of delta <= 0 means only exact equality is accepted.
-func RunTestGraphFnWithBackend(t *testing.T, testName string, backend backends.Backend, graphFn TestGraphFn, want []any, delta float64) {
+func RunTestGraphFnWithBackend(t *testing.T, testName string, backend compute.Backend, graphFn TestGraphFn, want []any, delta float64) {
 	t.Run(testName, func(t *testing.T) {
 		wantTensors := xslices.Map(want, func(value any) *tensors.Tensor {
 			if s, ok := value.(shapes.Shape); ok {
