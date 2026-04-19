@@ -29,10 +29,87 @@ type DeviceNum = compute.DeviceNum
 // Deprecated: it's just an alias to [compute.Buffer], use that instead.
 type Buffer = compute.Buffer
 
+// Value represents an intermediate value in a computation graph.
+//
+// Deprecated: it's just an alias to [compute.Value], use that instead.
+type Value = compute.Value
+
+// ActivationType specifies the activation function for fused operations.
+//
+// Deprecated: it's just an alias to [compute.ActivationType], use that instead.
+type ActivationType = compute.ActivationType
+
+const (
+	ActivationNone      = compute.ActivationNone
+	ActivationRelu      = compute.ActivationRelu
+	ActivationTanh      = compute.ActivationTanh
+	ActivationGelu      = compute.ActivationGelu
+	ActivationSilu      = compute.ActivationSilu
+	ActivationHardSwish = compute.ActivationHardSwish
+)
+
+// GGMLQuantType identifies the specific GGML block quantization format.
+//
+// Deprecated: it's just an alias to [compute.GGMLQuantType], use that instead.
+type GGMLQuantType = compute.GGMLQuantType
+
+const (
+	GGMLQ4_0  = compute.GGMLQ4_0
+	GGMLQ8_0  = compute.GGMLQ8_0
+	GGMLIQ4NL = compute.GGMLIQ4NL
+	GGMLQ2_K  = compute.GGMLQ2_K
+	GGMLQ3_K  = compute.GGMLQ3_K
+	GGMLQ4_K  = compute.GGMLQ4_K
+	GGMLQ5_K  = compute.GGMLQ5_K
+	GGMLQ6_K  = compute.GGMLQ6_K
+)
+
+// Quantization specifies the quantization for fused operations.
+//
+// Deprecated: it's just an alias to [compute.Quantization], use that instead.
+type Quantization = compute.Quantization
+
+// QuantizationScheme identifies the quantization scheme for fused operations.
+//
+// Deprecated: it's just an alias to [compute.QuantizationScheme], use that instead.
+type QuantizationScheme = compute.QuantizationScheme
+
+const (
+	QuantLinear = compute.QuantLinear
+	QuantNF4    = compute.QuantNF4
+	QuantGGML   = compute.QuantGGML
+)
+
+// IQ4NLLookupTable contains the 16 fixed IQ4_NL non-linear dequantization values.
+//
+// Deprecated: it's just an alias to [compute.IQ4NLLookupTable], use that instead.
+var IQ4NLLookupTable = compute.IQ4NLLookupTable
+
+// NF4LookupTable contains the 16 fixed QLoRA NormalFloat4 dequantization values.
+//
+// Deprecated: it's just an alias to [compute.NF4LookupTable], use that instead.
+var NF4LookupTable = compute.NF4LookupTable
+
+// AxesLayout specifies the ordering of axes in 4D attention tensors.
+//
+// Deprecated: it's just an alias to [compute.AxesLayout], use that instead.
+type AxesLayout = compute.AxesLayout
+
+const (
+	AxesLayoutBHSD = compute.AxesLayoutBHSD
+	AxesLayoutBSHD = compute.AxesLayoutBSHD
+)
+
 // DefaultConfig is the name of the default backend configuration to use if specified.
 //
 // Deprecated: it's just an alias to [compute.DefaultConfig], use that instead.
 var DefaultConfig = compute.DefaultConfig
+
+// ConfigEnvVar is the name of the environment variable with the default backend configuration to use:
+// "GOMLX_BACKEND".
+//
+// Deprecated: it's just an alias to [compute.ConfigEnvVar], use that instead.
+const ConfigEnvVar = compute.ConfigEnvVar
 
 // MustNew returns a new default Backend or panics if it fails.
 //
