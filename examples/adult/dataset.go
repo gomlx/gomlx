@@ -19,15 +19,16 @@ package adult
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/backends"
+	"log"
+
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/pkg/errors"
-	"log"
 )
 
 // NewDataset creates a new `datasets.InMemoryDataset` (can be used for training and evaluation) for the
 // MCI Adult dataset.
-func NewDataset(backend backends.Backend, rawData *RawData, name string) *datasets.InMemoryDataset {
+func NewDataset(backend compute.Backend, rawData *RawData, name string) *datasets.InMemoryDataset {
 	tensorData := rawData.CreateTensors(backend)
 	ds, err := datasets.InMemoryFromData(backend, name,
 		[]any{tensorData.CategoricalTensor, tensorData.ContinuousTensor, tensorData.WeightsTensor},
@@ -40,7 +41,7 @@ func NewDataset(backend backends.Backend, rawData *RawData, name string) *datase
 
 // PrintBatchSamples just generate a couple of batches of size 3 and print on the output.
 // Just for debugging.
-func PrintBatchSamples(backend backends.Backend, data *RawData) {
+func PrintBatchSamples(backend compute.Backend, data *RawData) {
 	sampler := NewDataset(backend, data, "batched sample dataset")
 	sampler.BatchSize(3, true)
 	for ii := range 2 {

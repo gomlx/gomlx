@@ -5,7 +5,7 @@ package main
 import (
 	"flag"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	fm "github.com/gomlx/gomlx/examples/FlowMatching"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
@@ -23,7 +23,7 @@ var (
 )
 
 var (
-	backend = backends.MustNew()
+	backend = compute.MustNew()
 )
 
 func main() {

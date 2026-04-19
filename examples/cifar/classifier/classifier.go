@@ -10,8 +10,10 @@
 package classifier
 
 import (
+	"image"
+
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/cifar"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -20,14 +22,13 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
-	"image"
 )
 
 // Classifier holds the Cifar-10 model compiled.
 // It will use XLA with GPU if available or CPU by default. But the backend can be configured with GOMLX_BACKEND.
 type Classifier struct {
 	// backend is created with defaults, which uses GOMLX_BACKEND if it is set.
-	backend backends.Backend
+	backend compute.Backend
 
 	// ctx with the model's weights.
 	ctx *context.Context
@@ -39,7 +40,7 @@ type Classifier struct {
 // New creates a new Classifier object that can be used to classify images using a Cifar-10 model.
 func New(checkpointDir string) (*Classifier, error) {
 	c := &Classifier{
-		backend: backends.MustNew(),
+		backend: compute.MustNew(),
 		ctx:     context.New(),
 	}
 

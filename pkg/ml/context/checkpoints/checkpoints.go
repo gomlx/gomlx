@@ -73,9 +73,9 @@ import (
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -125,7 +125,7 @@ type Config struct {
 	includeParams   bool             // whether to includeParams in loading/saving.
 	paramsToExclude sets.Set[string] // specific parameter names to exclude from loading.
 
-	backend  backends.Backend // used when taking the mean.
+	backend  compute.Backend // used when taking the mean.
 	takeMean int
 
 	varsToExclude sets.Set[*context.Variable]
@@ -348,7 +348,7 @@ func (c *Config) Keep(n int) *Config {
 // are going to be used on-device anyway -- or bad -- if they are not needed on-device, and it's using the limited
 // on-device space. Consider *tensors.Tensor.MaterializeLocal and *tensors.Tensor.InvalidateOnDevice to have them
 // moved locally if so desired.
-func (c *Config) TakeMean(n int, backend backends.Backend) *Config {
+func (c *Config) TakeMean(n int, backend compute.Backend) *Config {
 	if c.err != nil {
 		return c
 	}

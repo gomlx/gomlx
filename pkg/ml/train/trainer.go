@@ -14,7 +14,7 @@ import (
 	"iter"
 	"slices"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -51,15 +51,15 @@ const (
 //
 // See Loop for a flexible and extensible (different UIs) way to run this in a training loop.
 type Trainer struct {
-	backend   backends.Backend
+	backend   compute.Backend
 	context   *context.Context
-	deviceNum backends.DeviceNum
+	deviceNum compute.DeviceNum
 	modelFn   ModelFn
 	lossFn    LossFn
 	optimizer optimizers.Interface
 
 	// Distribute execution:
-	deviceAssignment []backends.DeviceNum // Optional.
+	deviceAssignment []compute.DeviceNum // Optional.
 
 	// maxExecutors to cache. It will fail after that. One executor is created
 	// per `spec` value, so this is the same as the max number of different `spec`
@@ -156,7 +156,7 @@ const (
 //   - evalMetrics are output by trainer.EvalStep and trainer.Eval. Here it's recommend to use mean metrics, since the model
 //     is presumably frozen, and it sees each example exactly once. The mean of the loss of the dataset is always provided
 //     as the first metric. It's ok to be empty (nil).
-func NewTrainer(backend backends.Backend, ctx *context.Context,
+func NewTrainer(backend compute.Backend, ctx *context.Context,
 	modelFn ModelFn, lossFn LossFn, optimizer optimizers.Interface,
 	trainMetrics, evalMetrics []metrics.Interface) *Trainer {
 
@@ -253,7 +253,7 @@ func NewTrainer(backend backends.Backend, ctx *context.Context,
 //
 // A nil value (the default) is valid, in which case it uses the backend's default, which is usually simply the
 // sequential devices starting from 0.
-func (r *Trainer) WithDeviceAssignment(deviceAssignment ...backends.DeviceNum) *Trainer {
+func (r *Trainer) WithDeviceAssignment(deviceAssignment ...compute.DeviceNum) *Trainer {
 	if deviceAssignment == nil {
 		r.deviceAssignment = nil
 		return r
@@ -482,7 +482,7 @@ func (r *Trainer) callGraphFn(
 // Notice that the returned metrics are not distributed.
 func (r *Trainer) distributedCallGraphFn(
 	strategy distributed.Strategy,
-	deviceAssignment []backends.DeviceNum,
+	deviceAssignment []compute.DeviceNum,
 	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node),
 	graphType GraphType,
 	execMap map[any]*context.Exec,
@@ -650,7 +650,7 @@ func (r *Trainer) TrainStep(spec any, inputs, labels []*tensors.Tensor) (metrics
 // only when the dataset spec changes.
 //
 // Otherwise, it behaves just like TrainStep.
-func (r *Trainer) DistributedTrainStep(strategy distributed.Strategy, deviceAssignment []backends.DeviceNum,
+func (r *Trainer) DistributedTrainStep(strategy distributed.Strategy, deviceAssignment []compute.DeviceNum,
 	spec any, inputs, labels []*distributed.Tensor) (metrics []*tensors.Tensor, err error) {
 	if r.accumulateGradients {
 		// Version that accumulate gradients.
@@ -704,7 +704,7 @@ func (r *Trainer) EvalStep(spec any, inputs, labels []*tensors.Tensor) (metrics 
 // only when the dataset spec changes.
 //
 // Otherwise, it behaves just like EvalStep.
-func (r *Trainer) DistributedEvalStep(strategy distributed.Strategy, deviceAssignment []backends.DeviceNum,
+func (r *Trainer) DistributedEvalStep(strategy distributed.Strategy, deviceAssignment []compute.DeviceNum,
 	spec any, inputs, labels []*distributed.Tensor) (metrics []*tensors.Tensor, err error) {
 	return r.distributedCallGraphFn(strategy, deviceAssignment, r.evalStepGraph, EvalType, r.evalStepExecMap, spec, inputs, labels)
 }

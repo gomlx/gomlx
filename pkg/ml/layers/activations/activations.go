@@ -10,7 +10,7 @@ package activations
 import (
 	"math"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -51,24 +51,24 @@ const (
 	TypeGeluApprox
 )
 
-// ToBackend converts an activations.Type to the corresponding backends.ActivationType.
-// Unsupported activation types map to backends.ActivationNone.
-func (t Type) ToBackend() backends.ActivationType {
+// ToBackend converts an activations.Type to the corresponding compute.ActivationType.
+// Unsupported activation types map to compute.ActivationNone.
+func (t Type) ToBackend() compute.ActivationType {
 	switch t {
 	case TypeNone:
-		return backends.ActivationNone
+		return compute.ActivationNone
 	case TypeGelu, TypeGeluApprox:
-		return backends.ActivationGelu
+		return compute.ActivationGelu
 	case TypeRelu:
-		return backends.ActivationRelu
+		return compute.ActivationRelu
 	case TypeSwish, TypeSilu:
-		return backends.ActivationSilu
+		return compute.ActivationSilu
 	case TypeHardSwish:
-		return backends.ActivationHardSwish
+		return compute.ActivationHardSwish
 	case TypeTanh:
-		return backends.ActivationTanh
+		return compute.ActivationTanh
 	default:
-		return backends.ActivationNone
+		return compute.ActivationNone
 	}
 }
 

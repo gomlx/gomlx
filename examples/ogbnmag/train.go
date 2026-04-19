@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -117,7 +117,7 @@ func TrainingSchedule(ctx *context.Context, fromStep, toStep int) train.OnStepFn
 
 // Train GNN model based on configuration in `ctx`.
 func Train(
-	backend backends.Backend,
+	backend compute.Backend,
 	ctx *context.Context,
 	dataDir, checkpointPath string,
 	layerWiseEval, report bool,
@@ -235,7 +235,7 @@ func Train(
 
 var NanLogger *nanlogger.NanLogger
 
-func newTrainer(backend backends.Backend, ctx *context.Context) *train.Trainer {
+func newTrainer(backend compute.Backend, ctx *context.Context) *train.Trainer {
 	// Loss: multi-class classification problem.
 	lossFn := losses.SparseCategoricalCrossEntropyLogits
 
@@ -256,7 +256,7 @@ func newTrainer(backend backends.Backend, ctx *context.Context) *train.Trainer {
 }
 
 func Eval(
-	backend backends.Backend,
+	backend compute.Backend,
 	ctx *context.Context,
 	dataDir, checkpointPath string,
 	layerWise, skipTrain bool,
@@ -276,7 +276,7 @@ func Eval(
 	return evalWithContext(backend, ctx, dataDir, layerWise, skipTrain)
 }
 
-func evalWithContext(backend backends.Backend, ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
+func evalWithContext(backend compute.Backend, ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
 	if layerWise {
 		return evalLayerWise(backend, ctx, baseDir)
 	}
@@ -295,7 +295,7 @@ func evalWithContext(backend backends.Backend, ctx *context.Context, baseDir str
 }
 
 // evalSampled evaluates GNN model based on configuration in `ctx` using sampled sub-graphs.
-func evalSampled(backend backends.Backend, ctx *context.Context, datasets ...train.Dataset) error {
+func evalSampled(backend compute.Backend, ctx *context.Context, datasets ...train.Dataset) error {
 	// Evaluation on the various eval datasets.
 	trainer := newTrainer(backend, ctx)
 	for _, ds := range datasets {
@@ -311,7 +311,7 @@ func evalSampled(backend backends.Backend, ctx *context.Context, datasets ...tra
 }
 
 // evalLayerWise evaluates GNN model based on configuration in `ctx` using layer-wise inference.
-func evalLayerWise(backend backends.Backend, ctx *context.Context, baseDir string) error {
+func evalLayerWise(backend compute.Backend, ctx *context.Context, baseDir string) error {
 	// Create the OGBN-MAG strategy, used by the layer-wise inference: batch-size is irrelevant.
 	magSampler, err := NewSampler(baseDir)
 	if err != nil {
@@ -349,7 +349,7 @@ func getDType(ctx *context.Context) dtypes.DType {
 // convertPaperEmbeddings converts the "PapersEmbeddings" variable to the selected dtype, if needed.
 //
 // One should be careful not to save the converted values -- ideally, the values are saved in the original Float32.
-func convertPapersEmbeddings(backend backends.Backend, ctx *context.Context) {
+func convertPapersEmbeddings(backend compute.Backend, ctx *context.Context) {
 	dtype := getDType(ctx)
 	dtypeEmbed := dtype
 	if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {

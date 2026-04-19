@@ -12,7 +12,7 @@
 //
 //   - FromShape(shape shapes.Shape): creates a tensor with the given shape, and zero values.
 //
-//   - FromShapeForBackend(backend backends.Backend, shape shapes.Shape): creates a tensor with the given shape,
+//   - FromShapeForBackend(backend compute.Backend, shape shapes.Shape): creates a tensor with the given shape,
 //     using a shared buffer if the backend supports it.
 //
 //   - FromScalarAndDimensions[T shapes.Supported](value T, dimensions ...int): creates a Tensor with the
@@ -64,15 +64,15 @@
 //
 // Alternatively, after using a tensor as input to a Backend computation, or a tensor returned from the Backend,
 // call Tensor.ToLocal(): it will remove any links to the backend (by copying all the data locally), and
-// it can then be used by other backends.
+// it can then be used by other compute.
 package tensors
 
 import (
 	"sync"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
 )
 
@@ -102,7 +102,7 @@ import (
 //
 // Alternatively, after using a tensor as input to a Backend computation, or a tensor returned from the Backend,
 // call Tensor.ToLocal(): it will remove any links to the backend (by copying all the data locally), and
-// it can then be used by other backends.
+// it can then be used by other compute.
 //
 // More details in the `tensor` package documentation.
 type Tensor struct {
@@ -126,10 +126,10 @@ type Tensor struct {
 	// the shared buffer.
 	isShared     bool
 	sharedFlat   any // Flat slice, []dtype of the shared memory area.
-	sharedDevice backends.DeviceNum
+	sharedDevice compute.DeviceNum
 
 	// backend to use for on-device tensors.
-	backend backends.Backend
+	backend compute.Backend
 }
 
 // newEmptyTensor returns a Tensor object initialized only with the shape, but no actual storage (local or on any device)

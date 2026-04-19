@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/adult"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -150,7 +150,7 @@ func main() {
 }
 
 func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) error {
-	backend := backends.MustNew()
+	backend := compute.MustNew()
 	numDevices := backend.NumDevices()
 	if *flagNumDevices > 0 {
 		if *flagNumDevices > numDevices {
@@ -231,7 +231,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 		}
 		inputShardingSpecs := []*distributed.ShardingSpec{shardingSpec}
 		labelsShardingSpecs := []*distributed.ShardingSpec{shardingSpec}
-		var deviceAssignment []backends.DeviceNum // nil, the default assignment will be used.
+		var deviceAssignment []compute.DeviceNum // nil, the default assignment will be used.
 		trainDS, err = datasets.NewDistributedAccumulator(
 			backend, trainDS, strategy, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
 		if err != nil {
@@ -254,7 +254,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 		// Distributed datasets already prefetch on device, so we don't need to do it here.
 		if !*flagDistributed {
 			var err error
-			trainDS, err = datasets.NewOnDevice(backend, trainDS, false, *flagPrefetchOnDevice, backends.DeviceNum(0))
+			trainDS, err = datasets.NewOnDevice(backend, trainDS, false, *flagPrefetchOnDevice, compute.DeviceNum(0))
 			if err != nil {
 				return err
 			}

@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -130,7 +130,7 @@ func SetTrainSteps(ctx *context.Context) {
 
 func main() {
 	// Init GoMLX manager and default context.
-	backend := backends.MustNew()
+	backend := compute.MustNew()
 	ctx := createDefaultContext()
 
 	// Flags with context settings.

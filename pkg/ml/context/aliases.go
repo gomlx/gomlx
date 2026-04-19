@@ -9,12 +9,12 @@ package context
 // package because we have conflicting symbols (`Exec`, `MustNewExec`).
 
 import (
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	graph "github.com/gomlx/gomlx/pkg/core/graph"
 )
 
 // Backend is an alias to graph.Backend.
-type Backend = backends.Backend
+type Backend = compute.Backend
 
 // Graph is an alias to graph.Graph.
 type Graph = graph.Graph

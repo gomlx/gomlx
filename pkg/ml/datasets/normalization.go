@@ -5,7 +5,7 @@ package datasets
 import (
 	"io"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -26,7 +26,7 @@ import (
 //
 // Notice for any feature that happens to be constant, the `stddev` will be 0. If trying to normalize (divide)
 // by that will result in error. Use ReplaceZerosByOnes below to avoid the numeric issues.
-func Normalization(backend backends.Backend, ds train.Dataset, inputsIndex int, independentAxes ...int) (mean, stddev *tensors.Tensor, err error) {
+func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, independentAxes ...int) (mean, stddev *tensors.Tensor, err error) {
 	ctx := context.New()
 	updateValuesWithInput := context.MustNewExec(backend, ctx, func(ctx *context.Context, batch *Node) {
 		g := batch.Graph()

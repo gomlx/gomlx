@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	_ "github.com/gomlx/gomlx/backends/default"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -140,7 +140,7 @@ func createTrainingBatch(ctx *context.Context, text string) (inputs [][]int32, t
 	return inputs, targets
 }
 
-func trainModel(backend backends.Backend, ctx *context.Context) {
+func trainModel(backend compute.Backend, ctx *context.Context) {
 	steps := context.GetParamOr(ctx, ParamTrainSteps, 200)
 	learningRate := context.GetParamOr(ctx, optimizers.ParamLearningRate, 0.01)
 	batchSize := context.GetParamOr(ctx, ParamBatchSize, 4)
@@ -180,7 +180,7 @@ func trainModel(backend backends.Backend, ctx *context.Context) {
 	fmt.Printf("\nTraining complete!\n")
 }
 
-func generateText(backend backends.Backend, ctx *context.Context, prompt string) {
+func generateText(backend compute.Backend, ctx *context.Context, prompt string) {
 	vocabSize := context.GetParamOr(ctx, transformer.ParamVocabSize, 128)
 
 	tokenizer := &CharTokenizer{vocabSize: vocabSize}
@@ -241,7 +241,7 @@ func main() {
 
 	fmt.Println(commandline.SprintContextSettings(ctx))
 
-	backend, err := backends.New()
+	backend, err := compute.New()
 	if err != nil {
 		log.Fatalf("Failed to create backend: %v", err)
 	}

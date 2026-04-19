@@ -9,8 +9,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -180,7 +180,7 @@ func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*t
 // distributedStep of loop, called by all looping methods.
 // It calls the appropriate hooks.
 func (loop *Loop) distributedStep(
-	strategy distributed.Strategy, deviceAssignment []backends.DeviceNum,
+	strategy distributed.Strategy, deviceAssignment []compute.DeviceNum,
 	spec any, inputs, labels []*distributed.Tensor) (metrics []*tensors.Tensor, err error) {
 	startTime := time.Now()
 	defer func() {

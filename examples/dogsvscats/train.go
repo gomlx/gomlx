@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -196,7 +196,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	backend := backends.MustNew()
+	backend := compute.MustNew()
 	var trainer *train.Trainer
 	optimizer := optimizers.FromContext(ctx)
 	if !preTraining {

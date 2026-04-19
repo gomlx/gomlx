@@ -19,10 +19,10 @@ import (
 	"os"
 	"sort"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/go-huggingface/hub"
 	"github.com/gomlx/go-huggingface/tokenizers"
 	"github.com/gomlx/go-huggingface/tokenizers/api"
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -97,7 +97,7 @@ func main() {
 	}
 
 	// Initialize backend.
-	backend := backends.MustNew()
+	backend := compute.MustNew()
 	fmt.Printf("Backend: %s\n\n", backend.Name())
 
 	// Tokenize query-document pairs and run inference.
@@ -131,7 +131,7 @@ func main() {
 
 // rerank computes relevance scores for a query against multiple documents
 // using a cross-encoder model.
-func rerank(backend backends.Backend, ctx *context.Context, model onnx.Model, tok tokenizers.Tokenizer, query string, documents []string) []float32 {
+func rerank(backend compute.Backend, ctx *context.Context, model onnx.Model, tok tokenizers.Tokenizer, query string, documents []string) []float32 {
 	// Tokenize each query-document pair.
 	pairs := encodePairs(tok, query, documents, *flagMaxLength)
 

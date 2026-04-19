@@ -3,7 +3,7 @@
 package ggml
 
 import (
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 )
 
@@ -18,7 +18,7 @@ import (
 //   - ggmlType: the GGML block format (Q4_0, Q8_0, IQ4_NL).
 //
 // Output: Float32 tensor with shape [batch..., K] where K is the logical embedding dimension.
-func EmbeddingLookupDecomposed(table, indices *Node, ggmlType backends.GGMLQuantType) *Node {
+func EmbeddingLookupDecomposed(table, indices *Node, ggmlType compute.GGMLQuantType) *Node {
 	tableShape := table.Shape()
 	bytesPerRow := tableShape.Dimensions[1]
 	bpb := ggmlType.BytesPerBlock()

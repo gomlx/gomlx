@@ -3,7 +3,7 @@
 package train
 
 import (
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 )
@@ -89,7 +89,7 @@ type DistributedDataset interface {
 
 	// DeviceAssignment returns the device assignment for the distributed dataset.
 	// The Yield() method will return distributed.Tensor already on the corresponding device.
-	DeviceAssignment() []backends.DeviceNum
+	DeviceAssignment() []compute.DeviceNum
 
 	// DistributedYield one "batch" (or whatever is the unit for a training step) or an error.
 	// Very similar to Dataset.Yield, all the notes there apply here.

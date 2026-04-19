@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/simplego"
 	"github.com/gomlx/gomlx/internal/must"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
@@ -30,7 +30,7 @@ var (
 // ListVariables list the variables of a model, with their shape and MAV (max absolute value), RMS (root-mean-square) and MaxAV (max absolute value) values.
 func ListVariables(ctx *context.Context) {
 	fmt.Println(titleStyle.Render(fmt.Sprintf("Variables in scope %q", ctx.Scope())))
-	metricsFn := MustNewExec(backends.MustNew(), func(x *Node) (mav, rms, maxAV *Node) {
+	metricsFn := MustNewExec(compute.MustNew(), func(x *Node) (mav, rms, maxAV *Node) {
 		x = ConvertDType(x, dtypes.Float64)
 		mav = ReduceAllMean(Abs(x))
 		rms = Sqrt(ReduceAllMean(Square(x)))

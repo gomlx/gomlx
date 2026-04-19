@@ -19,8 +19,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/go-huggingface/hub"
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -81,7 +81,7 @@ func main() {
 	must.M(onnxModel.VariablesToContext(ctx))
 
 	// Create backend
-	backend := must.M1(backends.New())
+	backend := must.M1(compute.New())
 	defer backend.Finalize()
 
 	// Tokenize input

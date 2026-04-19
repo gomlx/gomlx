@@ -7,9 +7,9 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -206,7 +206,7 @@ func TestFNNRegularized(t *testing.T) {
 }
 
 func TestFNNEnsembleShapes(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		for _, hasEnsembleAxis := range []bool{false, true} {
 			for _, numHiddenLayers := range []int{0, 1, 2} {
 				for _, useBias := range []bool{false, true} {

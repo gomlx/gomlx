@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/disintegration/imaging"
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
@@ -223,10 +223,10 @@ func (ds *Dataset) Reset() {
 //
 // If the cache is not found, it automatically calls DownloadAndParse to download and untar the original
 // images, if they are not yet downloaded.
-func InMemoryDataset(backend backends.Backend, baseDir string, imageSize int, name string,
+func InMemoryDataset(backend compute.Backend, baseDir string, imageSize int, name string,
 	partitionSeed int64, partitionFrom, partitionTo float64) (
 	inMemoryDataset *datasets.InMemoryDataset, err error) {
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 	var f *os.File
 	if baseDir != "" {
 		baseDir = fsutil.MustReplaceTildeInDir(baseDir) // If dir starts with "~", it is replaced.

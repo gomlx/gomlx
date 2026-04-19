@@ -12,7 +12,7 @@ import (
 	"strings"
 	"syscall/js"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	_ "github.com/gomlx/gomlx/backends/simplego"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -63,7 +63,7 @@ func main() {
 	}()
 
 	// With simplego imported, MustNew picks the pure-Go backend under WASM.
-	be := backends.MustNew()
+	be := compute.MustNew()
 
 	// Prepare cached executors for fast, repeated runs.
 	addExec := graph.MustNewExec(be, func(x, y *graph.Node) *graph.Node { return graph.Add(x, y) })

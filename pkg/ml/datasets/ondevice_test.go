@@ -6,7 +6,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/stretchr/testify/assert"
@@ -61,7 +61,7 @@ func TestOnDevice(t *testing.T) {
 	//
 	// Notice for bufferSize > 1 the ordder is not preserved, and the IOF may be queued before a valid batch
 	// so we use bufferSize = 1 here.
-	targetDevice := backends.DeviceNum(0)
+	targetDevice := compute.DeviceNum(0)
 	bufferSize := 1
 	onDeviceDS, err := NewOnDevice(backend, sourceDS, false, bufferSize, targetDevice)
 	require.NoError(t, err)

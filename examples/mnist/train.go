@@ -26,8 +26,8 @@ import (
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -138,7 +138,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	}
 
 	fmt.Printf("Training %s model:\n", modelType)
-	backend := backends.MustNew()
+	backend := compute.MustNew()
 	fmt.Printf("Backend %s: %s\n", backend.Name(), backend.Description())
 
 	lossFn, err := losses.LossFromContext(ctx)

@@ -3,8 +3,8 @@
 package nn
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/ggml"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
@@ -44,7 +44,7 @@ func QuantizedDense(x, weights *Node, quant *Quantization, bias *Node,
 	// GGML weights: types with a decomposed graph-level fallback (Q4_0, Q8_0, IQ4_NL)
 	// work on any backend (including XLA). K-quant types (Q4_K, Q6_K, etc.) require
 	// a backend with a fused executor (e.g. simplego); other backends will panic here.
-	if quant.Scheme == backends.QuantGGML {
+	if quant.Scheme == compute.QuantGGML {
 		if ggml.CanDecompose(quant.GGMLType) {
 			return InternalFusedOpCaller(
 				func() *Node { return BackendFusedQuantizedDense(x, weights, bias, quant, backendAct) },
@@ -77,7 +77,7 @@ func quantizedDenseDecomposed(x, weights *Node, quant *Quantization, bias *Node,
 	}
 
 	// NF4 quantization uses a fixed lookup table and does not support zero points.
-	if quant.Scheme == backends.QuantNF4 && quant.ZeroPoint != nil {
+	if quant.Scheme == compute.QuantNF4 && quant.ZeroPoint != nil {
 		Panicf("nn.QuantizedDense: ZeroPoint must be nil for NF4 quantization scheme")
 	}
 
@@ -90,9 +90,9 @@ func quantizedDenseDecomposed(x, weights *Node, quant *Quantization, bias *Node,
 	// Step A: Dequantize weights to [K, N] float32.
 	var dequant *Node
 	switch quant.Scheme {
-	case backends.QuantNF4:
+	case compute.QuantNF4:
 		dequant = dequantNF4FromTyped(g, weights, K, N)
-	case backends.QuantLinear:
+	case compute.QuantLinear:
 		dequant = ConvertDType(weights, dtypes.Float32) // [K, N] float32
 	default:
 		Panicf("nn.QuantizedDense: unsupported quantization scheme %v", quant.Scheme)
@@ -167,7 +167,7 @@ func dequantNF4FromTyped(g *Graph, weights *Node, K, N int) *Node {
 	default:
 		Panicf("dequantNF4FromTyped: expected Int4 or Uint4 weights, got %s", wDType)
 	}
-	nf4Table := Const(g, backends.NF4LookupTable[:]) // [16] float32
+	nf4Table := Const(g, compute.NF4LookupTable[:]) // [16] float32
 	indicesForGather := Reshape(indices, K, N, 1)    // [K, N, 1]
 	return Gather(nf4Table, indicesForGather)        // [K, N] float32
 }

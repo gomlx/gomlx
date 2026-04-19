@@ -16,8 +16,8 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	"k8s.io/klog/v2"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 )
@@ -568,7 +568,7 @@ func (t *Tensor) GobSerialize(encoder *gob.Encoder) error {
 // GobDeserialize a Tensor from the reader.
 //
 // If the tensor is only going to be directly consumed by the execution of a graph (an ML model),
-// use GoDeserializeOnDevice instead; it works faster for some backends.
+// use GoDeserializeOnDevice instead; it works faster for some compute.
 func GobDeserialize(decoder *gob.Decoder) (*Tensor, error) {
 	shape, err := shapes.GobDeserialize(decoder)
 	if err != nil {
@@ -597,8 +597,8 @@ func GobDeserialize(decoder *gob.Decoder) (*Tensor, error) {
 // Returns new Tensor (with shared or onDevice storage or an error).
 func GobDeserializeToDevice(
 	decoder *gob.Decoder,
-	backend backends.Backend,
-	deviceNum backends.DeviceNum,
+	backend compute.Backend,
+	deviceNum compute.DeviceNum,
 ) (*Tensor, error) {
 	if !backend.HasSharedBuffers() {
 		// Load locally, and then materialize on-device.
@@ -622,7 +622,7 @@ func GobDeserializeToDevice(
 	}
 
 	// Create a shared buffer.
-	var buffer backends.Buffer
+	var buffer compute.Buffer
 	var flatAny any
 	buffer, flatAny, err = backend.NewSharedBuffer(deviceNum, shape)
 	if err != nil {

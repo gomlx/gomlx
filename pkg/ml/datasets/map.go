@@ -3,8 +3,8 @@
 package datasets
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -19,7 +19,7 @@ type MapGraphFn func(ctx *context.Context, inputs, labels []*Node) (mappedInputs
 // mapGraphFnDataset implements a `train.Dataset` that maps a graph building function to a wrapped dataset.
 // See [MapWithGraphFn] on how to use it.
 type mapGraphFnDataset struct {
-	backend                          backends.Backend
+	backend                          compute.Backend
 	ctx                              *context.Context
 	ds                               train.Dataset
 	mapGraphFn                       MapGraphFn
@@ -35,7 +35,7 @@ type mapGraphFnDataset struct {
 //
 // The graph building function `graphFn` can return a different number of `inputs` or `labels` than what it was given,
 // but these numbers should never change -- always return the same number of inputs and labels.
-func MapWithGraphFn(backend backends.Backend, ctx *context.Context, dataset train.Dataset, graphFn MapGraphFn) train.Dataset {
+func MapWithGraphFn(backend compute.Backend, ctx *context.Context, dataset train.Dataset, graphFn MapGraphFn) train.Dataset {
 	mapDS := &mapGraphFnDataset{
 		backend:    backend,
 		ctx:        ctx,

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/train"
@@ -53,7 +53,7 @@ type distributedBatch struct {
 //
 // It accumulates the shards from the source dataset and yields them as a single distributed.Tensor.
 type DistributedAccumulator struct {
-	backend backends.Backend
+	backend compute.Backend
 	source  train.Dataset
 
 	// Distribution parameters
@@ -61,7 +61,7 @@ type DistributedAccumulator struct {
 	numDevices                             int
 	numInputShards                         int // Number of shards to read from source (can be < numDevices if replicated)
 	inputShardingSpecs, labelShardingSpecs []*distributed.ShardingSpec
-	deviceAssignment                       []backends.DeviceNum
+	deviceAssignment                       []compute.DeviceNum
 
 	// Bucketing system - no mutex needed, only one goroutine modifies buckets
 	buckets map[string]*bucket
@@ -90,9 +90,9 @@ var _ train.Dataset = (*DistributedAccumulator)(nil)
 //
 // The last element of inputShardingSpec is used if there are more inputs than specs defined.
 // The same for labels.
-func NewDistributedAccumulator(backend backends.Backend, source train.Dataset, strategy distributed.Strategy,
+func NewDistributedAccumulator(backend compute.Backend, source train.Dataset, strategy distributed.Strategy,
 	inputShardingSpecs, labelShardingSpecs []*distributed.ShardingSpec,
-	deviceAssignment []backends.DeviceNum) (
+	deviceAssignment []compute.DeviceNum) (
 	*DistributedAccumulator, error) {
 	if backend == nil {
 		return nil, errors.New("backend cannot be nil")
@@ -132,9 +132,9 @@ func NewDistributedAccumulator(backend backends.Backend, source train.Dataset, s
 
 	// Create default device assignment if nil (sequential, starting from 0)
 	if deviceAssignment == nil {
-		deviceAssignment = make([]backends.DeviceNum, numDevices)
+		deviceAssignment = make([]compute.DeviceNum, numDevices)
 		for i := range numDevices {
-			deviceAssignment[i] = backends.DeviceNum(i)
+			deviceAssignment[i] = compute.DeviceNum(i)
 		}
 	} else if len(deviceAssignment) != numDevices {
 		return nil, errors.Errorf("device assignment length (%d) must match numDevices (%d)",
@@ -247,7 +247,7 @@ func (ds *DistributedAccumulator) Strategy() distributed.Strategy {
 }
 
 // DeviceAssignment implements train.DistributedDataset.
-func (ds *DistributedAccumulator) DeviceAssignment() []backends.DeviceNum {
+func (ds *DistributedAccumulator) DeviceAssignment() []compute.DeviceNum {
 	return ds.deviceAssignment
 }
 

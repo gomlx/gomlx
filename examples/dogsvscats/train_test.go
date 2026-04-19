@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
@@ -24,9 +24,9 @@ func init() {
 	ctx := CreateDefaultContext()
 	flagSettings = commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
-	if _, found := os.LookupEnv(backends.ConfigEnvVar); !found {
+	if _, found := os.LookupEnv(compute.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
-		check(os.Setenv(backends.ConfigEnvVar, "xla:cpu"))
+		check(os.Setenv(compute.ConfigEnvVar, "xla:cpu"))
 	}
 }
 
