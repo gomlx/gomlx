@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gomlx/gomlx/internal/backendparser"
+	"github.com/gomlx/compute/support/backendparser"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"k8s.io/klog/v2"
