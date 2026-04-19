@@ -1,6 +1,8 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-// Package simplego is a stub for the newly created github.com/gomlx/compute/gobackend.
+// Package simplego is a stub for the newly created github.com/gomlx/compute/gobackend -- it is no longer
+// "simple", hence the change in package name.
+//
 // It simply aliases the public types and functions.
 package simplego
 
