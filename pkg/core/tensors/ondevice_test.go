@@ -11,9 +11,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/backends"
 	_ "github.com/gomlx/gomlx/backends/default" // Use xla backend.
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/stretchr/testify/require"
@@ -39,26 +39,27 @@ func must1[T any](value T, err error) T {
 }
 
 var (
-	backend backends.Backend
+	backend       compute.Backend
+	setupTestOnce sync.Once
 )
 
 func setupTest(t *testing.T) {
 	// setupTest is also called from benchmarks, make sure it only executes once though.
-	sync.OnceFunc(func() {
-		backends.DefaultConfig = *flagBackend
+	setupTestOnce.Do(func() {
+		compute.DefaultConfig = *flagBackend
 		if t != nil {
 			require.NotPanics(t, func() {
-				backend = backends.MustNew()
+				backend = compute.MustNew()
 			})
 		} else {
-			backend = backends.MustNew()
+			backend = compute.MustNew()
 		}
-	})()
+	})
 }
 
-func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends.Backend) {
+func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend compute.Backend) {
 	dtype := dtypes.FromGenericsType[T]()
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 
 	t.Run(dtype.String(), func(t *testing.T) {
 		// Create trivial f(x)=x^2 program using plain XlaBuilder
@@ -73,7 +74,7 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 		require.NoError(t, err)
 		x2, err := mainFn.Mul(x, x)
 		require.NoError(t, err)
-		err = mainFn.Return([]backends.Value{x2}, nil)
+		err = mainFn.Return([]compute.Value{x2}, nil)
 		require.NoError(t, err)
 		exec, err := builder.Compile()
 		require.NoError(t, err)
@@ -94,8 +95,8 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 			})
 		}
 
-		var outputs []backends.Buffer
-		outputs, err = exec.Execute([]backends.Buffer{buffer}, nil, 0)
+		var outputs []compute.Buffer
+		outputs, err = exec.Execute([]compute.Buffer{buffer}, nil, 0)
 		require.NoError(t, err)
 
 		// Convert the buffer to a tensor: the converted tensor should not be shared, since the buffer comes from the output
@@ -154,7 +155,7 @@ var testShapes = []shapes.Shape{
 //	BenchmarkHostToDevice/(Float32)[1000_1000]-24               9177            133306 ns/op
 func BenchmarkHostToDevice(b *testing.B) {
 	setupTest(nil)
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 
 	// Pre-allocate tensors.
 	numShapes := len(testShapes)
@@ -256,7 +257,7 @@ func BenchmarkCopyFromLocal(b *testing.B) {
 //	BenchmarkCopyFromDevice/(Float32)[1000_1000]-24             8956            133465 ns/op
 func BenchmarkCopyFromDevice(b *testing.B) {
 	setupTest(nil)
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 
 	// Pre-allocate tensors.
 	numShapes := len(testShapes)
@@ -302,7 +303,7 @@ func BenchmarkCopyFromDevice(b *testing.B) {
 
 func TestClones(t *testing.T) {
 	setupTest(t)
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 	refValues := []int32{1, 3, 5, 7, 11}
 	for cloneType := range 3 {
 		for fromLocation := range 2 {
@@ -342,7 +343,7 @@ func TestClones(t *testing.T) {
 
 func TestToLocal(t *testing.T) {
 	setupTest(t)
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 	refValues := []int32{1, 3, 5, 7, 11}
 
 	for _, shared := range []bool{false, true} {
@@ -364,7 +365,7 @@ func TestToLocal(t *testing.T) {
 }
 
 func TestOnDeviceSerialization(t *testing.T) {
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 	// Test reading directly to a device.
 	setupTest(t)
 	if backend == nil {
