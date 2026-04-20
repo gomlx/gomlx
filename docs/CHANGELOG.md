@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next:
+# Next: API changes with the large `backends` refactoring!
 
 ## API Changes: `backends`, `dtypes` and `shapes` moving to `github.com/gomlx/compute`
 
