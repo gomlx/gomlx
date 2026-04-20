@@ -10,5 +10,5 @@
 package _default
 
 import (
-	_ "github.com/gomlx/gomlx/backends/simplego"
+	_ "github.com/gomlx/compute/gobackend"
 )

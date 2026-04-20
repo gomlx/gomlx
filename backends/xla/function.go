@@ -7,6 +7,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	"github.com/gomlx/go-xla/pkg/types/shardy"
@@ -143,6 +144,8 @@ func (f *Function) Constant(flat any, dimensions ...int) (compute.Value, error) 
 	}
 	if bf16Slice, ok := flat.([]bfloat16.BFloat16); ok {
 		flat = any(BFloat16SliceToXLA(bf16Slice))
+	} else if f16Slice, ok := flat.([]float16.Float16); ok {
+		flat = any(Float16SliceToXLA(f16Slice))
 	}
 	value, err := f.fn.ConstantFromFlatAndDimensions(flat, dimensions...)
 	if err != nil {

@@ -59,6 +59,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/pkg/installer"
@@ -68,6 +69,7 @@ import (
 	xlashapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/pkg/errors"
+	xlafloat16 "github.com/x448/float16"
 	"k8s.io/klog/v2"
 )
 
@@ -325,6 +327,18 @@ func BFloat16SliceToXLA(slice []bfloat16.BFloat16) []xlabfloat16.BFloat16 {
 // Both types are defined as `type BFloat16 uint16`, so this is a zero-copy conversion using unsafe.
 func BFloat16SliceFromXLA(slice []xlabfloat16.BFloat16) []bfloat16.BFloat16 {
 	return unsafe.Slice((*bfloat16.BFloat16)(unsafe.Pointer(unsafe.SliceData(slice))), len(slice))
+}
+
+// Float16SliceToXLA converts a GoMLX []float16.Float16 slice to a go-xla []xlafloat16.Float16 slice.
+// Both types are defined as `type Float16 uint16`, so this is a zero-copy conversion using unsafe.
+func Float16SliceToXLA(slice []float16.Float16) []xlafloat16.Float16 {
+	return unsafe.Slice((*xlafloat16.Float16)(unsafe.Pointer(unsafe.SliceData(slice))), len(slice))
+}
+
+// Float16SliceFromXLA converts a go-xla []xlafloat16.Float16 slice to a GoMLX []float16.Float16 slice.
+// Both types are defined as `type Float16 uint16`, so this is a zero-copy conversion using unsafe.
+func Float16SliceFromXLA(slice []xlafloat16.Float16) []float16.Float16 {
+	return unsafe.Slice((*float16.Float16)(unsafe.Pointer(unsafe.SliceData(slice))), len(slice))
 }
 
 // ShapeToXLA converts a GoMLX shape to a go-xla shape.
