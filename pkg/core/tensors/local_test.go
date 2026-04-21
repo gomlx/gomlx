@@ -524,6 +524,38 @@ func TestPackedSubByteValueSafe(t *testing.T) {
 		assert.Equal(t, [][]int8{{0, 1, 2, 3}, {3, 2, 1, 0}}, got)
 	})
 
+	t.Run("Int1", func(t *testing.T) {
+		// Shape [2, 8]: 16 values packed into 2 bytes, 8 values per byte.
+		tensor := FromShape(shapes.Make(dtypes.Int1, 2, 8))
+		require.NoError(t, tensor.MutableBytes(func(data []byte) {
+			// Row 0: 0b1110_0100 = 0xE4 -> [0, 0, 1 (-1), 0, 0, 1 (-1), 1 (-1), 1 (-1)]
+			data[0] = 0xE4
+			// Row 1: 0b0001_1011 = 0x1B -> [1, 1, 0, 1, 1, 0, 0, 0] if interpreted as bits
+			// Actually little-endian: bit0=val0, bit1=val1...
+			// 0x1B = 0b0001_1011 -> val0=1, val1=1, val2=0, val3=1, val4=1, val5=0, val6=0, val7=0
+			data[1] = 0x1B
+		}))
+		val, err := tensor.ValueSafe()
+		require.NoError(t, err)
+		got, ok := val.([][]int8)
+		require.True(t, ok, "expected [][]int8, got %T", val)
+		assert.Equal(t, [][]int8{{0, 0, -1, 0, 0, -1, -1, -1}, {-1, -1, 0, -1, -1, 0, 0, 0}}, got)
+	})
+
+	t.Run("Uint1", func(t *testing.T) {
+		// Shape [2, 8]: 16 values packed into 2 bytes.
+		tensor := FromShape(shapes.Make(dtypes.Uint1, 2, 8))
+		require.NoError(t, tensor.MutableBytes(func(data []byte) {
+			data[0] = 0xE4 // 0b1110_0100 -> [0, 0, 1, 0, 0, 1, 1, 1]
+			data[1] = 0x1B // 0b0001_1011 -> [1, 1, 0, 1, 1, 0, 0, 0]
+		}))
+		val, err := tensor.ValueSafe()
+		require.NoError(t, err)
+		got, ok := val.([][]int8)
+		require.True(t, ok, "expected [][]uint8, got %T", val)
+		assert.Equal(t, [][]int8{{0, 0, 1, 0, 0, 1, 1, 1}, {1, 1, 0, 1, 1, 0, 0, 0}}, got)
+	})
+
 	t.Run("ScalarInt4", func(t *testing.T) {
 		tensor := FromShape(shapes.Make(dtypes.Int4))
 		require.NoError(t, tensor.MutableBytes(func(data []byte) {
@@ -539,7 +571,7 @@ func TestPackedSubByteValueSafe(t *testing.T) {
 		tensor, err := FromRaw(nil, 0, shapes.Make(dtypes.Uint4, 16, 16, 2), raw)
 		require.NoError(t, err)
 		summary := tensor.Summary(1)
-		want := `[16][16][2]U4{
+		want := `[16][16][2]Uint4{
  {{0, 0},
   {1, 0},
   {2, 0},
@@ -556,6 +588,11 @@ func TestPackedSubByteValueSafe(t *testing.T) {
   {14, 15},
   {15, 15}}}`
 		assert.Equal(t, want, summary)
+
+		tensor, err = FromRaw(nil, 0, shapes.Make(dtypes.Int1, 2), []byte{0b0000_0010})
+		require.NoError(t, err)
+		summary = tensor.Summary(1)
+		assert.Equal(t, "[2]Int1{0, -1}", summary)
 	})
 }
 
@@ -565,10 +602,13 @@ func TestFromShape(t *testing.T) {
 		size    int
 		wantLen int
 	}{
+		{dtypes.Uint1, 10, 2},
+		{dtypes.Int1, 10, 2},
 		{dtypes.Uint2, 10, 3},
 		{dtypes.Int2, 10, 3},
 		{dtypes.Uint4, 10, 5},
 		{dtypes.Int4, 10, 5},
+		{dtypes.Uint1, 8, 1},
 		{dtypes.Uint2, 12, 3},
 		{dtypes.Uint4, 11, 6},
 		{dtypes.Uint2, 0, 0},

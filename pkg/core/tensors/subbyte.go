@@ -5,7 +5,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
-// UnpackSubBytes unpacks packed sub-byte data (Uint4, Int4, Uint2 and Int2, packed into []uint8)
+// UnpackSubBytes unpacks packed sub-byte data (Uint1, Int1, Uint2, Int2, Uint4, Int4, packed into []uint8)
 // into a one-value-per-element []int8 slice -- enough bits to represent the unsigned types as well.
 //
 // It unpacks only the first numValues. If numValues is <= 0, it will unpack all the values in packed.
@@ -20,9 +20,9 @@ func UnpackSubBytes(packed []uint8, dtype dtypes.DType, numValues int) []int8 {
 	} else {
 		numValues = min(numValues, numPackedValues)
 	}
-	mask := uint8((1 << bitsPerValue) - 1) // 0x0F for 4-bit, 0x03 for 2-bit
+	mask := uint8((1 << bitsPerValue) - 1) // 0x0F for 4-bit, 0x03 for 2-bit, 0x01 for 1-bit
 	signBit := uint8(1 << (bitsPerValue - 1))
-	signExtend := ^mask // 0xF0 for 4-bit, 0xFC for 2-bit
+	signExtend := ^mask // 0xF0 for 4-bit, 0xFC for 2-bit, 0xFE for 1-bit
 
 	// Extract the raw unsigned value at logical index i.
 	extract := func(i int) uint8 {
@@ -32,13 +32,13 @@ func UnpackSubBytes(packed []uint8, dtype dtypes.DType, numValues int) []int8 {
 	}
 
 	switch dtype {
-	case dtypes.Uint4, dtypes.Uint2:
+	case dtypes.Uint1, dtypes.Uint2, dtypes.Uint4:
 		out := make([]int8, numValues)
 		for i := range numValues {
 			out[i] = int8(extract(i))
 		}
 		return out
-	case dtypes.Int4, dtypes.Int2:
+	case dtypes.Int1, dtypes.Int2, dtypes.Int4:
 		out := make([]int8, numValues)
 		for i := range numValues {
 			val := extract(i)
@@ -55,7 +55,7 @@ func UnpackSubBytes(packed []uint8, dtype dtypes.DType, numValues int) []int8 {
 }
 
 // UnpackSubByteAt returns the packed value at the given upacked position -- only one value is unpacked.
-// The packed slice represents sub-byte data (Uint4, Int4, Uint2 and Int2, packed into []uint8).
+// The packed slice represents sub-byte data (Uint1, Int1, Uint2, Int2, Uint4, Int4, packed into []uint8).
 // It returns the value as an int8, enough bits for both unsigned and signed values.
 //
 // It can panic if non-packed dtype is given, or an out-of-bound unpackedIdx.
@@ -67,16 +67,16 @@ func UnpackSubByteAt(packed []uint8, dtype dtypes.DType, unpackedIdx int) int8 {
 		exceptions.Panicf("UnpackSubByteAt: invalid index %d -- valid range is 0 < unpackedIdx < %d",
 			unpackedIdx, numPackedValues)
 	}
-	mask := uint8((1 << bitsPerValue) - 1) // 0x0F for 4-bit, 0x03 for 2-bit
+	mask := uint8((1 << bitsPerValue) - 1) // 0x0F for 4-bit, 0x03 for 2-bit, 0x01 for 1-bit
 	b := packed[unpackedIdx/valuesPerUnit]
 	shift := uint(unpackedIdx%valuesPerUnit) * uint(bitsPerValue)
 	rawValue := (b >> shift) & mask
 	switch dtype {
-	case dtypes.Uint4, dtypes.Uint2:
+	case dtypes.Uint1, dtypes.Uint2, dtypes.Uint4:
 		return int8(rawValue)
-	case dtypes.Int4, dtypes.Int2:
+	case dtypes.Int1, dtypes.Int2, dtypes.Int4:
 		signBit := uint8(1 << (bitsPerValue - 1))
-		signExtend := ^mask // 0xF0 for 4-bit, 0xFC for 2-bit
+		signExtend := ^mask // 0xF0 for 4-bit, 0xFC for 2-bit, 0xFE for 1-bit
 		if rawValue&signBit != 0 {
 			rawValue |= signExtend
 		}
