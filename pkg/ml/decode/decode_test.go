@@ -7,9 +7,9 @@ import (
 	"github.com/gomlx/compute/shapes"
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	graphtest "github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/decode/sample"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,7 +53,7 @@ func TestDecoder(t *testing.T) {
 // TestDecoderSampling groups non-beam sampling tests.
 func TestDecoderSampling(t *testing.T) {
 	t.Run("Greedy", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
@@ -79,7 +79,7 @@ func TestDecoderSampling(t *testing.T) {
 	})
 
 	t.Run("Temperature", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
@@ -102,7 +102,7 @@ func TestDecoderSampling(t *testing.T) {
 	})
 
 	t.Run("OneDPrompt", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
@@ -121,7 +121,7 @@ func TestDecoderSampling(t *testing.T) {
 	})
 
 	t.Run("PromptTooLong", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 		var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
 		cfg := New(modelFn).WithMaxLength(5)
@@ -134,7 +134,7 @@ func TestDecoderSampling(t *testing.T) {
 
 // TestGenerateBeamSearchNotImplemented remains as a placeholder expectation.
 func TestBeamSearch(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 	var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node {
 		batchSize := tokens.Shape().Dimensions[0]
@@ -154,7 +154,7 @@ func TestBeamSearch(t *testing.T) {
 
 // TestStreamingNotImplemented groups streaming placeholder test.
 func TestStreamingNotImplemented(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 	var modelFn IterativeModelFn = func(ctx *context.Context, tokens *Node) *Node { return tokens }
 	cfg := New(modelFn)

@@ -11,7 +11,6 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
@@ -20,6 +19,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -27,7 +27,7 @@ import (
 
 // TestLinearLayer checks that the linear layer of the VNN is equivariant to rotation.
 func TestLinearLayer(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 	ctx.SetRNGStateFromSeed(42)
 	y0 := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
@@ -63,7 +63,7 @@ func TestLinearLayer(t *testing.T) {
 
 // TestRelu checks that the Relu activation with a learned projection is equivariant to rotation.
 func TestRelu(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	baseCtx := context.New()
 	baseCtx.SetRNGStateFromSeed(42)
 	testShape := shapes.Make(dtypes.Float64, 20, 2, 3)
@@ -117,7 +117,7 @@ func TestRelu(t *testing.T) {
 // TestLayerNormalization checks that the LayerNormalization normalizes properly -- mean close to
 // the origin -- and that it is equivariant to rotation.
 func TestLayerNormalization(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 	ctx.SetRNGStateFromSeed(42)
 	outputs := context.MustExecOnceN(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
@@ -153,7 +153,7 @@ func TestLayerNormalization(t *testing.T) {
 
 // TestVNN_Equivariant checks that a fully configured VNN is SO(3) equivariant for rotations.
 func TestVNN_Equivariant(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 	ctx.SetRNGStateFromSeed(42)
 	rotDiff := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
@@ -192,7 +192,7 @@ func TestVNN_Equivariant(t *testing.T) {
 // TestVNNTrain checks whether a 2-layer VNN can learn whether 2 3D vectors are pointing to opposite quadrants.
 // The function to learn is not rotation-invariant, so we expect this test to fail.
 func TestVNNTrain(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 	ctx.SetRNGStateFromSeed(42)
 

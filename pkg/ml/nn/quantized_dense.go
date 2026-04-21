@@ -168,6 +168,6 @@ func dequantNF4FromTyped(g *Graph, weights *Node, K, N int) *Node {
 		Panicf("dequantNF4FromTyped: expected Int4 or Uint4 weights, got %s", wDType)
 	}
 	nf4Table := Const(g, compute.NF4LookupTable[:]) // [16] float32
-	indicesForGather := Reshape(indices, K, N, 1)    // [K, N, 1]
-	return Gather(nf4Table, indicesForGather)        // [K, N] float32
+	indicesForGather := Reshape(indices, K, N, 1)   // [K, N, 1]
+	return Gather(nf4Table, indicesForGather)       // [K, N] float32
 }

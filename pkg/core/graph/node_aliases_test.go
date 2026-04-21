@@ -8,14 +8,14 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNodeAliases(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	g := NewGraph(backend, "Graph With Aliases")
 
 	// Create some nodes

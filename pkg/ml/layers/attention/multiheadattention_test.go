@@ -14,7 +14,6 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/ctxtest"
@@ -23,13 +22,14 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMultiHeadAttentionGraph(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	{
 		ctx := context.New()
 		g := NewGraph(backend, "test")
@@ -96,7 +96,7 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 // TestMultiHeadAttentionFusedPath verifies that the fused SDPA fast path
 // produces the same results as the decomposed path.
 func TestMultiHeadAttentionFusedPath(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	// Test that Done() (which may use fused path) matches DoneWithCoefficients()
 	// (which always uses decomposed path) with the same weights.
@@ -155,7 +155,7 @@ func TestMultiHeadAttentionWithRoPE(t *testing.T) {
 	// Verify MHA with RoPE runs without error and produces correct output shape.
 	// This test catches the seq axis bug where RoPE was applied on the heads axis
 	// instead of the seq axis for BSHD layout.
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 
 	exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
@@ -191,7 +191,7 @@ func TestMultiHeadAttentionWithRoPE(t *testing.T) {
 }
 
 func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 
 		t.Run("basic", func(t *testing.T) {
 			ctx := context.New()
@@ -313,7 +313,7 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 	})
 }
 func TestMultiHeadAttentionGQA(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	t.Run("basic", func(t *testing.T) {
 		// GQA with 4 query heads, 2 KV heads (2:1 ratio).
@@ -544,7 +544,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 	}
 
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	// Context and optimizer used for training.
 	ctx := context.New()

@@ -10,9 +10,9 @@ import (
 
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,7 +34,7 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, w
 		return all
 	}
 
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	exec := context.MustNewExec(backend, ctx, wrapperFn)
 	var inputsAndOutputs []*tensors.Tensor
 	require.NotPanicsf(t, func() { inputsAndOutputs = exec.MustExec() },

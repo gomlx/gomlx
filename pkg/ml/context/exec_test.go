@@ -12,11 +12,11 @@ import (
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +30,7 @@ func oneLayerManyInputsGraph(ctx *context.Context, inputs []*Node) *Node {
 }
 
 func TestExec(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	// Checks that Context.RNGState is auto-initialized correctly.
 	t.Run("Context.RNGState initialization", func(t *testing.T) {
@@ -167,7 +167,7 @@ func TestExec(t *testing.T) {
 }
 
 func TestAutoSharding(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	numDevices := backend.NumDevices()
 	if numDevices < 2 {
 		t.Skipf("Skipping distributed tests: backend only has %d device.", numDevices)

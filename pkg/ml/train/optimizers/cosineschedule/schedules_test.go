@@ -9,12 +9,12 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -22,7 +22,7 @@ import (
 )
 
 func TestCosineAnnealingSchedule(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	const periodInSteps = 100
 	const minLearningRate = 0.001
 	const baseLearningRate = 1.0

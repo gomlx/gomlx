@@ -13,8 +13,8 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +24,7 @@ func EuclideanDistance(a, b *Node) *Node {
 }
 
 func TestExec(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	testForDim := func(exec *Exec, dim int) {
 		a := make([]float32, dim)
 		b := xslices.SliceWithValue(dim, float32(1))
@@ -120,7 +120,7 @@ func TestExec(t *testing.T) {
 }
 
 func TestDonate(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	deviceNum := compute.DeviceNum(0)
 	g := NewGraph(backend, "TestDonate")
 	x := Parameter(g, "x", shapes.Make(dtypes.Float64))
@@ -166,7 +166,7 @@ func addScalarTest(x *Node) *Node {
 }
 
 func TestExecWithSideParams(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	scalarBuffer, err := tensors.FromValue(3.0).DonateBuffer(backend, 0)
 	require.NoError(t, err)
@@ -210,7 +210,7 @@ func addSubGraph(a, b *Node) []*Node {
 }
 
 func TestExecWithSlices(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	concat := MustNewExecAny(backend, concatGraph)
 
 	a := [][]float64{{1, 2}, {3, 4}}
@@ -249,7 +249,7 @@ func concatWithLoggedFirstNodeGraph(nodes []*Node) *Node {
 }
 
 func TestExecWithLogger(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 
 	concat := MustNewExecAny(manager, concatWithLoggedFirstNodeGraph)
 	var firstNodeValue *tensors.Tensor
@@ -274,7 +274,7 @@ func TestExecWithLogger(t *testing.T) {
 }
 
 func TestExecWithNoInputs(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	matrixInitFn := MustNewExec(backend, func(g *Graph) *Node {
 		return IotaFull(g, shapes.Make(dtypes.Int64, 3, 3))
 	})
@@ -286,7 +286,7 @@ func TestExecWithNoInputs(t *testing.T) {
 
 // TestExecUnusedInput checks that it should work if an input is not used in the computation.
 func TestExecUnusedInput(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	// One of two variables is not used.
 	unusedInputFn := MustNewExec(backend, func(x, y *Node) *Node {

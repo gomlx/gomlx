@@ -23,9 +23,9 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/humanize"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/muesli/termenv"
 
@@ -69,7 +69,7 @@ func dimsToStr(dims []int) string {
 //	$ GOMLX_BACKEND=go go test -tags=perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
 //	$ GOMLX_BACKEND=xla:cuda go test -tags=perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
 func TestDotGeneral_PerformanceTable(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		filterPerfs := *flagDotGeneralPerfTests != ""
 		perfsToRun := sets.MakeWith(strings.Split(*flagDotGeneralPerfTests, ",")...)
 		filterDTypes := *flagPerfDTypes != ""

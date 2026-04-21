@@ -11,11 +11,11 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	graph "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	. "github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
@@ -70,7 +70,7 @@ func TestContextVariablesInitialization(t *testing.T) {
 	ctx2 := ctx1.In("c").WithInitializer(initializers.Zero)
 	v2 := ctx2.VariableWithShape("z", shapes.Make(dtypes.Int64, 3, 1))
 
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx.InitializeVariables(backend, nil)
 
 	fmt.Printf("\tv0=%v\n", v0)
@@ -159,7 +159,7 @@ func TestEnumerateVariables(t *testing.T) {
 	ctx2 := ctx1.In("c")
 	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 3, 1))
 
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx.InitializeVariables(backend, nil)
 
 	// Checks EnumerateVariables lists all variables:
@@ -197,7 +197,7 @@ func TestIterVariables(t *testing.T) {
 	ctx2 := ctx1.In("c")
 	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 3, 1))
 
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx.InitializeVariables(backend, nil)
 
 	// Checks IterVariables lists all variables:
@@ -255,7 +255,7 @@ func TestDeleteVariable(t *testing.T) {
 	ctx2 := ctx1.In("c")
 	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 1, 1))
 
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx.InitializeVariables(backend, nil)
 
 	assert.Equal(t, 3, ctx.NumVariables())
@@ -295,7 +295,7 @@ func TestDeleteVariablesInScope(t *testing.T) {
 	ctx2 := ctx1.In("c")
 	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 1, 1))
 
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx.InitializeVariables(backend, nil)
 
 	// Remove all under scope "/b"
@@ -348,7 +348,7 @@ func TestContext_SetLoader(t *testing.T) {
 	})
 	ctx = ctx.Reuse()
 
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	e := MustNewExec(backend, ctx, func(ctx *Context, g *Graph) (*Node, *Node) {
 		v0 := ctx.WithInitializer(initializers.Zero).VariableWithShape("x", shapes.Make(dtypes.Float32))
 		v1 := ctx.VariableWithValue("y", 1)
@@ -420,7 +420,7 @@ func TestContext_Clone(t *testing.T) {
 // TestReuseContextMultipleExecs verifies that variables persist across multiple NewExec calls
 // when using the same reuse context from ctx.Reuse().
 func TestReuseContextMultipleExecs(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := New()
 
 	// First execution: Initialize counter to 10 using ctx.Reuse()
@@ -484,7 +484,7 @@ func TestReuseContextMultipleExecs(t *testing.T) {
 
 // TestReuseContextSeparateCalls verifies what happens when calling ctx.Reuse() separately
 func TestReuseContextSeparateCalls(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := New()
 
 	// First execution with ctx.Reuse()

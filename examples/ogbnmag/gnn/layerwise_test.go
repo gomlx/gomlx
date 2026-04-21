@@ -10,11 +10,11 @@ import (
 	"github.com/gomlx/compute/shapes"
 	samplerPkg "github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -208,7 +208,7 @@ func setCommonTestParams(ctx *context.Context) {
 // weights and minimal configuration get expected results.
 func TestLayerWiseInferenceMinimal(t *testing.T) {
 	withCitation := false
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 	_, strategy := createDenseTestStrategy(withCitation)
 	ctx := context.New()
 	setMinimalTestParams(ctx)
@@ -269,7 +269,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 func TestLayerWiseInferenceCommon(t *testing.T) {
 	for _, withCitation := range []bool{false, true} {
 		fmt.Printf("\nwithCitation=%v:\n", withCitation)
-		manager := graphtest.BuildTestBackend()
+		manager := testutil.BuildTestBackend()
 		_, strategy := createDenseTestStrategy(withCitation)
 		ctx := context.New()
 		setCommonTestParams(ctx)

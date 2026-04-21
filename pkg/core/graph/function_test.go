@@ -7,13 +7,13 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFunction(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	t.Run("IsMain", func(t *testing.T) {
 		g := graph.NewGraph(backend, t.Name())
@@ -24,7 +24,7 @@ func TestFunction(t *testing.T) {
 	})
 
 	t.Run("NewFunctionWithSharding", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		if backend.NumDevices() < 2 {
 			t.Skip("Test requires at least 2 devices for sharding")
 		}
@@ -95,7 +95,7 @@ func TestFunction(t *testing.T) {
 	})
 
 	t.Run("Call", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		g := graph.NewGraph(backend, "Call")
 
 		// Define a simple function: f(a, b) = a + b
@@ -117,7 +117,7 @@ func TestFunction(t *testing.T) {
 	})
 
 	t.Run("InvalidCall", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		g := graph.NewGraph(backend, "Call")
 
 		// Define a simple function: f(a, b) = a + b
@@ -141,7 +141,7 @@ func TestFunction(t *testing.T) {
 	})
 
 	t.Run("Closure", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		g := graph.NewGraph(backend, "Closure")
 
 		// Create a closure: f(x) = x + y, where y is captured from parent

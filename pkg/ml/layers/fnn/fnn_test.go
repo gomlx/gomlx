@@ -11,7 +11,6 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
@@ -19,6 +18,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -107,7 +107,7 @@ func TestFNN(t *testing.T) {
 		return
 	}
 
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ds := &fnnTestDataset{batchSize: 128}
 
 	for ii, coreFn := range fnnVariations {
@@ -139,7 +139,7 @@ func TestFNNRegularized(t *testing.T) {
 		t.Skip("skipping testing in short mode")
 		return
 	}
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 	ctx.SetRNGStateFromSeed(42)
 	ds := &fnnTestDataset{batchSize: 128}
@@ -206,7 +206,7 @@ func TestFNNRegularized(t *testing.T) {
 }
 
 func TestFNNEnsembleShapes(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		for _, hasEnsembleAxis := range []bool{false, true} {
 			for _, numHiddenLayers := range []int{0, 1, 2} {
 				for _, useBias := range []bool{false, true} {

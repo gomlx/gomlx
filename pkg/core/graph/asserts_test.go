@@ -8,12 +8,12 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAsserts(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	g := NewGraph(backend, "TestAssertGraph")
 	node := Parameter(g, "node", shapes.Make(dtypes.Float32, 3, 2))
 	scalar := Parameter(g, "scalar", shapes.Make(dtypes.Int64))

@@ -14,11 +14,12 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestIndicesForShape(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	g := NewGraph(backend, t.Name())
 	shape := MakeShape(F64, 2, 3, 4)
 	numbers := IndicesForShape(g, shape)
@@ -38,7 +39,7 @@ func TestIndicesForShape(t *testing.T) {
 }
 
 func TestGather(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	// Trivial scalar gather.
 	t.Run("scalar", func(t *testing.T) {
@@ -116,7 +117,7 @@ func TestGather(t *testing.T) {
 }
 
 func TestNormalizeIndices(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	t.Run("basic negative indices", func(t *testing.T) {
 		// Test converting negative indices to positive
@@ -249,7 +250,7 @@ func TestGatherSlices(t *testing.T) {
 }
 
 func TestScatter(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	t.Run("Scatter(): trivial scalar scatter", func(t *testing.T) {
 		// Trivial scalar scatter.
 		g := NewGraph(backend, t.Name())
@@ -300,7 +301,7 @@ func TestScatter(t *testing.T) {
 // BenchmarkScatter tests the various scatter combinations: sorted or unique and different dtypes.
 // The auto-differentiation of a gather is a scatter: it is used in update of large embedding tables.
 func BenchmarkScatter(b *testing.B) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	const (
 		NumEntries          = 1_000_000
 		EmbeddingSize       = 32
@@ -372,7 +373,7 @@ func TestScatterSum(t *testing.T) {
 }
 
 func TestScatterSumGradient(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	operand := []float32{0, 0, 0, 0, -1}
 	updates := []float32{1, 3, 5, 7, 11, 13}
 	indices := []int32{0, 0, 0, 1, 1, 3}
@@ -420,7 +421,7 @@ func TestScatterMax(t *testing.T) {
 }
 
 func TestScatterMaxGradient(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	negInf := float32(math.Inf(-1))
 	operand := []float32{negInf, negInf, negInf, negInf, -1}
 	updates := []float32{1, 3, 5, 7, 11, 13}
@@ -469,7 +470,7 @@ func TestScatterMin(t *testing.T) {
 }
 
 func TestScatterMinGradient(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	posInf := float32(math.Inf(1))
 	operand := []float32{posInf, posInf, posInf, posInf, 100}
 	updates := []float32{1, 3, 5, 7, 11, 13}

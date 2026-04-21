@@ -6,15 +6,15 @@ import (
 	"fmt"
 
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 
 	"testing"
 )
 
 func TestRMSNorm(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 	exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
 		return RMSNorm(ctx, x).

@@ -9,12 +9,13 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/ml/nn"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 )
 
 // TestQuantizedGather_GGML_Q8_0 tests QuantizedGather with Q8_0 block format.
 // Q8_0 blocks: 2-byte fp16 scale + 32 int8 quants.
 func TestQuantizedGather_GGML_Q8_0(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		// vocabSize=3, K=32 (one block per row).
 		// Row 0: scale=2.0, quants=[1, 0, ...] → [2.0, 0, ...]
 		// Row 1: scale=3.0, quants=[0, 1, ...] → [0, 3.0, ...]
@@ -75,7 +76,7 @@ func TestQuantizedGather_GGML_Q8_0(t *testing.T) {
 // TestQuantizedGather_GGML_Q4_0 tests QuantizedGather with Q4_0 block format.
 // Q4_0 blocks: 2-byte fp16 scale + 16 nibble bytes.
 func TestQuantizedGather_GGML_Q4_0(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		// vocabSize=2, K=32 (one block per row).
 		// Row 0: scale=2.0, byte0 = 0x89 (lo=9→+1, hi=8→0), rest = 0x88
 		//   dequant[0]=2*(9-8)=2.0, rest=0
@@ -122,7 +123,7 @@ func TestQuantizedGather_GGML_Q4_0(t *testing.T) {
 // TestQuantizedGather_GGML_IQ4NL tests QuantizedGather with IQ4_NL block format.
 // Same layout as Q4_0, but nibbles are LUT indices. LUT[8]=1, LUT[9]=13.
 func TestQuantizedGather_GGML_IQ4NL(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		// vocabSize=2, K=32 (one block per row).
 		// Row 0: scale=1.0, byte0 = 0x89 (lo=9→LUT[9]=13, hi=8→LUT[8]=1), rest = 0x88
 		//   dequant[0]=1*13=13, rest=1*1=1

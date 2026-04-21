@@ -8,13 +8,13 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRandomBernoulli(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 	ctx.SetRNGStateFromSeed(42) // Always the same result.
 	gotT := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *graph.Graph) *graph.Node {

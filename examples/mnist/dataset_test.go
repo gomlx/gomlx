@@ -22,8 +22,8 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
@@ -38,7 +38,7 @@ func TestDataset(t *testing.T) {
 	}
 
 	modes := []string{"train", "test"}
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	batchSize := 100
 
 	for _, m := range modes {

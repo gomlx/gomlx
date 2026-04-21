@@ -13,11 +13,12 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDot(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	t.Run("Product", func(t *testing.T) {
 		g := NewGraph(backend, t.Name())
@@ -255,7 +256,7 @@ func TestGradientDot(t *testing.T) {
 	}, Epsilon)
 
 	// backend for the other tests.
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	t.Run("General()-batch-contracting", func(t *testing.T) {
 		dimensions := []int{2, 3, 4}
@@ -478,7 +479,7 @@ func TestDotGeneralDTypes(t *testing.T) {
 	}
 	testDTypes.Insert(dtypes.InvalidDType)
 
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	for inputDType := range testDTypes { // sets.MakeWith(dtypes.BF16) { //
 		if inputDType == dtypes.InvalidDType {
 			continue

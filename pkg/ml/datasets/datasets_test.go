@@ -20,6 +20,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -78,7 +79,7 @@ func TestParallelDataset(t *testing.T) {
 }
 
 func TestBatchedDataset(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 	ds := &testDS{}
 	batchSize := 3
 	numFullBatches := int(testDSMaxValue) / batchSize
@@ -140,7 +141,7 @@ func (ds *testSlicesDS) Yield() (spec any, inputs []*tensors.Tensor, labels []*t
 }
 
 func TestInMemoryDataset(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ds := &testSlicesDS{numExamples: 17}
 	const bytesPerValue = 8 // int uses dtypes.Int64, 8 bytes per value.
 	const valuesPerExample = 3
@@ -277,7 +278,7 @@ func TestInMemoryDataset(t *testing.T) {
 }
 
 func TestInMemoryFromData(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 	mds, err := InMemoryFromData(manager, "test",
 		[]any{[][]float32{{1, 2}, {3, 4}}},
 		[]any{[][]float32{{3}, {7}}})
@@ -311,7 +312,7 @@ func TestInMemoryFromData(t *testing.T) {
 }
 
 func TestNormalization(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 
 	// Create dataset with mean `(pi + featureNum)` and stddev `(e + featureNum)`.
 	rng := rand.New(rand.NewSource(42))
@@ -361,7 +362,7 @@ func TestReplaceZerosByOnes(t *testing.T) {
 }
 
 func TestMap(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 	ds, err := InMemoryFromData(manager, "test",
 		[]any{[][]float32{{1, 2}, {3, 4}}},
 		[]any{[][]float32{{3}, {7}}})

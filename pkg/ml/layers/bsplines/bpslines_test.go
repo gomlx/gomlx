@@ -4,13 +4,15 @@ package bsplines
 
 import (
 	"fmt"
+	"math/rand/v2"
+	"testing"
+
 	"github.com/gomlx/bsplines"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"math/rand/v2"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
@@ -41,7 +43,7 @@ func TestEvaluateSimple(t *testing.T) {
 		}
 	}
 
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	exec := MustNewExec(backend, func(x, controlPoints *Node) *Node {
 		values := Evaluate(b,
 			x,
@@ -113,7 +115,7 @@ func TestExtrapolation(t *testing.T) {
 	controlPoints := []float64{1.0, 0.7, -0.7, -1.0, -0.7, 0.7, 1.0, 0.7}
 	b := bsplines.NewRegular(3, len(controlPoints)).WithControlPoints(controlPoints)
 
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	xs := []float64{-0.1, 0.0, 1.0, 1.1}
 	evalFn := func() []float64 {

@@ -15,6 +15,7 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +38,7 @@ type graphFnOneInputToTest func(g *Graph) (input, output *Node)
 func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTest, want any) {
 	t.Run(testName, func(t *testing.T) {
 		wantTensor := tensors.FromAnyValue(want)
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		g := NewGraph(backend, testName)
 		inputNode, outputNode := graphFn(g)
 		err := g.Compile(inputNode, outputNode)
@@ -51,7 +52,7 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 }
 
 func TestConstant(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	{
 		g := NewGraph(backend, "")
 		n := Const(g, 5)
@@ -87,7 +88,7 @@ func compileRunAndTakeFirst(t *testing.T, g *Graph) *tensors.Tensor {
 }
 
 func TestAdd(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	{
 		// Test scalars.
 		g := NewGraph(backend, "scalar graph")
@@ -163,7 +164,7 @@ func TestAdd(t *testing.T) {
 }
 
 func TestParameter(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	// Test passing of values.
 	{
@@ -217,7 +218,7 @@ type BinaryOpsTestCase[T dtypes.Supported] struct {
 }
 
 func TestBinaryOps(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	{
 		casesFloat32 := []BinaryOpsTestCase[float32]{
@@ -321,7 +322,7 @@ type OneArgTestCase[T dtypes.Supported] struct {
 }
 
 func TestOneArgOps(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 
 		casesFloat64 := []OneArgTestCase[float64]{
 			{Abs, func(x float64) float64 { return math.Abs(x) }},
@@ -529,7 +530,7 @@ func reduceSumGraph(t *testing.T, backend compute.Backend, reduceDims []int) *Gr
 }
 
 func TestReduce(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	t.Run("ReduceSum", func(t *testing.T) {
 		cases := []struct {
 			dims []int
@@ -651,7 +652,7 @@ func TestReduceMax(t *testing.T) {
 		}, []any{5.0}, xslices.Epsilon)
 
 	// float64 NaN
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	// It works if input is passed as a constant:
 	{
@@ -725,7 +726,7 @@ func TestLogicalAllAndAny(t *testing.T) {
 }
 
 func TestReshape(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	{
 		g := NewGraph(backend, "")
 		input := Const(g, [][][]float32{{{1.1, 1.2}}}) // Shape [1, 1, 2]
@@ -741,7 +742,7 @@ func TestReshape(t *testing.T) {
 }
 
 func TestIota(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	{
 		g := NewGraph(backend, "").WithName("iota0")
 		Iota(g, MakeShape(F64, 2, 2), 0)
@@ -825,7 +826,7 @@ func TestSlice(t *testing.T) {
 }
 
 func TestPad(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		graphtest.RunTestGraphFnWithBackend(t, "Pad Tests with Rank 1", backend,
 			func(g *Graph) (inputs, outputs []*Node) {
 				x := Const(g, [][]int64{{1, 2}, {3, 4}})
@@ -885,7 +886,7 @@ func TestPad(t *testing.T) {
 }
 
 func TestConcatenate(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	{
 		fmt.Println("\tConcatenate(): 1D concatenation.")
 		g := NewGraph(backend, "")
@@ -998,7 +999,7 @@ func TestReduceAndKeep(t *testing.T) {
 }
 
 func TestReverse(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		graphtest.RunTestGraphFnWithBackend(t, "Reverse(dimensions={1,2})", backend,
 			func(g *Graph) (inputs, outputs []*Node) {
 				input := Iota(g, MakeShape(dtypes.Float32, 9), 0)
@@ -1401,7 +1402,7 @@ func TestMatMul(t *testing.T) {
 	}, 0)
 
 	// Test shapes of edge cases:
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	g := NewGraph(backend, "matmul_test")
 	testShapes := [][3][]int{
 		// Format: {<lhs shape>, <rhs shape>, <expected output shape>} :

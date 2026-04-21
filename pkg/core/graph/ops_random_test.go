@@ -12,6 +12,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 
 	"testing"
 )
@@ -168,7 +169,7 @@ func TestRandomIntN(t *testing.T) {
 //
 // Kept here to eventually test new compute.
 func TestMultiOutputs(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	_, err := MustNewExec(backend, func(x *Node) *Node {
 		g := x.Graph()
 		rngState := Const(g, must1(RNGStateFromSeed(42)))

@@ -11,7 +11,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +24,7 @@ import (
 // Portable compilation may not work on all PJRT types or different compute.
 // Please add a blacklist of backends to skip the test if the backend doesn't support it.
 func TestPortable(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	if backend.NumDevices() <= 1 {
 		t.Skipf("Skipping distributed test because there are only 1 device available for backend %q.", backend.Name())
 	}
@@ -65,7 +65,7 @@ func TestPortable(t *testing.T) {
 }
 
 func TestCollective(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	if backend.NumDevices() <= 1 {
 		t.Skipf("Skipping distributed test because there are only 1 device available for backend %q.", backend.Name())
 	}
@@ -164,7 +164,7 @@ func TestCollective(t *testing.T) {
 
 // TestAutoSharding distributed strategy.
 func TestAutoSharding(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	if backend.NumDevices() <= 1 {
 		t.Skipf("Skipping distributed test because there are only 1 device available for backend %q.", backend.Name())
 	}

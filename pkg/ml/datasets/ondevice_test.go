@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -48,7 +48,7 @@ func (ds *fakeSourceDataset) Yield() (spec any, inputs []*tensors.Tensor, labels
 }
 
 func TestOnDevice(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	require.NotNil(t, backend)
 
 	// Create a fake source dataset that yields 100 times

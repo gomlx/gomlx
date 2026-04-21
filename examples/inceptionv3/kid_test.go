@@ -12,10 +12,10 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/core/tensors/images"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -62,7 +62,7 @@ func TestKidMetric(t *testing.T) {
 		return
 	}
 	require.NoError(t, DownloadAndUnpackWeights(*flagDataDir))
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 
 	ImagePaths := []string{
 		"gomlx_gopher_299.png",

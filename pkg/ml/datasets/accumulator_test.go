@@ -10,8 +10,8 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/pkg/core/distributed"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -97,7 +97,7 @@ func (ds *heterogeneousMockDataset) Yield() (spec any, inputs []*tensors.Tensor,
 }
 
 func TestDistributedAccumulator(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	if backend.NumDevices() < 4 {
 		t.Skipf("Skipping distributed test because backend only has %d devices, need at least 4", backend.NumDevices())
 	}

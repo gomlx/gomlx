@@ -3,14 +3,15 @@
 package graph_test
 
 import (
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsConstantExpression(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	g := NewGraph(backend, "")
 	a := Const(g, 5.0)
 	b := Const(g, 7.0)

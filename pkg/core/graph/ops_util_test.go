@@ -12,10 +12,11 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 )
 
 func TestScalar(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		graphtest.RunTestGraphFnWithBackend(t, "EinsumMatrixMul", backend,
 			func(g *Graph) (inputs, outputs []*Node) {
 				inputs = []*Node{
@@ -545,7 +546,7 @@ func TestL2Normalize(t *testing.T) {
 }
 
 func TestCosineSimilarity(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		graphtest.RunTestGraphFnWithBackend(t, t.Name(), backend,
 			func(g *Graph) (inputs, outputs []*Node) {
 				x := Const(g, [][]float32{
@@ -582,7 +583,7 @@ func TestCosineSimilarity(t *testing.T) {
 }
 
 func TestCrossCosineSimilarity(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		graphtest.RunTestGraphFnWithBackend(t, t.Name(), backend,
 			func(g *Graph) (inputs, outputs []*Node) {
 				x := Const(g, [][]float32{

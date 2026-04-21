@@ -14,11 +14,12 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGradientAdd(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	g := NewGraph(backend, "TestDense")
 	{
 		c1 := Const(g, []float32{1, 2})
@@ -133,7 +134,7 @@ type gradTestFunc func(g *Graph) (output *Node, nodesForGrad []*Node)
 //
 // It will print out the inputNodes and outputs to help debugging.
 func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad []any) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	testGradientsInDelta(t, name, backend, testFn, wantForGrad, Epsilon)
 }
 
@@ -185,7 +186,7 @@ func testGradientsInDelta(t *testing.T, name string, backend compute.Backend, te
 //
 // It will print out the inputNodes and outputs to help debugging.
 func testGradientsExact(t *testing.T, name string, testFn gradTestFunc, wantForGrad []any) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	fmt.Printf("%s:\n", name)
 	// Create a function that can be used by computation.Exec.
 	fn := func(g *Graph) []*Node {
@@ -287,7 +288,7 @@ func TestGradientExp(t *testing.T) {
 }
 
 func TestGradientPow(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	a := []float64{3, 1, 0.5}
 	b := []float64{3, 1, -2}
 	testGradientsInDelta(t, "gradient_of_pow", backend,

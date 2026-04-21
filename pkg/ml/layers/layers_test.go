@@ -12,10 +12,10 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
@@ -41,7 +41,7 @@ func IotaP1Initializer(g *Graph, shape Shape) *Node {
 
 func testSimpleFunc(t *testing.T, name string, input any,
 	fn func(ctx *context.Context, input *Node) *Node, want any) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New().WithInitializer(IotaP1Initializer)
 	exec := context.MustNewExec(backend, ctx, fn)
 	var outputs []*tensors.Tensor
@@ -53,7 +53,7 @@ func testSimpleFunc(t *testing.T, name string, input any,
 
 func testSimpleFuncMany(t *testing.T, name string, inputs []any,
 	fn func(ctx *context.Context, inputs []*Node) *Node, want any) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New().WithInitializer(IotaP1Initializer)
 	exec := context.MustNewExec(backend, ctx, fn)
 	var outputs []*tensors.Tensor
@@ -69,7 +69,7 @@ func testSimpleFuncMany(t *testing.T, name string, inputs []any,
 }
 
 func TestDense(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New().WithInitializer(IotaP1Initializer)
 	g := NewGraph(backend, "TestDense")
 	input := tensors.FromValue([][]float32{{1, 2}, {10, 20}, {100, 200}})
@@ -170,7 +170,7 @@ func plotComputation(title string, start, end float64, fns ...func(x float64) fl
 }
 
 func TestPieceWiseLinearCalibration(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 	{
 		ctx := context.New()
 		g := NewGraph(manager, "test")
