@@ -8,14 +8,10 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/compute/dtypes/bfloat16"
-	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/go-xla/pkg/pjrt"
-	xlabfloat16 "github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
-	xlafloat16 "github.com/x448/float16"
 	"k8s.io/klog/v2"
 )
 
@@ -202,14 +198,6 @@ func (backend *Backend) BufferToFlatData(buffer compute.Buffer, flat any) error 
 // to the deviceNum, and returns the corresponding Buffer.
 func (backend *Backend) BufferFromFlatData(deviceNum compute.DeviceNum, flat any, shape shapes.Shape) (compute.Buffer, error) {
 	srcData := dtypes.UnsafeByteSliceFromAny(flat)
-
-	// Convert bfloat16 and float16 slices from gomlx to go-xla type.
-	if bf16Slice, ok := flat.([]bfloat16.BFloat16); ok {
-		flat = any(BFloat16SliceToXLA(bf16Slice))
-	} else if f16Slice, ok := flat.([]float16.Float16); ok {
-		flat = any(Float16SliceToXLA(f16Slice))
-	}
-
 	buffer, err := backend.client.BufferFromHost().
 		FromRawData(srcData, DTypeToXLA(shape.DType), shape.Dimensions).
 		ToDeviceNum(int(deviceNum)).
@@ -245,12 +233,6 @@ func (backend *Backend) NewSharedBuffer(deviceNum compute.DeviceNum, shape shape
 		err = errors.WithMessagef(err, "backend %q NewSharedBuffer", BackendName)
 		return
 	}
-	// Convert bfloat16 and float16 slices from go-xla to gomlx type.
-	if xlaBF16Slice, ok := flat.([]xlabfloat16.BFloat16); ok {
-		flat = any(BFloat16SliceFromXLA(xlaBF16Slice))
-	} else if xlaF16Slice, ok := flat.([]xlafloat16.Float16); ok {
-		flat = any(Float16SliceFromXLA(xlaF16Slice))
-	}
 	return
 }
 
@@ -272,12 +254,6 @@ func (backend *Backend) BufferData(buffer compute.Buffer) (flat any, err error) 
 	flat, err = buf.Data()
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to access buffer data directly, maybe not supported by backend?")
-	}
-	// Convert bfloat16 and float16 slices from go-xla to gomlx type.
-	if xlaBF16Slice, ok := flat.([]xlabfloat16.BFloat16); ok {
-		flat = any(BFloat16SliceFromXLA(xlaBF16Slice))
-	} else if xlaF16Slice, ok := flat.([]xlafloat16.Float16); ok {
-		flat = any(Float16SliceFromXLA(xlaF16Slice))
 	}
 	return
 }
