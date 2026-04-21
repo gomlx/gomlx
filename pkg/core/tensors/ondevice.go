@@ -456,10 +456,9 @@ func (t *Tensor) lockedMaterializeLocal() error {
 	}
 
 	// Create a flat slice.
-	flatV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), t.StorageSize(), t.StorageSize())
 	t.local = &local{
 		t:    t,
-		flat: flatV.Interface(),
+		flat: dtypes.MakeAnySlice(t.shape.DType, t.Size()),
 	}
 	if err := t.backend.BufferToFlatData(d.buffer, t.local.flat); err != nil {
 		return errors.WithMessagef(err,
