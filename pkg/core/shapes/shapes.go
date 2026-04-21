@@ -86,9 +86,9 @@ func ConvertTo[T dtypes.NumberNotComplex](value any) T {
 
 // UnsafeSliceForDType creates a slice of the corresponding dtype and casts it to any.
 //
-// Deprecated: use [shapes.UnsafeSliceForDType] instead.
+// Deprecated: use [dtypes.UnsafeAnySliceFromBytes] instead.
 func UnsafeSliceForDType(dtype dtypes.DType, unsafePtr unsafe.Pointer, len int) any {
-	return shapes.UnsafeSliceForDType(dtype, unsafePtr, len)
+	return dtypes.UnsafeAnySliceFromBytes(unsafePtr, dtype, len)
 }
 
 // CastAsDType casts a numeric value to the corresponding for the DType.
