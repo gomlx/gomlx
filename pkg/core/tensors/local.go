@@ -43,10 +43,9 @@ func FromShape(shape shapes.Shape) *Tensor {
 		panic(errors.New("invalid shape"))
 	}
 	t := newEmptyTensor(shape)
-	sliceLen := t.StorageSize()
 	t.local = &local{
 		t:    t,
-		flat: dtypes.MakeAnySlice(t.shape.DType, sliceLen),
+		flat: dtypes.MakeAnySlice(t.shape.DType, t.Size()),
 	}
 	return t
 }
@@ -57,9 +56,10 @@ func (t *Tensor) LocalClone() (*Tensor, error) {
 	var clone *Tensor
 	err := t.ConstFlatData(func(flat any) {
 		clone = newEmptyTensor(t.shape)
-		sliceLen := t.StorageSize()
-		cloneFlat := dtypes.MakeAnySlice(t.shape.DType, sliceLen)
-		dtypes.CopyAnySlice(cloneFlat, flat)
+		cloneFlat := dtypes.MakeAnySlice(t.shape.DType, t.Size())
+		if !t.shape.IsZeroSize() {
+			dtypes.CopyAnySlice(cloneFlat, flat)
+		}
 		clone.local = &local{
 			t:    clone,
 			flat: cloneFlat,

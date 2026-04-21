@@ -722,16 +722,17 @@ func FromRaw(backend compute.Backend, deviceNum compute.DeviceNum, shape shapes.
 
 	default:
 		// Create buffer directly on backend.
-		var length int
 		var bytesPtr unsafe.Pointer
+		var flatAny any
 		if len(data) > 0 {
 			bytesPtr = unsafe.Pointer(&data[0])
-			length = shape.Size() / shape.DType.ValuesPerStorageUnit()
+			flatAny = dtypes.UnsafeAnySliceFromBytes(bytesPtr, shape.DType, shape.Size())
 		}
-		flatAny := dtypes.UnsafeAnySliceFromBytes(bytesPtr, shape.DType, length)
-		backendBuf, err := backend.BufferFromFlatData(0, flatAny, shape)
+		backendBuf, err := backend.BufferFromFlatData(deviceNum, flatAny, shape)
 		if err != nil {
-			return nil, err
+			return nil, errors.WithMessagef(err,
+				"failed to create backend buffer from flat data for shape %s on device %d, on backend %s",
+				shape, deviceNum, backend.Name())
 		}
 		return FromBuffer(backend, backendBuf)
 	}

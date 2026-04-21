@@ -11,11 +11,14 @@ import (
 	"sync"
 	"testing"
 
+	"unsafe"
+
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	_ "github.com/gomlx/gomlx/backends/default" // Use xla backend.
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
 )
@@ -395,4 +398,63 @@ func TestOnDeviceSerialization(t *testing.T) {
 			tensor.MustFinalizeAll()
 		}
 	}
+}
+
+func testFromRaw(t *testing.T, backend compute.Backend) {
+	deviceNum := compute.DeviceNum(0)
+
+	// Float32 test
+	t.Run("float32", func(t *testing.T) {
+		f32s := []float32{1.0, 2.0, 3.0, 4.0}
+		data := unsafe.Slice((*byte)(unsafe.Pointer(&f32s[0])), len(f32s)*4)
+		tensor, err := tensors.FromRaw(backend, deviceNum, shapes.Make(dtypes.Float32, 2, 2), data)
+		require.NoError(t, err)
+		tensor.MustConstFlatData(func(flatAny any) {
+			flat := flatAny.([]float32)
+			require.Equal(t, f32s, flat)
+		})
+	})
+
+	// Int32 test
+	t.Run("int32", func(t *testing.T) {
+		i32s := []int32{10, 20, 30, 40}
+		data := unsafe.Slice((*byte)(unsafe.Pointer(&i32s[0])), len(i32s)*4)
+		tensor, err := tensors.FromRaw(backend, deviceNum, shapes.Make(dtypes.Int32, 2, 2), data)
+		require.NoError(t, err)
+		tensor.MustConstFlatData(func(flatAny any) {
+			flat := flatAny.([]int32)
+			require.Equal(t, i32s, flat)
+		})
+	})
+
+	// Uint4 test (packed sub-byte)
+	t.Run("uint4", func(t *testing.T) {
+		if backend.Name() == "xla" {
+			t.Skipf("Backend %s does not fully support FromRaw for packed sub-byte types yet", backend.Name())
+		}
+		// uint4 packed: 4 elements -> 2 bytes.
+		u4s := []uint8{0x12, 0x34} // Represents 4 uint4 values
+		data := u4s
+		tensor, err := tensors.FromRaw(backend, deviceNum, shapes.Make(dtypes.Uint4, 4), data)
+		require.NoError(t, err)
+		tensor.MustConstFlatData(func(flatAny any) {
+			flat := flatAny.([]uint8)
+			require.Equal(t, u4s, flat)
+		})
+	})
+
+	// Zero-shaped test
+	t.Run("zero-shaped", func(t *testing.T) {
+		data := []byte{}
+		tensor, err := tensors.FromRaw(backend, deviceNum, shapes.Make(dtypes.Float32, 0), data)
+		require.NoError(t, err)
+		tensor.MustConstFlatData(func(flatAny any) {
+			flat := flatAny.([]float32)
+			require.Empty(t, flat)
+		})
+	})
+}
+
+func TestFromRaw(t *testing.T) {
+	testutil.TestOfficialBackends(t, testFromRaw)
 }

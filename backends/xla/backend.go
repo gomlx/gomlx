@@ -4,9 +4,7 @@ package xla
 
 import (
 	"fmt"
-	"reflect"
 	"runtime"
-	"unsafe"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
@@ -171,20 +169,6 @@ func (backend *Backend) BufferDeviceNum(buffer compute.Buffer) (compute.DeviceNu
 	return compute.DeviceNum(num), nil
 }
 
-// flatBytes returns a byte slice view of the flat data.
-func flatBytes(flat any) []byte {
-	v := reflect.ValueOf(flat)
-	length := v.Len()
-	if length == 0 {
-		return nil
-	}
-
-	sizeBytes := uintptr(length) * v.Type().Elem().Size()
-
-	// v.UnsafePointer() returns a pointer to the slice's underlying array directly
-	return unsafe.Slice((*byte)(v.UnsafePointer()), sizeBytes)
-}
-
 // BufferToFlatData transfers the flat values of buffer to the Go flat array.
 // The slice flat must have the exact number of elements required to store the Buffer shape.
 //
@@ -202,7 +186,7 @@ func (backend *Backend) BufferToFlatData(buffer compute.Buffer, flat any) error 
 		return nil
 	}
 
-	dstData := flatBytes(flat)
+	dstData := dtypes.UnsafeByteSliceFromAny(flat)
 	pBuffer := castToPJRT(buffer)
 	var pinner runtime.Pinner
 	pinner.Pin(pBuffer)
@@ -217,15 +201,7 @@ func (backend *Backend) BufferToFlatData(buffer compute.Buffer, flat any) error 
 // BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)
 // to the deviceNum, and returns the corresponding Buffer.
 func (backend *Backend) BufferFromFlatData(deviceNum compute.DeviceNum, flat any, shape shapes.Shape) (compute.Buffer, error) {
-	srcData := flatBytes(flat)
-	flatV := reflect.ValueOf(flat)
-	if flatV.Kind() != reflect.Slice {
-		return nil, errors.Errorf("backend %q: BuffferFromFlatData, but flat is not a slice, instead it is %T", BackendName, flat)
-	}
-	flatDType := dtypes.FromGoType(flatV.Type().Elem())
-	if flatDType != shape.DType {
-		return nil, errors.Errorf("backend %q: BuffferFromFlatData with shape %s, but flat with incompatible dtype, it is %T", BackendName, shape, flat)
-	}
+	srcData := dtypes.UnsafeByteSliceFromAny(flat)
 
 	// Convert bfloat16 and float16 slices from gomlx to go-xla type.
 	if bf16Slice, ok := flat.([]bfloat16.BFloat16); ok {
