@@ -1,24 +1,22 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-// Package distributed defines the following objects related to cross-device execution:
-//
-// - DeviceMesh: expresses the topology of a set of devices, in terms of axis and their sizes.
-// - ShardingSpec: defines how a logical tensor is sharded across a DeviceMesh.
-// - Tensor: a logical tensor distributed across multiple devices organized as a DeviceMesh.
-package distributed
+// Package distributed defines a dtensor.Tensor, a logical tensor distributed across multiple devices organized
+// as a [distributed.DeviceMesh].
+package dtensor
 
 import (
 	"fmt"
 	"slices"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/pkg/errors"
 )
 
-// Tensor is a logical tensor meant to be distributed across multiple devices (organized as a DeviceMesh).
+// Tensor is a logical tensor meant to be distributed across multiple devices (organized as a [distributed.DeviceMesh]).
 // It is a container for its shards (concrete tensors.Tensor), one per device.
 // The shards may or may not be stored on a backend (or local on the host), it's up to the caller to manage
 // the shards storage.
@@ -32,10 +30,10 @@ import (
 // tensor shard, replicated and/or sharded, according to the specification.
 type Tensor struct {
 	// spec defines how this tensor is sharded across the mesh.
-	spec *ShardingSpec
+	spec *distributed.ShardingSpec
 
 	// mesh comes from the spec.
-	mesh *DeviceMesh
+	mesh *distributed.DeviceMesh
 
 	// shards holds the physical tensor data for each device.
 	// The map key is the device's global ordinal index (0 to NumDevices-1).
@@ -48,7 +46,7 @@ type Tensor struct {
 
 // NewTensor creates a new distributed Tensor.
 // It assumes the provided shards are already on their respective devices.
-func NewTensor(spec *ShardingSpec, shards []*tensors.Tensor) (*Tensor, error) {
+func NewTensor(spec *distributed.ShardingSpec, shards []*tensors.Tensor) (*Tensor, error) {
 	if len(shards) == 0 {
 		return nil, errors.New("distributed.NewTensor requires shards for initialization, none was provided")
 	}
@@ -83,7 +81,7 @@ func (dt *Tensor) NumShards() int {
 	return len(dt.shards)
 }
 
-// calculateLogicalShape based on the shardShape and the ShardingSpec.
+// calculateLogicalShape based on the shardShape and the distributed.ShardingSpec.
 func (dt *Tensor) calculateLogicalShape() error {
 	logicalShape := dt.shardShape.Clone()
 	for tensorAxis, axisSpec := range dt.spec.Axes {
@@ -107,8 +105,8 @@ func (dt *Tensor) calculateLogicalShape() error {
 	return nil
 }
 
-// Mesh redt.logicaturns the DeviceMesh for this tensor.
-func (dt *Tensor) Mesh() *DeviceMesh {
+// Mesh redt.logicaturns the distributed.DeviceMesh for this tensor.
+func (dt *Tensor) Mesh() *distributed.DeviceMesh {
 	return dt.mesh
 }
 
@@ -131,12 +129,12 @@ func (dt *Tensor) DType() dtypes.DType {
 	return dt.logicalShape.DType
 }
 
-// ShardingSpec returns the sharding specification for this tensor.
-func (dt *Tensor) ShardingSpec() *ShardingSpec {
+// distributed.ShardingSpec returns the sharding specification for this tensor.
+func (dt *Tensor) ShardingSpec() *distributed.ShardingSpec {
 	return dt.spec
 }
 
-// validateShards that all shards have the same shape and are consistent with the `ShardingSpec`.
+// validateShards that all shards have the same shape and are consistent with the `distributed.ShardingSpec`.
 func (dt *Tensor) validateShards() error {
 	shards := dt.shards
 	if len(shards) == 0 {
@@ -393,7 +391,7 @@ func (dt *Tensor) Merge() (*tensors.Tensor, error) {
 
 // ShardTensor splits a tensor into individual shards.
 // This all happen on the host, and the shards of the returned distributed.Tensor are local tensors.
-func ShardTensor(spec *ShardingSpec, t *tensors.Tensor) (*Tensor, error) {
+func ShardTensor(spec *distributed.ShardingSpec, t *tensors.Tensor) (*Tensor, error) {
 	logicalShape := t.Shape()
 	shardShape := logicalShape.Clone()
 	mesh := spec.Mesh
@@ -413,7 +411,7 @@ func ShardTensor(spec *ShardingSpec, t *tensors.Tensor) (*Tensor, error) {
 			if err != nil {
 				return nil, errors.WithMessagef(
 					err,
-					"inconsistency in distributed.ShardTensor, sharding spec references mesh tensorAxis %q not in mesh %s",
+					"inconsistency in dtensor.Tensor, sharding spec references mesh tensorAxis %q not in mesh %s",
 					meshAxisName,
 					mesh,
 				)

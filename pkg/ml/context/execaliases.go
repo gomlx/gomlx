@@ -4,7 +4,7 @@ package context
 
 import (
 	"github.com/gomlx/compute"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
+	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"

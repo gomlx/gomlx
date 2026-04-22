@@ -4,9 +4,10 @@ package graph
 
 import (
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 )
@@ -38,14 +39,14 @@ func (e *Exec) Exec(args ...any) ([]*tensors.Tensor, error) {
 	return outputs, err
 }
 
-// DistributedExec is just like Exec, but aggregates the outputs into *distributed.Tensor.
-// Usually, Exec will return alice of numDevices * nnumOutputs individual shards (*tensors.Tensor).
+// DistributedExec is just like Exec, but aggregates the outputs into [dtensor.Tensor].
+// Usually, Exec will return a slice of numDevices * numOutputs individual shards ([tensors.Tensor]).
 //
 // Notice that to actually trigger distributed execution, you must set Exec.AutoSharding (or Exec.SPMD) and
 // set the proper sharding specs of the inputs and outputs.
 //
 // See also Exec.AggregateShards.
-func (e *Exec) DistributedExec(args ...any) ([]*distributed.Tensor, error) {
+func (e *Exec) DistributedExec(args ...any) ([]*dtensor.Tensor, error) {
 	shards, _, err := e.ExecWithGraph(args...)
 	if err != nil {
 		return nil, err
@@ -53,11 +54,11 @@ func (e *Exec) DistributedExec(args ...any) ([]*distributed.Tensor, error) {
 	return e.AggregateShards(shards)
 }
 
-// AggregateShards returned by Exec into *distributedTensor outputs.
-// Usually, Exec will return alice of numDevices * nnumOutputs individual shards (*tensors.Tensor).
+// AggregateShards returned by Exec into [dtensor.Tensor].
+// Usually, Exec will return a slice of numDevices * numOutputs individual shards ([tensors.Tensor]).
 //
 // See also DistributedExec, which calls Exec and then calls this.
-func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*distributed.Tensor, error) {
+func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*dtensor.Tensor, error) {
 	numDevices := e.NumDevices()
 	if numDevices == 1 {
 		return nil, errors.New("distributed execution requires more than one device")
@@ -68,7 +69,7 @@ func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*distributed.Tensor,
 	defaultMesh := e.meshes[0]
 	replicatedSpec := distributed.NewReplicatedShardingSpec(defaultMesh)
 	numOutputs := len(shards) / numDevices
-	distributedOutputs := make([]*distributed.Tensor, numOutputs)
+	distributedOutputs := make([]*dtensor.Tensor, numOutputs)
 	var err error
 	for outputIdx := range numOutputs {
 		outputShards := make([]*tensors.Tensor, numDevices)
@@ -79,7 +80,7 @@ func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*distributed.Tensor,
 		if outputIdx < len(e.outputShardingSpecs) {
 			shardingSpec = e.outputShardingSpecs[outputIdx]
 		}
-		distributedOutputs[outputIdx], err = distributed.NewTensor(shardingSpec, outputShards)
+		distributedOutputs[outputIdx], err = dtensor.NewTensor(shardingSpec, outputShards)
 		if err != nil {
 			return nil, err
 		}
@@ -99,7 +100,7 @@ func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*distributed.Tensor,
 // then it requires the input values for each device used in the execution.
 // So if there are D devices, and I inputs, it required D*I args, organized in a
 // "device-major" list (all the inputs to the first device, then the inputs for the second device, and so on).
-// Alternatively, you can provide I args of distributed.Tensor (they already include one value per device),
+// Alternatively, you can provide I args of [dtensor.Tensor] (they already include one value per device),
 // matching the DistributedMesh provided to Exec.SPMD.
 //
 // Errors (with full stack-traces) are returned on failure.

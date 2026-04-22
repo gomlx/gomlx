@@ -7,12 +7,13 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
@@ -293,7 +294,7 @@ func TestAutoSharding(t *testing.T) {
 		// With two devices, we want 2 results, one per device.
 		// x := [][]float64{{1, 1, 1}, {10, 10, 10}, {1, 1, 1}, {10, 10, 10}}
 		x := [][]float64{{1, 1, 1}, {10, 10, 10}}
-		distributedX, err := distributed.ShardTensor(batchSpec, tensors.FromValue(x))
+		distributedX, err := dtensor.ShardTensor(batchSpec, tensors.FromValue(x))
 		fmt.Printf("\tInput x: shape=%s, shardShape=%s\n", distributedX.Shape(), distributedX.ShardShape())
 		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", distributedX.Shards()[0], distributedX.Shards()[1])
 		require.NoError(t, err)

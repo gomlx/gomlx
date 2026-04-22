@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -457,7 +458,7 @@ func (v *Variable) DistributedValue() (*distributed.Tensor, error) {
 		return nil, errors.Errorf("variable %q has no shardingSpec spec", v.ScopeAndName())
 	}
 	var err error
-	v.distValue, err = distributed.ShardTensor(shardingSpec, v.value)
+	v.distValue, err = dtensor.ShardTensor(shardingSpec, v.value)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to distribute variable %q", v.ScopeAndName())
 	}

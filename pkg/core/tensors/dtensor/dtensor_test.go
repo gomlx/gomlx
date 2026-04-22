@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package distributed_test
+package dtensor_test
 
 import (
 	"fmt"
@@ -8,11 +8,12 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -53,7 +54,7 @@ func TestTensor(t *testing.T) {
 			// Shard the tensor.
 			spec, err := distributed.NewShardingSpec(mesh, distributed.AxisSpec{"shards"}, distributed.ReplicatedAxis)
 			require.NoError(t, err)
-			distTensor, err := distributed.ShardTensor(spec, tensor)
+			distTensor, err := dtensor.ShardTensor(spec, tensor)
 			require.NoError(t, err)
 
 			// Check the logical shape.
@@ -76,7 +77,7 @@ func TestTensor(t *testing.T) {
 			require.NoError(t, err)
 			tensor := tensors.FromValue([][]float32{{1, 2, 3, 4}})
 			spec := distributed.NewReplicatedShardingSpec(mesh)
-			distTensor := must.M1(distributed.ShardTensor(spec, tensor))
+			distTensor := must.M1(dtensor.ShardTensor(spec, tensor))
 
 			// For replicated values, logical shape = shard shape.
 			assert.Equal(t, shapes.Make(dtypes.Float32, 1, 4), distTensor.Shape())
@@ -102,7 +103,7 @@ func TestTensor(t *testing.T) {
 			// Spec: tensor axis 0 is sharded by mesh axis "shards" (size 2), tensor axis 1 is replicated.
 			// Mesh axis "replicas" is not used for any tensor axis, so it causes replication.
 			spec := must.M1(distributed.BuildSpec(mesh).S("shards").R().Done())
-			distTensor := must.M1(distributed.ShardTensor(spec, tensor))
+			distTensor := must.M1(dtensor.ShardTensor(spec, tensor))
 
 			// Logical shape is the original tensor shape.
 			assert.Equal(t, shapes.Make(dtypes.Float32, 2, 4), distTensor.Shape())
@@ -140,7 +141,7 @@ func TestTensor(t *testing.T) {
 			spec, err := distributed.NewShardingSpec(mesh,
 				distributed.ReplicatedAxis, distributed.ReplicatedAxis, distributed.AxisSpec{"shards"})
 			require.NoError(t, err)
-			distTensor, err := distributed.NewTensor(spec, shards)
+			distTensor, err := dtensor.NewTensor(spec, shards)
 			require.NoError(t, err)
 
 			// Merge the tensor.
@@ -166,7 +167,7 @@ func TestTensor(t *testing.T) {
 			}
 			spec, err := distributed.BuildSpec(mesh).S("shards").R().R().Done()
 			require.NoError(t, err)
-			distTensor, err := distributed.NewTensor(spec, shards)
+			distTensor, err := dtensor.NewTensor(spec, shards)
 			require.NoError(t, err)
 
 			// Merge the tensor.
@@ -192,7 +193,7 @@ func TestTensor(t *testing.T) {
 		// Shard the tensor.
 		spec, err := distributed.NewShardingSpec(mesh, distributed.AxisSpec{"shards"}, distributed.ReplicatedAxis)
 		require.NoError(t, err)
-		distTensor, err := distributed.ShardTensor(spec, tensor)
+		distTensor, err := dtensor.ShardTensor(spec, tensor)
 		require.NoError(t, err)
 
 		// Clone the distributed tensor.
