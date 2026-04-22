@@ -274,7 +274,7 @@ Distributed computation improvements and refactorings:
   - Package `backends/notimplemented`:
     - Added dummy `Backend` that can be used to easily mock backends.
 - Package `pkg/core/distributed`:
-  -Added `DeviceMesh`, `ShardSpec` and `distributed.Tensor` objects.
+  -Added `DeviceMesh`, `ShardSpec` and `dtensor.Tensor` objects.
 - Package `pkg/core/tensors`:
   - Added `Tensor.CheckValid()`, `Tensor.Device()`, `Tensor.Backend()`
   - Changing it to return an error (as opposed to panic) where possible.

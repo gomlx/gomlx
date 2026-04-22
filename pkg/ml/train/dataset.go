@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 )
 
 // Dataset for a train.Trainer provides the data, one batch at a time. Flat consists of a slice of *tensors.Tensor
@@ -69,7 +70,7 @@ type Dataset interface {
 	Yield() (spec any, inputs, labels []*tensors.Tensor, err error)
 }
 
-// DistributedDataset is different API to a Dataset but yields distributed.Tensors, ready for distributed
+// DistributedDataset is different API to a Dataset but yields dtensor.Tensors, ready for distributed
 // execution.
 //
 // An important aspect of the dataset is the distributed.ShardingSpec of each input and label.
@@ -88,16 +89,16 @@ type DistributedDataset interface {
 	Strategy() distributed.Strategy
 
 	// DeviceAssignment returns the device assignment for the distributed dataset.
-	// The Yield() method will return distributed.Tensor already on the corresponding device.
+	// The Yield() method will return dtensor.Tensor already on the corresponding device.
 	DeviceAssignment() []compute.DeviceNum
 
 	// DistributedYield one "batch" (or whatever is the unit for a training step) or an error.
 	// Very similar to Dataset.Yield, all the notes there apply here.
 	//
-	// The returned data (inputs and labels) are given as distributed.Tensor instances, hence already sharded.
+	// The returned data (inputs and labels) are given as dtensor.Tensor instances, hence already sharded.
 	// The ShardingSpec of each input and label must be the same for the same spec.
 	// If your training is heterogeneous, it's ok to have different ShardingSpecs for different specs.
-	DistributedYield() (spec any, inputs, labels []*distributed.Tensor, err error)
+	DistributedYield() (spec any, inputs, labels []*dtensor.Tensor, err error)
 }
 
 // HasShortName allows a dataset to specify a short name (used when displaying a short version of metric names).

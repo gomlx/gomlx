@@ -18,6 +18,7 @@ import (
 	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
@@ -487,7 +488,7 @@ func (r *Trainer) distributedCallGraphFn(
 	graphType GraphType,
 	execMap map[any]*context.Exec,
 	spec any,
-	inputs, labels []*distributed.Tensor,
+	inputs, labels []*dtensor.Tensor,
 ) (metrics []*tensors.Tensor, err error) {
 	if len(inputs) == 0 {
 		return nil, errors.New("there are no inputs, at least one is required")
@@ -529,7 +530,7 @@ func (r *Trainer) distributedCallGraphFn(
 		var meshes []*distributed.DeviceMesh
 		inputShardingSpecs := make([]*distributed.ShardingSpec, 0, numParams)
 		for _, inputAny := range inputsAndLabels {
-			input := inputAny.(*distributed.Tensor)
+			input := inputAny.(*dtensor.Tensor)
 			shardingSpec := input.ShardingSpec()
 			mesh := shardingSpec.Mesh
 			if slices.Index(meshes, mesh) == -1 {
@@ -651,7 +652,7 @@ func (r *Trainer) TrainStep(spec any, inputs, labels []*tensors.Tensor) (metrics
 //
 // Otherwise, it behaves just like TrainStep.
 func (r *Trainer) DistributedTrainStep(strategy distributed.Strategy, deviceAssignment []compute.DeviceNum,
-	spec any, inputs, labels []*distributed.Tensor) (metrics []*tensors.Tensor, err error) {
+	spec any, inputs, labels []*dtensor.Tensor) (metrics []*tensors.Tensor, err error) {
 	if r.accumulateGradients {
 		// Version that accumulate gradients.
 		return nil, errors.New("distributed training with gradient accumulation not implemented yet")
@@ -705,7 +706,7 @@ func (r *Trainer) EvalStep(spec any, inputs, labels []*tensors.Tensor) (metrics 
 //
 // Otherwise, it behaves just like EvalStep.
 func (r *Trainer) DistributedEvalStep(strategy distributed.Strategy, deviceAssignment []compute.DeviceNum,
-	spec any, inputs, labels []*distributed.Tensor) (metrics []*tensors.Tensor, err error) {
+	spec any, inputs, labels []*dtensor.Tensor) (metrics []*tensors.Tensor, err error) {
 	return r.distributedCallGraphFn(strategy, deviceAssignment, r.evalStepGraph, EvalType, r.evalStepExecMap, spec, inputs, labels)
 }
 
@@ -862,7 +863,7 @@ func (r *Trainer) DistributedEval(ds DistributedDataset) (lossAndMetrics []*tens
 
 		// Free inputs and labels after usage.
 		if finalizeInputs {
-			for sliceIdx, slice := range [][]*distributed.Tensor{inputs, labels} {
+			for sliceIdx, slice := range [][]*dtensor.Tensor{inputs, labels} {
 				for i, t := range slice {
 					err := t.FinalizeAll()
 					if err != nil {

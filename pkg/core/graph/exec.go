@@ -16,6 +16,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -533,30 +534,30 @@ func unwrapListOfTensors(args []any) []any {
 	return args
 }
 
-// unwrapDistributedTensor converts something like []any{distributed.Tensor0, distributed.Tensor1, ...} to
+// unwrapDistributedTensor converts something like []any{dtensor.Tensor0, dtensor.Tensor1, ...} to
 // []any{shard0_0, shard0_1, ... , shard1_0, shard1_1, ... , shardN_0, shardN_1, ...},
-// where shardI_J is the shard J of the distributed.Tensor I.
+// where shardI_J is the shard J of the dtensor.Tensor I.
 func unwrapDistributedTensors(numDevices int, args []any) ([]any, error) {
 	if len(args) == 0 {
 		return args, nil
 	}
-	_, ok := args[0].(*distributed.Tensor)
+	_, ok := args[0].(*dtensor.Tensor)
 	if !ok {
-		// No distributed.Tensors, so no unwrapping needed.
+		// No dtensor.Tensors, so no unwrapping needed.
 		return args, nil
 	}
 	unwrapped := make([]any, numDevices*len(args))
 	for argIdx, arg := range args {
-		dTensor, ok := arg.(*distributed.Tensor)
+		dTensor, ok := arg.(*dtensor.Tensor)
 		if !ok {
 			return nil, errors.Errorf(
-				"argument #%d is not a distributed.Tensor -- if using distributed.Tensor as input, all arguments "+
-					"must be distributed.Tensors, or none of them", argIdx)
+				"argument #%d is not a dtensor.Tensor -- if using dtensor.Tensor as input, all arguments "+
+					"must be dtensor.Tensors, or none of them", argIdx)
 		}
 		shards := dTensor.Shards()
 		if len(shards) != numDevices {
 			return nil, errors.Errorf(
-				"distributed.Tensor #%d has %d shards, but graph has %d devices and those many shards  are expected",
+				"dtensor.Tensor #%d has %d shards, but graph has %d devices and those many shards  are expected",
 				argIdx, len(shards), numDevices)
 		}
 		for shardIdx, shard := range shards {

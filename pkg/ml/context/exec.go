@@ -13,6 +13,7 @@ import (
 	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -829,14 +830,14 @@ func (e *Exec) collectOutputs(outputs []*tensors.Tensor, changedVars []*Variable
 }
 
 // collectOutputsForDistributed processes outputs for distributed execution.
-// It collects shards for each changed variable from all devices, creates distributed.Tensor objects,
+// It collects shards for each changed variable from all devices, creates dtensor.Tensor objects,
 // and returns the rearranged outputs (excluding variables).
 func (e *Exec) collectOutputsForDistributed(
 	outputs []*tensors.Tensor, changedVars []*Variable, numDevices, numOutputsPerDevice int) (
 	[]*tensors.Tensor, error) {
 	var firstErr error
 
-	// Collect shards for each changed variable and create distributed.Tensor.
+	// Collect shards for each changed variable and create dtensor.Tensor.
 	for varIdx, v := range changedVars {
 		// Collect shards for this variable from all devices.
 		shards := make([]*tensors.Tensor, numDevices)
@@ -859,8 +860,8 @@ func (e *Exec) collectOutputsForDistributed(
 			continue
 		}
 
-		// Create distributed.Tensor from the shards.
-		distValue, err := distributed.NewTensor(shardingSpec, shards)
+		// Create dtensor.Tensor from the shards.
+		distValue, err := dtensor.NewTensor(shardingSpec, shards)
 		if err != nil {
 			err = errors.WithMessagef(err, "failed to create distributed tensor for variable %q", v.ScopeAndName())
 			if firstErr == nil {

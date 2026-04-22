@@ -48,7 +48,7 @@ type Tensor struct {
 // It assumes the provided shards are already on their respective devices.
 func NewTensor(spec *distributed.ShardingSpec, shards []*tensors.Tensor) (*Tensor, error) {
 	if len(shards) == 0 {
-		return nil, errors.New("distributed.NewTensor requires shards for initialization, none was provided")
+		return nil, errors.New("dtensor.NewTensor requires shards for initialization, none was provided")
 	}
 	mesh := spec.Mesh
 	if len(shards) != mesh.NumDevices() {
@@ -94,7 +94,7 @@ func (dt *Tensor) calculateLogicalShape() error {
 			s, err := dt.mesh.AxisSize(meshAxisName)
 			if err != nil {
 				return errors.WithMessagef(err,
-					"inconsistency in distributed.Tensor, sharding spec references mesh tensorAxis %q not in mesh %s",
+					"inconsistency in dtensor.Tensor, sharding spec references mesh tensorAxis %q not in mesh %s",
 					meshAxisName, dt.mesh)
 			}
 			meshSize *= s
@@ -111,7 +111,7 @@ func (dt *Tensor) Mesh() *distributed.DeviceMesh {
 }
 
 // Shards returns the physical tensor shards.
-// They are owned by the distributed.Tensor object, and the slice shouldn't be modified -- the contents of the
+// They are owned by the dtensor.Tensor object, and the slice shouldn't be modified -- the contents of the
 // individual shards can be modified directly, if they are stored locally.
 //
 // It returns Tensor.NumDevices() shards.
@@ -141,12 +141,12 @@ func (dt *Tensor) validateShards() error {
 		return errors.New("cannot create a distributed tensor with no shards")
 	}
 	if err := shards[0].CheckValid(); err != nil {
-		return errors.WithMessagef(err, "invalid shard 0 for distributed.Tensor")
+		return errors.WithMessagef(err, "invalid shard 0 for dtensor.Tensor")
 	}
 	shardShape := shards[0].Shape()
 	for i, shard := range shards {
 		if err := shard.CheckValid(); err != nil {
-			return errors.WithMessagef(err, "invalid shard %d for distributed.Tensor", i)
+			return errors.WithMessagef(err, "invalid shard %d for dtensor.Tensor", i)
 		}
 		if !shard.Shape().Equal(shardShape) {
 			return errors.Errorf("shard %d has shape %s, but shard 0 has shape %s",
@@ -186,7 +186,7 @@ func (dt *Tensor) validateShards() error {
 			_, err := mesh.AxisSize(meshAxisName)
 			if err != nil {
 				return errors.WithMessagef(err,
-					"inconsistency in distributed.Tensor, sharding spec references mesh axis %q not in mesh %s",
+					"inconsistency in dtensor.Tensor, sharding spec references mesh axis %q not in mesh %s",
 					meshAxisName, mesh)
 			}
 		}
@@ -236,7 +236,7 @@ func (dt *Tensor) Clone() (*Tensor, error) {
 		var err error
 		newShards[i], err = shard.Clone()
 		if err != nil {
-			return nil, errors.WithMessagef(err, "distributed.Tensor.Clone: failed to clone shard %d", i)
+			return nil, errors.WithMessagef(err, "dtensor.Tensor.Clone: failed to clone shard %d", i)
 		}
 	}
 	// NewTensor will validate the new shards and calculate shapes.
@@ -390,7 +390,7 @@ func (dt *Tensor) Merge() (*tensors.Tensor, error) {
 }
 
 // ShardTensor splits a tensor into individual shards.
-// This all happen on the host, and the shards of the returned distributed.Tensor are local tensors.
+// This all happen on the host, and the shards of the returned dtensor.Tensor are local tensors.
 func ShardTensor(spec *distributed.ShardingSpec, t *tensors.Tensor) (*Tensor, error) {
 	logicalShape := t.Shape()
 	shardShape := logicalShape.Clone()
