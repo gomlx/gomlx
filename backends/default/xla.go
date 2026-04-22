@@ -4,4 +4,4 @@
 
 package _default
 
-import _ "github.com/gomlx/gomlx/backends/xla"
+import _ "github.com/gomlx/go-xla/compute/xla"

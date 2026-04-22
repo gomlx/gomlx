@@ -5,6 +5,9 @@
 ## API Changes: `backends`, `dtypes` and `shapes` moving to `github.com/gomlx/compute`
 
 - New `github.com/gomlx/compute` repo will host what was in package `backends`.
+  - `backends/simplego` backend now moved to `github.com/gomlx/compute/gobackend` (no longer "simple").
+  - `backends/xla` backend now moved to `github.com/gomlx/go-xla/compute/xla`.
+  - `backends/default` still imports both by default the "go" and the "xla" backends.
 
 
 
@@ -364,7 +367,7 @@ Other improvements:
   * Progressbar now shows the median step duration.
 * Updated and refreshed all notebooks, including the tutorial.
 
-# v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/go-xla/pkg/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
+# v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/go-xla/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
 
 - Updated dependency to new Gopjrt v0.8.2 because of CUDA PJRT (lack of) backward compatibility issues.
 - Package `stablehlo`:
@@ -384,7 +387,7 @@ Other improvements:
 
 * Package `shapes`:
   * Added `FromAnyValue`: extract shape from a Go type.
-* New backend: `stablehlo` (or simply _"hlo"_ for short) using https://github.com/gomlx/go-xla/pkg/stablehlo.
+* New backend: `stablehlo` (or simply _"hlo"_ for short) using https://github.com/gomlx/go-xla/stablehlo.
   * All standard binary and unary ops implemented.
   * A handful of the standard ops also implemented.
   * If `backends/default` is compiled with `-tags=stablehlo` it will include the `stablehlo` backend.
