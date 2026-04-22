@@ -120,42 +120,51 @@ func TestExec(t *testing.T) {
 }
 
 func TestDonate(t *testing.T) {
-	backend := testutil.BuildTestBackend()
-	deviceNum := compute.DeviceNum(0)
-	g := NewGraph(backend, "TestDonate")
-	x := Parameter(g, "x", shapes.Make(dtypes.Float64))
-	p1 := AddScalar(x, 1)
-	err := g.Compile(p1)
-	require.NoError(t, err)
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		deviceNum := compute.DeviceNum(0)
+		g := NewGraph(backend, "TestDonate")
+		x := Parameter(g, "x", shapes.Make(dtypes.Float64))
+		p1 := AddScalar(x, 1)
+		err := g.Compile(p1)
+		require.NoError(t, err)
 
-	input := tensors.FromValue(5.0)
+		// Do not donate input:
+		t.Run("DontDonateInput", func(t *testing.T) {
+			input := tensors.FromValue(5.0)
+			output := g.Run(input)[0]
+			require.Equal(t, 6.0, output.Value())
+			require.True(t, input.Ok()) // input should still be valid.
+			require.True(t, input.IsOnDevice(0))
+		})
 
-	// Do not donate input:
-	output := g.Run(input)[0]
-	require.Equal(t, 6.0, output.Value())
-	require.True(t, input.Ok()) // input should still be valid.
-	require.True(t, input.IsOnDevice(0))
+		// Donate input: make sure input is not shared.
+		t.Run("DonateInput", func(t *testing.T) {
+			input := tensors.FromValue(5.0)
+			input.MustMaterializeOnDevice(backend, false, deviceNum)
+			fmt.Printf("TestDonate: IsShared=%v\n", input.IsShared())
+			buf, err := DonateTensorBuffer(input, backend, 0)
+			require.NoError(t, err)
+			output := g.Run(buf)[0]
+			require.Equal(t, 6.0, output.Value())
+			require.True(t, input.Ok()) // input should still be valid, since local copy stays alive.
+			require.False(t, input.IsOnDevice(0))
+		})
 
-	// Donate input: make sure input is not shared.
-	input = tensors.FromValue(5.0)
-	input.MustMaterializeOnDevice(backend, false, deviceNum)
-	fmt.Printf("TestDonate: IsShared=%v\n", input.IsShared())
-	buf, err := DonateTensorBuffer(input, backend, 0)
-	require.NoError(t, err)
-	output = g.Run(buf)[0]
-	require.Equal(t, 6.0, output.Value())
-	require.True(t, input.Ok()) // input should still be valid, since local copy stays alive.
-	require.False(t, input.IsOnDevice(0))
-
-	// Donate input with shared buffer:
-	input = tensors.FromValue(11.0)
-	input.MustMaterializeOnDevice(backend, true, deviceNum)
-	fmt.Printf("TestDonate (shared requested): IsShared=%v\n", input.IsShared())
-	buf, err = DonateTensorBuffer(input, backend, deviceNum)
-	require.NoError(t, err)
-	output = g.Run(buf)[0]
-	require.Equal(t, 12.0, output.Value())
-	require.False(t, input.Ok()) // input is no longer valid, since there are no local copies.
+		// Donate input with shared buffer:
+		t.Run("DonateSharedInput", func(t *testing.T) {
+			if !backend.HasSharedBuffers() {
+				t.Skip("Backend does not support shared buffers.")
+			}
+			input := tensors.FromValue(11.0)
+			input.MustMaterializeOnDevice(backend, true, deviceNum)
+			fmt.Printf("TestDonate (shared requested): IsShared=%v\n", input.IsShared())
+			buf, err := DonateTensorBuffer(input, backend, deviceNum)
+			require.NoError(t, err)
+			output := g.Run(buf)[0]
+			require.Equal(t, 12.0, output.Value())
+			require.False(t, input.Ok()) // input is no longer valid, since there are no local copies.
+		})
+	})
 }
 
 const scalarParamName = "scalar"
