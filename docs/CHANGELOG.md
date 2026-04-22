@@ -2,13 +2,15 @@
 
 # Next: API changes with the large `backends` refactoring!
 
-## API Changes: `backends`, `dtypes` and `shapes` moving to `github.com/gomlx/compute`
+## API Changes: `backends` and related packages moved to `github.com/gomlx/compute`
 
+- Packages `backends`, `dtypes`, `shapes` and `distributed` moved to `github.com/gomlx/compute`
 - New `github.com/gomlx/compute` repo will host what was in package `backends`.
   - `backends/simplego` backend now moved to `github.com/gomlx/compute/gobackend` (no longer "simple").
   - `backends/xla` backend now moved to `github.com/gomlx/go-xla/compute/xla`.
   - `backends/default` still imports both by default the "go" and the "xla" backends.
-
+- XLA backends used for test in `support/testutil` only where the platform is supported (and if the tag `noxla` is NOT selected).
+- New `tensors/dtensor` to hold distributed tensors (previously in `pkg/core/distributed`).
 
 
 # 0.27.3: Improves sub-byte support, optimized raw-byte data transfers, FNN ensembles, and major transformer updates including BERT and Gemma models.
