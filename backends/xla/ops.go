@@ -84,7 +84,7 @@ func (f *Function) Reshape(x compute.Value, dimensions ...int) (compute.Value, e
 	}
 	xNode := nodes[0]
 	dtype := xNode.shape.DType
-	shape := stablehloshapes.Make(DTypeToXLA(dtype), dimensions...)
+	shape := stablehloshapes.Make(dtype, dimensions...)
 	value, err := stablehlo.Reshape(xNode.value, shape)
 	if err != nil {
 		return nil, err
@@ -448,7 +448,7 @@ func (f *Function) Bitcast(x compute.Value, targetDType dtypes.DType) (compute.V
 		return nil, errors.Errorf("Cannot bitcast constant value to packed sub-byte type %s (x.Shape is %s): see details in "+
 			"https://github.com/openxla/xla/issues/38964", targetDType, xValue.Shape())
 	}
-	value, err := stablehlo.BitcastConvert(nodes[0].value, DTypeToXLA(targetDType))
+	value, err := stablehlo.BitcastConvert(nodes[0].value, targetDType)
 	if err != nil {
 		return nil, err
 	}
@@ -496,7 +496,7 @@ func (f *Function) ConvertDType(x compute.Value, dtype dtypes.DType) (compute.Va
 	if err != nil {
 		return nil, err
 	}
-	output, err := stablehlo.Convert(nodes[0].value, DTypeToXLA(dtype))
+	output, err := stablehlo.Convert(nodes[0].value, dtype)
 	if err != nil {
 		return nil, err
 	}
@@ -595,7 +595,7 @@ func (f *Function) extractStartIndexValues(startIndexNodes []*Node, rank int) ([
 			if err != nil {
 				return nil, err
 			}
-			reshaped, err := stablehlo.Reshape(sliced, stablehloshapes.Make(DTypeToXLA(startIndexNodes[0].shape.DType)))
+			reshaped, err := stablehlo.Reshape(sliced, stablehloshapes.Make(startIndexNodes[0].shape.DType))
 			if err != nil {
 				return nil, err
 			}

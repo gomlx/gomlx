@@ -103,7 +103,7 @@ func (f *Function) DotGeneral(
 			algo.RhsComponentCount = 1
 			algo.NumPrimitiveOperations = 1
 			algo.AllowImpreciseAccumulation = false
-			algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
+			algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: accumulationDType}
 
 			useTF32 := f.builder.backend.DotGeneralUseTF32
 			if useTF32 && accumulationDType == dtypes.Float32 {
@@ -111,15 +111,15 @@ func (f *Function) DotGeneral(
 				algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
 				algo.AccumulationType.TF32 = true
 			} else {
-				algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
-				algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: DTypeToXLA(accumulationDType)}
+				algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: accumulationDType}
+				algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: accumulationDType}
 			}
 			dotGeneralBuilder.Algorithm(&algo)
 
 		}
 	}
 	if config.OutputDType != dtypes.InvalidDType {
-		dotGeneralBuilder.OutputDType(DTypeToXLA(config.OutputDType))
+		dotGeneralBuilder.OutputDType(config.OutputDType)
 	}
 	value, err := dotGeneralBuilder.Done()
 	if err != nil {

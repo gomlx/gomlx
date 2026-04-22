@@ -56,12 +56,10 @@ import (
 	"strings"
 
 	"github.com/gomlx/compute"
-	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/pkg/installer"
 	"github.com/gomlx/go-xla/pkg/pjrt"
-	xladtypes "github.com/gomlx/go-xla/pkg/types/dtypes"
 	xlashapes "github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/pkg/errors"
@@ -298,26 +296,12 @@ func isPluginType(pluginName, baseType string) bool {
 	return pluginName == baseType || strings.HasPrefix(pluginName, baseType+"_v")
 }
 
-// DTypeToXLA converts a GoMLX dtypes.DType to a go-xla xladtypes.DType.
-// Currently, they are identical types, but this function centralizes the conversion
-// in case they diverge in the future.
-func DTypeToXLA(dtype dtypes.DType) xladtypes.DType {
-	return xladtypes.DType(dtype)
-}
-
-// DTypeFromXLA converts a go-xla xladtypes.DType to a GoMLX dtypes.DType.
-// Currently, they are identical types, but this function centralizes the conversion
-// in case they diverge in the future.
-func DTypeFromXLA(xlaDType xladtypes.DType) dtypes.DType {
-	return dtypes.DType(xlaDType)
-}
-
 // ShapeToXLA converts a GoMLX shape to a go-xla shape.
 func ShapeToXLA(shape shapes.Shape) xlashapes.Shape {
 	if !shape.Ok() || shape.IsTuple() {
 		return xlashapes.Invalid()
 	}
-	return xlashapes.Make(DTypeToXLA(shape.DType), slices.Clone(shape.Dimensions)...)
+	return xlashapes.Make(shape.DType, slices.Clone(shape.Dimensions)...)
 }
 
 // ShapeFromXLA converts a go-xla shape to a GoMLX shape.
@@ -325,5 +309,5 @@ func ShapeFromXLA(shape xlashapes.Shape) shapes.Shape {
 	if !shape.Ok() || shape.IsTuple() {
 		return shapes.Invalid()
 	}
-	return shapes.Make(DTypeFromXLA(shape.DType), slices.Clone(shape.Dimensions)...)
+	return shapes.Make(shape.DType, slices.Clone(shape.Dimensions)...)
 }

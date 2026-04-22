@@ -145,7 +145,7 @@ func (backend *Backend) BufferShape(buffer compute.Buffer) (shapes.Shape, error)
 	if err != nil {
 		return noShape, errors.WithMessagef(err, "backend %q", BackendName)
 	}
-	return shapes.Make(DTypeFromXLA(xlaDType), dims...), nil
+	return shapes.Make(xlaDType, dims...), nil
 }
 
 // BufferDeviceNum returns the deviceNum for the buffer.
@@ -199,7 +199,7 @@ func (backend *Backend) BufferToFlatData(buffer compute.Buffer, flat any) error 
 func (backend *Backend) BufferFromFlatData(deviceNum compute.DeviceNum, flat any, shape shapes.Shape) (compute.Buffer, error) {
 	srcData := dtypes.UnsafeByteSliceFromAny(flat)
 	buffer, err := backend.client.BufferFromHost().
-		FromRawData(srcData, DTypeToXLA(shape.DType), shape.Dimensions).
+		FromRawData(srcData, shape.DType, shape.Dimensions).
 		ToDeviceNum(int(deviceNum)).
 		Done()
 	if err != nil {
@@ -228,7 +228,7 @@ func (backend *Backend) NewSharedBuffer(deviceNum compute.DeviceNum, shape shape
 		return
 	}
 	device := devices[deviceNum]
-	buffer, flat, err = backend.client.NewSharedBuffer(DTypeToXLA(shape.DType), shape.Dimensions, device)
+	buffer, flat, err = backend.client.NewSharedBuffer(shape.DType, shape.Dimensions, device)
 	if err != nil {
 		err = errors.WithMessagef(err, "backend %q NewSharedBuffer", BackendName)
 		return

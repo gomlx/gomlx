@@ -46,11 +46,11 @@ func (f *Function) getReductionFn(dtype dtypes.DType, opType compute.OpType) (*s
 	reductionFn = f.fn.Closure()
 	var lhs, rhs *stablehlo.Value
 	var err error
-	lhs, err = reductionFn.NamedInput("lhs", stablehloshapes.Make(DTypeToXLA(dtype)))
+	lhs, err = reductionFn.NamedInput("lhs", stablehloshapes.Make(dtype))
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 	}
-	rhs, err = reductionFn.NamedInput("rhs", stablehloshapes.Make(DTypeToXLA(dtype)))
+	rhs, err = reductionFn.NamedInput("rhs", stablehloshapes.Make(dtype))
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 	}
@@ -379,19 +379,19 @@ func (f *Function) ArgMinMax(x compute.Value, axis int, outputDType dtypes.DType
 		// Create a new reduction function for this valuesDType/op.
 		reduceFn = f.fn.Closure()
 		var lhsIndex, lhsValue, rhsIndex, rhsValue *stablehlo.Value
-		lhsIndex, err = reduceFn.NamedInput("lhs_idx", stablehloshapes.Make(DTypeToXLA(outputDType)))
+		lhsIndex, err = reduceFn.NamedInput("lhs_idx", stablehloshapes.Make(outputDType))
 		if err != nil {
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
-		lhsValue, err = reduceFn.NamedInput("lhs_v", stablehloshapes.Make(DTypeToXLA(valuesDType)))
+		lhsValue, err = reduceFn.NamedInput("lhs_v", stablehloshapes.Make(valuesDType))
 		if err != nil {
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
-		rhsIndex, err = reduceFn.NamedInput("rhs_idx", stablehloshapes.Make(DTypeToXLA(outputDType)))
+		rhsIndex, err = reduceFn.NamedInput("rhs_idx", stablehloshapes.Make(outputDType))
 		if err != nil {
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
-		rhsValue, err = reduceFn.NamedInput("rhs_v", stablehloshapes.Make(DTypeToXLA(valuesDType)))
+		rhsValue, err = reduceFn.NamedInput("rhs_v", stablehloshapes.Make(valuesDType))
 		if err != nil {
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
@@ -554,11 +554,11 @@ func (f *Function) getSelectFn(dtype dtypes.DType, opType compute.OpType) (*stab
 	selectionFn = f.fn.Closure()
 	var lhs, rhs *stablehlo.Value
 	var err error
-	lhs, err = selectionFn.NamedInput("lhs", stablehloshapes.Make(DTypeToXLA(dtype)))
+	lhs, err = selectionFn.NamedInput("lhs", stablehloshapes.Make(dtype))
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 	}
-	rhs, err = selectionFn.NamedInput("rhs", stablehloshapes.Make(DTypeToXLA(dtype)))
+	rhs, err = selectionFn.NamedInput("rhs", stablehloshapes.Make(dtype))
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 	}
