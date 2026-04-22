@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute"
-	"github.com/gomlx/go-xla/pkg/installer"
+	"github.com/gomlx/go-xla/installer"
 	"github.com/gomlx/gomlx/backends/xla"
 	"k8s.io/klog/v2"
 )
