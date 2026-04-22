@@ -11,14 +11,12 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute"
-	"github.com/gomlx/go-xla/installer"
-	"github.com/gomlx/gomlx/backends/xla"
+	"github.com/gomlx/go-xla/compute/xla"
 	"k8s.io/klog/v2"
 )
 
 var (
 	OfficialTestBackendNames []string = []string{
-		"xla:cpu",
 		"go",
 	}
 	OfficialTestBackends = make(map[string]compute.Backend)
@@ -28,11 +26,6 @@ func init() {
 	if selectedBackendName := os.Getenv(compute.ConfigEnvVar); selectedBackendName != "" {
 		OfficialTestBackendNames = []string{selectedBackendName}
 		return
-	}
-
-	// Include CUDA PJRT test if available.
-	if installer.HasNvidiaGPU() {
-		OfficialTestBackendNames = append(OfficialTestBackendNames, "xla:cuda")
 	}
 }
 
