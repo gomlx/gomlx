@@ -15,6 +15,7 @@ import (
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,18 +33,48 @@ var (
 
 type graphFnOneInputToTest func(g *Graph) (input, output *Node)
 
-// testFuncOneInput makes it easy to test a function with one input and one output. It
+// testFuncOneInputDefaultBackend makes it easy to test a function with one input and one output. It
 // compiles and executes the given graph building function graphFn and checks that the
 // result is as expected.
-func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTest, want any) {
+func testFuncOneInputDefaultBackend(t *testing.T, testName string, graphFn graphFnOneInputToTest, want any) {
 	t.Run(testName, func(t *testing.T) {
 		wantTensor := tensors.FromAnyValue(want)
 		backend := testutil.BuildTestBackend()
 		g := NewGraph(backend, testName)
-		inputNode, outputNode := graphFn(g)
-		err := g.Compile(inputNode, outputNode)
+		var inputNode, outputNode *Node
+		err := exceptions.TryCatch[error](func() {
+			inputNode, outputNode = graphFn(g)
+		})
+		require.NoError(t, err)
+		err = g.Compile(inputNode, outputNode)
 		require.NoError(t, err)
 		results := g.Run()
+		input, got := results[0], results[1]
+		if !wantTensor.InDelta(got, Epsilon) {
+			t.Errorf("%s(%#v):\n\twant=%v, got=%s", testName, input, wantTensor.GoStr(), got.GoStr())
+		}
+	})
+}
+
+// testFuncOneInput makes it easy to test a function with one input and one output. It
+// compiles and executes the given graph building function graphFn and checks that the
+// result is as expected.
+func testFuncOneInput(t *testing.T, backend compute.Backend, testName string, graphFn graphFnOneInputToTest, want any) {
+	t.Run(testName, func(t *testing.T) {
+		wantTensor := tensors.FromAnyValue(want)
+		g := NewGraph(backend, testName)
+		var inputNode, outputNode *Node
+		err := exceptions.TryCatch[error](func() {
+			inputNode, outputNode = graphFn(g)
+		})
+		require.NoError(t, err)
+		err = g.Compile(inputNode, outputNode)
+		require.NoError(t, err)
+		var results []*tensors.Tensor
+		err = exceptions.TryCatch[error](func() {
+			results = g.Run()
+		})
+		require.NoError(t, err)
 		input, got := results[0], results[1]
 		if !wantTensor.InDelta(got, Epsilon) {
 			t.Errorf("%s(%#v):\n\twant=%v, got=%s", testName, input, wantTensor.GoStr(), got.GoStr())
@@ -413,7 +444,7 @@ func TestOneArgOps(t *testing.T) {
 }
 
 func TestClzOp(t *testing.T) {
-	testFuncOneInput(t, "Clz()",
+	testFuncOneInputDefaultBackend(t, "Clz()",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, []int64{16, 14})
 			output = Clz(input)
@@ -495,19 +526,19 @@ func TestBroadcast(t *testing.T) {
 }
 
 func TestFill(t *testing.T) {
-	testFuncOneInput(t, "FillScalar", func(g *Graph) (input, output *Node) {
+	testFuncOneInputDefaultBackend(t, "FillScalar", func(g *Graph) (input, output *Node) {
 		input = FillScalar(g, shapes.Make(dtypes.Int64, 3, 1), 4.0)
 		output = input
 		return
 	}, [][]int64{{4}, {4}, {4}})
 
-	testFuncOneInput(t, "Ones", func(g *Graph) (input, output *Node) {
+	testFuncOneInputDefaultBackend(t, "Ones", func(g *Graph) (input, output *Node) {
 		input = Ones(g, shapes.Make(dtypes.Float32, 3, 1))
 		output = input
 		return
 	}, [][]float32{{1}, {1}, {1}})
 
-	testFuncOneInput(t, "Zeros", func(g *Graph) (input, output *Node) {
+	testFuncOneInputDefaultBackend(t, "Zeros", func(g *Graph) (input, output *Node) {
 		input = Zeros(g, shapes.Make(dtypes.Float64, 3, 1))
 		output = input
 		return
@@ -611,13 +642,13 @@ func TestReduce(t *testing.T) {
 }
 
 func TestReduceMean(t *testing.T) {
-	testFuncOneInput(t, "ReduceMean(dims=1, 2)",
+	testFuncOneInputDefaultBackend(t, "ReduceMean(dims=1, 2)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, MakeShape(dtypes.Float32, 3, 2, 4))
 			output = ReduceMean(input, 1, 2)
 			return
 		}, []float32{3.5, 11.5, 19.5})
-	testFuncOneInput(t, "ReduceAllMean()",
+	testFuncOneInputDefaultBackend(t, "ReduceAllMean()",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, MakeShape(dtypes.Float32, 3, 2, 4))
 			output = ReduceAllMean(input)
@@ -942,7 +973,7 @@ func TestStack(t *testing.T) {
 }
 
 func TestNonNegativeIndicator(t *testing.T) {
-	testFuncOneInput(t, "NonNegativeIndicator",
+	testFuncOneInputDefaultBackend(t, "NonNegativeIndicator",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, []float64{1.0, 0.0001, 0, -0.2, -3.0})
 			output = NonNegativeIndicator(input)
@@ -951,7 +982,7 @@ func TestNonNegativeIndicator(t *testing.T) {
 }
 
 func TestPositiveIndicator(t *testing.T) {
-	testFuncOneInput(t, "PositiveIndicator",
+	testFuncOneInputDefaultBackend(t, "PositiveIndicator",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, []float64{1.0, 0.0001, 0, -0.2, -3.0})
 			output = PositiveIndicator(input)
@@ -960,7 +991,7 @@ func TestPositiveIndicator(t *testing.T) {
 }
 
 func TestNonPositiveIndicator(t *testing.T) {
-	testFuncOneInput(t, "NonPositiveIndicator",
+	testFuncOneInputDefaultBackend(t, "NonPositiveIndicator",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, []float64{1.0, 0.0001, 0, -0.2, -3.0})
 			output = NonPositiveIndicator(input)
@@ -969,7 +1000,7 @@ func TestNonPositiveIndicator(t *testing.T) {
 }
 
 func TestNegativeIndicator(t *testing.T) {
-	testFuncOneInput(t, "NegativeIndicator",
+	testFuncOneInputDefaultBackend(t, "NegativeIndicator",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, []float64{1.0, 0.0001, 0, -0.2, -3.0})
 			output = NegativeIndicator(input)
@@ -978,19 +1009,19 @@ func TestNegativeIndicator(t *testing.T) {
 }
 
 func TestReduceAndKeep(t *testing.T) {
-	testFuncOneInput(t, "TestReduceAndKeep last dimension",
+	testFuncOneInputDefaultBackend(t, "TestReduceAndKeep last dimension",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, [][]float64{{1, 0, 3}, {2, -1, 1}})
 			output = ReduceAndKeep(input, ReduceSum, -1)
 			return
 		}, [][]float64{{4}, {2}})
-	testFuncOneInput(t, "TestReduceAndKeep middle dimension",
+	testFuncOneInputDefaultBackend(t, "TestReduceAndKeep middle dimension",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, [][][]float32{{{1, 0, 3}, {2, -1, 1}}})
 			output = ReduceAndKeep(input, ReduceMax, -2)
 			return
 		}, [][][]float32{{{2, 0, 3}}})
-	testFuncOneInput(t, "TestReduceAndKeep first dimension",
+	testFuncOneInputDefaultBackend(t, "TestReduceAndKeep first dimension",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, [][][]float32{{{1, 0, 3}, {2, -1, 1}}})
 			output = ReduceAndKeep(input, ReduceMax, 0)
@@ -1024,7 +1055,7 @@ func TestReverse(t *testing.T) {
 }
 
 func TestTranspose(t *testing.T) {
-	testFuncOneInput(t, "Transpose(dims=1, 2)",
+	testFuncOneInputDefaultBackend(t, "Transpose(dims=1, 2)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, MakeShape(dtypes.Float32, 3, 2, 4))
 			output = Transpose(input, 1, 2)
@@ -1033,7 +1064,7 @@ func TestTranspose(t *testing.T) {
 }
 
 func TestInternalBatchNormForInference(t *testing.T) {
-	testFuncOneInput(t, "BatchNormInference()",
+	testFuncOneInputDefaultBackend(t, "BatchNormInference()",
 		func(g *Graph) (input, output *Node) {
 			input = Iota(g, MakeShape(dtypes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on the batch axis.
 			scale := Const(g, []float32{1.0, 2.0, 3.0})

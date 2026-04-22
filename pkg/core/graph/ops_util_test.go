@@ -129,7 +129,7 @@ func TestDiagonalWithValue(t *testing.T) {
 }
 
 func TestClip(t *testing.T) {
-	testFuncOneInput(t, "Clip({0, 3, 6}, 2, 4)",
+	testFuncOneInputDefaultBackend(t, "Clip({0, 3, 6}, 2, 4)",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, [][][]float32{{{0}, {3}, {6}}})
 			output = Clip(input, Const(g, float32(2)), Const(g, float32(4)))
@@ -138,21 +138,21 @@ func TestClip(t *testing.T) {
 }
 
 func TestNorms(t *testing.T) {
-	testFuncOneInput(t, "L2NormSquare",
+	testFuncOneInputDefaultBackend(t, "L2NormSquare",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, [][]float32{{1, 2}, {-3, 4}})
 			output = L2NormSquare(input)
 			return
 		}, float32(5+25))
 
-	testFuncOneInput(t, "L2Norm",
+	testFuncOneInputDefaultBackend(t, "L2Norm",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, [][]float32{{4, -3}, {-5, 12}})
 			output = L2Norm(input, -1)
 			return
 		}, [][]float32{{5}, {13}})
 
-	testFuncOneInput(t, "L1Norm",
+	testFuncOneInputDefaultBackend(t, "L1Norm",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, [][]float32{{-4, 3}, {5, -12}})
 			output = L1Norm(input, -1)
@@ -160,14 +160,14 @@ func TestNorms(t *testing.T) {
 		}, [][]float32{{7}, {17}})
 
 	invSqrt2 := float32(1.0 / math.Sqrt(2.0))
-	testFuncOneInput(t, "L2Normalize",
+	testFuncOneInputDefaultBackend(t, "L2Normalize",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, [][]float32{{5, 5}, {711, 711}})
 			output = L2Normalize(input, -1)
 			return
 		}, [][]float32{{invSqrt2, invSqrt2}, {invSqrt2, invSqrt2}})
 
-	testFuncOneInput(t, "L2NormalizeWithEpsilon",
+	testFuncOneInputDefaultBackend(t, "L2NormalizeWithEpsilon",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, [][]float32{{0, 0}, {11, 11}})
 			output = L2NormalizeWithEpsilon(input, 1e-9, -1)
@@ -176,7 +176,7 @@ func TestNorms(t *testing.T) {
 }
 
 func TestMirroredLog1p(t *testing.T) {
-	testFuncOneInput(t, "MirroredLog1p",
+	testFuncOneInputDefaultBackend(t, "MirroredLog1p",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, []float64{0.0, 1.0, math.E - 1.0, -1.0, -(math.E - 1.0)})
 			output = MirroredLog1p(input)
@@ -192,7 +192,7 @@ func TestMirroredLog1p(t *testing.T) {
 }
 
 func TestShiftWithScalar(t *testing.T) {
-	testFuncOneInput(t, "ShiftWithScalar(input, axis=1, left, n=1, fill=0.0)",
+	testFuncOneInputDefaultBackend(t, "ShiftWithScalar(input, axis=1, left, n=1, fill=0.0)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 2))
 			output = ShiftWithScalar(input, 1, ShiftDirLeft, 1, 0.0)
@@ -202,7 +202,7 @@ func TestShiftWithScalar(t *testing.T) {
 			{{6, 7}, {0, 0}},
 			{{10, 11}, {0, 0}},
 		})
-	testFuncOneInput(t, "ShiftWithScalar(input, axis=-1, left, n=1, fill=100)",
+	testFuncOneInputDefaultBackend(t, "ShiftWithScalar(input, axis=-1, left, n=1, fill=100)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(dtypes.Int32, 3, 2, 2))
 			output = ShiftWithScalar(input, -1, ShiftDirLeft, 1, 100)
@@ -212,7 +212,7 @@ func TestShiftWithScalar(t *testing.T) {
 			{{5, 100}, {7, 100}},
 			{{9, 100}, {11, 100}},
 		})
-	testFuncOneInput(t, "ShiftWithScalar(input, axis=0, right, n=2, fill=1.0)",
+	testFuncOneInputDefaultBackend(t, "ShiftWithScalar(input, axis=0, right, n=2, fill=1.0)",
 		func(g *Graph) (input, output *Node) {
 			input = Zeros(g, shapes.Make(dtypes.Bool, 3, 2, 2))
 			output = ShiftWithScalar(input, 0, ShiftDirRight, 2, 1)
@@ -222,7 +222,7 @@ func TestShiftWithScalar(t *testing.T) {
 			{{true, true}, {true, true}},
 			{{false, false}, {false, false}},
 		})
-	testFuncOneInput(t, "ShiftWithScalar(input, axis=0, right, n=3, fill=1)",
+	testFuncOneInputDefaultBackend(t, "ShiftWithScalar(input, axis=0, right, n=3, fill=1)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(dtypes.Float64, 10.0))
 			output = ShiftWithScalar(input, -1, ShiftDirRight, 3, 1)
@@ -231,13 +231,13 @@ func TestShiftWithScalar(t *testing.T) {
 }
 
 func TestShiftWithValue(t *testing.T) {
-	testFuncOneInput(t, "ShiftWithScalar(input, axis=0, left, n=3, value=1000)",
+	testFuncOneInputDefaultBackend(t, "ShiftWithScalar(input, axis=0, left, n=3, value=1000)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(dtypes.Float32, 10))
 			output = ShiftWithValue(input, 0, ShiftDirLeft, 3, Scalar(g, F32, 1000))
 			return
 		}, []float32{3, 4, 5, 6, 7, 8, 9, 1000, 1000, 1000})
-	testFuncOneInput(t, "ShiftWithScalar(input, axis=-1, right, n=3, value=[[100], [1000]])",
+	testFuncOneInputDefaultBackend(t, "ShiftWithScalar(input, axis=-1, right, n=3, value=[[100], [1000]])",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(dtypes.Int32, 2, 10))
 			output = ShiftWithValue(input, -1, ShiftDirRight, 3, Const(g, [][]int32{{100}, {1000}}))
@@ -249,13 +249,13 @@ func TestShiftWithValue(t *testing.T) {
 }
 
 func TestShift(t *testing.T) {
-	testFuncOneInput(t, "Shift(input, axis=0, left, n=3)",
+	testFuncOneInputDefaultBackend(t, "Shift(input, axis=0, left, n=3)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(dtypes.Float32, 10))
 			output = Shift(input, 0, ShiftDirLeft, 3)
 			return
 		}, []float32{3, 4, 5, 6, 7, 8, 9, 9, 9, 9})
-	testFuncOneInput(t, "Shift(input, axis=-1, right, n=3)",
+	testFuncOneInputDefaultBackend(t, "Shift(input, axis=-1, right, n=3)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(dtypes.Int32, 2, 10))
 			output = Shift(input, -1, ShiftDirRight, 3)
@@ -267,13 +267,13 @@ func TestShift(t *testing.T) {
 }
 
 func TestOneHot(t *testing.T) {
-	testFuncOneInput(t, "OneHot 1 leading dimension",
+	testFuncOneInputDefaultBackend(t, "OneHot 1 leading dimension",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, []int{1, 0, 3})
 			output = OneHot(input, 4, dtypes.Float32)
 			return
 		}, [][]float32{{0, 1, 0, 0}, {1, 0, 0, 0}, {0, 0, 0, 1}})
-	testFuncOneInput(t, "OneHot 2 leading dimensions",
+	testFuncOneInputDefaultBackend(t, "OneHot 2 leading dimensions",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, [][][]int{ // shape [2, 3, 2]
 				{{1, 0}, {0, 2}, {3, 1}},
@@ -288,7 +288,7 @@ func TestOneHot(t *testing.T) {
 }
 
 func TestGrow(t *testing.T) {
-	testFuncOneInput(t, "GrowLeft",
+	testFuncOneInputDefaultBackend(t, "GrowLeft",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(dtypes.Int32, 3, 2))
 			output = GrowLeft(input, 0, 2, 111)
@@ -300,7 +300,7 @@ func TestGrow(t *testing.T) {
 			{2, 3},
 			{4, 5},
 		})
-	testFuncOneInput(t, "GrowRight",
+	testFuncOneInputDefaultBackend(t, "GrowRight",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(dtypes.Float32, 3, 2))
 			output = GrowRight(input, 1, 1, 111)

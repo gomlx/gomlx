@@ -143,7 +143,7 @@ func TestDot(t *testing.T) {
 	})
 
 	t.Run("General", func(t *testing.T) {
-		testFuncOneInput(t, "Dot.(lhs=Iota([3,4]), rhs=0.1*Ones([3,4])).General()",
+		testFuncOneInputDefaultBackend(t, "Dot.(lhs=Iota([3,4]), rhs=0.1*Ones([3,4])).General()",
 			func(g *Graph) (input, output *Node) {
 				input = IotaFull(g, shapes.Make(dtypes.Float32, 3, 4))
 				input = OnePlus(input)
@@ -152,7 +152,7 @@ func TestDot(t *testing.T) {
 				return
 			}, []float32{1, 2.6, 4.2})
 
-		testFuncOneInput(t, "Dot.(lhs=Iota([3,2,4]), rhs=0.1*Ones([3,5,4])).General()",
+		testFuncOneInputDefaultBackend(t, "Dot.(lhs=Iota([3,2,4]), rhs=0.1*Ones([3,5,4])).General()",
 			func(g *Graph) (input, output *Node) {
 				input = IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 4))
 				input = OnePlus(input)

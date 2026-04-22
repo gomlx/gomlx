@@ -10,7 +10,7 @@ import (
 )
 
 func TestInterpolate(t *testing.T) {
-	testFuncOneInput(t, "Interpolate(1D).Nearest().HalfPixelCenters(true).AlignCorner(false)",
+	testFuncOneInputDefaultBackend(t, "Interpolate(1D).Nearest().HalfPixelCenters(true).AlignCorner(false)",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, [][][]float32{{{0}, {3}, {6}}})
 			output = Interpolate(input, NoInterpolation, 6, NoInterpolation).
@@ -19,7 +19,7 @@ func TestInterpolate(t *testing.T) {
 			return
 		}, [][][]float32{{{0}, {0}, {3}, {3}, {6}, {6}}})
 
-	testFuncOneInput(t, "Interpolate(1D).Bilinear().HalfPixelCenters(true).AlignCorner(false)",
+	testFuncOneInputDefaultBackend(t, "Interpolate(1D).Bilinear().HalfPixelCenters(true).AlignCorner(false)",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, [][][]float32{{{0}, {3}, {6}}})
 			output = Interpolate(input, NoInterpolation, 6, NoInterpolation).
@@ -28,7 +28,7 @@ func TestInterpolate(t *testing.T) {
 			return
 		}, [][][]float32{{{0}, {0.75}, {2.25}, {3.75}, {5.25}, {6}}})
 
-	testFuncOneInput(t, "Interpolate(2D).Bilinear().HalfPixelCenters(true).AlignCorner(false)",
+	testFuncOneInputDefaultBackend(t, "Interpolate(2D).Bilinear().HalfPixelCenters(true).AlignCorner(false)",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, [][][][]float32{{{{0}, {3}, {6}}, {{30}, {33}, {36}}, {{60}, {63}, {66}}}})
 			output = Interpolate(input, NoInterpolation, 6, 6, NoInterpolation).

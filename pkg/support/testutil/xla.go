@@ -8,17 +8,18 @@ package testutil
 
 import (
 	"os"
+	"slices"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/go-xla/installer"
 )
 
 func init() {
-	// If no explicit backend is selected, we add xla backends (cpu and cuda if available) to the tests.
+	// If no explicit backend is selected, we add xla backends (cpu and cuda if available) to the front of the test list.
 	if os.Getenv(compute.ConfigEnvVar) == "" {
-		OfficialTestBackendNames = append(OfficialTestBackendNames, "xla:cpu")
+		OfficialTestBackendNames = slices.Insert(OfficialTestBackendNames, 0, "xla:cpu")
 		if installer.HasNvidiaGPU() {
-			OfficialTestBackendNames = append(OfficialTestBackendNames, "xla:cuda")
+			OfficialTestBackendNames = slices.Insert(OfficialTestBackendNames, 0, "xla:cuda")
 		}
 	}
 }

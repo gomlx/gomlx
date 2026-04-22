@@ -374,10 +374,11 @@ func (conv *ConvolutionBuilder) Done() *Node {
 
 	// Check only one of the "strides" or "dilations" are set.
 	var dilationsSet, stridesSet bool
-	if conv.strides != nil {
+	if len(conv.strides) > 0 {
 		for _, stride := range conv.strides {
 			if stride != 1 {
 				stridesSet = true
+				break
 			}
 		}
 	}
@@ -385,6 +386,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 		for _, dilation := range conv.kernelDilations {
 			if dilation != 1 {
 				dilationsSet = true
+				break
 			}
 		}
 	}

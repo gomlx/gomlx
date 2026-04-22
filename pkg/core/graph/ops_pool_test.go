@@ -14,7 +14,7 @@ import (
 )
 
 func TestMaxPool(t *testing.T) {
-	testFuncOneInput(t, "MaxPool(...).ChannelsFirst().NoPadding()",
+	testFuncOneInputDefaultBackend(t, "MaxPool(...).ChannelsFirst().NoPadding()",
 		func(g *Graph) (input, output *Node) {
 			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
@@ -23,7 +23,7 @@ func TestMaxPool(t *testing.T) {
 			return
 		}, [][][][]float32{{{{2}}, {{0.2}}}})
 
-	testFuncOneInput(t, "MaxPool(...).ChannelsLast.NoPadding()",
+	testFuncOneInputDefaultBackend(t, "MaxPool(...).ChannelsLast.NoPadding()",
 		func(g *Graph) (input, output *Node) {
 			channelA := Iota(g, MakeShape(dtypes.Float64, 1, 3, 3, 1), 2)
 			channelB := Mul(channelA, Const(g, 0.1))
@@ -32,7 +32,7 @@ func TestMaxPool(t *testing.T) {
 			return
 		}, [][][][]float64{{{{2, 0.2}}}})
 
-	testFuncOneInput(t, "MaxPool(...).Window(3).ChannelAxis(ChannelsFirst).PadSame().Strides(1)",
+	testFuncOneInputDefaultBackend(t, "MaxPool(...).Window(3).ChannelAxis(ChannelsFirst).PadSame().Strides(1)",
 		func(g *Graph) (input, output *Node) {
 			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
@@ -41,7 +41,7 @@ func TestMaxPool(t *testing.T) {
 			return
 		}, [][][][]float32{{{{1, 1, 1}, {2, 2, 2}, {2, 2, 2}}, {{0.1, 0.1, 0.1}, {0.2, 0.2, 0.2}, {0.2, 0.2, 0.2}}}})
 
-	testFuncOneInput(t, "MaxPool(...).Window(3).ChannelsLast.PadSame().Strides(1)",
+	testFuncOneInputDefaultBackend(t, "MaxPool(...).Window(3).ChannelsLast.PadSame().Strides(1)",
 		func(g *Graph) (input, output *Node) {
 			channelA := IotaFull(g, MakeShape(dtypes.Float32, 1, 3, 3, 1))
 			channelB := Mul(channelA, Const(g, float32(0.1)))
@@ -50,7 +50,7 @@ func TestMaxPool(t *testing.T) {
 			return
 		}, [][][][]float32{{{{4, 0.4}, {5, 0.5}, {5, 0.5}}, {{7, 0.7}, {8, 0.8}, {8, 0.8}}, {{7, 0.7}, {8, 0.8}, {8, 0.8}}}})
 
-	testFuncOneInput(t, "MaxPool(...).Window(2).Strides(1)",
+	testFuncOneInputDefaultBackend(t, "MaxPool(...).Window(2).Strides(1)",
 		func(g *Graph) (input, output *Node) {
 			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 1))
 			channelB := Mul(channelA, Const(g, 0.1))
@@ -58,7 +58,7 @@ func TestMaxPool(t *testing.T) {
 			output = MaxPool(input).Window(2).Strides(1).Done()
 			return
 		}, [][][]float64{{{1, 0.1}, {2, 0.2}, {3, 0.3}, {4, 0.4}}})
-	testFuncOneInput(t, "MaxPool(...).Window(2)",
+	testFuncOneInputDefaultBackend(t, "MaxPool(...).Window(2)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 5, 1))
 			output = MaxPool(input).Window(2).Done()
@@ -67,7 +67,7 @@ func TestMaxPool(t *testing.T) {
 }
 
 func TestMinPool(t *testing.T) {
-	testFuncOneInput(t, "MinPool(...).ChannelsFirst().NoPadding()",
+	testFuncOneInputDefaultBackend(t, "MinPool(...).ChannelsFirst().NoPadding()",
 		func(g *Graph) (input, output *Node) {
 			channelA := AddScalar(Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2), 1)
 			channelB := MulScalar(channelA, 0.1)
@@ -76,7 +76,7 @@ func TestMinPool(t *testing.T) {
 			return
 		}, [][][][]float32{{{{1}}, {{0.1}}}})
 
-	testFuncOneInput(t, "MinPool(...).ChannelsAfter().NoPadding()",
+	testFuncOneInputDefaultBackend(t, "MinPool(...).ChannelsAfter().NoPadding()",
 		func(g *Graph) (input, output *Node) {
 			channelA := AddScalar(Iota(g, MakeShape(dtypes.Float32, 1, 3, 3, 1), 2), 1)
 			channelB := MulScalar(channelA, 0.1)
@@ -85,7 +85,7 @@ func TestMinPool(t *testing.T) {
 			return
 		}, [][][][]float32{{{{1, 0.1}}}})
 
-	testFuncOneInput(t, "MinPool(...).Window(3).ChannelsFirst().PadSame().Strides(1)",
+	testFuncOneInputDefaultBackend(t, "MinPool(...).Window(3).ChannelsFirst().PadSame().Strides(1)",
 		func(g *Graph) (input, output *Node) {
 			channelA := AddScalar(Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2), 1)
 			channelB := MulScalar(channelA, 0.1)
@@ -94,7 +94,7 @@ func TestMinPool(t *testing.T) {
 			return
 		}, [][][][]float32{{{{1, 1, 1}, {1, 1, 1}, {2, 2, 2}}, {{0.1, 0.1, 0.1}, {0.1, 0.1, 0.1}, {0.2, 0.2, 0.2}}}})
 
-	testFuncOneInput(t, "MinPool(...).Window(2).Strides(1)",
+	testFuncOneInputDefaultBackend(t, "MinPool(...).Window(2).Strides(1)",
 		func(g *Graph) (input, output *Node) {
 			channelA := AddScalar(IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 1)), 1)
 			channelB := MulScalar(channelA, 0.1)
@@ -103,7 +103,7 @@ func TestMinPool(t *testing.T) {
 			return
 		}, [][][]float64{{{1, 0.1}, {2, 0.2}, {3, 0.3}, {4, 0.4}}})
 
-	testFuncOneInput(t, "MinPool(...).Window(2)",
+	testFuncOneInputDefaultBackend(t, "MinPool(...).Window(2)",
 		func(g *Graph) (input, output *Node) {
 			input = AddScalar(IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 5, 1)), 1)
 			output = MinPool(input).Window(2).Done()
@@ -192,7 +192,7 @@ func TestGradientMinPool(t *testing.T) {
 // TestSumPool only tests that the correct reduction is applied. Windows and strides are already
 // tested with TestMaxPool.
 func TestSumPool(t *testing.T) {
-	testFuncOneInput(t, "SumPool(...)",
+	testFuncOneInputDefaultBackend(t, "SumPool(...)",
 		func(g *Graph) (input, output *Node) {
 			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 3, 3, 1))
 			channelB := Mul(channelA, Const(g, 0.1))
@@ -266,7 +266,7 @@ func TestGradientSumPool(t *testing.T) {
 // TestMeanPool only tests that the correct reduction and normalization are applied. Windows and strides are already
 // tested with TestMaxPool.
 func TestMeanPool(t *testing.T) {
-	testFuncOneInput(t, "MeanPool(...).ChannelsAfter().NoPadding()",
+	testFuncOneInputDefaultBackend(t, "MeanPool(...).ChannelsAfter().NoPadding()",
 		func(g *Graph) (input, output *Node) {
 			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 3, 3, 1))
 			channelB := Mul(channelA, Const(g, 0.1))
@@ -276,7 +276,7 @@ func TestMeanPool(t *testing.T) {
 		}, [][][][]float64{{{{4, 0.4}}}})
 
 	fmt.Println()
-	testFuncOneInput(t, "MeanPool(...).ChannelsAfter().PadSame().",
+	testFuncOneInputDefaultBackend(t, "MeanPool(...).ChannelsAfter().PadSame().",
 		func(g *Graph) (input, output *Node) {
 			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 3, 3, 1))
 			channelB := Mul(channelA, Const(g, 0.1))
