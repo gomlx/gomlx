@@ -42,6 +42,7 @@ func TestOfficialBackends(t *testing.T, testFn func(t *testing.T, backend comput
 // delta is the margin of value on the difference of output and want values that are acceptable.
 // Values of delta <= 0 means only exact equality is accepted.
 func RunTestGraphFn(t *testing.T, testName string, graphFn TestGraphFn, want []any, delta float64) {
+	t.Helper()
 	RunTestGraphFnWithBackend(t, testName, BuildTestBackend(), graphFn, want, delta)
 }
 
@@ -51,7 +52,9 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestGraphFn, want []a
 // delta is the margin of value on the difference of output and want values that are acceptable.
 // Values of delta <= 0 means only exact equality is accepted.
 func RunTestGraphFnWithBackend(t *testing.T, testName string, backend compute.Backend, graphFn TestGraphFn, want []any, delta float64) {
+	t.Helper()
 	t.Run(testName, func(t *testing.T) {
+		t.Helper()
 		wantTensors := xslices.Map(want, func(value any) *tensors.Tensor {
 			if s, ok := value.(shapes.Shape); ok {
 				return tensors.FromShape(s)
@@ -96,8 +99,9 @@ func RunTestGraphFnWithBackend(t *testing.T, testName string, backend compute.Ba
 		require.Equalf(t, len(want), numOutputs, "%s: number of wanted results different from number of outputs", testName)
 
 		for ii, output := range outputs {
-			require.Truef(t, wantTensors[ii].InDelta(output, delta), "%s: output #%d doesn't match wanted value %v",
-				testName, ii, want[ii])
+			if !wantTensors[ii].InDelta(output, delta) {
+				t.Errorf("%s: output #%d doesn't match wanted value %v", testName, ii, want[ii])
+			}
 		}
 	})
 }
