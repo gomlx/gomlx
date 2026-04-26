@@ -3991,11 +3991,11 @@ func backendReduceSum(x *Node, axes ...int) (
 
 // nodeInputsReduceWindow holds the inputs used for the call to compute.ReduceWindow.
 type nodeInputsReduceWindow struct {
-	x                *Node
+	input            *Node
 	reductionType    ReduceOpType
 	windowDimensions []int
 	strides          []int
-	baseDilations    []int
+	inputDilations   []int
 	windowDilations  []int
 	paddings         [][2]int
 }
@@ -4007,33 +4007,33 @@ func (ni *nodeInputsReduceWindow) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsReduceWindow) String() string {
-	return fmt.Sprintf("%s(x=[#%d], reductionType=%v, windowDimensions=%v, strides=%v, baseDilations=%v, windowDilations=%v, paddings=%v)",
+	return fmt.Sprintf("%s(input=[#%d], reductionType=%v, windowDimensions=%v, strides=%v, inputDilations=%v, windowDilations=%v, paddings=%v)",
 		ni.Type(),
-		ni.x.Id(),
+		ni.input.Id(),
 		ni.reductionType,
 		ni.windowDimensions,
 		ni.strides,
-		ni.baseDilations,
+		ni.inputDilations,
 		ni.windowDilations,
 		ni.paddings,
 	)
 }
 
 // backendReduceWindow is a Graph wrapper for the backend.Builder.ReduceWindow method.
-func backendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions []int, strides []int, baseDilations []int, windowDilations []int, paddings [][2]int) (
+func backendReduceWindow(input *Node, reductionType ReduceOpType, windowDimensions []int, strides []int, inputDilations []int, windowDilations []int, paddings [][2]int) (
 	node *Node) {
-	inputNodes := []*Node{x}
+	inputNodes := []*Node{input}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsReduceWindow{
-		x:                x,
+		input:            input,
 		reductionType:    reductionType,
 		windowDimensions: slices.Clone(windowDimensions),
 		strides:          slices.Clone(strides),
-		baseDilations:    slices.Clone(baseDilations),
+		inputDilations:   slices.Clone(inputDilations),
 		windowDilations:  slices.Clone(windowDilations),
 		paddings:         slices.Clone(paddings),
 	}
-	result, err := g.currentFunc.backendFunc.ReduceWindow(x.outputOps[0], inputs.reductionType, inputs.windowDimensions, inputs.strides, inputs.baseDilations, inputs.windowDilations, inputs.paddings)
+	result, err := g.currentFunc.backendFunc.ReduceWindow(input.outputOps[0], inputs.reductionType, inputs.windowDimensions, inputs.strides, inputs.inputDilations, inputs.windowDilations, inputs.paddings)
 	if err != nil {
 		panic(err)
 	}

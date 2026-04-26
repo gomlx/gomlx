@@ -380,7 +380,7 @@ func takeMeanOfContributions(x, pooledSum *Node, channelsAxis int, windowDimensi
 // This is exposed to allow testing, but you probably should avoid using it directly
 // and instead use the pool operations (MaxPool, MinPool, SumPool and MeanPool), which allow
 // almost the same flexibility.
-func BackendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) *Node {
+func BackendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions, strides, inputDilations, windowDilations []int, paddings [][2]int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	rank := x.Rank()
 	if len(windowDimensions) != rank {
@@ -389,8 +389,8 @@ func BackendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions, 
 	if len(strides) != 0 && len(strides) != rank {
 		Panicf("strides (length %d) if given must have the same length as the rank of x (rank %d)", len(strides), rank)
 	}
-	if len(baseDilations) > 0 && len(baseDilations) != rank {
-		Panicf("baseDilations (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
+	if len(inputDilations) > 0 && len(inputDilations) != rank {
+		Panicf("inputDilations (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
 	}
 	if len(windowDilations) > 0 && len(windowDilations) != rank {
 		Panicf("windowDilations (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
@@ -398,7 +398,7 @@ func BackendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions, 
 	if len(paddings) > 0 && len(paddings) != rank {
 		Panicf("paddings (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
 	}
-	return backendReduceWindow(x, reductionType, windowDimensions, strides, baseDilations, windowDilations, paddings)
+	return backendReduceWindow(x, reductionType, windowDimensions, strides, inputDilations, windowDilations, paddings)
 }
 
 // checkedSelectAndScatter selects (largest) the element (according to reduceOp) from a window and scatter to those positions
@@ -437,15 +437,15 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 		Panicf("ReduceWindow gradient only defined for the operations %q, instead got %q", vjpReductionTypes, params.reductionType)
 	}
 
-	if len(params.baseDilations) > 0 || len(params.windowDilations) > 0 {
+	if len(params.inputDilations) > 0 || len(params.windowDilations) > 0 {
 		Panicf("gradient of ReduceWindow with base or window dilations is not defined")
 	}
 	var vjpX *Node
 	switch params.reductionType {
 	case compute.ReduceOpMax, compute.ReduceOpMin:
-		vjpX = checkedSelectAndScatter(params.x, v, params.reductionType, params.windowDimensions, params.strides, params.paddings)
+		vjpX = checkedSelectAndScatter(params.input, v, params.reductionType, params.windowDimensions, params.strides, params.paddings)
 	case compute.ReduceOpSum:
-		vjpX = dilateConvolveToMatchSumPooling(params.x, v, params.windowDimensions, params.strides, params.paddings)
+		vjpX = dilateConvolveToMatchSumPooling(params.input, v, params.windowDimensions, params.strides, params.paddings)
 	default:
 		Panicf("ReduceWindow gradient not defined for reduction %q, pls create an issue in github if you need this", params.reductionType)
 	}
