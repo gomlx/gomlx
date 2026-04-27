@@ -39,7 +39,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          go test ./pkg/core/graph -test.skip 'TestGradientFFT'
+          go test -p 1 ./pkg/core/graph -test.skip 'TestGradientFFT'
 
       - name: Test
         env:
@@ -48,8 +48,8 @@ jobs:
         # The non-short tests work well locally (in the development box) because the datasets are cached.
         # Also excludes tests that have large dependencies (e.g.: X11):
         run: |
-          go test -short $(go list ./... | grep -v "ui/fyneui") \
+          go test -p 1 -short $(go list ./... | grep -v "ui/fyneui") \
             -test.skip 'TestGradientFFT'
-          cd examples ; go test -short $(go list ./... | grep -v "ogbnmag")
+          cd examples ; go test -p 1 -short $(go list ./... | grep -v "ogbnmag")
 
 

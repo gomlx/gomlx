@@ -151,7 +151,7 @@ func (t *Tensor) lockedConstFlatData(accessFn func(flat any)) error {
 	if t.local == nil && t.backend.HasSharedBuffers() {
 		// If local is nil, that means there is an on-device tensor instead;
 		// we take a view (the data) of the first one.
-		flat, err := t.backend.BufferData(t.onDevice.buffer)
+		flat, err := t.onDevice.buffer.Data()
 		if err != nil {
 			return err
 		}
@@ -637,7 +637,7 @@ func GobDeserializeToDevice(
 	if err != nil {
 		err = errors.Wrapf(err, "failed to deserialize Tensor data")
 		// Destroy the buffer since it's not going to be used.
-		err2 := backend.BufferFinalize(buffer)
+		err2 := buffer.Finalize()
 		if err2 != nil {
 			klog.Warningf("failed to destroy buffer for backend %q: %v", backend.Name(), err2)
 		}

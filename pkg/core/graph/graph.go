@@ -647,7 +647,7 @@ func (g *Graph) RunWithBuffers(inputs []compute.Buffer, donate []bool, defaultDe
 	outputs = xslices.Map(
 		results,
 		func(buf compute.Buffer) *tensors.Tensor {
-			t, err := tensors.FromBuffer(g.backend, buf)
+			t, err := tensors.FromBuffer(buf)
 			if err != nil {
 				panic(err)
 			}

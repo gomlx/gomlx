@@ -104,7 +104,7 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend compute.
 
 		// Convert the buffer to a tensor: the converted tensor should not be shared, since the buffer comes from the output
 		// of a backend execution.
-		outputTensor, err := tensors.FromBuffer(backend, outputs[0])
+		outputTensor, err := tensors.FromBuffer(outputs[0])
 		require.NoError(t, err)
 		require.False(t, outputTensor.IsShared())
 		fmt.Printf("\tf(x) = x^2, f(%s) = %s\n", tensor.GoStr(), outputTensor.GoStr())

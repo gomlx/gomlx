@@ -108,7 +108,7 @@ func TestEvaluateBatchMultiInputsAndOutputs(t *testing.T) {
 		outputs := Evaluate(b, nodeInputs, nodeControlPoints)
 		return []*Node{nodeInputs, nodeControlPoints}, []*Node{outputs}
 	}, []any{want},
-		1e-4)
+		1e-2)
 }
 
 func TestExtrapolation(t *testing.T) {

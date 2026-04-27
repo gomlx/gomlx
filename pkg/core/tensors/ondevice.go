@@ -27,19 +27,19 @@ type onDevice struct {
 	deviceNum compute.DeviceNum
 }
 
-// FromBuffer creates a Tensor from a backend's buffer. It requires the deviceNum information as well.
+// FromBuffer creates a Tensor from a backend's buffer.
 // The ownership of the buffer is transferred to the new Tensor.
 //
 // This doesn't work for shared buffers, so it assumes the buffer is not shared.
-func FromBuffer(backend compute.Backend, buffer compute.Buffer) (*Tensor, error) {
+func FromBuffer(buffer compute.Buffer) (*Tensor, error) {
 	// Create tensor.
-	shape, err := backend.BufferShape(buffer)
+	shape, err := buffer.Shape()
 	if err != nil {
 		return nil, err
 	}
 	t := newEmptyTensor(shape)
-	t.backend = backend
-	deviceNum, err := backend.BufferDeviceNum(buffer)
+	t.backend = buffer.Backend()
+	deviceNum, err := buffer.DeviceNum()
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func (d *onDevice) Finalize() error {
 	if !d.t.backend.IsFinalized() {
 		// We finalize only if the backend hasn't been finalized yet -- otherwise, we assume all buffers
 		// have been freed/finalized/invalidated by the backend already.
-		if err := d.t.backend.BufferFinalize(d.buffer); err != nil {
+		if err := d.buffer.Finalize(); err != nil {
 			return errors.WithMessagef(err, "Tensor.OnDevice.MustFinalize: failed to finalize buffer on-device")
 		}
 	}
@@ -243,7 +243,7 @@ func (t *Tensor) lockedMaterializeOnDevice(backend compute.Backend, share bool, 
 			return nil
 		}
 		// Attempt to transfer the buffer to the new device.
-		newBuffer, err := backend.BufferCopyToDevice(t.onDevice.buffer, deviceNum)
+		newBuffer, err := t.onDevice.buffer.CopyToDevice(deviceNum)
 		if err != nil {
 			return errors.WithMessagef(err, "failed to transfer Tensor's buffer from device %d to device %d",
 				t.onDevice.deviceNum, deviceNum)
@@ -460,7 +460,7 @@ func (t *Tensor) lockedMaterializeLocal() error {
 		t:    t,
 		flat: dtypes.MakeAnySlice(t.shape.DType, t.Size()),
 	}
-	if err := t.backend.BufferToFlatData(d.buffer, t.local.flat); err != nil {
+	if err := d.buffer.ToFlatData(t.local.flat); err != nil {
 		return errors.WithMessagef(err,
 			"Tensor(shape=%s).MaterializeLocal() failed to copy from on-device buffer",
 			t.shape)
@@ -567,7 +567,7 @@ func (t *Tensor) CopyFrom(tFrom *Tensor) error {
 			d.deviceNum,
 		)
 	}
-	if err := tFrom.backend.BufferToFlatData(d.buffer, tFlat); err != nil {
+	if err := d.buffer.ToFlatData(tFlat); err != nil {
 		return errors.WithMessagef(
 			err,
 			"Tensor(shape=%s).CopyFrom(tFrom) failed to copy from on-device buffer",
@@ -733,6 +733,6 @@ func FromRaw(backend compute.Backend, deviceNum compute.DeviceNum, shape shapes.
 				"failed to create backend buffer from flat data for shape %s on device %d, on backend %s",
 				shape, deviceNum, backend.Name())
 		}
-		return FromBuffer(backend, backendBuf)
+		return FromBuffer(backendBuf)
 	}
 }

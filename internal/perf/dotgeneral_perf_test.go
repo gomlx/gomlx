@@ -328,8 +328,8 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 						rhsFlatF16[i] = float16.FromFloat32(float32(i%10 + 1))
 					}
 				}
-				lhsTensor := must.M1(tensors.FromBuffer(backend, lhsBuffer))
-				rhsTensor := must.M1(tensors.FromBuffer(backend, rhsBuffer))
+				lhsTensor := must.M1(tensors.FromBuffer(lhsBuffer))
+				rhsTensor := must.M1(tensors.FromBuffer(rhsBuffer))
 
 				// Create the program that does the DotGeneral.
 				testExec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
