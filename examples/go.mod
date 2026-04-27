@@ -8,10 +8,10 @@ require (
 	github.com/daniellowtw/matlab v0.0.0-20190528220746-1ed1d96a6637
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-gota/gota v0.12.0
-	github.com/gomlx/compute v0.0.0-20260426084914-c478a14b5283
-	github.com/gomlx/go-huggingface v0.3.6-0.20260426104454-b03b225d6261
-	github.com/gomlx/gomlx v0.27.4-0.20260426103707-4e31b1361b06
-	github.com/gomlx/onnx-gomlx v0.4.3-0.20260426110509-f5c442f3659a
+	github.com/gomlx/compute v0.0.0-20260427075025-d268f3535dae
+	github.com/gomlx/go-huggingface v0.3.6-0.20260427090155-c3040213f58a
+	github.com/gomlx/gomlx v0.27.4-0.20260427084755-11640bc16504
+	github.com/gomlx/onnx-gomlx v0.4.3-0.20260427090309-097c6cdb0aa2
 	github.com/janpfeifer/gonb v0.11.3
 	github.com/janpfeifer/must v0.2.0
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
@@ -31,7 +31,6 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/edsrzf/mmap-go v1.2.0 // indirect
 	github.com/eliben/go-sentencepiece v0.7.0 // indirect
 	github.com/erkkah/margaid v0.3.0 // indirect
@@ -40,7 +39,8 @@ require (
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/gomlx/bsplines v0.2.0 // indirect
 	github.com/gomlx/exceptions v0.0.3 // indirect
-	github.com/gomlx/go-xla v0.2.3-0.20260426103526-9a5bf49c0bfd // indirect
+	github.com/gomlx/go-xla v0.2.3-0.20260427082356-0f2f80258789 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
