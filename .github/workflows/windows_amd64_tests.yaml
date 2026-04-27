@@ -56,7 +56,7 @@ jobs:
           # Run one test that triggers the auto-install first (concurrency issues)
           # TestGradientFFT is not working in windows.
         run: |
-          GOMLX_BACKEND="xla:cpu" go test ./pkg/core/graph -test.skip 'TestGradientFFT'
+          go test ./pkg/core/graph -test.skip 'TestGradientFFT'
 
       - name: Test
         env:
