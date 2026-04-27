@@ -53,6 +53,8 @@ func BuildTestBackend() compute.Backend {
 			OfficialTestBackends[backendName] = backend
 			if i == 0 {
 				klog.Infof("Default backend %q: %s", backendName, backend.Description())
+			} else {
+				klog.Infof("Extra backend #%d %q: %s", i, backendName, backend.Description())
 			}
 		}
 	})
