@@ -10,10 +10,10 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/support/humanize"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/support/humanize"
 	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/pbnjay/memory"
 	"github.com/stretchr/testify/assert"

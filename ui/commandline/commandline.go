@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gomlx/compute/support/humanize"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/support/humanize"
 )
 
 // ReportEval reports on the command line the results of evaluating the datasets using trainer.Eval.

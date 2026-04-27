@@ -11,9 +11,9 @@ import (
 	"strings"
 
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/support/humanize"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/humanize"
 	"github.com/pkg/errors"
 )
 

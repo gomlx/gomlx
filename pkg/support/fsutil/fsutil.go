@@ -15,7 +15,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/gomlx/gomlx/pkg/support/humanize"
+	"github.com/gomlx/compute/support/humanize"
 	"github.com/pkg/errors"
 )
 
