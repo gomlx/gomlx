@@ -165,7 +165,7 @@ func TestRandomIntN(t *testing.T) {
 }
 
 // TestMultiOutputs covers issue #197, about the execution nodes with multi-outputs (random number generator) on
-// the SimpleGo backend.
+// the Go backend.
 //
 // Kept here to eventually test new compute.
 func TestMultiOutputs(t *testing.T) {
