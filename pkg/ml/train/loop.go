@@ -9,10 +9,11 @@ import (
 	"slices"
 	"time"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/distributed"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
@@ -180,8 +181,8 @@ func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*t
 // distributedStep of loop, called by all looping methods.
 // It calls the appropriate hooks.
 func (loop *Loop) distributedStep(
-	strategy distributed.Strategy, deviceAssignment []backends.DeviceNum,
-	spec any, inputs, labels []*distributed.Tensor) (metrics []*tensors.Tensor, err error) {
+	strategy distributed.Strategy, deviceAssignment []compute.DeviceNum,
+	spec any, inputs, labels []*dtensor.Tensor) (metrics []*tensors.Tensor, err error) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
@@ -195,7 +196,7 @@ func (loop *Loop) distributedStep(
 
 	// Free inputs and labels:
 	if loop.finalizeYieldedTrainTensors {
-		for sliceIdx, slice := range [][]*distributed.Tensor{inputs, labels} {
+		for sliceIdx, slice := range [][]*dtensor.Tensor{inputs, labels} {
 			for i, dt := range slice {
 				err := dt.Finalize()
 				if err != nil {
@@ -301,9 +302,9 @@ func checkYield(inputs, labels []*tensors.Tensor) error {
 	return nil
 }
 
-func checkDistributedYield(inputs, labels []*distributed.Tensor) error {
+func checkDistributedYield(inputs, labels []*dtensor.Tensor) error {
 	// Check inputs and labels are valid.
-	for inputTypeIdx, slice := range [][]*distributed.Tensor{inputs, labels} {
+	for inputTypeIdx, slice := range [][]*dtensor.Tensor{inputs, labels} {
 		for tensorIdx, dt := range slice {
 			if !dt.Ok() {
 				return errors.Errorf(

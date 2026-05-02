@@ -11,13 +11,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 )
 
@@ -30,7 +30,7 @@ import (
 // Finally, it supports serialization and deserialization, to accelerate loading of the data -- in case
 // generating the original dataset is expensive (e.g: image transformations).
 type InMemoryDataset struct {
-	backend backends.Backend
+	backend compute.Backend
 
 	// name of the original dataset used to populate the InMemoryDataset.
 	name      string
@@ -97,7 +97,7 @@ type InMemoryDataset struct {
 //
 // Returns a `InMemoryDataset`, that is initially not shuffled and not batched. You can configure how you want to
 // use it with the other configuration methods.
-func InMemory(backend backends.Backend, ds train.Dataset, dsIsBatched bool) (mds *InMemoryDataset, err error) {
+func InMemory(backend compute.Backend, ds train.Dataset, dsIsBatched bool) (mds *InMemoryDataset, err error) {
 	mds = &InMemoryDataset{
 		backend:               backend,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -129,7 +129,7 @@ func InMemory(backend backends.Backend, ds train.Dataset, dsIsBatched bool) (mds
 //		[]any{[][]float32{{1, 2}, {3, 4}}},
 //		[]any{[][]float32{{3}, {7}}})
 func InMemoryFromData(
-	backend backends.Backend,
+	backend compute.Backend,
 	name string,
 	inputs []any,
 	labels []any,
@@ -695,8 +695,8 @@ func (mds *InMemoryDataset) GobSerialize(encoder *gob.Encoder) (err error) {
 // that reads through only one epoch. The random number generator is also newly initialized (see
 // InMemoryDataset.WithRand).
 func GobDeserializeInMemoryToDevice(
-	backend backends.Backend,
-	deviceNum backends.DeviceNum,
+	backend compute.Backend,
+	deviceNum compute.DeviceNum,
 	decoder *gob.Decoder,
 ) (mds *InMemoryDataset, err error) {
 	dec := func(data any) {

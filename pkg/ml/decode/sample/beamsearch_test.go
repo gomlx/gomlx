@@ -5,9 +5,9 @@ import (
 
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	graphtest "github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -43,7 +43,7 @@ func TestBeamSearchConfig(t *testing.T) {
 // TestBeamSearchStep groups tests for BeamSearchStep.
 func TestBeamSearchStep(t *testing.T) {
 	t.Run("Basic", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		config := NewBeamSearch(2, 999)
@@ -82,7 +82,7 @@ func TestBeamSearchStep(t *testing.T) {
 	})
 
 	t.Run("EOSSuppression", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		eosToken := 5
@@ -114,7 +114,7 @@ func TestBeamSearchStep(t *testing.T) {
 	})
 
 	t.Run("FinishedDetection", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		eosToken := 3
@@ -142,7 +142,7 @@ func TestBeamSearchStep(t *testing.T) {
 	})
 
 	t.Run("MultipleBatches", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		config := NewBeamSearch(2, 999)
@@ -192,7 +192,7 @@ func TestBeamSearchStep(t *testing.T) {
 // TestApplyLengthPenalty groups tests for ApplyLengthPenalty.
 func TestApplyLengthPenalty(t *testing.T) {
 	t.Run("NoPenalty", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 		config := NewBeamSearch(2, 999) // lengthPenalty defaults to 1.0
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, scores, lengths *Node) *Node {
@@ -209,7 +209,7 @@ func TestApplyLengthPenalty(t *testing.T) {
 	})
 
 	t.Run("WithPenalty", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 		penalty := 1.5
 		config := NewBeamSearch(2, 999).WithLengthPenalty(penalty)

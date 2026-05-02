@@ -5,10 +5,10 @@
 package sample
 
 import (
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
 // RNG is an interface for random number generation used by the sampling strategies.

@@ -7,16 +7,17 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/compute/distributed"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +31,7 @@ func oneLayerManyInputsGraph(ctx *context.Context, inputs []*Node) *Node {
 }
 
 func TestExec(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	// Checks that Context.RNGState is auto-initialized correctly.
 	t.Run("Context.RNGState initialization", func(t *testing.T) {
@@ -167,7 +168,7 @@ func TestExec(t *testing.T) {
 }
 
 func TestAutoSharding(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	numDevices := backend.NumDevices()
 	if numDevices < 2 {
 		t.Skipf("Skipping distributed tests: backend only has %d device.", numDevices)
@@ -228,8 +229,8 @@ func TestAutoSharding(t *testing.T) {
 		shardedResults, err := e.Exec()
 		require.NoError(t, err)
 		require.Len(t, shardedResults, 4)
-		a := must.M1(distributed.NewTensor(shardedSpec, []*tensors.Tensor{shardedResults[0], shardedResults[2]}))
-		b := must.M1(distributed.NewTensor(shardedSpec, []*tensors.Tensor{shardedResults[1], shardedResults[3]}))
+		a := must.M1(dtensor.NewTensor(shardedSpec, []*tensors.Tensor{shardedResults[0], shardedResults[2]}))
+		b := must.M1(dtensor.NewTensor(shardedSpec, []*tensors.Tensor{shardedResults[1], shardedResults[3]}))
 		fmt.Println("RandomUniform([2, 3]):")
 		fmt.Printf("\t- A [Shard #0]: %s\n\t- A [Shard #1]: %s\n", a.Shards()[0], a.Shards()[1])
 		fmt.Printf("\t- B [Shard #0]: %s\n\t- B [Shard #1]: %s\n", b.Shards()[0], b.Shards()[1])
@@ -293,7 +294,7 @@ func TestAutoSharding(t *testing.T) {
 		// With two devices, we want 2 results, one per device.
 		// x := [][]float64{{1, 1, 1}, {10, 10, 10}, {1, 1, 1}, {10, 10, 10}}
 		x := [][]float64{{1, 1, 1}, {10, 10, 10}}
-		distributedX, err := distributed.ShardTensor(batchSpec, tensors.FromValue(x))
+		distributedX, err := dtensor.ShardTensor(batchSpec, tensors.FromValue(x))
 		fmt.Printf("\tInput x: shape=%s, shardShape=%s\n", distributedX.Shape(), distributedX.ShardShape())
 		fmt.Printf("\t- [Shard #0]: %s\n\t- [Shard #1]: %s\n", distributedX.Shards()[0], distributedX.Shards()[1])
 		require.NoError(t, err)

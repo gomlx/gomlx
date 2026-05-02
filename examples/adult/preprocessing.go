@@ -6,7 +6,7 @@ import (
 	"encoding/gob"
 	"fmt"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/examples/downloader"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
@@ -483,7 +483,7 @@ type TensorData struct {
 }
 
 // CreateTensors of dataset, for faster ML interaction.
-func (r *RawData) CreateTensors(backend backends.Backend) *TensorData {
+func (r *RawData) CreateTensors(backend compute.Backend) *TensorData {
 	return &TensorData{
 		CategoricalTensor: tensors.FromFlatDataAndDimensions(r.Categorical, r.NumRows, r.NumCategorical),
 		ContinuousTensor:  tensors.FromFlatDataAndDimensions(r.Continuous, r.NumRows, r.NumContinuous),

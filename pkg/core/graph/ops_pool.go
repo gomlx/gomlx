@@ -5,18 +5,18 @@ package graph
 import (
 	"slices"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/core/tensors/images"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 // This file contains all parts of the {Max|Sum|Prod}Pool implementation.
 
-type ReduceOpType = backends.ReduceOpType
+type ReduceOpType = compute.ReduceOpType
 
 // PoolBuilder is a helper to build a pool computation.
 // Create it with {Max|Sum|Mean|Prod}Pool, set the desired parameters and
@@ -54,7 +54,7 @@ type PoolBuilder struct {
 //
 // Note: `images` refers to the package `github.com/gomlx/gomlx/pkg/core/tensors/images`.
 func MaxPool(x *Node) *PoolBuilder {
-	return makePoolBuilder(x, backends.ReduceOpMax)
+	return makePoolBuilder(x, compute.ReduceOpMax)
 }
 
 // MinPool prepares a min pooling on x for an arbitrary number of spatial dimensions (1D, 2D, 3D, etc.).
@@ -75,7 +75,7 @@ func MaxPool(x *Node) *PoolBuilder {
 //
 // Note: `images` refers to the package `github.com/gomlx/gomlx/pkg/core/tensors/images`.
 func MinPool(x *Node) *PoolBuilder {
-	return makePoolBuilder(x, backends.ReduceOpMin)
+	return makePoolBuilder(x, compute.ReduceOpMin)
 }
 
 // SumPool prepares a sum pooling on x for an arbitrary number of spatial dimensions (1D, 2D, 3D, etc.).
@@ -96,7 +96,7 @@ func MinPool(x *Node) *PoolBuilder {
 //
 // Note: `images` refers to the package `github.com/gomlx/gomlx/pkg/core/tensors/images`.
 func SumPool(x *Node) *PoolBuilder {
-	return makePoolBuilder(x, backends.ReduceOpSum)
+	return makePoolBuilder(x, compute.ReduceOpSum)
 }
 
 // MeanPool prepares a mean pooling on x for an arbitrary number of spatial dimensions (1D, 2D, 3D, etc.).
@@ -117,7 +117,7 @@ func SumPool(x *Node) *PoolBuilder {
 //
 // Note: `images` refers to the package `github.com/gomlx/gomlx/pkg/core/tensors/images`.
 func MeanPool(x *Node) *PoolBuilder {
-	pool := makePoolBuilder(x, backends.ReduceOpSum)
+	pool := makePoolBuilder(x, compute.ReduceOpSum)
 	pool.isMean = true
 	return pool
 }
@@ -130,7 +130,7 @@ func MeanPool(x *Node) *PoolBuilder {
 // The implementation actually uses a convolution with a fixed kernel, but it can be seen as a concatenating
 // pool operation.
 func ConcatPool(x *Node) *PoolBuilder {
-	pool := makePoolBuilder(x, backends.ReduceOpUndefined)
+	pool := makePoolBuilder(x, compute.ReduceOpUndefined)
 	pool.isConcat = true
 	return pool
 }
@@ -344,7 +344,7 @@ func (pool *PoolBuilder) Done() *Node {
 		windowDimensions, strides, nil, nil, paddings)
 
 	// Take the mean.
-	if pool.isMean && pool.reductionType == backends.ReduceOpSum {
+	if pool.isMean && pool.reductionType == compute.ReduceOpSum {
 		if len(paddings) == 0 {
 			// If no padding, the number of elements to take the mean is fixed:
 			totalWindowSize := 1
@@ -369,7 +369,7 @@ func takeMeanOfContributions(x, pooledSum *Node, channelsAxis int, windowDimensi
 	shapeNoBatchOrChannels.Dimensions[0] = 1
 	shapeNoBatchOrChannels.Dimensions[channelsAxis] = 1
 	ones := Ones(x.graph, shapeNoBatchOrChannels)
-	pooledOnes := BackendReduceWindow(ones, backends.ReduceOpSum,
+	pooledOnes := BackendReduceWindow(ones, compute.ReduceOpSum,
 		windowDimensions, strides, nil, nil, paddings)
 	pooledOnes = StopGradient(pooledOnes)
 	return Div(pooledSum, pooledOnes)
@@ -380,7 +380,7 @@ func takeMeanOfContributions(x, pooledSum *Node, channelsAxis int, windowDimensi
 // This is exposed to allow testing, but you probably should avoid using it directly
 // and instead use the pool operations (MaxPool, MinPool, SumPool and MeanPool), which allow
 // almost the same flexibility.
-func BackendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) *Node {
+func BackendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions, strides, inputDilations, windowDilations []int, paddings [][2]int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	rank := x.Rank()
 	if len(windowDimensions) != rank {
@@ -389,8 +389,8 @@ func BackendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions, 
 	if len(strides) != 0 && len(strides) != rank {
 		Panicf("strides (length %d) if given must have the same length as the rank of x (rank %d)", len(strides), rank)
 	}
-	if len(baseDilations) > 0 && len(baseDilations) != rank {
-		Panicf("baseDilations (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
+	if len(inputDilations) > 0 && len(inputDilations) != rank {
+		Panicf("inputDilations (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
 	}
 	if len(windowDilations) > 0 && len(windowDilations) != rank {
 		Panicf("windowDilations (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
@@ -398,7 +398,7 @@ func BackendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions, 
 	if len(paddings) > 0 && len(paddings) != rank {
 		Panicf("paddings (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
 	}
-	return backendReduceWindow(x, reductionType, windowDimensions, strides, baseDilations, windowDilations, paddings)
+	return backendReduceWindow(x, reductionType, windowDimensions, strides, inputDilations, windowDilations, paddings)
 }
 
 // checkedSelectAndScatter selects (largest) the element (according to reduceOp) from a window and scatter to those positions
@@ -417,9 +417,9 @@ func checkedSelectAndScatter(x, source *Node, reduceOp ReduceOpType, windowDimen
 	}
 
 	switch reduceOp {
-	case backends.ReduceOpMax:
+	case compute.ReduceOpMax:
 		return backendSelectAndScatterMax(x, source, windowDimensions, strides, paddings)
-	case backends.ReduceOpMin:
+	case compute.ReduceOpMin:
 		return backendSelectAndScatterMin(x, source, windowDimensions, strides, paddings)
 	default:
 		Panicf("SelectAndScatter not defined for original reduce operation %s", reduceOp)
@@ -427,7 +427,7 @@ func checkedSelectAndScatter(x, source *Node, reduceOp ReduceOpType, windowDimen
 	}
 }
 
-var vjpReductionTypes = sets.MakeWith(backends.ReduceOpMax, backends.ReduceOpMin, backends.ReduceOpSum)
+var vjpReductionTypes = sets.MakeWith(compute.ReduceOpMax, compute.ReduceOpMin, compute.ReduceOpSum)
 
 // reduceWindowVJP calculates v*d(reduceWindow(x))/{dx, d_kernel).
 func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
@@ -437,15 +437,15 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 		Panicf("ReduceWindow gradient only defined for the operations %q, instead got %q", vjpReductionTypes, params.reductionType)
 	}
 
-	if len(params.baseDilations) > 0 || len(params.windowDilations) > 0 {
+	if len(params.inputDilations) > 0 || len(params.windowDilations) > 0 {
 		Panicf("gradient of ReduceWindow with base or window dilations is not defined")
 	}
 	var vjpX *Node
 	switch params.reductionType {
-	case backends.ReduceOpMax, backends.ReduceOpMin:
-		vjpX = checkedSelectAndScatter(params.x, v, params.reductionType, params.windowDimensions, params.strides, params.paddings)
-	case backends.ReduceOpSum:
-		vjpX = dilateConvolveToMatchSumPooling(params.x, v, params.windowDimensions, params.strides, params.paddings)
+	case compute.ReduceOpMax, compute.ReduceOpMin:
+		vjpX = checkedSelectAndScatter(params.input, v, params.reductionType, params.windowDimensions, params.strides, params.paddings)
+	case compute.ReduceOpSum:
+		vjpX = dilateConvolveToMatchSumPooling(params.input, v, params.windowDimensions, params.strides, params.paddings)
 	default:
 		Panicf("ReduceWindow gradient not defined for reduction %q, pls create an issue in github if you need this", params.reductionType)
 	}
@@ -496,7 +496,7 @@ func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, stride
 		padSame[axis][1] = windowSize / 2
 	}
 	stridesOne := xslices.SliceWithValue(rank, 1)
-	expanded = BackendReduceWindow(expanded, backends.ReduceOpSum, windowDimensions, stridesOne, nil, nil, padSame)
+	expanded = BackendReduceWindow(expanded, compute.ReduceOpSum, windowDimensions, stridesOne, nil, nil, padSame)
 
 	// We may need to trim the extra padding used originally, since we don't want to re-generate
 	// the original padding. We many also need to pad extra, in case not everything from the input tensor

@@ -3,19 +3,19 @@ package attention
 import (
 	"testing"
 
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	_ "github.com/gomlx/gomlx/backends/default"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
 // TestKVCacheFunctions tests the KV cache functions.
 func TestKVCacheFunctions(t *testing.T) {
 	t.Run("InitAndGet", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		batchSize := 1
@@ -38,7 +38,7 @@ func TestKVCacheFunctions(t *testing.T) {
 	})
 
 	t.Run("SingleUpdateWritesToCache", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		batchSize := 1
@@ -73,7 +73,7 @@ func TestKVCacheFunctions(t *testing.T) {
 	})
 
 	t.Run("MultipleUpdatesAtDifferentPositions", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		batchSize := 1
@@ -119,7 +119,7 @@ func TestKVCacheFunctions(t *testing.T) {
 	})
 
 	t.Run("BatchProcessing", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		batchSize := 3
@@ -157,7 +157,7 @@ func TestKVCacheFunctions(t *testing.T) {
 	})
 
 	t.Run("GetAfterUpdateShape", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		batchSize := 1
@@ -189,7 +189,7 @@ func TestKVCacheFunctions(t *testing.T) {
 	})
 
 	t.Run("ResetClearsCache", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		batchSize := 2
@@ -241,7 +241,7 @@ func TestKVCacheFunctions(t *testing.T) {
 	})
 
 	t.Run("CreateAttentionMaskShape", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		batchSize := 1
@@ -269,7 +269,7 @@ func TestKVCacheFunctions(t *testing.T) {
 
 // TestKVCachePersistence tests that cache variables persist across multiple graph executions
 func TestKVCachePersistence(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 
 	batchSize := 1
@@ -322,7 +322,7 @@ func TestKVCachePersistence(t *testing.T) {
 
 // TestKVCacheCircular tests the circular/rotating cache functionality.
 func TestKVCacheCircular(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	t.Run("SingleTokenWrapAround", func(t *testing.T) {
 		ctx := context.New()

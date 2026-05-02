@@ -8,6 +8,7 @@ import (
 
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -24,7 +25,7 @@ func testGradients[T interface{ float32 | float64 }](t *testing.T, name string, 
 }
 
 func testGradientsInDelta[T interface{ float32 | float64 }](t *testing.T, name string, testFn gradTestFunc, wantForGrad [][]T, delta float64) {
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 	g := NewGraph(manager, name)
 	fmt.Printf("%s:\n", name)
 	output, nodesForGrad := testFn(g)
@@ -47,7 +48,7 @@ type fnToTest func(g *Graph) (input, output *Node)
 
 func testSomeFunc[T interface{ float32 | float64 }](t *testing.T, name string, fn fnToTest, want any, inDelta bool) {
 	fmt.Printf("%s\n", name)
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 	g := NewGraph(manager, name)
 	input, output := fn(g)
 	err := g.Compile(input, output)

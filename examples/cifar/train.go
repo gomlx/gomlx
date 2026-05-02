@@ -8,8 +8,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
@@ -41,7 +41,7 @@ var (
 )
 
 // Backend is created once and reused if train is called multiple times.
-var Backend backends.Backend
+var Backend compute.Backend
 
 // TrainCifar10Model with hyperparameters given in ctx.
 func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
@@ -55,7 +55,7 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
 	if Backend == nil {
-		Backend = backends.MustNew()
+		Backend = compute.MustNew()
 	}
 	if verbosity >= 1 {
 		fmt.Printf("Backend %q:\t%s\n", Backend.Name(), Backend.Description())
@@ -182,7 +182,7 @@ func SelectModelFn(ctx *context.Context) (modelFn train.ModelFn, err error) {
 	return modelFn, nil
 }
 
-func CreateDatasets(backend backends.Backend, dataDir string, batchSize, evalBatchSize int) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
+func CreateDatasets(backend compute.Backend, dataDir string, batchSize, evalBatchSize int) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
 	baseTrain := NewDataset(backend, "Training", dataDir, C10, DType, Train)
 	baseTest := NewDataset(backend, "Validation", dataDir, C10, DType, Test)
 	trainDS = baseTrain.Copy().BatchSize(batchSize, true).Shuffle().Infinite(true)

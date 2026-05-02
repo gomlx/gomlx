@@ -9,13 +9,13 @@ import (
 	"log"
 	"math"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes/float16"
+	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/x448/float16"
 	"k8s.io/klog/v2"
 )
 
@@ -209,7 +209,7 @@ func toTensorGenericsImpl[T dtypes.NumberNotComplex | float16.Float16 | bfloat16
 	if dtype == dtypes.Float16 {
 		convertToDType = func(val uint32) T {
 			// color.RGBA() returns 16 bits values packaged in uint32.
-			return T(float16.Fromfloat32(float32(val) * float32(tt.maxValue) / float32(0xFFFF)))
+			return T(float16.FromFloat32(float32(val) * float32(tt.maxValue) / float32(0xFFFF)))
 		}
 	} else if dtype == dtypes.BFloat16 {
 		convertToDType = func(val uint32) T {

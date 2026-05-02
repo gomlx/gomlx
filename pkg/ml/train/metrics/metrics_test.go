@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -35,7 +35,7 @@ func takeLabelsMaskWeightPredictionsFn(
 }
 
 func TestBinaryAccuracyGraph(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 	ctx := context.New()
 	accuracyExec := context.MustNewExec(manager, ctx, takeFirstFn(BinaryAccuracyGraph))
 	labels, probs := []float32{0, 1, 0, 1, 0, 1}, []float32{0.1, 0.1, 0.5, 0.5, 0.8, 0.8}
@@ -47,7 +47,7 @@ func TestBinaryAccuracyGraph(t *testing.T) {
 }
 
 func TestNewMeanBinaryAccuracy(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 	ctx := context.New().Checked(false)
 	accMetric := NewMeanBinaryAccuracy("accuracy", "acc")
 	accExec := context.MustNewExec(manager, ctx, func(ctx *context.Context, labels, predictions *Node) *Node {
@@ -94,7 +94,7 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 }
 
 func TestBinaryLogitsAccuracyGraph(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 	ctx := context.New()
 	accuracyExec := context.MustNewExec(manager, ctx, takeFirstFn(BinaryLogitsAccuracyGraph))
 	labels, logits := []float32{0, 1, 0, 1, 0, 1}, []float32{-0.1, -0.1, 0, 0, 0.2, 10.0}
@@ -104,7 +104,7 @@ func TestBinaryLogitsAccuracyGraph(t *testing.T) {
 }
 
 func TestSparseCategoricalAccuracyGraph(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 	ctx := context.New()
 	{
 		accuracyExec := context.MustNewExec(manager, ctx, takeFirstFn(SparseCategoricalAccuracyGraph))

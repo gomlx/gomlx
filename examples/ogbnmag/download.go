@@ -14,11 +14,11 @@ import (
 	"path"
 	"strconv"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
@@ -479,7 +479,7 @@ var (
 // it can be used by models.
 //
 // They will be stored under the "ogbnmag" scope.
-func UploadOgbnMagVariables(backend backends.Backend, ctx *context.Context) *context.Context {
+func UploadOgbnMagVariables(backend compute.Backend, ctx *context.Context) *context.Context {
 	ctxMag := ctx.InAbsPath(OgbnMagVariablesScope)
 	for name, tPtr := range OgbnMagVariablesRef {
 		if *tPtr == nil {
@@ -516,7 +516,7 @@ func getLabelsGraph(indices, allLabels *Node) *Node {
 // The datasets can be shuffled and batched as desired.
 //
 // The yielded values are papers indices, and the corresponding labels.
-func PapersSeedDatasets(manager backends.Backend) (trainDS, validDS, testDS *mldata.InMemoryDataset, err error) {
+func PapersSeedDatasets(manager compute.Backend) (trainDS, validDS, testDS *mldata.InMemoryDataset, err error) {
 	if PapersEmbeddings == nil {
 		// Data is not loaded yet.
 		err = errors.New("data is not loaded yet, please call ogbnmag.Download() first")

@@ -8,8 +8,8 @@ import (
 	"os"
 	"path"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -34,7 +34,7 @@ var (
 // Config holds a configuration for all diffusion image/data operations.
 // See NewConfig.
 type Config struct {
-	Backend backends.Backend
+	Backend compute.Backend
 	Context *context.Context // Usually, at the root scope.
 
 	// DataDir is where the data is downloaded, and models are saved.
@@ -60,7 +60,7 @@ type Config struct {
 // NewConfig creates a configuration for most of the diffusion methods.
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
-func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string, paramsSet []string) *Config {
+func NewConfig(backend compute.Backend, ctx *context.Context, dataDir string, paramsSet []string) *Config {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
 		check(os.MkdirAll(dataDir, 0777))

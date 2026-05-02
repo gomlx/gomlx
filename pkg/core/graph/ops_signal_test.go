@@ -7,12 +7,13 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 )
 
 func TestFFT(t *testing.T) {
@@ -56,75 +57,78 @@ func TestFFT(t *testing.T) {
 }
 
 func TestGradientFFT(t *testing.T) {
-	if runtime.GOOS == "darwin" {
-		t.Skip("TestGradientFFT does not work in Darwin -- numerical differences.")
-		return
-	}
-	// Create a small sine curve using 11 numbers (scaled from 0 to 2π),
-	// calculate the FFT, takes the gradient of that w.r.t input.
-	// Also checks that the InverseFFT takes it back to the input.
-	graphtest.RunTestGraphFn(t, "GradientFFT", func(g *Graph) (inputs, outputs []*Node) {
-		x := Iota(g, shapes.Make(dtypes.Float64, 11), 0)
-		x = MulScalar(x, 2.0*math.Pi/11)
-		x = Sin(x)
-		x = ConvertDType(x, dtypes.Complex128)
-		fft := FFT(x)
-		fft.SetLogged("FFT")
-		output := ReduceAllSum(Abs(fft))
-		argmax := ArgMax(Abs(fft), -1)
-		inv := InverseFFT(fft)
-		diff := ReduceAllSum(Abs(Sub(inv, x)))
-		grad := Gradient(output, x)[0]
-		return []*Node{x}, []*Node{output, argmax, diff, grad}
-	}, []any{
-		11.0,
-		int32(1), // Max frequency is of 1, since it's exactly 1 period of a sin curve.
-		0.0,
-		// Notice that GPUs FFT implementation yields significantly different results, so this only works on
-		// the CPU (Eigen presumably) implementation. The results matches results yielded by similar code in
-		// TensorFlow (notice that if using complex64 the numbers differ).
-		[]complex128{
-			2.241402232696969 + 0i,
-			0.8408081271818637 + 0i,
-			4.848838858213708 + 0i,
-			2.7934819834338587 + 0i,
-			-0.5628044369683731 + 0i,
-			0.6846870446443976 + 0i,
-			4.140658304799644 + 0i,
-			-0.16628391231716422 + 0i,
-			0.3723748150049282 + 0i,
-			-7.438217966151578 + 0i,
-			3.245054949461747 + 0i,
-		},
-	}, 1e-3)
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		if runtime.GOOS == "darwin" {
+			t.Skip("TestGradientFFT does not work in Darwin -- numerical differences.")
+			return
+		}
 
-	// Similar to previous test, same input, but now we check the gradient of the diff of the reversed sequence
-	// w.r.t the FFT values.
-	// It should be close to 0, since the diff should be close to 0 -- it would be if the FFT were perfect.
-	graphtest.RunTestGraphFn(t, "GradientFFT", func(g *Graph) (inputs, outputs []*Node) {
-		x := Iota(g, shapes.Make(dtypes.Float64, 11), 0)
-		x = MulScalar(x, 2.0*math.Pi/11)
-		x = Sin(x)
-		x = ConvertDType(x, dtypes.Complex128)
-		fft := FFT(x)
-		sumFft := ReduceAllSum(Abs(fft))
-		argmax := ArgMax(Abs(fft), -1)
-		inv := InverseFFT(fft)
-		diff := Abs(ReduceAllSum(Sub(inv, x)))
-		grad := Gradient(diff, fft)[0]
-		return []*Node{x}, []*Node{sumFft, argmax, diff, grad}
-	}, []any{
-		11.0, int32(1), 0.0,
-		// Notice that GPUs FFT implementation yields significantly different results, so this only works on
-		// the CPU (Eigen presumably) implementation. The results matches results yielded by similar code in
-		// TensorFlow (notice that if using complex64 the numbers differ).
-		[]complex128{(-1 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i)},
-	}, 1e-3)
+		// Create a small sine curve using 11 numbers (scaled from 0 to 2π),
+		// calculate the FFT, takes the gradient of that w.r.t input.
+		// Also checks that the InverseFFT takes it back to the input.
+		graphtest.RunTestGraphFnWithBackend(t, "GradientFFT", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Iota(g, shapes.Make(dtypes.Float64, 11), 0)
+			x = MulScalar(x, 2.0*math.Pi/11)
+			x = Sin(x)
+			x = ConvertDType(x, dtypes.Complex128)
+			fft := FFT(x)
+			fft.SetLogged("FFT")
+			output := ReduceAllSum(Abs(fft))
+			argmax := ArgMax(Abs(fft), -1)
+			inv := InverseFFT(fft)
+			diff := ReduceAllSum(Abs(Sub(inv, x)))
+			grad := Gradient(output, x)[0]
+			return []*Node{x}, []*Node{output, argmax, diff, grad}
+		}, []any{
+			11.0,
+			int32(1), // Max frequency is of 1, since it's exactly 1 period of a sin curve.
+			0.0,
+			// Notice that GPUs FFT implementation yields significantly different results, so this only works on
+			// the CPU (Eigen presumably) implementation. The results matches results yielded by similar code in
+			// TensorFlow (notice that if using complex64 the numbers differ).
+			[]complex128{
+				2.241402232696969 + 0i,
+				0.8408081271818637 + 0i,
+				4.848838858213708 + 0i,
+				2.7934819834338587 + 0i,
+				-0.5628044369683731 + 0i,
+				0.6846870446443976 + 0i,
+				4.140658304799644 + 0i,
+				-0.16628391231716422 + 0i,
+				0.3723748150049282 + 0i,
+				-7.438217966151578 + 0i,
+				3.245054949461747 + 0i,
+			},
+		}, 1e-3)
+
+		// Similar to previous test, same input, but now we check the gradient of the diff of the reversed sequence
+		// w.r.t the FFT values.
+		// It should be close to 0, since the diff should be close to 0 -- it would be if the FFT were perfect.
+		graphtest.RunTestGraphFnWithBackend(t, "GradientFFT", backend, func(g *Graph) (inputs, outputs []*Node) {
+			x := Iota(g, shapes.Make(dtypes.Float64, 11), 0)
+			x = MulScalar(x, 2.0*math.Pi/11)
+			x = Sin(x)
+			x = ConvertDType(x, dtypes.Complex128)
+			fft := FFT(x)
+			sumFft := ReduceAllSum(Abs(fft))
+			argmax := ArgMax(Abs(fft), -1)
+			inv := InverseFFT(fft)
+			diff := Abs(ReduceAllSum(Sub(inv, x)))
+			grad := Gradient(diff, fft)[0]
+			return []*Node{x}, []*Node{sumFft, argmax, diff, grad}
+		}, []any{
+			11.0, int32(1), 0.0,
+			// Notice that GPUs FFT implementation yields significantly different results, so this only works on
+			// the CPU (Eigen presumably) implementation. The results matches results yielded by similar code in
+			// TensorFlow (notice that if using complex64 the numbers differ).
+			[]complex128{(-1 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i)},
+		}, 1e-3)
+	}, "go", "xla:cuda") // Backends to exclude from test: "go" doesn't implement FFT and "xla:cuda" results in numerical differences.
 }
 
 // realFftExample returns (x, y) where: x is a sinusoidal curve with numPoints points,
 // and with `frequency` full cycles; y is the RealFFT(x).
-func realFftExample(backend backends.Backend, realDType dtypes.DType, numPoints int, frequency float64) (x, y *tensors.Tensor) {
+func realFftExample(backend compute.Backend, realDType dtypes.DType, numPoints int, frequency float64) (x, y *tensors.Tensor) {
 	e := MustNewExec(backend, func(g *Graph) (x, y *Node) {
 		x = Iota(g, shapes.Make(realDType, 1, numPoints), 1)
 		x = MulScalar(x, 2.0*math.Pi*frequency/float64(numPoints))

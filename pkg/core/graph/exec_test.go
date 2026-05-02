@@ -8,13 +8,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +24,7 @@ func EuclideanDistance(a, b *Node) *Node {
 }
 
 func TestExec(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	testForDim := func(exec *Exec, dim int) {
 		a := make([]float32, dim)
 		b := xslices.SliceWithValue(dim, float32(1))
@@ -120,42 +120,51 @@ func TestExec(t *testing.T) {
 }
 
 func TestDonate(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
-	deviceNum := backends.DeviceNum(0)
-	g := NewGraph(backend, "TestDonate")
-	x := Parameter(g, "x", shapes.Make(dtypes.Float64))
-	p1 := AddScalar(x, 1)
-	err := g.Compile(p1)
-	require.NoError(t, err)
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		deviceNum := compute.DeviceNum(0)
+		g := NewGraph(backend, "TestDonate")
+		x := Parameter(g, "x", shapes.Make(dtypes.Float64))
+		p1 := AddScalar(x, 1)
+		err := g.Compile(p1)
+		require.NoError(t, err)
 
-	input := tensors.FromValue(5.0)
+		// Do not donate input:
+		t.Run("DontDonateInput", func(t *testing.T) {
+			input := tensors.FromValue(5.0)
+			output := g.Run(input)[0]
+			require.Equal(t, 6.0, output.Value())
+			require.True(t, input.Ok()) // input should still be valid.
+			require.True(t, input.IsOnDevice(0))
+		})
 
-	// Do not donate input:
-	output := g.Run(input)[0]
-	require.Equal(t, 6.0, output.Value())
-	require.True(t, input.Ok()) // input should still be valid.
-	require.True(t, input.IsOnDevice(0))
+		// Donate input: make sure input is not shared.
+		t.Run("DonateInput", func(t *testing.T) {
+			input := tensors.FromValue(5.0)
+			input.MustMaterializeOnDevice(backend, false, deviceNum)
+			fmt.Printf("TestDonate: IsShared=%v\n", input.IsShared())
+			buf, err := DonateTensorBuffer(input, backend, 0)
+			require.NoError(t, err)
+			output := g.Run(buf)[0]
+			require.Equal(t, 6.0, output.Value())
+			require.True(t, input.Ok()) // input should still be valid, since local copy stays alive.
+			require.False(t, input.IsOnDevice(0))
+		})
 
-	// Donate input: make sure input is not shared.
-	input = tensors.FromValue(5.0)
-	input.MustMaterializeOnDevice(backend, false, deviceNum)
-	fmt.Printf("TestDonate: IsShared=%v\n", input.IsShared())
-	buf, err := DonateTensorBuffer(input, backend, 0)
-	require.NoError(t, err)
-	output = g.Run(buf)[0]
-	require.Equal(t, 6.0, output.Value())
-	require.True(t, input.Ok()) // input should still be valid, since local copy stays alive.
-	require.False(t, input.IsOnDevice(0))
-
-	// Donate input with shared buffer:
-	input = tensors.FromValue(11.0)
-	input.MustMaterializeOnDevice(backend, true, deviceNum)
-	fmt.Printf("TestDonate (shared requested): IsShared=%v\n", input.IsShared())
-	buf, err = DonateTensorBuffer(input, backend, deviceNum)
-	require.NoError(t, err)
-	output = g.Run(buf)[0]
-	require.Equal(t, 12.0, output.Value())
-	require.False(t, input.Ok()) // input is no longer valid, since there are no local copies.
+		// Donate input with shared buffer:
+		t.Run("DonateSharedInput", func(t *testing.T) {
+			if !backend.HasSharedBuffers() {
+				t.Skip("Backend does not support shared buffers.")
+			}
+			input := tensors.FromValue(11.0)
+			input.MustMaterializeOnDevice(backend, true, deviceNum)
+			fmt.Printf("TestDonate (shared requested): IsShared=%v\n", input.IsShared())
+			buf, err := DonateTensorBuffer(input, backend, deviceNum)
+			require.NoError(t, err)
+			output := g.Run(buf)[0]
+			require.Equal(t, 12.0, output.Value())
+			require.False(t, input.Ok()) // input is no longer valid, since there are no local copies.
+		})
+	})
 }
 
 const scalarParamName = "scalar"
@@ -166,11 +175,11 @@ func addScalarTest(x *Node) *Node {
 }
 
 func TestExecWithSideParams(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	scalarBuffer, err := tensors.FromValue(3.0).DonateBuffer(backend, 0)
 	require.NoError(t, err)
-	setSideParams := func(g *Graph, inputBuffers []backends.Buffer, donate []bool) error {
+	setSideParams := func(g *Graph, inputBuffers []compute.Buffer, donate []bool) error {
 		node := g.GetParameterByName(scalarParamName)
 		handle := node.GetParameterHandle()
 		inputBuffers[handle] = scalarBuffer
@@ -210,7 +219,7 @@ func addSubGraph(a, b *Node) []*Node {
 }
 
 func TestExecWithSlices(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	concat := MustNewExecAny(backend, concatGraph)
 
 	a := [][]float64{{1, 2}, {3, 4}}
@@ -249,7 +258,7 @@ func concatWithLoggedFirstNodeGraph(nodes []*Node) *Node {
 }
 
 func TestExecWithLogger(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	manager := testutil.BuildTestBackend()
 
 	concat := MustNewExecAny(manager, concatWithLoggedFirstNodeGraph)
 	var firstNodeValue *tensors.Tensor
@@ -274,7 +283,7 @@ func TestExecWithLogger(t *testing.T) {
 }
 
 func TestExecWithNoInputs(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	matrixInitFn := MustNewExec(backend, func(g *Graph) *Node {
 		return IotaFull(g, shapes.Make(dtypes.Int64, 3, 3))
 	})
@@ -286,7 +295,7 @@ func TestExecWithNoInputs(t *testing.T) {
 
 // TestExecUnusedInput checks that it should work if an input is not used in the computation.
 func TestExecUnusedInput(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	// One of two variables is not used.
 	unusedInputFn := MustNewExec(backend, func(x, y *Node) *Node {

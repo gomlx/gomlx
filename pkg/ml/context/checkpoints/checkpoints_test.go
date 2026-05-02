@@ -14,21 +14,21 @@ import (
 	"path"
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 )
 
 func TestCheckpoints(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	// Graph function to test: it simply creates, increments and returns the global step.
 	testGraphFn := func(ctx *context.Context, g *Graph) *Node {
@@ -171,7 +171,7 @@ func TestCheckpoints(t *testing.T) {
 }
 
 func TestMergedCheckpoints(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	var dir string
 	{
 		ctx := context.New().Checked(false)

@@ -5,15 +5,15 @@ package fm
 import (
 	"math"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 )
 
 var (
-	backend = backends.MustNew()
+	backend = compute.MustNew()
 	DType   = dtypes.Float32
 )
 

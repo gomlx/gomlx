@@ -6,24 +6,24 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/distributed"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 )
 
 // PadAxis defines the amount of padding preceding one axis (Start), at the end of axis (End)
 // or in between the inputNodes (Interior).
 // This is used as a parameter for the Pad function.
-// This is an alias to backends.PadAxis
-type PadAxis = backends.PadAxis
+// This is an alias to compute.PadAxis
+type PadAxis = compute.PadAxis
 
-// nodeInputsParameter holds the inputs used for the call to backends.Parameter.
+// nodeInputsParameter holds the inputs used for the call to compute.Parameter.
 type nodeInputsParameter struct {
 	name     string
 	shape    shapes.Shape
@@ -97,7 +97,7 @@ func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distr
 	}
 	node = &Node{
 		graph:        g,
-		outputOps:    []backends.Value{result},
+		outputOps:    []compute.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		inputs:       nodeInputs,
 	}
@@ -107,7 +107,7 @@ func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distr
 	return
 }
 
-// nodeInputsSplitNode holds the inputs used for the call to backends.Parameter.
+// nodeInputsSplitNode holds the inputs used for the call to compute.Parameter.
 type nodeInputsSplitNode struct {
 	multiOutputNode *Node
 	index           int
@@ -146,7 +146,7 @@ func splitNode(multiOutputNode *Node) (splitNodes []*Node) {
 		}
 		inputNodes := []*Node{multiOutputNode}
 		node := &Node{
-			outputOps:    []backends.Value{op},
+			outputOps:    []compute.Value{op},
 			outputShapes: []shapes.Shape{multiOutputNode.outputShapes[ii]},
 			graph:        g,
 			inputs:       inputs,
@@ -164,7 +164,7 @@ func splitNode(multiOutputNode *Node) (splitNodes []*Node) {
 // If set to 0, no value is kept.
 var MinConstValueSizeToKeep = 32
 
-// nodeInputsConstant holds the inputs used for the call to backends.Parameter.
+// nodeInputsConstant holds the inputs used for the call to compute.Parameter.
 type nodeInputsConstant struct {
 	shape  shapes.Shape
 	tensor *tensors.Tensor // Only saved for values < MinConstValueSizeToKeep
@@ -203,7 +203,7 @@ func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 				"ConstTensor failed to create a local clone of the tensor in the graph"))
 		}
 	}
-	var result backends.Value
+	var result compute.Value
 	var err error
 	t.MustConstFlatData(func(flat any) {
 		result, err = g.currentFunc.backendFunc.Constant(flat, nodeInputs.shape.Dimensions...)
@@ -213,7 +213,7 @@ func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 	}
 	node = &Node{
 		graph:        g,
-		outputOps:    []backends.Value{result},
+		outputOps:    []compute.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		inputs:       nodeInputs,
 	}

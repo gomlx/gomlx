@@ -31,9 +31,9 @@ import (
 	"os"
 	"path"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
@@ -151,7 +151,7 @@ var (
 //   - name:
 //   - baseDir:
 //   - mode: choose between 'train' and 'test'
-func NewDataset(backend backends.Backend, name, baseDir, mode string, dtype dtypes.DType) (ds *datasets.InMemoryDataset, err error) {
+func NewDataset(backend compute.Backend, name, baseDir, mode string, dtype dtypes.DType) (ds *datasets.InMemoryDataset, err error) {
 	imagesFile := mnistFiles[mode][ImageFileType]
 	labelsFile := mnistFiles[mode][LabelFileType]
 
@@ -269,7 +269,7 @@ type DatasetsConfiguration struct {
 }
 
 // CreateDatasets used for training and evaluation.
-func CreateDatasets(backend backends.Backend, config *DatasetsConfiguration) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
+func CreateDatasets(backend compute.Backend, config *DatasetsConfiguration) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
 	// Datasets created from original images:
 	var err error
 	baseTrain, err := NewDataset(backend, "train", config.DataDir, "train", config.Dtype)

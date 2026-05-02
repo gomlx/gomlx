@@ -39,7 +39,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.x"
+          go-version: "1.26.x"
 
       - name: Install PJRT plugin
         run: |
@@ -56,7 +56,7 @@ jobs:
           # Run one test that triggers the auto-install first (concurrency issues)
           # TestGradientFFT is not working in windows.
         run: |
-          go test ./pkg/core/graph -test.skip 'TestGradientFFT'
+          go test -p 1 ./pkg/core/graph -test.skip 'TestGradientFFT'
 
       - name: Test
         env:
@@ -65,9 +65,9 @@ jobs:
         # The non-short tests work well locally (in the development box) because the datasets are cached.
         # Also excludes tests that have large dependencies (e.g.: X11):
         run: |
-          go test -short $(go list ./... | \
+          go test -p 1 -short $(go list ./... | \
             grep -v "backends/xla" | \
             grep -v "ui/fyneui" | \
             grep -v "pkg/ml/context/checkpoints") \
             -test.skip 'TestGradientFFT'
-          cd examples ; go test -short $(go list ./... | grep -v "ogbnmag")
+          cd examples ; go test -p 1 -short $(go list ./... | grep -v "ogbnmag")

@@ -3,7 +3,7 @@
 package ggml
 
 import (
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
@@ -20,7 +20,7 @@ import (
 //   - ggmlType: the GGML block format (Q4_0, Q8_0, IQ4_NL).
 //   - bias: [N] Float32 (nil for no bias).
 //   - activation: optional activation function.
-func DenseDecomposed(x, weights *Node, ggmlType backends.GGMLQuantType,
+func DenseDecomposed(x, weights *Node, ggmlType compute.GGMLQuantType,
 	bias *Node, activation ...activations.Type) *Node {
 
 	act := activations.TypeNone

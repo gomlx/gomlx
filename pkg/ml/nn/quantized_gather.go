@@ -3,7 +3,7 @@
 package nn
 
 import (
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/ggml"
 )
@@ -28,7 +28,7 @@ import (
 // Output: float32 tensor with shape [batch..., K] where K is the logical embedding dimension
 // derived from the block format: K = (bytesPerRow / bytesPerBlock) * valuesPerBlock.
 func QuantizedGather(table, indices *Node, quant *Quantization) *Node {
-	if quant.Scheme != backends.QuantGGML {
+	if quant.Scheme != compute.QuantGGML {
 		panic("nn.QuantizedGather: only QuantGGML scheme is supported")
 	}
 	if ggml.CanDecompose(quant.GGMLType) {

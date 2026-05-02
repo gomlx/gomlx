@@ -6,9 +6,9 @@ import (
 	"reflect"
 	"unsafe"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 )
@@ -23,23 +23,23 @@ func must(err error) {
 // onDevice holds internal information about on-device storage of a Tensor.
 type onDevice struct {
 	t         *Tensor
-	buffer    backends.Buffer
-	deviceNum backends.DeviceNum
+	buffer    compute.Buffer
+	deviceNum compute.DeviceNum
 }
 
-// FromBuffer creates a Tensor from a backend's buffer. It requires the deviceNum information as well.
+// FromBuffer creates a Tensor from a backend's buffer.
 // The ownership of the buffer is transferred to the new Tensor.
 //
 // This doesn't work for shared buffers, so it assumes the buffer is not shared.
-func FromBuffer(backend backends.Backend, buffer backends.Buffer) (*Tensor, error) {
+func FromBuffer(buffer compute.Buffer) (*Tensor, error) {
 	// Create tensor.
-	shape, err := backend.BufferShape(buffer)
+	shape, err := buffer.Shape()
 	if err != nil {
 		return nil, err
 	}
 	t := newEmptyTensor(shape)
-	t.backend = backend
-	deviceNum, err := backend.BufferDeviceNum(buffer)
+	t.backend = buffer.Backend()
+	deviceNum, err := buffer.DeviceNum()
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func FromBuffer(backend backends.Backend, buffer backends.Buffer) (*Tensor, erro
 //
 // Careful not to finalize the tensor while the buffer is in use -- e.g.: during the execution that uses the buffer
 // as input.
-func (t *Tensor) Buffer(backend backends.Backend, deviceNum backends.DeviceNum) (backends.Buffer, error) {
+func (t *Tensor) Buffer(backend compute.Backend, deviceNum compute.DeviceNum) (compute.Buffer, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	err := t.CheckValid()
@@ -82,7 +82,7 @@ func (t *Tensor) Buffer(backend backends.Backend, deviceNum backends.DeviceNum) 
 // It triggers the transfer from local to the backend device if the tensor is not already stored on the device.
 //
 // It doesn't finalize(release) the local tensor value.
-func (t *Tensor) DonateBuffer(backend backends.Backend, deviceNum backends.DeviceNum) (backends.Buffer, error) {
+func (t *Tensor) DonateBuffer(backend compute.Backend, deviceNum compute.DeviceNum) (compute.Buffer, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	err := t.CheckValid()
@@ -135,7 +135,7 @@ func (d *onDevice) Finalize() error {
 	if !d.t.backend.IsFinalized() {
 		// We finalize only if the backend hasn't been finalized yet -- otherwise, we assume all buffers
 		// have been freed/finalized/invalidated by the backend already.
-		if err := d.t.backend.BufferFinalize(d.buffer); err != nil {
+		if err := d.buffer.Finalize(); err != nil {
 			return errors.WithMessagef(err, "Tensor.OnDevice.MustFinalize: failed to finalize buffer on-device")
 		}
 	}
@@ -157,7 +157,7 @@ func (d *onDevice) Finalize() error {
 // - If the Tensor has already been used with a different client, this panics: one cannot mix clients on the same Tensor.
 //
 // It panics on a backend error.
-func (t *Tensor) MustMaterializeOnDevice(backend backends.Backend, share bool, deviceNum backends.DeviceNum) {
+func (t *Tensor) MustMaterializeOnDevice(backend compute.Backend, share bool, deviceNum compute.DeviceNum) {
 	must(t.MaterializeOnDevice(backend, share, deviceNum))
 }
 
@@ -172,7 +172,7 @@ func (t *Tensor) MustMaterializeOnDevice(backend backends.Backend, share bool, d
 //
 // - If an updated copy of the Tensor is already on the device, this is a no-op.
 // - If the Tensor has already been used with a different client, this panics: one cannot mix clients on the same Tensor.
-func (t *Tensor) MaterializeOnDevice(backend backends.Backend, share bool, deviceNum backends.DeviceNum) error {
+func (t *Tensor) MaterializeOnDevice(backend compute.Backend, share bool, deviceNum compute.DeviceNum) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	err := t.CheckValid()
@@ -188,7 +188,7 @@ func (t *Tensor) MaterializeOnDevice(backend backends.Backend, share bool, devic
 // FinalizeLoca().
 //
 // It's a no-op if the tensor is already on the device.
-func (t *Tensor) ToDevice(backend backends.Backend, deviceNum backends.DeviceNum) error {
+func (t *Tensor) ToDevice(backend compute.Backend, deviceNum compute.DeviceNum) error {
 	if backend == nil {
 		return errors.New("backend cannot be nil")
 	}
@@ -213,13 +213,13 @@ func (t *Tensor) ToDevice(backend backends.Backend, deviceNum backends.DeviceNum
 }
 
 // defaultDeviceNums is used whenever `deviceNums` is not provided.
-var defaultDeviceNums = []backends.DeviceNum{0}
+var defaultDeviceNums = []compute.DeviceNum{0}
 
 // lockedMaterializeOnDevice implements Tensor.MaterializeOnDevice
 //
 // If share is true, it will attempt to materialize to a shared buffer if available.
 // In this case, it frees the local tensor storage and starts using the shared data instead.
-func (t *Tensor) lockedMaterializeOnDevice(backend backends.Backend, share bool, deviceNum backends.DeviceNum) error {
+func (t *Tensor) lockedMaterializeOnDevice(backend compute.Backend, share bool, deviceNum compute.DeviceNum) error {
 	if backend == nil || backend.IsFinalized() {
 		return errors.New("backend cannot be nil or finalized")
 	}
@@ -243,7 +243,7 @@ func (t *Tensor) lockedMaterializeOnDevice(backend backends.Backend, share bool,
 			return nil
 		}
 		// Attempt to transfer the buffer to the new device.
-		newBuffer, err := backend.BufferCopyToDevice(t.onDevice.buffer, deviceNum)
+		newBuffer, err := t.onDevice.buffer.CopyToDevice(deviceNum)
 		if err != nil {
 			return errors.WithMessagef(err, "failed to transfer Tensor's buffer from device %d to device %d",
 				t.onDevice.deviceNum, deviceNum)
@@ -269,7 +269,7 @@ func (t *Tensor) lockedMaterializeOnDevice(backend backends.Backend, share bool,
 		return errors.Errorf("Tensor(shape=%s) has invalid local and on-device data!?", t.shape)
 	}
 
-	var buffer backends.Buffer
+	var buffer compute.Buffer
 	var err error
 	if share && backend.HasSharedBuffers() {
 		buffer, t.sharedFlat, err = backend.NewSharedBuffer(deviceNum, t.shape)
@@ -343,14 +343,14 @@ func (t *Tensor) lockedInvalidateOnDevice() error {
 
 // OnDeviceClone creates a clone of the tensor t that has backend storage.
 // It also works to copy tensors to a different backend.
-func (t *Tensor) OnDeviceClone(backend backends.Backend, deviceNum backends.DeviceNum) (*Tensor, error) {
+func (t *Tensor) OnDeviceClone(backend compute.Backend, deviceNum compute.DeviceNum) (*Tensor, error) {
 	if err := t.CheckValid(); err != nil {
 		return nil, err
 	}
 
 	newT := newEmptyTensor(t.Shape())
 	newT.backend = backend
-	var buffer backends.Buffer
+	var buffer compute.Buffer
 	var err error
 	if backend.HasSharedBuffers() {
 		buffer, newT.sharedFlat, err = backend.NewSharedBuffer(deviceNum, t.shape)
@@ -456,12 +456,11 @@ func (t *Tensor) lockedMaterializeLocal() error {
 	}
 
 	// Create a flat slice.
-	flatV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), t.StorageSize(), t.StorageSize())
 	t.local = &local{
 		t:    t,
-		flat: flatV.Interface(),
+		flat: dtypes.MakeAnySlice(t.shape.DType, t.Size()),
 	}
-	if err := t.backend.BufferToFlatData(d.buffer, t.local.flat); err != nil {
+	if err := d.buffer.ToFlatData(t.local.flat); err != nil {
 		return errors.WithMessagef(err,
 			"Tensor(shape=%s).MaterializeLocal() failed to copy from on-device buffer",
 			t.shape)
@@ -568,7 +567,7 @@ func (t *Tensor) CopyFrom(tFrom *Tensor) error {
 			d.deviceNum,
 		)
 	}
-	if err := tFrom.backend.BufferToFlatData(d.buffer, tFlat); err != nil {
+	if err := d.buffer.ToFlatData(tFlat); err != nil {
 		return errors.WithMessagef(
 			err,
 			"Tensor(shape=%s).CopyFrom(tFrom) failed to copy from on-device buffer",
@@ -589,7 +588,7 @@ func (t *Tensor) IsOnAnyDevice() bool {
 // IsOnDevice checks whether the Tensor has an on-device copy on the given deviceNum.
 //
 // See MustMaterializeOnDevice to trigger a transfer/copy to the given device.
-func (t *Tensor) IsOnDevice(deviceNum backends.DeviceNum) bool {
+func (t *Tensor) IsOnDevice(deviceNum compute.DeviceNum) bool {
 	t.AssertValid()
 	return t.onDevice != nil && !t.onDevice.IsFinalized() && t.onDevice.deviceNum == deviceNum
 }
@@ -597,7 +596,7 @@ func (t *Tensor) IsOnDevice(deviceNum backends.DeviceNum) bool {
 // Backend returns the backend of the on-device copy of the Tensor, if any.
 //
 // It returns an error is the tensor is stored locally.
-func (t *Tensor) Backend() (backends.Backend, error) {
+func (t *Tensor) Backend() (compute.Backend, error) {
 	err := t.CheckValid()
 	if err != nil {
 		return nil, err
@@ -615,7 +614,7 @@ func (t *Tensor) Backend() (backends.Backend, error) {
 // Device returns the deviceNum of the on-device copy of the Tensor, if any.
 //
 // It returns an error is the tensor is stored locally.
-func (t *Tensor) Device() (backends.DeviceNum, error) {
+func (t *Tensor) Device() (compute.DeviceNum, error) {
 	err := t.CheckValid()
 	if err != nil {
 		return 0, err
@@ -637,7 +636,7 @@ func (t *Tensor) Device() (backends.DeviceNum, error) {
 // Notice, there is no point in simply creating a tensor on-device without shared buffers, since one cannot edit
 // data directly on-device (simply copy the whole tensor over). See FromShapeAndBytesForBackend instead if you
 // have data to transfer directly to the backend.
-func FromShapeForBackend(backend backends.Backend, deviceNum backends.DeviceNum, shape shapes.Shape) (*Tensor, error) {
+func FromShapeForBackend(backend compute.Backend, deviceNum compute.DeviceNum, shape shapes.Shape) (*Tensor, error) {
 	t, err := fromShapeForBackendUninitialized(backend, deviceNum, shape)
 	if err != nil {
 		return nil, err
@@ -655,7 +654,7 @@ func FromShapeForBackend(backend backends.Backend, deviceNum backends.DeviceNum,
 
 // fromShapeForBackendUninitialized implements FromShapeForBackend() but doesn't initialize the shared buffer with
 // zeros -- although some backends may initialize it anyway.
-func fromShapeForBackendUninitialized(backend backends.Backend, deviceNum backends.DeviceNum, shape shapes.Shape) (*Tensor, error) {
+func fromShapeForBackendUninitialized(backend compute.Backend, deviceNum compute.DeviceNum, shape shapes.Shape) (*Tensor, error) {
 	if backend == nil || !backend.HasSharedBuffers() {
 		return FromShape(shape), nil
 	}
@@ -695,7 +694,7 @@ func fromShapeForBackendUninitialized(backend backends.Backend, deviceNum backen
 // avoiding unnecessary copies.
 // It works well with mmap (memory-mapped) files, where data can be accessed directly from kernel buffers
 // (saving a copy to a temporary buffer that is initialized to 0 in Go, etc.)
-func FromRaw(backend backends.Backend, deviceNum backends.DeviceNum, shape shapes.Shape, data []byte) (*Tensor, error) {
+func FromRaw(backend compute.Backend, deviceNum compute.DeviceNum, shape shapes.Shape, data []byte) (*Tensor, error) {
 	if int(shape.ByteSize()) != len(data) {
 		return nil, errors.Errorf("shape %s has %d bytes, but data has %d bytes", shape, shape.ByteSize(), len(data))
 	}
@@ -722,17 +721,18 @@ func FromRaw(backend backends.Backend, deviceNum backends.DeviceNum, shape shape
 
 	default:
 		// Create buffer directly on backend.
-		var length int
 		var bytesPtr unsafe.Pointer
+		var flatAny any
 		if len(data) > 0 {
 			bytesPtr = unsafe.Pointer(&data[0])
-			length = shape.Size() / shape.DType.ValuesPerStorageUnit()
+			flatAny = dtypes.UnsafeAnySliceFromBytes(bytesPtr, shape.DType, shape.Size())
 		}
-		flatAny := dtypes.UnsafeAnySliceFromBytes(bytesPtr, shape.DType, length)
-		backendBuf, err := backend.BufferFromFlatData(0, flatAny, shape)
+		backendBuf, err := backend.BufferFromFlatData(deviceNum, flatAny, shape)
 		if err != nil {
-			return nil, err
+			return nil, errors.WithMessagef(err,
+				"failed to create backend buffer from flat data for shape %s on device %d, on backend %s",
+				shape, deviceNum, backend.Name())
 		}
-		return FromBuffer(backend, backendBuf)
+		return FromBuffer(backendBuf)
 	}
 }

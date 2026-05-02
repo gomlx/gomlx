@@ -3,12 +3,12 @@ package pos
 import (
 	"testing"
 
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	_ "github.com/gomlx/gomlx/backends/default"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +16,7 @@ import (
 // TestRoPE groups tests for the RoPE function.
 func TestRoPE(t *testing.T) {
 	t.Run("Basic", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		rope := NewRoPE(10000.0)
@@ -42,7 +42,7 @@ func TestRoPE(t *testing.T) {
 	})
 
 	t.Run("DifferentStartPos", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		rope := NewRoPE(10000.0)
@@ -61,7 +61,7 @@ func TestRoPE(t *testing.T) {
 	})
 
 	t.Run("DifferentBaseFreq", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		rope := NewRoPE(5000.0)
@@ -83,7 +83,7 @@ func TestRoPE(t *testing.T) {
 	})
 
 	t.Run("PreservesNorms", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		rope := NewRoPE(10000.0)
@@ -106,7 +106,7 @@ func TestRoPE(t *testing.T) {
 	})
 
 	t.Run("NonScalarStartPosPanics", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		// startPos with shape [2] should panic (can't squeeze to scalar)
@@ -132,7 +132,7 @@ func TestRoPE(t *testing.T) {
 // TestRoPEWithCustomDim groups tests for the RoPEWithCustomDim function.
 func TestRoPEWithCustomDim(t *testing.T) {
 	t.Run("PartialRange", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		// Input shape: [batch=2, embed_dim=8]
@@ -157,7 +157,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 	})
 
 	t.Run("FullEmbedding", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		rope := NewRoPEWithDimRange(10000.0, 0, 8)
@@ -181,7 +181,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 	})
 
 	t.Run("StartPosAndFreq", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		rope := NewRoPEWithDimRange(5000.0, 4, 8)
@@ -201,7 +201,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 	})
 
 	t.Run("OddRangePanics", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		// Range [1:4] has length 3 (odd) and should panic
@@ -221,7 +221,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 	})
 
 	t.Run("OutOfBoundsPanics", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		// dimEnd beyond embedding size should panic
@@ -241,7 +241,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 	})
 
 	t.Run("HigherRankTensor_SpacerRequired", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		// Test with a 3D tensor [batch, seq_len, embed_dim]
@@ -304,7 +304,7 @@ func TestApplyWithCosSin(t *testing.T) {
 	t.Run("MatchesRoPEApply", func(t *testing.T) {
 		// Verify that ApplyWithCosSin produces the same result as RoPE.Apply
 		// when cos/sin are computed from the same base frequency and positions.
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		baseFreq := 10000.0
@@ -368,7 +368,7 @@ func TestApplyWithCosSin(t *testing.T) {
 	})
 
 	t.Run("Interleaved", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, cos, sin *Node) *Node {
@@ -410,7 +410,7 @@ func TestApplyWithCosSin(t *testing.T) {
 	})
 
 	t.Run("PartialRotation", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x, cos, sin *Node) *Node {
@@ -437,7 +437,7 @@ func TestApplyWithCosSin(t *testing.T) {
 // TestRoPEWithSeqAxis1 tests that RoPE works correctly with seqAxis=1 on a rank-4
 // tensor (the BSHD layout case: [batch, seq, heads, dim]).
 func TestRoPEWithSeqAxis1(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 
 	rope := NewRoPE(10000.0)
@@ -501,7 +501,7 @@ func isInf(f float32) bool {
 // TestSequentialPositions tests the SequentialPositions helper function.
 func TestSequentialPositions(t *testing.T) {
 	t.Run("ScalarStartPos", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, startPos *Node) *Node {
@@ -514,7 +514,7 @@ func TestSequentialPositions(t *testing.T) {
 	})
 
 	t.Run("BatchedStartPos", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, startPos *Node) *Node {
@@ -532,7 +532,7 @@ func TestSequentialPositions(t *testing.T) {
 	})
 
 	t.Run("SingleElementBatchTreatedAsScalar", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, startPos *Node) *Node {

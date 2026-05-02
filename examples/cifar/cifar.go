@@ -12,11 +12,11 @@ import (
 	"path"
 	"reflect"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
@@ -113,7 +113,7 @@ func convertBytesToTensor[T dtypes.GoFloat](image []byte, imagesT *tensors.Tenso
 // The first 50k examples are for training, and the last 10k for testing.
 // Only Float32 and Float64 dtypes are supported for now.
 func LoadCifar10(
-	backend backends.Backend,
+	backend compute.Backend,
 	baseDir string,
 	dtype dtypes.DType,
 ) (partitioned PartitionedImagesAndLabels) {
@@ -174,7 +174,7 @@ func LoadCifar10(
 // The first 50k examples are for training, and the last 10k for testing.
 // Only Float32 and Float64 dtypes are supported for now.
 func LoadCifar100(
-	backend backends.Backend,
+	backend compute.Backend,
 	baseDir string,
 	dtype dtypes.DType,
 ) (partitioned PartitionedImagesAndLabels) {
@@ -249,7 +249,7 @@ func ConvertToGoImage(images *tensors.Tensor, exampleNum int) *image.NRGBA {
 
 // partitionImagesAndLabels into train and test partitions.
 func partitionImagesAndLabels(
-	backend backends.Backend,
+	backend compute.Backend,
 	images, labels *tensors.Tensor,
 ) (partitioned PartitionedImagesAndLabels) {
 	parts := MustExecOnceN(backend, func(images, labels *Node) []*Node {
@@ -312,7 +312,7 @@ func init() {
 // loaded yet.
 // It caches the result, so multiple Datasets can be created without any extra costs in time/memory.
 func NewDataset(
-	backend backends.Backend,
+	backend compute.Backend,
 	name, baseDir string,
 	source DataSource,
 	dtype dtypes.DType,
@@ -326,7 +326,7 @@ func NewDataset(
 		// How do download & load data: one per DataSource.
 		downloadFunctions := [2]func(baseDir string) error{
 			DownloadCifar10, DownloadCifar100}
-		loadFunctions := [2]func(backend backends.Backend, baseDir string, dType dtypes.DType) PartitionedImagesAndLabels{
+		loadFunctions := [2]func(backend compute.Backend, baseDir string, dType dtypes.DType) PartitionedImagesAndLabels{
 			LoadCifar10,
 			LoadCifar100,
 		}

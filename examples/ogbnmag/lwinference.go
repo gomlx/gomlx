@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
@@ -24,7 +24,7 @@ import (
 
 // LayerWiseEvaluation returns the train, validation and test accuracy of the model, using layer-wise inference.
 func LayerWiseEvaluation(
-	backend backends.Backend,
+	backend compute.Backend,
 	ctx *context.Context,
 	strategy *sampler.Strategy,
 ) (train, validation, test float64) {
@@ -71,7 +71,7 @@ func layerWiseCalculateAccuracies(predictions []int16, labels []int32) (train, v
 }
 
 func BuildLayerWiseCustomMetricFn(
-	backend backends.Backend,
+	backend compute.Backend,
 	ctx *context.Context,
 	strategy *sampler.Strategy,
 ) plots.CustomMetricFn {

@@ -5,167 +5,261 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/xslices"
+	"github.com/gomlx/gomlx/pkg/core/graph"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	"k8s.io/klog/v2"
 )
 
 func TestDot(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		t.Run("Product", func(t *testing.T) {
+			g := NewGraph(backend, t.Name())
 
-	t.Run("Product", func(t *testing.T) {
-		g := NewGraph(backend, t.Name())
+			// Shape: [batch=4, dims=3]
+			inputs := Const(g, [][]float32{{1.1, 2.2, 3.3}, {11, 22, 33}, {111, 222, 333}, {1111, 2222, 3333}})
+			// Layer 0: outputShapes [3, 2], that is the inputNodes have dim=3, and should output dims=2
+			w0 := Const(g, [][]float32{{1, 0}, {1, -1}, {-1, 1}})
+			// DotProduct(inputNodes, w0) -> outputShapes [batch=4, dims=2]
+			Dot(inputs, w0).Product() // The last node created in the graph is taken as output by default.
+			got := compileRunAndTakeFirst(t, g)
+			want := tensors.FromValue([][]float32{{0, 1.1}, {0, 11}, {0, 111}, {0, 1111}})
+			if !want.InDelta(got, Epsilon) {
+				fmt.Printf("%s\n", g)
+				fmt.Printf("\tResult=%v\n", got)
+				t.Errorf("Wanted %v, got %v", want, got)
+			}
+		})
 
-		// Shape: [batch=4, dims=3]
-		inputs := Const(g, [][]float32{{1.1, 2.2, 3.3}, {11, 22, 33}, {111, 222, 333}, {1111, 2222, 3333}})
-		// Layer 0: outputShapes [3, 2], that is the inputNodes have dim=3, and should output dims=2
-		w0 := Const(g, [][]float32{{1, 0}, {1, -1}, {-1, 1}})
-		// DotProduct(inputNodes, w0) -> outputShapes [batch=4, dims=2]
-		Dot(inputs, w0).Product() // The last node created in the graph is taken as output by default.
-		got := compileRunAndTakeFirst(t, g)
-		want := tensors.FromValue([][]float32{{0, 1.1}, {0, 11}, {0, 111}, {0, 1111}})
-		if !want.InDelta(got, Epsilon) {
-			fmt.Printf("%s\n", g)
-			fmt.Printf("\tResult=%v\n", got)
-			t.Errorf("Wanted %v, got %v", want, got)
-		}
-	})
+		t.Run("Einsum", func(t *testing.T) {
+			graphtest.RunTestGraphFn(t, "MatrixMul",
+				func(g *Graph) (inputs, outputs []*Node) {
+					lhs := IotaFull(g, shapes.Make(dtypes.Float32, 2, 4))
+					lhs = OnePlus(lhs)
+					rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 4, 3)), 0.1)
+					inputs = []*Node{lhs, rhs}
+					outputs = []*Node{Einsum("ij,jk->ik", lhs, rhs)}
+					return
+				}, []any{[][]float32{{1, 1, 1}, {2.6, 2.6, 2.6}}}, Epsilon)
+			graphtest.RunTestGraphFn(t, "DotProduct",
+				func(g *Graph) (inputs, outputs []*Node) {
+					lhs := IotaFull(g, shapes.Make(dtypes.Float32, 4))
+					lhs = OnePlus(lhs)
+					rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 4)), 0.1)
+					inputs = []*Node{lhs, rhs}
+					outputs = []*Node{Einsum("i,i->", lhs, rhs)}
+					return
+				}, []any{float32(1)}, Epsilon)
+			graphtest.RunTestGraphFn(t, "OuterProduct",
+				func(g *Graph) (inputs, outputs []*Node) {
+					lhs := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, 4)))
+					rhs := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, 3)))
+					inputs = []*Node{lhs, rhs}
+					outputs = []*Node{Einsum("i,j->ij", lhs, rhs)}
+					return
+				}, []any{[][]float32{{1, 2, 3}, {2, 4, 6}, {3, 6, 9}, {4, 8, 12}}}, Epsilon)
+			graphtest.RunTestGraphFn(t, "BatchMatrixMul",
+				func(g *Graph) (inputs, outputs []*Node) {
+					lhs := IotaFull(g, shapes.Make(dtypes.Float32, 5, 2, 4))
+					lhs = OnePlus(lhs)
+					rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 5, 4, 3)), 0.1)
+					inputs = []*Node{lhs, rhs}
+					outputs = []*Node{Einsum("bij,bjk->bik", lhs, rhs)}
+					return
+				}, []any{[][][]float32{
+					{{1, 1, 1}, {2.6, 2.6, 2.6}},
+					{{4.2, 4.2, 4.2}, {5.8, 5.8, 5.8}},
+					{{7.4, 7.4, 7.4}, {9, 9, 9}},
+					{{10.6, 10.6, 10.6}, {12.2, 12.2, 12.2}},
+					{{13.8, 13.8, 13.8}, {15.4, 15.4, 15.4}}},
+				}, Epsilon)
+			graphtest.RunTestGraphFn(t, "BatchMatrixMulTransposed",
+				func(g *Graph) (inputs, outputs []*Node) {
+					lhs := IotaFull(g, shapes.Make(dtypes.Float32, 5, 2, 4))
+					lhs = OnePlus(lhs)
+					rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 5, 4, 3)), 0.1)
+					inputs = []*Node{lhs, rhs}
+					outputs = []*Node{Einsum("bij,bjk->ikb", lhs, rhs)}
+					return
+				}, []any{[][][]float32{
+					{{1, 4.2, 7.4, 10.6, 13.8},
+						{1, 4.2, 7.4, 10.6, 13.8},
+						{1, 4.2, 7.4, 10.6, 13.8}},
+					{{2.6, 5.8, 9, 12.2, 15.4},
+						{2.6, 5.8, 9, 12.2, 15.4},
+						{2.6, 5.8, 9, 12.2, 15.4}},
+				}}, Epsilon)
+		})
 
-	t.Run("Einsum", func(t *testing.T) {
-		graphtest.RunTestGraphFn(t, "MatrixMul",
-			func(g *Graph) (inputs, outputs []*Node) {
-				lhs := IotaFull(g, shapes.Make(dtypes.Float32, 2, 4))
-				lhs = OnePlus(lhs)
-				rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 4, 3)), 0.1)
-				inputs = []*Node{lhs, rhs}
-				outputs = []*Node{Einsum("ij,jk->ik", lhs, rhs)}
-				return
-			}, []any{[][]float32{{1, 1, 1}, {2.6, 2.6, 2.6}}}, Epsilon)
-		graphtest.RunTestGraphFn(t, "DotProduct",
-			func(g *Graph) (inputs, outputs []*Node) {
-				lhs := IotaFull(g, shapes.Make(dtypes.Float32, 4))
-				lhs = OnePlus(lhs)
-				rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 4)), 0.1)
-				inputs = []*Node{lhs, rhs}
-				outputs = []*Node{Einsum("i,i->", lhs, rhs)}
-				return
-			}, []any{float32(1)}, Epsilon)
-		graphtest.RunTestGraphFn(t, "OuterProduct",
-			func(g *Graph) (inputs, outputs []*Node) {
-				lhs := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, 4)))
-				rhs := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, 3)))
-				inputs = []*Node{lhs, rhs}
-				outputs = []*Node{Einsum("i,j->ij", lhs, rhs)}
-				return
-			}, []any{[][]float32{{1, 2, 3}, {2, 4, 6}, {3, 6, 9}, {4, 8, 12}}}, Epsilon)
-		graphtest.RunTestGraphFn(t, "BatchMatrixMul",
-			func(g *Graph) (inputs, outputs []*Node) {
-				lhs := IotaFull(g, shapes.Make(dtypes.Float32, 5, 2, 4))
-				lhs = OnePlus(lhs)
-				rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 5, 4, 3)), 0.1)
-				inputs = []*Node{lhs, rhs}
-				outputs = []*Node{Einsum("bij,bjk->bik", lhs, rhs)}
-				return
-			}, []any{[][][]float32{
-				{{1, 1, 1}, {2.6, 2.6, 2.6}},
-				{{4.2, 4.2, 4.2}, {5.8, 5.8, 5.8}},
-				{{7.4, 7.4, 7.4}, {9, 9, 9}},
-				{{10.6, 10.6, 10.6}, {12.2, 12.2, 12.2}},
-				{{13.8, 13.8, 13.8}, {15.4, 15.4, 15.4}}},
-			}, Epsilon)
-		graphtest.RunTestGraphFn(t, "BatchMatrixMulTransposed",
-			func(g *Graph) (inputs, outputs []*Node) {
-				lhs := IotaFull(g, shapes.Make(dtypes.Float32, 5, 2, 4))
-				lhs = OnePlus(lhs)
-				rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 5, 4, 3)), 0.1)
-				inputs = []*Node{lhs, rhs}
-				outputs = []*Node{Einsum("bij,bjk->ikb", lhs, rhs)}
-				return
-			}, []any{[][][]float32{
-				{{1, 4.2, 7.4, 10.6, 13.8},
-					{1, 4.2, 7.4, 10.6, 13.8},
-					{1, 4.2, 7.4, 10.6, 13.8}},
-				{{2.6, 5.8, 9, 12.2, 15.4},
-					{2.6, 5.8, 9, 12.2, 15.4},
-					{2.6, 5.8, 9, 12.2, 15.4}},
-			}}, Epsilon)
-	})
+		t.Run("EinsumAxes", func(t *testing.T) {
+			graphtest.RunTestGraphFn(t, "MatrixMul",
+				func(g *Graph) (inputs, outputs []*Node) {
+					lhs := IotaFull(g, shapes.Make(dtypes.Float32, 2, 4))
+					lhs = OnePlus(lhs)
+					rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 4, 3)), 0.1)
+					inputs = []*Node{lhs, rhs}
+					outputs = []*Node{EinsumAxes(lhs, rhs, [][2]int{{1, 0}}, nil)}
+					return
+				}, []any{[][]float32{{1, 1, 1}, {2.6, 2.6, 2.6}}}, Epsilon)
+			graphtest.RunTestGraphFn(t, "DotProduct",
+				func(g *Graph) (inputs, outputs []*Node) {
+					lhs := IotaFull(g, shapes.Make(dtypes.Float32, 4))
+					lhs = OnePlus(lhs)
+					rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 4)), 0.1)
+					inputs = []*Node{lhs, rhs}
+					outputs = []*Node{EinsumAxes(lhs, rhs, [][2]int{{0, 0}}, nil)}
+					return
+				}, []any{float32(1)}, Epsilon)
+			graphtest.RunTestGraphFn(t, "OuterProduct",
+				func(g *Graph) (inputs, outputs []*Node) {
+					lhs := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, 4)))
+					rhs := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, 3)))
+					inputs = []*Node{lhs, rhs}
+					outputs = []*Node{EinsumAxes(lhs, rhs, nil, nil)}
+					return
+				}, []any{[][]float32{{1, 2, 3}, {2, 4, 6}, {3, 6, 9}, {4, 8, 12}}}, Epsilon)
+			graphtest.RunTestGraphFn(t, "BatchMatrixMul",
+				func(g *Graph) (inputs, outputs []*Node) {
+					lhs := IotaFull(g, shapes.Make(dtypes.Float32, 5, 2, 4))
+					lhs = OnePlus(lhs)
+					rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 5, 4, 3)), 0.1)
+					inputs = []*Node{lhs, rhs}
+					outputs = []*Node{EinsumAxes(lhs, rhs, [][2]int{{2, 1}}, [][2]int{{0, 0}})}
+					return
+				}, []any{[][][]float32{
+					{{1, 1, 1}, {2.6, 2.6, 2.6}},
+					{{4.2, 4.2, 4.2}, {5.8, 5.8, 5.8}},
+					{{7.4, 7.4, 7.4}, {9, 9, 9}},
+					{{10.6, 10.6, 10.6}, {12.2, 12.2, 12.2}},
+					{{13.8, 13.8, 13.8}, {15.4, 15.4, 15.4}}},
+				}, Epsilon)
+		})
 
-	t.Run("EinsumAxes", func(t *testing.T) {
-		graphtest.RunTestGraphFn(t, "MatrixMul",
-			func(g *Graph) (inputs, outputs []*Node) {
-				lhs := IotaFull(g, shapes.Make(dtypes.Float32, 2, 4))
-				lhs = OnePlus(lhs)
-				rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 4, 3)), 0.1)
-				inputs = []*Node{lhs, rhs}
-				outputs = []*Node{EinsumAxes(lhs, rhs, [][2]int{{1, 0}}, nil)}
-				return
-			}, []any{[][]float32{{1, 1, 1}, {2.6, 2.6, 2.6}}}, Epsilon)
-		graphtest.RunTestGraphFn(t, "DotProduct",
-			func(g *Graph) (inputs, outputs []*Node) {
-				lhs := IotaFull(g, shapes.Make(dtypes.Float32, 4))
-				lhs = OnePlus(lhs)
-				rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 4)), 0.1)
-				inputs = []*Node{lhs, rhs}
-				outputs = []*Node{EinsumAxes(lhs, rhs, [][2]int{{0, 0}}, nil)}
-				return
-			}, []any{float32(1)}, Epsilon)
-		graphtest.RunTestGraphFn(t, "OuterProduct",
-			func(g *Graph) (inputs, outputs []*Node) {
-				lhs := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, 4)))
-				rhs := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, 3)))
-				inputs = []*Node{lhs, rhs}
-				outputs = []*Node{EinsumAxes(lhs, rhs, nil, nil)}
-				return
-			}, []any{[][]float32{{1, 2, 3}, {2, 4, 6}, {3, 6, 9}, {4, 8, 12}}}, Epsilon)
-		graphtest.RunTestGraphFn(t, "BatchMatrixMul",
-			func(g *Graph) (inputs, outputs []*Node) {
-				lhs := IotaFull(g, shapes.Make(dtypes.Float32, 5, 2, 4))
-				lhs = OnePlus(lhs)
-				rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 5, 4, 3)), 0.1)
-				inputs = []*Node{lhs, rhs}
-				outputs = []*Node{EinsumAxes(lhs, rhs, [][2]int{{2, 1}}, [][2]int{{0, 0}})}
-				return
-			}, []any{[][][]float32{
-				{{1, 1, 1}, {2.6, 2.6, 2.6}},
-				{{4.2, 4.2, 4.2}, {5.8, 5.8, 5.8}},
-				{{7.4, 7.4, 7.4}, {9, 9, 9}},
-				{{10.6, 10.6, 10.6}, {12.2, 12.2, 12.2}},
-				{{13.8, 13.8, 13.8}, {15.4, 15.4, 15.4}}},
-			}, Epsilon)
-	})
+		t.Run("General", func(t *testing.T) {
+			testFuncOneInputDefaultBackend(t, "Dot.(lhs=Iota([3,4]), rhs=0.1*Ones([3,4])).General()",
+				func(g *Graph) (input, output *Node) {
+					input = IotaFull(g, shapes.Make(dtypes.Float32, 3, 4))
+					input = OnePlus(input)
+					rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 3, 4)), 0.1)
+					output = DotGeneral(input, []int{1}, []int{0}, rhs, []int{1}, []int{0})
+					return
+				}, []float32{1, 2.6, 4.2})
 
-	t.Run("General", func(t *testing.T) {
-		testFuncOneInput(t, "Dot.(lhs=Iota([3,4]), rhs=0.1*Ones([3,4])).General()",
-			func(g *Graph) (input, output *Node) {
-				input = IotaFull(g, shapes.Make(dtypes.Float32, 3, 4))
-				input = OnePlus(input)
-				rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 3, 4)), 0.1)
-				output = DotGeneral(input, []int{1}, []int{0}, rhs, []int{1}, []int{0})
-				return
-			}, []float32{1, 2.6, 4.2})
+			testFuncOneInputDefaultBackend(t, "Dot.(lhs=Iota([3,2,4]), rhs=0.1*Ones([3,5,4])).General()",
+				func(g *Graph) (input, output *Node) {
+					input = IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 4))
+					input = OnePlus(input)
+					rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 3, 5, 4)), 0.1)
+					output = DotGeneral(input, []int{2}, []int{0}, rhs, []int{2}, []int{0})
+					return
+				}, [][][]float32{
+					{
+						{1, 1, 1, 1, 1}, {2.6, 2.6, 2.6, 2.6, 2.6},
+					}, {
+						{4.2, 4.2, 4.2, 4.2, 4.2}, {5.8, 5.8, 5.8, 5.8, 5.8},
+					}, {
+						{7.4, 7.4, 7.4, 7.4, 7.4}, {9, 9, 9, 9, 9},
+					}})
+		})
 
-		testFuncOneInput(t, "Dot.(lhs=Iota([3,2,4]), rhs=0.1*Ones([3,5,4])).General()",
-			func(g *Graph) (input, output *Node) {
-				input = IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 4))
-				input = OnePlus(input)
-				rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 3, 5, 4)), 0.1)
-				output = DotGeneral(input, []int{2}, []int{0}, rhs, []int{2}, []int{0})
-				return
-			}, [][][]float32{
-				{
-					{1, 1, 1, 1, 1}, {2.6, 2.6, 2.6, 2.6, 2.6},
-				}, {
-					{4.2, 4.2, 4.2, 4.2, 4.2}, {5.8, 5.8, 5.8, 5.8, 5.8},
-				}, {
-					{7.4, 7.4, 7.4, 7.4, 7.4}, {9, 9, 9, 9, 9},
-				}})
+		// From DotGeneral parameters taken from LLM models that not working during development:
+		t.Run("LLM_1-parallel-requests", func(t *testing.T) {
+			lhs, err := tensors.Load("dotgeneral_test_lhs.bin")
+			require.NoError(t, err)
+			rhs, err := tensors.Load("dotgeneral_test_rhs.bin")
+			require.NoError(t, err)
+			want, err := tensors.Load("dotgeneral_test_out.bin")
+			require.NoError(t, err)
+			exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
+				return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
+			})
+			got := exec.MustExec(lhs, rhs)[0]
+			if !want.InDelta(got, 0.1) {
+				t.Errorf("got=%s,\nwant=%s", got, want)
+			}
+
+			// Run 8 workers in parallel to see if concurrency is a problem:
+			const numConcurrent = 16
+			errChan := make(chan error, numConcurrent)
+			for runnerIdx := range numConcurrent {
+				go func(_ int) {
+					var err error
+					defer func() {
+						errChan <- err
+					}()
+					const numRepeats = 1000
+					var got []*tensors.Tensor
+					for range numRepeats {
+						got, err = exec.Exec(lhs, rhs)
+						if err != nil {
+							return
+						}
+						if !got[0].InDelta(want, 0.1) {
+							err = errors.Errorf("got=%s, want=%s", got[0], want)
+						}
+					}
+				}(runnerIdx)
+			}
+			var firstError error
+			for range numConcurrent {
+				err := <-errChan
+				if err != nil {
+					if firstError == nil {
+						firstError = err
+					} else {
+						klog.Errorf("Error while running in parallel: %v", err)
+					}
+				}
+			}
+			if firstError != nil {
+				require.NoError(t, firstError)
+			}
+		})
+
+		t.Run("LLM_2", func(t *testing.T) {
+			lhs, err := tensors.Load("dotgeneral_test_lhs_2.bin")
+			require.NoError(t, err)
+			rhs, err := tensors.Load("dotgeneral_test_rhs_2.bin")
+			require.NoError(t, err)
+			want, err := tensors.Load("dotgeneral_test_out_2.bin")
+			require.NoError(t, err)
+			fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
+			got := graph.MustExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+				return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
+			}, lhs, rhs)
+			if !want.InDelta(got, 0.1) {
+				t.Errorf("got=%s,\nwant=%s", got, want)
+			}
+		})
+
+		t.Run("LLM_2_bfloat16", func(t *testing.T) {
+			lhs, err := tensors.Load("dotgeneral_test_lhs_2.bin")
+			require.NoError(t, err)
+			rhs, err := tensors.Load("dotgeneral_test_rhs_2.bin")
+			require.NoError(t, err)
+			want, err := tensors.Load("dotgeneral_test_out_2.bin")
+			require.NoError(t, err)
+			fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
+			got := graph.MustExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+				lhs = graph.ConvertDType(lhs, dtypes.BFloat16)
+				rhs = graph.ConvertDType(rhs, dtypes.BFloat16)
+				output := graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
+				return graph.ConvertDType(output, dtypes.F32)
+			}, lhs, rhs)
+			if !want.InDelta(got, 0.1) {
+				t.Errorf("got=%s,\nwant=%s", got, want)
+			}
+		})
 	})
 }
 
@@ -255,7 +349,7 @@ func TestGradientDot(t *testing.T) {
 	}, Epsilon)
 
 	// backend for the other tests.
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	t.Run("General()-batch-contracting", func(t *testing.T) {
 		dimensions := []int{2, 3, 4}
@@ -478,7 +572,7 @@ func TestDotGeneralDTypes(t *testing.T) {
 	}
 	testDTypes.Insert(dtypes.InvalidDType)
 
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	for inputDType := range testDTypes { // sets.MakeWith(dtypes.BF16) { //
 		if inputDType == dtypes.InvalidDType {
 			continue

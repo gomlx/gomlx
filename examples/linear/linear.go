@@ -8,10 +8,10 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
@@ -34,7 +34,7 @@ const (
 
 // initCoefficients chooses random coefficients and bias. These are the true values the model will
 // attempt to learn.
-func initCoefficients(backend backends.Backend, numVariables int) (coefficients, bias *tensors.Tensor) {
+func initCoefficients(backend compute.Backend, numVariables int) (coefficients, bias *tensors.Tensor) {
 	e := MustNewExec(backend, func(g *Graph) (coefficients, bias *Node) {
 		rngState := RNGStateForGraph(g)
 		rngState, coefficients = RandomNormal(rngState, shapes.Make(dtypes.Float64, numVariables))
@@ -51,7 +51,7 @@ func initCoefficients(backend backends.Backend, numVariables int) (coefficients,
 }
 
 func buildExamples(
-	backend backends.Backend,
+	backend compute.Backend,
 	coef, bias *tensors.Tensor,
 	numExamples int,
 	noise float64,
@@ -102,7 +102,7 @@ var (
 
 func main() {
 	flag.Parse()
-	backend := backends.MustNew()
+	backend := compute.MustNew()
 
 	fmt.Printf("Backend: %s, %s\n", backend.Name(), backend.Description())
 

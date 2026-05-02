@@ -10,11 +10,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
@@ -24,6 +23,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
 )
@@ -137,7 +137,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 	_, inputs, _, err := ds.Yield()
 	require.NoError(t, err, "Dataset.Yield")
 
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	for ctxSourceIdx := range 2 {
 		// Create context.
 		ctx := context.New()
@@ -206,7 +206,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	ds = mldata.Map(ds, ExtractLabelsFromInput)
 
 	// Create context and load from pre-trained checkpoint.
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 	_, fileName, _, ok := runtime.Caller(0)
 	require.True(t, ok, "Failed to get caller information to find out test source directory.")

@@ -7,21 +7,21 @@ import (
 	"math/rand/v2"
 	"path"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/humanize"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/gomlx/pkg/support/humanize"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 )
 
 // BalancedDataset implements a dataset that yields always one image from a different flower category.
 type BalancedDataset struct {
-	Backend              backends.Backend
+	Backend              compute.Backend
 	BaseDir              string
 	Size                 int
 	AllImages, AllLabels *tensors.Tensor
@@ -36,7 +36,7 @@ type BalancedDataset struct {
 //
 // It caches the whole OxfordFlowers dataset in a large tensor, that is also yielded, along with the indices
 // of the images to be used (using graph.Gather).
-func NewBalancedDataset(backend backends.Backend, baseDir string, size int) (bds *BalancedDataset, err error) {
+func NewBalancedDataset(backend compute.Backend, baseDir string, size int) (bds *BalancedDataset, err error) {
 	baseDir = fsutil.MustReplaceTildeInDir(baseDir)
 	imagesCachePath := fmt.Sprintf("all_images_%dx%d.tensor", size, size)
 	labelsCachePath := fmt.Sprintf("all_labels_%dx%d.tensor", size, size)

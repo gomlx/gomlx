@@ -7,7 +7,7 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/compute/support/xslices"
 )
 
 // Params provides a mapping from string to any data type that is "scoped":

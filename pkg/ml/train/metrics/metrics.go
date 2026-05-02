@@ -6,17 +6,17 @@ package metrics
 import (
 	"fmt"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes/float16"
+	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"github.com/x448/float16"
 )
 
 // Interface for a Metric.

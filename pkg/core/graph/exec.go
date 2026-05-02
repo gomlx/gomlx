@@ -11,12 +11,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/distributed"
+	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -78,7 +79,7 @@ type ExecGraphFnOneOutput interface {
 
 // SideParamsFn is a function that sets side parameters during execution
 // for Graphs that defines those. Typically, this is used to set the variables of a model.
-type SideParamsFn func(graph *Graph, inputBuffers []backends.Buffer, donate []bool) error
+type SideParamsFn func(graph *Graph, inputBuffers []compute.Buffer, donate []bool) error
 
 // LoggerFn is the function used to log nodes marked for logging.
 // It is called after the Exec method, with the list of messages and corresponding values of the evaluated nodes.
@@ -101,7 +102,7 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 //
 // With Exec one can do:
 //
-//	var l2NormExec = MustNewExec(backends.New(), L2Norm)
+//	var l2NormExec = MustNewExec(compute.New(), L2Norm)
 //	x0 := []float32{2}
 //	fmt.Printf("L2Norm(%v) = %s\n", x0, l2NormExec.MustExec1(x0)) // -> 2
 //	x1 := []float64{4, 3}
@@ -177,11 +178,11 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 // but graphFn must not mutate external shared state without its own synchronization.
 type Exec struct {
 	name    string
-	backend backends.Backend
+	backend compute.Backend
 
 	distStrategy     distributed.Strategy
 	meshes           []*distributed.DeviceMesh // For distributed.SPMD or distributed.AutoSharding.
-	deviceAssignment []backends.DeviceNum
+	deviceAssignment []compute.DeviceNum
 	numDevices       int
 
 	// graphFn is fixed for all entries in the cache.
@@ -252,7 +253,7 @@ const DefaultExecMaxCacheSize = 32
 // Please use NewExec if possible, it adds a compile-time check for most valid signatures of graphFn.
 //
 // It returns an error if the inputs are invalid.
-func NewExecAny(backend backends.Backend, graphFn any) (*Exec, error) {
+func NewExecAny(backend compute.Backend, graphFn any) (*Exec, error) {
 	funcName := runtime.FuncForPC(reflect.ValueOf(graphFn).Pointer()).Name()
 	e := &Exec{
 		backend:      backend,
@@ -274,7 +275,7 @@ func NewExecAny(backend backends.Backend, graphFn any) (*Exec, error) {
 // in which case it should take a single *Graph input.
 //
 // It's a wrapper to the NewExecAny, but it uses generics to add a compile-time check for valid graphFn signature.
-func NewExec[F ExecGraphFn](backend backends.Backend, graphFn F) (*Exec, error) {
+func NewExec[F ExecGraphFn](backend compute.Backend, graphFn F) (*Exec, error) {
 	return NewExecAny(backend, graphFn)
 }
 
@@ -357,14 +358,14 @@ func (e *Exec) WithName(name string) *Exec {
 //
 // For single-device execution (distributed strategy "None"), the default is to make it portable.
 // If the backend supports that, it can be executed in any device with ExecOnDevice().
-func (e *Exec) WithDeviceAssignment(devices []backends.DeviceNum) *Exec {
+func (e *Exec) WithDeviceAssignment(devices []compute.DeviceNum) *Exec {
 	e.deviceAssignment = devices
 	return e
 }
 
 // DeviceAssignment returns the current device assignment used by this Exec.
 // It returns nil if none was provided.
-func (e *Exec) DeviceAssignment() []backends.DeviceNum {
+func (e *Exec) DeviceAssignment() []compute.DeviceNum {
 	return e.deviceAssignment
 }
 
@@ -501,7 +502,7 @@ func (e *Exec) GetNodeLogger() LoggerFn {
 //
 // defaultDevice is used for single-device computations that are portable (no fixed device assignment set
 // WithDeviceAssignment). Otherwise, it is ignored.
-func (e *Exec) ExecWithGraphOnDevice(defaultDevice backends.DeviceNum, args ...any) (
+func (e *Exec) ExecWithGraphOnDevice(defaultDevice compute.DeviceNum, args ...any) (
 	[]*tensors.Tensor, *Graph, error) {
 	outputs, g, err := e.compileAndExecute(true, defaultDevice, args...)
 	if err != nil {
@@ -533,30 +534,30 @@ func unwrapListOfTensors(args []any) []any {
 	return args
 }
 
-// unwrapDistributedTensor converts something like []any{distributed.Tensor0, distributed.Tensor1, ...} to
+// unwrapDistributedTensor converts something like []any{dtensor.Tensor0, dtensor.Tensor1, ...} to
 // []any{shard0_0, shard0_1, ... , shard1_0, shard1_1, ... , shardN_0, shardN_1, ...},
-// where shardI_J is the shard J of the distributed.Tensor I.
+// where shardI_J is the shard J of the dtensor.Tensor I.
 func unwrapDistributedTensors(numDevices int, args []any) ([]any, error) {
 	if len(args) == 0 {
 		return args, nil
 	}
-	_, ok := args[0].(*distributed.Tensor)
+	_, ok := args[0].(*dtensor.Tensor)
 	if !ok {
-		// No distributed.Tensors, so no unwrapping needed.
+		// No dtensor.Tensors, so no unwrapping needed.
 		return args, nil
 	}
 	unwrapped := make([]any, numDevices*len(args))
 	for argIdx, arg := range args {
-		dTensor, ok := arg.(*distributed.Tensor)
+		dTensor, ok := arg.(*dtensor.Tensor)
 		if !ok {
 			return nil, errors.Errorf(
-				"argument #%d is not a distributed.Tensor -- if using distributed.Tensor as input, all arguments "+
-					"must be distributed.Tensors, or none of them", argIdx)
+				"argument #%d is not a dtensor.Tensor -- if using dtensor.Tensor as input, all arguments "+
+					"must be dtensor.Tensors, or none of them", argIdx)
 		}
 		shards := dTensor.Shards()
 		if len(shards) != numDevices {
 			return nil, errors.Errorf(
-				"distributed.Tensor #%d has %d shards, but graph has %d devices and those many shards  are expected",
+				"dtensor.Tensor #%d has %d shards, but graph has %d devices and those many shards  are expected",
 				argIdx, len(shards), numDevices)
 		}
 		for shardIdx, shard := range shards {
@@ -599,11 +600,11 @@ func (e *Exec) validateArgs(args []any) error {
 }
 
 // convertArgsToBuffers converts the arguments as any type to buffers, taking into account the device assignment.
-func (e *Exec) convertArgsToBuffers(args []any, defaultDevice backends.DeviceNum) (
-	argsAsBuffers []backends.Buffer, argsShapes []shapes.Shape, argsDonate []bool, err error) {
+func (e *Exec) convertArgsToBuffers(args []any, defaultDevice compute.DeviceNum) (
+	argsAsBuffers []compute.Buffer, argsShapes []shapes.Shape, argsDonate []bool, err error) {
 	// Convert args to buffers: care is taken so we move each value to the correct device.
 	// Note there may be more parameters, set with Exec.setSideParams later.
-	argsAsBuffers = make([]backends.Buffer, len(args))
+	argsAsBuffers = make([]compute.Buffer, len(args))
 	argsShapes = make([]shapes.Shape, len(args))
 	argsDonate = make([]bool, len(args))
 	numDevices := e.numDevices
@@ -614,7 +615,7 @@ func (e *Exec) convertArgsToBuffers(args []any, defaultDevice backends.DeviceNum
 		if numDevices > 1 {
 			if len(e.deviceAssignment) <= argDeviceIdx {
 				// If deviceAssignment is not given, we assume an f(idx) = idx assignment of devices.
-				argDeviceNum = backends.DeviceNum(argDeviceIdx)
+				argDeviceNum = compute.DeviceNum(argDeviceIdx)
 			} else {
 				argDeviceNum = e.deviceAssignment[argDeviceIdx]
 			}
@@ -649,8 +650,8 @@ func (e *Exec) convertArgsToBuffers(args []any, defaultDevice backends.DeviceNum
 // The slices are organized in "deviceNum major" order:
 // [device0_params..., device1_params..., device2_params..., ...]
 // So after growing, we need to shuffle each device's parameters to the start of their expanded row.
-func (e *Exec) expandArgsToTotalParams(g *Graph, argsAsBuffers []backends.Buffer, argsDonate []bool) (
-	[]backends.Buffer, []bool) {
+func (e *Exec) expandArgsToTotalParams(g *Graph, argsAsBuffers []compute.Buffer, argsDonate []bool) (
+	[]compute.Buffer, []bool) {
 	newParamsPerDevice := g.NumParameters()
 	totalParams := newParamsPerDevice * e.numDevices
 	if totalParams <= len(argsAsBuffers) {
@@ -688,7 +689,7 @@ func (e *Exec) expandArgsToTotalParams(g *Graph, argsAsBuffers []backends.Buffer
 //
 // defaultDevice is used for single-device computations that are portable (no fixed device assignment set
 // WithDeviceAssignment). Otherwise, it is ignored.
-func (e *Exec) compileAndExecute(execute bool, defaultDevice backends.DeviceNum, args ...any) (
+func (e *Exec) compileAndExecute(execute bool, defaultDevice compute.DeviceNum, args ...any) (
 	[]*tensors.Tensor, *Graph, error) {
 	args = unwrapListOfTensors(args)
 	var err error

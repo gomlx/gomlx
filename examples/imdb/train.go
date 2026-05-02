@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
@@ -26,7 +27,6 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"k8s.io/klog/v2"
@@ -146,7 +146,7 @@ func TrainModel(
 	}
 
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
-	backend := backends.MustNew()
+	backend := compute.MustNew()
 	if verbosity >= 1 {
 		fmt.Printf("Backend %q:\t%s\n", backend.Name(), backend.Description())
 	}

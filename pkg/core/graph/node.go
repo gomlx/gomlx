@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/humanize"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/humanize"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 const (
@@ -34,7 +34,7 @@ type Node struct {
 	scope        *Function
 	id           NodeId // id within graph.
 	outputShapes []shapes.Shape
-	outputOps    []backends.Value
+	outputOps    []compute.Value
 
 	// inputNodes are the edges of the computation graph.
 	// Notice that other static inputs to the node are registered in inputs

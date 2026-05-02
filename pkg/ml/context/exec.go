@@ -9,10 +9,11 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -158,7 +159,7 @@ type ExecGraphFnOneOutput interface {
 // and Node arguments, but ctxGraphFn must not mutate external shared state without its
 // own synchronization.
 type Exec struct {
-	backend backends.Backend
+	backend compute.Backend
 	context *Context
 	exec    *graph.Exec
 
@@ -197,7 +198,7 @@ type Exec struct {
 // Before the execution of a graph, it initializes the variables as needed, using the configured initializer.
 // And variables updated in the graph (using Variable.SetValueGraph) are updated also during execution.
 // More details see Exec.
-func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, error) {
+func NewExecAny(backend compute.Backend, ctx *Context, ctxGraphFn any) (*Exec, error) {
 	if ctx == nil {
 		ctx = New()
 	}
@@ -390,7 +391,7 @@ func (e *Exec) Finalize() {
 //
 // `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
 // needed by end users.
-func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []bool) error {
+func (e *Exec) setSideParams(g *Graph, inputBuffers []compute.Buffer, donate []bool) error {
 	// Initialize variables if needed.
 	ctx := e.context
 	if !e.isInitializeVariablesExec && ctx.NeedsInitialization() {
@@ -410,11 +411,11 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 }
 
 // setSideParamsSingleDevice sets the side parameters for single-device execution.
-func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []backends.Buffer, donate []bool) error {
+func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []compute.Buffer, donate []bool) error {
 	ctx := e.context
 	graphId := g.GraphId()
 	deviceAssignment := e.exec.DeviceAssignment()
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 	if len(deviceAssignment) > 0 {
 		deviceNum = deviceAssignment[0]
 	}
@@ -471,7 +472,7 @@ func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []backends.Buffe
 // In distributed mode, inputBuffers and donate are organized as:
 // [device0_param0, device0_param1, ..., device1_param0, device1_param1, ...]
 // For each variable parameter, we need to set numDevices buffers from its distributed shards.
-func (e *Exec) setSideParamsDistributed(g *Graph, inputBuffers []backends.Buffer, donate []bool) error {
+func (e *Exec) setSideParamsDistributed(g *Graph, inputBuffers []compute.Buffer, donate []bool) error {
 	ctx := e.context
 	graphId := g.GraphId()
 	numDevices := e.exec.NumDevices()
@@ -509,7 +510,7 @@ func (e *Exec) setSideParamsDistributed(g *Graph, inputBuffers []backends.Buffer
 			// Donate buffers since we'll get new ones on output.
 			for deviceIdx := range numDevices {
 				bufIdx := deviceIdx*numParams + handle
-				deviceNum := backends.DeviceNum(deviceIdx)
+				deviceNum := compute.DeviceNum(deviceIdx)
 				if len(deviceAssignment) > deviceIdx {
 					deviceNum = deviceAssignment[deviceIdx]
 				}
@@ -528,7 +529,7 @@ func (e *Exec) setSideParamsDistributed(g *Graph, inputBuffers []backends.Buffer
 		} else {
 			for deviceIdx := range numDevices {
 				bufIdx := deviceIdx*numParams + handle
-				deviceNum := backends.DeviceNum(deviceIdx)
+				deviceNum := compute.DeviceNum(deviceIdx)
 				if len(deviceAssignment) > deviceIdx {
 					deviceNum = deviceAssignment[deviceIdx]
 				}
@@ -583,14 +584,14 @@ func (e *Exec) GetNodeLogger() graph.LoggerFn {
 //
 // For single-device execution (distributed strategy "None"), the default is to make it portable.
 // If the backend supports that, it can be executed in any device with ExecOnDevice().
-func (e *Exec) WithDeviceAssignment(devices []backends.DeviceNum) *Exec {
+func (e *Exec) WithDeviceAssignment(devices []compute.DeviceNum) *Exec {
 	e.exec.WithDeviceAssignment(devices)
 	return e
 }
 
 // DeviceAssignment returns the current device assignment used by this Exec.
 // It returns nil if none was provided.
-func (e *Exec) DeviceAssignment() []backends.DeviceNum {
+func (e *Exec) DeviceAssignment() []compute.DeviceNum {
 	return e.exec.DeviceAssignment()
 }
 
@@ -829,14 +830,14 @@ func (e *Exec) collectOutputs(outputs []*tensors.Tensor, changedVars []*Variable
 }
 
 // collectOutputsForDistributed processes outputs for distributed execution.
-// It collects shards for each changed variable from all devices, creates distributed.Tensor objects,
+// It collects shards for each changed variable from all devices, creates dtensor.Tensor objects,
 // and returns the rearranged outputs (excluding variables).
 func (e *Exec) collectOutputsForDistributed(
 	outputs []*tensors.Tensor, changedVars []*Variable, numDevices, numOutputsPerDevice int) (
 	[]*tensors.Tensor, error) {
 	var firstErr error
 
-	// Collect shards for each changed variable and create distributed.Tensor.
+	// Collect shards for each changed variable and create dtensor.Tensor.
 	for varIdx, v := range changedVars {
 		// Collect shards for this variable from all devices.
 		shards := make([]*tensors.Tensor, numDevices)
@@ -859,8 +860,8 @@ func (e *Exec) collectOutputsForDistributed(
 			continue
 		}
 
-		// Create distributed.Tensor from the shards.
-		distValue, err := distributed.NewTensor(shardingSpec, shards)
+		// Create dtensor.Tensor from the shards.
+		distValue, err := dtensor.NewTensor(shardingSpec, shards)
 		if err != nil {
 			err = errors.WithMessagef(err, "failed to create distributed tensor for variable %q", v.ScopeAndName())
 			if firstErr == nil {

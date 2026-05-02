@@ -6,11 +6,11 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/gomlx/compute/support/humanize"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gomlx/pkg/support/humanize"
 )
 
 func Summary(ctxs, scopedCtxs []*context.Context, names []string) {

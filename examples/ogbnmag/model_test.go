@@ -9,12 +9,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/support/humanize"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/support/humanize"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/pbnjay/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,7 +39,7 @@ func TestModel(t *testing.T) {
 	}
 	checkMemory(t)
 
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")

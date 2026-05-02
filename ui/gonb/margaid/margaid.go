@@ -34,9 +34,9 @@ import (
 	"strings"
 
 	mg "github.com/erkkah/margaid"
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 	stdplots "github.com/gomlx/gomlx/ui/plots"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/pkg/errors"

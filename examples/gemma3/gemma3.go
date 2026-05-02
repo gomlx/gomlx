@@ -26,13 +26,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/go-huggingface/hub"
 	"github.com/gomlx/go-huggingface/tokenizers"
 	"github.com/gomlx/go-huggingface/tokenizers/api"
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/onnx-gomlx/onnx"
@@ -120,7 +120,7 @@ func main() {
 	}
 
 	// Initialize backend.
-	backend := backends.MustNew()
+	backend := compute.MustNew()
 	fmt.Printf("Backend: %s\n\n", backend.Name())
 
 	// Load prompts.
@@ -558,7 +558,7 @@ func decodeWithKVCacheGraph(
 // generateOne runs a single prompt through prefill and decode with KV cache,
 // returning the number of tokens generated and the wall-clock duration.
 func generateOne(
-	backend backends.Backend,
+	backend compute.Backend,
 	prefillExec *context.Exec,
 	decodeExec *context.Exec,
 	tok api.Tokenizer,
@@ -651,7 +651,7 @@ func generateOne(
 }
 
 // growKVBuffer creates a new padded KV buffer by zero-padding along the sequence dimension.
-func growKVBuffer(backend backends.Backend, kv *tensors.Tensor, targetSeqLen int) *tensors.Tensor {
+func growKVBuffer(backend compute.Backend, kv *tensors.Tensor, targetSeqLen int) *tensors.Tensor {
 	oldShape := kv.Shape()
 	if oldShape.Dimensions[3] >= targetSeqLen {
 		return kv
@@ -676,7 +676,7 @@ func growKVBuffer(backend backends.Backend, kv *tensors.Tensor, targetSeqLen int
 // the full sequence with power-of-2 padding. A persistent Exec is created
 // outside the loop to enable compilation caching across steps.
 func generateWithoutKVCache(
-	backend backends.Backend, ctx *context.Context, model onnx.Model, tok api.Tokenizer,
+	backend compute.Backend, ctx *context.Context, model onnx.Model, tok api.Tokenizer,
 	promptTokens []int32,
 	padID, eosID, maxSeqLen, maxTokens int, hasAttentionMask, hasPositionIDs bool,
 	kv *kvStructure,

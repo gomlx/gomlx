@@ -7,7 +7,7 @@ import (
 	"path"
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"

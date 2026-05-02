@@ -8,10 +8,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/distributed"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/pkg/errors"
 )
@@ -43,17 +44,17 @@ type shardBatch struct {
 // distributedBatch represents a ready distributed batch.
 type distributedBatch struct {
 	spec   any
-	inputs []*distributed.Tensor
-	labels []*distributed.Tensor
+	inputs []*dtensor.Tensor
+	labels []*dtensor.Tensor
 	err    error // io.EOF or other error
 }
 
 // DistributedAccumulator is a dataset that is distributed across multiple devices, ready for
 // distributed execution.
 //
-// It accumulates the shards from the source dataset and yields them as a single distributed.Tensor.
+// It accumulates the shards from the source dataset and yields them as a single dtensor.Tensor.
 type DistributedAccumulator struct {
-	backend backends.Backend
+	backend compute.Backend
 	source  train.Dataset
 
 	// Distribution parameters
@@ -61,7 +62,7 @@ type DistributedAccumulator struct {
 	numDevices                             int
 	numInputShards                         int // Number of shards to read from source (can be < numDevices if replicated)
 	inputShardingSpecs, labelShardingSpecs []*distributed.ShardingSpec
-	deviceAssignment                       []backends.DeviceNum
+	deviceAssignment                       []compute.DeviceNum
 
 	// Bucketing system - no mutex needed, only one goroutine modifies buckets
 	buckets map[string]*bucket
@@ -81,7 +82,7 @@ var _ train.DistributedDataset = (*DistributedAccumulator)(nil)
 var _ train.Dataset = (*DistributedAccumulator)(nil)
 
 // NewDistributedAccumulator creates a distributed dataset from the given source dataset, by accumulating the shards
-// and yielding them as a single distributed.Tensor.
+// and yielding them as a single dtensor.Tensor.
 //
 // It uses the given strategy to distribute the data across the devices.
 // The input and label sharding specs are used to specify how the data should be distributed.
@@ -90,9 +91,9 @@ var _ train.Dataset = (*DistributedAccumulator)(nil)
 //
 // The last element of inputShardingSpec is used if there are more inputs than specs defined.
 // The same for labels.
-func NewDistributedAccumulator(backend backends.Backend, source train.Dataset, strategy distributed.Strategy,
+func NewDistributedAccumulator(backend compute.Backend, source train.Dataset, strategy distributed.Strategy,
 	inputShardingSpecs, labelShardingSpecs []*distributed.ShardingSpec,
-	deviceAssignment []backends.DeviceNum) (
+	deviceAssignment []compute.DeviceNum) (
 	*DistributedAccumulator, error) {
 	if backend == nil {
 		return nil, errors.New("backend cannot be nil")
@@ -132,9 +133,9 @@ func NewDistributedAccumulator(backend backends.Backend, source train.Dataset, s
 
 	// Create default device assignment if nil (sequential, starting from 0)
 	if deviceAssignment == nil {
-		deviceAssignment = make([]backends.DeviceNum, numDevices)
+		deviceAssignment = make([]compute.DeviceNum, numDevices)
 		for i := range numDevices {
-			deviceAssignment[i] = backends.DeviceNum(i)
+			deviceAssignment[i] = compute.DeviceNum(i)
 		}
 	} else if len(deviceAssignment) != numDevices {
 		return nil, errors.Errorf("device assignment length (%d) must match numDevices (%d)",
@@ -247,7 +248,7 @@ func (ds *DistributedAccumulator) Strategy() distributed.Strategy {
 }
 
 // DeviceAssignment implements train.DistributedDataset.
-func (ds *DistributedAccumulator) DeviceAssignment() []backends.DeviceNum {
+func (ds *DistributedAccumulator) DeviceAssignment() []compute.DeviceNum {
 	return ds.deviceAssignment
 }
 
@@ -331,7 +332,7 @@ func (ds *DistributedAccumulator) aggregateShards(shardsToUse []shardBatch, spec
 	numLabels := len(firstShard.labels)
 
 	// Aggregate inputs
-	distributedInputs := make([]*distributed.Tensor, numInputs)
+	distributedInputs := make([]*dtensor.Tensor, numInputs)
 	for inputIdx := range numInputs {
 		// Use the last spec if inputIdx is beyond the number of specs provided
 		specIdx := inputIdx
@@ -356,7 +357,7 @@ func (ds *DistributedAccumulator) aggregateShards(shardsToUse []shardBatch, spec
 		// Calculate how many shards this spec needs
 		numShardsNeeded := numShardsForSpec(spec)
 
-		// Handle replication: we always need numDevices shards for distributed.NewTensor
+		// Handle replication: we always need numDevices shards for dtensor.NewTensor
 		shards := make([]*tensors.Tensor, ds.numDevices)
 		if spec.IsReplicated() {
 			// Fully replicated: clone first shard to all devices
@@ -417,7 +418,7 @@ func (ds *DistributedAccumulator) aggregateShards(shardsToUse []shardBatch, spec
 		}
 
 		// Create distributed tensor
-		dt, err := distributed.NewTensor(spec, shards)
+		dt, err := dtensor.NewTensor(spec, shards)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to create distributed tensor for input #%d", inputIdx)
 		}
@@ -428,7 +429,7 @@ func (ds *DistributedAccumulator) aggregateShards(shardsToUse []shardBatch, spec
 	if numLabels > 0 && len(ds.labelShardingSpecs) == 0 {
 		return nil, errors.New("label sharding specs cannot be empty when there are labels")
 	}
-	distributedLabels := make([]*distributed.Tensor, numLabels)
+	distributedLabels := make([]*dtensor.Tensor, numLabels)
 	for labelIdx := range numLabels {
 		// Use the last spec if labelIdx is beyond the number of specs provided
 		specIdx := labelIdx
@@ -453,7 +454,7 @@ func (ds *DistributedAccumulator) aggregateShards(shardsToUse []shardBatch, spec
 		// Calculate how many shards this spec needs
 		numShardsNeeded := numShardsForSpec(spec)
 
-		// Handle replication: we always need numDevices shards for distributed.NewTensor
+		// Handle replication: we always need numDevices shards for dtensor.NewTensor
 		shards := make([]*tensors.Tensor, ds.numDevices)
 		if spec.IsReplicated() {
 			// Fully replicated: clone first shard to all devices
@@ -514,7 +515,7 @@ func (ds *DistributedAccumulator) aggregateShards(shardsToUse []shardBatch, spec
 		}
 
 		// Create distributed tensor
-		dt, err := distributed.NewTensor(spec, shards)
+		dt, err := dtensor.NewTensor(spec, shards)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to create distributed tensor for label #%d", labelIdx)
 		}
@@ -687,7 +688,7 @@ func (ds *DistributedAccumulator) Yield() (spec any, inputs, labels []*tensors.T
 }
 
 // DistributedYield implements train.DistributedDataset.
-func (ds *DistributedAccumulator) DistributedYield() (spec any, inputs, labels []*distributed.Tensor, err error) {
+func (ds *DistributedAccumulator) DistributedYield() (spec any, inputs, labels []*dtensor.Tensor, err error) {
 	// Read the next prepared batch from channel
 	batch := <-ds.nextBatch
 

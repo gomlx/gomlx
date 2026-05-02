@@ -3,12 +3,14 @@
 package graph_test
 
 import (
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
+
+	"github.com/gomlx/compute/dtypes"
+	. "github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRagged2D(t *testing.T) {
@@ -33,7 +35,7 @@ func TestRagged2D(t *testing.T) {
 }
 
 func TestRagged2D_ReduceSumCols(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	// The inputs as fed as parameters, which prevents constant subexpression optimization.
 	// This was used to point out a difference in CPU/GPU versions.
 	output := MustExecOnce(backend, func(flat, rowIDs *Node) *Node {

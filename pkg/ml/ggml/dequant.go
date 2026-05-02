@@ -10,16 +10,16 @@
 package ggml
 
 import (
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 )
 
 // CanDecompose returns true for GGML quantization types that have a graph-level
 // decomposed implementation (Q4_0, Q8_0, IQ4_NL).
-func CanDecompose(t backends.GGMLQuantType) bool {
+func CanDecompose(t compute.GGMLQuantType) bool {
 	switch t {
-	case backends.GGMLQ4_0, backends.GGMLQ8_0, backends.GGMLIQ4NL:
+	case compute.GGMLQ4_0, compute.GGMLQ8_0, compute.GGMLIQ4NL:
 		return true
 	default:
 		return false
@@ -36,17 +36,17 @@ func CanDecompose(t backends.GGMLQuantType) bool {
 // N is passed explicitly rather than inferred from weights.Shape() because the caller may
 // have reshaped gathered rows into [totalRows, bytesPerRow] where totalRows differs from
 // the original table's first dimension.
-func Dequantize(weights *Node, ggmlType backends.GGMLQuantType, N int) *Node {
+func Dequantize(weights *Node, ggmlType compute.GGMLQuantType, N int) *Node {
 	bytesPerRow := weights.Shape().Dimensions[1]
 	bpb := ggmlType.BytesPerBlock()
 	numBlocks := bytesPerRow / bpb
 
 	switch ggmlType {
-	case backends.GGMLQ8_0:
+	case compute.GGMLQ8_0:
 		return dequantQ8_0(weights, N, numBlocks)
-	case backends.GGMLQ4_0:
+	case compute.GGMLQ4_0:
 		return dequantQ4_0(weights, N, numBlocks)
-	case backends.GGMLIQ4NL:
+	case compute.GGMLIQ4NL:
 		return dequantIQ4NL(weights, N, numBlocks)
 	default:
 		panic("ggml.Dequantize: unsupported type " + ggmlType.String())
@@ -126,7 +126,7 @@ func dequantIQ4NL(weights *Node, N, numBlocks int) *Node {
 	totalElements := N * numBlocks * 32
 	indicesFlat := Reshape(indices, totalElements, 1)
 
-	lut := Const(g, backends.IQ4NLLookupTable[:])
+	lut := Const(g, compute.IQ4NLLookupTable[:])
 	looked := Gather(lut, indicesFlat)
 	looked = Reshape(looked, N, numBlocks, 32)
 

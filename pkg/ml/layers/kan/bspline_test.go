@@ -7,16 +7,16 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -81,7 +81,7 @@ func TestBSplineKAN(t *testing.T) {
 		t.Skip("skipping testing in short mode")
 		return
 	}
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 	ctx.SetRNGStateFromSeed(42)
 	ds := &kanTestDataset{batchSize: 128}
@@ -128,7 +128,7 @@ func TestBSplineKANRegularized(t *testing.T) {
 		t.Skip("skipping testing in short mode")
 		return
 	}
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 	ctx.SetRNGStateFromSeed(42)
 	ctx.SetParam(kan.ParamBSplineMagnitudeL1, 0.01)

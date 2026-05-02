@@ -5,23 +5,23 @@ package attention
 import (
 	"slices"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
-// AxesLayout is a type alias for backends.AxesLayout, re-exported for convenience.
-type AxesLayout = backends.AxesLayout
+// AxesLayout is a type alias for compute.AxesLayout, re-exported for convenience.
+type AxesLayout = compute.AxesLayout
 
 const (
 	// LayoutBHSD is the [batch, heads, seq, dim] layout.
-	LayoutBHSD = backends.AxesLayoutBHSD
+	LayoutBHSD = compute.AxesLayoutBHSD
 
 	// LayoutBSHD is the [batch, seq, heads, dim] layout.
-	LayoutBSHD = backends.AxesLayoutBSHD
+	LayoutBSHD = compute.AxesLayoutBSHD
 )
 
 // Letters used in Einsum equations below:

@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	_ "github.com/gomlx/gomlx/backends/default"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	graphtest "github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -129,7 +129,7 @@ func TestModel(t *testing.T) {
 // TestTransformerBuilder groups transformer builder/exposed functions tests.
 func TestTransformerBuilder(t *testing.T) {
 	t.Run("BuildGraph", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
 		g := NewGraph(backend, "BuildGraph")
@@ -142,7 +142,7 @@ func TestTransformerBuilder(t *testing.T) {
 	})
 
 	t.Run("BuildGraphWithKVCache", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
 		g := NewGraph(backend, "BuildGraphWithKVCache")
@@ -157,7 +157,7 @@ func TestTransformerBuilder(t *testing.T) {
 // TestTransformerVariants groups variant configurations.
 func TestTransformerVariants(t *testing.T) {
 	t.Run("WithRoPE", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithRoPE(10000.0)
 		g := NewGraph(backend, "WithRoPE")
@@ -169,7 +169,7 @@ func TestTransformerVariants(t *testing.T) {
 	})
 
 	t.Run("WithoutLayerNorm", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithNormalization("none")
 		g := NewGraph(backend, "WithoutLayerNorm")
@@ -181,7 +181,7 @@ func TestTransformerVariants(t *testing.T) {
 	})
 
 	t.Run("WithoutBias", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithBias(false)
 		g := NewGraph(backend, "WithoutBias")
@@ -193,7 +193,7 @@ func TestTransformerVariants(t *testing.T) {
 	})
 
 	t.Run("WithDropout", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithDropout(0.1)
 		g := NewGraph(backend, "WithDropout")
@@ -208,7 +208,7 @@ func TestTransformerVariants(t *testing.T) {
 // TestTransformerBatchSizes groups batch size variations.
 func TestTransformerBatchSizes(t *testing.T) {
 	batchSizes := []int{1, 2, 4}
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 
 	for _, batchSize := range batchSizes {
 		t.Run(fmt.Sprintf("BatchSize%d", batchSize), func(t *testing.T) {

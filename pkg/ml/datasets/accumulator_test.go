@@ -6,12 +6,12 @@ import (
 	"io"
 	"testing"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/distributed"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -97,7 +97,7 @@ func (ds *heterogeneousMockDataset) Yield() (spec any, inputs []*tensors.Tensor,
 }
 
 func TestDistributedAccumulator(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	if backend.NumDevices() < 4 {
 		t.Skipf("Skipping distributed test because backend only has %d devices, need at least 4", backend.NumDevices())
 	}
@@ -152,12 +152,12 @@ func TestDistributedAccumulator(t *testing.T) {
 			for i, shard := range inputs[0].Shards() {
 				deviceNum, err := shard.Device()
 				require.NoError(t, err)
-				assert.Equal(t, backends.DeviceNum(i), deviceNum, "Input shard %d should be on device %d", i, i)
+				assert.Equal(t, compute.DeviceNum(i), deviceNum, "Input shard %d should be on device %d", i, i)
 			}
 			for i, shard := range labels[0].Shards() {
 				deviceNum, err := shard.Device()
 				require.NoError(t, err)
-				assert.Equal(t, backends.DeviceNum(i), deviceNum, "Label shard %d should be on device %d", i, i)
+				assert.Equal(t, compute.DeviceNum(i), deviceNum, "Label shard %d should be on device %d", i, i)
 			}
 
 			batchCount++
@@ -233,12 +233,12 @@ func TestDistributedAccumulator(t *testing.T) {
 			for i, shard := range inputs[0].Shards() {
 				deviceNum, err := shard.Device()
 				require.NoError(t, err)
-				assert.Equal(t, backends.DeviceNum(i), deviceNum, "Input shard %d should be on device %d", i, i)
+				assert.Equal(t, compute.DeviceNum(i), deviceNum, "Input shard %d should be on device %d", i, i)
 			}
 			for i, shard := range labels[0].Shards() {
 				deviceNum, err := shard.Device()
 				require.NoError(t, err)
-				assert.Equal(t, backends.DeviceNum(i), deviceNum, "Label shard %d should be on device %d", i, i)
+				assert.Equal(t, compute.DeviceNum(i), deviceNum, "Label shard %d should be on device %d", i, i)
 			}
 
 			batchCount++
@@ -301,12 +301,12 @@ func TestDistributedAccumulator(t *testing.T) {
 			for i, shard := range inputs[0].Shards() {
 				deviceNum, err := shard.Device()
 				require.NoError(t, err)
-				assert.Equal(t, backends.DeviceNum(i), deviceNum, "Input shard %d should be on device %d", i, i)
+				assert.Equal(t, compute.DeviceNum(i), deviceNum, "Input shard %d should be on device %d", i, i)
 			}
 			for i, shard := range labels[0].Shards() {
 				deviceNum, err := shard.Device()
 				require.NoError(t, err)
-				assert.Equal(t, backends.DeviceNum(i), deviceNum, "Label shard %d should be on device %d", i, i)
+				assert.Equal(t, compute.DeviceNum(i), deviceNum, "Label shard %d should be on device %d", i, i)
 			}
 
 			batchCount++

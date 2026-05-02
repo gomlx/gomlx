@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -80,7 +80,7 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 var ModelFn = FnnModelGraph
 
 // Train FNN model based on configuration in `ctx`.
-func Train(backend backends.Backend, ctx *context.Context) error {
+func Train(backend compute.Backend, ctx *context.Context) error {
 	trainDS, validDS, testDS, err := mag.PapersSeedDatasets(backend)
 	mag.UploadOgbnMagVariables(backend, ctx)
 	//ctx.EnumerateVariables(func(v *context.Variable) {

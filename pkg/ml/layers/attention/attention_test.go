@@ -8,15 +8,15 @@ import (
 
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestAxesLayoutEquivalence(t *testing.T) {
 	// Verify that BSHD and BHSD layouts produce the same results when
 	// given transposed versions of the same inputs.
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 
 	exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
@@ -69,7 +69,7 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 func TestCore(t *testing.T) {
 	t.Run("BasicIdentity", func(t *testing.T) {
 		// With identity-like inputs, verify output shape and basic computation.
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) *Node {
@@ -90,7 +90,7 @@ func TestCore(t *testing.T) {
 
 	t.Run("CustomScale", func(t *testing.T) {
 		// Verify that providing the default scale explicitly produces the same result.
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
@@ -122,7 +122,7 @@ func TestCore(t *testing.T) {
 	})
 
 	t.Run("WithAdditiveMask", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v, mask *Node) *Node {
@@ -150,7 +150,7 @@ func TestCore(t *testing.T) {
 	})
 
 	t.Run("WithBooleanMask", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v, boolMask *Node) *Node {
@@ -178,7 +178,7 @@ func TestCore(t *testing.T) {
 	})
 
 	t.Run("ReturnWeights", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
@@ -217,7 +217,7 @@ func TestCore(t *testing.T) {
 	t.Run("GQA", func(t *testing.T) {
 		// Grouped Query Attention: 2 query heads share 1 KV head.
 		// Verifies both fused and decomposed paths produce the same results.
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
@@ -276,7 +276,7 @@ func TestCore(t *testing.T) {
 
 	t.Run("GQA_BSHD", func(t *testing.T) {
 		// Same GQA test but with BSHD layout.
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
@@ -313,7 +313,7 @@ func TestCore(t *testing.T) {
 
 	t.Run("GQA_WithBooleanMask", func(t *testing.T) {
 		// GQA with boolean causal mask.
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v, boolMask *Node) []*Node {
@@ -355,7 +355,7 @@ func TestCore(t *testing.T) {
 	})
 
 	t.Run("Causal", func(t *testing.T) {
-		backend := graphtest.BuildTestBackend()
+		backend := testutil.BuildTestBackend()
 		ctx := context.New()
 
 		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) *Node {

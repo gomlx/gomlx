@@ -3,7 +3,7 @@
 package graph
 
 import (
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
 )
 
 // ReduceLogicalAnd returns true if all values of x evaluate to true

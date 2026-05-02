@@ -5,18 +5,19 @@ package nn_test
 import (
 	"testing"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
 	_ "github.com/gomlx/gomlx/backends/simplego"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/nn"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 )
 
 func TestQuantizedDense_Int8(t *testing.T) {
 	// Test Int8 QuantLinear across all official backends (both fused simplego and decomposed XLA paths).
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		// M=2, K=4, N=3, blockSize=3 → numBlocks=1, scales [4, 1].
 		K, N, blockSize := 4, 3, 3
 
@@ -41,7 +42,7 @@ func TestQuantizedDense_Int8(t *testing.T) {
 			s := Const(g, scalesData)
 			b := Const(g, biasData)
 			quant := &Quantization{
-				Scheme:    backends.QuantLinear,
+				Scheme:    compute.QuantLinear,
 				Scale:     s,
 				BlockAxis: 1,
 				BlockSize: blockSize,
@@ -55,7 +56,7 @@ func TestQuantizedDense_Int8(t *testing.T) {
 			w := Const(g, weightsData)
 			s := Const(g, scalesData)
 			quant := &Quantization{
-				Scheme:    backends.QuantLinear,
+				Scheme:    compute.QuantLinear,
 				Scale:     s,
 				BlockAxis: 1,
 				BlockSize: blockSize,
@@ -71,7 +72,7 @@ func TestQuantizedDense_Int8(t *testing.T) {
 			s := Const(g, scalesData)
 			b := Const(g, biasData)
 			quant := &Quantization{
-				Scheme:    backends.QuantLinear,
+				Scheme:    compute.QuantLinear,
 				Scale:     s,
 				BlockAxis: 1,
 				BlockSize: blockSize,
@@ -84,7 +85,7 @@ func TestQuantizedDense_Int8(t *testing.T) {
 
 func TestQuantizedDense_NF4(t *testing.T) {
 	// Sub-byte dtypes (Uint4) are only supported by the simplego backend; exclude XLA.
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		// M=1, K=2, N=4, blockSize=4 → numBlocks=1.
 		//
 		// Nibble indices (low nibble = even col, high nibble = odd col):
@@ -107,10 +108,10 @@ func TestQuantizedDense_NF4(t *testing.T) {
 			s := Const(g, scalesData)
 			// Bitcast uint8 [2, 2] → Uint4 [2, 2, 2] (packed: 2 nibbles per byte).
 			// FusedQuantizedDense handles packed sub-byte weights internally.
-			weights := Bitcast(packed, dtypes.Uint4)     // [2, 2, 2]
-			weights = Reshape(weights, 2, N)              // [2, 4]
+			weights := Bitcast(packed, dtypes.Uint4) // [2, 2, 2]
+			weights = Reshape(weights, 2, N)         // [2, 4]
 			quant := &Quantization{
-				Scheme:    backends.QuantNF4,
+				Scheme:    compute.QuantNF4,
 				Scale:     s,
 				BlockAxis: 1,
 				BlockSize: blockSize,
@@ -125,7 +126,7 @@ func TestQuantizedDense_NF4(t *testing.T) {
 // scale values. This verifies the block-index arithmetic in both the fused executor and the
 // decomposed graph-level fallback.
 func TestQuantizedDense_MultiBlock(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		// M=1, K=2, N=4, blockSize=2 → numBlocks=2, scales [2, 2].
 		//
 		// weights [K=2, N=4]:
@@ -153,7 +154,7 @@ func TestQuantizedDense_MultiBlock(t *testing.T) {
 			w := Const(g, weightsData)
 			s := Const(g, scalesData)
 			quant := &Quantization{
-				Scheme:    backends.QuantLinear,
+				Scheme:    compute.QuantLinear,
 				Scale:     s,
 				BlockAxis: 1,
 				BlockSize: blockSize,
@@ -170,7 +171,7 @@ func TestQuantizedDense_MultiBlock(t *testing.T) {
 			s := Const(g, scalesData)
 			b := Const(g, biasData)
 			quant := &Quantization{
-				Scheme:    backends.QuantLinear,
+				Scheme:    compute.QuantLinear,
 				Scale:     s,
 				BlockAxis: 1,
 				BlockSize: blockSize,
@@ -187,7 +188,7 @@ func TestQuantizedDense_MultiBlock(t *testing.T) {
 			w := Const(g, weightsData)
 			s := Const(g, scalesData)
 			quant := &Quantization{
-				Scheme:    backends.QuantLinear,
+				Scheme:    compute.QuantLinear,
 				Scale:     s,
 				BlockAxis: 1,
 				BlockSize: blockSize,
@@ -203,7 +204,7 @@ func TestQuantizedDense_MultiBlock(t *testing.T) {
 // TestQuantizedDense_ZeroPoint exercises asymmetric quantization with non-nil ZeroPoint,
 // testing both the fused executor and decomposed graph-level fallback.
 func TestQuantizedDense_ZeroPoint(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		// M=1, K=2, N=2, blockSize=2 → numBlocks=1, scales [2,1], zeroPoints [2,1].
 		//
 		// weights [2, 2] int8:
@@ -230,7 +231,7 @@ func TestQuantizedDense_ZeroPoint(t *testing.T) {
 			s := Const(g, scalesData)
 			zp := Const(g, zpData)
 			quant := &Quantization{
-				Scheme:    backends.QuantLinear,
+				Scheme:    compute.QuantLinear,
 				Scale:     s,
 				ZeroPoint: zp,
 				BlockAxis: 1,
@@ -249,7 +250,7 @@ func TestQuantizedDense_ZeroPoint(t *testing.T) {
 			zp := Const(g, zpData)
 			b := Const(g, biasData)
 			quant := &Quantization{
-				Scheme:    backends.QuantLinear,
+				Scheme:    compute.QuantLinear,
 				Scale:     s,
 				ZeroPoint: zp,
 				BlockAxis: 1,
@@ -265,7 +266,7 @@ func TestQuantizedDense_ZeroPoint(t *testing.T) {
 // Q8_0 blocks: 2-byte fp16 scale + 32 int8 quants. dequant: output[i] = scale * int8(qs[i]).
 // GGML is only supported by the simplego backend.
 func TestQuantizedDense_GGML_Q8_0(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		// K=32 (one block), N=2.
 		// Row 0: scale=2.0 (fp16 0x4000), quants=[1, 0, 0, ...] → dequant=[2.0, 0, 0, ...]
 		// Row 1: scale=3.0 (fp16 0x4200), quants=[0, 1, 0, ...] → dequant=[0, 3.0, 0, ...]
@@ -273,11 +274,11 @@ func TestQuantizedDense_GGML_Q8_0(t *testing.T) {
 
 		row0 := make([]uint8, bytesPerRow)
 		row0[0], row0[1] = 0x00, 0x40 // fp16 LE for 2.0
-		row0[2] = 1                    // quant[0] = 1
+		row0[2] = 1                   // quant[0] = 1
 
 		row1 := make([]uint8, bytesPerRow)
 		row1[0], row1[1] = 0x00, 0x42 // fp16 LE for 3.0
-		row1[3] = 1                    // quant[1] = 1
+		row1[3] = 1                   // quant[1] = 1
 
 		weightData := [][]uint8{row0, row1}
 
@@ -292,8 +293,8 @@ func TestQuantizedDense_GGML_Q8_0(t *testing.T) {
 			x := Const(g, [][]float32{xData})
 			w := Const(g, weightData)
 			quant := &Quantization{
-				Scheme:   backends.QuantGGML,
-				GGMLType: backends.GGMLQ8_0,
+				Scheme:   compute.QuantGGML,
+				GGMLType: compute.GGMLQ8_0,
 			}
 			y := nn.QuantizedDense(x, w, quant, nil)
 			return []*Node{x}, []*Node{y}
@@ -305,8 +306,8 @@ func TestQuantizedDense_GGML_Q8_0(t *testing.T) {
 			w := Const(g, weightData)
 			b := Const(g, []float32{0.5, -0.5})
 			quant := &Quantization{
-				Scheme:   backends.QuantGGML,
-				GGMLType: backends.GGMLQ8_0,
+				Scheme:   compute.QuantGGML,
+				GGMLType: compute.GGMLQ8_0,
 			}
 			y := nn.QuantizedDense(x, w, quant, b)
 			return []*Node{x}, []*Node{y}
@@ -319,8 +320,8 @@ func TestQuantizedDense_GGML_Q8_0(t *testing.T) {
 			x := Const(g, [][]float32{xData, xData2})
 			w := Const(g, weightData)
 			quant := &Quantization{
-				Scheme:   backends.QuantGGML,
-				GGMLType: backends.GGMLQ8_0,
+				Scheme:   compute.QuantGGML,
+				GGMLType: compute.GGMLQ8_0,
 			}
 			y := nn.QuantizedDense(x, w, quant, nil)
 			return []*Node{x}, []*Node{y}
@@ -333,7 +334,7 @@ func TestQuantizedDense_GGML_Q8_0(t *testing.T) {
 // Split layout: low nibbles → first 16 values, high nibbles → last 16 values.
 // dequant: output[j] = scale * (lo_nibble - 8), output[j+16] = scale * (hi_nibble - 8).
 func TestQuantizedDense_GGML_Q4_0(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		// K=32 (one block), N=2.
 		// Row 0: scale=2.0, nibble byte0 = lo=9,hi=8 → 0x89, rest = 0x88
 		//   dequant[0] = 2*(9-8) = 2.0, all others = 2*(8-8) = 0
@@ -343,15 +344,15 @@ func TestQuantizedDense_GGML_Q4_0(t *testing.T) {
 
 		row0 := make([]uint8, bytesPerRow)
 		row0[0], row0[1] = 0x00, 0x40 // fp16 LE for 2.0
-		row0[2] = 0x89                 // byte0: lo=9 (val=+1*scale), hi=8 (val=0)
+		row0[2] = 0x89                // byte0: lo=9 (val=+1*scale), hi=8 (val=0)
 		for i := 3; i < bytesPerRow; i++ {
 			row0[i] = 0x88 // nibble 8 → (8-8)=0
 		}
 
 		row1 := make([]uint8, bytesPerRow)
 		row1[0], row1[1] = 0x00, 0x42 // fp16 LE for 3.0
-		row1[2] = 0x88                 // byte0: both nibbles = 8 → 0
-		row1[3] = 0x89                 // byte1: lo=9 (val=+1*scale), hi=8
+		row1[2] = 0x88                // byte0: both nibbles = 8 → 0
+		row1[3] = 0x89                // byte1: lo=9 (val=+1*scale), hi=8
 		for i := 4; i < bytesPerRow; i++ {
 			row1[i] = 0x88
 		}
@@ -369,8 +370,8 @@ func TestQuantizedDense_GGML_Q4_0(t *testing.T) {
 			x := Const(g, [][]float32{xData})
 			w := Const(g, weightData)
 			quant := &Quantization{
-				Scheme:   backends.QuantGGML,
-				GGMLType: backends.GGMLQ4_0,
+				Scheme:   compute.QuantGGML,
+				GGMLType: compute.GGMLQ4_0,
 			}
 			y := nn.QuantizedDense(x, w, quant, nil)
 			return []*Node{x}, []*Node{y}
@@ -381,8 +382,8 @@ func TestQuantizedDense_GGML_Q4_0(t *testing.T) {
 			x := Const(g, [][]float32{xData})
 			w := Const(g, weightData)
 			quant := &Quantization{
-				Scheme:   backends.QuantGGML,
-				GGMLType: backends.GGMLQ4_0,
+				Scheme:   compute.QuantGGML,
+				GGMLType: compute.GGMLQ4_0,
 			}
 			y := nn.QuantizedDense(x, w, quant, nil, activations.TypeSilu)
 			return []*Node{x}, []*Node{y}
@@ -399,7 +400,7 @@ func TestQuantizedDense_GGML_Q4_0(t *testing.T) {
 // Same layout as Q4_0 (2-byte fp16 scale + 16 nibble bytes), but nibbles
 // are indices into a non-linear lookup table instead of linear (nibble - 8).
 func TestQuantizedDense_GGML_IQ4NL(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		// K=32 (one block), N=2.
 		// LUT[8]=1, LUT[9]=13 (from IQ4NLLookupTable).
 		//
@@ -411,7 +412,7 @@ func TestQuantizedDense_GGML_IQ4NL(t *testing.T) {
 
 		row0 := make([]uint8, bytesPerRow)
 		row0[0], row0[1] = 0x00, 0x3C // fp16 LE for 1.0
-		row0[2] = 0x89                 // lo=9 (LUT[9]=13), hi=8 (LUT[8]=1)
+		row0[2] = 0x89                // lo=9 (LUT[9]=13), hi=8 (LUT[8]=1)
 		for i := 3; i < bytesPerRow; i++ {
 			row0[i] = 0x88 // nibble 8 → LUT[8]=1
 		}
@@ -437,8 +438,8 @@ func TestQuantizedDense_GGML_IQ4NL(t *testing.T) {
 			x := Const(g, [][]float32{xData})
 			w := Const(g, weightData)
 			quant := &Quantization{
-				Scheme:   backends.QuantGGML,
-				GGMLType: backends.GGMLIQ4NL,
+				Scheme:   compute.QuantGGML,
+				GGMLType: compute.GGMLIQ4NL,
 			}
 			y := nn.QuantizedDense(x, w, quant, nil)
 			return []*Node{x}, []*Node{y}
@@ -448,7 +449,7 @@ func TestQuantizedDense_GGML_IQ4NL(t *testing.T) {
 
 func TestQuantizedDense_Int4(t *testing.T) {
 	// Sub-byte dtypes (Int4) are only supported by the simplego backend; exclude XLA.
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		// Same packed layout as the NF4 test, but QuantLinear dequant with Int4 weights.
 		//
 		// Packed bytes (low nibble first):
@@ -472,10 +473,10 @@ func TestQuantizedDense_Int4(t *testing.T) {
 			packed := Const(g, packedData)
 			s := Const(g, scalesData)
 			// Bitcast uint8 [2, 2] → Int4 [2, 2, 2], then reshape to [2, 4].
-			weights := Bitcast(packed, dtypes.Int4)      // [2, 2, 2]
-			weights = Reshape(weights, 2, N)              // [2, 4]
+			weights := Bitcast(packed, dtypes.Int4) // [2, 2, 2]
+			weights = Reshape(weights, 2, N)        // [2, 4]
 			quant := &Quantization{
-				Scheme:    backends.QuantLinear,
+				Scheme:    compute.QuantLinear,
 				Scale:     s,
 				BlockAxis: 1,
 				BlockSize: blockSize,

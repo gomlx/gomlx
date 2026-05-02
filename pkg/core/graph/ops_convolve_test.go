@@ -5,94 +5,98 @@ package graph_test
 import (
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors/images"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 )
 
 func TestConvolve(t *testing.T) {
-	testFuncOneInput(t, "Convolve(...).ChannelsAxis(images.ChannelsFirst).NoPadding()",
-		func(g *Graph) (input, output *Node) {
-			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
-			channelB := Mul(channelA, Const(g, float32(0.1)))
-			input = Concatenate([]*Node{channelA, channelB}, 1)
-			kernel := Ones(g, MakeShape(dtypes.Float32, 1, 2, 3, 3))
-			output = Convolve(input, kernel).ChannelsAxis(images.ChannelsFirst).NoPadding().Done()
-			return
-		}, [][][][]float32{{{{9.9}}}})
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		testFuncOneInput(t, backend, "Convolve(...).ChannelsAxis(images.ChannelsFirst).NoPadding()",
+			func(g *Graph) (input, output *Node) {
+				channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
+				channelB := Mul(channelA, Const(g, float32(0.1)))
+				input = Concatenate([]*Node{channelA, channelB}, 1)
+				kernel := Ones(g, MakeShape(dtypes.Float32, 1, 2, 3, 3))
+				output = Convolve(input, kernel).ChannelsAxis(images.ChannelsFirst).NoPadding().Done()
+				return
+			}, [][][][]float32{{{{9.9}}}})
 
-	testFuncOneInput(t, "Convolve(...).ChannelsAxis(images.ChannelsLast).NoPadding()",
-		func(g *Graph) (input, output *Node) {
-			channelA := Iota(g, MakeShape(dtypes.Float64, 1, 3, 3, 1), 2)
-			channelB := Mul(channelA, Const(g, 0.1))
-			input = Concatenate([]*Node{channelA, channelB}, -1)
-			kernel := Ones(g, MakeShape(dtypes.Float64, 3, 3, 2, 1))
-			output = Convolve(input, kernel).ChannelsAxis(images.ChannelsLast).NoPadding().Done()
-			return
-		}, [][][][]float64{{{{9.9}}}})
+		testFuncOneInput(t, backend, "Convolve(...).ChannelsAxis(images.ChannelsLast).NoPadding()",
+			func(g *Graph) (input, output *Node) {
+				channelA := Iota(g, MakeShape(dtypes.Float64, 1, 3, 3, 1), 2)
+				channelB := Mul(channelA, Const(g, 0.1))
+				input = Concatenate([]*Node{channelA, channelB}, -1)
+				kernel := Ones(g, MakeShape(dtypes.Float64, 3, 3, 2, 1))
+				output = Convolve(input, kernel).ChannelsAxis(images.ChannelsLast).NoPadding().Done()
+				return
+			}, [][][][]float64{{{{9.9}}}})
 
-	testFuncOneInput(t, "Convolve(...).ChannelsAxis(images.ChannelsFirst).PadSame()",
-		func(g *Graph) (input, output *Node) {
-			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
-			channelB := Mul(channelA, Const(g, float32(0.1)))
-			input = Concatenate([]*Node{channelA, channelB}, 1)
-			kernel := Ones(g, MakeShape(dtypes.Float32, 1, 2, 3, 3))
-			output = Convolve(input, kernel).ChannelsAxis(images.ChannelsFirst).PadSame().Done()
-			return
-		}, [][][][]float32{{{{2.2, 3.3, 2.2}, {6.6, 9.9, 6.6}, {6.6, 9.9, 6.6}}}})
+		testFuncOneInput(t, backend, "Convolve(...).ChannelsAxis(images.ChannelsFirst).PadSame()",
+			func(g *Graph) (input, output *Node) {
+				channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
+				channelB := Mul(channelA, Const(g, float32(0.1)))
+				input = Concatenate([]*Node{channelA, channelB}, 1)
+				kernel := Ones(g, MakeShape(dtypes.Float32, 1, 2, 3, 3))
+				output = Convolve(input, kernel).ChannelsAxis(images.ChannelsFirst).PadSame().Done()
+				return
+			}, [][][][]float32{{{{2.2, 3.3, 2.2}, {6.6, 9.9, 6.6}, {6.6, 9.9, 6.6}}}})
 
-	testFuncOneInput(t, "Convolve(...kernel=[2,2])",
-		func(g *Graph) (input, output *Node) {
-			channelA := Iota(g, MakeShape(dtypes.Float64, 1, 3, 3, 1), 1)
-			channelB := Mul(channelA, Const(g, 0.1))
-			input = Concatenate([]*Node{channelA, channelB}, -1)
-			kernel := Ones(g, MakeShape(dtypes.Float64, 2, 2, 2, 1))
-			output = Convolve(input, kernel).PadSame().Done()
-			return
-		}, [][][][]float64{{{{2.2}, {2.2}, {1.1}}, {{6.6}, {6.6}, {3.3}}, {{4.4}, {4.4}, {2.2}}}})
+		testFuncOneInput(t, backend, "Convolve(...kernel=[2,2])",
+			func(g *Graph) (input, output *Node) {
+				channelA := Iota(g, MakeShape(dtypes.Float64, 1, 3, 3, 1), 1)
+				channelB := Mul(channelA, Const(g, 0.1))
+				input = Concatenate([]*Node{channelA, channelB}, -1)
+				kernel := Ones(g, MakeShape(dtypes.Float64, 2, 2, 2, 1))
+				output = Convolve(input, kernel).PadSame().Done()
+				return
+			}, [][][][]float64{{{{2.2}, {2.2}, {1.1}}, {{6.6}, {6.6}, {3.3}}, {{4.4}, {4.4}, {2.2}}}})
 
-	testFuncOneInput(t, "Convolve(...).Strides(2)",
-		func(g *Graph) (input, output *Node) {
-			channelA := Iota(g, MakeShape(dtypes.Float64, 1, 3, 3, 1), 2)
-			channelB := Mul(channelA, Const(g, 0.1))
-			input = Concatenate([]*Node{channelA, channelB}, -1)
-			kernel := Ones(g, MakeShape(dtypes.Float64, 3, 3, 2, 1))
-			output = Convolve(input, kernel).Strides(2).PadSame().Done()
-			return
-		}, [][][][]float64{{{{2.2}, {6.6}}, {{2.2}, {6.6}}}})
-	testFuncOneInput(t, "Convolve().NoPadding().Dilations(2)",
-		func(g *Graph) (input, output *Node) {
-			channelA := Iota(g, MakeShape(dtypes.Float64, 1, 5, 5, 1), 1)
-			channelB := Mul(channelA, Const(g, 0.01))
-			input = Concatenate([]*Node{channelA, channelB}, -1)
-			kernel := Ones(g, MakeShape(dtypes.Float64, 3, 3, 2, 1))
-			output = Convolve(input, kernel).NoPadding().Dilations(2).Done()
-			return
-		}, [][][][]float64{{{{18.18}}}})
+		testFuncOneInput(t, backend, "Convolve(...).Strides(2)",
+			func(g *Graph) (input, output *Node) {
+				channelA := Iota(g, MakeShape(dtypes.Float64, 1, 3, 3, 1), 2)
+				channelB := Mul(channelA, Const(g, 0.1))
+				input = Concatenate([]*Node{channelA, channelB}, -1)
+				kernel := Ones(g, MakeShape(dtypes.Float64, 3, 3, 2, 1))
+				output = Convolve(input, kernel).Strides(2).PadSame().Done()
+				return
+			}, [][][][]float64{{{{2.2}, {6.6}}, {{2.2}, {6.6}}}})
+		testFuncOneInput(t, backend, "Convolve().NoPadding().Dilations(2)",
+			func(g *Graph) (input, output *Node) {
+				channelA := Iota(g, MakeShape(dtypes.Float64, 1, 5, 5, 1), 1)
+				channelB := Mul(channelA, Const(g, 0.01))
+				input = Concatenate([]*Node{channelA, channelB}, -1)
+				kernel := Ones(g, MakeShape(dtypes.Float64, 3, 3, 2, 1))
+				output = Convolve(input, kernel).NoPadding().Dilations(2).Done()
+				return
+			}, [][][][]float64{{{{18.18}}}})
 
-	testFuncOneInput(t, "Convolve().Dilations(2)",
-		func(g *Graph) (input, output *Node) {
-			channelA := Iota(g, MakeShape(dtypes.Float64, 1, 5, 5, 1), 1)
-			channelB := Mul(channelA, Const(g, 0.01))
-			input = Concatenate([]*Node{channelA, channelB}, -1)
-			kernel := Ones(g, MakeShape(dtypes.Float64, 3, 3, 2, 1))
-			output = Convolve(input, kernel).Dilations(2).PadSame().Done()
-			return
-		}, [][][][]float64{
-			{{{4.04}, {4.04}, {6.06}, {4.04}, {4.04}},
-				{{8.08}, {8.08}, {12.12}, {8.08}, {8.08}},
-				{{12.12}, {12.12}, {18.18}, {12.12}, {12.12}},
-				{{8.08}, {8.08}, {12.12}, {8.08}, {8.08}},
-				{{12.12}, {12.12}, {18.18}, {12.12}, {12.12}}}})
+		testFuncOneInput(t, backend, "Convolve().Dilations(2)",
+			func(g *Graph) (input, output *Node) {
+				channelA := Iota(g, MakeShape(dtypes.Float64, 1, 5, 5, 1), 1)
+				channelB := Mul(channelA, Const(g, 0.01))
+				input = Concatenate([]*Node{channelA, channelB}, -1)
+				kernel := Ones(g, MakeShape(dtypes.Float64, 3, 3, 2, 1))
+				output = Convolve(input, kernel).Dilations(2).PadSame().Done()
+				return
+			}, [][][][]float64{
+				{{{4.04}, {4.04}, {6.06}, {4.04}, {4.04}},
+					{{8.08}, {8.08}, {12.12}, {8.08}, {8.08}},
+					{{12.12}, {12.12}, {18.18}, {12.12}, {12.12}},
+					{{8.08}, {8.08}, {12.12}, {8.08}, {8.08}},
+					{{12.12}, {12.12}, {18.18}, {12.12}, {12.12}}}})
 
-	testFuncOneInput(t, "Convolve().InputDilations(2)",
-		func(g *Graph) (input, output *Node) {
-			input = Add(IotaFull(g, MakeShape(dtypes.Float64, 1, 2, 1)), Const(g, 1.0))
-			kernel := Add(IotaFull(g, MakeShape(dtypes.Float64, 3, 1, 1)), Const(g, 1.0))
-			output = Convolve(input, kernel).PaddingPerDim([][2]int{{2, 2}}).InputDilationPerAxis(2).Done()
-			return
-		}, [][][]float64{{{3}, {2}, {7}, {4}, {2}}})
+		testFuncOneInput(t, backend, "Convolve().InputDilations(2)",
+			func(g *Graph) (input, output *Node) {
+				input = Add(IotaFull(g, MakeShape(dtypes.Float64, 1, 2, 1)), Const(g, 1.0))
+				kernel := Add(IotaFull(g, MakeShape(dtypes.Float64, 3, 1, 1)), Const(g, 1.0))
+				output = Convolve(input, kernel).PaddingPerDim([][2]int{{2, 2}}).InputDilationPerAxis(2).Done()
+				return
+			}, [][][]float64{{{3}, {2}, {7}, {4}, {2}}})
+	})
 }
 
 func TestGradientConvolve(t *testing.T) {
@@ -229,42 +233,44 @@ func TestGradientConvolve(t *testing.T) {
 }
 
 func TestConvolveWithGrouping(t *testing.T) {
-	testFuncOneInput(t, "ChannelGroupCount=2",
-		func(g *Graph) (input, output *Node) {
-			// Input with 2 channels (matches FeatureGroupCount)
-			input = IotaFull(g, MakeShape(dtypes.Float32, 1, 2, 3, 3))
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		testFuncOneInput(t, backend, "ChannelGroupCount=2",
+			func(g *Graph) (input, output *Node) {
+				// Input with 2 channels (matches FeatureGroupCount)
+				input = IotaFull(g, MakeShape(dtypes.Float32, 1, 2, 3, 3))
 
-			// Create a kernel for grouped convolution (1 input channel per group)
-			kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
-			// Transposing from [in_channels, in_height, in_width, out_channels] to [out_channels, in_channels, height, width]
-			kernel = TransposeAllAxes(kernel, 3, 0, 1, 2)
+				// Create a kernel for grouped convolution (1 input channel per group)
+				kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
+				// Transposing from [in_channels, in_height, in_width, out_channels] to [out_channels, in_channels, height, width]
+				kernel = TransposeAllAxes(kernel, 3, 0, 1, 2)
 
-			output = Convolve(input, kernel).
-				ChannelsAxis(images.ChannelsFirst).
-				NoPadding().
-				ChannelGroupCount(2).
-				Done()
-			return
-		},
-		[][][][]float32{{{{4.0}}, {{26.0}}}})
+				output = Convolve(input, kernel).
+					ChannelsAxis(images.ChannelsFirst).
+					NoPadding().
+					ChannelGroupCount(2).
+					Done()
+				return
+			},
+			[][][][]float32{{{{4.0}}, {{26.0}}}})
 
-	testFuncOneInput(t, "BatchGroupCount=2",
-		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, MakeShape(dtypes.Float32, 2, 1, 3, 3))
+		testFuncOneInput(t, backend, "BatchGroupCount=2",
+			func(g *Graph) (input, output *Node) {
+				input = IotaFull(g, MakeShape(dtypes.Float32, 2, 1, 3, 3))
 
-			// Create kernel for grouped convolution (1 input channel per group)
-			kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
-			// Transposing from [in_channels, in_height, in_width, out_channels] to [out_channels, in_channels, height, width]
-			kernel = TransposeAllAxes(kernel, 3, 0, 1, 2)
+				// Create kernel for grouped convolution (1 input channel per group)
+				kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
+				// Transposing from [in_channels, in_height, in_width, out_channels] to [out_channels, in_channels, height, width]
+				kernel = TransposeAllAxes(kernel, 3, 0, 1, 2)
 
-			output = Convolve(input, kernel).
-				ChannelsAxis(images.ChannelsFirst).
-				NoPadding().
-				BatchGroupCount(2).
-				Done()
-			return
-		},
-		[][][][]float32{{{{4.0}}, {{26.0}}}})
+				output = Convolve(input, kernel).
+					ChannelsAxis(images.ChannelsFirst).
+					NoPadding().
+					BatchGroupCount(2).
+					Done()
+				return
+			},
+			[][][][]float32{{{{4.0}}, {{26.0}}}})
+	})
 
 	testGradients(t, "Gradient-Input:ChannelGroupCount(2)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {

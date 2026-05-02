@@ -6,7 +6,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/pkg/errors"
@@ -32,7 +32,7 @@ type onDeviceBatch struct {
 // The order of the yields is not preserved for bufferSize > 1: the queuing process may yield results in slighly
 // different order.
 type OnDevice struct {
-	backend backends.Backend
+	backend compute.Backend
 
 	// Source dataset to read from
 	source                train.Dataset
@@ -41,7 +41,7 @@ type OnDevice struct {
 
 	// Configuration
 	name, shortName string
-	targetDevice    backends.DeviceNum
+	targetDevice    compute.DeviceNum
 	bufferSize      int
 
 	// Channel for buffering batches that are already on device (size 1 by default)
@@ -59,8 +59,8 @@ var _ train.Dataset = &OnDevice{}
 // - targetDevice: 0
 //
 // Use SetTargetDevice() and SetCanCallInParallel() to configure before first use.
-func NewOnDevice(backend backends.Backend, source train.Dataset, concurrent bool,
-	bufferSize int, targetDevice backends.DeviceNum) (*OnDevice, error) {
+func NewOnDevice(backend compute.Backend, source train.Dataset, concurrent bool,
+	bufferSize int, targetDevice compute.DeviceNum) (*OnDevice, error) {
 	if backend == nil {
 		return nil, errors.New("backend cannot be nil")
 	}

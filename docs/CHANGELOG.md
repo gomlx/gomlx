@@ -1,6 +1,28 @@
 # GoMLX changelog
 
-# 0.27.3: Improves sub-byte support, optimized raw-byte data transfers, FNN ensembles, and major transformer updates including BERT and Gemma models.
+It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
+
+---
+
+# (In progress) v0.28.0: Large API and package re-organization: `backends` moved to `github.com/gomlx/compute` repository!
+
+## API Changes: `backends` and related packages moved to `github.com/gomlx/compute`
+
+- Packages `backends`, `dtypes`, `shapes` and `distributed` moved to `github.com/gomlx/compute`
+- New `github.com/gomlx/compute` repo will host what was in package `backends`.
+  - `backends/simplego` backend now moved to `github.com/gomlx/compute/gobackend` (no longer "simple").
+  - `backends/xla` backend now moved to `github.com/gomlx/go-xla/compute/xla`.
+  - `backends/default` still imports both by default the "go" and the "xla" backends.
+- XLA backends used for test in `support/testutil` only where the platform is supported (and if the tag `noxla` is NOT selected).
+- New `tensors/dtensor` to hold distributed tensors (previously in `pkg/core/distributed`).
+- Packages in `pkg/support` moved to `github.com/gomlx/compute/support`:
+  - The following packages were moved: `xslices`, `xsync`, `sets` and `humanize`.
+
+
+
+---
+
+# v0.27.3: Improves sub-byte support, optimized raw-byte data transfers, FNN ensembles, and major transformer updates including BERT and Gemma models.
 
 ### Core:
 - Package `tensors`
@@ -189,6 +211,8 @@
   - Added `BERT-base-NER`: A BERT-base model fine-tuned for Named Entity Recognition.
 - Bumped github actions versions to the new "Node24" ones.
 
+---
+
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 
 API Change: `dtypes` package moved from `github.com/gomlx/gopjrt/dtypes` to `github.com/gomlx/gomlx/pkg/core/dtypes`.
@@ -216,6 +240,8 @@ Other updates:
   - New, copied from now deprecated Gopjrt. 
 - Package `simplego`:
   - Registration of executors with priority.
+
+---
 
 # v0.25.0: Distributed execution; API cleanup (more Go idiomatic)
 
@@ -261,7 +287,7 @@ Distributed computation improvements and refactorings:
   - Package `backends/notimplemented`:
     - Added dummy `Backend` that can be used to easily mock backends.
 - Package `pkg/core/distributed`:
-  -Added `DeviceMesh`, `ShardSpec` and `distributed.Tensor` objects.
+  -Added `DeviceMesh`, `ShardSpec` and `dtensor.Tensor` objects.
 - Package `pkg/core/tensors`:
   - Added `Tensor.CheckValid()`, `Tensor.Device()`, `Tensor.Backend()`
   - Changing it to return an error (as opposed to panic) where possible.
@@ -356,7 +382,7 @@ Other improvements:
   * Progressbar now shows the median step duration.
 * Updated and refreshed all notebooks, including the tutorial.
 
-# v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/go-xla/pkg/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
+# v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/go-xla/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
 
 - Updated dependency to new Gopjrt v0.8.2 because of CUDA PJRT (lack of) backward compatibility issues.
 - Package `stablehlo`:
@@ -376,7 +402,7 @@ Other improvements:
 
 * Package `shapes`:
   * Added `FromAnyValue`: extract shape from a Go type.
-* New backend: `stablehlo` (or simply _"hlo"_ for short) using https://github.com/gomlx/go-xla/pkg/stablehlo.
+* New backend: `stablehlo` (or simply _"hlo"_ for short) using https://github.com/gomlx/go-xla/stablehlo.
   * All standard binary and unary ops implemented.
   * A handful of the standard ops also implemented.
   * If `backends/default` is compiled with `-tags=stablehlo` it will include the `stablehlo` backend.

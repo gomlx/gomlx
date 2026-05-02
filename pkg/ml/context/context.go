@@ -12,11 +12,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/distributed"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/internal/scoped"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
 	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
@@ -644,7 +644,7 @@ func (ctx *Context) NeedsInitialization() bool {
 //
 // InitializeVariables also resets the RNG state for the context, if is not yet set.
 func (ctx *Context) InitializeVariables(
-	backend backends.Backend, configExec func(initializerExec *Exec) error) error {
+	backend compute.Backend, configExec func(initializerExec *Exec) error) error {
 	// Collect variables that need initialization.
 	var variablesToInitialize []*Variable
 	for v := range ctx.IterVariables() {

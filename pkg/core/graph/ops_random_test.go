@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes/float16"
+	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/x448/float16"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 
 	"testing"
 )
@@ -164,11 +165,11 @@ func TestRandomIntN(t *testing.T) {
 }
 
 // TestMultiOutputs covers issue #197, about the execution nodes with multi-outputs (random number generator) on
-// the SimpleGo backend.
+// the Go backend.
 //
-// Kept here to eventually test new backends.
+// Kept here to eventually test new compute.
 func TestMultiOutputs(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	_, err := MustNewExec(backend, func(x *Node) *Node {
 		g := x.Graph()
 		rngState := Const(g, must1(RNGStateFromSeed(42)))

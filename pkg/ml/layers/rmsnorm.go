@@ -6,11 +6,11 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 // RMSNormBuilder holds the configuration for RMSNorm.

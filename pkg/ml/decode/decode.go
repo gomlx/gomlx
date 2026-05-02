@@ -5,7 +5,7 @@ package decode
 import (
 	"sync"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/backends/simplego"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -80,7 +80,7 @@ type Decoder struct {
 
 	// Internal backend for small operations (concat, reshape)
 	// Uses simplego for faster compilation and dynamic shape support
-	simpleBackend backends.Backend
+	simpleBackend compute.Backend
 
 	// Cached executors to avoid recompilation
 	promptExec   *context.Exec         // Cached executor for processing initial prompt in incremental generation
@@ -190,7 +190,7 @@ func (dec *Decoder) FromContext(ctx *context.Context) *Decoder {
 
 // initializePromptExec creates the cached executor for processing prompts in incremental generation.
 // This executor is reused across multiple generation calls to avoid recompilation overhead.
-func (dec *Decoder) initializePromptExec(backend backends.Backend, ctx *context.Context) error {
+func (dec *Decoder) initializePromptExec(backend compute.Backend, ctx *context.Context) error {
 	if dec.promptExec != nil || dec.IncrementalModelFn == nil {
 		return nil
 	}
@@ -343,7 +343,7 @@ func (dec *Decoder) validate() error {
 //	prompt := []int32{1, 2, 3}  // Token IDs
 //	output, err := decoder.Decode(backend, ctx, prompt)
 func (dec *Decoder) Decode(
-	backend backends.Backend,
+	backend compute.Backend,
 	ctx *context.Context,
 	prompt any,
 ) (*tensors.Tensor, error) {
@@ -401,7 +401,7 @@ func (dec *Decoder) Decode(
 //   - Generated sequence [batch, totalLen] where totalLen <= MaxLength
 //   - Error if generation fails
 func (dec *Decoder) generateSampling(
-	backend backends.Backend,
+	backend compute.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
 ) (*tensors.Tensor, error) {
@@ -452,7 +452,7 @@ func (dec *Decoder) generateSampling(
 //   - Generated sequence [batch, totalLen] where totalLen <= MaxLength
 //   - Error if generation fails
 func (dec *Decoder) generateSamplingFull(
-	backend backends.Backend,
+	backend compute.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
 	promptLen int,
@@ -537,7 +537,7 @@ func (dec *Decoder) generateSamplingFull(
 //   - Generated sequence [batch, totalLen] where totalLen <= MaxLength
 //   - Error if generation fails
 func (dec *Decoder) generateSamplingIncremental(
-	backend backends.Backend,
+	backend compute.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
 	_, promptLen int,
@@ -679,7 +679,7 @@ func (dec *Decoder) checkEOS(token *tensors.Tensor) bool {
 // generateBeamSearch performs beam search generation.
 // Dispatches to cached or non-cached implementation based on configuration.
 func (dec *Decoder) generateBeamSearch(
-	backend backends.Backend,
+	backend compute.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
 ) (*tensors.Tensor, error) {
@@ -721,7 +721,7 @@ func (dec *Decoder) generateBeamSearch(
 // generateBeamSearchNonCached performs beam search without KV caching.
 // Maintains multiple beam hypotheses and selects the best sequence.
 func (dec *Decoder) generateBeamSearchNonCached(
-	backend backends.Backend,
+	backend compute.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
 	batchSize, promptLen int,
@@ -847,7 +847,7 @@ func (dec *Decoder) generateBeamSearchNonCached(
 // generateBeamSearchCached performs beam search with KV caching.
 // Each beam maintains its own cache for efficient incremental generation.
 func (dec *Decoder) generateBeamSearchCached(
-	backend backends.Backend,
+	backend compute.Backend,
 	ctx *context.Context,
 	prompt *tensors.Tensor,
 	batchSize, promptLen int,
@@ -1020,7 +1020,7 @@ func (dec *Decoder) generateBeamSearchCached(
 //
 // Note: This is a placeholder for future streaming support.
 func (dec *Decoder) GenerateStreaming(
-	backend backends.Backend,
+	backend compute.Backend,
 	ctx *context.Context,
 	prompt any,
 	callback func(token int) bool,

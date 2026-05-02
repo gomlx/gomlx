@@ -5,17 +5,17 @@ package graph
 import (
 	"fmt"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
 // Quantization describes how a graph-level quantized tensor is dequantized.
-// This is the graph-layer counterpart of backends.Quantization, holding *Node
-// references for Scale and ZeroPoint instead of backends.Value.
+// This is the graph-layer counterpart of compute.Quantization, holding *Node
+// references for Scale and ZeroPoint instead of compute.Value.
 type Quantization struct {
 	// Scheme: Linear, NF4, or GGML.
-	Scheme backends.QuantizationScheme
+	Scheme compute.QuantizationScheme
 
 	// Scale is the multiplicative factor.
 	// Shape: [K, NumBlocks] (block-wise), where K is the input-features
@@ -42,13 +42,13 @@ type Quantization struct {
 
 	// GGMLType specifies the concrete GGML block format (Q4_0, Q8_0, etc.).
 	// Only used when Scheme == QuantGGML.
-	GGMLType backends.GGMLQuantType
+	GGMLType compute.GGMLQuantType
 }
 
-// toBackend converts the graph-level Quantization to a backends.Quantization
+// toBackend converts the graph-level Quantization to a compute.Quantization
 // by extracting the backend Values from the *Node fields.
-func (q *Quantization) toBackend() *backends.Quantization {
-	bq := &backends.Quantization{
+func (q *Quantization) toBackend() *compute.Quantization {
+	bq := &compute.Quantization{
 		Scheme:    q.Scheme,
 		BlockAxis: q.BlockAxis,
 		BlockSize: q.BlockSize,
@@ -63,15 +63,15 @@ func (q *Quantization) toBackend() *backends.Quantization {
 	return bq
 }
 
-// nodeInputsFusedQuantizedDense holds the inputs used for the call to backends.FusedQuantizedDense.
-// Hand-written (not generated) because the backend interface uses a *backends.Quantization struct
+// nodeInputsFusedQuantizedDense holds the inputs used for the call to compute.FusedQuantizedDense.
+// Hand-written (not generated) because the backend interface uses a *compute.Quantization struct
 // but the graph layer stores scale and zeroPoint as individual *Node values.
 type nodeInputsFusedQuantizedDense struct {
 	x          *Node
 	weights    *Node
 	bias       *Node
 	wq         *Quantization
-	activation backends.ActivationType
+	activation compute.ActivationType
 }
 
 // Type implements the interface NodeInputs.
@@ -112,25 +112,25 @@ func BackendFusedLayerNorm(x *Node, axes []int, epsilon float64, gamma, beta *No
 
 // BackendFusedDense performs fused matmul + optional bias + optional activation.
 // Internal: prefer nn.Dense which handles fallback and gradients.
-func BackendFusedDense(x, weight, bias *Node, activation backends.ActivationType) *Node {
+func BackendFusedDense(x, weight, bias *Node, activation compute.ActivationType) *Node {
 	return backendFusedDense(x, weight, bias, activation)
 }
 
 // BackendFusedScaledDotProductAttention computes multi-head scaled dot-product attention.
 // Internal: prefer the InternalFusedOpCaller wrapper in layers which handles fallback and gradients.
-func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHeads, numKVHeads int, axesLayout backends.AxesLayout, scale float64, causal bool, options *backends.ScaledDotProductAttentionConfig) *Node {
+func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) *Node {
 	return backendFusedScaledDotProductAttention(query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal, options)
 }
 
 // BackendFusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
 // Internal: prefer nn.QuantizedDense which handles fallback and gradients.
 func BackendFusedQuantizedDense(x, weights, bias *Node,
-	wq *Quantization, activation backends.ActivationType) *Node {
+	wq *Quantization, activation compute.ActivationType) *Node {
 
 	if wq == nil {
 		exceptions.Panicf("BackendFusedQuantizedDense: wq must not be nil")
 	}
-	if wq.Scale == nil && wq.Scheme != backends.QuantGGML {
+	if wq.Scale == nil && wq.Scheme != compute.QuantGGML {
 		exceptions.Panicf("BackendFusedQuantizedDense: wq.Scale must not be nil for scheme %s", wq.Scheme)
 	}
 
@@ -155,7 +155,7 @@ func BackendFusedQuantizedDense(x, weights, bias *Node,
 		activation: activation,
 	}
 
-	var biasVal backends.Value
+	var biasVal compute.Value
 	if bias != nil {
 		biasVal = bias.outputOps[0]
 	}
@@ -166,7 +166,7 @@ func BackendFusedQuantizedDense(x, weights, bias *Node,
 		panic(err)
 	}
 	node := &Node{
-		outputOps:    []backends.Value{result},
+		outputOps:    []compute.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -176,9 +176,9 @@ func BackendFusedQuantizedDense(x, weights, bias *Node,
 	return node
 }
 
-// nodeInputsQuantizedEmbeddingLookup holds the inputs used for the call to backends.QuantizedEmbeddingLookup.
+// nodeInputsQuantizedEmbeddingLookup holds the inputs used for the call to compute.QuantizedEmbeddingLookup.
 // Hand-written (not generated) to match the pattern of BackendFusedQuantizedDense: it accepts
-// a graph-level *Quantization and converts it to backends.Quantization via toBackend().
+// a graph-level *Quantization and converts it to compute.Quantization via toBackend().
 type nodeInputsQuantizedEmbeddingLookup struct {
 	data    *Node
 	indices *Node
@@ -224,7 +224,7 @@ func BackendQuantizedEmbeddingLookup(data, indices *Node, tq *Quantization) *Nod
 		panic(err)
 	}
 	node := &Node{
-		outputOps:    []backends.Value{result},
+		outputOps:    []compute.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		graph:        g,
 		inputs:       inputs,
@@ -241,7 +241,7 @@ func BackendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV *Node, quer
 }
 
 // InternalFusedOpCaller attempts to call fused, and if it panics with
-// backends.ErrNotImplemented, falls back to the decomposed version. Any other
+// compute.ErrNotImplemented, falls back to the decomposed version. Any other
 // panic is re-thrown — this prevents real bugs in fused op implementations from
 // being silently swallowed.
 //
@@ -263,7 +263,7 @@ func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
 		output = fused()
 	})
 	if err != nil {
-		if backends.IsNotImplemented(err) {
+		if compute.IsNotImplemented(err) {
 			// Expected: fused op doesn't support this config; fall back to decomposed.
 			return decomposedOutput
 		}
@@ -290,7 +290,7 @@ func InternalFusedOpCallerMulti(fused, decomposed func() []*Node) []*Node {
 		outputs = fused()
 	})
 	if err != nil {
-		if backends.IsNotImplemented(err) {
+		if compute.IsNotImplemented(err) {
 			return decomposedOutputs
 		}
 		panic(err)

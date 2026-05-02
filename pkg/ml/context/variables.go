@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gomlx/gomlx/pkg/core/distributed"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/distributed"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -52,7 +53,7 @@ type Variable struct {
 	value *tensors.Tensor
 
 	// distValue holds the distributed view: A tensor sharded across a mesh.
-	distValue *distributed.Tensor
+	distValue *dtensor.Tensor
 
 	// shardingSpec defines how the variable is split in a distributed context.
 	// If nil, the variable is considered replicated (or local).
@@ -359,7 +360,7 @@ func (v *Variable) HasValue() bool {
 // If you use SetValue() on a distributed variable, the current distributed value (if any) is immediately freed.
 // And later, upon request of the distributed value, the value will be sharded.
 // This is useful, for instance, when loading the variable: it is loaded and set with SetValue(), but used as
-// a distributed.Tensor later. The shardingSpec happens automatically.
+// a dtensor.Tensor later. The shardingSpec happens automatically.
 //
 // NOTE: Because often variables are large, the previous value is immediately freed (as opposed to
 // waiting for garbage collection). If the previous value is used somewhere else, use SetValuePreservingOld.
@@ -411,14 +412,14 @@ func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) error {
 	return nil
 }
 
-// SetDistributedValue is like Variable.SetValue(), but uses a distributed.Tensor instead.
+// SetDistributedValue is like Variable.SetValue(), but uses a dtensor.Tensor instead.
 //
 // If the variable is set to nil, the context is automatically marked as needing initialization, just in case.
 //
 // WARNING: memory management here is tricky: a call to SetValue triggers the current value to be deallocated,
 // and what is returned by a previous call to Value to become invalid.
 // The recommendation is not to use this in a concurrent setup -- or to create proper locking mechanisms.
-func (v *Variable) SetDistributedValue(distValue *distributed.Tensor) error {
+func (v *Variable) SetDistributedValue(distValue *dtensor.Tensor) error {
 	err := v.Reset()
 	if err != nil {
 		return errors.WithMessagef(err, "while finalizing previous value of variable %q", v.ScopeAndName())
@@ -439,7 +440,7 @@ func (v *Variable) SetDistributedValue(distValue *distributed.Tensor) error {
 //
 // It returns an error if the variable value needs to be distributed and the splitting of the
 // variable's value into shards fails.
-func (v *Variable) DistributedValue() (*distributed.Tensor, error) {
+func (v *Variable) DistributedValue() (*dtensor.Tensor, error) {
 	if err := v.CheckValid(); err != nil {
 		return nil, err
 	}
@@ -457,7 +458,7 @@ func (v *Variable) DistributedValue() (*distributed.Tensor, error) {
 		return nil, errors.Errorf("variable %q has no shardingSpec spec", v.ScopeAndName())
 	}
 	var err error
-	v.distValue, err = distributed.ShardTensor(shardingSpec, v.value)
+	v.distValue, err = dtensor.ShardTensor(shardingSpec, v.value)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to distribute variable %q", v.ScopeAndName())
 	}

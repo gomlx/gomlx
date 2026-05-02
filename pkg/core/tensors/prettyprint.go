@@ -8,9 +8,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/x448/float16"
+	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes/float16"
+	"github.com/gomlx/compute/support/xslices"
 )
 
 var (
@@ -198,7 +198,7 @@ func (t *Tensor) Summary(precision int) string {
 
 // GoStr converts to string, using a Go-syntax representation that can be copied&pasted back to code.
 //
-// Sub-byte packed values (Int2, Uint2, Int4, Uint4) are unpacked to int8 before being printed as Go values.
+// Sub-byte packed values (Int1, Uint1, Int2, Uint2, Int4, Uint4) are unpacked to int8 before being printed as Go values.
 func (t *Tensor) GoStr() string {
 	t.AssertValid()
 	if t.Shape().IsZeroSize() {

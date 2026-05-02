@@ -3,11 +3,11 @@
 package graph
 
 import (
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/xslices"
 	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 // This file contains all parts of the Convolve implementation.
@@ -374,10 +374,11 @@ func (conv *ConvolutionBuilder) Done() *Node {
 
 	// Check only one of the "strides" or "dilations" are set.
 	var dilationsSet, stridesSet bool
-	if conv.strides != nil {
+	if len(conv.strides) > 0 {
 		for _, stride := range conv.strides {
 			if stride != 1 {
 				stridesSet = true
+				break
 			}
 		}
 	}
@@ -385,6 +386,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 		for _, dilation := range conv.kernelDilations {
 			if dilation != 1 {
 				dilationsSet = true
+				break
 			}
 		}
 	}
@@ -427,7 +429,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 // ConvolveAxesConfig defines the interpretation of the input/kernel/output tensor axes.
 // There must be the same number of spatial dimensions (axes) for each of the 3 tensors.
 // Input and output have batch and channels axes. Filters have "inputChannels" and "outputChannels" axes.
-type ConvolveAxesConfig = backends.ConvolveAxesConfig
+type ConvolveAxesConfig = compute.ConvolveAxesConfig
 
 // ConvGeneral provides direct access to the backend implementation of convolutions.
 // Consider using Convolve instead since this is mostly used for testing.

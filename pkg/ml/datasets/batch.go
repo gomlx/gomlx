@@ -7,9 +7,9 @@ import (
 	"io"
 	"sync"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
@@ -36,7 +36,7 @@ func (e *batchElement) FinalizeAll() {
 //
 // See details in Batch, the function used to create it.
 type batchedDataset struct {
-	backend backends.Backend
+	backend compute.Backend
 	ds      train.Dataset // Source Dataset.
 
 	batchSize                              int
@@ -73,7 +73,7 @@ type batchedDataset struct {
 //
 // Returns a `train.Dataset` that yields batched examples.
 func Batch(
-	backend backends.Backend,
+	backend compute.Backend,
 	ds train.Dataset,
 	batchSize int,
 	createLeadingAxis, dropIncompleteBatch bool,

@@ -6,9 +6,9 @@ package main
 import (
 	"flag"
 
+	"github.com/gomlx/compute/dtypes"
 	_ "github.com/gomlx/gomlx/backends/default"
 	"github.com/gomlx/gomlx/examples/imdb"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/gomlx/gomlx/ui/commandline"
 

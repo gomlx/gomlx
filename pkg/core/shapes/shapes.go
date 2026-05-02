@@ -1,392 +1,148 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-// Package shapes define Shape and DType and associated tools.
+// Package shapes is an alias to compute/shapes package. It's here for historical reasons.
 //
-// Shape represents the shape (rank, dimensions, and DType) of either a Tensor or the expected
-// shape of a node in a computation Graph. DType indicates the data type for a Tensor's unit element.
-//
-// Shape and DType are used both by the concrete tensor values (see pkg/core/tensors package) and when
-// working on the symbolic computation graph (see pkg/core/graph package).
-//
-// Go float16 support (commonly used by Nvidia GPUs) uses github.com/x448/float16 implementation,
-// and bfloat16 uses a simple implementation in github.com/gomlx/gomlx/pkg/core/dtypes/bfloat16.
-//
-// ## Glossary
-//
-//   - Rank: number of axes (dimensions) of a Tensor.
-//   - Axis: is the index of a dimension on a multidimensional Tensor. Sometimes used
-//     interchangeably with Dimension, but here we try to refer to a dimension index as "axis"
-//     (plural axes), and its size as its dimension.
-//   - Dimension: the size of a multi-dimension Tensor in one of its axes. See the example below.
-//   - DType: the data type of the unit element in a tensor. Enumeration defined in github.com/gomlx/gomlx/pkg/core/dtypes
-//   - Scalar: is a shape where there are no axes (or dimensions), only a single value
-//     of the associated DType.
-//
-// Example: The multi-dimensional array `[][]int32{{0, 1, 2}, {3, 4, 5}}` if converted to a Tensor
-// would have shape `(int32)[2 3]`. We say it has rank 2 (so 2 axes), axis 0 has
-// dimension 2, and axis 1 has dimension 3. This shape could be created with
-// `shapes.Make(int32, 2, 3)`.
-//
-// ## Asserts
-//
-// When coding ML models, one delicate part is keeping tabs on the shape of
-// graph nodes -- unfortunately, there is no compile-time checking of values,
-// so validation only happens in runtime. To facilitate and also to serve as code documentation,
-// this package provides two variations of _assert_ functionality. Examples:
-//
-// AssertRank and AssertDims check that the rank and dimensions of the given
-// object (that has a `Shape` method) match, otherwise it panics. The `-1` means
-// the dimension is unchecked (it can be anything).
-//
-//	func modelGraph(ctx *context.Context, spec any, inputs []*Node) ([]*Node) {
-//		_ = spec  // Not needed here, we know the dataset.
-//		shapes.AssertRank(inputs, 2)
-//		batchSize := inputs.Shape().Dimensions[0]
-//		logits := layers.Dense(ctx, inputs[0], /* useBias= */ true, /* outputDim= */ 1)
-//		shapes.AssertDims(logits, batchSize, -1)
-//		return []*Node{logits}
-//	}
-//
-// ```
-//
-// If you don't want to panic, but instead return an error through the `graph.Graph`, you can
-// use the `Node.AssertDims()` method. So it would look like `logits.AssertDims(batchSize, -1)`.
+// Deprecated: use the [github.com/gomlx/compute/shapes] package instead.
 package shapes
 
 import (
 	"encoding/gob"
-	"fmt"
-	"reflect"
-	"slices"
-	"strings"
+	"unsafe"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/pkg/errors"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 )
 
 // Shape represents the shape of either a Tensor or the expected shape
 // of the value from a computation node.
 //
-// Use Make to create a new shape. See examples in the package documentation.
-type Shape struct {
-	// DType is the data type of the unit element in a tensor.
-	DType dtypes.DType
+// Deprecated: it's just an alias to [shapes.Shape], use that instead.
+type Shape = shapes.Shape
 
-	// Dimensions is the size of each axis. Its length determines the rank.
-	Dimensions []int
-	// TupleShapes is used if this Shape represents a tuple of elements.
-	// Internal use only.
-	TupleShapes []Shape `json:"tuple,omitempty"` // Shapes of the tuple, if this is a tuple.
-}
+// UncheckedAxis can be used in CheckDims or AssertDims functions for an axis
+// whose dimension doesn't matter.
+const UncheckedAxis = shapes.UncheckedAxis
+
+// HasShape is an interface for objects that have an associated Shape.
+//
+// Deprecated: it's just an alias to [shapes.HasShape], use that instead.
+type HasShape = shapes.HasShape
 
 // Make returns a Shape structure filled with the values given.
-// See MakeTuple for tuple shapes.
+//
+// Deprecated: use [shapes.Make] instead.
 func Make(dtype dtypes.DType, dimensions ...int) Shape {
-	s := Shape{Dimensions: slices.Clone(dimensions), DType: dtype}
-	for _, dim := range dimensions {
-		if dim < 0 {
-			panic(errors.Errorf("shapes.Make(%s): cannot create a shape with an axis with dimension < 0", s))
-		}
-	}
-	return s
+	return shapes.Make(dtype, dimensions...)
 }
 
 // Scalar returns a scalar Shape for the given type.
+//
+// Deprecated: use [shapes.Scalar] instead.
 func Scalar[T dtypes.Number]() Shape {
-	return Shape{DType: dtypes.FromGenericsType[T]()}
+	return shapes.Scalar[T]()
 }
 
 // Invalid returns an invalid shape.
 //
-// Invalid().IsOk() == false.
+// Deprecated: use [shapes.Invalid] instead.
 func Invalid() Shape {
-	return Shape{DType: dtypes.InvalidDType}
-}
-
-// Ok returns whether this is a valid Shape. A "zero" shape, that is just instantiating it with Shape{} will be invalid.
-func (s Shape) Ok() bool { return s.DType != dtypes.InvalidDType || len(s.TupleShapes) > 0 }
-
-// Rank of the shape, that is, the number of dimensions.
-func (s Shape) Rank() int { return len(s.Dimensions) }
-
-// IsScalar returns whether the shape represents a scalar, that is there are no dimensions (rank==0).
-func (s Shape) IsScalar() bool { return s.Ok() && s.Rank() == 0 }
-
-// Dim returns the dimension of the given axis. axis can take negative numbers, in which
-// case it counts as starting from the end -- so axis=-1 refers to the last axis.
-// Like with a slice indexing, it panics for an out-of-bound axis.
-func (s Shape) Dim(axis int) int {
-	adjustedAxis := axis
-	if adjustedAxis < 0 {
-		adjustedAxis += s.Rank()
-	}
-	if adjustedAxis < 0 || adjustedAxis > s.Rank() {
-		panic(errors.Errorf("Shape.Dim(%d) out-of-bounds for rank %d (shape=%s)", axis, s.Rank(), s))
-	}
-	return s.Dimensions[adjustedAxis]
-}
-
-// Shape returns a shallow copy of itself. It implements the HasShape interface.
-func (s Shape) Shape() Shape { return s }
-
-// String implements stringer, pretty-prints the shape.
-func (s Shape) String() string {
-	if s.TupleSize() > 0 {
-		parts := make([]string, 0, s.TupleSize())
-		for _, tuple := range s.TupleShapes {
-			parts = append(parts, tuple.String())
-		}
-		return fmt.Sprintf("Tuple<%s>", strings.Join(parts, ", "))
-	}
-	if s.Rank() == 0 {
-		return fmt.Sprintf("(%s)", s.DType)
-	}
-	return fmt.Sprintf("(%s)%v", s.DType, s.Dimensions)
-}
-
-// Size returns the number of elements (not bytes) for this shape. It's the product of all dimensions.
-//
-// For the number of bytes used to store this shape, see Shape.Memory.
-func (s Shape) Size() (size int) {
-	size = 1
-	for _, d := range s.Dimensions {
-		size *= d
-	}
-	return
-}
-
-// IsZeroSize returns whether any of the dimensions is zero, in which case
-// it's an empty shape, with no data attached to it.
-//
-// Notice scalars are not zero in size -- they have size one, but rank zero.
-func (s Shape) IsZeroSize() bool {
-	return slices.Contains(s.Dimensions, 0)
-
-}
-
-// ByteSize returns the number of bytes used to store an array of the given shape.
-func (s Shape) ByteSize() int64 {
-	size64 := int64(s.DType.Size()) * int64(s.Size())
-	if !s.DType.IsPacked() {
-		return size64
-	}
-	return (size64 + (int64(s.DType.ValuesPerStorageUnit()) - 1)) / int64(s.DType.ValuesPerStorageUnit())
-}
-
-// Memory is an old alias to ByteSize, kept for backward compatibility.
-//
-// Deprecated: use ByteSize() instead.
-func (s Shape) Memory() uintptr {
-	return uintptr(s.ByteSize())
+	return shapes.Invalid()
 }
 
 // MakeTuple returns a shape representing a tuple of elements with the given shapes.
+//
+// Deprecated: use [shapes.MakeTuple] instead.
 func MakeTuple(elements []Shape) Shape {
-	return Shape{DType: dtypes.InvalidDType, Dimensions: nil, TupleShapes: elements}
-}
-
-// IsTuple returns whether the shape represents a tuple.
-func (s Shape) IsTuple() bool {
-	return s.DType == dtypes.InvalidDType
-}
-
-// TupleSize returns the number of elements in the tuple, if it is a tuple.
-func (s Shape) TupleSize() int {
-	return len(s.TupleShapes)
-}
-
-// Equal compares two shapes for equality: dtype and dimensions are compared.
-func (s Shape) Equal(s2 Shape) bool {
-	if s.DType != s2.DType {
-		return false
-	}
-	if s.IsTuple() {
-		if s.TupleSize() != s2.TupleSize() {
-			return false
-		}
-		for ii, element := range s.TupleShapes {
-			if !element.Equal(s2.TupleShapes[ii]) {
-				return false
-			}
-		}
-		return true
-	}
-	if s.Rank() != s2.Rank() {
-		return false
-	}
-	if s.IsScalar() {
-		return true
-	}
-	// For normal shapes just compare dimensions.
-	return slices.Equal(s.Dimensions, s2.Dimensions)
-}
-
-// EqualDimensions compares two shapes for equality of dimensions. Dtypes can be different.
-func (s Shape) EqualDimensions(s2 Shape) bool {
-	if s.IsTuple() {
-		if !s2.IsTuple() {
-			return false
-		}
-		if s.TupleSize() != s2.TupleSize() {
-			return false
-		}
-		for ii, element := range s.TupleShapes {
-			if !element.EqualDimensions(s2.TupleShapes[ii]) {
-				return false
-			}
-		}
-		return true
-	}
-	if s.Rank() != s2.Rank() {
-		return false
-	}
-	if s.IsScalar() {
-		return true
-	}
-	// For normal shapes just compare dimensions.
-	return slices.Equal(s.Dimensions, s2.Dimensions)
-}
-
-// Clone returns a new deep copy of the shape.
-func (s Shape) Clone() (s2 Shape) {
-	s2.DType = s.DType
-	s2.Dimensions = slices.Clone(s.Dimensions)
-	if s.TupleSize() > 0 {
-		s2.TupleShapes = make([]Shape, 0, len(s.TupleShapes))
-		for _, subShape := range s.TupleShapes {
-			s2.TupleShapes = append(s2.TupleShapes, subShape.Clone())
-		}
-	}
-	return
-}
-
-// GobSerialize shape in binary format.
-func (s Shape) GobSerialize(encoder *gob.Encoder) (err error) {
-	enc := func(e any) {
-		if err != nil {
-			return
-		}
-		err = encoder.Encode(e)
-		if err != nil {
-			err = errors.Wrapf(err, "failed to serialize Shape %s", s)
-		}
-	}
-	enc(s.DType)
-	enc(s.Dimensions)
-	enc(len(s.TupleShapes))
-	if err != nil {
-		return
-	}
-	for _, subShape := range s.TupleShapes {
-		err = subShape.GobSerialize(encoder)
-		if err != nil {
-			return
-		}
-	}
-	return
+	return shapes.MakeTuple(elements)
 }
 
 // GobDeserialize a Shape. Returns new Shape or an error.
-func GobDeserialize(decoder *gob.Decoder) (s Shape, err error) {
-	dec := func(data any) {
-		if err != nil {
-			return
-		}
-		err = decoder.Decode(data)
-		if err != nil {
-			err = errors.Wrapf(err, "failed to deserialize Shape")
-		}
-	}
-	dec(&s.DType)
-	dec(&s.Dimensions)
-	var numTuples int
-	dec(&numTuples)
-	if err != nil {
-		return
-	}
-	s.TupleShapes = make([]Shape, numTuples)
-	for ii := range s.TupleShapes {
-		s.TupleShapes[ii], err = GobDeserialize(decoder)
-		if err != nil {
-			return
-		}
-	}
-	return
+//
+// Deprecated: use [shapes.GobDeserialize] instead.
+func GobDeserialize(decoder *gob.Decoder) (Shape, error) {
+	return shapes.GobDeserialize(decoder)
 }
 
-// ConcatenateDimensions of two shapes. The resulting rank is the sum of both ranks. They must
-// have the same dtype. If any of them is a scalar, the resulting shape will be a copy of the other.
-// It doesn't work for Tuples.
-func ConcatenateDimensions(s1, s2 Shape) (shape Shape) {
-	if s1.IsTuple() || s2.IsTuple() {
-		return
-	}
-	if s1.DType == dtypes.InvalidDType || s2.DType == dtypes.InvalidDType {
-		return
-	}
-	if s1.DType != s2.DType {
-		return
-	}
-	if s1.IsScalar() {
-		return s2.Clone()
-	} else if s2.IsScalar() {
-		return s1.Clone()
-	}
-	shape.DType = s1.DType
-	shape.Dimensions = make([]int, s1.Rank()+s2.Rank())
-	copy(shape.Dimensions, s1.Dimensions)
-	copy(shape.Dimensions[s1.Rank():], s2.Dimensions)
-	return
+// ConcatenateDimensions of two shapes.
+//
+// Deprecated: use [shapes.ConcatenateDimensions] instead.
+func ConcatenateDimensions(s1, s2 Shape) Shape {
+	return shapes.ConcatenateDimensions(s1, s2)
 }
 
 // FromAnyValue attempts to convert a Go "any" value to its expected shape.
-// Accepted values are plain-old-data (POD) types (ints, floats, complex), slices (or multiple level of slices) of POD.
 //
-// It returns the expected shape.
-//
-// Example:
-//
-//	shape := shapes.FromAnyValue([][]float64{{0, 0}}) // Returns shape (Float64)[1 2]
-func FromAnyValue(v any) (shape Shape, err error) {
-	err = shapeForAnyValueRecursive(&shape, reflect.ValueOf(v), reflect.TypeOf(v))
-	return
+// Deprecated: use [shapes.FromAnyValue] instead.
+func FromAnyValue(v any) (Shape, error) {
+	return shapes.FromAnyValue(v)
 }
 
-func shapeForAnyValueRecursive(shape *Shape, v reflect.Value, t reflect.Type) error {
-	if t.Kind() != reflect.Slice {
-		// If it's not a slice, it must be one of the supported scalar types.
-		shape.DType = dtypes.FromGoType(t)
-		if shape.DType == dtypes.InvalidDType {
-			return errors.Errorf("cannot convert type %q to a valid GoMLX shape (maybe type not supported yet?)", t)
-		}
-		return nil
-	}
+// ConvertTo converts any scalar to T.
+//
+// Deprecated: use [shapes.ConvertTo] instead.
+func ConvertTo[T dtypes.NumberNotComplex](value any) T {
+	return shapes.ConvertTo[T](value)
+}
 
-	// Slice: recurse into its element type (again slices or a supported POD).
-	t = t.Elem()
-	shape.Dimensions = append(shape.Dimensions, v.Len())
-	shapePrefix := shape.Clone()
+// UnsafeSliceForDType creates a slice of the corresponding dtype and casts it to any.
+//
+// Deprecated: use [dtypes.UnsafeAnySliceFromBytes] instead.
+func UnsafeSliceForDType(dtype dtypes.DType, unsafePtr unsafe.Pointer, len int) any {
+	return dtypes.UnsafeAnySliceFromBytes(unsafePtr, dtype, len)
+}
 
-	// The first element is the reference
-	if v.Len() == 0 {
-		return errors.Errorf("value with empty slice not valid for shape conversion: %T: %v -- it wouldn't be possible to figure out the inner dimensions", v.Interface(), v)
-	}
-	v0 := v.Index(0)
-	err := shapeForAnyValueRecursive(shape, v0, t)
-	if err != nil {
-		return err
-	}
+// CastAsDType casts a numeric value to the corresponding for the DType.
+//
+// Deprecated: use [shapes.CastAsDType] instead.
+func CastAsDType(value any, dtype dtypes.DType) any {
+	return shapes.CastAsDType(value, dtype)
+}
 
-	// Test that other elements have the same shape as the first one.
-	for ii := 1; ii < v.Len(); ii++ {
-		shapeTest := shapePrefix.Clone()
-		err = shapeForAnyValueRecursive(&shapeTest, v.Index(ii), t)
-		if err != nil {
-			return err
-		}
-		if !shape.Equal(shapeTest) {
-			return fmt.Errorf("sub-slices have irregular shapes, found shapes %q, and %q", shape, shapeTest)
-		}
-	}
-	return nil
+// CheckDims checks that the shape has the given dimensions and rank.
+//
+// Deprecated: use [shapes.CheckDims] instead.
+func CheckDims(shaped HasShape, dimensions ...int) error {
+	return shapes.CheckDims(shaped, dimensions...)
+}
+
+// AssertDims checks that the shape has the given dimensions and rank.
+//
+// Deprecated: use [shapes.AssertDims] instead.
+func AssertDims(shaped HasShape, dimensions ...int) {
+	shapes.AssertDims(shaped, dimensions...)
+}
+
+// Assert checks that the shape has the given dtype, dimensions and rank.
+//
+// Deprecated: use [shapes.Assert] instead.
+func Assert(shaped HasShape, dtype dtypes.DType, dimensions ...int) {
+	shapes.Assert(shaped, dtype, dimensions...)
+}
+
+// CheckRank checks that the shape has the given rank.
+//
+// Deprecated: use [shapes.CheckRank] instead.
+func CheckRank(shaped HasShape, rank int) error {
+	return shapes.CheckRank(shaped, rank)
+}
+
+// AssertRank checks that the shape has the given rank.
+//
+// Deprecated: use [shapes.AssertRank] instead.
+func AssertRank(shaped HasShape, rank int) {
+	shapes.AssertRank(shaped, rank)
+}
+
+// CheckScalar checks that the shape is a scalar.
+//
+// Deprecated: use [shapes.CheckScalar] instead.
+func CheckScalar(shaped HasShape) error {
+	return shapes.CheckScalar(shaped)
+}
+
+// AssertScalar checks that the shape is a scalar.
+//
+// Deprecated: use [shapes.AssertScalar] instead.
+func AssertScalar(shaped HasShape) {
+	shapes.AssertScalar(shaped)
 }

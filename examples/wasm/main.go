@@ -12,7 +12,7 @@ import (
 	"strings"
 	"syscall/js"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	_ "github.com/gomlx/gomlx/backends/simplego"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -20,12 +20,12 @@ import (
 
 // Element IDs in the HTML page.
 const (
-	idInputA  = "a"
-	idInputB  = "b"
-	idOp      = "op"
-	idRun     = "run"
-	idOutput  = "out"
-	opAdd     = "add"
+	idInputA   = "a"
+	idInputB   = "b"
+	idOp       = "op"
+	idRun      = "run"
+	idOutput   = "out"
+	opAdd      = "add"
 	opMultiply = "mul"
 )
 
@@ -63,7 +63,7 @@ func main() {
 	}()
 
 	// With simplego imported, MustNew picks the pure-Go backend under WASM.
-	be := backends.MustNew()
+	be := compute.MustNew()
 
 	// Prepare cached executors for fast, repeated runs.
 	addExec := graph.MustNewExec(be, func(x, y *graph.Node) *graph.Node { return graph.Add(x, y) })
@@ -71,7 +71,7 @@ func main() {
 
 	compute := func() {
 		doc := js.Global().Get("document")
-		
+
 		// Get operation type.
 		opEl := doc.Call("getElementById", idOp)
 		if !opEl.Truthy() {

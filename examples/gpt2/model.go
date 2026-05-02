@@ -6,14 +6,14 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/go-huggingface/hub"
 	"github.com/gomlx/go-huggingface/models/safetensors"
 	"github.com/gomlx/go-huggingface/tokenizers/api"
 	"github.com/gomlx/go-huggingface/tokenizers/hftokenizer"
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/decode/sample"
@@ -57,7 +57,7 @@ func DefaultGPT2Config() GPT2Config {
 
 // GPT2Model represents a loaded GPT-2 model ready for inference.
 type GPT2Model struct {
-	backend backends.Backend
+	backend compute.Backend
 	ctx     *context.Context
 	config  GPT2Config
 	model   *transformer.Model
@@ -121,7 +121,7 @@ func (m *GPT2Model) forwardGPT2(ctx *context.Context, tokens *Node, position *No
 }
 
 // LoadGPT2 loads the GPT-2 model from the given HuggingFace repository.
-func LoadGPT2(backend backends.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenizer, error) {
+func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenizer, error) {
 	config := DefaultGPT2Config()
 
 	// Create context for model parameters and load them.
@@ -262,7 +262,7 @@ func (m *GPT2Model) Generate(
 }
 
 // loadCheckpoint loads model weights from the HuggingFace repository.
-func loadCheckpoint(backend backends.Backend, ctx *context.Context, repo *hub.Repo) error {
+func loadCheckpoint(backend compute.Backend, ctx *context.Context, repo *hub.Repo) error {
 	// Get repo info for validation (includes SafeTensorsInfo)
 	info := repo.Info()
 	if info != nil && info.SafeTensors.Total > 0 {

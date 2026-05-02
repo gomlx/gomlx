@@ -3,18 +3,16 @@
 package layers
 
 import (
-	"fmt"
-
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 
 	"testing"
 )
 
 func TestRMSNorm(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	ctx := context.New()
 	exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
 		return RMSNorm(ctx, x).
@@ -33,8 +31,9 @@ func TestRMSNorm(t *testing.T) {
 	}, {
 		{0.52091914, 0.6945589}, {0.86819863, 1.0418383}, {1.2154781, 1.3891178},
 	}}
-	fmt.Printf("RMS(%v) = %s\n", x, got.GoStr())
-	require.Equal(t, want, got.Value())
+	if ok, diff := testutil.IsInDelta(want, got.Value(), 1e-3); !ok {
+		t.Errorf("RMSNorm mismatch (-want +got):\n%s", diff)
+	}
 
 	scaleVar := ctx.GetVariableByScopeAndName("/rms_norm", "scale")
 	require.NotNil(t, scaleVar)

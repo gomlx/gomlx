@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/humanize"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
-	"github.com/gomlx/gomlx/pkg/support/humanize"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/stretchr/testify/assert"
 
@@ -33,7 +33,7 @@ func init() {
 func getTestConfig() *Config {
 	ctx := CreateDefaultContext()
 	paramsSet := check1(commandline.ParseContextSettings(ctx, *ctxSettings))
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	return NewConfig(backend, ctx, *flagDataDir, paramsSet)
 }
 

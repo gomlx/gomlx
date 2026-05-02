@@ -5,16 +5,16 @@ package activations
 import (
 	"testing"
 
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/support/xslices"
+	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/support/xslices"
-
-	"github.com/gomlx/gomlx/backends"
-	_ "github.com/gomlx/gomlx/backends/default"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 )
 
 func TestRelu(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		graphtest.RunTestGraphFnWithBackend(t, "Relu", backend,
 			func(g *Graph) (inputs, outputs []*Node) {
 				x := Const(g, []float32{0, -1, 2, -3, 4, -5, 6})
@@ -28,7 +28,7 @@ func TestRelu(t *testing.T) {
 }
 
 func TestLeakyReluWithAlpha(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		graphtest.RunTestGraphFnWithBackend(t, "LeakyReluWithAlpha", backend,
 			func(g *Graph) (inputs, outputs []*Node) {
 				x := Const(g, []float32{0, -1, 2, -3, 4, -5, 6})
@@ -42,7 +42,7 @@ func TestLeakyReluWithAlpha(t *testing.T) {
 }
 
 func TestSwish(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		graphtest.RunTestGraphFnWithBackend(t, "Swish", backend,
 			func(g *Graph) (inputs, outputs []*Node) {
 				x := Const(g, []float32{0, -1, 2, -3, 4, -5, 6})
@@ -56,7 +56,7 @@ func TestSwish(t *testing.T) {
 }
 
 func TestSelu(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		graphtest.RunTestGraphFnWithBackend(t, "Selu", backend,
 			func(g *Graph) (inputs, outputs []*Node) {
 				x := Const(g, []float32{0, -1, 2, -3, 4, -5, 6})
@@ -70,7 +70,7 @@ func TestSelu(t *testing.T) {
 }
 
 func TestGelu(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		// Values generated using jax.nn.Gelu(approximate=False) on GPU (on cpus it varies a bit).
 		graphtest.RunTestGraphFnWithBackend(t, "Gelu (Exact)", backend,
 			func(g *Graph) (inputs, outputs []*Node) {
@@ -96,7 +96,7 @@ func TestGelu(t *testing.T) {
 }
 
 func TestHardSwish(t *testing.T) {
-	graphtest.TestOfficialBackends(t, func(t *testing.T, backend backends.Backend) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		graphtest.RunTestGraphFnWithBackend(t, "HardSwish", backend,
 			func(g *Graph) (inputs, outputs []*Node) {
 				x := Const(g, []float32{0, -1, 2, -3, 4, -5, 6})

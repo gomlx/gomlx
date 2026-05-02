@@ -10,8 +10,8 @@ import (
 	"log"
 	"os"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/go-huggingface/hub"
-	"github.com/gomlx/gomlx/backends"
 	_ "github.com/gomlx/gomlx/backends/default"
 	"github.com/gomlx/gomlx/pkg/ml/decode/sample"
 )
@@ -44,7 +44,7 @@ func main() {
 			log.Printf("Warning: failed to set backend: %v", err)
 		}
 	}
-	backend, err := backends.New()
+	backend, err := compute.New()
 	if err != nil {
 		log.Fatalf("Failed to initialize backend: %v", err)
 	}

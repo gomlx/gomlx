@@ -35,13 +35,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.x"
+          go-version: "1.26.x"
 
       - name: PreTest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          go test ./pkg/core/graph
+          go test -p 1 ./pkg/core/graph
 
       - name: Test
         env:
@@ -50,5 +50,5 @@ jobs:
         # The non-short tests work well locally (in the development box) because the datasets are cached.
         # Also excludes tests that have large dependencies (e.g.: X11):
         run: |
-          go test -short $(go list ./... | grep -v "ui/fyneui")
-          cd examples ; go test -short $(go list ./... | grep -v "ogbnmag")
+          go test -p 1 -short $(go list ./... | grep -v "ui/fyneui")
+          cd examples ; go test -p 1 -short $(go list ./... | grep -v "ogbnmag")

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/backends/simplego"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/stretchr/testify/require"
@@ -14,8 +14,8 @@ import (
 
 // TestFinalizeAfterBackend checks that it's ok to finalize a Tensor after its backend.
 func TestFinalizeAfterBackend(t *testing.T) {
-	// We create a temporary SimpleGo backend for this test.
-	deviceNum := backends.DeviceNum(0) // For `go` backend, there is only one device.
+	// We create a temporary Go backend for this test.
+	deviceNum := compute.DeviceNum(0) // For `go` backend, there is only one device.
 	for _, share := range []bool{false, true} {
 		t.Run(fmt.Sprintf("Shared=%v", share), func(t *testing.T) {
 			backend, err := simplego.New("")
@@ -32,8 +32,8 @@ func TestFinalizeAfterBackend(t *testing.T) {
 // TestInvalidAccessAfterBackendFinalized checks that it panics/returns an error if one attempts to access the
 // tensor after its device was destroyed.
 func TestInvalidAccessAfterBackendFinalized(t *testing.T) {
-	// We create a temporary SimpleGo backend for this test.
-	deviceNum := backends.DeviceNum(0) // For `go` backend, there is only one device.
+	// We create a temporary Go backend for this test.
+	deviceNum := compute.DeviceNum(0) // For `go` backend, there is only one device.
 	for _, share := range []bool{false, true} {
 		t.Run(fmt.Sprintf("Shared=%v", share), func(t *testing.T) {
 			backend, err := simplego.New("")

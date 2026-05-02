@@ -11,11 +11,14 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/gomlx/gomlx/backends"
+	"unsafe"
+
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	_ "github.com/gomlx/gomlx/backends/default" // Use xla backend.
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
 )
@@ -39,26 +42,27 @@ func must1[T any](value T, err error) T {
 }
 
 var (
-	backend backends.Backend
+	backend       compute.Backend
+	setupTestOnce sync.Once
 )
 
 func setupTest(t *testing.T) {
 	// setupTest is also called from benchmarks, make sure it only executes once though.
-	sync.OnceFunc(func() {
-		backends.DefaultConfig = *flagBackend
+	setupTestOnce.Do(func() {
+		compute.DefaultConfig = *flagBackend
 		if t != nil {
 			require.NotPanics(t, func() {
-				backend = backends.MustNew()
+				backend = compute.MustNew()
 			})
 		} else {
-			backend = backends.MustNew()
+			backend = compute.MustNew()
 		}
-	})()
+	})
 }
 
-func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends.Backend) {
+func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend compute.Backend) {
 	dtype := dtypes.FromGenericsType[T]()
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 
 	t.Run(dtype.String(), func(t *testing.T) {
 		// Create trivial f(x)=x^2 program using plain XlaBuilder
@@ -73,7 +77,7 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 		require.NoError(t, err)
 		x2, err := mainFn.Mul(x, x)
 		require.NoError(t, err)
-		err = mainFn.Return([]backends.Value{x2}, nil)
+		err = mainFn.Return([]compute.Value{x2}, nil)
 		require.NoError(t, err)
 		exec, err := builder.Compile()
 		require.NoError(t, err)
@@ -94,13 +98,13 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 			})
 		}
 
-		var outputs []backends.Buffer
-		outputs, err = exec.Execute([]backends.Buffer{buffer}, nil, 0)
+		var outputs []compute.Buffer
+		outputs, err = exec.Execute([]compute.Buffer{buffer}, nil, 0)
 		require.NoError(t, err)
 
 		// Convert the buffer to a tensor: the converted tensor should not be shared, since the buffer comes from the output
 		// of a backend execution.
-		outputTensor, err := tensors.FromBuffer(backend, outputs[0])
+		outputTensor, err := tensors.FromBuffer(outputs[0])
 		require.NoError(t, err)
 		require.False(t, outputTensor.IsShared())
 		fmt.Printf("\tf(x) = x^2, f(%s) = %s\n", tensor.GoStr(), outputTensor.GoStr())
@@ -154,7 +158,7 @@ var testShapes = []shapes.Shape{
 //	BenchmarkHostToDevice/(Float32)[1000_1000]-24               9177            133306 ns/op
 func BenchmarkHostToDevice(b *testing.B) {
 	setupTest(nil)
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 
 	// Pre-allocate tensors.
 	numShapes := len(testShapes)
@@ -256,7 +260,7 @@ func BenchmarkCopyFromLocal(b *testing.B) {
 //	BenchmarkCopyFromDevice/(Float32)[1000_1000]-24             8956            133465 ns/op
 func BenchmarkCopyFromDevice(b *testing.B) {
 	setupTest(nil)
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 
 	// Pre-allocate tensors.
 	numShapes := len(testShapes)
@@ -302,7 +306,7 @@ func BenchmarkCopyFromDevice(b *testing.B) {
 
 func TestClones(t *testing.T) {
 	setupTest(t)
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 	refValues := []int32{1, 3, 5, 7, 11}
 	for cloneType := range 3 {
 		for fromLocation := range 2 {
@@ -342,7 +346,7 @@ func TestClones(t *testing.T) {
 
 func TestToLocal(t *testing.T) {
 	setupTest(t)
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 	refValues := []int32{1, 3, 5, 7, 11}
 
 	for _, shared := range []bool{false, true} {
@@ -364,7 +368,7 @@ func TestToLocal(t *testing.T) {
 }
 
 func TestOnDeviceSerialization(t *testing.T) {
-	deviceNum := backends.DeviceNum(0)
+	deviceNum := compute.DeviceNum(0)
 	// Test reading directly to a device.
 	setupTest(t)
 	if backend == nil {
@@ -394,4 +398,63 @@ func TestOnDeviceSerialization(t *testing.T) {
 			tensor.MustFinalizeAll()
 		}
 	}
+}
+
+func testFromRaw(t *testing.T, backend compute.Backend) {
+	deviceNum := compute.DeviceNum(0)
+
+	// Float32 test
+	t.Run("float32", func(t *testing.T) {
+		f32s := []float32{1.0, 2.0, 3.0, 4.0}
+		data := unsafe.Slice((*byte)(unsafe.Pointer(&f32s[0])), len(f32s)*4)
+		tensor, err := tensors.FromRaw(backend, deviceNum, shapes.Make(dtypes.Float32, 2, 2), data)
+		require.NoError(t, err)
+		tensor.MustConstFlatData(func(flatAny any) {
+			flat := flatAny.([]float32)
+			require.Equal(t, f32s, flat)
+		})
+	})
+
+	// Int32 test
+	t.Run("int32", func(t *testing.T) {
+		i32s := []int32{10, 20, 30, 40}
+		data := unsafe.Slice((*byte)(unsafe.Pointer(&i32s[0])), len(i32s)*4)
+		tensor, err := tensors.FromRaw(backend, deviceNum, shapes.Make(dtypes.Int32, 2, 2), data)
+		require.NoError(t, err)
+		tensor.MustConstFlatData(func(flatAny any) {
+			flat := flatAny.([]int32)
+			require.Equal(t, i32s, flat)
+		})
+	})
+
+	// Uint4 test (packed sub-byte)
+	t.Run("uint4", func(t *testing.T) {
+		if backend.Name() == "xla" {
+			t.Skipf("Backend %s does not fully support FromRaw for packed sub-byte types yet", backend.Name())
+		}
+		// uint4 packed: 4 elements -> 2 bytes.
+		u4s := []uint8{0x12, 0x34} // Represents 4 uint4 values
+		data := u4s
+		tensor, err := tensors.FromRaw(backend, deviceNum, shapes.Make(dtypes.Uint4, 4), data)
+		require.NoError(t, err)
+		tensor.MustConstFlatData(func(flatAny any) {
+			flat := flatAny.([]uint8)
+			require.Equal(t, u4s, flat)
+		})
+	})
+
+	// Zero-shaped test
+	t.Run("zero-shaped", func(t *testing.T) {
+		data := []byte{}
+		tensor, err := tensors.FromRaw(backend, deviceNum, shapes.Make(dtypes.Float32, 0), data)
+		require.NoError(t, err)
+		tensor.MustConstFlatData(func(flatAny any) {
+			flat := flatAny.([]float32)
+			require.Empty(t, flat)
+		})
+	})
+}
+
+func TestFromRaw(t *testing.T) {
+	testutil.TestOfficialBackends(t, testFromRaw)
 }

@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
-	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
@@ -97,7 +97,7 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 // paramsSet enumerate the context parameters that were set and should override values loaded from a checkpoint.
 func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
-	backend := backends.MustNew()
+	backend := compute.MustNew()
 	if verbosity >= 1 {
 		fmt.Printf("Backend %q:\t%s\n", backend.Name(), backend.Description())
 	}
@@ -316,7 +316,7 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
 func DisplayTrainingPlots(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) {
-	backend := backends.MustNew()
+	backend := compute.MustNew()
 	config := NewConfig(backend, ctx, dataDir, paramsSet)
 	checkpoint, _, _ := config.AttachCheckpoint(checkpointPath)
 	if checkpoint == nil {

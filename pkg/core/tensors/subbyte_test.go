@@ -3,7 +3,7 @@
 package tensors
 
 import (
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -50,6 +50,36 @@ func TestUnpackSubByteAt(t *testing.T) {
 		assert.Equal(t, int8(-1), UnpackSubByteAt(packed, dtypes.Int2, 3))
 	}
 
+	// Uint1
+	{
+		// 0b1101_1001 = 0xD9
+		// Indices: 0: 1, 1: 0, 2: 0, 3: 1, 4: 1, 5: 0, 6: 1, 7: 1
+		packed := []uint8{0xD9}
+		assert.Equal(t, int8(1), UnpackSubByteAt(packed, dtypes.Uint1, 0))
+		assert.Equal(t, int8(0), UnpackSubByteAt(packed, dtypes.Uint1, 1))
+		assert.Equal(t, int8(0), UnpackSubByteAt(packed, dtypes.Uint1, 2))
+		assert.Equal(t, int8(1), UnpackSubByteAt(packed, dtypes.Uint1, 3))
+		assert.Equal(t, int8(1), UnpackSubByteAt(packed, dtypes.Uint1, 4))
+		assert.Equal(t, int8(0), UnpackSubByteAt(packed, dtypes.Uint1, 5))
+		assert.Equal(t, int8(1), UnpackSubByteAt(packed, dtypes.Uint1, 6))
+		assert.Equal(t, int8(1), UnpackSubByteAt(packed, dtypes.Uint1, 7))
+	}
+
+	// Int1
+	{
+		// 0b1110_0100 = 0xE4
+		// Indices: 0: 0, 1: 0, 2: 1 (-1), 3: 0, 4: 0, 5: 1 (-1), 6: 1 (-1), 7: 1 (-1)
+		packed := []uint8{0xE4}
+		assert.Equal(t, int8(0), UnpackSubByteAt(packed, dtypes.Int1, 0))
+		assert.Equal(t, int8(0), UnpackSubByteAt(packed, dtypes.Int1, 1))
+		assert.Equal(t, int8(-1), UnpackSubByteAt(packed, dtypes.Int1, 2))
+		assert.Equal(t, int8(0), UnpackSubByteAt(packed, dtypes.Int1, 3))
+		assert.Equal(t, int8(0), UnpackSubByteAt(packed, dtypes.Int1, 4))
+		assert.Equal(t, int8(-1), UnpackSubByteAt(packed, dtypes.Int1, 5))
+		assert.Equal(t, int8(-1), UnpackSubByteAt(packed, dtypes.Int1, 6))
+		assert.Equal(t, int8(-1), UnpackSubByteAt(packed, dtypes.Int1, 7))
+	}
+
 	// Out-of-bounds
 	{
 		packed := []uint8{0x12}
@@ -59,5 +89,21 @@ func TestUnpackSubByteAt(t *testing.T) {
 		assert.Panics(t, func() {
 			UnpackSubByteAt(packed, dtypes.Uint4, -1)
 		}, "Expected panic for out-of-bounds index (-1)")
+	}
+}
+
+func TestUnpackSubBytes(t *testing.T) {
+	// Test Int1
+	{
+		packed := []uint8{0x01} // 0b0000_0001 -> [1, 0, 0, 0, 0, 0, 0, 0] if Uint1, but [ -1, 0, 0, 0, 0, 0, 0, 0] if Int1
+		unpacked := UnpackSubBytes(packed, dtypes.Int1, 0)
+		assert.Equal(t, []int8{-1, 0, 0, 0, 0, 0, 0, 0}, unpacked)
+	}
+
+	// Test numValues truncation
+	{
+		packed := []uint8{0x01}
+		unpacked := UnpackSubBytes(packed, dtypes.Int1, 2)
+		assert.Equal(t, []int8{-1, 0}, unpacked)
 	}
 }

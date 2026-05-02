@@ -3,9 +3,9 @@
 package context
 
 import (
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/pkg/core/distributed"
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 )
@@ -25,7 +25,7 @@ import (
 //
 // This is a generic wrapper around NewExecAny that checks that types are
 // correct (but doesn't support all possible types of ctxGraphFn).
-func NewExec[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F) (*Exec, error) {
+func NewExec[F ExecGraphFn](backend compute.Backend, ctx *Context, ctxGraphFn F) (*Exec, error) {
 	return NewExecAny(backend, ctx, ctxGraphFn)
 }
 
@@ -43,7 +43,7 @@ func NewExec[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F
 // More details see Exec.
 //
 // It panics on error.
-func MustNewExec[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F) *Exec {
+func MustNewExec[F ExecGraphFn](backend compute.Backend, ctx *Context, ctxGraphFn F) *Exec {
 	e, err := NewExecAny(backend, ctx, ctxGraphFn)
 	if err != nil {
 		panic(err)
@@ -51,14 +51,14 @@ func MustNewExec[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraph
 	return e
 }
 
-// DistributedExec is just like Exec, but aggregates the outputs into *distributed.Tensor.
+// DistributedExec is just like Exec, but aggregates the outputs into *dtensor.Tensor.
 // Usually, Exec will return alice of numDevices * nnumOutputs individual shards (*tensors.Tensor).
 //
 // Notice that to actually trigger distributed execution, you must set Exec.AutoSharding (or Exec.SPMD) and
 // set the proper sharding specs of the inputs and outputs.
 //
 // See also Exec.AggregateShards.
-func (e *Exec) DistributedExec(args ...any) ([]*distributed.Tensor, error) {
+func (e *Exec) DistributedExec(args ...any) ([]*dtensor.Tensor, error) {
 	shards, _, err := e.ExecWithGraph(args...)
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func (e *Exec) DistributedExec(args ...any) ([]*distributed.Tensor, error) {
 // Usually, Exec will return alice of numDevices * nnumOutputs individual shards (*tensors.Tensor).
 //
 // See also DistributedExec, which calls Exec and then calls this.
-func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*distributed.Tensor, error) {
+func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*dtensor.Tensor, error) {
 	return e.exec.AggregateShards(shards)
 }
 
@@ -111,7 +111,7 @@ func (e *Exec) MustExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Gra
 // It's short for a call to NewExec, Exec.MustExec, and Exec.Finalize.
 //
 // See ExecOnce for a more convenient version if you have only one output.
-func ExecOnceN[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) ([]*tensors.Tensor, error) {
+func ExecOnceN[F ExecGraphFn](backend compute.Backend, ctx *Context, ctxGraphFn F, args ...any) ([]*tensors.Tensor, error) {
 	e, err := NewExec(backend, ctx, ctxGraphFn)
 	if err != nil {
 		return nil, err
@@ -127,7 +127,7 @@ func ExecOnceN[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn
 // See MustExecOnce for a more convenient version if you have only one output.
 //
 // It panics on error. See ExecOnceN for a version that returns an error.
-func MustExecOnceN[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) []*tensors.Tensor {
+func MustExecOnceN[F ExecGraphFn](backend compute.Backend, ctx *Context, ctxGraphFn F, args ...any) []*tensors.Tensor {
 	outputs, err := ExecOnceN(backend, ctx, ctxGraphFn, args...)
 	if err != nil {
 		panic(err)
@@ -140,7 +140,7 @@ func MustExecOnceN[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGra
 // It's short for a call to NewExec, Exec.MustExec, and Exec.Finalize for functions that return only one output.
 //
 // See ExecOnceN if you have multiple (or zero) outputs.
-func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) (*tensors.Tensor, error) {
+func ExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, ctx *Context, ctxGraphFn F, args ...any) (*tensors.Tensor, error) {
 	outputs, err := ExecOnceN(backend, ctx, ctxGraphFn, args...)
 	if err != nil {
 		return nil, err
@@ -158,7 +158,7 @@ func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, ctx *Context, ct
 // See MustExecOnceN if you have multiple outputs.
 //
 // It panics on error. See ExecOnce for a version that returns an error.
-func MustExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) *tensors.Tensor {
+func MustExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, ctx *Context, ctxGraphFn F, args ...any) *tensors.Tensor {
 	output, err := ExecOnce(backend, ctx, ctxGraphFn, args...)
 	if err != nil {
 		panic(err)
