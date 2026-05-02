@@ -57,6 +57,21 @@ Documentation is kept up to date (if it is not well-documented, it is as if the 
 and error messages are useful (always with a stack-trace) and try to make it easy to solve issues.
 </div>
 
+## 🔮 Upcoming Features & Plans 🔮
+
+**Large API and package re-organization: `backends` moved to `github.com/gomlx/compute` repository!**
+
+Already in branch `main`:
+
+* The _"go"_ backend is now implemented in `github.com/gomlx/compute/gobackend` -- it's been reorganized, and greatly simplified to read.
+* Many support packages also moved `github.com/gomlx/compute`.
+
+Upcoming features planned for the next release (v0.28.0):
+
+* (Optional) Dynamic shapes support for GoMLX -- the XLA backend still only supports static shapes.
+* More SIMD improvements for the Go backend (now in repo `github.com/gomlx/compute/gobackend`), we should expect great speedups.
+* (Tentative) Redesign of the `Context` object, using normal Go structs.
+
 ## 🗺️ Overview
 
 **GoMLX** is a full-featured ML framework, supporting various well-known ML components  

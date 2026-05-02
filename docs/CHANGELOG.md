@@ -4,7 +4,7 @@ It hasn't reached yet a 1.0 release yet (it is close), so instead we use every m
 
 ---
 
-# v0.28.0: Large API and package re-organization: `backends` moved to `github.com/gomlx/compute` repository!
+# (In progress) v0.28.0: Large API and package re-organization: `backends` moved to `github.com/gomlx/compute` repository!
 
 ## API Changes: `backends` and related packages moved to `github.com/gomlx/compute`
 
