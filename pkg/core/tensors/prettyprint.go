@@ -11,12 +11,33 @@ import (
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/support/xslices"
+	"github.com/gomlx/gomlx/pkg/support/envutil"
+	"k8s.io/klog/v2"
 )
 
 var (
 	typeFloat16  = reflect.TypeFor[float16.Float16]()
 	typeBFloat16 = reflect.TypeFor[bfloat16.BFloat16]()
 )
+
+// SummarySampleHalfSize holds the default number of elements to print from the beginning and from the
+// end of each dimension, by Tensor.Summary() (same as Tensor.String())
+// The default is 3, so for a 1D tensor of size 10, the first 3 and last 3 elements will be printed,
+// in between the first and last 3 elements, "..." will be printed.
+//
+// It can be changed by setting the SummarySampleHalfSize parameter in the
+// context, or by setting the environment variable GOMLX_TENSOR_SUMMARY_SAMPLE_SIZE.
+var SummarySampleHalfSize = 3
+
+const SummarySampleHalfSizeEnv = "GOMLX_TENSOR_SUMMARY_SAMPLE_SIZE"
+
+func init() {
+	var err error
+	SummarySampleHalfSize, err = envutil.ReadInt(SummarySampleHalfSizeEnv, SummarySampleHalfSize)
+	if err != nil {
+		klog.Fatalf("Failed to initialize %q: %+v", SummarySampleHalfSizeEnv, err)
+	}
+}
 
 // Summary returns a multi-line summary of the Tensor's content.
 // Inspired by numpy output.
@@ -91,17 +112,17 @@ func (t *Tensor) Summary(precision int) string {
 			if len(currentShape) == 1 {
 				// One row of data:
 				w("{")
-				if currentShape[0] > 6 {
+				if currentShape[0] > 2*SummarySampleHalfSize {
 					// Apply ellipsis for large arrays
-					for i := range 3 {
+					for i := range SummarySampleHalfSize {
 						if i > 0 {
 							w(", ")
 						}
 						wValueAt(index + i)
 					}
 					w(", ..., ")
-					for i := currentShape[0] - 3; i < currentShape[0]; i++ {
-						if i > currentShape[0]-3 {
+					for i := currentShape[0] - SummarySampleHalfSize; i < currentShape[0]; i++ {
+						if i > currentShape[0]-SummarySampleHalfSize {
 							w(", ")
 						}
 						wValueAt(index + i)
@@ -140,7 +161,7 @@ func (t *Tensor) Summary(precision int) string {
 			}
 			indentStr := strings.Repeat(" ", indent)
 
-			if numRows > 6 {
+			if numRows > 2*SummarySampleHalfSize {
 				if len(currentShape) > 2 {
 					// Only print first and last element of this outer dimension.
 					printElements(index, indent+1, currentShape[1:])
@@ -156,13 +177,13 @@ func (t *Tensor) Summary(precision int) string {
 					return
 				}
 
-				// This is the one-before last dimension, first 3 and last 3 rows for this outer dimension.
-				firstNRows := min(3, currentShape[0])
+				// This is the one-before last dimension, first SummarySampleHalfSize and last SummarySampleHalfSize rows for this outer dimension.
+				firstNRows := min(SummarySampleHalfSize, currentShape[0])
 				var lastNRows int
-				if currentShape[0] <= 6 {
+				if currentShape[0] <= 2*SummarySampleHalfSize {
 					firstNRows = currentShape[0]
 				} else {
-					lastNRows = 3
+					lastNRows = SummarySampleHalfSize
 				}
 				for ii := 0; ii < firstNRows; ii++ {
 					if ii > 0 {
