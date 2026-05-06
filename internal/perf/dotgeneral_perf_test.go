@@ -35,9 +35,10 @@ import (
 
 var (
 	// Generic performance flags.
-	flagPerfDuration = flag.Duration("perf_duration", time.Second, "Duration to run each performance test.")
-	flagPerfMinRuns  = flag.Int("perf_min_runs", 10, "Minimum number of runs for each performance test.")
-	flagMarkdown     = flag.Bool("markdown", false, "If true, it will print the performance table in markdown format.")
+	flagPerfDuration          = flag.Duration("perf_duration", 3*time.Second, "Duration to run each performance test.")
+	flagPerfMinWarmupDuration = flag.Duration("perf_min_warmup_duration", time.Second, "Duration to run warmup for each performance test.")
+	flagPerfMinRuns           = flag.Int("perf_min_runs", 10, "Minimum number of runs for each performance test.")
+	flagMarkdown              = flag.Bool("markdown", false, "If true, it will print the performance table in markdown format.")
 
 	// DotGeneral specific flags.
 	flagDotGeneralPerfTests = flag.String("dg_perf_names", "",
@@ -217,7 +218,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 		dtypesToTest := []dtypes.DType{dtypes.Float32, dtypes.Float64, dtypes.BFloat16, dtypes.Float16}
 
 		// Adjust for desired precision vs. test duration
-		const numWarmupRuns = 2
+		const minWarmupRuns = 2
 		const minNumTimedRuns = 10
 
 		// Colors: tests usually run in batch and that disallows colors. We temporarily force a different profile:
@@ -352,7 +353,9 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				})
 
 				// Warm-up runs
-				for i := 0; i < numWarmupRuns; i++ {
+				warmUpStartTime := time.Now()
+
+				for numRuns := 0; time.Since(warmUpStartTime) < *flagPerfMinWarmupDuration || numRuns < minWarmupRuns; numRuns++ {
 					output := testExec.MustExec(lhsTensor, rhsTensor)[0]
 					output.MustFinalizeAll()
 				}
