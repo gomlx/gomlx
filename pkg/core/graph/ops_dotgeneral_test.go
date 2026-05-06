@@ -596,9 +596,9 @@ func TestDotGeneralDTypes(t *testing.T) {
 				}
 				output, err := exec.Exec1()
 				if err != nil {
-					fmt.Printf("* failed for %s, %s, %s\n", inputDType, accumulatorDType, outputDType)
+					t.Errorf("* failed for %s, %s, %s: %v\n", inputDType, accumulatorDType, outputDType, err)
 				} else {
-					fmt.Printf("%s,%s,%s -> %s\n", inputDType, accumulatorDType, outputDType, output.DType())
+					t.Logf("Succeeded for %s,%s,%s -> %s\n", inputDType, accumulatorDType, outputDType, output.DType())
 				}
 				exec.Finalize()
 			}

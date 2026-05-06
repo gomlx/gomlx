@@ -202,15 +202,16 @@ func (n *Node) String() (str string) {
 		return "Node(nil)"
 	}
 	if n.graph == nil || !n.graph.IsValid() {
-		return "Node(invalid graph)"
+		return fmt.Sprintf("Node #%d(invalid graph)", n.id)
 	}
+	str = fmt.Sprintf("Node #%d", n.id)
 	if n.alias != "" {
-		str = fmt.Sprintf("[%q] ", n.alias)
+		str += fmt.Sprintf(" [%q]", n.alias)
 	}
 	if n.Type() == NodeTypeInvalid {
-		str += "Invalid(?)"
+		str += " Invalid(?)"
 	} else {
-		str += n.inputs.String()
+		str += " " + n.inputs.String()
 	}
 
 	parts := []string{str}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/gomlx/pkg/support/envutil"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 
@@ -240,6 +241,10 @@ func BackendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV *Node, quer
 	return backendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
 }
 
+// FusionEnv is the name of the environment variable that controls whether fused ops are used.
+// The default value is true.
+const FusionEnv = "GOMLX_FUSION"
+
 // InternalFusedOpCaller attempts to call fused, and if it panics with
 // compute.ErrNotImplemented, falls back to the decomposed version. Any other
 // panic is re-thrown — this prevents real bugs in fused op implementations from
@@ -251,12 +256,21 @@ func BackendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV *Node, quer
 // When the fused call succeeds, the decomposed version is also stored as the
 // VJP alternate output, so that reverse-mode autodiff can compute gradients
 // through the decomposed graph without hand-written VJPs.
+//
+// Note: If GOMLX_FUSION is disabled (set to "0", "false", etc.) the fused
+// version is never used. The default is enabled though.
 func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
 	// Build decomposed output first so it has a lower nodeIdx than the fused
 	// node. The gradient loop iterates from output down to 0, so it will
 	// visit the fused node first and transfer its VJP to the decomposed
 	// output, which is then processed normally.
 	decomposedOutput := decomposed()
+
+	if enabled, err := envutil.ReadBool("GOMLX_FUSION", true); err != nil {
+		panic(err)
+	} else if !enabled {
+		return decomposedOutput
+	}
 
 	var output *Node
 	err := exceptions.TryCatch[error](func() {
