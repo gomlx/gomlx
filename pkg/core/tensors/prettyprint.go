@@ -10,8 +10,8 @@ import (
 
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
+	"github.com/gomlx/compute/support/envutil"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/pkg/support/envutil"
 	"k8s.io/klog/v2"
 )
 
