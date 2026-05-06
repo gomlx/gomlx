@@ -226,13 +226,14 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 		fmt.Printf("\n--- execNormalizedDotGeneral Performance ---\n")
 		var header string
 		if *flagMarkdown {
-			header = "| Test Name | LHS Dims | RHS Dims | DType | BatchSize | Time/Run | Num Ops | GOps/Sec |"
+			header = "| Test Name | LHS Dims | RHS Dims | Layout | DType | BatchSize | Time/Run | Num Ops | GOps/Sec |"
 		} else {
 			header = fmt.Sprintf(
-				"| %-20s | %-20s | %-20s | %-10s | %-10s | %-12s | %-15s | %-10s |",
+				"| %-20s | %-20s | %-20s | %-10s | %-10s | %-10s | %-12s | %-15s | %-10s |",
 				"Test Name",
 				"LHS Dims",
 				"RHS Dims",
+				"Layout",
 				"DType",
 				"BatchSize",
 				"Time/Run",
@@ -244,14 +245,14 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 
 		if *flagMarkdown {
 			// Markdown header separator.
-			fmt.Println("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+			fmt.Println("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
 		} else {
 			fmt.Println(strings.Repeat("-", len(header)))
 		}
 
-		rowFormat := "| %-20s | %-20s | %-20s | %-10s | %-10d | %-12s | %-15s | %-10.1f |"
+		rowFormat := "| %-20s | %-20s | %-20s | %-10s | %-10s | %-10d | %-12s | %-15s | %-10.1f |"
 		if *flagMarkdown {
-			rowFormat = "| `%s` | %s | %s | %s | %d | %s | %s | %.1f |"
+			rowFormat = "| `%s` | %s | %s | %s | %s | %d | %s | %s | %.1f |"
 		}
 
 		for benchCaseIdx, benchCase := range benchmarkCases {
@@ -265,6 +266,14 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				}
 				if !found {
 					continue
+				}
+			}
+			layout := "Unknown"
+			if len(benchCase.lhsContractingAxes) == 1 && benchCase.lhsContractingAxes[0] == len(benchCase.lhsShape)-1 {
+				if benchCase.rhsContractingAxes[0] == len(benchCase.rhsShape)-2 {
+					layout = "NonTransposed"
+				} else if benchCase.rhsContractingAxes[0] == len(benchCase.rhsShape)-1 {
+					layout = "Transposed"
 				}
 			}
 			for _, dtype := range dtypesToTest {
@@ -365,6 +374,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				row := fmt.Sprintf(rowFormat,
 					benchCase.name,
 					dimsToStr(benchCase.lhsShape), dimsToStr(benchCase.rhsShape),
+					layout,
 					dtype,
 					batchSize,
 					commandline.FormatDuration(avgDurationPerRun),
