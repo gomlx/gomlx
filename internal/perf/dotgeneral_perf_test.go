@@ -28,6 +28,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/muesli/termenv"
+	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
@@ -46,6 +47,10 @@ var (
 		"Comma-separated list of dtypes to run DotGeneral performance tests (part of TestDotGeneral_PerformanceTable). "+
 			"If empty, it will run for all supported dtypes.")
 )
+
+func init() {
+	klog.InitFlags(nil)
+}
 
 // dotGeneralBenchmarkParamsCase defines input parameters for DotGeneral to be benchmarked.
 type dotGeneralBenchmarkParamsCase struct {
