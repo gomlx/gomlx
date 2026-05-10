@@ -47,6 +47,9 @@ var (
 	flagPerfDTypes = flag.String("dg_perf_dtypes", "",
 		"Comma-separated list of dtypes to run DotGeneral performance tests (part of TestDotGeneral_PerformanceTable). "+
 			"If empty, it will run for all supported dtypes.")
+	flagPerfLayout = flag.String("dg_perf_layout", "",
+		"DotGeneral layout (NonTransposed or Transposed) to run performance tests for (part of TestDotGeneral_PerformanceTable). "+
+			"If empty, it will run both.")
 )
 
 func init() {
@@ -80,6 +83,10 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 		perfsToRun := sets.MakeWith(strings.Split(*flagDotGeneralPerfTests, ",")...)
 		filterDTypes := *flagPerfDTypes != ""
 		dtypesToRun := sets.MakeWith(strings.Split(*flagPerfDTypes, ",")...)
+		if *flagPerfLayout != "" && strings.ToLower(*flagPerfLayout) != "nontransposed" &&
+			strings.ToLower(*flagPerfLayout) != "transposed" {
+			t.Fatalf("invalid perf layout: %q", *flagPerfLayout)
+		}
 
 		// IMPORTANT: Populate this slice with the shapes and parameters of the dot-product.
 		// lhsDims: [Batch, LhsCross, Contracting]
@@ -282,6 +289,11 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 					layout = "Transposed"
 				}
 			}
+			if *flagPerfLayout != "" && strings.ToLower(layout) != strings.ToLower(*flagPerfLayout) {
+				// Only run if the layout matches the flag (or is not specified).
+				continue
+			}
+
 			for _, dtype := range dtypesToTest {
 				if filterDTypes && !dtypesToRun.Has(dtype.String()) {
 					continue
