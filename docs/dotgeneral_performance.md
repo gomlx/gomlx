@@ -11,6 +11,107 @@ GOMLX_BACKEND=go go test -tags=perf ./internal/perf/ \
 
 ## Results
 
+### Backend: `go` with new `matmul` for AVX512 implementation / 2026/05/11 AMD 9950X3D, go 1.26.3, Ubuntu 26.04, PJRT Plugin 0.104
+
+| Test Name | LHS Dims | RHS Dims | Layout | DType | BatchSize | Time/Run | Num Ops | GOps/Sec |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `NoBatch-Tiny` | {128, 4} | {4, 1} | NonTransposed | Float32 | 1 | 4.4µs | 1_024 | 0.2 |
+| `NoBatch-Tiny` | {128, 4} | {4, 1} | NonTransposed | Float64 | 1 | 4.2µs | 1_024 | 0.2 |
+| `NoBatch-Tiny` | {128, 4} | {4, 1} | NonTransposed | BFloat16 | 1 | 6.1µs | 1_024 | 0.2 |
+| `NoBatch-Tiny` | {128, 4} | {4, 1} | NonTransposed | Float16 | 1 | 7.8µs | 1_024 | 0.1 |
+| `NoBatch-Tiny-Norm` | {128, 4} | {1, 4} | Transposed | Float32 | 1 | 4.9µs | 1_024 | 0.2 |
+| `NoBatch-Tiny-Norm` | {128, 4} | {1, 4} | Transposed | Float64 | 1 | 4.6µs | 1_024 | 0.2 |
+| `NoBatch-Tiny-Norm` | {128, 4} | {1, 4} | Transposed | BFloat16 | 1 | 7.9µs | 1_024 | 0.1 |
+| `NoBatch-Tiny-Norm` | {128, 4} | {1, 4} | Transposed | Float16 | 1 | 6.9µs | 1_024 | 0.1 |
+| `NoBatch-Small` | {16, 128} | {128, 32} | NonTransposed | Float32 | 1 | 8.2µs | 131_072 | 15.9 |
+| `NoBatch-Small` | {16, 128} | {128, 32} | NonTransposed | Float64 | 1 | 10.8µs | 131_072 | 12.1 |
+| `NoBatch-Small` | {16, 128} | {128, 32} | NonTransposed | BFloat16 | 1 | 51.1µs | 131_072 | 2.6 |
+| `NoBatch-Small` | {16, 128} | {128, 32} | NonTransposed | Float16 | 1 | 67.7µs | 131_072 | 1.9 |
+| `NoBatch-Medium` | {128, 128} | {128, 256} | NonTransposed | Float32 | 1 | 194.7µs | 8_388_608 | 43.1 |
+| `NoBatch-Medium` | {128, 128} | {128, 256} | NonTransposed | Float64 | 1 | 223.4µs | 8_388_608 | 37.6 |
+| `NoBatch-Medium` | {128, 128} | {128, 256} | NonTransposed | BFloat16 | 1 | 156µs | 8_388_608 | 53.8 |
+| `NoBatch-Medium` | {128, 128} | {128, 256} | NonTransposed | Float16 | 1 | 566.2µs | 8_388_608 | 14.8 |
+| `NoBatch-Large` | {1536, 1920} | {1920, 1024} | NonTransposed | Float32 | 1 | 3.9ms | 6_039_797_760 | 1536.5 |
+| `NoBatch-Large` | {1536, 1920} | {1920, 1024} | NonTransposed | Float64 | 1 | 7.7ms | 6_039_797_760 | 785.9 |
+| `NoBatch-Large` | {1536, 1920} | {1920, 1024} | NonTransposed | BFloat16 | 1 | 5.5ms | 6_039_797_760 | 1092.2 |
+| `NoBatch-Large` | {1536, 1920} | {1920, 1024} | NonTransposed | Float16 | 1 | 28.6ms | 6_039_797_760 | 211.5 |
+| `R-Unbalanced-Cross` | {128} | {128, 256} | NonTransposed | Float32 | 1 | 10.5µs | 65_536 | 6.2 |
+| `R-Unbalanced-Cross` | {128} | {128, 256} | NonTransposed | Float64 | 1 | 10.2µs | 65_536 | 6.5 |
+| `R-Unbalanced-Cross` | {128} | {128, 256} | NonTransposed | BFloat16 | 1 | 11.4µs | 65_536 | 5.8 |
+| `R-Unbalanced-Cross` | {128} | {128, 256} | NonTransposed | Float16 | 1 | 17.8µs | 65_536 | 3.7 |
+| `L-Unbalanced-Cross` | {4096, 32} | {32, 16} | NonTransposed | Float32 | 1 | 755.9µs | 4_194_304 | 5.5 |
+| `L-Unbalanced-Cross` | {4096, 32} | {32, 16} | NonTransposed | Float64 | 1 | 253.2µs | 4_194_304 | 16.6 |
+| `L-Unbalanced-Cross` | {4096, 32} | {32, 16} | NonTransposed | BFloat16 | 1 | 1.3ms | 4_194_304 | 3.2 |
+| `L-Unbalanced-Cross` | {4096, 32} | {32, 16} | NonTransposed | Float16 | 1 | 1.7ms | 4_194_304 | 2.5 |
+| `LargeBatch-Tiny` | {1024, 128, 4} | {1024, 4, 1} | NonTransposed | Float32 | 1024 | 181.4µs | 1_048_576 | 5.8 |
+| `LargeBatch-Tiny` | {1024, 128, 4} | {1024, 4, 1} | NonTransposed | Float64 | 1024 | 160µs | 1_048_576 | 6.6 |
+| `LargeBatch-Tiny` | {1024, 128, 4} | {1024, 4, 1} | NonTransposed | BFloat16 | 1024 | 242µs | 1_048_576 | 4.3 |
+| `LargeBatch-Tiny` | {1024, 128, 4} | {1024, 4, 1} | NonTransposed | Float16 | 1024 | 405.2µs | 1_048_576 | 2.6 |
+| `LargeBatch-Small` | {256, 8, 32} | {256, 32, 16} | NonTransposed | Float32 | 256 | 128.8µs | 2_097_152 | 16.3 |
+| `LargeBatch-Small` | {256, 8, 32} | {256, 32, 16} | NonTransposed | Float64 | 256 | 115.8µs | 2_097_152 | 18.1 |
+| `LargeBatch-Small` | {256, 8, 32} | {256, 32, 16} | NonTransposed | BFloat16 | 256 | 179.8µs | 2_097_152 | 11.7 |
+| `LargeBatch-Small` | {256, 8, 32} | {256, 32, 16} | NonTransposed | Float16 | 256 | 256.8µs | 2_097_152 | 8.2 |
+| `LargeBatch-Medium` | {64, 64, 128} | {64, 64, 128} | Transposed | Float32 | 64 | 211.1µs | 67_108_864 | 317.9 |
+| `LargeBatch-Medium` | {64, 64, 128} | {64, 64, 128} | Transposed | Float64 | 64 | 288.5µs | 67_108_864 | 232.6 |
+| `LargeBatch-Medium` | {64, 64, 128} | {64, 64, 128} | Transposed | BFloat16 | 64 | 292.6µs | 67_108_864 | 229.4 |
+| `LargeBatch-Medium` | {64, 64, 128} | {64, 64, 128} | Transposed | Float16 | 64 | 903.4µs | 67_108_864 | 74.3 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float32 | 16 | 52.2ms | 96_636_764_160 | 1852.3 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float64 | 16 | 108.1ms | 96_636_764_160 | 893.9 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | BFloat16 | 16 | 72.1ms | 96_636_764_160 | 1340.0 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float16 | 16 | 403.8ms | 96_636_764_160 | 239.3 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float32 | 16 | 53.2ms | 96_636_764_160 | 1817.7 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float64 | 16 | 112.4ms | 96_636_764_160 | 859.7 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | BFloat16 | 16 | 71.6ms | 96_636_764_160 | 1349.0 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float16 | 16 | 394.2ms | 96_636_764_160 | 245.1 |
+| `KA-Batch-16-#1` | {16, 12, 13, 13} | {16, 12, 13, 32} | NonTransposed | Float32 | 192 | 165.4µs | 2_076_672 | 12.6 |
+| `KA-Batch-16-#1` | {16, 12, 13, 13} | {16, 12, 13, 32} | NonTransposed | Float64 | 192 | 226.5µs | 2_076_672 | 9.2 |
+| `KA-Batch-16-#1` | {16, 12, 13, 13} | {16, 12, 13, 32} | NonTransposed | BFloat16 | 192 | 266.3µs | 2_076_672 | 7.8 |
+| `KA-Batch-16-#1` | {16, 12, 13, 13} | {16, 12, 13, 32} | NonTransposed | Float16 | 192 | 369µs | 2_076_672 | 5.6 |
+| `KA-Batch-16-#2` | {16, 12, 13, 32} | {16, 12, 32, 13} | NonTransposed | Float32 | 192 | 130.3µs | 2_076_672 | 15.9 |
+| `KA-Batch-16-#2` | {16, 12, 13, 32} | {16, 12, 32, 13} | NonTransposed | Float64 | 192 | 202.5µs | 2_076_672 | 10.3 |
+| `KA-Batch-16-#2` | {16, 12, 13, 32} | {16, 12, 32, 13} | NonTransposed | BFloat16 | 192 | 206.3µs | 2_076_672 | 10.1 |
+| `KA-Batch-16-#2` | {16, 12, 13, 32} | {16, 12, 32, 13} | NonTransposed | Float16 | 192 | 249.5µs | 2_076_672 | 8.3 |
+| `KA-Batch-16-#3` | {16, 13, 1536} | {1536, 384} | NonTransposed | Float32 | 1 | 1.7ms | 245_366_784 | 147.1 |
+| `KA-Batch-16-#3` | {16, 13, 1536} | {1536, 384} | NonTransposed | Float64 | 1 | 2.6ms | 245_366_784 | 96.2 |
+| `KA-Batch-16-#3` | {16, 13, 1536} | {1536, 384} | NonTransposed | BFloat16 | 1 | 2.4ms | 245_366_784 | 103.9 |
+| `KA-Batch-16-#3` | {16, 13, 1536} | {1536, 384} | NonTransposed | Float16 | 1 | 13.3ms | 245_366_784 | 18.5 |
+| `KA-Batch-16-#4` | {16, 13, 384} | {384, 1536} | NonTransposed | Float32 | 1 | 768.4µs | 245_366_784 | 319.3 |
+| `KA-Batch-16-#4` | {16, 13, 384} | {384, 1536} | NonTransposed | Float64 | 1 | 1.2ms | 245_366_784 | 211.7 |
+| `KA-Batch-16-#4` | {16, 13, 384} | {384, 1536} | NonTransposed | BFloat16 | 1 | 1.6ms | 245_366_784 | 151.6 |
+| `KA-Batch-16-#4` | {16, 13, 384} | {384, 1536} | NonTransposed | Float16 | 1 | 7.6ms | 245_366_784 | 32.2 |
+| `KA-Batch-16-#5` | {16, 13, 384} | {384, 384} | NonTransposed | Float32 | 1 | 477.6µs | 61_341_696 | 128.4 |
+| `KA-Batch-16-#5` | {16, 13, 384} | {384, 384} | NonTransposed | Float64 | 1 | 719µs | 61_341_696 | 85.3 |
+| `KA-Batch-16-#5` | {16, 13, 384} | {384, 384} | NonTransposed | BFloat16 | 1 | 627µs | 61_341_696 | 97.8 |
+| `KA-Batch-16-#5` | {16, 13, 384} | {384, 384} | NonTransposed | Float16 | 1 | 3.7ms | 61_341_696 | 16.4 |
+| `adult-#1` | {128, 4} | {4, 1} | NonTransposed | Float32 | 1 | 8.3µs | 1_024 | 0.1 |
+| `adult-#1` | {128, 4} | {4, 1} | NonTransposed | Float64 | 1 | 7.5µs | 1_024 | 0.1 |
+| `adult-#1` | {128, 4} | {4, 1} | NonTransposed | BFloat16 | 1 | 7.4µs | 1_024 | 0.1 |
+| `adult-#1` | {128, 4} | {4, 1} | NonTransposed | Float16 | 1 | 7.8µs | 1_024 | 0.1 |
+| `adult-#2` | {128, 69} | {69, 4} | NonTransposed | Float32 | 1 | 15µs | 70_656 | 4.7 |
+| `adult-#2` | {128, 69} | {69, 4} | NonTransposed | Float64 | 1 | 15.7µs | 70_656 | 4.5 |
+| `adult-#2` | {128, 69} | {69, 4} | NonTransposed | BFloat16 | 1 | 30µs | 70_656 | 2.4 |
+| `adult-#2` | {128, 69} | {69, 4} | NonTransposed | Float16 | 1 | 35.8µs | 70_656 | 2.0 |
+| `adult-#3` | {25, 4} | {4, 1} | NonTransposed | Float32 | 1 | 4.6µs | 200 | 0.0 |
+| `adult-#3` | {25, 4} | {4, 1} | NonTransposed | Float64 | 1 | 4.2µs | 200 | 0.0 |
+| `adult-#3` | {25, 4} | {4, 1} | NonTransposed | BFloat16 | 1 | 6.7µs | 200 | 0.0 |
+| `adult-#3` | {25, 4} | {4, 1} | NonTransposed | Float16 | 1 | 6.4µs | 200 | 0.0 |
+| `adult-#4` | {25, 69} | {69, 4} | NonTransposed | Float32 | 1 | 7.1µs | 13_800 | 1.9 |
+| `adult-#4` | {25, 69} | {69, 4} | NonTransposed | Float64 | 1 | 6.3µs | 13_800 | 2.2 |
+| `adult-#4` | {25, 69} | {69, 4} | NonTransposed | BFloat16 | 1 | 10.4µs | 13_800 | 1.3 |
+| `adult-#4` | {25, 69} | {69, 4} | NonTransposed | Float16 | 1 | 14.4µs | 13_800 | 1.0 |
+| `adult-#5` | {49, 4} | {4, 1} | NonTransposed | Float32 | 1 | 5.9µs | 392 | 0.1 |
+| `adult-#5` | {49, 4} | {4, 1} | NonTransposed | Float64 | 1 | 3.8µs | 392 | 0.1 |
+| `adult-#5` | {49, 4} | {4, 1} | NonTransposed | BFloat16 | 1 | 5.1µs | 392 | 0.1 |
+| `adult-#5` | {49, 4} | {4, 1} | NonTransposed | Float16 | 1 | 5.7µs | 392 | 0.1 |
+| `adult-#6` | {49, 69} | {69, 4} | NonTransposed | Float32 | 1 | 9.5µs | 27_048 | 2.8 |
+| `adult-#6` | {49, 69} | {69, 4} | NonTransposed | Float64 | 1 | 8.7µs | 27_048 | 3.1 |
+| `adult-#6` | {49, 69} | {69, 4} | NonTransposed | BFloat16 | 1 | 14.5µs | 27_048 | 1.9 |
+| `adult-#6` | {49, 69} | {69, 4} | NonTransposed | Float16 | 1 | 19.1µs | 27_048 | 1.4 |
+| `adult-#6-Normalized` | {49, 69} | {4, 69} | Transposed | Float32 | 1 | 8.9µs | 27_048 | 3.0 |
+| `adult-#6-Normalized` | {49, 69} | {4, 69} | Transposed | Float64 | 1 | 7.9µs | 27_048 | 3.4 |
+| `adult-#6-Normalized` | {49, 69} | {4, 69} | Transposed | BFloat16 | 1 | 10.4µs | 27_048 | 2.6 |
+| `adult-#6-Normalized` | {49, 69} | {4, 69} | Transposed | Float16 | 1 | 14.7µs | 27_048 | 1.8 |
+
 ### Backend: `go` / CPU AMD 9950X3D / 2026-05-06, go 1.26.2, Ubuntu 26.04, PJRT Plugin 0.104
 
 ```bash
