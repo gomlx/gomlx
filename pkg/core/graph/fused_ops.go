@@ -7,7 +7,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/pkg/support/envutil"
+	"github.com/gomlx/compute/support/envutil"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 

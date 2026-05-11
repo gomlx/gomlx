@@ -560,7 +560,7 @@ var flagDotGeneralDTypes = flag.Bool("dot_general_dtypes", false, "Run DotGenera
 
 func TestDotGeneralDTypes(t *testing.T) {
 	if !*flagDotGeneralDTypes {
-		t.Skip("skipping DotGeneralDTypes test")
+		t.Skip("skipping DotGeneralDTypes test -- use -dot_general_dtypes to include it")
 	}
 	testDTypes := sets.Make[dtypes.DType]()
 	for _, dtSet := range []*dtypes.DTypeSet{&dtypes.FloatDTypes} { // }, &dtypes.IntDTypes, &dtypes.UnsignedDTypes} {

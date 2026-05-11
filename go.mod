@@ -7,7 +7,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/erkkah/margaid v0.3.0
 	github.com/gomlx/bsplines v0.2.0
-	github.com/gomlx/compute v0.0.0-20260505150002-d9c293abe497
+	github.com/gomlx/compute v0.0.0-20260511141701-af68625a5861
 	github.com/gomlx/go-xla v0.2.3-0.20260506030948-dc1ef2fab36c
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
