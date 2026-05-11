@@ -63,8 +63,8 @@ github.com/gomlx/compute v0.0.0-20260511141701-af68625a5861 h1:PJvwO38ir5ismv1EF
 github.com/gomlx/compute v0.0.0-20260511141701-af68625a5861/go.mod h1:MDTT683Wvq7IMSKXDGLvV3Co7HDpx/Xsgp2RbF5lhNM=
 github.com/gomlx/exceptions v0.0.3 h1:HKnTgEjj4jlmhr8zVFkTP9qmV1ey7ypYYosQ8GzXWuM=
 github.com/gomlx/exceptions v0.0.3/go.mod h1:uHL0TQwJ0xaV2/snJOJV6hSE4yRmhhfymuYgNredGxU=
-github.com/gomlx/go-xla v0.2.3-0.20260506030948-dc1ef2fab36c h1:QK+gdtu9IeY5dPf4psUc/aKOXha6lmIBOU+EOQK7SLU=
-github.com/gomlx/go-xla v0.2.3-0.20260506030948-dc1ef2fab36c/go.mod h1:1Z6PVzM6UXKgTyrEV1r2ALAetENSPew8FUQo0LMJL0E=
+github.com/gomlx/go-xla v0.2.3-0.20260511144219-1589d7b98fcc h1:VBSjTj0JW+Ol1/AChUjJFaFgZb7nnimECvcrEYmqFpA=
+github.com/gomlx/go-xla v0.2.3-0.20260511144219-1589d7b98fcc/go.mod h1:fiBoCYf4XXcX/4S+7mS/PXW4pcQxGqsrs34lINgnOKw=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
