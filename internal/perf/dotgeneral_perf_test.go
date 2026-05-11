@@ -28,15 +28,17 @@ import (
 	"github.com/gomlx/gomlx/pkg/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/muesli/termenv"
+	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 var (
 	// Generic performance flags.
-	flagPerfDuration = flag.Duration("perf_duration", time.Second, "Duration to run each performance test.")
-	flagPerfMinRuns  = flag.Int("perf_min_runs", 10, "Minimum number of runs for each performance test.")
-	flagMarkdown     = flag.Bool("markdown", false, "If true, it will print the performance table in markdown format.")
+	flagPerfDuration          = flag.Duration("perf_duration", 3*time.Second, "Duration to run each performance test.")
+	flagPerfMinWarmupDuration = flag.Duration("perf_min_warmup_duration", time.Second, "Duration to run warmup for each performance test.")
+	flagPerfMinRuns           = flag.Int("perf_min_runs", 10, "Minimum number of runs for each performance test.")
+	flagMarkdown              = flag.Bool("markdown", false, "If true, it will print the performance table in markdown format.")
 
 	// DotGeneral specific flags.
 	flagDotGeneralPerfTests = flag.String("dg_perf_names", "",
@@ -45,7 +47,14 @@ var (
 	flagPerfDTypes = flag.String("dg_perf_dtypes", "",
 		"Comma-separated list of dtypes to run DotGeneral performance tests (part of TestDotGeneral_PerformanceTable). "+
 			"If empty, it will run for all supported dtypes.")
+	flagPerfLayout = flag.String("dg_perf_layout", "",
+		"DotGeneral layout (NonTransposed or Transposed) to run performance tests for (part of TestDotGeneral_PerformanceTable). "+
+			"If empty, it will run both.")
 )
+
+func init() {
+	klog.InitFlags(nil)
+}
 
 // dotGeneralBenchmarkParamsCase defines input parameters for DotGeneral to be benchmarked.
 type dotGeneralBenchmarkParamsCase struct {
@@ -74,6 +83,10 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 		perfsToRun := sets.MakeWith(strings.Split(*flagDotGeneralPerfTests, ",")...)
 		filterDTypes := *flagPerfDTypes != ""
 		dtypesToRun := sets.MakeWith(strings.Split(*flagPerfDTypes, ",")...)
+		if *flagPerfLayout != "" && strings.ToLower(*flagPerfLayout) != "nontransposed" &&
+			strings.ToLower(*flagPerfLayout) != "transposed" {
+			t.Fatalf("invalid perf layout: %q", *flagPerfLayout)
+		}
 
 		// IMPORTANT: Populate this slice with the shapes and parameters of the dot-product.
 		// lhsDims: [Batch, LhsCross, Contracting]
@@ -212,7 +225,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 		dtypesToTest := []dtypes.DType{dtypes.Float32, dtypes.Float64, dtypes.BFloat16, dtypes.Float16}
 
 		// Adjust for desired precision vs. test duration
-		const numWarmupRuns = 2
+		const minWarmupRuns = 2
 		const minNumTimedRuns = 10
 
 		// Colors: tests usually run in batch and that disallows colors. We temporarily force a different profile:
@@ -226,13 +239,14 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 		fmt.Printf("\n--- execNormalizedDotGeneral Performance ---\n")
 		var header string
 		if *flagMarkdown {
-			header = "| Test Name | LHS Dims | RHS Dims | DType | BatchSize | Time/Run | Num Ops | GOps/Sec |"
+			header = "| Test Name | LHS Dims | RHS Dims | Layout | DType | BatchSize | Time/Run | Num Ops | GOps/Sec |"
 		} else {
 			header = fmt.Sprintf(
-				"| %-20s | %-20s | %-20s | %-10s | %-10s | %-12s | %-15s | %-10s |",
+				"| %-20s | %-20s | %-20s | %-10s | %-10s | %-10s | %-12s | %-15s | %-10s |",
 				"Test Name",
 				"LHS Dims",
 				"RHS Dims",
+				"Layout",
 				"DType",
 				"BatchSize",
 				"Time/Run",
@@ -244,14 +258,14 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 
 		if *flagMarkdown {
 			// Markdown header separator.
-			fmt.Println("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+			fmt.Println("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
 		} else {
 			fmt.Println(strings.Repeat("-", len(header)))
 		}
 
-		rowFormat := "| %-20s | %-20s | %-20s | %-10s | %-10d | %-12s | %-15s | %-10.1f |"
+		rowFormat := "| %-20s | %-20s | %-20s | %-10s | %-10s | %-10d | %-12s | %-15s | %-10.1f |"
 		if *flagMarkdown {
-			rowFormat = "| `%s` | %s | %s | %s | %d | %s | %s | %.1f |"
+			rowFormat = "| `%s` | %s | %s | %s | %s | %d | %s | %s | %.1f |"
 		}
 
 		for benchCaseIdx, benchCase := range benchmarkCases {
@@ -267,6 +281,19 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 					continue
 				}
 			}
+			layout := "Unknown"
+			if len(benchCase.lhsContractingAxes) == 1 && benchCase.lhsContractingAxes[0] == len(benchCase.lhsShape)-1 {
+				if benchCase.rhsContractingAxes[0] == len(benchCase.rhsShape)-2 {
+					layout = "NonTransposed"
+				} else if benchCase.rhsContractingAxes[0] == len(benchCase.rhsShape)-1 {
+					layout = "Transposed"
+				}
+			}
+			if *flagPerfLayout != "" && strings.ToLower(layout) != strings.ToLower(*flagPerfLayout) {
+				// Only run if the layout matches the flag (or is not specified).
+				continue
+			}
+
 			for _, dtype := range dtypesToTest {
 				if filterDTypes && !dtypesToRun.Has(dtype.String()) {
 					continue
@@ -338,7 +365,9 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				})
 
 				// Warm-up runs
-				for i := 0; i < numWarmupRuns; i++ {
+				warmUpStartTime := time.Now()
+
+				for numRuns := 0; time.Since(warmUpStartTime) < *flagPerfMinWarmupDuration || numRuns < minWarmupRuns; numRuns++ {
 					output := testExec.MustExec(lhsTensor, rhsTensor)[0]
 					output.MustFinalizeAll()
 				}
@@ -365,6 +394,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				row := fmt.Sprintf(rowFormat,
 					benchCase.name,
 					dimsToStr(benchCase.lhsShape), dimsToStr(benchCase.rhsShape),
+					layout,
 					dtype,
 					batchSize,
 					commandline.FormatDuration(avgDurationPerRun),
