@@ -5,8 +5,8 @@ go 1.26
 require (
 	github.com/MetalBlueberry/go-plotly v0.7.0
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/gomlx/compute v0.0.0-20260505150002-d9c293abe497
-	github.com/gomlx/gomlx v0.27.4-0.20260506031003-5df18649e47d
+	github.com/gomlx/compute v0.0.0-20260511141701-af68625a5861
+	github.com/gomlx/gomlx v0.27.4-0.20260511144237-c63af7e33380
 	github.com/janpfeifer/gonb v0.11.3
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.11.1
@@ -25,7 +25,7 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
-	github.com/gomlx/go-xla v0.2.3-0.20260506030948-dc1ef2fab36c // indirect
+	github.com/gomlx/go-xla v0.2.3-0.20260511144219-1589d7b98fcc // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
