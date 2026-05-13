@@ -273,14 +273,18 @@ without linking GoMLX -- it will save a little executable size.
     - `GOMLX_BACKEND="xla:/path/to/my/pjrt_plugin.so"`: Use XLA with an arbitrary PJRT. PJRT is a plugin system for XLA to support different hardware.
       One can install PJRTs build for NVIDIA GPUs (there is an installation script for that), there is also one for ROCm (not tested by the author),
       for TPU (Google Cloud) and reports of PJRTs being built to even new accelerators (e.g.: [TensTorrent XLA](https://github.com/tenstorrent/tt-xla))
-  - `PJRT_PLUGIN_LIBRARY_PATH`: the underlying XLA backend uses this variable as an extra directory to search for plugin locations.
-    It searches for the systems library paths (`$LD_LIBRARY_PATH`, `/etc/ld.so.conf`), the default `/usr/local/lib/gomlx/pjrt` and `$PJRT_PLUGIN_LIBRARY_PATH` if set.
-  - `GOMLX_NO_AUTO_INSTALL`: if set to `1`, GoMLX will not automatically install PJRTs when running on a system without them.
-  - `GOMLX_FUSION`: if set to `0`, `false`, `no`, etc. GoMLX will not attempt to use fused operations. The default is enabled.
+  - For the native Go backend:
+    - `GOMLX_SIMD_AVX512`: set to `0` or `false` to disable AVX512 SIMD implementation in the native Go backend. The default is enabled if AVX512 is present.
+    - `GOMLX_SIMD_AVX2`: set to `0` or `false` to disable AVX2 SIMD implementation in the native Go backend. The default is enabled if AVX2 is present.
+    - `GOMLX_FUSION`: if set to `0`, `false` to disable fused operations in the native Go backend. The default is enabled.
+  - For the [XLA backend](https://github.com/gomlx/go-xla/tree/main/compute/xla)
+    - `PJRT_PLUGIN_LIBRARY_PATH`: the underlying XLA backend uses this variable as an extra directory to search for plugin locations.
+      It searches for the systems library paths (`$LD_LIBRARY_PATH`, `/etc/ld.so.conf`), the default `/usr/local/lib/gomlx/pjrt` and `$PJRT_PLUGIN_LIBRARY_PATH` if set.
+    - `GOMLX_NO_AUTO_INSTALL`: if set to `1`, GoMLX will not automatically install PJRTs when running on a system without them.
+    - `XLA_FLAGS`: optional controls for XLA backend. It should be set to a semicolon (";") separated list of options. If you set to `--help` 
+      the backend will print out some help for all options. There is also a description on the page [XLA Flags Guidance](https://openxla.org/xla/flags_guidance).
   - `GOMLX_TENSOR_SUMMARY_SIZE`: when a tensor is printed, it only displays by default the first and last 3 elements of each row. 
     Set this to a number to change this default.
-  - `XLA_FLAGS`: optional controls for XLA backend. It should be set to a semicolon (";") separated list of options. If you set to `--help` 
-    the backend will print out some help for all options. There is also a description on the page [XLA Flags Guidance](https://openxla.org/xla/flags_guidance).
 - **What backends to include when using GoMLX?**
   - The recommendation is to use `import _ "github.com/gomlx/gomlx/backends/default"` which will import `xla` (or the alias `stablehlo`) and
     `go` (_SimpleGo_) backends. If you add `-tags=noxla` to the compiler it won't include the XLA backend.
