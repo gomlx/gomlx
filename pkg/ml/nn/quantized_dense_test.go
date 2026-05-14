@@ -7,7 +7,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	_ "github.com/gomlx/gomlx/backends/simplego"
+	_ "github.com/gomlx/compute/gobackend"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"

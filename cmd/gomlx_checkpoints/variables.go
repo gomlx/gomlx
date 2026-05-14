@@ -10,8 +10,8 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/gobackend"
 	"github.com/gomlx/compute/support/humanize"
-	"github.com/gomlx/gomlx/backends/simplego"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -110,7 +110,7 @@ func DeleteVars(checkpointPath string, scopes ...string) {
 }
 
 func PerturbVars(checkpointPath string, x float64) {
-	backend := must.M1(simplego.New(""))
+	backend := must.M1(gobackend.New(""))
 	ctx := context.New()
 	checkpoint := must.M1(checkpoints.Build(ctx).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())

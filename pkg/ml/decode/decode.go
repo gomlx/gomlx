@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/gomlx/compute"
-	"github.com/gomlx/gomlx/backends/simplego"
+	"github.com/gomlx/compute/gobackend"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -135,7 +135,7 @@ func New[M interface {
 
 	// Initialize simplego backend for small operations (concat, reshape)
 	// Faster than XLA for small ops and supports dynamic shapes
-	decoder.simpleBackend, _ = simplego.New("decode")
+	decoder.simpleBackend, _ = gobackend.New("decode")
 
 	return decoder
 }
