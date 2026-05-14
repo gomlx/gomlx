@@ -615,6 +615,9 @@ func (ni *nodeInputsBitcast) String() string {
 //
 //	Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xbeef, 0xdead}} // Little-endian encoding.
 //	Bitcast([1][2]uint16{{0xbeef, 0xdead}}, dtypes.UInt32) -> [1]uint32{0xdeadbeef}
+//
+// Dynamic shapes: Bitcasting that collapses or expands a dynamic dimension is currently not
+// supported (requires axis expressions).
 func Bitcast(operand *Node, targetDType dtypes.DType) (
 	node *Node) {
 	inputNodes := []*Node{operand}
@@ -3394,6 +3397,9 @@ func (ni *nodeInputsPad) String() string {
 // Pad injects padding on the start, end, or interior (in between each element) of the given operand.
 // There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
+//
+// Dynamic shapes: Padding on a dynamic axis is currently not supported if the padding is non-zero,
+// because the resulting size cannot be represented symbolically yet (requires axis expressions).
 func Pad(x *Node, fillValue *Node, axesConfig ...compute.PadAxis) (
 	node *Node) {
 	inputNodes := []*Node{x, fillValue}

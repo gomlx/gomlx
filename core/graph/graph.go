@@ -1,10 +1,8 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-// Package graph is the core package for GoMLX. It is used to create and run computation graphs
-// on different compute.
+// Package graph is the core package for GoMLX. It is used to create and run computation graphs on different compute.
 //
-// The graph package also includes an automatic differentiation system and many useful higher level machine learning
-// operations.
+// The graph package also includes an automatic differentiation system and many useful higher-level operations.
 //
 // The main elements in the package (or related) are:
 //
@@ -18,17 +16,12 @@
 //     or the result of an operation ("op" for short, e.g.: Add, Sub, Mul, Sigmoid, Reshape, etc.).
 //     Each node has a fixed shape known in "graph building time" (see discussion below).
 //
-//   - context.Context and context.Exec (from the pkg/ml/context package):
-//     higher level abstractions that include variable handling and modeling check pointing.
-//     They work very similarly to graph.Exec and should be used when building gradient descent-based machine
-//     learning (ML) on models (with variables), like Neural Networks.
+// # Compute Backends
 //
-// # Backends
-//
-// The default backend is XLA/PJRT (using github.com/gomlx/gopjrt) -- a just-in-time compiler that allows for very
-// efficient numerical computations.
-// There is also a pure Go backend that is much slower, but functional for many use cases and very portable (e.g.,
-// it works in WebAssembly in a browser).
+// Graphs created by this package eventually translate to a lower-level "backend" responsible to JIT-compiling and
+// then executing the graph. The default backend is XLA/PJRT (using github.com/gomlx/go-xla), the same backend used
+// by JAX, TensorFlow and optionally also PyTorch. There is also a pure Go backend that is much slower, but functional
+// for many use cases and very portable (e.g., it works in WebAssembly in a browser).
 // Other backends are in the plans, and one can implement their own custom backends -- only the operations one uses.
 //
 // You have to import the backend(s) you are going to support. You can also import the default selection with:
@@ -37,17 +30,19 @@
 //
 // # Error Handling
 //
-// Graph (and its Node's) and context.Context methods "throw" errors with panic(). This prevents having to manage
-// error returning for every operation (Add, Sub, Mul, etc.) and makes the code much more readable.
+// Graph (and its Node's) methods "throw" errors with panic(). This prevents having to manage error
+// returning for every operation (Add, Sub, Mul, etc.) and makes the code more readable.
 // It always throws meaningful error messages, with the full stacktrace, to ease tracking bugs and solve issues.
 //
-// Notice that unfortunately, there is no way to statically, in compile time, check for many
-// of the errors that for a human would be relatively easy to spot without running the program.
-// But typically compilation of the computation graph happens early in the execution of a program,
-// so such errors are caught early. Here we commonly further split the usual "compile time / runtime" into
-// "compile time / graph building time / runtime", where "graph building time" is when the graph for a model is built
-// and compiled, before it's executed and used.
-// It is similar to the compilation of regexps or templates in Go.
+// The convention when writing graph building functions is to follow the same pattern: throw (panic) errors with
+// stack traces (and useful actionable messages).
+//
+// Notice that unfortunately, there is no way to statically, in compile time, check for many of the errors that for a
+// human would be relatively easy to spot without running the program. But typically compilation of the computation
+// graph happens early in the execution of a program, so such errors are caught early. Here we commonly further split
+// the usual "compile time / runtime" into "compile time / graph building time / runtime", where "graph building time"
+// is when the graph for a model is built and compiled, before it's executed and used. It is similar to the compilation
+// of regexps or templates in Go.
 //
 // # Writing Code With Graphs
 //
@@ -89,16 +84,15 @@
 // When the Graph is created a "main" function is automatically associated with it and everything goes into it.
 // Typically, a model will be a giant "main" function.
 //
-// Some backends support other top-level functions (uniquely named) and closures (functions that can capture
-// variables from the parent scope). See NewFunction and NewClosure to create those, and Call to execute top-level
-// functions.
+// Some backends support other top-level functions (uniquely named) and closures (functions that can capture variables
+// from the parent scope). See NewFunction and NewClosure to create those, and Call to execute top-level functions.
 //
 // The graph has a field associated to the CurrentFunction(), on which define some operations like Parameters and Const
-// will be created. It is initialized to the "main" function, and it is only temporarily changed inside
-// NewFunction and NewClosure.
+// will be created. It is initialized to the "main" function, and it is only temporarily changed inside NewFunction and
+// NewClosure.
 package graph
 
-//go:generate go run ../../../internal/cmd/graph_generator
+//go:generate go run ../../internal/cmd/graph_generator
 
 import (
 	"fmt"
