@@ -21,8 +21,8 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/go-huggingface/hub"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	onnxparser "github.com/gomlx/onnx-gomlx/onnx/parser"
 	"github.com/janpfeifer/must"

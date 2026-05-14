@@ -3,7 +3,7 @@
 package attention
 
 import (
-	. "github.com/gomlx/gomlx/pkg/core/graph"
+	. "github.com/gomlx/gomlx/core/graph"
 )
 
 // QKVProjection performs a fused Query-Key-Value projection: a single large matmul

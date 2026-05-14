@@ -33,13 +33,13 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 
-	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
+	timage "github.com/gomlx/gomlx/core/tensors/images"
 )
 
 const (

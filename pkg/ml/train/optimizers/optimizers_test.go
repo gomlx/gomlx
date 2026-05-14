@@ -3,8 +3,8 @@
 package optimizers
 
 import (
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/default"

@@ -4,7 +4,7 @@ package regularizers
 
 import (
 	_ "github.com/gomlx/gomlx/backends/default"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
+	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/ctxtest"
 	"github.com/gomlx/gomlx/pkg/ml/train"

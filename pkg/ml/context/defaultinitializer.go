@@ -6,7 +6,7 @@ import (
 	"math"
 
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/core/graph"
 )
 
 // VariableInitializer builds a valueNode that returns a value to initialize a variable of the given

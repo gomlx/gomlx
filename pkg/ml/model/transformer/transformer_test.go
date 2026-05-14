@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	_ "github.com/gomlx/gomlx/backends/default"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
+	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"

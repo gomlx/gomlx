@@ -18,7 +18,18 @@ It hasn't reached yet a 1.0 release yet (it is close), so instead we use every m
 - Packages in `pkg/support` moved to `github.com/gomlx/compute/support`:
   - The following packages were moved: `xslices`, `xsync`, `sets` and `humanize`.
 
+## Reoganization of packages -- removed the `pkg` top-level directory
 
+In Go making the exported packages under `pkg` was a reasonable convention before
+the special meaning `internal` came about, but it stayed in use (and was adopted by
+GoMLX even thought it was no longer needed).
+
+We are taking the opportunity of the large API upgrade to remove the `pkg` top-level
+directory, and move the packages to the root:
+
+- `github.com/gomlx/gomlx/pkg/core/...` -> `github.com/gomlx/gomlx/core/...
+- `github.com/gomlx/gomlx/pkg/ml/...` -> `github.com/gomlx/gomlx/ml/...
+- `github.com/gomlx/gomlx/pkg/support/...` -> `github.com/gomlx/gomlx/support/...
 
 ---
 

@@ -4,7 +4,7 @@ package ggml
 
 import (
 	"github.com/gomlx/compute"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
+	. "github.com/gomlx/gomlx/core/graph"
 )
 
 // EmbeddingLookupDecomposed performs a quantized embedding lookup using graph-level dequantization.

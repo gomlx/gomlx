@@ -25,9 +25,9 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/gomlx/core/tensors"
+	timage "github.com/gomlx/gomlx/core/tensors/images"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"

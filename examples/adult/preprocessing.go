@@ -7,8 +7,8 @@ import (
 	"fmt"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 
 	"math/rand"

@@ -12,7 +12,7 @@ package ggml
 import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
+	. "github.com/gomlx/gomlx/core/graph"
 )
 
 // CanDecompose returns true for GGML quantization types that have a graph-level

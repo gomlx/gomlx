@@ -11,7 +11,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"

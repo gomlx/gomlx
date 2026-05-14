@@ -5,7 +5,7 @@ package diffusion
 import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
+	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 )
 

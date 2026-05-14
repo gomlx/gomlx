@@ -5,8 +5,8 @@ package train
 import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/distributed"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/core/tensors/dtensor"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/core/tensors/dtensor"
 )
 
 // Dataset for a train.Trainer provides the data, one batch at a time. Flat consists of a slice of *tensors.Tensor

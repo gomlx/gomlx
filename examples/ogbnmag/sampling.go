@@ -8,8 +8,8 @@ import (
 	"path"
 
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
 	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"

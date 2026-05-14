@@ -4,8 +4,8 @@ package context
 
 import (
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
 	"k8s.io/klog/v2"
 )
 

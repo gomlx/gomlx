@@ -3,7 +3,7 @@ package pos
 import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
+	. "github.com/gomlx/gomlx/core/graph"
 )
 
 // SequentialPositions creates position indices for sequential positions starting from startPos.

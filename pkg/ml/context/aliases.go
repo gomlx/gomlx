@@ -10,7 +10,7 @@ package context
 
 import (
 	"github.com/gomlx/compute"
-	graph "github.com/gomlx/gomlx/pkg/core/graph"
+	graph "github.com/gomlx/gomlx/core/graph"
 )
 
 // Backend is an alias to graph.Backend.

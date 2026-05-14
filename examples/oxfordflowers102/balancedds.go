@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/humanize"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/support/fsutil"
 	"github.com/pkg/errors"

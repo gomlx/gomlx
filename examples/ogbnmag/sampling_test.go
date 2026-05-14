@@ -7,8 +7,8 @@ import (
 	"io"
 	"testing"
 
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"

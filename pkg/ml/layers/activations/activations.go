@@ -12,7 +12,7 @@ import (
 
 	"github.com/gomlx/compute"
 
-	. "github.com/gomlx/gomlx/pkg/core/graph"
+	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )

@@ -3,7 +3,7 @@
 package nn
 
 import (
-	. "github.com/gomlx/gomlx/pkg/core/graph"
+	. "github.com/gomlx/gomlx/core/graph"
 )
 
 // LayerNorm performs layer normalization on x over the given axes with the

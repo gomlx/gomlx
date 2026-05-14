@@ -7,7 +7,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/pkg/support/exceptions"
 )
 

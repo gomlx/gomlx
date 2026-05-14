@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/gomlx/compute"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"

@@ -3,7 +3,7 @@
 package nn
 
 import (
-	. "github.com/gomlx/gomlx/pkg/core/graph"
+	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 )

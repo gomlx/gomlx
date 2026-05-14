@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/ml/nn"
 	"github.com/gomlx/gomlx/pkg/support/testutil"
 )

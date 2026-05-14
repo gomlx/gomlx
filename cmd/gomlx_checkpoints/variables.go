@@ -12,8 +12,8 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/support/humanize"
 	"github.com/gomlx/gomlx/backends/simplego"
+	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/internal/must"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
 )

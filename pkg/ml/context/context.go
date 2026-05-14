@@ -15,9 +15,9 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/internal/scoped"
-	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
 	. "github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 )

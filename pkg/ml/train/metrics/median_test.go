@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/stretchr/testify/require"
 )
 

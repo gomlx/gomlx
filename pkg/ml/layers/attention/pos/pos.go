@@ -20,7 +20,7 @@
 package pos
 
 import (
-	. "github.com/gomlx/gomlx/pkg/core/graph"
+	. "github.com/gomlx/gomlx/core/graph"
 )
 
 // Encoder is the interface for applying positional information to attention inputs.
