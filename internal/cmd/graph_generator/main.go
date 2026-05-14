@@ -91,7 +91,6 @@ func buildMethodInfo() (methods []*MethodInfo) {
 		if methodsExcluded.Has(name) {
 			continue
 		}
-		fmt.Printf("Processing method %s\n", name)
 		mi := &MethodInfo{
 			BackendName:  name,
 			GraphName:    name,
