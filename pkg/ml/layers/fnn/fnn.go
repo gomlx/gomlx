@@ -29,7 +29,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/pkg/ml/nn"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 )
 
 const (

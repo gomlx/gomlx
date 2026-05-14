@@ -14,7 +14,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
+	. "github.com/gomlx/gomlx/support/exceptions"
 	"k8s.io/klog/v2"
 )
 

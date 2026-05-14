@@ -10,7 +10,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	"github.com/gomlx/gomlx/support/testutil"
 )
 
 func TestConvolve(t *testing.T) {

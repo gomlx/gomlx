@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
-	"github.com/gomlx/gomlx/pkg/support/xsync"
+	"github.com/gomlx/gomlx/support/xsync"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )

@@ -5,7 +5,7 @@ package nn
 import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
+	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
 // Dense performs a dense (linear) transformation with optional activation:

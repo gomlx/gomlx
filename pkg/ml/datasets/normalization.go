@@ -11,7 +11,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 )
 

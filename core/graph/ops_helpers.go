@@ -4,7 +4,7 @@ package graph
 
 import (
 	"github.com/gomlx/compute/shapes"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
+	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
 // MustAdjustAxis returns the positive axis to the operand shapes, adjusting in case the axis given is negative.

@@ -14,7 +14,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 )
 
 var (

@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 	"k8s.io/klog/v2"
 )
 

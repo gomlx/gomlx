@@ -10,7 +10,7 @@ import (
 	"path"
 
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 	"k8s.io/klog/v2"
 )
 

@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	xbsplines "github.com/gomlx/gomlx/pkg/ml/layers/bsplines"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 	"k8s.io/klog/v2"
 )
 

@@ -8,8 +8,8 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/sets"
+	. "github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/support/sets"
 )
 
 // NormalizeIndices converts Python-style negative indices to positive indices

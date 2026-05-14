@@ -37,7 +37,7 @@ import (
 	"github.com/gomlx/gomlx/examples/downloader"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/support/fsutil"
 
 	timage "github.com/gomlx/gomlx/core/tensors/images"
 )

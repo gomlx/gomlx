@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 )
 
 // Conv1DModelGraph implements a convolution (1D) based model for the IMDB dataset.

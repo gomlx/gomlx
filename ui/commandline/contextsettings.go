@@ -12,7 +12,7 @@ import (
 
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 )
 

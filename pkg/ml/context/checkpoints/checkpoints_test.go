@@ -24,7 +24,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	"github.com/gomlx/gomlx/support/testutil"
 )
 
 func TestCheckpoints(t *testing.T) {

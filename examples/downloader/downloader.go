@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/gomlx/compute/support/humanize"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 )

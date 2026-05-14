@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors/images"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
+	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
 // This file contains all parts of the layers.Convolve implementation.

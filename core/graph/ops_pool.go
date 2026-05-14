@@ -10,8 +10,8 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors/images"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/sets"
+	. "github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/support/sets"
 )
 
 // This file contains all parts of the {Max|Sum|Prod}Pool implementation.

@@ -8,7 +8,7 @@ import (
 	"slices"
 
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/support/sets"
 )
 
 func Params(ctxs, scopedCtxs []*context.Context, names []string) {

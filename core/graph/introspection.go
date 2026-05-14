@@ -4,7 +4,7 @@ package graph
 
 import (
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/support/sets"
 )
 
 // This file defines methods that allow for introspection of the graph.

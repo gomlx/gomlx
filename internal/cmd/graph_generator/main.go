@@ -14,8 +14,8 @@ import (
 
 	"github.com/gomlx/compute/support/backendparser"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/support/sets"
 	"k8s.io/klog/v2"
 )
 

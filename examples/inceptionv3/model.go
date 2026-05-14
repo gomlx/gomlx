@@ -74,8 +74,8 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	. "github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 )
 

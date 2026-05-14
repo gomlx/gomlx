@@ -7,7 +7,7 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
+	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
 // File with image manipulation tools

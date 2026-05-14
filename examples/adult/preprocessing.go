@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/support/fsutil"
 
 	"math/rand"
 	"os"

@@ -25,7 +25,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/muesli/termenv"
 	"k8s.io/klog/v2"

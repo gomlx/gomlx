@@ -11,7 +11,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 )
 
 // CnnModelGraph builds the CNN model for our demo.

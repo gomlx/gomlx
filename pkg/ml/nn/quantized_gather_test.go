@@ -9,7 +9,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/pkg/ml/nn"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	"github.com/gomlx/gomlx/support/testutil"
 )
 
 // TestQuantizedGather_GGML_Q8_0 tests QuantizedGather with Q8_0 block format.

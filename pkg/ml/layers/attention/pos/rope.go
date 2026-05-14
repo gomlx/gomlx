@@ -22,7 +22,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/graph"
 	. "github.com/gomlx/gomlx/core/graph"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
+	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
 // RoPE implements rotary position embeddings ("RoFormer", see [1]).

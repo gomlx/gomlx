@@ -23,8 +23,8 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
 	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	. "github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 )
 

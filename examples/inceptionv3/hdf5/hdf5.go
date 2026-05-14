@@ -22,7 +22,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 	_ "github.com/schollz/progressbar/v3"

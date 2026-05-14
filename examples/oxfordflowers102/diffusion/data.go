@@ -14,7 +14,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 
 	"github.com/gomlx/gomlx/pkg/ml/context"

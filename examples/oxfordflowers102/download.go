@@ -13,7 +13,7 @@ import (
 
 	"github.com/daniellowtw/matlab"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 )
 

@@ -8,7 +8,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/ggml"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
+	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
 // QuantizedDense performs a quantized dense (linear) transformation with optional activation:

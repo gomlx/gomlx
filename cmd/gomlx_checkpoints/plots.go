@@ -18,8 +18,8 @@ import (
 	"strings"
 
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/support/fsutil"
+	"github.com/gomlx/gomlx/support/sets"
 	"github.com/gomlx/gomlx/ui/plots"
 	"github.com/janpfeifer/gonb/gonbui/plotly"
 	"github.com/pkg/errors"

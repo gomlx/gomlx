@@ -2,7 +2,7 @@ package tensors
 
 import (
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 )
 
 // UnpackSubBytes unpacks packed sub-byte data (Uint1, Int1, Uint2, Int2, Uint4, Int4, packed into []uint8)

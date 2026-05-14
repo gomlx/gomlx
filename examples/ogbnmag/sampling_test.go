@@ -12,8 +12,8 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	"github.com/gomlx/gomlx/support/sets"
+	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 )
 

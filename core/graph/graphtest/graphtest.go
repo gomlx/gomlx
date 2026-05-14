@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 )
 

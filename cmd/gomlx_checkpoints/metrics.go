@@ -15,7 +15,7 @@ import (
 	"github.com/gomlx/compute/support/humanize"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/support/sets"
 	"github.com/gomlx/gomlx/ui/plots"
 	"k8s.io/klog/v2"
 )

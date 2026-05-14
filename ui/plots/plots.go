@@ -20,8 +20,8 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	types "github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/support/fsutil"
+	types "github.com/gomlx/gomlx/support/sets"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )

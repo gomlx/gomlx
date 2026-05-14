@@ -4,7 +4,7 @@ package graph
 
 import (
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 )
 

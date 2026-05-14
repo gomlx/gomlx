@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	_ "github.com/gomlx/gomlx/backends/default"
 	"github.com/gomlx/gomlx/examples/imdb"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/ui/commandline"
 
 	"k8s.io/klog/v2"

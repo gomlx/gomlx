@@ -15,8 +15,8 @@ import (
 
 	"github.com/gomlx/gomlx/examples/dogsvscats"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
 

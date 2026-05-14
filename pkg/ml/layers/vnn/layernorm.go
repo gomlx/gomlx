@@ -4,7 +4,7 @@ package vnn
 
 import (
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 )
 
 // LayerNormalization perform an equivariant (SO(3)) layer normalization on vectors.

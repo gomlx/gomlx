@@ -18,7 +18,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	_ "github.com/gomlx/gomlx/backends/default" // Use xla backend.
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
 )

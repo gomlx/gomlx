@@ -9,7 +9,7 @@ import (
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
