@@ -23,6 +23,14 @@ func EuclideanDistance(a, b *Node) *Node {
 	return Sqrt(ReduceAllSum(Square(Sub(a, b))))
 }
 
+func addOneWithGraph(g *Graph, inputs []*Node) []*Node {
+	var outputs []*Node
+	for _, input := range inputs {
+		outputs = append(outputs, Add(input, Scalar(g, input.DType(), 1)))
+	}
+	return outputs
+}
+
 func TestExec(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	testForDim := func(exec *Exec, dim int) {
@@ -43,6 +51,19 @@ func TestExec(t *testing.T) {
 		for dim := 1; dim <= 5; dim++ {
 			testForDim(dist, dim)
 		}
+	})
+
+	t.Run("VariableInputsWithGraph", func(t *testing.T) {
+		execAdd := MustNewExec(backend, addOneWithGraph)
+		a := []float32{1, 2}
+		b := []float32{3, 4, 5}
+		outputs := execAdd.MustExec(a, b)
+		require.Len(t, outputs, 2)
+		
+		gotA := outputs[0].Value().([]float32)
+		gotB := outputs[1].Value().([]float32)
+		assert.Equal(t, []float32{2, 3}, gotA)
+		assert.Equal(t, []float32{4, 5, 6}, gotB)
 	})
 
 	// Check that different types will fail.

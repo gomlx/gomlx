@@ -265,21 +265,21 @@ func (e *Exec) parseGraphFn() error {
 			graphFnT.NumIn(), graphFnT.NumOut())
 	}
 	for ii := range graphFnT.NumIn() {
-		if graphFnT.In(ii).Kind() == reflect.Slice && graphFnT.In(ii).Elem() == nodeType {
-			if graphFnT.NumIn() != 1 {
-				return errors.Errorf("[]*Node parameters are only accepted as input if they are the only input,"+
-					" got function type %s instead", graphFnT)
-			}
-			e.inputAsSlice = true
-			break
-		}
 		if graphFnT.In(ii) == graphType {
-			if graphFnT.NumIn() != 1 {
-				return errors.Errorf("*Graph parameter only accepted as input if they are the only input, got "+
+			if ii != 0 {
+				return errors.Errorf("*Graph parameter only accepted as the first input, got "+
 					"function type %s instead", graphFnT)
 			}
 			e.inputIsGraph = true
-			e.numInputs = 0
+			e.numInputs-- // Subtract *Graph from the expected number of arguments (which maps to tensor arguments).
+			continue
+		}
+		if graphFnT.In(ii).Kind() == reflect.Slice && graphFnT.In(ii).Elem() == nodeType {
+			if ii != graphFnT.NumIn()-1 || e.numInputs != 1 {
+				return errors.Errorf("[]*Node parameters are only accepted as input if they are the only Node input,"+
+					" got function type %s instead", graphFnT)
+			}
+			e.inputAsSlice = true
 			break
 		}
 		if graphFnT.In(ii) != nodeType {
@@ -809,14 +809,13 @@ func (e *Exec) buildAndCompileGraph(argsShapes []shapes.Shape, cacheIndex int) (
 		argsShapesToUse = argsShapes[:numArgsPerDevice]
 	}
 
-	switch {
-	case e.inputAsSlice:
-		args = make([]*Node, 0, len(argsShapesToUse))
-	case e.inputIsGraph:
-		// Notice in this case len(argsShapesToUse) == 0
+	if e.inputIsGraph {
 		argsV = []reflect.Value{reflect.ValueOf(g)}
-	default:
+	} else {
 		argsV = make([]reflect.Value, 0, len(argsShapesToUse))
+	}
+	if e.inputAsSlice {
+		args = make([]*Node, 0, len(argsShapesToUse))
 	}
 	for ii, shape := range argsShapesToUse {
 		var spec *distributed.ShardingSpec
@@ -841,7 +840,7 @@ func (e *Exec) buildAndCompileGraph(argsShapes []shapes.Shape, cacheIndex int) (
 	graphFnV := reflect.ValueOf(e.graphFn)
 	if e.inputAsSlice {
 		// If input is a slice of *Node, take argsV to be one parameter, the value of the slice.
-		argsV = []reflect.Value{reflect.ValueOf(args)}
+		argsV = append(argsV, reflect.ValueOf(args))
 	}
 
 	// Call graphFn — this is user code that may panic, so we catch panics here.
