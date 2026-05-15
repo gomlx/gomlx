@@ -76,6 +76,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+//go:generate go run ../../internal/cmd/constraints_generator -tensors
+
 // Tensor represents a multidimensional array (from scalar with 0 dimensions, to arbitrarily large dimensions), defined
 // by their shape, a data type (dtypes.DType) and its axes' dimensions, and their actual content stored as a flat (1D)
 // array of values.

@@ -93,6 +93,7 @@
 package graph
 
 //go:generate go run ../../internal/cmd/graph_generator
+//go:generate go run ../../internal/cmd/constraints_generator -graph
 
 import (
 	"fmt"
