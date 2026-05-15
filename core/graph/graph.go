@@ -227,6 +227,16 @@ const InvalidParameterHandle = ParameterHandle(-1)
 // execution. The values can be anything accepted by tensor.FromAnyValue().
 type ParamsMap map[*Node]any
 
+// GraphProvider is an interface for objects that have a reference to a Graph.
+type GraphProvider interface {
+	Graph() *Graph
+}
+
+// Graph returns itself, to satisfy the GraphProvider interface.
+func (g *Graph) Graph() *Graph {
+	return g
+}
+
 // WithName sets the name of the Graph.
 //
 // It can only be called before starting the build a Graph.
@@ -813,14 +823,14 @@ func (g *Graph) getScalarConst(dtype dtypes.DType, value float64) (output *Node)
 	return output
 }
 
-// AttachState saves an arbitrary object to the graph.
+// AttachState saves an arbitrary object to the graph. 
 // These state objects are opaque to Graph itself, it simply keeps this map for the user.
 //
 // This can be used, for instance, to store the root model, or any other type of "global" (graph-scoped) state.
 //
 // The convention is to use as key an empty unique struct, defined in the same package
 // as the type being stored, like:
-//
+// 
 //	type myStateKey struct{}
 //	type MyState struct {...}
 //	...
@@ -835,7 +845,7 @@ func (g *Graph) AttachState(key any, value any) {
 		delete(g.state, key)
 		return
 	}
-	g.state[key] = value
+    g.state[key] = value
 }
 
 // State retrieves an object from the graph.
@@ -843,10 +853,10 @@ func (g *Graph) AttachState(key any, value any) {
 //
 // The convention is to use as key an empty unique struct, defined in the same package
 // as the type being stored, like:
-//
+// 
 //	type myStateKey struct{}
 //	...
 //	state := g.State(myStateKey{})
 func (g *Graph) State(key any) any {
-	return g.state[key]
+    return g.state[key]
 }
