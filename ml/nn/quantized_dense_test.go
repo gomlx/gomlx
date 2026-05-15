@@ -10,8 +10,8 @@ import (
 	_ "github.com/gomlx/compute/gobackend"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
+	"github.com/gomlx/gomlx/ml/nn"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/gomlx/pkg/ml/nn"
 	"github.com/gomlx/gomlx/support/testutil"
 )
 

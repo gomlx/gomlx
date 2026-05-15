@@ -24,11 +24,11 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/ml/nn"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/pkg/ml/nn"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
