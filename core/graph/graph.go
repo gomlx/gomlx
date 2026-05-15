@@ -152,6 +152,10 @@ type Graph struct {
 	deviceMeshes     []*distributed.DeviceMesh
 	deviceAssignment []compute.DeviceNum
 	numDevices       int
+
+	// Arbitrary "global" (graph-scoped) state stored in the graph.
+	// See Graph.SetState and Graph.State for details.
+	state map[any]any
 }
 
 // GraphId is globally unique.
@@ -193,6 +197,8 @@ func NewGraph(backend compute.Backend, name string) *Graph {
 
 		distStrategy: distributed.None,
 		numDevices:   1,
+
+		state: make(map[any]any),
 	}
 	graphCount += 1
 	return g
@@ -805,4 +811,43 @@ func (g *Graph) getScalarConst(dtype dtypes.DType, value float64) (output *Node)
 	output = Const(g, shapes.CastAsDType(value, dtype))
 	dtypeMap[value] = output
 	return output
+}
+
+
+// AttachState saves an arbitrary object to the graph. 
+// These state objects are opaque to Graph itself, it simply keeps this map for the user.
+//
+// This can be used, for instance, to store the root model, or any other type of "global" (graph-scoped) state.
+//
+// The convention is to use as key an empty unique struct, defined in the same package
+// as the type being stored, like:
+// 
+//	type myStateKey struct{}
+//	type MyState struct {...}
+//	...
+//	g.AttachState(myStateKey{}, &MyState{...})
+//
+// If no key is provided, it panics.
+func (g *Graph) AttachState(key any, value any) {
+	if key == nil {
+		panic(errors.New("key cannot be nil"))
+	}
+	if value == nil {
+		delete(g.state, key)
+		return
+	}
+    g.state[key] = value
+}
+
+// State retrieves an object from the graph.
+// These state objects are opaque to Graph itself, it simply keeps this map for the user.
+//
+// The convention is to use as key an empty unique struct, defined in the same package
+// as the type being stored, like:
+// 
+//	type myStateKey struct{}
+//	...
+//	state := g.State(myStateKey{})
+func (g *Graph) State(key any) any {
+    return g.state[key]
 }
