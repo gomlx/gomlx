@@ -39,7 +39,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          go test -p 1 ./pkg/core/graph -test.skip 'TestGradientFFT'
+          go test -p 1 ./core/... -test.skip 'TestGradientFFT'
 
       - name: Test
         env:

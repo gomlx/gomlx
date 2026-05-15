@@ -56,7 +56,7 @@ jobs:
           # Run one test that triggers the auto-install first (concurrency issues)
           # TestGradientFFT is not working in windows.
         run: |
-          go test -p 1 ./pkg/core/graph -test.skip 'TestGradientFFT'
+          go test -p 1 ./core/... -test.skip 'TestGradientFFT'
 
       - name: Test
         env:

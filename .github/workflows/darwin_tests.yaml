@@ -41,7 +41,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          go test -p 1 ./pkg/core/graph
+          go test -p 1 ./core/...
 
       - name: Test
         env:
