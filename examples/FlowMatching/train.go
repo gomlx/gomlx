@@ -13,8 +13,8 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
@@ -47,14 +47,14 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	if verbosity >= 2 {
 		fmt.Println(commandline.SprintContextSettings(ctx))
 	}
-	if context.GetParamOr(ctx, "rng_reset", true) {
+	if model.GetParamOr(ctx, "rng_reset", true) {
 		// Reset RNG with some pseudo-random value.
 		ctx.ResetRNGState()
 	}
 	if verbosity >= 1 {
 		// Enumerate parameters that were set.
 		for _, paramsPath := range paramsSet {
-			scope, name := context.SplitScope(paramsPath)
+			scope, name := model.SplitScope(paramsPath)
 			if scope == "" {
 				if value, found := ctx.GetParam(name); found {
 					fmt.Printf("\t%s=%v\n", name, value)
@@ -74,7 +74,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	trainEvalDS.BatchSize(config.EvalBatchSize, false)
 	validationDS.BatchSize(config.EvalBatchSize, false)
 	var trainDS train.Dataset
-	if context.GetParamOr(ctx, "diffusion_balanced_dataset", false) {
+	if model.GetParamOr(ctx, "diffusion_balanced_dataset", false) {
 		fmt.Println("\t - Using balanced datasets.")
 		balancedTrainDS := check1(flowers.NewBalancedDataset(config.Backend, config.DataDir, config.ImageSize))
 		trainDS = balancedTrainDS
@@ -93,7 +93,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		[]metrics.Interface{}, // trainMetrics
 		[]metrics.Interface{}) // evalMetrics
 	if config.NanLogger != nil {
-		trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
+		trainer.OnExecCreation(func(exec *model.Exec, _ train.GraphType) {
 			config.NanLogger.AttachToExec(exec)
 		})
 	}
@@ -107,7 +107,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	// Checkpoint saving: every 3 minutes of training.
 	if checkpoint != nil {
 		period := check1(
-			time.ParseDuration(context.GetParamOr(ctx, "checkpoint_frequency", "3m")))
+			time.ParseDuration(model.GetParamOr(ctx, "checkpoint_frequency", "3m")))
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				return checkpoint.Save()
@@ -117,7 +117,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
 	var plotter *plotly.PlotConfig
-	if context.GetParamOr(ctx, plotly.ParamPlots, false) {
+	if model.GetParamOr(ctx, plotly.ParamPlots, false) {
 		plotter = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
@@ -131,14 +131,14 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	// KID is a InceptionV3 based pretrained model only used to measured similarity of the
 	// images between generated flowers and the original. It's a metric.
 	var kid *KidGenerator
-	if context.GetParamOr(ctx, "kid", false) {
+	if model.GetParamOr(ctx, "kid", false) {
 		kidDS := validationDS.Copy()
 		kidDS.Shuffle().BatchSize(config.EvalBatchSize, true)
 		kid = NewKidGenerator(config, kidDS, 5)
 	}
 
-	samplesFrequency := context.GetParamOr(ctx, "samples_during_training_frequency", 200)
-	samplesFrequencyGrowth := context.GetParamOr(ctx, "samples_during_training_frequency_growth", 1.2)
+	samplesFrequency := model.GetParamOr(ctx, "samples_during_training_frequency", 200)
+	samplesFrequencyGrowth := model.GetParamOr(ctx, "samples_during_training_frequency_growth", 1.2)
 	if plotter != nil {
 		train.ExponentialCallback(loop, samplesFrequency, samplesFrequencyGrowth, true,
 			"Monitor", 0, func(loop *train.Loop, metrics []*tensors.Tensor) error {
@@ -147,7 +147,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	}
 
 	// Loop for given number of steps.
-	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	numTrainSteps := model.GetParamOr(ctx, "train_steps", 0)
 	globalStep := int(optimizers.GetGlobalStep(ctx))
 	if globalStep > 0 {
 		trainer.SetContext(ctx.Reuse())
@@ -201,7 +201,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 // It generates the random noise as the "source distribution" for each example image,
 // as well as random values of t -> [0,1), used to train.
 func BuildTrainComputation(config *diffusion.Config) train.ModelFn {
-	return func(ctx *context.Context, spec any, inputs []*Node) []*Node {
+	return func(ctx *model.Context, spec any, inputs []*Node) []*Node {
 		g := inputs[0].Graph()
 
 		// Prepare the input image and noise.
@@ -255,8 +255,8 @@ func BuildTrainComputation(config *diffusion.Config) train.ModelFn {
 		// Calculate our loss inside the model: use losses.ParamLoss to define the loss, and if not set,
 		// back-off to "diffusion_loss" hyper-param (for backward compatibility).
 		// Defaults to "mae" (mean-absolute-error).
-		lossName := context.GetParamOr(ctx, losses.ParamLoss,
-			context.GetParamOr(ctx, "diffusion_loss", "mse"))
+		lossName := model.GetParamOr(ctx, losses.ParamLoss,
+			model.GetParamOr(ctx, "diffusion_loss", "mse"))
 		ctx.SetParam("loss", lossName) // Needed for old models that used "diffusion_loss".
 		lossFn := check1(losses.LossFromContext(ctx))
 

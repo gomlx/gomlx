@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package context_test
+package model_test
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/tensors"
-	. "github.com/gomlx/gomlx/pkg/ml/context"
+	. "github.com/gomlx/gomlx/ml/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,7 +31,7 @@ func TestVariable_CloneToContext(t *testing.T) {
 	require.Error(t, err, "/a/b/y was created uninitialized, it should have no value")
 	fmt.Printf("Cloned variable %q, with no value, shape=%s\n", v1y.ScopeAndName(), v1y.Shape())
 
-	// Check the new variable has the right name, scope and was properly inserted in to the new context.
+	// Check the new variable has the right name, scope and was properly inserted in to the new model.
 	if v1x.ScopeAndName() != "/a/b/x" {
 		fmt.Printf("Unexpeted scope/name of clone variable: %q\n", v1x.ScopeAndName())
 		t.Fail()

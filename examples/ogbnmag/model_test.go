@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/compute/support/humanize"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/pbnjay/memory"
 	"github.com/stretchr/testify/assert"
@@ -40,7 +40,7 @@ func TestModel(t *testing.T) {
 	checkMemory(t)
 
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")
 	UploadOgbnMagVariables(backend, ctx) // Uploads the Papers frozen embedding table.
@@ -50,10 +50,10 @@ func TestModel(t *testing.T) {
 
 	// Create graph function that will take a sampled sub-graph.
 	var spec any
-	testGraphFn := func(ctx *context.Context, inputs []*Node) []*Node {
+	testGraphFn := func(ctx *model.Context, inputs []*Node) []*Node {
 		return MagModelGraph(ctx, spec, inputs)
 	}
-	testGraphExec := context.MustNewExec(backend, ctx, testGraphFn)
+	testGraphExec := model.MustNewExec(backend, ctx, testGraphFn)
 
 	var inputs []*tensors.Tensor
 	spec, inputs, _, err = trainDS.Yield()

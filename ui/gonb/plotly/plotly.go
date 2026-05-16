@@ -24,7 +24,7 @@ import (
 	ptypes "github.com/MetalBlueberry/go-plotly/pkg/types"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/support/sets"
@@ -87,7 +87,7 @@ type PlotConfig struct {
 // This is used when configuring the train.Loop, and a typical use example, triggered by a "plots" parameter,
 // might look like:
 //
-//	usePlots := context.GetParamOr(ctx, plotly.ParamPlots, false)
+//	usePlots := model.GetParamOr(ctx, plotly.ParamPlots, false)
 //	...
 //	if usePlots {
 //		_ = plotly.New().

@@ -10,7 +10,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/support/testutil"
@@ -60,7 +60,7 @@ func TestModel(t *testing.T) {
 	})
 
 	t.Run("NewFromContext", func(t *testing.T) {
-		ctx := context.New()
+		ctx := model.New()
 		ctx.SetParams(map[string]any{
 			ParamVocabSize:     1000,
 			ParamEmbedDim:      128,
@@ -98,7 +98,7 @@ func TestModel(t *testing.T) {
 	})
 
 	t.Run("FromContext", func(t *testing.T) {
-		ctx := context.New()
+		ctx := model.New()
 		ctx.SetParams(map[string]any{
 			ParamFFNDim:        256,
 			ParamMaxPosEmbed:   1024,
@@ -130,7 +130,7 @@ func TestModel(t *testing.T) {
 func TestTransformerBuilder(t *testing.T) {
 	t.Run("BuildGraph", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 		cfg := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
 		g := NewGraph(backend, "BuildGraph")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 2, 8))
@@ -143,7 +143,7 @@ func TestTransformerBuilder(t *testing.T) {
 
 	t.Run("BuildGraphWithKVCache", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
 		g := NewGraph(backend, "BuildGraphWithKVCache")
 		prompt := IotaFull(g, shapes.Make(dtypes.Int32, 2, 5))
@@ -158,7 +158,7 @@ func TestTransformerBuilder(t *testing.T) {
 func TestTransformerVariants(t *testing.T) {
 	t.Run("WithRoPE", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithRoPE(10000.0)
 		g := NewGraph(backend, "WithRoPE")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 1, 4))
@@ -170,7 +170,7 @@ func TestTransformerVariants(t *testing.T) {
 
 	t.Run("WithoutLayerNorm", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithNormalization("none")
 		g := NewGraph(backend, "WithoutLayerNorm")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 2, 8))
@@ -182,7 +182,7 @@ func TestTransformerVariants(t *testing.T) {
 
 	t.Run("WithoutBias", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithBias(false)
 		g := NewGraph(backend, "WithoutBias")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 2, 8))
@@ -194,7 +194,7 @@ func TestTransformerVariants(t *testing.T) {
 
 	t.Run("WithDropout", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 		model := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128).WithDropout(0.1)
 		g := NewGraph(backend, "WithDropout")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 2, 8))
@@ -212,7 +212,7 @@ func TestTransformerBatchSizes(t *testing.T) {
 
 	for _, batchSize := range batchSizes {
 		t.Run(fmt.Sprintf("BatchSize%d", batchSize), func(t *testing.T) {
-			ctx := context.New()
+			ctx := model.New()
 
 			model := New(100, 64, 2, 4, 16).
 				WithFFNDim(128).

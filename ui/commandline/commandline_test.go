@@ -3,14 +3,14 @@
 package commandline
 
 import (
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
-func createTestContext() *context.Context {
-	ctx := context.New()
+func createTestContext() *model.Context {
+	ctx := model.New()
 	ctx.SetParam("x", 11.0)
 	ctx.SetParam("y", 7)
 	ctx.SetParam("z", false)
@@ -49,9 +49,9 @@ func TestParseContextSettings(t *testing.T) {
 	assert.True(t, found)
 	assert.Equal(t, "bar", s.(string))
 
-	assert.Equal(t, []int{1, 3, 7}, context.GetParamOr(ctx, "list_int", []int{}))
-	assert.Equal(t, []float64{0.1, 1.2, 3e3}, context.GetParamOr(ctx, "list_float", []float64{}))
-	assert.Equal(t, []string{"a", "b"}, context.GetParamOr(ctx, "list_str", []string{}))
+	assert.Equal(t, []int{1, 3, 7}, model.GetParamOr(ctx, "list_int", []int{}))
+	assert.Equal(t, []float64{0.1, 1.2, 3e3}, model.GetParamOr(ctx, "list_float", []float64{}))
+	assert.Equal(t, []string{"a", "b"}, model.GetParamOr(ctx, "list_str", []string{}))
 
 	// Parameter "q" is unknown.
 	_, err = ParseContextSettings(ctx, "q=3")

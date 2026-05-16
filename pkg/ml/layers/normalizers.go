@@ -7,7 +7,7 @@ import (
 
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
@@ -34,17 +34,17 @@ var (
 	// Notice that some normalizers use variables, and they need to be unique
 	// in their scope (`Context.In(scope)`) -- except if one wants to deliberately share
 	// normalization variables across more than one application.
-	KnownNormalizers = map[string]func(ctx *context.Context, input *Node) *Node{
-		NormalizationBatchNorm: func(ctx *context.Context, input *Node) *Node {
+	KnownNormalizers = map[string]func(ctx *model.Context, input *Node) *Node{
+		NormalizationBatchNorm: func(ctx *model.Context, input *Node) *Node {
 			return batchnorm.New(ctx, input, -1).Done()
 		},
-		NormalizationLayerNorm: func(ctx *context.Context, input *Node) *Node {
+		NormalizationLayerNorm: func(ctx *model.Context, input *Node) *Node {
 			return LayerNormalization(ctx, input, -1).Done()
 		},
-		NormalizationRMSNorm: func(ctx *context.Context, input *Node) *Node {
+		NormalizationRMSNorm: func(ctx *model.Context, input *Node) *Node {
 			return RMSNorm(ctx, input).Done()
 		},
-		NormalizationNone: func(ctx *context.Context, input *Node) *Node {
+		NormalizationNone: func(ctx *model.Context, input *Node) *Node {
 			return input
 		},
 	}
@@ -95,7 +95,7 @@ var (
 //	}
 //
 // ```
-func MustNormalizeByName(ctx *context.Context, normalization string, input *Node) *Node {
+func MustNormalizeByName(ctx *model.Context, normalization string, input *Node) *Node {
 	normFn, found := KnownNormalizers[normalization]
 	if !found {
 		log.Fatalf("Unsupported normalization %q given, valid values are %v", normalization, xslices.SortedKeys(KnownNormalizers))
@@ -104,20 +104,20 @@ func MustNormalizeByName(ctx *context.Context, normalization string, input *Node
 }
 
 // NormalizeFromContext applies a normalization (or none) according to the hyperparameter
-// ParamNormalization configured in the context.
+// ParamNormalization configured in the model.
 //
 // This is not recommended for images, since one may want to normalize over specific axes.
-func NormalizeFromContext(ctx *context.Context, input *Node) *Node {
+func NormalizeFromContext(ctx *model.Context, input *Node) *Node {
 	return MaskedNormalizeFromContext(ctx, input, nil)
 }
 
 // MaskedNormalizeFromContext applies a normalization (or none) according to the hyperparameter
-// ParamNormalization configured in the context.
+// ParamNormalization configured in the model.
 // The `mask` is actually optional and can be set to nil if not using a mask.
 //
 // This is not recommended for images, since one may want to normalize over specific axes.
-func MaskedNormalizeFromContext(ctx *context.Context, input, mask *Node) *Node {
-	normType := context.GetParamOr(ctx, ParamNormalization, "layer")
+func MaskedNormalizeFromContext(ctx *model.Context, input, mask *Node) *Node {
+	normType := model.GetParamOr(ctx, ParamNormalization, "layer")
 	switch normType {
 	case NormalizationNone, "":
 		return input

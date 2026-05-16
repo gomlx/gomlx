@@ -59,7 +59,7 @@ func TestExec(t *testing.T) {
 		b := []float32{3, 4, 5}
 		outputs := execAdd.MustExec(a, b)
 		require.Len(t, outputs, 2)
-		
+
 		gotA := outputs[0].Value().([]float32)
 		gotB := outputs[1].Value().([]float32)
 		assert.Equal(t, []float32{2, 3}, gotA)

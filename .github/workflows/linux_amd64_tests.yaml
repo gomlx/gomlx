@@ -48,7 +48,7 @@ jobs:
         # The non-short tests work well locally (in the development box) because the datasets are cached.
         # Also excludes tests that have large dependencies (e.g.: X11):
         run: |
-          go test -p 1 -short $(go list ./... | grep -v "backends/xla" | grep -v "ui/fyneui" | grep -v "pkg/ml/context/checkpoints")
+          go test -p 1 -short $(go list ./... | grep -v "backends/xla" | grep -v "ui/fyneui" | grep -v "ml/model/checkpoints")
           cd examples ; go test -p 1 -short $(go list ./... | grep -v "ogbnmag")
 
       - name: Go Coverage Badge

@@ -11,7 +11,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
@@ -48,7 +48,7 @@ func targetF(x0, x1 *Node) *Node {
 }
 
 // kanGraphModel will try to model targetF with the minimum number of nodes.
-func kanGraphModel(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func kanGraphModel(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	dtype := dtypes.Float64
 	_ = spec
 	batchSize := inputs[0].Shape().Dimensions[0]
@@ -82,7 +82,7 @@ func TestBSplineKAN(t *testing.T) {
 		return
 	}
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 	ctx.SetRNGStateFromSeed(42)
 	ds := &kanTestDataset{batchSize: 128}
 
@@ -105,7 +105,7 @@ func TestBSplineKAN(t *testing.T) {
 }
 
 // kanLargeGraphModel will try to model targetF with extra unnecessary number of nodes.
-func kanLargeGraphModel(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func kanLargeGraphModel(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	dtype := dtypes.Float64
 	_ = spec
 	batchSize := inputs[0].Shape().Dimensions[0]
@@ -129,7 +129,7 @@ func TestBSplineKANRegularized(t *testing.T) {
 		return
 	}
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 	ctx.SetRNGStateFromSeed(42)
 	ctx.SetParam(kan.ParamBSplineMagnitudeL1, 0.01)
 	ds := &kanTestDataset{batchSize: 128}
@@ -156,7 +156,7 @@ func TestBSplineKANRegularized(t *testing.T) {
 	// (if we remove the L1 regularization the test fails).
 	var numZeros int
 	fmt.Println("\nVariables:")
-	//ctx.EnumerateVariables(func(v *context.Variable) {
+	//ctx.EnumerateVariables(func(v *model.Variable) {
 	//	fmt.Printf("\t%s -> %v\n", v.ScopeAndName(), v.Value())
 	//})
 	for _, scope := range []string{"/bspline_kan_hidden_0", "/bspline_kan_output_layer"} {

@@ -12,8 +12,8 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
@@ -30,7 +30,7 @@ import (
 )
 
 // FnnModelGraph builds a FnnModel for the OGBN-MAP dataset.
-func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func FnnModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	seeds := inputs[0]
 	g := seeds.Graph()
 	getMagVar := func(name string) *Node {
@@ -54,9 +54,9 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	}, 1)
 
 	// Build FNN.
-	numLayers := context.GetParamOr(ctx, "hidden_layers", 2)
-	numNodes := context.GetParamOr(ctx, "num_nodes", 128)
-	useKan := context.GetParamOr(ctx, "kan", false)
+	numLayers := model.GetParamOr(ctx, "hidden_layers", 2)
+	numNodes := model.GetParamOr(ctx, "num_nodes", 128)
+	useKan := model.GetParamOr(ctx, "kan", false)
 	if useKan {
 		logits = kan.New(ctx, logits, mag.NumLabels).NumHiddenLayers(numLayers, numNodes).Done()
 	} else {
@@ -65,7 +65,7 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 			layerName := fmt.Sprintf("layer-%d", layerNum)
 			logits = layers.DenseWithBias(ctx.In(layerName), logits, numNodes)
 			logits = activations.LeakyRelu(logits)
-			dropoutRate := context.GetParamOr(ctx, "dropout_rate", 0.0)
+			dropoutRate := model.GetParamOr(ctx, "dropout_rate", 0.0)
 			if dropoutRate > 0 {
 				dropoutRateNode := Scalar(g, dtypes.Float32, dropoutRate)
 				logits = layers.Dropout(ctx, logits, dropoutRateNode)
@@ -80,10 +80,10 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 var ModelFn = FnnModelGraph
 
 // Train FNN model based on configuration in `ctx`.
-func Train(backend compute.Backend, ctx *context.Context) error {
+func Train(backend compute.Backend, ctx *model.Context) error {
 	trainDS, validDS, testDS, err := mag.PapersSeedDatasets(backend)
 	mag.UploadOgbnMagVariables(backend, ctx)
-	//ctx.EnumerateVariables(func(v *context.Variable) {
+	//ctx.EnumerateVariables(func(v *model.Variable) {
 	//	fmt.Printf("%s :: %s:\t%s\n", v.Scope(), v.Name(), v.Value().Shape())
 	//})
 
@@ -91,22 +91,22 @@ func Train(backend compute.Backend, ctx *context.Context) error {
 		return err
 	}
 
-	batchSize := context.GetParamOr(ctx, "batch_size", 128)
+	batchSize := model.GetParamOr(ctx, "batch_size", 128)
 	trainEvalDS := trainDS.Copy()
 	trainDS = trainDS.Shuffle().BatchSize(batchSize, true).Infinite(true)
 
 	// Evaluation datasets.
-	evalBatchSize := context.GetParamOr(ctx, "eval_batch_size", 1024)
+	evalBatchSize := model.GetParamOr(ctx, "eval_batch_size", 1024)
 	trainEvalDS = trainEvalDS.BatchSize(evalBatchSize, false).Infinite(false)
 	validDS = validDS.BatchSize(evalBatchSize, false).Infinite(false)
 	testDS = testDS.BatchSize(evalBatchSize, false).Infinite(false)
 
 	// Get trainSteps before a checkpoint is loaded -- in which case it will be overwritten.
-	trainSteps := context.GetParamOr(ctx, "train_steps", 100)
+	trainSteps := model.GetParamOr(ctx, "train_steps", 100)
 
 	// Checkpoint: it loads if already exists, and it will save as we train.
-	checkpointPath := context.GetParamOr(ctx, "checkpoint", "")
-	numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 10)
+	checkpointPath := model.GetParamOr(ctx, "checkpoint", "")
+	numCheckpointsToKeep := model.GetParamOr(ctx, "num_checkpoints", 10)
 	var checkpoint *checkpoints.Handler
 	var globalStep int64
 	if checkpointPath != "" {
@@ -142,7 +142,7 @@ func Train(backend compute.Backend, ctx *context.Context) error {
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	optimizer := optimizers.ByName(ctx, context.GetParamOr(ctx, "optimizer", "adamw"))
+	optimizer := optimizers.ByName(ctx, model.GetParamOr(ctx, "optimizer", "adamw"))
 	trainer := train.NewTrainer(backend, ctx, ModelFn,
 		lossFn,
 		optimizer,
@@ -164,7 +164,7 @@ func Train(backend compute.Backend, ctx *context.Context) error {
 
 	// Attach a margaid plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	usePlots := context.GetParamOr(ctx, "plots", false)
+	usePlots := model.GetParamOr(ctx, "plots", false)
 	if usePlots {
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).

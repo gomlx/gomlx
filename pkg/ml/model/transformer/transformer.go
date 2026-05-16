@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/decode"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
@@ -155,7 +155,7 @@ func New(vocabSize, embedDim, numLayers, numHeads, headDim int) *Model {
 //	    "transformer_head_dim": 64,
 //	})
 //	model := transformer.NewFromContext(ctx)
-func NewFromContext(ctx *context.Context) *Model {
+func NewFromContext(ctx *model.Context) *Model {
 	// Required parameters
 	vocabSize, found := ctx.GetParam(ParamVocabSize)
 	if !found {
@@ -193,42 +193,42 @@ func NewFromContext(ctx *context.Context) *Model {
 	return model
 }
 
-// FromContext configures the model with optional hyperparameters from the context.
+// FromContext configures the model with optional hyperparameters from the model.
 // This allows fine-tuning an existing model configuration.
-func (m *Model) FromContext(ctx *context.Context) *Model {
+func (m *Model) FromContext(ctx *model.Context) *Model {
 	// Optional parameters with defaults
-	m.FFNDim = context.GetParamOr(ctx, ParamFFNDim, m.FFNDim)
-	m.MaxPosEmbed = context.GetParamOr(ctx, ParamMaxPosEmbed, m.MaxPosEmbed)
-	m.Dropout = context.GetParamOr(ctx, ParamDropout, m.Dropout)
+	m.FFNDim = model.GetParamOr(ctx, ParamFFNDim, m.FFNDim)
+	m.MaxPosEmbed = model.GetParamOr(ctx, ParamMaxPosEmbed, m.MaxPosEmbed)
+	m.Dropout = model.GetParamOr(ctx, ParamDropout, m.Dropout)
 
 	// Deprecated way to specify LayerNorm:
-	useLayerNorm := context.GetParamOr(ctx, ParamUseLayerNorm, true)
+	useLayerNorm := model.GetParamOr(ctx, ParamUseLayerNorm, true)
 	if useLayerNorm {
 		m.WithLayerNorm(true)
 	}
-	m.Normalization = context.GetParamOr(ctx, ParamNormalization, m.Normalization)
+	m.Normalization = model.GetParamOr(ctx, ParamNormalization, m.Normalization)
 	m.WithNormalization(m.Normalization)
-	m.UseBias = context.GetParamOr(ctx, ParamUseBias, m.UseBias)
-	m.UseCausalMask = context.GetParamOr(ctx, ParamUseCausalMask, m.UseCausalMask)
-	archStr := context.GetParamOr(ctx, ParamArchitecture, m.Architecture.String())
+	m.UseBias = model.GetParamOr(ctx, ParamUseBias, m.UseBias)
+	m.UseCausalMask = model.GetParamOr(ctx, ParamUseCausalMask, m.UseCausalMask)
+	archStr := model.GetParamOr(ctx, ParamArchitecture, m.Architecture.String())
 	if arch, err := ArchitectureString(archStr); err == nil {
 		m.Architecture = arch
 	} else {
 		exceptions.Panicf("invalid architecture name %q: options are %v", archStr, ArchitectureValues())
 	}
-	m.NormEpsilon = context.GetParamOr(ctx, ParamNormEpsilon, m.NormEpsilon)
-	m.Activation = activations.FromName(context.GetParamOr(ctx, ParamActivation, m.Activation.String()))
-	m.NumKVHeads = context.GetParamOr(ctx, ParamNumKVHeads, m.NumKVHeads)
+	m.NormEpsilon = model.GetParamOr(ctx, ParamNormEpsilon, m.NormEpsilon)
+	m.Activation = activations.FromName(model.GetParamOr(ctx, ParamActivation, m.Activation.String()))
+	m.NumKVHeads = model.GetParamOr(ctx, ParamNumKVHeads, m.NumKVHeads)
 
 	// Legacy RoPE configuration from context
-	useRoPE := context.GetParamOr(ctx, ParamUseRoPE, false)
+	useRoPE := model.GetParamOr(ctx, ParamUseRoPE, false)
 	if useRoPE {
-		baseFreq := context.GetParamOr(ctx, ParamRoPEBaseFreq, 10000.0)
+		baseFreq := model.GetParamOr(ctx, ParamRoPEBaseFreq, 10000.0)
 		m.posEncoder = pos.NewRoPE(baseFreq)
 	}
 
 	// Handle dtype separately since it's a string
-	dtypeStr := context.GetParamOr(ctx, ParamDType, "")
+	dtypeStr := model.GetParamOr(ctx, ParamDType, "")
 	if dtypeStr != "" {
 		dtype, err := dtypes.DTypeString(dtypeStr)
 		if err != nil || !dtype.IsFloat() {
@@ -400,7 +400,7 @@ func (m *Model) WithTransposedWeights(transposed bool) *Model {
 //     is computed taking into consideration the mask.
 //
 // It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize]
-func (m *Model) Logits(ctx *context.Context, tokens, mask *Node) *Node {
+func (m *Model) Logits(ctx *model.Context, tokens, mask *Node) *Node {
 	embeddings, _ := m.AllLayers(ctx, tokens, mask, false, 0)
 	return m.LogitsFromEmbeddings(ctx, embeddings)
 }
@@ -408,7 +408,7 @@ func (m *Model) Logits(ctx *context.Context, tokens, mask *Node) *Node {
 // MakeIterativeModelFn returns a "iterative" model function for iteratively (increasing sequence length, no KVCache)
 // generation, using the decode package.
 func MakeIterativeModelFn(m *Model) decode.IterativeModelFn {
-	return func(ctx *context.Context, tokens *Node) *Node {
+	return func(ctx *model.Context, tokens *Node) *Node {
 		return m.Logits(ctx, tokens, nil)
 	}
 }
@@ -422,7 +422,7 @@ func MakeIterativeModelFn(m *Model) decode.IterativeModelFn {
 //
 // It returns the logits of the last layer, typically shaped [batchSize, 1, vocabSize],
 // and updates the KVCache stored as variables in the cache.
-func (m *Model) LogitsWithKVCache(ctx *context.Context, newTokens *Node, position int) *Node {
+func (m *Model) LogitsWithKVCache(ctx *model.Context, newTokens *Node, position int) *Node {
 	embeddings, _ := m.AllLayers(ctx, newTokens, nil, true, position)
 	return m.LogitsFromEmbeddings(ctx, embeddings)
 }
@@ -430,7 +430,7 @@ func (m *Model) LogitsWithKVCache(ctx *context.Context, newTokens *Node, positio
 // MakeIncrementalModelFn returns a model function used by the decoder for incremental generation with KVCache,
 // using the decode package.
 func MakeIncrementalModelFn(m *Model) decode.IncrementalModelFn {
-	return func(ctx *context.Context, newTokens *Node, position int) *Node {
+	return func(ctx *model.Context, newTokens *Node, position int) *Node {
 		return m.LogitsWithKVCache(ctx, newTokens, position)
 	}
 }
@@ -453,7 +453,7 @@ func MakeIncrementalModelFn(m *Model) decode.IncrementalModelFn {
 //   - allLayers: the input to the first layer and the output of each layer.
 //     It follows the HuggingFace convention, where the allLayers[0] is the input to the first attention layer,
 //     and the following nodes in allLayers are the outputs of all NumHiddenLayers attention layers.
-func (m *Model) AllLayers(ctx *context.Context, tokens, mask *Node, useKVCache bool, position int) (lastLayer *Node, allLayers []*Node) {
+func (m *Model) AllLayers(ctx *model.Context, tokens, mask *Node, useKVCache bool, position int) (lastLayer *Node, allLayers []*Node) {
 	allLayers = make([]*Node, 0, m.NumLayers+1)
 	x := m.EmbedTokens(ctx, tokens)
 	x = m.PrePositionalEncoder(ctx, x, position, useKVCache)
@@ -492,7 +492,7 @@ func (m *Model) AllLayers(ctx *context.Context, tokens, mask *Node, useKVCache b
 //
 // It defaults to TokenType 0 for all tokens if TokenTypeEmbedSize > 0.
 // Use EmbedTokensWithType to select a different index.
-func (m *Model) EmbedTokens(ctx *context.Context, tokens *Node) *Node {
+func (m *Model) EmbedTokens(ctx *model.Context, tokens *Node) *Node {
 	return m.EmbedTokensWithType(ctx, tokens, nil)
 }
 
@@ -505,7 +505,7 @@ func (m *Model) EmbedTokens(ctx *context.Context, tokens *Node) *Node {
 //
 // tokenTypes must be a scalar int (limited to the vocabSize set in WithTokenTypeEmbedding).
 // Or it can be nil, in which case it defaults to TokenType 0 for all tokens if TokenTypeEmbedSize > 0.
-func (m *Model) EmbedTokensWithType(ctx *context.Context, tokens, tokenTypes *Node) *Node {
+func (m *Model) EmbedTokensWithType(ctx *model.Context, tokens, tokenTypes *Node) *Node {
 	g := tokens.Graph()
 	// Tokens embedding table lookup.
 	embedded := layers.Embedding(ctx.In("token_embed"), tokens, m.DType, m.VocabSize, m.EmbedDim)
@@ -535,7 +535,7 @@ func (m *Model) EmbedTokensWithType(ctx *context.Context, tokens, tokenTypes *No
 //
 // This step is done automatically by AllLayers or Logits, but if needed, it can
 // be used separately by calling this method.
-func (m *Model) PrePositionalEncoder(ctx *context.Context, x *Node, position int, useKVCache bool) *Node {
+func (m *Model) PrePositionalEncoder(ctx *model.Context, x *Node, position int, useKVCache bool) *Node {
 	if m.posEncoder == nil {
 		return x
 	}
@@ -557,7 +557,7 @@ func (m *Model) PrePositionalEncoder(ctx *context.Context, x *Node, position int
 //
 // This step is done automatically by Logits (which builds the full forward path from the tokens), but if needed, it can
 // be used separately by calling this method.
-func (m *Model) LogitsFromEmbeddings(ctx *context.Context, embeddings *Node) *Node {
+func (m *Model) LogitsFromEmbeddings(ctx *model.Context, embeddings *Node) *Node {
 	return layers.Dense(ctx.In("output"), embeddings, false, m.VocabSize)
 }
 
@@ -573,14 +573,14 @@ func (m *Model) LogitsFromEmbeddings(ctx *context.Context, embeddings *Node) *No
 //
 // This step is done automatically by AllLayers or Logits, but if needed, it can
 // be used separately by calling this method.
-func (m *Model) ForwardLayer(ctx *context.Context, layerNum int, x, mask *Node, useCache bool, position int) *Node {
+func (m *Model) ForwardLayer(ctx *model.Context, layerNum int, x, mask *Node, useCache bool, position int) *Node {
 	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
 		return m.forwardLayerGemma(ctx, layerNum, x, mask, useCache, position)
 	}
 	return m.forwardLayerStandard(ctx, layerNum, x, mask, useCache, position)
 }
 
-func (m *Model) forwardLayerStandard(layerCtx *context.Context, layerNum int, x, mask *Node, useCache bool, position int) *Node {
+func (m *Model) forwardLayerStandard(layerCtx *model.Context, layerNum int, x, mask *Node, useCache bool, position int) *Node {
 	residual := x
 	var attn *Node
 
@@ -670,7 +670,7 @@ func (m *Model) forwardLayerStandard(layerCtx *context.Context, layerNum int, x,
 // dense behaves like layers.dense but checks whether the model is configured to use transposed projections.
 // If it is, it computes the dense layer using DotGeneral (Einsum), expecting weights in the format [outDim, inDim].
 // PyTorch nn.Linear stores its matrix in this transposed format.
-func (m *Model) dense(ctx *context.Context, op *Node, useBias bool, outputDims ...int) *Node {
+func (m *Model) dense(ctx *model.Context, op *Node, useBias bool, outputDims ...int) *Node {
 	if !m.TransposedProjections {
 		return layers.Dense(ctx, op, useBias, outputDims...)
 	}
@@ -699,7 +699,7 @@ func (m *Model) dense(ctx *context.Context, op *Node, useBias bool, outputDims .
 	return y
 }
 
-func (m *Model) normalize(ctx *context.Context, operand *Node, normType string) *Node {
+func (m *Model) normalize(ctx *model.Context, operand *Node, normType string) *Node {
 	if normType == layers.NormalizationNone {
 		return operand
 	}
@@ -718,7 +718,7 @@ func (m *Model) normalize(ctx *context.Context, operand *Node, normType string) 
 	}
 }
 
-func (m *Model) forwardLayerGemma(layerCtx *context.Context, layerNum int, x, mask *Node, useCache bool, position int) *Node {
+func (m *Model) forwardLayerGemma(layerCtx *model.Context, layerNum int, x, mask *Node, useCache bool, position int) *Node {
 	residual := x
 
 	// Pre-attention normalization.

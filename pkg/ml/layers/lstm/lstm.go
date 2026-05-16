@@ -25,13 +25,13 @@ package lstm
 import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 )
 
 // LSTM holds an LSTM configuration. It can be created with New (or NewWithWeights),
 // and once finished to be configured, can be applied to x with Done.
 type LSTM struct {
-	ctx                                  *context.Context
+	ctx                                  *model.Context
 	x                                    *Node
 	xLengths                             *Node
 	initialHiddenState, initialCellState *Node
@@ -57,7 +57,7 @@ type ActivationFn func(x *Node) *Node
 // See LSTM.Ragged if x is not densely used: a more compact version to padding or masking.
 //
 // Once finished configuring, call LSTM.Done and it will return the final state of the LSTM.
-func New(ctx *context.Context, x *Node, hiddenSize int) *LSTM {
+func New(ctx *model.Context, x *Node, hiddenSize int) *LSTM {
 	return &LSTM{
 		ctx:          ctx,
 		x:            x,

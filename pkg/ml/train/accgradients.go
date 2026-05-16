@@ -9,8 +9,8 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 )
@@ -22,7 +22,7 @@ const AccumulatedGradientsScope = "acc_grads"
 type OptimizeWithGradients interface {
 	// UpdateGraphWithGradients works like Optimizers.Interface.UpdateGraph, but takes as input the gradients themselves,
 	// as opposed to the loss.
-	UpdateGraphWithGradients(ctx *context.Context, gradients []*graph.Node, lossDType dtypes.DType)
+	UpdateGraphWithGradients(ctx *model.Context, gradients []*graph.Node, lossDType dtypes.DType)
 }
 
 // AccumulateGradients configures the trainer to accumulate numAccumulatingSteps of gradients before actually applying them.
@@ -51,8 +51,8 @@ func (r *Trainer) NumAccumulatingSteps() int {
 
 // iterTrainableAndAccumulatorVariables iterates over all the trainable variables (in the current graph g) and yields
 // both the trainable variable and the corresponding gradient accumulator variable.
-func iterTrainableAndAccumulatorVariables(ctx *context.Context, g *graph.Graph) iter.Seq2[*context.Variable, *context.Variable] {
-	return func(yield func(trainable, accumulator *context.Variable) bool) {
+func iterTrainableAndAccumulatorVariables(ctx *model.Context, g *graph.Graph) iter.Seq2[*model.Variable, *model.Variable] {
+	return func(yield func(trainable, accumulator *model.Variable) bool) {
 		for v := range ctx.IterVariables() {
 			if !v.Trainable || !v.InUseByGraph(g) {
 				// We are only interested in trainable variables used by this graph.
@@ -60,7 +60,7 @@ func iterTrainableAndAccumulatorVariables(ctx *context.Context, g *graph.Graph) 
 			}
 			originalScope := v.Scope()
 			originalName := v.Name()
-			scopePath := fmt.Sprintf("%s%s%s", context.ScopeSeparator, AccumulatedGradientsScope, originalScope)
+			scopePath := fmt.Sprintf("%s%s%s", model.ScopeSeparator, AccumulatedGradientsScope, originalScope)
 			shape := v.Shape().Clone()
 			ctx = ctx.Checked(false) // It shouldn't matter if it's the first time or not creating the variable.
 			accumulator := ctx.InAbsPath(scopePath).
@@ -79,7 +79,7 @@ func iterTrainableAndAccumulatorVariables(ctx *context.Context, g *graph.Graph) 
 // the first time, when the batch size changes, or the dataset spec changes.
 //
 // If applyGradients is true, it will also apply the accumulated gradients.
-func (r *Trainer) accumulateStepGraphImpl(spec any, ctx *context.Context, inputs, labels []*graph.Node, applyGradients bool) (metrics []*graph.Node) {
+func (r *Trainer) accumulateStepGraphImpl(spec any, ctx *model.Context, inputs, labels []*graph.Node, applyGradients bool) (metrics []*graph.Node) {
 	g := inputs[0].Graph()
 	ctx.SetTraining(g, true) // Some layers behave differently if in training.
 	if applyGradients {
@@ -155,11 +155,11 @@ func (r *Trainer) accumulateStepGraphImpl(spec any, ctx *context.Context, inputs
 	return
 }
 
-func (r *Trainer) accumulateStepNoApplyGraph(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
+func (r *Trainer) accumulateStepNoApplyGraph(spec any, ctx *model.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 	return r.accumulateStepGraphImpl(spec, ctx, inputs, labels, false)
 }
 
-func (r *Trainer) accumulateStepAndApplyGraph(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
+func (r *Trainer) accumulateStepAndApplyGraph(spec any, ctx *model.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 	return r.accumulateStepGraphImpl(spec, ctx, inputs, labels, true)
 }
 

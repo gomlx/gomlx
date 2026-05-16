@@ -421,7 +421,7 @@ func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 
 // SetSideParamsHook configures a function to be called just before executing a graph, so it can set extra parameters.
 //
-// Mostly, this is for internal use and end-users will not likely need this. The context.Exec object uses this to pass
+// Mostly, this is for internal use and end-users will not likely need this. The model.Exec object uses this to pass
 // the variable values as side inputs to the graph.
 //
 // Exec takes care of creating parameters (with graph.Parameter) for every value passed to Exec.Exec before
@@ -608,7 +608,7 @@ func (e *Exec) convertArgsToBuffers(args []any, defaultDevice compute.DeviceNum)
 // If the graph has more parameters than the arguments, it will add new parameters to the arguments.
 //
 // This happens if the graph building function created extra graph.Parameter nodes, that Exec is not aware of.
-// The package ml/context does that for variables used in during model building.
+// The package ml/model does that for variables used in during model building.
 //
 // The slices are organized in "deviceNum major" order:
 // [device0_params..., device1_params..., device2_params..., ...]

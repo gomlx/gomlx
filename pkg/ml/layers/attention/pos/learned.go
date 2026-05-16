@@ -22,7 +22,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 )
 
 // Learned implements a learned positional embedding.
@@ -31,7 +31,7 @@ import (
 //
 // It implements both Encoder and PreEncoder interfaces.
 type Learned struct {
-	ctx             *context.Context
+	ctx             *model.Context
 	maxPosEmbedding int
 	embedDim        int
 }
@@ -42,7 +42,7 @@ var _ PreEncoder = &Learned{}
 
 // NewLearned creates a Learned positional embedding.
 // It takes as input the context, the maximum positional embedding, and the embedding dimension.
-func NewLearned(ctx *context.Context, maxPosEmbedding, embedDim int) *Learned {
+func NewLearned(ctx *model.Context, maxPosEmbedding, embedDim int) *Learned {
 	return &Learned{
 		ctx:             ctx,
 		maxPosEmbedding: maxPosEmbedding,

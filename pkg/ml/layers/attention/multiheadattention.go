@@ -17,7 +17,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
@@ -29,7 +29,7 @@ import (
 // MultiHeadAttentionBuilder is a helper to build a multi-head-attention computation.
 // Create it with MultiHeadAttention, set the desired parameters, and when all is set, call Done.
 type MultiHeadAttentionBuilder struct {
-	ctx               *context.Context
+	ctx               *model.Context
 	g                 *Graph
 	query, key, value *Node
 	numHeads          int
@@ -112,7 +112,7 @@ type MultiHeadAttentionBuilder struct {
 //
 // [1] "Attention Is All You Need", https://arxiv.org/abs/1706.03762, by Ashish Vaswani, Noam Shazeer,
 // Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin.
-func MultiHeadAttention(ctx *context.Context, query, key, value *Node, numHeads int, headDim int) *MultiHeadAttentionBuilder {
+func MultiHeadAttention(ctx *model.Context, query, key, value *Node, numHeads int, headDim int) *MultiHeadAttentionBuilder {
 	g := query.Graph()
 
 	queryShape := query.Shape()
@@ -515,7 +515,7 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 // dense executes a Dense projection layer.
 // If UseTransposedWeights() has been called, it uses Einsum to compute the projection
 // using PyTorch's default transposed weight schema ([outDim, inDim]).
-func (b *MultiHeadAttentionBuilder) dense(ctx *context.Context, x *Node, useBias bool, outputDims ...int) *Node {
+func (b *MultiHeadAttentionBuilder) dense(ctx *model.Context, x *Node, useBias bool, outputDims ...int) *Node {
 	if !b.useTransposedWeights {
 		return layers.Dense(ctx, x, useBias, outputDims...)
 	}
@@ -630,6 +630,6 @@ func (b *MultiHeadAttentionBuilder) buildAttentionShape() {
 //	    UseCausalMask().
 //	    Dropout(0.1).
 //	    Done()
-func SelfAttention(ctx *context.Context, x *Node, numHeads int, headDim int) *MultiHeadAttentionBuilder {
+func SelfAttention(ctx *model.Context, x *Node, numHeads int, headDim int) *MultiHeadAttentionBuilder {
 	return MultiHeadAttention(ctx, x, x, x, numHeads, headDim)
 }

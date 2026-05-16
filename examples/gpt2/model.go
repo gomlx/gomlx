@@ -15,7 +15,7 @@ import (
 	"github.com/gomlx/go-huggingface/tokenizers/hftokenizer"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/decode/sample"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
@@ -58,16 +58,16 @@ func DefaultGPT2Config() GPT2Config {
 // GPT2Model represents a loaded GPT-2 model ready for inference.
 type GPT2Model struct {
 	backend compute.Backend
-	ctx     *context.Context
+	ctx     *model.Context
 	config  GPT2Config
 	model   *transformer.Model
 
 	// Single cached exec for all token generations
-	tokenExec *context.Exec
+	tokenExec *model.Exec
 }
 
 // forwardGPT2 implements GPT-2's forward pass with pre-norm architecture.
-func (m *GPT2Model) forwardGPT2(ctx *context.Context, tokens *Node, position *Node) *Node {
+func (m *GPT2Model) forwardGPT2(ctx *model.Context, tokens *Node, position *Node) *Node {
 	model := m.model
 	g := tokens.Graph()
 	currentSeqLen := tokens.Shape().Dimensions[1]
@@ -125,7 +125,7 @@ func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenize
 	config := DefaultGPT2Config()
 
 	// Create context for model parameters and load them.
-	ctx := context.New()
+	ctx := model.New()
 	fmt.Println("Loading checkpoint weights...")
 	if err := loadCheckpoint(backend, ctx, repo); err != nil {
 		fmt.Printf("Warning: Failed to load checkpoint: %v\n", err)
@@ -158,8 +158,8 @@ func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenize
 
 	// Create the generation exec once during loading (saves JIT compilation on first Generate call)
 	var err error
-	model.tokenExec, err = context.NewExec(backend, ctx.Reuse(),
-		func(ctx *context.Context, tokens *Node, position *Node) *Node {
+	model.tokenExec, err = model.NewExec(backend, ctx.Reuse(),
+		func(ctx *model.Context, tokens *Node, position *Node) *Node {
 			logits := model.forwardGPT2(ctx, tokens, position)
 			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 			lastLogits = Squeeze(lastLogits, 1)
@@ -262,7 +262,7 @@ func (m *GPT2Model) Generate(
 }
 
 // loadCheckpoint loads model weights from the HuggingFace repository.
-func loadCheckpoint(backend compute.Backend, ctx *context.Context, repo *hub.Repo) error {
+func loadCheckpoint(backend compute.Backend, ctx *model.Context, repo *hub.Repo) error {
 	// Get repo info for validation (includes SafeTensorsInfo)
 	info := repo.Info()
 	if info != nil && info.SafeTensors.Total > 0 {
@@ -385,7 +385,7 @@ func mapTensorName(safetensorsName string) (scopePath []string, varName string, 
 }
 
 // setContextVariableFromTensor sets a variable in the context from a tensor
-func setContextVariableFromTensor(ctx *context.Context, scopePath []string, varName string, t *tensors.Tensor) error {
+func setContextVariableFromTensor(ctx *model.Context, scopePath []string, varName string, t *tensors.Tensor) error {
 	// Check if this is a fused QKV weight that needs splitting
 	if len(scopePath) >= 3 && scopePath[len(scopePath)-1] == "_fused_qkv" {
 		return splitAndSetQKV(ctx, scopePath, varName, t)
@@ -402,7 +402,7 @@ func setContextVariableFromTensor(ctx *context.Context, scopePath []string, varN
 }
 
 // splitAndSetQKV splits fused QKV weights/biases into separate Q, K, V tensors
-func splitAndSetQKV(ctx *context.Context, scopePath []string, varName string, t *tensors.Tensor) error {
+func splitAndSetQKV(ctx *model.Context, scopePath []string, varName string, t *tensors.Tensor) error {
 	// Get the actual scope without "_fused_qkv"
 	baseScopePath := scopePath[:len(scopePath)-1]
 	baseCtx := ctx

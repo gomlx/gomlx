@@ -14,8 +14,8 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -64,12 +64,12 @@ const (
 )
 
 // ActivationFn applies a non-linearity to the operand.
-type ActivationFn func(ctx *context.Context, operand *Node) *Node
+type ActivationFn func(ctx *model.Context, operand *Node) *Node
 
 // Config is created with New and can be configured with its methods or simply setting the corresponding
-// hyperparameters in the context.
+// hyperparameters in the model.
 type Config struct {
-	ctx                             *context.Context
+	ctx                             *model.Context
 	operand                         *Node
 	outputChannels                  int
 	numHiddenLayers, numHiddenNodes int
@@ -96,7 +96,7 @@ type Config struct {
 //
 // E.g.: A VNN for a multi-class classification model with NumClasses classes, rotation invariant.
 //
-//	func MyModel(ctx *context.Context, inputs []*Node) (outputs []*Node) {
+//	func MyModel(ctx *model.Context, inputs []*Node) (outputs []*Node) {
 //		pointCloud := inputs[0]  // [batchSize, numPoints, 3]
 //		ctx = ctx.In("model")
 //		base := vnn.New(ctx.In("base"), pointCloud, 128).Done()  // [batchSize, 128, 3]
@@ -105,7 +105,7 @@ type Config struct {
 //		logits := InvariantDotProduct(V, T)  // [batchSize, NumClasses]
 //		return []*Node{logits}
 //	}
-func New(ctx *context.Context, operand *Node, outputChannels int) *Config {
+func New(ctx *model.Context, operand *Node, outputChannels int) *Config {
 	if operand.Rank() < 2 {
 		exceptions.Panicf("vnn: operand must be rank at least 2, got operand.shape=%s", operand.Shape())
 	}
@@ -120,22 +120,22 @@ func New(ctx *context.Context, operand *Node, outputChannels int) *Config {
 		ctx:             ctx,
 		operand:         operand,
 		outputChannels:  outputChannels,
-		numHiddenLayers: context.GetParamOr(ctx, ParamNumHiddenLayers, 0),
-		numHiddenNodes:  context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
-		activationName:  context.GetParamOr(ctx, ParamActivation, "relu"),
-		normalization:   context.GetParamOr(ctx, ParamNormalization, ""),
+		numHiddenLayers: model.GetParamOr(ctx, ParamNumHiddenLayers, 0),
+		numHiddenNodes:  model.GetParamOr(ctx, ParamNumHiddenNodes, 10),
+		activationName:  model.GetParamOr(ctx, ParamActivation, "relu"),
+		normalization:   model.GetParamOr(ctx, ParamNormalization, ""),
 		regularizer:     regularizers.FromContext(ctx),
-		dropoutRatio:    context.GetParamOr(ctx, ParamDropoutRate, 0.0),
-		useResidual:     context.GetParamOr(ctx, ParamResidual, false),
-		useScaler:       context.GetParamOr(ctx, ParamScaler, false),
+		dropoutRatio:    model.GetParamOr(ctx, ParamDropoutRate, 0.0),
+		useResidual:     model.GetParamOr(ctx, ParamResidual, false),
+		useScaler:       model.GetParamOr(ctx, ParamScaler, false),
 	}
 
 	// Fallback parameters.
 	if c.normalization == "" {
-		c.normalization = context.GetParamOr(ctx, layers.ParamNormalization, "none")
+		c.normalization = model.GetParamOr(ctx, layers.ParamNormalization, "none")
 	}
 	if c.dropoutRatio < 0 {
-		c.dropoutRatio = context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
+		c.dropoutRatio = model.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
 	}
 	return c
 }
@@ -189,7 +189,7 @@ func (c *Config) Residual(useResidual bool) *Config {
 // The operand and output layers don't get a normalization layer.
 //
 // The default is "none", but it can be overridden by setting the hyperparameter ParamNormalization (="vnn_normalization")
-// in the context.
+// in the model.
 func (c *Config) Normalization(normalization string) *Config {
 	if slices.Index([]string{"", "none", "layer"}, normalization) == -1 {
 		exceptions.Panicf("vnn: invalid normalization %q given: valid values are \"layer\", \"\" or \"none\"",
@@ -226,7 +226,7 @@ func (c *Config) Regularizer(regularizer regularizers.Regularizer) *Config {
 // If set to 0.0, no dropout is used.
 //
 // The default is 0.0, but it can be overridden by setting the hyperparameter layers.ParamDropoutRate (="dropout_rate")
-// in the context.
+// in the model.
 func (c *Config) Dropout(ratio float64) *Config {
 	if ratio < 0 || ratio >= 1.0 {
 		exceptions.Panicf("vnn: invalid dropout ratio %f -- set to 0.0 to disable it, and it must be < 1.0 otherwise everything is dropped out",
@@ -257,12 +257,12 @@ func (c *Config) Done() *Node {
 	}
 
 	// Normalization function.
-	var normalizationFn func(ctx *context.Context, x *Node) *Node
+	var normalizationFn func(ctx *model.Context, x *Node) *Node
 	switch c.normalization {
 	case "", "none":
 		// No activation, leave it as nil.
 	case "layer":
-		normalizationFn = func(ctx *context.Context, x *Node) *Node {
+		normalizationFn = func(ctx *model.Context, x *Node) *Node {
 			if x.DType() == dtypes.BFloat16 {
 				return LayerNormalization(x, 1e-4)
 			} else {
@@ -287,7 +287,7 @@ func (c *Config) Done() *Node {
 	// For hidden layers, we have only one axis, with numHiddenNodes.
 	for ii := range c.numHiddenLayers + 1 {
 		// Scope for this layer
-		var layerCtx *context.Context
+		var layerCtx *model.Context
 		if ii < c.numHiddenLayers {
 			layerCtx = ctx.Inf("vnn_hidden_layer_%d", ii)
 		} else {

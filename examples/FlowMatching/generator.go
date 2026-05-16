@@ -25,7 +25,7 @@ import (
 	"github.com/gomlx/gomlx/examples/inceptionv3"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -64,7 +64,7 @@ func GenerateFlowerIds(cfg *diffusion.Config, numImages int) *tensors.Tensor {
 //     0 <= startTime < 1 and startTime < endTime <= 1.
 //
 // Returns the sample images moved ΔT (ΔT=endTime-startTime) towards the target distribution.
-func MidPointODEStep(ctx *context.Context, noisyImages, flowerIds, startTime, endTime *Node) *Node {
+func MidPointODEStep(ctx *model.Context, noisyImages, flowerIds, startTime, endTime *Node) *Node {
 	numImages := noisyImages.Shape().Dimensions[0]
 	normalizeTimeFn := func(x *Node) *Node {
 		x = ConvertDType(x, noisyImages.DType())
@@ -91,12 +91,12 @@ func MidPointODEStep(ctx *context.Context, noisyImages, flowerIds, startTime, en
 // Use it with NewImagesGenerator.
 type ImagesGenerator struct {
 	config           *diffusion.Config
-	ctx              *context.Context
+	ctx              *model.Context
 	noise, flowerIds *tensors.Tensor
 	numImages        int
 	numSteps         int
 	denormalizerExec *Exec
-	stepExec         *context.Exec
+	stepExec         *model.Exec
 }
 
 // NewImagesGenerator generates flowers given initial `noise` and `flowerIds`, in `numSteps`.
@@ -118,7 +118,7 @@ func NewImagesGenerator(cfg *diffusion.Config, noise, flowerIds *tensors.Tensor,
 		flowerIds: flowerIds,
 		numImages: numImages,
 		numSteps:  numSteps,
-		stepExec:  context.MustNewExec(cfg.Backend, ctx, MidPointODEStep),
+		stepExec:  model.MustNewExec(cfg.Backend, ctx, MidPointODEStep),
 		denormalizerExec: MustNewExec(cfg.Backend, func(image *Node) *Node {
 			return cfg.DenormalizeImages(image)
 		}),
@@ -557,11 +557,11 @@ func GenerateImagesOfAllFlowerTypes(cfg *diffusion.Config, numDiffusionSteps int
 // KidGenerator generates the [Kernel Inception Distance (KID)](https://arxiv.org/abs/1801.01401) metric.
 type KidGenerator struct {
 	config         *diffusion.Config
-	ctxInceptionV3 *context.Context
+	ctxInceptionV3 *model.Context
 	ds             train.Dataset
 	generator      *ImagesGenerator
 	kid            metrics.Interface
-	evalExec       *context.Exec
+	evalExec       *model.Exec
 }
 
 // NewKidGenerator allows to generate the Kid metric.
@@ -575,16 +575,16 @@ func NewKidGenerator(cfg *diffusion.Config, evalDS train.Dataset, numDiffusionSt
 	must.M(inceptionv3.DownloadAndUnpackWeights(i3Path))
 	kg := &KidGenerator{
 		config:         cfg,
-		ctxInceptionV3: context.New().Checked(false),
+		ctxInceptionV3: model.New().Checked(false),
 		ds:             evalDS,
 		generator:      NewImagesGenerator(cfg, noise, flowerIds, numDiffusionStep),
 		kid:            inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
 	}
-	kg.evalExec = context.MustNewExec(cfg.Backend, kg.ctxInceptionV3, kg.EvalStepGraph)
+	kg.evalExec = model.MustNewExec(cfg.Backend, kg.ctxInceptionV3, kg.EvalStepGraph)
 	return kg
 }
 
-func (kg *KidGenerator) EvalStepGraph(ctx *context.Context, allImages []*Node) (metric *Node) {
+func (kg *KidGenerator) EvalStepGraph(ctx *model.Context, allImages []*Node) (metric *Node) {
 	g := allImages[0].Graph()
 	ctx.SetTraining(g, false) // Some layers behave differently in train/eval.
 

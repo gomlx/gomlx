@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 )
@@ -55,7 +55,7 @@ func (m *StreamingMedianMetric) WithSampleSize(n int) *StreamingMedianMetric {
 
 const streamingMedianScope = "streaming_median"
 
-func (m *StreamingMedianMetric) UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node) {
+func (m *StreamingMedianMetric) UpdateGraph(ctx *model.Context, labels, predictions []*Node) (metric *Node) {
 	var results *Node
 	err := TryCatch[error](func() { results = m.metricFn(ctx, labels, predictions) })
 	if err != nil {
@@ -104,7 +104,7 @@ func (m *StreamingMedianMetric) ReadGo() *tensors.Tensor {
 
 // Reset will delete all related variables to the streaming median: they will be recreated again
 // at the start of an update.
-func (m *StreamingMedianMetric) Reset(ctx *context.Context) {
+func (m *StreamingMedianMetric) Reset(ctx *model.Context) {
 	m.samples = nil
 	m.samplesSeen = 0
 }

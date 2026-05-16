@@ -31,7 +31,7 @@ Transfer learning model example:
 		flagInceptionFineTuning = flag.Bool("finetuning", true, "If using inception model, whether to fine-tune the inception model")
 	)
 
-	func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+	func ModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 		_ = spec // Not needed.
 		image := inputs[0]
 		channelsConfig := images.ChannelsLast
@@ -70,7 +70,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
@@ -106,7 +106,7 @@ const BuildScope = "InceptionV3"
 // See example in the package inceptionv3 documentation.
 //
 // Parameters:
-//   - ctx: context.Context where variables are created and loaded. Variables
+//   - ctx: model.Context where variables are created and loaded. Variables
 //     will be re-used if they were already created before in the current scope.
 //     That means one can call BuildGraph more than once, and have the same
 //     model be used for more than one input -- for instance, for 2-tower models.
@@ -125,7 +125,7 @@ const BuildScope = "InceptionV3"
 //
 // The implementation follows closely the definition in
 // https://github.com/keras-team/keras/blob/v2.12.0/keras/applications/inception_v3.py
-func BuildGraph(ctx *context.Context, image *Node) *Config {
+func BuildGraph(ctx *model.Context, image *Node) *Config {
 	cfg := &Config{
 		ctx:              ctx.In(BuildScope),
 		image:            image,
@@ -143,7 +143,7 @@ func BuildGraph(ctx *context.Context, image *Node) *Config {
 //
 // See Build to construct a Config object and a usage example.
 type Config struct {
-	ctx     *context.Context
+	ctx     *model.Context
 	image   *Node
 	baseDir string
 
@@ -176,7 +176,7 @@ func (cfg *Config) PreTrained(baseDir string) *Config {
 	return cfg
 }
 
-// Trainable configures whether the variables created will be set as trainable or not -- see `context.Variable`.
+// Trainable configures whether the variables created will be set as trainable or not -- see `model.Variable`.
 //
 // If using pre-trained weights as frozen values, set this to false -- and considering using `StopGradient()` on the
 // value returned by Done, to prevent any gradients from even propagating.
@@ -487,7 +487,7 @@ func (cfg *Config) Done() (output *Node) {
 	// Set all variables non-trainable, if model frozen:
 	if !cfg.trainable {
 		currentScope := ctx.Scope()
-		ctx.EnumerateVariables(func(v *context.Variable) {
+		ctx.EnumerateVariables(func(v *model.Variable) {
 			if strings.HasPrefix(v.Scope(), currentScope) {
 				v.SetTrainable(false)
 			}
@@ -500,7 +500,7 @@ func (cfg *Config) Done() (output *Node) {
 // conv2DWithBatchNorm adds a 2D convolution, followed by batch normalization and an activation. In addition,
 // it reads the weights for the layers (convolution and batch normalization) from the downloaded `.h5` file
 // with the InceptionV3 pre-trained model.
-func (cfg *Config) conv2DWithBatchNorm(ctx *context.Context, x *Node, kernelFilters, kernelHeight, kernelWidth int,
+func (cfg *Config) conv2DWithBatchNorm(ctx *model.Context, x *Node, kernelFilters, kernelHeight, kernelWidth int,
 	strides []int, padding bool) (output *Node) {
 	g := x.Graph()
 	if cfg.useAliases {
@@ -544,7 +544,7 @@ func (cfg *Config) conv2DWithBatchNorm(ctx *context.Context, x *Node, kernelFilt
 // moves contents to a variable named `variableName`.
 //
 // Any errors are set in the graph.
-func (cfg *Config) loadTensorToVariable(ctx *context.Context, graph *Graph, tensorFileName, variableName string) {
+func (cfg *Config) loadTensorToVariable(ctx *model.Context, graph *Graph, tensorFileName, variableName string) {
 	if cfg.baseDir == "" {
 		// Do not use pre-trained weights.
 		return
@@ -566,7 +566,7 @@ func (cfg *Config) loadTensorToVariable(ctx *context.Context, graph *Graph, tens
 // readNextConv2D enters a new scope and initializes it with the pre-trained weights for the next Conv2D layer.
 //
 // It returns the modified scope to be used in `layers.Convolution`.
-func (cfg *Config) readNextConv2D(ctx *context.Context, graph *Graph) (ctxInScope *context.Context) {
+func (cfg *Config) readNextConv2D(ctx *model.Context, graph *Graph) (ctxInScope *model.Context) {
 	// Set scope name to something similar to the original model layer names (cosmetic only).
 	ctxInScope = ctx
 	if cfg.conv2dCount == 0 {
@@ -589,7 +589,7 @@ func (cfg *Config) readNextConv2D(ctx *context.Context, graph *Graph) (ctxInScop
 // the top predictions layer.
 //
 // It returns the modified scope to use for `layers.DenseWithBias`.
-func (cfg *Config) readPredictionsWeights(ctx *context.Context, graph *Graph) (ctxInScope *context.Context) {
+func (cfg *Config) readPredictionsWeights(ctx *model.Context, graph *Graph) (ctxInScope *model.Context) {
 	ctxInScope = ctx.In("predictions")
 	ctxTmp := ctxInScope.In("dense") // layers.Dense will create a sub-scope, which we need to match.
 	cfg.loadTensorToVariable(ctxTmp, graph, "predictions/predictions/kernel:0", "weights")
@@ -602,7 +602,7 @@ func (cfg *Config) readPredictionsWeights(ctx *context.Context, graph *Graph) (c
 // batch normalization layer.
 //
 // It returns the modified scope to use for `batchnorm.New`.
-func (cfg *Config) readNextBatchNormalization(ctx *context.Context, graph *Graph) (ctxInScope *context.Context) {
+func (cfg *Config) readNextBatchNormalization(ctx *model.Context, graph *Graph) (ctxInScope *model.Context) {
 	ctxInScope = ctx
 
 	// Set scope name to something similar to the original model layer names (cosmetic only).

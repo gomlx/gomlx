@@ -11,7 +11,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	samplerPkg "github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/support/testutil"
@@ -166,7 +166,7 @@ func createDenseTestStateGraphLayerWise(
 	return graphStates, edges
 }
 
-func setMinimalTestParams(ctx *context.Context) {
+func setMinimalTestParams(ctx *model.Context) {
 	ctx.SetParams(map[string]any{
 		layers.ParamDropoutRate:     0.0,
 		activations.ParamActivation: "none", // No activation, to make math simpler.
@@ -185,7 +185,7 @@ func setMinimalTestParams(ctx *context.Context) {
 	})
 }
 
-func setCommonTestParams(ctx *context.Context) {
+func setCommonTestParams(ctx *model.Context) {
 	ctx.SetParams(map[string]any{
 		layers.ParamDropoutRate:     0.0,
 		activations.ParamActivation: "swish",
@@ -210,7 +210,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	withCitation := false
 	manager := testutil.BuildTestBackend()
 	_, strategy := createDenseTestStrategy(withCitation)
-	ctx := context.New()
+	ctx := model.New()
 	setMinimalTestParams(ctx)
 	// Set weights to fixed values, that makes it easier to interpret:
 	{
@@ -230,7 +230,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	}
 
 	// Normal GNN executor.
-	execGnn := context.MustNewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+	execGnn := model.MustNewExec(manager, ctx.Reuse(), func(ctx *model.Context, g *Graph) *Node {
 		graphStates := createDenseTestStateGraphWithMask(strategy, g, dtypes.Float32, withCitation)
 		NodePrediction(ctx.In("model"), strategy, graphStates)
 		return graphStates["seeds"].Value
@@ -246,7 +246,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 
 	// Uncomment to list variables used in model.
 	/*
-		ctx.EnumerateVariables(func(v *context.Variable) {
+		ctx.EnumerateVariables(func(v *model.Variable) {
 			fmt.Printf("\t%s=%s\n", v.GetParameterName(), v.Value())
 		})
 	*/
@@ -254,7 +254,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	// Layer-Wise Inference: should return the same values.
 	lw, err := LayerWiseGNN(ctx, strategy)
 	require.NoError(t, err)
-	execLayerWise := context.MustNewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+	execLayerWise := model.MustNewExec(manager, ctx.Reuse(), func(ctx *model.Context, g *Graph) *Node {
 		graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
 		lw.NodePrediction(ctx.In("model"), graphStates, edges)
 		return graphStates["seeds"]
@@ -271,11 +271,11 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		fmt.Printf("\nwithCitation=%v:\n", withCitation)
 		manager := testutil.BuildTestBackend()
 		_, strategy := createDenseTestStrategy(withCitation)
-		ctx := context.New()
+		ctx := model.New()
 		setCommonTestParams(ctx)
 
 		// Normal GNN executor.
-		execGnn := context.MustNewExec(manager, ctx, func(ctx *context.Context, g *Graph) *Node {
+		execGnn := model.MustNewExec(manager, ctx, func(ctx *model.Context, g *Graph) *Node {
 			graphStates := createDenseTestStateGraphWithMask(strategy, g, dtypes.Float32, withCitation)
 			NodePrediction(ctx, strategy, graphStates)
 			return graphStates["seeds"].Value
@@ -286,7 +286,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 
 		// Uncomment to list variables used in model.
 		/*
-			ctx.EnumerateVariables(func(v *context.Variable) {
+			ctx.EnumerateVariables(func(v *model.Variable) {
 				fmt.Printf("\t%s=%s\n", v.GetParameterName(), v.Value())
 			})
 		*/
@@ -294,7 +294,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		// Layer-Wise Inference: should return the same values.
 		lw, err := LayerWiseGNN(ctx, strategy)
 		require.NoError(t, err)
-		execLayerWise := context.MustNewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+		execLayerWise := model.MustNewExec(manager, ctx.Reuse(), func(ctx *model.Context, g *Graph) *Node {
 			graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
 			lw.NodePrediction(ctx, graphStates, edges)
 			return graphStates["seeds"]

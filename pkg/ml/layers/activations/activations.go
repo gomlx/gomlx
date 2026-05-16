@@ -4,7 +4,7 @@
 // activation by its type.
 //
 // There is also FromName to convert an activation name (string) to its type, and ApplyFromContext that applies
-// an activation based on the hyperparameter ParamActivation defined in a context.
+// an activation based on the hyperparameter ParamActivation defined in a model.
 package activations
 
 import (
@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/compute"
 
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -78,8 +78,8 @@ func (t Type) ToBackend() compute.ActivationType {
 // and applies it to x.
 //
 // It defaults to "relu".
-func ApplyFromContext(ctx *context.Context, x *Node) *Node {
-	activationName := context.GetParamOr(ctx, ParamActivation, "relu")
+func ApplyFromContext(ctx *model.Context, x *Node) *Node {
+	activationName := model.GetParamOr(ctx, ParamActivation, "relu")
 	return Apply(FromName(activationName), x)
 }
 

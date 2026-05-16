@@ -25,7 +25,7 @@ import (
 	"github.com/gomlx/go-huggingface/tokenizers/api"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/onnx-gomlx/onnx"
 	onnxparser "github.com/gomlx/onnx-gomlx/onnx/parser"
 	"k8s.io/klog/v2"
@@ -90,8 +90,8 @@ func main() {
 	fmt.Printf("Model inputs: %v\n", inputNames)
 	fmt.Printf("Model outputs: %v\n\n", outputNames)
 
-	// Load model weights into context.
-	ctx := context.New()
+	// Load model weights into model.
+	ctx := model.New()
 	if err := model.VariablesToContext(ctx); err != nil {
 		klog.Fatalf("Failed to load model variables: %+v", err)
 	}
@@ -131,7 +131,7 @@ func main() {
 
 // rerank computes relevance scores for a query against multiple documents
 // using a cross-encoder model.
-func rerank(backend compute.Backend, ctx *context.Context, model onnx.Model, tok tokenizers.Tokenizer, query string, documents []string) []float32 {
+func rerank(backend compute.Backend, ctx *model.Context, model onnx.Model, tok tokenizers.Tokenizer, query string, documents []string) []float32 {
 	// Tokenize each query-document pair.
 	pairs := encodePairs(tok, query, documents, *flagMaxLength)
 
@@ -148,9 +148,9 @@ func rerank(backend compute.Backend, ctx *context.Context, model onnx.Model, tok
 	// Run inference. MustExecOnce converts [][]int slices to tensors automatically.
 	var output *tensors.Tensor
 	if hasTokenTypeIDs {
-		output = context.MustExecOnce(
+		output = model.MustExecOnce(
 			backend, ctx,
-			func(ctx *context.Context, inputIDs, attentionMask, tokenTypeIDs *Node) *Node {
+			func(ctx *model.Context, inputIDs, attentionMask, tokenTypeIDs *Node) *Node {
 				g := inputIDs.Graph()
 				outputs := model.CallGraph(ctx, g, map[string]*Node{
 					"input_ids":      inputIDs,
@@ -162,9 +162,9 @@ func rerank(backend compute.Backend, ctx *context.Context, model onnx.Model, tok
 			pairs.inputIDs, pairs.attentionMask, pairs.tokenTypeIDs,
 		)
 	} else {
-		output = context.MustExecOnce(
+		output = model.MustExecOnce(
 			backend, ctx,
-			func(ctx *context.Context, inputIDs, attentionMask *Node) *Node {
+			func(ctx *model.Context, inputIDs, attentionMask *Node) *Node {
 				g := inputIDs.Graph()
 				outputs := model.CallGraph(ctx, g, map[string]*Node{
 					"input_ids":      inputIDs,

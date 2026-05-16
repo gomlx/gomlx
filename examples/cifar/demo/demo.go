@@ -8,7 +8,7 @@ import (
 	"flag"
 
 	"github.com/gomlx/gomlx/examples/cifar"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
@@ -31,8 +31,8 @@ var (
 )
 
 // createDefaultContext sets the context with default hyperparameters
-func createDefaultContext() *context.Context {
-	ctx := context.New()
+func createDefaultContext() *model.Context {
+	ctx := model.New()
 	ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		// Model type to use

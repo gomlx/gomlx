@@ -4,7 +4,7 @@ package layers
 
 import (
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 
@@ -13,8 +13,8 @@ import (
 
 func TestRMSNorm(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
-	exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
+	ctx := model.New()
+	exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x *Node) *Node {
 		return RMSNorm(ctx, x).
 			WithNormalizationAxes(-1, -2).
 			Done()

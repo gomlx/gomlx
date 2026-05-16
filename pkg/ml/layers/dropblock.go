@@ -7,13 +7,13 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
 // DropBlockConfig is created with a DropBlock.
 type DropBlockConfig struct {
-	ctx                *context.Context
+	ctx                *model.Context
 	x                  *Node
 	dropoutProbability *Node
 	channelsAxisConfig images.ChannelsAxisConfig
@@ -46,14 +46,14 @@ var (
 // Call Done when finished configuring, and it will return the regularized value.
 //
 // [1] "DropBlock: A regularization method for convolutional networks", Golnaz Ghiasi, Tsung{-}Yi Lin and Quoc V. Le, https://arxiv.org/abs/1810.12890v1
-func DropBlock(ctx *context.Context, x *Node) *DropBlockConfig {
+func DropBlock(ctx *model.Context, x *Node) *DropBlockConfig {
 	cfg := &DropBlockConfig{
 		ctx: ctx,
 		x:   x,
 	}
-	prob := context.GetParamOr(ctx, ParamDropBlockProbability, 0.0)
+	prob := model.GetParamOr(ctx, ParamDropBlockProbability, 0.0)
 	cfg.WithDropoutProbability(prob)
-	blockSize := context.GetParamOr(ctx, ParamDropBlockSize, 3)
+	blockSize := model.GetParamOr(ctx, ParamDropBlockSize, 3)
 	cfg.WithBlockSize(blockSize)
 	return cfg
 }

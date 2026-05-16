@@ -7,15 +7,15 @@ import (
 	"os/exec"
 	"path"
 
-	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/support/exceptions"
 	"k8s.io/klog/v2"
 )
 
 const outputFile = "gen_builderfns.go"
 
 type config struct {
-	hasGraph bool
+	hasGraph  bool
 	numInputs int
 }
 
@@ -166,88 +166,88 @@ func main() {
 			w("\t\treturn NewExecFunc(backend, m, m.Build)\n")
 		}
 		w("\tdefault:\n")
-		w("\t\treturn nil, errors.Errorf(\"model passed (%%T) doesn't implement any of the valid Build methods signatures supported, "+
+		w("\t\treturn nil, errors.Errorf(\"model passed (%%T) doesn't implement any of the valid Build methods signatures supported, " +
 			"see documentation in model.NewExec for details, or alternatively use model.NewExecFunc\", model)\n")
 		w("\t}\n")
 		w("}\n\n")
 	}
 
 	/*
-	// wInvocation writes the invocation of the builder object, given g, inputs and outputs parameters.
-	wInvocation := func(indent string, c config) {
+		// wInvocation writes the invocation of the builder object, given g, inputs and outputs parameters.
+		wInvocation := func(indent string, c config) {
 
-		// Checks the number of inputs passed.
-		if c.numInputs >= 0 {
-			w("%sif len(inputs) != %d {\n", indent, c.numInputs)
-			w("%s\tpanic(errors.Errorf(\"wrong number of inputs for model, expected %d, got %%d\", len(inputs)))\n", indent, c.numInputs)
-			w("%s}\n", indent)
-		}
+			// Checks the number of inputs passed.
+			if c.numInputs >= 0 {
+				w("%sif len(inputs) != %d {\n", indent, c.numInputs)
+				w("%s\tpanic(errors.Errorf(\"wrong number of inputs for model, expected %d, got %%d\", len(inputs)))\n", indent, c.numInputs)
+				w("%s}\n", indent)
+			}
 
-		// Assign results to outputs.
-		w("%s", indent)
-		if c.numOutputs == -1 {
-			w("return ")
-		} else if c.numOutputs > 0 {
-			w("outputs := make([]*graph.Node, %d)\n%s", c.numOutputs, indent)
-			for i := range c.numOutputs {
-				if i > 0 {
+			// Assign results to outputs.
+			w("%s", indent)
+			if c.numOutputs == -1 {
+				w("return ")
+			} else if c.numOutputs > 0 {
+				w("outputs := make([]*graph.Node, %d)\n%s", c.numOutputs, indent)
+				for i := range c.numOutputs {
+					if i > 0 {
+						w(", ")
+					}
+					w("outputs[%d]", i)
+				}
+				w(" = ")
+			}
+
+			// Write invocation.
+			w("builder(")
+			if c.hasGraph {
+				w("g")
+				if c.numInputs != 0 {
 					w(", ")
 				}
-				w("outputs[%d]", i)
 			}
-			w(" = ")
-		}
-
-		// Write invocation.
-		w("builder(")
-		if c.hasGraph {
-			w("g")
-			if c.numInputs != 0 {
-				w(", ")
-			}
-		}
-		if c.numInputs < 0 {
-			w("inputs...")
-		} else if c.numInputs > 0 {
-			for i := range c.numInputs {
-				if i > 0 {
-					w(", ")
+			if c.numInputs < 0 {
+				w("inputs...")
+			} else if c.numInputs > 0 {
+				for i := range c.numInputs {
+					if i > 0 {
+						w(", ")
+					}
+					w("inputs[%d]", i)
 				}
-				w("inputs[%d]", i)
 			}
+			w(")")
+
+			// Write return.
+			if c.numOutputs == 0 {
+				// No outputs.
+				w("\n%sreturn nil", indent)
+			} else if c.numOutputs > 0 {
+				w("\n%sreturn outputs", indent)
+			}
+			w("\n")
 		}
-		w(")")
 
-		// Write return.
-		if c.numOutputs == 0 {
-			// No outputs.
-			w("\n%sreturn nil", indent)
-		} else if c.numOutputs > 0 {
-			w("\n%sreturn outputs", indent)
+		// Write converter of a model to a generic
+		w("// convertToNormalizedBuilderFn converts a build closure compatible with BuilderFnSet to a canonical BuilderFn matching the corresponding parameters.\n" +
+			"// It also returns the number of inputs and outputs of the underlying Builder.\n")
+		w("func convertToNormalizedBuilderFn[B BuilderFnSet] (builder B) (builderFn normalizedBuilderFn, numInputs, numOutputs int, err error) {\n")
+		w("\treturn convertToNormalizedBuilderImpl(builder)\n}\n\n")
+
+		w("func convertToNormalizedBuilderImpl(builderAny any) (builderFn normalizedBuilderFn, numInputs, numOutputs int, err error) {\n")
+		w("\tswitch builder := builderAny.(type) {\n")
+		for _, c := range iterConfig() {
+			w("\tcase ")
+			wFuncType(c)
+			w(":\n")
+			w("\t\treturn func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {\n")
+			wInvocation("\t\t\t", c)
+			w("\t\t}, %d, %d, nil\n\n", c.numInputs, c.numOutputs)
 		}
-		w("\n")
-	}
-
-	// Write converter of a model to a generic
-	w("// convertToNormalizedBuilderFn converts a build closure compatible with BuilderFnSet to a canonical BuilderFn matching the corresponding parameters.\n" +
-		"// It also returns the number of inputs and outputs of the underlying Builder.\n")
-	w("func convertToNormalizedBuilderFn[B BuilderFnSet] (builder B) (builderFn normalizedBuilderFn, numInputs, numOutputs int, err error) {\n")
-	w("\treturn convertToNormalizedBuilderImpl(builder)\n}\n\n")
-
-	w("func convertToNormalizedBuilderImpl(builderAny any) (builderFn normalizedBuilderFn, numInputs, numOutputs int, err error) {\n")
-	w("\tswitch builder := builderAny.(type) {\n")
-	for _, c := range iterConfig() {
-		w("\tcase ")
-		wFuncType(c)
-		w(":\n")
-		w("\t\treturn func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {\n")
-		wInvocation("\t\t\t", c)
-		w("\t\t}, %d, %d, nil\n\n", c.numInputs, c.numOutputs)
-	}
-	w("\tdefault:\n")
-	w("\t\treturn nil, 0, 0, errors.Errorf(\"model object passed (%%T) doesn't implement any of the valid Build methods signatures supported, see documentation in models.NewExec for details\", builderAny)\n")
-	w("\t}\n}\n")
-*/
+		w("\tdefault:\n")
+		w("\t\treturn nil, 0, 0, errors.Errorf(\"model object passed (%%T) doesn't implement any of the valid Build methods signatures supported, see documentation in models.NewExec for details\", builderAny)\n")
+		w("\t}\n}\n")
+	*/
 	must.M(f.Close())
 	cmd := exec.Command("go", "fmt", outputPath)
 	klog.V(1).Infof("\t%s\n", cmd)

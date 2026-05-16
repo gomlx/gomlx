@@ -8,7 +8,7 @@ import (
 
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -17,9 +17,9 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 	// Verify that BSHD and BHSD layouts produce the same results when
 	// given transposed versions of the same inputs.
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 
-	exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
+	exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v *Node) []*Node {
 		headDim := q.Shape().Dimensions[3]
 		scale := 1.0 / math.Sqrt(float64(headDim))
 
@@ -70,9 +70,9 @@ func TestCore(t *testing.T) {
 	t.Run("BasicIdentity", func(t *testing.T) {
 		// With identity-like inputs, verify output shape and basic computation.
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) *Node {
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			output, _ := Core(ctx, q, k, v, scale, nil, nil, LayoutBHSD, false, false)
@@ -91,9 +91,9 @@ func TestCore(t *testing.T) {
 	t.Run("CustomScale", func(t *testing.T) {
 		// Verify that providing the default scale explicitly produces the same result.
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			defaultScale := 1.0 / math.Sqrt(float64(headDim))
 			// Both use the same scale — should produce identical results
@@ -123,9 +123,9 @@ func TestCore(t *testing.T) {
 
 	t.Run("WithAdditiveMask", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v, mask *Node) *Node {
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v, mask *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			output, _ := Core(ctx, q, k, v, scale, mask, nil, LayoutBHSD, false, false)
@@ -151,9 +151,9 @@ func TestCore(t *testing.T) {
 
 	t.Run("WithBooleanMask", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v, boolMask *Node) *Node {
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v, boolMask *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			// Pass boolean mask directly — Core auto-detects and uses MaskedSoftmax.
@@ -179,9 +179,9 @@ func TestCore(t *testing.T) {
 
 	t.Run("ReturnWeights", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			output, coefficients := Core(ctx, q, k, v, scale, nil, nil, LayoutBHSD, false, true)
@@ -218,9 +218,9 @@ func TestCore(t *testing.T) {
 		// Grouped Query Attention: 2 query heads share 1 KV head.
 		// Verifies both fused and decomposed paths produce the same results.
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			// Fused path (Done-style): numHeads=2, numKVHeads=1 inferred from shapes.
@@ -277,9 +277,9 @@ func TestCore(t *testing.T) {
 	t.Run("GQA_BSHD", func(t *testing.T) {
 		// Same GQA test but with BSHD layout.
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) []*Node {
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			fusedOutput, _ := Core(ctx, q, k, v, scale, nil, nil, LayoutBSHD, false, false)
@@ -314,9 +314,9 @@ func TestCore(t *testing.T) {
 	t.Run("GQA_WithBooleanMask", func(t *testing.T) {
 		// GQA with boolean causal mask.
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v, boolMask *Node) []*Node {
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v, boolMask *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			fusedOutput, _ := Core(ctx, q, k, v, scale, boolMask, nil, LayoutBHSD, false, false)
@@ -356,9 +356,9 @@ func TestCore(t *testing.T) {
 
 	t.Run("Causal", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, q, k, v *Node) *Node {
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			// Use causal=true, no explicit mask.

@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package context
+package model
 
 import (
 	"fmt"
@@ -91,7 +91,7 @@ type ExecGraphFnOneOutput interface {
 //
 // For example, assume you wrote the "symbolic computation" (graph) function:
 //
-//	def LogitsGraph(ctx *context.Context, inputs *Node) *Node {
+//	def LogitsGraph(ctx *model.Context, inputs *Node) *Node {
 //	    logits := layers.Dense(ctx.In("dense0", inputs, 5))
 //		logits = layers.Dense(ctx.In("dense1", logits, 5))
 //		logits = Sigmoid(logits)
@@ -100,8 +100,8 @@ type ExecGraphFnOneOutput interface {
 //
 // And then with Exec one can do:
 //
-//	ctx := context.New(backend)  // New context holding the model variables.
-//	var logitsFn = context.MustNewExec(backend, ctx, LogitsGraph)
+//	ctx := model.New(backend)  // New context holding the model variables.
+//	var logitsFn = model.MustNewExec(backend, ctx, LogitsGraph)
 //	batch := [][]float32{ {1, 2, 3}, {4, 5, 6} } // 2 examples with 3 features (shape=[2,3])
 //	results, err := logitsFn.Exec(batch)
 //	if err != nil {
@@ -129,8 +129,8 @@ type ExecGraphFnOneOutput interface {
 //
 // Example: Implementing a counter in a variable:
 //
-//	ctx := context.New()
-//	counterExec := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+//	ctx := model.New()
+//	counterExec := model.MustNewExec(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 //		counterVar := ctx.VariableWithValue("count", int32(10))
 //		count := counterVar.ValueGraph(g)
 //		count = AddScalar(count, 1)
@@ -154,7 +154,7 @@ type ExecGraphFnOneOutput interface {
 //
 // # Concurrency
 //
-// context.Exec inherits concurrent graph compilation from graph.Exec. The provided
+// model.Exec inherits concurrent graph compilation from graph.Exec. The provided
 // ctxGraphFn must be safe for concurrent invocation — each call receives its own Graph
 // and Node arguments, but ctxGraphFn must not mutate external shared state without its
 // own synchronization.
@@ -193,7 +193,7 @@ type Exec struct {
 // Alternatively, it can, instead of *Node inputs, take a *Graph object, when there are no input tensors.
 //
 // The Context ctx passed in the construction is used in all calls to ctxGraphFn, as well as during the graph execution later.
-// If set to nil, it automatically creates a new empty context.
+// If set to nil, it automatically creates a new empty model.
 //
 // Before the execution of a graph, it initializes the variables as needed, using the configured initializer.
 // And variables updated in the graph (using Variable.SetValueGraph) are updated also during execution.
@@ -281,7 +281,7 @@ func NewExecAny(backend compute.Backend, ctx *Context, ctxGraphFn any) (*Exec, e
 
 // buildGraphFn constructs a function graphFn that can be passed to the wrapped Exec.
 // This function is a closure that will call the ctxGraphFn provided by the user with the
-// extra *context.Context argument, plus it prepends the output with the updated values --
+// extra *model.Context argument, plus it prepends the output with the updated values --
 // so it can behind the scenes update the variables to the user.
 func (e *Exec) buildGraphFn() {
 	ctxGraphFnT := reflect.TypeOf(e.ctxGraphFn)
@@ -389,7 +389,7 @@ func (e *Exec) Finalize() {
 // And this function needs to set the last parameters (used by the variables) for each device,
 // in the order they were added to the backend.
 //
-// `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
+// `Exec*` methods are used by those implementing an executor (model.Exec) or related tests, not normally
 // needed by end users.
 func (e *Exec) setSideParams(g *Graph, inputBuffers []compute.Buffer, donate []bool) error {
 	// Initialize variables if needed.

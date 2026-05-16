@@ -9,11 +9,11 @@ import (
 	"github.com/gomlx/compute/support/humanize"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 )
 
-func Summary(ctxs, scopedCtxs []*context.Context, names []string) {
+func Summary(ctxs, scopedCtxs []*model.Context, names []string) {
 	numCheckpoints := len(names)
 
 	// Header
@@ -55,7 +55,7 @@ func Summary(ctxs, scopedCtxs []*context.Context, names []string) {
 	for ii, scopedCtx := range scopedCtxs {
 		var numVars, totalSize int
 		var totalMemory int64
-		scopedCtx.EnumerateVariablesInScope(func(v *context.Variable) {
+		scopedCtx.EnumerateVariablesInScope(func(v *model.Variable) {
 			numVars++
 			totalSize += v.Shape().Size()
 			totalMemory += v.Shape().ByteSize()

@@ -3,7 +3,7 @@
 package fm
 
 import (
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
@@ -14,8 +14,8 @@ import (
 )
 
 // CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
-func CreateDefaultContext() *context.Context {
-	ctx := context.New()
+func CreateDefaultContext() *model.Context {
+	ctx := model.New()
 	ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		// Model type to use

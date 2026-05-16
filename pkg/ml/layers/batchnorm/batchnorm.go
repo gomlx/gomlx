@@ -16,8 +16,8 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 )
@@ -25,7 +25,7 @@ import (
 // Config for a batch normalization layer.
 // Create it with New, set the desired parameters, and when all is set, call Done.
 type Config struct {
-	ctx                       *context.Context
+	ctx                       *model.Context
 	x                         *Node
 	featureAxis               int
 	momentum, epsilon         float64
@@ -73,7 +73,7 @@ const (
 // FutureWork:
 // 1. Support padding by not normalizing parts that weren't touched.
 // 2. Support selection of multiple features axes.
-func New(ctx *context.Context, x *Node, featureAxis int) *Config {
+func New(ctx *model.Context, x *Node, featureAxis int) *Config {
 	return &Config{
 		ctx:                 ctx,
 		x:                   x,
@@ -140,7 +140,7 @@ func (builder *Config) CurrentScope() *Config {
 // The default is `true`.
 //
 // Independent of the value set here, if the context is not set for training (
-// see `context.Context.IsTraining()`) like during evaluation and inference,
+// see `model.Context.IsTraining()`) like during evaluation and inference,
 // the Config will generate code for inference only.
 func (builder *Config) Trainable(trainable bool) *Config {
 	builder.trainable = trainable
@@ -175,7 +175,7 @@ func (builder *Config) Done() *Node {
 
 	// Set about batch normalization usage.
 	if builder.trainable && !builder.frozenAverages {
-		builder.ctx.InAbsPath(context.RootScope).SetParam(AveragesUpdatesTriggerParam, true)
+		builder.ctx.InAbsPath(model.RootScope).SetParam(AveragesUpdatesTriggerParam, true)
 	}
 
 	// Creates new scope for variables.
@@ -190,7 +190,7 @@ func (builder *Config) Done() *Node {
 	// Scale and offset applied to the normalized value.
 	var scale, offset *Node
 	varShape := shapes.Make(dtype, featureDim)
-	var scaleVar *context.Variable
+	var scaleVar *model.Variable
 	if builder.scale {
 		scaleVar = ctx.WithInitializer(initializers.One).VariableWithShape("scale", varShape).SetTrainable(true)
 		scale = scaleVar.ValueGraph(g)
@@ -214,7 +214,7 @@ func (builder *Config) Done() *Node {
 
 	var normalized *Node
 	mean, variance := meanAverageVar.ValueGraph(g), varianceAverageVar.ValueGraph(g)
-	averagesUpdatePhase := context.GetGraphParamOr(ctx, g, train.BatchNormalizationUpdatePhase, -1)
+	averagesUpdatePhase := model.GetGraphParamOr(ctx, g, train.BatchNormalizationUpdatePhase, -1)
 	if averagesUpdatePhase >= 0 {
 		if builder.frozenAverages {
 			normalized = builder.directBatchNormGraph(x, scale, offset, mean, variance)
@@ -266,7 +266,7 @@ func (builder *Config) Done() *Node {
 
 	// Add regularization to scale.
 	if scaleVar != nil {
-		if l2 := context.GetParamOr(ctx, regularizers.ParamL2, 0.0); l2 > 0 {
+		if l2 := model.GetParamOr(ctx, regularizers.ParamL2, 0.0); l2 > 0 {
 			reg := regularizers.L2(l2)
 			reg(ctx, g, scaleVar)
 		}
@@ -313,21 +313,21 @@ func (builder *Config) directBatchNormGraph(x, scale, offset, mean, variance *No
 	return normalized
 }
 
-// batchNormUpdater implements context.PerStepUpdateHandler, which is called by optimizers at every step
+// batchNormUpdater implements model.PerStepUpdateHandler, which is called by optimizers at every step
 type batchNormUpdater struct {
 	builder                            *Config
-	meanAverageVar, varianceAverageVar *context.Variable
-	weightVar                          *context.Variable
+	meanAverageVar, varianceAverageVar *model.Variable
+	weightVar                          *model.Variable
 	mean, variance                     *Node
 }
 
 // updateMeanAndVariance values that will be used in inference later. It's a moving average, where weight is how many
 // examples have been seen so far -- it's incremented at every step.
 func (builder *Config) updateMeanAndVariance(
-	ctx *context.Context,
+	ctx *model.Context,
 	graph *Graph,
 	batchMean, batchVariance *Node,
-	meanAverageVar, varianceAverageVar, weightVar *context.Variable,
+	meanAverageVar, varianceAverageVar, weightVar *model.Variable,
 ) {
 	_ = ctx
 	if builder.frozenAverages {
@@ -359,7 +359,7 @@ func (builder *Config) updateMeanAndVariance(
 // It is a no-op if no batch-normalization was used.
 //
 // Usually this method is not used directly, instead use UpdateAverages.
-func ResetWeights(ctx *context.Context) error {
+func ResetWeights(ctx *model.Context) error {
 	suffix := "/" + BatchNormalizationScopeName
 	for v := range ctx.IterVariablesInScope() {
 		if strings.HasSuffix(v.Scope(), suffix) && v.Name() == "avg_weight" {
@@ -398,7 +398,7 @@ const (
 // - https://discuss.pytorch.org/t/batch-norm-instability/32159/14
 func UpdateAverages(trainer *train.Trainer, oneEpochDS train.Dataset) (bool, error) {
 	ctx := trainer.Context()
-	if !context.GetParamOr(ctx, AveragesUpdatesTriggerParam, false) {
+	if !model.GetParamOr(ctx, AveragesUpdatesTriggerParam, false) {
 		// No-op.
 		return false, nil
 	}

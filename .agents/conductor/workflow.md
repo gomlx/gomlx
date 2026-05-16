@@ -337,7 +337,7 @@ A task is complete when:
 
 ### Executing models and graphs:
 
-If executing a model with variables, those are stored in `pkg/ml/context.Context` objects, and require `context.Exec` 
+If executing a model with variables, those are stored in `ml/model.Context` objects, and require `model.Exec` 
 object to execute. Simpler graph functions can be simply executed with `pkg/core/graph.Exec` objects. They both
 have very similar APIs, just one takes an extra `Context` object with the models variables and parameters.
 

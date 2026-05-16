@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package context
+package model
 
 // Aliases to GoMLX basic types.
 //

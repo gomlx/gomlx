@@ -7,7 +7,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -16,7 +16,7 @@ import (
 func TestKVCacheFunctions(t *testing.T) {
 	t.Run("InitAndGet", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
 		batchSize := 1
 		numHeads := 2
@@ -24,7 +24,7 @@ func TestKVCacheFunctions(t *testing.T) {
 		headDim := 8
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, input *Node) *Node {
+		exec := model.MustNewExec(backend, ctx, func(testCtx *model.Context, input *Node) *Node {
 			g := input.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
@@ -39,7 +39,7 @@ func TestKVCacheFunctions(t *testing.T) {
 
 	t.Run("SingleUpdateWritesToCache", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
 		batchSize := 1
 		numHeads := 2
@@ -47,7 +47,7 @@ func TestKVCacheFunctions(t *testing.T) {
 		headDim := 4
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, position, keys, values *Node) *Node {
+		exec := model.MustNewExec(backend, ctx, func(testCtx *model.Context, position, keys, values *Node) *Node {
 			g := keys.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
@@ -74,7 +74,7 @@ func TestKVCacheFunctions(t *testing.T) {
 
 	t.Run("MultipleUpdatesAtDifferentPositions", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
 		batchSize := 1
 		numHeads := 2
@@ -83,7 +83,7 @@ func TestKVCacheFunctions(t *testing.T) {
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
 		// First update at position 0
-		exec1 := context.MustNewExec(backend, ctx, func(testCtx *context.Context, position, keys, values *Node) *Node {
+		exec1 := model.MustNewExec(backend, ctx, func(testCtx *model.Context, position, keys, values *Node) *Node {
 			g := keys.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
@@ -100,7 +100,7 @@ func TestKVCacheFunctions(t *testing.T) {
 
 		// Second update at position 1
 		ctx2 := ctx.Reuse()
-		exec2 := context.MustNewExec(backend, ctx2, func(testCtx *context.Context, position, keys, values *Node) *Node {
+		exec2 := model.MustNewExec(backend, ctx2, func(testCtx *model.Context, position, keys, values *Node) *Node {
 			g := keys.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
@@ -120,7 +120,7 @@ func TestKVCacheFunctions(t *testing.T) {
 
 	t.Run("BatchProcessing", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
 		batchSize := 3
 		numHeads := 2
@@ -128,7 +128,7 @@ func TestKVCacheFunctions(t *testing.T) {
 		headDim := 4
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, position, keys, values *Node) *Node {
+		exec := model.MustNewExec(backend, ctx, func(testCtx *model.Context, position, keys, values *Node) *Node {
 			g := keys.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
@@ -158,7 +158,7 @@ func TestKVCacheFunctions(t *testing.T) {
 
 	t.Run("GetAfterUpdateShape", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
 		batchSize := 1
 		numHeads := 2
@@ -166,7 +166,7 @@ func TestKVCacheFunctions(t *testing.T) {
 		headDim := 4
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, position, keys, values *Node) *Node {
+		exec := model.MustNewExec(backend, ctx, func(testCtx *model.Context, position, keys, values *Node) *Node {
 			g := keys.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
@@ -190,7 +190,7 @@ func TestKVCacheFunctions(t *testing.T) {
 
 	t.Run("ResetClearsCache", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
 		batchSize := 2
 		numHeads := 2
@@ -199,7 +199,7 @@ func TestKVCacheFunctions(t *testing.T) {
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
 		// First: update the cache with some values
-		updateExec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, position, keys, values *Node) *Node {
+		updateExec := model.MustNewExec(backend, ctx, func(testCtx *model.Context, position, keys, values *Node) *Node {
 			g := keys.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
@@ -227,7 +227,7 @@ func TestKVCacheFunctions(t *testing.T) {
 		KVCacheReset(cacheCtx)
 
 		// Verify cache is cleared by reading key values
-		getExec := context.MustNewExec(backend, ctx.Reuse(), func(testCtx *context.Context, dummy *Node) *Node {
+		getExec := model.MustNewExec(backend, ctx.Reuse(), func(testCtx *model.Context, dummy *Node) *Node {
 			g := dummy.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 			cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
@@ -242,7 +242,7 @@ func TestKVCacheFunctions(t *testing.T) {
 
 	t.Run("CreateAttentionMaskShape", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
+		ctx := model.New()
 
 		batchSize := 1
 		numHeads := 2
@@ -250,7 +250,7 @@ func TestKVCacheFunctions(t *testing.T) {
 		headDim := 4
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, position, keys, values *Node) *Node {
+		exec := model.MustNewExec(backend, ctx, func(testCtx *model.Context, position, keys, values *Node) *Node {
 			g := keys.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
@@ -270,7 +270,7 @@ func TestKVCacheFunctions(t *testing.T) {
 // TestKVCachePersistence tests that cache variables persist across multiple graph executions
 func TestKVCachePersistence(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 
 	batchSize := 1
 	numHeads := 2
@@ -279,7 +279,7 @@ func TestKVCachePersistence(t *testing.T) {
 	cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
 	// First execution: Initialize and update with 3 keys/values at position 0
-	exec1 := context.MustNewExec(backend, ctx.Reuse(), func(testCtx *context.Context, position *Node) *Node {
+	exec1 := model.MustNewExec(backend, ctx.Reuse(), func(testCtx *model.Context, position *Node) *Node {
 		g := position.Graph()
 		cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
@@ -299,7 +299,7 @@ func TestKVCachePersistence(t *testing.T) {
 	assert.True(t, cached1[0][0][2][0] >= 10.0, "Expected non-zero value at position 2 after first update")
 
 	// Second execution: Update with 1 more key/value at position 3
-	exec2 := context.MustNewExec(backend, ctx.Reuse(), func(testCtx *context.Context, position *Node) *Node {
+	exec2 := model.MustNewExec(backend, ctx.Reuse(), func(testCtx *model.Context, position *Node) *Node {
 		g := position.Graph()
 		cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
@@ -325,14 +325,14 @@ func TestKVCacheCircular(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 
 	t.Run("SingleTokenWrapAround", func(t *testing.T) {
-		ctx := context.New()
+		ctx := model.New()
 		batchSize := 1
 		numHeads := 1
 		maxSeqLen := 4 // Small cache to test wrapping
 		headDim := 2
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, position, keys, values *Node) *Node {
+		exec := model.MustNewExec(backend, ctx, func(testCtx *model.Context, position, keys, values *Node) *Node {
 			g := position.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 
@@ -364,14 +364,14 @@ func TestKVCacheCircular(t *testing.T) {
 	})
 
 	t.Run("MultiTokenWrapAround", func(t *testing.T) {
-		ctx := context.New()
+		ctx := model.New()
 		batchSize := 1
 		numHeads := 1
 		maxSeqLen := 4 // Small cache to test wrapping
 		headDim := 2
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		exec := context.MustNewExec(backend, ctx, func(testCtx *context.Context, position, keys, values *Node) *Node {
+		exec := model.MustNewExec(backend, ctx, func(testCtx *model.Context, position, keys, values *Node) *Node {
 			g := position.Graph()
 			cacheCtx := testCtx.In("cache").Reuse().Checked(false)
 

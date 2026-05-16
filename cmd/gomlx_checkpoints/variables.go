@@ -14,8 +14,8 @@ import (
 	"github.com/gomlx/compute/support/humanize"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoints"
 )
 
 var (
@@ -28,7 +28,7 @@ var (
 )
 
 // ListVariables list the variables of a model, with their shape and MAV (max absolute value), RMS (root-mean-square) and MaxAV (max absolute value) values.
-func ListVariables(ctx *context.Context) {
+func ListVariables(ctx *model.Context) {
 	fmt.Println(titleStyle.Render(fmt.Sprintf("Variables in scope %q", ctx.Scope())))
 	metricsFn := MustNewExec(compute.MustNew(), func(x *Node) (mav, rms, maxAV *Node) {
 		x = ConvertDType(x, dtypes.Float64)
@@ -40,7 +40,7 @@ func ListVariables(ctx *context.Context) {
 	table := newPlainTable(true)
 	table.Headers("Scope", "Name", "Shape", "Size", "Bytes", "Scalar/MAV", "RMS", "MaxAV")
 	var rows [][]string
-	ctx.EnumerateVariablesInScope(func(v *context.Variable) {
+	ctx.EnumerateVariablesInScope(func(v *model.Variable) {
 		if !v.IsValid() {
 			rows = append(rows, []string{v.Scope(), v.Name(), "<invalid>", "", "", "", "", ""})
 			return
@@ -83,15 +83,15 @@ func ListVariables(ctx *context.Context) {
 
 // DeleteVars on the given scopes.
 func DeleteVars(checkpointPath string, scopes ...string) {
-	ctx := context.New()
+	ctx := model.New()
 	checkpoint := must.M1(checkpoints.Build(ctx).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
-	var varsToDelete []*context.Variable
+	var varsToDelete []*model.Variable
 	for _, scope := range scopes {
 		if scope == "" {
 			continue
 		}
-		scopePrefix := scope + context.ScopeSeparator
+		scopePrefix := scope + model.ScopeSeparator
 		for v := range ctx.IterVariables() {
 			if v.Scope() == scope || strings.HasPrefix(v.Scope(), scopePrefix) {
 				varsToDelete = append(varsToDelete, v)
@@ -111,7 +111,7 @@ func DeleteVars(checkpointPath string, scopes ...string) {
 
 func PerturbVars(checkpointPath string, x float64) {
 	backend := must.M1(gobackend.New(""))
-	ctx := context.New()
+	ctx := model.New()
 	checkpoint := must.M1(checkpoints.Build(ctx).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
 	var numUpdates int
@@ -119,7 +119,7 @@ func PerturbVars(checkpointPath string, x float64) {
 		if !v.Trainable || !(v.DType().IsFloat() || v.DType().IsComplex()) {
 			continue
 		}
-		newValue := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+		newValue := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 			value := v.ValueGraph(g)
 			// Perturbation from -1 to 1
 			perturbation := OneMinus(MulScalar(ctx.RandomUniform(g, value.Shape()), 2))

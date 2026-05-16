@@ -11,14 +11,14 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDropBlock(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 	ctx.SetRNGStateFromSeed(42) // Always the same result.
 	batchSize := 10
 	width, height := 100, 100
@@ -26,7 +26,7 @@ func TestDropBlock(t *testing.T) {
 	shape := shapes.Make(dtypes.Float32, batchSize, width, height, numChannels)
 	for _, dropRate := range []float64{0.1, 0.2} {
 		for _, blockSize := range []int{1, 3, 4} {
-			gotT := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+			gotT := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 				ctx.SetTraining(g, true)
 				batch := ctx.RandomUniform(g, shape)
 				batch = DropBlock(ctx, batch).
@@ -51,9 +51,9 @@ func TestDropBlock(t *testing.T) {
 
 func TestDropPath(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 	ctx.SetRNGStateFromSeed(42) // Always the same result.
-	gotT := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+	gotT := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 		ctx.SetTraining(g, true)
 		ones := Ones(g, shapes.Make(dtypes.Float32, 10_000, 10, 10))
 		masked := DropPath(ctx, ones, Const(g, 0.07))

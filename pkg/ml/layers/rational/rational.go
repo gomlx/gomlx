@@ -27,8 +27,8 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -36,7 +36,7 @@ import (
 //
 // Call its several methods to configure, and Done when configuration is finished to apply the rational function.
 type Config struct {
-	ctx   *context.Context
+	ctx   *model.Context
 	input *Node
 
 	// numInputGroups must be a divisor of the feature (last) dimension of input, and allows multiple inputs to share the same learnable rational function.
@@ -73,7 +73,7 @@ type Config struct {
 // New returns a Config object that can be further configured. Once finished, call Config.Done and it will
 // return the result of "rational(x)" with the same as x.Shape(), except if configured with a Config.WithMultipleOutputs,
 // in which case there is an extra output axis with dimension equal to the number of the outputs.
-func New(ctx *context.Context, x *Node) *Config {
+func New(ctx *model.Context, x *Node) *Config {
 	if x.IsScalar() {
 		x = Reshape(x, 1)
 	}

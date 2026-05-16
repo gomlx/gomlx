@@ -10,8 +10,8 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -105,15 +105,15 @@ type discreteConfig struct {
 	splitPointInitialValue                  *tensors.Tensor
 }
 
-// initDiscrete initializes the default values for Discrete-KANs based on context.
-func (c *Config) initDiscrete(ctx *context.Context) {
-	c.discrete.softness = context.GetParamOr(ctx, ParamDiscreteSoftness, 0.1)
-	c.discrete.minSoftness = context.GetParamOr(ctx, ParamDiscreteSoftnessScheduleMin, 1e-5)
-	c.discrete.splitPointsTrainable = context.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, false)
-	c.discrete.splitPointsFrozen = context.GetParamOr(ctx, ParamDiscreteSplitPointsFrozen, false)
+// initDiscrete initializes the default values for Discrete-KANs based on model.
+func (c *Config) initDiscrete(ctx *model.Context) {
+	c.discrete.softness = model.GetParamOr(ctx, ParamDiscreteSoftness, 0.1)
+	c.discrete.minSoftness = model.GetParamOr(ctx, ParamDiscreteSoftnessScheduleMin, 1e-5)
+	c.discrete.splitPointsTrainable = model.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, false)
+	c.discrete.splitPointsFrozen = model.GetParamOr(ctx, ParamDiscreteSplitPointsFrozen, false)
 	c.DiscreteInputRange(-1, 1)
 
-	perturbationStr := context.GetParamOr(ctx, ParamDiscretePerturbation, "triangular")
+	perturbationStr := model.GetParamOr(ctx, ParamDiscretePerturbation, "triangular")
 	switch perturbationStr {
 	case "", "triangular":
 		c.discrete.perturbation = PerturbationTriangular
@@ -124,7 +124,7 @@ func (c *Config) initDiscrete(ctx *context.Context) {
 			"\"triangular\", \"normal\"", ParamDiscretePerturbation, perturbationStr)
 	}
 
-	softnessScheduleStr := context.GetParamOr(ctx, ParamDiscreteSoftnessSchedule, SoftnessScheduleNone.String())
+	softnessScheduleStr := model.GetParamOr(ctx, ParamDiscreteSoftnessSchedule, SoftnessScheduleNone.String())
 	var err error
 	c.discrete.softnessSchedule, err = SoftnessScheduleTypeString(softnessScheduleStr)
 	if err != nil {
@@ -264,7 +264,7 @@ func (c *Config) DiscreteInitialSplitPoints(initialValues *tensors.Tensor) *Conf
 }
 
 // Layer implements one Discrete-KAN layer. x is expected to be shaped [batchSize, numInputNodes].
-func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int) *Node {
+func (c *Config) discreteLayer(ctx *model.Context, x *Node, numOutputNodes int) *Node {
 	g := x.Graph()
 	dtype := x.DType()
 	residual := x
@@ -335,9 +335,9 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 
 		// At the end of each training step, project splitPoints back to monotonically increasing values, so they
 		// don't overlap.
-		train.AddPerStepUpdateGraphFn(ctx.In("kan_discrete_split_points_projection"), g, func(ctx *context.Context, g *Graph) {
+		train.AddPerStepUpdateGraphFn(ctx.In("kan_discrete_split_points_projection"), g, func(ctx *model.Context, g *Graph) {
 			splitPoints := splitPointsVar.ValueGraph(g)
-			margin := Scalar(g, splitPoints.DType(), context.GetParamOr(ctx, ParamDiscreteSplitsMargin, 0.01))
+			margin := Scalar(g, splitPoints.DType(), model.GetParamOr(ctx, ParamDiscreteSplitsMargin, 0.01))
 			splitPoints = optimizers.MonotonicProjection(splitPoints, margin, -1)
 			splitPointsVar.SetValueGraph(splitPoints)
 		})
@@ -374,14 +374,14 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 }
 
 // scheduledSoftness adjust the base softness according to the configured schedule.
-func (c *Config) scheduledSoftness(ctx *context.Context, base *Node) *Node {
+func (c *Config) scheduledSoftness(ctx *model.Context, base *Node) *Node {
 	if c.discrete.softnessSchedule == SoftnessScheduleNone {
 		return base
 	}
 
 	g := base.Graph()
 	dtype := base.DType()
-	rootCtx := ctx.InAbsPath(context.RootScope)
+	rootCtx := ctx.InAbsPath(model.RootScope)
 
 	// Calculate scheduleTime: from 0.0 to 1.0 depending on training progress.
 	globalStep := ConvertDType(optimizers.GetGlobalStepVar(rootCtx).ValueGraph(g), dtypes.Float32)

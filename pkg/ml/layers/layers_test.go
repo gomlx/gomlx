@@ -13,8 +13,8 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/plot"
@@ -40,10 +40,10 @@ func IotaP1Initializer(g *Graph, shape Shape) *Node {
 }
 
 func testSimpleFunc(t *testing.T, name string, input any,
-	fn func(ctx *context.Context, input *Node) *Node, want any) {
+	fn func(ctx *model.Context, input *Node) *Node, want any) {
 	backend := testutil.BuildTestBackend()
-	ctx := context.New().WithInitializer(IotaP1Initializer)
-	exec := context.MustNewExec(backend, ctx, fn)
+	ctx := model.New().WithInitializer(IotaP1Initializer)
+	exec := model.MustNewExec(backend, ctx, fn)
 	var outputs []*tensors.Tensor
 	require.NotPanicsf(t, func() { outputs = exec.MustExec(input) }, "%s: failed to exec graph", name)
 	fmt.Printf("\t%s(%v) = %s\n", name, input, outputs[0].GoStr())
@@ -52,10 +52,10 @@ func testSimpleFunc(t *testing.T, name string, input any,
 }
 
 func testSimpleFuncMany(t *testing.T, name string, inputs []any,
-	fn func(ctx *context.Context, inputs []*Node) *Node, want any) {
+	fn func(ctx *model.Context, inputs []*Node) *Node, want any) {
 	backend := testutil.BuildTestBackend()
-	ctx := context.New().WithInitializer(IotaP1Initializer)
-	exec := context.MustNewExec(backend, ctx, fn)
+	ctx := model.New().WithInitializer(IotaP1Initializer)
+	exec := model.MustNewExec(backend, ctx, fn)
 	var outputs []*tensors.Tensor
 	require.NotPanicsf(t, func() { outputs = exec.MustExec(inputs...) }, "%s: failed to exec graph", name)
 	parts := make([]string, len(inputs))
@@ -70,7 +70,7 @@ func testSimpleFuncMany(t *testing.T, name string, inputs []any,
 
 func TestDense(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := context.New().WithInitializer(IotaP1Initializer)
+	ctx := model.New().WithInitializer(IotaP1Initializer)
 	g := NewGraph(backend, "TestDense")
 	input := tensors.FromValue([][]float32{{1, 2}, {10, 20}, {100, 200}})
 	fmt.Printf("\tinput=%v\n", input)
@@ -89,7 +89,7 @@ func TestDense(t *testing.T) {
 
 	// Before running the graph initialize the variables.
 	ctx.InitializeVariables(backend, nil)
-	ctx.EnumerateVariables(func(v *context.Variable) {
+	ctx.EnumerateVariables(func(v *model.Variable) {
 		fmt.Printf("\t%s=%v\n", v.ParameterName(), v.MustValue())
 	})
 
@@ -126,7 +126,7 @@ func TestDense(t *testing.T) {
 func TestDense2(t *testing.T) {
 	testSimpleFunc(t, "Dense([4,1,2], true, 3, 1)",
 		[][][]float32{{{1, 2}}, {{10, 20}}, {{100, 200}}, {{100, 200}}},
-		func(ctx *context.Context, input *Node) *Node {
+		func(ctx *model.Context, input *Node) *Node {
 			return Dense(ctx, input, true, 3, 1)
 		},
 		[][][][]float32{{{{6}, {7}, {8}}}, {{{51}, {52}, {53}}}, {{{501}, {502}, {503}}}, {{{501}, {502}, {503}}}},
@@ -134,7 +134,7 @@ func TestDense2(t *testing.T) {
 
 	testSimpleFunc(t, "DenseWithBias([100, 3072], 4) == 0",
 		float32(0),
-		func(ctx *context.Context, input *Node) *Node {
+		func(ctx *model.Context, input *Node) *Node {
 			g := input.Graph()
 			input = Ones(g, shapes.Make(dtypes.Float32, 100, 3072))
 			output := DenseWithBias(ctx.WithInitializer(initializers.Zero), input, 4)
@@ -172,7 +172,7 @@ func plotComputation(title string, start, end float64, fns ...func(x float64) fl
 func TestPieceWiseLinearCalibration(t *testing.T) {
 	manager := testutil.BuildTestBackend()
 	{
-		ctx := context.New()
+		ctx := model.New()
 		g := NewGraph(manager, "test")
 		const numKeypoints = 5
 		const maxInput = 100
@@ -221,7 +221,7 @@ func TestPieceWiseLinearCalibration(t *testing.T) {
 func TestLayerNormalization(t *testing.T) {
 	testSimpleFunc(t, "LayerNormalization()",
 		[][]float32{{0, 10}, {20, 30}, {40, 50}},
-		func(ctx *context.Context, input *Node) *Node {
+		func(ctx *model.Context, input *Node) *Node {
 			return LayerNormalization(ctx, input, -1).LearnedOffset(false).LearnedGain(false).Epsilon(0).Done()
 		},
 		[][]float32{{-1, 1}, {-1, 1}, {-1, 1}},
@@ -229,7 +229,7 @@ func TestLayerNormalization(t *testing.T) {
 
 	testSimpleFunc(t, "LayerNormalization()",
 		[][]float32{{0, 10}, {20, 30}, {40, 50}},
-		func(ctx *context.Context, input *Node) *Node {
+		func(ctx *model.Context, input *Node) *Node {
 			return LayerNormalization(ctx, input, -1).LearnedOffset(false).LearnedGain(false).Epsilon(0).ScaleNormalization(false).Done()
 		},
 		[][]float32{{-5, 5}, {-5, 5}, {-5, 5}},
@@ -239,7 +239,7 @@ func TestLayerNormalization(t *testing.T) {
 			[][]float32{{0, 10, 5}, {20, 30, 0}, {0, 30, 50}, {0, 0, 0}},
 			[][]bool{{true, true, true}, {true, true, false}, {true, false, true}, {false, false, false}},
 		},
-		func(ctx *context.Context, inputs []*Node) *Node {
+		func(ctx *model.Context, inputs []*Node) *Node {
 			return LayerNormalization(ctx, inputs[0], -1).Mask(inputs[1]).
 				LearnedOffset(false).LearnedGain(false).Epsilon(0).
 				ScaleNormalization(false).Done()

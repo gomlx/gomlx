@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package context_test
+package model_test
 
 import (
 	"fmt"
@@ -12,8 +12,8 @@ import (
 	"github.com/gomlx/compute/shapes"
 	graph "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	. "github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	. "github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/support/sets"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
@@ -355,7 +355,7 @@ func TestContext_SetLoader(t *testing.T) {
 		return v0.ValueGraph(g), v1.ValueGraph(g)
 	})
 	var results []*tensors.Tensor
-	require.NotPanics(t, func() { results = e.MustExec() }, "Failed to run context.Exec")
+	require.NotPanics(t, func() { results = e.MustExec() }, "Failed to run model.Exec")
 	gotV0 := tensors.ToScalar[float32](results[0])
 	gotV1 := tensors.ToScalar[int64](results[1])
 	if gotV0 != 2 || gotV1 != 3 {

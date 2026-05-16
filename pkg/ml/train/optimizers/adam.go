@@ -8,8 +8,8 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -111,11 +111,11 @@ type AdamConfig struct {
 	backoffSteps int
 }
 
-// FromContext will configure Adam with hyperparameters set in the given context.
+// FromContext will configure Adam with hyperparameters set in the given model.
 // E.g.: "adam_epsilon" (see [ParamAdamEpsilon]) is used to set [AdamConfig.Epsilon].
-func (c *AdamConfig) FromContext(ctx *context.Context) *AdamConfig {
-	c.Epsilon(context.GetParamOr(ctx, ParamAdamEpsilon, c.epsilon))
-	dtypeStr := context.GetParamOr(ctx, ParamAdamDType, "")
+func (c *AdamConfig) FromContext(ctx *model.Context) *AdamConfig {
+	c.Epsilon(model.GetParamOr(ctx, ParamAdamEpsilon, c.epsilon))
+	dtypeStr := model.GetParamOr(ctx, ParamAdamDType, "")
 	if dtypeStr != "" {
 		dtype, err := dtypes.DTypeString(dtypeStr)
 		if err != nil || !dtype.IsFloat() {
@@ -123,9 +123,9 @@ func (c *AdamConfig) FromContext(ctx *context.Context) *AdamConfig {
 		}
 		c.DType(dtype)
 	}
-	c.WeightDecay(context.GetParamOr(ctx, ParamAdamWeightDecay, 0.0))
-	c.beta1 = context.GetParamOr(ctx, ParamAdamBeta1, 0.9)
-	c.beta2 = context.GetParamOr(ctx, ParamAdamBeta2, 0.999)
+	c.WeightDecay(model.GetParamOr(ctx, ParamAdamWeightDecay, 0.0))
+	c.beta1 = model.GetParamOr(ctx, ParamAdamBeta1, 0.9)
+	c.beta2 = model.GetParamOr(ctx, ParamAdamBeta2, 0.999)
 	return c
 }
 
@@ -227,7 +227,7 @@ type adam struct {
 
 // UpdateGraph builds the graph to update the weights for one training step.
 // It implements optimizers.Interface.
-func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
+func (o *adam) UpdateGraph(ctx *model.Context, g *Graph, loss *Node) {
 	if !loss.Shape().IsScalar() {
 		Panicf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", loss.Shape())
 		return
@@ -236,7 +236,7 @@ func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 	o.UpdateGraphWithGradients(ctx, grads, loss.DType())
 }
 
-func (o *adam) UpdateGraphWithGradients(ctx *context.Context, grads []*Node, lossDType dtypes.DType) {
+func (o *adam) UpdateGraphWithGradients(ctx *model.Context, grads []*Node, lossDType dtypes.DType) {
 	if len(grads) == 0 {
 		Panicf(
 			"Context.BuildTrainableVariablesGradientsGraph returned 0 gradients, are there any trainable variables ?",
@@ -252,7 +252,7 @@ func (o *adam) UpdateGraphWithGradients(ctx *context.Context, grads []*Node, los
 	// Set up learning-rate.
 	lrValue := o.config.learningRate
 	if lrValue < 0 {
-		lrValue = context.GetParamOr(ctx, ParamLearningRate, AdamDefaultLearningRate)
+		lrValue = model.GetParamOr(ctx, ParamLearningRate, AdamDefaultLearningRate)
 	}
 	lrVar := LearningRateVar(ctx, dtype, lrValue)
 	learningRate := lrVar.ValueGraph(g)
@@ -313,7 +313,7 @@ func (o *adam) UpdateGraphWithGradients(ctx *context.Context, grads []*Node, los
 
 // applyAdamGraph calculates variable and its 1st and 2nd order moments updates.
 // If `Adamax` is set, we use instead moment2 to store the L-infinity (the max) of the gradient.
-func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variable, dtype dtypes.DType, grad *Node,
+func (o *adam) applyAdamGraph(ctx *model.Context, g *Graph, v *model.Variable, dtype dtypes.DType, grad *Node,
 	learningRate, beta1, debiasTermBeta1, beta2, debiasTermBeta2, epsilon *Node) {
 	rmsProp := o.config.rmsProp // If set, don't use 1st momentum.
 	m1Var, m2Var := o.getMomentVariables(ctx, v, dtype)
@@ -374,7 +374,7 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 	}
 
 	// Clip step value, if requested.
-	clipByValue := context.GetParamOr(ctx, ParamClipStepByValue, 0.0)
+	clipByValue := model.GetParamOr(ctx, ParamClipStepByValue, 0.0)
 	if clipByValue > 0 {
 		stepDirection = ClipScalar(stepDirection, -clipByValue, clipByValue)
 	}
@@ -395,13 +395,13 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 // If g is not nil, it creates the moments variables if they don't exist. Otherwise, it just tries to
 // fetch the presumably existing variables.
 func (o *adam) getMomentVariables(
-	ctx *context.Context,
-	trainable *context.Variable,
+	ctx *model.Context,
+	trainable *model.Variable,
 	dtype dtypes.DType,
-) (m1, m2 *context.Variable) {
+) (m1, m2 *model.Variable) {
 	originalScope := trainable.Scope()
 	originalName := trainable.Name()
-	scopePath := fmt.Sprintf("%s%s%s", context.ScopeSeparator, o.config.scopeName, originalScope)
+	scopePath := fmt.Sprintf("%s%s%s", model.ScopeSeparator, o.config.scopeName, originalScope)
 	m1Name := fmt.Sprintf("%s_1st_moment", originalName)
 	m2Name := fmt.Sprintf("%s_2nd_moment", originalName)
 	shape := trainable.Shape().Clone()
@@ -422,7 +422,7 @@ func (o *adam) getMomentVariables(
 
 // Clear all optimizer variables.
 // It implements optimizers.Interface.
-func (o *adam) Clear(ctx *context.Context) error {
+func (o *adam) Clear(ctx *model.Context) error {
 	ctxAdam := ctx.In(o.config.scopeName)
 	return ctxAdam.DeleteVariablesInScope()
 }

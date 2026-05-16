@@ -6,7 +6,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,10 +14,10 @@ import (
 
 func TestDecoderConfigFreeze(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 
 	// Create a simple incremental model function
-	var incrementalFn IncrementalModelFn = func(ctx *context.Context, newTokens *graph.Node, position int) *graph.Node {
+	var incrementalFn IncrementalModelFn = func(ctx *model.Context, newTokens *graph.Node, position int) *graph.Node {
 		g := newTokens.Graph()
 		batchSize := newTokens.Shape().Dimensions[0]
 		seqLen := newTokens.Shape().Dimensions[1]

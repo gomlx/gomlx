@@ -11,7 +11,7 @@ import (
 	"github.com/gomlx/compute"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
@@ -37,8 +37,8 @@ var (
 
 const paramWithReplacement = "mag_with_replacement"
 
-func createDefaultContext() *context.Context {
-	ctx := context.New()
+func createDefaultContext() *model.Context {
+	ctx := model.New()
 	ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		"checkpoint":         "",
@@ -114,22 +114,22 @@ func createDefaultContext() *context.Context {
 	return ctx
 }
 
-func SetTrainSteps(ctx *context.Context) {
-	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+func SetTrainSteps(ctx *model.Context) {
+	numTrainSteps := model.GetParamOr(ctx, "train_steps", 0)
 	if numTrainSteps <= 0 {
 		stepsPerEpoch := mag.TrainSplit.Shape().Size()/mag.BatchSize + 1
 		numEpochs := 10 // Taken from TF-GNN OGBN-MAG notebook.
 		numTrainSteps = numEpochs * stepsPerEpoch
 		ctx.SetParam("train_steps", numTrainSteps)
 	}
-	//cosineScheduleSteps := context.GetParamOr(ctx, cosineschedule.ParamPeriodSteps, 0)
+	//cosineScheduleSteps := model.GetParamOr(ctx, cosineschedule.ParamPeriodSteps, 0)
 	//if cosineScheduleSteps < 0 {
 	//	ctx.SetParam(cosineschedule.ParamPeriodSteps, numTrainSteps/(-cosineScheduleSteps))
 	//}
 }
 
 func main() {
-	// Init GoMLX manager and default context.
+	// Init GoMLX manager and default model.
 	backend := compute.MustNew()
 	ctx := createDefaultContext()
 
@@ -150,7 +150,7 @@ func main() {
 		fmt.Println("Hyperparameters set:")
 		fmt.Println(commandline.SprintModifiedContextSettings(ctx, paramsSet))
 	}
-	mag.BatchSize = context.GetParamOr(ctx, "batch_size", 128)
+	mag.BatchSize = model.GetParamOr(ctx, "batch_size", 128)
 
 	//Early sanity checks.
 	if *flagCheckpoint == "" && *flagEval {
@@ -165,7 +165,7 @@ func main() {
 	SetTrainSteps(ctx) // Can only be set after mag data is loaded.
 
 	// RunWithMap train / eval.
-	mag.WithReplacement = context.GetParamOr(ctx, paramWithReplacement, false)
+	mag.WithReplacement = model.GetParamOr(ctx, paramWithReplacement, false)
 	var err error
 	if *flagEval {
 		err = mag.Eval(backend, ctx, *flagDataDir, *flagCheckpoint, *flagLayerWise, *flagSkipTrainEval)

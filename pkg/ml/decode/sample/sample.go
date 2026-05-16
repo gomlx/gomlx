@@ -13,7 +13,7 @@ import (
 
 // RNG is an interface for random number generation used by the sampling strategies.
 //
-// The context.Context implements this interface.
+// The model.Context implements this interface.
 type RNG interface {
 	RandomUniform(g *Graph, shape shapes.Shape) *Node
 }
@@ -38,7 +38,7 @@ func Greedy(logits *Node) *Node {
 
 // Temperature: scale by temperature and sample via Gumbel-ArgMax.
 //
-// The rng is used for random number generation, a context.Context implements this interface.
+// The rng is used for random number generation, a model.Context implements this interface.
 func Temperature(rng RNG, logits *Node, temperature float64) *Node {
 	g := logits.Graph()
 
@@ -57,7 +57,7 @@ func Temperature(rng RNG, logits *Node, temperature float64) *Node {
 
 // TopP: nucleus sampling by masking tokens covering ~p mass.
 //
-// The rng is used for random number generation, a context.Context implements this interface.
+// The rng is used for random number generation, a model.Context implements this interface.
 func TopP(rng RNG, logits *Node, p float64, temperature float64) *Node {
 	g := logits.Graph()
 
@@ -113,7 +113,7 @@ func TopP(rng RNG, logits *Node, p float64, temperature float64) *Node {
 
 // TopKWithTemperature: mask non-top-k to -inf, then temperature.
 //
-// The rng is used for random number generation, a context.Context implements this interface.
+// The rng is used for random number generation, a model.Context implements this interface.
 func TopKWithTemperature(rng RNG, logits *graph.Node, k int, temperature float64) *graph.Node {
 	g := logits.Graph()
 

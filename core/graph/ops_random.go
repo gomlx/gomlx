@@ -121,7 +121,7 @@ func validateRNGState(rngState *Node) {
 // It uses and updates the random number generator (RNG) state in `rngState`.
 // See RNGStateFromSeed or RNGState to generate a random state tensor (that can be fed to the computation graph).
 //
-// Alternatively, if you don't want to worry about carrying around the rngState, use the context.Context.RandomUniform
+// Alternatively, if you don't want to worry about carrying around the rngState, use the model.Context.RandomUniform
 // version, which stores the rngState as a variable.
 //
 // Example:
@@ -205,7 +205,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRNGState, values *Nod
 // It uses and updates the random number generator (RNG) state in `rngState`.
 // See [RNGStateFromSeed] or [RNGState] to generate a random state tensor (that can be fed to the computation graph).
 //
-// Alternatively, if you don't want to worry about carrying around the rngState, use the context.Context.RandomNormal
+// Alternatively, if you don't want to worry about carrying around the rngState, use the model.Context.RandomNormal
 // version, which stores the rngState as a variable.
 func RandomNormal(rngState *Node, shape shapes.Shape) (newRNGState, values *Node) {
 	validateRNGState(rngState)
@@ -239,7 +239,7 @@ func RandomNormal(rngState *Node, shape shapes.Shape) (newRNGState, values *Node
 // It uses and updates the random number generator (RNG) state in `rngState`.
 // See [RNGStateFromSeed] or [RNGState] to generate a random state tensor (that can be fed to the computation graph).
 //
-// Alternatively, if you don't want to worry about carrying around the rngState, use the context.Context.RandomIntN
+// Alternatively, if you don't want to worry about carrying around the rngState, use the model.Context.RandomIntN
 // version, which stores the rngState as a variable.
 func RandomIntN[IntT interface{ *Node | constraints.Integer }](
 	rngState *Node, N IntT, shape shapes.Shape) (newRNGState, values *Node) {

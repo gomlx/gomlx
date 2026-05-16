@@ -8,8 +8,8 @@ import (
 	"github.com/gomlx/compute"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
@@ -27,8 +27,8 @@ import (
 // Notice for any feature that happens to be constant, the `stddev` will be 0. If trying to normalize (divide)
 // by that will result in error. Use ReplaceZerosByOnes below to avoid the numeric issues.
 func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, independentAxes ...int) (mean, stddev *tensors.Tensor, err error) {
-	ctx := context.New()
-	updateValuesWithInput := context.MustNewExec(backend, ctx, func(ctx *context.Context, batch *Node) {
+	ctx := model.New()
+	updateValuesWithInput := model.MustNewExec(backend, ctx, func(ctx *model.Context, batch *Node) {
 		g := batch.Graph()
 		ctx = ctx.WithInitializer(initializers.Zero)
 
@@ -93,7 +93,7 @@ func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, i
 	// Calculate mean and stddev, using a graph.
 	var results []*tensors.Tensor
 	err = exceptions.TryCatch[error](func() {
-		results = context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
+		results = model.MustNewExec(backend, ctx, func(ctx *model.Context, g *Graph) []*Node {
 			countVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "count")
 			count := countVar.ValueGraph(g)
 

@@ -4,7 +4,7 @@ package losses
 
 import (
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 )
 
 //go:generate enumer -type=PairwiseDistanceMetric -trimprefix=PairwiseDistanceMetric -transform=snake -values -text -json -yaml triplet.go
@@ -273,11 +273,11 @@ func TripletLoss(labels, predictions []*Node,
 }
 
 // MakeTripletLossFromContext calls TripletLoss using the configured by the hyperparameter
-// in the context.
-func MakeTripletLossFromContext(ctx *context.Context) LossFn {
-	miningStrategy := context.GetParamOr(ctx, ParamTripletLossMiningStrategy, TripletMiningStrategySemiHard)
-	margin := context.GetParamOr(ctx, ParamTripletLossMargin, 1.0)
-	metric := context.GetParamOr(ctx, ParamTripletLossPairwiseDistanceMetric, PairwiseDistanceMetricL2)
+// in the model.
+func MakeTripletLossFromContext(ctx *model.Context) LossFn {
+	miningStrategy := model.GetParamOr(ctx, ParamTripletLossMiningStrategy, TripletMiningStrategySemiHard)
+	margin := model.GetParamOr(ctx, ParamTripletLossMargin, 1.0)
+	metric := model.GetParamOr(ctx, ParamTripletLossPairwiseDistanceMetric, PairwiseDistanceMetricL2)
 	return func(labels, predictions []*Node) (loss *Node) {
 		return TripletLoss(labels, predictions, miningStrategy, margin, metric)
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
@@ -28,8 +28,8 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 	const baseLearningRate = 1.0
 
 	t.Run("periodSteps", func(t *testing.T) {
-		ctx := context.New().Checked(false)
-		cosineExec, err := context.NewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
+		ctx := model.New().Checked(false)
+		cosineExec, err := model.NewExec(backend, ctx, func(ctx *model.Context, graph *Graph) *Node {
 			ctx.SetTraining(graph, true)
 			cosineschedule.New(ctx, graph, dtypes.Float32).
 				PeriodSteps(periodInSteps).
@@ -69,9 +69,9 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 	})
 
 	t.Run("periodSteps with warmUp", func(t *testing.T) {
-		ctx := context.New().Checked(false)
+		ctx := model.New().Checked(false)
 		const warmUpSteps = 10
-		cosineExec, err := context.NewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
+		cosineExec, err := model.NewExec(backend, ctx, func(ctx *model.Context, graph *Graph) *Node {
 			ctx.SetTraining(graph, true)
 			cosineschedule.New(ctx, graph, dtypes.Float32).
 				PeriodSteps(periodInSteps).
@@ -101,7 +101,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 	})
 
 	t.Run("numCycles with warmUp+context configuration", func(t *testing.T) {
-		ctx := context.New().Checked(false)
+		ctx := model.New().Checked(false)
 		const warmUpSteps = 10
 		const numCycles = 2
 		const stepsPerCycle = 100
@@ -112,7 +112,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		ctx.SetParam(cosineschedule.ParamMinLearningRate, minLearningRate)
 		lastStepVar := train.GetTrainLastStepVar(ctx)
 		lastStepVar.MustSetValue(tensors.FromScalar(int64(numSteps)))
-		cosineExec, err := context.NewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
+		cosineExec, err := model.NewExec(backend, ctx, func(ctx *model.Context, graph *Graph) *Node {
 			ctx.SetTraining(graph, true)
 			cosineschedule.New(ctx, graph, dtypes.Float32).FromContext().Done()
 			return optimizers.LearningRateVar(ctx, dtypes.Float32, 1e3).ValueGraph(graph)

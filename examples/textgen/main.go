@@ -27,7 +27,7 @@ import (
 	_ "github.com/gomlx/gomlx/backends/default"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/decode"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/pkg/ml/model/transformer"
@@ -48,8 +48,8 @@ var (
 	flagPrompt = flag.String("prompt", "The quick", "Prompt text")
 )
 
-func createDefaultContext() *context.Context {
-	ctx := context.New()
+func createDefaultContext() *model.Context {
+	ctx := model.New()
 	ctx.SetParams(map[string]any{
 		// Model hyperparameters
 		transformer.ParamVocabSize:   128,
@@ -111,10 +111,10 @@ func (t *CharTokenizer) Decode(tokens []int) string {
 	return string(chars)
 }
 
-func createTrainingBatch(ctx *context.Context, text string) (inputs [][]int32, targets [][][]int32) {
-	batchSize := context.GetParamOr(ctx, ParamBatchSize, 4)
-	seqLen := context.GetParamOr(ctx, ParamSeqLen, 32)
-	vocabSize := context.GetParamOr(ctx, transformer.ParamVocabSize, 128)
+func createTrainingBatch(ctx *model.Context, text string) (inputs [][]int32, targets [][][]int32) {
+	batchSize := model.GetParamOr(ctx, ParamBatchSize, 4)
+	seqLen := model.GetParamOr(ctx, ParamSeqLen, 32)
+	vocabSize := model.GetParamOr(ctx, transformer.ParamVocabSize, 128)
 
 	tokenizer := &CharTokenizer{vocabSize: vocabSize}
 	tokens := tokenizer.Encode(text)
@@ -140,16 +140,16 @@ func createTrainingBatch(ctx *context.Context, text string) (inputs [][]int32, t
 	return inputs, targets
 }
 
-func trainModel(backend compute.Backend, ctx *context.Context) {
-	steps := context.GetParamOr(ctx, ParamTrainSteps, 200)
-	learningRate := context.GetParamOr(ctx, optimizers.ParamLearningRate, 0.01)
-	batchSize := context.GetParamOr(ctx, ParamBatchSize, 4)
-	seqLen := context.GetParamOr(ctx, ParamSeqLen, 32)
+func trainModel(backend compute.Backend, ctx *model.Context) {
+	steps := model.GetParamOr(ctx, ParamTrainSteps, 200)
+	learningRate := model.GetParamOr(ctx, optimizers.ParamLearningRate, 0.01)
+	batchSize := model.GetParamOr(ctx, ParamBatchSize, 4)
+	seqLen := model.GetParamOr(ctx, ParamSeqLen, 32)
 
 	fmt.Printf("\nTraining Model\nSteps: %d  LR: %.4f  Batch: %d  SeqLen: %d\n\n", steps, learningRate, batchSize, seqLen)
 
 	// Simple model function wrapper
-	modelFn := func(ctx *context.Context, _ any, inputs []*graph.Node) []*graph.Node {
+	modelFn := func(ctx *model.Context, _ any, inputs []*graph.Node) []*graph.Node {
 		tokens := inputs[0]
 		transformerModel := transformer.NewFromContext(ctx)
 		posEmbeder := pos.NewLearned(ctx, transformerModel.MaxPosEmbed, transformerModel.EmbedDim)
@@ -180,8 +180,8 @@ func trainModel(backend compute.Backend, ctx *context.Context) {
 	fmt.Printf("\nTraining complete!\n")
 }
 
-func generateText(backend compute.Backend, ctx *context.Context, prompt string) {
-	vocabSize := context.GetParamOr(ctx, transformer.ParamVocabSize, 128)
+func generateText(backend compute.Backend, ctx *model.Context, prompt string) {
+	vocabSize := model.GetParamOr(ctx, transformer.ParamVocabSize, 128)
 
 	tokenizer := &CharTokenizer{vocabSize: vocabSize}
 

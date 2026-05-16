@@ -14,7 +14,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -53,7 +53,7 @@ type Loop struct {
 	Trainer *Trainer
 
 	// LoopStep currently being executed.
-	// It is initialized with the current context's `GlobalStep`, which will be 0 for a new context.
+	// It is initialized with the current context's `GlobalStep`, which will be 0 for a new model.
 	//
 	// Notice if using Trainer.AccumulateGradients: this is a measure of "train steps", and "global steps"
 	// will be incremented only every "numAccumulatedGradients" train steps are made.
@@ -122,7 +122,7 @@ const TrainLastStepVarName = "train_last_global_step"
 // It is stored in the TrainerAbsoluteScope.
 //
 // This is a graph building function and so it may panic if the variable cannot be created.
-func GetTrainLastStepVar(ctx *context.Context) *context.Variable {
+func GetTrainLastStepVar(ctx *model.Context) *model.Variable {
 	return ctx.InAbsPath(TrainerAbsoluteScope).
 		Checked(false).
 		VariableWithValue(TrainLastStepVarName, int64(-1)).
@@ -247,10 +247,10 @@ func (loop *Loop) postStep(metrics []*tensors.Tensor) error {
 	return nil
 }
 
-// setLastStep, both the field in Loop but also the corresponding variable in the context.
+// setLastStep, both the field in Loop but also the corresponding variable in the model.
 func (loop *Loop) setLastStep(lastStep int) error {
 	loop.EndStep = lastStep
-	var endStepVar *context.Variable
+	var endStepVar *model.Variable
 	err := exceptions.TryCatch[error](func() {
 		endStepVar = GetTrainLastStepVar(loop.Trainer.Context())
 	})

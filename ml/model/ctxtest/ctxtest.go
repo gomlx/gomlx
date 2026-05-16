@@ -1,7 +1,7 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 // Package ctxtest holds test utilities for packages that depend on context package. It allows
-// for easy running tests on graph building functions that depends on context.Context objects.
+// for easy running tests on graph building functions that depends on model.Context objects.
 package ctxtest
 
 import (
@@ -11,13 +11,13 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 // TestContextGraphFn should build its own inputs, and return both inputs and outputs
-type TestContextGraphFn func(ctx *context.Context, g *Graph) (inputs, outputs []*Node)
+type TestContextGraphFn func(ctx *model.Context, g *Graph) (inputs, outputs []*Node)
 
 // RunTestGraphFn tests a graph building function graphFn by executing it and comparing
 // its output(s) to the values in want, reporting back any errors in t.
@@ -25,9 +25,9 @@ type TestContextGraphFn func(ctx *context.Context, g *Graph) (inputs, outputs []
 // delta is the margin of value on the difference of output and want values that are acceptable.
 // Values of delta <= 0 means only exact equality is accepted.
 func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, want []any, delta float64) {
-	ctx := context.New()
+	ctx := model.New()
 	var numInputs, numOutputs int
-	wrapperFn := func(ctx *context.Context, g *Graph) []*Node {
+	wrapperFn := func(ctx *model.Context, g *Graph) []*Node {
 		i, o := graphFn(ctx, g)
 		numInputs, numOutputs = len(i), len(o)
 		all := append(i, o...)
@@ -35,7 +35,7 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, w
 	}
 
 	backend := testutil.BuildTestBackend()
-	exec := context.MustNewExec(backend, ctx, wrapperFn)
+	exec := model.MustNewExec(backend, ctx, wrapperFn)
 	var inputsAndOutputs []*tensors.Tensor
 	require.NotPanicsf(t, func() { inputsAndOutputs = exec.MustExec() },
 		"%s: failed to run graph", testName)
@@ -49,7 +49,7 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, w
 	if numInputs > 0 {
 		fmt.Printf("\t======\n")
 	}
-	ctx.EnumerateVariables(func(v *context.Variable) {
+	ctx.EnumerateVariables(func(v *model.Variable) {
 		fmt.Printf("\tVar %s: ", v.ParameterName())
 		if v.Shape().Size() > 16 {
 			fmt.Printf("%s\n", v.Shape())

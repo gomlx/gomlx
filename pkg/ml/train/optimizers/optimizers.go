@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -29,31 +29,31 @@ type Interface interface {
 	//
 	// The ctx holds the variables to train (marked as trainable), the hyperparameters
 	// used by the optimizer (in `ctx.Params`) and non-trainable variables
-	// that the optimizer itself may create. One should scope it (context.Context.In("<some scope name>"))
+	// that the optimizer itself may create. One should scope it (model.Context.In("<some scope name>"))
 	// to avoid naming conflicts on the variables created -- notice that
 	// some complex training schedule may have more than one optimizer on the same Context object.
 	//
 	// loss must be a scalar value.
 	//
 	// This is a graph building function and panics on error.
-	UpdateGraph(ctx *context.Context, g *Graph, loss *Node)
+	UpdateGraph(ctx *model.Context, g *Graph, loss *Node)
 
 	// Clear deletes all temporary variables used by the optimizer.
 	// This may be used for a model to be used by inference to save space, or if the training should be reset
 	// for some other reason.
-	Clear(ctx *context.Context) error
+	Clear(ctx *model.Context) error
 }
 
 var (
 	// KnownOptimizers is a map of known optimizers by name to their default constructors.
 	// This provides an easy quick start point. One can hyperparameter-tune the optimizers
 	// for usually slightly better results.
-	KnownOptimizers = map[string]func(ctx *context.Context) Interface{
-		"sgd":     func(ctx *context.Context) Interface { return StochasticGradientDescent() },
-		"adam":    func(ctx *context.Context) Interface { return Adam().FromContext(ctx).Done() },
-		"adamax":  func(ctx *context.Context) Interface { return Adam().Adamax().FromContext(ctx).Done() },
-		"adamw":   func(ctx *context.Context) Interface { return Adam().WeightDecay(0.004).FromContext(ctx).Done() },
-		"rmsprop": func(ctx *context.Context) Interface { return RMSProp().FromContext(ctx).Done() },
+	KnownOptimizers = map[string]func(ctx *model.Context) Interface{
+		"sgd":     func(ctx *model.Context) Interface { return StochasticGradientDescent() },
+		"adam":    func(ctx *model.Context) Interface { return Adam().FromContext(ctx).Done() },
+		"adamax":  func(ctx *model.Context) Interface { return Adam().Adamax().FromContext(ctx).Done() },
+		"adamw":   func(ctx *model.Context) Interface { return Adam().WeightDecay(0.004).FromContext(ctx).Done() },
+		"rmsprop": func(ctx *model.Context) Interface { return RMSProp().FromContext(ctx).Done() },
 	}
 
 	// ParamOptimizer is the context parameter with the name of the optimizer.
@@ -101,7 +101,7 @@ var (
 )
 
 const (
-	// GlobalStepVariableName as stored in context.Context, usually in the root scope -- but depends on the
+	// GlobalStepVariableName as stored in model.Context, usually in the root scope -- but depends on the
 	// caller.
 	GlobalStepVariableName = "global_step"
 
@@ -111,8 +111,8 @@ const (
 
 // FromContext creates an optimizer from context hyperparameters.
 // See [ParamOptimizer]. The default is "adamw".
-func FromContext(ctx *context.Context) Interface {
-	optName := context.GetParamOr(ctx, ParamOptimizer, "adamw")
+func FromContext(ctx *model.Context) Interface {
+	optName := model.GetParamOr(ctx, ParamOptimizer, "adamw")
 	return ByName(ctx, optName)
 }
 
@@ -137,7 +137,7 @@ func FromContext(ctx *context.Context) Interface {
 //	   []metrics.Interface{otherMetric})   // evalMetrics
 //
 // ```
-func ByName(ctx *context.Context, optName string) Interface {
+func ByName(ctx *model.Context, optName string) Interface {
 	optBuilder, found := KnownOptimizers[optName]
 	if !found {
 		Panicf("Unknown optimizer %q, valid values are %v.", optName, xslices.Keys(KnownOptimizers))
@@ -148,13 +148,13 @@ func ByName(ctx *context.Context, optName string) Interface {
 // GetGlobalStepVar returns the global step counter, a dtypes.Int64 variable.
 // It creates it (initialized with 0) if not already there.
 // This can be used in graph building or directly.
-func GetGlobalStepVar(ctx *context.Context) *context.Variable {
+func GetGlobalStepVar(ctx *model.Context) *model.Variable {
 	return ctx.Checked(false).VariableWithValue(GlobalStepVariableName, int64(0)).SetTrainable(false)
 }
 
 // GetGlobalStep returns the current global step value.
 // It creates the global step variable if it does not yet exist.
-func GetGlobalStep(ctx *context.Context) int64 {
+func GetGlobalStep(ctx *model.Context) int64 {
 	vAny := GetGlobalStepVar(ctx).MustValue().Value()
 	v, ok := vAny.(int64)
 	if !ok {
@@ -164,7 +164,7 @@ func GetGlobalStep(ctx *context.Context) int64 {
 }
 
 // DeleteGlobalStep in case one wants to reset the model state, or hide how many steps were taken.
-func DeleteGlobalStep(ctx *context.Context) error {
+func DeleteGlobalStep(ctx *model.Context) error {
 	return ctx.DeleteVariable(ctx.Scope(), GlobalStepVariableName)
 }
 
@@ -177,7 +177,7 @@ func DeleteGlobalStep(ctx *context.Context) error {
 //
 // GlobalStep is always stored as dtypes.Int64, but it is converted to the given DType
 // before being returned.
-func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype dtypes.DType) *Node {
+func IncrementGlobalStepGraph(ctx *model.Context, g *Graph, dtype dtypes.DType) *Node {
 	globalStepVar := GetGlobalStepVar(ctx)
 	globalStep := globalStepVar.ValueGraph(g)
 	globalStep = Add(globalStep, OnesLike(globalStep))
@@ -192,20 +192,20 @@ func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype dtypes.DType
 //
 // If the variable doesn't exist yet, it is initialized with initialValue.
 //
-// Consider reading the initialValue from context.GetParamOr(ctx, ParamLearningRate, SGDDefaultLearningRate).
-func LearningRateVar(ctx *context.Context, dtype dtypes.DType, initialValue float64) *context.Variable {
+// Consider reading the initialValue from model.GetParamOr(ctx, ParamLearningRate, SGDDefaultLearningRate).
+func LearningRateVar(ctx *model.Context, dtype dtypes.DType, initialValue float64) *model.Variable {
 	return LearningRateVarWithValue(ctx, dtype, initialValue)
 }
 
 // LearningRateVarWithValue creates (or reuses) variable for learning rate with the given value.
-func LearningRateVarWithValue(ctx *context.Context, dtype dtypes.DType, value float64) *context.Variable {
+func LearningRateVarWithValue(ctx *model.Context, dtype dtypes.DType, value float64) *model.Variable {
 	ctx = ctx.Checked(false).In(Scope)
 	return ctx.VariableWithValue(ParamLearningRate, shapes.CastAsDType(value, dtype)).SetTrainable(false)
 }
 
 // ClipStepByValue applies the [ParamClipStepByValue] hyperparameter if it is not 0.0 (the default).
-func ClipStepByValue(ctx *context.Context, step *Node) *Node {
-	clipByValue := context.GetParamOr(ctx, ParamClipStepByValue, 0.0)
+func ClipStepByValue(ctx *model.Context, step *Node) *Node {
+	clipByValue := model.GetParamOr(ctx, ParamClipStepByValue, 0.0)
 	if clipByValue == 0 {
 		return step
 	}
@@ -218,8 +218,8 @@ type Tracer interface {
 }
 
 // TraceNaNInGradients will report a NaN/Inf value in a gradient for the given variable, is a "Tracer" (typically a nanlogger.NanLogger)
-// has been configured in the context.
-func TraceNaNInGradients(ctx *context.Context, variable *context.Variable, gradients *Node) {
+// has been configured in the model.
+func TraceNaNInGradients(ctx *model.Context, variable *model.Variable, gradients *Node) {
 	lAny, found := ctx.GetParam(ParamNanLogger)
 	if !found {
 		return
@@ -235,8 +235,8 @@ func TraceNaNInGradients(ctx *context.Context, variable *context.Variable, gradi
 // It is only enabled if ParamClipNaN is set to true.
 //
 // See also ClipNaNsInUpdates.
-func ClipNaNsInGradients(ctx *context.Context, gradients *Node) *Node {
-	if !context.GetParamOr(ctx, ParamClipNaN, false) {
+func ClipNaNsInGradients(ctx *model.Context, gradients *Node) *Node {
+	if !model.GetParamOr(ctx, ParamClipNaN, false) {
 		return gradients
 	}
 	return Where(LogicalAll(IsFinite(gradients)), gradients, ZerosLike(gradients))
@@ -246,8 +246,8 @@ func ClipNaNsInGradients(ctx *context.Context, gradients *Node) *Node {
 // if the ParamClipNaN is set to true.
 //
 // See also ClipNaNsInGradients.
-func ClipNaNsInUpdates(ctx *context.Context, original, updates *Node) *Node {
-	if !context.GetParamOr(ctx, ParamClipNaN, false) {
+func ClipNaNsInUpdates(ctx *model.Context, original, updates *Node) *Node {
+	if !model.GetParamOr(ctx, ParamClipNaN, false) {
 		return updates
 	}
 	return Where(IsFinite(updates), updates, original)
@@ -303,7 +303,7 @@ func (sgd *SGDConfig) Done() Interface {
 
 // UpdateGraph builds the graph to update the weights for one training step.
 // It implements optimizers.Interface.
-func (sgd *SGDConfig) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
+func (sgd *SGDConfig) UpdateGraph(ctx *model.Context, g *Graph, loss *Node) {
 	_ = g
 	if !loss.Shape().IsScalar() {
 		Panicf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", loss.Shape())
@@ -312,7 +312,7 @@ func (sgd *SGDConfig) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 	sgd.UpdateGraphWithGradients(ctx, grads, loss.DType())
 }
 
-func (sgd *SGDConfig) UpdateGraphWithGradients(ctx *context.Context, grads []*Node, lossDType dtypes.DType) {
+func (sgd *SGDConfig) UpdateGraphWithGradients(ctx *model.Context, grads []*Node, lossDType dtypes.DType) {
 	if len(grads) == 0 {
 		return
 	}
@@ -321,8 +321,8 @@ func (sgd *SGDConfig) UpdateGraphWithGradients(ctx *context.Context, grads []*No
 
 	initialLearningRate := sgd.initialLearningRate
 	if initialLearningRate <= 0 {
-		// If the value was not set, read it from the context.
-		initialLearningRate = context.GetParamOr(ctx, ParamLearningRate, SGDDefaultLearningRate)
+		// If the value was not set, read it from the model.
+		initialLearningRate = model.GetParamOr(ctx, ParamLearningRate, SGDDefaultLearningRate)
 	}
 
 	lrVar := LearningRateVar(ctx, dtype, initialLearningRate)
@@ -337,7 +337,7 @@ func (sgd *SGDConfig) UpdateGraphWithGradients(ctx *context.Context, grads []*No
 // Clear all optimizer variables.
 // There are none for sgd, so this is a non-op.
 // It implements optimizers.Interface.
-func (sgd *SGDConfig) Clear(_ *context.Context) error {
+func (sgd *SGDConfig) Clear(_ *model.Context) error {
 	return nil
 }
 
@@ -345,7 +345,7 @@ func (sgd *SGDConfig) Clear(_ *context.Context) error {
 // multiply by (-learningRate) and add to the current value of the variablesMap.
 //
 // It replaces NaNs with zero.
-func addGradientsToVariablesGraph(ctx *context.Context, grads []*Node, learningRate *Node) {
+func addGradientsToVariablesGraph(ctx *model.Context, grads []*Node, learningRate *Node) {
 	g := learningRate.Graph()
 	if !learningRate.Shape().IsScalar() {
 		Panicf("Context.addGradientsToVariablesGraph require scalar learningRate, instead got %s", learningRate.Shape())

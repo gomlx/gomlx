@@ -63,7 +63,7 @@ func GraphExecFnConstraints(w io.Writer, withContext bool) {
 	if withContext {
 		possibleOutputs = append(possibleOutputs, "")
 	}
-	possibleOutputs = append(possibleOutputs, "*" + p + "Node", "(*" + p + "Node, *" + p + "Node)", "(*" + p + "Node, *" + p + "Node, *" + p + "Node)", "[]*" + p + "Node")
+	possibleOutputs = append(possibleOutputs, "*"+p+"Node", "(*"+p+"Node, *"+p+"Node)", "(*"+p+"Node, *"+p+"Node, *"+p+"Node)", "[]*"+p+"Node")
 	var contextInput string
 	if withContext {
 		contextInput = "*Context, "
@@ -141,7 +141,7 @@ func main() {
 		fmt.Fprintln(f, "\t\"github.com/gomlx/gomlx/core/graph\"")
 		fmt.Fprintln(f, ")")
 		fmt.Fprintln(f)
-		fmt.Fprintf(f, "// For ml/context/exec.go:\n\n")
+		fmt.Fprintf(f, "// For ml/model/exec.go:\n\n")
 		fmt.Fprintln(f, "type ExecGraphFn interface {")
 		GraphExecFnConstraints(f, true)
 		fmt.Fprintln(f, "}")

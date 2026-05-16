@@ -7,11 +7,11 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/sets"
 )
 
-func Params(ctxs, scopedCtxs []*context.Context, names []string) {
+func Params(ctxs, scopedCtxs []*model.Context, names []string) {
 	numCheckpoints := len(names)
 	numCols := numCheckpoints + 3
 

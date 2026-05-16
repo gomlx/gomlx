@@ -10,11 +10,11 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 )
 
 func TestPoolMessagesWithFixedShape(t *testing.T) {
-	ctx := context.New()
+	ctx := model.New()
 	ctx.SetParam(ParamPoolingType, "sum|max")
 	graphtest.RunTestGraphFn(
 		t, "poolMessagesWithFixedShape()",
@@ -42,7 +42,7 @@ func TestPoolMessagesWithFixedShape(t *testing.T) {
 }
 
 func TestPoolMessagesWithAdjacency(t *testing.T) {
-	ctx := context.New()
+	ctx := model.New()
 	ctx.SetParam(ParamPoolingType, "sum|mean")
 	graphtest.RunTestGraphFn(
 		t, "poolMessagesWithAdjacency()",

@@ -68,6 +68,6 @@ jobs:
           go test -p 1 -short $(go list ./... | \
             grep -v "backends/xla" | \
             grep -v "ui/fyneui" | \
-            grep -v "pkg/ml/context/checkpoints") \
+            grep -v "ml/model/checkpoints") \
             -test.skip 'TestGradientFFT'
           cd examples ; go test -p 1 -short $(go list ./... | grep -v "ogbnmag")

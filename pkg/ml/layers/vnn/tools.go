@@ -7,7 +7,7 @@ import (
 
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -16,7 +16,7 @@ import (
 // to preserve the mean of the operand values.
 //
 // It expects the operand to have shape [..., inputFeatures, 3], and the dropout happens on the inputFeatures.
-func DropoutNormalize(ctx *context.Context, operand *Node, dropoutRate *Node, normalize bool) *Node {
+func DropoutNormalize(ctx *model.Context, operand *Node, dropoutRate *Node, normalize bool) *Node {
 	g := operand.Graph()
 	if operand.Shape().Dim(-1) != 3 {
 		exceptions.Panicf("vnn: the operand last dimensions must be 3 -- it works with 3D vectors only for now")

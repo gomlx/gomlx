@@ -4,7 +4,7 @@ package imdb
 
 import (
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
@@ -12,10 +12,10 @@ import (
 
 // TransformerModelGraph is the part of the model that takes the word/token embeddings to a transformed
 // embedding through attention ready to be pooled and read out.
-func TransformerModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func TransformerModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	_ = spec
 	tokens := inputs[0]
-	maskWordTaskWeight := context.GetParamOr(ctx, "imdb_mask_word_task_weight", 0.0)
+	maskWordTaskWeight := model.GetParamOr(ctx, "imdb_mask_word_task_weight", 0.0)
 	useMaskWordTask := maskWordTaskWeight > 0
 	if useMaskWordTask {
 		// Select word to mask and replace with <masked> token.
@@ -30,7 +30,7 @@ func TransformerModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 	contentLen := embed.Shape().Dimensions[1]
 	//embedSize := embed.Shape().Dimensions[2]
 
-	maxAttentionLen := context.GetParamOr(ctx, "transformer_max_att_len", 200)
+	maxAttentionLen := model.GetParamOr(ctx, "transformer_max_att_len", 200)
 	var newEmbed *Node
 	if maxAttentionLen >= contentLen {
 		// Full attention, the normal way.
@@ -85,16 +85,16 @@ func TransformerModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 }
 
 // TransformerLayers builds the stacked transformer layers for the model.
-func TransformerLayers(ctx *context.Context, embed, mask *Node) *Node {
+func TransformerLayers(ctx *model.Context, embed, mask *Node) *Node {
 	g := embed.Graph()
 	shape := embed.Shape()
 	dtype := embed.DType()
 	embedSize := shape.Dimensions[2]
 
 	// Dropout.
-	dropoutRate := context.GetParamOr(ctx, "transformer_dropout_rate", -1.0)
+	dropoutRate := model.GetParamOr(ctx, "transformer_dropout_rate", -1.0)
 	if dropoutRate < 0 {
-		dropoutRate = context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
+		dropoutRate = model.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
 	}
 	var dropoutNode *Node
 	if dropoutRate > 0.0 {
@@ -111,9 +111,9 @@ func TransformerLayers(ctx *context.Context, embed, mask *Node) *Node {
 	embed = Add(embed, posEmbed) // Just add the embeddings, seems to work well.
 
 	// Add the requested number of attention layers.
-	numAttLayers := context.GetParamOr(ctx, "transformer_num_att_layers", 1)
-	numAttHeads := context.GetParamOr(ctx, "transformer_num_att_heads", 2)
-	attKeySize := context.GetParamOr(ctx, "transformer_att_key_size", 8)
+	numAttLayers := model.GetParamOr(ctx, "transformer_num_att_layers", 1)
+	numAttHeads := model.GetParamOr(ctx, "transformer_num_att_heads", 2)
+	attKeySize := model.GetParamOr(ctx, "transformer_att_key_size", 8)
 	for layerNum := range numAttLayers {
 		// Each layer in its own scope.
 		ctx := ctx.Inf("%03d_attention_layer", layerNum)
@@ -146,7 +146,7 @@ func TransformerLayers(ctx *context.Context, embed, mask *Node) *Node {
 
 /*
 // MaskedWordTaskGraph builds the computation graph for the predicting a hidden word unsupervised task.
-func MaskedWordTaskGraph(ctx *context.Context, tokens, embed, mask *Node,
+func MaskedWordTaskGraph(ctx *model.Context, tokens, embed, mask *Node,
 	transformerFn func(input, mask *Node) *Node) {
 	g := embed.Graph()
 	batchSize := embed.Shape().Dimensions[0]

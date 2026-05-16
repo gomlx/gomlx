@@ -13,8 +13,8 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/nn"
-	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	. "github.com/gomlx/gomlx/support/exceptions"
@@ -55,7 +55,7 @@ const (
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
 //
 // See also FNN for a more configurable (including hidden layers) version.
-func DenseWithBias(ctx *context.Context, input *Node, outputDimensions ...int) *Node {
+func DenseWithBias(ctx *model.Context, input *Node, outputDimensions ...int) *Node {
 	return Dense(ctx, input, true, outputDimensions...)
 }
 
@@ -68,7 +68,7 @@ func DenseWithBias(ctx *context.Context, input *Node, outputDimensions ...int) *
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
 //
 // See also FNN for a more configurable (including hidden layers) version.
-func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...int) *Node {
+func Dense(ctx *model.Context, input *Node, useBias bool, outputDimensions ...int) *Node {
 	g := input.Graph()
 	ctx = ctx.In("dense")
 	regularizer := regularizers.FromContext(ctx)
@@ -113,12 +113,12 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 // must smaller than vocabSize, otherwise it will fail -- no checking is explicitly made.
 //
 // indicesAreSorted should be set to true only if the input is guaranteed to be sorted (ascending).
-// This allows some optimizations in some backends. The default is false (for compatibility),
+// This allows some optimizations in some compute. The default is false (for compatibility),
 // in future versions this argument will be made obligatory.
 //
 // The output has rank one larger than the input, with the last dimension the same as
 // the embedding dimension.
-func Embedding(ctx *context.Context, input *Node, dtype dtypes.DType, vocabSize, dimension int, indicesAreSorted ...bool) *Node {
+func Embedding(ctx *model.Context, input *Node, dtype dtypes.DType, vocabSize, dimension int, indicesAreSorted ...bool) *Node {
 	inputShape := input.Shape()
 	if !inputShape.DType.IsInt() {
 		Panicf("can only use Embedding on integer inputs, passed %s instead", input.Shape())
@@ -169,7 +169,7 @@ func AssertQuantilesForPWLCalibrationValid[T cmp.Ordered](values []T) {
 //
 // This is a simpler version to the one described here:
 // https://www.tensorflow.org/lattice/api_docs/python/tfl/layers/PWLCalibration
-func PieceWiseLinearCalibration(ctx *context.Context, input, keypoints *Node, outputTrainable bool) *Node {
+func PieceWiseLinearCalibration(ctx *model.Context, input, keypoints *Node, outputTrainable bool) *Node {
 	g := input.Graph()
 	ctx = ctx.In("piece_wise_linear")
 	if !input.DType().IsFloat() {
@@ -248,7 +248,7 @@ func PieceWiseLinearCalibration(ctx *context.Context, input, keypoints *Node, ou
 // is equally powerful (express the same functions) simpler (fewer ops) and faster, but is parametrizing
 // differently (cascaded linear functions), and may have different learning characteristics when
 // doing gradient descent.
-func PieceWiseLinearCalibrationCascaded(ctx *context.Context, input, keypoints *Node, outputTrainable bool) *Node {
+func PieceWiseLinearCalibrationCascaded(ctx *model.Context, input, keypoints *Node, outputTrainable bool) *Node {
 	g := input.Graph()
 	ctx = ctx.In("piece_wise_linear")
 	if !input.DType().IsFloat() {
@@ -310,13 +310,13 @@ func PieceWiseLinearCalibrationCascaded(ctx *context.Context, input, keypoints *
 // Dropout randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
 // it's a no op (it returns input).
 // If the input is float, it scales the output by 1/(1-dropoutRate) to preserve the mean of the values of the input.
-func Dropout(ctx *context.Context, input *Node, dropoutRate *Node) *Node {
+func Dropout(ctx *model.Context, input *Node, dropoutRate *Node) *Node {
 	return DropoutNormalize(ctx, input, dropoutRate, input.DType().IsFloat())
 }
 
 // DropoutStatic is the same as Dropout, but it takes the `dropoutRate` as a static value, given as a float64.
 // If `dropoutRate <= 0` or it's not training, this is a no-op.
-func DropoutStatic(ctx *context.Context, input *Node, dropoutRate float64) *Node {
+func DropoutStatic(ctx *model.Context, input *Node, dropoutRate float64) *Node {
 	if dropoutRate <= 0 {
 		return input
 	}
@@ -326,14 +326,14 @@ func DropoutStatic(ctx *context.Context, input *Node, dropoutRate float64) *Node
 
 // IsDropoutActive returns true if dropout is active (i.e. if it's training).
 // If using DropoutStatic, also check that dropoutRate > 0.
-func IsDropoutActive(ctx *context.Context, g *Graph) bool {
+func IsDropoutActive(ctx *model.Context, g *Graph) bool {
 	return ctx != nil && ctx.IsTraining(g)
 }
 
 // DropoutNormalize randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
 // it's a no op (it returns input). If normalize is set, it scales the output by 1/(1-dropoutRate)
 // to preserve the mean of the input values.
-func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, normalize bool) *Node {
+func DropoutNormalize(ctx *model.Context, input *Node, dropoutRate *Node, normalize bool) *Node {
 	g := input.Graph()
 	if !IsDropoutActive(ctx, g) {
 		return input
@@ -357,8 +357,8 @@ func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, norm
 //
 // If it is 0.0 this is a no-op.
 // If `Context.IsTraining() == false` this is also a no-op, so it doesn't impact evaluation or inference.
-func DropoutFromContext(ctx *context.Context, x *Node) *Node {
-	dropoutRate := context.GetParamOr(ctx, ParamDropoutRate, 0.0)
+func DropoutFromContext(ctx *model.Context, x *Node) *Node {
+	dropoutRate := model.GetParamOr(ctx, ParamDropoutRate, 0.0)
 	if dropoutRate > 0 {
 		// We apply edge dropout to the mask.
 		g := x.Graph()
@@ -378,7 +378,7 @@ func DropoutFromContext(ctx *context.Context, x *Node) *Node {
 // If it is not training or dropProbability is nil, it is a no-op.
 //
 // See also DropPathFromContext.
-func DropPath(ctx *context.Context, x, dropProbability *Node) *Node {
+func DropPath(ctx *model.Context, x, dropProbability *Node) *Node {
 	g := x.Graph()
 	if !ctx.IsTraining(g) || dropProbability == nil {
 		return x
@@ -392,12 +392,12 @@ func DropPath(ctx *context.Context, x, dropProbability *Node) *Node {
 
 // DropPathFromContext will execute DropPath if the hyperparameter ParamDropPathProb is set to a value > 0.
 // If ParamDropPathProb is not set or if not training, this is a no-op.
-func DropPathFromContext(ctx *context.Context, x *Node) *Node {
+func DropPathFromContext(ctx *model.Context, x *Node) *Node {
 	g := x.Graph()
 	if !ctx.IsTraining(g) {
 		return x
 	}
-	dropPathProb := context.GetParamOr(ctx, ParamDropPathProbability, 0.0)
+	dropPathProb := model.GetParamOr(ctx, ParamDropPathProbability, 0.0)
 	if dropPathProb > 0 {
 		// We apply edge dropout to the mask.
 		g := x.Graph()
@@ -409,7 +409,7 @@ func DropPathFromContext(ctx *context.Context, x *Node) *Node {
 // AddL2RegularizationStatic is like AddL2Regularization, but takes the `amount` as a static Go float64 value.
 //
 // Deprecated: use package regularizers instead.
-func AddL2RegularizationStatic(ctx *context.Context, amount float64, values ...*Node) {
+func AddL2RegularizationStatic(ctx *model.Context, amount float64, values ...*Node) {
 	if len(values) == 0 {
 		Panicf("no values given to AddL2RegularizationAsFloat")
 	}
@@ -419,11 +419,11 @@ func AddL2RegularizationStatic(ctx *context.Context, amount float64, values ...*
 }
 
 // AddL2Regularization calculates the L2 of the given values (typically variable nodes returned
-// by context.Variable.ValueGraph()), scale by the given amount (typically a constant) and then
+// by model.Variable.ValueGraph()), scale by the given amount (typically a constant) and then
 // train.AddLoss the resulting value, having the effect of regularizing the weights (variables).
 //
 // Deprecated: use package regularizers instead.
-func AddL2Regularization(ctx *context.Context, amount *Node, values ...*Node) {
+func AddL2Regularization(ctx *model.Context, amount *Node, values ...*Node) {
 	if len(values) == 0 {
 		Panicf("no values given to AddL2Regularization")
 	}

@@ -5,7 +5,7 @@ package inceptionv3
 import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
@@ -83,7 +83,7 @@ func NewKidBuilder(dataDir string, kidImageSize int, maxImageValue float64, chan
 //
 // It returns a scalar with the mean distance of the images provided in labels and predictions.
 // The images
-func (builder *KidBuilder) BuildGraph(ctx *context.Context, labels, predictions []*Node) (output *Node) {
+func (builder *KidBuilder) BuildGraph(ctx *model.Context, labels, predictions []*Node) (output *Node) {
 	// Sanity checking:
 	g := predictions[0].Graph()
 	dtype := predictions[0].DType()

@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 )
 
 var (
@@ -23,7 +23,7 @@ var (
 // Modeled after scikit-learn make_moons function.
 //
 // It returns a tensor of the given shaped [n, 2].
-func MakeMoons(ctx *context.Context, g *Graph, n int) *Node {
+func MakeMoons(ctx *model.Context, g *Graph, n int) *Node {
 	angles := ctx.RandomUniform(g, shapes.Make(DType, n))
 	angles = MulScalar(angles, math.Pi)
 	outerMoonX := Cos(angles)

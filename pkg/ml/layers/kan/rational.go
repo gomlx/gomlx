@@ -4,7 +4,7 @@ package kan
 
 import (
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers/rational"
 )
 
@@ -42,10 +42,10 @@ type rationalConfig struct {
 }
 
 // initRational initializes the GR-KAN configuration.
-func (c *Config) initRational(ctx *context.Context) {
-	c.rational.numDegree = context.GetParamOr(ctx, ParamRationalNumeratorDegree, 5)
-	c.rational.denDegree = context.GetParamOr(ctx, ParamRationalDenominatorDegree, 4)
-	c.rational.initialApproximation = context.GetParamOr(ctx, ParamRationalInitialApproximation, rational.IdentityApproximation)
+func (c *Config) initRational(ctx *model.Context) {
+	c.rational.numDegree = model.GetParamOr(ctx, ParamRationalNumeratorDegree, 5)
+	c.rational.denDegree = model.GetParamOr(ctx, ParamRationalDenominatorDegree, 4)
+	c.rational.initialApproximation = model.GetParamOr(ctx, ParamRationalInitialApproximation, rational.IdentityApproximation)
 	c.rational.version = "B"
 	c.rational.withMultiplier = true
 	c.rational.multiplierInitialVariance = 1.0
@@ -65,7 +65,7 @@ func (c *Config) Rational() *Config {
 }
 
 // Layer implements one GR-KAN layer. x is expected to be shaped [batchSize, numInputNodes].
-func (c *Config) rationalLayer(ctx *context.Context, x *Node, numOutputNodes int) *Node {
+func (c *Config) rationalLayer(ctx *model.Context, x *Node, numOutputNodes int) *Node {
 	residual := x
 	batchSize := x.Shape().Dimensions[0]
 	numInputNodes := x.Shape().Dimensions[x.Rank()-1]

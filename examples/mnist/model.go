@@ -22,7 +22,7 @@ package mnist
 
 import (
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
@@ -32,7 +32,7 @@ import (
 // LinearModelGraph builds a simple  model logistic model
 // It returns the logit, not the predictions, which works with most losses with shape `[batch_size, NumClasses]`.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
-func LinearModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func LinearModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
 	batchSize := inputs[0].Shape().Dimensions[0]
 	embeddings := Reshape(inputs[0], batchSize, -1)
@@ -43,28 +43,28 @@ func LinearModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 // CnnModelGraph builds the CNN model for our demo.
 // It returns the logit, not the predictions, which works with most losses with shape `[batch_size, NumClasses]`.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
-func CnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func CnnModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
 	embeddings := CnnEmbeddings(ctx, inputs[0])
 	logits := layers.Dense(ctx, embeddings, true, NumClasses)
 	return []*Node{logits}
 }
 
-func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
+func CnnEmbeddings(ctx *model.Context, images *Node) *Node {
 	batchSize := images.Shape().Dimensions[0]
 	g := images.Graph()
 	dtype := images.DType()
 
 	layerIdx := 0
-	nextCtx := func(name string) *context.Context {
+	nextCtx := func(name string) *model.Context {
 		newCtx := ctx.Inf("%03d_%s", layerIdx, name)
 		layerIdx++
 		return newCtx
 	}
 	// Dropout.
-	dropoutRate := context.GetParamOr(ctx, "cnn_dropout_rate", -1.0)
+	dropoutRate := model.GetParamOr(ctx, "cnn_dropout_rate", -1.0)
 	if dropoutRate < 0 {
-		dropoutRate = context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
+		dropoutRate = model.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
 	}
 	var dropoutNode *Node
 	if dropoutRate > 0.0 {
@@ -91,8 +91,8 @@ func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
 	return images
 }
 
-func normalizeCNN(ctx *context.Context, logits *Node) *Node {
-	normalizationType := context.GetParamOr(ctx, "cnn_normalization", "none")
+func normalizeCNN(ctx *model.Context, logits *Node) *Node {
+	normalizationType := model.GetParamOr(ctx, "cnn_normalization", "none")
 	switch normalizationType {
 	case "layer":
 		if logits.Rank() == 2 {

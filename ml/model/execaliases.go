@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package context
+package model
 
 import (
 	"github.com/gomlx/compute"
@@ -17,7 +17,7 @@ import (
 // Alternatively, it can, instead of *Node inputs, take a *Graph object when there are no input tensors.
 //
 // The Context ctx passed in the construction is used in all calls to ctxGraphFn, as well as during the graph execution later.
-// If set to nil, it automatically creates a new empty context.
+// If set to nil, it automatically creates a new empty model.
 //
 // Before the execution of a graph, it initializes the variables as needed, using the configured initializer.
 // And variables updated in the graph (using Variable.SetValueGraph) are updated also during execution.
@@ -36,7 +36,7 @@ func NewExec[F ExecGraphFn](backend compute.Backend, ctx *Context, ctxGraphFn F)
 // Alternatively, it can, instead of *Node inputs, take a *Graph object when there are no input tensors.
 //
 // The Context ctx passed in the construction is used in all calls to ctxGraphFn, as well as during the graph execution later.
-// If set to nil, it automatically creates a new empty context.
+// If set to nil, it automatically creates a new empty model.
 //
 // Before the execution of a graph, it initializes the variables as needed, using the configured initializer.
 // And variables updated in the graph (using Variable.SetValueGraph) are updated also during execution.

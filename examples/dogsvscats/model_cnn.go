@@ -6,7 +6,7 @@ package dogsvscats
 
 import (
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
@@ -17,21 +17,21 @@ import (
 // CnnModelGraph builds the CNN model for our demo.
 // It returns the logit, not the predictions, which works with most losses.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
-func CnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func CnnModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
 	embeddings := CnnEmbeddings(ctx, inputs[0])
 	logit := fnn.New(ctx.In("readout"), embeddings, 1).NumHiddenLayers(0, 0).Done()
 	return []*Node{logit}
 }
 
-func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
+func CnnEmbeddings(ctx *model.Context, images *Node) *Node {
 	batchSize := images.Shape().Dimensions[0]
-	numConvolutions := context.GetParamOr(ctx, "cnn_num_layers", 5)
+	numConvolutions := model.GetParamOr(ctx, "cnn_num_layers", 5)
 
 	// Dropout.
-	dropoutRate := context.GetParamOr(ctx, "cnn_dropout_rate", -1.0)
+	dropoutRate := model.GetParamOr(ctx, "cnn_dropout_rate", -1.0)
 	if dropoutRate < 0 {
-		dropoutRate = context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
+		dropoutRate = model.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
 	}
 	var dropoutNode *Node
 	if dropoutRate > 0.0 {
@@ -68,14 +68,14 @@ func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
 
 	// Flatten the resulting image, and treat the convolved values as tabular.
 	logits = Reshape(logits, batchSize, -1)
-	return fnn.New(ctx.Inf("%03d_fnn", numConvolutions), logits, context.GetParamOr(ctx, "cnn_embeddings_size", 128)).Done()
+	return fnn.New(ctx.Inf("%03d_fnn", numConvolutions), logits, model.GetParamOr(ctx, "cnn_embeddings_size", 128)).Done()
 }
 
-func normalizeImage(ctx *context.Context, x *Node) *Node {
+func normalizeImage(ctx *model.Context, x *Node) *Node {
 	x.AssertRank(4) // [batch_size, width, height, depth]
-	norm := context.GetParamOr(ctx, "cnn_normalization", "")
+	norm := model.GetParamOr(ctx, "cnn_normalization", "")
 	if norm == "" {
-		context.GetParamOr(ctx, layers.ParamNormalization, "")
+		model.GetParamOr(ctx, layers.ParamNormalization, "")
 	}
 	switch norm {
 	case "layer":

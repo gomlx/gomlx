@@ -14,7 +14,7 @@ import (
 	"os"
 
 	"github.com/gomlx/gomlx/examples/dogsvscats"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -53,7 +53,7 @@ func main() {
 	}
 }
 
-func preGenerate(ctx *context.Context, dataDir string) {
+func preGenerate(ctx *model.Context, dataDir string) {
 	*flagDataDir = fsutil.MustReplaceTildeInDir(*flagDataDir)
 	if !fsutil.MustFileExists(*flagDataDir) {
 		check(os.MkdirAll(*flagDataDir, 0777))

@@ -156,7 +156,7 @@ type ValueMask[T any] struct {
 //
 // Example 2: usage in a model that is fed the output of a [sampler.Dataset]:
 //
-//	func MyModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+//	func MyModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 //		strategy := spec.(*Sampler.Strategy)
 //		graphSample, _ := strategy.MapInputsToStates(inputs)
 //		Seeds, mask := graphSample["Seeds"].Value, graphSample["Seeds"].Mask

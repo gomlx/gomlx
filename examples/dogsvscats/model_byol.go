@@ -9,8 +9,8 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	timage "github.com/gomlx/gomlx/core/tensors/images"
 	"github.com/gomlx/gomlx/examples/inceptionv3"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
 	"github.com/gomlx/gomlx/pkg/ml/train"
@@ -22,8 +22,8 @@ import (
 //
 // baseTrainable defines whether the base model should be trainable (set to false for the "target"
 // model, or if fine-tuning is disabled)
-func byolModelEmbedding(ctx *context.Context, images *Node, baseTrainable bool) (embeddings *Node) {
-	isInceptionV3 := context.GetParamOr(ctx, "byol_inception", false)
+func byolModelEmbedding(ctx *model.Context, images *Node, baseTrainable bool) (embeddings *Node) {
+	isInceptionV3 := model.GetParamOr(ctx, "byol_inception", false)
 	if isInceptionV3 {
 		channelsConfig := timage.ChannelsLast
 		images = inceptionv3.PreprocessImage(images, 1.0, channelsConfig) // Adjust image to format used by Inception.
@@ -46,7 +46,7 @@ func byolModelEmbedding(ctx *context.Context, images *Node, baseTrainable bool) 
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
 //
 // Based on https://arxiv.org/abs/2006.07733
-func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func ByolCnnModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	_ = spec // Not used.
 
 	// Create two models: same structure, different initializations, and if `--byol_use_pairs` is set,
@@ -61,8 +61,8 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	// Evaluation/Inference and if pre-training is over, we only use the "online" model, and return
 	// its prediction.
 	g := inputs[0].Graph()
-	byolPretrain := context.GetParamOr(ctx, "byol_pretrain", false)
-	byolFinetune := context.GetParamOr(ctx, "byol_finetune", false)
+	byolPretrain := model.GetParamOr(ctx, "byol_pretrain", false)
+	byolFinetune := model.GetParamOr(ctx, "byol_finetune", false)
 	if !ctx.IsTraining(g) || !byolPretrain {
 		// Normal model path, without byol regularization.
 		baseTraining := ctx.IsTraining(g) && byolFinetune
@@ -73,7 +73,7 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 
 	stackedImages12 := Concatenate([]*Node{inputs[0], inputs[1]}, 0) // For "online" model.
 	stackedImages21 := Concatenate([]*Node{inputs[1], inputs[0]}, 0) // For "target" model.
-	regularizationRate := context.GetParamOr(targetCtx, "byol_regularization_rate", 1.0)
+	regularizationRate := model.GetParamOr(targetCtx, "byol_regularization_rate", 1.0)
 
 	onlineEmbedding := byolModelEmbedding(onlineCtx, stackedImages12, true)
 	onlineProjection := byolProjection(onlineCtx, onlineEmbedding, 3)
@@ -81,7 +81,7 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 
 	targetEmbedding := byolModelEmbedding(targetCtx, stackedImages21, false)
 	targetProjection := byolProjection(targetCtx, targetEmbedding, 1)
-	targetCtx.EnumerateVariablesInScope(func(v *context.Variable) {
+	targetCtx.EnumerateVariablesInScope(func(v *model.Variable) {
 		v.Trainable = false
 	})
 	targetProjection = StopGradient(targetProjection)
@@ -91,14 +91,14 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	train.AddLoss(ctx, MulScalar(byolReg, regularizationRate))
 
 	// Update "target" model with moving average to the "online" model.
-	movingAverageRatio := context.GetParamOr(targetCtx, "byol_target_update_ratio", 0.999)
+	movingAverageRatio := model.GetParamOr(targetCtx, "byol_target_update_ratio", 0.999)
 	moveTargetModel(onlineCtx, targetCtx, g, movingAverageRatio)
 	return []*Node{} // No prediction to return.
 }
 
-func byolProjection(ctx *context.Context, embeddings *Node, numHiddenLayers int) *Node {
-	projectionNodes := context.GetParamOr(ctx, "byol_projection_nodes", 256)
-	projectionHiddenNodes := context.GetParamOr(ctx, "byol_hidden_nodes", 4096)
+func byolProjection(ctx *model.Context, embeddings *Node, numHiddenLayers int) *Node {
+	projectionNodes := model.GetParamOr(ctx, "byol_projection_nodes", 256)
+	projectionHiddenNodes := model.GetParamOr(ctx, "byol_hidden_nodes", 4096)
 	return fnn.New(ctx.In("byol_projection"), embeddings, projectionNodes).
 		NumHiddenLayers(numHiddenLayers, projectionHiddenNodes).
 		Done()
@@ -108,13 +108,13 @@ func byolProjection(ctx *context.Context, embeddings *Node, numHiddenLayers int)
 // If movingAverageRatio > 1.0, it is a no-op.
 //
 // onlineCtx and targetCtx are the same context, in different scopes.
-func moveTargetModel(onlineCtx, targetCtx *context.Context, g *Graph, movingAverageRatio float64) {
+func moveTargetModel(onlineCtx, targetCtx *model.Context, g *Graph, movingAverageRatio float64) {
 	if movingAverageRatio >= 1.0 {
 		return
 	}
 	onlineScope := onlineCtx.Scope()
 	targetScope := targetCtx.Scope()
-	targetCtx.EnumerateVariablesInScope(func(targetVar *context.Variable) {
+	targetCtx.EnumerateVariablesInScope(func(targetVar *model.Variable) {
 		// Get corresponding variable in "online" model.
 		onlineVarScope := onlineScope + targetVar.Scope()[len(targetScope):]
 		onlineVar := onlineCtx.GetVariableByScopeAndName(onlineVarScope, targetVar.Name())
@@ -147,8 +147,8 @@ func byolLoss(p0, p1 *Node) *Node {
 }
 
 // Add a regularization term proportional to $(1 - L2(projection))^2$.
-func byolRegularizeToLengthOne(ctx *context.Context, projection *Node) {
-	regLenOne := context.GetParamOr(ctx, "byol_reg_len1", 0.0)
+func byolRegularizeToLengthOne(ctx *model.Context, projection *Node) {
+	regLenOne := model.GetParamOr(ctx, "byol_reg_len1", 0.0)
 	if regLenOne <= 0.0 {
 		return
 	}

@@ -30,8 +30,8 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
@@ -50,10 +50,10 @@ var ModelList = []string{"linear", "cnn"}
 
 var excludeParams = []string{"data_dir", "train_steps", "num_checkpoints", "plots"}
 
-type ContextFn func(ctx *context.Context) *context.Context
+type ContextFn func(ctx *model.Context) *model.Context
 
-func CreateDefaultContext() *context.Context {
-	ctx := context.New()
+func CreateDefaultContext() *model.Context {
+	ctx := model.New()
 	_ = ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		// Model type to use
@@ -103,13 +103,13 @@ func CreateDefaultContext() *context.Context {
 }
 
 // NewDatasetsConfigurationFromContext create a preprocessing configuration based on hyperparameters
-// set in the context.
-func NewDatasetsConfigurationFromContext(ctx *context.Context, dataDir string) *DatasetsConfiguration {
+// set in the model.
+func NewDatasetsConfigurationFromContext(ctx *model.Context, dataDir string) *DatasetsConfiguration {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	config := &DatasetsConfiguration{}
 	config.DataDir = dataDir
-	config.BatchSize = context.GetParamOr(ctx, "batch_size", 0)
-	config.EvalBatchSize = context.GetParamOr(ctx, "eval_batch_size", 0)
+	config.BatchSize = model.GetParamOr(ctx, "batch_size", 0)
+	config.EvalBatchSize = model.GetParamOr(ctx, "eval_batch_size", 0)
 	config.UseParallelism = true
 	config.BufferSize = 100
 	config.Dtype = dtypes.Float32
@@ -117,7 +117,7 @@ func NewDatasetsConfigurationFromContext(ctx *context.Context, dataDir string) *
 }
 
 // TrainModel based on configuration and flags.
-func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) error {
+func TrainModel(ctx *model.Context, dataDir, checkpointPath string, paramsSet []string) error {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
 		if err := os.MkdirAll(dataDir, 0777); err != nil {
@@ -125,7 +125,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 		}
 	}
 
-	modelType := context.GetParamOr(ctx, "model", "")
+	modelType := model.GetParamOr(ctx, "model", "")
 	var modelFn train.ModelFn
 	switch modelType {
 	case "linear":
@@ -169,7 +169,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
 	// Debugging.
-	if context.GetParamOr(ctx, "nan_logger", false) {
+	if model.GetParamOr(ctx, "nan_logger", false) {
 		nanlogger.New().AttachToTrainer(trainer)
 	}
 
@@ -180,7 +180,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
-		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
+		numCheckpointsToKeep := model.GetParamOr(ctx, "num_checkpoints", 3)
 		checkpoint, err = checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
@@ -201,7 +201,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if context.GetParamOr(ctx, plotly.ParamPlots, false) {
+	if model.GetParamOr(ctx, plotly.ParamPlots, false) {
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
@@ -211,7 +211,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	}
 
 	// Loop for a given number of steps.
-	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	numTrainSteps := model.GetParamOr(ctx, "train_steps", 0)
 	globalStep := int(optimizers.GetGlobalStep(ctx))
 	if globalStep > 0 {
 		fmt.Printf("\t- restarting from global step %d\n", globalStep)

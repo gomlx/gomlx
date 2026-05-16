@@ -21,7 +21,7 @@ import (
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/support/testutil"
@@ -31,13 +31,13 @@ func TestCheckpoints(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 
 	// Graph function to test: it simply creates, increments and returns the global step.
-	testGraphFn := func(ctx *context.Context, g *Graph) *Node {
+	testGraphFn := func(ctx *model.Context, g *Graph) *Node {
 		return optimizers.IncrementGlobalStepGraph(ctx, g, dtypes.Float64)
 	}
 	var dir string
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.New()
+		ctx := model.New()
 		ctx.SetParam("learning_rate", 0.01)
 		ctx.SetParam(regularizers.ParamL2, 0.001)
 		ctx.SetParam(regularizers.ParamL1, 1.0e7)
@@ -47,7 +47,7 @@ func TestCheckpoints(t *testing.T) {
 		assert.Equal(t, 0, checkpoint.checkpointsCount)
 		dir = checkpoint.Dir()
 		fmt.Printf("Checkpoint directory: %s\n", dir)
-		e := context.MustNewExec(backend, ctx, testGraphFn)
+		e := model.MustNewExec(backend, ctx, testGraphFn)
 		for ii := range 10 {
 			results := e.MustExec()
 			globalStep := tensors.ToScalar[float64](results[0])
@@ -66,7 +66,7 @@ func TestCheckpoints(t *testing.T) {
 	// Test loading of variables and parameters.
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.New()
+		ctx := model.New()
 		ctx.SetParam("learning_rate", 5.0)       // Value should be overwritten when loading.
 		ctx.SetParam(regularizers.ParamL1, 17.0) // Value should NOT be overwritten when loading.
 		checkpoint := Build(ctx).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).MustDone()
@@ -74,7 +74,7 @@ func TestCheckpoints(t *testing.T) {
 		lr, found := ctx.GetParam("learning_rate")
 		assert.True(t, found, "learning_rate should be set")
 		assert.Equal(t, 0.01, lr.(float64), "Params[learning_rate]")
-		assert.Equal(t, 17.0, context.GetParamOr(ctx, regularizers.ParamL1, 0.0))
+		assert.Equal(t, 17.0, model.GetParamOr(ctx, regularizers.ParamL1, 0.0))
 
 		var l2 any
 		l2, found = ctx.GetParam(regularizers.ParamL2)
@@ -95,7 +95,7 @@ func TestCheckpoints(t *testing.T) {
 		require.NoError(t, v.Shape().Check(dtypes.Int64))
 
 		// Re-execute testGraphFn: it should load global step at 10, increment and return it at 11.
-		e := context.MustNewExec(backend, ctx, testGraphFn)
+		e := model.MustNewExec(backend, ctx, testGraphFn)
 		results := e.MustExec()
 		globalStep := tensors.ToScalar[float64](results[0])
 		assert.Equal(t, 11.0, globalStep, "Re-loaded global step")
@@ -109,7 +109,7 @@ func TestCheckpoints(t *testing.T) {
 
 	// Test that immediate form also loads the variables correctly.
 	{
-		ctx := context.New()
+		ctx := model.New()
 		_ = Build(ctx).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).Immediate().MustDone()
 
 		// Check that the only variable ("global_step") is present.
@@ -123,7 +123,7 @@ func TestCheckpoints(t *testing.T) {
 
 		v := ctx.GetVariable(optimizers.GlobalStepVariableName)
 		require.NoError(t, v.Shape().Check(dtypes.Int64))
-		e := context.MustNewExec(backend, ctx, testGraphFn)
+		e := model.MustNewExec(backend, ctx, testGraphFn)
 		results := e.MustExec()
 		globalStep := tensors.ToScalar[float64](results[0])
 		assert.Equal(t, 12.0, globalStep, "Re-loaded global step")
@@ -135,7 +135,7 @@ func TestCheckpoints(t *testing.T) {
 	)
 	{
 		// Read the whole checkpoint to a variable -- similar to embedding it.
-		ctx := context.New()
+		ctx := model.New()
 		handler := Build(ctx).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).Immediate().MustDone()
 		checkpoints, err := handler.ListCheckpoints()
 		require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestCheckpoints(t *testing.T) {
 	}
 	{
 		// Check that reading from the variable works.
-		ctx := context.New()
+		ctx := model.New()
 		_, err := Build(ctx).FromEmbed(string(jsonBlob), binBlob).Immediate().Done()
 		require.NoError(t, err)
 
@@ -174,7 +174,7 @@ func TestMergedCheckpoints(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	var dir string
 	{
-		ctx := context.New().Checked(false)
+		ctx := model.New().Checked(false)
 		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").Keep(2).MustDone()
 		dir = checkpoint.Dir()
 		globalStepV := optimizers.GetGlobalStepVar(ctx)
@@ -190,7 +190,7 @@ func TestMergedCheckpoints(t *testing.T) {
 	}
 	{
 		// Check that the values were averaged:
-		ctx := context.New().Checked(false)
+		ctx := model.New().Checked(false)
 		_ = Build(ctx).Dir(dir).Keep(2).TakeMean(-1, backend).MustDone()
 		globalStep := optimizers.GetGlobalStep(ctx)
 		assert.Equal(t, int64(10), globalStep, "GlobalStep")
@@ -218,7 +218,7 @@ func TestParams(t *testing.T) {
 
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.New()
+		ctx := model.New()
 		ctx.SetParam("xFloat64", xFloat64)
 		ctx.SetParam("xFloat32", xFloat32)
 		ctx.SetParam("xInt", xInt)
@@ -235,7 +235,7 @@ func TestParams(t *testing.T) {
 	// Test loading of values
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.New()
+		ctx := model.New()
 		_ = Build(ctx).Dir(dir).Keep(3).MustDone()
 
 		got, found := ctx.GetParam("xFloat64")

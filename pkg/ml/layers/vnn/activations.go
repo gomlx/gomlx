@@ -5,8 +5,8 @@ package vnn
 import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -21,7 +21,7 @@ const (
 )
 
 type ReluConfig struct {
-	ctx               *context.Context
+	ctx               *model.Context
 	operand           *Node
 	shareNonLinearity bool
 	negativeSlope     float64
@@ -35,7 +35,7 @@ type ReluConfig struct {
 //
 // This returns a configuration object. Call ReluConfig.Done when finished and it
 // will compute the Relu of the operand as specified.
-func Relu(ctx *context.Context, operand *Node) *ReluConfig {
+func Relu(ctx *model.Context, operand *Node) *ReluConfig {
 	if operand.Rank() < 2 {
 		exceptions.Panicf("Relu requires at least two axes, got operand.shape=%s", operand.Shape())
 	}
@@ -48,8 +48,8 @@ func Relu(ctx *context.Context, operand *Node) *ReluConfig {
 	return &ReluConfig{
 		ctx:               ctx,
 		operand:           operand,
-		shareNonLinearity: context.GetParamOr(ctx, ParamReluShareNonLinearity, false),
-		negativeSlope:     context.GetParamOr(ctx, ParamReluNegativeSlope, 0.2),
+		shareNonLinearity: model.GetParamOr(ctx, ParamReluShareNonLinearity, false),
+		negativeSlope:     model.GetParamOr(ctx, ParamReluNegativeSlope, 0.2),
 	}
 }
 
@@ -115,7 +115,7 @@ func (c *ReluConfig) Done() *Node {
 	return operand
 }
 
-// ReluFromContext applies Relu with the default parameters used from the context.
-func ReluFromContext(ctx *context.Context, operand *Node) *Node {
+// ReluFromContext applies Relu with the default parameters used from the model.
+func ReluFromContext(ctx *model.Context, operand *Node) *Node {
 	return Relu(ctx, operand).Done()
 }

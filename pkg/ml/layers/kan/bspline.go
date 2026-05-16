@@ -8,8 +8,8 @@ import (
 	"github.com/gomlx/bsplines"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	xbsplines "github.com/gomlx/gomlx/pkg/ml/layers/bsplines"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
@@ -43,17 +43,17 @@ type bsplineConfig struct {
 	MagnitudeRegularizer regularizers.Regularizer
 }
 
-// initBSpline initializes the default values for Discrete-KANs based on context.
-func (c *Config) initBSpline(ctx *context.Context) {
-	c.bspline.Degree = context.GetParamOr(ctx, ParamBSplineDegree, 2)
+// initBSpline initializes the default values for Discrete-KANs based on model.
+func (c *Config) initBSpline(ctx *model.Context) {
+	c.bspline.Degree = model.GetParamOr(ctx, ParamBSplineDegree, 2)
 	c.bspline.MagnitudeTerms = true
 
 	var magRegs []regularizers.Regularizer
-	magL2 := context.GetParamOr(ctx, ParamBSplineMagnitudeL2, 0.0)
+	magL2 := model.GetParamOr(ctx, ParamBSplineMagnitudeL2, 0.0)
 	if magL2 > 0 {
 		magRegs = append(magRegs, regularizers.L2(magL2))
 	}
-	magL1 := context.GetParamOr(ctx, ParamBSplineMagnitudeL1, 0.0)
+	magL1 := model.GetParamOr(ctx, ParamBSplineMagnitudeL1, 0.0)
 	if magL1 > 0 {
 		magRegs = append(magRegs, regularizers.L1(magL1))
 	}
@@ -80,7 +80,7 @@ func (c *Config) WithBSplineMagnitudeRegularizer(regularizer regularizers.Regula
 }
 
 // bsplineLayer implements one KAN bsplineLayer. x is expected to be rank-2.
-func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int) *Node {
+func (c *Config) bsplineLayer(ctx *model.Context, x *Node, numOutputNodes int) *Node {
 	g := x.Graph()
 	dtype := x.DType()
 	residual := x

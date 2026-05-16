@@ -53,5 +53,5 @@ func TestNodeAliases(t *testing.T) {
 	// Test popping alias scope
 	g.PopAliasScope()
 	assert.Equal(t, n3, g.GetNodeByAlias("/scope1/n3")) // "/scope1/n3" still exists.
-	assert.True(t, g.GetNodeByAlias("n3") == nil)       // But it is now on a different context.
+	assert.True(t, g.GetNodeByAlias("n3") == nil)       // But it is now on a different model.
 }

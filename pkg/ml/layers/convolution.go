@@ -7,7 +7,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
@@ -17,7 +17,7 @@ import (
 // ConvBuilder is a helper to build a convolution computation. Create it with Convolution, set the desired parameters,
 // and when all is set, call Done.
 type ConvBuilder struct {
-	ctx                                *context.Context
+	ctx                                *model.Context
 	graph                              *Graph
 	x                                  *Node
 	numSpatialDims                     int
@@ -53,7 +53,7 @@ type ConvBuilder struct {
 //
 // The output rank and order of the output axes are the same as the input's.
 // Their dimensions depend on the configuration options.
-func Convolution(ctx *context.Context, x *Node) *ConvBuilder {
+func Convolution(ctx *model.Context, x *Node) *ConvBuilder {
 	conv := &ConvBuilder{
 		ctx:               ctx,
 		graph:             x.Graph(),

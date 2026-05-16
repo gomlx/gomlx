@@ -148,7 +148,7 @@ func (d *onDevice) Finalize() error {
 // one device to another (freeing the source device copy).
 //
 // Generally the user doesn't need to call this function, it is called by the libraries executing GoMLX computations
-// automatically when needed (e.g.: graph.Exec or context.Exec).
+// automatically when needed (e.g.: graph.Exec or model.Exec).
 //
 // If share is true, and if the backend allows for shared buffers, this will create a shared buffer,
 // which can be more economic.
@@ -165,7 +165,7 @@ func (t *Tensor) MustMaterializeOnDevice(backend compute.Backend, share bool, de
 // one device to another (freeing the source device copy).
 //
 // Generally the user doesn't need to call this function, it is called by the libraries executing GoMLX computations
-// automatically when needed (e.g.: graph.Exec or context.Exec).
+// automatically when needed (e.g.: graph.Exec or model.Exec).
 //
 // If share is true, and if the backend allows for shared buffers, this will create a shared buffer,
 // which can be more economic.

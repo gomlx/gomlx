@@ -9,7 +9,7 @@ import (
 
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/support/sets"
@@ -22,7 +22,7 @@ func TestDatasets(t *testing.T) {
 		t.Skip("Skipping long-running test.")
 	}
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")
 	UploadOgbnMagVariables(backend, ctx) // Uploads the Papers frozen embedding table.

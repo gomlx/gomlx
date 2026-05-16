@@ -11,8 +11,8 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
@@ -46,7 +46,7 @@ var (
 	// ModelsPrep maps models to a preparation function called in TrainModel before training start.
 	//
 	// This can be extended for new models.
-	ModelsPrep = map[string]func(ctx *context.Context, dataDir string, checkpoint *checkpoints.Handler){
+	ModelsPrep = map[string]func(ctx *model.Context, dataDir string, checkpoint *checkpoints.Handler){
 		"inception": InceptionV3ModelPrep,
 	}
 )
@@ -56,8 +56,8 @@ var (
 var nanLogger *nanlogger.NanLogger
 
 // CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
-func CreateDefaultContext() *context.Context {
-	ctx := context.New()
+func CreateDefaultContext() *model.Context {
+	ctx := model.New()
 	ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		// Model type to use
@@ -141,7 +141,7 @@ func CreateDefaultContext() *context.Context {
 }
 
 // TrainModel based on configuration and flags.
-func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bool, paramsSet []string) {
+func TrainModel(ctx *model.Context, dataDir, checkpointPath string, runEval bool, paramsSet []string) {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
 		check(os.MkdirAll(dataDir, 0777))
@@ -150,7 +150,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 	// Checkpoint: it loads if already exists, and it will save as we train.
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
-		numCheckpoints := context.GetParamOr(ctx, "num_checkpoints", 3)
+		numCheckpoints := model.GetParamOr(ctx, "num_checkpoints", 3)
 		checkpoint = check1(checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
 			ExcludeParams(append(
@@ -177,7 +177,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Select the model type we are using:
-	modelType := context.GetParamOr(ctx, "model", "")
+	modelType := model.GetParamOr(ctx, "model", "")
 	modelFn, found := ModelsFns[modelType]
 	if !found {
 		exceptions.Panicf("Unknown model type %q: valid values are %q", modelType, xslices.Keys(ModelsFns))
@@ -187,7 +187,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 		modelPrep(ctx, dataDir, checkpoint)
 	}
 	// BYOL may require pretraining.
-	preTraining := modelType == "byol" && context.GetParamOr(ctx, "byol_pretrain", false)
+	preTraining := modelType == "byol" && model.GetParamOr(ctx, "byol_pretrain", false)
 	if preTraining && checkpoint == nil {
 		klog.Warning(
 			"*** pre-training model but not saving (--checkpoint) the pretrained weights -- is only useful for debugging ***",
@@ -215,7 +215,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 	}
 
 	// Debugging.
-	if context.GetParamOr(ctx, "nan_logger", false) {
+	if model.GetParamOr(ctx, "nan_logger", false) {
 		nanlogger.New().AttachToTrainer(trainer)
 	}
 
@@ -234,7 +234,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if context.GetParamOr(ctx, plotly.ParamPlots, false) {
+	if model.GetParamOr(ctx, plotly.ParamPlots, false) {
 		if preTraining {
 			// Pre-training: no evaluation.
 			_ = plotly.New().
@@ -252,7 +252,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 	}
 
 	// Loop for given number of steps.
-	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	numTrainSteps := model.GetParamOr(ctx, "train_steps", 0)
 	globalStep := int(optimizers.GetGlobalStep(ctx))
 	if globalStep > 0 {
 		trainer.SetContext(ctx.Reuse())

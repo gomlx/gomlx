@@ -4,7 +4,7 @@ package cifar
 
 import (
 	"github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
@@ -15,12 +15,12 @@ import (
 
 // C10PlainModelGraph implements train.ModelFn, and returns the logit Node, given the input image.
 // It's a basic FNN (Feedforward Neural Network), so no convolutions. It is meant only as an example.
-func C10PlainModelGraph(ctx *context.Context, spec any, inputs []*graph.Node) []*graph.Node {
+func C10PlainModelGraph(ctx *model.Context, spec any, inputs []*graph.Node) []*graph.Node {
 	batchedImages := inputs[0]
 	batchSize := batchedImages.Shape().Dimensions[0]
 	logits := graph.Reshape(batchedImages, batchSize, -1)
 	numClasses := len(C10Labels)
-	modelType := context.GetParamOr(ctx, "model", C10ValidModels[0])
+	modelType := model.GetParamOr(ctx, "model", C10ValidModels[0])
 	if modelType == "kan" {
 		// Configuration of the KAN layer(s) use the context hyperparameters.
 		// Re-scale logits to be from -1.0 to 1.0.
@@ -37,8 +37,8 @@ func C10PlainModelGraph(ctx *context.Context, spec any, inputs []*graph.Node) []
 
 const ParamCNNNormalization = "cnn_normalization"
 
-func normalizeCNN(ctx *context.Context, logits *graph.Node) *graph.Node {
-	normalizationType := context.GetParamOr(ctx, ParamCNNNormalization, "none")
+func normalizeCNN(ctx *model.Context, logits *graph.Node) *graph.Node {
+	normalizationType := model.GetParamOr(ctx, ParamCNNNormalization, "none")
 	switch normalizationType {
 	case "layer":
 		if logits.Rank() == 2 {
@@ -64,7 +64,7 @@ func normalizeCNN(ctx *context.Context, logits *graph.Node) *graph.Node {
 // This is modeled after the Keras example in Kaggle:
 // https://www.kaggle.com/code/ektasharma/simple-cifar10-cnn-keras-code-with-88-accuracy
 // (Thanks @ektasharma)
-func C10ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*graph.Node) []*graph.Node {
+func C10ConvolutionModelGraph(ctx *model.Context, spec any, inputs []*graph.Node) []*graph.Node {
 	batchedImages := inputs[0]
 	g := batchedImages.Graph()
 	dtype := batchedImages.DType()
@@ -72,7 +72,7 @@ func C10ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*graph.No
 	logits := batchedImages
 
 	layerIdx := 0
-	nextCtx := func(name string) *context.Context {
+	nextCtx := func(name string) *model.Context {
 		newCtx := ctx.Inf("%03d_%s", layerIdx, name)
 		layerIdx++
 		return newCtx

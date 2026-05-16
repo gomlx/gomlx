@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
@@ -28,9 +28,9 @@ import (
 // TestLinearLayer checks that the linear layer of the VNN is equivariant to rotation.
 func TestLinearLayer(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 	ctx.SetRNGStateFromSeed(42)
-	y0 := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+	y0 := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 		pi2 := math.Pi * 2.0
 
 		// Random inputs and rotations:
@@ -64,7 +64,7 @@ func TestLinearLayer(t *testing.T) {
 // TestRelu checks that the Relu activation with a learned projection is equivariant to rotation.
 func TestRelu(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	baseCtx := context.New()
+	baseCtx := model.New()
 	baseCtx.SetRNGStateFromSeed(42)
 	testShape := shapes.Make(dtypes.Float64, 20, 2, 3)
 	//testShape := shapes.Make(dtypes.Float64, 1, 2, 3)
@@ -73,7 +73,7 @@ func TestRelu(t *testing.T) {
 			name := fmt.Sprintf("Leak=%.1f-Shared=%v", negativeSlope, shareNonLinearity)
 			t.Run(name, func(t *testing.T) {
 				ctx := baseCtx.In(name)
-				outputs := context.MustExecOnceN(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
+				outputs := model.MustExecOnceN(backend, ctx, func(ctx *model.Context, g *Graph) []*Node {
 					pi2 := math.Pi * 2.0
 
 					// Random inputs and rotations:
@@ -118,9 +118,9 @@ func TestRelu(t *testing.T) {
 // the origin -- and that it is equivariant to rotation.
 func TestLayerNormalization(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 	ctx.SetRNGStateFromSeed(42)
-	outputs := context.MustExecOnceN(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
+	outputs := model.MustExecOnceN(backend, ctx, func(ctx *model.Context, g *Graph) []*Node {
 		pi2 := math.Pi * 2.0
 
 		// Random inputs and rotations:
@@ -154,9 +154,9 @@ func TestLayerNormalization(t *testing.T) {
 // TestVNN_Equivariant checks that a fully configured VNN is SO(3) equivariant for rotations.
 func TestVNN_Equivariant(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 	ctx.SetRNGStateFromSeed(42)
-	rotDiff := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+	rotDiff := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 		pi2 := math.Pi * 2.0
 
 		// Random inputs and rotations:
@@ -193,12 +193,12 @@ func TestVNN_Equivariant(t *testing.T) {
 // The function to learn is not rotation-invariant, so we expect this test to fail.
 func TestVNNTrain(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 	ctx.SetRNGStateFromSeed(42)
 
 	// Model function
 	numFeatures := 4
-	modelFn := func(ctx *context.Context, spec any, inputs []*Node) []*Node {
+	modelFn := func(ctx *model.Context, spec any, inputs []*Node) []*Node {
 		x := inputs[0] // Shape: [batch, 2, 3]
 		ctx = ctx.In("vnn")
 		vnn := New(ctx, x, numFeatures).
@@ -284,7 +284,7 @@ func TestVNNTrain(t *testing.T) {
 	accuracy := lossAndMetrics[2].Value().(float32)
 	require.GreaterOrEqual(t, accuracy, float32(0.8), "VNN was not able to learn rotation invariant simple task, accuracy=%.1f%%.", accuracy*100.0)
 
-	sample := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+	sample := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 		return ctx.RandomUniform(g, shapes.Make(dtypes.Float64))
 	})
 	fmt.Printf("Context random sample: %s\n", sample.GoStr())

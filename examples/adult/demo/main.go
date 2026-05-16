@@ -15,8 +15,8 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/adult"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
@@ -58,8 +58,8 @@ func check1[T any](v T, err error) T {
 	return v
 }
 
-func createDefaultContext() *context.Context {
-	ctx := context.New()
+func createDefaultContext() *model.Context {
+	ctx := model.New()
 	ctx.SetParams(map[string]any{
 		// Number of steps to take during training.
 		"train_steps": 5000,
@@ -149,7 +149,7 @@ func main() {
 	}
 }
 
-func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) error {
+func mainWithContext(ctx *model.Context, dataDir, checkpointPath string, paramsSet []string) error {
 	backend := compute.MustNew()
 	numDevices := backend.NumDevices()
 	if *flagNumDevices > 0 {
@@ -171,7 +171,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	var checkpoint *checkpoints.Handler
 	const keepCheckpoints = 3
 	if checkpointPath != "" {
-		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", keepCheckpoints)
+		numCheckpointsToKeep := model.GetParamOr(ctx, "num_checkpoints", keepCheckpoints)
 		checkpoint = check1(checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
@@ -191,7 +191,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	}
 
 	// Batch size: it is affected by the distributed execution..
-	batchSize := context.GetParamOr(ctx, "batch_size", 128)
+	batchSize := model.GetParamOr(ctx, "batch_size", 128)
 	shardedBatchSize := batchSize
 	if *flagDistributed {
 		if numDevices < 2 {
@@ -289,7 +289,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if context.GetParamOr(ctx, margaid.ParamPlots, false) {
+	if model.GetParamOr(ctx, margaid.ParamPlots, false) {
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
@@ -299,7 +299,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	}
 
 	// Train up to "train_steps".
-	trainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	trainSteps := model.GetParamOr(ctx, "train_steps", 0)
 	globalStep := int(optimizers.GetGlobalStep(ctx))
 	if globalStep != 0 {
 		fmt.Printf("- Restarting training from global step %d\n", globalStep)

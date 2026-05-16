@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package context
+package model
 
 import (
 	"fmt"
@@ -55,7 +55,7 @@ type Variable struct {
 	// distValue holds the distributed view: A tensor sharded across a mesh.
 	distValue *dtensor.Tensor
 
-	// shardingSpec defines how the variable is split in a distributed context.
+	// shardingSpec defines how the variable is split in a distributed model.
 	// If nil, the variable is considered replicated (or local).
 	shardingSpec *distributed.ShardingSpec
 
@@ -69,7 +69,7 @@ type Variable struct {
 // Value, name, scope, trainable state, shardingSpec spec, and initializer are cloned.
 // But the new clone starts with no graph node mapping -- so it's assumed it's not in use by any Graph.
 //
-// The variable is then inserted into the given context.
+// The variable is then inserted into the given model.
 func (v *Variable) CloneToContext(toCtx *Context) (*Variable, error) {
 	newV := &Variable{
 		ctx:          toCtx,
@@ -129,10 +129,10 @@ func (v *Variable) IsValid() bool {
 // CheckValid returns an error if the variable is in an invalid state: if it's nil, or if its shape is not yet set.
 func (v *Variable) CheckValid() error {
 	if v == nil {
-		return errors.New("context.Variable is nil")
+		return errors.New("model.Variable is nil")
 	}
 	if !v.Shape().Ok() {
-		return errors.New("context.Variable has no shape")
+		return errors.New("model.Variable has no shape")
 	}
 	return nil
 }
@@ -505,7 +505,7 @@ func (v *Variable) ValueGraph(g *Graph) *Node {
 // This is used to "communicate" among different parts of the graph building that this value Node should
 // be used as the new variable value.
 //
-// [context.Exec] will also use the last value set with [SetValueGraph] and include it as the output of the graph
+// [model.Exec] will also use the last value set with [SetValueGraph] and include it as the output of the graph
 // execution and then update the variables (with [SetValue]) accordingly after each graph execution.
 //
 // So a graph building function can update variable values, for instance, to update weights during gradient

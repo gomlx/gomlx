@@ -14,7 +14,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 
@@ -81,8 +81,8 @@ func TestKidMetric(t *testing.T) {
 	noisyBatch := noisyImages(t, manager, imagesBatch)
 
 	kidBuilder := NewKidBuilder(*flagDataDir, 75, 255.0, images.ChannelsLast)
-	ctx := context.New()
-	kidExec := context.MustNewExec(manager, ctx, func(ctx *context.Context, imagesPair []*Node) *Node {
+	ctx := model.New()
+	kidExec := model.MustNewExec(manager, ctx, func(ctx *model.Context, imagesPair []*Node) *Node {
 		return kidBuilder.BuildGraph(ctx, []*Node{imagesPair[0]}, []*Node{imagesPair[1]})
 	})
 	kid := kidExec.MustExec(imagesBatch, noisyBatch)[0].Value().(float32)

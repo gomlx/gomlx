@@ -6,7 +6,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -15,8 +15,8 @@ import (
 func TestGreedy(t *testing.T) {
 	t.Run("Basic", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node { return Greedy(logits) })
+		ctx := model.New()
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, logits *Node) *Node { return Greedy(logits) })
 		logits := [][]float32{
 			{0, 0, 0, 0, 0, 10, 0, 0, 0, 0},
 			{0, 0, 0, 10, 0, 0, 0, 0, 0, 0},
@@ -34,8 +34,8 @@ func TestGreedy(t *testing.T) {
 func TestTemperature(t *testing.T) {
 	t.Run("Range", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node { return Temperature(ctx, logits, 1.0) })
+		ctx := model.New()
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, logits *Node) *Node { return Temperature(ctx, logits, 1.0) })
 		logits := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
 		tokens := exec.MustExec(logits)[0]
 		assert.Equal(t, dtypes.Int32, tokens.DType())
@@ -51,8 +51,8 @@ func TestTopP(t *testing.T) {
 		// Test that TopPSample correctly handles batch dimensions
 		// This tests the BroadcastToShape fix for condition broadcasting
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node {
+		ctx := model.New()
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, logits *Node) *Node {
 			return TopP(ctx, logits, 0.9, 1.0)
 		})
 
@@ -77,8 +77,8 @@ func TestTopP(t *testing.T) {
 	t.Run("SingleBatch", func(t *testing.T) {
 		// Test with batch size 1 (common case in generation)
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node {
+		ctx := model.New()
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, logits *Node) *Node {
 			return TopP(ctx, logits, 0.95, 0.8)
 		})
 
@@ -100,8 +100,8 @@ func TestTopKSample(t *testing.T) {
 	t.Run("BatchShape", func(t *testing.T) {
 		// Test that TopKSample correctly handles batch dimensions
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node {
+		ctx := model.New()
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, logits *Node) *Node {
 			return TopKWithTemperature(ctx, logits, 5, 1.0)
 		})
 
@@ -128,8 +128,8 @@ func TestTopKSample(t *testing.T) {
 func TestSampleWithStrategy(t *testing.T) {
 	t.Run("Greedy", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node {
+		ctx := model.New()
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, logits *Node) *Node {
 			return SampleWithStrategy(ctx, logits, StrategyGreedy, 0, 0, 0)
 		})
 		logits := [][]float32{{0, 0, 0, 0, 0, 0, 0, 10, 0, 0}}
@@ -140,8 +140,8 @@ func TestSampleWithStrategy(t *testing.T) {
 
 	t.Run("Temperature", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node {
+		ctx := model.New()
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, logits *Node) *Node {
 			return SampleWithStrategy(ctx, logits, StrategyTemperature, 0.8, 0, 0)
 		})
 		logits := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
@@ -153,8 +153,8 @@ func TestSampleWithStrategy(t *testing.T) {
 
 	t.Run("TopK", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node {
+		ctx := model.New()
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, logits *Node) *Node {
 			return SampleWithStrategy(ctx, logits, StrategyTopK, 1.0, 3, 0)
 		})
 		logits := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
@@ -166,8 +166,8 @@ func TestSampleWithStrategy(t *testing.T) {
 
 	t.Run("TopP", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := context.New()
-		exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, logits *Node) *Node {
+		ctx := model.New()
+		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, logits *Node) *Node {
 			return SampleWithStrategy(ctx, logits, StrategyTopP, 1.0, 0, 0.8)
 		})
 		logits := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}

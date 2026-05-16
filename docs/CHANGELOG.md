@@ -278,7 +278,7 @@ Distributed computation improvements and refactorings:
   - Added `RunOnDevice`.
   - Added `Exec.AutoSharding` and `Exec.SPMD`.
 - Package `context`:
-  - Added `context.MustGetParam[T](ctx, key)` and `context.MustGetGraphParam[T](ctx, graph, key)`.
+  - Added `model.MustGetParam[T](ctx, key)` and `model.MustGetGraphParam[T](ctx, graph, key)`.
   - Added `Exec.AutoSharding` and `Exec.SPMD`.
   - Added `Variable.DistributedValue` and `Variable.SetDistributedValue`.
 - Package `train`:
@@ -343,9 +343,9 @@ Other improvements:
     * **This requires changes to the import paths**: core packages (`tensors`, `shapes` and `graph`) are under `pkg/core`;
       machine learning packages (`context`, `layers`, `train`, `datasets`, ...) are under `pkg/ml`;
       supporting packages (`fsutil`, `sets`, `xslices`, `xsync`) are under `pkg/support`.
-    * Normalized `graph.Exec` and `context.Exec` slightly changed the API: 
+    * Normalized `graph.Exec` and `model.Exec` slightly changed the API: 
       the `Exec.Exec...` methods now return an error, and the `Exec.MustExec...` methods panic (instead of the old `Exec.Call` format);
-      The `graph.NewExec` and `context.NewExec` return errors, and the `graph.MustNewExec` and `context.MustNewExec` panic.
+      The `graph.NewExec` and `model.NewExec` return errors, and the `graph.MustNewExec` and `model.MustNewExec` panic.
     * File utilities under the old `ml/data` now are under `pkg/support/fsutil`, and the package `ml/data` itself was 
       renamed `pkg/ml/datasets` and now only holds the various datasets types.
     * Packages that were not moved:
@@ -534,7 +534,7 @@ Other improvements:
   * Added support for multiple models to allow comparing models.
   * Fixed the printing of metrics with tiny values.
 * Package `context`:
-  * Allow VariableInitializers to use the `context.Context` itself, with its own random initializer.
+  * Allow VariableInitializers to use the `model.Context` itself, with its own random initializer.
   * `DefaultInitializer` now creates an initializer. The new default uses He initializer, the same used in PyTorch.
   * Package `initializers`:
     * They now use the `context` random number generator state, which simplifies things.
@@ -710,8 +710,8 @@ Other improvements:
   * Added backprop for `ReduceMin` that was missing (thx @TuSKan)
   * Added `CosineSimilarity`, numerically safe for 0 vectors.
   * Added `BitcastConvert`.
-* Package `ml/context`:
-  * Added support for string derived types for `context.GetParamsOr[T]`.
+* Package `ml/model`:
+  * Added support for string derived types for `model.GetParamsOr[T]`.
 * Package `ml/train`:
   * Created `ExecPerStepUpdateGraphFn` for those creating custom "TrainStep" functions.
 * Package `ml/train/losses`:
@@ -814,7 +814,7 @@ Other improvements:
 * Updated dependency to **gopjrt** 0.4.5
 * Moving package `huggingface` and `downloader` to "github.com/gomlx/go-huggingface": marked as deprecated.
 * Added checks and better error report for misuse of rngState in random functions.
-* Added graph.RandomIntN and context.Context.RandomIntN.
+* Added graph.RandomIntN and model.Context.RandomIntN.
 
 # v0.15.0 - 2024/11/01 Some API clean up; Added support for ONNX model conversion.
 
@@ -870,8 +870,8 @@ Other improvements:
   * Fixed gradient of `Where` when operands are broadcast.
   * Added `ConsecutiveDifference`, `SliceAxis`, `BitsCount`, `IsFinite`.
 * Package `context`:
-  * Added `context.ExecOnce` and `context.ExecOnceN`.
-  * `context.GetParamOr` now returns the default value for a hyperparameter, if it is set to nil.
+  * Added `model.ExecOnce` and `model.ExecOnceN`.
+  * `model.GetParamOr` now returns the default value for a hyperparameter, if it is set to nil.
 * Package `train`:
   * Added `GetTrainLastStepVar` with information about last step of training: used for setting up various schedules.
   * Added `ResetComputationGraphs` to allow the trainer to recreate computation graphs, if hyperparameters change in the middle
@@ -978,7 +978,7 @@ Other improvements:
   * Added all numeric dtypes support; Added conversion tests to all types.
   * Added support to `dtypes.Float16`.
 * Package `context`
-  * Renamed `context.NewContext` to `context.New`.
+  * Renamed `model.NewContext` to `model.New`.
   * Added `Variable.Reset`: reset a variable, to be reinitialialized.
 * Package `checkpoints`: added `ExcludeParams` and `ExcludeAllParams`.
 * Package `plots`
@@ -1102,7 +1102,7 @@ Other improvements:
   * Enable copy elision -- which makes `std::move` not necessary.
   * Temporarily copied `xla/mlir/utils` library to `deps/xla_mlir`, since it is not available in all XLA distributions.
 * Package `context`:
-  * Added `context.GetParamOr` and `context.GetGraphParamOr`: it uses generics to cast to the desired type, and allowing a default value to be returned.
+  * Added `model.GetParamOr` and `model.GetGraphParamOr`: it uses generics to cast to the desired type, and allowing a default value to be returned.
   * Added `Context.DeleteVariable` and `Context.DeleteVariablesInScope`.
 * Package `checkpoints`:
   * Added recovery of some basic types (numeric and slices) when loading params from Json.
@@ -1197,9 +1197,9 @@ Other improvements:
 ## v0.4.0
 
 * Models: Diffusion example model (working draft); added Kernel Inception Distance (KID) metric implementation.
-* Contexts: added `context.NumParameters()`, `context.Memory()`, `context.RandomUniform`, `context.RandomNormal`,
-  `context.RngStateWithSeed` and `context.RngStateReset`.
-* Random numbers revamped, making graph purely functional. Also, 'context.Context' provides
+* Contexts: added `model.NumParameters()`, `model.Memory()`, `model.RandomUniform`, `model.RandomNormal`,
+  `model.RngStateWithSeed` and `model.RngStateReset`.
+* Random numbers revamped, making graph purely functional. Also, 'model.Context' provides
   the facilities to carry around random number generator state.
 * Added ops: `ArgMax`, `ArgMin`, `ExpandLeftToRank`, `RandomUniform` and `RandomNormal`.
 * Datasets: `InMemoryFromData` (for testing); `Normalization()` returns mean and standard deviation for dataset;

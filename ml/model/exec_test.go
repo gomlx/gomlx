@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package context_test
+package model_test
 
 import (
 	"fmt"
@@ -14,19 +14,19 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func oneLayerGraph(ctx *context.Context, x *Node) *Node {
+func oneLayerGraph(ctx *model.Context, x *Node) *Node {
 	return layers.DenseWithBias(ctx.In("dense0"), x, 1)
 }
 
-func oneLayerManyInputsGraph(ctx *context.Context, inputs []*Node) *Node {
+func oneLayerManyInputsGraph(ctx *model.Context, inputs []*Node) *Node {
 	return layers.DenseWithBias(ctx.In("dense0"), Concatenate(inputs, -1), 1)
 }
 
@@ -35,8 +35,8 @@ func TestExec(t *testing.T) {
 
 	// Checks that Context.RNGState is auto-initialized correctly.
 	t.Run("Context.RNGState initialization", func(t *testing.T) {
-		ctx := context.New()
-		result, err := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+		ctx := model.New()
+		result, err := model.ExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 			return Add(ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 10)), Const(g, float32(0.0001)))
 		})
 		require.NoError(t, err)
@@ -53,8 +53,8 @@ func TestExec(t *testing.T) {
 
 	// Checks that Context.RNGState is auto-initialized correctly.
 	t.Run("variable initialization", func(t *testing.T) {
-		ctx := context.New()
-		result, err := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+		ctx := model.New()
+		result, err := model.ExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 			v := ctx.WithInitializer(initializers.RandomUniformFn(ctx, 0.0001, 1.0)).
 				VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
 			return v.ValueGraph(g)
@@ -72,9 +72,9 @@ func TestExec(t *testing.T) {
 	})
 
 	t.Run("DenseLayer", func(t *testing.T) {
-		oneLayer, err := context.NewExecAny(backend, nil, oneLayerGraph)
+		oneLayer, err := model.NewExecAny(backend, nil, oneLayerGraph)
 		if err != nil {
-			t.Fatalf("Failed to create context.Exec for oneLayer: %+v", err)
+			t.Fatalf("Failed to create model.Exec for oneLayer: %+v", err)
 		}
 
 		// First graph build, variable should be initialized.
@@ -116,9 +116,9 @@ func TestExec(t *testing.T) {
 	})
 
 	t.Run("WithSlices", func(t *testing.T) {
-		oneLayer, err := context.NewExecAny(backend, nil, oneLayerManyInputsGraph)
+		oneLayer, err := model.NewExecAny(backend, nil, oneLayerManyInputsGraph)
 		if err != nil {
-			t.Fatalf("Failed to create context.Exec for oneLayer: %+v", err)
+			t.Fatalf("Failed to create model.Exec for oneLayer: %+v", err)
 		}
 
 		// First execution builds graph and should initialize variables (weights) randomly.
@@ -140,8 +140,8 @@ func TestExec(t *testing.T) {
 	})
 
 	t.Run("VariableUpdates", func(t *testing.T) {
-		ctx := context.New()
-		counter := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+		ctx := model.New()
+		counter := model.MustNewExec(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 			dtype := dtypes.Int64
 			counterVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("counter", shapes.Make(dtype))
 			counterNode := counterVar.ValueGraph(g)
@@ -178,9 +178,9 @@ func TestAutoSharding(t *testing.T) {
 	// Replicating variable: initializing it's value non-sharde should trigger automatic replication.
 	// for each device.
 	t.Run("replicated variable", func(t *testing.T) {
-		ctx := context.New()
+		ctx := model.New()
 		xVar := ctx.VariableWithValue("x", []float32{1.0, 2.0, 3.0})
-		e := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+		e := model.MustNewExec(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 			return xVar.ValueGraph(g)
 		})
 		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
@@ -213,9 +213,9 @@ func TestAutoSharding(t *testing.T) {
 	// RNGState is special: it must be initialized as "replicated", but the values are different
 	// for each device.
 	t.Run("RandomUniform", func(t *testing.T) {
-		ctx := context.New()
-		ctx.SetParam(context.ParamInitialSeed, int64(42))
-		e := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) (*Node, *Node) {
+		ctx := model.New()
+		ctx.SetParam(model.ParamInitialSeed, int64(42))
+		e := model.MustNewExec(backend, ctx, func(ctx *model.Context, g *Graph) (*Node, *Node) {
 			a := ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 2, 3))
 			b := ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 2, 3))
 			return a, b
@@ -245,13 +245,13 @@ func TestAutoSharding(t *testing.T) {
 	})
 
 	t.Run("variable initialization", func(t *testing.T) {
-		ctx := context.New()
-		ctx.SetParam(context.ParamInitialSeed, int64(42))
-		e, err := context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+		ctx := model.New()
+		ctx.SetParam(model.ParamInitialSeed, int64(42))
+		e, err := model.NewExec(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 			// v := ctx.WithInitializer(initializers.RandomUniformFn(ctx, 0.0001, 1.0)).VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
 			// return v.ValueGraph(g)
 			// return ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 10))
-			return ctx.GetVariable(context.RNGStateVariableName).ValueGraph(g)
+			return ctx.GetVariable(model.RNGStateVariableName).ValueGraph(g)
 		})
 		require.NoError(t, err)
 		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
@@ -270,9 +270,9 @@ func TestAutoSharding(t *testing.T) {
 	})
 
 	t.Run("batch sharding", func(t *testing.T) {
-		ctx := context.New()
-		ctx.SetParam(context.ParamInitialSeed, int64(42))
-		oneLayerExec, err := context.NewExec(backend, ctx, func(ctx *context.Context, x *Node) (*Node, *Node) {
+		ctx := model.New()
+		ctx.SetParam(model.ParamInitialSeed, int64(42))
+		oneLayerExec, err := model.NewExec(backend, ctx, func(ctx *model.Context, x *Node) (*Node, *Node) {
 			g := x.Graph()
 			wVar := ctx.VariableWithShape("w", shapes.Make(dtypes.F64, 3, 1))
 			w := wVar.ValueGraph(g)

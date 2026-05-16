@@ -14,7 +14,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,8 +46,8 @@ func TestBuildGraph(t *testing.T) {
 	require.NoError(t, DownloadAndUnpackWeights(*flagDataDir))
 
 	// InceptionV3 classification.
-	ctx := context.New()
-	inceptionV3Exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, img *Node) *Node {
+	ctx := model.New()
+	inceptionV3Exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, img *Node) *Node {
 		img = InsertAxes(img, 0) // Add batch dimension
 		img = PreprocessImage(img, 255.0, images.ChannelsLast)
 		output := BuildGraph(ctx, img).

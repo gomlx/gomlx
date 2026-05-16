@@ -9,14 +9,14 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 )
 
 // RMSNormBuilder holds the configuration for RMSNorm.
 // Once finished configuring, call RMSNormBuilder.Done()
 type RMSNormBuilder struct {
-	ctx               *context.Context
+	ctx               *model.Context
 	operand           *Node
 	useScale          bool
 	scaleOffset       float64
@@ -35,7 +35,7 @@ type RMSNormBuilder struct {
 // Where g_i is a learnable gain (scale), enabled by default.
 //
 // Call RMSNormBuilder.Done when you finished the configuration.
-func RMSNorm(ctx *context.Context, operand *Node) *RMSNormBuilder {
+func RMSNorm(ctx *model.Context, operand *Node) *RMSNormBuilder {
 	return &RMSNormBuilder{
 		ctx:               ctx,
 		operand:           operand,

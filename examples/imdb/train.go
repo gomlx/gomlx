@@ -12,8 +12,8 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
@@ -51,8 +51,8 @@ var (
 var DType = dtypes.Float32
 
 // CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
-func CreateDefaultContext() *context.Context {
-	ctx := context.New()
+func CreateDefaultContext() *model.Context {
+	ctx := model.New()
 	ctx.ResetRNGState()
 	ctx.SetParams(map[string]any{
 		// Model type to use
@@ -121,7 +121,7 @@ func CreateDefaultContext() *context.Context {
 
 // TrainModel with hyperparameters given in ctx.
 func TrainModel(
-	ctx *context.Context,
+	ctx *model.Context,
 	dataDir, checkpointPath string,
 	paramsSet []string,
 	evaluateOnEnd bool,
@@ -134,10 +134,10 @@ func TrainModel(
 	}
 
 	// Imdb data preparation.
-	IncludeSeparators = context.GetParamOr(ctx, "imdb_include_separators", false)
+	IncludeSeparators = model.GetParamOr(ctx, "imdb_include_separators", false)
 	check(Download(dataDir))
-	imdbUseUnsupervised := context.GetParamOr(ctx, "imdb_use_unsupervised", false)
-	imdbMaskWordTaskWeight := context.GetParamOr(ctx, "imdb_mask_word_task_weight", 0.0)
+	imdbUseUnsupervised := model.GetParamOr(ctx, "imdb_use_unsupervised", false)
+	imdbMaskWordTaskWeight := model.GetParamOr(ctx, "imdb_mask_word_task_weight", 0.0)
 	if imdbUseUnsupervised && imdbMaskWordTaskWeight <= 0 {
 		exceptions.Panicf(
 			`Parameter "imdb_use_unsupervised" is only useful together with parameter "imdb_mask_word_task" (=%g) > 0.0`,
@@ -152,16 +152,16 @@ func TrainModel(
 	}
 
 	// Create datasets used for training and evaluation.
-	batchSize := context.GetParamOr(ctx, "batch_size", int(0))
+	batchSize := model.GetParamOr(ctx, "batch_size", int(0))
 	if batchSize <= 0 {
 		exceptions.Panicf("Batch size must be > 0 (maybe it was not set?): %d", batchSize)
 	}
-	evalBatchSize := context.GetParamOr(ctx, "eval_batch_size", int(0))
+	evalBatchSize := model.GetParamOr(ctx, "eval_batch_size", int(0))
 	if evalBatchSize <= 0 {
 		evalBatchSize = batchSize
 	}
 	var trainDS, trainEvalDS, testEvalDS train.Dataset
-	maxLen := context.GetParamOr(ctx, "imdb_content_max_len", 200)
+	maxLen := model.GetParamOr(ctx, "imdb_content_max_len", 200)
 	if imdbUseUnsupervised {
 		trainDS = NewUnsupervisedDataset("unsupervised-train", maxLen, batchSize, true).Shuffle()
 	} else {
@@ -178,7 +178,7 @@ func TrainModel(
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
-		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
+		numCheckpointsToKeep := model.GetParamOr(ctx, "num_checkpoints", 3)
 		checkpoint = check1(checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
@@ -191,7 +191,7 @@ func TrainModel(
 	}
 
 	// Select model graph building function.
-	modelType := context.GetParamOr(ctx, "model", "bow")
+	modelType := model.GetParamOr(ctx, "model", "bow")
 	modelFn, found := ValidModels[modelType]
 	if !found {
 		exceptions.Panicf("Parameter \"model\" must take one value from %v, got %q", xslices.Keys(ValidModels), modelType)
@@ -232,7 +232,7 @@ func TrainModel(
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if context.GetParamOr(ctx, plotly.ParamPlots, false) {
+	if model.GetParamOr(ctx, plotly.ParamPlots, false) {
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
@@ -242,7 +242,7 @@ func TrainModel(
 	}
 
 	// Loop for given number of steps.
-	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	numTrainSteps := model.GetParamOr(ctx, "train_steps", 0)
 	globalStep := int(optimizers.GetGlobalStep(ctx))
 	if globalStep > 0 {
 		trainer.SetContext(ctx.Reuse())

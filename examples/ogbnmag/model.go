@@ -9,8 +9,8 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
@@ -30,7 +30,7 @@ var (
 )
 
 // getMagVar retrieves the static (not-learnable) OGBN-MAG variables -- e.g: the frozen papers embedding table.
-func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
+func getMagVar(ctx *model.Context, g *Graph, name string) *Node {
 	magVar := ctx.GetVariableByScopeAndName(OgbnMagVariablesScope, name)
 	if magVar == nil {
 		Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
@@ -40,8 +40,8 @@ func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
 }
 
 // logitsGraph converts the readout state of the seed nodes to its logits.
-func logitsGraph(ctx *context.Context, readout *Node) *Node {
-	//useKan := context.GetParamOr(ctx, "kan", false)
+func logitsGraph(ctx *model.Context, readout *Node) *Node {
+	//useKan := model.GetParamOr(ctx, "kan", false)
 	//if useKan {
 	//	readout = kan.New(ctx.In("logits_kan"), readout, NumLabels).NumHiddenLayers(0, 0).Done()
 	//} else {
@@ -58,7 +58,7 @@ func logitsGraph(ctx *context.Context, readout *Node) *Node {
 // It returns 2 tensors:
 // * Predictions for all seeds shaped `Float32[BatchSize, mag.NumLabels]` (or `Float16` or `Float64`).
 // * Mask of the seeds, provided by the sampler, shaped `Bool[BatchSize]`.
-func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func MagModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.WithInitializer(initializers.GlorotUniformFn(ctx))
 	dtype := getDType(ctx) // Default is Float32
 	g := inputs[0].Graph()
@@ -68,7 +68,7 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	}
 
 	lrDType := dtype
-	if adamDType := context.GetParamOr(ctx, optimizers.ParamAdamDType, ""); adamDType != "" {
+	if adamDType := model.GetParamOr(ctx, optimizers.ParamAdamDType, ""); adamDType != "" {
 		var err error
 		lrDType, err = dtypes.DTypeString(adamDType)
 		if err != nil || !lrDType.IsFloat() {
@@ -121,7 +121,7 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 //
 //	author/paper, so it is reasonable to expect that during validation/testing it will see many embeddings
 //	zero initialized.
-func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inputs []*Node) (
+func FeaturePreprocessing(ctx *model.Context, strategy *sampler.Strategy, inputs []*Node) (
 	graphInputs map[string]*sampler.ValueMask[*Node], remainingInputs []*Node) {
 	g := inputs[0].Graph()
 	graphInputs, remainingInputs = sampler.MapInputsToStates[*Node](strategy, inputs)
@@ -140,7 +140,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 	// They shouldn't be initialized with GlorotUniform, but instead with small random uniform values.
 	ctxEmbed := ctx.In("embeddings").Checked(false).
 		WithInitializer(initializers.RandomUniformFn(ctx, -0.05, 0.05))
-	embedDropoutRate := context.GetParamOr(ctx, ParamEmbedDropoutRate, 0.0)
+	embedDropoutRate := model.GetParamOr(ctx, ParamEmbedDropoutRate, 0.0)
 
 	// Preprocess papers to its features --> these are in a frozen embedding table in the context as a frozen variable.
 	papersEmbeddings := getMagVar(ctx, g, "PapersEmbeddings")
@@ -155,8 +155,8 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 	}
 
 	// Preprocess institutions to its embeddings.
-	institutionsEmbedSize := context.GetParamOr(ctx, "InstitutionsEmbedSize", 16)
-	splitEmbedTables := context.GetParamOr(ctx, ParamSplitEmbedTablesSize, 2)
+	institutionsEmbedSize := model.GetParamOr(ctx, "InstitutionsEmbedSize", 16)
+	splitEmbedTables := model.GetParamOr(ctx, ParamSplitEmbedTablesSize, 2)
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "institutions" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
@@ -175,7 +175,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 	}
 
 	// Preprocess "field of study" to its embeddings.
-	fieldsOfStudyEmbedSize := context.GetParamOr(ctx, "FieldsOfStudyEmbedSize", 32)
+	fieldsOfStudyEmbedSize := model.GetParamOr(ctx, "FieldsOfStudyEmbedSize", 32)
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "fields_of_study" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.

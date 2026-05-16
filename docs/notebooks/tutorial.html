@@ -7840,7 +7840,7 @@ And with that, let's talk how error is handled in GoMLX computational graph buil
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="Exec-aliases:"><code>Exec</code> aliases:<a class="anchor-link" href="#Exec-aliases:">¶</a></h3><p>Because the <code>graph.Exec</code> (and later the similar <code>context.Exec</code>, in a few sections below) is so central, we provide some aliases to make it more "ergonomic" to use.</p>
+<h3 id="Exec-aliases:"><code>Exec</code> aliases:<a class="anchor-link" href="#Exec-aliases:">¶</a></h3><p>Because the <code>graph.Exec</code> (and later the similar <code>model.Exec</code>, in a few sections below) is so central, we provide some aliases to make it more "ergonomic" to use.</p>
 <p>To create an <code>Exec</code> object:</p>
 <ul>
 <li><code>NewExec</code>, <code>MustNewExec</code>: the first returns an error, the second panics.</li>
@@ -8229,8 +8229,8 @@ they take inputs, return outputs and everything in between is transient.</p>
 <p>For Machine Learning as well as many types of computations, it's convenient to use and update "contextual" information
 about a model being trained or executed, like its weights/parameters.
 We want to be able to easily access and update these weights in the middle of a computation graph.</p>
-<p>To allow this <strong>GoMLX</strong> offers the <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/ml/context"><code>context.Context</code></a> object
-(completely unrelated to the usual Go's <code>context</code> package), and a corresponding <code>context.Exec</code>.
+<p>To allow this <strong>GoMLX</strong> offers the <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/ml/context"><code>model.Context</code></a> object
+(completely unrelated to the usual Go's <code>context</code> package), and a corresponding <code>model.Exec</code>.
 It is a container of <strong>variables</strong>, and it manages automatically its updates, passing it as "side
 inputs" and returning them as "side outputs" if they were updated in the computation graph.</p>
 <p>This may sound more complex than it is in practice. Let's see a simple example of maintaining a counter:</p>
@@ -8294,8 +8294,8 @@ inputs" and returning them as "side outputs" if they were updated in the computa
 <blockquote>
 <p><strong>Note</strong>:</p>
 <ul>
-<li>We are using <code>context.Exec</code>, while before we were using <code>graph.Exec</code>. The main difference is that
-<code>context.Exec</code> compiles and executes graph functions that take a context as its first parameter, and it
+<li>We are using <code>model.Exec</code>, while before we were using <code>graph.Exec</code>. The main difference is that
+<code>model.Exec</code> compiles and executes graph functions that take a context as its first parameter, and it
 automatically handles the passing of variables as side inputs and outputs (for those variables updated)
 of the computation graph.</li>
 <li>During graph building, we access and set the variables's symbolic values (<code>graph.Node</code>) with <code>Variable.ValueGraph</code> and <code>VariableSetValueGraph</code>.</li>
@@ -8479,7 +8479,7 @@ used to keep track how many steps were already executed.</li>
 <li>Yes, if we set <code>--lr=1</code> (the learning rate), it will get to the minimum in one step for the quadratic f(x). 😉</li>
 </ul>
 </blockquote>
-<p>There is more to <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/ml/context"><code>context.Context</code></a>, some we'll present
+<p>There is more to <a href="https://pkg.go.dev/github.com/gomlx/gomlx/pkg/ml/context"><code>model.Context</code></a>, some we'll present
 on the next section on <em>Machine Learning</em>, others can be found in its documentation. A few things worth advancing:</p>
 <ul>
 <li><code>Context</code> is always configured at a certain <em>scope</em>, and variables are unique within its scope. Scope
@@ -8508,7 +8508,7 @@ when building complex graphs, the funcitonality will be there.</li>
 we present various sub-packages that provide high level ML layers and tools that make building, training and
 evaluating a model trivial.</p>
 <p>First is the package <code>layers</code> (see code in <a href="../../../tree/main/ml/layers/">ml/layers</a>. It provides several composable ML layers.
-These are graph building functions, most of which take a <code>*context.Context</code> as first parameter, where they store
+These are graph building functions, most of which take a <code>*model.Context</code> as first parameter, where they store
 variables or access hyperparameters.
 There are several such layers, for example: <code>layers.Dense</code>, <code>layers/fnn.New</code>, <code>layers/kan.New</code>,<br/>
 <code>layers.Dropout</code>, <code>layers.PiecewiseLinearCalibration</code> (very good for normalization of inputs), <code>layers.BatchNorm</code>,
@@ -8623,7 +8623,7 @@ have been selected in Go directly using <code>math/random</code>, but just for f
 graph to generate randomly the <code>coefficients</code> and <code>bias</code>. Then it executes it and returns the result.</li>
 <li>Notice that since the <em>computation graph is functional</em>: we need to pass around the random number
 generator state, which gets updated at each call to <code>RandomUniform</code> or <code>RandomNormal</code>.<ul>
-<li>Alternatively the <code>context.Context</code> introduced earlier can keep the state
+<li>Alternatively the <code>model.Context</code> introduced earlier can keep the state
 as a variable, and provides a simpler interface: see <code>Context.RandomUniform</code> and <code>Context.RandomNormal</code>.</li>
 </ul>
 </li>
@@ -8798,7 +8798,7 @@ See example in <a href="https://github.com/gomlx/gomlx/blob/main/examples/discre
 <h3 id="ModelFn">ModelFn<a class="anchor-link" href="#ModelFn">¶</a></h3><p>Next we build a model, that for our <code>train</code> package means implementing a function with the following signature:</p>
 <div class="highlight"><pre><span></span><span class="kd">type</span><span class="w"> </span><span class="nx">ModelFn</span><span class="w"> </span><span class="kd">func</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="o">*</span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span><span class="w"> </span><span class="nx">spec</span><span class="w"> </span><span class="kt">any</span><span class="p">,</span><span class="w"> </span><span class="nx">inputs</span><span class="w"> </span><span class="p">[]</span><span class="o">*</span><span class="nx">graph</span><span class="p">.</span><span class="nx">Node</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="nx">predictions</span><span class="w"> </span><span class="p">[]</span><span class="o">*</span><span class="nx">graph</span><span class="p">.</span><span class="nx">Node</span><span class="p">)</span>
 </pre></div>
-<p>It takes a <code>context.Context</code> for the variables and hyperparameters, the <code>spec</code>  and a slice of <code>inputs</code> —
+<p>It takes a <code>model.Context</code> for the variables and hyperparameters, the <code>spec</code>  and a slice of <code>inputs</code> —
 the last two are fed by <code>Dataset.Yield</code> above. It returns a slice of <code>predictions</code> — is most cases there
 is just one value in the slice (only one prediction). During training <code>predictions</code> fed to the loss function,
 and during inference they can be returned directly.</p>
@@ -9126,7 +9126,7 @@ Learned: coefficients=[[-2.89] [1.15] [-5.2]], bias=[9.04]
 </blockquote>
 <h3 id="Other-examples">Other examples<a class="anchor-link" href="#Other-examples">¶</a></h3><p>There is much more in the libraries and <a href="https://github.com/gomlx/gomlx/tree/main/examples">examples</a>.
 GoMLX libraries are well documented, and the implementation is generally simple to use and understand -- don't hesitate into diving into the code.
-For machine learning, we highly recommend diving into the <code>context.Context</code> package/objects, and looking at the <code>layers</code> library, to learn how many of the common ML layers work.</p>
+For machine learning, we highly recommend diving into the <code>model.Context</code> package/objects, and looking at the <code>layers</code> library, to learn how many of the common ML layers work.</p>
 </div>
 </div>
 </div>
@@ -9145,7 +9145,7 @@ And AIs sometimes "get it", but still write wrong programs.</p>
 almost instant). Logging results to stdout is a valid way of developing. During graph building development,
 often one prints the shape of the <code>Node</code> being operated to confirm (or not) one's expectations.</p>
 <h3 id="Errors-in-GoMLX-have-stacktrace">Errors in <strong>GoMLX</strong> have stacktrace<a class="anchor-link" href="#Errors-in-GoMLX-have-stacktrace">¶</a></h3><p>Errors during the building of the graph are reported back with <code>panic</code>.
-The <code>graph.Exec</code> or <code>context.Exec</code> recover and convert them to errors for you.</p>
+The <code>graph.Exec</code> or <code>model.Exec</code> recover and convert them to errors for you.</p>
 <p>These errors include a stack-trace the tells you exactly where things happened. The stack-grace can be printed with <code>"%+v"</code> format string.</p>
 <h3 id="Node-Shape-Asserts">Node Shape Asserts<a class="anchor-link" href="#Node-Shape-Asserts">¶</a></h3><p>During the writing of complex models, it's very common to add comments on the expected shapes of the graph nodes, to
 facilitate the reader (and developer) of the code to have the right mental model of what is going on.</p>

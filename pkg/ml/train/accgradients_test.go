@@ -8,7 +8,7 @@ import (
 
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/support/testutil"
@@ -19,9 +19,9 @@ import (
 
 func TestTrainer_AccumulateGradients(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 
-	modelFn := func(ctx *context.Context, spec any, inputs []*Node) []*Node {
+	modelFn := func(ctx *model.Context, spec any, inputs []*Node) []*Node {
 		g := inputs[0].Graph()
 		predictionVar := ctx.In("model").
 			VariableWithValue("prediction", float32(0))

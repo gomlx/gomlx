@@ -11,7 +11,7 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -64,7 +64,7 @@ var (
 // New creates it and once configured, call Config.Done to add it into the computation graph.
 type Config struct {
 	graph                         *Graph
-	ctx                           *context.Context
+	ctx                           *model.Context
 	dtype                         dtypes.DType
 	learningRate, minLearningRate float64
 	periodNumSteps, numCycles     int
@@ -89,7 +89,7 @@ type Config struct {
 // We assume that the learning rate is set in the context as the parameter "learning_rate"
 // (== optimizers.ParamLearningRate):
 //
-//	func MyModelGraph(cxt *context.Context, inputs []*Node) *Node {
+//	func MyModelGraph(cxt *model.Context, inputs []*Node) *Node {
 //		...
 //		g := inputs[0].Graph()
 //		cosineschedule.New(ctx, g, dtypes.Float32).
@@ -101,14 +101,14 @@ type Config struct {
 // Or more simply, pass the hyperparameters in the context (see ParamPeriodSteps, ParamMinLearningRate, and
 // ParamWarmUpSteps):
 //
-//	func modelGraph(cxt *context.Context, inputs []*Node) *Node {
+//	func modelGraph(cxt *model.Context, inputs []*Node) *Node {
 //		...
 //		g := inputs[0].Graph()
 //		cosineschedule.New(ctx, g, dtypes.Float32).FromContext().Done()
 //	}
 //
 // [1] https://paperswithcode.com/method/cosine-annealing.
-func New(ctx *context.Context, graph *Graph, dtype dtypes.DType) *Config {
+func New(ctx *model.Context, graph *Graph, dtype dtypes.DType) *Config {
 	return &Config{
 		ctx:   ctx,
 		graph: graph,
@@ -119,11 +119,11 @@ func New(ctx *context.Context, graph *Graph, dtype dtypes.DType) *Config {
 // FromContext configures the cosine annealing from the context, using the keys
 // [ParamPeriodSteps] and [ParamMinLearningRate].
 func (opt *Config) FromContext() *Config {
-	opt.PeriodSteps(context.GetParamOr(opt.ctx, ParamPeriodSteps, 0))
-	opt.NumCycles(context.GetParamOr(opt.ctx, ParamCycles, 0))
-	opt.LearningRate(context.GetParamOr(opt.ctx, optimizers.ParamLearningRate, 0.0))
-	opt.MinLearningRate(context.GetParamOr(opt.ctx, ParamMinLearningRate, 0.0))
-	opt.WarmUpSteps(context.GetParamOr(opt.ctx, ParamWarmUpSteps, 0))
+	opt.PeriodSteps(model.GetParamOr(opt.ctx, ParamPeriodSteps, 0))
+	opt.NumCycles(model.GetParamOr(opt.ctx, ParamCycles, 0))
+	opt.LearningRate(model.GetParamOr(opt.ctx, optimizers.ParamLearningRate, 0.0))
+	opt.MinLearningRate(model.GetParamOr(opt.ctx, ParamMinLearningRate, 0.0))
+	opt.WarmUpSteps(model.GetParamOr(opt.ctx, ParamWarmUpSteps, 0))
 	return opt
 }
 
@@ -225,7 +225,7 @@ func (opt *Config) Done() {
 
 	lrValue := opt.learningRate
 	if lrValue <= 0 {
-		lrValue = context.GetParamOr(opt.ctx, optimizers.ParamLearningRate, 0.0)
+		lrValue = model.GetParamOr(opt.ctx, optimizers.ParamLearningRate, 0.0)
 		if lrValue == 0 {
 			exceptions.Panicf("learning rate not configured for New and also "+
 				"not set in the context as parameter %q", optimizers.ParamLearningRate)

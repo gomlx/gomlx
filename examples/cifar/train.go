@@ -11,8 +11,8 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
@@ -44,7 +44,7 @@ var (
 var Backend compute.Backend
 
 // TrainCifar10Model with hyperparameters given in ctx.
-func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
+func TrainCifar10Model(ctx *model.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
@@ -62,11 +62,11 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 	}
 
 	// Create datasets used for training and evaluation.
-	batchSize := context.GetParamOr(ctx, "batch_size", int(0))
+	batchSize := model.GetParamOr(ctx, "batch_size", int(0))
 	if batchSize <= 0 {
 		exceptions.Panicf("Batch size must be > 0 (maybe it was not set?): %d", batchSize)
 	}
-	evalBatchSize := context.GetParamOr(ctx, "eval_batch_size", int(0))
+	evalBatchSize := model.GetParamOr(ctx, "eval_batch_size", int(0))
 	if evalBatchSize <= 0 {
 		evalBatchSize = batchSize
 	}
@@ -75,7 +75,7 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
-		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
+		numCheckpointsToKeep := model.GetParamOr(ctx, "num_checkpoints", 3)
 		checkpoint = check1(checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
@@ -123,7 +123,7 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if context.GetParamOr(ctx, plotly.ParamPlots, false) {
+	if model.GetParamOr(ctx, plotly.ParamPlots, false) {
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
@@ -133,7 +133,7 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 	}
 
 	// Loop for given number of steps.
-	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	numTrainSteps := model.GetParamOr(ctx, "train_steps", 0)
 	globalStep := int(optimizers.GetGlobalStep(ctx))
 	if globalStep > 0 {
 		trainer.SetContext(ctx.Reuse())
@@ -170,9 +170,9 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 }
 
 // SelectModelFn based on hyperparameter "model" in Context.
-func SelectModelFn(ctx *context.Context) (modelFn train.ModelFn, err error) {
+func SelectModelFn(ctx *model.Context) (modelFn train.ModelFn, err error) {
 	modelFn = C10PlainModelGraph // Handles all models except CNN.
-	modelType := context.GetParamOr(ctx, "model", C10ValidModels[0])
+	modelType := model.GetParamOr(ctx, "model", C10ValidModels[0])
 	if slices.Index(C10ValidModels, modelType) == -1 {
 		return nil, errors.Errorf("Parameter \"model\" must take one value from %v, got %q", C10ValidModels, modelType)
 	}

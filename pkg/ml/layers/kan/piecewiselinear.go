@@ -9,8 +9,8 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -55,13 +55,13 @@ type pwlConfig struct {
 	splitPointsMargin                       float64
 }
 
-// initPiecewiseLinear initializes the default values for PWL-KANs based on context.
-func (c *Config) initPiecewiseLinear(ctx *context.Context) {
-	c.pwl.linearExtrapolation = context.GetParamOr(ctx, ParamPWLExtrapolate, false)
-	c.pwl.splitPointsTrainable = context.GetParamOr(ctx, ParamPWLSplitPointsTrainable, false)
-	c.pwl.splitPointsFrozen = context.GetParamOr(ctx, ParamPWLSplitPointsFrozen, false)
+// initPiecewiseLinear initializes the default values for PWL-KANs based on model.
+func (c *Config) initPiecewiseLinear(ctx *model.Context) {
+	c.pwl.linearExtrapolation = model.GetParamOr(ctx, ParamPWLExtrapolate, false)
+	c.pwl.splitPointsTrainable = model.GetParamOr(ctx, ParamPWLSplitPointsTrainable, false)
+	c.pwl.splitPointsFrozen = model.GetParamOr(ctx, ParamPWLSplitPointsFrozen, false)
 	c.PWLInputRange(-1, 1)
-	c.pwl.splitPointsMargin = context.GetParamOr(ctx, ParamPWLSplitsMargin, 0.01)
+	c.pwl.splitPointsMargin = model.GetParamOr(ctx, ParamPWLSplitsMargin, 0.01)
 }
 
 // PiecewiseLinear configures for a PWL-KAN (PieceWise-Linear), as opposed to the default BSpline.
@@ -113,7 +113,7 @@ func (c *Config) PWLExtrapolate(useLinear bool) *Config {
 }
 
 // Layer implements one PWL-KAN layer. x is expected to be shaped [batchSize, numInputNodes].
-func (c *Config) pwlLayer(ctx *context.Context, x *Node, numOutputNodes int) *Node {
+func (c *Config) pwlLayer(ctx *model.Context, x *Node, numOutputNodes int) *Node {
 	g := x.Graph()
 	dtype := x.DType()
 	residual := x
@@ -190,7 +190,7 @@ func (c *Config) pwlLayer(ctx *context.Context, x *Node, numOutputNodes int) *No
 
 		// At the end of each training step, project splitPoints back to monotonically increasing values, so they
 		// don't overlap.
-		train.AddPerStepUpdateGraphFn(ctx.In("kan_pwl_split_points_projection"), g, func(ctx *context.Context, g *Graph) {
+		train.AddPerStepUpdateGraphFn(ctx.In("kan_pwl_split_points_projection"), g, func(ctx *model.Context, g *Graph) {
 			splitPoints := splitPointsVar.ValueGraph(g)
 			margin := Scalar(g, splitPoints.DType(), c.pwl.splitPointsMargin)
 			splitPoints = optimizers.MonotonicProjection(splitPoints, margin, -1)

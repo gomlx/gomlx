@@ -10,7 +10,7 @@
 // If at the end of a graph.Exec call, if a `NaN` value is found on the traced computation nodes,
 // the first node where it appears (often `NaN` values spread through the graph) is reported back.
 //
-// The report includes a stack trace and an optional user set scoped context.
+// The report includes a stack trace and an optional user set scoped model.
 //
 // Example: create a `NanLogger` and attaches it to the trainer, to it gets attached to every
 // graph created (if more than one is created by the trainer).
@@ -24,7 +24,7 @@
 //		…
 //	}
 //
-//	func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+//	func ModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 //		…
 //		for ii := range numBlocks {
 //			x = ResidualBlock(ctx.In(name), x, lastNumChannels)
@@ -44,7 +44,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -98,7 +98,7 @@ type Trace struct {
 	FirstOnly bool
 }
 
-// ExecWithLogger represents any of the executors in GoMLX (or future): `graph.Exec` and `context.Exec`.
+// ExecWithLogger represents any of the executors in GoMLX (or future): `graph.Exec` and `model.Exec`.
 // What is required is that it supports setting the logger and reading the current logger.
 type ExecWithLogger interface {
 	SetNodeLogger(loggerFn graph.LoggerFn)
@@ -145,7 +145,7 @@ func (l *NanLogger) AttachToTrainer(trainer *train.Trainer) {
 	if l == nil {
 		return
 	}
-	trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
+	trainer.OnExecCreation(func(exec *model.Exec, _ train.GraphType) {
 		l.AttachToExec(exec)
 	})
 }
@@ -166,7 +166,7 @@ func (l *NanLogger) WithStopAtFirst(stopAtFirst bool) *NanLogger {
 // TraceFirstNaN sets a trace on the given node, and if it ever becomes NaN, the trace of the first node
 // the graph (closer to the input in graph ordering) is logged (if the DefaultHandler is used).
 //
-// Remember to attach the NanLogger once to the train.Trainer or to the graph.Exec/context.Exec you are running.
+// Remember to attach the NanLogger once to the train.Trainer or to the graph.Exec/model.Exec you are running.
 //
 // A nil NanLogger is valid, and it will simply be a no-op.
 func (l *NanLogger) TraceFirstNaN(node *graph.Node, scope ...string) {
@@ -176,7 +176,7 @@ func (l *NanLogger) TraceFirstNaN(node *graph.Node, scope ...string) {
 // TraceAndContinue sets a trace on the given node, and if it ever becomes NaN, the scope is printed -- but the execution
 // continues normally.
 //
-// Remember to attach the NanLogger once to the train.Trainer or to the graph.Exec/context.Exec you are running.
+// Remember to attach the NanLogger once to the train.Trainer or to the graph.Exec/model.Exec you are running.
 //
 // A nil NanLogger is valid, and it will simply be a no-op.
 func (l *NanLogger) TraceAndContinue(node *graph.Node, scope ...string) {
@@ -188,7 +188,7 @@ func (l *NanLogger) TraceAndContinue(node *graph.Node, scope ...string) {
 //
 // Args:
 //
-// Remember to attach the NanLogger once to the train.Trainer or to the graph.Exec/context.Exec you are running.
+// Remember to attach the NanLogger once to the train.Trainer or to the graph.Exec/model.Exec you are running.
 //
 // A nil NanLogger is valid, and it will simply be a no-op.
 func (l *NanLogger) Trace(node *graph.Node, scope ...string) {

@@ -13,31 +13,31 @@ unmarshaling (decoding).
 This package requires zero modifications to your interfaces or concrete types.
 Just follow these 3 steps:
 
-1. Register each concrete type with the pjson.Register function during
-   initialization.
+ 1. Register each concrete type with the pjson.Register function during
+    initialization.
 
     func init() {
-        pjson.Register(func() OptimizerIface { return &AdagradOptimizer{} })
+    pjson.Register(func() OptimizerIface { return &AdagradOptimizer{} })
     }
 
 2. Wrap the interface value using pjson.Wrapper[I] in your structs.
 
-    type Trainer struct {
-        Optimizer pjson.Wrapper[OptimizerIface] `json:"optimizer"`
-    }
-    
-    myTrainer.Optimizer = pjson.Wrap[OptimizerIface](&AdagradOptimizer{LR: 0.005})
+		type Trainer struct {
+		    Optimizer pjson.Wrapper[OptimizerIface] `json:"optimizer"`
+		}
 
-3. Optionally, define a proxy struct that embeds the Wrapper[I] to eliminate
-   the need to access the internal '.Value' field.
+		myTrainer.Optimizer = pjson.Wrap[OptimizerIface](&AdagradOptimizer{LR: 0.005})
 
-    type Optimizer struct {
-        pjson.Wrapper[OptimizerIface]
-    }
+	 3. Optionally, define a proxy struct that embeds the Wrapper[I] to eliminate
+	    the need to access the internal '.Value' field.
 
-    func (o Optimizer) Tune(epochs int) error {
-        return o.Value.Tune(epochs)
-    }
+	    type Optimizer struct {
+	    pjson.Wrapper[OptimizerIface]
+	    }
+
+	    func (o Optimizer) Tune(epochs int) error {
+	    return o.Value.Tune(epochs)
+	    }
 
 That's it! Marshaling automatically records the fully qualified type, and
 unmarshaling automatically routes the payload to the correct constructor.

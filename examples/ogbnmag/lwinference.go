@@ -15,8 +15,8 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/ui/plots"
 	"k8s.io/klog/v2"
@@ -25,11 +25,11 @@ import (
 // LayerWiseEvaluation returns the train, validation and test accuracy of the model, using layer-wise inference.
 func LayerWiseEvaluation(
 	backend compute.Backend,
-	ctx *context.Context,
+	ctx *model.Context,
 	strategy *sampler.Strategy,
 ) (train, validation, test float64) {
 	var predictionsT *tensors.Tensor
-	exec := context.MustNewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
+	exec := model.MustNewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 
 	if klog.V(1).Enabled() {
 		// Report timings.
@@ -72,10 +72,10 @@ func layerWiseCalculateAccuracies(predictions []int16, labels []int32) (train, v
 
 func BuildLayerWiseCustomMetricFn(
 	backend compute.Backend,
-	ctx *context.Context,
+	ctx *model.Context,
 	strategy *sampler.Strategy,
 ) plots.CustomMetricFn {
-	exec := context.MustNewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
+	exec := model.MustNewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 	ctx = ctx.Reuse()
 	labels := tensors.MustCopyFlatData[int32](PapersLabels)
 	return func(plotter plots.Plotter, step float64) error {
@@ -98,7 +98,7 @@ func BuildLayerWiseCustomMetricFn(
 // BuildLayerWiseInferenceModel returns a function that builds the OGBN-MAG GNN inference model,
 // that expects to run inference on the whole dataset in one go.
 //
-// It takes as input the [sampler.Strategy], and returns a function that can be used with `context.MustNewExec`
+// It takes as input the [sampler.Strategy], and returns a function that can be used with `model.MustNewExec`
 // and executed with the values of the MAG graph. Batch size is irrelevant.
 //
 // The returned function returns the predictions for all seeds shaped `Int16[NumSeedNodes]` if `predictions == true`,
@@ -106,8 +106,8 @@ func BuildLayerWiseCustomMetricFn(
 func BuildLayerWiseInferenceModel(
 	strategy *sampler.Strategy,
 	predictions bool,
-) func(ctx *context.Context, g *Graph) *Node {
-	return func(ctx *context.Context, g *Graph) *Node {
+) func(ctx *model.Context, g *Graph) *Node {
+	return func(ctx *model.Context, g *Graph) *Node {
 		ctx = ctx.WithInitializer(initializers.GlorotUniformFn(ctx))
 		ctx = ctx.In("model")
 
@@ -165,7 +165,7 @@ func recursivelyCreateInputsWithAllStates(g *Graph, rule *sampler.Rule, inputs [
 }
 
 // createEdgesInputs create the edges pairs (source indices, target indices) for each of the edge rules (non-seed).
-func createEdgesInputs(ctx *context.Context, g *Graph, strategy *sampler.Strategy, inputs []*Node) []*Node {
+func createEdgesInputs(ctx *model.Context, g *Graph, strategy *sampler.Strategy, inputs []*Node) []*Node {
 	edges := createEdgesIndices(ctx, g)
 	for _, seedsRule := range strategy.Seeds {
 		// seedRule doesn't have a connecting edge.
@@ -174,7 +174,7 @@ func createEdgesInputs(ctx *context.Context, g *Graph, strategy *sampler.Strateg
 	return inputs
 }
 
-func createEdgesIndices(ctx *context.Context, g *Graph) map[string]sampler.EdgePair[*Node] {
+func createEdgesIndices(ctx *model.Context, g *Graph) map[string]sampler.EdgePair[*Node] {
 	edges := make(map[string]sampler.EdgePair[*Node])
 	for _, edgeName := range []string{"Writes", "AffiliatedWith", "Cites", "HasTopic"} {
 		edgeVar := getMagVar(ctx, g, "Edges"+edgeName)

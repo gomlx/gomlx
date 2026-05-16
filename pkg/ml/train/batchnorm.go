@@ -8,7 +8,7 @@ import (
 
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/pkg/errors"
 )
 
@@ -30,7 +30,7 @@ func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) error {
 	var err error
 	for phase := range 2 {
 		// Reset models from previous phases.
-		r.batchNormStepExecMap = make(map[any]*context.Exec)
+		r.batchNormStepExecMap = make(map[any]*model.Exec)
 		ds.Reset()
 		err = r.resetEvalMetrics()
 		if err != nil {
@@ -97,8 +97,8 @@ func (r *Trainer) batchNormAveragesStep(phase int, spec any, inputs, labels []*t
 // inputsAndLabel[:-1] are the inputs, and inputsAndLabel[-1] is the labels batch.
 func (r *Trainer) batchNormsAverageStepGraphFn(
 	phase int,
-) func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
-	return func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
+) func(spec any, ctx *model.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
+	return func(spec any, ctx *model.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 		g := inputs[0].Graph()
 		ctx.SetTraining(g, false)
 		ctx.SetGraphParam(g, BatchNormalizationUpdatePhase, phase)

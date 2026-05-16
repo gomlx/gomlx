@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
@@ -54,11 +54,11 @@ func targetF(x0, x1 *Node) *Node {
 		x1))
 }
 
-type coreFnType func(ctx *context.Context, input *Node) *Node
+type coreFnType func(ctx *model.Context, input *Node) *Node
 
 // fnnGraphModelBuilder will try to model targetF using the given coreFn function.
 func fnnGraphModelBuilder(coreFn coreFnType) train.ModelFn {
-	return func(ctx *context.Context, spec any, inputs []*Node) []*Node {
+	return func(ctx *model.Context, spec any, inputs []*Node) []*Node {
 		dtype := dtypes.Float64
 		_ = spec
 		batchSize := inputs[0].Shape().Dimensions[0]
@@ -84,7 +84,7 @@ func lossGraphFn(labels []*Node, predictions []*Node) (loss *Node) {
 var (
 	fnnVariations = []coreFnType{
 		// Vanilla
-		func(ctx *context.Context, input *Node) *Node {
+		func(ctx *model.Context, input *Node) *Node {
 			return New(ctx, input, 1).
 				NumHiddenLayers(1, 128).
 				Activation(activations.TypeRelu).
@@ -92,7 +92,7 @@ var (
 		},
 
 		// Residual+Normalization:
-		func(ctx *context.Context, input *Node) *Node {
+		func(ctx *model.Context, input *Node) *Node {
 			return New(ctx, input, 1).
 				NumHiddenLayers(8, 8).
 				Normalization("layer").
@@ -117,7 +117,7 @@ func TestFNN(t *testing.T) {
 
 	for ii, coreFn := range fnnVariations {
 		fmt.Printf("Variation #%d %q:\n", ii, fnnVariationsNames[ii])
-		ctx := context.New()
+		ctx := model.New()
 		ctx.SetRNGStateFromSeed(42)
 		opt := optimizers.Adam().LearningRate(0.001).Done()
 		trainer := train.NewTrainer(backend, ctx, fnnGraphModelBuilder(coreFn),
@@ -145,11 +145,11 @@ func TestFNNRegularized(t *testing.T) {
 		return
 	}
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 	ctx.SetRNGStateFromSeed(42)
 	ds := &fnnTestDataset{batchSize: 128}
 
-	regularizedFn := func(ctx *context.Context, input *Node) *Node {
+	regularizedFn := func(ctx *model.Context, input *Node) *Node {
 		return New(ctx, input, 1).
 			NumHiddenLayers(2, 32).
 			Residual(true).
@@ -179,7 +179,7 @@ func TestFNNRegularized(t *testing.T) {
 	var numZeros int
 	fmt.Println("\nVariables:")
 	/*
-		ctx.EnumerateVariables(func(v *context.Variable) {
+		ctx.EnumerateVariables(func(v *model.Variable) {
 			if strings.Index(v.Scope(), "Adam") != -1 {
 				return
 			}
@@ -217,7 +217,7 @@ func TestFNNEnsembleShapes(t *testing.T) {
 				for _, useBias := range []bool{false, true} {
 					for _, useResidual := range []bool{false, true} {
 						t.Run(fmt.Sprintf("ensembleAxis=%t_hidden=%d_bias=%t_residual=%t", hasEnsembleAxis, numHiddenLayers, useBias, useResidual), func(t *testing.T) {
-							ctx := context.New()
+							ctx := model.New()
 							g := NewGraph(backend, "test_ensemble_shapes")
 
 							var input *Node

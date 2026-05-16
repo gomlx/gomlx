@@ -8,7 +8,7 @@
 //
 // E.g: A FNN for a multi-class classification model with NumClasses classes.
 //
-//	func MyMode(ctx *context.Context, inputs []*Node) (outputs []*Node) {
+//	func MyMode(ctx *model.Context, inputs []*Node) (outputs []*Node) {
 //		x := inputs[0]
 //		logits := fnn.New(ctx.In("model"), x, NumClasses).
 //			NumHiddenLayers(3).
@@ -24,8 +24,8 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/nn"
-	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
@@ -63,9 +63,9 @@ const (
 )
 
 // Config is created with New and can be configured with its methods, or simply setting the corresponding
-// hyperparameters in the context.
+// hyperparameters in the model.
 type Config struct {
-	ctx                             *context.Context
+	ctx                             *model.Context
 	input                           *Node
 	outputDimensions                []int
 	numHiddenLayers, numHiddenNodes int
@@ -87,11 +87,11 @@ type Config struct {
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
 //
 // Configuration options have defaults, but can also be configured through hyperparameters
-// set in the context. See corresponding configuration methods for details.
+// set in the model. See corresponding configuration methods for details.
 //
 // E.g: A FNN for a multi-class classification model with NumClasses classes.
 //
-//	func MyModel(ctx *context.Context, inputs []*Node) (outputs []*Node) {
+//	func MyModel(ctx *model.Context, inputs []*Node) (outputs []*Node) {
 //		x := inputs[0]
 //		logits := fnn.New(ctx.In("model"), x, NumClasses).
 //			NumHiddenLayers(3, 128).
@@ -102,7 +102,7 @@ type Config struct {
 //			Done()
 //		return []*Node{logits}
 //	}
-func New(ctx *context.Context, input *Node, outputDimensions ...int) *Config {
+func New(ctx *model.Context, input *Node, outputDimensions ...int) *Config {
 	if input.Rank() < 2 {
 		exceptions.Panicf("fnn: input must be rank at least 2, got input.shape=%s", input.Shape())
 	}
@@ -120,22 +120,22 @@ func New(ctx *context.Context, input *Node, outputDimensions ...int) *Config {
 		input:            input,
 		outputDimensions: outputDimensions,
 		ensembleAxis:     -1,
-		numHiddenLayers:  context.GetParamOr(ctx, ParamNumHiddenLayers, 0),
-		numHiddenNodes:   context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
-		activation:       activations.FromName(context.GetParamOr(ctx, activations.ParamActivation, "relu")),
-		normalization:    context.GetParamOr(ctx, ParamNormalization, ""),
+		numHiddenLayers:  model.GetParamOr(ctx, ParamNumHiddenLayers, 0),
+		numHiddenNodes:   model.GetParamOr(ctx, ParamNumHiddenNodes, 10),
+		activation:       activations.FromName(model.GetParamOr(ctx, activations.ParamActivation, "relu")),
+		normalization:    model.GetParamOr(ctx, ParamNormalization, ""),
 		regularizer:      regularizers.FromContext(ctx),
-		dropoutRatio:     context.GetParamOr(ctx, ParamDropoutRate, -1.0),
-		useResidual:      context.GetParamOr(ctx, ParamResidual, false),
+		dropoutRatio:     model.GetParamOr(ctx, ParamDropoutRate, -1.0),
+		useResidual:      model.GetParamOr(ctx, ParamResidual, false),
 		useBias:          true,
 	}
 
 	// Fallback parameters.
 	if c.normalization == "" {
-		c.normalization = context.GetParamOr(ctx, layers.ParamNormalization, "none")
+		c.normalization = model.GetParamOr(ctx, layers.ParamNormalization, "none")
 	}
 	if c.dropoutRatio < 0 {
-		c.dropoutRatio = context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
+		c.dropoutRatio = model.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
 	}
 	return c
 }
@@ -201,7 +201,7 @@ func (c *Config) UseBias(useBias bool) *Config {
 // The input and output layers don't get an activation layer.
 //
 // The default is "relu", but it can be overridden by setting the hyperparameter layers.ParamActivation (="activation")
-// in the context.
+// in the model.
 func (c *Config) Activation(activation activations.Type) *Config {
 	c.activation = activation
 	return c
@@ -220,7 +220,7 @@ func (c *Config) Residual(useResidual bool) *Config {
 // The input and output layers don't get a normalization layer.
 //
 // The default is "none", but it can be overridden by setting the hyperparameter ParamNormalization (="fnn_normalization")
-// in the context.
+// in the model.
 func (c *Config) Normalization(normalization string) *Config {
 	_, found := layers.KnownNormalizers[normalization]
 	if normalization != "" && !found {
@@ -248,7 +248,7 @@ func (c *Config) Regularizer(regularizer regularizers.Regularizer) *Config {
 // If set to 0.0, no dropout is used.
 //
 // The default is 0.0, but it can be overridden by setting the hyperparameter layers.ParamDropoutRate (="dropout_rate")
-// in the context.
+// in the model.
 func (c *Config) Dropout(ratio float64) *Config {
 	if ratio >= 1.0 {
 		exceptions.Panicf("fnn: invalid dropout ratio %f -- set to <= 0.0 to disable it, and it must be < 1.0 otherwise everything is dropped out",
@@ -281,7 +281,7 @@ func (c *Config) Done() *Node {
 			outputDims = c.outputDimensions
 		}
 		// Scope for this layer
-		var layerCtx *context.Context
+		var layerCtx *model.Context
 		if ii < c.numHiddenLayers {
 			layerCtx = ctx.Inf("fnn_hidden_layer_%d", ii)
 		} else {

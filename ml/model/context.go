@@ -1,8 +1,8 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-// Package context defines the Context and Variable types: Context organizes variablesMap
+// Package model defines the Context and Variable types: Context organizes variablesMap
 // and variablesMap manages the storage of values typically used as variablesMap.
-package context
+package model
 
 import (
 	"encoding"
@@ -45,12 +45,12 @@ import (
 // One could create a new context with:
 //
 //	func main() {
-//		ctx := context.New()
+//		ctx := model.New()
 //		ctx.SetParam("dropout_rate") = 0.2  // Set default dropout to 0.2
 //		...
 //	}
 //
-//	func ModelGraph(ctx *context.Context, inputs []*Node) (logits *Node) {
+//	func ModelGraph(ctx *model.Context, inputs []*Node) (logits *Node) {
 //		...
 //		{
 //			ctx := ctx.In("output_layer")  // Enter "output_layer" scope in temporary new context (same data, different scope)
@@ -127,7 +127,7 @@ type contextData struct {
 	loader Loader
 
 	// needsInitialization indicates whether there are uninitialized variables in
-	// the context. It's set to false whenever one runs Context.InitializeVariables,
+	// the model. It's set to false whenever one runs Context.InitializeVariables,
 	// and it's set to true whenever a new variable is created without a value.
 	//
 	// If it is set to false, it means all variables are set, and there is no need to initialize.
@@ -150,7 +150,7 @@ type Loader interface {
 	// Errors can be reported with Context.Panic.
 	//
 	// It is called at most once for each variable: if a values is loaded owner is transferred and the Loader
-	// can "forget" about that variable, it's assumed to be transferred to the context.
+	// can "forget" about that variable, it's assumed to be transferred to the model.
 	LoadVariable(ctx *Context, scope, name string) (value *tensors.Tensor, found bool)
 
 	// DeleteVariable is called whenever Context.DeleteVariable is called. The deletion should cascade to the
@@ -163,8 +163,8 @@ type Loader interface {
 // New returns an empty context, associated with freshly created data.
 //
 // Something to be mindful: the default variable initializer is a random uniform noise from [-0.05, 0.05].
-// You can change the default by importing ml/context/default, or you can
-// set your own with Context.WithInitializer. See available initializers in ml/context/initializers.
+// You can change the default by importing ml/model/default, or you can
+// set your own with Context.WithInitializer. See available initializers in ml/model/initializers.
 func New() *Context {
 	ctx := &Context{
 		scope:   RootScope,
@@ -389,7 +389,7 @@ func (ctx *Context) WithInitializer(initializer VariableInitializer) *Context {
 	return ctx2
 }
 
-// Initializer returns the initializer configured for the context.
+// Initializer returns the initializer configured for the model.
 func (ctx *Context) Initializer() VariableInitializer {
 	return ctx.initializer
 }
@@ -704,7 +704,7 @@ func (ctx *Context) InitializeVariables(
 
 // ExecSetVariablesInParams adds all variables (all scopes) used by the graph to the ParamsMap objects.
 //
-// `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
+// `Exec*` methods are used by those implementing an executor (model.Exec) or related tests, not normally
 // needed by end users.
 func (ctx *Context) ExecSetVariablesInParams(params graph.ParamsMap, g *Graph) {
 	g.AssertValid()
@@ -883,7 +883,7 @@ func (ctx *Context) DeleteVariablesInScope() error {
 }
 
 // VariableWithShape creates or returns an existing variable with the given shape in the current scope.
-// It is initialized with the current variable initializer set for the context.
+// It is initialized with the current variable initializer set for the model.
 // By default, variables are marked as trainable.
 //
 // If a Loader is configured (see SetLoader), and the value is available to load, it will override
@@ -1051,7 +1051,7 @@ func (ctx *Context) VariableWithValue(name string, defaultValue any) *Variable {
 //
 // This is a graph building function and so it may panic if the variable cannot be created.
 func (ctx *Context) VariableWithValueGraph(name string, value *Node) *Variable {
-	// Create a zero-initialized context.
+	// Create a zero-initialized model.
 	zeroCtx := ctx.WithInitializer(func(g *Graph, shape shapes.Shape) *Node {
 		return graph.Zeros(g, shape)
 	})
@@ -1060,7 +1060,7 @@ func (ctx *Context) VariableWithValueGraph(name string, value *Node) *Variable {
 	return v
 }
 
-// EnumerateVariables will call fn for each variable in the context. Notice
+// EnumerateVariables will call fn for each variable in the model. Notice
 // the order of visitation is deterministic.
 //
 // Notice that variables' information is stored in the "data" component of Context objects, and is shared
@@ -1069,7 +1069,7 @@ func (ctx *Context) VariableWithValueGraph(name string, value *Node) *Variable {
 // Example:
 //
 //	fmt.Println("\nVariables:")
-//	ctx.EnumerateVariables(func(v *context.Variable) {
+//	ctx.EnumerateVariables(func(v *model.Variable) {
 //		fmt.Printf("\t%s::%s: shape=%s\n", v.Scope(), v.Name(), v.Shape())
 //	})
 //
@@ -1080,7 +1080,7 @@ func (ctx *Context) EnumerateVariables(fn func(v *Variable)) {
 	}
 }
 
-// IterVariables returns an iterator that yields each variable in the context.
+// IterVariables returns an iterator that yields each variable in the model.
 // The order of iteration is deterministic.
 //
 // Notice that variables' information is stored in the "data" component of Context objects, and is shared
@@ -1174,7 +1174,7 @@ func (ctx *Context) Memory() uintptr {
 	return uintptr(ctx.ByteSize())
 }
 
-// Loader returns the current configured Loader for this context. See SetLoader for details on how the
+// Loader returns the current configured Loader for this model. See SetLoader for details on how the
 // Loader is used.
 //
 // Notice that loader configuration is stored in the "data" component of Context objects, and is shared
@@ -1199,7 +1199,7 @@ func (ctx *Context) SetLoader(loader Loader) {
 
 // ExecPopulateGraphParamsMap will enter the parameter values for every variable used in the given graph.
 //
-// `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
+// `Exec*` methods are used by those implementing an executor (model.Exec) or related tests, not normally
 // needed by end users.
 func (ctx *Context) ExecPopulateGraphParamsMap(g *Graph, params graph.ParamsMap) {
 	graphId := g.GraphId()

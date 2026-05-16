@@ -19,7 +19,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -372,7 +372,7 @@ func TestMap(t *testing.T) {
 		manager,
 		nil,
 		ds,
-		func(_ *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
+		func(_ *model.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
 			// Add 1 to the inputs[0], drop the labels.
 			return []*Node{AddScalar(inputs[0], 1)}, nil
 		},

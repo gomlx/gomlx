@@ -20,7 +20,7 @@ package kan
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -74,9 +74,9 @@ const (
 )
 
 // Config is created with New and can be configured with its methods, or simply setting the corresponding
-// hyperparameters in the context.
+// hyperparameters in the model.
 type Config struct {
-	ctx                             *context.Context
+	ctx                             *model.Context
 	input                           *Node
 	numOutputNodes                  int
 	numHiddenLayers, numHiddenNodes int
@@ -111,29 +111,29 @@ type Config struct {
 //
 // It will apply KAN-like transformations to the last axis (the "feature axis") of x, while preserving all leading
 // axes (we'll call them "batch axes").
-func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
+func New(ctx *model.Context, input *Node, numOutputNodes int) *Config {
 	c := &Config{
 		ctx:              ctx,
 		input:            input,
 		numOutputNodes:   numOutputNodes,
-		numHiddenLayers:  context.GetParamOr(ctx, ParamNumHiddenLayers, 0),
-		numHiddenNodes:   context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
-		activation:       activations.FromName(context.GetParamOr(ctx, activations.ParamActivation, "none")),
+		numHiddenLayers:  model.GetParamOr(ctx, ParamNumHiddenLayers, 0),
+		numHiddenNodes:   model.GetParamOr(ctx, ParamNumHiddenNodes, 10),
+		activation:       activations.FromName(model.GetParamOr(ctx, activations.ParamActivation, "none")),
 		regularizer:      regularizers.FromContext(ctx),
-		useResidual:      context.GetParamOr(ctx, ParamResidual, true),
-		useMean:          context.GetParamOr(ctx, ParamMean, true),
-		inputGroupSize:   context.GetParamOr(ctx, ParamInputGroupSize, int(0)),
-		numControlPoints: context.GetParamOr(ctx, ParamNumControlPoints, 20),
-		useDiscrete:      context.GetParamOr(ctx, ParamDiscrete, false),
-		useRational:      context.GetParamOr(ctx, ParamRational, false),
-		usePWL:           context.GetParamOr(ctx, ParamPiecewiseLinear, false),
+		useResidual:      model.GetParamOr(ctx, ParamResidual, true),
+		useMean:          model.GetParamOr(ctx, ParamMean, true),
+		inputGroupSize:   model.GetParamOr(ctx, ParamInputGroupSize, int(0)),
+		numControlPoints: model.GetParamOr(ctx, ParamNumControlPoints, 20),
+		useDiscrete:      model.GetParamOr(ctx, ParamDiscrete, false),
+		useRational:      model.GetParamOr(ctx, ParamRational, false),
+		usePWL:           model.GetParamOr(ctx, ParamPiecewiseLinear, false),
 	}
 	c.initBSpline(ctx)
 	c.initDiscrete(ctx)
 	c.initRational(ctx)
 	c.initPiecewiseLinear(ctx)
 
-	constL1amount := context.GetParamOr(ctx, ParamConstantRegularizationL1, 0.0)
+	constL1amount := model.GetParamOr(ctx, ParamConstantRegularizationL1, 0.0)
 	if constL1amount > 0 {
 		c.regularizer = regularizers.Combine(c.regularizer, regularizers.ConstantL1(constL1amount))
 	}
@@ -163,7 +163,7 @@ func (c *Config) NumHiddenLayers(numLayers, numHiddenNodes int) *Config {
 // Activation sets the activation for the KAN, which is applied after the sum.
 //
 // Following the paper, it defaults to "none", but it will be overridden if the hyperparameter
-// layers.ParamActivation (="activation") is set in the context.
+// layers.ParamActivation (="activation") is set in the model.
 //
 // Most KAN functions are already non-linear, and don't require activation.
 func (c *Config) Activation(activation activations.Type) *Config {

@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 )
@@ -45,7 +45,7 @@ import (
 //		fmt.Println(commandline.SprintContextSettings(ctx))
 //		...
 //	}
-func ParseContextSettings(ctx *context.Context, settings string) (paramsSet []string, err error) {
+func ParseContextSettings(ctx *model.Context, settings string) (paramsSet []string, err error) {
 	settingsList := strings.SplitSeq(settings, ";")
 	for setting := range settingsList {
 		paramsSet, err = parseContextSetting(ctx, setting, paramsSet)
@@ -56,7 +56,7 @@ func ParseContextSettings(ctx *context.Context, settings string) (paramsSet []st
 	return
 }
 
-func parseContextSetting(ctx *context.Context, setting string, paramsSet []string) (newParamsSet []string, err error) {
+func parseContextSetting(ctx *model.Context, setting string, paramsSet []string) (newParamsSet []string, err error) {
 	newParamsSet = paramsSet
 	if setting == "" {
 		return
@@ -95,10 +95,10 @@ func parseContextSetting(ctx *context.Context, setting string, paramsSet []strin
 		return
 	}
 	paramPath, valueStr := parts[0], parts[1]
-	paramScope, paramName := context.SplitScope(paramPath)
-	if strings.Index(paramName, context.ScopeSeparator) != -1 {
+	paramScope, paramName := model.SplitScope(paramPath)
+	if strings.Index(paramName, model.ScopeSeparator) != -1 {
 		err = errors.Errorf("can't set parameter %q  because some scope is set, but it is not absolue (it does not start with %q)",
-			paramPath, context.ScopeSeparator)
+			paramPath, model.ScopeSeparator)
 		return
 	}
 	value, found := ctx.GetParam(paramName)
@@ -204,7 +204,7 @@ func parseContextSetting(ctx *context.Context, setting string, paramsSet []strin
 //		fmt.Println(commandline.SprintContextSettings(ctx))
 //		...
 //	}
-func CreateContextSettingsFlag(ctx *context.Context, flagName string) *string {
+func CreateContextSettingsFlag(ctx *model.Context, flagName string) *string {
 	if flagName == "" {
 		flagName = "set"
 	}
@@ -217,9 +217,9 @@ func CreateContextSettingsFlag(ctx *context.Context, flagName string) *string {
 			`which case the file will be read and the settings will be parsed, `+
 			`with new-lines working as ";" to separate settings and lines starting with "#" are considered comments. `+
 			`Current available parameters that can be set:`,
-		context.ScopeSeparator))
+		model.ScopeSeparator))
 	ctx.EnumerateParams(func(scope, key string, value any) {
-		if scope != context.RootScope {
+		if scope != model.RootScope {
 			return
 		}
 		parts = append(parts, fmt.Sprintf("%q: default value is %v", key, value))
@@ -231,10 +231,10 @@ func CreateContextSettingsFlag(ctx *context.Context, flagName string) *string {
 }
 
 // SprintContextSettings pretty-print values for the current hyperparameters settings into a string.
-func SprintContextSettings(ctx *context.Context) string {
+func SprintContextSettings(ctx *model.Context) string {
 	var parts []string
 	ctx.EnumerateParams(func(scope, key string, value any) {
-		if scope == context.RootScope {
+		if scope == model.RootScope {
 			scope = ""
 		}
 		parts = append(parts, fmt.Sprintf("\t\"%s/%s\": (%T) %v", scope, key, value, value))
@@ -242,7 +242,7 @@ func SprintContextSettings(ctx *context.Context) string {
 	return strings.Join(parts, "\n")
 }
 
-func SprintModifiedContextSettings(ctx *context.Context, paramsSet []string) string {
+func SprintModifiedContextSettings(ctx *model.Context, paramsSet []string) string {
 	var parts []string
 	paramsSet = slices.Clone(paramsSet)
 	slices.Sort(paramsSet)
@@ -253,9 +253,9 @@ func SprintModifiedContextSettings(ctx *context.Context, paramsSet []string) str
 			continue
 		}
 		lastParamPath = paramPath
-		paramScope, paramName := context.SplitScope(paramPath)
+		paramScope, paramName := model.SplitScope(paramPath)
 		if paramScope == "" {
-			paramScope = context.RootScope
+			paramScope = model.RootScope
 		}
 		value, found := ctx.InAbsPath(paramScope).GetParam(paramName)
 		if !found {

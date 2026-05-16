@@ -11,18 +11,18 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestConvolution(t *testing.T) {
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
-		ctx := context.New()
+		ctx := model.New()
 		defer ctx.Finalize()
 
 		t.Run("2D-PadSame", func(t *testing.T) {
-			gotT := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+			gotT := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 				x := Ones(g, shapes.Make(dtypes.F32, 5, 4, 4, 3))
 				ctx = ctx.In(path.Base(t.Name()))
 				conv := Convolution(ctx, x).
@@ -36,7 +36,7 @@ func TestConvolution(t *testing.T) {
 		})
 
 		t.Run("3D-Strides", func(t *testing.T) {
-			gotT := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+			gotT := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 				x := Ones(g, shapes.Make(dtypes.F32, 5, 3, 8, 8, 8))
 				ctx = ctx.In(path.Base(t.Name()))
 				conv := Convolution(ctx, x).

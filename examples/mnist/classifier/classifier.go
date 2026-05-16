@@ -20,8 +20,8 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/images"
 	"github.com/gomlx/gomlx/examples/mnist"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 )
 
@@ -32,17 +32,17 @@ type Classifier struct {
 	backend compute.Backend
 
 	// ctx with the model's weights.
-	ctx *context.Context
+	ctx *model.Context
 
-	// exec is used to execute the model with a context.
-	exec *context.Exec
+	// exec is used to execute the model with a model.
+	exec *model.Exec
 }
 
 // New creates a new Classifier object that can be used to classify images using a MNIST model.
 func New(checkpointDir string) (*Classifier, error) {
 	c := &Classifier{
 		backend: compute.MustNew(),
-		ctx:     context.New(),
+		ctx:     model.New(),
 	}
 
 	// Notice all hyperparameters are read from the checkpoint as well, so it will be built with the
@@ -56,7 +56,7 @@ func New(checkpointDir string) (*Classifier, error) {
 	}
 	c.ctx = c.ctx.Reuse() // Mark it to reuse variables: it will be an error to create a new variable -- for extra sanity checking.
 
-	modelType := context.GetParamOr(c.ctx, "model", "")
+	modelType := model.GetParamOr(c.ctx, "model", "")
 	var modelFn train.ModelFn
 	switch modelType {
 	case "linear":
@@ -69,8 +69,8 @@ func New(checkpointDir string) (*Classifier, error) {
 	}
 
 	// Create model executor.
-	c.exec = context.MustNewExec(c.backend, c.ctx,
-		func(ctx *context.Context, image *graph.Node) (choice *graph.Node) {
+	c.exec = model.MustNewExec(c.backend, c.ctx,
+		func(ctx *model.Context, image *graph.Node) (choice *graph.Node) {
 			// We take the first result from the modelFn -- it returns a slice.
 			image = graph.ExpandAxes(image, 0) // Create a batch dimension of size 1.
 			logits := modelFn(ctx, nil, []*graph.Node{image})[0]

@@ -7,9 +7,9 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	"github.com/gomlx/gomlx/ml/nn"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/pkg/errors"
 )
@@ -18,7 +18,7 @@ import (
 // set the desired parameters and when all is set, call Done.
 // See LayerNormalization for details.
 type LayerNormBuilder struct {
-	ctx                *context.Context
+	ctx                *model.Context
 	x, mask            *Node
 	normalizingAxes    []int
 	epsilon            float64
@@ -98,20 +98,20 @@ var (
 // https://arxiv.org/abs/1607.06450
 //
 // FutureWork: support padding by not normalizing parts that weren't touched ...
-func LayerNormalization(ctx *context.Context, x *Node, normalizingAxes ...int) *LayerNormBuilder {
+func LayerNormalization(ctx *model.Context, x *Node, normalizingAxes ...int) *LayerNormBuilder {
 	builder := &LayerNormBuilder{
 		ctx:                ctx.In("layer_normalization"),
 		x:                  x,
 		normalizingAxes:    normalizingAxes,
-		epsilon:            context.GetParamOr(ctx, ParamLayerNormEpsilon, 1e-3),
-		center:             context.GetParamOr(ctx, ParamLayerNormCenter, true),
-		gain:               context.GetParamOr(ctx, ParamLayerNormLearnedGain, true),
-		scaleNormalization: context.GetParamOr(ctx, ParamLayerNormRescale, true),
+		epsilon:            model.GetParamOr(ctx, ParamLayerNormEpsilon, 1e-3),
+		center:             model.GetParamOr(ctx, ParamLayerNormCenter, true),
+		gain:               model.GetParamOr(ctx, ParamLayerNormLearnedGain, true),
+		scaleNormalization: model.GetParamOr(ctx, ParamLayerNormRescale, true),
 		normalizationDType: x.DType(),
 	}
 
 	// Create default regularizer.
-	if l2 := context.GetParamOr(ctx, ParamLayerNormL2Regularization, 0.0); l2 > 0 {
+	if l2 := model.GetParamOr(ctx, ParamLayerNormL2Regularization, 0.0); l2 > 0 {
 		builder.regularizer = regularizers.Combine(builder.regularizer, regularizers.L2(l2))
 	}
 
@@ -121,7 +121,7 @@ func LayerNormalization(ctx *context.Context, x *Node, normalizingAxes ...int) *
 	}
 
 	// Add default dtype for normalization.
-	normDTypeStr := context.GetParamOr(ctx, ParamLayerNormNormalizationDType, "")
+	normDTypeStr := model.GetParamOr(ctx, ParamLayerNormNormalizationDType, "")
 	if normDTypeStr == "" {
 		if x.DType() == dtypes.Float16 || x.DType() == dtypes.BFloat16 {
 			builder.normalizationDType = dtypes.Float32

@@ -8,7 +8,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
@@ -175,7 +175,7 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 //   - coefficients: attention coefficients (nil when wantCoefficients is false) shaped
 //     [batch, heads, q_seq, kv_seq] for LayoutBHSD or
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
-func Core(ctx *context.Context, query, key, value *Node, scale float64, attentionMask *Node, dropoutRate *Node,
+func Core(ctx *model.Context, query, key, value *Node, scale float64, attentionMask *Node, dropoutRate *Node,
 	layout AxesLayout, useCausalMask, wantCoefficients bool) (output, coefficients *Node) {
 	g := query.Graph()
 	numQueryHeads := query.Shape().Dimensions[layout.HeadsAxis()]

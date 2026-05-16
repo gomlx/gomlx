@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,26 +18,26 @@ import (
 // takeFirstFn wraps the given `metricFn` with a function that takes a single node for labels and predictions as
 // opposed to slices of nodes.
 func takeFirstFn(
-	metricFn func(ctx *context.Context, labels, predictions []*Node) *Node,
-) func(*context.Context, *Node, *Node) *Node {
-	return func(ctx *context.Context, labels, predictions *Node) *Node {
+	metricFn func(ctx *model.Context, labels, predictions []*Node) *Node,
+) func(*model.Context, *Node, *Node) *Node {
+	return func(ctx *model.Context, labels, predictions *Node) *Node {
 		return metricFn(ctx, []*Node{labels}, []*Node{predictions})
 	}
 }
 
 // takeLabelsMaskWeightPredictionsFn wraps the given `metricFn` with a function that takes labels, mask, weights and predictions.
 func takeLabelsMaskWeightPredictionsFn(
-	metricFn func(ctx *context.Context, labels, predictions []*Node) *Node,
-) func(ctx *context.Context, labels, mask, weights, predictions *Node) *Node {
-	return func(ctx *context.Context, labels, mask, weights, predictions *Node) *Node {
+	metricFn func(ctx *model.Context, labels, predictions []*Node) *Node,
+) func(ctx *model.Context, labels, mask, weights, predictions *Node) *Node {
+	return func(ctx *model.Context, labels, mask, weights, predictions *Node) *Node {
 		return metricFn(ctx, []*Node{labels, mask, weights}, []*Node{predictions})
 	}
 }
 
 func TestBinaryAccuracyGraph(t *testing.T) {
 	manager := testutil.BuildTestBackend()
-	ctx := context.New()
-	accuracyExec := context.MustNewExec(manager, ctx, takeFirstFn(BinaryAccuracyGraph))
+	ctx := model.New()
+	accuracyExec := model.MustNewExec(manager, ctx, takeFirstFn(BinaryAccuracyGraph))
 	labels, probs := []float32{0, 1, 0, 1, 0, 1}, []float32{0.1, 0.1, 0.5, 0.5, 0.8, 0.8}
 	results := accuracyExec.MustExec(labels, probs)
 	got := results[0].Value().(float32)
@@ -48,9 +48,9 @@ func TestBinaryAccuracyGraph(t *testing.T) {
 
 func TestNewMeanBinaryAccuracy(t *testing.T) {
 	manager := testutil.BuildTestBackend()
-	ctx := context.New().Checked(false)
+	ctx := model.New().Checked(false)
 	accMetric := NewMeanBinaryAccuracy("accuracy", "acc")
-	accExec := context.MustNewExec(manager, ctx, func(ctx *context.Context, labels, predictions *Node) *Node {
+	accExec := model.MustNewExec(manager, ctx, func(ctx *model.Context, labels, predictions *Node) *Node {
 		return accMetric.UpdateGraph(ctx, []*Node{labels}, []*Node{predictions})
 	})
 
@@ -63,7 +63,7 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 	// List and check variables.
 	fmt.Println("Variables:")
-	ctx.EnumerateVariables(func(v *context.Variable) {
+	ctx.EnumerateVariables(func(v *model.Variable) {
 		fmt.Printf("\t%s / %s=%s\n", v.Scope(), v.Name(), v.MustValue())
 	})
 
@@ -95,8 +95,8 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 func TestBinaryLogitsAccuracyGraph(t *testing.T) {
 	manager := testutil.BuildTestBackend()
-	ctx := context.New()
-	accuracyExec := context.MustNewExec(manager, ctx, takeFirstFn(BinaryLogitsAccuracyGraph))
+	ctx := model.New()
+	accuracyExec := model.MustNewExec(manager, ctx, takeFirstFn(BinaryLogitsAccuracyGraph))
 	labels, logits := []float32{0, 1, 0, 1, 0, 1}, []float32{-0.1, -0.1, 0, 0, 0.2, 10.0}
 	results := accuracyExec.MustExec(labels, logits)
 	got, _ := results[0].Value().(float32)
@@ -105,9 +105,9 @@ func TestBinaryLogitsAccuracyGraph(t *testing.T) {
 
 func TestSparseCategoricalAccuracyGraph(t *testing.T) {
 	manager := testutil.BuildTestBackend()
-	ctx := context.New()
+	ctx := model.New()
 	{
-		accuracyExec := context.MustNewExec(manager, ctx, takeFirstFn(SparseCategoricalAccuracyGraph))
+		accuracyExec := model.MustNewExec(manager, ctx, takeFirstFn(SparseCategoricalAccuracyGraph))
 		labels, logits := [][]int{{0}, {1}, {2}}, [][]float32{
 			{0, 0, 1},     // Tie, should be a miss.
 			{-2, -1, -3},  // Correct, even if negative.
@@ -118,7 +118,7 @@ func TestSparseCategoricalAccuracyGraph(t *testing.T) {
 		assert.Equal(t, float32(1.0/3.0), got, "TestSparseCategoricalAccuracyGraph")
 	}
 	{
-		accuracyExec := context.MustNewExec(
+		accuracyExec := model.MustNewExec(
 			manager,
 			ctx,
 			takeLabelsMaskWeightPredictionsFn(SparseCategoricalAccuracyGraph),

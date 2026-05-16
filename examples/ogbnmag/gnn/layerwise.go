@@ -6,7 +6,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 )
@@ -14,7 +14,7 @@ import (
 // LayerWiseConfig is a configuration object for [ComputeLayerWiseGNN].
 // Once configured with its methods, call [LayerWiseConfig.Done] to actually run the layer-wise GNN.
 type LayerWiseConfig struct {
-	ctx                    *context.Context
+	ctx                    *model.Context
 	strategy               *sampler.Strategy
 	sampler                *sampler.Sampler
 	keepIntermediaryStates bool
@@ -30,21 +30,21 @@ type LayerWiseConfig struct {
 //
 // It returns a configuration option that can be furthered configured.
 // It runs the layer-wise GNN once [NodePrediction] is called.
-func LayerWiseGNN(ctx *context.Context, strategy *sampler.Strategy) (*LayerWiseConfig, error) {
+func LayerWiseGNN(ctx *model.Context, strategy *sampler.Strategy) (*LayerWiseConfig, error) {
 	lw := &LayerWiseConfig{
 		ctx:                    ctx,
 		strategy:               strategy,
 		sampler:                strategy.Sampler,
 		keepIntermediaryStates: true,
 		freeAcceleratorMemory:  true,
-		numGraphUpdates:        context.GetParamOr(ctx, ParamNumGraphUpdates, 2),
-		graphUpdateType:        context.GetParamOr(ctx, ParamGraphUpdateType, "tree"),
+		numGraphUpdates:        model.GetParamOr(ctx, ParamNumGraphUpdates, 2),
+		graphUpdateType:        model.GetParamOr(ctx, ParamGraphUpdateType, "tree"),
 	}
 	lw.dependentsUpdateFirst = "tree" == lw.graphUpdateType
 	if lw.graphUpdateType != "tree" && lw.graphUpdateType != "simultaneous" {
 		return nil, errors.Errorf("unsupported graph update type: %s", lw.graphUpdateType)
 	}
-	if context.GetParamOr(ctx, ParamUsePathToRootStates, false) {
+	if model.GetParamOr(ctx, ParamUsePathToRootStates, false) {
 		return nil, errors.Errorf("layerwise inference doesn't work if using `%q=true`",
 			ParamUsePathToRootStates)
 	}
@@ -79,7 +79,7 @@ func (lw *LayerWiseConfig) FreeAcceleratorMemory(free bool) *LayerWiseConfig {
 //
 // It can be called more than once with different `initialStates`.
 // Subsequent calls will by-step the JIT-compilation of the models.
-func (lw *LayerWiseConfig) NodePrediction(ctx *context.Context, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node]) {
+func (lw *LayerWiseConfig) NodePrediction(ctx *model.Context, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node]) {
 	for round := range lw.numGraphUpdates {
 		for _, rule := range lw.strategy.Seeds {
 			lw.recursivelyApplyGraphConvolution(ctxForGraphUpdateRound(ctx, round), rule, graphStates, edges)
@@ -94,7 +94,7 @@ func (lw *LayerWiseConfig) NodePrediction(ctx *context.Context, graphStates map[
 }
 
 func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
-	ctx *context.Context, rule *sampler.Rule, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node]) {
+	ctx *model.Context, rule *sampler.Rule, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node]) {
 	if rule.Name == "" || rule.ConvKernelScopeName == "" {
 		Panicf("strategy's rule name=%q or kernel scope name=%q are empty, they both must be defined",
 			rule.Name, rule.ConvKernelScopeName)
@@ -147,7 +147,7 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 	graphStates[rule.Name] = state
 }
 
-func (lw *LayerWiseConfig) convolveEdgeSet(ctx *context.Context, ruleName string, sourceState, edgesSource, edgesTarget *Node, numTargetNodes int) *Node {
+func (lw *LayerWiseConfig) convolveEdgeSet(ctx *model.Context, ruleName string, sourceState, edgesSource, edgesTarget *Node, numTargetNodes int) *Node {
 	messages, _ := edgeMessageGraph(ctx.In("message"), sourceState, nil)
 	pooled := poolMessagesWithAdjacency(ctx, messages, edgesSource, edgesTarget, numTargetNodes, nil)
 	return pooled

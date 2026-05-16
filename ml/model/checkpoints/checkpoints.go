@@ -15,7 +15,7 @@
 // `*flagCheckpointKeep` steps.
 //
 //	…
-//	ctx := context.New()
+//	ctx := model.New()
 //	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 //
 //	var checkpoint *checkpoints.Handler
@@ -78,7 +78,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	. "github.com/gomlx/gomlx/support/exceptions"
@@ -110,7 +110,7 @@ const (
 // a checkpoints.Handler that loads (if there are any previously saved checkpoints) and
 // saves checkpoints.
 type Config struct {
-	ctx *context.Context
+	ctx *model.Context
 
 	err error
 
@@ -128,7 +128,7 @@ type Config struct {
 	backend  compute.Backend // used when taking the mean.
 	takeMean int
 
-	varsToExclude sets.Set[*context.Variable]
+	varsToExclude sets.Set[*model.Variable]
 
 	binFormat BinFormat // the compression format
 }
@@ -148,14 +148,14 @@ type Config struct {
 // gomlx_checkpoints, will want to do that.
 //
 // See Config.Dir, Config.DirFromBase or Config.FromEmbed to specify where to load/save.
-func Build(ctx *context.Context) *Config {
+func Build(ctx *model.Context) *Config {
 	c := &Config{
 		ctx:             ctx,
 		includeParams:   true,
 		keep:            1,
 		takeMean:        1,
 		paramsToExclude: sets.Make[string](),
-		varsToExclude:   sets.Make[*context.Variable](),
+		varsToExclude:   sets.Make[*model.Variable](),
 	}
 	return c
 }
@@ -165,7 +165,7 @@ func Build(ctx *context.Context) *Config {
 //
 // Use Dir or DirWithBase to configure the location of the checkpoint.
 // Once configured, call Config.Done to actually load it.
-func Load(ctx *context.Context) *Config {
+func Load(ctx *model.Context) *Config {
 	c := Build(ctx)
 	c.mustLoad = true
 	return c
@@ -247,7 +247,7 @@ func (c *Config) FromEmbed(json string, binary []byte) *Config {
 // Immediate forces immediate load of all variables, as opposed to dynamically load
 // variables from checkpoint as they are being used when building the model.
 //
-// Not normally needed, but may be handy for testing. See also [context.Context.InspectVariableIfLoaded].
+// Not normally needed, but may be handy for testing. See also [model.Context.InspectVariableIfLoaded].
 //
 // It may trigger use more memory if not all variables are not used by the model -- not all training data (e.g.: optimizer
 // variables) is used for inference.
@@ -284,7 +284,7 @@ func (c *Config) TempDir(dir, pattern string) *Config {
 }
 
 // ExcludeAllParams configures Handler to exclude Context parameters (values usually
-// read/written by Context.GetParam and context.SetParam) from being read.
+// read/written by Context.GetParam and model.SetParam) from being read.
 //
 // By default, Params are loaded and set into Context the moment Handler is created
 // (when Done() is called), overriding values already present in the Context.
@@ -296,11 +296,11 @@ func (c *Config) ExcludeAllParams() *Config {
 }
 
 // ExcludeParams configures Handler to exclude certain Context parameters (values usually
-// read/written by Context.GetParam and context.SetParam) from being read.
+// read/written by Context.GetParam and model.SetParam) from being read.
 // It can be called multiple times; each call adds new parameters to be excluded.
 //
 // For values in paramsToExclude that don't include a preceding scope (separated by "/"), the exclusion applies to all scopes.
-// Otherwise, it applies only to the specific scope. See context.JoinScope to merge scope and name.
+// Otherwise, it applies only to the specific scope. See model.JoinScope to merge scope and name.
 //
 // By default, no parameters are excluded.
 //
@@ -316,7 +316,7 @@ func (c *Config) ExcludeParams(paramsToExclude ...string) *Config {
 // The function can be called multiple times, adding variables to be excluded from saving.
 //
 // It can also be called after the [Handler] object is built as new variables are created.
-func (c *Config) ExcludeVars(vars ...*context.Variable) *Config {
+func (c *Config) ExcludeVars(vars ...*model.Variable) *Config {
 	for _, v := range vars {
 		c.varsToExclude.Insert(v)
 	}
@@ -428,7 +428,7 @@ func (c *Config) Done() (*Handler, error) {
 	if c.immediate {
 		ctxToSet := c.ctx.Checked(false)
 		for paramName, value := range handler.variableValues {
-			scope, name := context.VariableScopeAndNameFromParameterName(paramName)
+			scope, name := model.VariableScopeAndNameFromParameterName(paramName)
 			v := ctxToSet.GetVariableByScopeAndName(scope, name)
 			if v != nil {
 				v.MustSetValue(value)
@@ -463,7 +463,7 @@ func (c *Config) MustDone() *Handler {
 	return h
 }
 
-// Handler handles saving and loading of checkpoints for a context.Context. See an example in the
+// Handler handles saving and loading of checkpoints for a model.Context. See an example in the
 // package documentation.
 //
 // It is created and configured using Build(), followed by options setting and then calling
@@ -485,14 +485,14 @@ func (c *Config) MustDone() *Handler {
 // be used, for instance, for transfer learning, where parts of the model are loaded from somewhere
 // else.
 //
-// A Handler can only be "attached" to one context.Context. If one wants to load the same
+// A Handler can only be "attached" to one model.Context. If one wants to load the same
 // checkpoint to two different contexts, another Handler object needs to be created.
 // This is because once a variable is loaded, it is transferred to Context, and handler does
 // not keep it.
 type Handler struct {
 	config            *Config
-	ctx               *context.Context
-	prevContextLoader context.Loader
+	ctx               *model.Context
+	prevContextLoader model.Loader
 
 	serialized     *serializedData
 	variableValues map[string]*tensors.Tensor
@@ -505,7 +505,7 @@ type Handler struct {
 type serializedData struct {
 	Params []serializedParam
 
-	// Variables maps context.Variable.GetParameterName() to its position in storage.
+	// Variables maps model.Variable.GetParameterName() to its position in storage.
 	Variables []serializedVar
 	// BinFormat describes the format used by the binary file.  It is informative.
 	// The current valid values are "gzip" and "uncompressed"
@@ -867,7 +867,7 @@ func (h *Handler) Save() error {
 		return nil
 	}
 	if h.ctx == nil {
-		return errors.Errorf("%s not attached to a context.Context yet.", h)
+		return errors.Errorf("%s not attached to a model.Context yet.", h)
 	}
 
 	// Read globalStep if one is set.
@@ -901,7 +901,7 @@ func (h *Handler) Save() error {
 	}
 
 	// Copy over and set variables: both from Context and previously loaded ones, that haven't yet
-	// been loaded into context.
+	// been loaded into model.
 	h.serialized.Variables = make([]serializedVar, 0, h.ctx.NumVariables()+len(h.variableValues))
 	pos := 0
 	// * Closure to save the contents of a variable.
@@ -939,8 +939,8 @@ func (h *Handler) Save() error {
 		return nil
 	}
 
-	// * Loop over variables in context.
-	h.ctx.EnumerateVariables(func(v *context.Variable) {
+	// * Loop over variables in model.
+	h.ctx.EnumerateVariables(func(v *model.Variable) {
 		if err != nil {
 			return
 		}
@@ -1050,13 +1050,13 @@ func (h *Handler) keepNCheckpoints() error {
 	return nil
 }
 
-// attachTo attaches Handler to a context.Context. The first thing it does if there is a checkpoint
+// attachTo attaches Handler to a model.Context. The first thing it does if there is a checkpoint
 // loaded is to set the Context's Params from the loaded values (except if the Handler was configured
 // with ExcludeAllParams).
 //
 // attachTo can only be called once. It will fail, and set the given context to an error state if
 // requested to attach more than once.
-func (h *Handler) attachTo(ctx *context.Context) {
+func (h *Handler) attachTo(ctx *model.Context) {
 	if h.ctx != nil {
 		Panicf("%s already attached to a Context, can not attach to another one", h.config.dir)
 	}
@@ -1068,7 +1068,7 @@ func (h *Handler) attachTo(ctx *context.Context) {
 	if h.config.includeParams {
 		for _, p := range h.serialized.Params {
 			// Check for un-scoped and scoped exclusions:
-			if h.config.paramsToExclude.Has(p.Key) || h.config.paramsToExclude.Has(context.JoinScope(p.Scope, p.Key)) {
+			if h.config.paramsToExclude.Has(p.Key) || h.config.paramsToExclude.Has(model.JoinScope(p.Scope, p.Key)) {
 				continue
 			}
 			tmpCtx := ctx.InAbsPath(p.Scope)
@@ -1088,10 +1088,10 @@ func (h *Handler) Dir() string {
 	return h.config.dir
 }
 
-// LoadVariable implements context.Loader.
-// This is called by context.Context when the variable is used for the first time.
+// LoadVariable implements model.Loader.
+// This is called by model.Context when the variable is used for the first time.
 // The user may want to use this function to inspect loaded values for testing.
-func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value *tensors.Tensor, found bool) {
+func (h *Handler) LoadVariable(ctx *model.Context, scope, name string) (value *tensors.Tensor, found bool) {
 	// Priority is based on the installation order. That means we attempt first the previously configured loaders.
 	if h.prevContextLoader != nil {
 		value, found = h.prevContextLoader.LoadVariable(ctx, scope, name)
@@ -1102,7 +1102,7 @@ func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value 
 	}
 
 	// Try to find variable in our currently loaded checkpoint.
-	varParamName := context.VariableParameterNameFromScopeAndName(scope, name)
+	varParamName := model.VariableParameterNameFromScopeAndName(scope, name)
 	value, found = h.variableValues[varParamName]
 	if !found {
 		return
@@ -1113,14 +1113,14 @@ func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value 
 	return
 }
 
-// DeleteVariable implements context.Loader.
+// DeleteVariable implements model.Loader.
 // It is called whenever Context.DeleteVariable is called. The deletion should cascade to the
 // loader, otherwise the variable will reappear after deletion.
-func (h *Handler) DeleteVariable(ctx *context.Context, scope, name string) error {
+func (h *Handler) DeleteVariable(ctx *model.Context, scope, name string) error {
 	if h.prevContextLoader != nil {
 		h.prevContextLoader.DeleteVariable(ctx, scope, name)
 	}
-	varParamName := context.VariableParameterNameFromScopeAndName(scope, name)
+	varParamName := model.VariableParameterNameFromScopeAndName(scope, name)
 	delete(h.variableValues, varParamName)
 	return nil
 }
@@ -1135,7 +1135,7 @@ func (h *Handler) LoadedVariables() map[string]*tensors.Tensor {
 
 // ExcludeVarsFromSaving enumerates variables to be excluded from saving.
 // The function can be called multiple times, adding variables to be excluded from saving.
-func (h *Handler) ExcludeVarsFromSaving(vars ...*context.Variable) {
+func (h *Handler) ExcludeVarsFromSaving(vars ...*model.Variable) {
 	for _, v := range vars {
 		h.config.varsToExclude.Insert(v)
 	}

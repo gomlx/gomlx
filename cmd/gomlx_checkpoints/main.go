@@ -16,8 +16,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"k8s.io/klog/v2"
 
@@ -51,7 +51,7 @@ func main() {
 		pf("\n\t$ gomlx_checkpoints [flags...] <checkpoint_path> [<checkpoint_path2> ...]\n" +
 			"\ngomlx_checkpoints reports back on model size (and memory) usage (--summary), individual variables shapes and sizes (--vars), " +
 			"hyperparameters used with the model (--params) or metrics collected during model training (--metrics, --metrics_labels).\n" +
-			"\n\t<checkpoint_path> is the path of a checkpoint directory used to save a GoMLX model (see package github.com/gomlx/gomlx/pkg/ml/context/checkpoints)\n" +
+			"\n\t<checkpoint_path> is the path of a checkpoint directory used to save a GoMLX model (see package github.com/gomlx/gomlx/ml/model/checkpoints)\n" +
 			"\tSome flags support more than one checkpoint, which can be used to compare models.\n\n" +
 			"Flags:\n\n")
 		flag.PrintDefaults()
@@ -108,10 +108,10 @@ var (
 
 func Reports(checkpointPaths []string) {
 	numCheckpoints := len(checkpointPaths)
-	ctxs := make([]*context.Context, 0, len(checkpointPaths))
-	scopedCtxs := make([]*context.Context, 0, len(checkpointPaths))
+	ctxs := make([]*model.Context, 0, len(checkpointPaths))
+	scopedCtxs := make([]*model.Context, 0, len(checkpointPaths))
 	for _, checkpointPath := range checkpointPaths {
-		ctx := context.New()
+		ctx := model.New()
 		if *flagSummary || *flagParams || *flagVars {
 			_ = must.M1(checkpoints.Build(ctx).
 				Dir(checkpointPath).Immediate().Done())
@@ -149,7 +149,7 @@ func Reports(checkpointPaths []string) {
 }
 
 func Backup(checkpointPath string) {
-	ctx := context.New()
+	ctx := model.New()
 	checkpoint := must.M1(checkpoints.Build(ctx).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
 	must.M(checkpoint.Backup())

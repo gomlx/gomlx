@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
@@ -83,7 +83,7 @@ func buildExamples(
 }
 
 // modelGraph builds graph that returns predictions for inputs.
-func modelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func modelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	_ = spec
 	logits := layers.Dense(ctx, inputs[0], true, 1)
 	return []*Node{logits}
@@ -119,7 +119,7 @@ func main() {
 	// dataset := &Dataset{"training", []*tensors.Tensor{inputs}, []*tensors.Tensor{labels}}
 
 	// Creates Context with learned weights and bias.
-	ctx := context.New()
+	ctx := model.New()
 	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 
 	// train.Trainer executes a training step.

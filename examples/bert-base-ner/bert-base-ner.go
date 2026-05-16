@@ -23,7 +23,7 @@ import (
 	"github.com/gomlx/go-huggingface/hub"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	onnxparser "github.com/gomlx/onnx-gomlx/onnx/parser"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
@@ -77,7 +77,7 @@ func main() {
 	onnxModel := must.M1(onnxparser.ParseFile(onnxPath))
 
 	// Create context and load model weights
-	ctx := context.New()
+	ctx := model.New()
 	must.M(onnxModel.VariablesToContext(ctx))
 
 	// Create backend
@@ -105,9 +105,9 @@ func main() {
 	}
 
 	// Run inference with argmax and softmax computed in the graph
-	outputs := context.MustExecOnceN(
+	outputs := model.MustExecOnceN(
 		backend, ctx,
-		func(ctx *context.Context, inputs []*Node) []*Node {
+		func(ctx *model.Context, inputs []*Node) []*Node {
 			g := inputs[0].Graph()
 			logits := onnxModel.CallGraph(ctx, g,
 				map[string]*Node{

@@ -4,7 +4,7 @@ package imdb
 
 import (
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
@@ -13,7 +13,7 @@ import (
 )
 
 // Conv1DModelGraph implements a convolution (1D) based model for the IMDB dataset.
-func Conv1DModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func Conv1DModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	_ = spec
 	tokens := inputs[0]
 	embed, _ := EmbedTokensGraph(ctx, tokens)
@@ -26,9 +26,9 @@ func Conv1DModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	embedSize := embed.Shape().Dimensions[2]
 
 	// Dropout.
-	dropoutRate := context.GetParamOr(ctx, "cnn_dropout_rate", -1.0)
+	dropoutRate := model.GetParamOr(ctx, "cnn_dropout_rate", -1.0)
 	if dropoutRate < 0 {
-		dropoutRate = context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
+		dropoutRate = model.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
 	}
 	var dropoutNode *Node
 	if dropoutRate > 0.0 {
@@ -36,7 +36,7 @@ func Conv1DModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	}
 
 	// 1D Convolution: embed is [batch_size, content_len, embed_size].
-	numConvolutions := context.GetParamOr(ctx, "cnn_num_layers", 5)
+	numConvolutions := model.GetParamOr(ctx, "cnn_num_layers", 5)
 	logits := embed
 	for convIdx := range numConvolutions {
 		ctx := ctx.Inf("%03d_conv", convIdx)
@@ -63,11 +63,11 @@ func Conv1DModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 }
 
 // NormalizeSequence `x` according to "normalization" hyperparameter. Works for sequence nodes (rank-3).
-func NormalizeSequence(ctx *context.Context, x *Node) *Node {
+func NormalizeSequence(ctx *model.Context, x *Node) *Node {
 	x.AssertRank(3) // [batch_size, content_length, embed_size]
-	norm := context.GetParamOr(ctx, "cnn_normalization", "")
+	norm := model.GetParamOr(ctx, "cnn_normalization", "")
 	if norm == "" {
-		context.GetParamOr(ctx, layers.ParamNormalization, "")
+		model.GetParamOr(ctx, layers.ParamNormalization, "")
 	}
 
 	switch norm {

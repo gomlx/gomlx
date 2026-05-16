@@ -7,7 +7,7 @@ import (
 
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/examples/adult"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
 	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
@@ -19,7 +19,7 @@ import (
 // - categorical inputs, shaped  `(int64)[batch_size, len(VocabulariesFeatures)]`
 // - continuous inputs, shaped `(float32)[batch_size, len(Quantiles)]`
 // - weights: not currently used, but shaped `(float32)[batch_size, 1]`.
-func Model(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func Model(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	_ = spec // Not used, since the dataset is always the same.
 	g := inputs[0].Graph()
 	dtype := inputs[1].DType() // From continuous features.
@@ -69,7 +69,7 @@ func Model(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	logits.AssertDims(batchSize, -1)
 
 	// Model itself is an FNN or a KAN.
-	if context.GetParamOr(ctx, "kan", false) {
+	if model.GetParamOr(ctx, "kan", false) {
 		// Use KAN, all configured by context hyperparameters. See createDefaultContext for defaults.
 		logits = kan.New(ctx.In("kan"), logits, 1).Done()
 	} else {

@@ -20,8 +20,8 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoints"
 	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
@@ -479,7 +479,7 @@ var (
 // it can be used by models.
 //
 // They will be stored under the "ogbnmag" scope.
-func UploadOgbnMagVariables(backend compute.Backend, ctx *context.Context) *context.Context {
+func UploadOgbnMagVariables(backend compute.Backend, ctx *model.Context) *model.Context {
 	ctxMag := ctx.InAbsPath(OgbnMagVariablesScope)
 	for name, tPtr := range OgbnMagVariablesRef {
 		if *tPtr == nil {
@@ -494,7 +494,7 @@ func UploadOgbnMagVariables(backend compute.Backend, ctx *context.Context) *cont
 
 // ExcludeOgbnMagVariablesFromSave marks the OGBN-MAG variables as not to be saved by the given `checkpoint`.
 // Since they are read separately and are constant, no need to repeat them at every checkpoint.
-func ExcludeOgbnMagVariablesFromSave(ctx *context.Context, checkpoint *checkpoints.Handler) {
+func ExcludeOgbnMagVariablesFromSave(ctx *model.Context, checkpoint *checkpoints.Handler) {
 	ctxMag := ctx.InAbsPath(OgbnMagVariablesScope)
 	for name := range OgbnMagVariablesRef {
 		v := ctxMag.GetVariable(name)

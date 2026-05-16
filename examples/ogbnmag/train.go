@@ -15,8 +15,8 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoints"
 	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
@@ -60,7 +60,7 @@ func progressBarSpacing() {
 
 // InitTrainingSchedule initializes custom scheduled training.
 // It's enabled with the hyperparameter "scheduled_training".
-func InitTrainingSchedule(ctx *context.Context) {
+func InitTrainingSchedule(ctx *model.Context) {
 	// Start with split points frozen.
 	ctx.SetParam(kan.ParamDiscreteSplitPointsFrozen, true)
 }
@@ -68,7 +68,7 @@ func InitTrainingSchedule(ctx *context.Context) {
 // TrainingSchedule is used to control hyperparameters during training.
 // The parameters fromStep and toStep are the starting and final global_steps of training.
 // It's enabled with the hyperparameter "scheduled_training".
-func TrainingSchedule(ctx *context.Context, fromStep, toStep int) train.OnStepFn {
+func TrainingSchedule(ctx *model.Context, fromStep, toStep int) train.OnStepFn {
 	percentageToStep := func(pct int) int {
 		return pct * (fromStep + toStep) / 100
 	}
@@ -83,7 +83,7 @@ func TrainingSchedule(ctx *context.Context, fromStep, toStep int) train.OnStepFn
 			fmt.Println("\tTrain split_points, smoothness_schedule=none")
 			ctx.SetParam(kan.ParamDiscreteSplitPointsFrozen, false)
 			ctx.SetParam(kan.ParamDiscreteSoftnessSchedule, "none")
-			ctx.EnumerateVariables(func(v *context.Variable) {
+			ctx.EnumerateVariables(func(v *model.Variable) {
 				if v.Name() == "kan_discrete_split_points" {
 					v.Trainable = true
 				} else if slices.Index([]string{"kan_discrete_control_points", "embeddings", "weights", "biases"}, v.Name()) != -1 {
@@ -101,7 +101,7 @@ func TrainingSchedule(ctx *context.Context, fromStep, toStep int) train.OnStepFn
 
 			fmt.Println("\tTrain control_points, freeze split_points, , smoothness_schedule=exponential")
 			ctx.SetParam(kan.ParamDiscreteSoftnessSchedule, "exponential")
-			ctx.EnumerateVariables(func(v *context.Variable) {
+			ctx.EnumerateVariables(func(v *model.Variable) {
 				if v.Name() == "kan_discrete_split_points" {
 					v.Trainable = false
 				} else if slices.Index([]string{"kan_discrete_control_points", "embeddings", "weights", "biases"}, v.Name()) != -1 {
@@ -118,14 +118,14 @@ func TrainingSchedule(ctx *context.Context, fromStep, toStep int) train.OnStepFn
 // Train GNN model based on configuration in `ctx`.
 func Train(
 	backend compute.Backend,
-	ctx *context.Context,
+	ctx *model.Context,
 	dataDir, checkpointPath string,
 	layerWiseEval, report bool,
 	paramsSet []string,
 ) error {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
-	ReuseShareableKernels = context.GetParamOr(ctx, ParamReuseKernels, true)
-	IdentitySubSeeds = context.GetParamOr(ctx, ParamIdentitySubSeeds, true)
+	ReuseShareableKernels = model.GetParamOr(ctx, ParamReuseKernels, true)
+	IdentitySubSeeds = model.GetParamOr(ctx, ParamIdentitySubSeeds, true)
 
 	trainDS, trainEvalDS, validEvalDS, testEvalDS, err := MakeDatasets(dataDir)
 	_ = testEvalDS
@@ -137,7 +137,7 @@ func Train(
 	// Checkpoint: it loads if already exists, and it will save as we train.
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
-		numCheckpointsToKeep := context.GetParamOr(ctx, ParamNumCheckpoints, 5)
+		numCheckpointsToKeep := model.GetParamOr(ctx, ParamNumCheckpoints, 5)
 		var err error
 		checkpoint, err = checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
@@ -169,7 +169,7 @@ func Train(
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
 	var plots *plotly.PlotConfig
-	usePlots := context.GetParamOr(ctx, margaid.ParamPlots, false)
+	usePlots := model.GetParamOr(ctx, margaid.ParamPlots, false)
 	if usePlots {
 		stepsPerEpoch := TrainSplit.Shape().Size()/BatchSize + 1
 		plots = plotly.New().WithCheckpoint(checkpoint).Dynamic().
@@ -185,7 +185,7 @@ func Train(
 	}
 
 	// Loop for given number of steps
-	trainSteps := context.GetParamOr(ctx, "train_steps", 100)
+	trainSteps := model.GetParamOr(ctx, "train_steps", 100)
 	globalStep := int(optimizers.GetGlobalStep(ctx))
 	if trainSteps <= globalStep {
 		fmt.Printf("> training already reached target train_steps=%d. To train further, set a number additional "+
@@ -198,7 +198,7 @@ func Train(
 	}
 
 	// Set up scheduled training.
-	if context.GetParamOr(ctx, "scheduled_training", false) {
+	if model.GetParamOr(ctx, "scheduled_training", false) {
 		InitTrainingSchedule(ctx)
 		loop.OnStep(
 			"TrainingSchedule",
@@ -235,7 +235,7 @@ func Train(
 
 var NanLogger *nanlogger.NanLogger
 
-func newTrainer(backend compute.Backend, ctx *context.Context) *train.Trainer {
+func newTrainer(backend compute.Backend, ctx *model.Context) *train.Trainer {
 	// Loss: multi-class classification problem.
 	lossFn := losses.SparseCategoricalCrossEntropyLogits
 
@@ -257,7 +257,7 @@ func newTrainer(backend compute.Backend, ctx *context.Context) *train.Trainer {
 
 func Eval(
 	backend compute.Backend,
-	ctx *context.Context,
+	ctx *model.Context,
 	dataDir, checkpointPath string,
 	layerWise, skipTrain bool,
 ) error {
@@ -276,7 +276,7 @@ func Eval(
 	return evalWithContext(backend, ctx, dataDir, layerWise, skipTrain)
 }
 
-func evalWithContext(backend compute.Backend, ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
+func evalWithContext(backend compute.Backend, ctx *model.Context, baseDir string, layerWise, skipTrain bool) error {
 	if layerWise {
 		return evalLayerWise(backend, ctx, baseDir)
 	}
@@ -295,7 +295,7 @@ func evalWithContext(backend compute.Backend, ctx *context.Context, baseDir stri
 }
 
 // evalSampled evaluates GNN model based on configuration in `ctx` using sampled sub-graphs.
-func evalSampled(backend compute.Backend, ctx *context.Context, datasets ...train.Dataset) error {
+func evalSampled(backend compute.Backend, ctx *model.Context, datasets ...train.Dataset) error {
 	// Evaluation on the various eval datasets.
 	trainer := newTrainer(backend, ctx)
 	for _, ds := range datasets {
@@ -311,7 +311,7 @@ func evalSampled(backend compute.Backend, ctx *context.Context, datasets ...trai
 }
 
 // evalLayerWise evaluates GNN model based on configuration in `ctx` using layer-wise inference.
-func evalLayerWise(backend compute.Backend, ctx *context.Context, baseDir string) error {
+func evalLayerWise(backend compute.Backend, ctx *model.Context, baseDir string) error {
 	// Create the OGBN-MAG strategy, used by the layer-wise inference: batch-size is irrelevant.
 	magSampler, err := NewSampler(baseDir)
 	if err != nil {
@@ -329,8 +329,8 @@ func evalLayerWise(backend compute.Backend, ctx *context.Context, baseDir string
 }
 
 // getDType returns the dtype selected in the context hyperparameters.
-func getDType(ctx *context.Context) dtypes.DType {
-	dtypeStr := context.GetParamOr(ctx, ParamDType, "float32")
+func getDType(ctx *model.Context) dtypes.DType {
+	dtypeStr := model.GetParamOr(ctx, ParamDType, "float32")
 	switch dtypeStr {
 	case "float32":
 		return dtypes.Float32
@@ -349,7 +349,7 @@ func getDType(ctx *context.Context) dtypes.DType {
 // convertPaperEmbeddings converts the "PapersEmbeddings" variable to the selected dtype, if needed.
 //
 // One should be careful not to save the converted values -- ideally, the values are saved in the original Float32.
-func convertPapersEmbeddings(backend compute.Backend, ctx *context.Context) {
+func convertPapersEmbeddings(backend compute.Backend, ctx *model.Context) {
 	dtype := getDType(ctx)
 	dtypeEmbed := dtype
 	if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {
@@ -367,7 +367,7 @@ func convertPapersEmbeddings(backend compute.Backend, ctx *context.Context) {
 		return
 	}
 
-	e := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+	e := model.MustNewExec(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
 		return ConvertDType(papersVar.ValueGraph(g), dtype)
 	})
 	converted := e.MustExec()[0]

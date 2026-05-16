@@ -13,11 +13,11 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoints"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
@@ -35,7 +35,7 @@ var (
 // See NewConfig.
 type Config struct {
 	Backend compute.Backend
-	Context *context.Context // Usually, at the root scope.
+	Context *model.Context // Usually, at the root scope.
 
 	// DataDir is where the data is downloaded, and models are saved.
 	DataDir string
@@ -60,24 +60,24 @@ type Config struct {
 // NewConfig creates a configuration for most of the diffusion methods.
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
-func NewConfig(backend compute.Backend, ctx *context.Context, dataDir string, paramsSet []string) *Config {
+func NewConfig(backend compute.Backend, ctx *model.Context, dataDir string, paramsSet []string) *Config {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
 		check(os.MkdirAll(dataDir, 0777))
 	}
 	dtype := check1(dtypes.DTypeString(
-		context.GetParamOr(ctx, "dtype", "float32")))
+		model.GetParamOr(ctx, "dtype", "float32")))
 	cfg := &Config{
 		Backend:       backend,
 		Context:       ctx,
 		DataDir:       dataDir,
-		ImageSize:     context.GetParamOr(ctx, "image_size", 64),
-		BatchSize:     context.GetParamOr(ctx, "batch_size", 64),
-		EvalBatchSize: context.GetParamOr(ctx, "eval_batch_size", 128),
+		ImageSize:     model.GetParamOr(ctx, "image_size", 64),
+		BatchSize:     model.GetParamOr(ctx, "batch_size", 64),
+		EvalBatchSize: model.GetParamOr(ctx, "eval_batch_size", 128),
 		DType:         dtype,
 		ParamsSet:     paramsSet,
 	}
-	useNanLogger := context.GetParamOr(ctx, "nan_logger", false)
+	useNanLogger := model.GetParamOr(ctx, "nan_logger", false)
 	if useNanLogger {
 		cfg.NanLogger = nanlogger.New()
 	}
@@ -141,7 +141,7 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 		c.Backend,
 		nil,
 		trainDS,
-		func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
+		func(ctx *model.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
 			images := c.PreprocessImages(inputs[0], false)
 			return []*Node{images}, labels
 		},

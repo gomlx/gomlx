@@ -24,12 +24,12 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializers"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
-// KVCacheScopeName is the scope name used for KV cache variables in the context.
+// KVCacheScopeName is the scope name used for KV cache variables in the model.
 const KVCacheScopeName = "kv_cache"
 
 // KV cache variable names
@@ -41,7 +41,7 @@ const (
 // KVCacheReset clears all KV caches under the given context scope.
 // Call this outside of graph execution before starting a new generation.
 // This resets the key cache, value cache, and position for all attention layers
-// under the provided context.
+// under the provided model.
 //
 // Parameters:
 //   - ctx: Context scope under which to find and reset KV cache variables.
@@ -55,9 +55,9 @@ const (
 //
 //	// Or reset only a specific layer's cache:
 //	attention.KVCacheReset(layerCtx)
-func KVCacheReset(ctx *context.Context) {
-	keySuffix := fmt.Sprintf("%s%s%s%s", context.ScopeSeparator, KVCacheScopeName, context.ScopeSeparator, kvCacheKeyName)
-	valueSuffix := fmt.Sprintf("%s%s%s%s", context.ScopeSeparator, KVCacheScopeName, context.ScopeSeparator, kvCacheValueName)
+func KVCacheReset(ctx *model.Context) {
+	keySuffix := fmt.Sprintf("%s%s%s%s", model.ScopeSeparator, KVCacheScopeName, model.ScopeSeparator, kvCacheKeyName)
+	valueSuffix := fmt.Sprintf("%s%s%s%s", model.ScopeSeparator, KVCacheScopeName, model.ScopeSeparator, kvCacheValueName)
 
 	for v := range ctx.IterVariablesInScope() {
 		scopeAndName := v.ScopeAndName()
@@ -80,7 +80,7 @@ func KVCacheReset(ctx *context.Context) {
 // Returns:
 //   - keyVar: Variable storing cached key projections
 //   - valueVar: Variable storing cached value projections
-func KVCacheGetVars(ctx *context.Context, cacheShape shapes.Shape) (keyVar, valueVar *context.Variable) {
+func KVCacheGetVars(ctx *model.Context, cacheShape shapes.Shape) (keyVar, valueVar *model.Variable) {
 	if cacheShape.Rank() != 4 {
 		Panicf("KV cache shape must have rank 4, got %s", cacheShape)
 	}
@@ -111,7 +111,7 @@ func KVCacheGetVars(ctx *context.Context, cacheShape shapes.Shape) (keyVar, valu
 //	    KVCacheUpdate(layerCtx, g, cacheShape, position, newKeys, newValues)
 //	}
 //	// Then increment position for next iteration (managed by caller)
-func KVCacheUpdate(ctx *context.Context, g *Graph, cacheShape shapes.Shape, startPosition *Node, newKeysSlice, newValuesSlice *Node) {
+func KVCacheUpdate(ctx *model.Context, g *Graph, cacheShape shapes.Shape, startPosition *Node, newKeysSlice, newValuesSlice *Node) {
 	keyVar, valueVar := KVCacheGetVars(ctx, cacheShape)
 
 	// Get current cache state
@@ -160,9 +160,9 @@ func KVCacheUpdate(ctx *context.Context, g *Graph, cacheShape shapes.Shape, star
 	valueVar.SetValueGraph(valueCache)
 }
 
-// getKVCache returns key/value caches from the given context.
+// getKVCache returns key/value caches from the given model.
 // cacheShape must be [batchSize, numHeads, maxSeqLen, headDim].
-func getKVCache(ctx *context.Context, g *Graph, cacheShape shapes.Shape) (keys, values *Node) {
+func getKVCache(ctx *model.Context, g *Graph, cacheShape shapes.Shape) (keys, values *Node) {
 	keyVar, valueVar := KVCacheGetVars(ctx, cacheShape)
 	return keyVar.ValueGraph(g), valueVar.ValueGraph(g)
 }

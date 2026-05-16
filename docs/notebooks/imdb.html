@@ -7745,7 +7745,7 @@ Loaded data from "aclImdb.bin": 100000 examples, 141088 unique tokens, 23727054 
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h2 id="Training">Training<a class="anchor-link" href="#Training">¶</a></h2><p>We will create 3 different types of models for this demo: <strong>Bag of Words</strong> (<strong>"bow"</strong>), <strong>Convolutionals</strong> (<strong>"cnn"</strong>) and <strong>Transformers</strong> (<strong>"transformer"</strong>).</p>
-<h3 id="Model-Configuration">Model Configuration<a class="anchor-link" href="#Model-Configuration">¶</a></h3><p>As with other demos we leverage the <code>context.Context</code> object to store all model and training parameters.
+<h3 id="Model-Configuration">Model Configuration<a class="anchor-link" href="#Model-Configuration">¶</a></h3><p>As with other demos we leverage the <code>model.Context</code> object to store all model and training parameters.
 One can set specific parameters using the <code>-set</code> command line flag.</p>
 <p>The <a href="https://github.com/gomlx/gomlx/blob/main/examples/imdb/train.go"><code>imdb.CreateDefaultContext()</code></a> method sets all the default values for the hyperparameters that may be used by any of the 3 model types. The parameter "model" specify the model type.</p>
 </div>

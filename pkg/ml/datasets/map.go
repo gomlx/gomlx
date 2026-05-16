@@ -7,23 +7,23 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 )
 
 // MapGraphFn if a graph building function that transforms inputs and labels.
-type MapGraphFn func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node)
+type MapGraphFn func(ctx *model.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node)
 
 // mapGraphFnDataset implements a `train.Dataset` that maps a graph building function to a wrapped dataset.
 // See [MapWithGraphFn] on how to use it.
 type mapGraphFnDataset struct {
 	backend                          compute.Backend
-	ctx                              *context.Context
+	ctx                              *model.Context
 	ds                               train.Dataset
 	mapGraphFn                       MapGraphFn
-	mapGraphFnExec                   *context.Exec
+	mapGraphFnExec                   *model.Exec
 	numInputs, numLabels             int
 	numMappedInputs, numMappedLabels int
 }
@@ -35,7 +35,7 @@ type mapGraphFnDataset struct {
 //
 // The graph building function `graphFn` can return a different number of `inputs` or `labels` than what it was given,
 // but these numbers should never change -- always return the same number of inputs and labels.
-func MapWithGraphFn(backend compute.Backend, ctx *context.Context, dataset train.Dataset, graphFn MapGraphFn) train.Dataset {
+func MapWithGraphFn(backend compute.Backend, ctx *model.Context, dataset train.Dataset, graphFn MapGraphFn) train.Dataset {
 	mapDS := &mapGraphFnDataset{
 		backend:    backend,
 		ctx:        ctx,
@@ -43,7 +43,7 @@ func MapWithGraphFn(backend compute.Backend, ctx *context.Context, dataset train
 		mapGraphFn: graphFn,
 	}
 	if mapDS.ctx == nil {
-		mapDS.ctx = context.New()
+		mapDS.ctx = model.New()
 	}
 	return mapDS
 }
@@ -70,8 +70,8 @@ func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []*tensors.Tensor, lab
 		// Build execution of MapGraphFn
 		mapDS.numInputs = len(inputs)
 		mapDS.numLabels = len(labels)
-		mapDS.mapGraphFnExec = context.MustNewExec(mapDS.backend, mapDS.ctx,
-			func(ctx *context.Context, inputsAndLabels []*Node) []*Node {
+		mapDS.mapGraphFnExec = model.MustNewExec(mapDS.backend, mapDS.ctx,
+			func(ctx *model.Context, inputsAndLabels []*Node) []*Node {
 				var inputs, labels []*Node
 				if mapDS.numInputs > 0 {
 					inputs = inputsAndLabels[:mapDS.numInputs]

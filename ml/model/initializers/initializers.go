@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-// Package initializers include several weight initializers, to be used with a context.Context.
+// Package initializers include several weight initializers, to be used with a model.Context.
 //
 // They construct computation.VariableInitializer closures.
 package initializers
@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -22,13 +22,13 @@ var (
 	// which makes it non-deterministic. Set it to a value different from 0 for a deterministic initialization
 	// (as long as the model doesn't change).
 	//
-	// It is an alias to context.ParamInitialSeed.
-	ParamInitialSeed = context.ParamInitialSeed
+	// It is an alias to model.ParamInitialSeed.
+	ParamInitialSeed = model.ParamInitialSeed
 )
 
 // VariableInitializer builds a node that returns a value to initialize a variable of the given
 // shape. It is defined in the Context.
-type VariableInitializer = context.VariableInitializer
+type VariableInitializer = model.VariableInitializer
 
 // Zero initializes variables with zero.
 func Zero(graph *Graph, shape shapes.Shape) *Node {
@@ -48,7 +48,7 @@ func One(graph *Graph, shape shapes.Shape) *Node {
 // If it is set to 0 (NoSeed, the default), a random seed is instead generated (from the nanosecond clock).
 //
 // Non-float and non-complex variables are initialized with zero instead.
-func RandomNormalFn(ctx *context.Context, stddev float64) VariableInitializer {
+func RandomNormalFn(ctx *model.Context, stddev float64) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if shape.DType != dtypes.Float32 && shape.DType != dtypes.Float64 {
 			return Zeros(g, shape)
@@ -65,7 +65,7 @@ func RandomNormalFn(ctx *context.Context, stddev float64) VariableInitializer {
 // If it is set to 0 (NoSeed, the default), a random seed is instead generated (from the nanosecond clock).
 //
 // Non-float and non-complex variables are initialized with zero instead.
-func RandomUniformFn(ctx *context.Context, min, max float64) VariableInitializer {
+func RandomUniformFn(ctx *model.Context, min, max float64) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -98,7 +98,7 @@ func RandomUniformFn(ctx *context.Context, min, max float64) VariableInitializer
 // It initializes biases (anything with rank <= 1) to zeros.
 //
 // Non-float and non-complex variables are initialized with zero instead.
-func GlorotUniformFn(ctx *context.Context) VariableInitializer {
+func GlorotUniformFn(ctx *model.Context) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -152,7 +152,7 @@ func computeFanInFanOut(shape shapes.Shape) (fanIn, fanOut int) {
 // It initializes biases (anything with rank <= 1) to zeros.
 //
 // Non-float and non-complex variables are initialized with zero instead.
-func XavierUniformFn(ctx *context.Context) VariableInitializer {
+func XavierUniformFn(ctx *model.Context) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -181,7 +181,7 @@ func XavierUniformFn(ctx *context.Context) VariableInitializer {
 // It initializes biases (anything with rank <= 1) to zeros.
 //
 // Non-float and non-complex variables are initialized with zero instead.
-func XavierNormalFn(ctx *context.Context) VariableInitializer {
+func XavierNormalFn(ctx *model.Context) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -208,7 +208,7 @@ func XavierNormalFn(ctx *context.Context) VariableInitializer {
 //
 // [1] https://medium.com/@tylernisonoff/weight-initialization-for-cnns-a-deep-dive-into-he-initialization-50b03f37f53d
 // [2] https://arxiv.org/pdf/1502.01852
-func HeFn(ctx *context.Context) VariableInitializer {
+func HeFn(ctx *model.Context) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)

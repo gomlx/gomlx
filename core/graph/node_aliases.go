@@ -17,7 +17,7 @@ import (
 // an alias "output" to the node with the output of the layer. The different scope helps
 // differentiate the different "output" aliases nodes.
 //
-// Notice this is orthogonal to the context.Context scope used for variables.
+// Notice this is orthogonal to the model.Context scope used for variables.
 // That's because for instance, one may reuse a model multiple times for different inputs (e.g.: triplet loss
 // will use the same model for the "anchor", "positive" and "negative" examples, or a style transfer model
 // will use the same embedding model for the "source", "style" and "target" images), so the variables context

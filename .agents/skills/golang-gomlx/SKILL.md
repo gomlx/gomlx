@@ -42,7 +42,7 @@ go get -u github.com/gomlx/gomlx
 - Computation Graph (`github.com/gomlx/gomlx/pkg/core/graph`): The `Graph` object is the container for computation nodes.
   - Computations are built using `*Node` objects. Each node represents an operation or a value.
   - The graph building phase is separate from the execution phase. You build the graph first, then execute it.
-  - Executor: (`graph.Exec` or `context.Exec`) takes a graph-building function, JIT-compiles it, and provides methods to execute it.
+  - Executor: (`graph.Exec` or `model.Exec`) takes a graph-building function, JIT-compiles it, and provides methods to execute it.
 - Backends (`github.com/gomlx/gomlx/backends`): It abstracts backend engines to execute computations on devices (accelerators or the CPU itself). 
   One doesn't need to interact with it directly except if implementing one, just need to pass it around, and know that they exist.
   Usually, one imports (`import _ "github.com/gomlx/gomlx/backends/default"`) to include support for the default backends.
@@ -51,7 +51,7 @@ go get -u github.com/gomlx/gomlx
 - Tensors: (`github.com/gomlx/gomlx/pkg/core/tensors`): These represent actual values, that can have local storage or "on-device" (accelerator) storage.
   Usually, they are only used as inputs and outputs of computations, or to save, load or print values. Most methods are about conversion or
   access to the underlying data (e.g., `tensor.Value()` returns a generic value, or `tensor.Local().Copy()` for moving back to CPU memory).
-- Context: (`github.com/gomlx/gomlx/pkg/ml/context`): A container for stateful variables (like model weights) and hyperparameters. It has reference semantics.
+- Context: (`github.com/gomlx/gomlx/ml/model`): A container for stateful variables (like model weights) and hyperparameters. It has reference semantics.
 
 ### Creating a graph computation -- package `github.com/gomlx/gomlx/pkg/core/graph`
 
@@ -97,20 +97,20 @@ func EuclideanDistance(a, b *Node) *Node {
 - Constructors: Use `tensors.FromValue(any)` or `tensors.FromShape(shape)` to create tensors.
 - Donation for execution: You can "donate" a tensor to an execution to allow XLA to reuse its memory for outputs using `exec.Call(input1, input2)`. The donated tensor's memory will be overwritten, so it shouldn't be used afterward.
 
-### Context: container for variables and hyperparameters -- package `github.com/gomlx/gomlx/pkg/ml/context`
+### Context: container for variables and hyperparameters -- package `github.com/gomlx/gomlx/ml/model`
 
 - Scope: A context represents a hierarchical scope (e.g., `/model/layer1`). You can enter sub-scopes via `ctx.In("layer1")`.
-- `context.Context` has a reference semantics and works as a "current scope path", and can cheaply be copied.
+- `model.Context` has a reference semantics and works as a "current scope path", and can cheaply be copied.
 - Variables: Are created using `ctx.VariableWithValue(name, value)` or `ctx.VariableWithShape(name, shape)`. Once created, they persist in the context and can be retrieved using `ctx.InspectVariable(...)`.
-- Hyperparameters: Set with `ctx.SetParam("key", value)` and retrieved with `context.GetParamOr(ctx, "key", defaultValue)`.
+- Hyperparameters: Set with `ctx.SetParam("key", value)` and retrieved with `model.GetParamOr(ctx, "key", defaultValue)`.
 - Checkpointing: `checkpoints.New(ctx, dir)` helps save and load the state of all variables in a context.
 - Trainable: Variables are by default trainable.
-- `Exec`: `context.Exec` is similar to `graph.Exec` but designed for ML models. Its builder function takes an extra `*context.Context` parameter. Variables can be used and set in the graph building, and `context.Exec` will handle passing their values as inputs and outputs.
+- `Exec`: `model.Exec` is similar to `graph.Exec` but designed for ML models. Its builder function takes an extra `*model.Context` parameter. Variables can be used and set in the graph building, and `model.Exec` will handle passing their values as inputs and outputs.
 
 Example:
 
 ```go
-func DenseLayer(ctx *context.Context, x *Node, outputDim int) *Node {
+func DenseLayer(ctx *model.Context, x *Node, outputDim int) *Node {
 	inputDim := x.Shape().Dimensions[len(x.Shape().Dimensions)-1]
 	weightsVar := ctx.VariableWithShape("weights", shapes.Make(x.DType(), inputDim, outputDim))
 	biasVar := ctx.VariableWithShape("bias", shapes.Make(x.DType(), outputDim))
@@ -123,7 +123,7 @@ func DenseLayer(ctx *context.Context, x *Node, outputDim int) *Node {
 ### Machine Learning Layers -- package `github.com/gomlx/gomlx/pkg/ml/layers` and sub-packages
 
 - The `layers` package provides standard higher-level building blocks for ML models.
-- Uses `*context.Context` extensively to manage the weights/biases for each layer.
+- Uses `*model.Context` extensively to manage the weights/biases for each layer.
 - Sub-packages include `activations` (Relu, Swish, etc.), `fnn` (feed-forward neural networks), `kan` (Kolmogorov-Arnold Networks), `regularizers`, etc.
 - **See [`layers` package reference](./references/layers.md)** for a list of common layers and their PyTorch equivalents.
 
@@ -131,7 +131,7 @@ func DenseLayer(ctx *context.Context, x *Node, outputDim int) *Node {
 
 - Example from `examples/adult/demo`: Shows a full ML pipeline.
 - `train.Trainer` orchestrates the model function, the loss function, and the optimizer.
-  - Needs `context.Context`, a model function, a loss function (e.g., `losses.BinaryCrossentropyLogits`), and an optimizer (e.g., `optimizers.Adam`).
+  - Needs `model.Context`, a model function, a loss function (e.g., `losses.BinaryCrossentropyLogits`), and an optimizer (e.g., `optimizers.Adam`).
 - Metrics (`pkg/ml/train/metrics`): Used to evaluate model performance during training and evaluation.
   - Metrics are provided as lists during `train.NewTrainer` initialization (one list for train metrics, one for eval metrics).
   - Common metrics include `metrics.NewMeanBinaryLogitsAccuracy()`, `metrics.NewSparseCategoricalAccuracy()`.
@@ -160,7 +160,7 @@ loop := train.NewLoop(trainer)
 commandline.AttachProgressBar(loop)
 
 // 6. Get hyperparameters and run the training loop
-trainSteps := context.GetParamOr(ctx, "train_steps", 1000)
+trainSteps := model.GetParamOr(ctx, "train_steps", 1000)
 _, err := loop.RunToGlobalStep(trainDS, trainSteps)
 if err != nil {
 	return err

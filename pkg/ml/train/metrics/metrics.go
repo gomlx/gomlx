@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/google/uuid"
@@ -42,14 +42,14 @@ type Interface interface {
 	//
 	// Weights and masks are by convention given as extra `*Node` values in the labels slice,
 	// when supported by the metrics.
-	UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node)
+	UpdateGraph(ctx *model.Context, labels, predictions []*Node) (metric *Node)
 
 	// PrettyPrint is used to pretty-print a metric value, usually in a short form.
 	PrettyPrint(value *tensors.Tensor) string
 
 	// Reset metrics internal counters when starting a new evaluation.
 	// Notice this may be called before UpdateGraph, and the metric should handle this without errors.
-	Reset(ctx *context.Context)
+	Reset(ctx *model.Context)
 }
 
 // UpdateGo interface can be implemented by metrics that prefer to update their values during
@@ -82,8 +82,8 @@ const (
 )
 
 // BaseMetricGraph is a graph building function of any metric that can be calculated stateless, without the need for
-// any context. It should return a scalar, the mean for the given batch.
-type BaseMetricGraph func(ctx *context.Context, labels, predictions []*Node) *Node
+// any model. It should return a scalar, the mean for the given batch.
+type BaseMetricGraph func(ctx *model.Context, labels, predictions []*Node) *Node
 
 // PrettyPrintFn is a function to convert a metric value to a string.
 type PrettyPrintFn func(value *tensors.Tensor) string
@@ -109,12 +109,12 @@ func (m *baseMetric) MetricType() string {
 
 func (m *baseMetric) ScopeName() string {
 	if m.scopeName == "" {
-		m.scopeName = context.EscapeScopeName(fmt.Sprintf("%s_uuid_%s", m.Name(), uuid.NewString()))
+		m.scopeName = model.EscapeScopeName(fmt.Sprintf("%s_uuid_%s", m.Name(), uuid.NewString()))
 	}
 	return m.scopeName
 }
 
-func (m *baseMetric) UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node) {
+func (m *baseMetric) UpdateGraph(ctx *model.Context, labels, predictions []*Node) (metric *Node) {
 	result := m.metricFn(ctx, labels, predictions)
 	if !result.Shape().IsScalar() {
 		Panicf("metric %q should return a scalar, instead got shape %s", m.Name(), result.Shape())
@@ -140,7 +140,7 @@ func (m *baseMetric) PrettyPrint(value *tensors.Tensor) string {
 	return m.pPrintFn(value)
 }
 
-func (m *baseMetric) Reset(_ *context.Context) {}
+func (m *baseMetric) Reset(_ *model.Context) {}
 
 // NewBaseMetric creates a stateless metric from any BaseMetricGraph function, it will return the metric
 // calculated solely on the last batch.
@@ -212,7 +212,7 @@ func upPrecision(x *Node) *Node {
 	return x
 }
 
-func (m *MeanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node) {
+func (m *MeanMetric) UpdateGraph(ctx *model.Context, labels, predictions []*Node) (metric *Node) {
 	g := predictions[0].Graph()
 	var result *Node
 	err := TryCatch[error](func() { result = m.metricFn(ctx, labels, predictions) })
@@ -260,7 +260,7 @@ func (m *MeanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 	return mean
 }
 
-func (m *MeanMetric) Reset(ctx *context.Context) {
+func (m *MeanMetric) Reset(ctx *model.Context) {
 	ctx = ctx.Reuse().In(Scope).In(m.ScopeName())
 	totalVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "total")
 	if totalVar == nil {
@@ -305,7 +305,7 @@ func NewExponentialMovingAverageMetric(
 }
 
 // UpdateGraph implements metrics.Interface.
-func (m *movingAverageMetric) UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node) {
+func (m *movingAverageMetric) UpdateGraph(ctx *model.Context, labels, predictions []*Node) (metric *Node) {
 	g := predictions[0].Graph()
 	var result *Node
 	err := TryCatch[error](func() { result = m.metricFn(ctx, labels, predictions) })
@@ -347,7 +347,7 @@ func (m *movingAverageMetric) UpdateGraph(ctx *context.Context, labels, predicti
 // BinaryAccuracyGraph can be used in combination with New*Metric functions to build metrics for binary accuracy.
 // It assumes predictions are probabilities, that labels are `{0, 1}`, and those predictions and labels have
 // the same shape and dtype.
-func BinaryAccuracyGraph(_ *context.Context, labels, predictions []*Node) *Node {
+func BinaryAccuracyGraph(_ *model.Context, labels, predictions []*Node) *Node {
 	prediction := predictions[0]
 	g := prediction.Graph()
 	if len(labels) != 1 {
@@ -397,7 +397,7 @@ func NewMovingAverageBinaryAccuracy(name, shortName string, newExampleWeight flo
 //
 // labels is converted to predictions dtype, and it's expected to convert to 1.0 (for true) or 0.0 for false.
 // So booleans should work, as an int type that is 0 or 1.
-func BinaryLogitsAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node {
+func BinaryLogitsAccuracyGraph(_ *model.Context, labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	g := logits0.Graph()
 	if len(labels) != 1 {
@@ -455,7 +455,7 @@ func NewMovingAverageBinaryLogitsAccuracy(name, shortName string, newExampleWeig
 //
 // Weights and mask can be given in the `labels` slice, following the labels themselves and they
 // will be accounted for.
-func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node {
+func SparseCategoricalAccuracyGraph(_ *model.Context, labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	g := logits0.Graph()
 	labels0 := labels[0]
