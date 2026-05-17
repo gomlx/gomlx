@@ -4,7 +4,6 @@ package model
 
 import (
 	"iter"
-	"path"
 	"slices"
 	"strings"
 
@@ -138,7 +137,7 @@ func (s *Store) GetVariable(fullPath string) *Variable {
 		return nil
 	}
 
-	scopePath, name := path.Split(fullPath)
+	scopePath, name := SplitPath(fullPath)
 	if scopePath == "" {
 		scopePath = "/"
 	} else if len(scopePath) > 1 && strings.HasSuffix(scopePath, "/") {

@@ -3,8 +3,6 @@
 package model
 
 import (
-	"path"
-
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -26,7 +24,7 @@ var (
 
 // getRNGStateVar panics if it fails to create the random state.
 func (s *Store) getRNGStateVar() *Variable {
-	fullPath := path.Join("/", RNGStateVariableName)
+	fullPath := JoinPath("/", RNGStateVariableName)
 	rngStateVar := s.GetVariable(fullPath)
 	if rngStateVar != nil {
 		return rngStateVar

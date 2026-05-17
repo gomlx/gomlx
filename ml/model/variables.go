@@ -4,7 +4,6 @@ package model
 
 import (
 	"fmt"
-	"path"
 	"strings"
 
 	"github.com/gomlx/compute/distributed"
@@ -280,7 +279,7 @@ const VariableParameterPrefix = "var:"
 
 // ScopeAndName is a quick pretty-print way to refer to a variable.
 func (v *Variable) ScopeAndName() string {
-	return path.Join(v.scopePath, v.name)
+	return JoinPath(v.scopePath, v.name)
 }
 
 // ParameterName used when creating a parameter node in a Graph to access the variable, or as a key when saving.
@@ -297,12 +296,12 @@ func VariableScopeAndNameFromParameterName(parameterName string) (scope, name st
 		return scope, name
 	}
 	fullPath := parameterName[len(VariableParameterPrefix):]
-	return path.Split(fullPath)
+	return SplitPath(fullPath)
 }
 
 // VariableParameterNameFromScopeAndName creates the [Variable.ParameterName] from its scope and name.
 func VariableParameterNameFromScopeAndName(scope, name string) string {
-	return VariableParameterPrefix + path.Join(scope, name)
+	return VariableParameterPrefix + JoinPath(scope, name)
 }
 
 // MustValue returns the tensor holding the variable value. Use this to manipulate the value in Go.

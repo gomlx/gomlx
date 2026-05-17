@@ -61,7 +61,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -216,7 +215,7 @@ func (c *Config) DirFromBase(dir, baseDir string) *Config {
 	dir = fsutil.MustReplaceTildeInDir(dir)
 	if !filepath.IsAbs(dir) {
 		baseDir = fsutil.MustReplaceTildeInDir(baseDir)
-		dir = path.Join(baseDir, dir)
+		dir = model.JoinPath(baseDir, dir)
 	}
 	return c.Dir(dir)
 }
@@ -998,13 +997,13 @@ func (h *Handler) Backup() error {
 	baseName := xslices.Last(baseNames)
 	varFilePath := filepath.Join(h.config.dir, baseName+BinDataSuffix)
 	jsonFilePath := filepath.Join(h.config.dir, baseName+JsonNameSuffix)
-	backupDir := path.Join(h.Dir(), BackupDir)
+	backupDir := model.JoinPath(h.Dir(), BackupDir)
 	err = os.MkdirAll(backupDir, DirPermMode)
 	if err != nil {
 		return errors.Wrapf(err, "trying to create dir %q", backupDir)
 	}
 	for _, srcFilePath := range []string{varFilePath, jsonFilePath} {
-		newPath := path.Join(backupDir, path.Base(srcFilePath))
+		newPath := model.JoinPath(backupDir, model.BasePath(srcFilePath))
 		err := os.Link(srcFilePath, newPath)
 		if err != nil {
 			return errors.Wrapf(err, "failed to link %q to %q", srcFilePath, newPath)
@@ -1066,7 +1065,7 @@ func (h *Handler) attachTo(scope *model.Scope) {
 	if h.config.includeParams {
 		for _, p := range h.serialized.Params {
 			// Check for un-scoped and scoped exclusions:
-			if h.config.paramsToExclude.Has(p.Key) || h.config.paramsToExclude.Has(path.Join(p.Scope, p.Key)) {
+			if h.config.paramsToExclude.Has(p.Key) || h.config.paramsToExclude.Has(model.JoinPath(p.Scope, p.Key)) {
 				continue
 			}
 			tmpCtx := scope.Store().Scope(p.Scope)

@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
@@ -144,9 +143,9 @@ func TestCheckpoints(t *testing.T) {
 		checkpoints, err := handler.ListCheckpoints()
 		require.NoError(t, err)
 		lastCheckpoint := checkpoints[len(checkpoints)-1]
-		jsonBlob, err = os.ReadFile(path.Join(dir, lastCheckpoint+JsonNameSuffix))
+		jsonBlob, err = os.ReadFile(model.JoinPath(dir, lastCheckpoint+JsonNameSuffix))
 		require.NoError(t, err)
-		binBlob, err = os.ReadFile(path.Join(dir, lastCheckpoint+BinDataSuffix))
+		binBlob, err = os.ReadFile(model.JoinPath(dir, lastCheckpoint+BinDataSuffix))
 	}
 	{
 		// Check that reading from the variable works.
@@ -284,8 +283,8 @@ func Test_compressedBin(t *testing.T) {
 	dirT := t.TempDir()
 	const size = 10240
 
-	sZip := path.Join(dirT, "test.zip.bin")
-	s := path.Join(dirT, "test.bin")
+	sZip := model.JoinPath(dirT, "test.zip.bin")
+	s := model.JoinPath(dirT, "test.bin")
 	buffer := make([]byte, size)
 	_, _ = rand.Read(buffer)
 	_ = os.WriteFile(s, buffer, 0666)
@@ -320,7 +319,7 @@ func Test_uncompressedBin(t *testing.T) {
 	dirT := t.TempDir()
 	const size = 10240
 
-	sZip := path.Join(dirT, "test.zip.bin")
+	sZip := model.JoinPath(dirT, "test.zip.bin")
 	buffer := make([]byte, size)
 	_, _ = rand.Read(buffer)
 

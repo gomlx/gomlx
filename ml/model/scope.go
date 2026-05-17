@@ -6,6 +6,7 @@ import (
 	"encoding"
 	"fmt"
 	"iter"
+	"path"
 	"reflect"
 	"strings"
 
@@ -17,15 +18,23 @@ import (
 	"github.com/gomlx/gomlx/support/sets"
 )
 
-// Join scopes (always with "/").
-func Join(a, b string) string {
-	if b == "" {
-		return a
-	}
-	if a == "" {
-		return b
-	}
-	return a + ScopeSeparator + b
+// JoinPath joins scopes (always with "/").
+// It is platform-independent and always uses forward slashes, even on Windows.
+// It also normalizes the path (handles "." and "..").
+func JoinPath(elements ...string) string {
+	return path.Join(elements...)
+}
+
+// SplitPath splits the path into its scope component and the last element name.
+// It is platform-independent and always uses forward slashes, even on Windows.
+func SplitPath(fullPath string) (scope, name string) {
+	return path.Split(fullPath)
+}
+
+// BasePath returns the last element of path.
+// It is platform-independent and always uses forward slashes, even on Windows.
+func BasePath(p string) string {
+	return path.Base(p)
 }
 
 // Scope represents a "scoped" (a "current directory") view into a model's Store, which holds the scoped
@@ -89,7 +98,7 @@ func (s *Scope) In(nameFormat string, args ...any) *Scope {
 	}
 	s.visitedPaths.Insert(name)
 
-	newScopePath := Join(s.scope, name)
+	newScopePath := JoinPath(s.scope, name)
 	s2 := s.copy()
 	s2.scope = newScopePath
 	s2.visitedPaths = sets.Make[string]()
@@ -113,7 +122,7 @@ func (s *Scope) Shared(nameFormat string, args ...any) *Scope {
 		Panicf("sub-scope %q not yet visited from %q, use In() first", name, s.scope)
 	}
 
-	newScopePath := Join(s.scope, name)
+	newScopePath := JoinPath(s.scope, name)
 	s2 := s.copy()
 	s2.scope = newScopePath
 	s2.visitedPaths = sets.Make[string]()
@@ -133,7 +142,7 @@ func (s *Scope) At(nameFormat string, args ...any) *Scope {
 	}
 	s.checkName(name)
 
-	newScopePath := Join(s.scope, name)
+	newScopePath := JoinPath(s.scope, name)
 	s2 := s.copy()
 	s2.scope = newScopePath
 	s2.visitedPaths = sets.Make[string]()
@@ -159,14 +168,14 @@ func (s *Scope) Initializer() VariableInitializer {
 // The name cannot contain the ScopeSeparator ("/").
 func (s *Scope) GetVariable(name string) *Variable {
 	s.checkName(name)
-	return s.store.GetVariable(Join(s.scope, name))
+	return s.store.GetVariable(JoinPath(s.scope, name))
 }
 
 // DeleteVariable deletes the variable in the current scope.
 // The name cannot contain the ScopeSeparator ("/").
 func (s *Scope) DeleteVariable(name string) error {
 	s.checkName(name)
-	return s.store.DeleteVariable(Join(s.scope, name))
+	return s.store.DeleteVariable(JoinPath(s.scope, name))
 }
 
 // checkName panics if the name contains the ScopeSeparator ("/").
@@ -381,7 +390,7 @@ func (s *Scope) SetGraphParam(g *Graph, key string, value any) {
 // VariableWithShape creates or returns an existing variable with the given shape in the current scope.
 func (s *Scope) VariableWithShape(name string, shape shapes.Shape) *Variable {
 	s.checkName(name)
-	fullPath := Join(s.scope, name)
+	fullPath := JoinPath(s.scope, name)
 	v := s.store.GetVariable(fullPath)
 
 	if v != nil {
@@ -416,7 +425,7 @@ func (s *Scope) VariableWithShape(name string, shape shapes.Shape) *Variable {
 // VariableWithValue creates or returns a variable initialized with the given value in the current scope.
 func (s *Scope) VariableWithValue(name string, defaultValue any) *Variable {
 	s.checkName(name)
-	fullPath := Join(s.scope, name)
+	fullPath := JoinPath(s.scope, name)
 	v := s.store.GetVariable(fullPath)
 
 	var valueT *tensors.Tensor
