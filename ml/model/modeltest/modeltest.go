@@ -2,7 +2,7 @@
 
 // Package ctxtest holds test utilities for packages that depend on context package. It allows
 // for easy running tests on graph building functions that depends on model.Context objects.
-package ctxtest
+package modeltest
 
 import (
 	"fmt"

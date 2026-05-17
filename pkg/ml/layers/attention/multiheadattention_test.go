@@ -16,8 +16,8 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/ctxtest"
 	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/modeltest"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
@@ -66,7 +66,7 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 		assert.EqualValues(t, []int{batchSize, 6, 1, 2, 3, 4}, results[1].Shape().Dimensions, "Higher-rank masked coef shape")
 	}
 
-	ctxtest.RunTestGraphFn(t, "MultiHeadAttention with masking",
+	modeltest.RunTestGraphFn(t, "MultiHeadAttention with masking",
 		func(ctx *model.Context, g *Graph) (inputs, outputs []*Node) {
 			batchSize := 2
 			key := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 3))

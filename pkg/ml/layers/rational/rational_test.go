@@ -9,14 +9,14 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/ctxtest"
+	"github.com/gomlx/gomlx/ml/model/modeltest"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 func TestConfig_Approximate(t *testing.T) {
-	ctxtest.RunTestGraphFn(t, "Swish-Approximate",
+	modeltest.RunTestGraphFn(t, "Swish-Approximate",
 		func(ctx *model.Context, g *Graph) (inputs, outputs []*Node) {
 			batchSize := 1_000
 			minX, maxX := -10.0, 10.0
@@ -40,7 +40,7 @@ func TestConfig_Approximate(t *testing.T) {
 		}, 0.01)
 
 	// Add a multiplier that tries to preserve the variance.
-	ctxtest.RunTestGraphFn(t, "Relu-Variance",
+	modeltest.RunTestGraphFn(t, "Relu-Variance",
 		func(ctx *model.Context, g *Graph) (inputs, outputs []*Node) {
 			batchSize := 1_000
 			numOutputs := 1000
@@ -65,7 +65,7 @@ func TestConfig_Approximate(t *testing.T) {
 }
 
 func TestMultipleOutputs(t *testing.T) {
-	ctxtest.RunTestGraphFn(t, "Identity: multiple outputs, numInputGroups=2",
+	modeltest.RunTestGraphFn(t, "Identity: multiple outputs, numInputGroups=2",
 		func(ctx *model.Context, g *Graph) (inputs, outputs []*Node) {
 			batchSize := 3
 			x := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 6))

@@ -3,16 +3,17 @@
 package regularizers
 
 import (
+	"testing"
+
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/ctxtest"
+	"github.com/gomlx/gomlx/ml/model/modeltest"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	"testing"
 )
 
 func TestConstantL1(t *testing.T) {
-	ctxtest.RunTestGraphFn(t, "ConstantL1 regularizer", func(ctx *model.Context, g *Graph) (inputs, outputs []*Node) {
+	modeltest.RunTestGraphFn(t, "ConstantL1 regularizer", func(ctx *model.Context, g *Graph) (inputs, outputs []*Node) {
 		wVar := ctx.VariableWithValue("w", [][]float32{{0, 1, 2, 3, 4}, {0, 1, 2, 3, 4}})
 		w := wVar.ValueGraph(g)
 		ConstantL1(0.1)(ctx, g, wVar)
