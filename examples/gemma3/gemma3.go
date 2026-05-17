@@ -99,14 +99,14 @@ func main() {
 	}
 
 	// Load ONNX model.
-	model, err := onnxparser.ParseFile(onnxPath)
+	onnxModel, err := onnxparser.ParseFile(onnxPath)
 	if err != nil {
 		klog.Fatalf("Failed to load ONNX model: %+v", err)
 	}
-	defer model.Close()
+	defer onnxModel.Close()
 
-	inputNames, inputShapes := model.Inputs()
-	outputNames, _ := model.Outputs()
+	inputNames, inputShapes := onnxModel.Inputs()
+	outputNames, _ := onnxModel.Outputs()
 	fmt.Printf("Model inputs (%d):\n", len(inputNames))
 	for i, name := range inputNames {
 		fmt.Printf("  %s: %v\n", name, inputShapes[i])
@@ -114,8 +114,8 @@ func main() {
 	fmt.Printf("Model outputs: %v\n\n", outputNames)
 
 	// Load model weights into model.
-	scope := model.New()
-	if err := model.VariablesToContext(scope); err != nil {
+	scope := model.NewStore().RootScope()
+	if err := onnxModel.VariablesToContext(scope); err != nil {
 		klog.Fatalf("Failed to load model variables: %+v", err)
 	}
 
@@ -147,24 +147,24 @@ func main() {
 	maxTokens := *flagMaxTokens
 
 	// Parse KV cache structure from model inputs/outputs.
-	kv := parseKVStructure(model)
+	kv := parseKVStructure(onnxModel)
 
 	if kv.hasOutputs() {
 		fmt.Printf("Using KV cache: %d layers, %d heads, dim=%d\n\n", kv.numLayers, kv.kvHeads, kv.headDim)
 		cacheSize := int(math.Log2(float64(maxSeqLen))) + 2
 
-		prefillExec := model.MustNewExec(backend, scope.Reuse(),
+		prefillExec := model.MustNewExec(backend, scope,
 			func(scope *model.Scope, idNode, maskNode, posNode, seqLenNode *Node) []*Node {
-				return prefillKVCacheGraph(scope, model, kv, hasAttentionMask, hasPositionIDs,
+				return prefillKVCacheGraph(scope, onnxModel, kv, hasAttentionMask, hasPositionIDs,
 					idNode, maskNode, posNode, seqLenNode)
 			},
 		)
 		prefillExec.SetMaxCache(cacheSize)
 		defer prefillExec.Finalize()
 
-		decodeExec := model.MustNewExec(backend, scope.Reuse(),
+		decodeExec := model.MustNewExec(backend, scope,
 			func(scope *model.Scope, idNode, maskNode, posNode, concatKeysNode, concatValuesNode, kvInsertPosNode *Node) []*Node {
-				return decodeWithKVCacheGraph(scope, model, kv, hasAttentionMask, hasPositionIDs,
+				return decodeWithKVCacheGraph(scope, onnxModel, kv, hasAttentionMask, hasPositionIDs,
 					idNode, maskNode, posNode, concatKeysNode, concatValuesNode, kvInsertPosNode)
 			},
 		)
@@ -243,7 +243,7 @@ func main() {
 			fmt.Println("Generating...")
 			fmt.Println("---")
 			startTime := time.Now()
-			n := generateWithoutKVCache(backend, scope, model, tok, promptTokens,
+			n := generateWithoutKVCache(backend, scope, onnxModel, tok, promptTokens,
 				padID, eosID, maxSeqLen, maxTokens, hasAttentionMask, hasPositionIDs, kv)
 			duration := time.Since(startTime)
 			fmt.Println("\n---")
@@ -378,9 +378,9 @@ func (kv *kvStructure) setInputs(inputs map[string]*Node, concatKeys, concatValu
 
 // parseKVStructure inspects the ONNX model's inputs and outputs to identify
 // the KV cache layout: layer count, input/output names, and shapes.
-func parseKVStructure(model onnx.Model) *kvStructure {
-	inputNames, inputShapes := model.Inputs()
-	outputNames, _ := model.Outputs()
+func parseKVStructure(onnxModel onnx.Model) *kvStructure {
+	inputNames, inputShapes := onnxModel.Inputs()
+	outputNames, _ := onnxModel.Outputs()
 
 	kv := &kvStructure{logitsIndex: 0} // default logits at index 0
 
@@ -465,7 +465,7 @@ func parseKVStructure(model onnx.Model) *kvStructure {
 // The returned KV caches initialize the decode loop. The attention mask must mark
 // which positions are real tokens vs padding so the model attends only to valid positions.
 func prefillKVCacheGraph(
-	scope *model.Scope, model onnx.Model, kv *kvStructure,
+	scope *model.Scope, onnxModel onnx.Model, kv *kvStructure,
 	hasAttentionMask, hasPositionIDs bool,
 	idNode, maskNode, posNode, seqLenNode *Node,
 ) []*Node {
@@ -482,7 +482,7 @@ func prefillKVCacheGraph(
 		inputs[kv.inputValueNames[i]] = Zeros(g, shapes.Make(kv.kvDType, 1, kv.kvHeads, 0, kv.headDim))
 	}
 
-	allOutputs := model.CallGraph(scope, g, inputs)
+	allOutputs := onnxModel.CallGraph(scope, g, inputs)
 
 	// Extract last-token logits: [1, seqLen, vocabSize] -> [vocabSize]
 	logits := allOutputs[kv.logitsIndex]
@@ -509,7 +509,7 @@ func prefillKVCacheGraph(
 //   - updatedKeys [numLayers, 1, kvHeads, paddedSize, headDim]: cache with the new key inserted.
 //   - updatedValues [numLayers, 1, kvHeads, paddedSize, headDim]: cache with the new value inserted.
 func decodeWithKVCacheGraph(
-	scope *model.Scope, model onnx.Model, kv *kvStructure,
+	scope *model.Scope, onnxModel onnx.Model, kv *kvStructure,
 	hasAttentionMask, hasPositionIDs bool,
 	idNode, maskNode, posNode, concatKeysNode, concatValuesNode, kvInsertPosNode *Node,
 ) []*Node {
@@ -521,7 +521,7 @@ func decodeWithKVCacheGraph(
 	}
 	kv.setInputs(inputs, concatKeysNode, concatValuesNode)
 
-	allOutputs := model.CallGraph(scope, g, inputs)
+	allOutputs := onnxModel.CallGraph(scope, g, inputs)
 
 	// Logits for the single new token: [1, 1, vocabSize] -> [vocabSize]
 	logits := allOutputs[kv.logitsIndex]
@@ -676,7 +676,7 @@ func growKVBuffer(backend compute.Backend, kv *tensors.Tensor, targetSeqLen int)
 // the full sequence with power-of-2 padding. A persistent Exec is created
 // outside the loop to enable compilation caching across steps.
 func generateWithoutKVCache(
-	backend compute.Backend, scope *model.Scope, model onnx.Model, tok api.Tokenizer,
+	backend compute.Backend, scope *model.Scope, onnxModel onnx.Model, tok api.Tokenizer,
 	promptTokens []int32,
 	padID, eosID, maxSeqLen, maxTokens int, hasAttentionMask, hasPositionIDs bool,
 	kv *kvStructure,
@@ -684,7 +684,7 @@ func generateWithoutKVCache(
 	// Create the Exec outside the loop. The seqLen parameter is passed dynamically
 	// so the same compiled graph works for different sequence lengths within the
 	// same power-of-2 padded shape.
-	genExec := model.MustNewExec(backend, scope.Reuse(),
+	genExec := model.MustNewExec(backend, scope,
 		func(scope *model.Scope, idNode, maskNode, posNode, seqLenNode *Node) *Node {
 			g := idNode.Graph()
 			inputs := map[string]*Node{"input_ids": idNode}
@@ -701,7 +701,7 @@ func generateWithoutKVCache(
 				}
 			}
 
-			outputs := model.CallGraph(scope, g, inputs)
+			outputs := onnxModel.CallGraph(scope, g, inputs)
 			logits := outputs[0]
 
 			// Extract logits at the last real token position.

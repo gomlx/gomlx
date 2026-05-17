@@ -50,8 +50,8 @@ func TransformerModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node
 			// part = x[:, sequenceFrom:sequenceTo, :]
 			part := Slice(embed, AxisRange(), AxisRange(sequenceFrom, sequenceTo), AxisRange())
 			partMask := Slice(mask, AxisRange(), AxisRange(sequenceFrom, sequenceTo))
-			// Checked(false) -> to reuse "transformer" scope (same weights on every slice).
-			part = TransformerLayers(scope.In("transformer").Checked(false), part, partMask)
+			// At("transformer") -> to reuse "transformer" scope (same weights on every slice).
+			part = TransformerLayers(scope.At("transformer"), part, partMask)
 			if newEmbed == nil {
 				newEmbed = part
 			} else {

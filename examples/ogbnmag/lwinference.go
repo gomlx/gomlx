@@ -29,7 +29,7 @@ func LayerWiseEvaluation(
 	strategy *sampler.Strategy,
 ) (train, validation, test float64) {
 	var predictionsT *tensors.Tensor
-	exec := model.MustNewExec(backend, scope.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
+	exec := model.MustNewExec(backend, scope.Store(), BuildLayerWiseInferenceModel(strategy, true))
 
 	if klog.V(1).Enabled() {
 		// Report timings.
@@ -75,8 +75,8 @@ func BuildLayerWiseCustomMetricFn(
 	scope *model.Scope,
 	strategy *sampler.Strategy,
 ) plots.CustomMetricFn {
-	exec := model.MustNewExec(backend, scope.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
-	scope = scope.Reuse()
+	exec := model.MustNewExec(backend, scope.Store(), BuildLayerWiseInferenceModel(strategy, true))
+	scope = scope
 	labels := tensors.MustCopyFlatData[int32](PapersLabels)
 	return func(plotter plots.Plotter, step float64) error {
 		predictions := exec.MustExec()[0].Value().([]int16)

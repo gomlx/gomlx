@@ -31,7 +31,7 @@ var (
 
 // getMagVar retrieves the static (not-learnable) OGBN-MAG variables -- e.g: the frozen papers embedding table.
 func getMagVar(scope *model.Scope, g *Graph, name string) *Node {
-	magVar := scope.GetVariableByScopeAndName(OgbnMagVariablesScope, name)
+	magVar := scope.Store().GetVariable(model.JoinPath(OgbnMagVariablesScope, name))
 	if magVar == nil {
 		Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
 		panic(nil) // Quiet linter.
@@ -79,7 +79,7 @@ func MagModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 
 	// We disable checking for re-use of scopes because we deliberately reuse
 	// kernels in our GNN.
-	ctxModel := scope.In("model").Checked(false)
+	ctxModel := scope.In("model")
 
 	strategy := spec.(*sampler.Strategy)
 	graphStates, _ := FeaturePreprocessing(ctxModel, strategy, inputs)
@@ -138,7 +138,7 @@ func FeaturePreprocessing(scope *model.Scope, strategy *sampler.Strategy, inputs
 	// Learnable embeddings context: it may benefit from dropout to have the model handle well
 	// the cases of unknown (zero) embeddings.
 	// They shouldn't be initialized with GlorotUniform, but instead with small random uniform values.
-	ctxEmbed := scope.In("embeddings").Checked(false).
+	ctxEmbed := scope.In("embeddings").
 		WithInitializer(initializers.RandomUniformFn(scope, -0.05, 0.05))
 	embedDropoutRate := model.GetParamOr(scope, ParamEmbedDropoutRate, 0.0)
 

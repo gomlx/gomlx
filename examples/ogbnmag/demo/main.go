@@ -38,8 +38,9 @@ var (
 const paramWithReplacement = "mag_with_replacement"
 
 func createDefaultContext() *model.Scope {
-	scope := model.NewStore()
-	scope.ResetRNGState()
+	store := model.NewStore()
+	store.ResetRNGState()
+	scope := store.RootScope()
 	scope.SetParams(map[string]any{
 		"checkpoint":         "",
 		"num_checkpoints":    3,

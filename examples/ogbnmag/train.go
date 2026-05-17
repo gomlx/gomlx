@@ -38,7 +38,7 @@ var (
 	// The default is 10.
 	ParamNumCheckpoints = "num_checkpoints"
 
-	// ParamReuseKernels context parameter configs whether the kernels for similar sampling rules will be reused.
+	// ParamReuseKernels context parameter configures whether the kernels for similar sampling rules will be reused.
 	ParamReuseKernels = "mag_reuse_kernels"
 
 	// ParamIdentitySubSeeds controls whether to use an IdentitySubSeed, to allow more sharing of the kernel.
@@ -83,7 +83,7 @@ func TrainingSchedule(scope *model.Scope, fromStep, toStep int) train.OnStepFn {
 			fmt.Println("\tTrain split_points, smoothness_schedule=none")
 			scope.SetParam(kan.ParamDiscreteSplitPointsFrozen, false)
 			scope.SetParam(kan.ParamDiscreteSoftnessSchedule, "none")
-			scope.EnumerateVariables(func(v *model.Variable) {
+			for v := range scope.IterVariables() {
 				if v.Name() == "kan_discrete_split_points" {
 					v.Trainable = true
 				} else if slices.Index([]string{"kan_discrete_control_points", "embeddings", "weights", "biases"}, v.Name()) != -1 {
@@ -91,7 +91,7 @@ func TrainingSchedule(scope *model.Scope, fromStep, toStep int) train.OnStepFn {
 				} else if v.Trainable {
 					fmt.Printf("\t\t%q trainable\n", v.ScopeAndName())
 				}
-			})
+			}
 			progressBarSpacing()
 
 		} else if loop.LoopStep == splitPointsEnd {
@@ -101,13 +101,13 @@ func TrainingSchedule(scope *model.Scope, fromStep, toStep int) train.OnStepFn {
 
 			fmt.Println("\tTrain control_points, freeze split_points, , smoothness_schedule=exponential")
 			scope.SetParam(kan.ParamDiscreteSoftnessSchedule, "exponential")
-			scope.EnumerateVariables(func(v *model.Variable) {
+			for v := range scope.IterVariables() {
 				if v.Name() == "kan_discrete_split_points" {
 					v.Trainable = false
 				} else if slices.Index([]string{"kan_discrete_control_points", "embeddings", "weights", "biases"}, v.Name()) != -1 {
 					v.Trainable = true
 				}
-			})
+			}
 			progressBarSpacing()
 
 		}
@@ -194,7 +194,6 @@ func Train(
 	}
 	if globalStep != 0 {
 		fmt.Printf("> restarting training from global_step=%d (training until %d)\n", globalStep, trainSteps)
-		scope = scope.Reuse()
 	}
 
 	// Set up scheduled training.
@@ -211,9 +210,11 @@ func Train(
 	fmt.Println("Compiling graph... (once it's done, training immediately starts)")
 	_, err = loop.RunSteps(trainDS, trainSteps-globalStep)
 	// Save checkpoint at end of training (even if training failed)
-	err2 := checkpoint.Save()
-	if err2 != nil {
-		klog.Errorf("Failed to save final checkpoint in %q: %+v", checkpointPath, err2)
+	if checkpoint != nil {
+		err2 := checkpoint.Save()
+		if err2 != nil {
+			klog.Errorf("Failed to save final checkpoint in %q: %+v", checkpointPath, err2)
+		}
 	}
 	fmt.Printf("\t[Step %d] median train step: %s\n", loop.LoopStep, loop.MedianTrainStepDuration())
 
@@ -251,7 +252,9 @@ func newTrainer(backend compute.Backend, scope *model.Scope) *train.Trainer {
 		optimizers.FromContext(scope), // Based on `ctx.GetParam("optimizer")`.
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
-	NanLogger.AttachToTrainer(trainer)
+	if NanLogger != nil {
+		NanLogger.AttachToTrainer(trainer)
+	}
 	return trainer
 }
 
@@ -357,7 +360,7 @@ func convertPapersEmbeddings(backend compute.Backend, scope *model.Scope) {
 		dtypeEmbed = dtypes.Float32
 	}
 
-	papersVar := scope.GetVariableByScopeAndName(OgbnMagVariablesScope, "PapersEmbeddings")
+	papersVar := scope.Store().GetVariable(model.JoinPath(OgbnMagVariablesScope, "PapersEmbeddings"))
 	if papersVar == nil || papersVar.MustValue() == nil {
 		Panicf("Cannot convert papers embeddings if variable \"PapersEmbeddings\" is not set yet")
 		panic(nil) // Clear lint warning.
@@ -367,7 +370,7 @@ func convertPapersEmbeddings(backend compute.Backend, scope *model.Scope) {
 		return
 	}
 
-	e := model.MustNewExec(backend, scope, func(scope *model.Scope, g *Graph) *Node {
+	e := model.MustNewExec(backend, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
 		return ConvertDType(papersVar.ValueGraph(g), dtype)
 	})
 	converted := e.MustExec()[0]

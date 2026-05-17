@@ -79,20 +79,20 @@ func main() {
 	}
 
 	// Load ONNX model.
-	model, err := onnxparser.ParseFile(onnxPath)
+	onnxModel, err := onnxparser.ParseFile(onnxPath)
 	if err != nil {
 		klog.Fatalf("Failed to load ONNX model: %+v", err)
 	}
-	defer model.Close()
+	defer onnxModel.Close()
 
-	inputNames, _ := model.Inputs()
-	outputNames, _ := model.Outputs()
+	inputNames, _ := onnxModel.Inputs()
+	outputNames, _ := onnxModel.Outputs()
 	fmt.Printf("Model inputs: %v\n", inputNames)
 	fmt.Printf("Model outputs: %v\n\n", outputNames)
 
 	// Load model weights into model.
-	scope := model.New()
-	if err := model.VariablesToContext(scope); err != nil {
+	scope := model.NewStore().RootScope()
+	if err := onnxModel.VariablesToContext(scope); err != nil {
 		klog.Fatalf("Failed to load model variables: %+v", err)
 	}
 
@@ -106,7 +106,7 @@ func main() {
 
 	fmt.Printf("Query: %q\n\n", query)
 
-	scores := rerank(backend, scope, model, tok, query, documents)
+	scores := rerank(backend, scope, onnxModel, tok, query, documents)
 
 	// Display results sorted by score.
 	type result struct {
@@ -131,12 +131,12 @@ func main() {
 
 // rerank computes relevance scores for a query against multiple documents
 // using a cross-encoder model.
-func rerank(backend compute.Backend, scope *model.Scope, model onnx.Model, tok tokenizers.Tokenizer, query string, documents []string) []float32 {
+func rerank(backend compute.Backend, scope *model.Scope, onnxModel onnx.Model, tok tokenizers.Tokenizer, query string, documents []string) []float32 {
 	// Tokenize each query-document pair.
 	pairs := encodePairs(tok, query, documents, *flagMaxLength)
 
 	// Determine which inputs the model expects.
-	inputNames, _ := model.Inputs()
+	inputNames, _ := onnxModel.Inputs()
 	hasTokenTypeIDs := false
 	for _, name := range inputNames {
 		if name == "token_type_ids" {
@@ -152,7 +152,7 @@ func rerank(backend compute.Backend, scope *model.Scope, model onnx.Model, tok t
 			backend, scope,
 			func(scope *model.Scope, inputIDs, attentionMask, tokenTypeIDs *Node) *Node {
 				g := inputIDs.Graph()
-				outputs := model.CallGraph(scope, g, map[string]*Node{
+				outputs := onnxModel.CallGraph(scope, g, map[string]*Node{
 					"input_ids":      inputIDs,
 					"attention_mask": attentionMask,
 					"token_type_ids": tokenTypeIDs,
@@ -166,7 +166,7 @@ func rerank(backend compute.Backend, scope *model.Scope, model onnx.Model, tok t
 			backend, scope,
 			func(scope *model.Scope, inputIDs, attentionMask *Node) *Node {
 				g := inputIDs.Graph()
-				outputs := model.CallGraph(scope, g, map[string]*Node{
+				outputs := onnxModel.CallGraph(scope, g, map[string]*Node{
 					"input_ids":      inputIDs,
 					"attention_mask": attentionMask,
 				})

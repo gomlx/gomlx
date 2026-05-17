@@ -49,7 +49,8 @@ var (
 )
 
 func createDefaultContext() *model.Scope {
-	scope := model.NewStore()
+	store := model.NewStore()
+	scope := store.RootScope()
 	scope.SetParams(map[string]any{
 		// Model hyperparameters
 		transformer.ParamVocabSize:   128,
@@ -190,8 +191,8 @@ func generateText(backend compute.Backend, scope *model.Scope, prompt string) {
 		promptTokens = []int{32}
 	}
 
-	model := transformer.NewFromScope(scope)
-	modelFn := transformer.MakeIncrementalModelFn(model)
+	transformerModel := transformer.NewFromScope(scope)
+	modelFn := transformer.MakeIncrementalModelFn(transformerModel)
 
 	decoder := decode.New(modelFn).FromContext(scope)
 	fmt.Printf("\nGeneration\nStrategy: %s  Temp: %.2f  MaxLen: %d\nPrompt: %q\n\n",
@@ -247,8 +248,6 @@ func main() {
 	}
 
 	trainModel(backend, scope)
-
-	scope = scope.Reuse()
 
 	generateText(backend, scope, *flagPrompt)
 }

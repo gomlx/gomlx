@@ -34,7 +34,7 @@ func FnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	seeds := inputs[0]
 	g := seeds.Graph()
 	getMagVar := func(name string) *Node {
-		magVar := scope.GetVariableByScopeAndName(mag.OgbnMagVariablesScope, name)
+		magVar := scope.Store().GetVariable(model.JoinPath(mag.OgbnMagVariablesScope, name))
 		if magVar == nil {
 			exceptions.Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
 		}
@@ -128,7 +128,6 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 		globalStep = optimizers.GetGlobalStep(scope)
 		if globalStep != 0 {
 			fmt.Printf("> restarting training from global_step=%d\n", globalStep)
-			scope = scope.Reuse()
 		}
 		scope.SetParam("train_steps", trainSteps)
 	}

@@ -57,10 +57,10 @@ func DefaultGPT2Config() GPT2Config {
 
 // GPT2Model represents a loaded GPT-2 model ready for inference.
 type GPT2Model struct {
-	backend compute.Backend
-	scope   *model.Scope
-	config  GPT2Config
-	model   *transformer.Model
+	backend          compute.Backend
+	scope            *model.Scope
+	config           GPT2Config
+	transformerModel *transformer.Model
 
 	// Single cached exec for all token generations
 	tokenExec *model.Exec
@@ -68,25 +68,25 @@ type GPT2Model struct {
 
 // forwardGPT2 implements GPT-2's forward pass with pre-norm architecture.
 func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node) *Node {
-	model := m.model
+	tm := m.transformerModel
 	g := tokens.Graph()
 	currentSeqLen := tokens.Shape().Dimensions[1]
 
 	// Token + positional embeddings
-	embedded := layers.Embedding(scope.In("token_embed"), tokens, model.DType, model.VocabSize, model.EmbedDim)
+	embedded := layers.Embedding(scope.In("token_embed"), tokens, tm.DType, tm.VocabSize, tm.EmbedDim)
 	if embedded.Rank() == 2 {
 		embedded = ExpandDims(embedded, 1)
 	}
 
 	posEmbedFull := scope.In("pos_embed").VariableWithShape("embeddings",
-		shapes.Make(model.DType, model.MaxPosEmbed, model.EmbedDim)).ValueGraph(g)
+		shapes.Make(tm.DType, tm.MaxPosEmbed, tm.EmbedDim)).ValueGraph(g)
 	posScalar := Squeeze(ConvertDType(position, dtypes.Int32))
-	posEmbed := DynamicSlice(posEmbedFull, []*Node{posScalar, Const(g, int32(0))}, []int{currentSeqLen, model.EmbedDim})
+	posEmbed := DynamicSlice(posEmbedFull, []*Node{posScalar, Const(g, int32(0))}, []int{currentSeqLen, tm.EmbedDim})
 	posEmbed = BroadcastToShape(ExpandDims(posEmbed, 0), embedded.Shape())
 	x := Add(embedded, posEmbed)
 
 	// Transformer layers (pre-norm architecture)
-	for layer := range model.NumLayers {
+	for layer := range tm.NumLayers {
 		layerCtx := scope.In("layer_%d", layer)
 
 		// Pre-attention LayerNorm
@@ -94,8 +94,8 @@ func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node
 			Epsilon(m.config.NormEps).Done()
 
 		// Self-attention with KV cache
-		attn := attention.SelfAttention(layerCtx.In("attn"), attnInput, model.NumHeads, model.HeadDim).
-			WithKVCache(model.MaxPosEmbed, position).
+		attn := attention.SelfAttention(layerCtx.In("attn"), attnInput, tm.NumHeads, tm.HeadDim).
+			WithKVCache(tm.MaxPosEmbed, position).
 			UseProjectionBias(true).
 			WithCausalMask(true).
 			Done()
@@ -106,9 +106,9 @@ func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node
 			Epsilon(m.config.NormEps).Done()
 
 		// Feed-forward network
-		ff := layers.Dense(layerCtx.In("ff1"), ffInput, true, model.FFNDim)
+		ff := layers.Dense(layerCtx.In("ff1"), ffInput, true, tm.FFNDim)
 		ff = activations.Gelu(ff)
-		ff = layers.Dense(layerCtx.In("ff2"), ff, true, model.EmbedDim)
+		ff = layers.Dense(layerCtx.In("ff2"), ff, true, tm.EmbedDim)
 		x = Add(x, ff)
 	}
 
@@ -117,7 +117,7 @@ func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node
 		Epsilon(m.config.NormEps).Done()
 
 	// Output projection
-	return layers.Dense(scope.In("output"), x, false, model.VocabSize)
+	return layers.Dense(scope.In("output"), x, false, tm.VocabSize)
 }
 
 // LoadGPT2 loads the GPT-2 model from the given HuggingFace repository.
@@ -125,7 +125,7 @@ func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenize
 	config := DefaultGPT2Config()
 
 	// Create context for model parameters and load them.
-	scope := model.NewStore()
+	scope := model.NewStore().RootScope()
 	fmt.Println("Loading checkpoint weights...")
 	if err := loadCheckpoint(backend, scope, repo); err != nil {
 		fmt.Printf("Warning: Failed to load checkpoint: %v\n", err)
@@ -149,26 +149,26 @@ func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenize
 		WithMaxPosEmbed(config.MaxPosEmbed).
 		WithDType(config.DType).
 		WithPositionalEncoder(posEmbedder)
-	model := &GPT2Model{
-		backend: backend,
-		scope:   scope,
-		config:  config,
-		model:   transformerModel,
+	gpt2Model := &GPT2Model{
+		backend:          backend,
+		scope:            scope,
+		config:           config,
+		transformerModel: transformerModel,
 	}
 
 	// Create the generation exec once during loading (saves JIT compilation on first Generate call)
 	var err error
-	model.tokenExec, err = model.NewExec(backend, scope.Reuse(),
+	gpt2Model.tokenExec, err = model.NewExec(backend, scope,
 		func(scope *model.Scope, tokens *Node, position *Node) *Node {
-			logits := model.forwardGPT2(scope, tokens, position)
+			logits := gpt2Model.forwardGPT2(scope, tokens, position)
 			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 			lastLogits = Squeeze(lastLogits, 1)
 			return sample.SampleWithStrategy(
 				scope, lastLogits,
-				model.config.Strategy,
-				model.config.Temperature,
-				model.config.TopK,
-				model.config.TopP,
+				gpt2Model.config.Strategy,
+				gpt2Model.config.Temperature,
+				gpt2Model.config.TopK,
+				gpt2Model.config.TopP,
 			)
 		})
 	if err != nil {
@@ -181,7 +181,7 @@ func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenize
 		return nil, nil, fmt.Errorf("failed to load tokenizer: %w", err)
 	}
 
-	return model, tokenizer, nil
+	return gpt2Model, tokenizer, nil
 }
 
 // GenerationConfig holds parameters for text generation.
@@ -393,8 +393,8 @@ func setContextVariableFromTensor(scope *model.Scope, scopePath []string, varNam
 
 	// Normal case: set single variable
 	scopeCtx := scope
-	for _, scope := range scopePath {
-		scopeCtx = scopeCtx.In(scope)
+	for _, s := range scopePath {
+		scopeCtx = scopeCtx.In(s)
 	}
 
 	scopeCtx.VariableWithValue(varName, t)
@@ -406,8 +406,8 @@ func splitAndSetQKV(scope *model.Scope, scopePath []string, varName string, t *t
 	// Get the actual scope without "_fused_qkv"
 	baseScopePath := scopePath[:len(scopePath)-1]
 	baseCtx := scope
-	for _, scope := range baseScopePath {
-		baseCtx = baseCtx.In(scope)
+	for _, s := range baseScopePath {
+		baseCtx = baseCtx.In(s)
 	}
 	baseCtx = baseCtx.In("MultiHeadAttention")
 

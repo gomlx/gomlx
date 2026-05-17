@@ -52,8 +52,9 @@ var DType = dtypes.Float32
 
 // CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
 func CreateDefaultContext() *model.Scope {
-	scope := model.NewStore()
-	scope.ResetRNGState()
+	store := model.NewStore()
+	store.ResetRNGState()
+	scope := store.RootScope()
 	scope.SetParams(map[string]any{
 		// Model type to use
 		"model":           "bow", // One of the listed in ValidModels: the user can also inject (in ValidModels) new custom models.
@@ -245,7 +246,7 @@ func TrainModel(
 	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
 	globalStep := int(optimizers.GetGlobalStep(scope))
 	if globalStep > 0 {
-		trainer.SetContext(scope.Reuse())
+		trainer.SetContext(scope)
 	}
 	if globalStep < numTrainSteps {
 		_ = check1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
