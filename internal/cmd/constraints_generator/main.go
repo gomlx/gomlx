@@ -47,10 +47,9 @@ func TensorSlicesConstraints(w io.Writer) {
 	}
 }
 
-func GraphExecFnConstraints(w io.Writer, withContext bool) {
-	var parts []string
+func GraphExecFnConstraints(w io.Writer, withScope bool) {
 	p := ""
-	if withContext {
+	if withScope {
 		p = "graph."
 	}
 	possibleInputs := []string{"*" + p + "Graph", "[]*" + p + "Node", "*" + p + "Graph, []*" + p + "Node"}
@@ -59,28 +58,46 @@ func GraphExecFnConstraints(w io.Writer, withContext bool) {
 		possibleInputs = append(possibleInputs, nodesParams)
 		nodesParams = nodesParams + ", *" + p + "Node"
 	}
-	possibleOutputs := []string{}
-	if withContext {
-		possibleOutputs = append(possibleOutputs, "")
+	
+	type outputConfig struct {
+		name   string
+		output string
 	}
-	possibleOutputs = append(possibleOutputs, "*"+p+"Node", "(*"+p+"Node, *"+p+"Node)", "(*"+p+"Node, *"+p+"Node, *"+p+"Node)", "[]*"+p+"Node")
+	possibleOutputs := []outputConfig{}
+	if withScope {
+		possibleOutputs = append(possibleOutputs, outputConfig{"ZeroOutputs", ""})
+	}
+	possibleOutputs = append(possibleOutputs,
+		outputConfig{"OneOutput", "*" + p + "Node"},
+		outputConfig{"TwoOutputs", "(*" + p + "Node, *" + p + "Node)"},
+		outputConfig{"ThreeOutputs", "(*" + p + "Node, *" + p + "Node, *" + p + "Node)"},
+		outputConfig{"SliceOutputs", "[]*" + p + "Node"},
+	)
 	var contextInput string
-	if withContext {
-		contextInput = "*Context, "
+	if withScope {
+		contextInput = "*Scope, "
 	}
-	for _, outputs := range possibleOutputs {
+	
+	var interfaceNames []string
+	for _, outConfig := range possibleOutputs {
+		interfaceName := fmt.Sprintf("ExecGraphFn%s", outConfig.name)
+		interfaceNames = append(interfaceNames, interfaceName)
+		fmt.Fprintf(w, "type %s interface {\n", interfaceName)
+		var parts []string
+		outputs := outConfig.output
 		if outputs != "" {
 			outputs = " " + outputs
 		}
 		for _, inputs := range possibleInputs {
 			parts = append(parts, fmt.Sprintf("\tfunc (%s%s)%s", contextInput, inputs, outputs))
 		}
+		fmt.Fprintf(w, "%s\n}\n\n", strings.Join(parts, " |\n"))
 	}
-	fmt.Fprintf(w, "%s\n", strings.Join(parts, " |\n"))
+	fmt.Fprintf(w, "type ExecGraphFn interface {\n\t%s\n}\n", strings.Join(interfaceNames, " | "))
 }
 
 var (
-	flagContext = flag.Bool("context", false, "Generate constraints for the context package.")
+	flagModel   = flag.Bool("model", false, "Generate constraints for the model package.")
 	flagGraph   = flag.Bool("graph", false, "Generate constraints for the graph package.")
 	flagTensors = flag.Bool("tensors", false, "Generate constraints for the tensors package.")
 )
@@ -89,7 +106,7 @@ func main() {
 	flag.Parse()
 
 	numFlags := 0
-	if *flagContext {
+	if *flagModel {
 		numFlags++
 	}
 	if *flagGraph {
@@ -130,21 +147,17 @@ func main() {
 		fmt.Fprintln(f, "package graph")
 		fmt.Fprintln(f)
 		fmt.Fprintf(f, "// For graph/exec.go:\n\n")
-		fmt.Fprintln(f, "type ExecGraphFn interface {")
 		GraphExecFnConstraints(f, false)
-		fmt.Fprintln(f, "}")
 		fmt.Fprintln(f)
-	} else if *flagContext {
-		fmt.Fprintln(f, "package context")
+	} else if *flagModel {
+		fmt.Fprintln(f, "package model")
 		fmt.Fprintln(f)
 		fmt.Fprintln(f, "import (")
 		fmt.Fprintln(f, "\t\"github.com/gomlx/gomlx/core/graph\"")
 		fmt.Fprintln(f, ")")
 		fmt.Fprintln(f)
 		fmt.Fprintf(f, "// For ml/model/exec.go:\n\n")
-		fmt.Fprintln(f, "type ExecGraphFn interface {")
 		GraphExecFnConstraints(f, true)
-		fmt.Fprintln(f, "}")
 	}
 
 	must.M(f.Close())

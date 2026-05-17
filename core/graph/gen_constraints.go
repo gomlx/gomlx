@@ -4,7 +4,7 @@ package graph
 
 // For graph/exec.go:
 
-type ExecGraphFn interface {
+type ExecGraphFnOneOutput interface {
 	func(*Graph) *Node |
 		func([]*Node) *Node |
 		func(*Graph, []*Node) *Node |
@@ -13,8 +13,11 @@ type ExecGraphFn interface {
 		func(*Node, *Node, *Node) *Node |
 		func(*Node, *Node, *Node, *Node) *Node |
 		func(*Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Graph) (*Node, *Node) |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
+}
+
+type ExecGraphFnTwoOutputs interface {
+	func(*Graph) (*Node, *Node) |
 		func([]*Node) (*Node, *Node) |
 		func(*Graph, []*Node) (*Node, *Node) |
 		func(*Node) (*Node, *Node) |
@@ -22,8 +25,11 @@ type ExecGraphFn interface {
 		func(*Node, *Node, *Node) (*Node, *Node) |
 		func(*Node, *Node, *Node, *Node) (*Node, *Node) |
 		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Graph) (*Node, *Node, *Node) |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node)
+}
+
+type ExecGraphFnThreeOutputs interface {
+	func(*Graph) (*Node, *Node, *Node) |
 		func([]*Node) (*Node, *Node, *Node) |
 		func(*Graph, []*Node) (*Node, *Node, *Node) |
 		func(*Node) (*Node, *Node, *Node) |
@@ -31,8 +37,11 @@ type ExecGraphFn interface {
 		func(*Node, *Node, *Node) (*Node, *Node, *Node) |
 		func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
 		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Graph) []*Node |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node)
+}
+
+type ExecGraphFnSliceOutputs interface {
+	func(*Graph) []*Node |
 		func([]*Node) []*Node |
 		func(*Graph, []*Node) []*Node |
 		func(*Node) []*Node |
@@ -41,4 +50,8 @@ type ExecGraphFn interface {
 		func(*Node, *Node, *Node, *Node) []*Node |
 		func(*Node, *Node, *Node, *Node, *Node) []*Node |
 		func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
+}
+
+type ExecGraphFn interface {
+	ExecGraphFnOneOutput | ExecGraphFnTwoOutputs | ExecGraphFnThreeOutputs | ExecGraphFnSliceOutputs
 }
