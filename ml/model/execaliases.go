@@ -10,14 +10,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-// NewExec constructs an Exec object for the given context and symbolic computation function ctxGraphFn.
+// NewExec constructs an Exec object for the given store and symbolic computation function ctxGraphFn.
 //
-// The ctxGraphFn is called to build the computation graphs with a Context.
-// It must take a *Context input parameter followed by one or more *Node parameters as input and return one or more *Node.
+// The ctxGraphFn is called to build the computation graphs with a Scope (Store.RootScope()).
+// It must take a *Scope input parameter followed by one or more *Node parameters as input and return one or more *Node.
 // Alternatively, it can, instead of *Node inputs, take a *Graph object when there are no input tensors.
 //
-// The Context ctx passed in the construction is used in all calls to ctxGraphFn, as well as during the graph execution later.
-// If set to nil, it automatically creates a new empty model.
+// The Store store passed in the construction is used in all calls to ctxGraphFn, as well as during the graph execution later.
+// If set to nil, it automatically creates a new empty store.
 //
 // Before the execution of a graph, it initializes the variables as needed, using the configured initializer.
 // And variables updated in the graph (using Variable.SetValueGraph) are updated also during execution.
@@ -25,26 +25,26 @@ import (
 //
 // This is a generic wrapper around NewExecAny that checks that types are
 // correct (but doesn't support all possible types of ctxGraphFn).
-func NewExec[F ExecGraphFn](backend compute.Backend, ctx *Context, ctxGraphFn F) (*Exec, error) {
-	return NewExecAny(backend, ctx, ctxGraphFn)
+func NewExec[F ExecGraphFn](backend compute.Backend, store *Store, ctxGraphFn F) (*Exec, error) {
+	return NewExecAny(backend, store, ctxGraphFn)
 }
 
-// MustNewExec constructs an Exec object for the given context and symbolic computation function ctxGraphFn.
+// MustNewExec constructs an Exec object for the given store and symbolic computation function ctxGraphFn.
 //
-// The ctxGraphFn is called to build the computation graphs with a Context.
-// It must take a *Context input parameter followed by one or more *Node parameters as input and return one or more *Node.
+// The ctxGraphFn is called to build the computation graphs with a Scope (Store.RootScope()).
+// It must take a *Scope input parameter followed by one or more *Node parameters as input and return one or more *Node.
 // Alternatively, it can, instead of *Node inputs, take a *Graph object when there are no input tensors.
 //
-// The Context ctx passed in the construction is used in all calls to ctxGraphFn, as well as during the graph execution later.
-// If set to nil, it automatically creates a new empty model.
+// The Store store passed in the construction is used in all calls to ctxGraphFn, as well as during the graph execution later.
+// If set to nil, it automatically creates a new empty store.
 //
 // Before the execution of a graph, it initializes the variables as needed, using the configured initializer.
 // And variables updated in the graph (using Variable.SetValueGraph) are updated also during execution.
 // More details see Exec.
 //
 // It panics on error.
-func MustNewExec[F ExecGraphFn](backend compute.Backend, ctx *Context, ctxGraphFn F) *Exec {
-	e, err := NewExecAny(backend, ctx, ctxGraphFn)
+func MustNewExec[F ExecGraphFn](backend compute.Backend, store *Store, ctxGraphFn F) *Exec {
+	e, err := NewExecAny(backend, store, ctxGraphFn)
 	if err != nil {
 		panic(err)
 	}
@@ -77,11 +77,10 @@ func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*dtensor.Tensor, err
 // MustExec parses the arguments into tensors (if they are not yet) and executes
 // the graph corresponding to the shapes of the arguments.
 //
-// Notice it uses the Context object used during creation -- if needed, you can change it with SetContext.
+// Notice it uses the Store object used during creation -- if needed, you can change it with SetStore.
 //
 // If a graph does not yet exist, one is created (using ctxGraphFn provided during creation), compiled, and cached
 // for these shapes of the inputs.
-// After the very first invocation of Exec, the context is marked as Context.Reuse().
 //
 // It returns the outputs in a slice. See MustExec1, MustExec2, ..., MustExec4 as aliases when you expect a fixed number of outputs.
 //
@@ -111,8 +110,8 @@ func (e *Exec) MustExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Gra
 // It's short for a call to NewExec, Exec.MustExec, and Exec.Finalize.
 //
 // See ExecOnce for a more convenient version if you have only one output.
-func ExecOnceN[F ExecGraphFn](backend compute.Backend, ctx *Context, ctxGraphFn F, args ...any) ([]*tensors.Tensor, error) {
-	e, err := NewExec(backend, ctx, ctxGraphFn)
+func ExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, ctxGraphFn F, args ...any) ([]*tensors.Tensor, error) {
+	e, err := NewExec(backend, store, ctxGraphFn)
 	if err != nil {
 		return nil, err
 	}
@@ -127,8 +126,8 @@ func ExecOnceN[F ExecGraphFn](backend compute.Backend, ctx *Context, ctxGraphFn 
 // See MustExecOnce for a more convenient version if you have only one output.
 //
 // It panics on error. See ExecOnceN for a version that returns an error.
-func MustExecOnceN[F ExecGraphFn](backend compute.Backend, ctx *Context, ctxGraphFn F, args ...any) []*tensors.Tensor {
-	outputs, err := ExecOnceN(backend, ctx, ctxGraphFn, args...)
+func MustExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, ctxGraphFn F, args ...any) []*tensors.Tensor {
+	outputs, err := ExecOnceN(backend, store, ctxGraphFn, args...)
 	if err != nil {
 		panic(err)
 	}
@@ -140,8 +139,8 @@ func MustExecOnceN[F ExecGraphFn](backend compute.Backend, ctx *Context, ctxGrap
 // It's short for a call to NewExec, Exec.MustExec, and Exec.Finalize for functions that return only one output.
 //
 // See ExecOnceN if you have multiple (or zero) outputs.
-func ExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, ctx *Context, ctxGraphFn F, args ...any) (*tensors.Tensor, error) {
-	outputs, err := ExecOnceN(backend, ctx, ctxGraphFn, args...)
+func ExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store, ctxGraphFn F, args ...any) (*tensors.Tensor, error) {
+	outputs, err := ExecOnceN(backend, store, ctxGraphFn, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -158,8 +157,8 @@ func ExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, ctx *Context, ctx
 // See MustExecOnceN if you have multiple outputs.
 //
 // It panics on error. See ExecOnce for a version that returns an error.
-func MustExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, ctx *Context, ctxGraphFn F, args ...any) *tensors.Tensor {
-	output, err := ExecOnce(backend, ctx, ctxGraphFn, args...)
+func MustExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store, ctxGraphFn F, args ...any) *tensors.Tensor {
+	output, err := ExecOnce(backend, store, ctxGraphFn, args...)
 	if err != nil {
 		panic(err)
 	}

@@ -3,6 +3,8 @@
 package model
 
 import (
+	"path"
+
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -10,7 +12,7 @@ import (
 )
 
 const (
-	// RNGStateVariableName is the name of a Context internal variable the holds the current
+	// RNGStateVariableName is the name of a Store internal variable that holds the current
 	// random number generator state.
 	RNGStateVariableName = "#rngState"
 )
@@ -23,45 +25,44 @@ var (
 )
 
 // getRNGStateVar panics if it fails to create the random state.
-func (ctx *Context) getRNGStateVar() *Variable {
-	rngStateVar := ctx.GetVariableByScopeAndName(RootScope, RNGStateVariableName)
+func (s *Store) getRNGStateVar() *Variable {
+	fullPath := path.Join("/", RNGStateVariableName)
+	rngStateVar := s.GetVariable(fullPath)
 	if rngStateVar != nil {
 		return rngStateVar
 	}
-	rngStateVar = ctx.InAbsPath(RootScope).Checked(false).
-		VariableWithShape(RNGStateVariableName, graph.RNGStateShape).SetTrainable(false)
+	rngStateVar = &Variable{
+		name:         RNGStateVariableName,
+		scopePath:    "/",
+		shape:        graph.RNGStateShape,
+		Trainable:    false,
+		shardingSpec: s.defaultShardingSpec,
+	}
+	s.setVariable(rngStateVar)
 	return rngStateVar
 }
 
 // mustGetRNGStateVarWithValue panics if it fails to create the random state.
-func (ctx *Context) mustGetRNGStateVarWithValue() *Variable {
-	v := ctx.getRNGStateVar()
+func (s *Store) mustGetRNGStateVarWithValue() *Variable {
+	v := s.getRNGStateVar()
 	if v.HasValue() {
 		return v
 	}
-	err := ctx.ResetRNGState()
+	err := s.ResetRNGState()
 	if err != nil {
 		panic(err)
 	}
 	return v
 }
 
-// ResetRNGState resets the default context random number generator (RNG) to a cryptographically secure
+// ResetRNGState resets the default store random number generator (RNG) to a cryptographically secure
 // random seed, if the OS supports it.
 //
-// The Context random methods will call this automatically, if the Context state is not set.
-//
 // If ParamInitialSeed is set, it will be used instead of cryptographically secure random seed.
-//
-// If the context is loaded from a checkpoint, and one wants to reset it (as opposed to continue
-// with the previous state), one can call this.
-//
-// The random number generator (RNG) state is stored in a variable on the root scope
-// of the context, called "#rngState" (RNGStateVariableName).
-func (ctx *Context) ResetRNGState() error {
-	v := ctx.getRNGStateVar()
+func (s *Store) ResetRNGState() error {
+	v := s.getRNGStateVar()
 	var randomState *tensors.Tensor
-	seedAny, found := ctx.GetParam(ParamInitialSeed)
+	seedAny, found := s.params.Get("/", ParamInitialSeed)
 	if !found {
 		var err error
 		randomState, err = graph.RNGState()
@@ -86,93 +87,67 @@ func (ctx *Context) ResetRNGState() error {
 	return nil
 }
 
-// SetRNGStateFromSeed initializes the default context random number generator (RNG) state with a static seed.
-// If the state has already been created, it is reset to a value based on the seed.
-//
-// The random number generator (RNG) state is stored in a variable on the root scope
-// of the context, called "#rngState" (RNGStateVariableName).
-//
-// This overrides the seed used in ParamInitialSeed.
-func (ctx *Context) SetRNGStateFromSeed(seed int64) error {
+// SetRNGStateFromSeed initializes the default store random number generator (RNG) state with a static seed.
+func (s *Store) SetRNGStateFromSeed(seed int64) error {
 	initialState, err := graph.RNGStateFromSeed(seed)
 	if err != nil {
 		return err
 	}
-	v := ctx.getRNGStateVar()
+	v := s.getRNGStateVar()
 	return v.SetValue(initialState)
 }
 
 // RandomNormal generates random numbers from a normal distribution, with mean 0.0
 // and standard deviation 1.0.
-// It generates values with the given shape, each value pseudo-randomly generated.
-//
-// If you need a different mean and standard deviation, just do something like the example below, where `mean`
-// and `stddev` are the desired mean and standard deviation:
-//
-//	numbers = ctx.RandomNormal(g, myShape)
-//	numbers = AddScalar(MulScalar(numbers, stddev), mean)
-//
-// The random number generator (RNG) state is stored in a variable on the root scope
-// of the context, called "#rngState" (RNGStateVariableName).
-// The state is initialized with the nanosecond clock, the first time it is used -- so pretty random.
-// But you can initialize it with a fixed seed before using any of the Random* methods.
-//
-// See details in graph.RandomNormal.
-func (ctx *Context) RandomNormal(g *graph.Graph, shape shapes.Shape) (values *Node) {
-	rngStateVar := ctx.mustGetRNGStateVarWithValue()
+func (s *Store) RandomNormal(g *graph.Graph, shape shapes.Shape) (values *Node) {
+	rngStateVar := s.mustGetRNGStateVarWithValue()
 	rngState := rngStateVar.ValueGraph(g)
 	rngState, values = graph.RandomNormal(rngState, shape)
 	rngStateVar.SetValueGraph(rngState)
 	return
 }
 
-// RandomUniform generates random uniform values from 0.0 to 1.0 (half-open `[0.0, 1.0)`, so 1.0 is never returned)
-// for float numbers in the given shape.
-//
-// The random number generator (RNG) state is stored in a variable on the root scope
-// of the context, called "#rngState" (RNGStateVariableName).
-// The state is initialized with the nanosecond clock, the first time it is used -- so pretty random.
-// But you can initialize it with a fixed seed before using any of the Random* methods.
-//
-// See details in graph.RandomNormal.
-func (ctx *Context) RandomUniform(g *graph.Graph, shape shapes.Shape) (values *Node) {
-	rngStateVar := ctx.mustGetRNGStateVarWithValue()
+// RandomUniform generates random uniform values from 0.0 to 1.0.
+func (s *Store) RandomUniform(g *graph.Graph, shape shapes.Shape) (values *Node) {
+	rngStateVar := s.mustGetRNGStateVarWithValue()
 	rngState := rngStateVar.ValueGraph(g)
 	rngState, values = graph.RandomUniform(rngState, shape)
 	rngStateVar.SetValueGraph(rngState)
 	return
 }
 
+// RandomNormal proxy for Store.RandomNormal.
+func (s *Scope) RandomNormal(g *graph.Graph, shape shapes.Shape) *Node {
+	return s.store.RandomNormal(g, shape)
+}
+
+// RandomUniform proxy for Store.RandomUniform.
+func (s *Scope) RandomUniform(g *graph.Graph, shape shapes.Shape) *Node {
+	return s.store.RandomUniform(g, shape)
+}
+
 // RandomBernoulli generates 0s and 1s in the given shape (or True/False if shape dtype is Bool),
 // with probability of 1s being prob.
-//
-// It uses a random number generation with precision equal to prob.DType().
-//
-// See Bernoulli Distribution article: https://en.wikipedia.org/wiki/Bernoulli_distribution
-func (ctx *Context) RandomBernoulli(prob *Node, shape shapes.Shape) *Node {
+func (s *Store) RandomBernoulli(prob *Node, shape shapes.Shape) *Node {
 	g := prob.Graph()
 	maskShape := shape.Clone()
 	maskShape.DType = prob.DType()
-	mask := ctx.RandomUniform(g, maskShape)
+	mask := s.RandomUniform(g, maskShape)
 	mask = graph.LessThan(mask, prob)
 	return graph.ConvertDType(mask, shape.DType)
 }
 
-// RandomIntN generates random numbers uniformly from 0 to N-1. It only works for integer types, see RandomUniform for
-// float or complex data types. N can be given as a Node, or a static scalar integer value.
+// RandomBernoulli generates 0s and 1s in the given shape (or True/False if shape dtype is Bool),
+// with probability of 1s being prob.
 //
-// Example:
-//
-//	D10 := ctx.RandomIntN(10, shapes.Make(dtypes.Int32))
-//
-// The random number generator (RNG) state is stored in a variable on the root scope
-// of the context, called "#rngState" (RNGStateVariableName).
-// The state is initialized with the nanosecond clock, the first time it is used -- so pretty random.
-// But you can initialize it with a fixed seed before using any of the Random* methods.
-//
-// See details in graph.RandomIntN.
-func (ctx *Context) RandomIntN(g *graph.Graph, N any, shape shapes.Shape) (values *Node) {
-	rngStateVar := ctx.mustGetRNGStateVarWithValue()
+// It is a proxy to Store.RandomBernoulli.
+func (s *Scope) RandomBernoulli(prob *Node, shape shapes.Shape) *Node {
+	return s.store.RandomBernoulli(prob, shape)
+}
+
+// RandomIntN generates random numbers uniformly from 0 to N-1.
+func (s *Store) RandomIntN(g *graph.Graph, N any, shape shapes.Shape) (values *Node) {
+	rngStateVar := s.mustGetRNGStateVarWithValue()
 	rngState := rngStateVar.ValueGraph(g)
 	switch n := N.(type) {
 	case *Node:
@@ -196,4 +171,11 @@ func (ctx *Context) RandomIntN(g *graph.Graph, N any, shape shapes.Shape) (value
 	}
 	rngStateVar.SetValueGraph(rngState)
 	return
+}
+
+// RandomIntN generates random numbers uniformly from 0 to N-1.
+//
+// It is a proxy to Store.RandomIntN.
+func (s *Scope) RandomIntN(g *graph.Graph, N any, shape shapes.Shape) (values *Node) {
+	return s.store.RandomIntN(g, N, shape)
 }

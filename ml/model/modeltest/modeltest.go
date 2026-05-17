@@ -17,7 +17,7 @@ import (
 )
 
 // TestContextGraphFn should build its own inputs, and return both inputs and outputs
-type TestContextGraphFn func(ctx *model.Context, g *Graph) (inputs, outputs []*Node)
+type TestContextGraphFn func(scope *model.Scope, g *Graph) (inputs, outputs []*Node)
 
 // RunTestGraphFn tests a graph building function graphFn by executing it and comparing
 // its output(s) to the values in want, reporting back any errors in t.
@@ -25,17 +25,17 @@ type TestContextGraphFn func(ctx *model.Context, g *Graph) (inputs, outputs []*N
 // delta is the margin of value on the difference of output and want values that are acceptable.
 // Values of delta <= 0 means only exact equality is accepted.
 func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, want []any, delta float64) {
-	ctx := model.New()
+	store := model.NewStore()
 	var numInputs, numOutputs int
-	wrapperFn := func(ctx *model.Context, g *Graph) []*Node {
-		i, o := graphFn(ctx, g)
+	wrapperFn := func(scope *model.Scope, g *Graph) []*Node {
+		i, o := graphFn(scope, g)
 		numInputs, numOutputs = len(i), len(o)
 		all := append(i, o...)
 		return all
 	}
 
 	backend := testutil.BuildTestBackend()
-	exec := model.MustNewExec(backend, ctx, wrapperFn)
+	exec := model.MustNewExec(backend, store, wrapperFn)
 	var inputsAndOutputs []*tensors.Tensor
 	require.NotPanicsf(t, func() { inputsAndOutputs = exec.MustExec() },
 		"%s: failed to run graph", testName)
@@ -49,14 +49,14 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, w
 	if numInputs > 0 {
 		fmt.Printf("\t======\n")
 	}
-	ctx.EnumerateVariables(func(v *model.Variable) {
+	for v := range store.IterVariables() {
 		fmt.Printf("\tVar %s: ", v.ParameterName())
 		if v.Shape().Size() > 16 {
 			fmt.Printf("%s\n", v.Shape())
 		} else {
 			fmt.Printf("%s\n", v.MustValue().GoStr())
 		}
-	})
+	}
 	fmt.Printf("\t======\n")
 	for ii, output := range outputs {
 		fmt.Printf("\tOutput %d: %s\n", ii, output.GoStr())

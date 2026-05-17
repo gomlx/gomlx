@@ -10,7 +10,7 @@ import (
 )
 
 // VariableInitializer builds a valueNode that returns a value to initialize a variable of the given
-// shape. It is defined in the Context.
+// shape. It is defined in the Store.
 type VariableInitializer = func(g *graph.Graph, shape shapes.Shape) *Node
 
 // computeFanInFanOut of a variable expected to be the parameters of
@@ -50,7 +50,7 @@ func computeFanInFanOut(shape shapes.Shape) (fanIn, fanOut int) {
 // Copy from package initializers, used to populate the DefaultInitializer.
 //
 // It uses the context random state (as opposed to initializers.HeFn which uses initializers own RNG state).
-func heInitializer(ctx *Context) VariableInitializer {
+func heInitializer(store *Store) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return graph.Zeros(g, shape)
@@ -62,7 +62,7 @@ func heInitializer(ctx *Context) VariableInitializer {
 		fanIn, _ := computeFanInFanOut(shape)
 		scale := max(1.0, float64(fanIn))
 		stddev := math.Sqrt(2.0 / scale)
-		values := ctx.RandomNormal(g, shape)
+		values := store.RandomNormal(g, shape)
 		return graph.MulScalar(values, stddev)
 	}
 }
@@ -73,4 +73,4 @@ func heInitializer(ctx *Context) VariableInitializer {
 // See package initializers for various standard initializers.
 //
 // It defaults to a He initializer (https://arxiv.org/pdf/1502.01852)
-var DefaultInitializer func(ctx *Context) VariableInitializer = heInitializer
+var DefaultInitializer func(store *Store) VariableInitializer = heInitializer

@@ -15,11 +15,11 @@ import (
 
 func TestRandomBernoulli(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
-	ctx.SetRNGStateFromSeed(42) // Always the same result.
-	gotT := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *graph.Graph) *graph.Node {
-		ctx.SetTraining(g, true)
-		values := ctx.RandomBernoulli(graph.Const(g, 0.13), shapes.Make(dtypes.Float32, 100, 100, 100))
+	scope := model.NewStore()
+	scope.SetRNGStateFromSeed(42) // Always the same result.
+	gotT := model.MustExecOnce(backend, scope, func(scope *model.Scope, g *graph.Graph) *graph.Node {
+		scope.SetTraining(g, true)
+		values := scope.RandomBernoulli(graph.Const(g, 0.13), shapes.Make(dtypes.Float32, 100, 100, 100))
 		require.NoError(t, values.Shape().CheckDims(100, 100, 100))
 		return graph.ReduceAllMean(values)
 	})

@@ -4,6 +4,7 @@ package model
 
 import (
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/gomlx/compute/distributed"
@@ -12,6 +13,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
+	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/xsync"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -31,8 +33,8 @@ import (
 // When building a graph, they are passed as parameters (the corresponding graph node is called ParameterNode)
 // and have their values passed only during the execution of the compiled computation graph.
 type Variable struct {
-	ctx         *Context
-	name, scope string
+	scope         *Scope
+	name, scopePath string
 
 	// Trainable indicates whether the variable is trainable.
 	// If set to false, it won't be touched by trainers.
@@ -64,17 +66,16 @@ type Variable struct {
 	graphToNodes xsync.SyncMap[graph.GraphId, *variableNodes]
 }
 
-// CloneToContext Variable.
+// CloneToStore Variable.
 //
-// Value, name, scope, trainable state, shardingSpec spec, and initializer are cloned.
+// Value, name, scopePath, trainable state, shardingSpec spec, and initializer are cloned.
 // But the new clone starts with no graph node mapping -- so it's assumed it's not in use by any Graph.
 //
-// The variable is then inserted into the given model.
-func (v *Variable) CloneToContext(toCtx *Context) (*Variable, error) {
+// The variable is then inserted into the given store.
+func (v *Variable) CloneToStore(toStore *Store) (*Variable, error) {
 	newV := &Variable{
-		ctx:          toCtx,
 		name:         v.name,
-		scope:        v.scope,
+		scopePath:    v.scopePath,
 		shape:        v.shape,
 		Trainable:    v.Trainable,
 		shardingSpec: v.shardingSpec,
@@ -92,8 +93,20 @@ func (v *Variable) CloneToContext(toCtx *Context) (*Variable, error) {
 	if err != nil {
 		return nil, err
 	}
-	toCtx.InAbsPath(v.scope).setVariableInScope(v.name, newV)
+	toStore.setVariable(newV)
 	return newV, nil
+}
+
+func valueToTensor(value any) *tensors.Tensor {
+	if tensorValue, ok := value.(*tensors.Tensor); ok {
+		return tensorValue
+	}
+	if node, ok := value.(*Node); ok {
+		Panicf(
+			"trying to feed a computation graph node (`*computation.Node`) as a concrete value will not work, "+
+				"you have to provide a Go value or a tensor here -- *Node provided: %s", node)
+	}
+	return tensors.FromAnyValue(value)
 }
 
 // variableNodes is used to store the variable parameter node (fed to the graph) and current value Node for a given graph.
@@ -175,7 +188,7 @@ func (v *Variable) Scope() string {
 	if v == nil {
 		return "<nil>"
 	}
-	return v.scope
+	return v.scopePath
 }
 
 // Shape returns the variable shape.
@@ -267,14 +280,14 @@ const VariableParameterPrefix = "var:"
 
 // ScopeAndName is a quick pretty-print way to refer to a variable.
 func (v *Variable) ScopeAndName() string {
-	return JoinScope(v.Scope(), v.Name())
+	return path.Join(v.scopePath, v.name)
 }
 
 // ParameterName used when creating a parameter node in a Graph to access the variable, or as a key when saving.
 // It is a unique name for the variable that includes the scope and the variable name and is reversible.
 func (v *Variable) ParameterName() string {
 	v.AssertValid()
-	return VariableParameterNameFromScopeAndName(v.Scope(), v.Name())
+	return VariableParameterNameFromScopeAndName(v.scopePath, v.name)
 }
 
 // VariableScopeAndNameFromParameterName extracts the scope and name from a variable's [GetParameterName].
@@ -283,23 +296,13 @@ func VariableScopeAndNameFromParameterName(parameterName string) (scope, name st
 	if !strings.HasPrefix(parameterName, VariableParameterPrefix) {
 		return scope, name
 	}
-	parts := strings.Split(parameterName[len(VariableParameterPrefix):], ScopeSeparator)
-	if len(parts) == 1 {
-		// Scope was not properly set.
-		return scope, name
-	}
-	name = parts[len(parts)-1]
-	if len(parts) > 2 { //nolint:mnd // (scope, name) pair.
-		scope = strings.Join(parts[:len(parts)-1], ScopeSeparator)
-	} else {
-		scope = RootScope
-	}
-	return scope, name
+	fullPath := parameterName[len(VariableParameterPrefix):]
+	return path.Split(fullPath)
 }
 
 // VariableParameterNameFromScopeAndName creates the [Variable.ParameterName] from its scope and name.
 func VariableParameterNameFromScopeAndName(scope, name string) string {
-	return fmt.Sprintf("%s%s%s%s", VariableParameterPrefix, scope, ScopeSeparator, name)
+	return VariableParameterPrefix + path.Join(scope, name)
 }
 
 // MustValue returns the tensor holding the variable value. Use this to manipulate the value in Go.
@@ -407,7 +410,7 @@ func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) error {
 	if value != nil {
 		v.shape = value.Shape()
 	} else {
-		v.ctx.data.needsInitialization = true
+		v.scope.store.needsInitialization = true
 	}
 	return nil
 }
@@ -430,7 +433,7 @@ func (v *Variable) SetDistributedValue(distValue *dtensor.Tensor) error {
 		v.shardingSpec = distValue.ShardingSpec()
 	} else {
 		// If setting to nil, marks the context as needing initialization.
-		v.ctx.data.needsInitialization = true
+		v.scope.store.needsInitialization = true
 	}
 	return nil
 }
@@ -452,7 +455,7 @@ func (v *Variable) DistributedValue() (*dtensor.Tensor, error) {
 	}
 	shardingSpec := v.shardingSpec
 	if shardingSpec == nil {
-		shardingSpec = v.ctx.data.defaultShardingSpec
+		shardingSpec = v.scope.store.defaultShardingSpec
 	}
 	if shardingSpec == nil {
 		return nil, errors.Errorf("variable %q has no shardingSpec spec", v.ScopeAndName())
@@ -554,7 +557,7 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		// If a shardingSpec spec is present, we need to calculate the shard shape.
 		// If no shardingSpec spec is present, it is assumed replicated, so we use the full shape.
 		if v.shardingSpec == nil {
-			v.shardingSpec = v.ctx.data.defaultShardingSpec
+			v.shardingSpec = v.scope.store.defaultShardingSpec
 		}
 		// SPMD uses the shard shape.
 		paramNode = graph.ShardedParameter(g, paramName, v.ShardShape(), v.shardingSpec)
@@ -563,7 +566,7 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		// In AutoSharding, the graph sees the global logical shape.
 		// We attach the shardingSpec spec to the node if available.
 		if v.shardingSpec == nil {
-			v.shardingSpec = v.ctx.data.defaultShardingSpec
+			v.shardingSpec = v.scope.store.defaultShardingSpec
 		}
 		// AutoSharding uses the full logical shape as shape.
 		paramNode = graph.ShardedParameter(g, paramName, v.shape, v.shardingSpec)
@@ -611,6 +614,6 @@ func (v *Variable) Finalize() error {
 	}
 	v.shape = shapes.Invalid()
 	v.graphToNodes.Clear()
-	v.ctx = nil
+	v.scope = nil
 	return firstErr
 }

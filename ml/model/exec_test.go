@@ -16,18 +16,26 @@ import (
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializers"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func oneLayerGraph(ctx *model.Context, x *Node) *Node {
-	return layers.DenseWithBias(ctx.In("dense0"), x, 1)
+func denseWithBias(scope *model.Scope, x *Node, outputDim int) *Node {
+	g := x.Graph()
+	inputDim := x.Shape().Dimensions[x.Shape().Rank()-1]
+	w := scope.VariableWithShape("weights", shapes.Make(x.DType(), inputDim, outputDim)).ValueGraph(g)
+	b := scope.VariableWithShape("biases", shapes.Make(x.DType(), outputDim)).ValueGraph(g)
+	y := MatMul(x, w)
+	return Add(y, ExpandLeftToRank(b, y.Rank()))
 }
 
-func oneLayerManyInputsGraph(ctx *model.Context, inputs []*Node) *Node {
-	return layers.DenseWithBias(ctx.In("dense0"), Concatenate(inputs, -1), 1)
+func oneLayerGraph(scope *model.Scope, x *Node) *Node {
+	return denseWithBias(scope.In("dense0"), x, 1)
+}
+
+func oneLayerManyInputsGraph(scope *model.Scope, inputs []*Node) *Node {
+	return denseWithBias(scope.In("dense0"), Concatenate(inputs, -1), 1)
 }
 
 func TestExec(t *testing.T) {
@@ -35,9 +43,9 @@ func TestExec(t *testing.T) {
 
 	// Checks that Context.RNGState is auto-initialized correctly.
 	t.Run("Context.RNGState initialization", func(t *testing.T) {
-		ctx := model.New()
-		result, err := model.ExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
-			return Add(ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 10)), Const(g, float32(0.0001)))
+		scope := model.NewStore()
+		result, err := model.ExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
+			return Add(scope.RandomUniform(g, shapes.Make(dtypes.Float32, 10)), Const(g, float32(0.0001)))
 		})
 		require.NoError(t, err)
 		assert.NotNil(t, result)
@@ -53,9 +61,9 @@ func TestExec(t *testing.T) {
 
 	// Checks that Context.RNGState is auto-initialized correctly.
 	t.Run("variable initialization", func(t *testing.T) {
-		ctx := model.New()
-		result, err := model.ExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
-			v := ctx.WithInitializer(initializers.RandomUniformFn(ctx, 0.0001, 1.0)).
+		scope := model.NewStore()
+		result, err := model.ExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
+			v := scope.WithInitializer(initializers.RandomUniformFn(scope, 0.0001, 1.0)).
 				VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
 			return v.ValueGraph(g)
 		})
@@ -140,10 +148,10 @@ func TestExec(t *testing.T) {
 	})
 
 	t.Run("VariableUpdates", func(t *testing.T) {
-		ctx := model.New()
-		counter := model.MustNewExec(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
+		scope := model.NewStore()
+		counter := model.MustNewExec(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 			dtype := dtypes.Int64
-			counterVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("counter", shapes.Make(dtype))
+			counterVar := scope.WithInitializer(initializers.Zero).VariableWithShape("counter", shapes.Make(dtype))
 			counterNode := counterVar.ValueGraph(g)
 			counterNode = Add(counterNode, OnesLike(counterNode))
 			counterVar.SetValueGraph(counterNode)
@@ -161,7 +169,7 @@ func TestExec(t *testing.T) {
 		if got != 2 {
 			t.Fatalf("Wanted second counter value to be 2, got %d instead", got)
 		}
-		counterVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "counter")
+		counterVar := scope.GetVariable("/counter")
 		require.NotNil(t, counterVar)
 		require.Equal(t, int64(2), tensors.ToScalar[int64](counterVar.MustValue()))
 	})
@@ -178,16 +186,16 @@ func TestAutoSharding(t *testing.T) {
 	// Replicating variable: initializing it's value non-sharde should trigger automatic replication.
 	// for each device.
 	t.Run("replicated variable", func(t *testing.T) {
-		ctx := model.New()
-		xVar := ctx.VariableWithValue("x", []float32{1.0, 2.0, 3.0})
-		e := model.MustNewExec(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
+		store := model.NewStore()
+		xVar := store.RootScope().VariableWithValue("x", []float32{1.0, 2.0, 3.0})
+		e := model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) *Node {
 			return xVar.ValueGraph(g)
 		})
 		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
 		e = e.AutoSharding(meshFor2).
 			WithOutputShardingSpecs(replicatedSpec)
 		require.NoError(t, e.SetDefaultShardingSpec(replicatedSpec))
-		require.NoError(t, ctx.ResetRNGState())
+		require.NoError(t, store.ResetRNGState())
 		shardedResults, err := e.Exec()
 		require.NoError(t, err)
 		require.Len(t, shardedResults, 2)
@@ -213,11 +221,11 @@ func TestAutoSharding(t *testing.T) {
 	// RNGState is special: it must be initialized as "replicated", but the values are different
 	// for each device.
 	t.Run("RandomUniform", func(t *testing.T) {
-		ctx := model.New()
-		ctx.SetParam(model.ParamInitialSeed, int64(42))
-		e := model.MustNewExec(backend, ctx, func(ctx *model.Context, g *Graph) (*Node, *Node) {
-			a := ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 2, 3))
-			b := ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 2, 3))
+		store := model.NewStore()
+		store.SetParam("/", model.ParamInitialSeed, int64(42))
+		e := model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) (*Node, *Node) {
+			a := scope.RandomUniform(g, shapes.Make(dtypes.Float32, 2, 3))
+			b := scope.RandomUniform(g, shapes.Make(dtypes.Float32, 2, 3))
 			return a, b
 		})
 		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
@@ -225,7 +233,7 @@ func TestAutoSharding(t *testing.T) {
 		e = e.AutoSharding(meshFor2).
 			WithOutputShardingSpecs(shardedSpec)
 		require.NoError(t, e.SetDefaultShardingSpec(replicatedSpec))
-		require.NoError(t, ctx.ResetRNGState())
+		require.NoError(t, store.ResetRNGState())
 		shardedResults, err := e.Exec()
 		require.NoError(t, err)
 		require.Len(t, shardedResults, 4)
@@ -245,20 +253,20 @@ func TestAutoSharding(t *testing.T) {
 	})
 
 	t.Run("variable initialization", func(t *testing.T) {
-		ctx := model.New()
-		ctx.SetParam(model.ParamInitialSeed, int64(42))
-		e, err := model.NewExec(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
+		store := model.NewStore()
+		store.SetParam("/", model.ParamInitialSeed, int64(42))
+		e, err := model.NewExec(backend, store, func(scope *model.Scope, g *Graph) *Node {
 			// v := ctx.WithInitializer(initializers.RandomUniformFn(ctx, 0.0001, 1.0)).VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
 			// return v.ValueGraph(g)
 			// return ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 10))
-			return ctx.GetVariable(model.RNGStateVariableName).ValueGraph(g)
+			return scope.Store().GetVariable(model.RNGStateVariableName).ValueGraph(g)
 		})
 		require.NoError(t, err)
 		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
 		e = e.AutoSharding(meshFor2).
 			WithOutputShardingSpecs(replicatedSpec)
 		require.NoError(t, e.SetDefaultShardingSpec(replicatedSpec))
-		require.NoError(t, ctx.ResetRNGState())
+		require.NoError(t, store.ResetRNGState())
 
 		shardedResults, err := e.Exec()
 		require.NoError(t, err)
@@ -270,13 +278,13 @@ func TestAutoSharding(t *testing.T) {
 	})
 
 	t.Run("batch sharding", func(t *testing.T) {
-		ctx := model.New()
-		ctx.SetParam(model.ParamInitialSeed, int64(42))
-		oneLayerExec, err := model.NewExec(backend, ctx, func(ctx *model.Context, x *Node) (*Node, *Node) {
+		store := model.NewStore()
+		store.SetParam("/", model.ParamInitialSeed, int64(42))
+		oneLayerExec, err := model.NewExec(backend, store, func(scope *model.Scope, x *Node) (*Node, *Node) {
 			g := x.Graph()
-			wVar := ctx.VariableWithShape("w", shapes.Make(dtypes.F64, 3, 1))
+			wVar := scope.VariableWithShape("w", shapes.Make(dtypes.F64, 3, 1))
 			w := wVar.ValueGraph(g)
-			bVar := ctx.VariableWithShape("b", shapes.Make(dtypes.F64, 1))
+			bVar := scope.VariableWithShape("b", shapes.Make(dtypes.F64, 1))
 			b := bVar.ValueGraph(g)
 			y := MatMul(x, w)
 			y = Add(y, ExpandLeftToRank(b, y.Rank()))

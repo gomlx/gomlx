@@ -48,12 +48,12 @@ func One(graph *Graph, shape shapes.Shape) *Node {
 // If it is set to 0 (NoSeed, the default), a random seed is instead generated (from the nanosecond clock).
 //
 // Non-float and non-complex variables are initialized with zero instead.
-func RandomNormalFn(ctx *model.Context, stddev float64) VariableInitializer {
+func RandomNormalFn(scope *model.Scope, stddev float64) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if shape.DType != dtypes.Float32 && shape.DType != dtypes.Float64 {
 			return Zeros(g, shape)
 		}
-		values := ctx.RandomNormal(g, shape)
+		values := scope.RandomNormal(g, shape)
 		return MulScalar(values, stddev)
 	}
 }
@@ -65,12 +65,12 @@ func RandomNormalFn(ctx *model.Context, stddev float64) VariableInitializer {
 // If it is set to 0 (NoSeed, the default), a random seed is instead generated (from the nanosecond clock).
 //
 // Non-float and non-complex variables are initialized with zero instead.
-func RandomUniformFn(ctx *model.Context, min, max float64) VariableInitializer {
+func RandomUniformFn(scope *model.Scope, min, max float64) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
 		}
-		values := ctx.RandomUniform(g, shape)
+		values := scope.RandomUniform(g, shape)
 		values = MulScalar(values, max-min)
 		values = AddScalar(values, min)
 		return values
@@ -98,7 +98,7 @@ func RandomUniformFn(ctx *model.Context, min, max float64) VariableInitializer {
 // It initializes biases (anything with rank <= 1) to zeros.
 //
 // Non-float and non-complex variables are initialized with zero instead.
-func GlorotUniformFn(ctx *model.Context) VariableInitializer {
+func GlorotUniformFn(scope *model.Scope) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -110,7 +110,7 @@ func GlorotUniformFn(ctx *model.Context) VariableInitializer {
 		fanIn, fanOut := computeFanInFanOut(shape)
 		scale := max(1.0, float64(fanIn+fanOut)/2.0)
 		limit := math.Sqrt(3.0 / scale)
-		values := ctx.RandomUniform(g, shape)
+		values := scope.RandomUniform(g, shape)
 		values = MulScalar(values, 2*limit)
 		values = AddScalar(values, -limit)
 		return values
@@ -152,7 +152,7 @@ func computeFanInFanOut(shape shapes.Shape) (fanIn, fanOut int) {
 // It initializes biases (anything with rank <= 1) to zeros.
 //
 // Non-float and non-complex variables are initialized with zero instead.
-func XavierUniformFn(ctx *model.Context) VariableInitializer {
+func XavierUniformFn(scope *model.Scope) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -164,7 +164,7 @@ func XavierUniformFn(ctx *model.Context) VariableInitializer {
 		fanIn, fanOut := computeFanInFanOut(shape)
 		scale := max(1.0, float64(fanIn+fanOut))
 		limit := math.Sqrt(6.0 / scale)
-		values := ctx.RandomUniform(g, shape)
+		values := scope.RandomUniform(g, shape)
 		values = MulScalar(values, 2*limit)
 		values = AddScalar(values, -limit)
 		return values
@@ -181,7 +181,7 @@ func XavierUniformFn(ctx *model.Context) VariableInitializer {
 // It initializes biases (anything with rank <= 1) to zeros.
 //
 // Non-float and non-complex variables are initialized with zero instead.
-func XavierNormalFn(ctx *model.Context) VariableInitializer {
+func XavierNormalFn(scope *model.Scope) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -193,7 +193,7 @@ func XavierNormalFn(ctx *model.Context) VariableInitializer {
 		fanIn, fanOut := computeFanInFanOut(shape)
 		scale := max(1.0, float64(fanIn+fanOut))
 		stddev := math.Sqrt(2.0 / scale)
-		values := ctx.RandomNormal(g, shape)
+		values := scope.RandomNormal(g, shape)
 		return MulScalar(values, stddev)
 	}
 }
@@ -208,7 +208,7 @@ func XavierNormalFn(ctx *model.Context) VariableInitializer {
 //
 // [1] https://medium.com/@tylernisonoff/weight-initialization-for-cnns-a-deep-dive-into-he-initialization-50b03f37f53d
 // [2] https://arxiv.org/pdf/1502.01852
-func HeFn(ctx *model.Context) VariableInitializer {
+func HeFn(scope *model.Scope) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -220,7 +220,7 @@ func HeFn(ctx *model.Context) VariableInitializer {
 		fanIn, _ := computeFanInFanOut(shape)
 		scale := max(1.0, float64(fanIn))
 		stddev := math.Sqrt(2.0 / scale)
-		values := ctx.RandomNormal(g, shape)
+		values := scope.RandomNormal(g, shape)
 		return MulScalar(values, stddev)
 	}
 }

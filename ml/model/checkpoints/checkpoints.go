@@ -110,7 +110,7 @@ const (
 // a checkpoints.Handler that loads (if there are any previously saved checkpoints) and
 // saves checkpoints.
 type Config struct {
-	ctx *model.Context
+	scope *model.Scope
 
 	err error
 
@@ -148,9 +148,9 @@ type Config struct {
 // gomlx_checkpoints, will want to do that.
 //
 // See Config.Dir, Config.DirFromBase or Config.FromEmbed to specify where to load/save.
-func Build(ctx *model.Context) *Config {
+func Build(scope *model.Scope) *Config {
 	c := &Config{
-		ctx:             ctx,
+		scope:           scope,
 		includeParams:   true,
 		keep:            1,
 		takeMean:        1,
@@ -165,8 +165,8 @@ func Build(ctx *model.Context) *Config {
 //
 // Use Dir or DirWithBase to configure the location of the checkpoint.
 // Once configured, call Config.Done to actually load it.
-func Load(ctx *model.Context) *Config {
-	c := Build(ctx)
+func Load(scope *model.Scope) *Config {
+	c := Build(scope)
 	c.mustLoad = true
 	return c
 }
@@ -247,7 +247,7 @@ func (c *Config) FromEmbed(json string, binary []byte) *Config {
 // Immediate forces immediate load of all variables, as opposed to dynamically load
 // variables from checkpoint as they are being used when building the model.
 //
-// Not normally needed, but may be handy for testing. See also [model.Context.InspectVariableIfLoaded].
+// Not normally needed, but may be handy for testing. See also [model.Scope.InspectVariableIfLoaded].
 //
 // It may trigger use more memory if not all variables are not used by the model -- not all training data (e.g.: optimizer
 // variables) is used for inference.
@@ -426,22 +426,20 @@ func (c *Config) Done() (*Handler, error) {
 	}
 
 	if c.immediate {
-		ctxToSet := c.ctx.Checked(false)
 		for paramName, value := range handler.variableValues {
-			scope, name := model.VariableScopeAndNameFromParameterName(paramName)
-			v := ctxToSet.GetVariableByScopeAndName(scope, name)
+			v := c.scope.Store().GetVariable(paramName)
 			if v != nil {
 				v.MustSetValue(value)
 			} else {
-				ctxToSet.InAbsPath(scope).VariableWithValue(name, value)
+				scopePath, name := model.VariableScopeAndNameFromParameterName(paramName)
+				c.scope.Store().Scope(scopePath).VariableWithValue(name, value)
 			}
 		}
 		// Empty remaining variableValues.
 		handler.variableValues = make(map[string]*tensors.Tensor)
 	} else {
 		// Force overwriting variables already present in the context: e.g., global_step.
-		ctxToSet := c.ctx.Checked(false)
-		for v := range ctxToSet.IterVariables() {
+		for v := range c.scope.IterVariables() {
 			value, found := handler.LoadedVariables()[v.ParameterName()]
 			if !found {
 				continue
@@ -450,7 +448,7 @@ func (c *Config) Done() (*Handler, error) {
 			delete(handler.variableValues, v.ParameterName())
 		}
 	}
-	handler.attachTo(c.ctx)
+	handler.attachTo(c.scope)
 	return handler, nil
 }
 
@@ -491,7 +489,7 @@ func (c *Config) MustDone() *Handler {
 // not keep it.
 type Handler struct {
 	config            *Config
-	ctx               *model.Context
+	scope             *model.Scope
 	prevContextLoader model.Loader
 
 	serialized     *serializedData
@@ -685,7 +683,7 @@ func (h *Handler) loadCheckpointFromFile(baseName string, merge bool, mergeWeigh
 	if klog.V(1).Enabled() {
 		klog.Infof("loading: %q\n", baseName)
 	}
-	if h.ctx != nil {
+	if h.scope != nil {
 		return errors.Errorf(
 			"%s tried to loadCheckpointFromFile(%q) after being attached to a Context, this is not allowed",
 			h, baseName)
@@ -866,23 +864,23 @@ func (h *Handler) Save() error {
 	if h == nil {
 		return nil
 	}
-	if h.ctx == nil {
+	if h.scope == nil {
 		return errors.Errorf("%s not attached to a model.Context yet.", h)
 	}
 
 	// Read globalStep if one is set.
-	globalStep := optimizers.GetGlobalStep(h.ctx)
+	globalStep := optimizers.GetGlobalStep(h.scope)
 	// Update the binary format in JSON.
 	h.serialized.BinFormat = h.config.binFormat.String()
 
 	// Copy over Params.
 	if h.config.includeParams {
 		h.serialized.Params = nil
-		h.ctx.EnumerateParams(func(scope, name string, value any) {
+		for p := range h.scope.IterParams() {
 			h.serialized.Params = append(h.serialized.Params,
 				serializedParam{
-					Scope: scope, Key: name, Value: value, ValueType: fmt.Sprintf("%T", value)})
-		})
+					Scope: p.Scope, Key: p.Key, Value: p.Value, ValueType: fmt.Sprintf("%T", p.Value)})
+		}
 	}
 
 	// Create files.
@@ -902,7 +900,7 @@ func (h *Handler) Save() error {
 
 	// Copy over and set variables: both from Context and previously loaded ones, that haven't yet
 	// been loaded into model.
-	h.serialized.Variables = make([]serializedVar, 0, h.ctx.NumVariables()+len(h.variableValues))
+	h.serialized.Variables = make([]serializedVar, 0, h.scope.NumVariables()+len(h.variableValues))
 	pos := 0
 	// * Closure to save the contents of a variable.
 	saveVar := func(name string, tensor *tensors.Tensor) error {
@@ -940,15 +938,15 @@ func (h *Handler) Save() error {
 	}
 
 	// * Loop over variables in model.
-	h.ctx.EnumerateVariables(func(v *model.Variable) {
+	for v := range h.scope.IterVariables() {
 		if err != nil {
-			return
+			return err
 		}
 		if h.config.varsToExclude.Has(v) {
-			return
+			continue
 		}
 		err = saveVar(v.ParameterName(), v.MustValue())
-	})
+	}
 
 	// * Loop over current loaded variables.
 	for name, tensor := range h.variableValues {
@@ -1056,22 +1054,22 @@ func (h *Handler) keepNCheckpoints() error {
 //
 // attachTo can only be called once. It will fail, and set the given context to an error state if
 // requested to attach more than once.
-func (h *Handler) attachTo(ctx *model.Context) {
-	if h.ctx != nil {
+func (h *Handler) attachTo(scope *model.Scope) {
+	if h.scope != nil {
 		Panicf("%s already attached to a Context, can not attach to another one", h.config.dir)
 	}
-	h.ctx = ctx
-	h.prevContextLoader = ctx.Loader()
-	ctx.SetLoader(h)
+	h.scope = scope
+	h.prevContextLoader = scope.Store().Loader()
+	scope.Store().SetLoader(h)
 
 	// Sets ctx.Params with values read, if any.
 	if h.config.includeParams {
 		for _, p := range h.serialized.Params {
 			// Check for un-scoped and scoped exclusions:
-			if h.config.paramsToExclude.Has(p.Key) || h.config.paramsToExclude.Has(model.JoinScope(p.Scope, p.Key)) {
+			if h.config.paramsToExclude.Has(p.Key) || h.config.paramsToExclude.Has(path.Join(p.Scope, p.Key)) {
 				continue
 			}
-			tmpCtx := ctx.InAbsPath(p.Scope)
+			tmpCtx := scope.Store().Scope(p.Scope)
 			tmpCtx.SetParam(p.Key, p.Value)
 		}
 	}
@@ -1091,10 +1089,10 @@ func (h *Handler) Dir() string {
 // LoadVariable implements model.Loader.
 // This is called by model.Context when the variable is used for the first time.
 // The user may want to use this function to inspect loaded values for testing.
-func (h *Handler) LoadVariable(ctx *model.Context, scope, name string) (value *tensors.Tensor, found bool) {
+func (h *Handler) LoadVariable(store *model.Store, fullPath string) (value *tensors.Tensor, found bool) {
 	// Priority is based on the installation order. That means we attempt first the previously configured loaders.
 	if h.prevContextLoader != nil {
-		value, found = h.prevContextLoader.LoadVariable(ctx, scope, name)
+		value, found = h.prevContextLoader.LoadVariable(store, fullPath)
 		if found {
 			// Previous manager found value (or issued an error), return that.
 			return
@@ -1102,7 +1100,8 @@ func (h *Handler) LoadVariable(ctx *model.Context, scope, name string) (value *t
 	}
 
 	// Try to find variable in our currently loaded checkpoint.
-	varParamName := model.VariableParameterNameFromScopeAndName(scope, name)
+	// varParamName is VariableParameterPrefix + fullPath
+	varParamName := model.VariableParameterPrefix + fullPath
 	value, found = h.variableValues[varParamName]
 	if !found {
 		return
@@ -1116,11 +1115,11 @@ func (h *Handler) LoadVariable(ctx *model.Context, scope, name string) (value *t
 // DeleteVariable implements model.Loader.
 // It is called whenever Context.DeleteVariable is called. The deletion should cascade to the
 // loader, otherwise the variable will reappear after deletion.
-func (h *Handler) DeleteVariable(ctx *model.Context, scope, name string) error {
+func (h *Handler) DeleteVariable(store *model.Store, fullPath string) error {
 	if h.prevContextLoader != nil {
-		h.prevContextLoader.DeleteVariable(ctx, scope, name)
+		_ = h.prevContextLoader.DeleteVariable(store, fullPath)
 	}
-	varParamName := model.VariableParameterNameFromScopeAndName(scope, name)
+	varParamName := model.VariableParameterPrefix + fullPath
 	delete(h.variableValues, varParamName)
 	return nil
 }

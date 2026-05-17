@@ -16,16 +16,18 @@ import (
 
 func TestVariable_CloneToContext(t *testing.T) {
 	value := []float32{3, 5, 7, 11, 13}
-	ctx0 := New()
-	v0x := ctx0.In("a").In("b").VariableWithValue("x", value)
+	store0 := NewStore()
+	root0 := store0.RootScope()
+	sA := root0.In("a")
+	v0x := sA.In("b").VariableWithValue("x", value)
 	// Uninitialized variable:
-	v0y := ctx0.In("a").In("b").VariableWithShape("y", shapes.Make(dtypes.Int8, 2, 3, 4))
+	v0y := sA.Shared("b").VariableWithShape("y", shapes.Make(dtypes.Int8, 2, 3, 4))
 
-	ctx1 := New()
-	v1x, err := v0x.CloneToContext(ctx1)
+	store1 := NewStore()
+	v1x, err := v0x.CloneToStore(store1)
 	require.NoError(t, err)
 	fmt.Printf("Cloned variable %q: %s\n", v1x.ScopeAndName(), v1x.MustValue())
-	v1y, err := v0y.CloneToContext(ctx1)
+	v1y, err := v0y.CloneToStore(store1)
 	require.NoError(t, err)
 	_, err = v1y.Value()
 	require.Error(t, err, "/a/b/y was created uninitialized, it should have no value")
@@ -36,12 +38,12 @@ func TestVariable_CloneToContext(t *testing.T) {
 		fmt.Printf("Unexpeted scope/name of clone variable: %q\n", v1x.ScopeAndName())
 		t.Fail()
 	}
-	require.Equal(t, 2, ctx1.NumVariables())
-	require.Equal(t, v1x, ctx1.GetVariableByScopeAndName("/a/b", "x"))
-	require.Equal(t, v1y, ctx1.GetVariableByScopeAndName("/a/b", "y"))
+	require.Equal(t, 2, store1.NumVariables())
+	require.Equal(t, v1x, store1.GetVariable("/a/b/x"))
+	require.Equal(t, v1y, store1.GetVariable("/a/b/y"))
 
 	// Check the new variable value is independent of the old one.
-	ctx0 = nil
+	store0 = nil
 	v0x.MustValue().MustFinalizeAll()
 	for range 5 {
 		runtime.GC()

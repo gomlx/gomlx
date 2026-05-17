@@ -31,23 +31,24 @@ func TestCheckpoints(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 
 	// Graph function to test: it simply creates, increments and returns the global step.
-	testGraphFn := func(ctx *model.Context, g *Graph) *Node {
-		return optimizers.IncrementGlobalStepGraph(ctx, g, dtypes.Float64)
+	testGraphFn := func(scope *model.Scope, g *Graph) *Node {
+		return optimizers.IncrementGlobalStepGraph(scope, g, dtypes.Float64)
 	}
 	var dir string
 	{
 		// Build model, checkpoint a few times.
-		ctx := model.New()
-		ctx.SetParam("learning_rate", 0.01)
-		ctx.SetParam(regularizers.ParamL2, 0.001)
-		ctx.SetParam(regularizers.ParamL1, 1.0e7)
-		ctx.In("layer_1").SetParam(regularizers.ParamL2, 0.004)
-		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").
+		store := model.NewStore()
+		root := store.RootScope()
+		root.SetParam("learning_rate", 0.01)
+		root.SetParam(regularizers.ParamL2, 0.001)
+		root.SetParam(regularizers.ParamL1, 1.0e7)
+		root.In("layer_1").SetParam(regularizers.ParamL2, 0.004)
+		checkpoint := Build(root).TempDir("", "test_checkpoints_").
 			Keep(3).MustDone()
 		assert.Equal(t, 0, checkpoint.checkpointsCount)
 		dir = checkpoint.Dir()
 		fmt.Printf("Checkpoint directory: %s\n", dir)
-		e := model.MustNewExec(backend, ctx, testGraphFn)
+		e := model.MustNewExec(backend, store, testGraphFn)
 		for ii := range 10 {
 			results := e.MustExec()
 			globalStep := tensors.ToScalar[float64](results[0])
@@ -66,36 +67,37 @@ func TestCheckpoints(t *testing.T) {
 	// Test loading of variables and parameters.
 	{
 		// Build model, checkpoint a few times.
-		ctx := model.New()
-		ctx.SetParam("learning_rate", 5.0)       // Value should be overwritten when loading.
-		ctx.SetParam(regularizers.ParamL1, 17.0) // Value should NOT be overwritten when loading.
-		checkpoint := Build(ctx).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).MustDone()
+		store := model.NewStore()
+		root := store.RootScope()
+		root.SetParam("learning_rate", 5.0)       // Value should be overwritten when loading.
+		root.SetParam(regularizers.ParamL1, 17.0) // Value should NOT be overwritten when loading.
+		checkpoint := Build(root).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).MustDone()
 
-		lr, found := ctx.GetParam("learning_rate")
+		lr, found := root.GetParam("learning_rate")
 		assert.True(t, found, "learning_rate should be set")
 		assert.Equal(t, 0.01, lr.(float64), "Params[learning_rate]")
-		assert.Equal(t, 17.0, model.GetParamOr(ctx, regularizers.ParamL1, 0.0))
+		assert.Equal(t, 17.0, model.GetParamOr(root, regularizers.ParamL1, 0.0))
 
 		var l2 any
-		l2, found = ctx.GetParam(regularizers.ParamL2)
+		l2, found = root.GetParam(regularizers.ParamL2)
 		assert.Truef(t, found, "%s should have been set", regularizers.ParamL2)
-		assert.Equal(t, 0.001, l2.(float64), "(Scope=%s) Params[%s]", ctx.Scope(), regularizers.ParamL2)
-		l2, found = ctx.In("layer_1").GetParam(regularizers.ParamL2)
+		assert.Equal(t, 0.001, l2.(float64), "(Scope=%s) Params[%s]", root.Scope(), regularizers.ParamL2)
+		l2, found = root.In("layer_1").GetParam(regularizers.ParamL2)
 		assert.Truef(t, found, "%s should have been set", regularizers.ParamL2)
 		assert.Equal(t, 0.004, l2.(float64), "Params[%s]", regularizers.ParamL2)
 
 		// If we are lazy loading, no variable should be listed.
-		for v := range ctx.IterVariables() {
+		for v := range root.IterVariables() {
 			fmt.Printf("\tvariable %q -> %s\n", v.ScopeAndName(), v.Shape())
 			t.Fail()
 		}
 
 		// Check that the variable (global_step) is listed, if we look for it.
-		v := ctx.GetVariable(optimizers.GlobalStepVariableName)
+		v := root.GetVariable(optimizers.GlobalStepVariableName)
 		require.NoError(t, v.Shape().Check(dtypes.Int64))
 
 		// Re-execute testGraphFn: it should load global step at 10, increment and return it at 11.
-		e := model.MustNewExec(backend, ctx, testGraphFn)
+		e := model.MustNewExec(backend, store, testGraphFn)
 		results := e.MustExec()
 		globalStep := tensors.ToScalar[float64](results[0])
 		assert.Equal(t, 11.0, globalStep, "Re-loaded global step")
@@ -109,21 +111,22 @@ func TestCheckpoints(t *testing.T) {
 
 	// Test that immediate form also loads the variables correctly.
 	{
-		ctx := model.New()
-		_ = Build(ctx).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).Immediate().MustDone()
+		store := model.NewStore()
+		root := store.RootScope()
+		_ = Build(root).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).Immediate().MustDone()
 
 		// Check that the only variable ("global_step") is present.
 		count := 0
-		for v := range ctx.IterVariables() {
+		for v := range root.IterVariables() {
 			// fmt.Printf("\tvariable %q -> %s\n", v.ScopeAndName(), v.Shape())
 			require.NoError(t, v.Shape().Check(dtypes.Int64))
 			count++
 		}
 		require.Equal(t, 1, count, "Number of variables should have been one: global_step")
 
-		v := ctx.GetVariable(optimizers.GlobalStepVariableName)
+		v := root.GetVariable(optimizers.GlobalStepVariableName)
 		require.NoError(t, v.Shape().Check(dtypes.Int64))
-		e := model.MustNewExec(backend, ctx, testGraphFn)
+		e := model.MustNewExec(backend, store, testGraphFn)
 		results := e.MustExec()
 		globalStep := tensors.ToScalar[float64](results[0])
 		assert.Equal(t, 12.0, globalStep, "Re-loaded global step")
@@ -135,8 +138,9 @@ func TestCheckpoints(t *testing.T) {
 	)
 	{
 		// Read the whole checkpoint to a variable -- similar to embedding it.
-		ctx := model.New()
-		handler := Build(ctx).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).Immediate().MustDone()
+		store := model.NewStore()
+		root := store.RootScope()
+		handler := Build(root).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).Immediate().MustDone()
 		checkpoints, err := handler.ListCheckpoints()
 		require.NoError(t, err)
 		lastCheckpoint := checkpoints[len(checkpoints)-1]
@@ -146,13 +150,14 @@ func TestCheckpoints(t *testing.T) {
 	}
 	{
 		// Check that reading from the variable works.
-		ctx := model.New()
-		_, err := Build(ctx).FromEmbed(string(jsonBlob), binBlob).Immediate().Done()
+		store := model.NewStore()
+		root := store.RootScope()
+		_, err := Build(root).FromEmbed(string(jsonBlob), binBlob).Immediate().Done()
 		require.NoError(t, err)
 
 		// Check that the only variable ("global_step") is present.
 		count := 0
-		for v := range ctx.IterVariables() {
+		for v := range root.IterVariables() {
 			fmt.Printf("\tFromEmbed: variable %q: %s -> %s\n", v.ScopeAndName(), v.Shape(), v.MustValue())
 			require.NoError(t, v.Shape().Check(dtypes.Int64))
 			require.Equal(t, "/global_step", v.ScopeAndName(), "Variable name")
@@ -174,30 +179,32 @@ func TestMergedCheckpoints(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	var dir string
 	{
-		ctx := model.New().Checked(false)
-		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").Keep(2).MustDone()
+		store := model.NewStore()
+		root := store.RootScope()
+		checkpoint := Build(root).TempDir("", "test_checkpoints_").Keep(2).MustDone()
 		dir = checkpoint.Dir()
-		globalStepV := optimizers.GetGlobalStepVar(ctx)
-		globalStepV.MustSetValue(tensors.FromValue(1))
-		xV := ctx.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
-		yV := ctx.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
+		globalStepV := optimizers.GetGlobalStepVar(root)
+		globalStepV.MustSetValue(tensors.FromValue(int64(1)))
+		xV := root.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
+		yV := root.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
 		require.NoError(t, checkpoint.Save())
 
-		globalStepV.MustSetValue(tensors.FromValue(10))
+		globalStepV.MustSetValue(tensors.FromValue(int64(10)))
 		xV.MustSetValue(tensors.FromValue([]float64{3.0, 3.0, 3.0}))
 		yV.MustSetValue(tensors.FromValue([][]float32{{6.0}, {6.0}}))
 		require.NoError(t, checkpoint.Save())
 	}
 	{
 		// Check that the values were averaged:
-		ctx := model.New().Checked(false)
-		_ = Build(ctx).Dir(dir).Keep(2).TakeMean(-1, backend).MustDone()
-		globalStep := optimizers.GetGlobalStep(ctx)
+		store := model.NewStore()
+		root := store.RootScope()
+		_ = Build(root).Dir(dir).Keep(2).TakeMean(-1, backend).MustDone()
+		globalStep := optimizers.GetGlobalStep(root)
 		assert.Equal(t, int64(10), globalStep, "GlobalStep")
-		xV := ctx.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
+		xV := root.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
 		// Assume X will be loaded with the mean of the previous 2 checkpoints:
 		assert.Equal(t, []float64{2.0, 2.0, 2.0}, xV.MustValue().Value(), "X")
-		yV := ctx.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
+		yV := root.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
 		assert.Equal(t, [][]float32{{5.0}, {5.0}}, yV.MustValue().Value(), "Y")
 	}
 
@@ -218,16 +225,17 @@ func TestParams(t *testing.T) {
 
 	{
 		// Build model, checkpoint a few times.
-		ctx := model.New()
-		ctx.SetParam("xFloat64", xFloat64)
-		ctx.SetParam("xFloat32", xFloat32)
-		ctx.SetParam("xInt", xInt)
-		ctx.SetParam("xInts", xInts)
-		ctx = ctx.In("foo") // Some different scope.
-		ctx.SetParam("xStr", xStr)
-		ctx.SetParam("xStrs", xStrs)
+		store := model.NewStore()
+		root := store.RootScope()
+		root.SetParam("xFloat64", xFloat64)
+		root.SetParam("xFloat32", xFloat32)
+		root.SetParam("xInt", xInt)
+		root.SetParam("xInts", xInts)
+		sFoo := root.In("foo") // Some different scope.
+		sFoo.SetParam("xStr", xStr)
+		sFoo.SetParam("xStrs", xStrs)
 
-		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").Keep(3).MustDone()
+		checkpoint := Build(root).TempDir("", "test_checkpoints_").Keep(3).MustDone()
 		dir = checkpoint.Dir()
 		require.NoError(t, checkpoint.Save())
 	}
@@ -235,31 +243,32 @@ func TestParams(t *testing.T) {
 	// Test loading of values
 	{
 		// Build model, checkpoint a few times.
-		ctx := model.New()
-		_ = Build(ctx).Dir(dir).Keep(3).MustDone()
+		store := model.NewStore()
+		root := store.RootScope()
+		_ = Build(root).Dir(dir).Keep(3).MustDone()
 
-		got, found := ctx.GetParam("xFloat64")
+		got, found := root.GetParam("xFloat64")
 		require.True(t, found)
 		assert.Equal(t, xFloat64, got)
 
-		got, found = ctx.GetParam("xFloat32")
+		got, found = root.GetParam("xFloat32")
 		assert.True(t, found)
 		assert.Equal(t, xFloat32, got)
 
-		got, found = ctx.GetParam("xInt")
+		got, found = root.GetParam("xInt")
 		assert.True(t, found)
 		assert.Equal(t, xInt, got)
 
-		got, found = ctx.GetParam("xInts")
+		got, found = root.GetParam("xInts")
 		assert.True(t, found)
 		assert.Equal(t, xInts, got)
 
-		ctx = ctx.In("foo")
-		got, found = ctx.GetParam("xStr")
+		sFoo := root.In("foo")
+		got, found = sFoo.GetParam("xStr")
 		assert.True(t, found)
 		assert.Equal(t, xStr, got)
 
-		got, found = ctx.GetParam("xStrs")
+		got, found = sFoo.GetParam("xStrs")
 		assert.True(t, found)
 		assert.Equal(t, xStrs, got)
 	}
