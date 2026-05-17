@@ -13,8 +13,6 @@
 package diffusion
 
 import (
-	"flag"
-	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -483,10 +481,6 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 	}
 }
 
-var (
-	flagDropoutRate = flag.Float64("dropout", 0.15, "Dropout rate")
-)
-
 // TransformerBlock takes embed shaped `[batchDim, spatialDim, embedDim]`, where the spatial dimension is
 // the combined dimensions of the image.
 func TransformerBlock(scope *model.Scope, nanLogger *nanlogger.NanLogger, x *Node) *Node {
@@ -516,7 +510,7 @@ func TransformerBlock(scope *model.Scope, nanLogger *nanlogger.NanLogger, x *Nod
 	// Add the requested number of attention layers.
 	for ii := range numLayers {
 		// Each layer in its own scope.
-		scopedCtx := scope.In(fmt.Sprintf("AttLayer_%d", ii))
+		scopedCtx := scope.In("AttLayer_%d", ii)
 		residual := embed
 		embed = Concatenate([]*Node{embed, posEmbed}, -1)
 		embed = attention.MultiHeadAttention(scopedCtx, embed, embed, embed, numHeads, keyQueryDim).

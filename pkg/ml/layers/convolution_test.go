@@ -3,7 +3,6 @@
 package layers
 
 import (
-	"path"
 	"testing"
 
 	"github.com/gomlx/compute"
@@ -24,7 +23,7 @@ func TestConvolution(t *testing.T) {
 		t.Run("2D-PadSame", func(t *testing.T) {
 			gotT := model.MustExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 				x := Ones(g, shapes.Make(dtypes.F32, 5, 4, 4, 3))
-				scope = scope.In(path.Base(t.Name()))
+				scope = scope.In("%s", model.BasePath(t.Name()))
 				conv := Convolution(scope, x).
 					Channels(32).
 					KernelSize(3).
@@ -38,7 +37,7 @@ func TestConvolution(t *testing.T) {
 		t.Run("3D-Strides", func(t *testing.T) {
 			gotT := model.MustExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 				x := Ones(g, shapes.Make(dtypes.F32, 5, 3, 8, 8, 8))
-				scope = scope.In(path.Base(t.Name()))
+				scope = scope.In("%s", model.BasePath(t.Name()))
 				conv := Convolution(scope, x).
 					ChannelsAxis(images.ChannelsFirst).
 					Channels(32).

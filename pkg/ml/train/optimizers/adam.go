@@ -261,7 +261,7 @@ func (o *adam) UpdateGraphWithGradients(scope *model.Scope, grads []*Node, lossD
 	// Increment the global step, but keep a separate step count for the Adam optimizer -- it can be
 	// reset separately.
 	_ = IncrementGlobalStepGraph(scope, g, dtype) // LoopStep, not used by this optimizer, but updated.
-	adamStep := IncrementGlobalStepGraph(scope.In(o.config.scopeName), g, dtype)
+	adamStep := IncrementGlobalStepGraph(scope.In("%s", o.config.scopeName), g, dtype)
 
 	// Back-off steps to allow a better estimate of momentum and variance, before actually taking
 	// a gradient step.
@@ -308,8 +308,6 @@ func (o *adam) UpdateGraphWithGradients(scope *model.Scope, grads []*Node, lossD
 			"Adam only sees %d variables -- were new variables created in between ?",
 			numTrainable, varIdx)
 	}
-
-	return // Errors reported in Context or Graph.
 }
 
 // applyAdamGraph calculates variable and its 1st and 2nd order moments updates.
@@ -388,7 +386,6 @@ func (o *adam) applyAdamGraph(scope *model.Scope, g *Graph, v *model.Variable, d
 		updated = ConvertDType(updated, v.Shape().DType)
 	}
 	v.SetValueGraph(updated)
-	return
 }
 
 // getMomentVariables returns the moment variables corresponding to the trainable variable give.
@@ -423,6 +420,6 @@ func (o *adam) getMomentVariables(
 // Clear all optimizer variables.
 // It implements optimizers.Interface.
 func (o *adam) Clear(scope *model.Scope) error {
-	ctxAdam := scope.In(o.config.scopeName)
+	ctxAdam := scope.In("%s", o.config.scopeName)
 	return ctxAdam.DeleteVariablesInScope()
 }

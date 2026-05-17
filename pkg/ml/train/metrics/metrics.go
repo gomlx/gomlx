@@ -228,7 +228,7 @@ func (m *MeanMetric) UpdateGraph(scope *model.Scope, labels, predictions []*Node
 	result = upPrecision(result)
 
 	// Create scope in context for metrics state.
-	scope = scope.In(Scope).In(m.ScopeName())
+	scope = scope.In(Scope).In("%s", m.ScopeName())
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
 	totalVar := scope.VariableWithValue("total", zero).SetTrainable(false)
@@ -318,7 +318,7 @@ func (m *movingAverageMetric) UpdateGraph(scope *model.Scope, labels, prediction
 	result = upPrecision(result)
 
 	// Create scope in context for metrics state.
-	scope = scope.In(Scope).In(m.ScopeName())
+	scope = scope.In(Scope).In("%s", m.ScopeName())
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
 

@@ -86,8 +86,8 @@ func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node
 	x := Add(embedded, posEmbed)
 
 	// Transformer layers (pre-norm architecture)
-	for layer := 0; layer < model.NumLayers; layer++ {
-		layerCtx := scope.In(fmt.Sprintf("layer_%d", layer))
+	for layer := range model.NumLayers {
+		layerCtx := scope.In("layer_%d", layer)
 
 		// Pre-attention LayerNorm
 		attnInput := layers.LayerNormalization(layerCtx.In("norm1"), x, -1).

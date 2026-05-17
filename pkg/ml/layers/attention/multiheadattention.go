@@ -102,9 +102,9 @@ type MultiHeadAttentionBuilder struct {
 //
 //	positionEncoder := pos.NewRoPE(10000.0)
 //	for layer := range numLayers {
-//		ctx := ctx.In(fmt.Sprintf("layer_%d", layer))
+//		scope := scope.In("layer_%d", layer)
 //		// Use x for the source of query/key/values (self-attention).
-//		x := attention.MultiHeadAttention(ctx, x, x, x, numHeads, headDim).
+//		x := attention.MultiHeadAttention(scope, x, x, x, numHeads, headDim).
 //		    WithPositionalEncoder(positionEncoder)
 //		logits := attention.Done()
 //		...  // normalization, residual connection, etc.

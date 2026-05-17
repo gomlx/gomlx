@@ -207,7 +207,7 @@ func MaskedWordTaskGraph(ctx *model.Context, tokens, embed, mask *Node,
 		logits = Normalize(ctx, logits)
 	}
 	for ii := 1; ii < *flagNumHiddenLayers; ii++ {
-		ctx := ctx.In(fmt.Sprintf("output_dense_%d", ii))
+		ctx := ctx.In("output_dense_%d", ii)
 		residual := logits
 		// Add layer with residual connection.
 		if *flagDropoutRate > 0 {

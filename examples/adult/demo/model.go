@@ -3,8 +3,6 @@
 package main
 
 import (
-	"fmt"
-
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/examples/adult"
 	"github.com/gomlx/gomlx/ml/model"
@@ -40,7 +38,7 @@ func Model(scope *model.Scope, spec any, inputs []*Node) []*Node {
 			// Take one column at a time of the categorical values.
 			split := Slice(categorical, AxisRange(), AxisRange(catIdx, catIdx+1))
 			// Embed it accordingly.
-			embedCtx := scope.In(fmt.Sprintf("categorical_%d_%s", catIdx, adult.Data.VocabulariesFeatures[catIdx]))
+			embedCtx := scope.In("categorical_%d_%s", catIdx, adult.Data.VocabulariesFeatures[catIdx])
 			vocab := adult.Data.Vocabularies[catIdx]
 			vocabSize := len(vocab)
 			embedding := layers.Embedding(embedCtx, split, ModelDType, vocabSize, *flagEmbeddingDim, false)
@@ -56,7 +54,7 @@ func Model(scope *model.Scope, spec any, inputs []*Node) []*Node {
 			// Take one column at a time of the continuous values.
 			split := Slice(continuous, AxisRange(), AxisRange(contIdx, contIdx+1))
 			featureName := adult.Data.QuantilesFeatures[contIdx]
-			calibrationCtx := scope.In(fmt.Sprintf("continuous_%d_%s", contIdx, featureName))
+			calibrationCtx := scope.In("continuous_%d_%s", contIdx, featureName)
 			quantiles := adult.Data.Quantiles[contIdx]
 			layers.AssertQuantilesForPWLCalibrationValid(quantiles)
 			calibrated := layers.PieceWiseLinearCalibration(calibrationCtx, split, Const(g, quantiles),

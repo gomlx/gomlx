@@ -129,7 +129,7 @@ func NodePrediction(scope *model.Scope, strategy *sampler.Strategy, graphStates 
 
 // ctxForGraphUpdateRound returns the context with scope for the given round of graph update.
 func ctxForGraphUpdateRound(scope *model.Scope, n int) *model.Scope {
-	return scope.In(fmt.Sprintf("graph_update_%d", n))
+	return scope.In("graph_update_%d", n)
 }
 
 // TreeGraphStateUpdate takes a `graphStates`, a map of name of node sets to their hidden states,
@@ -476,9 +476,9 @@ func updateState(scope *model.Scope, prevState, input, mask *Node) *Node {
 	numHiddenLayers := model.GetParamOr(scope, ParamUpdateNumHiddenLayers, 0)
 	state := input
 	for ii := range numHiddenLayers {
-		ctxHiddenLayer := scope.In(fmt.Sprintf("hidden_%d", ii))
+		ctxHiddenLayer := scope.In("hidden_%d", ii)
 		state = layers.DenseWithBias(ctxHiddenLayer, state, stateDim)
-		state = activations.ApplyFromContext(scope.In(fmt.Sprintf("hidden_%d", ii)), state)
+		state = activations.ApplyFromContext(scope.In("hidden_%d", ii), state)
 	}
 	state = layers.DenseWithBias(scope, state, stateDim)
 	state = activations.ApplyFromContext(scope, state)

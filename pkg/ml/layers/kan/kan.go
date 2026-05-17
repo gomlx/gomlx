@@ -18,7 +18,6 @@ package kan
 // "layer" function as well as hyperparameters.
 
 import (
-	"fmt"
 	"slices"
 
 	. "github.com/gomlx/gomlx/core/graph"
@@ -254,16 +253,16 @@ func (c *Config) Done() *Node {
 	// Notice residual connections, regularization, dropout, are related layers are applied within the layers themselves.
 	for ii := range c.numHiddenLayers {
 		if c.useDiscrete {
-			layerCtx := scope.In(fmt.Sprintf("discrete_kan_hidden_%d", ii))
+			layerCtx := scope.In("discrete_kan_hidden_%d", ii)
 			x = c.discreteLayer(layerCtx, x, c.numHiddenNodes)
 		} else if c.useRational {
-			layerCtx := scope.In(fmt.Sprintf("gr_kan_hidden_%d", ii))
+			layerCtx := scope.In("gr_kan_hidden_%d", ii)
 			x = c.rationalLayer(layerCtx, x, c.numHiddenNodes)
 		} else if c.usePWL {
-			layerCtx := scope.In(fmt.Sprintf("pwl_kan_hidden_%d", ii))
+			layerCtx := scope.In("pwl_kan_hidden_%d", ii)
 			x = c.pwlLayer(layerCtx, x, c.numHiddenNodes)
 		} else {
-			layerCtx := scope.In(fmt.Sprintf("bspline_kan_hidden_%d", ii))
+			layerCtx := scope.In("bspline_kan_hidden_%d", ii)
 			x = c.bsplineLayer(layerCtx, x, c.numHiddenNodes)
 		}
 	}

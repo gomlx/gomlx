@@ -453,7 +453,7 @@ func (cfg *Config) readNextConv2D(scope *model.Scope, graph *Graph) (ctxInScope 
 	if cfg.conv2dCount == 0 {
 		ctxInScope = scope.In("conv2d")
 	} else {
-		ctxInScope = scope.In(fmt.Sprintf("conv2d_%d", cfg.conv2dCount))
+		ctxInScope = scope.In("conv2d_%d", cfg.conv2dCount)
 	}
 	cfg.conv2dCount += 1
 
@@ -481,7 +481,7 @@ func (cfg *Config) readNextBatchNormalization(scope *model.Scope, graph *Graph) 
 	if cfg.batchNormCount == 0 {
 		ctxInScope = scope.In("batch_normalization")
 	} else {
-		ctxInScope = scope.In(fmt.Sprintf("batch_normalization_%d", cfg.batchNormCount))
+		ctxInScope = scope.In("batch_normalization_%d", cfg.batchNormCount)
 	}
 	cfg.batchNormCount += 1
 
