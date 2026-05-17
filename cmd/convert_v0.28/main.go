@@ -32,12 +32,17 @@ func main() {
 			"github.com/gomlx/gomlx/pkg/ml/context":              "github.com/gomlx/gomlx/ml/model",
 			"github.com/gomlx/gomlx/pkg/ml/context/checkpoints":  "github.com/gomlx/gomlx/ml/model/checkpoints",
 			"github.com/gomlx/gomlx/pkg/ml/context/ctxtest":      "github.com/gomlx/gomlx/ml/model/modeltest",
-			"github.com/gomlx/gomlx/ml/model/ctxtest":            "github.com/gomlx/gomlx/ml/model/modeltest",
 			"github.com/gomlx/gomlx/pkg/ml/context/initializers": "github.com/gomlx/gomlx/ml/model/initializers",
 		},
 		PackageNameMap: map[string]string{
 			"backends": "compute",
 			"context":  "model",
+		},
+		TypeNameMap: map[string]string{
+			"model.Context": "Scope",
+		},
+		VariableNameMap: map[string]importrefactor.VariableRename{
+			"ctx": {NewName: "scope", TypeName: "model.Context"},
 		},
 	}
 
