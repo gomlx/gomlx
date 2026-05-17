@@ -31,7 +31,7 @@ import (
 // LSTM holds an LSTM configuration. It can be created with New (or NewWithWeights),
 // and once finished to be configured, can be applied to x with Done.
 type LSTM struct {
-	ctx                                  *model.Context
+	scope                                *model.Scope
 	x                                    *Node
 	xLengths                             *Node
 	initialHiddenState, initialCellState *Node
@@ -57,9 +57,9 @@ type ActivationFn func(x *Node) *Node
 // See LSTM.Ragged if x is not densely used: a more compact version to padding or masking.
 //
 // Once finished configuring, call LSTM.Done and it will return the final state of the LSTM.
-func New(ctx *model.Context, x *Node, hiddenSize int) *LSTM {
+func New(scope *model.Scope, x *Node, hiddenSize int) *LSTM {
 	return &LSTM{
-		ctx:          ctx,
+		scope:        scope,
 		x:            x,
 		direction:    DirForward,
 		batchSize:    x.Shape().Dim(0),
@@ -167,7 +167,7 @@ func (l *LSTM) NumDirections() int {
 // - lastHiddenState and lastCellState: [numDirections, batchSize, hiddenSize]
 func (l *LSTM) Done() (allHiddenStates, lastHiddenState, lastCellState *Node) {
 	// "Mis en place": everything we need in local variables.
-	ctx := l.ctx
+	scope := l.scope
 	x := l.x
 	g := l.x.Graph()
 	dtype := x.DType()
@@ -188,11 +188,11 @@ func (l *LSTM) Done() (allHiddenStates, lastHiddenState, lastCellState *Node) {
 		//   - recurrentW: shaped [numDirections, 4, hiddenSize, hiddenSize]
 		//   - biases: for both gates and cell updates, shaped [numDirections, 8, hiddenSize].
 		//   - peepholeW: optional (can be nil), shaped [numDirections, 3, hiddenSize].
-		inputsW = ctx.VariableWithShape("inputsW", shapes.Make(dtype, numDirections, 4, hiddenSize, featuresSize)).ValueGraph(g)
-		recurrentW = ctx.VariableWithShape("recurrentW", shapes.Make(dtype, numDirections, 4, hiddenSize, hiddenSize)).ValueGraph(g)
-		biasesW = ctx.VariableWithShape("biasesW", shapes.Make(dtype, numDirections, 8, hiddenSize)).ValueGraph(g)
+		inputsW = scope.VariableWithShape("inputsW", shapes.Make(dtype, numDirections, 4, hiddenSize, featuresSize)).ValueGraph(g)
+		recurrentW = scope.VariableWithShape("recurrentW", shapes.Make(dtype, numDirections, 4, hiddenSize, hiddenSize)).ValueGraph(g)
+		biasesW = scope.VariableWithShape("biasesW", shapes.Make(dtype, numDirections, 8, hiddenSize)).ValueGraph(g)
 		if l.usePeephole {
-			peepholeW = ctx.VariableWithShape("peepholeW", shapes.Make(dtype, numDirections, 3, hiddenSize)).ValueGraph(g)
+			peepholeW = scope.VariableWithShape("peepholeW", shapes.Make(dtype, numDirections, 3, hiddenSize)).ValueGraph(g)
 		}
 	}
 

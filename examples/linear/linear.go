@@ -83,9 +83,9 @@ func buildExamples(
 }
 
 // modelGraph builds graph that returns predictions for inputs.
-func modelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
+func modelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	_ = spec
-	logits := layers.Dense(ctx, inputs[0], true, 1)
+	logits := layers.Dense(scope, inputs[0], true, 1)
 	return []*Node{logits}
 }
 
@@ -119,11 +119,11 @@ func main() {
 	// dataset := &Dataset{"training", []*tensors.Tensor{inputs}, []*tensors.Tensor{labels}}
 
 	// Creates Context with learned weights and bias.
-	ctx := model.New()
-	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
+	store := model.NewStore()
+	store.SetParam("/", optimizers.ParamLearningRate, *flagLearningRate)
 
 	// train.Trainer executes a training step.
-	trainer := train.NewTrainer(backend, ctx, modelGraph,
+	trainer := train.NewTrainer(backend, store.RootScope(), modelGraph,
 		losses.MeanSquaredError,
 		optimizers.StochasticGradientDescent().Done(),
 		nil, nil) // trainMetrics, evalMetrics
@@ -139,13 +139,7 @@ func main() {
 
 	// Print learned coefficients and bias -- from the weights in the dense layer.
 	fmt.Println()
-	coefVar, biasVar := ctx.GetVariableByScopeAndName(
-		"/dense",
-		"weights",
-	), ctx.GetVariableByScopeAndName(
-		"/dense",
-		"biases",
-	)
+	coefVar, biasVar := store.GetVariable("/dense/weights"), store.GetVariable("/dense/biases")
 	learnedCoef, learnedBias := coefVar.MustValue(), biasVar.MustValue()
 	fmt.Printf("Learned coefficients: %0.5v\n", learnedCoef.Value())
 	fmt.Printf("Learned bias: %0.5v\n", learnedBias.Value())

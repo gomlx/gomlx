@@ -135,7 +135,7 @@ func TopKWithTemperature(rng RNG, logits *graph.Node, k int, temperature float64
 //
 // BeamSearch rquires specialized handling, and will lead to an error if used here.
 func SampleWithStrategy(
-	ctx RNG,
+	scope RNG,
 	logits *graph.Node,
 	strategy Strategy,
 	temperature float64,
@@ -146,11 +146,11 @@ func SampleWithStrategy(
 	case StrategyGreedy:
 		return Greedy(logits)
 	case StrategyTemperature:
-		return Temperature(ctx, logits, temperature)
+		return Temperature(scope, logits, temperature)
 	case StrategyTopK:
-		return TopKWithTemperature(ctx, logits, topK, temperature)
+		return TopKWithTemperature(scope, logits, topK, temperature)
 	case StrategyTopP:
-		return TopP(ctx, logits, topP, temperature)
+		return TopP(scope, logits, topP, temperature)
 	case StrategyBeamSearch:
 		panic("BeamSearch requires specialized handling, see sample.NewBeamSearch or simply use the decode.Decoder with StrategyBeamSearch strategy.")
 	default:

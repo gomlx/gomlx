@@ -58,9 +58,10 @@ func check1[T any](v T, err error) T {
 	return v
 }
 
-func createDefaultContext() *model.Context {
-	ctx := model.New()
-	ctx.SetParams(map[string]any{
+func createDefaultContext() *model.Scope {
+	store := model.NewStore()
+	scope := store.RootScope()
+	scope.SetParams(map[string]any{
 		// Number of steps to take during training.
 		"train_steps": 5000,
 		"batch_size":  128,
@@ -105,7 +106,7 @@ func createDefaultContext() *model.Context {
 		kan.ParamDiscreteSplitPointsTrainable: true,
 		kan.ParamResidual:                     true,
 	})
-	return ctx
+	return scope
 }
 
 var (
@@ -138,18 +139,18 @@ var (
 
 func main() {
 	// Flags with context settings.
-	ctx := createDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	scope := createDefaultContext()
+	settings := commandline.CreateContextSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
-	err := mainWithContext(ctx, *flagDataDir, *flagCheckpoint, paramsSet)
+	paramsSet := check1(commandline.ParseContextSettings(scope, *settings))
+	err := mainWithContext(scope, *flagDataDir, *flagCheckpoint, paramsSet)
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
 	}
 }
 
-func mainWithContext(ctx *model.Context, dataDir, checkpointPath string, paramsSet []string) error {
+func mainWithContext(scope *model.Scope, dataDir, checkpointPath string, paramsSet []string) error {
 	backend := compute.MustNew()
 	numDevices := backend.NumDevices()
 	if *flagNumDevices > 0 {
@@ -164,15 +165,15 @@ func mainWithContext(ctx *model.Context, dataDir, checkpointPath string, paramsS
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if *flagVerbosity >= 1 {
 		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
-		fmt.Println(commandline.SprintContextSettings(ctx))
+		fmt.Println(commandline.SprintContextSettings(scope))
 	}
 
 	// Checkpoints loading (and saving)
 	var checkpoint *checkpoints.Handler
 	const keepCheckpoints = 3
 	if checkpointPath != "" {
-		numCheckpointsToKeep := model.GetParamOr(ctx, "num_checkpoints", keepCheckpoints)
-		checkpoint = check1(checkpoints.Build(ctx).
+		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", keepCheckpoints)
+		checkpoint = check1(checkpoints.Build(scope).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, "train_steps", "plots", "num_checkpoints")...).
@@ -191,7 +192,7 @@ func mainWithContext(ctx *model.Context, dataDir, checkpointPath string, paramsS
 	}
 
 	// Batch size: it is affected by the distributed execution..
-	batchSize := model.GetParamOr(ctx, "batch_size", 128)
+	batchSize := model.GetParamOr(scope, "batch_size", 128)
 	shardedBatchSize := batchSize
 	if *flagDistributed {
 		if numDevices < 2 {
@@ -268,8 +269,8 @@ func mainWithContext(ctx *model.Context, dataDir, checkpointPath string, paramsS
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	trainer := train.NewTrainer(backend, ctx, Model, losses.BinaryCrossentropyLogits,
-		optimizers.FromContext(ctx),
+	trainer := train.NewTrainer(backend, scope, Model, losses.BinaryCrossentropyLogits,
+		optimizers.FromContext(scope),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
@@ -289,7 +290,7 @@ func mainWithContext(ctx *model.Context, dataDir, checkpointPath string, paramsS
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if model.GetParamOr(ctx, margaid.ParamPlots, false) {
+	if model.GetParamOr(scope, margaid.ParamPlots, false) {
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
@@ -299,8 +300,8 @@ func mainWithContext(ctx *model.Context, dataDir, checkpointPath string, paramsS
 	}
 
 	// Train up to "train_steps".
-	trainSteps := model.GetParamOr(ctx, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(ctx))
+	trainSteps := model.GetParamOr(scope, "train_steps", 0)
+	globalStep := int(optimizers.GetGlobalStep(scope))
 	if globalStep != 0 {
 		fmt.Printf("- Restarting training from global step %d\n", globalStep)
 	}

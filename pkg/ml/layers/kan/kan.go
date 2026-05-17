@@ -19,12 +19,13 @@ package kan
 
 import (
 	"fmt"
+	"slices"
+
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/support/exceptions"
-	"slices"
 )
 
 const (
@@ -76,7 +77,7 @@ const (
 // Config is created with New and can be configured with its methods, or simply setting the corresponding
 // hyperparameters in the model.
 type Config struct {
-	ctx                             *model.Context
+	scope                           *model.Scope
 	input                           *Node
 	numOutputNodes                  int
 	numHiddenLayers, numHiddenNodes int
@@ -111,29 +112,29 @@ type Config struct {
 //
 // It will apply KAN-like transformations to the last axis (the "feature axis") of x, while preserving all leading
 // axes (we'll call them "batch axes").
-func New(ctx *model.Context, input *Node, numOutputNodes int) *Config {
+func New(scope *model.Scope, input *Node, numOutputNodes int) *Config {
 	c := &Config{
-		ctx:              ctx,
+		scope:            scope,
 		input:            input,
 		numOutputNodes:   numOutputNodes,
-		numHiddenLayers:  model.GetParamOr(ctx, ParamNumHiddenLayers, 0),
-		numHiddenNodes:   model.GetParamOr(ctx, ParamNumHiddenNodes, 10),
-		activation:       activations.FromName(model.GetParamOr(ctx, activations.ParamActivation, "none")),
-		regularizer:      regularizers.FromContext(ctx),
-		useResidual:      model.GetParamOr(ctx, ParamResidual, true),
-		useMean:          model.GetParamOr(ctx, ParamMean, true),
-		inputGroupSize:   model.GetParamOr(ctx, ParamInputGroupSize, int(0)),
-		numControlPoints: model.GetParamOr(ctx, ParamNumControlPoints, 20),
-		useDiscrete:      model.GetParamOr(ctx, ParamDiscrete, false),
-		useRational:      model.GetParamOr(ctx, ParamRational, false),
-		usePWL:           model.GetParamOr(ctx, ParamPiecewiseLinear, false),
+		numHiddenLayers:  model.GetParamOr(scope, ParamNumHiddenLayers, 0),
+		numHiddenNodes:   model.GetParamOr(scope, ParamNumHiddenNodes, 10),
+		activation:       activations.FromName(model.GetParamOr(scope, activations.ParamActivation, "none")),
+		regularizer:      regularizers.FromContext(scope),
+		useResidual:      model.GetParamOr(scope, ParamResidual, true),
+		useMean:          model.GetParamOr(scope, ParamMean, true),
+		inputGroupSize:   model.GetParamOr(scope, ParamInputGroupSize, int(0)),
+		numControlPoints: model.GetParamOr(scope, ParamNumControlPoints, 20),
+		useDiscrete:      model.GetParamOr(scope, ParamDiscrete, false),
+		useRational:      model.GetParamOr(scope, ParamRational, false),
+		usePWL:           model.GetParamOr(scope, ParamPiecewiseLinear, false),
 	}
-	c.initBSpline(ctx)
-	c.initDiscrete(ctx)
-	c.initRational(ctx)
-	c.initPiecewiseLinear(ctx)
+	c.initBSpline(scope)
+	c.initDiscrete(scope)
+	c.initRational(scope)
+	c.initPiecewiseLinear(scope)
 
-	constL1amount := model.GetParamOr(ctx, ParamConstantRegularizationL1, 0.0)
+	constL1amount := model.GetParamOr(scope, ParamConstantRegularizationL1, 0.0)
 	if constL1amount > 0 {
 		c.regularizer = regularizers.Combine(c.regularizer, regularizers.ConstantL1(constL1amount))
 	}
@@ -232,7 +233,7 @@ func (c *Config) NumControlPoints(numControlPoints int) *Config {
 
 // Done takes the configuration and apply the KAN bsplineLayer(s) configured.
 func (c *Config) Done() *Node {
-	ctx := c.ctx
+	scope := c.scope
 
 	// Reshape to rank-2: [batch, features]
 	numInputNodes := c.input.Shape().Dimensions[c.input.Rank()-1]
@@ -253,29 +254,29 @@ func (c *Config) Done() *Node {
 	// Notice residual connections, regularization, dropout, are related layers are applied within the layers themselves.
 	for ii := range c.numHiddenLayers {
 		if c.useDiscrete {
-			layerCtx := ctx.In(fmt.Sprintf("discrete_kan_hidden_%d", ii))
+			layerCtx := scope.In(fmt.Sprintf("discrete_kan_hidden_%d", ii))
 			x = c.discreteLayer(layerCtx, x, c.numHiddenNodes)
 		} else if c.useRational {
-			layerCtx := ctx.In(fmt.Sprintf("gr_kan_hidden_%d", ii))
+			layerCtx := scope.In(fmt.Sprintf("gr_kan_hidden_%d", ii))
 			x = c.rationalLayer(layerCtx, x, c.numHiddenNodes)
 		} else if c.usePWL {
-			layerCtx := ctx.In(fmt.Sprintf("pwl_kan_hidden_%d", ii))
+			layerCtx := scope.In(fmt.Sprintf("pwl_kan_hidden_%d", ii))
 			x = c.pwlLayer(layerCtx, x, c.numHiddenNodes)
 		} else {
-			layerCtx := ctx.In(fmt.Sprintf("bspline_kan_hidden_%d", ii))
+			layerCtx := scope.In(fmt.Sprintf("bspline_kan_hidden_%d", ii))
 			x = c.bsplineLayer(layerCtx, x, c.numHiddenNodes)
 		}
 	}
 
 	// Apply last layer.
 	if c.useDiscrete {
-		x = c.discreteLayer(ctx.In("discrete_kan_output_layer"), x, c.numOutputNodes)
+		x = c.discreteLayer(scope.In("discrete_kan_output_layer"), x, c.numOutputNodes)
 	} else if c.useRational {
-		x = c.rationalLayer(ctx.In("gr_kan_output_layer"), x, c.numOutputNodes)
+		x = c.rationalLayer(scope.In("gr_kan_output_layer"), x, c.numOutputNodes)
 	} else if c.usePWL {
-		x = c.pwlLayer(ctx.In("pwl_kan_output_layer"), x, c.numOutputNodes)
+		x = c.pwlLayer(scope.In("pwl_kan_output_layer"), x, c.numOutputNodes)
 	} else {
-		x = c.bsplineLayer(ctx.In("bspline_kan_output_layer"), x, c.numOutputNodes)
+		x = c.bsplineLayer(scope.In("bspline_kan_output_layer"), x, c.numOutputNodes)
 	}
 
 	// Reshape back the batch axes.

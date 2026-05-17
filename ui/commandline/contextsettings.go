@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"slices"
 	"strings"
 
@@ -45,10 +46,10 @@ import (
 //		fmt.Println(commandline.SprintContextSettings(ctx))
 //		...
 //	}
-func ParseContextSettings(ctx *model.Context, settings string) (paramsSet []string, err error) {
+func ParseContextSettings(scope *model.Scope, settings string) (paramsSet []string, err error) {
 	settingsList := strings.SplitSeq(settings, ";")
 	for setting := range settingsList {
-		paramsSet, err = parseContextSetting(ctx, setting, paramsSet)
+		paramsSet, err = parseContextSetting(scope, setting, paramsSet)
 		if err != nil {
 			return
 		}
@@ -56,7 +57,7 @@ func ParseContextSettings(ctx *model.Context, settings string) (paramsSet []stri
 	return
 }
 
-func parseContextSetting(ctx *model.Context, setting string, paramsSet []string) (newParamsSet []string, err error) {
+func parseContextSetting(scope *model.Scope, setting string, paramsSet []string) (newParamsSet []string, err error) {
 	newParamsSet = paramsSet
 	if setting == "" {
 		return
@@ -79,7 +80,7 @@ func parseContextSetting(ctx *model.Context, setting string, paramsSet []string)
 			}
 			settings := strings.SplitSeq(line, ";")
 			for setting := range settings {
-				newParamsSet, err = parseContextSetting(ctx, setting, newParamsSet)
+				newParamsSet, err = parseContextSetting(scope, setting, newParamsSet)
 				if err != nil {
 					return
 				}
@@ -95,23 +96,26 @@ func parseContextSetting(ctx *model.Context, setting string, paramsSet []string)
 		return
 	}
 	paramPath, valueStr := parts[0], parts[1]
-	paramScope, paramName := model.SplitScope(paramPath)
-	if strings.Index(paramName, model.ScopeSeparator) != -1 {
-		err = errors.Errorf("can't set parameter %q  because some scope is set, but it is not absolue (it does not start with %q)",
+	paramScope, paramName := path.Split(paramPath)
+	if paramScope != "" && len(paramScope) > 1 && strings.HasSuffix(paramScope, "/") {
+		paramScope = paramScope[:len(paramScope)-1]
+	}
+	if strings.Contains(paramName, model.ScopeSeparator) {
+		err = errors.Errorf("can't set parameter %q because some scope is set, but it is not absolue (it does not start with %q)",
 			paramPath, model.ScopeSeparator)
 		return
 	}
-	value, found := ctx.GetParam(paramName)
+	value, found := scope.GetParam(paramName)
 	if !found {
-		err = errors.Errorf("can't set parameter %q (scope=%q)  because the param %q is not known in the root context",
+		err = errors.Errorf("can't set parameter %q (scope=%q) because the param %q is not known in the root context",
 			paramPath, paramScope, paramName)
 		return
 	}
 
 	// Set the new parameter in the selected scope.
-	ctxInScope := ctx
+	ctxInScope := scope
 	if paramScope != "" {
-		ctxInScope = ctxInScope.InAbsPath(paramScope)
+		ctxInScope = ctxInScope.Store().Scope(paramScope)
 	}
 
 	// Parse value accordingly.
@@ -204,7 +208,7 @@ func parseContextSetting(ctx *model.Context, setting string, paramsSet []string)
 //		fmt.Println(commandline.SprintContextSettings(ctx))
 //		...
 //	}
-func CreateContextSettingsFlag(ctx *model.Context, flagName string) *string {
+func CreateContextSettingsFlag(scope *model.Scope, flagName string) *string {
 	if flagName == "" {
 		flagName = "set"
 	}
@@ -218,12 +222,12 @@ func CreateContextSettingsFlag(ctx *model.Context, flagName string) *string {
 			`with new-lines working as ";" to separate settings and lines starting with "#" are considered comments. `+
 			`Current available parameters that can be set:`,
 		model.ScopeSeparator))
-	ctx.EnumerateParams(func(scope, key string, value any) {
-		if scope != model.RootScope {
-			return
+	for p := range scope.IterParams() {
+		if p.Scope != model.RootScopePath {
+			continue
 		}
-		parts = append(parts, fmt.Sprintf("%q: default value is %v", key, value))
-	})
+		parts = append(parts, fmt.Sprintf("%q: default value is %v", p.Key, p.Value))
+	}
 	usage := strings.Join(parts, "\n")
 	var settings string
 	flag.StringVar(&settings, flagName, "", usage)
@@ -231,18 +235,19 @@ func CreateContextSettingsFlag(ctx *model.Context, flagName string) *string {
 }
 
 // SprintContextSettings pretty-print values for the current hyperparameters settings into a string.
-func SprintContextSettings(ctx *model.Context) string {
+func SprintContextSettings(scope *model.Scope) string {
 	var parts []string
-	ctx.EnumerateParams(func(scope, key string, value any) {
-		if scope == model.RootScope {
-			scope = ""
+	for p := range scope.IterParams() {
+		s := p.Scope
+		if s == model.RootScopePath {
+			s = ""
 		}
-		parts = append(parts, fmt.Sprintf("\t\"%s/%s\": (%T) %v", scope, key, value, value))
-	})
+		parts = append(parts, fmt.Sprintf("\t\"%s/%s\": (%T) %v", s, p.Key, p.Value, p.Value))
+	}
 	return strings.Join(parts, "\n")
 }
 
-func SprintModifiedContextSettings(ctx *model.Context, paramsSet []string) string {
+func SprintModifiedContextSettings(scope *model.Scope, paramsSet []string) string {
 	var parts []string
 	paramsSet = slices.Clone(paramsSet)
 	slices.Sort(paramsSet)
@@ -253,11 +258,14 @@ func SprintModifiedContextSettings(ctx *model.Context, paramsSet []string) strin
 			continue
 		}
 		lastParamPath = paramPath
-		paramScope, paramName := model.SplitScope(paramPath)
-		if paramScope == "" {
-			paramScope = model.RootScope
+		paramScope, paramName := path.Split(paramPath)
+		if paramScope != "" && len(paramScope) > 1 && strings.HasSuffix(paramScope, "/") {
+			paramScope = paramScope[:len(paramScope)-1]
 		}
-		value, found := ctx.InAbsPath(paramScope).GetParam(paramName)
+		if paramScope == "" {
+			paramScope = model.RootScopePath
+		}
+		value, found := scope.Store().Scope(paramScope).GetParam(paramName)
 		if !found {
 			continue
 		}

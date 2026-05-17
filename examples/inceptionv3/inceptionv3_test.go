@@ -46,11 +46,11 @@ func TestBuildGraph(t *testing.T) {
 	require.NoError(t, DownloadAndUnpackWeights(*flagDataDir))
 
 	// InceptionV3 classification.
-	ctx := model.New()
-	inceptionV3Exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, img *Node) *Node {
+	scope := model.NewStore()
+	inceptionV3Exec := model.MustNewExec(backend, scope, func(scope *model.Scope, img *Node) *Node {
 		img = InsertAxes(img, 0) // Add batch dimension
 		img = PreprocessImage(img, 255.0, images.ChannelsLast)
-		output := BuildGraph(ctx, img).
+		output := BuildGraph(scope, img).
 			PreTrained(*flagDataDir).
 			ClassificationTop(true).
 			WithAliases(true).

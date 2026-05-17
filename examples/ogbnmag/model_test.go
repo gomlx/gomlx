@@ -40,20 +40,20 @@ func TestModel(t *testing.T) {
 	checkMemory(t)
 
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
+	scope := model.NewStore()
 	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")
-	UploadOgbnMagVariables(backend, ctx) // Uploads the Papers frozen embedding table.
+	UploadOgbnMagVariables(backend, scope) // Uploads the Papers frozen embedding table.
 
 	trainDS, _, _, _, err := MakeDatasets(*flagDataDir)
 	require.NoError(t, err, "failed to make datasets")
 
 	// Create graph function that will take a sampled sub-graph.
 	var spec any
-	testGraphFn := func(ctx *model.Context, inputs []*Node) []*Node {
-		return MagModelGraph(ctx, spec, inputs)
+	testGraphFn := func(scope *model.Scope, inputs []*Node) []*Node {
+		return MagModelGraph(scope, spec, inputs)
 	}
-	testGraphExec := model.MustNewExec(backend, ctx, testGraphFn)
+	testGraphExec := model.MustNewExec(backend, scope, testGraphFn)
 
 	var inputs []*tensors.Tensor
 	spec, inputs, _, err = trainDS.Yield()

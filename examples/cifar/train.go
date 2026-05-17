@@ -44,7 +44,7 @@ var (
 var Backend compute.Backend
 
 // TrainCifar10Model with hyperparameters given in ctx.
-func TrainCifar10Model(ctx *model.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
+func TrainCifar10Model(scope *model.Scope, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
@@ -62,11 +62,11 @@ func TrainCifar10Model(ctx *model.Context, dataDir, checkpointPath string, evalu
 	}
 
 	// Create datasets used for training and evaluation.
-	batchSize := model.GetParamOr(ctx, "batch_size", int(0))
+	batchSize := model.GetParamOr(scope, "batch_size", int(0))
 	if batchSize <= 0 {
 		exceptions.Panicf("Batch size must be > 0 (maybe it was not set?): %d", batchSize)
 	}
-	evalBatchSize := model.GetParamOr(ctx, "eval_batch_size", int(0))
+	evalBatchSize := model.GetParamOr(scope, "eval_batch_size", int(0))
 	if evalBatchSize <= 0 {
 		evalBatchSize = batchSize
 	}
@@ -75,8 +75,8 @@ func TrainCifar10Model(ctx *model.Context, dataDir, checkpointPath string, evalu
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
-		numCheckpointsToKeep := model.GetParamOr(ctx, "num_checkpoints", 3)
-		checkpoint = check1(checkpoints.Build(ctx).
+		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 3)
+		checkpoint = check1(checkpoints.Build(scope).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, ParamsExcludedFromSaving...)...).
@@ -84,11 +84,11 @@ func TrainCifar10Model(ctx *model.Context, dataDir, checkpointPath string, evalu
 		fmt.Printf("Checkpointing model to %q\n", checkpoint.Dir())
 	}
 	if verbosity >= 2 {
-		fmt.Println(commandline.SprintContextSettings(ctx))
+		fmt.Println(commandline.SprintContextSettings(scope))
 	}
 
 	// Select model graph building function.
-	modelFn, err := SelectModelFn(ctx)
+	modelFn, err := SelectModelFn(scope)
 	if err != nil {
 		panic(err)
 	}
@@ -99,10 +99,10 @@ func TrainCifar10Model(ctx *model.Context, dataDir, checkpointPath string, evalu
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	ctx = ctx.In("model") // Convention scope used for model creation.
-	trainer := train.NewTrainer(Backend, ctx, modelFn,
+	scope = scope.In("model") // Convention scope used for model creation.
+	trainer := train.NewTrainer(Backend, scope, modelFn,
 		losses.SparseCategoricalCrossEntropyLogits,
-		optimizers.FromContext(ctx),
+		optimizers.FromContext(scope),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
@@ -123,7 +123,7 @@ func TrainCifar10Model(ctx *model.Context, dataDir, checkpointPath string, evalu
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if model.GetParamOr(ctx, plotly.ParamPlots, false) {
+	if model.GetParamOr(scope, plotly.ParamPlots, false) {
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
@@ -133,10 +133,10 @@ func TrainCifar10Model(ctx *model.Context, dataDir, checkpointPath string, evalu
 	}
 
 	// Loop for given number of steps.
-	numTrainSteps := model.GetParamOr(ctx, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(ctx))
+	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
+	globalStep := int(optimizers.GetGlobalStep(scope))
 	if globalStep > 0 {
-		trainer.SetContext(ctx.Reuse())
+		trainer.SetContext(scope)
 	}
 	if globalStep < numTrainSteps {
 		_ = check1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
@@ -170,9 +170,9 @@ func TrainCifar10Model(ctx *model.Context, dataDir, checkpointPath string, evalu
 }
 
 // SelectModelFn based on hyperparameter "model" in Context.
-func SelectModelFn(ctx *model.Context) (modelFn train.ModelFn, err error) {
+func SelectModelFn(scope *model.Scope) (modelFn train.ModelFn, err error) {
 	modelFn = C10PlainModelGraph // Handles all models except CNN.
-	modelType := model.GetParamOr(ctx, "model", C10ValidModels[0])
+	modelType := model.GetParamOr(scope, "model", C10ValidModels[0])
 	if slices.Index(C10ValidModels, modelType) == -1 {
 		return nil, errors.Errorf("Parameter \"model\" must take one value from %v, got %q", C10ValidModels, modelType)
 	}

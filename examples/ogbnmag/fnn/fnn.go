@@ -30,11 +30,11 @@ import (
 )
 
 // FnnModelGraph builds a FnnModel for the OGBN-MAP dataset.
-func FnnModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
+func FnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	seeds := inputs[0]
 	g := seeds.Graph()
 	getMagVar := func(name string) *Node {
-		magVar := ctx.GetVariableByScopeAndName(mag.OgbnMagVariablesScope, name)
+		magVar := scope.GetVariableByScopeAndName(mag.OgbnMagVariablesScope, name)
 		if magVar == nil {
 			exceptions.Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
 		}
@@ -54,24 +54,24 @@ func FnnModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	}, 1)
 
 	// Build FNN.
-	numLayers := model.GetParamOr(ctx, "hidden_layers", 2)
-	numNodes := model.GetParamOr(ctx, "num_nodes", 128)
-	useKan := model.GetParamOr(ctx, "kan", false)
+	numLayers := model.GetParamOr(scope, "hidden_layers", 2)
+	numNodes := model.GetParamOr(scope, "num_nodes", 128)
+	useKan := model.GetParamOr(scope, "kan", false)
 	if useKan {
-		logits = kan.New(ctx, logits, mag.NumLabels).NumHiddenLayers(numLayers, numNodes).Done()
+		logits = kan.New(scope, logits, mag.NumLabels).NumHiddenLayers(numLayers, numNodes).Done()
 	} else {
 		// Normal FNN
 		for layerNum := range numLayers {
 			layerName := fmt.Sprintf("layer-%d", layerNum)
-			logits = layers.DenseWithBias(ctx.In(layerName), logits, numNodes)
+			logits = layers.DenseWithBias(scope.In(layerName), logits, numNodes)
 			logits = activations.LeakyRelu(logits)
-			dropoutRate := model.GetParamOr(ctx, "dropout_rate", 0.0)
+			dropoutRate := model.GetParamOr(scope, "dropout_rate", 0.0)
 			if dropoutRate > 0 {
 				dropoutRateNode := Scalar(g, dtypes.Float32, dropoutRate)
-				logits = layers.Dropout(ctx, logits, dropoutRateNode)
+				logits = layers.Dropout(scope, logits, dropoutRateNode)
 			}
 		}
-		logits = layers.DenseWithBias(ctx.In("readout"), logits, mag.NumLabels)
+		logits = layers.DenseWithBias(scope.In("readout"), logits, mag.NumLabels)
 	}
 
 	return []*Node{logits} // Return only the logits.
@@ -80,9 +80,9 @@ func FnnModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 var ModelFn = FnnModelGraph
 
 // Train FNN model based on configuration in `ctx`.
-func Train(backend compute.Backend, ctx *model.Context) error {
+func Train(backend compute.Backend, scope *model.Scope) error {
 	trainDS, validDS, testDS, err := mag.PapersSeedDatasets(backend)
-	mag.UploadOgbnMagVariables(backend, ctx)
+	mag.UploadOgbnMagVariables(backend, scope)
 	//ctx.EnumerateVariables(func(v *model.Variable) {
 	//	fmt.Printf("%s :: %s:\t%s\n", v.Scope(), v.Name(), v.Value().Shape())
 	//})
@@ -91,22 +91,22 @@ func Train(backend compute.Backend, ctx *model.Context) error {
 		return err
 	}
 
-	batchSize := model.GetParamOr(ctx, "batch_size", 128)
+	batchSize := model.GetParamOr(scope, "batch_size", 128)
 	trainEvalDS := trainDS.Copy()
 	trainDS = trainDS.Shuffle().BatchSize(batchSize, true).Infinite(true)
 
 	// Evaluation datasets.
-	evalBatchSize := model.GetParamOr(ctx, "eval_batch_size", 1024)
+	evalBatchSize := model.GetParamOr(scope, "eval_batch_size", 1024)
 	trainEvalDS = trainEvalDS.BatchSize(evalBatchSize, false).Infinite(false)
 	validDS = validDS.BatchSize(evalBatchSize, false).Infinite(false)
 	testDS = testDS.BatchSize(evalBatchSize, false).Infinite(false)
 
 	// Get trainSteps before a checkpoint is loaded -- in which case it will be overwritten.
-	trainSteps := model.GetParamOr(ctx, "train_steps", 100)
+	trainSteps := model.GetParamOr(scope, "train_steps", 100)
 
 	// Checkpoint: it loads if already exists, and it will save as we train.
-	checkpointPath := model.GetParamOr(ctx, "checkpoint", "")
-	numCheckpointsToKeep := model.GetParamOr(ctx, "num_checkpoints", 10)
+	checkpointPath := model.GetParamOr(scope, "checkpoint", "")
+	numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 10)
 	var checkpoint *checkpoints.Handler
 	var globalStep int64
 	if checkpointPath != "" {
@@ -117,20 +117,20 @@ func Train(backend compute.Backend, ctx *model.Context) error {
 			numCheckpointsToKeep = -1
 		}
 		if numCheckpointsToKeep > 0 {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3, backend).Done()
+			checkpoint, err = checkpoints.Build(scope).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3, backend).Done()
 		} else {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Done()
+			checkpoint, err = checkpoints.Build(scope).Dir(checkpointPath).Done()
 		}
 		if err != nil {
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
 				checkpointPath, numCheckpointsToKeep)
 		}
-		globalStep = optimizers.GetGlobalStep(ctx)
+		globalStep = optimizers.GetGlobalStep(scope)
 		if globalStep != 0 {
 			fmt.Printf("> restarting training from global_step=%d\n", globalStep)
-			ctx = ctx.Reuse()
+			scope = scope.Reuse()
 		}
-		ctx.SetParam("train_steps", trainSteps)
+		scope.SetParam("train_steps", trainSteps)
 	}
 
 	// Loss: multi-class classification problem.
@@ -142,8 +142,8 @@ func Train(backend compute.Backend, ctx *model.Context) error {
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	optimizer := optimizers.ByName(ctx, model.GetParamOr(ctx, "optimizer", "adamw"))
-	trainer := train.NewTrainer(backend, ctx, ModelFn,
+	optimizer := optimizers.ByName(scope, model.GetParamOr(scope, "optimizer", "adamw"))
+	trainer := train.NewTrainer(backend, scope, ModelFn,
 		lossFn,
 		optimizer,
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
@@ -164,7 +164,7 @@ func Train(backend compute.Backend, ctx *model.Context) error {
 
 	// Attach a margaid plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	usePlots := model.GetParamOr(ctx, "plots", false)
+	usePlots := model.GetParamOr(scope, "plots", false)
 	if usePlots {
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).

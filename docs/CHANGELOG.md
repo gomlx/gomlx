@@ -31,6 +31,17 @@ directory, and move the packages to the root:
 - `github.com/gomlx/gomlx/pkg/ml/...` -> `github.com/gomlx/gomlx/ml/...
 - `github.com/gomlx/gomlx/pkg/support/...` -> `github.com/gomlx/gomlx/support/...
 
+## Context Redesign: `context` -> `model`; `Context` -> `Store` and `Scope`.
+
+- Renamed `context` package to `model`:
+  - `Scope`: represents a scope (or sub-package) in a `Store`. It holds a pointer to the `Store` it belongs to.
+  - `Store`: represents a store of variables and hyperparameters.
+  - `Exec`: represents an executor that takes as an extra parameter a `Store` and will handle passing the variables automatically as extra inputs and outputs to the graph being built. `Exec` simplifies building models using or updateing the variables of its `Store`.
+  - `Exec.Exec` -> `Exec.Call`, more inline with ML standards, and less stuttering.
+
+## Graph: `Exec.Exec` -> `Exec.Call` (no change in name, but `Exec` is gone).
+
+
 ---
 
 # v0.27.3: Improves sub-byte support, optimized raw-byte data transfers, FNN ensembles, and major transformer updates including BERT and Gemma models.

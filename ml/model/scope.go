@@ -6,7 +6,6 @@ import (
 	"encoding"
 	"fmt"
 	"iter"
-	"path"
 	"reflect"
 	"strings"
 
@@ -17,6 +16,17 @@ import (
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/sets"
 )
+
+// Join scopes (always with "/").
+func Join(a, b string) string {
+	if b == "" {
+		return a
+	}
+	if a == "" {
+		return b
+	}
+	return a + ScopeSeparator + b
+}
 
 // Scope represents a "scoped" (a "current directory") view into a model's Store, which holds the scoped
 // (in "directory" tree) variables and hyperparameters for the model.
@@ -61,59 +71,73 @@ func (s *Scope) copy() *Scope {
 	return s2
 }
 
-// InAbsPath returns a new Scope for the given absolute path.
-func (s *Scope) InAbsPath(fullPath string) *Scope {
-	return s.store.Scope(fullPath)
-}
-
-// In returns a new Scope with the extra given scope. No ScopeSeparator ("/") is
-// allowed in scope.
+// In returns a new "sub"-Scope of the current one with the given name.
 //
-// It checks whether the new scope has been visited before and panics with an error if it has already been visited.
-// This is used to prevent layers from overstepping on each other.
-func (s *Scope) In(scope string) *Scope {
-	if scope == "" {
+// The nameFormat and its args are fed to fmt.Sprintf(), as a shortcut to allow formatted sub-scope names.
+//
+// This version panics if the sub-scope has not yet been visited.
+// See also Scope.In and Scope.At.
+func (s *Scope) In(nameFormat string, args ...any) *Scope {
+	name := fmt.Sprintf(nameFormat, args...)
+	if name == "" {
 		Panicf("cannot use empty scope for Scope.In()")
 	}
-	s.checkName(scope)
+	s.checkName(name)
 
-	if s.visitedPaths.Has(scope) {
-		Panicf("scope %q already visited from %q, use Shared() if this is intended", scope, s.scope)
+	if s.visitedPaths.Has(name) {
+		Panicf("sub-scope %q already visited from %q, use Shared() if this is intended", name, s.scope)
 	}
-	s.visitedPaths.Insert(scope)
+	s.visitedPaths.Insert(name)
 
-	newScopePath := path.Join(s.scope, scope)
+	newScopePath := Join(s.scope, name)
 	s2 := s.copy()
 	s2.scope = newScopePath
 	s2.visitedPaths = sets.Make[string]()
 	return s2
 }
 
-// Shared returns a new Scope with the extra given scope, but only if it has already been visited.
+// Shared returns a new "sub"-Scope of the current one with the given name.
 //
-// No ScopeSeparator ("/") is allowed in scope.
-func (s *Scope) Shared(scope string) *Scope {
-	if scope == "" {
+// The nameFormat and its args are fed to fmt.Sprintf(), as a shortcut to allow formatted sub-scope names.
+//
+// This version panics if the sub-scope has not yet been visited.
+// See also Scope.In and Scope.At.
+func (s *Scope) Shared(nameFormat string, args ...any) *Scope {
+	name := fmt.Sprintf(nameFormat, args...)
+	if name == "" {
 		Panicf("cannot use empty scope for Scope.Shared()")
 	}
-	s.checkName(scope)
+	s.checkName(name)
 
-	if !s.visitedPaths.Has(scope) {
-		Panicf("scope %q not yet visited from %q, use In() first", scope, s.scope)
+	if !s.visitedPaths.Has(name) {
+		Panicf("sub-scope %q not yet visited from %q, use In() first", name, s.scope)
 	}
 
-	newScopePath := path.Join(s.scope, scope)
+	newScopePath := Join(s.scope, name)
 	s2 := s.copy()
 	s2.scope = newScopePath
 	s2.visitedPaths = sets.Make[string]()
 	return s2
 }
 
-// Inf returns a new Scope with the extra given scope. No ScopeSeparator ("/") is
-// allowed in scope.
-// The name of the new scope is given as a format + args, which are passed to fmt.Sprintf.
-func (s *Scope) Inf(format string, args ...any) *Scope {
-	return s.In(fmt.Sprintf(format, args...))
+// At returns a new "sub"-Scope of the current one with the given name.
+//
+// The nameFormat and its args are fed to fmt.Sprintf(), as a shortcut to allow formatted sub-scope names.
+//
+// This version works irrespective of whether the scope has been visited before or not.
+// See also Scope.In and Scope.Shared.
+func (s *Scope) At(nameFormat string, args ...any) *Scope {
+	name := fmt.Sprintf(nameFormat, args...)
+	if name == "" {
+		Panicf("cannot use empty scope for Scope.At()")
+	}
+	s.checkName(name)
+
+	newScopePath := Join(s.scope, name)
+	s2 := s.copy()
+	s2.scope = newScopePath
+	s2.visitedPaths = sets.Make[string]()
+	return s2
 }
 
 // WithInitializer returns a new reference to the Scope, with the initializer set.
@@ -135,14 +159,14 @@ func (s *Scope) Initializer() VariableInitializer {
 // The name cannot contain the ScopeSeparator ("/").
 func (s *Scope) GetVariable(name string) *Variable {
 	s.checkName(name)
-	return s.store.GetVariable(path.Join(s.scope, name))
+	return s.store.GetVariable(Join(s.scope, name))
 }
 
 // DeleteVariable deletes the variable in the current scope.
 // The name cannot contain the ScopeSeparator ("/").
 func (s *Scope) DeleteVariable(name string) error {
 	s.checkName(name)
-	return s.store.DeleteVariable(path.Join(s.scope, name))
+	return s.store.DeleteVariable(Join(s.scope, name))
 }
 
 // checkName panics if the name contains the ScopeSeparator ("/").
@@ -357,7 +381,7 @@ func (s *Scope) SetGraphParam(g *Graph, key string, value any) {
 // VariableWithShape creates or returns an existing variable with the given shape in the current scope.
 func (s *Scope) VariableWithShape(name string, shape shapes.Shape) *Variable {
 	s.checkName(name)
-	fullPath := path.Join(s.scope, name)
+	fullPath := Join(s.scope, name)
 	v := s.store.GetVariable(fullPath)
 
 	if v != nil {
@@ -392,7 +416,7 @@ func (s *Scope) VariableWithShape(name string, shape shapes.Shape) *Variable {
 // VariableWithValue creates or returns a variable initialized with the given value in the current scope.
 func (s *Scope) VariableWithValue(name string, defaultValue any) *Variable {
 	s.checkName(name)
-	fullPath := path.Join(s.scope, name)
+	fullPath := Join(s.scope, name)
 	v := s.store.GetVariable(fullPath)
 
 	var valueT *tensors.Tensor

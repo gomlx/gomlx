@@ -19,11 +19,11 @@ import (
 
 func TestTrainer_AccumulateGradients(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
+	store := model.NewStore()
 
-	modelFn := func(ctx *model.Context, spec any, inputs []*Node) []*Node {
+	modelFn := func(scope *model.Scope, spec any, inputs []*Node) []*Node {
 		g := inputs[0].Graph()
-		predictionVar := ctx.In("model").
+		predictionVar := scope.In("model").
 			VariableWithValue("prediction", float32(0))
 		return []*Node{predictionVar.ValueGraph(g)}
 	}
@@ -31,7 +31,7 @@ func TestTrainer_AccumulateGradients(t *testing.T) {
 	learningRate := 0.1
 	optimizer := optimizers.StochasticGradientDescent().
 		WithDecay(false).WithLearningRate(learningRate).Done()
-	trainer := NewTrainer(backend, ctx, modelFn, lossFn, optimizer, nil, nil)
+	trainer := NewTrainer(backend, store.RootScope(), modelFn, lossFn, optimizer, nil, nil)
 	input := tensors.FromScalar(float32(0))
 	label := tensors.FromScalar(float32(10))
 
@@ -49,9 +49,9 @@ func TestTrainer_AccumulateGradients(t *testing.T) {
 		loss := metrics[0].Value().(float32)
 		require.Equal(t, float32(10), loss)
 
-		predictionVar := ctx.GetVariableByScopeAndName("/model", "prediction")
+		predictionVar := store.GetVariable("/model/prediction")
 		require.NotNil(t, predictionVar)
-		accPredictionVar := ctx.GetVariableByScopeAndName("/"+AccumulatedGradientsScope+"/model", "prediction")
+		accPredictionVar := store.GetVariable("/"+AccumulatedGradientsScope+"/model/prediction")
 		require.NotNil(t, accPredictionVar)
 
 		prediction := predictionVar.MustValue().Value().(float32)

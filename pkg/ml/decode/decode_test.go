@@ -17,7 +17,7 @@ import (
 // TestDecoder groups config default and builder tests.
 func TestDecoder(t *testing.T) {
 	t.Run("Defaults", func(t *testing.T) {
-		var modelFn IterativeModelFn = func(ctx *model.Context, tokens *Node) *Node { return tokens }
+		var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node { return tokens }
 		cfg := New(modelFn)
 		assert.Equal(t, 100, cfg.MaxLength)
 		assert.Equal(t, sample.StrategyGreedy, cfg.Strategy)
@@ -30,7 +30,7 @@ func TestDecoder(t *testing.T) {
 	})
 
 	t.Run("Builders", func(t *testing.T) {
-		var modelFn IterativeModelFn = func(ctx *model.Context, tokens *Node) *Node { return tokens }
+		var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node { return tokens }
 		cfg := New(modelFn).
 			WithMaxLength(50).
 			WithStrategy(sample.StrategyTemperature).
@@ -54,8 +54,8 @@ func TestDecoder(t *testing.T) {
 func TestDecoderSampling(t *testing.T) {
 	t.Run("Greedy", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
-		var modelFn IterativeModelFn = func(ctx *model.Context, tokens *Node) *Node {
+		store := model.NewStore()
+		var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
 			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
@@ -67,7 +67,7 @@ func TestDecoderSampling(t *testing.T) {
 		}
 		cfg := New(modelFn).WithStrategy(sample.StrategyGreedy).WithMaxLength(10)
 		prompt := [][]int32{{1, 2, 3}}
-		result, err := cfg.Decode(backend, ctx, prompt)
+		result, err := cfg.Decode(backend, store.RootScope(), prompt)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		// Expect full sequence [batch=1, length=10]
@@ -80,8 +80,8 @@ func TestDecoderSampling(t *testing.T) {
 
 	t.Run("Temperature", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
-		var modelFn IterativeModelFn = func(ctx *model.Context, tokens *Node) *Node {
+		store := model.NewStore()
+		var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
 			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
@@ -90,7 +90,7 @@ func TestDecoderSampling(t *testing.T) {
 		}
 		cfg := New(modelFn).WithStrategy(sample.StrategyTemperature).WithTemperature(1.5).WithMaxLength(10)
 		prompt := [][]int32{{1, 2, 3}}
-		result, err := cfg.Decode(backend, ctx, prompt)
+		result, err := cfg.Decode(backend, store.RootScope(), prompt)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, 2, result.Rank())
@@ -103,8 +103,8 @@ func TestDecoderSampling(t *testing.T) {
 
 	t.Run("OneDPrompt", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
-		var modelFn IterativeModelFn = func(ctx *model.Context, tokens *Node) *Node {
+		store := model.NewStore()
+		var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
 			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
@@ -113,7 +113,7 @@ func TestDecoderSampling(t *testing.T) {
 		}
 		cfg := New(modelFn).WithStrategy(sample.StrategyGreedy).WithMaxLength(10)
 		prompt := []int32{1, 2, 3}
-		result, err := cfg.Decode(backend, ctx, prompt)
+		result, err := cfg.Decode(backend, store.RootScope(), prompt)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, 2, result.Rank())
@@ -122,11 +122,11 @@ func TestDecoderSampling(t *testing.T) {
 
 	t.Run("PromptTooLong", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
-		var modelFn IterativeModelFn = func(ctx *model.Context, tokens *Node) *Node { return tokens }
+		store := model.NewStore()
+		var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node { return tokens }
 		cfg := New(modelFn).WithMaxLength(5)
 		prompt := [][]int32{{1, 2, 3, 4, 5, 6, 7, 8}}
-		_, err := cfg.Decode(backend, ctx, prompt)
+		_, err := cfg.Decode(backend, store.RootScope(), prompt)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "prompt length")
 	})
@@ -135,8 +135,8 @@ func TestDecoderSampling(t *testing.T) {
 // TestGenerateBeamSearchNotImplemented remains as a placeholder expectation.
 func TestBeamSearch(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
-	var modelFn IterativeModelFn = func(ctx *model.Context, tokens *Node) *Node {
+	store := model.NewStore()
+	var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node {
 		batchSize := tokens.Shape().Dimensions[0]
 		seqLen := tokens.Shape().Dimensions[1]
 		g := tokens.Graph()
@@ -144,7 +144,7 @@ func TestBeamSearch(t *testing.T) {
 	}
 	cfg := New(modelFn).WithStrategy(sample.StrategyBeamSearch).WithBeamSize(4).WithMaxLength(10)
 	prompt := [][]int32{{1, 2, 3}}
-	result, err := cfg.Decode(backend, ctx, prompt)
+	result, err := cfg.Decode(backend, store.RootScope(), prompt)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	// Expect best sequences: shape [batch, seq_len]
@@ -155,11 +155,11 @@ func TestBeamSearch(t *testing.T) {
 // TestStreamingNotImplemented groups streaming placeholder test.
 func TestStreamingNotImplemented(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
-	var modelFn IterativeModelFn = func(ctx *model.Context, tokens *Node) *Node { return tokens }
+	store := model.NewStore()
+	var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node { return tokens }
 	cfg := New(modelFn)
 	prompt := []int32{1, 2, 3}
-	err := cfg.GenerateStreaming(backend, ctx, prompt, func(token int) bool { return true })
+	err := cfg.GenerateStreaming(backend, store.RootScope(), prompt, func(token int) bool { return true })
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "streaming generation not yet implemented")
 }

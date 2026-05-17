@@ -11,7 +11,7 @@ import (
 	"github.com/gomlx/gomlx/support/sets"
 )
 
-func Params(ctxs, scopedCtxs []*model.Context, names []string) {
+func Params(ctxs, scopedCtxs []*model.Scope, names []string) {
 	numCheckpoints := len(names)
 	numCols := numCheckpoints + 3
 
@@ -33,8 +33,8 @@ func Params(ctxs, scopedCtxs []*model.Context, names []string) {
 	// List params set on all models.
 	type scopeKey struct{ Scope, Key string }
 	scopeKeySet := sets.Make[scopeKey]()
-	for _, ctx := range ctxs {
-		ctx.EnumerateParams(func(scope, key string, value any) {
+	for _, scope := range ctxs {
+		scope.EnumerateParams(func(scope, key string, value any) {
 			scopeKeySet.Insert(scopeKey{Scope: scope, Key: key})
 		})
 	}
@@ -59,11 +59,11 @@ func Params(ctxs, scopedCtxs []*model.Context, names []string) {
 		scope, key := pair.Scope, pair.Key
 		row[0] = scope
 		row[1] = key
-		for ii, ctx := range ctxs {
+		for ii, scope := range ctxs {
 			if scope != "/" {
-				ctx = ctx.In(scope)
+				scope = scope.In(scope)
 			}
-			value, found := ctx.GetParam(key)
+			value, found := scope.GetParam(key)
 			if !found {
 				continue
 			}

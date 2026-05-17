@@ -40,7 +40,7 @@ const (
 //
 // Returns:
 //   - logits: Output logits per candidate token (vocabSize), shaped [batch, seqLen, vocabSize]
-type IterativeModelFn func(ctx *model.Context, tokens *Node) *Node
+type IterativeModelFn func(scope *model.Scope, tokens *Node) *Node
 
 // IncrementalModelFn represents an incremental model function, which is expected to have
 // some form of caching (stored in the variables in the context).
@@ -58,7 +58,7 @@ type IterativeModelFn func(ctx *model.Context, tokens *Node) *Node
 //
 // Returns:
 //   - logits: Output logits [batch, newLen, vocabSize]
-type IncrementalModelFn func(ctx *model.Context, newTokens *Node, position int) *Node
+type IncrementalModelFn func(scope *model.Scope, newTokens *Node, position int) *Node
 
 // Decoder configures and executes autoregressive text generation.
 // Supports multiple sampling strategies (greedy, temperature, top-k, nucleus, beam search)
@@ -161,7 +161,7 @@ func New[M interface {
 //	    "decode_max_length": 200,
 //	})
 //	decoder.FromContext(ctx)
-func (dec *Decoder) FromContext(ctx *model.Context) *Decoder {
+func (dec *Decoder) FromContext(scope *model.Scope) *Decoder {
 	dec.mu.Lock()
 	defer dec.mu.Unlock()
 	if dec.promptExec != nil {
@@ -169,8 +169,8 @@ func (dec *Decoder) FromContext(ctx *model.Context) *Decoder {
 		return dec
 	}
 	// Optional parameters with defaults
-	dec.MaxLength = model.GetParamOr(ctx, ParamMaxLength, dec.MaxLength)
-	strategyName := model.GetParamOr(ctx, ParamStrategy, "")
+	dec.MaxLength = model.GetParamOr(scope, ParamMaxLength, dec.MaxLength)
+	strategyName := model.GetParamOr(scope, ParamStrategy, "")
 	if strategyName != "" {
 		var err error
 		dec.Strategy, err = sample.StrategyString(strategyName)
@@ -179,28 +179,28 @@ func (dec *Decoder) FromContext(ctx *model.Context) *Decoder {
 			return dec
 		}
 	}
-	dec.Temperature = model.GetParamOr(ctx, ParamTemperature, dec.Temperature)
-	dec.TopK = model.GetParamOr(ctx, ParamTopK, dec.TopK)
-	dec.TopP = model.GetParamOr(ctx, ParamTopP, dec.TopP)
-	dec.BeamSize = model.GetParamOr(ctx, ParamBeamSize, dec.BeamSize)
-	dec.EosTokenId = model.GetParamOr(ctx, ParamEosTokenId, dec.EosTokenId)
-	dec.StopOnEOS = model.GetParamOr(ctx, ParamStopOnEOS, dec.StopOnEOS)
+	dec.Temperature = model.GetParamOr(scope, ParamTemperature, dec.Temperature)
+	dec.TopK = model.GetParamOr(scope, ParamTopK, dec.TopK)
+	dec.TopP = model.GetParamOr(scope, ParamTopP, dec.TopP)
+	dec.BeamSize = model.GetParamOr(scope, ParamBeamSize, dec.BeamSize)
+	dec.EosTokenId = model.GetParamOr(scope, ParamEosTokenId, dec.EosTokenId)
+	dec.StopOnEOS = model.GetParamOr(scope, ParamStopOnEOS, dec.StopOnEOS)
 	return dec
 }
 
 // initializePromptExec creates the cached executor for processing prompts in incremental generation.
 // This executor is reused across multiple generation calls to avoid recompilation overhead.
-func (dec *Decoder) initializePromptExec(backend compute.Backend, ctx *model.Context) error {
+func (dec *Decoder) initializePromptExec(backend compute.Backend, scope *model.Scope) error {
 	if dec.promptExec != nil || dec.IncrementalModelFn == nil {
 		return nil
 	}
 
 	var err error
-	dec.promptExec, err = model.NewExec(backend, ctx.Reuse(), func(ctx *model.Context, tokens *Node) *Node {
-		logits := dec.IncrementalModelFn(ctx, tokens, 0)
+	dec.promptExec, err = model.NewExec(backend, scope.Store(), func(scope *model.Scope, tokens *Node) *Node {
+		logits := dec.IncrementalModelFn(scope, tokens, 0)
 		lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 		lastLogits = Squeeze(lastLogits, 1) // [batch, vocab_size]
-		nextToken := sample.SampleWithStrategy(ctx, lastLogits, dec.Strategy, float64(dec.Temperature), dec.TopK, float64(dec.TopP))
+		nextToken := sample.SampleWithStrategy(scope, lastLogits, dec.Strategy, float64(dec.Temperature), dec.TopK, float64(dec.TopP))
 		return nextToken
 	})
 	if err != nil {
@@ -344,7 +344,7 @@ func (dec *Decoder) validate() error {
 //	output, err := decoder.Decode(backend, ctx, prompt)
 func (dec *Decoder) Decode(
 	backend compute.Backend,
-	ctx *model.Context,
+	scope *model.Scope,
 	prompt any,
 ) (*tensors.Tensor, error) {
 	dec.mu.Lock()
@@ -356,7 +356,7 @@ func (dec *Decoder) Decode(
 	}
 
 	// Initialize cached executors for incremental generation
-	if err := dec.initializePromptExec(backend, ctx); err != nil {
+	if err := dec.initializePromptExec(backend, scope); err != nil {
 		return nil, err
 	}
 
@@ -382,11 +382,11 @@ func (dec *Decoder) Decode(
 	}
 
 	if dec.Strategy == sample.StrategyBeamSearch {
-		return dec.generateBeamSearch(backend, ctx, promptTensor)
+		return dec.generateBeamSearch(backend, scope, promptTensor)
 	}
 
 	// Regular sampling-based generation
-	return dec.generateSampling(backend, ctx, promptTensor)
+	return dec.generateSampling(backend, scope, promptTensor)
 }
 
 // generateSampling performs generation using sampling strategies.
@@ -402,7 +402,7 @@ func (dec *Decoder) Decode(
 //   - Error if generation fails
 func (dec *Decoder) generateSampling(
 	backend compute.Backend,
-	ctx *model.Context,
+	scope *model.Scope,
 	prompt *tensors.Tensor,
 ) (*tensors.Tensor, error) {
 	promptShape := prompt.Shape()
@@ -410,7 +410,7 @@ func (dec *Decoder) generateSampling(
 
 	if prompt.Rank() == 1 {
 		// Reshape 1D to 2D with batch size 1
-		reshapeExec, err := model.NewExec(backend, ctx.Reuse(), func(ctx *model.Context, input *Node) *Node {
+		reshapeExec, err := model.NewExec(backend, scope.Store(), func(scope *model.Scope, input *Node) *Node {
 			return ExpandDims(input, 0) // [seq_len] -> [1, seq_len]
 		})
 		if err != nil {
@@ -434,9 +434,9 @@ func (dec *Decoder) generateSampling(
 	}
 
 	if dec.isCached() {
-		return dec.generateSamplingIncremental(backend, ctx, prompt, batchSize, promptLen)
+		return dec.generateSamplingIncremental(backend, scope, prompt, batchSize, promptLen)
 	}
-	return dec.generateSamplingFull(backend, ctx, prompt, promptLen)
+	return dec.generateSamplingFull(backend, scope, prompt, promptLen)
 }
 
 // generateSamplingFull performs sampling-based generation without KV caching.
@@ -453,7 +453,7 @@ func (dec *Decoder) generateSampling(
 //   - Error if generation fails
 func (dec *Decoder) generateSamplingFull(
 	backend compute.Backend,
-	ctx *model.Context,
+	scope *model.Scope,
 	prompt *tensors.Tensor,
 	promptLen int,
 ) (*tensors.Tensor, error) {
@@ -480,13 +480,13 @@ func (dec *Decoder) generateSamplingFull(
 
 	// Create or reuse cached executor for full sequence generation
 	if dec.fullExec == nil {
-		predCtx := ctx.Reuse()
+		predCtx := scope
 		var err error
-		dec.fullExec, err = model.NewExec(backend, predCtx, func(ctx *model.Context, currentSeq *Node) *Node {
-			logits := dec.ModelFn(ctx, currentSeq)
+		dec.fullExec, err = model.NewExec(backend, predCtx.Store(), func(scope *model.Scope, currentSeq *Node) *Node {
+			logits := dec.ModelFn(scope, currentSeq)
 			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 			lastLogits = Squeeze(lastLogits, 1) // Remove the seq_len dimension
-			nextToken := sample.SampleWithStrategy(ctx, lastLogits, dec.Strategy, float64(dec.Temperature), dec.TopK, float64(dec.TopP))
+			nextToken := sample.SampleWithStrategy(scope, lastLogits, dec.Strategy, float64(dec.Temperature), dec.TopK, float64(dec.TopP))
 			return nextToken
 		})
 		if err != nil {
@@ -538,7 +538,7 @@ func (dec *Decoder) generateSamplingFull(
 //   - Error if generation fails
 func (dec *Decoder) generateSamplingIncremental(
 	backend compute.Backend,
-	ctx *model.Context,
+	scope *model.Scope,
 	prompt *tensors.Tensor,
 	_, promptLen int,
 ) (*tensors.Tensor, error) {
@@ -592,7 +592,7 @@ func (dec *Decoder) generateSamplingIncremental(
 		return tensors.FromValue(outputTokens), nil
 	}
 
-	genCtx := ctx.Reuse()
+	genCtx := scope
 
 	// Initialize cache if needed
 	if dec.genExecCache == nil {
@@ -607,11 +607,11 @@ func (dec *Decoder) generateSamplingIncremental(
 		exec, ok := dec.genExecCache[position]
 		if !ok {
 			var err error
-			exec, err = model.NewExec(backend, genCtx, func(ctx *model.Context, token *Node) *Node {
+			exec, err = model.NewExec(backend, genCtx.Store(), func(scope *model.Scope, token *Node) *Node {
 				tokenReshaped := ExpandDims(token, -1)
-				logits := dec.IncrementalModelFn(ctx, tokenReshaped, position)
+				logits := dec.IncrementalModelFn(scope, tokenReshaped, position)
 				lastLogits := Squeeze(logits, 1)
-				nextToken := sample.SampleWithStrategy(ctx, lastLogits, dec.Strategy, float64(dec.Temperature), dec.TopK, float64(dec.TopP))
+				nextToken := sample.SampleWithStrategy(scope, lastLogits, dec.Strategy, float64(dec.Temperature), dec.TopK, float64(dec.TopP))
 				return nextToken
 			})
 			if err != nil {
@@ -680,7 +680,7 @@ func (dec *Decoder) checkEOS(token *tensors.Tensor) bool {
 // Dispatches to cached or non-cached implementation based on configuration.
 func (dec *Decoder) generateBeamSearch(
 	backend compute.Backend,
-	ctx *model.Context,
+	scope *model.Scope,
 	prompt *tensors.Tensor,
 ) (*tensors.Tensor, error) {
 	// Ensure prompt 2D
@@ -688,7 +688,7 @@ func (dec *Decoder) generateBeamSearch(
 	var batchSize, promptLen int
 
 	if prompt.Rank() == 1 {
-		reshapeExec, err := model.NewExec(backend, ctx.Reuse(), func(ctx *model.Context, input *Node) *Node {
+		reshapeExec, err := model.NewExec(backend, scope.Store(), func(scope *model.Scope, input *Node) *Node {
 			return ExpandDims(input, 0)
 		})
 		if err != nil {
@@ -713,16 +713,16 @@ func (dec *Decoder) generateBeamSearch(
 
 	// Dispatch cached or non-cached
 	if dec.isCached() {
-		return dec.generateBeamSearchCached(backend, ctx, prompt, batchSize, promptLen)
+		return dec.generateBeamSearchCached(backend, scope, prompt, batchSize, promptLen)
 	}
-	return dec.generateBeamSearchNonCached(backend, ctx, prompt, batchSize, promptLen)
+	return dec.generateBeamSearchNonCached(backend, scope, prompt, batchSize, promptLen)
 }
 
 // generateBeamSearchNonCached performs beam search without KV caching.
 // Maintains multiple beam hypotheses and selects the best sequence.
 func (dec *Decoder) generateBeamSearchNonCached(
 	backend compute.Backend,
-	ctx *model.Context,
+	scope *model.Scope,
 	prompt *tensors.Tensor,
 	batchSize, promptLen int,
 ) (*tensors.Tensor, error) {
@@ -730,7 +730,7 @@ func (dec *Decoder) generateBeamSearchNonCached(
 	batchBeamSize := batchSize * beamSize
 
 	// Replicate prompt for each beam
-	replicateExec, err := model.NewExec(backend, ctx.Reuse(), func(ctx *model.Context, prompt *Node) *Node {
+	replicateExec, err := model.NewExec(backend, scope.Store(), func(scope *model.Scope, prompt *Node) *Node {
 		// prompt: [batch, seq_len]
 		// Replicate beamSize times along batch dimension
 		// Result: [batch * beam_size, seq_len]
@@ -767,7 +767,7 @@ func (dec *Decoder) generateBeamSearchNonCached(
 		WithLengthPenalty(1.0)
 
 	// Main loop
-	predCtx := ctx.Reuse()
+	predCtx := scope
 	numSteps := dec.MaxLength - promptLen
 
 	for step := 0; step < numSteps; step++ {
@@ -776,9 +776,9 @@ func (dec *Decoder) generateBeamSearchNonCached(
 		// TODO: It seems I cannot cache this exec because currentLength changes each iteration
 		// and is used as a compile-time constant in the graph (passed to beamConfig.Step)
 		// I leave it like this for now as I think we need the dynamic shape support of the simplego backend.
-		exec, err := model.NewExec(backend, predCtx, func(ctx *model.Context, sequences, scores *Node) (*Node, *Node, *Node) {
+		exec, err := model.NewExec(backend, predCtx.Store(), func(scope *model.Scope, sequences, scores *Node) (*Node, *Node, *Node) {
 			// Run model
-			logits := dec.ModelFn(ctx, sequences)
+			logits := dec.ModelFn(scope, sequences)
 
 			// Last token logits: [batch_beam_size, vocab_size]
 			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
@@ -827,7 +827,7 @@ func (dec *Decoder) generateBeamSearchNonCached(
 	}
 
 	// Apply length penalty; select best sequences
-	selectExec, err := model.NewExec(backend, ctx.Reuse(), func(ctx *model.Context, sequences, scores *Node) (*Node, *Node) {
+	selectExec, err := model.NewExec(backend, scope.Store(), func(scope *model.Scope, sequences, scores *Node) (*Node, *Node) {
 		// Select best sequences (length penalty is applied automatically)
 		bestSeqs, bestScores := beamConfig.SelectBest(sequences, scores)
 		return bestSeqs, bestScores
@@ -848,7 +848,7 @@ func (dec *Decoder) generateBeamSearchNonCached(
 // Each beam maintains its own cache for efficient incremental generation.
 func (dec *Decoder) generateBeamSearchCached(
 	backend compute.Backend,
-	ctx *model.Context,
+	scope *model.Scope,
 	prompt *tensors.Tensor,
 	batchSize, promptLen int,
 ) (*tensors.Tensor, error) {
@@ -858,7 +858,7 @@ func (dec *Decoder) generateBeamSearchCached(
 	// Each call to WithKVCache in the model function will create/reuse cache variables in the model.
 
 	// Replicate prompt for each beam
-	replicateExec, err := model.NewExec(backend, ctx.Reuse(), func(ctx *model.Context, prompt *Node) *Node {
+	replicateExec, err := model.NewExec(backend, scope.Store(), func(scope *model.Scope, prompt *Node) *Node {
 		replicated := make([]*Node, beamSize)
 		for i := range beamSize {
 			replicated[i] = prompt
@@ -877,8 +877,8 @@ func (dec *Decoder) generateBeamSearchCached(
 	replicatedPrompt := replicatedResults[0]
 
 	// Process prompt to populate caches
-	promptExec, err := model.NewExec(backend, ctx.Reuse(), func(ctx *model.Context, tokens *Node) *Node {
-		logits := dec.IncrementalModelFn(ctx, tokens, 0)
+	promptExec, err := model.NewExec(backend, scope.Store(), func(scope *model.Scope, tokens *Node) *Node {
+		logits := dec.IncrementalModelFn(scope, tokens, 0)
 		lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 		return Squeeze(lastLogits, 1)
 	})
@@ -911,7 +911,7 @@ func (dec *Decoder) generateBeamSearchCached(
 		WithLengthPenalty(1.0)
 
 	// Main loop
-	genCtx := ctx.Reuse()
+	genCtx := scope
 	numSteps := dec.MaxLength - promptLen
 
 	for step := 0; step < numSteps; step++ {
@@ -920,7 +920,7 @@ func (dec *Decoder) generateBeamSearchCached(
 		// Note: Cannot cache extractExec across decode calls because it would need
 		// to be invalidated when sequences change shape. Creating it per-step is acceptable
 		// since it's a trivial slice operation.
-		extractExec, err := model.NewExec(backend, ctx.Reuse(), func(ctx *model.Context, sequences *Node) *Node {
+		extractExec, err := model.NewExec(backend, scope.Store(), func(scope *model.Scope, sequences *Node) *Node {
 			// Last token: [batch_beam_size]
 			lastTokens := Slice(sequences, AxisRange(), AxisElem(-1))
 			return lastTokens
@@ -938,12 +938,12 @@ func (dec *Decoder) generateBeamSearchCached(
 
 		// Note: Cannot cache this exec because position changes each iteration
 		// and is used as a compile-time constant in the graph (passed to IncrementalModelFn)
-		exec, err := model.NewExec(backend, genCtx, func(ctx *model.Context, tokens, scores, sequences *Node) (*Node, *Node, *Node) {
+		exec, err := model.NewExec(backend, genCtx.Store(), func(scope *model.Scope, tokens, scores, sequences *Node) (*Node, *Node, *Node) {
 			// tokens: [batch_beam_size]
 			tokensReshaped := ExpandDims(tokens, -1) // [batch_beam_size, 1]
 
 			// Process with incremental model
-			logits := dec.IncrementalModelFn(ctx, tokensReshaped, position)
+			logits := dec.IncrementalModelFn(scope, tokensReshaped, position)
 			logits = Squeeze(logits, 1) // [batch_beam_size, vocab_size]
 
 			// Beam search step
@@ -989,7 +989,7 @@ func (dec *Decoder) generateBeamSearchCached(
 	}
 
 	// Select best sequences
-	selectExec, err := model.NewExec(backend, ctx.Reuse(), func(ctx *model.Context, sequences, scores *Node) (*Node, *Node) {
+	selectExec, err := model.NewExec(backend, scope.Store(), func(scope *model.Scope, sequences, scores *Node) (*Node, *Node) {
 		// Select best sequences (length penalty is applied automatically)
 		bestSeqs, bestScores := beamConfig.SelectBest(sequences, scores)
 		return bestSeqs, bestScores
@@ -1021,7 +1021,7 @@ func (dec *Decoder) generateBeamSearchCached(
 // Note: This is a placeholder for future streaming support.
 func (dec *Decoder) GenerateStreaming(
 	backend compute.Backend,
-	ctx *model.Context,
+	scope *model.Scope,
 	prompt any,
 	callback func(token int) bool,
 ) error {

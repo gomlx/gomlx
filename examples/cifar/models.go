@@ -15,21 +15,21 @@ import (
 
 // C10PlainModelGraph implements train.ModelFn, and returns the logit Node, given the input image.
 // It's a basic FNN (Feedforward Neural Network), so no convolutions. It is meant only as an example.
-func C10PlainModelGraph(ctx *model.Context, spec any, inputs []*graph.Node) []*graph.Node {
+func C10PlainModelGraph(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
 	batchedImages := inputs[0]
 	batchSize := batchedImages.Shape().Dimensions[0]
 	logits := graph.Reshape(batchedImages, batchSize, -1)
 	numClasses := len(C10Labels)
-	modelType := model.GetParamOr(ctx, "model", C10ValidModels[0])
+	modelType := model.GetParamOr(scope, "model", C10ValidModels[0])
 	if modelType == "kan" {
 		// Configuration of the KAN layer(s) use the context hyperparameters.
 		// Re-scale logits to be from -1.0 to 1.0.
 		logits = graph.AddScalar(graph.MulScalar(logits, 2), -1)
 		//graph.ReduceMean(graph.ReduceVariance(logits, -1)).SetLogged("Mean input variance of the examples")
-		logits = kan.New(ctx, logits, numClasses).Done()
+		logits = kan.New(scope, logits, numClasses).Done()
 	} else {
 		// Configuration of the FNN layer(s) use the context hyperparameters.
-		logits = fnn.New(ctx, logits, numClasses).Done()
+		logits = fnn.New(scope, logits, numClasses).Done()
 	}
 	logits.AssertDims(batchSize, numClasses)
 	return []*graph.Node{logits}
@@ -37,19 +37,19 @@ func C10PlainModelGraph(ctx *model.Context, spec any, inputs []*graph.Node) []*g
 
 const ParamCNNNormalization = "cnn_normalization"
 
-func normalizeCNN(ctx *model.Context, logits *graph.Node) *graph.Node {
-	normalizationType := model.GetParamOr(ctx, ParamCNNNormalization, "none")
+func normalizeCNN(scope *model.Scope, logits *graph.Node) *graph.Node {
+	normalizationType := model.GetParamOr(scope, ParamCNNNormalization, "none")
 	switch normalizationType {
 	case "layer":
 		if logits.Rank() == 2 {
-			return layers.LayerNormalization(ctx, logits, -1).Done()
+			return layers.LayerNormalization(scope, logits, -1).Done()
 		} else if logits.Rank() == 4 {
-			return layers.LayerNormalization(ctx, logits, 2, 3).Done()
+			return layers.LayerNormalization(scope, logits, 2, 3).Done()
 		} else {
 			return logits
 		}
 	case "batch":
-		return batchnorm.New(ctx, logits, -1).Done()
+		return batchnorm.New(scope, logits, -1).Done()
 	case "none", "":
 		return logits
 	default:
@@ -64,7 +64,7 @@ func normalizeCNN(ctx *model.Context, logits *graph.Node) *graph.Node {
 // This is modeled after the Keras example in Kaggle:
 // https://www.kaggle.com/code/ektasharma/simple-cifar10-cnn-keras-code-with-88-accuracy
 // (Thanks @ektasharma)
-func C10ConvolutionModelGraph(ctx *model.Context, spec any, inputs []*graph.Node) []*graph.Node {
+func C10ConvolutionModelGraph(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
 	batchedImages := inputs[0]
 	g := batchedImages.Graph()
 	dtype := batchedImages.DType()
@@ -72,8 +72,8 @@ func C10ConvolutionModelGraph(ctx *model.Context, spec any, inputs []*graph.Node
 	logits := batchedImages
 
 	layerIdx := 0
-	nextCtx := func(name string) *model.Context {
-		newCtx := ctx.Inf("%03d_%s", layerIdx, name)
+	nextCtx := func(name string) *model.Scope {
+		newCtx := scope.In("%03d_%s", layerIdx, name)
 		layerIdx++
 		return newCtx
 	}

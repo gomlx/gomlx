@@ -4,6 +4,7 @@ package metrics
 
 import (
 	"fmt"
+	"path"
 	"testing"
 
 	. "github.com/gomlx/gomlx/core/graph"
@@ -18,26 +19,26 @@ import (
 // takeFirstFn wraps the given `metricFn` with a function that takes a single node for labels and predictions as
 // opposed to slices of nodes.
 func takeFirstFn(
-	metricFn func(ctx *model.Context, labels, predictions []*Node) *Node,
-) func(*model.Context, *Node, *Node) *Node {
-	return func(ctx *model.Context, labels, predictions *Node) *Node {
-		return metricFn(ctx, []*Node{labels}, []*Node{predictions})
+	metricFn func(scope *model.Scope, labels, predictions []*Node) *Node,
+) func(*model.Scope, *Node, *Node) *Node {
+	return func(scope *model.Scope, labels, predictions *Node) *Node {
+		return metricFn(scope, []*Node{labels}, []*Node{predictions})
 	}
 }
 
 // takeLabelsMaskWeightPredictionsFn wraps the given `metricFn` with a function that takes labels, mask, weights and predictions.
 func takeLabelsMaskWeightPredictionsFn(
-	metricFn func(ctx *model.Context, labels, predictions []*Node) *Node,
-) func(ctx *model.Context, labels, mask, weights, predictions *Node) *Node {
-	return func(ctx *model.Context, labels, mask, weights, predictions *Node) *Node {
-		return metricFn(ctx, []*Node{labels, mask, weights}, []*Node{predictions})
+	metricFn func(scope *model.Scope, labels, predictions []*Node) *Node,
+) func(scope *model.Scope, labels, mask, weights, predictions *Node) *Node {
+	return func(scope *model.Scope, labels, mask, weights, predictions *Node) *Node {
+		return metricFn(scope, []*Node{labels, mask, weights}, []*Node{predictions})
 	}
 }
 
 func TestBinaryAccuracyGraph(t *testing.T) {
 	manager := testutil.BuildTestBackend()
-	ctx := model.New()
-	accuracyExec := model.MustNewExec(manager, ctx, takeFirstFn(BinaryAccuracyGraph))
+	scope := model.NewStore()
+	accuracyExec := model.MustNewExec(manager, scope, takeFirstFn(BinaryAccuracyGraph))
 	labels, probs := []float32{0, 1, 0, 1, 0, 1}, []float32{0.1, 0.1, 0.5, 0.5, 0.8, 0.8}
 	results := accuracyExec.MustExec(labels, probs)
 	got := results[0].Value().(float32)
@@ -48,10 +49,10 @@ func TestBinaryAccuracyGraph(t *testing.T) {
 
 func TestNewMeanBinaryAccuracy(t *testing.T) {
 	manager := testutil.BuildTestBackend()
-	ctx := model.New().Checked(false)
+	store := model.NewStore()
 	accMetric := NewMeanBinaryAccuracy("accuracy", "acc")
-	accExec := model.MustNewExec(manager, ctx, func(ctx *model.Context, labels, predictions *Node) *Node {
-		return accMetric.UpdateGraph(ctx, []*Node{labels}, []*Node{predictions})
+	accExec := model.MustNewExec(manager, store, func(scope *model.Scope, labels, predictions *Node) *Node {
+		return accMetric.UpdateGraph(scope, []*Node{labels}, []*Node{predictions})
 	})
 
 	// First batch:
@@ -63,18 +64,17 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 	// List and check variables.
 	fmt.Println("Variables:")
-	ctx.EnumerateVariables(func(v *model.Variable) {
+	for v := range store.IterVariables() {
 		fmt.Printf("\t%s / %s=%s\n", v.Scope(), v.Name(), v.MustValue())
-	})
+	}
 
-	metricScope := ctx.In(Scope).In(accMetric.ScopeName()).Scope()
-	totalVar := ctx.GetVariableByScopeAndName(metricScope, "total")
-	require.NotNilf(t, totalVar, "Variable \"total\" was not created in %s / total", metricScope)
+	totalVar := store.GetVariable(path.Join("/", Scope, accMetric.ScopeName(), "total"))
+	require.NotNilf(t, totalVar, "Variable \"total\" was not created")
 	total := totalVar.MustValue().Value().(float32)
 	assert.Equal(t, float32(2), total, "MeanBinaryAccuracy total value")
 
-	weightVar := ctx.GetVariableByScopeAndName(metricScope, "weight")
-	require.NotNilf(t, weightVar, "Variable \"weight\" was not created in %s / total", metricScope)
+	weightVar := store.GetVariable(path.Join("/", Scope, accMetric.ScopeName(), "weight"))
+	require.NotNilf(t, weightVar, "Variable \"weight\" was not created")
 	weight := weightVar.MustValue().Value().(float32)
 	assert.Equal(t, float32(6), weight, "MeanBinaryAccuracy weight value")
 
@@ -86,7 +86,7 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 	assert.Equal(t, float32(6.0/12.0), meanAcc, "MeanBinaryAccuracy after batch #2")
 
 	// Zeros the state.
-	accMetric.Reset(ctx)
+	accMetric.Reset(store.RootScope())
 	total = totalVar.MustValue().Value().(float32)
 	weight = weightVar.MustValue().Value().(float32)
 	assert.Zero(t, total, "Expected total variable to be 0 after Reset()")
@@ -95,8 +95,8 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 func TestBinaryLogitsAccuracyGraph(t *testing.T) {
 	manager := testutil.BuildTestBackend()
-	ctx := model.New()
-	accuracyExec := model.MustNewExec(manager, ctx, takeFirstFn(BinaryLogitsAccuracyGraph))
+	scope := model.NewStore()
+	accuracyExec := model.MustNewExec(manager, scope, takeFirstFn(BinaryLogitsAccuracyGraph))
 	labels, logits := []float32{0, 1, 0, 1, 0, 1}, []float32{-0.1, -0.1, 0, 0, 0.2, 10.0}
 	results := accuracyExec.MustExec(labels, logits)
 	got, _ := results[0].Value().(float32)
@@ -105,9 +105,9 @@ func TestBinaryLogitsAccuracyGraph(t *testing.T) {
 
 func TestSparseCategoricalAccuracyGraph(t *testing.T) {
 	manager := testutil.BuildTestBackend()
-	ctx := model.New()
+	scope := model.NewStore()
 	{
-		accuracyExec := model.MustNewExec(manager, ctx, takeFirstFn(SparseCategoricalAccuracyGraph))
+		accuracyExec := model.MustNewExec(manager, scope, takeFirstFn(SparseCategoricalAccuracyGraph))
 		labels, logits := [][]int{{0}, {1}, {2}}, [][]float32{
 			{0, 0, 1},     // Tie, should be a miss.
 			{-2, -1, -3},  // Correct, even if negative.
@@ -120,7 +120,7 @@ func TestSparseCategoricalAccuracyGraph(t *testing.T) {
 	{
 		accuracyExec := model.MustNewExec(
 			manager,
-			ctx,
+			scope,
 			takeLabelsMaskWeightPredictionsFn(SparseCategoricalAccuracyGraph),
 		)
 		labels := [][]int{{0}, {1}, {0}, {2}}

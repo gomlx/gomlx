@@ -23,15 +23,15 @@ var (
 // Modeled after scikit-learn make_moons function.
 //
 // It returns a tensor of the given shaped [n, 2].
-func MakeMoons(ctx *model.Context, g *Graph, n int) *Node {
-	angles := ctx.RandomUniform(g, shapes.Make(DType, n))
+func MakeMoons(scope *model.Scope, g *Graph, n int) *Node {
+	angles := scope.RandomUniform(g, shapes.Make(DType, n))
 	angles = MulScalar(angles, math.Pi)
 	outerMoonX := Cos(angles)
 	outerMoonY := Sin(angles)
 	innerMoonX := OneMinus(outerMoonX)
 	innerMoonY := AddScalar(OneMinus(outerMoonY), -0.5)
 
-	coinFlip := ctx.RandomUniform(g, shapes.Make(DType, n))
+	coinFlip := scope.RandomUniform(g, shapes.Make(DType, n))
 	coinFlip = GreaterThan(AddScalar(coinFlip, -0.5), ScalarZero(g, DType))
 	xs := Where(coinFlip, innerMoonX, outerMoonX)
 	ys := Where(coinFlip, innerMoonY, outerMoonY)

@@ -42,10 +42,10 @@ type rationalConfig struct {
 }
 
 // initRational initializes the GR-KAN configuration.
-func (c *Config) initRational(ctx *model.Context) {
-	c.rational.numDegree = model.GetParamOr(ctx, ParamRationalNumeratorDegree, 5)
-	c.rational.denDegree = model.GetParamOr(ctx, ParamRationalDenominatorDegree, 4)
-	c.rational.initialApproximation = model.GetParamOr(ctx, ParamRationalInitialApproximation, rational.IdentityApproximation)
+func (c *Config) initRational(scope *model.Scope) {
+	c.rational.numDegree = model.GetParamOr(scope, ParamRationalNumeratorDegree, 5)
+	c.rational.denDegree = model.GetParamOr(scope, ParamRationalDenominatorDegree, 4)
+	c.rational.initialApproximation = model.GetParamOr(scope, ParamRationalInitialApproximation, rational.IdentityApproximation)
 	c.rational.version = "B"
 	c.rational.withMultiplier = true
 	c.rational.multiplierInitialVariance = 1.0
@@ -65,7 +65,7 @@ func (c *Config) Rational() *Config {
 }
 
 // Layer implements one GR-KAN layer. x is expected to be shaped [batchSize, numInputNodes].
-func (c *Config) rationalLayer(ctx *model.Context, x *Node, numOutputNodes int) *Node {
+func (c *Config) rationalLayer(scope *model.Scope, x *Node, numOutputNodes int) *Node {
 	residual := x
 	batchSize := x.Shape().Dimensions[0]
 	numInputNodes := x.Shape().Dimensions[x.Rank()-1]
@@ -73,7 +73,7 @@ func (c *Config) rationalLayer(ctx *model.Context, x *Node, numOutputNodes int) 
 	if c.inputGroupSize > 1 {
 		numInputGroups = numInputNodes / c.inputGroupSize
 	}
-	output := rational.New(ctx, x).
+	output := rational.New(scope, x).
 		Version(c.rational.version).
 		Approximate(c.rational.initialApproximation).
 		WithMultiplier(c.rational.withMultiplier).

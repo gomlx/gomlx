@@ -25,7 +25,7 @@ import (
 // Config for a batch normalization layer.
 // Create it with New, set the desired parameters, and when all is set, call Done.
 type Config struct {
-	ctx                       *model.Context
+	scope                     *model.Scope
 	x                         *Node
 	featureAxis               int
 	momentum, epsilon         float64
@@ -73,9 +73,9 @@ const (
 // FutureWork:
 // 1. Support padding by not normalizing parts that weren't touched.
 // 2. Support selection of multiple features axes.
-func New(ctx *model.Context, x *Node, featureAxis int) *Config {
+func New(scope *model.Scope, x *Node, featureAxis int) *Config {
 	return &Config{
-		ctx:                 ctx,
+		scope:               scope,
 		x:                   x,
 		featureAxis:         featureAxis,
 		momentum:            0.99,
@@ -175,14 +175,14 @@ func (builder *Config) Done() *Node {
 
 	// Set about batch normalization usage.
 	if builder.trainable && !builder.frozenAverages {
-		builder.ctx.InAbsPath(model.RootScope).SetParam(AveragesUpdatesTriggerParam, true)
+		builder.scope.Store().Scope(model.RootScopePath).SetParam(AveragesUpdatesTriggerParam, true)
 	}
 
 	// Creates new scope for variables.
 	if builder.newScope {
-		builder.ctx = builder.ctx.In("batch_normalization")
+		builder.scope = builder.scope.In("batch_normalization")
 	}
-	ctx := builder.ctx
+	scope := builder.scope
 
 	featureAxis := MustAdjustAxis(builder.featureAxis, x)
 	featureDim := x.Shape().Dimensions[featureAxis]
@@ -192,36 +192,36 @@ func (builder *Config) Done() *Node {
 	varShape := shapes.Make(dtype, featureDim)
 	var scaleVar *model.Variable
 	if builder.scale {
-		scaleVar = ctx.WithInitializer(initializers.One).VariableWithShape("scale", varShape).SetTrainable(true)
+		scaleVar = scope.WithInitializer(initializers.One).VariableWithShape("scale", varShape).SetTrainable(true)
 		scale = scaleVar.ValueGraph(g)
 	} else {
 		scale = Ones(g, varShape)
 	}
 
 	if builder.center {
-		offsetVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("offset", varShape).SetTrainable(true)
+		offsetVar := scope.WithInitializer(initializers.Zero).VariableWithShape("offset", varShape).SetTrainable(true)
 		offset = offsetVar.ValueGraph(g)
 	} else {
 		offset = Zeros(g, varShape)
 	}
 
 	// Normalization moving average of the mean and variance.
-	meanAverageVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("mean", varShape).SetTrainable(false)
-	varianceAverageVar := ctx.WithInitializer(initializers.One).
+	meanAverageVar := scope.WithInitializer(initializers.Zero).VariableWithShape("mean", varShape).SetTrainable(false)
+	varianceAverageVar := scope.WithInitializer(initializers.One).
 		VariableWithShape("variance", varShape).
 		SetTrainable(false)
-	weightVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("avg_weight", varShape).SetTrainable(false)
+	weightVar := scope.WithInitializer(initializers.Zero).VariableWithShape("avg_weight", varShape).SetTrainable(false)
 
 	var normalized *Node
 	mean, variance := meanAverageVar.ValueGraph(g), varianceAverageVar.ValueGraph(g)
-	averagesUpdatePhase := model.GetGraphParamOr(ctx, g, train.BatchNormalizationUpdatePhase, -1)
+	averagesUpdatePhase := model.GetGraphParamOr(scope, g, train.BatchNormalizationUpdatePhase, -1)
 	if averagesUpdatePhase >= 0 {
 		if builder.frozenAverages {
 			normalized = builder.directBatchNormGraph(x, scale, offset, mean, variance)
 		} else {
 			var batchMean, batchVariance *Node
 			batchMean, batchVariance = builder.batchMeanAndVariance(x)
-			builder.updateMeanAndVariance(ctx, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
+			builder.updateMeanAndVariance(scope, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
 			if averagesUpdatePhase > 0 {
 				// Use updated mean, variance to normalize.
 				mean, variance = meanAverageVar.ValueGraph(g), varianceAverageVar.ValueGraph(g)
@@ -235,7 +235,7 @@ func (builder *Config) Done() *Node {
 			}
 		}
 
-	} else if builder.trainable && ctx.IsTraining(g) {
+	} else if builder.trainable && scope.IsTraining(g) {
 		if builder.frozenAverages {
 			// Here we want to use the frozen mean and variance, and not the batch one, since these are different
 			// quantities and in inference we will use the frozen ones.
@@ -245,10 +245,10 @@ func (builder *Config) Done() *Node {
 			// Training: take batch's mean and variance and use it to update averages.
 			var batchMean, batchVariance *Node
 			normalized, batchMean, batchVariance = InternalBatchNormForTraining(x, scale, offset, float32(builder.epsilon), featureAxis)
-			builder.updateMeanAndVariance(ctx, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
+			builder.updateMeanAndVariance(scope, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
 		} else {
 			batchMean, batchVariance := builder.batchMeanAndVariance(x)
-			builder.updateMeanAndVariance(ctx, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
+			builder.updateMeanAndVariance(scope, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
 			normalized = builder.directBatchNormGraph(x, scale, offset, batchMean, batchVariance)
 		}
 
@@ -266,9 +266,9 @@ func (builder *Config) Done() *Node {
 
 	// Add regularization to scale.
 	if scaleVar != nil {
-		if l2 := model.GetParamOr(ctx, regularizers.ParamL2, 0.0); l2 > 0 {
+		if l2 := model.GetParamOr(scope, regularizers.ParamL2, 0.0); l2 > 0 {
 			reg := regularizers.L2(l2)
-			reg(ctx, g, scaleVar)
+			reg(scope, g, scaleVar)
 		}
 	}
 	return normalized
@@ -324,12 +324,12 @@ type batchNormUpdater struct {
 // updateMeanAndVariance values that will be used in inference later. It's a moving average, where weight is how many
 // examples have been seen so far -- it's incremented at every step.
 func (builder *Config) updateMeanAndVariance(
-	ctx *model.Context,
+	scope *model.Scope,
 	graph *Graph,
 	batchMean, batchVariance *Node,
 	meanAverageVar, varianceAverageVar, weightVar *model.Variable,
 ) {
-	_ = ctx
+	_ = scope
 	if builder.frozenAverages {
 		// We are not changing the averages.
 		return
@@ -359,9 +359,9 @@ func (builder *Config) updateMeanAndVariance(
 // It is a no-op if no batch-normalization was used.
 //
 // Usually this method is not used directly, instead use UpdateAverages.
-func ResetWeights(ctx *model.Context) error {
+func ResetWeights(scope *model.Scope) error {
 	suffix := "/" + BatchNormalizationScopeName
-	for v := range ctx.IterVariablesInScope() {
+	for v := range scope.IterVariables() {
 		if strings.HasSuffix(v.Scope(), suffix) && v.Name() == "avg_weight" {
 			zeros := tensors.FromShape(v.Shape())
 			err := v.SetValue(zeros)
@@ -397,13 +397,13 @@ const (
 // - https://www.mindee.com/blog/batch-normalization
 // - https://discuss.pytorch.org/t/batch-norm-instability/32159/14
 func UpdateAverages(trainer *train.Trainer, oneEpochDS train.Dataset) (bool, error) {
-	ctx := trainer.Context()
-	if !model.GetParamOr(ctx, AveragesUpdatesTriggerParam, false) {
+	scope := trainer.Context()
+	if !model.GetParamOr(scope, AveragesUpdatesTriggerParam, false) {
 		// No-op.
 		return false, nil
 	}
 
-	err := ResetWeights(ctx)
+	err := ResetWeights(scope)
 	if err != nil {
 		return true, err
 	}

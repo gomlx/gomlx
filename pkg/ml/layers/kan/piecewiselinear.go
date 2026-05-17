@@ -56,12 +56,12 @@ type pwlConfig struct {
 }
 
 // initPiecewiseLinear initializes the default values for PWL-KANs based on model.
-func (c *Config) initPiecewiseLinear(ctx *model.Context) {
-	c.pwl.linearExtrapolation = model.GetParamOr(ctx, ParamPWLExtrapolate, false)
-	c.pwl.splitPointsTrainable = model.GetParamOr(ctx, ParamPWLSplitPointsTrainable, false)
-	c.pwl.splitPointsFrozen = model.GetParamOr(ctx, ParamPWLSplitPointsFrozen, false)
+func (c *Config) initPiecewiseLinear(scope *model.Scope) {
+	c.pwl.linearExtrapolation = model.GetParamOr(scope, ParamPWLExtrapolate, false)
+	c.pwl.splitPointsTrainable = model.GetParamOr(scope, ParamPWLSplitPointsTrainable, false)
+	c.pwl.splitPointsFrozen = model.GetParamOr(scope, ParamPWLSplitPointsFrozen, false)
 	c.PWLInputRange(-1, 1)
-	c.pwl.splitPointsMargin = model.GetParamOr(ctx, ParamPWLSplitsMargin, 0.01)
+	c.pwl.splitPointsMargin = model.GetParamOr(scope, ParamPWLSplitsMargin, 0.01)
 }
 
 // PiecewiseLinear configures for a PWL-KAN (PieceWise-Linear), as opposed to the default BSpline.
@@ -113,7 +113,7 @@ func (c *Config) PWLExtrapolate(useLinear bool) *Config {
 }
 
 // Layer implements one PWL-KAN layer. x is expected to be shaped [batchSize, numInputNodes].
-func (c *Config) pwlLayer(ctx *model.Context, x *Node, numOutputNodes int) *Node {
+func (c *Config) pwlLayer(scope *model.Scope, x *Node, numOutputNodes int) *Node {
 	g := x.Graph()
 	dtype := x.DType()
 	residual := x
@@ -133,7 +133,7 @@ func (c *Config) pwlLayer(ctx *model.Context, x *Node, numOutputNodes int) *Node
 
 	if klog.V(2).Enabled() {
 		klog.Infof("kan pwlLayer (%s): 2 x %d x %d x %d = %d weights, splits_trainable=%v\n",
-			ctx.Scope(), c.numControlPoints, numInputGroups, numOutputNodes,
+			scope.Scope(), c.numControlPoints, numInputGroups, numOutputNodes,
 			2*c.numControlPoints*numInputGroups*numOutputNodes, c.pwl.splitPointsTrainable)
 	}
 
@@ -151,15 +151,15 @@ func (c *Config) pwlLayer(ctx *model.Context, x *Node, numOutputNodes int) *Node
 		// Using ReduceSum.
 		stdDev = 1.0 / math.Sqrt(float64(numInputNodes))
 	}
-	controlPointsVar := ctx.WithInitializer(initializers.RandomNormalFn(ctx, stdDev)).
+	controlPointsVar := scope.WithInitializer(initializers.RandomNormalFn(scope, stdDev)).
 		VariableWithShape("kan_pwl_control_points", shapes.Make(dtype, numOutputNodes, numInputGroups, c.numControlPoints))
 	if c.regularizer != nil {
-		c.regularizer(ctx, g, controlPointsVar)
+		c.regularizer(scope, g, controlPointsVar)
 	}
 	controlPoints := controlPointsVar.ValueGraph(g)
 
 	// bias term:
-	biasPointsVar := ctx.WithInitializer(initializers.Zero).
+	biasPointsVar := scope.WithInitializer(initializers.Zero).
 		VariableWithShape("kan_pwl_bias", shapes.Make(dtype, numOutputNodes, numInputGroups))
 	bias := biasPointsVar.ValueGraph(g)
 
@@ -181,7 +181,7 @@ func (c *Config) pwlLayer(ctx *model.Context, x *Node, numOutputNodes int) *Node
 	if c.pwl.splitPointsTrainable {
 		// Trainable split points: one per input.
 		// * We could also make it learn one per output ... at the cost of more parameters.
-		splitPointsVar := ctx.WithInitializer(initializers.BroadcastTensorToShape(initialSplitPointsT)).
+		splitPointsVar := scope.WithInitializer(initializers.BroadcastTensorToShape(initialSplitPointsT)).
 			VariableWithShape("kan_pwl_split_points", shapes.Make(dtype, numInputGroups, c.numControlPoints))
 		if c.pwl.splitPointsFrozen {
 			splitPointsVar.Trainable = false
@@ -190,7 +190,7 @@ func (c *Config) pwlLayer(ctx *model.Context, x *Node, numOutputNodes int) *Node
 
 		// At the end of each training step, project splitPoints back to monotonically increasing values, so they
 		// don't overlap.
-		train.AddPerStepUpdateGraphFn(ctx.In("kan_pwl_split_points_projection"), g, func(ctx *model.Context, g *Graph) {
+		train.AddPerStepUpdateGraphFn(scope.In("kan_pwl_split_points_projection"), g, func(scope *model.Scope, g *Graph) {
 			splitPoints := splitPointsVar.ValueGraph(g)
 			margin := Scalar(g, splitPoints.DType(), c.pwl.splitPointsMargin)
 			splitPoints = optimizers.MonotonicProjection(splitPoints, margin, -1)

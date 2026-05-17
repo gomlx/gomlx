@@ -106,14 +106,14 @@ type discreteConfig struct {
 }
 
 // initDiscrete initializes the default values for Discrete-KANs based on model.
-func (c *Config) initDiscrete(ctx *model.Context) {
-	c.discrete.softness = model.GetParamOr(ctx, ParamDiscreteSoftness, 0.1)
-	c.discrete.minSoftness = model.GetParamOr(ctx, ParamDiscreteSoftnessScheduleMin, 1e-5)
-	c.discrete.splitPointsTrainable = model.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, false)
-	c.discrete.splitPointsFrozen = model.GetParamOr(ctx, ParamDiscreteSplitPointsFrozen, false)
+func (c *Config) initDiscrete(scope *model.Scope) {
+	c.discrete.softness = model.GetParamOr(scope, ParamDiscreteSoftness, 0.1)
+	c.discrete.minSoftness = model.GetParamOr(scope, ParamDiscreteSoftnessScheduleMin, 1e-5)
+	c.discrete.splitPointsTrainable = model.GetParamOr(scope, ParamDiscreteSplitPointsTrainable, false)
+	c.discrete.splitPointsFrozen = model.GetParamOr(scope, ParamDiscreteSplitPointsFrozen, false)
 	c.DiscreteInputRange(-1, 1)
 
-	perturbationStr := model.GetParamOr(ctx, ParamDiscretePerturbation, "triangular")
+	perturbationStr := model.GetParamOr(scope, ParamDiscretePerturbation, "triangular")
 	switch perturbationStr {
 	case "", "triangular":
 		c.discrete.perturbation = PerturbationTriangular
@@ -124,7 +124,7 @@ func (c *Config) initDiscrete(ctx *model.Context) {
 			"\"triangular\", \"normal\"", ParamDiscretePerturbation, perturbationStr)
 	}
 
-	softnessScheduleStr := model.GetParamOr(ctx, ParamDiscreteSoftnessSchedule, SoftnessScheduleNone.String())
+	softnessScheduleStr := model.GetParamOr(scope, ParamDiscreteSoftnessSchedule, SoftnessScheduleNone.String())
 	var err error
 	c.discrete.softnessSchedule, err = SoftnessScheduleTypeString(softnessScheduleStr)
 	if err != nil {
@@ -264,7 +264,7 @@ func (c *Config) DiscreteInitialSplitPoints(initialValues *tensors.Tensor) *Conf
 }
 
 // Layer implements one Discrete-KAN layer. x is expected to be shaped [batchSize, numInputNodes].
-func (c *Config) discreteLayer(ctx *model.Context, x *Node, numOutputNodes int) *Node {
+func (c *Config) discreteLayer(scope *model.Scope, x *Node, numOutputNodes int) *Node {
 	g := x.Graph()
 	dtype := x.DType()
 	residual := x
@@ -282,7 +282,7 @@ func (c *Config) discreteLayer(ctx *model.Context, x *Node, numOutputNodes int) 
 
 	if klog.V(2).Enabled() {
 		klog.Infof("kan discreteLayer (%s): ~ %d x %d x %d = %d weights, splits_trainable=%v\n",
-			ctx.Scope(), c.numControlPoints, numInputGroups, numOutputNodes,
+			scope.Scope(), c.numControlPoints, numInputGroups, numOutputNodes,
 			c.numControlPoints*numInputGroups*numOutputNodes, c.discrete.splitPointsTrainable)
 	}
 
@@ -295,15 +295,15 @@ func (c *Config) discreteLayer(ctx *model.Context, x *Node, numOutputNodes int) 
 		// Apply a random constant.
 		slopeShape := shape.Clone()
 		slopeShape.Dimensions[slopeShape.Rank()-1] = 1 // The same multiplier for all control points, so it's linear.
-		slope := ctx.RandomNormal(graph, slopeShape)
+		slope := scope.RandomNormal(graph, slopeShape)
 		slope = MulScalar(slope, 0.1)
 		v = Mul(v, slope)
 		return v
 	}
-	controlPointsVar := ctx.WithInitializer(controlPointsInitializer).
+	controlPointsVar := scope.WithInitializer(controlPointsInitializer).
 		VariableWithShape("kan_discrete_control_points", shapes.Make(dtype, numOutputNodes, numInputGroups, c.numControlPoints))
 	if c.regularizer != nil {
-		c.regularizer(ctx, g, controlPointsVar)
+		c.regularizer(scope, g, controlPointsVar)
 	}
 	controlPoints := controlPointsVar.ValueGraph(g)
 
@@ -326,7 +326,7 @@ func (c *Config) discreteLayer(ctx *model.Context, x *Node, numOutputNodes int) 
 
 		// Trainable split points: one per input.
 		// * We could also make it learn one per output ... at the cost of more parameters.
-		splitPointsVar := ctx.WithInitializer(initializers.BroadcastTensorToShape(initialSplitPointsT)).
+		splitPointsVar := scope.WithInitializer(initializers.BroadcastTensorToShape(initialSplitPointsT)).
 			VariableWithShape("kan_discrete_split_points", shapes.Make(dtype, 1, numInputGroups, c.numControlPoints-1))
 		if c.discrete.splitPointsFrozen {
 			splitPointsVar.Trainable = false
@@ -335,9 +335,9 @@ func (c *Config) discreteLayer(ctx *model.Context, x *Node, numOutputNodes int) 
 
 		// At the end of each training step, project splitPoints back to monotonically increasing values, so they
 		// don't overlap.
-		train.AddPerStepUpdateGraphFn(ctx.In("kan_discrete_split_points_projection"), g, func(ctx *model.Context, g *Graph) {
+		train.AddPerStepUpdateGraphFn(scope.In("kan_discrete_split_points_projection"), g, func(scope *model.Scope, g *Graph) {
 			splitPoints := splitPointsVar.ValueGraph(g)
-			margin := Scalar(g, splitPoints.DType(), model.GetParamOr(ctx, ParamDiscreteSplitsMargin, 0.01))
+			margin := Scalar(g, splitPoints.DType(), model.GetParamOr(scope, ParamDiscreteSplitsMargin, 0.01))
 			splitPoints = optimizers.MonotonicProjection(splitPoints, margin, -1)
 			splitPointsVar.SetValueGraph(splitPoints)
 		})
@@ -349,10 +349,10 @@ func (c *Config) discreteLayer(ctx *model.Context, x *Node, numOutputNodes int) 
 	}
 
 	var output *Node
-	if c.discrete.softness <= 0 || !ctx.IsTraining(g) {
+	if c.discrete.softness <= 0 || !scope.IsTraining(g) {
 		output = PiecewiseConstantFunction(x, controlPoints, splitPoints)
 	} else {
-		softness := c.scheduledSoftness(ctx, Scalar(g, dtype, c.discrete.softness))
+		softness := c.scheduledSoftness(scope, Scalar(g, dtype, c.discrete.softness))
 		output = PiecewiseConstantFunctionWithInputPerturbation(x, controlPoints, splitPoints, c.discrete.perturbation, softness)
 	}
 	output.AssertDims(batchSize, numOutputNodes, numInputNodes) // Shape=[batch, outputs, inputs]
@@ -374,14 +374,14 @@ func (c *Config) discreteLayer(ctx *model.Context, x *Node, numOutputNodes int) 
 }
 
 // scheduledSoftness adjust the base softness according to the configured schedule.
-func (c *Config) scheduledSoftness(ctx *model.Context, base *Node) *Node {
+func (c *Config) scheduledSoftness(scope *model.Scope, base *Node) *Node {
 	if c.discrete.softnessSchedule == SoftnessScheduleNone {
 		return base
 	}
 
 	g := base.Graph()
 	dtype := base.DType()
-	rootCtx := ctx.InAbsPath(model.RootScope)
+	rootCtx := scope.Store().Scope(model.RootScopePath)
 
 	// Calculate scheduleTime: from 0.0 to 1.0 depending on training progress.
 	globalStep := ConvertDType(optimizers.GetGlobalStepVar(rootCtx).ValueGraph(g), dtypes.Float32)

@@ -64,7 +64,7 @@ func GenerateFlowerIds(cfg *diffusion.Config, numImages int) *tensors.Tensor {
 //     0 <= startTime < 1 and startTime < endTime <= 1.
 //
 // Returns the sample images moved ΔT (ΔT=endTime-startTime) towards the target distribution.
-func MidPointODEStep(ctx *model.Context, noisyImages, flowerIds, startTime, endTime *Node) *Node {
+func MidPointODEStep(scope *model.Scope, noisyImages, flowerIds, startTime, endTime *Node) *Node {
 	numImages := noisyImages.Shape().Dimensions[0]
 	normalizeTimeFn := func(x *Node) *Node {
 		x = ConvertDType(x, noisyImages.DType())
@@ -78,12 +78,12 @@ func MidPointODEStep(ctx *model.Context, noisyImages, flowerIds, startTime, endT
 	startTime = normalizeTimeFn(startTime)
 	endTime = normalizeTimeFn(endTime)
 
-	velocity0 := diffusion.UNetModelGraph(ctx, nil, noisyImages, startTime, flowerIds)
+	velocity0 := diffusion.UNetModelGraph(scope, nil, noisyImages, startTime, flowerIds)
 	// slope0 := u(ctx, xyT, tStart)
 	ΔT := Sub(endTime, startTime)
 	halfΔT := DivScalar(ΔT, 2)
 	midPoint := Add(noisyImages, Mul(velocity0, halfΔT))
-	velocity1 := diffusion.UNetModelGraph(ctx, nil, midPoint, Add(startTime, halfΔT), flowerIds)
+	velocity1 := diffusion.UNetModelGraph(scope, nil, midPoint, Add(startTime, halfΔT), flowerIds)
 	return Add(noisyImages, Mul(velocity1, ΔT))
 }
 
@@ -91,7 +91,7 @@ func MidPointODEStep(ctx *model.Context, noisyImages, flowerIds, startTime, endT
 // Use it with NewImagesGenerator.
 type ImagesGenerator struct {
 	config           *diffusion.Config
-	ctx              *model.Context
+	scope            *model.Scope
 	noise, flowerIds *tensors.Tensor
 	numImages        int
 	numSteps         int
@@ -101,7 +101,7 @@ type ImagesGenerator struct {
 
 // NewImagesGenerator generates flowers given initial `noise` and `flowerIds`, in `numSteps`.
 func NewImagesGenerator(cfg *diffusion.Config, noise, flowerIds *tensors.Tensor, numSteps int) *ImagesGenerator {
-	ctx := cfg.Context.Reuse()
+	scope := cfg.Context.Reuse()
 	if numSteps <= 0 {
 		exceptions.Panicf("Expected numSteps > 0, got %d", numSteps)
 	}
@@ -113,12 +113,12 @@ func NewImagesGenerator(cfg *diffusion.Config, noise, flowerIds *tensors.Tensor,
 	}
 	return &ImagesGenerator{
 		config:    cfg,
-		ctx:       ctx,
+		scope:     scope,
 		noise:     noise,
 		flowerIds: flowerIds,
 		numImages: numImages,
 		numSteps:  numSteps,
-		stepExec:  model.MustNewExec(cfg.Backend, ctx, MidPointODEStep),
+		stepExec:  model.MustNewExec(cfg.Backend, scope, MidPointODEStep),
 		denormalizerExec: MustNewExec(cfg.Backend, func(image *Node) *Node {
 			return cfg.DenormalizeImages(image)
 		}),
@@ -371,8 +371,8 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 		exceptions.Panicf("DisplayImagesAcrossDiffusionSteps requires a model loaded from a checkpoint, see " +
 			"Config.AttachCheckpoint.")
 	}
-	ctx := cfg.Context.Checked(false)
-	ctx.ResetRNGState()
+	scope := cfg.Context.Checked(false)
+	scope.ResetRNGState()
 	noise := cfg.GenerateNoise(numImages)
 	flowerIds := cfg.GenerateFlowerIds(numImages)
 
@@ -381,8 +381,8 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 
 	fmt.Printf("DisplayImagesAcrossDiffusionSteps(%d images, %d steps): noise.shape=%s\n",
 		numImages, numSteps, noise.Shape())
-	fmt.Printf("\tModel #params:\t%d\n", ctx.NumParameters())
-	fmt.Printf("\t Model memory:\t%s\n", humanize.Bytes(ctx.ByteSize()))
+	fmt.Printf("\tModel #params:\t%d\n", scope.NumParameters())
+	fmt.Printf("\t Model memory:\t%s\n", humanize.Bytes(scope.ByteSize()))
 	for ii, generatedImage := range generatedImages {
 		gonbui.DisplayHTMLF("<p>%.2f%% Transformed</p>", generationTimes[ii]*100.0)
 		PlotImagesTensor(generatedImage)
@@ -472,8 +472,8 @@ func GenerateImagesOfFlowerType(
 	flowerType int32,
 	numDiffusionSteps int,
 ) (predictedImages *tensors.Tensor) {
-	ctx := cfg.Context
-	ctx.ResetRNGState()
+	scope := cfg.Context
+	scope.ResetRNGState()
 	noise := cfg.GenerateNoise(numImages)
 	flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 	generator := NewImagesGenerator(cfg, noise, flowerIds, numDiffusionSteps)
@@ -539,9 +539,9 @@ func DropdownFlowerTypes(
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
 func GenerateImagesOfAllFlowerTypes(cfg *diffusion.Config, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
-	ctx := cfg.Context
+	scope := cfg.Context
 	numImages := flowers.NumLabels
-	ctx.ResetRNGState()
+	scope.ResetRNGState()
 	imageSize := cfg.ImageSize
 	noise := MustNewExec(cfg.Backend, func(g *Graph) *Node {
 		state := RNGStateForGraph(g)
@@ -557,7 +557,7 @@ func GenerateImagesOfAllFlowerTypes(cfg *diffusion.Config, numDiffusionSteps int
 // KidGenerator generates the [Kernel Inception Distance (KID)](https://arxiv.org/abs/1801.01401) metric.
 type KidGenerator struct {
 	config         *diffusion.Config
-	ctxInceptionV3 *model.Context
+	ctxInceptionV3 *model.Scope
 	ds             train.Dataset
 	generator      *ImagesGenerator
 	kid            metrics.Interface
@@ -575,7 +575,7 @@ func NewKidGenerator(cfg *diffusion.Config, evalDS train.Dataset, numDiffusionSt
 	must.M(inceptionv3.DownloadAndUnpackWeights(i3Path))
 	kg := &KidGenerator{
 		config:         cfg,
-		ctxInceptionV3: model.New().Checked(false),
+		ctxInceptionV3: model.NewStore().Checked(false),
 		ds:             evalDS,
 		generator:      NewImagesGenerator(cfg, noise, flowerIds, numDiffusionStep),
 		kid:            inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
@@ -584,14 +584,14 @@ func NewKidGenerator(cfg *diffusion.Config, evalDS train.Dataset, numDiffusionSt
 	return kg
 }
 
-func (kg *KidGenerator) EvalStepGraph(ctx *model.Context, allImages []*Node) (metric *Node) {
+func (kg *KidGenerator) EvalStepGraph(scope *model.Scope, allImages []*Node) (metric *Node) {
 	g := allImages[0].Graph()
-	ctx.SetTraining(g, false) // Some layers behave differently in train/eval.
+	scope.SetTraining(g, false) // Some layers behave differently in train/eval.
 
 	// Get metrics and updates: the generated images are the inputs, and the
 	generatedImages := allImages[0]
 	datasetImages := kg.config.PreprocessImages(allImages[1], false)
-	metric = kg.kid.UpdateGraph(ctx, []*Node{datasetImages}, []*Node{generatedImages})
+	metric = kg.kid.UpdateGraph(scope, []*Node{datasetImages}, []*Node{generatedImages})
 	return
 }
 

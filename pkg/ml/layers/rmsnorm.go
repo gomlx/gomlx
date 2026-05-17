@@ -16,7 +16,7 @@ import (
 // RMSNormBuilder holds the configuration for RMSNorm.
 // Once finished configuring, call RMSNormBuilder.Done()
 type RMSNormBuilder struct {
-	ctx               *model.Context
+	scope             *model.Scope
 	operand           *Node
 	useScale          bool
 	scaleOffset       float64
@@ -35,9 +35,9 @@ type RMSNormBuilder struct {
 // Where g_i is a learnable gain (scale), enabled by default.
 //
 // Call RMSNormBuilder.Done when you finished the configuration.
-func RMSNorm(ctx *model.Context, operand *Node) *RMSNormBuilder {
+func RMSNorm(scope *model.Scope, operand *Node) *RMSNormBuilder {
 	return &RMSNormBuilder{
-		ctx:               ctx,
+		scope:             scope,
 		operand:           operand,
 		useScale:          true,
 		normalizationAxes: []int{-1},
@@ -74,7 +74,7 @@ func (rms *RMSNormBuilder) WithNormalizationAxes(axes ...int) *RMSNormBuilder {
 // Done uses the current configuration to perform RMSNorm.
 // It returns the normalized operand.
 func (rms *RMSNormBuilder) Done() *Node {
-	ctx := rms.ctx.In("rms_norm")
+	scope := rms.scope.In("rms_norm")
 	x := rms.operand
 	g := x.Graph()
 	shape := x.Shape()
@@ -94,7 +94,7 @@ func (rms *RMSNormBuilder) Done() *Node {
 		sort.Ints(normAxes)
 		dims := xslices.Map(normAxes, func(axis int) int { return shape.Dim(axis) })
 		scaleShape := shapes.Make(dtype, dims...)
-		scaleVar := ctx.WithInitializer(initializers.One).VariableWithShape("scale", scaleShape)
+		scaleVar := scope.WithInitializer(initializers.One).VariableWithShape("scale", scaleShape)
 		scale := scaleVar.ValueGraph(g)
 		if rms.scaleOffset != 0 {
 			scale = AddScalar(scale, rms.scaleOffset)

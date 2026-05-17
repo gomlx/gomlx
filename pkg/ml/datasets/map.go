@@ -14,13 +14,13 @@ import (
 )
 
 // MapGraphFn if a graph building function that transforms inputs and labels.
-type MapGraphFn func(ctx *model.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node)
+type MapGraphFn func(scope *model.Scope, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node)
 
 // mapGraphFnDataset implements a `train.Dataset` that maps a graph building function to a wrapped dataset.
 // See [MapWithGraphFn] on how to use it.
 type mapGraphFnDataset struct {
 	backend                          compute.Backend
-	ctx                              *model.Context
+	store                            *model.Store
 	ds                               train.Dataset
 	mapGraphFn                       MapGraphFn
 	mapGraphFnExec                   *model.Exec
@@ -35,15 +35,15 @@ type mapGraphFnDataset struct {
 //
 // The graph building function `graphFn` can return a different number of `inputs` or `labels` than what it was given,
 // but these numbers should never change -- always return the same number of inputs and labels.
-func MapWithGraphFn(backend compute.Backend, ctx *model.Context, dataset train.Dataset, graphFn MapGraphFn) train.Dataset {
+func MapWithGraphFn(backend compute.Backend, store *model.Store, dataset train.Dataset, graphFn MapGraphFn) train.Dataset {
+	if store == nil {
+		store = model.NewStore()
+	}
 	mapDS := &mapGraphFnDataset{
 		backend:    backend,
-		ctx:        ctx,
+		store:      store,
 		ds:         dataset,
 		mapGraphFn: graphFn,
-	}
-	if mapDS.ctx == nil {
-		mapDS.ctx = model.New()
 	}
 	return mapDS
 }
@@ -70,8 +70,8 @@ func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []*tensors.Tensor, lab
 		// Build execution of MapGraphFn
 		mapDS.numInputs = len(inputs)
 		mapDS.numLabels = len(labels)
-		mapDS.mapGraphFnExec = model.MustNewExec(mapDS.backend, mapDS.ctx,
-			func(ctx *model.Context, inputsAndLabels []*Node) []*Node {
+		mapDS.mapGraphFnExec = model.MustNewExec(mapDS.backend, mapDS.store,
+			func(scope *model.Scope, inputsAndLabels []*Node) []*Node {
 				var inputs, labels []*Node
 				if mapDS.numInputs > 0 {
 					inputs = inputsAndLabels[:mapDS.numInputs]
@@ -79,7 +79,7 @@ func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []*tensors.Tensor, lab
 				if mapDS.numLabels > 0 {
 					labels = inputsAndLabels[mapDS.numInputs:]
 				}
-				mappedInputs, mappedLabels := mapDS.mapGraphFn(ctx, inputs, labels)
+				mappedInputs, mappedLabels := mapDS.mapGraphFn(scope, inputs, labels)
 				mapDS.numMappedInputs = len(mappedInputs)
 				mapDS.numMappedLabels = len(mappedLabels)
 				return append(mappedInputs, mappedLabels...)

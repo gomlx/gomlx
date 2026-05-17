@@ -5,6 +5,7 @@ package kan_test
 import (
 	"fmt"
 	"math"
+	"path"
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
@@ -48,7 +49,7 @@ func targetF(x0, x1 *Node) *Node {
 }
 
 // kanGraphModel will try to model targetF with the minimum number of nodes.
-func kanGraphModel(ctx *model.Context, spec any, inputs []*Node) []*Node {
+func kanGraphModel(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	dtype := dtypes.Float64
 	_ = spec
 	batchSize := inputs[0].Shape().Dimensions[0]
@@ -58,10 +59,10 @@ func kanGraphModel(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	normalizeUniformFn := func(x *Node) *Node {
 		return AddScalar(MulScalar(x, 2), -1)
 	}
-	x0 := normalizeUniformFn(ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1)))
-	x1 := normalizeUniformFn(ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1)))
+	x0 := normalizeUniformFn(scope.RandomUniform(g, shapes.Make(dtype, batchSize, 1)))
+	x1 := normalizeUniformFn(scope.RandomUniform(g, shapes.Make(dtype, batchSize, 1)))
 	labels := targetF(x0, x1)
-	output := kan.New(ctx, Concatenate([]*Node{x0, x1}, -1), 1).
+	output := kan.New(scope, Concatenate([]*Node{x0, x1}, -1), 1).
 		NumHiddenLayers(1, 2).
 		NumControlPoints(30).
 		BSpline().
@@ -82,12 +83,13 @@ func TestBSplineKAN(t *testing.T) {
 		return
 	}
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
-	ctx.SetRNGStateFromSeed(42)
+	store := model.NewStore()
+	store.RootScope().Store().ResetRNGState()
+	store.SetParam("/", model.ParamInitialSeed, int64(42))
 	ds := &kanTestDataset{batchSize: 128}
 
 	opt := optimizers.Adam().LearningRate(0.001).Done()
-	trainer := train.NewTrainer(backend, ctx, kanGraphModel,
+	trainer := train.NewTrainer(backend, store.RootScope(), kanGraphModel,
 		lossGraphFn, // a simple wrapper around losses.MeanSquaredError,
 		opt,
 		nil, // trainMetrics
@@ -105,17 +107,17 @@ func TestBSplineKAN(t *testing.T) {
 }
 
 // kanLargeGraphModel will try to model targetF with extra unnecessary number of nodes.
-func kanLargeGraphModel(ctx *model.Context, spec any, inputs []*Node) []*Node {
+func kanLargeGraphModel(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	dtype := dtypes.Float64
 	_ = spec
 	batchSize := inputs[0].Shape().Dimensions[0]
 	g := inputs[0].Graph()
 	g.SetTraced(true)
 
-	x0 := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1))
-	x1 := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1))
+	x0 := scope.RandomUniform(g, shapes.Make(dtype, batchSize, 1))
+	x1 := scope.RandomUniform(g, shapes.Make(dtype, batchSize, 1))
 	labels := targetF(x0, x1)
-	output := kan.New(ctx, Concatenate([]*Node{x0, x1}, -1), 1).
+	output := kan.New(scope, Concatenate([]*Node{x0, x1}, -1), 1).
 		BSpline().
 		NumHiddenLayers(1, 4).
 		NumControlPoints(30).
@@ -129,13 +131,14 @@ func TestBSplineKANRegularized(t *testing.T) {
 		return
 	}
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
-	ctx.SetRNGStateFromSeed(42)
-	ctx.SetParam(kan.ParamBSplineMagnitudeL1, 0.01)
+	store := model.NewStore()
+	store.RootScope().Store().ResetRNGState()
+	store.SetParam("/", model.ParamInitialSeed, int64(42))
+	store.SetParam("/", kan.ParamBSplineMagnitudeL1, 0.01)
 	ds := &kanTestDataset{batchSize: 128}
 
 	opt := optimizers.Adam().LearningRate(0.001).Done()
-	trainer := train.NewTrainer(backend, ctx, kanLargeGraphModel,
+	trainer := train.NewTrainer(backend, store.RootScope(), kanLargeGraphModel,
 		lossGraphFn, // a simple wrapper around losses.MeanSquaredError,
 		opt,
 		nil, // trainMetrics
@@ -156,13 +159,10 @@ func TestBSplineKANRegularized(t *testing.T) {
 	// (if we remove the L1 regularization the test fails).
 	var numZeros int
 	fmt.Println("\nVariables:")
-	//ctx.EnumerateVariables(func(v *model.Variable) {
-	//	fmt.Printf("\t%s -> %v\n", v.ScopeAndName(), v.Value())
-	//})
-	for _, scope := range []string{"/bspline_kan_hidden_0", "/bspline_kan_output_layer"} {
+	for _, scopeName := range []string{"/bspline_kan_hidden_0", "/bspline_kan_output_layer"} {
 		for _, vName := range []string{"w_splines", "w_residual"} {
-			v := ctx.GetVariableByScopeAndName(scope, vName)
-			require.NotNilf(t, v, "failed to inspect variable scope=%q, name=%q", scope, vName)
+			v := store.GetVariable(path.Join(scopeName, vName))
+			require.NotNilf(t, v, "failed to inspect variable scope=%q, name=%q", scopeName, vName)
 			tensor := v.MustValue()
 			fmt.Printf("\t%s : %s -> %v\n", v.Scope(), v.Name(), tensor)
 			tensors.MustConstFlatData[float64](tensor, func(flat []float64) {

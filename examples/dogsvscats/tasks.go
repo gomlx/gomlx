@@ -105,20 +105,20 @@ var (
 //
 // Notice some configuration parameters depends on the model type ("model" hyperparameter): "inception" has a
 // specific size, "byol" model requires image pairs.
-func NewPreprocessingConfigurationFromContext(ctx *model.Context, dataDir string) *PreprocessingConfiguration {
+func NewPreprocessingConfigurationFromContext(scope *model.Scope, dataDir string) *PreprocessingConfiguration {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
-	modelType := model.GetParamOr(ctx, "model", "")
+	modelType := model.GetParamOr(scope, "model", "")
 	config := &PreprocessingConfiguration{}
 	*config = *DefaultConfig
 	config.DataDir = dataDir
-	config.BatchSize = model.GetParamOr(ctx, "batch_size", 0)
-	config.EvalBatchSize = model.GetParamOr(ctx, "eval_batch_size", 0)
-	config.AngleStdDev = model.GetParamOr(ctx, "augmentation_angle_stddev", 0.0)
-	config.FlipRandomly = model.GetParamOr(ctx, "augmentation_random_flips", false)
+	config.BatchSize = model.GetParamOr(scope, "batch_size", 0)
+	config.EvalBatchSize = model.GetParamOr(scope, "eval_batch_size", 0)
+	config.AngleStdDev = model.GetParamOr(scope, "augmentation_angle_stddev", 0.0)
+	config.FlipRandomly = model.GetParamOr(scope, "augmentation_random_flips", false)
 	if modelType == "inception" {
 		config.ModelImageSize = inceptionv3.MinimumImageSize
 	}
-	config.ForceOriginal = model.GetParamOr(ctx, "augmentation_force_original", false)
+	config.ForceOriginal = model.GetParamOr(scope, "augmentation_force_original", false)
 	config.UseParallelism = true
 	config.BufferSize = 100
 	config.YieldImagePairs = modelType == "byol"

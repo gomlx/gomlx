@@ -111,8 +111,8 @@ const (
 // Useful for projects where more than one loss matches the problem underlying optimization goal.
 //
 // It returns an error if the configured loss is unknown.
-func LossFromContext(ctx *model.Context) (LossFn, error) {
-	lossName := model.GetParamOr(ctx, ParamLoss, "mae")
+func LossFromContext(scope *model.Scope) (LossFn, error) {
+	lossName := model.GetParamOr(scope, ParamLoss, "mae")
 	lossType, err := TypeString(lossName)
 	if err != nil {
 		err = errors.Wrapf(err, "invalid value %q for hyperparameter %q, known losses are: \"%s\"",
@@ -125,9 +125,9 @@ func LossFromContext(ctx *model.Context) (LossFn, error) {
 	case TypeMSE:
 		return MeanSquaredError, nil
 	case TypeAPL:
-		return MakeAdaptivePowerLossFromContext(ctx), nil
+		return MakeAdaptivePowerLossFromContext(scope), nil
 	case TypeHuber:
-		return MakeHuberLossFromContext(ctx), nil
+		return MakeHuberLossFromContext(scope), nil
 	case TypeBinCross:
 		return BinaryCrossentropy, nil
 	case TypeBinCrossLogits:
@@ -139,7 +139,7 @@ func LossFromContext(ctx *model.Context) (LossFn, error) {
 	case TypeSparseCrossLogits:
 		return SparseCategoricalCrossEntropyLogits, nil
 	case TypeTriplet:
-		return MakeTripletLossFromContext(ctx), nil
+		return MakeTripletLossFromContext(scope), nil
 	case TypeEuclidean:
 		return EuclideanDistance, nil
 	case TypeEuclideanSquare:
@@ -522,8 +522,8 @@ var (
 
 // MakeHuberLossFromContext calls MakeHuberLoss using the delta configured by the hyperparameter
 // ParamHuberLossDelta in the model.
-func MakeHuberLossFromContext(ctx *model.Context) LossFn {
-	delta := model.GetParamOr(ctx, ParamHuberLossDelta, 1.0)
+func MakeHuberLossFromContext(scope *model.Scope) LossFn {
+	delta := model.GetParamOr(scope, ParamHuberLossDelta, 1.0)
 	return MakeHuberLoss(delta)
 }
 
@@ -636,11 +636,11 @@ var (
 // in the model.
 //
 // See ParamAdaptivePowerLossNear, ParamAdaptivePowerLossFar, ParamAdaptivePowerLoss
-func MakeAdaptivePowerLossFromContext(ctx *model.Context) LossFn {
-	powerNear := model.GetParamOr(ctx, ParamAdaptivePowerLossNear, 2.0)
-	powerFar := model.GetParamOr(ctx, ParamAdaptivePowerLossFar, 1.0)
-	middleDelta := model.GetParamOr(ctx, ParamAdaptivePowerLossMiddleDelta, 1.0)
-	sharpness := model.GetParamOr(ctx, ParamAdaptivePowerLossSharpness, 1.0)
+func MakeAdaptivePowerLossFromContext(scope *model.Scope) LossFn {
+	powerNear := model.GetParamOr(scope, ParamAdaptivePowerLossNear, 2.0)
+	powerFar := model.GetParamOr(scope, ParamAdaptivePowerLossFar, 1.0)
+	middleDelta := model.GetParamOr(scope, ParamAdaptivePowerLossMiddleDelta, 1.0)
+	sharpness := model.GetParamOr(scope, ParamAdaptivePowerLossSharpness, 1.0)
 	return MakeAdaptivePowerLoss(powerNear, powerFar, middleDelta, sharpness)
 }
 

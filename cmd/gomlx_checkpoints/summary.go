@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 )
 
-func Summary(ctxs, scopedCtxs []*model.Context, names []string) {
+func Summary(ctxs, scopedCtxs []*model.Scope, names []string) {
 	numCheckpoints := len(names)
 
 	// Header
@@ -33,8 +33,8 @@ func Summary(ctxs, scopedCtxs []*model.Context, names []string) {
 	globalStepRow := make([]string, numCheckpoints+1)
 	globalStepRow[0] = "global_step"
 	haveGlobalStep := false
-	for ii, ctx := range ctxs {
-		globalStepVar := ctx.GetVariable(optimizers.GlobalStepVariableName)
+	for ii, scope := range ctxs {
+		globalStepVar := scope.GetVariable(optimizers.GlobalStepVariableName)
 		if globalStepVar != nil {
 			haveGlobalStep = true
 			globalStepT := must.M1(globalStepVar.Value())

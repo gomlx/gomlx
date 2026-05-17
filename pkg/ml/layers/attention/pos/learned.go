@@ -31,7 +31,7 @@ import (
 //
 // It implements both Encoder and PreEncoder interfaces.
 type Learned struct {
-	ctx             *model.Context
+	scope           *model.Scope
 	maxPosEmbedding int
 	embedDim        int
 }
@@ -42,9 +42,9 @@ var _ PreEncoder = &Learned{}
 
 // NewLearned creates a Learned positional embedding.
 // It takes as input the context, the maximum positional embedding, and the embedding dimension.
-func NewLearned(ctx *model.Context, maxPosEmbedding, embedDim int) *Learned {
+func NewLearned(scope *model.Scope, maxPosEmbedding, embedDim int) *Learned {
 	return &Learned{
-		ctx:             ctx,
+		scope:           scope,
 		maxPosEmbedding: maxPosEmbedding,
 		embedDim:        embedDim,
 	}
@@ -61,7 +61,7 @@ func (l *Learned) PreEncode(x, positionIndices *Node, seqAxis int) *Node {
 	g := x.Graph()
 
 	// Variable with all the positional embeddings: created if it doesn't exist yet.
-	posEmbedFull := l.ctx.In("pos_embed").VariableWithShape("embeddings",
+	posEmbedFull := l.scope.In("pos_embed").VariableWithShape("embeddings",
 		shapes.Make(x.DType(), l.maxPosEmbedding, l.embedDim)).ValueGraph(g)
 
 	// Ensure positionIndices has an integer dtype for Gather.

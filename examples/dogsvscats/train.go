@@ -46,7 +46,7 @@ var (
 	// ModelsPrep maps models to a preparation function called in TrainModel before training start.
 	//
 	// This can be extended for new models.
-	ModelsPrep = map[string]func(ctx *model.Context, dataDir string, checkpoint *checkpoints.Handler){
+	ModelsPrep = map[string]func(scope *model.Scope, dataDir string, checkpoint *checkpoints.Handler){
 		"inception": InceptionV3ModelPrep,
 	}
 )
@@ -56,10 +56,11 @@ var (
 var nanLogger *nanlogger.NanLogger
 
 // CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
-func CreateDefaultContext() *model.Context {
-	ctx := model.New()
-	ctx.ResetRNGState()
-	ctx.SetParams(map[string]any{
+func CreateDefaultContext() *model.Scope {
+	store := model.NewStore()
+	store.ResetRNGState()
+	scope := store.RootScope()
+	scope.SetParams(map[string]any{
 		// Model type to use
 		"model":           "cnn",
 		"num_checkpoints": 3,
@@ -137,11 +138,11 @@ func CreateDefaultContext() *model.Context {
 		"inception_pretrained": true, // Whether to use the pre-trained weights to transfer learn
 		"inception_finetuning": true, // Whether to fine-tune the inception model
 	})
-	return ctx
+	return scope
 }
 
 // TrainModel based on configuration and flags.
-func TrainModel(ctx *model.Context, dataDir, checkpointPath string, runEval bool, paramsSet []string) {
+func TrainModel(scope *model.Scope, dataDir, checkpointPath string, runEval bool, paramsSet []string) {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
 		check(os.MkdirAll(dataDir, 0777))
@@ -150,8 +151,8 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, runEval bool
 	// Checkpoint: it loads if already exists, and it will save as we train.
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
-		numCheckpoints := model.GetParamOr(ctx, "num_checkpoints", 3)
-		checkpoint = check1(checkpoints.Build(ctx).
+		numCheckpoints := model.GetParamOr(scope, "num_checkpoints", 3)
+		checkpoint = check1(checkpoints.Build(scope).
 			DirFromBase(checkpointPath, dataDir).
 			ExcludeParams(append(
 				paramsSet,
@@ -169,7 +170,7 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, runEval bool
 	// Generation of augmented images and create datasets.
 	check(Download(dataDir))
 	check(FilterValidImages(dataDir))
-	config := NewPreprocessingConfigurationFromContext(ctx, dataDir)
+	config := NewPreprocessingConfigurationFromContext(scope, dataDir)
 	trainDS, trainEvalDS, validationEvalDS := CreateDatasets(config)
 
 	// Metrics we are interested.
@@ -177,17 +178,17 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, runEval bool
 	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Select the model type we are using:
-	modelType := model.GetParamOr(ctx, "model", "")
+	modelType := model.GetParamOr(scope, "model", "")
 	modelFn, found := ModelsFns[modelType]
 	if !found {
 		exceptions.Panicf("Unknown model type %q: valid values are %q", modelType, xslices.Keys(ModelsFns))
 	}
 	fmt.Printf("Model: %q\n", modelType)
 	if modelPrep, found := ModelsPrep[modelType]; found {
-		modelPrep(ctx, dataDir, checkpoint)
+		modelPrep(scope, dataDir, checkpoint)
 	}
 	// BYOL may require pretraining.
-	preTraining := modelType == "byol" && model.GetParamOr(ctx, "byol_pretrain", false)
+	preTraining := modelType == "byol" && model.GetParamOr(scope, "byol_pretrain", false)
 	if preTraining && checkpoint == nil {
 		klog.Warning(
 			"*** pre-training model but not saving (--checkpoint) the pretrained weights -- is only useful for debugging ***",
@@ -198,16 +199,16 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, runEval bool
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	backend := compute.MustNew()
 	var trainer *train.Trainer
-	optimizer := optimizers.FromContext(ctx)
+	optimizer := optimizers.FromContext(scope)
 	if !preTraining {
-		trainer = train.NewTrainer(backend, ctx, modelFn,
+		trainer = train.NewTrainer(backend, scope, modelFn,
 			losses.BinaryCrossentropyLogits,
 			optimizer,
 			[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 			[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 	} else {
 		// Pre-training: no loss, no metrics.
-		trainer = train.NewTrainer(backend, ctx, modelFn,
+		trainer = train.NewTrainer(backend, scope, modelFn,
 			nil,
 			optimizer,
 			nil, // trainMetrics
@@ -215,7 +216,7 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, runEval bool
 	}
 
 	// Debugging.
-	if model.GetParamOr(ctx, "nan_logger", false) {
+	if model.GetParamOr(scope, "nan_logger", false) {
 		nanlogger.New().AttachToTrainer(trainer)
 	}
 
@@ -234,7 +235,7 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, runEval bool
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if model.GetParamOr(ctx, plotly.ParamPlots, false) {
+	if model.GetParamOr(scope, plotly.ParamPlots, false) {
 		if preTraining {
 			// Pre-training: no evaluation.
 			_ = plotly.New().
@@ -252,10 +253,10 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, runEval bool
 	}
 
 	// Loop for given number of steps.
-	numTrainSteps := model.GetParamOr(ctx, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(ctx))
+	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
+	globalStep := int(optimizers.GetGlobalStep(scope))
 	if globalStep > 0 {
-		trainer.SetContext(ctx.Reuse())
+		trainer.SetContext(scope)
 	}
 	if globalStep < numTrainSteps {
 		_ = check1(loop.RunSteps(trainDS, int(numTrainSteps-globalStep)))
@@ -272,13 +273,13 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, runEval bool
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
 			"to current global step.\n", numTrainSteps)
 	}
-	fmt.Printf("Training done (global_step=%d).\n", optimizers.GetGlobalStep(ctx))
+	fmt.Printf("Training done (global_step=%d).\n", optimizers.GetGlobalStep(scope))
 
 	if preTraining {
 		// If pre-training (unsupervised), skip evaluation, and clear optimizer variables and global step.
 		fmt.Println("Pre-training only, no evaluation.")
-		check(optimizer.Clear(ctx))
-		check(optimizers.DeleteGlobalStep(ctx))
+		check(optimizer.Clear(scope))
+		check(optimizers.DeleteGlobalStep(scope))
 		check(checkpoint.Save())
 		return
 	}

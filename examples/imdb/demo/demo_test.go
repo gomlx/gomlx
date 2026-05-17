@@ -21,8 +21,8 @@ var (
 )
 
 func init() {
-	ctx := imdb.CreateDefaultContext()
-	flagSettings = commandline.CreateContextSettingsFlag(ctx, "")
+	scope := imdb.CreateDefaultContext()
+	flagSettings = commandline.CreateContextSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	if _, found := os.LookupEnv(compute.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
@@ -36,13 +36,13 @@ func TestDemo(t *testing.T) {
 		return
 	}
 
-	ctx := imdb.CreateDefaultContext()
-	ctx.SetParam("train_steps", 10)
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *flagSettings))
+	scope := imdb.CreateDefaultContext()
+	scope.SetParam("train_steps", 10)
+	paramsSet := check1(commandline.ParseContextSettings(scope, *flagSettings))
 
 	muTrain.Lock()
 	defer muTrain.Unlock()
 	require.NotPanics(t, func() {
-		imdb.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
+		imdb.TrainModel(scope, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
 	})
 }

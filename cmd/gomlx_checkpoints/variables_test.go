@@ -19,9 +19,9 @@ func TestPerturbVars(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Create context and add variable.
-	ctx := model.New()
-	_ = ctx.VariableWithValue("test_var", tensors.FromScalarAndDimensions(1.0, 100, 100))
-	checkpoint, err := checkpoints.Build(ctx).Dir(tmpDir).Keep(-1).Done()
+	scope := model.NewStore()
+	_ = scope.VariableWithValue("test_var", tensors.FromScalarAndDimensions(1.0, 100, 100))
+	checkpoint, err := checkpoints.Build(scope).Dir(tmpDir).Keep(-1).Done()
 	require.NoError(t, err)
 	require.NoError(t, checkpoint.Save())
 
@@ -30,7 +30,7 @@ func TestPerturbVars(t *testing.T) {
 	PerturbVars(tmpDir, perturbAmount)
 
 	// Load and check perturbed values.
-	newCtx := model.New()
+	newCtx := model.NewStore()
 	_, err = checkpoints.Build(newCtx).Dir(tmpDir).Immediate().Done()
 	require.NoError(t, err)
 	perturbedT, err := newCtx.GetVariable("test_var").Value()

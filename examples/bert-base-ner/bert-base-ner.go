@@ -77,8 +77,8 @@ func main() {
 	onnxModel := must.M1(onnxparser.ParseFile(onnxPath))
 
 	// Create context and load model weights
-	ctx := model.New()
-	must.M(onnxModel.VariablesToContext(ctx))
+	scope := model.NewStore()
+	must.M(onnxModel.VariablesToContext(scope))
 
 	// Create backend
 	backend := must.M1(compute.New())
@@ -106,10 +106,10 @@ func main() {
 
 	// Run inference with argmax and softmax computed in the graph
 	outputs := model.MustExecOnceN(
-		backend, ctx,
-		func(ctx *model.Context, inputs []*Node) []*Node {
+		backend, scope,
+		func(scope *model.Scope, inputs []*Node) []*Node {
 			g := inputs[0].Graph()
-			logits := onnxModel.CallGraph(ctx, g,
+			logits := onnxModel.CallGraph(scope, g,
 				map[string]*Node{
 					"input_ids":      inputs[0],
 					"attention_mask": inputs[1],

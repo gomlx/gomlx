@@ -25,11 +25,11 @@ import (
 // LayerWiseEvaluation returns the train, validation and test accuracy of the model, using layer-wise inference.
 func LayerWiseEvaluation(
 	backend compute.Backend,
-	ctx *model.Context,
+	scope *model.Scope,
 	strategy *sampler.Strategy,
 ) (train, validation, test float64) {
 	var predictionsT *tensors.Tensor
-	exec := model.MustNewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
+	exec := model.MustNewExec(backend, scope.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 
 	if klog.V(1).Enabled() {
 		// Report timings.
@@ -72,11 +72,11 @@ func layerWiseCalculateAccuracies(predictions []int16, labels []int32) (train, v
 
 func BuildLayerWiseCustomMetricFn(
 	backend compute.Backend,
-	ctx *model.Context,
+	scope *model.Scope,
 	strategy *sampler.Strategy,
 ) plots.CustomMetricFn {
-	exec := model.MustNewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
-	ctx = ctx.Reuse()
+	exec := model.MustNewExec(backend, scope.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
+	scope = scope.Reuse()
 	labels := tensors.MustCopyFlatData[int32](PapersLabels)
 	return func(plotter plots.Plotter, step float64) error {
 		predictions := exec.MustExec()[0].Value().([]int16)
@@ -106,18 +106,18 @@ func BuildLayerWiseCustomMetricFn(
 func BuildLayerWiseInferenceModel(
 	strategy *sampler.Strategy,
 	predictions bool,
-) func(ctx *model.Context, g *Graph) *Node {
-	return func(ctx *model.Context, g *Graph) *Node {
-		ctx = ctx.WithInitializer(initializers.GlorotUniformFn(ctx))
-		ctx = ctx.In("model")
+) func(scope *model.Scope, g *Graph) *Node {
+	return func(scope *model.Scope, g *Graph) *Node {
+		scope = scope.WithInitializer(initializers.GlorotUniformFn(scope))
+		scope = scope.In("model")
 
 		// Create inputs with all elements. Similar to the code in [sampler.Dataset.Yield].
 		inputs := make([]*Node, 0, 5*len(strategy.Rules))
 		inputs = createInputsWithAllStates(g, strategy, inputs)
-		inputs = createEdgesInputs(ctx, g, strategy, inputs)
+		inputs = createEdgesInputs(scope, g, strategy, inputs)
 
 		// Input preprocessing and re-organize graph states into a map. Masks are dropped, it's assumed to be dense.
-		maskedGraphStates, inputs := FeaturePreprocessing(ctx, strategy, inputs)
+		maskedGraphStates, inputs := FeaturePreprocessing(scope, strategy, inputs)
 		graphStates := make(map[string]*Node, len(maskedGraphStates))
 		for stateName, state := range maskedGraphStates {
 			graphStates[stateName] = state.Value
@@ -125,13 +125,13 @@ func BuildLayerWiseInferenceModel(
 		edges, _ := sampler.MapInputsToEdges(strategy, inputs)
 
 		// Create layer-wise inference graph.
-		lw, err := gnn.LayerWiseGNN(ctx, strategy)
+		lw, err := gnn.LayerWiseGNN(scope, strategy)
 		if err != nil {
 			panic(err)
 		}
-		lw.NodePrediction(ctx, graphStates, edges) // Last layer outputs the logits for the `NumLabels` classes.
+		lw.NodePrediction(scope, graphStates, edges) // Last layer outputs the logits for the `NumLabels` classes.
 		readoutState := graphStates[strategy.Seeds[0].Name]
-		readoutState = logitsGraph(ctx, readoutState)
+		readoutState = logitsGraph(scope, readoutState)
 		if predictions {
 			return ArgMax(readoutState, -1, dtypes.Int16)
 		}
@@ -165,8 +165,8 @@ func recursivelyCreateInputsWithAllStates(g *Graph, rule *sampler.Rule, inputs [
 }
 
 // createEdgesInputs create the edges pairs (source indices, target indices) for each of the edge rules (non-seed).
-func createEdgesInputs(ctx *model.Context, g *Graph, strategy *sampler.Strategy, inputs []*Node) []*Node {
-	edges := createEdgesIndices(ctx, g)
+func createEdgesInputs(scope *model.Scope, g *Graph, strategy *sampler.Strategy, inputs []*Node) []*Node {
+	edges := createEdgesIndices(scope, g)
 	for _, seedsRule := range strategy.Seeds {
 		// seedRule doesn't have a connecting edge.
 		inputs = recursivelyCreateEdgesInputs(g, seedsRule, edges, inputs)
@@ -174,10 +174,10 @@ func createEdgesInputs(ctx *model.Context, g *Graph, strategy *sampler.Strategy,
 	return inputs
 }
 
-func createEdgesIndices(ctx *model.Context, g *Graph) map[string]sampler.EdgePair[*Node] {
+func createEdgesIndices(scope *model.Scope, g *Graph) map[string]sampler.EdgePair[*Node] {
 	edges := make(map[string]sampler.EdgePair[*Node])
 	for _, edgeName := range []string{"Writes", "AffiliatedWith", "Cites", "HasTopic"} {
-		edgeVar := getMagVar(ctx, g, "Edges"+edgeName)
+		edgeVar := getMagVar(scope, g, "Edges"+edgeName)
 		edges[edgeName] = sampler.EdgePair[*Node]{
 			SourceIndices: Slice(edgeVar, AxisRange(), AxisElem(0)),
 			TargetIndices: Slice(edgeVar, AxisRange(), AxisElem(1)),

@@ -55,8 +55,8 @@ const (
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
 //
 // See also FNN for a more configurable (including hidden layers) version.
-func DenseWithBias(ctx *model.Context, input *Node, outputDimensions ...int) *Node {
-	return Dense(ctx, input, true, outputDimensions...)
+func DenseWithBias(scope *model.Scope, input *Node, outputDimensions ...int) *Node {
+	return Dense(scope, input, true, outputDimensions...)
 }
 
 // Dense adds a single dense linear layer, a learnable linear transformation.
@@ -68,10 +68,10 @@ func DenseWithBias(ctx *model.Context, input *Node, outputDimensions ...int) *No
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
 //
 // See also FNN for a more configurable (including hidden layers) version.
-func Dense(ctx *model.Context, input *Node, useBias bool, outputDimensions ...int) *Node {
+func Dense(scope *model.Scope, input *Node, useBias bool, outputDimensions ...int) *Node {
 	g := input.Graph()
-	ctx = ctx.In("dense")
-	regularizer := regularizers.FromContext(ctx)
+	scope = scope.In("dense")
+	regularizer := regularizers.FromContext(scope)
 
 	inputShape := input.Shape()
 	inputRank := inputShape.Rank()
@@ -87,10 +87,10 @@ func Dense(ctx *model.Context, input *Node, useBias bool, outputDimensions ...in
 	weightsDims := make([]int, 1+len(outputDimensions))
 	weightsDims[0] = inputLastDimension
 	copy(weightsDims[1:], outputDimensions)
-	weightsVar := ctx.VariableWithShape("weights", shapes.Make(inputShape.DType, weightsDims...))
+	weightsVar := scope.VariableWithShape("weights", shapes.Make(inputShape.DType, weightsDims...))
 	if regularizer != nil {
 		// Only for the weights, not for the bias.
-		regularizer(ctx, g, weightsVar)
+		regularizer(scope, g, weightsVar)
 	}
 	weights := weightsVar.ValueGraph(g)
 
@@ -98,7 +98,7 @@ func Dense(ctx *model.Context, input *Node, useBias bool, outputDimensions ...in
 	// output weights, and fused ops.
 	var biasNode *Node
 	if useBias {
-		biasVar := ctx.VariableWithShape("biases", shapes.Make(inputShape.DType, outputDimensions...))
+		biasVar := scope.VariableWithShape("biases", shapes.Make(inputShape.DType, outputDimensions...))
 		biasNode = biasVar.ValueGraph(g)
 	}
 	return nn.Dense(input, weights, biasNode)
@@ -118,7 +118,7 @@ func Dense(ctx *model.Context, input *Node, useBias bool, outputDimensions ...in
 //
 // The output has rank one larger than the input, with the last dimension the same as
 // the embedding dimension.
-func Embedding(ctx *model.Context, input *Node, dtype dtypes.DType, vocabSize, dimension int, indicesAreSorted ...bool) *Node {
+func Embedding(scope *model.Scope, input *Node, dtype dtypes.DType, vocabSize, dimension int, indicesAreSorted ...bool) *Node {
 	inputShape := input.Shape()
 	if !inputShape.DType.IsInt() {
 		Panicf("can only use Embedding on integer inputs, passed %s instead", input.Shape())
@@ -128,7 +128,7 @@ func Embedding(ctx *model.Context, input *Node, dtype dtypes.DType, vocabSize, d
 		// and index of size 1.
 		input = InsertAxes(input, -1)
 	}
-	embeddingTable := ctx.VariableWithShape("embeddings", shapes.Make(dtype, vocabSize, dimension))
+	embeddingTable := scope.VariableWithShape("embeddings", shapes.Make(dtype, vocabSize, dimension))
 	return Gather(embeddingTable.ValueGraph(input.Graph()), input, indicesAreSorted...)
 }
 
@@ -169,9 +169,9 @@ func AssertQuantilesForPWLCalibrationValid[T cmp.Ordered](values []T) {
 //
 // This is a simpler version to the one described here:
 // https://www.tensorflow.org/lattice/api_docs/python/tfl/layers/PWLCalibration
-func PieceWiseLinearCalibration(ctx *model.Context, input, keypoints *Node, outputTrainable bool) *Node {
+func PieceWiseLinearCalibration(scope *model.Scope, input, keypoints *Node, outputTrainable bool) *Node {
 	g := input.Graph()
-	ctx = ctx.In("piece_wise_linear")
+	scope = scope.In("piece_wise_linear")
 	if !input.DType().IsFloat() {
 		Panicf("PieceWiseLinearCalibration only accepts float inputs, but got %s", input.Shape())
 	}
@@ -200,7 +200,7 @@ func PieceWiseLinearCalibration(ctx *model.Context, input, keypoints *Node, outp
 	outKPValue := shapes.CastAsDType(outputKeypoints, dtype)
 	var outputKeypointsNode *Node
 	if outputTrainable {
-		outputKeypointsNode = ctx.VariableWithValue("output_keypoints", outKPValue).ValueGraph(g)
+		outputKeypointsNode = scope.VariableWithValue("output_keypoints", outKPValue).ValueGraph(g)
 	} else {
 		outputKeypointsNode = Const(g, outKPValue)
 	}
@@ -248,9 +248,9 @@ func PieceWiseLinearCalibration(ctx *model.Context, input, keypoints *Node, outp
 // is equally powerful (express the same functions) simpler (fewer ops) and faster, but is parametrizing
 // differently (cascaded linear functions), and may have different learning characteristics when
 // doing gradient descent.
-func PieceWiseLinearCalibrationCascaded(ctx *model.Context, input, keypoints *Node, outputTrainable bool) *Node {
+func PieceWiseLinearCalibrationCascaded(scope *model.Scope, input, keypoints *Node, outputTrainable bool) *Node {
 	g := input.Graph()
-	ctx = ctx.In("piece_wise_linear")
+	scope = scope.In("piece_wise_linear")
 	if !input.DType().IsFloat() {
 		Panicf("PieceWiseLinearCalibration only accepts float inputs, but got %s", input.Shape())
 	}
@@ -282,7 +282,7 @@ func PieceWiseLinearCalibrationCascaded(ctx *model.Context, input, keypoints *No
 	outKPValue := shapes.CastAsDType(outputKeypoints, dtype)
 	var outputKeypointsNode *Node
 	if outputTrainable {
-		outputKeypointsNode = ctx.VariableWithValue("output_keypoints", outKPValue).ValueGraph(g)
+		outputKeypointsNode = scope.VariableWithValue("output_keypoints", outKPValue).ValueGraph(g)
 	} else {
 		outputKeypointsNode = Const(g, outKPValue)
 	}
@@ -310,39 +310,39 @@ func PieceWiseLinearCalibrationCascaded(ctx *model.Context, input, keypoints *No
 // Dropout randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
 // it's a no op (it returns input).
 // If the input is float, it scales the output by 1/(1-dropoutRate) to preserve the mean of the values of the input.
-func Dropout(ctx *model.Context, input *Node, dropoutRate *Node) *Node {
-	return DropoutNormalize(ctx, input, dropoutRate, input.DType().IsFloat())
+func Dropout(scope *model.Scope, input *Node, dropoutRate *Node) *Node {
+	return DropoutNormalize(scope, input, dropoutRate, input.DType().IsFloat())
 }
 
 // DropoutStatic is the same as Dropout, but it takes the `dropoutRate` as a static value, given as a float64.
 // If `dropoutRate <= 0` or it's not training, this is a no-op.
-func DropoutStatic(ctx *model.Context, input *Node, dropoutRate float64) *Node {
+func DropoutStatic(scope *model.Scope, input *Node, dropoutRate float64) *Node {
 	if dropoutRate <= 0 {
 		return input
 	}
 	g := input.Graph()
-	return Dropout(ctx, input, Scalar(g, dtypes.Float32, dropoutRate))
+	return Dropout(scope, input, Scalar(g, dtypes.Float32, dropoutRate))
 }
 
 // IsDropoutActive returns true if dropout is active (i.e. if it's training).
 // If using DropoutStatic, also check that dropoutRate > 0.
-func IsDropoutActive(ctx *model.Context, g *Graph) bool {
-	return ctx != nil && ctx.IsTraining(g)
+func IsDropoutActive(scope *model.Scope, g *Graph) bool {
+	return scope != nil && scope.IsTraining(g)
 }
 
 // DropoutNormalize randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
 // it's a no op (it returns input). If normalize is set, it scales the output by 1/(1-dropoutRate)
 // to preserve the mean of the input values.
-func DropoutNormalize(ctx *model.Context, input *Node, dropoutRate *Node, normalize bool) *Node {
+func DropoutNormalize(scope *model.Scope, input *Node, dropoutRate *Node, normalize bool) *Node {
 	g := input.Graph()
-	if !IsDropoutActive(ctx, g) {
+	if !IsDropoutActive(scope, g) {
 		return input
 	}
 
 	// Disable (by multiplying by 0) random entries.
 	dtype := dropoutRate.DType()
 	dims := input.Shape().Dimensions
-	rnd := ctx.RandomUniform(g, shapes.Make(dtype, dims...))
+	rnd := scope.RandomUniform(g, shapes.Make(dtype, dims...))
 	broadcastRate := BroadcastToDims(dropoutRate, dims...)
 	result := Where(LessOrEqual(rnd, broadcastRate), ZerosLike(input), input)
 	if normalize {
@@ -357,13 +357,13 @@ func DropoutNormalize(ctx *model.Context, input *Node, dropoutRate *Node, normal
 //
 // If it is 0.0 this is a no-op.
 // If `Context.IsTraining() == false` this is also a no-op, so it doesn't impact evaluation or inference.
-func DropoutFromContext(ctx *model.Context, x *Node) *Node {
-	dropoutRate := model.GetParamOr(ctx, ParamDropoutRate, 0.0)
+func DropoutFromContext(scope *model.Scope, x *Node) *Node {
+	dropoutRate := model.GetParamOr(scope, ParamDropoutRate, 0.0)
 	if dropoutRate > 0 {
 		// We apply edge dropout to the mask.
 		g := x.Graph()
 		normalize := x.DType().IsFloat()
-		x = DropoutNormalize(ctx, x, Scalar(g, x.DType(), dropoutRate), normalize)
+		x = DropoutNormalize(scope, x, Scalar(g, x.DType(), dropoutRate), normalize)
 	}
 	return x
 }
@@ -378,30 +378,30 @@ func DropoutFromContext(ctx *model.Context, x *Node) *Node {
 // If it is not training or dropProbability is nil, it is a no-op.
 //
 // See also DropPathFromContext.
-func DropPath(ctx *model.Context, x, dropProbability *Node) *Node {
+func DropPath(scope *model.Scope, x, dropProbability *Node) *Node {
 	g := x.Graph()
-	if !ctx.IsTraining(g) || dropProbability == nil {
+	if !scope.IsTraining(g) || dropProbability == nil {
 		return x
 	}
 	maskShape := x.Shape().Clone()
 	for ii := 1; ii < maskShape.Rank(); ii++ {
 		maskShape.Dimensions[ii] = 1
 	}
-	return Mul(x, ctx.RandomBernoulli(OneMinus(dropProbability), maskShape))
+	return Mul(x, scope.RandomBernoulli(OneMinus(dropProbability), maskShape))
 }
 
 // DropPathFromContext will execute DropPath if the hyperparameter ParamDropPathProb is set to a value > 0.
 // If ParamDropPathProb is not set or if not training, this is a no-op.
-func DropPathFromContext(ctx *model.Context, x *Node) *Node {
+func DropPathFromContext(scope *model.Scope, x *Node) *Node {
 	g := x.Graph()
-	if !ctx.IsTraining(g) {
+	if !scope.IsTraining(g) {
 		return x
 	}
-	dropPathProb := model.GetParamOr(ctx, ParamDropPathProbability, 0.0)
+	dropPathProb := model.GetParamOr(scope, ParamDropPathProbability, 0.0)
 	if dropPathProb > 0 {
 		// We apply edge dropout to the mask.
 		g := x.Graph()
-		x = DropPath(ctx, x, Scalar(g, x.DType(), dropPathProb))
+		x = DropPath(scope, x, Scalar(g, x.DType(), dropPathProb))
 	}
 	return x
 }
@@ -409,13 +409,13 @@ func DropPathFromContext(ctx *model.Context, x *Node) *Node {
 // AddL2RegularizationStatic is like AddL2Regularization, but takes the `amount` as a static Go float64 value.
 //
 // Deprecated: use package regularizers instead.
-func AddL2RegularizationStatic(ctx *model.Context, amount float64, values ...*Node) {
+func AddL2RegularizationStatic(scope *model.Scope, amount float64, values ...*Node) {
 	if len(values) == 0 {
 		Panicf("no values given to AddL2RegularizationAsFloat")
 	}
 	g := values[0].Graph()
 	amountNode := Scalar(g, values[0].DType(), amount)
-	AddL2Regularization(ctx, amountNode, values...)
+	AddL2Regularization(scope, amountNode, values...)
 }
 
 // AddL2Regularization calculates the L2 of the given values (typically variable nodes returned
@@ -423,7 +423,7 @@ func AddL2RegularizationStatic(ctx *model.Context, amount float64, values ...*No
 // train.AddLoss the resulting value, having the effect of regularizing the weights (variables).
 //
 // Deprecated: use package regularizers instead.
-func AddL2Regularization(ctx *model.Context, amount *Node, values ...*Node) {
+func AddL2Regularization(scope *model.Scope, amount *Node, values ...*Node) {
 	if len(values) == 0 {
 		Panicf("no values given to AddL2Regularization")
 	}
@@ -437,7 +437,7 @@ func AddL2Regularization(ctx *model.Context, amount *Node, values ...*Node) {
 		}
 	}
 	loss = Mul(loss, amount)
-	train.AddLoss(ctx, loss)
+	train.AddLoss(scope, loss)
 }
 
 // Normalize shifts and scales the input such that the mean becomes zero and the variance one.

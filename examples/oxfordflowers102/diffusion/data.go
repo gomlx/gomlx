@@ -35,7 +35,7 @@ var (
 // See NewConfig.
 type Config struct {
 	Backend compute.Backend
-	Context *model.Context // Usually, at the root scope.
+	Context *model.Scope // Usually, at the root scope.
 
 	// DataDir is where the data is downloaded, and models are saved.
 	DataDir string
@@ -60,24 +60,24 @@ type Config struct {
 // NewConfig creates a configuration for most of the diffusion methods.
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
-func NewConfig(backend compute.Backend, ctx *model.Context, dataDir string, paramsSet []string) *Config {
+func NewConfig(backend compute.Backend, scope *model.Scope, dataDir string, paramsSet []string) *Config {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
 		check(os.MkdirAll(dataDir, 0777))
 	}
 	dtype := check1(dtypes.DTypeString(
-		model.GetParamOr(ctx, "dtype", "float32")))
+		model.GetParamOr(scope, "dtype", "float32")))
 	cfg := &Config{
 		Backend:       backend,
-		Context:       ctx,
+		Context:       scope,
 		DataDir:       dataDir,
-		ImageSize:     model.GetParamOr(ctx, "image_size", 64),
-		BatchSize:     model.GetParamOr(ctx, "batch_size", 64),
-		EvalBatchSize: model.GetParamOr(ctx, "eval_batch_size", 128),
+		ImageSize:     model.GetParamOr(scope, "image_size", 64),
+		BatchSize:     model.GetParamOr(scope, "batch_size", 64),
+		EvalBatchSize: model.GetParamOr(scope, "eval_batch_size", 128),
 		DType:         dtype,
 		ParamsSet:     paramsSet,
 	}
-	useNanLogger := model.GetParamOr(ctx, "nan_logger", false)
+	useNanLogger := model.GetParamOr(scope, "nan_logger", false)
 	if useNanLogger {
 		cfg.NanLogger = nanlogger.New()
 	}
@@ -141,7 +141,7 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 		c.Backend,
 		nil,
 		trainDS,
-		func(ctx *model.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
+		func(scope *model.Scope, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
 			images := c.PreprocessImages(inputs[0], false)
 			return []*Node{images}, labels
 		},

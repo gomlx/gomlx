@@ -26,31 +26,31 @@ var (
 )
 
 func init() {
-	ctx := CreateDefaultContext()
-	ctxSettings = commandline.CreateContextSettingsFlag(ctx, "")
+	scope := CreateDefaultContext()
+	ctxSettings = commandline.CreateContextSettingsFlag(scope, "")
 }
 
 func getTestConfig() *Config {
-	ctx := CreateDefaultContext()
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *ctxSettings))
+	scope := CreateDefaultContext()
+	paramsSet := check1(commandline.ParseContextSettings(scope, *ctxSettings))
 	backend := testutil.BuildTestBackend()
-	return NewConfig(backend, ctx, *flagDataDir, paramsSet)
+	return NewConfig(backend, scope, *flagDataDir, paramsSet)
 }
 
 func TestUNetModelGraph(t *testing.T) {
 	config := getTestConfig()
-	ctx := config.Context
+	scope := config.Context
 	g := NewGraph(config.Backend, "test")
 
 	numExamples := 5
 	noisyImages := Zeros(g, shapes.Make(config.DType, numExamples, 64, 64, 3))
 	flowerIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
 	fmt.Printf("  noisyImages.shape:\t%s\n", noisyImages.Shape())
-	filtered := UNetModelGraph(ctx, nil, noisyImages, Ones(g, shapes.Make(config.DType, numExamples, 1, 1, 1)), flowerIds)
+	filtered := UNetModelGraph(scope, nil, noisyImages, Ones(g, shapes.Make(config.DType, numExamples, 1, 1, 1)), flowerIds)
 	assert.True(t, noisyImages.Shape().Equal(filtered.Shape()), "Filtered images after UNetModelGraph should have the same shape as its input images")
 	fmt.Printf("     filtered.shape:\t%s\n", filtered.Shape())
-	fmt.Printf("U-Net Model #params:\t%d\n", ctx.NumParameters())
-	fmt.Printf(" U-Net Model memory:\t%s\n", humanize.Bytes(ctx.ByteSize()))
+	fmt.Printf("U-Net Model #params:\t%d\n", scope.NumParameters())
+	fmt.Printf(" U-Net Model memory:\t%s\n", humanize.Bytes(scope.ByteSize()))
 }
 
 // getZeroPredictions calls the model with some placeholder images.
@@ -72,7 +72,7 @@ func TestTrainingModelGraph(t *testing.T) {
 
 	config := getTestConfig()
 	config.NoNormalization = true
-	ctx := config.Context
+	scope := config.Context
 	g := NewGraph(config.Backend, "test")
 
 	numExamples := 5
@@ -80,11 +80,11 @@ func TestTrainingModelGraph(t *testing.T) {
 	predictedImages, loss := predictions[0], predictions[1]
 	assert.NoError(t, predictedImages.Shape().CheckDims(numExamples, config.ImageSize, config.ImageSize, 3))
 	assert.True(t, loss.Shape().IsScalar(), "Loss must be scalar.")
-	assert.Greater(t, ctx.NumParameters(), 0, "No context parameters created!?")
+	assert.Greater(t, scope.NumParameters(), 0, "No context parameters created!?")
 	fmt.Printf("predictedImages.shape:\t%s\n", predictions[0].Shape())
 	fmt.Printf("           loss.shape:\t%s\n", predictions[1].Shape())
-	fmt.Printf("        Model #params:\t%d\n", ctx.NumParameters())
-	fmt.Printf("         Model memory:\t%s\n", humanize.Bytes(ctx.ByteSize()))
+	fmt.Printf("        Model #params:\t%d\n", scope.NumParameters())
+	fmt.Printf("         Model memory:\t%s\n", humanize.Bytes(scope.ByteSize()))
 }
 
 func TestImagesGenerator(t *testing.T) {

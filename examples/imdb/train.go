@@ -51,10 +51,10 @@ var (
 var DType = dtypes.Float32
 
 // CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
-func CreateDefaultContext() *model.Context {
-	ctx := model.New()
-	ctx.ResetRNGState()
-	ctx.SetParams(map[string]any{
+func CreateDefaultContext() *model.Scope {
+	scope := model.NewStore()
+	scope.ResetRNGState()
+	scope.SetParams(map[string]any{
 		// Model type to use
 		"model":           "bow", // One of the listed in ValidModels: the user can also inject (in ValidModels) new custom models.
 		"train_steps":     5000,
@@ -116,12 +116,12 @@ func CreateDefaultContext() *model.Context {
 		"transformer_att_key_size":   8,    // Dimension of the Key/Query attention embedding.
 		"transformer_dropout_rate":   -1.0, // Set to 0.0 for no dropout. If < 0 it falls back to layers.ParamDropoutRate.
 	})
-	return ctx
+	return scope
 }
 
 // TrainModel with hyperparameters given in ctx.
 func TrainModel(
-	ctx *model.Context,
+	scope *model.Scope,
 	dataDir, checkpointPath string,
 	paramsSet []string,
 	evaluateOnEnd bool,
@@ -134,10 +134,10 @@ func TrainModel(
 	}
 
 	// Imdb data preparation.
-	IncludeSeparators = model.GetParamOr(ctx, "imdb_include_separators", false)
+	IncludeSeparators = model.GetParamOr(scope, "imdb_include_separators", false)
 	check(Download(dataDir))
-	imdbUseUnsupervised := model.GetParamOr(ctx, "imdb_use_unsupervised", false)
-	imdbMaskWordTaskWeight := model.GetParamOr(ctx, "imdb_mask_word_task_weight", 0.0)
+	imdbUseUnsupervised := model.GetParamOr(scope, "imdb_use_unsupervised", false)
+	imdbMaskWordTaskWeight := model.GetParamOr(scope, "imdb_mask_word_task_weight", 0.0)
 	if imdbUseUnsupervised && imdbMaskWordTaskWeight <= 0 {
 		exceptions.Panicf(
 			`Parameter "imdb_use_unsupervised" is only useful together with parameter "imdb_mask_word_task" (=%g) > 0.0`,
@@ -152,16 +152,16 @@ func TrainModel(
 	}
 
 	// Create datasets used for training and evaluation.
-	batchSize := model.GetParamOr(ctx, "batch_size", int(0))
+	batchSize := model.GetParamOr(scope, "batch_size", int(0))
 	if batchSize <= 0 {
 		exceptions.Panicf("Batch size must be > 0 (maybe it was not set?): %d", batchSize)
 	}
-	evalBatchSize := model.GetParamOr(ctx, "eval_batch_size", int(0))
+	evalBatchSize := model.GetParamOr(scope, "eval_batch_size", int(0))
 	if evalBatchSize <= 0 {
 		evalBatchSize = batchSize
 	}
 	var trainDS, trainEvalDS, testEvalDS train.Dataset
-	maxLen := model.GetParamOr(ctx, "imdb_content_max_len", 200)
+	maxLen := model.GetParamOr(scope, "imdb_content_max_len", 200)
 	if imdbUseUnsupervised {
 		trainDS = NewUnsupervisedDataset("unsupervised-train", maxLen, batchSize, true).Shuffle()
 	} else {
@@ -178,8 +178,8 @@ func TrainModel(
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
-		numCheckpointsToKeep := model.GetParamOr(ctx, "num_checkpoints", 3)
-		checkpoint = check1(checkpoints.Build(ctx).
+		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 3)
+		checkpoint = check1(checkpoints.Build(scope).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, ParamsExcludedFromLoading...)...).
@@ -187,11 +187,11 @@ func TrainModel(
 		fmt.Printf("Checkpoint: %q\n", checkpoint.Dir())
 	}
 	if verbosity >= 2 {
-		fmt.Println(commandline.SprintContextSettings(ctx))
+		fmt.Println(commandline.SprintContextSettings(scope))
 	}
 
 	// Select model graph building function.
-	modelType := model.GetParamOr(ctx, "model", "bow")
+	modelType := model.GetParamOr(scope, "model", "bow")
 	modelFn, found := ValidModels[modelType]
 	if !found {
 		exceptions.Panicf("Parameter \"model\" must take one value from %v, got %q", xslices.Keys(ValidModels), modelType)
@@ -204,14 +204,14 @@ func TrainModel(
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	ctx = ctx.In("model") // Convention scope used for model creation.
+	scope = scope.In("model") // Convention scope used for model creation.
 	var loss train.LossFn
 	if !imdbUseUnsupervised {
 		loss = losses.BinaryCrossentropyLogits
 	}
-	trainer := train.NewTrainer(backend, ctx, modelFn,
+	trainer := train.NewTrainer(backend, scope, modelFn,
 		loss,
-		optimizers.FromContext(ctx),
+		optimizers.FromContext(scope),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
@@ -232,7 +232,7 @@ func TrainModel(
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if model.GetParamOr(ctx, plotly.ParamPlots, false) {
+	if model.GetParamOr(scope, plotly.ParamPlots, false) {
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
@@ -242,10 +242,10 @@ func TrainModel(
 	}
 
 	// Loop for given number of steps.
-	numTrainSteps := model.GetParamOr(ctx, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(ctx))
+	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
+	globalStep := int(optimizers.GetGlobalStep(scope))
 	if globalStep > 0 {
-		trainer.SetContext(ctx.Reuse())
+		trainer.SetContext(scope.Reuse())
 	}
 	if globalStep < numTrainSteps {
 		_ = check1(loop.RunSteps(trainDS, numTrainSteps-globalStep))

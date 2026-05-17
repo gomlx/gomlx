@@ -13,7 +13,7 @@ import (
 
 // DropBlockConfig is created with a DropBlock.
 type DropBlockConfig struct {
-	ctx                *model.Context
+	scope              *model.Scope
 	x                  *Node
 	dropoutProbability *Node
 	channelsAxisConfig images.ChannelsAxisConfig
@@ -46,14 +46,14 @@ var (
 // Call Done when finished configuring, and it will return the regularized value.
 //
 // [1] "DropBlock: A regularization method for convolutional networks", Golnaz Ghiasi, Tsung{-}Yi Lin and Quoc V. Le, https://arxiv.org/abs/1810.12890v1
-func DropBlock(ctx *model.Context, x *Node) *DropBlockConfig {
+func DropBlock(scope *model.Scope, x *Node) *DropBlockConfig {
 	cfg := &DropBlockConfig{
-		ctx: ctx,
-		x:   x,
+		scope: scope,
+		x:     x,
 	}
-	prob := model.GetParamOr(ctx, ParamDropBlockProbability, 0.0)
+	prob := model.GetParamOr(scope, ParamDropBlockProbability, 0.0)
 	cfg.WithDropoutProbability(prob)
-	blockSize := model.GetParamOr(ctx, ParamDropBlockSize, 3)
+	blockSize := model.GetParamOr(scope, ParamDropBlockSize, 3)
 	cfg.WithBlockSize(blockSize)
 	return cfg
 }
@@ -134,10 +134,10 @@ func (cfg *DropBlockConfig) WithBlockSize(blockSize int) *DropBlockConfig {
 
 // Done applies the configured DropBlock to the operand x, and returns the regularized value.
 func (cfg *DropBlockConfig) Done() *Node {
-	ctx := cfg.ctx
+	scope := cfg.scope
 	x := cfg.x
 	g := x.Graph()
-	if !ctx.IsTraining(g) || cfg.dropoutProbability == nil {
+	if !scope.IsTraining(g) || cfg.dropoutProbability == nil {
 		// No-op: either it's inference, or zero dropout was configured.
 		return x
 	}
@@ -177,7 +177,7 @@ func (cfg *DropBlockConfig) Done() *Node {
 	if channelsAxis >= 0 {
 		maskShape.Dimensions[channelsAxis] = 1
 	}
-	mask := ctx.RandomBernoulli(OneMinus(gamma), maskShape)
+	mask := scope.RandomBernoulli(OneMinus(gamma), maskShape)
 
 	// Expand masked pixels to blocks -- except if block size is 1, then it behaves like a dropout.
 	if pixelsPerBlock > 1 {

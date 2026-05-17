@@ -274,10 +274,10 @@ func TripletLoss(labels, predictions []*Node,
 
 // MakeTripletLossFromContext calls TripletLoss using the configured by the hyperparameter
 // in the model.
-func MakeTripletLossFromContext(ctx *model.Context) LossFn {
-	miningStrategy := model.GetParamOr(ctx, ParamTripletLossMiningStrategy, TripletMiningStrategySemiHard)
-	margin := model.GetParamOr(ctx, ParamTripletLossMargin, 1.0)
-	metric := model.GetParamOr(ctx, ParamTripletLossPairwiseDistanceMetric, PairwiseDistanceMetricL2)
+func MakeTripletLossFromContext(scope *model.Scope) LossFn {
+	miningStrategy := model.GetParamOr(scope, ParamTripletLossMiningStrategy, TripletMiningStrategySemiHard)
+	margin := model.GetParamOr(scope, ParamTripletLossMargin, 1.0)
+	metric := model.GetParamOr(scope, ParamTripletLossPairwiseDistanceMetric, PairwiseDistanceMetricL2)
 	return func(labels, predictions []*Node) (loss *Node) {
 		return TripletLoss(labels, predictions, miningStrategy, margin, metric)
 	}

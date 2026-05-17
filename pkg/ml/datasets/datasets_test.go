@@ -372,7 +372,7 @@ func TestMap(t *testing.T) {
 		manager,
 		nil,
 		ds,
-		func(_ *model.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
+		func(_ *model.Scope, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
 			// Add 1 to the inputs[0], drop the labels.
 			return []*Node{AddScalar(inputs[0], 1)}, nil
 		},

@@ -65,7 +65,7 @@ const (
 // Config is created with New and can be configured with its methods, or simply setting the corresponding
 // hyperparameters in the model.
 type Config struct {
-	ctx                             *model.Context
+	scope                           *model.Scope
 	input                           *Node
 	outputDimensions                []int
 	numHiddenLayers, numHiddenNodes int
@@ -102,7 +102,7 @@ type Config struct {
 //			Done()
 //		return []*Node{logits}
 //	}
-func New(ctx *model.Context, input *Node, outputDimensions ...int) *Config {
+func New(scope *model.Scope, input *Node, outputDimensions ...int) *Config {
 	if input.Rank() < 2 {
 		exceptions.Panicf("fnn: input must be rank at least 2, got input.shape=%s", input.Shape())
 	}
@@ -116,26 +116,26 @@ func New(ctx *model.Context, input *Node, outputDimensions ...int) *Config {
 	}
 
 	c := &Config{
-		ctx:              ctx,
+		scope:            scope,
 		input:            input,
 		outputDimensions: outputDimensions,
 		ensembleAxis:     -1,
-		numHiddenLayers:  model.GetParamOr(ctx, ParamNumHiddenLayers, 0),
-		numHiddenNodes:   model.GetParamOr(ctx, ParamNumHiddenNodes, 10),
-		activation:       activations.FromName(model.GetParamOr(ctx, activations.ParamActivation, "relu")),
-		normalization:    model.GetParamOr(ctx, ParamNormalization, ""),
-		regularizer:      regularizers.FromContext(ctx),
-		dropoutRatio:     model.GetParamOr(ctx, ParamDropoutRate, -1.0),
-		useResidual:      model.GetParamOr(ctx, ParamResidual, false),
+		numHiddenLayers:  model.GetParamOr(scope, ParamNumHiddenLayers, 0),
+		numHiddenNodes:   model.GetParamOr(scope, ParamNumHiddenNodes, 10),
+		activation:       activations.FromName(model.GetParamOr(scope, activations.ParamActivation, "relu")),
+		normalization:    model.GetParamOr(scope, ParamNormalization, ""),
+		regularizer:      regularizers.FromContext(scope),
+		dropoutRatio:     model.GetParamOr(scope, ParamDropoutRate, -1.0),
+		useResidual:      model.GetParamOr(scope, ParamResidual, false),
 		useBias:          true,
 	}
 
 	// Fallback parameters.
 	if c.normalization == "" {
-		c.normalization = model.GetParamOr(ctx, layers.ParamNormalization, "none")
+		c.normalization = model.GetParamOr(scope, layers.ParamNormalization, "none")
 	}
 	if c.dropoutRatio < 0 {
-		c.dropoutRatio = model.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
+		c.dropoutRatio = model.GetParamOr(scope, layers.ParamDropoutRate, 0.0)
 	}
 	return c
 }
@@ -260,7 +260,7 @@ func (c *Config) Dropout(ratio float64) *Config {
 
 // Done takes the configuration and apply the FNN as configured.
 func (c *Config) Done() *Node {
-	ctx := c.ctx
+	scope := c.scope
 	x := c.input
 	g := x.Graph()
 	dtype := x.DType()
@@ -281,11 +281,11 @@ func (c *Config) Done() *Node {
 			outputDims = c.outputDimensions
 		}
 		// Scope for this layer
-		var layerCtx *model.Context
+		var layerCtx *model.Scope
 		if ii < c.numHiddenLayers {
-			layerCtx = ctx.Inf("fnn_hidden_layer_%d", ii)
+			layerCtx = scope.In("fnn_hidden_layer_%d", ii)
 		} else {
-			layerCtx = ctx.In("fnn_output_layer")
+			layerCtx = scope.In("fnn_output_layer")
 		}
 
 		// In between-layers: some don't apply to the input (ii == 0)

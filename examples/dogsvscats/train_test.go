@@ -21,8 +21,8 @@ var (
 )
 
 func init() {
-	ctx := CreateDefaultContext()
-	flagSettings = commandline.CreateContextSettingsFlag(ctx, "")
+	scope := CreateDefaultContext()
+	flagSettings = commandline.CreateContextSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	if _, found := os.LookupEnv(compute.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
@@ -36,10 +36,10 @@ func TestTrain(t *testing.T) {
 		t.Skip("skipping testing in short mode")
 		return
 	}
-	ctx := CreateDefaultContext()
-	ctx.SetParam("train_steps", 10)
-	ctx.SetParam("plots", false)
-	ctx.SetParam(layers.ParamNormalization, "layer")
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *flagSettings))
-	TrainModel(ctx, *flagDataDir, "", false, paramsSet)
+	scope := CreateDefaultContext()
+	scope.SetParam("train_steps", 10)
+	scope.SetParam("plots", false)
+	scope.SetParam(layers.ParamNormalization, "layer")
+	paramsSet := check1(commandline.ParseContextSettings(scope, *flagSettings))
+	TrainModel(scope, *flagDataDir, "", false, paramsSet)
 }

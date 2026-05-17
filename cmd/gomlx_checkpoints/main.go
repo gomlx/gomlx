@@ -108,19 +108,19 @@ var (
 
 func Reports(checkpointPaths []string) {
 	numCheckpoints := len(checkpointPaths)
-	ctxs := make([]*model.Context, 0, len(checkpointPaths))
-	scopedCtxs := make([]*model.Context, 0, len(checkpointPaths))
+	ctxs := make([]*model.Scope, 0, len(checkpointPaths))
+	scopedCtxs := make([]*model.Scope, 0, len(checkpointPaths))
 	for _, checkpointPath := range checkpointPaths {
-		ctx := model.New()
+		scope := model.NewStore()
 		if *flagSummary || *flagParams || *flagVars {
-			_ = must.M1(checkpoints.Build(ctx).
+			_ = must.M1(checkpoints.Build(scope).
 				Dir(checkpointPath).Immediate().Done())
 		}
-		scopedCtx := ctx
+		scopedCtx := scope
 		if *flagScope != "" {
-			scopedCtx = ctx.InAbsPath(*flagScope)
+			scopedCtx = scope.Store().Scope(*flagScope)
 		}
-		ctxs = append(ctxs, ctx)
+		ctxs = append(ctxs, scope)
 		scopedCtxs = append(scopedCtxs, scopedCtx)
 	}
 	var names []string
@@ -149,10 +149,10 @@ func Reports(checkpointPaths []string) {
 }
 
 func Backup(checkpointPath string) {
-	ctx := model.New()
-	checkpoint := must.M1(checkpoints.Build(ctx).
+	scope := model.NewStore()
+	checkpoint := must.M1(checkpoints.Build(scope).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
 	must.M(checkpoint.Backup())
-	globalStep := optimizers.GetGlobalStep(ctx)
+	globalStep := optimizers.GetGlobalStep(scope)
 	fmt.Printf("Backup of latest checkpoint (global step %d) successful, see %q.\n", globalStep, path.Join(checkpoint.Dir(), checkpoints.BackupDir))
 }

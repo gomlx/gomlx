@@ -14,7 +14,7 @@ import (
 // LayerWiseConfig is a configuration object for [ComputeLayerWiseGNN].
 // Once configured with its methods, call [LayerWiseConfig.Done] to actually run the layer-wise GNN.
 type LayerWiseConfig struct {
-	ctx                    *model.Context
+	scope                  *model.Scope
 	strategy               *sampler.Strategy
 	sampler                *sampler.Sampler
 	keepIntermediaryStates bool
@@ -30,21 +30,21 @@ type LayerWiseConfig struct {
 //
 // It returns a configuration option that can be furthered configured.
 // It runs the layer-wise GNN once [NodePrediction] is called.
-func LayerWiseGNN(ctx *model.Context, strategy *sampler.Strategy) (*LayerWiseConfig, error) {
+func LayerWiseGNN(scope *model.Scope, strategy *sampler.Strategy) (*LayerWiseConfig, error) {
 	lw := &LayerWiseConfig{
-		ctx:                    ctx,
+		scope:                  scope,
 		strategy:               strategy,
 		sampler:                strategy.Sampler,
 		keepIntermediaryStates: true,
 		freeAcceleratorMemory:  true,
-		numGraphUpdates:        model.GetParamOr(ctx, ParamNumGraphUpdates, 2),
-		graphUpdateType:        model.GetParamOr(ctx, ParamGraphUpdateType, "tree"),
+		numGraphUpdates:        model.GetParamOr(scope, ParamNumGraphUpdates, 2),
+		graphUpdateType:        model.GetParamOr(scope, ParamGraphUpdateType, "tree"),
 	}
 	lw.dependentsUpdateFirst = "tree" == lw.graphUpdateType
 	if lw.graphUpdateType != "tree" && lw.graphUpdateType != "simultaneous" {
 		return nil, errors.Errorf("unsupported graph update type: %s", lw.graphUpdateType)
 	}
-	if model.GetParamOr(ctx, ParamUsePathToRootStates, false) {
+	if model.GetParamOr(scope, ParamUsePathToRootStates, false) {
 		return nil, errors.Errorf("layerwise inference doesn't work if using `%q=true`",
 			ParamUsePathToRootStates)
 	}
@@ -79,13 +79,13 @@ func (lw *LayerWiseConfig) FreeAcceleratorMemory(free bool) *LayerWiseConfig {
 //
 // It can be called more than once with different `initialStates`.
 // Subsequent calls will by-step the JIT-compilation of the models.
-func (lw *LayerWiseConfig) NodePrediction(ctx *model.Context, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node]) {
+func (lw *LayerWiseConfig) NodePrediction(scope *model.Scope, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node]) {
 	for round := range lw.numGraphUpdates {
 		for _, rule := range lw.strategy.Seeds {
-			lw.recursivelyApplyGraphConvolution(ctxForGraphUpdateRound(ctx, round), rule, graphStates, edges)
+			lw.recursivelyApplyGraphConvolution(ctxForGraphUpdateRound(scope, round), rule, graphStates, edges)
 		}
 	}
-	ctxReadout := ctx.In("readout")
+	ctxReadout := scope.In("readout")
 	for _, rule := range lw.strategy.Seeds {
 		seedState := graphStates[rule.Name]
 		seedState = updateState(ctxReadout.In(rule.ConvKernelScopeName), seedState, seedState, nil)
@@ -94,7 +94,7 @@ func (lw *LayerWiseConfig) NodePrediction(ctx *model.Context, graphStates map[st
 }
 
 func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
-	ctx *model.Context, rule *sampler.Rule, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node]) {
+	scope *model.Scope, rule *sampler.Rule, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node]) {
 	if rule.Name == "" || rule.ConvKernelScopeName == "" {
 		Panicf("strategy's rule name=%q or kernel scope name=%q are empty, they both must be defined",
 			rule.Name, rule.ConvKernelScopeName)
@@ -125,10 +125,10 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 		}
 
 		if lw.dependentsUpdateFirst {
-			lw.recursivelyApplyGraphConvolution(ctx, dependent, graphStates, edges)
+			lw.recursivelyApplyGraphConvolution(scope, dependent, graphStates, edges)
 		}
 		dependentState := graphStates[dependent.Name]
-		convolveCtx := ctx.In(dependent.ConvKernelScopeName).In("conv")
+		convolveCtx := scope.In(dependent.ConvKernelScopeName).In("conv")
 		if dependentState != nil {
 			// Notice that we are sending messages on the reverse order of the sampling.
 			// E.g.: If paper->"HasTopic"->topic, the sampling direction is "paper is source, topic is target".
@@ -137,18 +137,18 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 			updateInputs = append(updateInputs, update)
 		}
 		if !lw.dependentsUpdateFirst {
-			lw.recursivelyApplyGraphConvolution(ctx, dependent, graphStates, edges)
+			lw.recursivelyApplyGraphConvolution(scope, dependent, graphStates, edges)
 		}
 	}
 
 	// Update state of current rule: only update state if there was any new incoming input.
-	updateCtx := ctx.In(rule.UpdateKernelScopeName).In("update")
+	updateCtx := scope.In(rule.UpdateKernelScopeName).In("update")
 	state = updateState(updateCtx, state, Concatenate(updateInputs, -1), nil)
 	graphStates[rule.Name] = state
 }
 
-func (lw *LayerWiseConfig) convolveEdgeSet(ctx *model.Context, ruleName string, sourceState, edgesSource, edgesTarget *Node, numTargetNodes int) *Node {
-	messages, _ := edgeMessageGraph(ctx.In("message"), sourceState, nil)
-	pooled := poolMessagesWithAdjacency(ctx, messages, edgesSource, edgesTarget, numTargetNodes, nil)
+func (lw *LayerWiseConfig) convolveEdgeSet(scope *model.Scope, ruleName string, sourceState, edgesSource, edgesTarget *Node, numTargetNodes int) *Node {
+	messages, _ := edgeMessageGraph(scope.In("message"), sourceState, nil)
+	pooled := poolMessagesWithAdjacency(scope, messages, edgesSource, edgesTarget, numTargetNodes, nil)
 	return pooled
 }

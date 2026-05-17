@@ -17,10 +17,10 @@ import (
 func TestRoPE(t *testing.T) {
 	t.Run("Basic", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		rope := NewRoPE(10000.0)
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, startPos *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, startPos *Node) *Node {
 			// Create position indices using helper function
 			seqLen := x.Shape().Dimensions[0]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
@@ -43,10 +43,10 @@ func TestRoPE(t *testing.T) {
 
 	t.Run("DifferentStartPos", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		rope := NewRoPE(10000.0)
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, startPos *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[0]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 			q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
@@ -62,10 +62,10 @@ func TestRoPE(t *testing.T) {
 
 	t.Run("DifferentBaseFreq", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		rope := NewRoPE(5000.0)
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, startPos *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 			q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
@@ -84,10 +84,10 @@ func TestRoPE(t *testing.T) {
 
 	t.Run("PreservesNorms", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		rope := NewRoPE(10000.0)
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, startPos *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 			rotated, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
@@ -107,12 +107,12 @@ func TestRoPE(t *testing.T) {
 
 	t.Run("NonScalarStartPosPanics", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		// startPos with shape [2] should panic (can't squeeze to scalar)
 		require.Panics(t, func() {
 			rope := NewRoPE(10000.0)
-			exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, startPos *Node) *Node {
+			exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, startPos *Node) *Node {
 				seqLen := x.Shape().Dimensions[x.Rank()-2]
 				posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 				q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
@@ -133,11 +133,11 @@ func TestRoPE(t *testing.T) {
 func TestRoPEWithCustomDim(t *testing.T) {
 	t.Run("PartialRange", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		// Input shape: [batch=2, embed_dim=8]
 		rope := NewRoPEWithDimRange(10000.0, 2, 6)
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, startPos *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, startPos *Node) *Node {
 			// Apply RoPE only to middle dimensions [2:6]
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
@@ -158,10 +158,10 @@ func TestRoPEWithCustomDim(t *testing.T) {
 
 	t.Run("FullEmbedding", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		rope := NewRoPEWithDimRange(10000.0, 0, 8)
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, startPos *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, startPos *Node) *Node {
 			// Apply RoPE to the full embedding range [0:8]
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
@@ -182,10 +182,10 @@ func TestRoPEWithCustomDim(t *testing.T) {
 
 	t.Run("StartPosAndFreq", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		rope := NewRoPEWithDimRange(5000.0, 4, 8)
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, startPos *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, startPos *Node) *Node {
 			// Apply RoPE to tail half with different startPos and baseFreq
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
@@ -202,12 +202,12 @@ func TestRoPEWithCustomDim(t *testing.T) {
 
 	t.Run("OddRangePanics", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		// Range [1:4] has length 3 (odd) and should panic
 		require.Panics(t, func() {
 			rope := NewRoPEWithDimRange(10000.0, 1, 4)
-			exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, startPos *Node) *Node {
+			exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, startPos *Node) *Node {
 				seqLen := x.Shape().Dimensions[x.Rank()-2]
 				posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 				q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
@@ -222,12 +222,12 @@ func TestRoPEWithCustomDim(t *testing.T) {
 
 	t.Run("OutOfBoundsPanics", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		// dimEnd beyond embedding size should panic
 		require.Panics(t, func() {
 			rope := NewRoPEWithDimRange(10000.0, 0, 10)
-			exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, startPos *Node) *Node {
+			exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, startPos *Node) *Node {
 				seqLen := x.Shape().Dimensions[x.Rank()-2]
 				posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 				q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
@@ -242,13 +242,13 @@ func TestRoPEWithCustomDim(t *testing.T) {
 
 	t.Run("HigherRankTensor_SpacerRequired", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		// Test with a 3D tensor [batch, seq_len, embed_dim]
 		// This test validates that .Spacer() correctly slices the last axis
 		// Without .Spacer(), it would incorrectly slice the seq_len axis
 		rope := NewRoPEWithDimRange(10000.0, 0, 4)
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, startPos *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, startPos *Node) *Node {
 			seqLen := x.Shape().Dimensions[x.Rank()-2]
 			posIndices := SequentialPositions(x.Graph(), startPos, seqLen)
 			q, _ := rope.EncodeQK(x, x, posIndices, x.Rank()-2)
@@ -305,12 +305,12 @@ func TestApplyWithCosSin(t *testing.T) {
 		// Verify that ApplyWithCosSin produces the same result as RoPE.Apply
 		// when cos/sin are computed from the same base frequency and positions.
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		baseFreq := 10000.0
 		rope := NewRoPE(baseFreq)
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, startPos *Node) []*Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, startPos *Node) []*Node {
 			g := x.Graph()
 			shape := x.Shape()
 			dtype := shape.DType
@@ -369,9 +369,9 @@ func TestApplyWithCosSin(t *testing.T) {
 
 	t.Run("Interleaved", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, cos, sin *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, cos, sin *Node) *Node {
 			return NewRoPEWithCosSin(cos, sin).WithInterleaved(true).Encode(x, x.Rank()-2)
 		})
 
@@ -411,9 +411,9 @@ func TestApplyWithCosSin(t *testing.T) {
 
 	t.Run("PartialRotation", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, cos, sin *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, cos, sin *Node) *Node {
 			return NewRoPEWithCosSin(cos, sin).Encode(x, x.Rank()-2)
 		})
 
@@ -438,7 +438,7 @@ func TestApplyWithCosSin(t *testing.T) {
 // tensor (the BSHD layout case: [batch, seq, heads, dim]).
 func TestRoPEWithSeqAxis1(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
+	scope := model.NewStore()
 
 	rope := NewRoPE(10000.0)
 
@@ -446,7 +446,7 @@ func TestRoPEWithSeqAxis1(t *testing.T) {
 		// Compare: applying RoPE with seqAxis=1 on [batch, seq, heads, dim]
 		// should produce the same result on the seq/dim pair as seqAxis=rank-2
 		// on [batch, heads, seq, dim] (after transposing back).
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x, startPos *Node) []*Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, x, startPos *Node) []*Node {
 			g := x.Graph()
 			seqLen := x.Shape().Dimensions[1] // seq is at axis 1 in BSHD
 			posIndices := SequentialPositions(g, startPos, seqLen)
@@ -502,9 +502,9 @@ func isInf(f float32) bool {
 func TestSequentialPositions(t *testing.T) {
 	t.Run("ScalarStartPos", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, startPos *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, startPos *Node) *Node {
 			return SequentialPositions(startPos.Graph(), startPos, 4)
 		})
 
@@ -515,9 +515,9 @@ func TestSequentialPositions(t *testing.T) {
 
 	t.Run("BatchedStartPos", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, startPos *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, startPos *Node) *Node {
 			return SequentialPositions(startPos.Graph(), startPos, 4)
 		})
 
@@ -533,9 +533,9 @@ func TestSequentialPositions(t *testing.T) {
 
 	t.Run("SingleElementBatchTreatedAsScalar", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, startPos *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, startPos *Node) *Node {
 			return SequentialPositions(startPos.Graph(), startPos, 3)
 		})
 

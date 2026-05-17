@@ -188,17 +188,17 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 }
 
 // DenoiseStepGraph executes one step of separating the noise and images from noisy images.
-func DenoiseStepGraph(ctx *model.Context, noisyImages, diffusionTime, nextDiffusionTime, flowerIds *Node) (
+func DenoiseStepGraph(scope *model.Scope, noisyImages, diffusionTime, nextDiffusionTime, flowerIds *Node) (
 	predictedImages, nextNoisyImages *Node) {
 	dtype := noisyImages.DType()
 	numImages := noisyImages.Shape().Dimensions[0]
 	diffusionTimes := BroadcastToDims(ConvertDType(diffusionTime, dtype), numImages, 1, 1, 1)
-	signalRatios, noiseRatios := DiffusionSchedule(ctx, diffusionTimes, false)
+	signalRatios, noiseRatios := DiffusionSchedule(scope, diffusionTimes, false)
 	var predictedNoises *Node
-	predictedImages, predictedNoises = Denoise(ctx, noisyImages, signalRatios, noiseRatios, flowerIds)
+	predictedImages, predictedNoises = Denoise(scope, noisyImages, signalRatios, noiseRatios, flowerIds)
 
 	nextDiffusionTimes := BroadcastToDims(ConvertDType(nextDiffusionTime, dtype), numImages, 1, 1, 1)
-	nextSignalRatios, nextNoiseRatios := DiffusionSchedule(ctx, nextDiffusionTimes, false)
+	nextSignalRatios, nextNoiseRatios := DiffusionSchedule(scope, nextDiffusionTimes, false)
 	nextNoisyImages = Add(
 		Mul(predictedImages, nextSignalRatios),
 		Mul(predictedNoises, nextNoiseRatios))
@@ -215,8 +215,8 @@ func (c *Config) DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSt
 			"DisplayImagesAcrossDiffusionSteps requires a model loaded from a checkpoint, see Config.AttachCheckpoint.",
 		)
 	}
-	ctx := c.Context.Checked(false)
-	ctx.ResetRNGState()
+	scope := c.Context
+	_ = scope.Store().ResetRNGState()
 	noise := c.GenerateNoise(numImages)
 	flowerIds := c.GenerateFlowerIds(numImages)
 
@@ -229,8 +229,8 @@ func (c *Config) DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSt
 		numDiffusionSteps,
 		noise.Shape(),
 	)
-	fmt.Printf("\tModel #params:\t%d\n", ctx.NumParameters())
-	fmt.Printf("\t Model memory:\t%s\n", humanize.Bytes(ctx.ByteSize()))
+	fmt.Printf("\tModel #params:\t%d\n", scope.NumParameters())
+	fmt.Printf("\t Model memory:\t%s\n", humanize.Bytes(scope.ByteSize()))
 	gonbui.DisplayHtml("<p><b>Noise</b></p>")
 	PlotImagesTensor(noise)
 
@@ -242,14 +242,9 @@ func (c *Config) DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSt
 }
 
 // SliderDiffusionSteps creates and animates a slider that shows images at different diffusion steps.
-// It handles the slider on a separate goroutine.
-// Trigger the returned latch to stop it.
-//
-// If `cacheKey` empty, cache is by-passed. Otherwise, try to load images from cache first if available,
-// or save generated images in cache for future use.
 func (c *Config) SliderDiffusionSteps(
 	cacheKey string,
-	ctx *model.Context,
+	scope *model.Scope,
 	numImages int,
 	numDiffusionSteps int,
 	htmlId string,
@@ -316,15 +311,13 @@ func (c *Config) SliderDiffusionSteps(
 
 // GenerateImagesOfFlowerType is similar to DisplayImagesAcrossDiffusionSteps, but it limits itself to generating images of only one
 // flower type.
-//
-// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
 func (c *Config) GenerateImagesOfFlowerType(
 	numImages int,
 	flowerType int32,
 	numDiffusionSteps int,
 ) (predictedImages *tensors.Tensor) {
-	ctx := c.Context
-	ctx.ResetRNGState()
+	scope := c.Context
+	_ = scope.Store().ResetRNGState()
 	noise := c.GenerateNoise(numImages)
 	flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 	generator := c.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
@@ -332,9 +325,6 @@ func (c *Config) GenerateImagesOfFlowerType(
 }
 
 // DropdownFlowerTypes creates a drop-down that shows images at different diffusion steps.
-//
-// If `cacheKey` empty, cache is by-passed. Otherwise, try to load images from cache first if available,
-// or save generated images in cache for future use.
 func (c *Config) DropdownFlowerTypes(cacheKey string, numImages, numDiffusionSteps int, htmlId string) *xsync.Latch {
 	numFlowerTypes := flowers.NumLabels
 	generateFn := func() []string {
@@ -382,12 +372,10 @@ func (c *Config) DropdownFlowerTypes(cacheKey string, numImages, numDiffusionSte
 }
 
 // GenerateImagesOfAllFlowerTypes takes one random noise, and generate the flower for each of the 102 types.
-//
-// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
 func (c *Config) GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages *tensors.Tensor) {
-	ctx := c.Context
+	scope := c.Context
 	numImages := flowers.NumLabels
-	ctx.ResetRNGState()
+	_ = scope.Store().ResetRNGState()
 	imageSize := c.ImageSize
 	noise := MustNewExec(c.Backend, func(g *Graph) *Node {
 		state := RNGStateForGraph(g)
@@ -404,7 +392,7 @@ func (c *Config) GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predicte
 // Use it with NewImagesGenerator.
 type ImagesGenerator struct {
 	config            *Config
-	ctx               *model.Context
+	scope             *model.Scope
 	noise, flowerIds  *tensors.Tensor
 	numImages         int
 	numDiffusionSteps int
@@ -415,7 +403,7 @@ type ImagesGenerator struct {
 // NewImagesGenerator generates flowers given initial `noise` and `flowerIds`, in `numDiffusionSteps`.
 // Typically, 20 diffusion steps will suffice.
 func (c *Config) NewImagesGenerator(noise, flowerIds *tensors.Tensor, numDiffusionSteps int) *ImagesGenerator {
-	ctx := c.Context.Reuse()
+	scope := c.Context
 	if numDiffusionSteps <= 0 {
 		exceptions.Panicf("Expected numDiffusionSteps > 0, got %d", numDiffusionSteps)
 	}
@@ -427,12 +415,12 @@ func (c *Config) NewImagesGenerator(noise, flowerIds *tensors.Tensor, numDiffusi
 	}
 	return &ImagesGenerator{
 		config:            c,
-		ctx:               ctx,
+		scope:             scope,
 		noise:             noise,
 		flowerIds:         flowerIds,
 		numImages:         numImages,
 		numDiffusionSteps: numDiffusionSteps,
-		diffusionStepExec: model.MustNewExec(c.Backend, ctx, DenoiseStepGraph),
+		diffusionStepExec: model.MustNewExec(c.Backend, scope.Store(), DenoiseStepGraph),
 		denormalizerExec: MustNewExec(c.Backend, func(image *Node) *Node {
 			return c.DenormalizeImages(image)
 		}),
@@ -440,15 +428,6 @@ func (c *Config) NewImagesGenerator(noise, flowerIds *tensors.Tensor, numDiffusi
 }
 
 // GenerateEveryN images from the original noise.
-// While iteratively undoing diffusion, it will keep every `n` intermediary images.
-// It will always return the last image generated.
-//
-// It can be called multiple times if the context changed, if the model was further trained.
-// Otherwise, it will always return the same images.
-//
-// It returns a slice of batches of images, one batch per intermediary diffusion step,
-// a slice with the step used for each batch, and another slice with the "diffusionTime"
-// of the intermediary images (it will be 1.0 for the last)
 func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tensor,
 	diffusionSteps []int, diffusionTimes []float64) {
 	noisyImages := g.noise
@@ -476,9 +455,6 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tens
 }
 
 // Generate images from the original noise.
-//
-// It can be called multiple times if the context changed, if the model was further trained.
-// Otherwise, it will always return the same images.
 func (g *ImagesGenerator) Generate() (batchedImages *tensors.Tensor) {
 	allBatches, _, _ := g.GenerateEveryN(0)
 	return allBatches[0]
@@ -505,7 +481,7 @@ func (c *Config) GenerateFlowerIds(numImages int) *tensors.Tensor {
 // KidGenerator generates the [Kernel Inception Distance (KID)](https://arxiv.org/abs/1801.01401) metric.
 type KidGenerator struct {
 	config         *Config
-	ctxInceptionV3 *model.Context
+	ctxInceptionV3 *model.Scope
 	ds             train.Dataset
 	generator      *ImagesGenerator
 	kid            metrics.Interface
@@ -513,9 +489,6 @@ type KidGenerator struct {
 }
 
 // NewKidGenerator allows to generate the Kid metric.
-// The Context passed is the context for the diffusion model.
-// It uses a different context for the InceptionV3 KID metric, so that it's weights are not included
-// in the generator model.
 func (c *Config) NewKidGenerator(evalDS train.Dataset, numDiffusionStep int) *KidGenerator {
 	noise := c.GenerateNoise(c.EvalBatchSize)
 	flowerIds := c.GenerateFlowerIds(c.EvalBatchSize)
@@ -523,23 +496,23 @@ func (c *Config) NewKidGenerator(evalDS train.Dataset, numDiffusionStep int) *Ki
 	check(inceptionv3.DownloadAndUnpackWeights(i3Path))
 	kg := &KidGenerator{
 		config:         c,
-		ctxInceptionV3: model.New().Checked(false),
+		ctxInceptionV3: model.NewStore().RootScope(),
 		ds:             evalDS,
 		generator:      c.NewImagesGenerator(noise, flowerIds, numDiffusionStep),
 		kid:            inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
 	}
-	kg.evalExec = model.MustNewExec(c.Backend, kg.ctxInceptionV3, kg.EvalStepGraph)
+	kg.evalExec = model.MustNewExec(c.Backend, kg.ctxInceptionV3.Store(), kg.EvalStepGraph)
 	return kg
 }
 
-func (kg *KidGenerator) EvalStepGraph(ctx *model.Context, allImages []*Node) (metric *Node) {
+func (kg *KidGenerator) EvalStepGraph(scope *model.Scope, allImages []*Node) (metric *Node) {
 	g := allImages[0].Graph()
-	ctx.SetTraining(g, false) // Some layers behave differently in train/eval.
+	scope.SetTraining(g, false) // Some layers behave differently in train/eval.
 
 	// Get metrics and updates: the generated images are the inputs, and the
 	generatedImages := allImages[0]
 	datasetImages := kg.config.PreprocessImages(allImages[1], false)
-	metric = kg.kid.UpdateGraph(ctx, []*Node{datasetImages}, []*Node{generatedImages})
+	metric = kg.kid.UpdateGraph(scope, []*Node{datasetImages}, []*Node{generatedImages})
 	return
 }
 

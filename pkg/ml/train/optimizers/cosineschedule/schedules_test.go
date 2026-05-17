@@ -3,8 +3,8 @@
 package cosineschedule_test
 
 import (
-	"fmt"
 	"math"
+	"path"
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
@@ -28,15 +28,15 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 	const baseLearningRate = 1.0
 
 	t.Run("periodSteps", func(t *testing.T) {
-		ctx := model.New().Checked(false)
-		cosineExec, err := model.NewExec(backend, ctx, func(ctx *model.Context, graph *Graph) *Node {
-			ctx.SetTraining(graph, true)
-			cosineschedule.New(ctx, graph, dtypes.Float32).
+		store := model.NewStore()
+		cosineExec, err := model.NewExec(backend, store, func(scope *model.Scope, graph *Graph) *Node {
+			scope.SetTraining(graph, true)
+			cosineschedule.New(scope, graph, dtypes.Float32).
 				PeriodSteps(periodInSteps).
 				LearningRate(baseLearningRate).
 				MinLearningRate(minLearningRate).
 				Done()
-			return optimizers.LearningRateVar(ctx, dtypes.Float32, 1e3).ValueGraph(graph)
+			return optimizers.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).ValueGraph(graph)
 		})
 		require.NoError(t, err)
 
@@ -45,9 +45,8 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 			require.NoErrorf(t, err, "failed for step %d", ii)
 
 			// Checks the correct step number is set.
-			stepVar := ctx.GetVariableByScopeAndName(
-				fmt.Sprintf("/%s/%s", optimizers.Scope, cosineschedule.Scope),
-				optimizers.GlobalStepVariableName,
+			stepVar := store.GetVariable(
+				path.Join("/", optimizers.Scope, cosineschedule.Scope, optimizers.GlobalStepVariableName),
 			)
 			if stepVar == nil {
 				t.Fatalf(
@@ -69,17 +68,17 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 	})
 
 	t.Run("periodSteps with warmUp", func(t *testing.T) {
-		ctx := model.New().Checked(false)
+		store := model.NewStore()
 		const warmUpSteps = 10
-		cosineExec, err := model.NewExec(backend, ctx, func(ctx *model.Context, graph *Graph) *Node {
-			ctx.SetTraining(graph, true)
-			cosineschedule.New(ctx, graph, dtypes.Float32).
+		cosineExec, err := model.NewExec(backend, store, func(scope *model.Scope, graph *Graph) *Node {
+			scope.SetTraining(graph, true)
+			cosineschedule.New(scope, graph, dtypes.Float32).
 				PeriodSteps(periodInSteps).
 				LearningRate(baseLearningRate).
 				MinLearningRate(minLearningRate).
 				WarmUpSteps(warmUpSteps).
 				Done()
-			return optimizers.LearningRateVar(ctx, dtypes.Float32, 1e3).ValueGraph(graph)
+			return optimizers.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).ValueGraph(graph)
 		})
 		require.NoError(t, err)
 		for ii := range 2*periodInSteps + warmUpSteps {
@@ -101,22 +100,23 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 	})
 
 	t.Run("numCycles with warmUp+context configuration", func(t *testing.T) {
-		ctx := model.New().Checked(false)
+		store := model.NewStore()
 		const warmUpSteps = 10
 		const numCycles = 2
 		const stepsPerCycle = 100
 		const numSteps = numCycles*stepsPerCycle + warmUpSteps
-		ctx.SetParam(optimizers.ParamLearningRate, baseLearningRate)
-		ctx.SetParam(cosineschedule.ParamCycles, numCycles)
-		ctx.SetParam(cosineschedule.ParamWarmUpSteps, warmUpSteps)
-		ctx.SetParam(cosineschedule.ParamMinLearningRate, minLearningRate)
-		lastStepVar := train.GetTrainLastStepVar(ctx)
+		store.SetParam("/", optimizers.ParamLearningRate, baseLearningRate)
+		store.SetParam("/", cosineschedule.ParamCycles, numCycles)
+		store.SetParam("/", cosineschedule.ParamWarmUpSteps, warmUpSteps)
+		store.SetParam("/", cosineschedule.ParamMinLearningRate, minLearningRate)
+		lastStepVar := train.GetTrainLastStepVar(store.RootScope())
 		lastStepVar.MustSetValue(tensors.FromScalar(int64(numSteps)))
-		cosineExec, err := model.NewExec(backend, ctx, func(ctx *model.Context, graph *Graph) *Node {
-			ctx.SetTraining(graph, true)
-			cosineschedule.New(ctx, graph, dtypes.Float32).FromContext().Done()
-			return optimizers.LearningRateVar(ctx, dtypes.Float32, 1e3).ValueGraph(graph)
+		cosineExec, err := model.NewExec(backend, store, func(scope *model.Scope, graph *Graph) *Node {
+			scope.SetTraining(graph, true)
+			cosineschedule.New(scope, graph, dtypes.Float32).FromContext().Done()
+			return optimizers.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).ValueGraph(graph)
 		})
+
 		require.NoError(t, err)
 		for ii := range numSteps {
 			lrT, err := cosineExec.Exec1()

@@ -18,14 +18,14 @@ import (
 
 func TestConvolution(t *testing.T) {
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
-		ctx := model.New()
-		defer ctx.Finalize()
+		scope := model.NewStore()
+		defer scope.Finalize()
 
 		t.Run("2D-PadSame", func(t *testing.T) {
-			gotT := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
+			gotT := model.MustExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 				x := Ones(g, shapes.Make(dtypes.F32, 5, 4, 4, 3))
-				ctx = ctx.In(path.Base(t.Name()))
-				conv := Convolution(ctx, x).
+				scope = scope.In(path.Base(t.Name()))
+				conv := Convolution(scope, x).
 					Channels(32).
 					KernelSize(3).
 					PadSame().
@@ -36,10 +36,10 @@ func TestConvolution(t *testing.T) {
 		})
 
 		t.Run("3D-Strides", func(t *testing.T) {
-			gotT := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
+			gotT := model.MustExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 				x := Ones(g, shapes.Make(dtypes.F32, 5, 3, 8, 8, 8))
-				ctx = ctx.In(path.Base(t.Name()))
-				conv := Convolution(ctx, x).
+				scope = scope.In(path.Base(t.Name()))
+				conv := Convolution(scope, x).
 					ChannelsAxis(images.ChannelsFirst).
 					Channels(32).
 					KernelSizePerAxis(3, 2, 2).

@@ -78,8 +78,8 @@ func (t Type) ToBackend() compute.ActivationType {
 // and applies it to x.
 //
 // It defaults to "relu".
-func ApplyFromContext(ctx *model.Context, x *Node) *Node {
-	activationName := model.GetParamOr(ctx, ParamActivation, "relu")
+func ApplyFromContext(scope *model.Scope, x *Node) *Node {
+	activationName := model.GetParamOr(scope, ParamActivation, "relu")
 	return Apply(FromName(activationName), x)
 }
 

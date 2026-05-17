@@ -32,39 +32,39 @@ import (
 // LinearModelGraph builds a simple  model logistic model
 // It returns the logit, not the predictions, which works with most losses with shape `[batch_size, NumClasses]`.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
-func LinearModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
-	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
+func LinearModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
+	scope = scope.In("model") // Create the model by default under the "/model" scope.
 	batchSize := inputs[0].Shape().Dimensions[0]
 	embeddings := Reshape(inputs[0], batchSize, -1)
-	logits := layers.DenseWithBias(ctx, embeddings, NumClasses)
+	logits := layers.DenseWithBias(scope, embeddings, NumClasses)
 	return []*Node{logits}
 }
 
 // CnnModelGraph builds the CNN model for our demo.
 // It returns the logit, not the predictions, which works with most losses with shape `[batch_size, NumClasses]`.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
-func CnnModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
-	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
-	embeddings := CnnEmbeddings(ctx, inputs[0])
-	logits := layers.Dense(ctx, embeddings, true, NumClasses)
+func CnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
+	scope = scope.In("model") // Create the model by default under the "/model" scope.
+	embeddings := CnnEmbeddings(scope, inputs[0])
+	logits := layers.Dense(scope, embeddings, true, NumClasses)
 	return []*Node{logits}
 }
 
-func CnnEmbeddings(ctx *model.Context, images *Node) *Node {
+func CnnEmbeddings(scope *model.Scope, images *Node) *Node {
 	batchSize := images.Shape().Dimensions[0]
 	g := images.Graph()
 	dtype := images.DType()
 
 	layerIdx := 0
-	nextCtx := func(name string) *model.Context {
-		newCtx := ctx.Inf("%03d_%s", layerIdx, name)
+	nextCtx := func(name string) *model.Scope {
+		newCtx := scope.In("%03d_%s", layerIdx, name)
 		layerIdx++
 		return newCtx
 	}
 	// Dropout.
-	dropoutRate := model.GetParamOr(ctx, "cnn_dropout_rate", -1.0)
+	dropoutRate := model.GetParamOr(scope, "cnn_dropout_rate", -1.0)
 	if dropoutRate < 0 {
-		dropoutRate = model.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
+		dropoutRate = model.GetParamOr(scope, layers.ParamDropoutRate, 0.0)
 	}
 	var dropoutNode *Node
 	if dropoutRate > 0.0 {
@@ -91,19 +91,19 @@ func CnnEmbeddings(ctx *model.Context, images *Node) *Node {
 	return images
 }
 
-func normalizeCNN(ctx *model.Context, logits *Node) *Node {
-	normalizationType := model.GetParamOr(ctx, "cnn_normalization", "none")
+func normalizeCNN(scope *model.Scope, logits *Node) *Node {
+	normalizationType := model.GetParamOr(scope, "cnn_normalization", "none")
 	switch normalizationType {
 	case "layer":
 		if logits.Rank() == 2 {
-			return layers.LayerNormalization(ctx, logits, -1).Done()
+			return layers.LayerNormalization(scope, logits, -1).Done()
 		} else if logits.Rank() == 4 {
-			return layers.LayerNormalization(ctx, logits, 2, 3).Done()
+			return layers.LayerNormalization(scope, logits, 2, 3).Done()
 		} else {
 			return logits
 		}
 	case "batch":
-		return batchnorm.New(ctx, logits, -1).Done()
+		return batchnorm.New(scope, logits, -1).Done()
 	case "none", "":
 		return logits
 	default:

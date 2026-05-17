@@ -36,7 +36,7 @@ import (
 //
 // Call its several methods to configure, and Done when configuration is finished to apply the rational function.
 type Config struct {
-	ctx   *model.Context
+	scope *model.Scope
 	input *Node
 
 	// numInputGroups must be a divisor of the feature (last) dimension of input, and allows multiple inputs to share the same learnable rational function.
@@ -73,11 +73,11 @@ type Config struct {
 // New returns a Config object that can be further configured. Once finished, call Config.Done and it will
 // return the result of "rational(x)" with the same as x.Shape(), except if configured with a Config.WithMultipleOutputs,
 // in which case there is an extra output axis with dimension equal to the number of the outputs.
-func New(ctx *model.Context, x *Node) *Config {
+func New(scope *model.Scope, x *Node) *Config {
 	if x.IsScalar() {
 		x = Reshape(x, 1)
 	}
-	return (&Config{ctx: ctx, input: x}).
+	return (&Config{scope: scope, input: x}).
 		WithInputGroups(0).
 		WithMultipleOutputs(1).
 		WithDegrees(5, 4).
@@ -220,7 +220,7 @@ func (c *Config) Done() *Node {
 	}
 
 	// Aliases.
-	ctx := c.ctx
+	scope := c.scope
 	g := c.input.Graph()
 	dtype := c.input.DType()
 	x := c.input
@@ -266,7 +266,7 @@ func (c *Config) Done() *Node {
 			}
 		}
 		wInitializerStddev := math.Sqrt(wInitializerVariance)
-		w = ctx.WithInitializer(initializers.RandomNormalFn(ctx, wInitializerStddev)).
+		w = scope.WithInitializer(initializers.RandomNormalFn(scope, wInitializerStddev)).
 			VariableWithShape("w", shapes.Make(dtype, outputDim, numInputGroups)).ValueGraph(g)
 	}
 
@@ -283,20 +283,20 @@ func (c *Config) Done() *Node {
 			"with rational.Config.WithInitialValues() or add them to the cache table for future use",
 			c.initApproximation, c.version, c.numeratorDegree, c.denominatorDegree)
 	}
-	numeratorCoeffs := ctx.WithInitializer(initializers.BroadcastTensorToShape(numeratorInit)).
+	numeratorCoeffs := scope.WithInitializer(initializers.BroadcastTensorToShape(numeratorInit)).
 		VariableWithShape("numeratorCoeffs", shapes.Make(dtype, outputDim, numInputGroups, c.numeratorDegree+1)).
 		ValueGraph(g)
-	denominatorCoeffs := ctx.WithInitializer(initializers.BroadcastTensorToShape(denominatorInit)).
+	denominatorCoeffs := scope.WithInitializer(initializers.BroadcastTensorToShape(denominatorInit)).
 		VariableWithShape("denominatorCoeffs", shapes.Make(dtype, outputDim, numInputGroups, c.denominatorDegree)).
 		ValueGraph(g)
 
 	// Version "D" adds noise to coefficients.
-	if c.version == "D" && ctx.IsTraining(g) {
+	if c.version == "D" && scope.IsTraining(g) {
 		// In version "D", if training, apply noise to the coefficients.
 		for _, vRef := range []**Node{&numeratorCoeffs, &denominatorCoeffs} {
-			noise := ctx.RandomUniform(g, (*vRef).Shape()) // Uniform [0, 1]
-			noise = AddScalar(MulScalar(noise, 2), -1)     // Uniform [-1,1]
-			noise = MulScalar(noise, c.noiseDeviation)     // Uniform [-noiseDeviation, +noiseDeviation]
+			noise := scope.RandomUniform(g, (*vRef).Shape()) // Uniform [0, 1]
+			noise = AddScalar(MulScalar(noise, 2), -1)       // Uniform [-1,1]
+			noise = MulScalar(noise, c.noiseDeviation)       // Uniform [-noiseDeviation, +noiseDeviation]
 			noise = AddScalar(noise, 1.0)
 			*vRef = Mul(*vRef, noise)
 		}

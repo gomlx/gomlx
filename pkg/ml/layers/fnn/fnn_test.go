@@ -5,6 +5,7 @@ package fnn
 import (
 	"fmt"
 	"math"
+	"path"
 	"testing"
 
 	"github.com/gomlx/compute"
@@ -54,22 +55,22 @@ func targetF(x0, x1 *Node) *Node {
 		x1))
 }
 
-type coreFnType func(ctx *model.Context, input *Node) *Node
+type coreFnType func(scope *model.Scope, input *Node) *Node
 
 // fnnGraphModelBuilder will try to model targetF using the given coreFn function.
 func fnnGraphModelBuilder(coreFn coreFnType) train.ModelFn {
-	return func(ctx *model.Context, spec any, inputs []*Node) []*Node {
+	return func(scope *model.Scope, spec any, inputs []*Node) []*Node {
 		dtype := dtypes.Float64
 		_ = spec
 		batchSize := inputs[0].Shape().Dimensions[0]
 		g := inputs[0].Graph()
 		g.SetTraced(true)
 
-		x0 := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1))
-		x1 := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1))
+		x0 := scope.RandomUniform(g, shapes.Make(dtype, batchSize, 1))
+		x1 := scope.RandomUniform(g, shapes.Make(dtype, batchSize, 1))
 		labels := targetF(x0, x1)
 		input := Concatenate([]*Node{x0, x1}, -1)
-		output := coreFn(ctx, input)
+		output := coreFn(scope, input)
 		return []*Node{output, labels}
 	}
 }
@@ -84,16 +85,16 @@ func lossGraphFn(labels []*Node, predictions []*Node) (loss *Node) {
 var (
 	fnnVariations = []coreFnType{
 		// Vanilla
-		func(ctx *model.Context, input *Node) *Node {
-			return New(ctx, input, 1).
+		func(scope *model.Scope, input *Node) *Node {
+			return New(scope, input, 1).
 				NumHiddenLayers(1, 128).
 				Activation(activations.TypeRelu).
 				Done()
 		},
 
 		// Residual+Normalization:
-		func(ctx *model.Context, input *Node) *Node {
-			return New(ctx, input, 1).
+		func(scope *model.Scope, input *Node) *Node {
+			return New(scope, input, 1).
 				NumHiddenLayers(8, 8).
 				Normalization("layer").
 				Residual(true).
@@ -117,10 +118,11 @@ func TestFNN(t *testing.T) {
 
 	for ii, coreFn := range fnnVariations {
 		fmt.Printf("Variation #%d %q:\n", ii, fnnVariationsNames[ii])
-		ctx := model.New()
-		ctx.SetRNGStateFromSeed(42)
+		store := model.NewStore()
+		store.RootScope().Store().ResetRNGState()
+		store.SetParam("/", model.ParamInitialSeed, int64(42))
 		opt := optimizers.Adam().LearningRate(0.001).Done()
-		trainer := train.NewTrainer(backend, ctx, fnnGraphModelBuilder(coreFn),
+		trainer := train.NewTrainer(backend, store.RootScope(), fnnGraphModelBuilder(coreFn),
 			lossGraphFn, // a simple wrapper around losses.MeanSquaredError,
 			opt,
 			nil, // trainMetrics
@@ -145,12 +147,12 @@ func TestFNNRegularized(t *testing.T) {
 		return
 	}
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
-	ctx.SetRNGStateFromSeed(42)
+	store := model.NewStore()
+	store.SetParam("/", model.ParamInitialSeed, int64(42))
 	ds := &fnnTestDataset{batchSize: 128}
 
-	regularizedFn := func(ctx *model.Context, input *Node) *Node {
-		return New(ctx, input, 1).
+	regularizedFn := func(scope *model.Scope, input *Node) *Node {
+		return New(scope, input, 1).
 			NumHiddenLayers(2, 32).
 			Residual(true).
 			Normalization("layer").
@@ -159,7 +161,7 @@ func TestFNNRegularized(t *testing.T) {
 			Done()
 	}
 	opt := optimizers.Adam().LearningRate(0.001).Done()
-	trainer := train.NewTrainer(backend, ctx, fnnGraphModelBuilder(regularizedFn),
+	trainer := train.NewTrainer(backend, store.RootScope(), fnnGraphModelBuilder(regularizedFn),
 		lossGraphFn, // a simple wrapper around losses.MeanSquaredError,
 		opt,
 		nil, // trainMetrics
@@ -178,18 +180,10 @@ func TestFNNRegularized(t *testing.T) {
 	// We are going to count the number of zeros in the weights.
 	var numZeros int
 	fmt.Println("\nVariables:")
-	/*
-		ctx.EnumerateVariables(func(v *model.Variable) {
-			if strings.Index(v.Scope(), "Adam") != -1 {
-				return
-			}
-			fmt.Printf("\t%s : %s -> %s\n", v.Scope(), v.Name(), v.Shape())
-		})
-	*/
-	for _, scope := range []string{"/fnn_hidden_layer_0", "/fnn_hidden_layer_1", "/fnn_output_layer"} {
+	for _, scopeName := range []string{"/fnn_hidden_layer_0", "/fnn_hidden_layer_1", "/fnn_output_layer"} {
 		vName := "weights"
-		v := ctx.GetVariableByScopeAndName(scope, vName)
-		require.NotNilf(t, v, "failed to inspect variable scope=%q, name=%q", scope, vName)
+		v := store.GetVariable(path.Join(scopeName, vName))
+		require.NotNilf(t, v, "failed to inspect variable scope=%q, name=%q", scopeName, vName)
 		tensor := v.MustValue()
 		fmt.Printf("\t%s : %s -> %v\n", v.Scope(), v.Name(), tensor)
 		tensors.MustConstFlatData(tensor, func(flat []float64) {
@@ -217,7 +211,7 @@ func TestFNNEnsembleShapes(t *testing.T) {
 				for _, useBias := range []bool{false, true} {
 					for _, useResidual := range []bool{false, true} {
 						t.Run(fmt.Sprintf("ensembleAxis=%t_hidden=%d_bias=%t_residual=%t", hasEnsembleAxis, numHiddenLayers, useBias, useResidual), func(t *testing.T) {
-							ctx := model.New()
+							store := model.NewStore()
 							g := NewGraph(backend, "test_ensemble_shapes")
 
 							var input *Node
@@ -228,7 +222,7 @@ func TestFNNEnsembleShapes(t *testing.T) {
 								input = Ones(g, shapes.Make(dtypes.Float32, 3, 2, 4)) // batch=[3, 2], F=4
 							}
 
-							config := New(ctx.In("model"), input, 5, 6).
+							config := New(store.RootScope().In("model"), input, 5, 6).
 								NumHiddenLayers(numHiddenLayers, 8). // 8 nodes in hidden layers
 								UseBias(useBias).
 								Residual(useResidual)
@@ -248,7 +242,7 @@ func TestFNNEnsembleShapes(t *testing.T) {
 								expectedShape = shapes.Make(dtypes.Float32, 3, 2, 7, 5, 6)
 							}
 							assert.Equal(t, expectedShape, fnnOutput.Shape())
-							ctx.Finalize()
+							store.Finalize()
 						})
 					}
 				}

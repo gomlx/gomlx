@@ -107,20 +107,20 @@ var NanLogger *nanlogger.NanLogger
 //		logits := layers.DenseWithBias(ctx.In("readout"), readoutState.Value, numClasses)
 //		return []*Node{logits}
 //	}
-func NodePrediction(ctx *model.Context, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
-	numGraphUpdates := model.GetParamOr(ctx, ParamNumGraphUpdates, 2)
-	graphUpdateType := model.GetParamOr(ctx, ParamGraphUpdateType, "tree")
+func NodePrediction(scope *model.Scope, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
+	numGraphUpdates := model.GetParamOr(scope, ParamNumGraphUpdates, 2)
+	graphUpdateType := model.GetParamOr(scope, ParamGraphUpdateType, "tree")
 	for round := range numGraphUpdates {
 		switch graphUpdateType {
 		case "tree":
-			TreeGraphStateUpdate(ctxForGraphUpdateRound(ctx, round), strategy, graphStates)
+			TreeGraphStateUpdate(ctxForGraphUpdateRound(scope, round), strategy, graphStates)
 		case "simultaneous":
-			SimultaneousGraphStateUpdate(ctxForGraphUpdateRound(ctx, round), strategy, graphStates)
+			SimultaneousGraphStateUpdate(ctxForGraphUpdateRound(scope, round), strategy, graphStates)
 		default:
 			Panicf("invalid value for %q: valid values are \"tree\" or \"simultaneous\"", ParamGraphUpdateType)
 		}
 	}
-	ctxReadout := ctx.In("readout")
+	ctxReadout := scope.In("readout")
 	for _, rule := range strategy.Seeds {
 		seedState := graphStates[rule.Name]
 		seedState.Value = updateState(ctxReadout.In(rule.ConvKernelScopeName), seedState.Value, seedState.Value, seedState.Mask)
@@ -128,8 +128,8 @@ func NodePrediction(ctx *model.Context, strategy *sampler.Strategy, graphStates 
 }
 
 // ctxForGraphUpdateRound returns the context with scope for the given round of graph update.
-func ctxForGraphUpdateRound(ctx *model.Context, n int) *model.Context {
-	return ctx.In(fmt.Sprintf("graph_update_%d", n))
+func ctxForGraphUpdateRound(scope *model.Scope, n int) *model.Scope {
+	return scope.In(fmt.Sprintf("graph_update_%d", n))
 }
 
 // TreeGraphStateUpdate takes a `graphStates`, a map of name of node sets to their hidden states,
@@ -144,24 +144,24 @@ func ctxForGraphUpdateRound(ctx *model.Context, n int) *model.Context {
 // run from the leaf nodes towards the root nodes (seeds).
 //
 // It updates all states in `graphStates` except the leaves. The masks are left unchanged.
-func TreeGraphStateUpdate(ctx *model.Context, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
+func TreeGraphStateUpdate(scope *model.Scope, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
 	// Starting from the seed node sets, do updates recursively.
 	for _, rule := range strategy.Seeds {
-		recursivelyApplyGraphConvolution(ctx, rule, nil, graphStates, true)
+		recursivelyApplyGraphConvolution(scope, rule, nil, graphStates, true)
 	}
 }
 
 // SimultaneousGraphStateUpdate executes one step of state update on all node sets of the graph "simultaneously".
 // If the graph has a tree like structure, one needs to call this function at least `N` times, where `N` is the depth
 // of the tree, until the signal arrives from the leaf node to the root.
-func SimultaneousGraphStateUpdate(ctx *model.Context, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
+func SimultaneousGraphStateUpdate(scope *model.Scope, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
 	// Starting from the seed node sets, do updates recursively.
 	for _, rule := range strategy.Seeds {
-		recursivelyApplyGraphConvolution(ctx, rule, nil, graphStates, false)
+		recursivelyApplyGraphConvolution(scope, rule, nil, graphStates, false)
 	}
 }
 
-func recursivelyApplyGraphConvolution(ctx *model.Context, rule *sampler.Rule,
+func recursivelyApplyGraphConvolution(scope *model.Scope, rule *sampler.Rule,
 	pathToRootStates []*Node,
 	graphStates map[string]*sampler.ValueMask[*Node],
 	dependentsUpdateFirst bool) {
@@ -182,8 +182,8 @@ func recursivelyApplyGraphConvolution(ctx *model.Context, rule *sampler.Rule,
 	}
 
 	var subPathToRootStates []*Node
-	useRootAsContext := model.GetParamOr(ctx, ParamUseRootAsContext, false)
-	if model.GetParamOr(ctx, ParamUsePathToRootStates, false) || useRootAsContext {
+	useRootAsContext := model.GetParamOr(scope, ParamUseRootAsContext, false)
+	if model.GetParamOr(scope, ParamUsePathToRootStates, false) || useRootAsContext {
 		// subPathToRootStates: passed to the children rules. They need to be expanded at each level to get the correct
 		// broadcasting (the broadcasting to the right shapes will happen automatically).
 		subPathToRootStates = make([]*Node, 0, len(pathToRootStates)+1)
@@ -222,7 +222,7 @@ func recursivelyApplyGraphConvolution(ctx *model.Context, rule *sampler.Rule,
 	// Update dependents and calculate their convolved messages: it's a depth-first-search on dependents.
 	for _, dependent := range rule.Dependents {
 		if dependentsUpdateFirst {
-			recursivelyApplyGraphConvolution(ctx, dependent, subPathToRootStates, graphStates, dependentsUpdateFirst)
+			recursivelyApplyGraphConvolution(scope, dependent, subPathToRootStates, graphStates, dependentsUpdateFirst)
 		}
 		dependentState, found := graphStates[dependent.Name]
 		if !found {
@@ -233,19 +233,19 @@ func recursivelyApplyGraphConvolution(ctx *model.Context, rule *sampler.Rule,
 		if dependentDegreePair != nil {
 			dependentDegree = dependentDegreePair.Value
 		}
-		convolveCtx := ctx.In(dependent.ConvKernelScopeName).In("conv")
+		convolveCtx := scope.In(dependent.ConvKernelScopeName).In("conv")
 		if dependentState.Value != nil {
 			updateInputs = append(updateInputs, sampledConvolveEdgeSet(convolveCtx, dependentState.Value, dependentState.Mask, dependentDegree))
 			hasNewUpdateInputs = true
 		}
 		if !dependentsUpdateFirst {
-			recursivelyApplyGraphConvolution(ctx, dependent, subPathToRootStates, graphStates, dependentsUpdateFirst)
+			recursivelyApplyGraphConvolution(scope, dependent, subPathToRootStates, graphStates, dependentsUpdateFirst)
 		}
 	}
 
 	// Update state of current rule: only update state if there was any new incoming input.
 	if hasNewUpdateInputs {
-		updateCtx := ctx.In(rule.UpdateKernelScopeName).In("update")
+		updateCtx := scope.In(rule.UpdateKernelScopeName).In("update")
 		state.Value = updateState(updateCtx, state.Value, Concatenate(updateInputs, -1), state.Mask)
 	}
 }
@@ -257,37 +257,37 @@ func recursivelyApplyGraphConvolution(ctx *model.Context, rule *sampler.Rule,
 //
 // This function should do the same as `layeredConvolveEdgeSet`, this function does it for sampled graphs.
 // They must be aligned.
-func sampledConvolveEdgeSet(ctx *model.Context, value, mask, degree *Node) *Node {
-	messages, mask := edgeMessageGraph(ctx.In("message"), value, mask)
-	return poolMessagesWithFixedShape(ctx, messages, mask, degree)
+func sampledConvolveEdgeSet(scope *model.Scope, value, mask, degree *Node) *Node {
+	messages, mask := edgeMessageGraph(scope.In("message"), value, mask)
+	return poolMessagesWithFixedShape(scope, messages, mask, degree)
 }
 
 // edgeMessageGraph calculates the graph for messages being sent across edges.
 // It takes as input the source node state already gathered for the edge: their shape should
 // look like: `[batch_size, ..., num_edges, source_node_state_dim]`.
-func edgeMessageGraph(ctx *model.Context, gatheredStates, gatheredMask *Node) (messages, mask *Node) {
-	messageDim := model.GetParamOr(ctx, ParamMessageDim, 128)
+func edgeMessageGraph(scope *model.Scope, gatheredStates, gatheredMask *Node) (messages, mask *Node) {
+	messageDim := model.GetParamOr(scope, ParamMessageDim, 128)
 
-	useKan := model.GetParamOr(ctx, "kan", false)
+	useKan := model.GetParamOr(scope, "kan", false)
 	if useKan {
 		// KAN
-		messages = kan.New(ctx, gatheredStates, messageDim).NumHiddenLayers(0, messageDim).Done()
+		messages = kan.New(scope, gatheredStates, messageDim).NumHiddenLayers(0, messageDim).Done()
 
 	} else {
 		// Normal FNN
-		messages = layers.DenseWithBias(ctx, gatheredStates, messageDim)
-		messages = activations.ApplyFromContext(ctx, messages)
+		messages = layers.DenseWithBias(scope, gatheredStates, messageDim)
+		messages = activations.ApplyFromContext(scope, messages)
 	}
 	if NanLogger != nil {
-		NanLogger.TraceFirstNaN(messages, fmt.Sprintf("(KAN)edgeMessageGraph(%s)", ctx.Scope()))
+		NanLogger.TraceFirstNaN(messages, fmt.Sprintf("(KAN)edgeMessageGraph(%s)", scope.Scope()))
 	}
 
 	mask = gatheredMask
 	if mask != nil {
-		edgeDropOutRate := model.GetParamOr(ctx, ParamEdgeDropoutRate, 0.0)
+		edgeDropOutRate := model.GetParamOr(scope, ParamEdgeDropoutRate, 0.0)
 		if edgeDropOutRate > 0 {
 			// We apply edge dropout to the mask: values disabled here will mask the whole edge.
-			mask = layers.DropoutStatic(ctx, gatheredMask, edgeDropOutRate)
+			mask = layers.DropoutStatic(scope, gatheredMask, edgeDropOutRate)
 		}
 	}
 	return
@@ -304,8 +304,8 @@ func edgeMessageGraph(ctx *model.Context, gatheredStates, gatheredMask *Node) (m
 // It's expected to be of shape `[d_0, d_1, ..., d_{n-1}, 1]`.
 //
 // There are no training variables in this. The `ctx` is only used for the hyperparameter configuration.
-func poolMessagesWithFixedShape(ctx *model.Context, value, mask, degree *Node) *Node {
-	poolTypes := model.GetParamOr(ctx, ParamPoolingType, "mean|sum")
+func poolMessagesWithFixedShape(scope *model.Scope, value, mask, degree *Node) *Node {
+	poolTypes := model.GetParamOr(scope, ParamPoolingType, "mean|sum")
 	poolTypesList := strings.Split(poolTypes, "|")
 	parts := make([]*Node, 0, len(poolTypesList))
 	var pooled *Node
@@ -357,8 +357,8 @@ func poolMessagesWithFixedShape(ctx *model.Context, value, mask, degree *Node) *
 // It returns a tensor ([graph.Node]) shaped `[targetSize, pooled_embedded_size]`.
 //
 // There are no training variables in this. The `ctx` is only used for the hyperparameter configuration.
-func poolMessagesWithAdjacency(ctx *model.Context, source, edgesSource, edgesTarget *Node, targetSize int, degree *Node) *Node {
-	poolTypes := model.GetParamOr(ctx, ParamPoolingType, "mean|sum")
+func poolMessagesWithAdjacency(scope *model.Scope, source, edgesSource, edgesTarget *Node, targetSize int, degree *Node) *Node {
+	poolTypes := model.GetParamOr(scope, ParamPoolingType, "mean|sum")
 	if source.Rank() != 2 {
 		Panicf("poolMessagesWithAdjacency(): source is expected to be shaped `[num_nodes, emb_size]`, instead got %s", source.Shape())
 	}
@@ -445,62 +445,62 @@ func hasPaperEmbeddingsInput(scope string) bool {
 	return slices.Index(layersWithPaperEmbeddingsInput, scope) != -1
 }
 
-func noKANForScope(ctx *model.Context) bool {
-	skip := model.GetParamOr(ctx, ParamNoKanForLayers, "")
+func noKANForScope(scope *model.Scope) bool {
+	skip := model.GetParamOr(scope, ParamNoKanForLayers, "")
 	if skip == "" {
 		return false
 	}
 	noKANScopes := strings.Split(skip, ",")
-	return slices.Index(noKANScopes, ctx.Scope()) >= 0
+	return slices.Index(noKANScopes, scope.Scope()) >= 0
 }
 
 // updateState of a node set, given the `input` (should be a concatenation of previous
 // state and all pooled messages) and its `mask`.
-func updateState(ctx *model.Context, prevState, input, mask *Node) *Node {
-	useKAN := model.GetParamOr(ctx, "kan", false)
-	if useKAN && noKANForScope(ctx) {
+func updateState(scope *model.Scope, prevState, input, mask *Node) *Node {
+	useKAN := model.GetParamOr(scope, "kan", false)
+	if useKAN && noKANForScope(scope) {
 		useKAN = false
 	}
 	if useKAN {
-		return kanUpdateState(ctx, prevState, input, mask)
+		return kanUpdateState(scope, prevState, input, mask)
 	}
-	updateType := model.GetParamOr(ctx, ParamUpdateStateType, "residual")
+	updateType := model.GetParamOr(scope, ParamUpdateStateType, "residual")
 	if updateType != "residual" && updateType != "none" {
 		Panicf("invalid GNN update type %q (given by parameter %q) -- valid values are 'residual' and 'none'",
 			updateType, ParamUpdateStateType)
 	}
 
 	// Inputs: both previous state and pooled messages passes through a dropout first.
-	input = layers.DropoutFromContext(ctx, input)
-	stateDim := model.GetParamOr(ctx, ParamStateDim, 128)
-	numHiddenLayers := model.GetParamOr(ctx, ParamUpdateNumHiddenLayers, 0)
+	input = layers.DropoutFromContext(scope, input)
+	stateDim := model.GetParamOr(scope, ParamStateDim, 128)
+	numHiddenLayers := model.GetParamOr(scope, ParamUpdateNumHiddenLayers, 0)
 	state := input
 	for ii := range numHiddenLayers {
-		ctxHiddenLayer := ctx.In(fmt.Sprintf("hidden_%d", ii))
+		ctxHiddenLayer := scope.In(fmt.Sprintf("hidden_%d", ii))
 		state = layers.DenseWithBias(ctxHiddenLayer, state, stateDim)
-		state = activations.ApplyFromContext(ctx.In(fmt.Sprintf("hidden_%d", ii)), state)
+		state = activations.ApplyFromContext(scope.In(fmt.Sprintf("hidden_%d", ii)), state)
 	}
-	state = layers.DenseWithBias(ctx, state, stateDim)
-	state = activations.ApplyFromContext(ctx, state)
-	state = layers.DropoutFromContext(ctx, state)
+	state = layers.DenseWithBias(scope, state, stateDim)
+	state = activations.ApplyFromContext(scope, state)
+	state = layers.DropoutFromContext(scope, state)
 	if updateType == "residual" && prevState.Shape().Equal(state.Shape()) {
 		state = Add(state, prevState)
 	}
-	state = layers.MaskedNormalizeFromContext(ctx.In("normalization"), state, mask)
+	state = layers.MaskedNormalizeFromContext(scope.In("normalization"), state, mask)
 	if NanLogger != nil {
-		NanLogger.TraceFirstNaN(state, fmt.Sprintf("UpdateState(%s)", ctx.Scope()))
+		NanLogger.TraceFirstNaN(state, fmt.Sprintf("UpdateState(%s)", scope.Scope()))
 	}
 	return state
 }
 
 // kanUpdateState is a version of updateState using KAN networks.
-func kanUpdateState(ctx *model.Context, prevState, input, mask *Node) *Node {
-	stateDim := model.GetParamOr(ctx, ParamStateDim, 128)
-	numHiddenLayers := model.GetParamOr(ctx, ParamUpdateNumHiddenLayers, 0)
-	if false && hasPaperEmbeddingsInput(ctx.Scope()) {
-		fmt.Printf("\t> special KAN for %q\n", ctx.Scope())
+func kanUpdateState(scope *model.Scope, prevState, input, mask *Node) *Node {
+	stateDim := model.GetParamOr(scope, ParamStateDim, 128)
+	numHiddenLayers := model.GetParamOr(scope, ParamUpdateNumHiddenLayers, 0)
+	if false && hasPaperEmbeddingsInput(scope.Scope()) {
+		fmt.Printf("\t> special KAN for %q\n", scope.Scope())
 		inputDim := input.Shape().Dim(-1)
-		return fnn.New(ctx, input, inputDim).NumHiddenLayers(1, inputDim).Done()
+		return fnn.New(scope, input, inputDim).NumHiddenLayers(1, inputDim).Done()
 		//g := input.Graph()
 		//inputDim := input.Shape().Dim(-1)
 		//a := ctx.In("adjust").WithInitializer(initializers.One).
@@ -538,17 +538,17 @@ func kanUpdateState(ctx *model.Context, prevState, input, mask *Node) *Node {
 				})).Done()
 		*/
 	}
-	kanLayer := kan.New(ctx.In("kan_update_state"), input, stateDim).NumHiddenLayers(numHiddenLayers, stateDim)
+	kanLayer := kan.New(scope.In("kan_update_state"), input, stateDim).NumHiddenLayers(numHiddenLayers, stateDim)
 	state := kanLayer.Done()
-	state = layers.DropoutFromContext(ctx, state)
+	state = layers.DropoutFromContext(scope, state)
 	//state = layers.MaskedNormalizeFromContext(ctx.In("normalization"), state, mask)
 
-	updateType := model.GetParamOr(ctx, ParamUpdateStateType, "residual")
+	updateType := model.GetParamOr(scope, ParamUpdateStateType, "residual")
 	if updateType == "residual" && prevState.Shape().Equal(state.Shape()) {
 		state = Add(state, prevState)
 	}
 	if NanLogger != nil {
-		NanLogger.TraceFirstNaN(state, fmt.Sprintf("(KAN)UpdateState(%s)", ctx.Scope()))
+		NanLogger.TraceFirstNaN(state, fmt.Sprintf("(KAN)UpdateState(%s)", scope.Scope()))
 	}
 	return state
 }

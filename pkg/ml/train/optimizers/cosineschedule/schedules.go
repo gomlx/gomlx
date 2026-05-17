@@ -3,7 +3,7 @@
 // Package cosineschedule implements a cosine annealing schedule for the learning rate.
 // See New for details and example of usage, and original paper description in [1]
 //
-// [1] https://paperswithcode.com/method/cosine-annealing.
+// [1] https://paperswithcode.com/method/cosine-annealing
 package cosineschedule
 
 import (
@@ -64,7 +64,7 @@ var (
 // New creates it and once configured, call Config.Done to add it into the computation graph.
 type Config struct {
 	graph                         *Graph
-	ctx                           *model.Context
+	scope                         *model.Scope
 	dtype                         dtypes.DType
 	learningRate, minLearningRate float64
 	periodNumSteps, numCycles     int
@@ -108,9 +108,9 @@ type Config struct {
 //	}
 //
 // [1] https://paperswithcode.com/method/cosine-annealing.
-func New(ctx *model.Context, graph *Graph, dtype dtypes.DType) *Config {
+func New(scope *model.Scope, graph *Graph, dtype dtypes.DType) *Config {
 	return &Config{
-		ctx:   ctx,
+		scope: scope,
 		graph: graph,
 		dtype: dtype,
 	}
@@ -119,11 +119,11 @@ func New(ctx *model.Context, graph *Graph, dtype dtypes.DType) *Config {
 // FromContext configures the cosine annealing from the context, using the keys
 // [ParamPeriodSteps] and [ParamMinLearningRate].
 func (opt *Config) FromContext() *Config {
-	opt.PeriodSteps(model.GetParamOr(opt.ctx, ParamPeriodSteps, 0))
-	opt.NumCycles(model.GetParamOr(opt.ctx, ParamCycles, 0))
-	opt.LearningRate(model.GetParamOr(opt.ctx, optimizers.ParamLearningRate, 0.0))
-	opt.MinLearningRate(model.GetParamOr(opt.ctx, ParamMinLearningRate, 0.0))
-	opt.WarmUpSteps(model.GetParamOr(opt.ctx, ParamWarmUpSteps, 0))
+	opt.PeriodSteps(model.GetParamOr(opt.scope, ParamPeriodSteps, 0))
+	opt.NumCycles(model.GetParamOr(opt.scope, ParamCycles, 0))
+	opt.LearningRate(model.GetParamOr(opt.scope, optimizers.ParamLearningRate, 0.0))
+	opt.MinLearningRate(model.GetParamOr(opt.scope, ParamMinLearningRate, 0.0))
+	opt.WarmUpSteps(model.GetParamOr(opt.scope, ParamWarmUpSteps, 0))
 	return opt
 }
 
@@ -210,10 +210,10 @@ const (
 //
 // If invalid options are given, an error is raised in the Graph.
 func (opt *Config) Done() {
-	ctx := opt.ctx.Checked(false)
+	scope := opt.scope
 	graph := opt.graph
 
-	if !ctx.IsTraining(opt.graph) || (opt.periodNumSteps <= 0 && opt.numCycles <= 0) {
+	if !scope.IsTraining(opt.graph) || (opt.periodNumSteps <= 0 && opt.numCycles <= 0) {
 		// Nothing to do.
 		return
 	}
@@ -225,7 +225,7 @@ func (opt *Config) Done() {
 
 	lrValue := opt.learningRate
 	if lrValue <= 0 {
-		lrValue = model.GetParamOr(opt.ctx, optimizers.ParamLearningRate, 0.0)
+		lrValue = model.GetParamOr(opt.scope, optimizers.ParamLearningRate, 0.0)
 		if lrValue == 0 {
 			exceptions.Panicf("learning rate not configured for New and also "+
 				"not set in the context as parameter %q", optimizers.ParamLearningRate)
@@ -235,7 +235,7 @@ func (opt *Config) Done() {
 	lrMinValue := max(opt.minLearningRate, 0.0)
 
 	// Current training step: cosine schedule keeps its own "global step" counter.
-	cosineStep := optimizers.IncrementGlobalStepGraph(ctx.In(optimizers.Scope).In(Scope), graph, opt.dtype)
+	cosineStep := optimizers.IncrementGlobalStepGraph(scope.Store().Scope(scope.Scope()).In(optimizers.Scope).In(Scope), graph, opt.dtype)
 	cosineStep = MinusOne(cosineStep) // The value before the increment.
 	adjustedCosineStep := cosineStep
 	if opt.warmUpSteps > 0 {
@@ -249,7 +249,7 @@ func (opt *Config) Done() {
 		cycle = DivScalar(adjustedCosineStep, float64(opt.periodNumSteps))
 	} else {
 		// opt.numCyles > 0
-		lastStep := train.GetTrainLastStepVar(ctx).ValueGraph(graph)
+		lastStep := train.GetTrainLastStepVar(scope).ValueGraph(graph)
 		lastStep = Where(IsNegative(lastStep), Const(graph, DefaultLastStep), lastStep)
 		if opt.warmUpSteps > 0 {
 			lastStep = SubScalar(lastStep, opt.warmUpSteps)
@@ -276,6 +276,6 @@ func (opt *Config) Done() {
 	}
 
 	// Update learning rate.
-	lrVar := optimizers.LearningRateVarWithValue(ctx, opt.dtype, lrValue)
+	lrVar := optimizers.LearningRateVarWithValue(scope.Store().Scope(scope.Scope()), opt.dtype, lrValue)
 	lrVar.SetValueGraph(lr)
 }

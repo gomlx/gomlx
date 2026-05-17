@@ -21,7 +21,7 @@ const (
 )
 
 type ReluConfig struct {
-	ctx               *model.Context
+	scope             *model.Scope
 	operand           *Node
 	shareNonLinearity bool
 	negativeSlope     float64
@@ -35,7 +35,7 @@ type ReluConfig struct {
 //
 // This returns a configuration object. Call ReluConfig.Done when finished and it
 // will compute the Relu of the operand as specified.
-func Relu(ctx *model.Context, operand *Node) *ReluConfig {
+func Relu(scope *model.Scope, operand *Node) *ReluConfig {
 	if operand.Rank() < 2 {
 		exceptions.Panicf("Relu requires at least two axes, got operand.shape=%s", operand.Shape())
 	}
@@ -46,10 +46,10 @@ func Relu(ctx *model.Context, operand *Node) *ReluConfig {
 		exceptions.Panicf("Relu requires at least two vectors (channels > 2) as operand, got operand.shape=%s", operand.Shape())
 	}
 	return &ReluConfig{
-		ctx:               ctx,
+		scope:             scope,
 		operand:           operand,
-		shareNonLinearity: model.GetParamOr(ctx, ParamReluShareNonLinearity, false),
-		negativeSlope:     model.GetParamOr(ctx, ParamReluNegativeSlope, 0.2),
+		shareNonLinearity: model.GetParamOr(scope, ParamReluShareNonLinearity, false),
+		negativeSlope:     model.GetParamOr(scope, ParamReluNegativeSlope, 0.2),
 	}
 }
 
@@ -71,7 +71,7 @@ func (c *ReluConfig) NegativeSlope(negativeSlope float64) *ReluConfig {
 // Done applies the Relu layer as configured.
 func (c *ReluConfig) Done() *Node {
 	// We force a random initializer: we don't want a Zero initializer here.
-	ctx := c.ctx
+	scope := c.scope
 	operand := c.operand
 	g := operand.Graph()
 	dtype := operand.DType()
@@ -80,7 +80,7 @@ func (c *ReluConfig) Done() *Node {
 
 	numChannels := operand.Shape().Dim(-2)
 	vecDim := operand.Shape().Dim(-1) // 3
-	ctx = ctx.In("relu").WithInitializer(initializers.RandomNormalFn(ctx, 0.1))
+	scope = scope.In("relu").WithInitializer(initializers.RandomNormalFn(scope, 0.1))
 
 	// Normalize the operand to rank-3: [batchSize, inputChannels, 3 (each vector dimension)]
 	originalShape := operand.Shape()
@@ -91,7 +91,7 @@ func (c *ReluConfig) Done() *Node {
 	if c.shareNonLinearity {
 		numProjections = 1
 	}
-	projection := ctx.VariableWithShape("projection", shapes.Make(dtype, numProjections, numChannels)).ValueGraph(g)
+	projection := scope.VariableWithShape("projection", shapes.Make(dtype, numProjections, numChannels)).ValueGraph(g)
 	k := Einsum("bcv,pc->bpv", operand, projection)
 	kL2NormSq := L2NormSquare(k, -1)
 	kL2NormSq = Where(Equal(kL2NormSq, zero), one, kL2NormSq)
@@ -116,6 +116,6 @@ func (c *ReluConfig) Done() *Node {
 }
 
 // ReluFromContext applies Relu with the default parameters used from the model.
-func ReluFromContext(ctx *model.Context, operand *Node) *Node {
-	return Relu(ctx, operand).Done()
+func ReluFromContext(scope *model.Scope, operand *Node) *Node {
+	return Relu(scope, operand).Done()
 }

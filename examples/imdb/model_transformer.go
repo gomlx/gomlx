@@ -12,16 +12,16 @@ import (
 
 // TransformerModelGraph is the part of the model that takes the word/token embeddings to a transformed
 // embedding through attention ready to be pooled and read out.
-func TransformerModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
+func TransformerModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	_ = spec
 	tokens := inputs[0]
-	maskWordTaskWeight := model.GetParamOr(ctx, "imdb_mask_word_task_weight", 0.0)
+	maskWordTaskWeight := model.GetParamOr(scope, "imdb_mask_word_task_weight", 0.0)
 	useMaskWordTask := maskWordTaskWeight > 0
 	if useMaskWordTask {
 		// Select word to mask and replace with <masked> token.
 	}
 
-	embed, mask := EmbedTokensGraph(ctx, tokens)
+	embed, mask := EmbedTokensGraph(scope, tokens)
 
 	//g := embed.Graph()
 	//dtype := embed.DType()
@@ -30,11 +30,11 @@ func TransformerModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node
 	contentLen := embed.Shape().Dimensions[1]
 	//embedSize := embed.Shape().Dimensions[2]
 
-	maxAttentionLen := model.GetParamOr(ctx, "transformer_max_att_len", 200)
+	maxAttentionLen := model.GetParamOr(scope, "transformer_max_att_len", 200)
 	var newEmbed *Node
 	if maxAttentionLen >= contentLen {
 		// Full attention, the normal way.
-		newEmbed = TransformerLayers(ctx.In("transformer"), embed, mask)
+		newEmbed = TransformerLayers(scope.In("transformer"), embed, mask)
 		embed = Add(embed, newEmbed)
 	} else {
 		// Split embedding in multiple split embeddings and apply transformer in each of them.
@@ -51,7 +51,7 @@ func TransformerModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node
 			part := Slice(embed, AxisRange(), AxisRange(sequenceFrom, sequenceTo), AxisRange())
 			partMask := Slice(mask, AxisRange(), AxisRange(sequenceFrom, sequenceTo))
 			// Checked(false) -> to reuse "transformer" scope (same weights on every slice).
-			part = TransformerLayers(ctx.In("transformer").Checked(false), part, partMask)
+			part = TransformerLayers(scope.In("transformer").Checked(false), part, partMask)
 			if newEmbed == nil {
 				newEmbed = part
 			} else {
@@ -79,22 +79,22 @@ func TransformerModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node
 	// Take the max over the content length, and put an FNN on top.
 	// Shape transformation: [batch_size, content_len, embed_size] -> [batch_size, embed_size]
 	logits := ReduceMax(embed, 1)
-	logits = fnn.New(ctx, logits, 1).Done()
+	logits = fnn.New(scope, logits, 1).Done()
 	logits.AssertDims(batchSize, 1)
 	return []*Node{logits}
 }
 
 // TransformerLayers builds the stacked transformer layers for the model.
-func TransformerLayers(ctx *model.Context, embed, mask *Node) *Node {
+func TransformerLayers(scope *model.Scope, embed, mask *Node) *Node {
 	g := embed.Graph()
 	shape := embed.Shape()
 	dtype := embed.DType()
 	embedSize := shape.Dimensions[2]
 
 	// Dropout.
-	dropoutRate := model.GetParamOr(ctx, "transformer_dropout_rate", -1.0)
+	dropoutRate := model.GetParamOr(scope, "transformer_dropout_rate", -1.0)
 	if dropoutRate < 0 {
-		dropoutRate = model.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
+		dropoutRate = model.GetParamOr(scope, layers.ParamDropoutRate, 0.0)
 	}
 	var dropoutNode *Node
 	if dropoutRate > 0.0 {
@@ -106,35 +106,35 @@ func TransformerLayers(ctx *model.Context, embed, mask *Node) *Node {
 	// Shape: [1, maxLen, embedSize]
 	posEmbedShape := shape.Clone()
 	posEmbedShape.Dimensions[0] = 1
-	posEmbedVar := ctx.VariableWithShape("positional", posEmbedShape)
+	posEmbedVar := scope.VariableWithShape("positional", posEmbedShape)
 	posEmbed := posEmbedVar.ValueGraph(g)
 	embed = Add(embed, posEmbed) // Just add the embeddings, seems to work well.
 
 	// Add the requested number of attention layers.
-	numAttLayers := model.GetParamOr(ctx, "transformer_num_att_layers", 1)
-	numAttHeads := model.GetParamOr(ctx, "transformer_num_att_heads", 2)
-	attKeySize := model.GetParamOr(ctx, "transformer_att_key_size", 8)
+	numAttLayers := model.GetParamOr(scope, "transformer_num_att_layers", 1)
+	numAttHeads := model.GetParamOr(scope, "transformer_num_att_heads", 2)
+	attKeySize := model.GetParamOr(scope, "transformer_att_key_size", 8)
 	for layerNum := range numAttLayers {
 		// Each layer in its own scope.
-		ctx := ctx.Inf("%03d_attention_layer", layerNum)
+		scope := scope.In("%03d_attention_layer", layerNum)
 		residual := embed
-		embed = attention.MultiHeadAttention(ctx.In("000_attention"), embed, embed, embed, numAttHeads, attKeySize).
+		embed = attention.MultiHeadAttention(scope.In("000_attention"), embed, embed, embed, numAttHeads, attKeySize).
 			WithKeyMask(mask).WithQueryMask(mask).
 			WithOutputDim(embedSize).
 			WithValueHeadDim(embedSize).Done()
 		if dropoutNode != nil {
-			embed = layers.Dropout(ctx.In("001_dropout"), embed, dropoutNode)
+			embed = layers.Dropout(scope.In("001_dropout"), embed, dropoutNode)
 		}
-		embed = NormalizeSequence(ctx.In("002_normalization"), embed)
+		embed = NormalizeSequence(scope.In("002_normalization"), embed)
 		attentionOutput := embed
 
 		// Transformers recipe: 2 dense layers after attention.
-		embed = fnn.New(ctx.In("003_fnn"), embed, embedSize).NumHiddenLayers(1, embedSize).Done()
+		embed = fnn.New(scope.In("003_fnn"), embed, embedSize).NumHiddenLayers(1, embedSize).Done()
 		if dropoutNode != nil {
-			embed = layers.Dropout(ctx.In("004_dropout"), embed, dropoutNode)
+			embed = layers.Dropout(scope.In("004_dropout"), embed, dropoutNode)
 		}
 		embed = Add(embed, attentionOutput)
-		embed = NormalizeSequence(ctx.In("005_normalization"), embed)
+		embed = NormalizeSequence(scope.In("005_normalization"), embed)
 
 		// Residual connection:
 		if layerNum > 0 {

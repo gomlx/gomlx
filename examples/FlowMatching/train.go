@@ -29,7 +29,7 @@ import (
 
 // TrainModel with a given config -- it includes the context with hyperparameters.
 func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd bool, verbosity int) {
-	ctx := config.Context
+	scope := config.Context
 	paramsSet := config.ParamsSet
 	backend := config.Backend
 
@@ -45,23 +45,26 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		klog.Exitf("A checkpoint directory name with --checkpoint is required for storing evolution of some samples, none given")
 	}
 	if verbosity >= 2 {
-		fmt.Println(commandline.SprintContextSettings(ctx))
+		fmt.Println(commandline.SprintContextSettings(scope))
 	}
-	if model.GetParamOr(ctx, "rng_reset", true) {
+	if model.GetParamOr(scope, "rng_reset", true) {
 		// Reset RNG with some pseudo-random value.
-		ctx.ResetRNGState()
+		_ = scope.Store().ResetRNGState()
 	}
 	if verbosity >= 1 {
 		// Enumerate parameters that were set.
 		for _, paramsPath := range paramsSet {
-			scope, name := model.SplitScope(paramsPath)
-			if scope == "" {
-				if value, found := ctx.GetParam(name); found {
+			pScope, name := path.Split(paramsPath)
+			if pScope != "" && len(pScope) > 1 && strings.HasSuffix(pScope, "/") {
+				pScope = pScope[:len(pScope)-1]
+			}
+			if pScope == "" {
+				if value, found := scope.GetParam(name); found {
 					fmt.Printf("\t%s=%v\n", name, value)
 				}
 			} else {
-				if value, found := ctx.InAbsPath(scope).GetParam(name); found {
-					fmt.Printf("\tscope=%q %s=%v\n", scope, name, value)
+				if value, found := scope.Store().Scope(pScope).GetParam(name); found {
+					fmt.Printf("\tscope=%q %s=%v\n", pScope, name, value)
 				}
 			}
 		}
@@ -74,7 +77,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	trainEvalDS.BatchSize(config.EvalBatchSize, false)
 	validationDS.BatchSize(config.EvalBatchSize, false)
 	var trainDS train.Dataset
-	if model.GetParamOr(ctx, "diffusion_balanced_dataset", false) {
+	if model.GetParamOr(scope, "diffusion_balanced_dataset", false) {
 		fmt.Println("\t - Using balanced datasets.")
 		balancedTrainDS := check1(flowers.NewBalancedDataset(config.Backend, config.DataDir, config.ImageSize))
 		trainDS = balancedTrainDS
@@ -88,8 +91,8 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(
-		backend, ctx, BuildTrainComputation(config), customLoss,
-		optimizers.FromContext(ctx),
+		backend, scope, BuildTrainComputation(config), customLoss,
+		optimizers.FromContext(scope),
 		[]metrics.Interface{}, // trainMetrics
 		[]metrics.Interface{}) // evalMetrics
 	if config.NanLogger != nil {
@@ -107,7 +110,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	// Checkpoint saving: every 3 minutes of training.
 	if checkpoint != nil {
 		period := check1(
-			time.ParseDuration(model.GetParamOr(ctx, "checkpoint_frequency", "3m")))
+			time.ParseDuration(model.GetParamOr(scope, "checkpoint_frequency", "3m")))
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				return checkpoint.Save()
@@ -117,7 +120,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
 	var plotter *plotly.PlotConfig
-	if model.GetParamOr(ctx, plotly.ParamPlots, false) {
+	if model.GetParamOr(scope, plotly.ParamPlots, false) {
 		plotter = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
@@ -131,14 +134,14 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	// KID is a InceptionV3 based pretrained model only used to measured similarity of the
 	// images between generated flowers and the original. It's a metric.
 	var kid *KidGenerator
-	if model.GetParamOr(ctx, "kid", false) {
+	if model.GetParamOr(scope, "kid", false) {
 		kidDS := validationDS.Copy()
 		kidDS.Shuffle().BatchSize(config.EvalBatchSize, true)
 		kid = NewKidGenerator(config, kidDS, 5)
 	}
 
-	samplesFrequency := model.GetParamOr(ctx, "samples_during_training_frequency", 200)
-	samplesFrequencyGrowth := model.GetParamOr(ctx, "samples_during_training_frequency_growth", 1.2)
+	samplesFrequency := model.GetParamOr(scope, "samples_during_training_frequency", 200)
+	samplesFrequencyGrowth := model.GetParamOr(scope, "samples_during_training_frequency_growth", 1.2)
 	if plotter != nil {
 		train.ExponentialCallback(loop, samplesFrequency, samplesFrequencyGrowth, true,
 			"Monitor", 0, func(loop *train.Loop, metrics []*tensors.Tensor) error {
@@ -147,10 +150,10 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	}
 
 	// Loop for given number of steps.
-	numTrainSteps := model.GetParamOr(ctx, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(ctx))
+	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
+	globalStep := int(optimizers.GetGlobalStep(scope))
 	if globalStep > 0 {
-		trainer.SetContext(ctx.Reuse())
+		trainer.SetContext(scope)
 	}
 	if globalStep < numTrainSteps {
 		fmt.Println("Starting training stage:")
@@ -201,7 +204,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 // It generates the random noise as the "source distribution" for each example image,
 // as well as random values of t -> [0,1), used to train.
 func BuildTrainComputation(config *diffusion.Config) train.ModelFn {
-	return func(ctx *model.Context, spec any, inputs []*Node) []*Node {
+	return func(scope *model.Scope, spec any, inputs []*Node) []*Node {
 		g := inputs[0].Graph()
 
 		// Prepare the input image and noise.
@@ -216,7 +219,7 @@ func BuildTrainComputation(config *diffusion.Config) train.ModelFn {
 		dtype := config.DType
 
 		// Augment images, if not training.
-		images = diffusion.AugmentImages(ctx, images)
+		images = diffusion.AugmentImages(scope, images)
 
 		// Convert to the corresponding image size.
 		config.NanLogger.TraceFirstNaN(images, "RawImages")
@@ -225,15 +228,15 @@ func BuildTrainComputation(config *diffusion.Config) train.ModelFn {
 		images = ConvertDType(images, dtype)
 
 		// Gaussian noise to be transposed to the images.
-		noises := ctx.RandomNormal(g, images.Shape())
+		noises := scope.RandomNormal(g, images.Shape())
 		config.NanLogger.TraceFirstNaN(noises, "noises")
 
 		// Cosine schedule, if enabled.
-		cosineschedule.New(ctx, g, dtype).FromContext().Done()
+		cosineschedule.New(scope, g, dtype).FromContext().Done()
 
 		// Sample noise at different schedules.
-		t := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1, 1, 1))
-		if ctx.IsTraining(g) {
+		t := scope.RandomUniform(g, shapes.Make(dtype, batchSize, 1, 1, 1))
+		if scope.IsTraining(g) {
 			// During training, we bias towards the end (larger times t), since it's more detailed shifts.
 			t = Sqrt(t)
 		} else {
@@ -249,16 +252,16 @@ func BuildTrainComputation(config *diffusion.Config) train.ModelFn {
 
 		// Target and predicted velocity (aka. u(X,t)).
 		targetVelocity := Sub(images, noises)
-		predictedVelocity := diffusion.UNetModelGraph(ctx, config.NanLogger, noisyImages, t, flowerIds)
+		predictedVelocity := diffusion.UNetModelGraph(scope, config.NanLogger, noisyImages, t, flowerIds)
 		config.NanLogger.TraceFirstNaN(predictedVelocity, "predictedVelocity")
 
 		// Calculate our loss inside the model: use losses.ParamLoss to define the loss, and if not set,
 		// back-off to "diffusion_loss" hyper-param (for backward compatibility).
 		// Defaults to "mae" (mean-absolute-error).
-		lossName := model.GetParamOr(ctx, losses.ParamLoss,
-			model.GetParamOr(ctx, "diffusion_loss", "mse"))
-		ctx.SetParam("loss", lossName) // Needed for old models that used "diffusion_loss".
-		lossFn := check1(losses.LossFromContext(ctx))
+		lossName := model.GetParamOr(scope, losses.ParamLoss,
+			model.GetParamOr(scope, "diffusion_loss", "mse"))
+		scope.SetParam("loss", lossName) // Needed for old models that used "diffusion_loss".
+		lossFn := check1(losses.LossFromContext(scope))
 
 		// Large reduce operations lead to overflow for low-precision dtypes. We up-convert in those cases, before calculating the loss.
 		if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {

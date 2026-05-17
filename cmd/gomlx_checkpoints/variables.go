@@ -28,8 +28,8 @@ var (
 )
 
 // ListVariables list the variables of a model, with their shape and MAV (max absolute value), RMS (root-mean-square) and MaxAV (max absolute value) values.
-func ListVariables(ctx *model.Context) {
-	fmt.Println(titleStyle.Render(fmt.Sprintf("Variables in scope %q", ctx.Scope())))
+func ListVariables(scope *model.Scope) {
+	fmt.Println(titleStyle.Render(fmt.Sprintf("Variables in scope %q", scope.Scope())))
 	metricsFn := MustNewExec(compute.MustNew(), func(x *Node) (mav, rms, maxAV *Node) {
 		x = ConvertDType(x, dtypes.Float64)
 		mav = ReduceAllMean(Abs(x))
@@ -40,7 +40,7 @@ func ListVariables(ctx *model.Context) {
 	table := newPlainTable(true)
 	table.Headers("Scope", "Name", "Shape", "Size", "Bytes", "Scalar/MAV", "RMS", "MaxAV")
 	var rows [][]string
-	ctx.EnumerateVariablesInScope(func(v *model.Variable) {
+	scope.EnumerateVariablesInScope(func(v *model.Variable) {
 		if !v.IsValid() {
 			rows = append(rows, []string{v.Scope(), v.Name(), "<invalid>", "", "", "", "", ""})
 			return
@@ -83,8 +83,8 @@ func ListVariables(ctx *model.Context) {
 
 // DeleteVars on the given scopes.
 func DeleteVars(checkpointPath string, scopes ...string) {
-	ctx := model.New()
-	checkpoint := must.M1(checkpoints.Build(ctx).
+	scope := model.NewStore()
+	checkpoint := must.M1(checkpoints.Build(scope).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
 	var varsToDelete []*model.Variable
 	for _, scope := range scopes {
@@ -92,7 +92,7 @@ func DeleteVars(checkpointPath string, scopes ...string) {
 			continue
 		}
 		scopePrefix := scope + model.ScopeSeparator
-		for v := range ctx.IterVariables() {
+		for v := range scope.IterVariables() {
 			if v.Scope() == scope || strings.HasPrefix(v.Scope(), scopePrefix) {
 				varsToDelete = append(varsToDelete, v)
 			}
@@ -103,7 +103,7 @@ func DeleteVars(checkpointPath string, scopes ...string) {
 		return
 	}
 	for _, v := range varsToDelete {
-		ctx.DeleteVariable(v.Scope(), v.Name())
+		scope.DeleteVariable(v.Scope(), v.Name())
 	}
 	must.M(checkpoint.Save())
 	fmt.Printf("%d deleted vars under scopes %v, new checkpoint saved.\n", len(varsToDelete), scopes)
@@ -111,18 +111,18 @@ func DeleteVars(checkpointPath string, scopes ...string) {
 
 func PerturbVars(checkpointPath string, x float64) {
 	backend := must.M1(gobackend.New(""))
-	ctx := model.New()
-	checkpoint := must.M1(checkpoints.Build(ctx).
+	scope := model.NewStore()
+	checkpoint := must.M1(checkpoints.Build(scope).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
 	var numUpdates int
-	for v := range ctx.IterVariables() {
+	for v := range scope.IterVariables() {
 		if !v.Trainable || !(v.DType().IsFloat() || v.DType().IsComplex()) {
 			continue
 		}
-		newValue := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
+		newValue := model.MustExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 			value := v.ValueGraph(g)
 			// Perturbation from -1 to 1
-			perturbation := OneMinus(MulScalar(ctx.RandomUniform(g, value.Shape()), 2))
+			perturbation := OneMinus(MulScalar(scope.RandomUniform(g, value.Shape()), 2))
 			perturbation = MulScalar(perturbation, x) // [-x, +x], -perturb=x
 			perturbation = OnePlus(perturbation)      // [1-x, 1+x]
 			return Mul(value, perturbation)

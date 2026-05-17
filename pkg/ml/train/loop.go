@@ -122,9 +122,8 @@ const TrainLastStepVarName = "train_last_global_step"
 // It is stored in the TrainerAbsoluteScope.
 //
 // This is a graph building function and so it may panic if the variable cannot be created.
-func GetTrainLastStepVar(ctx *model.Context) *model.Variable {
-	return ctx.InAbsPath(TrainerAbsoluteScope).
-		Checked(false).
+func GetTrainLastStepVar(scope *model.Scope) *model.Variable {
+	return scope.Store().Scope(TrainerAbsoluteScope).
 		VariableWithValue(TrainLastStepVarName, int64(-1)).
 		SetTrainable(false)
 }
@@ -339,16 +338,13 @@ func freeMetrics(metricsInterfaces []metrics.Interface, metrics []*tensors.Tenso
 // RunToGlobalStep runs the loop until the target global step is reached.
 // If targetGlobalStep is smaller than the current global step, it does nothing and returns nil metrics.
 func (loop *Loop) RunToGlobalStep(ds Dataset, targetGlobalStep int) (metrics []*tensors.Tensor, err error) {
-	ctx := loop.Trainer.Context()
+	scope := loop.Trainer.Context()
 	var globalStep int
 	err = exceptions.TryCatch[error](func() {
-		globalStep = int(optimizers.GetGlobalStep(ctx))
+		globalStep = int(optimizers.GetGlobalStep(scope))
 	})
 	if err != nil {
 		return nil, err
-	}
-	if globalStep != 0 {
-		loop.Trainer.SetContext(ctx.Reuse())
 	}
 	if targetGlobalStep <= globalStep {
 		return nil, nil
@@ -359,14 +355,6 @@ func (loop *Loop) RunToGlobalStep(ds Dataset, targetGlobalStep int) (metrics []*
 
 // RunSteps runs those many steps. StartStep and EndStep are adjusted to the current
 // LoopStep, so it can be called multiple times, and it will simply pick up where it left of last time.
-//
-// It returns the training metrics returned by the trainer after the last step.
-//
-// It takes a BaseDataset: it must implement either Dataset or DistributedDataset.
-// A DistributedDataset will automatically be executed in a distributed manner, according to the distribution
-// settings (strategy, device assignment, etc.) given by the dataset.
-//
-// Note: inputs and labels yielded by the dataset are immediately finalized (freed) after use in each step.
 func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, err error) {
 	if steps <= 0 {
 		return nil, nil
@@ -477,12 +465,6 @@ func (loop *Loop) runStepsDistributed(ds DistributedDataset, steps int) (metrics
 // RunEpochs runs those many steps. StartStep is adjusted to the current
 // LoopStep, so it can be called multiple times, and it will simply pick up
 // where it left of last time.
-// Loop.Epoch is set to the current running epoch. EndStep starts as -1 and will
-// be adjusted to expectation after the first epoch, when one knows how many steps there are
-// going to be.
-// Dataset.Reset is called after each epoch (including the last).
-//
-// Note: inputs and labels yielded by the dataset are immediately finalized (freed) after use in each step.
 func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, err error) {
 	if err = loop.Trainer.ResetTrainMetrics(); err != nil {
 		return
@@ -549,10 +531,7 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, 
 	return
 }
 
-// MedianTrainStepDuration returns the median duration of each training step. It returns 1 millisecond
-// if no training step was recorded (to avoid potential division by 0).
-//
-// It sorts and mutates loop.TrainStepDurations.
+// MedianTrainStepDuration returns the median duration of each training step.
 func (loop *Loop) MedianTrainStepDuration() time.Duration {
 	if len(loop.TrainStepDurations) == 0 {
 		// Return something different from 0 to avoid division by 0.
@@ -573,7 +552,6 @@ func (loop *Loop) OnStart(name string, priority Priority, fn OnStartFn) {
 }
 
 // OnStep adds a hook with given priority and name (for error reporting) to each step of a loop.
-// The function `fn` is called after each `Trainer.TrainStep`.
 func (loop *Loop) OnStep(name string, priority Priority, fn OnStepFn) {
 	loop.onStep.Add(priority, &hookWithName[OnStepFn]{
 		name: name,
@@ -581,8 +559,7 @@ func (loop *Loop) OnStep(name string, priority Priority, fn OnStepFn) {
 	})
 }
 
-// OnEnd adds a hook with given priority and name (for error reporting) to the end of a loop,
-// after the last call to `Trainer.TrainStep`.
+// OnEnd adds a hook with given priority and name (for error reporting) to the end of a loop.
 func (loop *Loop) OnEnd(name string, priority Priority, fn OnEndFn) {
 	loop.onEnd.Add(priority, &hookWithName[OnEndFn]{
 		name: name,

@@ -30,8 +30,8 @@ var (
 )
 
 // getMagVar retrieves the static (not-learnable) OGBN-MAG variables -- e.g: the frozen papers embedding table.
-func getMagVar(ctx *model.Context, g *Graph, name string) *Node {
-	magVar := ctx.GetVariableByScopeAndName(OgbnMagVariablesScope, name)
+func getMagVar(scope *model.Scope, g *Graph, name string) *Node {
+	magVar := scope.GetVariableByScopeAndName(OgbnMagVariablesScope, name)
 	if magVar == nil {
 		Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
 		panic(nil) // Quiet linter.
@@ -40,7 +40,7 @@ func getMagVar(ctx *model.Context, g *Graph, name string) *Node {
 }
 
 // logitsGraph converts the readout state of the seed nodes to its logits.
-func logitsGraph(ctx *model.Context, readout *Node) *Node {
+func logitsGraph(scope *model.Scope, readout *Node) *Node {
 	//useKan := model.GetParamOr(ctx, "kan", false)
 	//if useKan {
 	//	readout = kan.New(ctx.In("logits_kan"), readout, NumLabels).NumHiddenLayers(0, 0).Done()
@@ -48,7 +48,7 @@ func logitsGraph(ctx *model.Context, readout *Node) *Node {
 	//	// Normal FNN
 	//	readout = layers.DenseWithBias(ctx.In("logits"), readout, NumLabels)
 	//}
-	readout = layers.DenseWithBias(ctx.In("logits"), readout, NumLabels)
+	readout = layers.DenseWithBias(scope.In("logits"), readout, NumLabels)
 	return readout
 }
 
@@ -58,9 +58,9 @@ func logitsGraph(ctx *model.Context, readout *Node) *Node {
 // It returns 2 tensors:
 // * Predictions for all seeds shaped `Float32[BatchSize, mag.NumLabels]` (or `Float16` or `Float64`).
 // * Mask of the seeds, provided by the sampler, shaped `Bool[BatchSize]`.
-func MagModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
-	ctx = ctx.WithInitializer(initializers.GlorotUniformFn(ctx))
-	dtype := getDType(ctx) // Default is Float32
+func MagModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
+	scope = scope.WithInitializer(initializers.GlorotUniformFn(scope))
+	dtype := getDType(scope) // Default is Float32
 	g := inputs[0].Graph()
 	if klog.V(3).Enabled() {
 		// The trace is used below to print the largest node.
@@ -68,18 +68,18 @@ func MagModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 	}
 
 	lrDType := dtype
-	if adamDType := model.GetParamOr(ctx, optimizers.ParamAdamDType, ""); adamDType != "" {
+	if adamDType := model.GetParamOr(scope, optimizers.ParamAdamDType, ""); adamDType != "" {
 		var err error
 		lrDType, err = dtypes.DTypeString(adamDType)
 		if err != nil || !lrDType.IsFloat() {
 			Panicf("Cannot parse hyperparameter %s=%q: %v", optimizers.ParamAdamDType, adamDType, err)
 		}
 	}
-	cosineschedule.New(ctx, g, lrDType).FromContext().Done()
+	cosineschedule.New(scope, g, lrDType).FromContext().Done()
 
 	// We disable checking for re-use of scopes because we deliberately reuse
 	// kernels in our GNN.
-	ctxModel := ctx.In("model").Checked(false)
+	ctxModel := scope.In("model").Checked(false)
 
 	strategy := spec.(*sampler.Strategy)
 	graphStates, _ := FeaturePreprocessing(ctxModel, strategy, inputs)
@@ -121,11 +121,11 @@ func MagModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
 //
 //	author/paper, so it is reasonable to expect that during validation/testing it will see many embeddings
 //	zero initialized.
-func FeaturePreprocessing(ctx *model.Context, strategy *sampler.Strategy, inputs []*Node) (
+func FeaturePreprocessing(scope *model.Scope, strategy *sampler.Strategy, inputs []*Node) (
 	graphInputs map[string]*sampler.ValueMask[*Node], remainingInputs []*Node) {
 	g := inputs[0].Graph()
 	graphInputs, remainingInputs = sampler.MapInputsToStates[*Node](strategy, inputs)
-	dtype := getDType(ctx)
+	dtype := getDType(scope)
 	dtypeEmbed := dtype
 	if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {
 		// If we don't do this for Float16, on a 2080ti GPU, the training becomes 3 times slower. Gemini mentioned
@@ -138,12 +138,12 @@ func FeaturePreprocessing(ctx *model.Context, strategy *sampler.Strategy, inputs
 	// Learnable embeddings context: it may benefit from dropout to have the model handle well
 	// the cases of unknown (zero) embeddings.
 	// They shouldn't be initialized with GlorotUniform, but instead with small random uniform values.
-	ctxEmbed := ctx.In("embeddings").Checked(false).
-		WithInitializer(initializers.RandomUniformFn(ctx, -0.05, 0.05))
-	embedDropoutRate := model.GetParamOr(ctx, ParamEmbedDropoutRate, 0.0)
+	ctxEmbed := scope.In("embeddings").Checked(false).
+		WithInitializer(initializers.RandomUniformFn(scope, -0.05, 0.05))
+	embedDropoutRate := model.GetParamOr(scope, ParamEmbedDropoutRate, 0.0)
 
 	// Preprocess papers to its features --> these are in a frozen embedding table in the context as a frozen variable.
-	papersEmbeddings := getMagVar(ctx, g, "PapersEmbeddings")
+	papersEmbeddings := getMagVar(scope, g, "PapersEmbeddings")
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "papers" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
@@ -155,8 +155,8 @@ func FeaturePreprocessing(ctx *model.Context, strategy *sampler.Strategy, inputs
 	}
 
 	// Preprocess institutions to its embeddings.
-	institutionsEmbedSize := model.GetParamOr(ctx, "InstitutionsEmbedSize", 16)
-	splitEmbedTables := model.GetParamOr(ctx, ParamSplitEmbedTablesSize, 2)
+	institutionsEmbedSize := model.GetParamOr(scope, "InstitutionsEmbedSize", 16)
+	splitEmbedTables := model.GetParamOr(scope, ParamSplitEmbedTablesSize, 2)
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "institutions" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
@@ -164,7 +164,7 @@ func FeaturePreprocessing(ctx *model.Context, strategy *sampler.Strategy, inputs
 			embedded := layers.Embedding(ctxEmbed.In("institutions"), indices,
 				dtypeEmbed, (NumInstitutions+splitEmbedTables-1)/splitEmbedTables, institutionsEmbedSize, false)
 			if graphInputs[name].Mask != nil {
-				embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
+				embedMask := layers.DropoutStatic(scope, graphInputs[name].Mask, embedDropoutRate)
 				embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
 			}
 			graphInputs[name].Value = embedded
@@ -175,7 +175,7 @@ func FeaturePreprocessing(ctx *model.Context, strategy *sampler.Strategy, inputs
 	}
 
 	// Preprocess "field of study" to its embeddings.
-	fieldsOfStudyEmbedSize := model.GetParamOr(ctx, "FieldsOfStudyEmbedSize", 32)
+	fieldsOfStudyEmbedSize := model.GetParamOr(scope, "FieldsOfStudyEmbedSize", 32)
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "fields_of_study" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
@@ -185,7 +185,7 @@ func FeaturePreprocessing(ctx *model.Context, strategy *sampler.Strategy, inputs
 				fieldsOfStudyEmbedSize, false)
 
 			if graphInputs[name].Mask != nil {
-				embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
+				embedMask := layers.DropoutStatic(scope, graphInputs[name].Mask, embedDropoutRate)
 				embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
 			}
 			graphInputs[name].Value = embedded

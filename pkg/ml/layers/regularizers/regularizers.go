@@ -8,11 +8,12 @@
 package regularizers
 
 import (
+	"slices"
+
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	. "github.com/gomlx/gomlx/support/exceptions"
-	"slices"
 )
 
 const (
@@ -36,14 +37,14 @@ const (
 // Notice it takes variables (and not the nodes) as inputs, as some specialized regularizers may want to update the variables
 // post gradient updates to impose constraints -- e.g.: L1 will reduce weights to 0 if they smaller than
 // the amount of regularization; a monotonicity regularizer may force weights to be monotonic in some direction.
-type Regularizer func(ctx *model.Context, g *Graph, weights ...*model.Variable)
+type Regularizer func(scope *model.Scope, g *Graph, weights ...*model.Variable)
 
 // L2 creates a L2 regularizer (x^2 * amount) with the given static amount.
 func L2(amount float64) Regularizer {
 	if amount == 0 {
 		return nil
 	}
-	return func(ctx *model.Context, g *Graph, weights ...*model.Variable) {
+	return func(scope *model.Scope, g *Graph, weights ...*model.Variable) {
 		if len(weights) == 0 {
 			Panicf("no weights given to regularizers.L2")
 		}
@@ -57,7 +58,7 @@ func L2(amount float64) Regularizer {
 			}
 		}
 		loss = MulScalar(loss, amount)
-		train.AddLoss(ctx, loss)
+		train.AddLoss(scope, loss)
 	}
 }
 
@@ -69,7 +70,7 @@ func L1(amount float64) Regularizer {
 	if amount == 0 {
 		return nil
 	}
-	return func(ctx *model.Context, g *Graph, weights ...*model.Variable) {
+	return func(scope *model.Scope, g *Graph, weights ...*model.Variable) {
 		if len(weights) == 0 {
 			Panicf("no weights given to regularizers.L1")
 		}
@@ -84,14 +85,14 @@ func L1(amount float64) Regularizer {
 			}
 		}
 		loss = MulScalar(loss, amount)
-		train.AddLoss(ctx, loss)
+		train.AddLoss(scope, loss)
 
 		// Update weights such that if they are smaller than the regularization amount, they are set to 0.
 		// Part of this is finding a unique name for all weights, so we don't add updates to the same scope.
 		for _, weight := range weights {
-			scopedCtx := ctx.InAbsPath(weight.Scope()).Inf("regularizers.L1(%s)", weight.Name())
+			scopedCtx := scope.Store().Scope(weight.Scope()).In("regularizers.L1(%s)", weight.Name())
 			train.AddPerStepUpdateGraphFn(scopedCtx, g,
-				func(ctx *model.Context, g *Graph) {
+				func(scope *model.Scope, g *Graph) {
 					value := weight.ValueGraph(g)
 					dtype := value.DType()
 					smallWeights := LessThan(Abs(value), Scalar(g, dtype, amount))
@@ -114,10 +115,10 @@ func Combine(regs ...Regularizer) Regularizer {
 	if len(regs) == 1 {
 		return regs[0]
 	}
-	return func(ctx *model.Context, g *Graph, weights ...*model.Variable) {
+	return func(scope *model.Scope, g *Graph, weights ...*model.Variable) {
 		for _, reg := range regs {
 			if reg != nil {
-				reg(ctx, g, weights...)
+				reg(scope, g, weights...)
 			}
 		}
 	}
@@ -127,14 +128,14 @@ func Combine(regs ...Regularizer) Regularizer {
 // It may be nil if no regularization is configured.
 //
 // It looks at ParamL2 and ParamL1 regularizer for now.
-func FromContext(ctx *model.Context) Regularizer {
+func FromContext(scope *model.Scope) Regularizer {
 	var regs []Regularizer
 
-	amount := model.GetParamOr(ctx, ParamL2, 0.0)
+	amount := model.GetParamOr(scope, ParamL2, 0.0)
 	if amount > 0 {
 		regs = append(regs, L2(amount))
 	}
-	amount = model.GetParamOr(ctx, ParamL1, 0.0)
+	amount = model.GetParamOr(scope, ParamL1, 0.0)
 	if amount > 0 {
 		regs = append(regs, L1(amount))
 	}
@@ -154,7 +155,7 @@ func FromContext(ctx *model.Context) Regularizer {
 // This is useful for control points in piecewise-linear, piecewise-constant or b-spline functions, when one wants to make
 // points that are not trained much to move towards the mean of its neighbours.
 func ConstantL1(amount float64) Regularizer {
-	return func(ctx *model.Context, g *Graph, weights ...*model.Variable) {
+	return func(scope *model.Scope, g *Graph, weights ...*model.Variable) {
 		var loss *Node
 		for _, wVar := range weights {
 			w := wVar.ValueGraph(g)
@@ -167,6 +168,6 @@ func ConstantL1(amount float64) Regularizer {
 				loss = Add(l1, loss)
 			}
 		}
-		train.AddLoss(ctx, loss)
+		train.AddLoss(scope, loss)
 	}
 }

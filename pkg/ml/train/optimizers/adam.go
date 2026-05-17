@@ -4,6 +4,7 @@ package optimizers
 
 import (
 	"fmt"
+	"path"
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
@@ -113,9 +114,9 @@ type AdamConfig struct {
 
 // FromContext will configure Adam with hyperparameters set in the given model.
 // E.g.: "adam_epsilon" (see [ParamAdamEpsilon]) is used to set [AdamConfig.Epsilon].
-func (c *AdamConfig) FromContext(ctx *model.Context) *AdamConfig {
-	c.Epsilon(model.GetParamOr(ctx, ParamAdamEpsilon, c.epsilon))
-	dtypeStr := model.GetParamOr(ctx, ParamAdamDType, "")
+func (c *AdamConfig) FromContext(scope *model.Scope) *AdamConfig {
+	c.Epsilon(model.GetParamOr(scope, ParamAdamEpsilon, c.epsilon))
+	dtypeStr := model.GetParamOr(scope, ParamAdamDType, "")
 	if dtypeStr != "" {
 		dtype, err := dtypes.DTypeString(dtypeStr)
 		if err != nil || !dtype.IsFloat() {
@@ -123,9 +124,9 @@ func (c *AdamConfig) FromContext(ctx *model.Context) *AdamConfig {
 		}
 		c.DType(dtype)
 	}
-	c.WeightDecay(model.GetParamOr(ctx, ParamAdamWeightDecay, 0.0))
-	c.beta1 = model.GetParamOr(ctx, ParamAdamBeta1, 0.9)
-	c.beta2 = model.GetParamOr(ctx, ParamAdamBeta2, 0.999)
+	c.WeightDecay(model.GetParamOr(scope, ParamAdamWeightDecay, 0.0))
+	c.beta1 = model.GetParamOr(scope, ParamAdamBeta1, 0.9)
+	c.beta2 = model.GetParamOr(scope, ParamAdamBeta2, 0.999)
 	return c
 }
 
@@ -227,16 +228,16 @@ type adam struct {
 
 // UpdateGraph builds the graph to update the weights for one training step.
 // It implements optimizers.Interface.
-func (o *adam) UpdateGraph(ctx *model.Context, g *Graph, loss *Node) {
+func (o *adam) UpdateGraph(scope *model.Scope, g *Graph, loss *Node) {
 	if !loss.Shape().IsScalar() {
 		Panicf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", loss.Shape())
 		return
 	}
-	grads := ctx.BuildTrainableVariablesGradientsGraph(loss)
-	o.UpdateGraphWithGradients(ctx, grads, loss.DType())
+	grads := scope.BuildTrainableVariablesGradientsGraph(loss)
+	o.UpdateGraphWithGradients(scope, grads, loss.DType())
 }
 
-func (o *adam) UpdateGraphWithGradients(ctx *model.Context, grads []*Node, lossDType dtypes.DType) {
+func (o *adam) UpdateGraphWithGradients(scope *model.Scope, grads []*Node, lossDType dtypes.DType) {
 	if len(grads) == 0 {
 		Panicf(
 			"Context.BuildTrainableVariablesGradientsGraph returned 0 gradients, are there any trainable variables ?",
@@ -252,15 +253,15 @@ func (o *adam) UpdateGraphWithGradients(ctx *model.Context, grads []*Node, lossD
 	// Set up learning-rate.
 	lrValue := o.config.learningRate
 	if lrValue < 0 {
-		lrValue = model.GetParamOr(ctx, ParamLearningRate, AdamDefaultLearningRate)
+		lrValue = model.GetParamOr(scope, ParamLearningRate, AdamDefaultLearningRate)
 	}
-	lrVar := LearningRateVar(ctx, dtype, lrValue)
+	lrVar := LearningRateVar(scope, dtype, lrValue)
 	learningRate := lrVar.ValueGraph(g)
 
 	// Increment the global step, but keep a separate step count for the Adam optimizer -- it can be
 	// reset separately.
-	_ = IncrementGlobalStepGraph(ctx, g, dtype) // LoopStep, not used by this optimizer, but updated.
-	adamStep := IncrementGlobalStepGraph(ctx.In(o.config.scopeName), g, dtype)
+	_ = IncrementGlobalStepGraph(scope, g, dtype) // LoopStep, not used by this optimizer, but updated.
+	adamStep := IncrementGlobalStepGraph(scope.In(o.config.scopeName), g, dtype)
 
 	// Back-off steps to allow a better estimate of momentum and variance, before actually taking
 	// a gradient step.
@@ -282,11 +283,11 @@ func (o *adam) UpdateGraphWithGradients(ctx *model.Context, grads []*Node, lossD
 	// Apply gradient one variable at a time.
 	numTrainable := len(grads)
 	varIdx := 0
-	for v := range ctx.IterVariables() {
+	for v := range scope.IterVariables() {
 		if v.Trainable && v.InUseByGraph(g) {
 			if varIdx < numTrainable {
 				o.applyAdamGraph(
-					ctx,
+					scope,
 					g,
 					v,
 					dtype,
@@ -313,10 +314,10 @@ func (o *adam) UpdateGraphWithGradients(ctx *model.Context, grads []*Node, lossD
 
 // applyAdamGraph calculates variable and its 1st and 2nd order moments updates.
 // If `Adamax` is set, we use instead moment2 to store the L-infinity (the max) of the gradient.
-func (o *adam) applyAdamGraph(ctx *model.Context, g *Graph, v *model.Variable, dtype dtypes.DType, grad *Node,
+func (o *adam) applyAdamGraph(scope *model.Scope, g *Graph, v *model.Variable, dtype dtypes.DType, grad *Node,
 	learningRate, beta1, debiasTermBeta1, beta2, debiasTermBeta2, epsilon *Node) {
 	rmsProp := o.config.rmsProp // If set, don't use 1st momentum.
-	m1Var, m2Var := o.getMomentVariables(ctx, v, dtype)
+	m1Var, m2Var := o.getMomentVariables(scope, v, dtype)
 	var moment1 *Node
 	if !rmsProp {
 		moment1 = m1Var.ValueGraph(g)
@@ -328,8 +329,8 @@ func (o *adam) applyAdamGraph(ctx *model.Context, g *Graph, v *model.Variable, d
 	if grad.DType() != dtype {
 		grad = ConvertDType(grad, dtype)
 	}
-	TraceNaNInGradients(ctx, v, grad)
-	grad = ClipNaNsInGradients(ctx, grad)
+	TraceNaNInGradients(scope, v, grad)
+	grad = ClipNaNsInGradients(scope, grad)
 
 	// Do the gradient step with momentum.
 	// The momentum is disabled (we simply take the gradien) if rmsProp is set.
@@ -374,14 +375,14 @@ func (o *adam) applyAdamGraph(ctx *model.Context, g *Graph, v *model.Variable, d
 	}
 
 	// Clip step value, if requested.
-	clipByValue := model.GetParamOr(ctx, ParamClipStepByValue, 0.0)
+	clipByValue := model.GetParamOr(scope, ParamClipStepByValue, 0.0)
 	if clipByValue > 0 {
 		stepDirection = ClipScalar(stepDirection, -clipByValue, clipByValue)
 	}
 
 	// Update variable.
 	updated := Sub(value, stepDirection)
-	updated = ClipNaNsInUpdates(ctx, value, updated) // If selected, clip NaN updates.
+	updated = ClipNaNsInUpdates(scope, value, updated) // If selected, clip NaN updates.
 	if v.Shape().DType != dtype {
 		// Convert back to the variable type.
 		updated = ConvertDType(updated, v.Shape().DType)
@@ -395,25 +396,24 @@ func (o *adam) applyAdamGraph(ctx *model.Context, g *Graph, v *model.Variable, d
 // If g is not nil, it creates the moments variables if they don't exist. Otherwise, it just tries to
 // fetch the presumably existing variables.
 func (o *adam) getMomentVariables(
-	ctx *model.Context,
+	scope *model.Scope,
 	trainable *model.Variable,
 	dtype dtypes.DType,
 ) (m1, m2 *model.Variable) {
 	originalScope := trainable.Scope()
 	originalName := trainable.Name()
-	scopePath := fmt.Sprintf("%s%s%s", model.ScopeSeparator, o.config.scopeName, originalScope)
+	scopePath := path.Join("/", o.config.scopeName, originalScope)
 	m1Name := fmt.Sprintf("%s_1st_moment", originalName)
 	m2Name := fmt.Sprintf("%s_2nd_moment", originalName)
 	shape := trainable.Shape().Clone()
 	shape.DType = dtype
-	ctx = ctx.Checked(false) // It shouldn't matter if it's the first time or not creating the variable.
 	if !o.config.rmsProp {
-		m1 = ctx.InAbsPath(scopePath).
+		m1 = scope.Store().Scope(scopePath).
 			WithInitializer(initializers.Zero).
 			VariableWithShape(m1Name, shape).
 			SetTrainable(false)
 	}
-	m2 = ctx.InAbsPath(scopePath).
+	m2 = scope.Store().Scope(scopePath).
 		WithInitializer(initializers.Zero).
 		VariableWithShape(m2Name, shape).
 		SetTrainable(false)
@@ -422,7 +422,7 @@ func (o *adam) getMomentVariables(
 
 // Clear all optimizer variables.
 // It implements optimizers.Interface.
-func (o *adam) Clear(ctx *model.Context) error {
-	ctxAdam := ctx.In(o.config.scopeName)
+func (o *adam) Clear(scope *model.Scope) error {
+	ctxAdam := scope.In(o.config.scopeName)
 	return ctxAdam.DeleteVariablesInScope()
 }

@@ -64,12 +64,12 @@ const (
 )
 
 // ActivationFn applies a non-linearity to the operand.
-type ActivationFn func(ctx *model.Context, operand *Node) *Node
+type ActivationFn func(scope *model.Scope, operand *Node) *Node
 
 // Config is created with New and can be configured with its methods or simply setting the corresponding
 // hyperparameters in the model.
 type Config struct {
-	ctx                             *model.Context
+	scope                           *model.Scope
 	operand                         *Node
 	outputChannels                  int
 	numHiddenLayers, numHiddenNodes int
@@ -105,7 +105,7 @@ type Config struct {
 //		logits := InvariantDotProduct(V, T)  // [batchSize, NumClasses]
 //		return []*Node{logits}
 //	}
-func New(ctx *model.Context, operand *Node, outputChannels int) *Config {
+func New(scope *model.Scope, operand *Node, outputChannels int) *Config {
 	if operand.Rank() < 2 {
 		exceptions.Panicf("vnn: operand must be rank at least 2, got operand.shape=%s", operand.Shape())
 	}
@@ -117,25 +117,25 @@ func New(ctx *model.Context, operand *Node, outputChannels int) *Config {
 	}
 
 	c := &Config{
-		ctx:             ctx,
+		scope:           scope,
 		operand:         operand,
 		outputChannels:  outputChannels,
-		numHiddenLayers: model.GetParamOr(ctx, ParamNumHiddenLayers, 0),
-		numHiddenNodes:  model.GetParamOr(ctx, ParamNumHiddenNodes, 10),
-		activationName:  model.GetParamOr(ctx, ParamActivation, "relu"),
-		normalization:   model.GetParamOr(ctx, ParamNormalization, ""),
-		regularizer:     regularizers.FromContext(ctx),
-		dropoutRatio:    model.GetParamOr(ctx, ParamDropoutRate, 0.0),
-		useResidual:     model.GetParamOr(ctx, ParamResidual, false),
-		useScaler:       model.GetParamOr(ctx, ParamScaler, false),
+		numHiddenLayers: model.GetParamOr(scope, ParamNumHiddenLayers, 0),
+		numHiddenNodes:  model.GetParamOr(scope, ParamNumHiddenNodes, 10),
+		activationName:  model.GetParamOr(scope, ParamActivation, "relu"),
+		normalization:   model.GetParamOr(scope, ParamNormalization, ""),
+		regularizer:     regularizers.FromContext(scope),
+		dropoutRatio:    model.GetParamOr(scope, ParamDropoutRate, 0.0),
+		useResidual:     model.GetParamOr(scope, ParamResidual, false),
+		useScaler:       model.GetParamOr(scope, ParamScaler, false),
 	}
 
 	// Fallback parameters.
 	if c.normalization == "" {
-		c.normalization = model.GetParamOr(ctx, layers.ParamNormalization, "none")
+		c.normalization = model.GetParamOr(scope, layers.ParamNormalization, "none")
 	}
 	if c.dropoutRatio < 0 {
-		c.dropoutRatio = model.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
+		c.dropoutRatio = model.GetParamOr(scope, layers.ParamDropoutRate, 0.0)
 	}
 	return c
 }
@@ -238,7 +238,7 @@ func (c *Config) Dropout(ratio float64) *Config {
 
 // Done takes the configuration and applies the VNN as configured.
 func (c *Config) Done() *Node {
-	ctx := c.ctx
+	scope := c.scope
 	operand := c.operand
 	g := operand.Graph()
 	dtype := operand.DType()
@@ -257,12 +257,12 @@ func (c *Config) Done() *Node {
 	}
 
 	// Normalization function.
-	var normalizationFn func(ctx *model.Context, x *Node) *Node
+	var normalizationFn func(scope *model.Scope, x *Node) *Node
 	switch c.normalization {
 	case "", "none":
 		// No activation, leave it as nil.
 	case "layer":
-		normalizationFn = func(ctx *model.Context, x *Node) *Node {
+		normalizationFn = func(scope *model.Scope, x *Node) *Node {
 			if x.DType() == dtypes.BFloat16 {
 				return LayerNormalization(x, 1e-4)
 			} else {
@@ -287,11 +287,11 @@ func (c *Config) Done() *Node {
 	// For hidden layers, we have only one axis, with numHiddenNodes.
 	for ii := range c.numHiddenLayers + 1 {
 		// Scope for this layer
-		var layerCtx *model.Context
+		var layerCtx *model.Scope
 		if ii < c.numHiddenLayers {
-			layerCtx = ctx.Inf("vnn_hidden_layer_%d", ii)
+			layerCtx = scope.In("vnn_hidden_layer_%d", ii)
 		} else {
-			layerCtx = ctx.In("vnn_output_layer")
+			layerCtx = scope.In("vnn_output_layer")
 		}
 
 		// In between-layers: some don't apply to the operand (ii == 0)

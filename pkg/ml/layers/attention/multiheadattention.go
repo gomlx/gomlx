@@ -29,7 +29,7 @@ import (
 // MultiHeadAttentionBuilder is a helper to build a multi-head-attention computation.
 // Create it with MultiHeadAttention, set the desired parameters, and when all is set, call Done.
 type MultiHeadAttentionBuilder struct {
-	ctx               *model.Context
+	scope             *model.Scope
 	g                 *Graph
 	query, key, value *Node
 	numHeads          int
@@ -112,7 +112,7 @@ type MultiHeadAttentionBuilder struct {
 //
 // [1] "Attention Is All You Need", https://arxiv.org/abs/1706.03762, by Ashish Vaswani, Noam Shazeer,
 // Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin.
-func MultiHeadAttention(ctx *model.Context, query, key, value *Node, numHeads int, headDim int) *MultiHeadAttentionBuilder {
+func MultiHeadAttention(scope *model.Scope, query, key, value *Node, numHeads int, headDim int) *MultiHeadAttentionBuilder {
 	g := query.Graph()
 
 	queryShape := query.Shape()
@@ -139,7 +139,7 @@ func MultiHeadAttention(ctx *model.Context, query, key, value *Node, numHeads in
 			keyShape, valueShape)
 	}
 	b := &MultiHeadAttentionBuilder{
-		ctx:               ctx.In("MultiHeadAttention"),
+		scope:             scope.In("MultiHeadAttention"),
 		g:                 g,
 		query:             query,
 		key:               key,
@@ -419,14 +419,14 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	if b.useQKVProjection {
 		projectedQuery, projectedKey, projectedValue = b.qkvProject(flatQuery)
 	} else {
-		projectedKey = b.dense(b.ctx.In("key"), flatKey, b.useProjectionBias, kvHeads, b.keyQueryDim)
-		projectedQuery = b.dense(b.ctx.In("query"), flatQuery, b.useProjectionBias, b.numHeads, b.keyQueryDim)
-		projectedValue = b.dense(b.ctx.In("value"), flatValue, b.useProjectionBias, kvHeads, b.valueDim)
+		projectedKey = b.dense(b.scope.In("key"), flatKey, b.useProjectionBias, kvHeads, b.keyQueryDim)
+		projectedQuery = b.dense(b.scope.In("query"), flatQuery, b.useProjectionBias, b.numHeads, b.keyQueryDim)
+		projectedValue = b.dense(b.scope.In("value"), flatValue, b.useProjectionBias, kvHeads, b.valueDim)
 	}
 
 	if b.withQKRMSNorm {
-		projectedQuery = layers.RMSNorm(b.ctx.In("query"), projectedQuery).WithEpsilon(b.qkNormEpsilon).WithNormalizationAxes(-1).WithScaleOffset(1.0).Done()
-		projectedKey = layers.RMSNorm(b.ctx.In("key"), projectedKey).WithEpsilon(b.qkNormEpsilon).WithNormalizationAxes(-1).WithScaleOffset(1.0).Done()
+		projectedQuery = layers.RMSNorm(b.scope.In("query"), projectedQuery).WithEpsilon(b.qkNormEpsilon).WithNormalizationAxes(-1).WithScaleOffset(1.0).Done()
+		projectedKey = layers.RMSNorm(b.scope.In("key"), projectedKey).WithEpsilon(b.qkNormEpsilon).WithNormalizationAxes(-1).WithScaleOffset(1.0).Done()
 	}
 
 	// Apply positional encoding (e.g. RoPE) if enabled.
@@ -457,9 +457,9 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 		// Update cache and get full key/value (including past)
 		// KV cache variables are stored in the context under "kv_cache" scope
 		// Pass b.position so the cache knows where to write the new keys/values
-		cacheCtx := b.ctx.In("kv_cache").Reuse().Checked(false)
-		KVCacheUpdate(cacheCtx, b.g, b.kvCacheShape, b.position, keyForCache, valueForCache)
-		fullKey, fullValue := getKVCache(cacheCtx, b.g, b.kvCacheShape)
+		cacheScope := b.scope.At("kv_cache")
+		KVCacheUpdate(cacheScope, b.g, b.kvCacheShape, b.position, keyForCache, valueForCache)
+		fullKey, fullValue := getKVCache(cacheScope, b.g, b.kvCacheShape)
 
 		// b.position holds the current position in the sequence
 		b.actualCacheLen = b.position
@@ -486,7 +486,7 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	// Pass causal to Core only when not using KV cache (Core builds a simple lower-triangular mask).
 	// When using KV cache, the position-aware causal mask is already built in buildMask above.
 	useCausalMask := b.useCausalMask && mask == nil
-	attentionOutput, attentionCoefficients = Core(b.ctx, projectedQuery, projectedKey, projectedValue,
+	attentionOutput, attentionCoefficients = Core(b.scope, projectedQuery, projectedKey, projectedValue,
 		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients)
 
 	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.
@@ -508,31 +508,31 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	}
 
 	// Final shape: `[batch, <query_elements>, outputDim]`
-	attentionOutput = b.dense(b.ctx.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
+	attentionOutput = b.dense(b.scope.In("output"), attentionOutput, b.useProjectionBias, b.outputDim)
 	return attentionOutput, attentionCoefficients
 }
 
 // dense executes a Dense projection layer.
 // If UseTransposedWeights() has been called, it uses Einsum to compute the projection
 // using PyTorch's default transposed weight schema ([outDim, inDim]).
-func (b *MultiHeadAttentionBuilder) dense(ctx *model.Context, x *Node, useBias bool, outputDims ...int) *Node {
+func (b *MultiHeadAttentionBuilder) dense(scope *model.Scope, x *Node, useBias bool, outputDims ...int) *Node {
 	if !b.useTransposedWeights {
-		return layers.Dense(ctx, x, useBias, outputDims...)
+		return layers.Dense(scope, x, useBias, outputDims...)
 	}
-	ctx = ctx.In("dense")
+	scope = scope.In("dense")
 	g := x.Graph()
 	inDim := x.Shape().Dim(-1)
 	outDim := 1
 	for _, d := range outputDims {
 		outDim *= d
 	}
-	wVar := ctx.VariableWithShape("weights", shapes.Make(x.DType(), outDim, inDim))
+	wVar := scope.VariableWithShape("weights", shapes.Make(x.DType(), outDim, inDim))
 	w := wVar.ValueGraph(g)
 
 	y := DotGeneral(x, []int{-1}, nil, w, []int{1}, nil)
 
 	if useBias {
-		bVar := ctx.VariableWithShape("biases", shapes.Make(x.DType(), outDim))
+		bVar := scope.VariableWithShape("biases", shapes.Make(x.DType(), outDim))
 		bias := bVar.ValueGraph(g)
 		for bias.Rank() < y.Rank() {
 			bias = ExpandAxes(bias, 0)
@@ -554,7 +554,7 @@ func (b *MultiHeadAttentionBuilder) dense(ctx *model.Context, x *Node, useBias b
 // each shaped [batch, seq, numHeads, headDim] matching the BSHD layout.
 func (b *MultiHeadAttentionBuilder) qkvProject(x *Node) (projectedQuery, projectedKey, projectedValue *Node) {
 	g := x.Graph()
-	qkvCtx := b.ctx.In("qkv")
+	qkvCtx := b.scope.In("qkv")
 	dtype := x.DType()
 	inFeatures := x.Shape().Dim(-1)
 	queryDim := b.numHeads * b.keyQueryDim
@@ -630,6 +630,6 @@ func (b *MultiHeadAttentionBuilder) buildAttentionShape() {
 //	    UseCausalMask().
 //	    Dropout(0.1).
 //	    Done()
-func SelfAttention(ctx *model.Context, x *Node, numHeads int, headDim int) *MultiHeadAttentionBuilder {
-	return MultiHeadAttention(ctx, x, x, x, numHeads, headDim)
+func SelfAttention(scope *model.Scope, x *Node, numHeads int, headDim int) *MultiHeadAttentionBuilder {
+	return MultiHeadAttention(scope, x, x, x, numHeads, headDim)
 }

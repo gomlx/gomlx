@@ -34,17 +34,17 @@ var (
 	// Notice that some normalizers use variables, and they need to be unique
 	// in their scope (`Context.In(scope)`) -- except if one wants to deliberately share
 	// normalization variables across more than one application.
-	KnownNormalizers = map[string]func(ctx *model.Context, input *Node) *Node{
-		NormalizationBatchNorm: func(ctx *model.Context, input *Node) *Node {
-			return batchnorm.New(ctx, input, -1).Done()
+	KnownNormalizers = map[string]func(scope *model.Scope, input *Node) *Node{
+		NormalizationBatchNorm: func(scope *model.Scope, input *Node) *Node {
+			return batchnorm.New(scope, input, -1).Done()
 		},
-		NormalizationLayerNorm: func(ctx *model.Context, input *Node) *Node {
-			return LayerNormalization(ctx, input, -1).Done()
+		NormalizationLayerNorm: func(scope *model.Scope, input *Node) *Node {
+			return LayerNormalization(scope, input, -1).Done()
 		},
-		NormalizationRMSNorm: func(ctx *model.Context, input *Node) *Node {
-			return RMSNorm(ctx, input).Done()
+		NormalizationRMSNorm: func(scope *model.Scope, input *Node) *Node {
+			return RMSNorm(scope, input).Done()
 		},
-		NormalizationNone: func(ctx *model.Context, input *Node) *Node {
+		NormalizationNone: func(scope *model.Scope, input *Node) *Node {
 			return input
 		},
 	}
@@ -95,20 +95,20 @@ var (
 //	}
 //
 // ```
-func MustNormalizeByName(ctx *model.Context, normalization string, input *Node) *Node {
+func MustNormalizeByName(scope *model.Scope, normalization string, input *Node) *Node {
 	normFn, found := KnownNormalizers[normalization]
 	if !found {
 		log.Fatalf("Unsupported normalization %q given, valid values are %v", normalization, xslices.SortedKeys(KnownNormalizers))
 	}
-	return normFn(ctx, input)
+	return normFn(scope, input)
 }
 
 // NormalizeFromContext applies a normalization (or none) according to the hyperparameter
 // ParamNormalization configured in the model.
 //
 // This is not recommended for images, since one may want to normalize over specific axes.
-func NormalizeFromContext(ctx *model.Context, input *Node) *Node {
-	return MaskedNormalizeFromContext(ctx, input, nil)
+func NormalizeFromContext(scope *model.Scope, input *Node) *Node {
+	return MaskedNormalizeFromContext(scope, input, nil)
 }
 
 // MaskedNormalizeFromContext applies a normalization (or none) according to the hyperparameter
@@ -116,21 +116,21 @@ func NormalizeFromContext(ctx *model.Context, input *Node) *Node {
 // The `mask` is actually optional and can be set to nil if not using a mask.
 //
 // This is not recommended for images, since one may want to normalize over specific axes.
-func MaskedNormalizeFromContext(ctx *model.Context, input, mask *Node) *Node {
-	normType := model.GetParamOr(ctx, ParamNormalization, "layer")
+func MaskedNormalizeFromContext(scope *model.Scope, input, mask *Node) *Node {
+	normType := model.GetParamOr(scope, ParamNormalization, "layer")
 	switch normType {
 	case NormalizationNone, "":
 		return input
 	case NormalizationLayerNorm:
-		return LayerNormalization(ctx, input, -1).Mask(mask).Done()
+		return LayerNormalization(scope, input, -1).Mask(mask).Done()
 	case NormalizationRMSNorm:
-		return RMSNorm(ctx, input).Done()
+		return RMSNorm(scope, input).Done()
 	case NormalizationBatchNorm:
 		if mask != nil {
 			Panicf("'batch' normalization set in context parameter %q does not support usage of mask yet, please open a feature request",
 				ParamNormalization)
 		}
-		return batchnorm.New(ctx, input, -1).Done()
+		return batchnorm.New(scope, input, -1).Done()
 	default:
 		Panicf("invalid normalization type %q given in context parameter %q -- valid values are 'none', 'layer' or 'batch'",
 			normType, ParamNormalization)

@@ -31,13 +31,13 @@ import (
 func TestMultiHeadAttentionGraph(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	{
-		ctx := model.New()
+		store := model.NewStore()
 		g := NewGraph(backend, "test")
 		batchSize := 3
 		key := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 4, 5, 3))
 		query := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 7, 1, 2))
 		value := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 4, 5, 10))
-		attOutput, attCoef := MultiHeadAttention(ctx, query, key, value, 6, 12).
+		attOutput, attCoef := MultiHeadAttention(store.RootScope(), query, key, value, 6, 12).
 			WithOutputDim(11).DoneWithCoefficients()
 		assert.EqualValues(t, []int{batchSize, 7, 1, 11}, attOutput.Shape().Dimensions, "AttentionOutput shape mismatch")
 		assert.EqualValues(t, []int{batchSize, 7, 1, 6, 4, 5}, attCoef.Shape().Dimensions, "AttentionCoefficients shape mismatch")
@@ -46,9 +46,9 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 	// Higher-rank with key mask: verifies that masks are correctly flattened alongside Q/K/V
 	// when inner axes are > 1, and that the graph executes without errors.
 	{
-		ctx := model.New()
+		store := model.NewStore()
 		batchSize := 2
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, input *Node) (*Node, *Node) {
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, input *Node) (*Node, *Node) {
 			g := input.Graph()
 			key := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 4, 5))
 			query := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 6, 1, 3))
@@ -56,7 +56,7 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 			// keyMask shape: [batch, 3, 4] — one mask per key inner element, same for all heads.
 			keyMask := Const(g, true)
 			keyMask = BroadcastToDims(keyMask, batchSize, 3, 4)
-			return MultiHeadAttention(ctx, query, key, value, 2, 8).
+			return MultiHeadAttention(scope, query, key, value, 2, 8).
 				WithKeyMask(keyMask).
 				WithOutputDim(9).DoneWithCoefficients()
 		})
@@ -67,12 +67,12 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 	}
 
 	modeltest.RunTestGraphFn(t, "MultiHeadAttention with masking",
-		func(ctx *model.Context, g *Graph) (inputs, outputs []*Node) {
+		func(scope *model.Scope, g *Graph) (inputs, outputs []*Node) {
 			batchSize := 2
 			key := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 3))
 			query := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 2))
 			value := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 2)))
-			attOutput, attCoef := MultiHeadAttention(ctx.WithInitializer(initializers.One),
+			attOutput, attCoef := MultiHeadAttention(scope.WithInitializer(initializers.One),
 				query, key, value, 1, 2).
 				WithCausalMask(true).
 				WithOutputDim(5).DoneWithCoefficients()
@@ -114,12 +114,13 @@ func TestMultiHeadAttentionFusedPath(t *testing.T) {
 
 			// Build two graphs with the same context (shared weights):
 			// one using DoneWithCoefficients (decomposed), one using Done (fused).
-			ctx := model.New().WithInitializer(initializers.One)
+			store := model.NewStore()
 
 			// Decomposed path.
-			decomposedExec := model.MustNewExec(backend, ctx, func(ctx *model.Context, g *Graph) []*Node {
+			decomposedExec := model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) []*Node {
+				scope = scope.WithInitializer(initializers.One)
 				input := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, inputDim))
-				builder := MultiHeadAttention(ctx, input, input, input, numHeads, headDim)
+				builder := MultiHeadAttention(scope, input, input, input, numHeads, headDim)
 				if useCausal {
 					builder = builder.WithCausalMask(true)
 				}
@@ -129,9 +130,10 @@ func TestMultiHeadAttentionFusedPath(t *testing.T) {
 			decomposedOutputs := decomposedExec.MustExec()
 
 			// Fused path (Done() will use fused when available).
-			fusedExec := model.MustNewExec(backend, ctx.Reuse(), func(ctx *model.Context, g *Graph) []*Node {
+			fusedExec := model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) []*Node {
+				scope = scope.WithInitializer(initializers.One)
 				input := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, inputDim))
-				builder := MultiHeadAttention(ctx, input, input, input, numHeads, headDim)
+				builder := MultiHeadAttention(scope, input, input, input, numHeads, headDim)
 				if useCausal {
 					builder = builder.WithCausalMask(true)
 				}
@@ -156,10 +158,10 @@ func TestMultiHeadAttentionWithRoPE(t *testing.T) {
 	// This test catches the seq axis bug where RoPE was applied on the heads axis
 	// instead of the seq axis for BSHD layout.
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
+	store := model.NewStore()
 
-	exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x *Node) *Node {
-		return SelfAttention(ctx, x, 2, 4).
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+		return SelfAttention(scope, x, 2, 4).
 			WithRoPE(10000.0).
 			WithCausalMask(true).
 			Done()
@@ -176,8 +178,8 @@ func TestMultiHeadAttentionWithRoPE(t *testing.T) {
 
 	// Run a second time with different sequence length to verify re-compilation
 	// with the same weights (reuse ctx so Dense parameters are shared).
-	exec2 := model.MustNewExec(backend, ctx.Reuse(), func(ctx *model.Context, x *Node) *Node {
-		return SelfAttention(ctx, x, 2, 4).
+	exec2 := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+		return SelfAttention(scope, x, 2, 4).
 			WithRoPE(10000.0).
 			WithCausalMask(true).
 			Done()
@@ -194,9 +196,9 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 
 		t.Run("basic", func(t *testing.T) {
-			ctx := model.New()
-			exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x *Node) *Node {
-				return SelfAttention(ctx, x, 2, 4).
+			store := model.NewStore()
+			exec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+				return SelfAttention(scope, x, 2, 4).
 					UseQKVProjection().
 					Done()
 			})
@@ -211,9 +213,9 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 		})
 
 		t.Run("with_causal_mask", func(t *testing.T) {
-			ctx := model.New()
-			exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x *Node) *Node {
-				return SelfAttention(ctx, x, 2, 4).
+			store := model.NewStore()
+			exec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+				return SelfAttention(scope, x, 2, 4).
 					UseQKVProjection().
 					WithCausalMask(true).
 					Done()
@@ -227,9 +229,9 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 		})
 
 		t.Run("with_coefficients", func(t *testing.T) {
-			ctx := model.New()
-			exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x *Node) []*Node {
-				output, coef := SelfAttention(ctx, x, 2, 4).
+			store := model.NewStore()
+			exec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) []*Node {
+				output, coef := SelfAttention(scope, x, 2, 4).
 					UseQKVProjection().
 					DoneWithCoefficients()
 				return []*Node{output, coef}
@@ -247,9 +249,9 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 		t.Run("no_output_bias", func(t *testing.T) {
 			// UseProjectionBias(false) disables only the output projection bias;
 			// QKV biases are always present (matching the separate Dense path).
-			ctx := model.New()
-			exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x *Node) *Node {
-				return SelfAttention(ctx, x, 2, 4).
+			store := model.NewStore()
+			exec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+				return SelfAttention(scope, x, 2, 4).
 					UseQKVProjection().
 					UseProjectionBias(false).
 					Done()
@@ -263,14 +265,14 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 		})
 
 		t.Run("with_mask", func(t *testing.T) {
-			ctx := model.New()
-			ctx.SetRNGStateFromSeed(42)
-			ctx = ctx.WithInitializer(initializers.RandomNormalFn(ctx, 1.0)) // Random initialization
+			store := model.NewStore()
+			store.SetRNGStateFromSeed(42)
 
 			// 1. exec for sequence N and masked as 3.
 			const N = 100
-			execN := model.MustNewExec(backend, ctx, func(ctx *model.Context, x *Node, mask *Node) *Node {
-				output := SelfAttention(ctx, x, 2, 4).
+			execN := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node, mask *Node) *Node {
+				scope = scope.WithInitializer(initializers.RandomNormalFn(scope, 1.0))
+				output := SelfAttention(scope, x, 2, 4).
 					UseQKVProjection().
 					WithMask(mask).
 					Done()
@@ -295,10 +297,11 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 			fmt.Printf("output -- slice after the attention:\n%s\n", output3ofN)
 
 			// 2. exec for sequence 3 (slice of the original), without mask
-			exec3 := model.MustNewExec(backend, ctx.Reuse(), func(ctx *model.Context, x *Node) *Node {
+			exec3 := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+				scope = scope.WithInitializer(initializers.RandomNormalFn(scope, 1.0))
 				// Slice the first 3 elements.
 				x = Slice(x, AxisRange(), AxisRange(0, 3), AxisRange())
-				return SelfAttention(ctx, x, 2, 4).
+				return SelfAttention(scope, x, 2, 4).
 					UseQKVProjection().
 					Done()
 			})
@@ -317,9 +320,9 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 
 	t.Run("basic", func(t *testing.T) {
 		// GQA with 4 query heads, 2 KV heads (2:1 ratio).
-		ctx := model.New()
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x *Node) *Node {
-			return MultiHeadAttention(ctx, x, x, x, 4, 8).
+		store := model.NewStore()
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+			return MultiHeadAttention(scope, x, x, x, 4, 8).
 				WithNumKVHeads(2).
 				Done()
 		})
@@ -342,9 +345,9 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 
 	t.Run("MQA", func(t *testing.T) {
 		// Multi-Query Attention: 4 query heads, 1 KV head.
-		ctx := model.New()
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x *Node) *Node {
-			return SelfAttention(ctx, x, 4, 8).
+		store := model.NewStore()
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+			return SelfAttention(scope, x, 4, 8).
 				WithNumKVHeads(1).
 				Done()
 		})
@@ -358,7 +361,7 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 
 	t.Run("fused_vs_decomposed", func(t *testing.T) {
 		// Verify fused (Done) and decomposed (DoneWithCoefficients) paths agree for GQA.
-		ctx := model.New().WithInitializer(initializers.One)
+		store := model.NewStore()
 		batchSize := 2
 		seqLen := 3
 		inputDim := 8
@@ -366,18 +369,20 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 		numKVHeads := 2
 		headDim := 4
 
-		decomposedExec := model.MustNewExec(backend, ctx, func(ctx *model.Context, g *Graph) []*Node {
+		decomposedExec := model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) []*Node {
+			scope = scope.WithInitializer(initializers.One)
 			input := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, inputDim))
-			output, _ := MultiHeadAttention(ctx, input, input, input, numHeads, headDim).
+			output, _ := MultiHeadAttention(scope, input, input, input, numHeads, headDim).
 				WithNumKVHeads(numKVHeads).
 				DoneWithCoefficients()
 			return []*Node{output}
 		})
 		decomposedOutputs := decomposedExec.MustExec()
 
-		fusedExec := model.MustNewExec(backend, ctx.Reuse(), func(ctx *model.Context, g *Graph) []*Node {
+		fusedExec := model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) []*Node {
+			scope = scope.WithInitializer(initializers.One)
 			input := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, inputDim))
-			output := MultiHeadAttention(ctx, input, input, input, numHeads, headDim).
+			output := MultiHeadAttention(scope, input, input, input, numHeads, headDim).
 				WithNumKVHeads(numKVHeads).
 				Done()
 			return []*Node{output}
@@ -390,9 +395,9 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 	})
 
 	t.Run("with_causal_mask", func(t *testing.T) {
-		ctx := model.New()
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x *Node) *Node {
-			return SelfAttention(ctx, x, 4, 4).
+		store := model.NewStore()
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+			return SelfAttention(scope, x, 4, 4).
 				WithNumKVHeads(2).
 				WithCausalMask(true).
 				Done()
@@ -407,9 +412,9 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 	})
 
 	t.Run("with_rope", func(t *testing.T) {
-		ctx := model.New()
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x *Node) *Node {
-			return SelfAttention(ctx, x, 4, 4).
+		store := model.NewStore()
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+			return SelfAttention(scope, x, 4, 4).
 				WithNumKVHeads(2).
 				WithRoPE(10000.0).
 				WithCausalMask(true).
@@ -426,9 +431,9 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 
 	t.Run("coefficients_shape", func(t *testing.T) {
 		// Verify coefficient shape uses numHeads (not numKVHeads).
-		ctx := model.New()
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x *Node) []*Node {
-			output, coef := SelfAttention(ctx, x, 4, 4).
+		store := model.NewStore()
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) []*Node {
+			output, coef := SelfAttention(scope, x, 4, 4).
 				WithNumKVHeads(2).
 				DoneWithCoefficients()
 			return []*Node{output, coef}
@@ -449,8 +454,8 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 // of a sequence, with a learnable positional embedding.
 //
 // If debug==true allows to control printing out of intermediary results.
-func buildSyntheticAttentionModelFn(debug bool) (modelGraphFn func(ctx *model.Context, spec any, inputs []*Node) []*Node) {
-	return func(ctx *model.Context, spec any, inputs []*Node) (allLogits []*Node) {
+func buildSyntheticAttentionModelFn(debug bool) (modelGraphFn func(scope *model.Scope, spec any, inputs []*Node) []*Node) {
+	return func(scope *model.Scope, spec any, inputs []*Node) (allLogits []*Node) {
 		_ = spec
 		input := inputs[0] // shape=[batch, sequence]
 		g := input.Graph()
@@ -461,7 +466,7 @@ func buildSyntheticAttentionModelFn(debug bool) (modelGraphFn func(ctx *model.Co
 		batchSize := input.Shape().Dimensions[0]
 		sequenceSize := input.Shape().Dimensions[1]
 		const positionalEmbeddingSize = 16
-		noisyCtx := ctx.WithInitializer(initializers.RandomNormalFn(ctx, 1.0))
+		noisyCtx := scope.WithInitializer(initializers.RandomNormalFn(scope, 1.0))
 		positionalVar := noisyCtx.In("positional").VariableWithShape("embeddings", shapes.Make(dtype, sequenceSize, positionalEmbeddingSize))
 		positionalEmbedding := positionalVar.ValueGraph(g)
 		positionalEmbedding = InsertAxes(positionalEmbedding, 0) // Prefixing with batch dimension.
@@ -473,16 +478,16 @@ func buildSyntheticAttentionModelFn(debug bool) (modelGraphFn func(ctx *model.Co
 			logits.SetLogged("Input+Positional")
 		}
 		var coef *Node
-		logits, coef = MultiHeadAttention(ctx.In("attention"), logits, logits, logits, 4, 8).DoneWithCoefficients()
+		logits, coef = MultiHeadAttention(scope.In("attention"), logits, logits, logits, 4, 8).DoneWithCoefficients()
 		if debug {
 			coef.SetLogged("Attention Coefficients")
 		}
 		residual := logits
 		logits = Sigmoid(logits)
-		logits = layers.Dense(ctx.In("dense_seq_1"), logits, true, logits.Shape().Dimensions[2])
+		logits = layers.Dense(scope.In("dense_seq_1"), logits, true, logits.Shape().Dimensions[2])
 		logits = Add(residual, logits)
 		logits = Sigmoid(logits)
-		logits = layers.Dense(ctx.In("dense_seq_0"), logits, true, 1)
+		logits = layers.Dense(scope.In("dense_seq_0"), logits, true, 1)
 		logits = Squeeze(logits, -1)
 		allLogits = []*Node{logits}
 		return
@@ -547,10 +552,10 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 
 	// Context and optimizer used for training.
-	ctx := model.New()
+	store := model.NewStore()
 	opt := optimizers.Adam().LearningRate(0.001).Done()
 
-	trainer := train.NewTrainer(backend, ctx, buildSyntheticAttentionModelFn(false),
+	trainer := train.NewTrainer(backend, store.RootScope(), buildSyntheticAttentionModelFn(false),
 		losses.MeanSquaredError,
 		opt,
 		nil, // trainMetrics
@@ -574,10 +579,10 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 		var results []*tensors.Tensor
 
 		modelFn := buildSyntheticAttentionModelFn(false)
-		inferenceFn := func(ctx *model.Context, inputs []*Node) *Node {
-			return modelFn(ctx, nil, inputs)[0]
+		inferenceFn := func(scope *model.Scope, inputs []*Node) *Node {
+			return modelFn(scope, nil, inputs)[0]
 		}
-		inferenceExec := model.MustNewExec(backend, ctx.Reuse(), inferenceFn)
+		inferenceExec := model.MustNewExec(backend, store, inferenceFn)
 		for range 3 {
 			_, inputs, labels, err := evalDS.Yield()
 			require.NoErrorf(t, err, "Failed datasets: %+v", err)

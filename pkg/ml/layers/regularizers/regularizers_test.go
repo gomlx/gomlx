@@ -13,11 +13,11 @@ import (
 )
 
 func TestConstantL1(t *testing.T) {
-	modeltest.RunTestGraphFn(t, "ConstantL1 regularizer", func(ctx *model.Context, g *Graph) (inputs, outputs []*Node) {
-		wVar := ctx.VariableWithValue("w", [][]float32{{0, 1, 2, 3, 4}, {0, 1, 2, 3, 4}})
+	modeltest.RunTestGraphFn(t, "ConstantL1 regularizer", func(scope *model.Scope, g *Graph) (inputs, outputs []*Node) {
+		wVar := scope.VariableWithValue("w", [][]float32{{0, 1, 2, 3, 4}, {0, 1, 2, 3, 4}})
 		w := wVar.ValueGraph(g)
-		ConstantL1(0.1)(ctx, g, wVar)
-		loss := train.GetLosses(ctx, g)
+		ConstantL1(0.1)(scope, g, wVar)
+		loss := train.GetLosses(scope, g)
 		inputs = []*Node{w}
 		outputs = []*Node{loss, Gradient(loss, w)[0]}
 		return

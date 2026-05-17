@@ -50,12 +50,13 @@ var ModelList = []string{"linear", "cnn"}
 
 var excludeParams = []string{"data_dir", "train_steps", "num_checkpoints", "plots"}
 
-type ContextFn func(ctx *model.Context) *model.Context
+type ContextFn func(scope *model.Scope) *model.Scope
 
-func CreateDefaultContext() *model.Context {
-	ctx := model.New()
-	_ = ctx.ResetRNGState()
-	ctx.SetParams(map[string]any{
+func CreateDefaultContext() *model.Scope {
+	store := model.NewStore()
+	_ = store.ResetRNGState()
+	scope := store.RootScope()
+	scope.SetParams(map[string]any{
 		// Model type to use
 		"model":           "linear",
 		"loss":            "sparse_cross_logits",
@@ -99,17 +100,17 @@ func CreateDefaultContext() *model.Context {
 		losses.ParamTripletLossMiningStrategy:         "Hard",
 		losses.ParamTripletLossMargin:                 0.5,
 	})
-	return ctx
+	return scope
 }
 
 // NewDatasetsConfigurationFromContext create a preprocessing configuration based on hyperparameters
 // set in the model.
-func NewDatasetsConfigurationFromContext(ctx *model.Context, dataDir string) *DatasetsConfiguration {
+func NewDatasetsConfigurationFromContext(scope *model.Scope, dataDir string) *DatasetsConfiguration {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	config := &DatasetsConfiguration{}
 	config.DataDir = dataDir
-	config.BatchSize = model.GetParamOr(ctx, "batch_size", 0)
-	config.EvalBatchSize = model.GetParamOr(ctx, "eval_batch_size", 0)
+	config.BatchSize = model.GetParamOr(scope, "batch_size", 0)
+	config.EvalBatchSize = model.GetParamOr(scope, "eval_batch_size", 0)
 	config.UseParallelism = true
 	config.BufferSize = 100
 	config.Dtype = dtypes.Float32
@@ -117,7 +118,7 @@ func NewDatasetsConfigurationFromContext(ctx *model.Context, dataDir string) *Da
 }
 
 // TrainModel based on configuration and flags.
-func TrainModel(ctx *model.Context, dataDir, checkpointPath string, paramsSet []string) error {
+func TrainModel(scope *model.Scope, dataDir, checkpointPath string, paramsSet []string) error {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
 		if err := os.MkdirAll(dataDir, 0777); err != nil {
@@ -125,7 +126,7 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, paramsSet []
 		}
 	}
 
-	modelType := model.GetParamOr(ctx, "model", "")
+	modelType := model.GetParamOr(scope, "model", "")
 	var modelFn train.ModelFn
 	switch modelType {
 	case "linear":
@@ -141,7 +142,7 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, paramsSet []
 	backend := compute.MustNew()
 	fmt.Printf("Backend %s: %s\n", backend.Name(), backend.Description())
 
-	lossFn, err := losses.LossFromContext(ctx)
+	lossFn, err := losses.LossFromContext(scope)
 	if err != nil {
 		return err
 	}
@@ -150,7 +151,7 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, paramsSet []
 		return err
 	}
 
-	dsConfig := NewDatasetsConfigurationFromContext(ctx, dataDir)
+	dsConfig := NewDatasetsConfigurationFromContext(scope, dataDir)
 	trainDS, trainEvalDS, validationEvalDS := CreateDatasets(backend, dsConfig)
 
 	// Metrics we are interested in.
@@ -160,8 +161,8 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, paramsSet []
 	// Create a train.Trainer: this object will orchestrate running the modelType, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	var trainer *train.Trainer
-	optimizer := optimizers.FromContext(ctx)
-	trainer = train.NewTrainer(backend, ctx,
+	optimizer := optimizers.FromContext(scope)
+	trainer = train.NewTrainer(backend, scope,
 		modelFn,
 		lossFn,
 		optimizer,
@@ -169,7 +170,7 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, paramsSet []
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
 	// Debugging.
-	if model.GetParamOr(ctx, "nan_logger", false) {
+	if model.GetParamOr(scope, "nan_logger", false) {
 		nanlogger.New().AttachToTrainer(trainer)
 	}
 
@@ -180,8 +181,8 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, paramsSet []
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
-		numCheckpointsToKeep := model.GetParamOr(ctx, "num_checkpoints", 3)
-		checkpoint, err = checkpoints.Build(ctx).
+		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 3)
+		checkpoint, err = checkpoints.Build(scope).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, excludeParams...)...).
@@ -201,7 +202,7 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, paramsSet []
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if model.GetParamOr(ctx, plotly.ParamPlots, false) {
+	if model.GetParamOr(scope, plotly.ParamPlots, false) {
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
@@ -211,11 +212,10 @@ func TrainModel(ctx *model.Context, dataDir, checkpointPath string, paramsSet []
 	}
 
 	// Loop for a given number of steps.
-	numTrainSteps := model.GetParamOr(ctx, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(ctx))
+	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
+	globalStep := int(optimizers.GetGlobalStep(scope))
 	if globalStep > 0 {
 		fmt.Printf("\t- restarting from global step %d\n", globalStep)
-		trainer.SetContext(ctx.Reuse())
 	}
 	if globalStep < numTrainSteps {
 		_, err = loop.RunSteps(trainDS, numTrainSteps-globalStep)

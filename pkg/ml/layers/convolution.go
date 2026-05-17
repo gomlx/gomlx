@@ -17,7 +17,7 @@ import (
 // ConvBuilder is a helper to build a convolution computation. Create it with Convolution, set the desired parameters,
 // and when all is set, call Done.
 type ConvBuilder struct {
-	ctx                                *model.Context
+	scope                              *model.Scope
 	graph                              *Graph
 	x                                  *Node
 	numSpatialDims                     int
@@ -53,13 +53,13 @@ type ConvBuilder struct {
 //
 // The output rank and order of the output axes are the same as the input's.
 // Their dimensions depend on the configuration options.
-func Convolution(ctx *model.Context, x *Node) *ConvBuilder {
+func Convolution(scope *model.Scope, x *Node) *ConvBuilder {
 	conv := &ConvBuilder{
-		ctx:               ctx,
+		scope:             scope,
 		graph:             x.Graph(),
 		x:                 x,
 		newScope:          true,
-		regularizer:       regularizers.FromContext(ctx),
+		regularizer:       regularizers.FromContext(scope),
 		channelGroupCount: 1,
 		batchGroupCount:   1,
 	}
@@ -310,7 +310,7 @@ func (conv *ConvBuilder) Regularizer(regularizer regularizers.Regularizer) *Conv
 // Node.
 func (conv *ConvBuilder) Done() *Node {
 	// Default is to create a sub-scope for the convolution variables.
-	ctxInScope := conv.ctx
+	ctxInScope := conv.scope
 	if conv.newScope {
 		ctxInScope = ctxInScope.In("conv")
 	}

@@ -27,10 +27,10 @@ import (
 // Notice for any feature that happens to be constant, the `stddev` will be 0. If trying to normalize (divide)
 // by that will result in error. Use ReplaceZerosByOnes below to avoid the numeric issues.
 func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, independentAxes ...int) (mean, stddev *tensors.Tensor, err error) {
-	ctx := model.New()
-	updateValuesWithInput := model.MustNewExec(backend, ctx, func(ctx *model.Context, batch *Node) {
+	store := model.NewStore()
+	updateValuesWithInput := model.MustNewExec(backend, store, func(scope *model.Scope, batch *Node) {
 		g := batch.Graph()
-		ctx = ctx.WithInitializer(initializers.Zero)
+		scope = scope.WithInitializer(initializers.Zero)
 
 		// Find axes to reduce from the input.
 		mapIndependentAxes := make([]bool, batch.Rank())
@@ -49,14 +49,14 @@ func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, i
 		batchSum := ReduceAndKeep(batch, ReduceSum, reduceAxes...)
 		reducedCount := batch.Shape().Size() / batchSum.Shape().Size()
 
-		countVar := ctx.VariableWithValue("count", 0)
+		countVar := scope.VariableWithValue("count", 0.0)
 		countVar.SetValueGraph(AddScalar(countVar.ValueGraph(g), float64(reducedCount)))
 
-		sumVar := ctx.VariableWithShape("sum", batchSum.Shape())
+		sumVar := scope.VariableWithShape("sum", batchSum.Shape())
 		sumVar.SetValueGraph(Add(sumVar.ValueGraph(g), batchSum))
 
 		batchSum2 := ReduceAndKeep(Square(batch), ReduceSum, reduceAxes...)
-		sumSquareVar := ctx.VariableWithShape("sum^2", batchSum2.Shape())
+		sumSquareVar := scope.VariableWithShape("sum^2", batchSum2.Shape())
 		sumSquareVar.SetValueGraph(Add(sumSquareVar.ValueGraph(g), batchSum2))
 	})
 
@@ -93,14 +93,14 @@ func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, i
 	// Calculate mean and stddev, using a graph.
 	var results []*tensors.Tensor
 	err = exceptions.TryCatch[error](func() {
-		results = model.MustNewExec(backend, ctx, func(ctx *model.Context, g *Graph) []*Node {
-			countVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "count")
+		results = model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) []*Node {
+			countVar := scope.GetVariable("count")
 			count := countVar.ValueGraph(g)
 
-			sumVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "sum")
+			sumVar := scope.GetVariable("sum")
 			sum := sumVar.ValueGraph(g)
 
-			sumSquareVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "sum^2")
+			sumSquareVar := scope.GetVariable("sum^2")
 			sumSquare := sumSquareVar.ValueGraph(g)
 
 			count = ConvertDType(count, sum.DType())
@@ -113,9 +113,11 @@ func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, i
 		}).MustExec()
 	})
 	if err != nil {
+		err = errors.WithMessagef(err, "while calculating the final mean/stddev from accumulated batch statistics")
 		return
 	}
-	mean, stddev = results[0], results[1]
+	mean = results[0]
+	stddev = results[1]
 	return
 }
 

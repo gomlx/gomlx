@@ -34,18 +34,18 @@ var (
 )
 
 func main() {
-	ctx := dogsvscats.CreateDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	scope := dogsvscats.CreateDefaultContext()
+	settings := commandline.CreateContextSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := check1(commandline.ParseContextSettings(scope, *settings))
 
 	// --force_original better set by
 	err := exceptions.TryCatch[error](func() {
 		if *flagPreGenerate {
-			preGenerate(ctx, *flagDataDir)
+			preGenerate(scope, *flagDataDir)
 		} else {
-			dogsvscats.TrainModel(ctx, *flagDataDir, *flagCheckpoint, *flagEval, paramsSet)
+			dogsvscats.TrainModel(scope, *flagDataDir, *flagCheckpoint, *flagEval, paramsSet)
 		}
 	})
 	if err != nil {
@@ -53,7 +53,7 @@ func main() {
 	}
 }
 
-func preGenerate(ctx *model.Context, dataDir string) {
+func preGenerate(scope *model.Scope, dataDir string) {
 	*flagDataDir = fsutil.MustReplaceTildeInDir(*flagDataDir)
 	if !fsutil.MustFileExists(*flagDataDir) {
 		check(os.MkdirAll(*flagDataDir, 0777))
@@ -61,7 +61,7 @@ func preGenerate(ctx *model.Context, dataDir string) {
 	check(dogsvscats.Download(*flagDataDir))
 	check(dogsvscats.FilterValidImages(*flagDataDir))
 
-	config := dogsvscats.NewPreprocessingConfigurationFromContext(ctx, *flagDataDir)
+	config := dogsvscats.NewPreprocessingConfigurationFromContext(scope, *flagDataDir)
 	dogsvscats.PreGenerate(config, *flagPreGenEpochs, true)
 }
 

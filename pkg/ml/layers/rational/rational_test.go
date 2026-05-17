@@ -17,13 +17,13 @@ import (
 
 func TestConfig_Approximate(t *testing.T) {
 	modeltest.RunTestGraphFn(t, "Swish-Approximate",
-		func(ctx *model.Context, g *Graph) (inputs, outputs []*Node) {
+		func(scope *model.Scope, g *Graph) (inputs, outputs []*Node) {
 			batchSize := 1_000
 			minX, maxX := -10.0, 10.0
 			xs := Iota(g, shapes.Make(dtypes.Float64, batchSize), 0)
 			xs = MulScalar(xs, (maxX-minX)/float64(batchSize-1))
 			xs = AddScalar(xs, minX)
-			y := New(ctx, xs).
+			y := New(scope, xs).
 				Approximate("swish").
 				Version("B").
 				WithInputGroups(1).
@@ -41,11 +41,11 @@ func TestConfig_Approximate(t *testing.T) {
 
 	// Add a multiplier that tries to preserve the variance.
 	modeltest.RunTestGraphFn(t, "Relu-Variance",
-		func(ctx *model.Context, g *Graph) (inputs, outputs []*Node) {
+		func(scope *model.Scope, g *Graph) (inputs, outputs []*Node) {
 			batchSize := 1_000
 			numOutputs := 1000
-			xs := ctx.RandomNormal(g, shapes.Make(dtypes.Float64, batchSize, 1))
-			y := New(ctx, xs).
+			xs := scope.RandomNormal(g, shapes.Make(dtypes.Float64, batchSize, 1))
+			y := New(scope, xs).
 				Approximate("swish").
 				Version("B").
 				WithMultipleOutputs(numOutputs).
@@ -66,10 +66,10 @@ func TestConfig_Approximate(t *testing.T) {
 
 func TestMultipleOutputs(t *testing.T) {
 	modeltest.RunTestGraphFn(t, "Identity: multiple outputs, numInputGroups=2",
-		func(ctx *model.Context, g *Graph) (inputs, outputs []*Node) {
+		func(scope *model.Scope, g *Graph) (inputs, outputs []*Node) {
 			batchSize := 3
 			x := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 6))
-			y := New(ctx, x).
+			y := New(scope, x).
 				Approximate("identity").
 				Version("B").
 				WithInputGroups(2).

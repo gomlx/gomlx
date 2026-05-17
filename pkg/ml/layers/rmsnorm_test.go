@@ -13,9 +13,9 @@ import (
 
 func TestRMSNorm(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
-	exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, x *Node) *Node {
-		return RMSNorm(ctx, x).
+	store := model.NewStore()
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+		return RMSNorm(scope, x).
 			WithNormalizationAxes(-1, -2).
 			Done()
 	})
@@ -35,7 +35,7 @@ func TestRMSNorm(t *testing.T) {
 		t.Errorf("RMSNorm mismatch (-want +got):\n%s", diff)
 	}
 
-	scaleVar := ctx.GetVariableByScopeAndName("/rms_norm", "scale")
+	scaleVar := store.GetVariable("/rms_norm/scale")
 	require.NotNil(t, scaleVar)
 	require.NoError(t, scaleVar.Shape().CheckDims(3, 2))
 }

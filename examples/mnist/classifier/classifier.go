@@ -32,7 +32,7 @@ type Classifier struct {
 	backend compute.Backend
 
 	// ctx with the model's weights.
-	ctx *model.Context
+	scope *model.Scope
 
 	// exec is used to execute the model with a model.
 	exec *model.Exec
@@ -42,21 +42,20 @@ type Classifier struct {
 func New(checkpointDir string) (*Classifier, error) {
 	c := &Classifier{
 		backend: compute.MustNew(),
-		ctx:     model.New(),
+		scope:   model.NewStore().RootScope(),
 	}
 
 	// Notice all hyperparameters are read from the checkpoint as well, so it will be built with the
 	// same model.
 	// We don't need to keep the checkpoint handler around, since we are not going to use it to save.
-	_, err := checkpoints.Load(c.ctx).
+	_, err := checkpoints.Load(c.scope).
 		Dir(checkpointDir).
 		Done()
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed while loading MNIST model from %q", checkpointDir)
 	}
-	c.ctx = c.ctx.Reuse() // Mark it to reuse variables: it will be an error to create a new variable -- for extra sanity checking.
 
-	modelType := model.GetParamOr(c.ctx, "model", "")
+	modelType := model.GetParamOr(c.scope, "model", "")
 	var modelFn train.ModelFn
 	switch modelType {
 	case "linear":
@@ -69,11 +68,11 @@ func New(checkpointDir string) (*Classifier, error) {
 	}
 
 	// Create model executor.
-	c.exec = model.MustNewExec(c.backend, c.ctx,
-		func(ctx *model.Context, image *graph.Node) (choice *graph.Node) {
+	c.exec = model.MustNewExec(c.backend, c.scope.Store(),
+		func(scope *model.Scope, image *graph.Node) (choice *graph.Node) {
 			// We take the first result from the modelFn -- it returns a slice.
 			image = graph.ExpandAxes(image, 0) // Create a batch dimension of size 1.
-			logits := modelFn(ctx, nil, []*graph.Node{image})[0]
+			logits := modelFn(scope, nil, []*graph.Node{image})[0]
 			// Take the class with highest logit value.
 			choice = graph.ArgMax(logits, -1, dtypes.Int32)
 			// Remove batch dimension.

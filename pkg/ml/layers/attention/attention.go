@@ -175,7 +175,7 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 //   - coefficients: attention coefficients (nil when wantCoefficients is false) shaped
 //     [batch, heads, q_seq, kv_seq] for LayoutBHSD or
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
-func Core(ctx *model.Context, query, key, value *Node, scale float64, attentionMask *Node, dropoutRate *Node,
+func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionMask *Node, dropoutRate *Node,
 	layout AxesLayout, useCausalMask, wantCoefficients bool) (output, coefficients *Node) {
 	g := query.Graph()
 	numQueryHeads := query.Shape().Dimensions[layout.HeadsAxis()]
@@ -188,7 +188,7 @@ func Core(ctx *model.Context, query, key, value *Node, scale float64, attentionM
 		Panicf("attention.Core: numQueryHeads (%d) must be positive and divisible by numKVHeads (%d)", numQueryHeads, numKVHeads)
 	}
 
-	dropoutActive := layers.IsDropoutActive(ctx, g) && dropoutRate != nil
+	dropoutActive := layers.IsDropoutActive(scope, g) && dropoutRate != nil
 
 	// Function to compute the attention "decomposed" (as in not-fused).
 	// We use this as a closure (as opposed to calculating it directly), because it's required
@@ -238,7 +238,7 @@ func Core(ctx *model.Context, query, key, value *Node, scale float64, attentionM
 			coefficients = MaskedSoftmax(scores, decomposedMask, -1)
 		}
 		if dropoutActive {
-			coefficients = layers.Dropout(ctx, coefficients, dropoutRate)
+			coefficients = layers.Dropout(scope, coefficients, dropoutRate)
 		}
 
 		decomposedOutput := Einsum(outputEquation(layout, isGQA), coefficients, value)

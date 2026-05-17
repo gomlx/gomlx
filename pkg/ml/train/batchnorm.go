@@ -97,20 +97,20 @@ func (r *Trainer) batchNormAveragesStep(phase int, spec any, inputs, labels []*t
 // inputsAndLabel[:-1] are the inputs, and inputsAndLabel[-1] is the labels batch.
 func (r *Trainer) batchNormsAverageStepGraphFn(
 	phase int,
-) func(spec any, ctx *model.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
-	return func(spec any, ctx *model.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
+) func(spec any, scope *model.Scope, inputs, labels []*graph.Node) (metrics []*graph.Node) {
+	return func(spec any, scope *model.Scope, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 		g := inputs[0].Graph()
-		ctx.SetTraining(g, false)
-		ctx.SetGraphParam(g, BatchNormalizationUpdatePhase, phase)
+		scope.SetTraining(g, false)
+		scope.SetGraphParam(g, BatchNormalizationUpdatePhase, phase)
 
-		predictions := r.modelFn(ctx, spec, inputs)
+		predictions := r.modelFn(scope, spec, inputs)
 		metrics = slices.Clone(predictions)
 		if r.lossFn != nil {
 			loss := r.lossFn(labels, predictions)
 			if !loss.Shape().IsScalar() {
 				loss = graph.ReduceAllMean(loss)
 			}
-			AddLoss(ctx, loss)
+			AddLoss(scope, loss)
 			metrics = append(metrics, loss)
 		}
 		return

@@ -37,10 +37,10 @@ var (
 
 const paramWithReplacement = "mag_with_replacement"
 
-func createDefaultContext() *model.Context {
-	ctx := model.New()
-	ctx.ResetRNGState()
-	ctx.SetParams(map[string]any{
+func createDefaultContext() *model.Scope {
+	scope := model.NewStore()
+	scope.ResetRNGState()
+	scope.SetParams(map[string]any{
 		"checkpoint":         "",
 		"num_checkpoints":    3,
 		"train_steps":        0,
@@ -110,17 +110,17 @@ func createDefaultContext() *model.Context {
 		mag.ParamIdentitySubSeeds:     true,
 		mag.ParamDType:                "float32",
 	})
-	ctx.In("readout").SetParam(gnn.ParamUpdateNumHiddenLayers, 2)
-	return ctx
+	scope.In("readout").SetParam(gnn.ParamUpdateNumHiddenLayers, 2)
+	return scope
 }
 
-func SetTrainSteps(ctx *model.Context) {
-	numTrainSteps := model.GetParamOr(ctx, "train_steps", 0)
+func SetTrainSteps(scope *model.Scope) {
+	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
 	if numTrainSteps <= 0 {
 		stepsPerEpoch := mag.TrainSplit.Shape().Size()/mag.BatchSize + 1
 		numEpochs := 10 // Taken from TF-GNN OGBN-MAG notebook.
 		numTrainSteps = numEpochs * stepsPerEpoch
-		ctx.SetParam("train_steps", numTrainSteps)
+		scope.SetParam("train_steps", numTrainSteps)
 	}
 	//cosineScheduleSteps := model.GetParamOr(ctx, cosineschedule.ParamPeriodSteps, 0)
 	//if cosineScheduleSteps < 0 {
@@ -131,10 +131,10 @@ func SetTrainSteps(ctx *model.Context) {
 func main() {
 	// Init GoMLX manager and default model.
 	backend := compute.MustNew()
-	ctx := createDefaultContext()
+	scope := createDefaultContext()
 
 	// Flags with context settings.
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	settings := commandline.CreateContextSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
 
@@ -145,12 +145,12 @@ func main() {
 	}
 
 	// Parse hyperparameter settings.
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := check1(commandline.ParseContextSettings(scope, *settings))
 	if *flagVerbose {
 		fmt.Println("Hyperparameters set:")
-		fmt.Println(commandline.SprintModifiedContextSettings(ctx, paramsSet))
+		fmt.Println(commandline.SprintModifiedContextSettings(scope, paramsSet))
 	}
-	mag.BatchSize = model.GetParamOr(ctx, "batch_size", 128)
+	mag.BatchSize = model.GetParamOr(scope, "batch_size", 128)
 
 	//Early sanity checks.
 	if *flagCheckpoint == "" && *flagEval {
@@ -162,20 +162,20 @@ func main() {
 	start := time.Now()
 	check(mag.Download(*flagDataDir))
 	fmt.Printf("elapsed: %s\n", time.Since(start))
-	SetTrainSteps(ctx) // Can only be set after mag data is loaded.
+	SetTrainSteps(scope) // Can only be set after mag data is loaded.
 
 	// RunWithMap train / eval.
-	mag.WithReplacement = model.GetParamOr(ctx, paramWithReplacement, false)
+	mag.WithReplacement = model.GetParamOr(scope, paramWithReplacement, false)
 	var err error
 	if *flagEval {
-		err = mag.Eval(backend, ctx, *flagDataDir, *flagCheckpoint, *flagLayerWise, *flagSkipTrainEval)
+		err = mag.Eval(backend, scope, *flagDataDir, *flagCheckpoint, *flagLayerWise, *flagSkipTrainEval)
 	} else {
 		if mag.WithReplacement {
 			fmt.Println("Training dataset with replacement")
 		}
 
 		// Train.
-		err = mag.Train(backend, ctx, *flagDataDir, *flagCheckpoint, *flagLayerWise, !*flagSkipReport, paramsSet)
+		err = mag.Train(backend, scope, *flagDataDir, *flagCheckpoint, *flagLayerWise, !*flagSkipReport, paramsSet)
 	}
 	if err != nil {
 		fmt.Printf("%+v\n", err)

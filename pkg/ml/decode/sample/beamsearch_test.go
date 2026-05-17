@@ -44,14 +44,14 @@ func TestBeamSearchConfig(t *testing.T) {
 func TestBeamSearchStep(t *testing.T) {
 	t.Run("Basic", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		config := NewBeamSearch(2, 999)
 		batchSize := 1
 		beamSize := 2
 		currentLength := 3
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, logits, sequences, scores *Node) []*Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, logits, sequences, scores *Node) []*Node {
 			nextSeqs, nextScores, isFinished := config.Step(logits, sequences, scores, currentLength)
 			return []*Node{nextSeqs, nextScores, isFinished}
 		})
@@ -83,13 +83,13 @@ func TestBeamSearchStep(t *testing.T) {
 
 	t.Run("EOSSuppression", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		eosToken := 5
 		config := NewBeamSearch(2, eosToken).WithMinLength(10)
 		currentLength := 3
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, logits, sequences, scores *Node) []*Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, logits, sequences, scores *Node) []*Node {
 			nextSeqs, nextScores, isFinished := config.Step(logits, sequences, scores, currentLength)
 			return []*Node{nextSeqs, nextScores, isFinished}
 		})
@@ -115,13 +115,13 @@ func TestBeamSearchStep(t *testing.T) {
 
 	t.Run("FinishedDetection", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		eosToken := 3
 		config := NewBeamSearch(2, eosToken).WithMinLength(0)
 		currentLength := 5
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, logits, sequences, scores *Node) []*Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, logits, sequences, scores *Node) []*Node {
 			nextSeqs, nextScores, isFinished := config.Step(logits, sequences, scores, currentLength)
 			return []*Node{nextSeqs, nextScores, isFinished}
 		})
@@ -143,14 +143,14 @@ func TestBeamSearchStep(t *testing.T) {
 
 	t.Run("MultipleBatches", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
 		config := NewBeamSearch(2, 999)
 		batchSize := 3
 		beamSize := 2
 		currentLength := 2
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, logits, sequences, scores *Node) []*Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, logits, sequences, scores *Node) []*Node {
 			nextSeqs, nextScores, isFinished := config.Step(logits, sequences, scores, currentLength)
 			return []*Node{nextSeqs, nextScores, isFinished}
 		})
@@ -193,9 +193,9 @@ func TestBeamSearchStep(t *testing.T) {
 func TestApplyLengthPenalty(t *testing.T) {
 	t.Run("NoPenalty", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 		config := NewBeamSearch(2, 999) // lengthPenalty defaults to 1.0
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, scores, lengths *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, scores, lengths *Node) *Node {
 			return config.applyLengthPenalty(scores, lengths)
 		})
 		scores := tensors.FromValue([]float32{-1.0, -2.0, -3.0, -4.0})
@@ -210,10 +210,10 @@ func TestApplyLengthPenalty(t *testing.T) {
 
 	t.Run("WithPenalty", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 		penalty := 1.5
 		config := NewBeamSearch(2, 999).WithLengthPenalty(penalty)
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, scores, lengths *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, scores, lengths *Node) *Node {
 			return config.applyLengthPenalty(scores, lengths)
 		})
 		scores := tensors.FromValue([]float32{-10.0, -20.0})

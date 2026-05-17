@@ -18,7 +18,7 @@ import (
 // set the desired parameters and when all is set, call Done.
 // See LayerNormalization for details.
 type LayerNormBuilder struct {
-	ctx                *model.Context
+	scope              *model.Scope
 	x, mask            *Node
 	normalizingAxes    []int
 	epsilon            float64
@@ -98,20 +98,20 @@ var (
 // https://arxiv.org/abs/1607.06450
 //
 // FutureWork: support padding by not normalizing parts that weren't touched ...
-func LayerNormalization(ctx *model.Context, x *Node, normalizingAxes ...int) *LayerNormBuilder {
+func LayerNormalization(scope *model.Scope, x *Node, normalizingAxes ...int) *LayerNormBuilder {
 	builder := &LayerNormBuilder{
-		ctx:                ctx.In("layer_normalization"),
+		scope:              scope.In("layer_normalization"),
 		x:                  x,
 		normalizingAxes:    normalizingAxes,
-		epsilon:            model.GetParamOr(ctx, ParamLayerNormEpsilon, 1e-3),
-		center:             model.GetParamOr(ctx, ParamLayerNormCenter, true),
-		gain:               model.GetParamOr(ctx, ParamLayerNormLearnedGain, true),
-		scaleNormalization: model.GetParamOr(ctx, ParamLayerNormRescale, true),
+		epsilon:            model.GetParamOr(scope, ParamLayerNormEpsilon, 1e-3),
+		center:             model.GetParamOr(scope, ParamLayerNormCenter, true),
+		gain:               model.GetParamOr(scope, ParamLayerNormLearnedGain, true),
+		scaleNormalization: model.GetParamOr(scope, ParamLayerNormRescale, true),
 		normalizationDType: x.DType(),
 	}
 
 	// Create default regularizer.
-	if l2 := model.GetParamOr(ctx, ParamLayerNormL2Regularization, 0.0); l2 > 0 {
+	if l2 := model.GetParamOr(scope, ParamLayerNormL2Regularization, 0.0); l2 > 0 {
 		builder.regularizer = regularizers.Combine(builder.regularizer, regularizers.L2(l2))
 	}
 
@@ -121,7 +121,7 @@ func LayerNormalization(ctx *model.Context, x *Node, normalizingAxes ...int) *La
 	}
 
 	// Add default dtype for normalization.
-	normDTypeStr := model.GetParamOr(ctx, ParamLayerNormNormalizationDType, "")
+	normDTypeStr := model.GetParamOr(scope, ParamLayerNormNormalizationDType, "")
 	if normDTypeStr == "" {
 		if x.DType() == dtypes.Float16 || x.DType() == dtypes.BFloat16 {
 			builder.normalizationDType = dtypes.Float32
@@ -207,7 +207,7 @@ func (builder *LayerNormBuilder) Done() *Node {
 // createVariables creates the gamma (gain) and beta (offset) trainable variables,
 // broadcast-shaped to match the normalizing axes.
 func (builder *LayerNormBuilder) createVariables() (gamma, beta *Node) {
-	ctx := builder.ctx
+	scope := builder.scope
 	x := builder.x
 	g := x.Graph()
 
@@ -223,14 +223,14 @@ func (builder *LayerNormBuilder) createVariables() (gamma, beta *Node) {
 	}
 
 	if builder.gain {
-		gainVar := ctx.WithInitializer(initializers.One).VariableWithShape("gain", normShape).SetTrainable(true)
+		gainVar := scope.WithInitializer(initializers.One).VariableWithShape("gain", normShape).SetTrainable(true)
 		if builder.regularizer != nil {
-			builder.regularizer(ctx, g, gainVar)
+			builder.regularizer(scope, g, gainVar)
 		}
 		gamma = Reshape(gainVar.ValueGraph(g), broadcastNormShape.Dimensions...)
 	}
 	if builder.center {
-		offsetVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("offset", normShape).SetTrainable(true)
+		offsetVar := scope.WithInitializer(initializers.Zero).VariableWithShape("offset", normShape).SetTrainable(true)
 		beta = Reshape(offsetVar.ValueGraph(g), broadcastNormShape.Dimensions...)
 	}
 	return

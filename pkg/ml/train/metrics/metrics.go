@@ -5,6 +5,7 @@ package metrics
 
 import (
 	"fmt"
+	"path"
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
@@ -42,14 +43,14 @@ type Interface interface {
 	//
 	// Weights and masks are by convention given as extra `*Node` values in the labels slice,
 	// when supported by the metrics.
-	UpdateGraph(ctx *model.Context, labels, predictions []*Node) (metric *Node)
+	UpdateGraph(scope *model.Scope, labels, predictions []*Node) (metric *Node)
 
 	// PrettyPrint is used to pretty-print a metric value, usually in a short form.
 	PrettyPrint(value *tensors.Tensor) string
 
 	// Reset metrics internal counters when starting a new evaluation.
 	// Notice this may be called before UpdateGraph, and the metric should handle this without errors.
-	Reset(ctx *model.Context)
+	Reset(scope *model.Scope)
 }
 
 // UpdateGo interface can be implemented by metrics that prefer to update their values during
@@ -83,7 +84,7 @@ const (
 
 // BaseMetricGraph is a graph building function of any metric that can be calculated stateless, without the need for
 // any model. It should return a scalar, the mean for the given batch.
-type BaseMetricGraph func(ctx *model.Context, labels, predictions []*Node) *Node
+type BaseMetricGraph func(scope *model.Scope, labels, predictions []*Node) *Node
 
 // PrettyPrintFn is a function to convert a metric value to a string.
 type PrettyPrintFn func(value *tensors.Tensor) string
@@ -114,8 +115,8 @@ func (m *baseMetric) ScopeName() string {
 	return m.scopeName
 }
 
-func (m *baseMetric) UpdateGraph(ctx *model.Context, labels, predictions []*Node) (metric *Node) {
-	result := m.metricFn(ctx, labels, predictions)
+func (m *baseMetric) UpdateGraph(scope *model.Scope, labels, predictions []*Node) (metric *Node) {
+	result := m.metricFn(scope, labels, predictions)
 	if !result.Shape().IsScalar() {
 		Panicf("metric %q should return a scalar, instead got shape %s", m.Name(), result.Shape())
 	}
@@ -140,7 +141,7 @@ func (m *baseMetric) PrettyPrint(value *tensors.Tensor) string {
 	return m.pPrintFn(value)
 }
 
-func (m *baseMetric) Reset(_ *model.Context) {}
+func (m *baseMetric) Reset(_ *model.Scope) {}
 
 // NewBaseMetric creates a stateless metric from any BaseMetricGraph function, it will return the metric
 // calculated solely on the last batch.
@@ -212,10 +213,10 @@ func upPrecision(x *Node) *Node {
 	return x
 }
 
-func (m *MeanMetric) UpdateGraph(ctx *model.Context, labels, predictions []*Node) (metric *Node) {
+func (m *MeanMetric) UpdateGraph(scope *model.Scope, labels, predictions []*Node) (metric *Node) {
 	g := predictions[0].Graph()
 	var result *Node
-	err := TryCatch[error](func() { result = m.metricFn(ctx, labels, predictions) })
+	err := TryCatch[error](func() { result = m.metricFn(scope, labels, predictions) })
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed building computation graph for mean metric %q", m.Name()))
 	}
@@ -226,16 +227,15 @@ func (m *MeanMetric) UpdateGraph(ctx *model.Context, labels, predictions []*Node
 	// Up the precision for float16/bfloat16, often not enough.
 	result = upPrecision(result)
 
-	// Create scope in context for metrics state, and mark it as unchecked -- model variables
-	// may be set for reuse, but metrics variables are not.
-	ctx = ctx.Checked(false).In(Scope).In(m.ScopeName())
+	// Create scope in context for metrics state.
+	scope = scope.In(Scope).In(m.ScopeName())
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
-	totalVar := ctx.VariableWithValue("total", zero).SetTrainable(false)
+	totalVar := scope.VariableWithValue("total", zero).SetTrainable(false)
 	if totalVar == nil {
 		Panicf("variable nil building computation graph for mean metric %q", m.Name())
 	}
-	weightVar := ctx.VariableWithValue("weight", zero).SetTrainable(false)
+	weightVar := scope.VariableWithValue("weight", zero).SetTrainable(false)
 	if weightVar == nil {
 		Panicf("variable nil building computation graph for mean metric %q", m.Name())
 	}
@@ -260,19 +260,19 @@ func (m *MeanMetric) UpdateGraph(ctx *model.Context, labels, predictions []*Node
 	return mean
 }
 
-func (m *MeanMetric) Reset(ctx *model.Context) {
-	ctx = ctx.Reuse().In(Scope).In(m.ScopeName())
-	totalVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "total")
+func (m *MeanMetric) Reset(scope *model.Scope) {
+	scope = scope.Store().Scope(path.Join("/", Scope, m.ScopeName()))
+	totalVar := scope.GetVariable("total")
 	if totalVar == nil {
 		// Assume this was called before the graph was first built, so there is nothing to reset yet.
 		return
 	}
 	totalVar.MustSetValue(tensors.FromAnyValue(shapes.CastAsDType(0, totalVar.MustValue().DType())))
-	weightVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "weight")
+	weightVar := scope.GetVariable("weight")
 	if weightVar != nil {
 		weightVar.MustSetValue(tensors.FromAnyValue(shapes.CastAsDType(0, weightVar.MustValue().DType())))
 	} else {
-		Panicf("can't find variable \"weight\" in scope %q", ctx.Scope())
+		Panicf("can't find variable \"weight\" in scope %q", scope.Scope())
 	}
 }
 
@@ -305,10 +305,10 @@ func NewExponentialMovingAverageMetric(
 }
 
 // UpdateGraph implements metrics.Interface.
-func (m *movingAverageMetric) UpdateGraph(ctx *model.Context, labels, predictions []*Node) (metric *Node) {
+func (m *movingAverageMetric) UpdateGraph(scope *model.Scope, labels, predictions []*Node) (metric *Node) {
 	g := predictions[0].Graph()
 	var result *Node
-	err := TryCatch[error](func() { result = m.metricFn(ctx, labels, predictions) })
+	err := TryCatch[error](func() { result = m.metricFn(scope, labels, predictions) })
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed building computation graph for mean metric %q", m.Name()))
 	}
@@ -317,19 +317,18 @@ func (m *movingAverageMetric) UpdateGraph(ctx *model.Context, labels, prediction
 	}
 	result = upPrecision(result)
 
-	// Create scope in context for metrics state, and mark it as unchecked -- model variables
-	// may be set for reuse, but metrics variables are not.
-	ctx = ctx.Checked(false).In(Scope).In(m.ScopeName())
+	// Create scope in context for metrics state.
+	scope = scope.In(Scope).In(m.ScopeName())
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
 
-	meanVar := ctx.VariableWithValue("mean", zero).SetTrainable(false)
+	meanVar := scope.VariableWithValue("mean", zero).SetTrainable(false)
 	if meanVar == nil {
 		Panicf("variable nil building computation graph for mean metric %q", m.Name())
 	}
 	mean := meanVar.ValueGraph(g)
 
-	countVar := ctx.VariableWithValue("count", zero).SetTrainable(false)
+	countVar := scope.VariableWithValue("count", zero).SetTrainable(false)
 	count := countVar.ValueGraph(g)
 	count = Add(count, OnesLike(count))
 	countVar.SetValueGraph(count)
@@ -347,7 +346,7 @@ func (m *movingAverageMetric) UpdateGraph(ctx *model.Context, labels, prediction
 // BinaryAccuracyGraph can be used in combination with New*Metric functions to build metrics for binary accuracy.
 // It assumes predictions are probabilities, that labels are `{0, 1}`, and those predictions and labels have
 // the same shape and dtype.
-func BinaryAccuracyGraph(_ *model.Context, labels, predictions []*Node) *Node {
+func BinaryAccuracyGraph(_ *model.Scope, labels, predictions []*Node) *Node {
 	prediction := predictions[0]
 	g := prediction.Graph()
 	if len(labels) != 1 {
@@ -397,7 +396,7 @@ func NewMovingAverageBinaryAccuracy(name, shortName string, newExampleWeight flo
 //
 // labels is converted to predictions dtype, and it's expected to convert to 1.0 (for true) or 0.0 for false.
 // So booleans should work, as an int type that is 0 or 1.
-func BinaryLogitsAccuracyGraph(_ *model.Context, labels, logits []*Node) *Node {
+func BinaryLogitsAccuracyGraph(_ *model.Scope, labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	g := logits0.Graph()
 	if len(labels) != 1 {
@@ -455,7 +454,7 @@ func NewMovingAverageBinaryLogitsAccuracy(name, shortName string, newExampleWeig
 //
 // Weights and mask can be given in the `labels` slice, following the labels themselves and they
 // will be accounted for.
-func SparseCategoricalAccuracyGraph(_ *model.Context, labels, logits []*Node) *Node {
+func SparseCategoricalAccuracyGraph(_ *model.Scope, labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	g := logits0.Graph()
 	labels0 := labels[0]

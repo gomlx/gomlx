@@ -28,30 +28,29 @@ import (
 // TestLinearLayer checks that the linear layer of the VNN is equivariant to rotation.
 func TestLinearLayer(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
-	ctx.SetRNGStateFromSeed(42)
-	y0 := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
+	store := model.NewStore()
+	store.SetRNGStateFromSeed(42)
+	y0 := model.MustExecOnce(backend, store, func(scope *model.Scope, g *Graph) *Node {
 		pi2 := math.Pi * 2.0
 
 		// Random inputs and rotations:
 		// - Inputs has extra batch dimensions (1, 1, 1), we are also testing that they are preserved.
-		input := ctx.RandomUniform(g, shapes.Make(dtypes.Float64, 1, 1, 1, 10, 3))
-		roll := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
-		pitch := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
-		yaw := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
-
+		input := scope.RandomUniform(g, shapes.Make(dtypes.Float64, 1, 1, 1, 10, 3))
+		roll := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
+		pitch := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
+		yaw := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 		// Linear function: fix seed so we always have the same values.
-		ctx = ctx.Checked(false)
-		linearFn := func(x *Node) *Node {
-			return New(ctx, x, 2).
+		linearFn := func(s *model.Scope, x *Node) *Node {
+			return New(s, x, 2).
 				NumHiddenLayers(0, 0).
 				Activation("").Regularizer(nil).Done()
 		}
 
 		// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
-		out1 := RotateOnOrigin(linearFn(input), roll, pitch, yaw)
+		out1 := RotateOnOrigin(linearFn(scope.Store().Scope(scope.Scope()), input), roll, pitch, yaw)
 		require.NoError(t, out1.Shape().CheckDims(1, 1, 1, 2, 3))
-		out2 := linearFn(RotateOnOrigin(input, roll, pitch, yaw))
+		out2 := linearFn(scope.Store().Scope(scope.Scope()), RotateOnOrigin(input, roll, pitch, yaw))
+
 		require.NoError(t, out2.Shape().CheckDims(1, 1, 1, 2, 3))
 		diff := Abs(Sub(out1, out2))
 		diff.SetLogged("Difference of rotation before/after linear transformation")
@@ -64,30 +63,28 @@ func TestLinearLayer(t *testing.T) {
 // TestRelu checks that the Relu activation with a learned projection is equivariant to rotation.
 func TestRelu(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	baseCtx := model.New()
-	baseCtx.SetRNGStateFromSeed(42)
+	baseStore := model.NewStore()
+	baseStore.SetRNGStateFromSeed(42)
 	testShape := shapes.Make(dtypes.Float64, 20, 2, 3)
 	//testShape := shapes.Make(dtypes.Float64, 1, 2, 3)
 	for _, negativeSlope := range []float64{0, 0.2} {
 		for _, shareNonLinearity := range []bool{false, true} {
 			name := fmt.Sprintf("Leak=%.1f-Shared=%v", negativeSlope, shareNonLinearity)
 			t.Run(name, func(t *testing.T) {
-				ctx := baseCtx.In(name)
-				outputs := model.MustExecOnceN(backend, ctx, func(ctx *model.Context, g *Graph) []*Node {
+				store, err := baseStore.Clone()
+				require.NoError(t, err)
+				outputs := model.MustExecOnceN(backend, store, func(scope *model.Scope, g *Graph) []*Node {
 					pi2 := math.Pi * 2.0
 
 					// Random inputs and rotations:
 					// - Inputs has extra batch dimensions (1, 1, 1), we are also testing that they are preserved.
-					input := ctx.RandomUniform(g, testShape)
-					roll := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
-					pitch := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
-					yaw := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
-
-					// Linear function: fix seed so we always have the same values.
-					ctx = ctx.Checked(false)
+					input := scope.RandomUniform(g, testShape)
+					roll := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
+					pitch := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
+					yaw := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 
 					// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
-					out1 := Relu(ctx, input).
+					out1 := Relu(scope.Store().Scope(scope.Scope()), input).
 						NegativeSlope(negativeSlope).
 						ShareNonLinearity(shareNonLinearity).
 						Done()
@@ -95,7 +92,7 @@ func TestRelu(t *testing.T) {
 					out1 = RotateOnOrigin(out1, roll, pitch, yaw)
 					require.True(t, out1.Shape().Equal(testShape))
 
-					out2 := Relu(ctx, RotateOnOrigin(input, roll, pitch, yaw)).
+					out2 := Relu(scope.Store().Scope(scope.Scope()), RotateOnOrigin(input, roll, pitch, yaw)).
 						NegativeSlope(negativeSlope).
 						ShareNonLinearity(shareNonLinearity).
 						Done()
@@ -114,24 +111,19 @@ func TestRelu(t *testing.T) {
 	}
 }
 
-// TestLayerNormalization checks that the LayerNormalization normalizes properly -- mean close to
-// the origin -- and that it is equivariant to rotation.
 func TestLayerNormalization(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
-	ctx.SetRNGStateFromSeed(42)
-	outputs := model.MustExecOnceN(backend, ctx, func(ctx *model.Context, g *Graph) []*Node {
+	store := model.NewStore()
+	store.SetRNGStateFromSeed(42)
+	outputs := model.MustExecOnceN(backend, store, func(scope *model.Scope, g *Graph) []*Node {
 		pi2 := math.Pi * 2.0
 
 		// Random inputs and rotations:
 		// - Inputs has extra batch dimensions (1, 1, 1), we are also testing that they are preserved.
-		input := ctx.RandomUniform(g, shapes.Make(dtypes.Float64, 1, 1_000, 3))
-		roll := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
-		pitch := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
-		yaw := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
-
-		// Linear function: fix seed so we always have the same values.
-		ctx = ctx.Checked(false)
+		input := scope.RandomUniform(g, shapes.Make(dtypes.Float64, 1, 1_000, 3))
+		roll := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
+		pitch := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
+		yaw := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 
 		// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
 		epsilon := 1e-5
@@ -154,22 +146,20 @@ func TestLayerNormalization(t *testing.T) {
 // TestVNN_Equivariant checks that a fully configured VNN is SO(3) equivariant for rotations.
 func TestVNN_Equivariant(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
-	ctx.SetRNGStateFromSeed(42)
-	rotDiff := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
+	store := model.NewStore()
+	store.SetRNGStateFromSeed(42)
+	rotDiff := model.MustExecOnce(backend, store, func(scope *model.Scope, g *Graph) *Node {
 		pi2 := math.Pi * 2.0
 
 		// Random inputs and rotations:
 		// - Inputs has extra batch dimensions (1, 1, 1), we are also testing that they are preserved.
-		input := ctx.RandomUniform(g, shapes.Make(dtypes.Float64, 2, 3, 20, 3))
-		roll := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
-		pitch := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
-		yaw := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
+		input := scope.RandomUniform(g, shapes.Make(dtypes.Float64, 2, 3, 20, 3))
+		roll := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
+		pitch := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
+		yaw := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 
-		// vnn layer: fix seed so we always have the same values.
-		ctx = ctx.Checked(false)
-		vnnFn := func(x *Node) *Node {
-			return New(ctx, x, 5).
+		vnnFn := func(s *model.Scope, x *Node) *Node {
+			return New(s, x, 5).
 				NumHiddenLayers(3, 10).
 				Activation("relu").
 				Normalization("layer").
@@ -178,9 +168,9 @@ func TestVNN_Equivariant(t *testing.T) {
 		}
 
 		// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
-		out1 := RotateOnOrigin(vnnFn(input), roll, pitch, yaw)
+		out1 := RotateOnOrigin(vnnFn(scope.Store().Scope(scope.Scope()), input), roll, pitch, yaw)
 		require.NoError(t, out1.Shape().CheckDims(2, 3, 5, 3))
-		out2 := vnnFn(RotateOnOrigin(input, roll, pitch, yaw))
+		out2 := vnnFn(scope.Store().Scope(scope.Scope()), RotateOnOrigin(input, roll, pitch, yaw))
 		require.NoError(t, out2.Shape().CheckDims(2, 3, 5, 3))
 		diff := Abs(Sub(out1, out2))
 		return ReduceAllMean(diff)
@@ -192,16 +182,20 @@ func TestVNN_Equivariant(t *testing.T) {
 // TestVNNTrain checks whether a 2-layer VNN can learn whether 2 3D vectors are pointing to opposite quadrants.
 // The function to learn is not rotation-invariant, so we expect this test to fail.
 func TestVNNTrain(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping testing in short mode")
+		return
+	}
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
-	ctx.SetRNGStateFromSeed(42)
+	store := model.NewStore()
+	store.SetRNGStateFromSeed(42)
 
 	// Model function
 	numFeatures := 4
-	modelFn := func(ctx *model.Context, spec any, inputs []*Node) []*Node {
+	modelFn := func(scope *model.Scope, spec any, inputs []*Node) []*Node {
 		x := inputs[0] // Shape: [batch, 2, 3]
-		ctx = ctx.In("vnn")
-		vnn := New(ctx, x, numFeatures).
+		scope = scope.In("vnn")
+		vnn := New(scope, x, numFeatures).
 			NumHiddenLayers(1, numFeatures). // 2 hidden layers
 			Activation("relu").
 			Normalization("layer").
@@ -211,12 +205,12 @@ func TestVNNTrain(t *testing.T) {
 			Done()
 
 		// Invariant head for classification
-		ctx = ctx.In("head")
-		p0 := New(ctx.In("p0"), vnn, 1).
+		scope = scope.In("head")
+		p0 := New(scope.In("p0"), vnn, 1).
 			NumHiddenLayers(0, 0).
 			Scaler(true).
 			Done()
-		p1 := New(ctx.In("p1"), vnn, 1).
+		p1 := New(scope.In("p1"), vnn, 1).
 			NumHiddenLayers(0, 0).
 			Scaler(true).
 			Done()
@@ -264,7 +258,7 @@ func TestVNNTrain(t *testing.T) {
 	ds.BatchSize(batchSize, true).Infinite(true)
 
 	trainer := train.NewTrainer(
-		backend, ctx, modelFn, losses.BinaryCrossentropyLogits,
+		backend, store.RootScope(), modelFn, losses.BinaryCrossentropyLogits,
 		optimizers.Adam().LearningRate(3e-5).Done(),
 		[]metrics.Interface{metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Accuracy", "~acc", 0.01)},
 		[]metrics.Interface{metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")})
@@ -284,8 +278,8 @@ func TestVNNTrain(t *testing.T) {
 	accuracy := lossAndMetrics[2].Value().(float32)
 	require.GreaterOrEqual(t, accuracy, float32(0.8), "VNN was not able to learn rotation invariant simple task, accuracy=%.1f%%.", accuracy*100.0)
 
-	sample := model.MustExecOnce(backend, ctx, func(ctx *model.Context, g *Graph) *Node {
-		return ctx.RandomUniform(g, shapes.Make(dtypes.Float64))
+	sample := model.MustExecOnce(backend, store, func(scope *model.Scope, g *Graph) *Node {
+		return scope.RandomUniform(g, shapes.Make(dtypes.Float64))
 	})
 	fmt.Printf("Context random sample: %s\n", sample.GoStr())
 }

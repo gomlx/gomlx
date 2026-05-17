@@ -48,9 +48,9 @@ var (
 	flagPrompt = flag.String("prompt", "The quick", "Prompt text")
 )
 
-func createDefaultContext() *model.Context {
-	ctx := model.New()
-	ctx.SetParams(map[string]any{
+func createDefaultContext() *model.Scope {
+	scope := model.NewStore()
+	scope.SetParams(map[string]any{
 		// Model hyperparameters
 		transformer.ParamVocabSize:   128,
 		transformer.ParamEmbedDim:    64,
@@ -72,7 +72,7 @@ func createDefaultContext() *model.Context {
 		decode.ParamTemperature: 1.0,
 		decode.ParamMaxLength:   50,
 	})
-	return ctx
+	return scope
 }
 
 const trainingText = `The quick brown fox jumps over the lazy dog. ` +
@@ -111,10 +111,10 @@ func (t *CharTokenizer) Decode(tokens []int) string {
 	return string(chars)
 }
 
-func createTrainingBatch(ctx *model.Context, text string) (inputs [][]int32, targets [][][]int32) {
-	batchSize := model.GetParamOr(ctx, ParamBatchSize, 4)
-	seqLen := model.GetParamOr(ctx, ParamSeqLen, 32)
-	vocabSize := model.GetParamOr(ctx, transformer.ParamVocabSize, 128)
+func createTrainingBatch(scope *model.Scope, text string) (inputs [][]int32, targets [][][]int32) {
+	batchSize := model.GetParamOr(scope, ParamBatchSize, 4)
+	seqLen := model.GetParamOr(scope, ParamSeqLen, 32)
+	vocabSize := model.GetParamOr(scope, transformer.ParamVocabSize, 128)
 
 	tokenizer := &CharTokenizer{vocabSize: vocabSize}
 	tokens := tokenizer.Encode(text)
@@ -140,30 +140,30 @@ func createTrainingBatch(ctx *model.Context, text string) (inputs [][]int32, tar
 	return inputs, targets
 }
 
-func trainModel(backend compute.Backend, ctx *model.Context) {
-	steps := model.GetParamOr(ctx, ParamTrainSteps, 200)
-	learningRate := model.GetParamOr(ctx, optimizers.ParamLearningRate, 0.01)
-	batchSize := model.GetParamOr(ctx, ParamBatchSize, 4)
-	seqLen := model.GetParamOr(ctx, ParamSeqLen, 32)
+func trainModel(backend compute.Backend, scope *model.Scope) {
+	steps := model.GetParamOr(scope, ParamTrainSteps, 200)
+	learningRate := model.GetParamOr(scope, optimizers.ParamLearningRate, 0.01)
+	batchSize := model.GetParamOr(scope, ParamBatchSize, 4)
+	seqLen := model.GetParamOr(scope, ParamSeqLen, 32)
 
 	fmt.Printf("\nTraining Model\nSteps: %d  LR: %.4f  Batch: %d  SeqLen: %d\n\n", steps, learningRate, batchSize, seqLen)
 
 	// Simple model function wrapper
-	modelFn := func(ctx *model.Context, _ any, inputs []*graph.Node) []*graph.Node {
+	modelFn := func(scope *model.Scope, _ any, inputs []*graph.Node) []*graph.Node {
 		tokens := inputs[0]
-		transformerModel := transformer.NewFromContext(ctx)
-		posEmbeder := pos.NewLearned(ctx, transformerModel.MaxPosEmbed, transformerModel.EmbedDim)
+		transformerModel := transformer.NewFromScope(scope)
+		posEmbeder := pos.NewLearned(scope, transformerModel.MaxPosEmbed, transformerModel.EmbedDim)
 		transformerModel.WithPositionalEncoder(posEmbeder)
-		return []*graph.Node{transformerModel.Logits(ctx, tokens, nil)}
+		return []*graph.Node{transformerModel.Logits(scope, tokens, nil)}
 	}
 
-	trainer := train.NewTrainer(backend, ctx, modelFn,
+	trainer := train.NewTrainer(backend, scope, modelFn,
 		losses.SparseCategoricalCrossEntropyLogits,
 		optimizers.Adam().Done(),
 		nil, nil) // no metrics for this simple example
 
 	for step := range steps {
-		inputData, targetData := createTrainingBatch(ctx, trainingText)
+		inputData, targetData := createTrainingBatch(scope, trainingText)
 		inputTensor := tensors.FromValue(inputData)
 		targetTensor := tensors.FromValue(targetData)
 
@@ -180,8 +180,8 @@ func trainModel(backend compute.Backend, ctx *model.Context) {
 	fmt.Printf("\nTraining complete!\n")
 }
 
-func generateText(backend compute.Backend, ctx *model.Context, prompt string) {
-	vocabSize := model.GetParamOr(ctx, transformer.ParamVocabSize, 128)
+func generateText(backend compute.Backend, scope *model.Scope, prompt string) {
+	vocabSize := model.GetParamOr(scope, transformer.ParamVocabSize, 128)
 
 	tokenizer := &CharTokenizer{vocabSize: vocabSize}
 
@@ -190,15 +190,15 @@ func generateText(backend compute.Backend, ctx *model.Context, prompt string) {
 		promptTokens = []int{32}
 	}
 
-	model := transformer.NewFromContext(ctx)
+	model := transformer.NewFromScope(scope)
 	modelFn := transformer.MakeIncrementalModelFn(model)
 
-	decoder := decode.New(modelFn).FromContext(ctx)
+	decoder := decode.New(modelFn).FromContext(scope)
 	fmt.Printf("\nGeneration\nStrategy: %s  Temp: %.2f  MaxLen: %d\nPrompt: %q\n\n",
 		decoder.Strategy, decoder.Temperature, decoder.MaxLength, prompt)
 
 	promptTensor := tensors.FromValue([][]int32{xslices.Map(promptTokens, func(t int) int32 { return int32(t) })})
-	generated, err := decoder.Decode(backend, ctx, promptTensor)
+	generated, err := decoder.Decode(backend, scope, promptTensor)
 	if err != nil {
 		log.Fatalf("Generation failed: %v", err)
 	}
@@ -231,24 +231,24 @@ func extractTokens(generated *tensors.Tensor) []int {
 }
 
 func main() {
-	ctx := createDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	scope := createDefaultContext()
+	settings := commandline.CreateContextSettingsFlag(scope, "")
 	flag.Parse()
-	_, err := commandline.ParseContextSettings(ctx, *settings)
+	_, err := commandline.ParseContextSettings(scope, *settings)
 	if err != nil {
 		log.Fatalf("Failed to parse context settings: %v", err)
 	}
 
-	fmt.Println(commandline.SprintContextSettings(ctx))
+	fmt.Println(commandline.SprintContextSettings(scope))
 
 	backend, err := compute.New()
 	if err != nil {
 		log.Fatalf("Failed to create backend: %v", err)
 	}
 
-	trainModel(backend, ctx)
+	trainModel(backend, scope)
 
-	ctx = ctx.Reuse()
+	scope = scope.Reuse()
 
-	generateText(backend, ctx, *flagPrompt)
+	generateText(backend, scope, *flagPrompt)
 }

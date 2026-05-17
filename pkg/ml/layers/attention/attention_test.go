@@ -17,14 +17,14 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 	// Verify that BSHD and BHSD layouts produce the same results when
 	// given transposed versions of the same inputs.
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
+	scope := model.NewStore()
 
-	exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v *Node) []*Node {
+	exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v *Node) []*Node {
 		headDim := q.Shape().Dimensions[3]
 		scale := 1.0 / math.Sqrt(float64(headDim))
 
 		// Compute with BHSD layout (default): q/k/v are [batch, heads, seq, dim]
-		bhsdOut, _ := Core(ctx, q, k, v, scale, nil, nil, LayoutBHSD, false, false)
+		bhsdOut, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, false)
 
 		// Transpose to BSHD: [batch, seq, heads, dim]
 		qBSHD := TransposeAllDims(q, 0, 2, 1, 3)
@@ -32,7 +32,7 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 		vBSHD := TransposeAllDims(v, 0, 2, 1, 3)
 
 		// Compute with BSHD layout
-		bshdOut, _ := Core(ctx, qBSHD, kBSHD, vBSHD, scale, nil, nil, LayoutBSHD, false, false)
+		bshdOut, _ := Core(scope, qBSHD, kBSHD, vBSHD, scale, nil, nil, LayoutBSHD, false, false)
 
 		// Transpose BSHD output back to BHSD for comparison
 		bshdOutTransposed := TransposeAllDims(bshdOut, 0, 2, 1, 3)
@@ -70,12 +70,12 @@ func TestCore(t *testing.T) {
 	t.Run("BasicIdentity", func(t *testing.T) {
 		// With identity-like inputs, verify output shape and basic computation.
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, _ := Core(ctx, q, k, v, scale, nil, nil, LayoutBHSD, false, false)
+			output, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, false)
 			return output
 		})
 
@@ -91,14 +91,14 @@ func TestCore(t *testing.T) {
 	t.Run("CustomScale", func(t *testing.T) {
 		// Verify that providing the default scale explicitly produces the same result.
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v *Node) []*Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			defaultScale := 1.0 / math.Sqrt(float64(headDim))
 			// Both use the same scale — should produce identical results
-			defaultOut, _ := Core(ctx, q, k, v, defaultScale, nil, nil, LayoutBHSD, false, false)
-			explicitOut, _ := Core(ctx, q, k, v, 1.0/math.Sqrt(2.0), nil, nil, LayoutBHSD, false, false)
+			defaultOut, _ := Core(scope, q, k, v, defaultScale, nil, nil, LayoutBHSD, false, false)
+			explicitOut, _ := Core(scope, q, k, v, 1.0/math.Sqrt(2.0), nil, nil, LayoutBHSD, false, false)
 			return []*Node{defaultOut, explicitOut}
 		})
 
@@ -123,12 +123,12 @@ func TestCore(t *testing.T) {
 
 	t.Run("WithAdditiveMask", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v, mask *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v, mask *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, _ := Core(ctx, q, k, v, scale, mask, nil, LayoutBHSD, false, false)
+			output, _ := Core(scope, q, k, v, scale, mask, nil, LayoutBHSD, false, false)
 			return output
 		})
 
@@ -151,13 +151,13 @@ func TestCore(t *testing.T) {
 
 	t.Run("WithBooleanMask", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v, boolMask *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v, boolMask *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			// Pass boolean mask directly — Core auto-detects and uses MaskedSoftmax.
-			output, _ := Core(ctx, q, k, v, scale, boolMask, nil, LayoutBHSD, false, false)
+			output, _ := Core(scope, q, k, v, scale, boolMask, nil, LayoutBHSD, false, false)
 			return output
 		})
 
@@ -179,12 +179,12 @@ func TestCore(t *testing.T) {
 
 	t.Run("ReturnWeights", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v *Node) []*Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, coefficients := Core(ctx, q, k, v, scale, nil, nil, LayoutBHSD, false, true)
+			output, coefficients := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, true)
 			return []*Node{output, coefficients}
 		})
 
@@ -218,15 +218,15 @@ func TestCore(t *testing.T) {
 		// Grouped Query Attention: 2 query heads share 1 KV head.
 		// Verifies both fused and decomposed paths produce the same results.
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v *Node) []*Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			// Fused path (Done-style): numHeads=2, numKVHeads=1 inferred from shapes.
-			fusedOutput, _ := Core(ctx, q, k, v, scale, nil, nil, LayoutBHSD, false, false)
+			fusedOutput, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, false)
 			// Decomposed path (DoneWithCoefficients-style):
-			decomposedOutput, coefficients := Core(ctx, q, k, v, scale, nil, nil, LayoutBHSD, false, true)
+			decomposedOutput, coefficients := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, true)
 			return []*Node{fusedOutput, decomposedOutput, coefficients}
 		})
 
@@ -277,13 +277,13 @@ func TestCore(t *testing.T) {
 	t.Run("GQA_BSHD", func(t *testing.T) {
 		// Same GQA test but with BSHD layout.
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v *Node) []*Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			fusedOutput, _ := Core(ctx, q, k, v, scale, nil, nil, LayoutBSHD, false, false)
-			decomposedOutput, _ := Core(ctx, q, k, v, scale, nil, nil, LayoutBSHD, false, true)
+			fusedOutput, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBSHD, false, false)
+			decomposedOutput, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBSHD, false, true)
 			return []*Node{fusedOutput, decomposedOutput}
 		})
 
@@ -314,13 +314,13 @@ func TestCore(t *testing.T) {
 	t.Run("GQA_WithBooleanMask", func(t *testing.T) {
 		// GQA with boolean causal mask.
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v, boolMask *Node) []*Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v, boolMask *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			fusedOutput, _ := Core(ctx, q, k, v, scale, boolMask, nil, LayoutBHSD, false, false)
-			decomposedOutput, _ := Core(ctx, q, k, v, scale, boolMask, nil, LayoutBHSD, false, true)
+			fusedOutput, _ := Core(scope, q, k, v, scale, boolMask, nil, LayoutBHSD, false, false)
+			decomposedOutput, _ := Core(scope, q, k, v, scale, boolMask, nil, LayoutBHSD, false, true)
 			return []*Node{fusedOutput, decomposedOutput}
 		})
 
@@ -356,13 +356,13 @@ func TestCore(t *testing.T) {
 
 	t.Run("Causal", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
-		ctx := model.New()
+		scope := model.NewStore()
 
-		exec := model.MustNewExec(backend, ctx, func(ctx *model.Context, q, k, v *Node) *Node {
+		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			// Use causal=true, no explicit mask.
-			output, _ := Core(ctx, q, k, v, scale, nil, nil, LayoutBHSD, true, false)
+			output, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, true, false)
 			return output
 		})
 

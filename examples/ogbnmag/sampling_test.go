@@ -22,10 +22,10 @@ func TestDatasets(t *testing.T) {
 		t.Skip("Skipping long-running test.")
 	}
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
+	scope := model.NewStore()
 	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")
-	UploadOgbnMagVariables(backend, ctx) // Uploads the Papers frozen embedding table.
+	UploadOgbnMagVariables(backend, scope) // Uploads the Papers frozen embedding table.
 
 	_, trainDS, validDS, testDS, err := MakeDatasets(*flagDataDir)
 	require.NoError(t, err, "failed to make datasets")

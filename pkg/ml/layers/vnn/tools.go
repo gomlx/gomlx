@@ -16,7 +16,7 @@ import (
 // to preserve the mean of the operand values.
 //
 // It expects the operand to have shape [..., inputFeatures, 3], and the dropout happens on the inputFeatures.
-func DropoutNormalize(ctx *model.Context, operand *Node, dropoutRate *Node, normalize bool) *Node {
+func DropoutNormalize(scope *model.Scope, operand *Node, dropoutRate *Node, normalize bool) *Node {
 	g := operand.Graph()
 	if operand.Shape().Dim(-1) != 3 {
 		exceptions.Panicf("vnn: the operand last dimensions must be 3 -- it works with 3D vectors only for now")
@@ -27,7 +27,7 @@ func DropoutNormalize(ctx *model.Context, operand *Node, dropoutRate *Node, norm
 	if !dropoutRate.IsScalar() {
 		exceptions.Panicf("vnn: dropoutRate must be a scalar, got dropoutRate.shape=%s", dropoutRate.Shape())
 	}
-	if !ctx.IsTraining(g) {
+	if !scope.IsTraining(g) {
 		return operand
 	}
 
@@ -35,7 +35,7 @@ func DropoutNormalize(ctx *model.Context, operand *Node, dropoutRate *Node, norm
 	dtype := dropoutRate.DType()
 	dims := slices.Clone(operand.Shape().Dimensions)
 	dims[len(dims)-1] = 1
-	rnd := ctx.RandomUniform(g, shapes.Make(dtype, dims...))
+	rnd := scope.RandomUniform(g, shapes.Make(dtype, dims...))
 	result := Where(LessOrEqual(rnd, dropoutRate), ZerosLike(operand), operand)
 	if normalize {
 		// Normalize operand values, so mean value remains constant.

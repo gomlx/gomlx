@@ -12,9 +12,9 @@ import (
 )
 
 // InceptionV3ModelPrep is executed before training: it downloads the inceptionv3 weights.
-func InceptionV3ModelPrep(ctx *model.Context, dataDir string, checkpoint *checkpoints.Handler) {
-	ctx.SetParam("data_dir", dataDir)
-	if model.GetParamOr(ctx, "inception_pretrained", true) {
+func InceptionV3ModelPrep(scope *model.Scope, dataDir string, checkpoint *checkpoints.Handler) {
+	scope.SetParam("data_dir", dataDir)
+	if model.GetParamOr(scope, "inception_pretrained", true) {
 		check(inceptionv3.DownloadAndUnpackWeights(dataDir))
 	}
 }
@@ -28,23 +28,23 @@ func InceptionV3ModelPrep(ctx *model.Context, dataDir string, checkpoint *checkp
 // Results if we don't use the pre-trained weights (it can probably get much better with more training):
 // - no scaling (from 0.0 to 1.0): 62.5% accuracy
 // - with Keras scale (from -1.0 to 1.0): 61.8% accuracy
-func InceptionV3ModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
-	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
-	_ = spec              // Not needed.
-	images := inputs[0]   // Images scaled from 0.0 to 1.0
+func InceptionV3ModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
+	scope = scope.In("model") // Create the model by default under the "/model" scope.
+	_ = spec                  // Not needed.
+	images := inputs[0]       // Images scaled from 0.0 to 1.0
 	channelsConfig := timage.ChannelsLast
 	images = inceptionv3.PreprocessImage(images, 1.0, channelsConfig) // Adjust image to format used by Inception.
-	dataDir := model.GetParamOr(ctx, "data_dir", ".")
+	dataDir := model.GetParamOr(scope, "data_dir", ".")
 	var preTrainedPath string
-	if model.GetParamOr(ctx, "inception_pretrained", true) {
+	if model.GetParamOr(scope, "inception_pretrained", true) {
 		// Use pre-trained
 		preTrainedPath = dataDir
 	}
-	logits := inceptionv3.BuildGraph(ctx, images).
+	logits := inceptionv3.BuildGraph(scope, images).
 		PreTrained(preTrainedPath).
 		SetPooling(inceptionv3.MaxPooling).
-		Trainable(model.GetParamOr(ctx, "inception_finetuning", false)).
+		Trainable(model.GetParamOr(scope, "inception_finetuning", false)).
 		Done()
-	logits = fnn.New(ctx.In("fnn"), logits, 1).Done()
+	logits = fnn.New(scope.In("fnn"), logits, 1).Done()
 	return []*Node{logits}
 }

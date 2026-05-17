@@ -14,10 +14,10 @@ import (
 
 func TestDecoderConfigFreeze(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	ctx := model.New()
+	store := model.NewStore()
 
 	// Create a simple incremental model function
-	var incrementalFn IncrementalModelFn = func(ctx *model.Context, newTokens *graph.Node, position int) *graph.Node {
+	var incrementalFn IncrementalModelFn = func(scope *model.Scope, newTokens *graph.Node, position int) *graph.Node {
 		g := newTokens.Graph()
 		batchSize := newTokens.Shape().Dimensions[0]
 		seqLen := newTokens.Shape().Dimensions[1]
@@ -36,7 +36,7 @@ func TestDecoderConfigFreeze(t *testing.T) {
 	prompt := []int32{1, 2, 3}
 	// The model is dummy, but compatible shapes.
 	// Decode might succeed or fail, but promptExec should be initialized.
-	_, _ = dec.Decode(backend, ctx, prompt)
+	_, _ = dec.Decode(backend, store.RootScope(), prompt)
 
 	// Config after use - should fail
 	dec.WithMaxLength(60)

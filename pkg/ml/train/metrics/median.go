@@ -55,9 +55,9 @@ func (m *StreamingMedianMetric) WithSampleSize(n int) *StreamingMedianMetric {
 
 const streamingMedianScope = "streaming_median"
 
-func (m *StreamingMedianMetric) UpdateGraph(ctx *model.Context, labels, predictions []*Node) (metric *Node) {
+func (m *StreamingMedianMetric) UpdateGraph(scope *model.Scope, labels, predictions []*Node) (metric *Node) {
 	var results *Node
-	err := TryCatch[error](func() { results = m.metricFn(ctx, labels, predictions) })
+	err := TryCatch[error](func() { results = m.metricFn(scope, labels, predictions) })
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed building computation graph for streaming median metric %q", m.Name()))
 	}
@@ -104,7 +104,7 @@ func (m *StreamingMedianMetric) ReadGo() *tensors.Tensor {
 
 // Reset will delete all related variables to the streaming median: they will be recreated again
 // at the start of an update.
-func (m *StreamingMedianMetric) Reset(ctx *model.Context) {
+func (m *StreamingMedianMetric) Reset(scope *model.Scope) {
 	m.samples = nil
 	m.samplesSeen = 0
 }

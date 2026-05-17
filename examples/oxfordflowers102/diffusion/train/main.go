@@ -21,13 +21,13 @@ var (
 )
 
 func main() {
-	ctx := diffusion.CreateDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	scope := diffusion.CreateDefaultContext()
+	settings := commandline.CreateContextSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := check1(commandline.ParseContextSettings(scope, *settings))
 	err := exceptions.TryCatch[error](func() {
-		diffusion.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
+		diffusion.TrainModel(scope, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
 	})
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)

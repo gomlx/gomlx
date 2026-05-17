@@ -83,7 +83,7 @@ func NewKidBuilder(dataDir string, kidImageSize int, maxImageValue float64, chan
 //
 // It returns a scalar with the mean distance of the images provided in labels and predictions.
 // The images
-func (builder *KidBuilder) BuildGraph(ctx *model.Context, labels, predictions []*Node) (output *Node) {
+func (builder *KidBuilder) BuildGraph(scope *model.Scope, labels, predictions []*Node) (output *Node) {
 	// Sanity checking:
 	g := predictions[0].Graph()
 	dtype := predictions[0].DType()
@@ -129,10 +129,15 @@ func (builder *KidBuilder) BuildGraph(ctx *model.Context, labels, predictions []
 	}
 
 	// Apply InceptionV3 model to each image.
-	ctx = ctx.In("kid_metric").Checked(false)
 	var features [2]*Node
 	for imgIdx := range imagesPair {
-		features[imgIdx] = BuildGraph(ctx, imagesPair[imgIdx]).
+		s := scope.Store().Scope(scope.Scope())
+		if imgIdx == 0 {
+			s = s.In("kid_metric")
+		} else {
+			s = s.Shared("kid_metric")
+		}
+		features[imgIdx] = BuildGraph(s, imagesPair[imgIdx]).
 			SetPooling(MeanPooling).ClassificationTop(false).PreTrained(builder.dataDir).
 			ChannelsAxis(builder.channelsConfig).Trainable(false).Done()
 	}

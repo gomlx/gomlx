@@ -14,9 +14,9 @@ import (
 // a randomly augmented batch of images with the exact same shape.
 //
 // Currently only random mirroring (left-to-right) is supported.
-func AugmentImages(ctx *model.Context, images *Node) *Node {
+func AugmentImages(scope *model.Scope, images *Node) *Node {
 	g := images.Graph()
-	if !ctx.IsTraining(g) {
+	if !scope.IsTraining(g) {
 		// No-op if not training.
 		return images
 	}
@@ -24,7 +24,7 @@ func AugmentImages(ctx *model.Context, images *Node) *Node {
 	// Mirror on the horizontal axis 50% of the time.
 	batchSize := images.Shape().Dim(0)
 	return Where(
-		ctx.RandomBernoulli(Const(g, 0.5), shapes.Make(dtypes.Bool, batchSize)), // 50% true, 50% false
+		scope.RandomBernoulli(Const(g, 0.5), shapes.Make(dtypes.Bool, batchSize)), // 50% true, 50% false
 		images,
 		Reverse(images, 2 /* width axis */))
 }

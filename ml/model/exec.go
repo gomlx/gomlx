@@ -25,7 +25,7 @@ import (
 // Otherwise, very similar to graph.Exec.
 type Exec struct {
 	backend compute.Backend
-	store   *Store
+	scope   *Scope
 	exec    *graph.Exec
 
 	// Original function that takes ctx and the converted closure
@@ -47,25 +47,35 @@ type Exec struct {
 	isInitializeVariablesExec bool
 }
 
-// NewExecAny constructs an Exec object for the given store and symbolic computation function ctxGraphFn.
+// NewExecAny constructs an Exec object for the given scopeOrStore and symbolic computation function ctxGraphFn.
 //
-// The ctxGraphFn is called to build the computation graphs with a Scope (Store.RootScope()).
+// The scopeOrStore can be a *Scope or a *Store. If it is a *Store, it is converted to its RootScope().
+// If nil, it automatically creates a new empty store and uses its RootScope().
+//
+// The ctxGraphFn is called to build the computation graphs with a Scope.
 // It must take a *Scope input parameter followed by one or more *Node parameters as input and return one or more *Node.
 // Alternatively, it can, instead of *Node inputs, take a *Graph object, when there are no input tensors.
-//
-// The Store store passed in the construction is used in all calls to ctxGraphFn, as well as during the graph execution later.
-// If set to nil, it automatically creates a new empty store.
 //
 // Before the execution of a graph, it initializes the variables as needed, using the configured initializer.
 // And variables updated in the graph (using Variable.SetValueGraph) are updated also during execution.
 // More details see Exec.
-func NewExecAny(backend compute.Backend, store *Store, ctxGraphFn any) (*Exec, error) {
-	if store == nil {
-		store = NewStore()
+func NewExecAny(backend compute.Backend, scopeOrStore any, ctxGraphFn any) (*Exec, error) {
+	var scope *Scope
+	if scopeOrStore == nil {
+		scope = NewStore().RootScope()
+	} else {
+		switch v := scopeOrStore.(type) {
+		case *Store:
+			scope = v.RootScope()
+		case *Scope:
+			scope = v
+		default:
+			return nil, errors.Errorf("scopeOrStore must be a *model.Scope or *model.Store, got %T instead", scopeOrStore)
+		}
 	}
 	e := &Exec{
 		backend:     backend,
-		store:       store,
+		scope:       scope,
 		ctxGraphFn:  ctxGraphFn,
 		changedVars: make(map[graph.GraphId][]*Variable),
 	}
@@ -174,9 +184,9 @@ func (e *Exec) buildGraphFn() {
 	// input a slice of *Node (or only a *computation.Graph), and as output also a slice of *Node.
 	graphFnT := reflect.FuncOf(inT, outT, false)
 	e.graphFn = reflect.MakeFunc(graphFnT, func(args []reflect.Value) (results []reflect.Value) {
-		// Inputs for the original ctxGraphFn: we prepend the root scope to the arguments.
+		// Inputs for the original ctxGraphFn: we prepend the scope to the arguments.
 		argsWithScope := make([]reflect.Value, len(args)+1)
-		argsWithScope[0] = reflect.ValueOf(e.store.RootScope())
+		argsWithScope[0] = reflect.ValueOf(e.scope.Store().Scope(e.scope.Scope()))
 		copy(argsWithScope[1:], args)
 
 		// Call ctxGraphFn, the results will be a slice of *Node.
@@ -198,7 +208,7 @@ func (e *Exec) buildGraphFn() {
 		// Find variables that were changed and their updated graph values (*Node).
 		var changedVars []*Variable
 		var allValues []*Node
-		for _, v := range e.store.variables {
+		for _, v := range e.scope.store.variables {
 			if v.ChangedInGraph(g) {
 				changedVars = append(changedVars, v)
 				allValues = append(allValues, v.ValueGraph(g))
@@ -237,7 +247,7 @@ func (e *Exec) Finalize() {
 // the variable values as parameters just before graph execution.
 func (e *Exec) setSideParams(g *Graph, inputBuffers []compute.Buffer, donate []bool) error {
 	// Initialize variables if needed.
-	store := e.store
+	store := e.scope.store
 	if !e.isInitializeVariablesExec && store.needsInitialization {
 		err := store.InitializeVariables(e.backend, func(initExec *Exec) error {
 			return initExec.ConfigureDistributionFrom(e)
@@ -256,7 +266,7 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []compute.Buffer, donate []b
 
 // setSideParamsSingleDevice sets the side parameters for single-device execution.
 func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []compute.Buffer, donate []bool) error {
-	store := e.store
+	store := e.scope.store
 	graphId := g.GraphId()
 	deviceAssignment := e.exec.DeviceAssignment()
 	deviceNum := compute.DeviceNum(0)
@@ -313,7 +323,7 @@ func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []compute.Buffer
 
 // setSideParamsDistributed sets the side parameters for distributed execution.
 func (e *Exec) setSideParamsDistributed(g *Graph, inputBuffers []compute.Buffer, donate []bool) error {
-	store := e.store
+	store := e.scope.store
 	graphId := g.GraphId()
 	numDevices := e.exec.NumDevices()
 	numParams := g.NumParameters()
@@ -431,14 +441,14 @@ func (e *Exec) NumDevices() int {
 // SPMD sets the distribution strategy to SPMD.
 func (e *Exec) SPMD(mesh *distributed.DeviceMesh) *Exec {
 	e.exec.SPMD(mesh)
-	e.store.defaultShardingSpec = distributed.NewReplicatedShardingSpec(mesh)
+	e.scope.store.defaultShardingSpec = distributed.NewReplicatedShardingSpec(mesh)
 	return e
 }
 
 // AutoSharding sets the distribution strategy to AutoSharding.
 func (e *Exec) AutoSharding(meshes ...*distributed.DeviceMesh) *Exec {
 	e.exec.AutoSharding(meshes...)
-	e.store.defaultShardingSpec = distributed.NewReplicatedShardingSpec(meshes[0])
+	e.scope.store.defaultShardingSpec = distributed.NewReplicatedShardingSpec(meshes[0])
 	return e
 }
 
@@ -463,7 +473,7 @@ func (e *Exec) WithOutputShardingSpecs(specs ...*distributed.ShardingSpec) *Exec
 
 // DefaultShardingSpec returns the default sharding spec.
 func (e *Exec) DefaultShardingSpec() *distributed.ShardingSpec {
-	return e.store.defaultShardingSpec
+	return e.scope.store.defaultShardingSpec
 }
 
 // SetDefaultShardingSpec sets the default sharding spec for the associated Store object.
@@ -485,7 +495,7 @@ func (e *Exec) SetDefaultShardingSpec(spec *distributed.ShardingSpec) error {
 			spec = distributed.NewReplicatedShardingSpec(e.exec.Meshes()[0])
 		}
 	}
-	e.store.defaultShardingSpec = spec
+	e.scope.store.defaultShardingSpec = spec
 	return nil
 }
 
@@ -508,12 +518,12 @@ func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 
 // Store returns the associated Store object.
 func (e *Exec) Store() *Store {
-	return e.store
+	return e.scope.store
 }
 
 // SetStore associates the given Store with the Exec object.
 func (e *Exec) SetStore(store *Store) *Exec {
-	e.store = store
+	e.scope = store.Scope(e.scope.Scope())
 	return e
 }
 
@@ -588,7 +598,7 @@ func (e *Exec) collectOutputsForDistributed(
 
 		shardingSpec := v.shardingSpec
 		if shardingSpec == nil {
-			shardingSpec = e.store.defaultShardingSpec
+			shardingSpec = e.scope.store.defaultShardingSpec
 		}
 		if shardingSpec == nil {
 			err := errors.Errorf("variable %q has no sharding spec", v.ScopeAndName())

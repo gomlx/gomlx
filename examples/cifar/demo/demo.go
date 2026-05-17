@@ -31,10 +31,11 @@ var (
 )
 
 // createDefaultContext sets the context with default hyperparameters
-func createDefaultContext() *model.Context {
-	ctx := model.New()
-	ctx.ResetRNGState()
-	ctx.SetParams(map[string]any{
+func createDefaultContext() *model.Scope {
+	store := model.NewStore()
+	store.ResetRNGState()
+	scope := store.RootScope()
+	scope.SetParams(map[string]any{
 		// Model type to use
 		"model":           cifar.C10ValidModels[0],
 		"checkpoint":      "",
@@ -100,19 +101,19 @@ func createDefaultContext() *model.Context {
 		// CNN model
 		cifar.ParamCNNNormalization: "batch",
 	})
-	return ctx
+	return scope
 }
 
 func main() {
 	// Flags with context settings.
-	ctx := createDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	scope := createDefaultContext()
+	settings := commandline.CreateContextSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := check1(commandline.ParseContextSettings(scope, *settings))
 
 	// Train.
-	cifar.TrainCifar10Model(ctx, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity, paramsSet)
+	cifar.TrainCifar10Model(scope, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity, paramsSet)
 }
 
 // check reports and exits on error.
