@@ -37,8 +37,8 @@ func (ds *fakeSourceDataset) Yield() (spec any, inputs []*tensors.Tensor, labels
 
 	// Create dummy tensors with batch index as value
 	batchIdx := float32(ds.currentBatch)
-	input := tensors.FromAnyValue([]float32{batchIdx, batchIdx + 1.0, batchIdx + 2.0})
-	label := tensors.FromAnyValue(batchIdx)
+	input := tensors.MustFromAnyValue([]float32{batchIdx, batchIdx + 1.0, batchIdx + 2.0})
+	label := tensors.MustFromAnyValue(batchIdx)
 
 	inputs = []*tensors.Tensor{input}
 	labels = []*tensors.Tensor{label}

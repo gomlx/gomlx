@@ -267,10 +267,10 @@ func (m *MeanMetric) Reset(scope *model.Scope) {
 		// Assume this was called before the graph was first built, so there is nothing to reset yet.
 		return
 	}
-	totalVar.MustSetValue(tensors.FromAnyValue(shapes.CastAsDType(0, totalVar.MustValue().DType())))
+	totalVar.MustSetValue(tensors.MustFromAnyValue(shapes.CastAsDType(0, totalVar.MustValue().DType())))
 	weightVar := scope.GetVariable("weight")
 	if weightVar != nil {
-		weightVar.MustSetValue(tensors.FromAnyValue(shapes.CastAsDType(0, weightVar.MustValue().DType())))
+		weightVar.MustSetValue(tensors.MustFromAnyValue(shapes.CastAsDType(0, weightVar.MustValue().DType())))
 	} else {
 		Panicf("can't find variable \"weight\" in scope %q", scope.Scope())
 	}

@@ -43,8 +43,8 @@ func (ds *testDS) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors
 		err = io.EOF
 		return
 	}
-	inputs = []*tensors.Tensor{tensors.FromAnyValue(int(value))} // One nil element.
-	return                                                       // As if a batch was returned.
+	inputs = []*tensors.Tensor{tensors.MustFromAnyValue(int(value))} // One nil element.
+	return                                                           // As if a batch was returned.
 }
 
 // TestNewParallelDataset with and without buffer.

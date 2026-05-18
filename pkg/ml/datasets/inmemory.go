@@ -153,21 +153,18 @@ func InMemoryFromData(
 	}
 	for ii, value := range append(inputs, labels...) {
 		var valueT *tensors.Tensor
-		err = TryCatch[error](func() { valueT = tensors.FromAnyValue(value) })
+		valueT, err = tensors.FromAnyValue(value)
 		if err != nil {
-			err = errors.WithMessage(err, errMsgFn(ii))
-			return
+			return nil, errors.WithMessage(err, errMsgFn(ii))
 		}
 		if valueT.Shape().IsScalar() {
-			err = errors.Errorf("cannot use scalars when %s", errMsgFn(ii))
-			return
+			return nil, errors.Errorf("cannot use scalars when %s", errMsgFn(ii))
 		}
 		if ii == 0 {
 			mds.numExamples = valueT.Shape().Dimensions[0]
 		} else if mds.numExamples != valueT.Shape().Dimensions[0] {
-			err = errors.Errorf("inputs[0] has %d examples, but got %d examples when %s -- all must have the same number",
+			return nil, errors.Errorf("inputs[0] has %d examples, but got %d examples when %s -- all must have the same number",
 				mds.batchSize, valueT.Shape().Dimensions[0], errMsgFn(ii))
-			return
 		}
 		mds.inputsAndLabelsData = append(mds.inputsAndLabelsData, valueT)
 	}

@@ -360,7 +360,10 @@ func (dec *Decoder) Decode(
 		return nil, err
 	}
 
-	promptTensor := tensors.FromAnyValue(prompt)
+	promptTensor, err := tensors.FromAnyValue(prompt)
+	if err != nil {
+		return nil, err
+	}
 	if promptTensor.Rank() == 1 {
 		// Reshape is not a method on Tensor, so we need to work with the shape
 		// For now, we'll use the prompt as-is in the graph
