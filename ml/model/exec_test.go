@@ -222,7 +222,7 @@ func TestAutoSharding(t *testing.T) {
 	// for each device.
 	t.Run("RandomUniform", func(t *testing.T) {
 		store := model.NewStore()
-		store.SetParam("/", model.ParamInitialSeed, int64(42))
+		store.SetParam(model.ParamInitialSeed, int64(42))
 		e := model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) (*Node, *Node) {
 			a := scope.RandomUniform(g, shapes.Make(dtypes.Float32, 2, 3))
 			b := scope.RandomUniform(g, shapes.Make(dtypes.Float32, 2, 3))
@@ -254,7 +254,7 @@ func TestAutoSharding(t *testing.T) {
 
 	t.Run("variable initialization", func(t *testing.T) {
 		store := model.NewStore()
-		store.SetParam("/", model.ParamInitialSeed, int64(42))
+		store.SetParam(model.ParamInitialSeed, int64(42))
 		e, err := model.NewExec(backend, store, func(scope *model.Scope, g *Graph) *Node {
 			// v := ctx.WithInitializer(initializers.RandomUniformFn(ctx, 0.0001, 1.0)).VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
 			// return v.ValueGraph(g)
@@ -279,7 +279,7 @@ func TestAutoSharding(t *testing.T) {
 
 	t.Run("batch sharding", func(t *testing.T) {
 		store := model.NewStore()
-		store.SetParam("/", model.ParamInitialSeed, int64(42))
+		store.SetParam(model.ParamInitialSeed, int64(42))
 		oneLayerExec, err := model.NewExec(backend, store, func(scope *model.Scope, x *Node) (*Node, *Node) {
 			g := x.Graph()
 			wVar := scope.VariableWithShape("w", shapes.Make(dtypes.F64, 3, 1))

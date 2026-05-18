@@ -85,7 +85,7 @@ func TestBSplineKAN(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	store := model.NewStore()
 	store.RootScope().Store().ResetRNGState()
-	store.SetParam("/", model.ParamInitialSeed, int64(42))
+	store.SetParam(model.ParamInitialSeed, int64(42))
 	ds := &kanTestDataset{batchSize: 128}
 
 	opt := optimizers.Adam().LearningRate(0.001).Done()
@@ -133,8 +133,8 @@ func TestBSplineKANRegularized(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	store := model.NewStore()
 	store.RootScope().Store().ResetRNGState()
-	store.SetParam("/", model.ParamInitialSeed, int64(42))
-	store.SetParam("/", kan.ParamBSplineMagnitudeL1, 0.01)
+	store.SetParam(model.ParamInitialSeed, int64(42))
+	store.SetParam(kan.ParamBSplineMagnitudeL1, 0.01)
 	ds := &kanTestDataset{batchSize: 128}
 
 	opt := optimizers.Adam().LearningRate(0.001).Done()

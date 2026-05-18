@@ -120,7 +120,7 @@ func main() {
 
 	// Creates Context with learned weights and bias.
 	store := model.NewStore()
-	store.SetParam("/", optimizers.ParamLearningRate, *flagLearningRate)
+	store.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 
 	// train.Trainer executes a training step.
 	trainer := train.NewTrainer(backend, store.RootScope(), modelGraph,

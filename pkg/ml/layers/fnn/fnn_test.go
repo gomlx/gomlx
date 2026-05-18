@@ -120,7 +120,7 @@ func TestFNN(t *testing.T) {
 		fmt.Printf("Variation #%d %q:\n", ii, fnnVariationsNames[ii])
 		store := model.NewStore()
 		store.RootScope().Store().ResetRNGState()
-		store.SetParam("/", model.ParamInitialSeed, int64(42))
+		store.SetParam(model.ParamInitialSeed, int64(42))
 		opt := optimizers.Adam().LearningRate(0.001).Done()
 		trainer := train.NewTrainer(backend, store.RootScope(), fnnGraphModelBuilder(coreFn),
 			lossGraphFn, // a simple wrapper around losses.MeanSquaredError,
@@ -148,7 +148,7 @@ func TestFNNRegularized(t *testing.T) {
 	}
 	backend := testutil.BuildTestBackend()
 	store := model.NewStore()
-	store.SetParam("/", model.ParamInitialSeed, int64(42))
+	store.SetParam(model.ParamInitialSeed, int64(42))
 	ds := &fnnTestDataset{batchSize: 128}
 
 	regularizedFn := func(scope *model.Scope, input *Node) *Node {

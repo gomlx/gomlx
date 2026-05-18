@@ -105,12 +105,13 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		const numCycles = 2
 		const stepsPerCycle = 100
 		const numSteps = numCycles*stepsPerCycle + warmUpSteps
-		store.SetParam("/", optimizers.ParamLearningRate, baseLearningRate)
-		store.SetParam("/", cosineschedule.ParamCycles, numCycles)
-		store.SetParam("/", cosineschedule.ParamWarmUpSteps, warmUpSteps)
-		store.SetParam("/", cosineschedule.ParamMinLearningRate, minLearningRate)
+		store.SetParam(optimizers.ParamLearningRate, baseLearningRate)
+		store.SetParam(cosineschedule.ParamCycles, numCycles)
+		store.SetParam(cosineschedule.ParamWarmUpSteps, warmUpSteps)
+		store.SetParam(cosineschedule.ParamMinLearningRate, minLearningRate)
 		lastStepVar := train.GetTrainLastStepVar(store.RootScope())
-		lastStepVar.MustSetValue(tensors.FromScalar(int64(numSteps)))
+		err := lastStepVar.SetValue(tensors.FromScalar(int64(numSteps)))
+		require.NoError(t, err)
 		cosineExec, err := model.NewExec(backend, store, func(scope *model.Scope, graph *Graph) *Node {
 			scope.SetTraining(graph, true)
 			cosineschedule.New(scope, graph, dtypes.Float32).FromContext().Done()
