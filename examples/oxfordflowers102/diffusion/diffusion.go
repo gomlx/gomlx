@@ -24,7 +24,7 @@ import (
 	timages "github.com/gomlx/gomlx/core/tensors/images"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
@@ -134,7 +134,7 @@ func ResidualBlock(scope *model.Scope, nanLogger *nanlogger.NanLogger, x *Node, 
 
 	case 2: // Version 2: slimmer.
 		residual = activations.ApplyFromContext(scope, residual)
-		convCtx := nextCtx("conv").WithInitializer(initializers.Zero)
+		convCtx := nextCtx("conv").WithInitializer(initializer.Zero)
 		x = layers.Convolution(convCtx, x).Channels(outputChannels).KernelSize(3).PadSame().Done()
 		x = layers.DropBlock(scope, x).ChannelsAxis(timages.ChannelsLast).Done()
 		nanLogger.TraceFirstNaN(x, "x (Version 2)")
@@ -238,7 +238,7 @@ const IsV1Test = true
 //   - "diffusion_num_residual_blocks" (static hyperparameter): number of blocks to use per numChannelsList element.
 func UNetModelGraph(scope *model.Scope, nanLogger *nanlogger.NanLogger, noisyImages, noiseVariances, flowerIds *Node) *Node {
 	dtype := noisyImages.DType()
-	scope = scope.In(UNetModelScope).WithInitializer(initializers.XavierNormalFn(scope))
+	scope = scope.In(UNetModelScope).WithInitializer(initializer.XavierNormalFn(scope))
 
 	// nextCtx return a new context prefixed with a counter, to give a nice ordering to the variables.
 	layerNum := 0
@@ -276,7 +276,7 @@ func UNetModelGraph(scope *model.Scope, nanLogger *nanlogger.NanLogger, noisyIma
 	flowerEmbedSize := model.GetParamOr(scope, "flower_type_embed_size", 16)
 	if flowerEmbedSize > 0 {
 		flowerTypeEmbed := layers.Embedding(
-			nextCtx("FlowerEmbeddings").WithInitializer(initializers.RandomNormalFn(scope, 1.0/float64(flowerEmbedSize))),
+			nextCtx("FlowerEmbeddings").WithInitializer(initializer.RandomNormalFn(scope, 1.0/float64(flowerEmbedSize))),
 			flowerIds, dtype, flowers.NumLabels, flowerEmbedSize, false)
 		nanLogger.TraceFirstNaN(flowerTypeEmbed, "UNetModelGraph:flowerTypeEmbed")
 		contextFeatures = Concatenate([]*Node{contextFeatures, flowerTypeEmbed}, -1)
@@ -335,7 +335,7 @@ func UNetModelGraph(scope *model.Scope, nanLogger *nanlogger.NanLogger, noisyIma
 	}
 
 	// Output initialized to 0, which is the mean of the target.
-	x = layers.DenseWithBias(nextCtx("Readout").WithInitializer(initializers.Zero), x, imageChannels)
+	x = layers.DenseWithBias(nextCtx("Readout").WithInitializer(initializer.Zero), x, imageChannels)
 	nanLogger.TraceFirstNaN(x, "UNetModelGraph:x")
 
 	return x
@@ -400,7 +400,7 @@ func Denoise(scope *model.Scope, noisyImages, signalRatios, noiseRatios, flowerI
 	if scope.IsTraining(g) && emaCoef > 0 {
 		// Update moving average weights:
 		prefixScope := scope.Scope()
-		emaScope := scope.In("ema").WithInitializer(initializers.Zero)
+		emaScope := scope.In("ema").WithInitializer(initializer.Zero)
 		newPrefixScope := emaScope.Scope()
 		// Enumerate the variables we care about, under the UNet model:
 		for v := range scope.In(UNetModelScope).IterVariables() {

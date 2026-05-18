@@ -3,7 +3,7 @@
 // Package initializers include several weight initializers, to be used with a model.Context.
 //
 // They construct computation.VariableInitializer closures.
-package initializers
+package initializer
 
 import (
 	"math"

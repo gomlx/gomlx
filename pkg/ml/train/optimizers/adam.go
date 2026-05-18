@@ -10,7 +10,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -406,12 +406,12 @@ func (o *adam) getMomentVariables(
 	shape.DType = dtype
 	if !o.config.rmsProp {
 		m1 = scope.Store().Scope(scopePath).
-			WithInitializer(initializers.Zero).
+			WithInitializer(initializer.Zero).
 			VariableWithShape(m1Name, shape).
 			SetTrainable(false)
 	}
 	m2 = scope.Store().Scope(scopePath).
-		WithInitializer(initializers.Zero).
+		WithInitializer(initializer.Zero).
 		VariableWithShape(m2Name, shape).
 		SetTrainable(false)
 	return

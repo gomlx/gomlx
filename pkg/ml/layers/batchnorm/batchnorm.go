@@ -17,7 +17,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 )
@@ -192,25 +192,25 @@ func (builder *Config) Done() *Node {
 	varShape := shapes.Make(dtype, featureDim)
 	var scaleVar *model.Variable
 	if builder.scale {
-		scaleVar = scope.WithInitializer(initializers.One).VariableWithShape("scale", varShape).SetTrainable(true)
+		scaleVar = scope.WithInitializer(initializer.One).VariableWithShape("scale", varShape).SetTrainable(true)
 		scale = scaleVar.NodeValue(g)
 	} else {
 		scale = Ones(g, varShape)
 	}
 
 	if builder.center {
-		offsetVar := scope.WithInitializer(initializers.Zero).VariableWithShape("offset", varShape).SetTrainable(true)
+		offsetVar := scope.WithInitializer(initializer.Zero).VariableWithShape("offset", varShape).SetTrainable(true)
 		offset = offsetVar.NodeValue(g)
 	} else {
 		offset = Zeros(g, varShape)
 	}
 
 	// Normalization moving average of the mean and variance.
-	meanAverageVar := scope.WithInitializer(initializers.Zero).VariableWithShape("mean", varShape).SetTrainable(false)
-	varianceAverageVar := scope.WithInitializer(initializers.One).
+	meanAverageVar := scope.WithInitializer(initializer.Zero).VariableWithShape("mean", varShape).SetTrainable(false)
+	varianceAverageVar := scope.WithInitializer(initializer.One).
 		VariableWithShape("variance", varShape).
 		SetTrainable(false)
-	weightVar := scope.WithInitializer(initializers.Zero).VariableWithShape("avg_weight", varShape).SetTrainable(false)
+	weightVar := scope.WithInitializer(initializer.Zero).VariableWithShape("avg_weight", varShape).SetTrainable(false)
 
 	var normalized *Node
 	mean, variance := meanAverageVar.NodeValue(g), varianceAverageVar.NodeValue(g)

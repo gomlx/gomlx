@@ -10,7 +10,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 )
@@ -63,7 +63,7 @@ func iterTrainableAndAccumulatorVariables(scope *model.Scope, g *graph.Graph) it
 			scopePath := path.Join("/", AccumulatedGradientsScope, originalScope)
 			shape := v.Shape().Clone()
 			accumulator := scope.Store().Scope(scopePath).
-				WithInitializer(initializers.Zero).
+				WithInitializer(initializer.Zero).
 				VariableWithShape(originalName, shape).
 				SetTrainable(false)
 			if !yield(v, accumulator) {

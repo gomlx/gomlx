@@ -15,7 +15,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,7 +63,7 @@ func TestExec(t *testing.T) {
 	t.Run("variable initialization", func(t *testing.T) {
 		scope := model.NewStore()
 		result, err := model.ExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
-			v := scope.WithInitializer(initializers.RandomUniformFn(scope, 0.0001, 1.0)).
+			v := scope.WithInitializer(initializer.RandomUniformFn(scope, 0.0001, 1.0)).
 				VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
 			return v.NodeValue(g)
 		})
@@ -152,7 +152,7 @@ func TestExec(t *testing.T) {
 		scope := model.NewStore()
 		counter := model.MustNewExec(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 			dtype := dtypes.Int64
-			counterVar := scope.WithInitializer(initializers.Zero).VariableWithShape("counter", shapes.Make(dtype))
+			counterVar := scope.WithInitializer(initializer.Zero).VariableWithShape("counter", shapes.Make(dtype))
 			counterNode := counterVar.NodeValue(g)
 			counterNode = Add(counterNode, OnesLike(counterNode))
 			counterVar.SetNodeValue(counterNode)

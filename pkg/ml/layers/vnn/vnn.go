@@ -15,7 +15,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -340,10 +340,10 @@ func (c *Config) Done() *Node {
 
 			scalerShape := shapes.Make(dtype, 1, outputChannels, 1)
 			alphaVar := layerCtx.
-				WithInitializer(initializers.One).
+				WithInitializer(initializer.One).
 				VariableWithShape("scaler_alpha", scalerShape)
 			betaVar := layerCtx.
-				WithInitializer(initializers.Zero).
+				WithInitializer(initializer.Zero).
 				VariableWithShape("scaler_beta", scalerShape)
 			alpha := alphaVar.NodeValue(g)
 			beta := betaVar.NodeValue(g)

@@ -6,7 +6,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -80,7 +80,7 @@ func (c *ReluConfig) Done() *Node {
 
 	numChannels := operand.Shape().Dim(-2)
 	vecDim := operand.Shape().Dim(-1) // 3
-	scope = scope.In("relu").WithInitializer(initializers.RandomNormalFn(scope, 0.1))
+	scope = scope.In("relu").WithInitializer(initializer.RandomNormalFn(scope, 0.1))
 
 	// Normalize the operand to rank-3: [batchSize, inputChannels, 3 (each vector dimension)]
 	originalShape := operand.Shape()

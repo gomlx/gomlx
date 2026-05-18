@@ -11,7 +11,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -326,7 +326,7 @@ func (c *Config) discreteLayer(scope *model.Scope, x *Node, numOutputNodes int) 
 
 		// Trainable split points: one per input.
 		// * We could also make it learn one per output ... at the cost of more parameters.
-		splitPointsVar := scope.WithInitializer(initializers.BroadcastTensorToShape(initialSplitPointsT)).
+		splitPointsVar := scope.WithInitializer(initializer.BroadcastTensorToShape(initialSplitPointsT)).
 			VariableWithShape("kan_discrete_split_points", shapes.Make(dtype, 1, numInputGroups, c.numControlPoints-1))
 		if c.discrete.splitPointsFrozen {
 			splitPointsVar.Trainable = false

@@ -10,7 +10,7 @@ import (
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
@@ -59,7 +59,7 @@ func logitsGraph(scope *model.Scope, readout *Node) *Node {
 // * Predictions for all seeds shaped `Float32[BatchSize, mag.NumLabels]` (or `Float16` or `Float64`).
 // * Mask of the seeds, provided by the sampler, shaped `Bool[BatchSize]`.
 func MagModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
-	scope = scope.WithInitializer(initializers.GlorotUniformFn(scope))
+	scope = scope.WithInitializer(initializer.GlorotUniformFn(scope))
 	dtype := getDType(scope) // Default is Float32
 	g := inputs[0].Graph()
 	if klog.V(3).Enabled() {
@@ -139,7 +139,7 @@ func FeaturePreprocessing(scope *model.Scope, strategy *sampler.Strategy, inputs
 	// the cases of unknown (zero) embeddings.
 	// They shouldn't be initialized with GlorotUniform, but instead with small random uniform values.
 	ctxEmbed := scope.In("embeddings").
-		WithInitializer(initializers.RandomUniformFn(scope, -0.05, 0.05))
+		WithInitializer(initializer.RandomUniformFn(scope, -0.05, 0.05))
 	embedDropoutRate := model.GetParamOr(scope, ParamEmbedDropoutRate, 0.0)
 
 	// Preprocess papers to its features --> these are in a frozen embedding table in the context as a frozen variable.

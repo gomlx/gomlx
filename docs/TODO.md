@@ -6,9 +6,6 @@
  ---
 ## v0.28 TODOs
 
-- Exec (in packages `graph` and `model`): use less reflection, and use a
-  "canonical" graphFn (or modelGraphFn) using slices and generate conversors
-  from any of the various accepted aliases to the canonical one.
 - `ml/initializers` -> `model/initializer`
 - `ml/checkpoints` -> `model/checkpoint`
 - Move other `pkg/ml/...` to `ml/...`

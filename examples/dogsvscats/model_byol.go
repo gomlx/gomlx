@@ -12,7 +12,7 @@ import (
 	timage "github.com/gomlx/gomlx/core/tensors/images"
 	"github.com/gomlx/gomlx/examples/inceptionv3"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
 	"github.com/gomlx/gomlx/pkg/ml/train"
@@ -54,7 +54,7 @@ func ByolCnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	// Create two models: same structure, different initializations, and if `--byol_use_pairs` is set,
 	// different augmentations of the same image.
 	onlineCtx := scope.In("online")
-	targetCtx := scope.In("target").WithInitializer(initializers.RandomNormalFn(scope, 1.0))
+	targetCtx := scope.In("target").WithInitializer(initializer.RandomNormalFn(scope, 1.0))
 
 	// No dropout for the "target" model.
 	targetCtx.SetParam("cnn_dropout_rate", 0.0)

@@ -8,7 +8,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/ml/nn"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
 	"github.com/pkg/errors"
@@ -223,14 +223,14 @@ func (builder *LayerNormBuilder) createVariables() (gamma, beta *Node) {
 	}
 
 	if builder.gain {
-		gainVar := scope.WithInitializer(initializers.One).VariableWithShape("gain", normShape).SetTrainable(true)
+		gainVar := scope.WithInitializer(initializer.One).VariableWithShape("gain", normShape).SetTrainable(true)
 		if builder.regularizer != nil {
 			builder.regularizer(scope, g, gainVar)
 		}
 		gamma = Reshape(gainVar.NodeValue(g), broadcastNormShape.Dimensions...)
 	}
 	if builder.center {
-		offsetVar := scope.WithInitializer(initializers.Zero).VariableWithShape("offset", normShape).SetTrainable(true)
+		offsetVar := scope.WithInitializer(initializer.Zero).VariableWithShape("offset", normShape).SetTrainable(true)
 		beta = Reshape(offsetVar.NodeValue(g), broadcastNormShape.Dimensions...)
 	}
 	return

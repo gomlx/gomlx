@@ -16,7 +16,7 @@ import (
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/ui/plots"
 	"k8s.io/klog/v2"
@@ -108,7 +108,7 @@ func BuildLayerWiseInferenceModel(
 	predictions bool,
 ) func(scope *model.Scope, g *Graph) *Node {
 	return func(scope *model.Scope, g *Graph) *Node {
-		scope = scope.WithInitializer(initializers.GlorotUniformFn(scope))
+		scope = scope.WithInitializer(initializer.GlorotUniformFn(scope))
 		scope = scope.In("model")
 
 		// Create inputs with all elements. Similar to the code in [sampler.Dataset.Yield].

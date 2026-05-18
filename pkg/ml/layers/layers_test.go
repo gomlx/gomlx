@@ -14,7 +14,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/plot"
@@ -137,7 +137,7 @@ func TestDense2(t *testing.T) {
 		func(scope *model.Scope, input *Node) *Node {
 			g := input.Graph()
 			input = Ones(g, shapes.Make(dtypes.Float32, 100, 3072))
-			output := DenseWithBias(scope.WithInitializer(initializers.Zero), input, 4)
+			output := DenseWithBias(scope.WithInitializer(initializer.Zero), input, 4)
 			fmt.Printf("\toutput.shape=%s\n", output.Shape())
 			return ReduceAllSum(output)
 		},

@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	xbsplines "github.com/gomlx/gomlx/pkg/ml/layers/bsplines"
 	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
@@ -100,14 +100,14 @@ func (c *Config) bsplineLayer(scope *model.Scope, x *Node, numOutputNodes int) *
 	// Notice we dropped the initializations suggested by the paper because the seemed much worse in all my experiments.
 	var weightsSplines, weightsResidual *Node
 	if c.bspline.MagnitudeTerms {
-		weightsSplinesVar := scope.WithInitializer(initializers.One).
+		weightsSplinesVar := scope.WithInitializer(initializer.One).
 			VariableWithShape("w_splines", shapes.Make(dtype, 1, numOutputNodes, numInputNodes))
 		if c.bspline.MagnitudeRegularizer != nil {
 			c.bspline.MagnitudeRegularizer(scope, g, weightsSplinesVar)
 		}
 		weightsSplines = weightsSplinesVar.NodeValue(g)
 		if c.useResidual {
-			weightsResidualVar := scope.WithInitializer(initializers.XavierUniformFn(scope)).
+			weightsResidualVar := scope.WithInitializer(initializer.XavierUniformFn(scope)).
 				VariableWithShape("w_residual", shapes.Make(dtype, 1, numOutputNodes, numInputNodes))
 			weightsResidual = weightsResidualVar.NodeValue(g)
 			if c.bspline.MagnitudeRegularizer != nil {
@@ -138,7 +138,7 @@ func (c *Config) bsplineLayer(scope *model.Scope, x *Node, numOutputNodes int) *
 		// Using ReduceSum.
 		stdDev = 1.0 / math.Sqrt(float64(numInputNodes))
 	}
-	controlPointsVar := scope.WithInitializer(initializers.RandomNormalFn(scope, stdDev)).
+	controlPointsVar := scope.WithInitializer(initializer.RandomNormalFn(scope, stdDev)).
 		VariableWithShape("bspline_control_points", shapes.Make(dtype, numInputNodes, numOutputNodes, c.numControlPoints))
 	if c.regularizer != nil {
 		c.regularizer(scope, g, controlPointsVar)

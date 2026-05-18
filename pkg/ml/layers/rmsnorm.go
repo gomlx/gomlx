@@ -10,7 +10,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 )
 
 // RMSNormBuilder holds the configuration for RMSNorm.
@@ -94,7 +94,7 @@ func (rms *RMSNormBuilder) Done() *Node {
 		sort.Ints(normAxes)
 		dims := xslices.Map(normAxes, func(axis int) int { return shape.Dim(axis) })
 		scaleShape := shapes.Make(dtype, dims...)
-		scaleVar := scope.WithInitializer(initializers.One).VariableWithShape("scale", scaleShape)
+		scaleVar := scope.WithInitializer(initializer.One).VariableWithShape("scale", scaleShape)
 		scale := scaleVar.NodeValue(g)
 		if rms.scaleOffset != 0 {
 			scale = AddScalar(scale, rms.scaleOffset)

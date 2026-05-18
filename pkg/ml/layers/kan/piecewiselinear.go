@@ -10,7 +10,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -151,7 +151,7 @@ func (c *Config) pwlLayer(scope *model.Scope, x *Node, numOutputNodes int) *Node
 		// Using ReduceSum.
 		stdDev = 1.0 / math.Sqrt(float64(numInputNodes))
 	}
-	controlPointsVar := scope.WithInitializer(initializers.RandomNormalFn(scope, stdDev)).
+	controlPointsVar := scope.WithInitializer(initializer.RandomNormalFn(scope, stdDev)).
 		VariableWithShape("kan_pwl_control_points", shapes.Make(dtype, numOutputNodes, numInputGroups, c.numControlPoints))
 	if c.regularizer != nil {
 		c.regularizer(scope, g, controlPointsVar)
@@ -159,7 +159,7 @@ func (c *Config) pwlLayer(scope *model.Scope, x *Node, numOutputNodes int) *Node
 	controlPoints := controlPointsVar.NodeValue(g)
 
 	// bias term:
-	biasPointsVar := scope.WithInitializer(initializers.Zero).
+	biasPointsVar := scope.WithInitializer(initializer.Zero).
 		VariableWithShape("kan_pwl_bias", shapes.Make(dtype, numOutputNodes, numInputGroups))
 	bias := biasPointsVar.NodeValue(g)
 
@@ -181,7 +181,7 @@ func (c *Config) pwlLayer(scope *model.Scope, x *Node, numOutputNodes int) *Node
 	if c.pwl.splitPointsTrainable {
 		// Trainable split points: one per input.
 		// * We could also make it learn one per output ... at the cost of more parameters.
-		splitPointsVar := scope.WithInitializer(initializers.BroadcastTensorToShape(initialSplitPointsT)).
+		splitPointsVar := scope.WithInitializer(initializer.BroadcastTensorToShape(initialSplitPointsT)).
 			VariableWithShape("kan_pwl_split_points", shapes.Make(dtype, numInputGroups, c.numControlPoints))
 		if c.pwl.splitPointsFrozen {
 			splitPointsVar.Trainable = false

@@ -25,7 +25,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -85,7 +85,7 @@ func KVCacheGetVars(scope *model.Scope, cacheShape shapes.Shape) (keyVar, valueV
 		Panicf("KV cache shape must have rank 4, got %s", cacheShape)
 	}
 
-	scope = scope.At(KVCacheScopeName).WithInitializer(initializers.Zero)
+	scope = scope.At(KVCacheScopeName).WithInitializer(initializer.Zero)
 	keyVar = scope.VariableWithShape(kvCacheKeyName, cacheShape)
 	valueVar = scope.VariableWithShape(kvCacheValueName, cacheShape)
 	return

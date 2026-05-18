@@ -12,7 +12,7 @@ import (
 	graph "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	. "github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/support/sets"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
@@ -68,12 +68,12 @@ func TestScopeVariables(t *testing.T) {
 func TestScopeVariablesInitialization(t *testing.T) {
 	store := NewStore()
 	root := store.RootScope()
-	root.SetParam(initializers.ParamInitialSeed, int64(42))
-	sA := root.In("a").WithInitializer(initializers.RandomUniformFn(root, 1.5, 2.5))
+	root.SetParam(initializer.ParamInitialSeed, int64(42))
+	sA := root.In("a").WithInitializer(initializer.RandomUniformFn(root, 1.5, 2.5))
 	v0 := sA.VariableWithShape("x", shapes.Make(dtypes.Float32))
-	sB := root.In("b").WithInitializer(initializers.RandomNormalFn(root, 1.0))
+	sB := root.In("b").WithInitializer(initializer.RandomNormalFn(root, 1.0))
 	v1 := sB.VariableWithShape("y", shapes.Make(dtypes.Float64, 2))
-	sC := sB.In("c").WithInitializer(initializers.Zero)
+	sC := sB.In("c").WithInitializer(initializer.Zero)
 	v2 := sC.VariableWithShape("z", shapes.Make(dtypes.Int64, 3, 1))
 
 	backend := testutil.BuildTestBackend()
@@ -223,7 +223,7 @@ func TestStore_SetLoader(t *testing.T) {
 
 	backend := testutil.BuildTestBackend()
 	e := MustNewExec(backend, store, func(s *Scope, g *graph.Graph) (*graph.Node, *graph.Node) {
-		v0 := s.WithInitializer(initializers.Zero).VariableWithShape("x", shapes.Make(dtypes.Float32))
+		v0 := s.WithInitializer(initializer.Zero).VariableWithShape("x", shapes.Make(dtypes.Float32))
 		v1 := s.VariableWithValue("y", int32(1))
 		return v0.NodeValue(g), v1.NodeValue(g)
 	})

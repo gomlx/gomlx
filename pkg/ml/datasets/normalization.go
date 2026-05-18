@@ -9,7 +9,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
@@ -30,7 +30,7 @@ func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, i
 	store := model.NewStore()
 	updateValuesWithInput := model.MustNewExec(backend, store, func(scope *model.Scope, batch *Node) {
 		g := batch.Graph()
-		scope = scope.WithInitializer(initializers.Zero)
+		scope = scope.WithInitializer(initializer.Zero)
 
 		// Find axes to reduce from the input.
 		mapIndependentAxes := make([]bool, batch.Rank())

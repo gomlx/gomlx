@@ -16,7 +16,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/ml/model/modeltest"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/train"
@@ -72,7 +72,7 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 			key := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 3))
 			query := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 2))
 			value := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 3, 2)))
-			attOutput, attCoef := MultiHeadAttention(scope.WithInitializer(initializers.One),
+			attOutput, attCoef := MultiHeadAttention(scope.WithInitializer(initializer.One),
 				query, key, value, 1, 2).
 				WithCausalMask(true).
 				WithOutputDim(5).DoneWithCoefficients()
@@ -118,7 +118,7 @@ func TestMultiHeadAttentionFusedPath(t *testing.T) {
 
 			// Decomposed path.
 			decomposedExec := model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) []*Node {
-				scope = scope.WithInitializer(initializers.One)
+				scope = scope.WithInitializer(initializer.One)
 				input := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, inputDim))
 				builder := MultiHeadAttention(scope, input, input, input, numHeads, headDim)
 				if useCausal {
@@ -131,7 +131,7 @@ func TestMultiHeadAttentionFusedPath(t *testing.T) {
 
 			// Fused path (Done() will use fused when available).
 			fusedExec := model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) []*Node {
-				scope = scope.WithInitializer(initializers.One)
+				scope = scope.WithInitializer(initializer.One)
 				input := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, inputDim))
 				builder := MultiHeadAttention(scope, input, input, input, numHeads, headDim)
 				if useCausal {
@@ -271,7 +271,7 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 			// 1. exec for sequence N and masked as 3.
 			const N = 100
 			execN := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node, mask *Node) *Node {
-				scope = scope.WithInitializer(initializers.RandomNormalFn(scope, 1.0))
+				scope = scope.WithInitializer(initializer.RandomNormalFn(scope, 1.0))
 				output := SelfAttention(scope, x, 2, 4).
 					UseQKVProjection().
 					WithMask(mask).
@@ -298,7 +298,7 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 
 			// 2. exec for sequence 3 (slice of the original), without mask
 			exec3 := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
-				scope = scope.WithInitializer(initializers.RandomNormalFn(scope, 1.0))
+				scope = scope.WithInitializer(initializer.RandomNormalFn(scope, 1.0))
 				// Slice the first 3 elements.
 				x = Slice(x, AxisRange(), AxisRange(0, 3), AxisRange())
 				return SelfAttention(scope, x, 2, 4).
@@ -370,7 +370,7 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 		headDim := 4
 
 		decomposedExec := model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) []*Node {
-			scope = scope.WithInitializer(initializers.One)
+			scope = scope.WithInitializer(initializer.One)
 			input := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, inputDim))
 			output, _ := MultiHeadAttention(scope, input, input, input, numHeads, headDim).
 				WithNumKVHeads(numKVHeads).
@@ -380,7 +380,7 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 		decomposedOutputs := decomposedExec.MustExec()
 
 		fusedExec := model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) []*Node {
-			scope = scope.WithInitializer(initializers.One)
+			scope = scope.WithInitializer(initializer.One)
 			input := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, inputDim))
 			output := MultiHeadAttention(scope, input, input, input, numHeads, headDim).
 				WithNumKVHeads(numKVHeads).
@@ -466,7 +466,7 @@ func buildSyntheticAttentionModelFn(debug bool) (modelGraphFn func(scope *model.
 		batchSize := input.Shape().Dimensions[0]
 		sequenceSize := input.Shape().Dimensions[1]
 		const positionalEmbeddingSize = 16
-		noisyCtx := scope.WithInitializer(initializers.RandomNormalFn(scope, 1.0))
+		noisyCtx := scope.WithInitializer(initializer.RandomNormalFn(scope, 1.0))
 		positionalVar := noisyCtx.In("positional").VariableWithShape("embeddings", shapes.Make(dtype, sequenceSize, positionalEmbeddingSize))
 		positionalEmbedding := positionalVar.NodeValue(g)
 		positionalEmbedding = InsertAxes(positionalEmbedding, 0) // Prefixing with batch dimension.

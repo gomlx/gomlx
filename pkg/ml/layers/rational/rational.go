@@ -28,7 +28,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/initializers"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -266,7 +266,7 @@ func (c *Config) Done() *Node {
 			}
 		}
 		wInitializerStddev := math.Sqrt(wInitializerVariance)
-		w = scope.WithInitializer(initializers.RandomNormalFn(scope, wInitializerStddev)).
+		w = scope.WithInitializer(initializer.RandomNormalFn(scope, wInitializerStddev)).
 			VariableWithShape("w", shapes.Make(dtype, outputDim, numInputGroups)).NodeValue(g)
 	}
 
@@ -283,10 +283,10 @@ func (c *Config) Done() *Node {
 			"with rational.Config.WithInitialValues() or add them to the cache table for future use",
 			c.initApproximation, c.version, c.numeratorDegree, c.denominatorDegree)
 	}
-	numeratorCoeffs := scope.WithInitializer(initializers.BroadcastTensorToShape(numeratorInit)).
+	numeratorCoeffs := scope.WithInitializer(initializer.BroadcastTensorToShape(numeratorInit)).
 		VariableWithShape("numeratorCoeffs", shapes.Make(dtype, outputDim, numInputGroups, c.numeratorDegree+1)).
 		NodeValue(g)
-	denominatorCoeffs := scope.WithInitializer(initializers.BroadcastTensorToShape(denominatorInit)).
+	denominatorCoeffs := scope.WithInitializer(initializer.BroadcastTensorToShape(denominatorInit)).
 		VariableWithShape("denominatorCoeffs", shapes.Make(dtype, outputDim, numInputGroups, c.denominatorDegree)).
 		NodeValue(g)
 
