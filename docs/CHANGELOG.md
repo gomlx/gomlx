@@ -4,7 +4,14 @@ It hasn't reached yet a 1.0 release yet (it is close), so instead we use every m
 
 ---
 
-# (In progress) v0.28.0: Large API and package re-organization: `backends` moved to `github.com/gomlx/compute` repository!
+# (In progress) v0.28.0: Large API and Packages Cleanup and Reorganization:
+
+To faciliate conversion to this updated API, we added the CLI tool `cmd/convert_v0.28`.
+It won't fully fix the code, but will change the import package paths and names.
+
+```
+go run <path_to_gomlx>/cmd/convert_v0.28 [-dir <directory>]
+```
 
 ## API Changes: `backends` and related packages moved to `github.com/gomlx/compute`
 
@@ -31,15 +38,23 @@ directory, and move the packages to the root:
 - `github.com/gomlx/gomlx/pkg/ml/...` -> `github.com/gomlx/gomlx/ml/...
 - `github.com/gomlx/gomlx/pkg/support/...` -> `github.com/gomlx/gomlx/support/...
 
-## Context Redesign: `context` -> `model`; `Context` -> `Store` and `Scope`.
+## **Context Redesign** now in package `model`
+- Package `context` -> `model`
+- `Context` -> `Store` and `Scope`
+- `NewContext` -> `NewStore` (the only "global" one)
+- `Exec.Exec` -> `Exec.Call`, more inline with ML standards, and less stuttering.
+- Using mostly `fullPath` instead of the split scope/key pairs.
+- Variables:
+  - `Scope.VariableWithValueGraph` -> `Scope.VariableWithNodeValue`
+  - `InspectVariable` -> `Store.GetVariable`
+  - `InspectVariableInScope` -> `Scope.GetVariable`
+  - `SetValueGraph` -> `SetNodeValue`; `ValueGraph` -> `NodeValue`
 
-- Renamed `context` package to `model`:
-  - `Scope`: represents a scope (or sub-package) in a `Store`. It holds a pointer to the `Store` it belongs to.
-  - `Store`: represents a store of variables and hyperparameters.
-  - `Exec`: represents an executor that takes as an extra parameter a `Store` and will handle passing the variables automatically as extra inputs and outputs to the graph being built. `Exec` simplifies building models using or updateing the variables of its `Store`.
-  - `Exec.Exec` -> `Exec.Call`, more inline with ML standards, and less stuttering.
+## Graph (github.com/gomlx/gomlx/core/graph):
+- `Exec.Exec` -> `Exec.Call` (no change in name, but `Exec` is gone).
 
-## Graph: `Exec.Exec` -> `Exec.Call` (no change in name, but `Exec` is gone).
+## Tensors (github.com/gomlx/gomlx/core/tensors):
+- Renamed `FromAnyValue` to `MustFromAnyValue` and added `FromAnyValue` returning `(tensor, error)`.
 
 
 ---
