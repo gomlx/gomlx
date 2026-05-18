@@ -411,10 +411,8 @@ func (s *Scope) VariableWithValue(name string, defaultValue any) *Variable {
 // This should only be used during graph/model building function.
 func (s *Scope) VariableWithNodeValue(name string, value *Node) *Variable {
 	s.checkName(name)
-	zeroScope := s.WithInitializer(graph.Zeros)
-	v := zeroScope.VariableWithShape(name, value.Shape())
-	v.SetNodeValue(value)
-	return v
+	fullPath := JoinPath(s.scope, name)
+	return s.store.VariableWithNodeValue(fullPath, value)
 }
 
 // IsTraining returns whether current Store (and thus this Scope) is being used for training.

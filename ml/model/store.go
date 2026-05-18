@@ -471,6 +471,17 @@ func (s *Store) VariableWithShape(fullPath string, shape shapes.Shape, initializ
 	return v
 }
 
+// VariableWithNodeValue creates a variable with the path and [graph.Node] value given.
+// The value is immediately available in the graph (see Variable.NodeValue()), but
+// it will only have a concrete value once the model is executed (see Exec.Call).
+//
+// This should only be used during graph/model building function.
+func (s *Store) VariableWithNodeValue(fullPath string, value *Node) *Variable {
+	v := s.VariableWithShape(fullPath, value.Shape(), graph.Zeros)
+	v.SetNodeValue(value)
+	return v
+}
+
 // VariableWithValue creates or returns a variable initialized with the given value in the given variable path.
 func (s *Store) VariableWithValue(fullPath string, defaultValue any) *Variable {
 	if !strings.HasPrefix(fullPath, "/") {
