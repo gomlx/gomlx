@@ -27,7 +27,7 @@ var (
 			"Only variables that are both trainable and float are modified.")
 )
 
-// ListVariables list the variables of a model, with their shape and MAV (max absolute value), RMS (root-mean-square) and MaxAV (max absolute value) values.
+// ListVariables list the variables of a model under the given scope, with their shape and MAV (max absolute value), RMS (root-mean-square) and MaxAV (max absolute value) values.
 func ListVariables(scope *model.Scope) {
 	fmt.Println(titleStyle.Render(fmt.Sprintf("Variables in scope %q", scope.Scope())))
 	metricsFn := MustNewExec(compute.MustNew(), func(x *Node) (mav, rms, maxAV *Node) {
@@ -40,10 +40,10 @@ func ListVariables(scope *model.Scope) {
 	table := newPlainTable(true)
 	table.Headers("Scope", "Name", "Shape", "Size", "Bytes", "Scalar/MAV", "RMS", "MaxAV")
 	var rows [][]string
-	scope.EnumerateVariablesInScope(func(v *model.Variable) {
+	for v := range scope.IterVariables() {
 		if !v.IsValid() {
 			rows = append(rows, []string{v.Scope(), v.Name(), "<invalid>", "", "", "", "", ""})
-			return
+			continue
 		}
 		shape := v.Shape()
 		var mav, rms, maxAV string
@@ -61,7 +61,7 @@ func ListVariables(scope *model.Scope) {
 			humanize.Bytes(shape.ByteSize()),
 			mav, rms, maxAV,
 		})
-	})
+	}
 	slices.SortFunc(rows, func(a, b []string) int {
 		cmp := strings.Compare(a[0], b[0])
 		if cmp != 0 {
@@ -83,19 +83,17 @@ func ListVariables(scope *model.Scope) {
 
 // DeleteVars on the given scopes.
 func DeleteVars(checkpointPath string, scopes ...string) {
-	scope := model.NewStore()
-	checkpoint := must.M1(checkpoints.Build(scope).
+	store := model.NewStore()
+	checkpoint := must.M1(checkpoints.Build(store).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
 	var varsToDelete []*model.Variable
-	for _, scope := range scopes {
-		if scope == "" {
+	for _, scopePath := range scopes {
+		if scopePath == "" {
 			continue
 		}
-		scopePrefix := scope + model.ScopeSeparator
+		scope := store.Scope(scopePath)
 		for v := range scope.IterVariables() {
-			if v.Scope() == scope || strings.HasPrefix(v.Scope(), scopePrefix) {
-				varsToDelete = append(varsToDelete, v)
-			}
+			varsToDelete = append(varsToDelete, v)
 		}
 	}
 	if len(varsToDelete) == 0 {
@@ -103,7 +101,7 @@ func DeleteVars(checkpointPath string, scopes ...string) {
 		return
 	}
 	for _, v := range varsToDelete {
-		scope.DeleteVariable(v.Scope(), v.Name())
+		store.DeleteVariable(v.Path())
 	}
 	must.M(checkpoint.Save())
 	fmt.Printf("%d deleted vars under scopes %v, new checkpoint saved.\n", len(varsToDelete), scopes)

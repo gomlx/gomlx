@@ -113,7 +113,7 @@ func Reports(checkpointPaths []string) {
 	for _, checkpointPath := range checkpointPaths {
 		store := model.NewStore()
 		if *flagSummary || *flagParams || *flagVars {
-			_ = must.M1(checkpoints.Build(store.RootScope()).
+			_ = must.M1(checkpoints.Build(store).
 				Dir(checkpointPath).Immediate().Done())
 		}
 		scope := store.RootScope()
