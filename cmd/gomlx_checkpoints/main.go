@@ -108,20 +108,20 @@ var (
 
 func Reports(checkpointPaths []string) {
 	numCheckpoints := len(checkpointPaths)
-	ctxs := make([]*model.Scope, 0, len(checkpointPaths))
-	scopedCtxs := make([]*model.Scope, 0, len(checkpointPaths))
+	stores := make([]*model.Store, 0, len(checkpointPaths))
+	scopes := make([]*model.Scope, 0, len(checkpointPaths))
 	for _, checkpointPath := range checkpointPaths {
-		scope := model.NewStore()
+		store := model.NewStore()
 		if *flagSummary || *flagParams || *flagVars {
-			_ = must.M1(checkpoints.Build(scope).
+			_ = must.M1(checkpoints.Build(store.RootScope()).
 				Dir(checkpointPath).Immediate().Done())
 		}
-		scopedCtx := scope
+		scope := store.RootScope()
 		if *flagScope != "" {
-			scopedCtx = scope.Store().Scope(*flagScope)
+			scope = store.Scope(*flagScope)
 		}
-		ctxs = append(ctxs, scope)
-		scopedCtxs = append(scopedCtxs, scopedCtx)
+		stores = append(stores, store)
+		scopes = append(scopes, scope)
 	}
 	var names []string
 	if numCheckpoints == 1 {
@@ -131,10 +131,10 @@ func Reports(checkpointPaths []string) {
 	}
 
 	if *flagSummary {
-		Summary(ctxs, scopedCtxs, names)
+		Summary(stores, scopes, names)
 	}
 	if *flagParams {
-		Params(ctxs, scopedCtxs, names)
+		Params(stores, scopes, names)
 	}
 	if *flagMetrics || *flagMetricsLabels || *flagPlot {
 		metrics(checkpointPaths, names)
@@ -143,16 +143,16 @@ func Reports(checkpointPaths []string) {
 		if numCheckpoints > 1 {
 			klog.Fatalf("More than one checkpoint not supported for --vars")
 		}
-		ListVariables(scopedCtxs[0])
+		ListVariables(scopes[0])
 	}
 
 }
 
 func Backup(checkpointPath string) {
-	scope := model.NewStore()
-	checkpoint := must.M1(checkpoints.Build(scope).
+	store := model.NewStore()
+	checkpoint := must.M1(checkpoints.Build(store).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
 	must.M(checkpoint.Backup())
-	globalStep := optimizers.GetGlobalStep(scope)
+	globalStep := optimizers.GetGlobalStep(store)
 	fmt.Printf("Backup of latest checkpoint (global step %d) successful, see %q.\n", globalStep, path.Join(checkpoint.Dir(), checkpoints.BackupDir))
 }

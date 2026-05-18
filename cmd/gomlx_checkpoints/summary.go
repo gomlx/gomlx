@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 )
 
-func Summary(ctxs, scopedCtxs []*model.Scope, names []string) {
+func Summary(stores []*model.Store, scopes []*model.Scope, names []string) {
 	numCheckpoints := len(names)
 
 	// Header
@@ -33,8 +33,8 @@ func Summary(ctxs, scopedCtxs []*model.Scope, names []string) {
 	globalStepRow := make([]string, numCheckpoints+1)
 	globalStepRow[0] = "global_step"
 	haveGlobalStep := false
-	for ii, scope := range ctxs {
-		globalStepVar := scope.GetVariable(optimizers.GlobalStepVariableName)
+	for ii, store := range stores {
+		globalStepVar := store.GetVariable(optimizers.GlobalStepVariableName)
 		if globalStepVar != nil {
 			haveGlobalStep = true
 			globalStepT := must.M1(globalStepVar.Value())
@@ -52,14 +52,14 @@ func Summary(ctxs, scopedCtxs []*model.Scope, names []string) {
 	variablesRow[0] = "# variables"
 	parametersRow[0] = "# parameters"
 	memoryRow[0] = "# bytes"
-	for ii, scopedCtx := range scopedCtxs {
+	for ii, scope := range scopes {
 		var numVars, totalSize int
 		var totalMemory int64
-		scopedCtx.EnumerateVariablesInScope(func(v *model.Variable) {
+		for v := range scope.IterVariables() {
 			numVars++
 			totalSize += v.Shape().Size()
 			totalMemory += v.Shape().ByteSize()
-		})
+		}
 		variablesRow[ii+1] = humanize.Underscores(numVars)
 		parametersRow[ii+1] = humanize.Count(totalSize)
 		memoryRow[ii+1] = humanize.Bytes(totalMemory)

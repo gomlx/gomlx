@@ -4,14 +4,13 @@ package main
 
 import (
 	"fmt"
-	"maps"
-	"slices"
 
+	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/sets"
 )
 
-func Params(ctxs, scopedCtxs []*model.Scope, names []string) {
+func Params(stores []*model.Store, scopes []*model.Scope, names []string) {
 	numCheckpoints := len(names)
 	numCols := numCheckpoints + 3
 
@@ -31,39 +30,19 @@ func Params(ctxs, scopedCtxs []*model.Scope, names []string) {
 	table.Table.Headers(headers...)
 
 	// List params set on all models.
-	type scopeKey struct{ Scope, Key string }
-	scopeKeySet := sets.Make[scopeKey]()
-	for _, scope := range ctxs {
-		scope.EnumerateParams(func(scope, key string, value any) {
-			scopeKeySet.Insert(scopeKey{Scope: scope, Key: key})
-		})
+	paramPaths := sets.Make[string]()
+	for _, store := range stores {
+		for paramPath := range store.IterParams() {
+			paramPaths.Insert(paramPath)
+		}
 	}
-	scopeKeys := slices.SortedFunc(maps.Keys(scopeKeySet), func(a scopeKey, b scopeKey) int {
-		if a.Scope < b.Scope {
-			return -1
-		}
-		if a.Scope > b.Scope {
-			return 1
-		}
-		if a.Key < b.Key {
-			return -1
-		}
-		if a.Key > b.Key {
-			return 1
-		}
-		return 0
-	})
-
-	for _, pair := range scopeKeys {
+	for _, fullPath := range xslices.SortedKeys(paramPaths) {
 		row := make([]string, numCols)
-		scope, key := pair.Scope, pair.Key
+		scope, key := model.SplitPath(fullPath)
 		row[0] = scope
 		row[1] = key
-		for ii, scope := range ctxs {
-			if scope != "/" {
-				scope = scope.In(scope)
-			}
-			value, found := scope.GetParam(key)
+		for ii, store := range stores {
+			value, found := store.GetParam(key)
 			if !found {
 				continue
 			}
