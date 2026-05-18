@@ -26,13 +26,14 @@ var (
 )
 
 func main() {
-	scope := imdb.CreateDefaultContext()
+	store := imdb.CreateModelStore()
+	scope := store.RootScope()
 	settings := commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
 	paramsSet := check1(commandline.ParseSettings(scope, *settings))
 	err := exceptions.TryCatch[error](func() {
-		imdb.TrainModel(scope, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
+		imdb.TrainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
 	})
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)

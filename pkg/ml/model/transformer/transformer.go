@@ -681,12 +681,12 @@ func (m *Model) dense(scope *model.Scope, op *Node, useBias bool, outputDims ...
 		outDim *= d
 	}
 	wVar := scope.VariableWithShape("weights", shapes.Make(op.DType(), outDim, inDim))
-	w := wVar.ValueGraph(g)
+	w := wVar.NodeValue(g)
 	y := DotGeneral(op, []int{-1}, nil, w, []int{1}, nil)
 
 	if useBias {
 		bVar := scope.VariableWithShape("biases", shapes.Make(op.DType(), outDim))
-		y = Add(y, broadcastPrefixToMatch(bVar.ValueGraph(g), y))
+		y = Add(y, broadcastPrefixToMatch(bVar.NodeValue(g), y))
 	}
 
 	if len(outputDims) > 1 {

@@ -18,7 +18,8 @@ var (
 )
 
 func init() {
-	scope := createDefaultContext()
+	store := createModelStore()
+	scope := store.RootScope()
 	flagSettings = commandline.CreateSettingsFlag(scope, "")
 	if _, found := os.LookupEnv(compute.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
@@ -31,9 +32,9 @@ func TestMainFunc(t *testing.T) {
 		t.Skip("skipping testing in short mode")
 		return
 	}
-	scope := createDefaultContext()
-	scope.SetParam("train_steps", 10)
-	paramsSet := check1(commandline.ParseSettings(scope, *flagSettings))
-	err := mainWithContext(scope, *flagDataDir, *flagCheckpoint, paramsSet)
+	store := createModelStore()
+	store.SetParam("train_steps", 10)
+	paramsSet := check1(commandline.ParseSettings(store.RootScope(), *flagSettings))
+	err := mainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet)
 	require.NoError(t, err, "failed to train Adult model for 10 steps")
 }

@@ -20,9 +20,15 @@ type RewriteRules struct {
 	// TypeNameMap maps old type names to new type names (e.g., "model.Context" -> "Scope").
 	// The key is the full identifier or just the name if it's in the same package.
 	TypeNameMap map[string]string
+	// FunctionNameMap maps old function names to new function names.
+	// The key is the full identifier or just the name if it's in the same package.
+	FunctionNameMap map[string]string
 	// VariableNameMap maps old variable names to new variable names,
 	// optionally filtered by their type name.
 	VariableNameMap map[string]VariableRename
+	// MethodNameMap maps old method names to new method names.
+	// The key is the type-qualified method name (e.g., "model.Scope.VariableWithValueGraph").
+	MethodNameMap map[string]string
 }
 
 type VariableRename struct {
@@ -52,6 +58,17 @@ func RefactorFile(filename string, rules RewriteRules) (bool, error) {
 	ast.Inspect(f, func(n ast.Node) bool {
 		switch node := n.(type) {
 		case *ast.SelectorExpr:
+			// Method rename
+			// We use a heuristic: match the method name part since we don't have full type info.
+			for oldMethod, newMethodName := range rules.MethodNameMap {
+				parts := strings.Split(oldMethod, ".")
+				methodName := parts[len(parts)-1]
+				if node.Sel.Name == methodName {
+					node.Sel.Name = newMethodName
+					modified = true
+				}
+			}
+
 			// Handle package name renames and type name renames (e.g., model.Context)
 			if x, ok := node.X.(*ast.Ident); ok {
 				// Package rename
@@ -64,6 +81,12 @@ func RefactorFile(filename string, rules RewriteRules) (bool, error) {
 				fullID := x.Name + "." + node.Sel.Name
 				if newTypeName, found := rules.TypeNameMap[fullID]; found {
 					node.Sel.Name = newTypeName
+					modified = true
+				}
+
+				// Function rename
+				if newFuncName, found := rules.FunctionNameMap[fullID]; found {
+					node.Sel.Name = newFuncName
 					modified = true
 				}
 			}
@@ -119,6 +142,12 @@ func RefactorFile(filename string, rules RewriteRules) (bool, error) {
 					node.Name = rename.NewName
 					modified = true
 				}
+			}
+
+			// Rename bare function calls / references if they are in the same package
+			if newFuncName, found := rules.FunctionNameMap[node.Name]; found {
+				node.Name = newFuncName
+				modified = true
 			}
 		}
 		return true

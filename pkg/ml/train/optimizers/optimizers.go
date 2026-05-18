@@ -148,17 +148,17 @@ func ByName(scope *model.Scope, optName string) Interface {
 // GetGlobalStepVar returns the global step counter, a dtypes.Int64 variable.
 // It creates it (initialized with 0) if not already there.
 // This can be used in graph building or directly.
-func GetGlobalStepVar(scope *model.Scope) *model.Variable {
-	return scope.VariableWithValue(GlobalStepVariableName, int64(0)).SetTrainable(false)
+func GetGlobalStepVar(scopeOrStore model.StoreProvider) *model.Variable {
+	return scopeOrStore.Store().VariableWithValue(GlobalStepVariableName, int64(0)).SetTrainable(false)
 }
 
 // GetGlobalStep returns the current global step value.
 // It creates the global step variable if it does not yet exist.
-func GetGlobalStep(scope *model.Scope) int64 {
-	vAny := GetGlobalStepVar(scope).MustValue().Value()
+func GetGlobalStep(scopeOrStore model.StoreProvider) int64 {
+	vAny := GetGlobalStepVar(scopeOrStore).MustValue().Value()
 	v, ok := vAny.(int64)
 	if !ok {
-		Panicf("Context(scope=%q)[%q]=%#v, and cannot be converted to int64", scope.Scope(), GlobalStepVariableName, vAny)
+		Panicf("Variable %q=%#v, and cannot be converted to int64", GlobalStepVariableName, vAny)
 	}
 	return v
 }
@@ -179,9 +179,9 @@ func DeleteGlobalStep(scope *model.Scope) error {
 // before being returned.
 func IncrementGlobalStepGraph(scope *model.Scope, g *Graph, dtype dtypes.DType) *Node {
 	globalStepVar := GetGlobalStepVar(scope)
-	globalStep := globalStepVar.ValueGraph(g)
+	globalStep := globalStepVar.NodeValue(g)
 	globalStep = Add(globalStep, OnesLike(globalStep))
-	globalStepVar.SetValueGraph(globalStep)
+	globalStepVar.SetNodeValue(globalStep)
 	if dtype != dtypes.Int64 {
 		globalStep = ConvertDType(globalStep, dtype)
 	}
@@ -228,7 +228,7 @@ func TraceNaNInGradients(scope *model.Scope, variable *model.Variable, gradients
 	if !ok {
 		return
 	}
-	l.Trace(gradients, "Gradients", variable.ScopeAndName())
+	l.Trace(gradients, "Gradients", variable.Path())
 }
 
 // ClipNaNsInGradients will replace the gradient tensor by zeros if there are any NaNs or +/-Inf values.
@@ -326,7 +326,7 @@ func (sgd *SGDConfig) UpdateGraphWithGradients(scope *model.Scope, grads []*Node
 	}
 
 	lrVar := LearningRateVar(scope, dtype, initialLearningRate)
-	learningRate := lrVar.ValueGraph(g)
+	learningRate := lrVar.NodeValue(g)
 	globalStep := IncrementGlobalStepGraph(scope, g, dtype)
 	if sgd.useDecay {
 		learningRate = Div(learningRate, Sqrt(globalStep)) // Factor global_step into the learning rate.
@@ -369,10 +369,10 @@ func addGradientsToVariablesGraph(scope *model.Scope, grads []*Node, learningRat
 		scaledGradient = ClipStepByValue(scope, scaledGradient)
 		TraceNaNInGradients(scope, v, scaledGradient)
 
-		vNode := v.ValueGraph(g)
+		vNode := v.NodeValue(g)
 		updatedValue := Sub(vNode, scaledGradient)
 		updatedValue = ClipNaNsInUpdates(scope, vNode, updatedValue)
-		v.SetValueGraph(updatedValue)
+		v.SetNodeValue(updatedValue)
 		ii++
 	}
 	if ii != numTrainable {

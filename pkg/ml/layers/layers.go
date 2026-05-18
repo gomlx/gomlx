@@ -92,14 +92,14 @@ func Dense(scope *model.Scope, input *Node, useBias bool, outputDimensions ...in
 		// Only for the weights, not for the bias.
 		regularizer(scope, g, weightsVar)
 	}
-	weights := weightsVar.ValueGraph(g)
+	weights := weightsVar.NodeValue(g)
 
 	// Dispatch to nn.Dense which handles arbitrary rank, multi-dimensional
 	// output weights, and fused ops.
 	var biasNode *Node
 	if useBias {
 		biasVar := scope.VariableWithShape("biases", shapes.Make(inputShape.DType, outputDimensions...))
-		biasNode = biasVar.ValueGraph(g)
+		biasNode = biasVar.NodeValue(g)
 	}
 	return nn.Dense(input, weights, biasNode)
 }
@@ -129,7 +129,7 @@ func Embedding(scope *model.Scope, input *Node, dtype dtypes.DType, vocabSize, d
 		input = InsertAxes(input, -1)
 	}
 	embeddingTable := scope.VariableWithShape("embeddings", shapes.Make(dtype, vocabSize, dimension))
-	return Gather(embeddingTable.ValueGraph(input.Graph()), input, indicesAreSorted...)
+	return Gather(embeddingTable.NodeValue(input.Graph()), input, indicesAreSorted...)
 }
 
 // AssertQuantilesForPWLCalibrationValid validates that raw values for quantiles are ok to be used for
@@ -200,7 +200,7 @@ func PieceWiseLinearCalibration(scope *model.Scope, input, keypoints *Node, outp
 	outKPValue := shapes.CastAsDType(outputKeypoints, dtype)
 	var outputKeypointsNode *Node
 	if outputTrainable {
-		outputKeypointsNode = scope.VariableWithValue("output_keypoints", outKPValue).ValueGraph(g)
+		outputKeypointsNode = scope.VariableWithValue("output_keypoints", outKPValue).NodeValue(g)
 	} else {
 		outputKeypointsNode = Const(g, outKPValue)
 	}
@@ -282,7 +282,7 @@ func PieceWiseLinearCalibrationCascaded(scope *model.Scope, input, keypoints *No
 	outKPValue := shapes.CastAsDType(outputKeypoints, dtype)
 	var outputKeypointsNode *Node
 	if outputTrainable {
-		outputKeypointsNode = scope.VariableWithValue("output_keypoints", outKPValue).ValueGraph(g)
+		outputKeypointsNode = scope.VariableWithValue("output_keypoints", outKPValue).NodeValue(g)
 	} else {
 		outputKeypointsNode = Const(g, outKPValue)
 	}

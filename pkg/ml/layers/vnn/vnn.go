@@ -325,7 +325,7 @@ func (c *Config) Done() *Node {
 			// Only for the weights, not for the bias.
 			c.regularizer(layerCtx, g, weightsVar)
 		}
-		weights := weightsVar.ValueGraph(g)
+		weights := weightsVar.NodeValue(g)
 		// The output 3D vectors are a linear combination of the operand vectors -> they are SO(3) equivariant.
 		// b->batchSize, i->inputChannels, v->3 (vector) o-> outputChannels
 		operand = Einsum("biv,io->bov", operand, weights)
@@ -345,8 +345,8 @@ func (c *Config) Done() *Node {
 			betaVar := layerCtx.
 				WithInitializer(initializers.Zero).
 				VariableWithShape("scaler_beta", scalerShape)
-			alpha := alphaVar.ValueGraph(g)
-			beta := betaVar.ValueGraph(g)
+			alpha := alphaVar.NodeValue(g)
+			beta := betaVar.NodeValue(g)
 			operand = Add(Mul(operand, alpha), Mul(operandUnit, beta))
 		}
 	}

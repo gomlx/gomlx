@@ -55,12 +55,11 @@ var (
 // See `nanlogger` package for details.
 var nanLogger *nanlogger.NanLogger
 
-// CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
-func CreateDefaultContext() *model.Scope {
+// CreateModelStore sets the store with default hyperparameters to use with TrainWithStore.
+func CreateModelStore() *model.Store {
 	store := model.NewStore()
 	store.ResetRNGState()
-	scope := store.RootScope()
-	scope.SetParams(map[string]any{
+	store.SetParams(map[string]any{
 		// Model type to use
 		"model":           "cnn",
 		"num_checkpoints": 3,
@@ -138,11 +137,12 @@ func CreateDefaultContext() *model.Scope {
 		"inception_pretrained": true, // Whether to use the pre-trained weights to transfer learn
 		"inception_finetuning": true, // Whether to fine-tune the inception model
 	})
-	return scope
+	return store
 }
 
-// TrainModel based on configuration and flags.
-func TrainModel(scope *model.Scope, dataDir, checkpointPath string, runEval bool, paramsSet []string) {
+// TrainWithStore based on configuration and flags.
+func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval bool, paramsSet []string) {
+	scope := store.RootScope()
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
 		check(os.MkdirAll(dataDir, 0777))

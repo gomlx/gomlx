@@ -37,11 +37,10 @@ var (
 
 const paramWithReplacement = "mag_with_replacement"
 
-func createDefaultContext() *model.Scope {
+func createModelStore() *model.Store {
 	store := model.NewStore()
 	store.ResetRNGState()
-	scope := store.RootScope()
-	scope.SetParams(map[string]any{
+	store.SetParams(map[string]any{
 		"checkpoint":         "",
 		"num_checkpoints":    3,
 		"train_steps":        0,
@@ -111,8 +110,8 @@ func createDefaultContext() *model.Scope {
 		mag.ParamIdentitySubSeeds:     true,
 		mag.ParamDType:                "float32",
 	})
-	scope.In("readout").SetParam(gnn.ParamUpdateNumHiddenLayers, 2)
-	return scope
+	store.Scope("readout").SetParam(gnn.ParamUpdateNumHiddenLayers, 2)
+	return store
 }
 
 func SetTrainSteps(scope *model.Scope) {
@@ -132,7 +131,8 @@ func SetTrainSteps(scope *model.Scope) {
 func main() {
 	// Init GoMLX manager and default model.
 	backend := compute.MustNew()
-	scope := createDefaultContext()
+	store := createModelStore()
+	scope := store.RootScope()
 
 	// Flags with context settings.
 	settings := commandline.CreateSettingsFlag(scope, "")
@@ -149,7 +149,7 @@ func main() {
 	paramsSet := check1(commandline.ParseSettings(scope, *settings))
 	if *flagVerbose {
 		fmt.Println("Hyperparameters set:")
-		fmt.Println(commandline.SprintModifiedContextSettings(scope, paramsSet))
+		fmt.Println(commandline.SprintModifiedSettings(scope, paramsSet))
 	}
 	mag.BatchSize = model.GetParamOr(scope, "batch_size", 128)
 
@@ -169,14 +169,14 @@ func main() {
 	mag.WithReplacement = model.GetParamOr(scope, paramWithReplacement, false)
 	var err error
 	if *flagEval {
-		err = mag.Eval(backend, scope, *flagDataDir, *flagCheckpoint, *flagLayerWise, *flagSkipTrainEval)
+		err = mag.EvalWithStore(backend, store, *flagDataDir, *flagCheckpoint, *flagLayerWise, *flagSkipTrainEval)
 	} else {
 		if mag.WithReplacement {
 			fmt.Println("Training dataset with replacement")
 		}
 
 		// Train.
-		err = mag.Train(backend, scope, *flagDataDir, *flagCheckpoint, *flagLayerWise, !*flagSkipReport, paramsSet)
+		err = mag.TrainWithStore(backend, store, *flagDataDir, *flagCheckpoint, *flagLayerWise, !*flagSkipReport, paramsSet)
 	}
 	if err != nil {
 		fmt.Printf("%+v\n", err)

@@ -88,13 +88,13 @@ func TestDense(t *testing.T) {
 		biasesVar := store.GetVariable("/dense/biases")
 
 		// Generate the gradients with respect to everything (inputs and variables).
-		gradients := Gradient(sum, inputNode, weightsVar.ValueGraph(g), biasesVar.ValueGraph(g))
+		gradients := Gradient(sum, inputNode, weightsVar.NodeValue(g), biasesVar.NodeValue(g))
 		return append([]*Node{sum, output}, gradients...)
 	})
 
 	results := exec.MustExec(input)
 	for v := range store.IterVariables() {
-		fmt.Printf("\t%s=%v\n", v.ParameterName(), v.MustValue())
+		fmt.Printf("\t%s=%v\n", v.Path(), v.MustValue())
 	}
 
 	fmt.Printf("\tsum=%v\n", results[0])

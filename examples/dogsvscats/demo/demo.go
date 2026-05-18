@@ -34,7 +34,8 @@ var (
 )
 
 func main() {
-	scope := dogsvscats.CreateDefaultContext()
+	store := dogsvscats.CreateModelStore()
+	scope := store.RootScope()
 	settings := commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
@@ -45,7 +46,7 @@ func main() {
 		if *flagPreGenerate {
 			preGenerate(scope, *flagDataDir)
 		} else {
-			dogsvscats.TrainModel(scope, *flagDataDir, *flagCheckpoint, *flagEval, paramsSet)
+			dogsvscats.TrainWithStore(store, *flagDataDir, *flagCheckpoint, *flagEval, paramsSet)
 		}
 	})
 	if err != nil {

@@ -50,7 +50,7 @@ func L2(amount float64) Regularizer {
 		}
 		var loss *Node
 		for _, v := range weights {
-			l2 := ReduceAllSum(Square(v.ValueGraph(g)))
+			l2 := ReduceAllSum(Square(v.NodeValue(g)))
 			if loss == nil {
 				loss = l2
 			} else {
@@ -76,7 +76,7 @@ func L1(amount float64) Regularizer {
 		}
 		var loss *Node
 		for _, v := range weights {
-			value := v.ValueGraph(g)
+			value := v.NodeValue(g)
 			l1 := ReduceAllSum(Abs(value))
 			if loss == nil {
 				loss = l1
@@ -93,10 +93,10 @@ func L1(amount float64) Regularizer {
 			scopedCtx := scope.Store().Scope(weight.Scope()).In("regularizers.L1(%s)", weight.Name())
 			train.AddPerStepUpdateGraphFn(scopedCtx, g,
 				func(scope *model.Scope, g *Graph) {
-					value := weight.ValueGraph(g)
+					value := weight.NodeValue(g)
 					dtype := value.DType()
 					smallWeights := LessThan(Abs(value), Scalar(g, dtype, amount))
-					weight.SetValueGraph(Where(smallWeights, ZerosLike(value), value))
+					weight.SetNodeValue(Where(smallWeights, ZerosLike(value), value))
 				})
 		}
 	}
@@ -158,7 +158,7 @@ func ConstantL1(amount float64) Regularizer {
 	return func(scope *model.Scope, g *Graph, weights ...*model.Variable) {
 		var loss *Node
 		for _, wVar := range weights {
-			w := wVar.ValueGraph(g)
+			w := wVar.NodeValue(g)
 			diff := ConsecutiveDifference(w, -1, false)
 			diff = MulScalar(diff, amount)
 			l1 := ReduceAllSum(Abs(diff))

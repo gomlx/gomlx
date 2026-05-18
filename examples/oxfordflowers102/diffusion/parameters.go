@@ -23,12 +23,11 @@ var (
 	}
 )
 
-// CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
-func CreateDefaultContext() *model.Scope {
+// CreateModelStore sets the store with default hyperparameters to use with TrainWithStore.
+func CreateModelStore() *model.Store {
 	store := model.NewStore()
 	store.ResetRNGState()
-	scope := store.RootScope()
-	scope.SetParams(map[string]any{
+	store.SetParams(map[string]any{
 		// Model type to use
 		"train_steps":          300_000,
 		"num_checkpoints":      5,
@@ -110,5 +109,5 @@ func CreateDefaultContext() *model.Scope {
 		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
 		plotly.ParamPlots: true,
 	})
-	return scope
+	return store
 }

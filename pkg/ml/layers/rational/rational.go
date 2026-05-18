@@ -267,7 +267,7 @@ func (c *Config) Done() *Node {
 		}
 		wInitializerStddev := math.Sqrt(wInitializerVariance)
 		w = scope.WithInitializer(initializers.RandomNormalFn(scope, wInitializerStddev)).
-			VariableWithShape("w", shapes.Make(dtype, outputDim, numInputGroups)).ValueGraph(g)
+			VariableWithShape("w", shapes.Make(dtype, outputDim, numInputGroups)).NodeValue(g)
 	}
 
 	// Numerator/Denominator coefficients shaped [outputDim, numInputGroups, <degree>].
@@ -285,10 +285,10 @@ func (c *Config) Done() *Node {
 	}
 	numeratorCoeffs := scope.WithInitializer(initializers.BroadcastTensorToShape(numeratorInit)).
 		VariableWithShape("numeratorCoeffs", shapes.Make(dtype, outputDim, numInputGroups, c.numeratorDegree+1)).
-		ValueGraph(g)
+		NodeValue(g)
 	denominatorCoeffs := scope.WithInitializer(initializers.BroadcastTensorToShape(denominatorInit)).
 		VariableWithShape("denominatorCoeffs", shapes.Make(dtype, outputDim, numInputGroups, c.denominatorDegree)).
-		ValueGraph(g)
+		NodeValue(g)
 
 	// Version "D" adds noise to coefficients.
 	if c.version == "D" && scope.IsTraining(g) {

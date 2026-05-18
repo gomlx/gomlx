@@ -492,7 +492,7 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err erro
 		}
 	})
 	inputs = []*tensors.Tensor{input}
-	labels = []*tensors.Tensor{tensors.FromAnyValue(labelsData)}
+	labels = []*tensors.Tensor{tensors.MustFromAnyValue(labelsData)}
 	return
 }
 

@@ -100,7 +100,7 @@ func (r *Trainer) batchNormsAverageStepGraphFn(
 ) func(spec any, scope *model.Scope, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 	return func(spec any, scope *model.Scope, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 		g := inputs[0].Graph()
-		scope.SetTraining(g, false)
+		scope.Store().SetTraining(g, false)
 		scope.SetGraphParam(g, BatchNormalizationUpdatePhase, phase)
 
 		predictions := r.modelFn(scope, spec, inputs)

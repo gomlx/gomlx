@@ -240,8 +240,8 @@ func (m *MeanMetric) UpdateGraph(scope *model.Scope, labels, predictions []*Node
 		Panicf("variable nil building computation graph for mean metric %q", m.Name())
 	}
 
-	total := totalVar.ValueGraph(g)
-	previousWeight := weightVar.ValueGraph(g)
+	total := totalVar.NodeValue(g)
+	previousWeight := weightVar.NodeValue(g)
 	var resultWeight *Node
 	if m.dynamicBatch {
 		resultWeight = BatchSize(predictions[0])
@@ -255,8 +255,8 @@ func (m *MeanMetric) UpdateGraph(scope *model.Scope, labels, predictions []*Node
 	mean := Div(total, weight)
 
 	// Update variable values.
-	weightVar.SetValueGraph(weight)
-	totalVar.SetValueGraph(total)
+	weightVar.SetNodeValue(weight)
+	totalVar.SetNodeValue(total)
 	return mean
 }
 
@@ -326,19 +326,19 @@ func (m *movingAverageMetric) UpdateGraph(scope *model.Scope, labels, prediction
 	if meanVar == nil {
 		Panicf("variable nil building computation graph for mean metric %q", m.Name())
 	}
-	mean := meanVar.ValueGraph(g)
+	mean := meanVar.NodeValue(g)
 
 	countVar := scope.VariableWithValue("count", zero).SetTrainable(false)
-	count := countVar.ValueGraph(g)
+	count := countVar.NodeValue(g)
 	count = Add(count, OnesLike(count))
-	countVar.SetValueGraph(count)
+	countVar.SetNodeValue(count)
 
 	weight := Max(Const(g, shapes.CastAsDType(m.newExampleWeight, dtype)), Reciprocal(count))
 	mean = Add(
 		Mul(mean, OneMinus(weight)),
 		Mul(result, weight),
 	) // total are the values multiplied by weights, and then summed.
-	meanVar.SetValueGraph(mean)
+	meanVar.SetNodeValue(mean)
 
 	return mean
 }

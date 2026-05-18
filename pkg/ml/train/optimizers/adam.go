@@ -256,7 +256,7 @@ func (o *adam) UpdateGraphWithGradients(scope *model.Scope, grads []*Node, lossD
 		lrValue = model.GetParamOr(scope, ParamLearningRate, AdamDefaultLearningRate)
 	}
 	lrVar := LearningRateVar(scope, dtype, lrValue)
-	learningRate := lrVar.ValueGraph(g)
+	learningRate := lrVar.NodeValue(g)
 
 	// Increment the global step, but keep a separate step count for the Adam optimizer -- it can be
 	// reset separately.
@@ -318,9 +318,9 @@ func (o *adam) applyAdamGraph(scope *model.Scope, g *Graph, v *model.Variable, d
 	m1Var, m2Var := o.getMomentVariables(scope, v, dtype)
 	var moment1 *Node
 	if !rmsProp {
-		moment1 = m1Var.ValueGraph(g)
+		moment1 = m1Var.NodeValue(g)
 	}
-	moment2 := m2Var.ValueGraph(g)
+	moment2 := m2Var.NodeValue(g)
 
 	// Adam runs on a fixed dtype -- defaults to the dtype of the loss, but it can be configured.
 	// We convert the grad to the dtype used by Adam for its computation.
@@ -337,7 +337,7 @@ func (o *adam) applyAdamGraph(scope *model.Scope, g *Graph, v *model.Variable, d
 		moment1 = Add(
 			Mul(beta1, moment1),
 			Mul(OneMinus(beta1), grad))
-		m1Var.SetValueGraph(moment1)
+		m1Var.SetNodeValue(moment1)
 		debiasedMoment1 = Mul(moment1, debiasTermBeta1)
 	}
 
@@ -347,7 +347,7 @@ func (o *adam) applyAdamGraph(scope *model.Scope, g *Graph, v *model.Variable, d
 		moment2 = Max(
 			Mul(beta2, moment2),
 			Abs(grad)) // L-infinity norm. Notice Abs() can change dtypes for complex numbers.
-		m2Var.SetValueGraph(moment2)
+		m2Var.SetNodeValue(moment2)
 		denominator = Add(moment2, epsilon)
 
 	} else {
@@ -355,12 +355,12 @@ func (o *adam) applyAdamGraph(scope *model.Scope, g *Graph, v *model.Variable, d
 		moment2 = Add(
 			Mul(beta2, moment2),
 			Mul(OneMinus(beta2), Square(grad)))
-		m2Var.SetValueGraph(moment2)
+		m2Var.SetNodeValue(moment2)
 		debiasedMoment2 := Mul(moment2, debiasTermBeta2)
 		denominator = Add(Sqrt(debiasedMoment2), epsilon)
 	}
 
-	value := v.ValueGraph(g)
+	value := v.NodeValue(g)
 	if value.DType() != dtype {
 		value = ConvertDType(value, dtype)
 	}
@@ -385,7 +385,7 @@ func (o *adam) applyAdamGraph(scope *model.Scope, g *Graph, v *model.Variable, d
 		// Convert back to the variable type.
 		updated = ConvertDType(updated, v.Shape().DType)
 	}
-	v.SetValueGraph(updated)
+	v.SetNodeValue(updated)
 }
 
 // getMomentVariables returns the moment variables corresponding to the trainable variable give.

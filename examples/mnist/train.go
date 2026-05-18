@@ -52,11 +52,10 @@ var excludeParams = []string{"data_dir", "train_steps", "num_checkpoints", "plot
 
 type ContextFn func(scope *model.Scope) *model.Scope
 
-func CreateDefaultContext() *model.Scope {
+func CreateModelStore() *model.Store {
 	store := model.NewStore()
 	_ = store.ResetRNGState()
-	scope := store.RootScope()
-	scope.SetParams(map[string]any{
+	store.SetParams(map[string]any{
 		// Model type to use
 		"model":           "linear",
 		"loss":            "sparse_cross_logits",
@@ -100,7 +99,7 @@ func CreateDefaultContext() *model.Scope {
 		losses.ParamTripletLossMiningStrategy:         "Hard",
 		losses.ParamTripletLossMargin:                 0.5,
 	})
-	return scope
+	return store
 }
 
 // NewDatasetsConfigurationFromContext create a preprocessing configuration based on hyperparameters
@@ -117,8 +116,9 @@ func NewDatasetsConfigurationFromContext(scope *model.Scope, dataDir string) *Da
 	return config
 }
 
-// TrainModel based on configuration and flags.
-func TrainModel(scope *model.Scope, dataDir, checkpointPath string, paramsSet []string) error {
+// TrainWithStore based on configuration and flags.
+func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet []string) error {
+	scope := store.RootScope()
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
 		if err := os.MkdirAll(dataDir, 0777); err != nil {

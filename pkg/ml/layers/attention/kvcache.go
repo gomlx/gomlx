@@ -60,7 +60,7 @@ func KVCacheReset(scope *model.Scope) {
 	valueSuffix := fmt.Sprintf("%s%s%s%s", model.ScopeSeparator, KVCacheScopeName, model.ScopeSeparator, kvCacheValueName)
 
 	for v := range scope.IterVariables() {
-		scopeAndName := v.ScopeAndName()
+		scopeAndName := v.Path()
 		if strings.HasSuffix(scopeAndName, keySuffix) ||
 			strings.HasSuffix(scopeAndName, valueSuffix) {
 			// Reset to zero - tensors.FromShape creates a zero-initialized tensor
@@ -115,8 +115,8 @@ func KVCacheUpdate(scope *model.Scope, g *Graph, cacheShape shapes.Shape, startP
 	keyVar, valueVar := KVCacheGetVars(scope, cacheShape)
 
 	// Get current cache state
-	keyCache := keyVar.ValueGraph(g)
-	valueCache := valueVar.ValueGraph(g)
+	keyCache := keyVar.NodeValue(g)
+	valueCache := valueVar.NodeValue(g)
 
 	// Convert startPosition to int32 scalar
 	position := Reshape(ConvertDType(startPosition, dtypes.Int32)) // Ensure scalar shape
@@ -156,15 +156,15 @@ func KVCacheUpdate(scope *model.Scope, g *Graph, cacheShape shapes.Shape, startP
 	}
 
 	// Update the cache variables
-	keyVar.SetValueGraph(keyCache)
-	valueVar.SetValueGraph(valueCache)
+	keyVar.SetNodeValue(keyCache)
+	valueVar.SetNodeValue(valueCache)
 }
 
 // getKVCache returns key/value caches from the given model.
 // cacheShape must be [batchSize, numHeads, maxSeqLen, headDim].
 func getKVCache(scope *model.Scope, g *Graph, cacheShape shapes.Shape) (keys, values *Node) {
 	keyVar, valueVar := KVCacheGetVars(scope, cacheShape)
-	return keyVar.ValueGraph(g), valueVar.ValueGraph(g)
+	return keyVar.NodeValue(g), valueVar.NodeValue(g)
 }
 
 // createKVCacheAttentionMask creates a mask for unfilled cache positions.

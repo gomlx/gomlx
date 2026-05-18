@@ -62,7 +62,7 @@ func (l *Learned) PreEncode(x, positionIndices *Node, seqAxis int) *Node {
 
 	// Variable with all the positional embeddings: created if it doesn't exist yet.
 	posEmbedFull := l.scope.In("pos_embed").VariableWithShape("embeddings",
-		shapes.Make(x.DType(), l.maxPosEmbedding, l.embedDim)).ValueGraph(g)
+		shapes.Make(x.DType(), l.maxPosEmbedding, l.embedDim)).NodeValue(g)
 
 	// Ensure positionIndices has an integer dtype for Gather.
 	if !positionIndices.DType().IsInt() {

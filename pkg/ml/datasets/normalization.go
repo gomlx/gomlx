@@ -50,14 +50,14 @@ func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, i
 		reducedCount := batch.Shape().Size() / batchSum.Shape().Size()
 
 		countVar := scope.VariableWithValue("count", 0.0)
-		countVar.SetValueGraph(AddScalar(countVar.ValueGraph(g), float64(reducedCount)))
+		countVar.SetNodeValue(AddScalar(countVar.NodeValue(g), float64(reducedCount)))
 
 		sumVar := scope.VariableWithShape("sum", batchSum.Shape())
-		sumVar.SetValueGraph(Add(sumVar.ValueGraph(g), batchSum))
+		sumVar.SetNodeValue(Add(sumVar.NodeValue(g), batchSum))
 
 		batchSum2 := ReduceAndKeep(Square(batch), ReduceSum, reduceAxes...)
 		sumSquareVar := scope.VariableWithShape("sum^2", batchSum2.Shape())
-		sumSquareVar.SetValueGraph(Add(sumSquareVar.ValueGraph(g), batchSum2))
+		sumSquareVar.SetNodeValue(Add(sumSquareVar.NodeValue(g), batchSum2))
 	})
 
 	// Read through dataset updating measurements.
@@ -95,13 +95,13 @@ func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, i
 	err = exceptions.TryCatch[error](func() {
 		results = model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) []*Node {
 			countVar := scope.GetVariable("count")
-			count := countVar.ValueGraph(g)
+			count := countVar.NodeValue(g)
 
 			sumVar := scope.GetVariable("sum")
-			sum := sumVar.ValueGraph(g)
+			sum := sumVar.NodeValue(g)
 
 			sumSquareVar := scope.GetVariable("sum^2")
-			sumSquare := sumSquareVar.ValueGraph(g)
+			sumSquare := sumSquareVar.NodeValue(g)
 
 			count = ConvertDType(count, sum.DType())
 			mean := Div(sum, count)

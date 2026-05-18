@@ -43,8 +43,9 @@ var (
 // Backend is created once and reused if train is called multiple times.
 var Backend compute.Backend
 
-// TrainCifar10Model with hyperparameters given in ctx.
-func TrainCifar10Model(scope *model.Scope, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
+// TrainCifar10WithStore with hyperparameters given in store.
+func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
+	scope := store.RootScope()
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
@@ -84,7 +85,7 @@ func TrainCifar10Model(scope *model.Scope, dataDir, checkpointPath string, evalu
 		fmt.Printf("Checkpointing model to %q\n", checkpoint.Dir())
 	}
 	if verbosity >= 2 {
-		fmt.Println(commandline.SprintContextSettings(scope))
+		fmt.Println(commandline.SprintSettings(scope))
 	}
 
 	// Select model graph building function.

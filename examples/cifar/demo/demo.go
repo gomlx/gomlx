@@ -30,12 +30,11 @@ var (
 	flagCheckpoint = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
 )
 
-// createDefaultContext sets the context with default hyperparameters
-func createDefaultContext() *model.Scope {
+// createModelStore sets the store with default hyperparameters
+func createModelStore() *model.Store {
 	store := model.NewStore()
 	store.ResetRNGState()
-	scope := store.RootScope()
-	scope.SetParams(map[string]any{
+	store.SetParams(map[string]any{
 		// Model type to use
 		"model":           cifar.C10ValidModels[0],
 		"checkpoint":      "",
@@ -101,19 +100,20 @@ func createDefaultContext() *model.Scope {
 		// CNN model
 		cifar.ParamCNNNormalization: "batch",
 	})
-	return scope
+	return store
 }
 
 func main() {
 	// Flags with context settings.
-	scope := createDefaultContext()
+	store := createModelStore()
+	scope := store.RootScope()
 	settings := commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
 	paramsSet := check1(commandline.ParseSettings(scope, *settings))
 
 	// Train.
-	cifar.TrainCifar10Model(scope, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity, paramsSet)
+	cifar.TrainCifar10WithStore(store, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity, paramsSet)
 }
 
 // check reports and exits on error.

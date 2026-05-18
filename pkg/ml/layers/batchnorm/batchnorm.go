@@ -193,14 +193,14 @@ func (builder *Config) Done() *Node {
 	var scaleVar *model.Variable
 	if builder.scale {
 		scaleVar = scope.WithInitializer(initializers.One).VariableWithShape("scale", varShape).SetTrainable(true)
-		scale = scaleVar.ValueGraph(g)
+		scale = scaleVar.NodeValue(g)
 	} else {
 		scale = Ones(g, varShape)
 	}
 
 	if builder.center {
 		offsetVar := scope.WithInitializer(initializers.Zero).VariableWithShape("offset", varShape).SetTrainable(true)
-		offset = offsetVar.ValueGraph(g)
+		offset = offsetVar.NodeValue(g)
 	} else {
 		offset = Zeros(g, varShape)
 	}
@@ -213,7 +213,7 @@ func (builder *Config) Done() *Node {
 	weightVar := scope.WithInitializer(initializers.Zero).VariableWithShape("avg_weight", varShape).SetTrainable(false)
 
 	var normalized *Node
-	mean, variance := meanAverageVar.ValueGraph(g), varianceAverageVar.ValueGraph(g)
+	mean, variance := meanAverageVar.NodeValue(g), varianceAverageVar.NodeValue(g)
 	averagesUpdatePhase := model.GetGraphParamOr(scope, g, train.BatchNormalizationUpdatePhase, -1)
 	if averagesUpdatePhase >= 0 {
 		if builder.frozenAverages {
@@ -224,7 +224,7 @@ func (builder *Config) Done() *Node {
 			builder.updateMeanAndVariance(scope, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
 			if averagesUpdatePhase > 0 {
 				// Use updated mean, variance to normalize.
-				mean, variance = meanAverageVar.ValueGraph(g), varianceAverageVar.ValueGraph(g)
+				mean, variance = meanAverageVar.NodeValue(g), varianceAverageVar.NodeValue(g)
 			} else {
 				mean, variance = batchMean, batchVariance
 			}
@@ -336,21 +336,21 @@ func (builder *Config) updateMeanAndVariance(
 	}
 	momentum := Scalar(batchMean.Graph(), batchMean.DType(), builder.momentum)
 
-	weight := OnePlus(weightVar.ValueGraph(graph))
-	weightVar.SetValueGraph(weight)
+	weight := OnePlus(weightVar.NodeValue(graph))
+	weightVar.SetNodeValue(weight)
 	debiasedMomentum := Min(momentum, OneMinus(Reciprocal(weight)))
 
-	meanAverage := meanAverageVar.ValueGraph(graph)
+	meanAverage := meanAverageVar.NodeValue(graph)
 	meanAverage = Add(
 		Mul(debiasedMomentum, meanAverage),         // Current mean.
 		Mul(OneMinus(debiasedMomentum), batchMean)) // New batch mean.
-	meanAverageVar.SetValueGraph(meanAverage)
+	meanAverageVar.SetNodeValue(meanAverage)
 
-	varianceAverage := varianceAverageVar.ValueGraph(graph)
+	varianceAverage := varianceAverageVar.NodeValue(graph)
 	varianceAverage = Add(
 		Mul(debiasedMomentum, varianceAverage),         // Current variance.
 		Mul(OneMinus(debiasedMomentum), batchVariance)) // New variance.
-	varianceAverageVar.SetValueGraph(varianceAverage)
+	varianceAverageVar.SetNodeValue(varianceAverage)
 }
 
 // ResetWeights reset the weights of the moving averages, forcing them to be reinitialized to 0.

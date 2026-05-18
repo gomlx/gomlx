@@ -91,7 +91,7 @@ func (c *ReluConfig) Done() *Node {
 	if c.shareNonLinearity {
 		numProjections = 1
 	}
-	projection := scope.VariableWithShape("projection", shapes.Make(dtype, numProjections, numChannels)).ValueGraph(g)
+	projection := scope.VariableWithShape("projection", shapes.Make(dtype, numProjections, numChannels)).NodeValue(g)
 	k := Einsum("bcv,pc->bpv", operand, projection)
 	kL2NormSq := L2NormSquare(k, -1)
 	kL2NormSq = Where(Equal(kL2NormSq, zero), one, kL2NormSq)

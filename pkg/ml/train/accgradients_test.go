@@ -25,7 +25,7 @@ func TestTrainer_AccumulateGradients(t *testing.T) {
 		g := inputs[0].Graph()
 		predictionVar := scope.In("model").
 			VariableWithValue("prediction", float32(0))
-		return []*Node{predictionVar.ValueGraph(g)}
+		return []*Node{predictionVar.NodeValue(g)}
 	}
 	lossFn := losses.MeanAbsoluteError
 	learningRate := 0.1
@@ -51,7 +51,7 @@ func TestTrainer_AccumulateGradients(t *testing.T) {
 
 		predictionVar := store.GetVariable("/model/prediction")
 		require.NotNil(t, predictionVar)
-		accPredictionVar := store.GetVariable("/"+AccumulatedGradientsScope+"/model/prediction")
+		accPredictionVar := store.GetVariable("/" + AccumulatedGradientsScope + "/model/prediction")
 		require.NotNil(t, accPredictionVar)
 
 		prediction := predictionVar.MustValue().Value().(float32)

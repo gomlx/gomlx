@@ -95,7 +95,7 @@ func (rms *RMSNormBuilder) Done() *Node {
 		dims := xslices.Map(normAxes, func(axis int) int { return shape.Dim(axis) })
 		scaleShape := shapes.Make(dtype, dims...)
 		scaleVar := scope.WithInitializer(initializers.One).VariableWithShape("scale", scaleShape)
-		scale := scaleVar.ValueGraph(g)
+		scale := scaleVar.NodeValue(g)
 		if rms.scaleOffset != 0 {
 			scale = AddScalar(scale, rms.scaleOffset)
 		}

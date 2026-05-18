@@ -227,11 +227,11 @@ func (builder *LayerNormBuilder) createVariables() (gamma, beta *Node) {
 		if builder.regularizer != nil {
 			builder.regularizer(scope, g, gainVar)
 		}
-		gamma = Reshape(gainVar.ValueGraph(g), broadcastNormShape.Dimensions...)
+		gamma = Reshape(gainVar.NodeValue(g), broadcastNormShape.Dimensions...)
 	}
 	if builder.center {
 		offsetVar := scope.WithInitializer(initializers.Zero).VariableWithShape("offset", normShape).SetTrainable(true)
-		beta = Reshape(offsetVar.ValueGraph(g), broadcastNormShape.Dimensions...)
+		beta = Reshape(offsetVar.NodeValue(g), broadcastNormShape.Dimensions...)
 	}
 	return
 }

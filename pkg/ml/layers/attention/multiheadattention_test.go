@@ -468,7 +468,7 @@ func buildSyntheticAttentionModelFn(debug bool) (modelGraphFn func(scope *model.
 		const positionalEmbeddingSize = 16
 		noisyCtx := scope.WithInitializer(initializers.RandomNormalFn(scope, 1.0))
 		positionalVar := noisyCtx.In("positional").VariableWithShape("embeddings", shapes.Make(dtype, sequenceSize, positionalEmbeddingSize))
-		positionalEmbedding := positionalVar.ValueGraph(g)
+		positionalEmbedding := positionalVar.NodeValue(g)
 		positionalEmbedding = InsertAxes(positionalEmbedding, 0) // Prefixing with batch dimension.
 		dims := positionalEmbedding.Shape().Clone().Dimensions
 		dims[0] = batchSize

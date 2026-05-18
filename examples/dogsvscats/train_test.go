@@ -21,7 +21,8 @@ var (
 )
 
 func init() {
-	scope := CreateDefaultContext()
+	store := CreateModelStore()
+	scope := store.RootScope()
 	flagSettings = commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	if _, found := os.LookupEnv(compute.ConfigEnvVar); !found {
@@ -36,10 +37,10 @@ func TestTrain(t *testing.T) {
 		t.Skip("skipping testing in short mode")
 		return
 	}
-	scope := CreateDefaultContext()
-	scope.SetParam("train_steps", 10)
-	scope.SetParam("plots", false)
-	scope.SetParam(layers.ParamNormalization, "layer")
-	paramsSet := check1(commandline.ParseSettings(scope, *flagSettings))
-	TrainModel(scope, *flagDataDir, "", false, paramsSet)
+	store := CreateModelStore()
+	store.SetParam("train_steps", 10)
+	store.SetParam("plots", false)
+	store.SetParam(layers.ParamNormalization, "layer")
+	paramsSet := check1(commandline.ParseSettings(store.RootScope(), *flagSettings))
+	TrainWithStore(store, *flagDataDir, "", false, paramsSet)
 }

@@ -115,14 +115,15 @@ func TrainingSchedule(scope *model.Scope, fromStep, toStep int) train.OnStepFn {
 	}
 }
 
-// Train GNN model based on configuration in `ctx`.
-func Train(
+// TrainWithStore GNN model based on configuration in `store`.
+func TrainWithStore(
 	backend compute.Backend,
-	scope *model.Scope,
+	store *model.Store,
 	dataDir, checkpointPath string,
 	layerWiseEval, report bool,
 	paramsSet []string,
 ) error {
+	scope := store.RootScope()
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	ReuseShareableKernels = model.GetParamOr(scope, ParamReuseKernels, true)
 	IdentitySubSeeds = model.GetParamOr(scope, ParamIdentitySubSeeds, true)
@@ -139,7 +140,7 @@ func Train(
 	if checkpointPath != "" {
 		numCheckpointsToKeep := model.GetParamOr(scope, ParamNumCheckpoints, 5)
 		var err error
-		checkpoint, err = checkpoints.Build(scope).
+		checkpoint, err = checkpoints.Build(store).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(paramsSet...).
@@ -226,7 +227,7 @@ func Train(
 	// Finally, print an evaluation on train and test datasets.
 	if report {
 		fmt.Println()
-		err = evalWithContext(backend, scope, dataDir, layerWiseEval, false)
+		err = evalWithModelStore(backend, scope, dataDir, layerWiseEval, false)
 		if err != nil {
 			return errors.WithMessage(err, "while reporting eval")
 		}
@@ -258,30 +259,30 @@ func newTrainer(backend compute.Backend, scope *model.Scope) *train.Trainer {
 	return trainer
 }
 
-func Eval(
+func EvalWithStore(
 	backend compute.Backend,
-	scope *model.Scope,
+	store *model.Store,
 	dataDir, checkpointPath string,
 	layerWise, skipTrain bool,
 ) error {
-	_, err := checkpoints.Build(scope).DirFromBase(checkpointPath, dataDir).Done()
+	_, err := checkpoints.Build(store).DirFromBase(checkpointPath, dataDir).Done()
 	if err != nil {
 		return errors.WithMessagef(err, "while loading checkpoint from %q", checkpointPath)
 	}
 
 	// Model stats:
-	globalStep := optimizers.GetGlobalStep(scope)
+	globalStep := optimizers.GetGlobalStep(store)
 	fmt.Printf("Model in %q trained for %d steps.\n", checkpointPath, globalStep)
 
 	// Upload OGBN-MAG variables -- and possibly convert them.
-	_ = UploadOgbnMagVariables(backend, scope)
+	_ = UploadOgbnMagVariables(backend, store)
 
-	return evalWithContext(backend, scope, dataDir, layerWise, skipTrain)
+	return evalWithModelStore(backend, store, dataDir, layerWise, skipTrain)
 }
 
-func evalWithContext(backend compute.Backend, scope *model.Scope, baseDir string, layerWise, skipTrain bool) error {
+func evalWithModelStore(backend compute.Backend, store *model.Store, baseDir string, layerWise, skipTrain bool) error {
 	if layerWise {
-		return evalLayerWise(backend, scope, baseDir)
+		return evalLayerWise(backend, store, baseDir)
 	}
 
 	// Evaluate on various datasets.
@@ -291,9 +292,9 @@ func evalWithContext(backend compute.Backend, scope *model.Scope, baseDir string
 	check(err)
 
 	if skipTrain {
-		return evalSampled(backend, scope, validEvalDS, testEvalDS)
+		return evalSampled(backend, store, validEvalDS, testEvalDS)
 	} else {
-		return evalSampled(backend, scope, trainEvalDS, validEvalDS, testEvalDS)
+		return evalSampled(backend, store, trainEvalDS, validEvalDS, testEvalDS)
 	}
 }
 

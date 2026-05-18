@@ -48,10 +48,9 @@ var (
 	flagPrompt = flag.String("prompt", "The quick", "Prompt text")
 )
 
-func createDefaultContext() *model.Scope {
+func createModelStore() *model.Store {
 	store := model.NewStore()
-	scope := store.RootScope()
-	scope.SetParams(map[string]any{
+	store.SetParams(map[string]any{
 		// Model hyperparameters
 		transformer.ParamVocabSize:   128,
 		transformer.ParamEmbedDim:    64,
@@ -73,7 +72,7 @@ func createDefaultContext() *model.Scope {
 		decode.ParamTemperature: 1.0,
 		decode.ParamMaxLength:   50,
 	})
-	return scope
+	return store
 }
 
 const trainingText = `The quick brown fox jumps over the lazy dog. ` +
@@ -232,7 +231,8 @@ func extractTokens(generated *tensors.Tensor) []int {
 }
 
 func main() {
-	scope := createDefaultContext()
+	store := createModelStore()
+	scope := store.RootScope()
 	settings := commandline.CreateSettingsFlag(scope, "")
 	flag.Parse()
 	_, err := commandline.ParseSettings(scope, *settings)
@@ -240,7 +240,7 @@ func main() {
 		log.Fatalf("Failed to parse context settings: %v", err)
 	}
 
-	fmt.Println(commandline.SprintContextSettings(scope))
+	fmt.Println(commandline.SprintSettings(scope))
 
 	backend, err := compute.New()
 	if err != nil {

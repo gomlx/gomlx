@@ -105,11 +105,11 @@ func (c *Config) bsplineLayer(scope *model.Scope, x *Node, numOutputNodes int) *
 		if c.bspline.MagnitudeRegularizer != nil {
 			c.bspline.MagnitudeRegularizer(scope, g, weightsSplinesVar)
 		}
-		weightsSplines = weightsSplinesVar.ValueGraph(g)
+		weightsSplines = weightsSplinesVar.NodeValue(g)
 		if c.useResidual {
 			weightsResidualVar := scope.WithInitializer(initializers.XavierUniformFn(scope)).
 				VariableWithShape("w_residual", shapes.Make(dtype, 1, numOutputNodes, numInputNodes))
-			weightsResidual = weightsResidualVar.ValueGraph(g)
+			weightsResidual = weightsResidualVar.NodeValue(g)
 			if c.bspline.MagnitudeRegularizer != nil {
 				c.bspline.MagnitudeRegularizer(scope, g, weightsResidualVar)
 			}
@@ -143,7 +143,7 @@ func (c *Config) bsplineLayer(scope *model.Scope, x *Node, numOutputNodes int) *
 	if c.regularizer != nil {
 		c.regularizer(scope, g, controlPointsVar)
 	}
-	controlPoints := controlPointsVar.ValueGraph(g)
+	controlPoints := controlPointsVar.NodeValue(g)
 	output := xbsplines.Evaluate(b, x, controlPoints)
 	output.AssertDims(batchSize, numOutputNodes, numInputNodes) // Shape=[batch, outputs, inputs]
 

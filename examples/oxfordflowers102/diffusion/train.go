@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"strings"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gomlx/compute"
@@ -93,10 +93,10 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 	check(flowerIDs.Save(flowerIdsPath))
 	return checkpoint, noise, flowerIDs
 }
-
-// TrainModel with hyperparameters given in Context.
+// TrainWithStore with hyperparameters given in Store.
 // paramsSet enumerate the context parameters that were set and should override values loaded from a checkpoint.
-func TrainModel(scope *model.Scope, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
+func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
+	scope := store.RootScope()
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
 	backend := compute.MustNew()
 	if verbosity >= 1 {
@@ -106,11 +106,12 @@ func TrainModel(scope *model.Scope, dataDir, checkpointPath string, paramsSet []
 
 	// Checkpoints saving.
 	checkpoint, samplesNoise, samplesFlowerIds := config.AttachCheckpoint(checkpointPath)
+...
 	if samplesNoise == nil {
 		klog.Exitf("A checkpoint directory name with --checkpoint is required, none given")
 	}
 	if verbosity >= 2 {
-		fmt.Println(commandline.SprintContextSettings(scope))
+		fmt.Println(commandline.SprintSettings(scope))
 	}
 	if model.GetParamOr(scope, "rng_reset", true) {
 		// Reset RNG.

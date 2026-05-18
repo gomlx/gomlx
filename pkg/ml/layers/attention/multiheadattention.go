@@ -527,13 +527,13 @@ func (b *MultiHeadAttentionBuilder) dense(scope *model.Scope, x *Node, useBias b
 		outDim *= d
 	}
 	wVar := scope.VariableWithShape("weights", shapes.Make(x.DType(), outDim, inDim))
-	w := wVar.ValueGraph(g)
+	w := wVar.NodeValue(g)
 
 	y := DotGeneral(x, []int{-1}, nil, w, []int{1}, nil)
 
 	if useBias {
 		bVar := scope.VariableWithShape("biases", shapes.Make(x.DType(), outDim))
-		bias := bVar.ValueGraph(g)
+		bias := bVar.NodeValue(g)
 		for bias.Rank() < y.Rank() {
 			bias = ExpandAxes(bias, 0)
 		}
@@ -565,13 +565,13 @@ func (b *MultiHeadAttentionBuilder) qkvProject(x *Node) (projectedQuery, project
 	if regularizer := regularizers.FromContext(qkvCtx); regularizer != nil {
 		regularizer(qkvCtx, g, wQKVVar)
 	}
-	wQKV := wQKVVar.ValueGraph(g)
+	wQKV := wQKVVar.NodeValue(g)
 
 	// Separate biases for Q, K, V (always enabled, matching the separate Dense path
 	// which hardcodes useBias=true for Q/K/V projections).
-	biasQ := qkvCtx.VariableWithShape("biases_q", shapes.Make(dtype, queryDim)).ValueGraph(g)
-	biasK := qkvCtx.VariableWithShape("biases_k", shapes.Make(dtype, keyValueDim)).ValueGraph(g)
-	biasV := qkvCtx.VariableWithShape("biases_v", shapes.Make(dtype, keyValueDim)).ValueGraph(g)
+	biasQ := qkvCtx.VariableWithShape("biases_q", shapes.Make(dtype, queryDim)).NodeValue(g)
+	biasK := qkvCtx.VariableWithShape("biases_k", shapes.Make(dtype, keyValueDim)).NodeValue(g)
+	biasV := qkvCtx.VariableWithShape("biases_v", shapes.Make(dtype, keyValueDim)).NodeValue(g)
 
 	// QKVProjection expects [..., inFeatures] and returns [..., dim] flat outputs.
 	// With x=[batch, seq, inFeatures], outputs are [batch, seq, queryDim] etc.

@@ -249,7 +249,7 @@ func (opt *Config) Done() {
 		cycle = DivScalar(adjustedCosineStep, float64(opt.periodNumSteps))
 	} else {
 		// opt.numCyles > 0
-		lastStep := train.GetTrainLastStepVar(scope).ValueGraph(graph)
+		lastStep := train.GetTrainLastStepVar(scope).NodeValue(graph)
 		lastStep = Where(IsNegative(lastStep), Const(graph, DefaultLastStep), lastStep)
 		if opt.warmUpSteps > 0 {
 			lastStep = SubScalar(lastStep, opt.warmUpSteps)
@@ -277,5 +277,5 @@ func (opt *Config) Done() {
 
 	// Update learning rate.
 	lrVar := optimizers.LearningRateVarWithValue(scope.Store().Scope(scope.Scope()), opt.dtype, lrValue)
-	lrVar.SetValueGraph(lr)
+	lrVar.SetNodeValue(lr)
 }

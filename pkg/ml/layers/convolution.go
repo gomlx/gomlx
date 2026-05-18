@@ -363,7 +363,7 @@ func (conv *ConvBuilder) Done() *Node {
 	if conv.regularizer != nil {
 		conv.regularizer(ctxInScope, conv.graph, kernelVar)
 	}
-	kernel := kernelVar.ValueGraph(conv.graph)
+	kernel := kernelVar.NodeValue(conv.graph)
 	convOpts := Convolve(conv.x, kernel).
 		StridePerAxis(conv.strides...).
 		ChannelsAxis(conv.channelsAxisConfig).
@@ -382,7 +382,7 @@ func (conv *ConvBuilder) Done() *Node {
 	// Create and apply bias.
 	if conv.bias {
 		biasVar := ctxInScope.VariableWithShape("biases", shapes.Make(dtype, conv.outputChannels))
-		bias := biasVar.ValueGraph(conv.graph)
+		bias := biasVar.NodeValue(conv.graph)
 		expandedDims := xslices.SliceWithValue(output.Rank(), 1)
 		outputChannelsAxis := images.GetChannelsAxis(output, conv.channelsAxisConfig)
 		expandedDims[outputChannelsAxis] = conv.outputChannels

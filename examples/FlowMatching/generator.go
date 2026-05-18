@@ -586,7 +586,7 @@ func NewKidGenerator(cfg *diffusion.Config, evalDS train.Dataset, numDiffusionSt
 
 func (kg *KidGenerator) EvalStepGraph(scope *model.Scope, allImages []*Node) (metric *Node) {
 	g := allImages[0].Graph()
-	scope.SetTraining(g, false) // Some layers behave differently in train/eval.
+	scope.Store().SetTraining(g, false) // Some layers behave differently in train/eval.
 
 	// Get metrics and updates: the generated images are the inputs, and the
 	generatedImages := allImages[0]

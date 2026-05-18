@@ -21,7 +21,8 @@ var (
 )
 
 func init() {
-	scope := imdb.CreateDefaultContext()
+	store := imdb.CreateModelStore()
+	scope := store.RootScope()
 	flagSettings = commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	if _, found := os.LookupEnv(compute.ConfigEnvVar); !found {
@@ -36,13 +37,13 @@ func TestDemo(t *testing.T) {
 		return
 	}
 
-	scope := imdb.CreateDefaultContext()
-	scope.SetParam("train_steps", 10)
-	paramsSet := check1(commandline.ParseSettings(scope, *flagSettings))
+	store := imdb.CreateModelStore()
+	store.SetParam("train_steps", 10)
+	paramsSet := check1(commandline.ParseSettings(store.RootScope(), *flagSettings))
 
 	muTrain.Lock()
 	defer muTrain.Unlock()
 	require.NotPanics(t, func() {
-		imdb.TrainModel(scope, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
+		imdb.TrainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
 	})
 }

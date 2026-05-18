@@ -50,12 +50,10 @@ var (
 // DType used in the mode.
 var DType = dtypes.Float32
 
-// CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
-func CreateDefaultContext() *model.Scope {
+// CreateModelStore sets the store with default hyperparameters to use with TrainWithStore.
+func CreateModelStore() *model.Store {
 	store := model.NewStore()
-	store.ResetRNGState()
-	scope := store.RootScope()
-	scope.SetParams(map[string]any{
+	store.SetParams(map[string]any{
 		// Model type to use
 		"model":           "bow", // One of the listed in ValidModels: the user can also inject (in ValidModels) new custom models.
 		"train_steps":     5000,
@@ -117,17 +115,18 @@ func CreateDefaultContext() *model.Scope {
 		"transformer_att_key_size":   8,    // Dimension of the Key/Query attention embedding.
 		"transformer_dropout_rate":   -1.0, // Set to 0.0 for no dropout. If < 0 it falls back to layers.ParamDropoutRate.
 	})
-	return scope
+	return store
 }
 
-// TrainModel with hyperparameters given in ctx.
-func TrainModel(
-	scope *model.Scope,
+// TrainWithStore with hyperparameters given in store.
+func TrainWithStore(
+	store *model.Store,
 	dataDir, checkpointPath string,
 	paramsSet []string,
 	evaluateOnEnd bool,
 	verbosity int,
 ) {
+	scope := store.RootScope()
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
@@ -188,7 +187,7 @@ func TrainModel(
 		fmt.Printf("Checkpoint: %q\n", checkpoint.Dir())
 	}
 	if verbosity >= 2 {
-		fmt.Println(commandline.SprintContextSettings(scope))
+		fmt.Println(commandline.SprintSettings(scope))
 	}
 
 	// Select model graph building function.

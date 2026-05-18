@@ -21,13 +21,14 @@ var (
 )
 
 func main() {
-	scope := diffusion.CreateDefaultContext()
+	store := diffusion.CreateModelStore()
+	scope := store.RootScope()
 	settings := commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
 	paramsSet := check1(commandline.ParseSettings(scope, *settings))
 	err := exceptions.TryCatch[error](func() {
-		diffusion.TrainModel(scope, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
+		diffusion.TrainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
 	})
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)

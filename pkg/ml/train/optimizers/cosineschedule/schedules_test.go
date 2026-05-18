@@ -30,13 +30,13 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 	t.Run("periodSteps", func(t *testing.T) {
 		store := model.NewStore()
 		cosineExec, err := model.NewExec(backend, store, func(scope *model.Scope, graph *Graph) *Node {
-			scope.SetTraining(graph, true)
+			scope.Store().SetTraining(graph, true)
 			cosineschedule.New(scope, graph, dtypes.Float32).
 				PeriodSteps(periodInSteps).
 				LearningRate(baseLearningRate).
 				MinLearningRate(minLearningRate).
 				Done()
-			return optimizers.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).ValueGraph(graph)
+			return optimizers.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).NodeValue(graph)
 		})
 		require.NoError(t, err)
 
@@ -71,14 +71,14 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		store := model.NewStore()
 		const warmUpSteps = 10
 		cosineExec, err := model.NewExec(backend, store, func(scope *model.Scope, graph *Graph) *Node {
-			scope.SetTraining(graph, true)
+			scope.Store().SetTraining(graph, true)
 			cosineschedule.New(scope, graph, dtypes.Float32).
 				PeriodSteps(periodInSteps).
 				LearningRate(baseLearningRate).
 				MinLearningRate(minLearningRate).
 				WarmUpSteps(warmUpSteps).
 				Done()
-			return optimizers.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).ValueGraph(graph)
+			return optimizers.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).NodeValue(graph)
 		})
 		require.NoError(t, err)
 		for ii := range 2*periodInSteps + warmUpSteps {
@@ -113,9 +113,9 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		err := lastStepVar.SetValue(tensors.FromScalar(int64(numSteps)))
 		require.NoError(t, err)
 		cosineExec, err := model.NewExec(backend, store, func(scope *model.Scope, graph *Graph) *Node {
-			scope.SetTraining(graph, true)
+			scope.Store().SetTraining(graph, true)
 			cosineschedule.New(scope, graph, dtypes.Float32).FromContext().Done()
-			return optimizers.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).ValueGraph(graph)
+			return optimizers.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).NodeValue(graph)
 		})
 
 		require.NoError(t, err)

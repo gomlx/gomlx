@@ -305,7 +305,7 @@ func (c *Config) discreteLayer(scope *model.Scope, x *Node, numOutputNodes int) 
 	if c.regularizer != nil {
 		c.regularizer(scope, g, controlPointsVar)
 	}
-	controlPoints := controlPointsVar.ValueGraph(g)
+	controlPoints := controlPointsVar.NodeValue(g)
 
 	// splitPoints: start from values distributed between -1 and 1, and let them be trained.
 	var splitPoints *Node
@@ -331,15 +331,15 @@ func (c *Config) discreteLayer(scope *model.Scope, x *Node, numOutputNodes int) 
 		if c.discrete.splitPointsFrozen {
 			splitPointsVar.Trainable = false
 		}
-		splitPoints = splitPointsVar.ValueGraph(g)
+		splitPoints = splitPointsVar.NodeValue(g)
 
 		// At the end of each training step, project splitPoints back to monotonically increasing values, so they
 		// don't overlap.
 		train.AddPerStepUpdateGraphFn(scope.In("kan_discrete_split_points_projection"), g, func(scope *model.Scope, g *Graph) {
-			splitPoints := splitPointsVar.ValueGraph(g)
+			splitPoints := splitPointsVar.NodeValue(g)
 			margin := Scalar(g, splitPoints.DType(), model.GetParamOr(scope, ParamDiscreteSplitsMargin, 0.01))
 			splitPoints = optimizers.MonotonicProjection(splitPoints, margin, -1)
-			splitPointsVar.SetValueGraph(splitPoints)
+			splitPointsVar.SetNodeValue(splitPoints)
 		})
 
 	} else {
@@ -384,8 +384,8 @@ func (c *Config) scheduledSoftness(scope *model.Scope, base *Node) *Node {
 	rootCtx := scope.Store().Scope(model.RootScopePath)
 
 	// Calculate scheduleTime: from 0.0 to 1.0 depending on training progress.
-	globalStep := ConvertDType(optimizers.GetGlobalStepVar(rootCtx).ValueGraph(g), dtypes.Float32)
-	lastStep := ConvertDType(train.GetTrainLastStepVar(rootCtx).ValueGraph(g), dtypes.Float32)
+	globalStep := ConvertDType(optimizers.GetGlobalStepVar(rootCtx).NodeValue(g), dtypes.Float32)
+	lastStep := ConvertDType(train.GetTrainLastStepVar(rootCtx).NodeValue(g), dtypes.Float32)
 	// scheduleTime will be at most 1.0, if for some reason globalStep >
 	scheduleTime := MinScalar(Div(globalStep, MaxScalar(lastStep, 1.0)), 1.0)
 	zero := ZerosLike(lastStep)

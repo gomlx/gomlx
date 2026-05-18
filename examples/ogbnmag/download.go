@@ -479,23 +479,23 @@ var (
 // it can be used by models.
 //
 // They will be stored under the "ogbnmag" scope.
-func UploadOgbnMagVariables(backend compute.Backend, scope *model.Scope) *model.Scope {
-	ctxMag := scope.Store().Scope(OgbnMagVariablesScope)
+func UploadOgbnMagVariables(backend compute.Backend, store *model.Store) *model.Store {
+	magScope := store.Scope(OgbnMagVariablesScope)
 	for name, tPtr := range OgbnMagVariablesRef {
 		if *tPtr == nil {
 			Panicf("trying to upload OgbnMagVariablesRef to context before calling Download()")
 		}
-		v := ctxMag.VariableWithValue(name, *tPtr)
+		v := magScope.VariableWithValue(name, *tPtr)
 		v.Trainable = false
 	}
-	convertPapersEmbeddings(backend, scope) // Convert to the selected dtype.
-	return scope
+	convertPapersEmbeddings(backend, store) // Convert to the selected dtype.
+	return store
 }
 
 // ExcludeOgbnMagVariablesFromSave marks the OGBN-MAG variables as not to be saved by the given `checkpoint`.
 // Since they are read separately and are constant, no need to repeat them at every checkpoint.
-func ExcludeOgbnMagVariablesFromSave(scope *model.Scope, checkpoint *checkpoints.Handler) {
-	ctxMag := scope.Store().Scope(OgbnMagVariablesScope)
+func ExcludeOgbnMagVariablesFromSave(store *model.Store, checkpoint *checkpoints.Handler) {
+	ctxMag := store.Scope(OgbnMagVariablesScope)
 	for name := range OgbnMagVariablesRef {
 		v := ctxMag.GetVariable(name)
 		if v == nil {

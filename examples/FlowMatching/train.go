@@ -46,7 +46,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		klog.Exitf("A checkpoint directory name with --checkpoint is required for storing evolution of some samples, none given")
 	}
 	if verbosity >= 2 {
-		fmt.Println(commandline.SprintContextSettings(scope))
+		fmt.Println(commandline.SprintSettings(scope))
 	}
 	if model.GetParamOr(scope, "rng_reset", true) {
 		// Reset RNG with some pseudo-random value.

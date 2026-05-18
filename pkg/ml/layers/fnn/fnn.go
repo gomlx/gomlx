@@ -335,7 +335,7 @@ func (c *Config) Done() *Node {
 			// Only for the weights, not for the bias.
 			c.regularizer(layerCtx, g, weightsVar)
 		}
-		weights := weightsVar.ValueGraph(g)
+		weights := weightsVar.NodeValue(g)
 		var biasNode *Node
 		if c.useBias {
 			biasDims := make([]int, 0, 1+len(outputDims))
@@ -344,7 +344,7 @@ func (c *Config) Done() *Node {
 			}
 			biasDims = append(biasDims, outputDims...)
 			biasVar := layerCtx.VariableWithShape("biases", shapes.Make(dtype, biasDims...))
-			biasNode = biasVar.ValueGraph(g)
+			biasNode = biasVar.NodeValue(g)
 		}
 
 		if !isEnsemble {

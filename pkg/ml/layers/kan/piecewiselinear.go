@@ -156,12 +156,12 @@ func (c *Config) pwlLayer(scope *model.Scope, x *Node, numOutputNodes int) *Node
 	if c.regularizer != nil {
 		c.regularizer(scope, g, controlPointsVar)
 	}
-	controlPoints := controlPointsVar.ValueGraph(g)
+	controlPoints := controlPointsVar.NodeValue(g)
 
 	// bias term:
 	biasPointsVar := scope.WithInitializer(initializers.Zero).
 		VariableWithShape("kan_pwl_bias", shapes.Make(dtype, numOutputNodes, numInputGroups))
-	bias := biasPointsVar.ValueGraph(g)
+	bias := biasPointsVar.NodeValue(g)
 
 	// splitPoints: start from values distributed between -1 and 1, and let them be trained.
 	var splitPoints *Node
@@ -186,15 +186,15 @@ func (c *Config) pwlLayer(scope *model.Scope, x *Node, numOutputNodes int) *Node
 		if c.pwl.splitPointsFrozen {
 			splitPointsVar.Trainable = false
 		}
-		splitPoints = splitPointsVar.ValueGraph(g)
+		splitPoints = splitPointsVar.NodeValue(g)
 
 		// At the end of each training step, project splitPoints back to monotonically increasing values, so they
 		// don't overlap.
 		train.AddPerStepUpdateGraphFn(scope.In("kan_pwl_split_points_projection"), g, func(scope *model.Scope, g *Graph) {
-			splitPoints := splitPointsVar.ValueGraph(g)
+			splitPoints := splitPointsVar.NodeValue(g)
 			margin := Scalar(g, splitPoints.DType(), c.pwl.splitPointsMargin)
 			splitPoints = optimizers.MonotonicProjection(splitPoints, margin, -1)
-			splitPointsVar.SetValueGraph(splitPoints)
+			splitPointsVar.SetNodeValue(splitPoints)
 		})
 
 	} else {

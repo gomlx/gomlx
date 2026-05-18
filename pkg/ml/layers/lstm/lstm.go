@@ -188,11 +188,11 @@ func (l *LSTM) Done() (allHiddenStates, lastHiddenState, lastCellState *Node) {
 		//   - recurrentW: shaped [numDirections, 4, hiddenSize, hiddenSize]
 		//   - biases: for both gates and cell updates, shaped [numDirections, 8, hiddenSize].
 		//   - peepholeW: optional (can be nil), shaped [numDirections, 3, hiddenSize].
-		inputsW = scope.VariableWithShape("inputsW", shapes.Make(dtype, numDirections, 4, hiddenSize, featuresSize)).ValueGraph(g)
-		recurrentW = scope.VariableWithShape("recurrentW", shapes.Make(dtype, numDirections, 4, hiddenSize, hiddenSize)).ValueGraph(g)
-		biasesW = scope.VariableWithShape("biasesW", shapes.Make(dtype, numDirections, 8, hiddenSize)).ValueGraph(g)
+		inputsW = scope.VariableWithShape("inputsW", shapes.Make(dtype, numDirections, 4, hiddenSize, featuresSize)).NodeValue(g)
+		recurrentW = scope.VariableWithShape("recurrentW", shapes.Make(dtype, numDirections, 4, hiddenSize, hiddenSize)).NodeValue(g)
+		biasesW = scope.VariableWithShape("biasesW", shapes.Make(dtype, numDirections, 8, hiddenSize)).NodeValue(g)
 		if l.usePeephole {
-			peepholeW = scope.VariableWithShape("peepholeW", shapes.Make(dtype, numDirections, 3, hiddenSize)).ValueGraph(g)
+			peepholeW = scope.VariableWithShape("peepholeW", shapes.Make(dtype, numDirections, 3, hiddenSize)).NodeValue(g)
 		}
 	}
 

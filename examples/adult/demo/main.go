@@ -58,10 +58,9 @@ func check1[T any](v T, err error) T {
 	return v
 }
 
-func createDefaultContext() *model.Scope {
+func createModelStore() *model.Store {
 	store := model.NewStore()
-	scope := store.RootScope()
-	scope.SetParams(map[string]any{
+	store.SetParams(map[string]any{
 		// Number of steps to take during training.
 		"train_steps": 5000,
 		"batch_size":  128,
@@ -106,7 +105,7 @@ func createDefaultContext() *model.Scope {
 		kan.ParamDiscreteSplitPointsTrainable: true,
 		kan.ParamResidual:                     true,
 	})
-	return scope
+	return store
 }
 
 var (
@@ -139,18 +138,20 @@ var (
 
 func main() {
 	// Flags with context settings.
-	scope := createDefaultContext()
+	store := createModelStore()
+	scope := store.RootScope()
 	settings := commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
 	paramsSet := check1(commandline.ParseSettings(scope, *settings))
-	err := mainWithContext(scope, *flagDataDir, *flagCheckpoint, paramsSet)
+	err := mainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet)
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
 	}
 }
 
-func mainWithContext(scope *model.Scope, dataDir, checkpointPath string, paramsSet []string) error {
+func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet []string) error {
+	scope := store.RootScope()
 	backend := compute.MustNew()
 	numDevices := backend.NumDevices()
 	if *flagNumDevices > 0 {
@@ -165,7 +166,7 @@ func mainWithContext(scope *model.Scope, dataDir, checkpointPath string, paramsS
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if *flagVerbosity >= 1 {
 		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
-		fmt.Println(commandline.SprintContextSettings(scope))
+		fmt.Println(commandline.SprintSettings(scope))
 	}
 
 	// Checkpoints loading (and saving)
