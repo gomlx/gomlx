@@ -259,7 +259,7 @@ func Const(g *Graph, x any) *Node {
 			"Const(g, x) can only take actual values, not another computation graph `*Node` -- " +
 				"for that you don't need Const(), just use it directly.")
 	}
-	t := tensors.FromAnyValue(x)
+	t := tensors.MustFromAnyValue(x)
 	return ConstTensor(g, t)
 }
 

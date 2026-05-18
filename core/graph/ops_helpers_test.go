@@ -33,7 +33,7 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 		require.NoError(t, err)
 		outputs := g.Run()
 		fmt.Printf("\t%s(%s) = %s\n", testName, outputs[0].GoStr(), outputs[1].GoStr())
-		wantTensor := tensors.FromAnyValue(want)
+		wantTensor := tensors.MustFromAnyValue(want)
 		require.Truef(t, wantTensor.InDelta(outputs[1], margin), "%s(%v): want=%v, got=%v", testName, outputs[0], wantTensor, outputs[1])
 	})
 }

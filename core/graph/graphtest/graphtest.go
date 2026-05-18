@@ -59,7 +59,7 @@ func RunTestGraphFnWithBackend(t *testing.T, testName string, backend compute.Ba
 			if s, ok := value.(shapes.Shape); ok {
 				return tensors.FromShape(s)
 			}
-			return tensors.FromAnyValue(value)
+			return tensors.MustFromAnyValue(value)
 		})
 
 		var numInputs, numOutputs int

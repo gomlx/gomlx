@@ -38,7 +38,7 @@ type graphFnOneInputToTest func(g *Graph) (input, output *Node)
 // result is as expected.
 func testFuncOneInputDefaultBackend(t *testing.T, testName string, graphFn graphFnOneInputToTest, want any) {
 	t.Run(testName, func(t *testing.T) {
-		wantTensor := tensors.FromAnyValue(want)
+		wantTensor := tensors.MustFromAnyValue(want)
 		backend := testutil.BuildTestBackend()
 		g := NewGraph(backend, testName)
 		var inputNode, outputNode *Node
@@ -61,7 +61,7 @@ func testFuncOneInputDefaultBackend(t *testing.T, testName string, graphFn graph
 // result is as expected.
 func testFuncOneInput(t *testing.T, backend compute.Backend, testName string, graphFn graphFnOneInputToTest, want any) {
 	t.Run(testName, func(t *testing.T) {
-		wantTensor := tensors.FromAnyValue(want)
+		wantTensor := tensors.MustFromAnyValue(want)
 		g := NewGraph(backend, testName)
 		var inputNode, outputNode *Node
 		err := exceptions.TryCatch[error](func() {
@@ -574,7 +574,7 @@ func TestReduce(t *testing.T) {
 		for _, testCase := range cases {
 			g := reduceSumGraph(t, backend, testCase.dims)
 			got := g.Run()[0]
-			wantT := tensors.FromAnyValue(testCase.want)
+			wantT := tensors.MustFromAnyValue(testCase.want)
 			if !wantT.InDelta(got, Epsilon) {
 				t.Errorf("Wanted %v, got %v", testCase.want, got)
 			}

@@ -173,7 +173,7 @@ func testGradientsInDelta(t *testing.T, name string, backend compute.Backend, te
 				// Simply checking the shape:
 				require.Truef(t, output.Shape().Equal(wantShape), "Wanted shape %s, got %s", wantShape, output.Shape())
 			} else {
-				require.Truef(t, tensors.FromAnyValue(wantForGrad[ii]).InDelta(output, delta),
+				require.Truef(t, tensors.MustFromAnyValue(wantForGrad[ii]).InDelta(output, delta),
 					"%s: gradient #%d doesn't match wanted value (withing %g delta/margin)\n\t%v", name, ii, delta, wantForGrad[ii])
 			}
 		}

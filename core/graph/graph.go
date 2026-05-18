@@ -694,7 +694,7 @@ func anyToDeviceBuffer(
 		return b.buffer, b.shape, true
 	}
 	// A Go value by default is converted to a buffer and can be donated.
-	t := tensors.FromAnyValue(value)
+	t := tensors.MustFromAnyValue(value)
 	shape := t.Shape()
 	return must1(t.DonateBuffer(backend, deviceNum)), shape, true
 }
