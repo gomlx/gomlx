@@ -13,6 +13,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/internal/scoped"
+	"github.com/gomlx/gomlx/support/exceptions"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/sets"
 	"github.com/pkg/errors"
@@ -132,6 +133,12 @@ const (
 //
 // This will trigger the loading of the variable if a loader is attached.
 func (s *Store) GetVariable(fullPath string) *Variable {
+	if s == nil {
+		exceptions.Panicf("Store is nil")
+	}
+	if s.variablesMap == nil {
+		exceptions.Panicf("Store.variablesMap is nil")
+	}
 	if !strings.HasPrefix(fullPath, "/") {
 		fullPath = "/" + fullPath
 	}

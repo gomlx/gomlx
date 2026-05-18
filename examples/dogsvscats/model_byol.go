@@ -124,12 +124,12 @@ func moveTargetModel(onlineCtx, targetCtx *model.Scope, g *Graph, movingAverageR
 			exceptions.Panicf("BYOL target model variable %q::%q has no corresponding variable %q::%q in online model",
 				targetVar.Scope(), targetVar.Name(), onlineVarScope, targetVar.Name())
 		}
-		targetValue := targetVar.ValueGraph(g)
-		onlineValue := onlineVar.ValueGraph(g)
+		targetValue := targetVar.NodeValue(g)
+		onlineValue := onlineVar.NodeValue(g)
 		targetValue = Add(
 			MulScalar(onlineValue, 1.0-movingAverageRatio),
 			MulScalar(targetValue, movingAverageRatio))
-		targetVar.SetValueGraph(targetValue)
+		targetVar.SetNodeValue(targetValue)
 	}
 }
 

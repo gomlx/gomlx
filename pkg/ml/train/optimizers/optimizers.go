@@ -23,7 +23,7 @@ type Interface interface {
 	// training step.
 	// It should return these updates.
 	//
-	// Variable values can be updated in graph building time (inside UpdateGraph) using Variable.SetValueGraph,
+	// Variable values can be updated in graph building time (inside UpdateGraph) using Variable.SetNodeValue,
 	// and the trainer (train.Trainer) will make sure these values are returned from the graph execution
 	// and the materialized values used to update the variables (Variable.SetValue).
 	//

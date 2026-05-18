@@ -120,7 +120,7 @@ func PerturbVars(checkpointPath string, x float64) {
 			continue
 		}
 		newValue := model.MustExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
-			value := v.ValueGraph(g)
+			value := v.NodeValue(g)
 			// Perturbation from -1 to 1
 			perturbation := OneMinus(MulScalar(scope.RandomUniform(g, value.Shape()), 2))
 			perturbation = MulScalar(perturbation, x) // [-x, +x], -perturb=x

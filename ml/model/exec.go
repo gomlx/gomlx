@@ -25,12 +25,12 @@ import (
 // Otherwise, very similar to graph.Exec.
 type Exec struct {
 	backend compute.Backend
-	scope   *Scope
+	store   *Store
 	exec    *graph.Exec
 
 	// Original function that takes ctx and the converted closure
 	// that only takes *Node as input.
-	ctxGraphFn, graphFn                       any
+	modelGraphFn, graphFn                     any
 	inputIsGraph, inputAsSlice, outputAsSlice bool
 	inputShardingSpecs                        []*distributed.ShardingSpec
 	outputShardingSpecs                       []*distributed.ShardingSpec
@@ -47,121 +47,108 @@ type Exec struct {
 	isInitializeVariablesExec bool
 }
 
-// NewExecAny constructs an Exec object for the given scopeOrStore and symbolic computation function ctxGraphFn.
+// NewExecAny constructs an Exec object for the given model store and symbolic computation function modelGraphFn.
 //
-// The scopeOrStore can be a *Scope or a *Store. If it is a *Store, it is converted to its RootScope().
-// If nil, it automatically creates a new empty store and uses its RootScope().
-//
-// The ctxGraphFn is called to build the computation graphs with a Scope.
+// The modelGraphFn is called to build the computation graphs with a Scope.
 // It must take a *Scope input parameter followed by one or more *Node parameters as input and return one or more *Node.
 // Alternatively, it can, instead of *Node inputs, take a *Graph object, when there are no input tensors.
 //
 // Before the execution of a graph, it initializes the variables as needed, using the configured initializer.
-// And variables updated in the graph (using Variable.SetValueGraph) are updated also during execution.
+// And variables updated in the graph (using Variable.SetNodeValue) are updated also during execution.
 // More details see Exec.
-func NewExecAny(backend compute.Backend, scopeOrStore any, ctxGraphFn any) (*Exec, error) {
-	var scope *Scope
-	if scopeOrStore == nil {
-		scope = NewStore().RootScope()
-	} else {
-		switch v := scopeOrStore.(type) {
-		case *Store:
-			scope = v.RootScope()
-		case *Scope:
-			scope = v
-		default:
-			return nil, errors.Errorf("scopeOrStore must be a *model.Scope or *model.Store, got %T instead", scopeOrStore)
-		}
+func NewExecAny(backend compute.Backend, store *Store, modelGraphFn any) (*Exec, error) {
+	if store == nil {
+		return nil, errors.Errorf("model.NewExec: store cannot be nil, you can create an empty one with model.NewStore")
 	}
 	e := &Exec{
-		backend:     backend,
-		scope:       scope,
-		ctxGraphFn:  ctxGraphFn,
-		changedVars: make(map[graph.GraphId][]*Variable),
+		backend:      backend,
+		store:        store,
+		modelGraphFn: modelGraphFn,
+		changedVars:  make(map[graph.GraphId][]*Variable),
 	}
-	ctxGraphFnT := reflect.TypeOf(ctxGraphFn)
-	if ctxGraphFnT.Kind() != reflect.Func {
-		return nil, errors.Errorf("ctxGraphFn must be a function")
+	modelGraphFnT := reflect.TypeOf(modelGraphFn)
+	if modelGraphFnT.Kind() != reflect.Func {
+		return nil, errors.Errorf("modelGraphFn must be a function")
 	}
 	nodeType := reflect.TypeFor[*Node]()
 	scopeType := reflect.TypeFor[*Scope]()
 	graphType := reflect.TypeFor[*Graph]()
 
 	// Must have at least 2 arguments, and the first must be of type *Scope.
-	if ctxGraphFnT.NumIn() < 2 {
+	if modelGraphFnT.NumIn() < 2 {
 		return nil, errors.Errorf("at least *Scope and one input argument required")
 	}
-	if ctxGraphFnT.In(0) != scopeType {
+	if modelGraphFnT.In(0) != scopeType {
 		return nil, errors.Errorf(
-			"the first argument for ctxGraphFn must be a *Scope, got %s instead",
-			ctxGraphFnT.In(0),
+			"the first argument for modelGraphFn must be a *Scope, got %s instead",
+			modelGraphFnT.In(0),
 		)
 	}
 
 	// Check other arguments.
-	for ii := 1; ii < ctxGraphFnT.NumIn(); ii++ {
-		if ctxGraphFnT.In(ii).Kind() == reflect.Slice && ctxGraphFnT.In(ii).Elem() == nodeType {
+	for ii := 1; ii < modelGraphFnT.NumIn(); ii++ {
+		if modelGraphFnT.In(ii).Kind() == reflect.Slice && modelGraphFnT.In(ii).Elem() == nodeType {
 			// Case 1: []*Node
-			if ctxGraphFnT.NumIn() != 2 {
+			if modelGraphFnT.NumIn() != 2 {
 				return nil, errors.Errorf(
 					"[]*Node parameters are only accepted if they are the only input besides the Scope, got function type %s instead",
-					ctxGraphFnT,
+					modelGraphFnT,
 				)
 			}
 			e.inputAsSlice = true
 			break
 		}
-		if ctxGraphFnT.In(ii) == graphType {
+		if modelGraphFnT.In(ii) == graphType {
 			// Case 2: *Graph
-			if ctxGraphFnT.NumIn() != 2 {
+			if modelGraphFnT.NumIn() != 2 {
 				return nil, errors.Errorf(
 					"*Graph argument is only accepted if it is the only input besides the Scope, got function type %s instead",
-					ctxGraphFnT,
+					modelGraphFnT,
 				)
 			}
 			e.inputIsGraph = true
 			break
 		}
-		if ctxGraphFnT.In(ii) != nodeType {
+		if modelGraphFnT.In(ii) != nodeType {
 			return nil, errors.Errorf("input parameter %d is not of type *Node", ii)
 		}
 	}
-	for ii := 0; ii < ctxGraphFnT.NumOut(); ii++ {
-		if ctxGraphFnT.Out(ii).Kind() == reflect.Slice && ctxGraphFnT.Out(ii).Elem() == nodeType {
-			if ctxGraphFnT.NumOut() != 1 {
+	for ii := 0; ii < modelGraphFnT.NumOut(); ii++ {
+		if modelGraphFnT.Out(ii).Kind() == reflect.Slice && modelGraphFnT.Out(ii).Elem() == nodeType {
+			if modelGraphFnT.NumOut() != 1 {
 				return nil, errors.Errorf(
 					"[]*Node parameters are only accepted as output if they are the only output, got function type %s instead",
-					ctxGraphFnT,
+					modelGraphFnT,
 				)
 			}
 			e.outputAsSlice = true
 			break
 		}
-		if ctxGraphFnT.Out(ii) != nodeType {
+		if modelGraphFnT.Out(ii) != nodeType {
 			return nil, errors.Errorf("output parameter %d is not of type *Node", ii)
 		}
 	}
 
 	e.buildGraphFn()
 	e.exec = graph.MustNewExecAny(backend, e.graphFn)
-	funcName := runtime.FuncForPC(reflect.ValueOf(ctxGraphFn).Pointer()).Name()
+	funcName := runtime.FuncForPC(reflect.ValueOf(modelGraphFn).Pointer()).Name()
 	e.exec.WithName(fmt.Sprintf("Store.Exec:%s", funcName))
 	e.exec.SetSideParamsHook(e.setSideParams)
 	return e, nil
 }
 
 // buildGraphFn constructs a function graphFn that can be passed to the wrapped Exec.
-// This function is a closure that will call the ctxGraphFn provided by the user with the
+// This function is a closure that will call the modelGraphFn provided by the user with the
 // extra *model.Scope argument, plus it prepends the output with the updated values --
 // so it can behind the scenes update the variables to the user.
 func (e *Exec) buildGraphFn() {
-	ctxGraphFnT := reflect.TypeOf(e.ctxGraphFn)
-	numIn := ctxGraphFnT.NumIn() - 1
+	modelGraphFnT := reflect.TypeOf(e.modelGraphFn)
+	numIn := modelGraphFnT.NumIn() - 1
 	nodeT := reflect.TypeFor[*Node]()
 	nodeSliceT := reflect.TypeFor[[]*Node]()
 	graphT := reflect.TypeFor[*Graph]()
 
-	// Build input types for new graphFn: same as ctxGraphFn, but without the Scope.
+	// Build input types for new graphFn: same as modelGraphFn, but without the Scope.
 	var inT []reflect.Type
 	if e.inputIsGraph {
 		// The only input is a graph.
@@ -184,13 +171,13 @@ func (e *Exec) buildGraphFn() {
 	// input a slice of *Node (or only a *computation.Graph), and as output also a slice of *Node.
 	graphFnT := reflect.FuncOf(inT, outT, false)
 	e.graphFn = reflect.MakeFunc(graphFnT, func(args []reflect.Value) (results []reflect.Value) {
-		// Inputs for the original ctxGraphFn: we prepend the scope to the arguments.
+		// Inputs for the original modelGraphFn: we prepend the scope to the arguments.
 		argsWithScope := make([]reflect.Value, len(args)+1)
-		argsWithScope[0] = reflect.ValueOf(e.scope.Store().Scope(e.scope.Scope()))
+		argsWithScope[0] = reflect.ValueOf(e.store.RootScope())
 		copy(argsWithScope[1:], args)
 
-		// Call ctxGraphFn, the results will be a slice of *Node.
-		ctxGraphFnResults := reflect.ValueOf(e.ctxGraphFn).Call(argsWithScope)
+		// Call modelGraphFn, the results will be a slice of *Node.
+		modelGraphFnResults := reflect.ValueOf(e.modelGraphFn).Call(argsWithScope)
 
 		// Find the graph.
 		var g *Graph
@@ -208,7 +195,7 @@ func (e *Exec) buildGraphFn() {
 		// Find variables that were changed and their updated graph values (*Node).
 		var changedVars []*Variable
 		var allValues []*Node
-		for _, v := range e.scope.store.variables {
+		for _, v := range e.store.variables {
 			if v.ChangedInGraph(g) {
 				changedVars = append(changedVars, v)
 				allValues = append(allValues, v.NodeValue(g))
@@ -220,13 +207,13 @@ func (e *Exec) buildGraphFn() {
 			e.changedVars[graphId] = changedVars
 			e.muChangedVars.Unlock()
 		}
-		// Append ctxGraphFnResults to allValues.
+		// Append modelGraphFnResults to allValues.
 		if e.outputAsSlice {
 			// cxtGraphResults returns one value, a []*Node, easy to append.
-			allValues = append(allValues, ctxGraphFnResults[0].Interface().([]*Node)...)
+			allValues = append(allValues, modelGraphFnResults[0].Interface().([]*Node)...)
 		} else {
 			// Append one result at a time (it's ok if there are no results).
-			for _, r := range ctxGraphFnResults {
+			for _, r := range modelGraphFnResults {
 				allValues = append(allValues, r.Interface().(*Node))
 			}
 		}
@@ -247,9 +234,8 @@ func (e *Exec) Finalize() {
 // the variable values as parameters just before graph execution.
 func (e *Exec) setSideParams(g *Graph, inputBuffers []compute.Buffer, donate []bool) error {
 	// Initialize variables if needed.
-	store := e.scope.store
-	if !e.isInitializeVariablesExec && store.needsInitialization {
-		err := store.InitializeVariables(e.backend, func(initExec *Exec) error {
+	if !e.isInitializeVariablesExec && e.store.needsInitialization {
+		err := e.store.InitializeVariables(e.backend, func(initExec *Exec) error {
 			return initExec.ConfigureDistributionFrom(e)
 		})
 		if err != nil {
@@ -266,7 +252,6 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []compute.Buffer, donate []b
 
 // setSideParamsSingleDevice sets the side parameters for single-device execution.
 func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []compute.Buffer, donate []bool) error {
-	store := e.scope.store
 	graphId := g.GraphId()
 	deviceAssignment := e.exec.DeviceAssignment()
 	deviceNum := compute.DeviceNum(0)
@@ -274,7 +259,7 @@ func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []compute.Buffer
 		deviceNum = deviceAssignment[0]
 	}
 
-	for _, v := range store.variables {
+	for _, v := range e.store.variables {
 		nodes, found := v.graphToNodes.Load(graphId)
 		if !found {
 			continue
@@ -323,13 +308,12 @@ func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []compute.Buffer
 
 // setSideParamsDistributed sets the side parameters for distributed execution.
 func (e *Exec) setSideParamsDistributed(g *Graph, inputBuffers []compute.Buffer, donate []bool) error {
-	store := e.scope.store
 	graphId := g.GraphId()
 	numDevices := e.exec.NumDevices()
 	numParams := g.NumParameters()
 	deviceAssignment := e.exec.DeviceAssignment()
 
-	for _, v := range store.variables {
+	for _, v := range e.store.variables {
 		nodes, found := v.graphToNodes.Load(graphId)
 		if !found {
 			continue
@@ -441,14 +425,14 @@ func (e *Exec) NumDevices() int {
 // SPMD sets the distribution strategy to SPMD.
 func (e *Exec) SPMD(mesh *distributed.DeviceMesh) *Exec {
 	e.exec.SPMD(mesh)
-	e.scope.store.defaultShardingSpec = distributed.NewReplicatedShardingSpec(mesh)
+	e.store.defaultShardingSpec = distributed.NewReplicatedShardingSpec(mesh)
 	return e
 }
 
 // AutoSharding sets the distribution strategy to AutoSharding.
 func (e *Exec) AutoSharding(meshes ...*distributed.DeviceMesh) *Exec {
 	e.exec.AutoSharding(meshes...)
-	e.scope.store.defaultShardingSpec = distributed.NewReplicatedShardingSpec(meshes[0])
+	e.store.defaultShardingSpec = distributed.NewReplicatedShardingSpec(meshes[0])
 	return e
 }
 
@@ -473,7 +457,7 @@ func (e *Exec) WithOutputShardingSpecs(specs ...*distributed.ShardingSpec) *Exec
 
 // DefaultShardingSpec returns the default sharding spec.
 func (e *Exec) DefaultShardingSpec() *distributed.ShardingSpec {
-	return e.scope.store.defaultShardingSpec
+	return e.store.defaultShardingSpec
 }
 
 // SetDefaultShardingSpec sets the default sharding spec for the associated Store object.
@@ -495,7 +479,7 @@ func (e *Exec) SetDefaultShardingSpec(spec *distributed.ShardingSpec) error {
 			spec = distributed.NewReplicatedShardingSpec(e.exec.Meshes()[0])
 		}
 	}
-	e.scope.store.defaultShardingSpec = spec
+	e.store.defaultShardingSpec = spec
 	return nil
 }
 
@@ -518,12 +502,13 @@ func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 
 // Store returns the associated Store object.
 func (e *Exec) Store() *Store {
-	return e.scope.store
+	return e.store
 }
 
 // SetStore associates the given Store with the Exec object.
 func (e *Exec) SetStore(store *Store) *Exec {
-	e.scope = store.Scope(e.scope.Scope())
+	e.store = store
+	e.rootScope = store.RootScope()
 	return e
 }
 
@@ -598,7 +583,7 @@ func (e *Exec) collectOutputsForDistributed(
 
 		shardingSpec := v.shardingSpec
 		if shardingSpec == nil {
-			shardingSpec = e.scope.store.defaultShardingSpec
+			shardingSpec = e.store.defaultShardingSpec
 		}
 		if shardingSpec == nil {
 			err := errors.Errorf("variable %q has no sharding spec", v.Path())

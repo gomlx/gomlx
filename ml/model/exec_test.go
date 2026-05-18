@@ -80,7 +80,8 @@ func TestExec(t *testing.T) {
 	})
 
 	t.Run("DenseLayer", func(t *testing.T) {
-		oneLayer, err := model.NewExecAny(backend, nil, oneLayerGraph)
+		store := model.NewStore()
+		oneLayer, err := model.NewExecAny(backend, store, oneLayerGraph)
 		if err != nil {
 			t.Fatalf("Failed to create model.Exec for oneLayer: %+v", err)
 		}
@@ -256,9 +257,6 @@ func TestAutoSharding(t *testing.T) {
 		store := model.NewStore()
 		store.SetParam(model.ParamInitialSeed, int64(42))
 		e, err := model.NewExec(backend, store, func(scope *model.Scope, g *Graph) *Node {
-			// v := ctx.WithInitializer(initializers.RandomUniformFn(ctx, 0.0001, 1.0)).VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
-			// return v.ValueGraph(g)
-			// return ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 10))
 			return scope.Store().GetVariable(model.RNGStateVariableName).NodeValue(g)
 		})
 		require.NoError(t, err)

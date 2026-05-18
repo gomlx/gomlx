@@ -107,7 +107,7 @@ func TransformerLayers(scope *model.Scope, embed, mask *Node) *Node {
 	posEmbedShape := shape.Clone()
 	posEmbedShape.Dimensions[0] = 1
 	posEmbedVar := scope.VariableWithShape("positional", posEmbedShape)
-	posEmbed := posEmbedVar.ValueGraph(g)
+	posEmbed := posEmbedVar.NodeValue(g)
 	embed = Add(embed, posEmbed) // Just add the embeddings, seems to work well.
 
 	// Add the requested number of attention layers.

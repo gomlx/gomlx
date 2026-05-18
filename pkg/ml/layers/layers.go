@@ -419,7 +419,7 @@ func AddL2RegularizationStatic(scope *model.Scope, amount float64, values ...*No
 }
 
 // AddL2Regularization calculates the L2 of the given values (typically variable nodes returned
-// by model.Variable.ValueGraph()), scale by the given amount (typically a constant) and then
+// by model.Variable.NodeValue()), scale by the given amount (typically a constant) and then
 // train.AddLoss the resulting value, having the effect of regularizing the weights (variables).
 //
 // Deprecated: use package regularizers instead.

@@ -161,8 +161,8 @@ func DenseLayer(scope *model.Scope, x *Node, outputDim int) *Node {
 	inputDim := x.Shape().Dimensions[len(x.Shape().Dimensions)-1]
 	weightsVar := scope.VariableWithShape("weights", shapes.Make(x.DType(), inputDim, outputDim))
 	biasVar := scope.VariableWithShape("bias", shapes.Make(x.DType(), outputDim))
-	x = Dot(x, weightsVar.ValueGraph(g)).Product()
-	return Add(x, biasVar.ValueGraph(g))
+	x = Dot(x, weightsVar.NodeValue(g)).Product()
+	return Add(x, biasVar.NodeValue(g))
 }
 ```
 

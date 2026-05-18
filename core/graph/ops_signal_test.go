@@ -159,7 +159,7 @@ func TestGradientRealFFT(t *testing.T) {
 	modelFn := func(ctx *model.Context, spec any, inputs []*Node) []*Node {
 		g := inputs[0].Graph()
 		learnedXVar := ctx.VariableWithShape("learnedX", trueX.Shape())
-		y := RealFFT(learnedXVar.ValueGraph(g))
+		y := RealFFT(learnedXVar.NodeValue(g))
 		return []*Node{y}
 	}
 
@@ -200,7 +200,7 @@ func TestGradientInverseRealFFT(t *testing.T) {
 	modelFn := func(ctx *model.Context, spec any, inputs []*Node) []*Node {
 		g := inputs[0].Graph()
 		learnedXVar := ctx.VariableWithShape("learnedX", trueX.Shape())
-		y := InverseRealFFT(learnedXVar.ValueGraph(g))
+		y := InverseRealFFT(learnedXVar.NodeValue(g))
 		return []*Node{y}
 	}
 

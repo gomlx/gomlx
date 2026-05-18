@@ -286,7 +286,7 @@ func (v *Variable) MustValue() *tensors.Tensor {
 }
 
 // Value returns the tensor holding the variable value. Use this to manipulate the value in Go.
-// If building a computation graph, use Variable.ValueGraph().
+// If building a computation graph, use Variable.NodeValue().
 //
 // On a distributed setup, the Variable will be sharded (see Variable.WithShardingSpec() or Variable.SetShardingSpec).
 // In these cases you can get the sharded values with Variable.DistributedValue(), or set it with
@@ -454,7 +454,7 @@ func (v *Variable) ChangedInGraph(g *Graph) bool {
 }
 
 // NodeValue returns the Node of the Graph that holds the current value of the variable. It can be changed
-// for the graph (for instance, when applying a gradient descent) by [SetValueGraph].
+// for the graph (for instance, when applying a gradient descent) by [SetNodeValue].
 //
 // It's a computation graph building function, and panics on errors.
 func (v *Variable) NodeValue(nodeOrGraph graph.GraphProvider) *Node {

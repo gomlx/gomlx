@@ -79,7 +79,7 @@ func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node
 	}
 
 	posEmbedFull := scope.In("pos_embed").VariableWithShape("embeddings",
-		shapes.Make(tm.DType, tm.MaxPosEmbed, tm.EmbedDim)).ValueGraph(g)
+		shapes.Make(tm.DType, tm.MaxPosEmbed, tm.EmbedDim)).NodeValue(g)
 	posScalar := Squeeze(ConvertDType(position, dtypes.Int32))
 	posEmbed := DynamicSlice(posEmbedFull, []*Node{posScalar, Const(g, int32(0))}, []int{currentSeqLen, tm.EmbedDim})
 	posEmbed = BroadcastToShape(ExpandDims(posEmbed, 0), embedded.Shape())
