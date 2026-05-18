@@ -519,7 +519,7 @@ func (e *Exec) Exec(args ...any) ([]*tensors.Tensor, error) {
 
 // ExecWithGraph is similar to Exec, but it also returns the computation graph used in the call.
 func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, err error) {
-	outputs, g, err = e.exec.ExecWithGraph(args...)
+	outputs, g, err = e.exec.CallWithGraph(args...)
 	if err != nil {
 		return nil, nil, err
 	}

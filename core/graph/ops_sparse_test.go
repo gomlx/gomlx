@@ -339,14 +339,14 @@ func BenchmarkScatter(b *testing.B) {
 					_, state = RandomNormal(rngState, shapes.Make(dtype, NumEntries, EmbeddingSize))
 					_, value = RandomNormal(rngState, shapes.Make(dtype, BatchSize, EmbeddingSize))
 					return
-				}).MustExec(rngStateT)
+				}).MustCall(rngStateT)
 				stateT, valuesT := results[0], results[1]
 
 				// Precompile graph for given inputNodes. It also makes sure the inputNodes are transferred to the accelerator.
-				scatterExec.MustExec(stateT, indicesT, valuesT)[0].MustFinalizeAll()
+				scatterExec.MustCall(stateT, indicesT, valuesT)[0].MustFinalizeAll()
 				b.Run(fmt.Sprintf("sorted-%v_unique-%v_dtype-%s", sorted, unique, dtype), func(b *testing.B) {
 					for range b.N {
-						results := scatterExec.MustExec(stateT, indicesT, valuesT)
+						results := scatterExec.MustCall(stateT, indicesT, valuesT)
 						must(stateT.FinalizeAll())
 						stateT = results[0]
 					}

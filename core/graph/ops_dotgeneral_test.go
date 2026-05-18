@@ -183,7 +183,7 @@ func TestDot(t *testing.T) {
 			exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
 				return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
 			})
-			got := exec.MustExec(lhs, rhs)[0]
+			got := exec.MustCall(lhs, rhs)[0]
 			if !want.InDelta(got, 0.1) {
 				t.Errorf("got=%s,\nwant=%s", got, want)
 			}
@@ -200,7 +200,7 @@ func TestDot(t *testing.T) {
 					const numRepeats = 1000
 					var got []*tensors.Tensor
 					for range numRepeats {
-						got, err = exec.Exec(lhs, rhs)
+						got, err = exec.Call(lhs, rhs)
 						if err != nil {
 							return
 						}
@@ -395,7 +395,7 @@ func TestGradientDot(t *testing.T) {
 
 				exec := MustNewExec(backend, testFn)
 				fmt.Printf("Executing GradDotGeneralBatchContracting:\n")
-				parts := exec.MustExec()
+				parts := exec.MustCall()
 				for ii, name := range []string{"lhs", "rhs", "dot", "grad_lhs", "grad_rhs"} {
 					fmt.Printf("\t%s: %s\n", name, parts[ii].GoStr())
 				}
@@ -467,7 +467,7 @@ func TestGradientDot(t *testing.T) {
 				}
 
 				exec := MustNewExec(backend, testFn)
-				parts := exec.MustExec()
+				parts := exec.MustCall()
 				fmt.Printf("Executing TestGradDotGeneral:\n")
 				for ii, name := range []string{"lhs", "rhs", "dot", "grad_lhs", "grad_rhs"} {
 					fmt.Printf("\t%s: %s\n", name, parts[ii].GoStr())
@@ -594,7 +594,7 @@ func TestDotGeneralDTypes(t *testing.T) {
 				if err != nil {
 					t.Fatalf("DotGeneralDTypes failed to create graph: %v", err)
 				}
-				output, err := exec.Exec1()
+				output, err := exec.Call1()
 				if err != nil {
 					t.Errorf("* failed for %s, %s, %s: %v\n", inputDType, accumulatorDType, outputDType, err)
 				} else {

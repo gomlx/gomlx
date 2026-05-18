@@ -53,7 +53,7 @@ func TestPortable(t *testing.T) {
 		})
 		numDevices := backend.NumDevices()
 		for deviceNum := range numDevices {
-			outputs, err := e.ExecOnDevice(compute.DeviceNum(deviceNum), float32(deviceNum))
+			outputs, err := e.CallOnDevice(compute.DeviceNum(deviceNum), float32(deviceNum))
 			require.NoError(t, err)
 			require.Len(t, outputs, 1)
 			output := outputs[0]
@@ -223,7 +223,7 @@ func TestAutoSharding(t *testing.T) {
 			AutoSharding(mesh).
 			WithInputShardingSpecs(nil, spec). // x is replicated (nil), w is sharded (spec).
 			WithOutputShardingSpecs(spec)      // output y is sharded (spec).
-		outputs, err := exec.Exec(
+		outputs, err := exec.Call(
 			float32(10), []float32{0, 1}, // Device 0
 			float32(10), []float32{2, 3}, // Device 1
 		)
@@ -251,7 +251,7 @@ func TestAutoSharding(t *testing.T) {
 			AutoSharding(mesh).
 			WithInputShardingSpecs(nil, spec).
 			WithOutputShardingSpecs(spec)
-		outputs, err := exec.Exec(
+		outputs, err := exec.Call(
 			float32(10), []float32{0, 1}, // Device 0
 			float32(10), []float32{2, 3}, // Device 1
 		)
@@ -278,7 +278,7 @@ func TestAutoSharding(t *testing.T) {
 			AutoSharding(mesh).
 			WithInputShardingSpecs(nil, spec). // the last spec is repeated for tail of inputs.
 			WithOutputShardingSpecs(spec)      // the last spec is repeated for tail of outputs.
-		outputs, err := exec.Exec(
+		outputs, err := exec.Call(
 			float32(100), []float32{0, 1}, []float32{10, 11}, // Device 0
 			float32(100), []float32{2, 3}, []float32{12, 13}, // Device 1
 		)

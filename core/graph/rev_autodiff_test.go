@@ -160,7 +160,7 @@ func testGradientsInDelta(t *testing.T, name string, backend compute.Backend, te
 		}
 		exec, err := NewExec(backend, fn)
 		require.NoError(t, err)
-		results, err := exec.Exec()
+		results, err := exec.Call()
 		require.NoError(t, err)
 		fmt.Printf("\toutput=%v\n", results[0].GoStr())
 		gradients := results[1:]
@@ -195,7 +195,7 @@ func testGradientsExact(t *testing.T, name string, testFn gradTestFunc, wantForG
 		return append([]*Node{output}, grads...)
 	}
 	exec := MustNewExec(backend, fn)
-	results := exec.MustExec()
+	results := exec.MustCall()
 	fmt.Printf("\tgradient=%v\n", results[0].GoStr())
 	gradients := results[1:]
 	for ii, gradient := range gradients {

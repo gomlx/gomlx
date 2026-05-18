@@ -36,7 +36,7 @@ func TestExec(t *testing.T) {
 	testForDim := func(exec *Exec, dim int) {
 		a := make([]float32, dim)
 		b := xslices.SliceWithValue(dim, float32(1))
-		outputs := exec.MustExec(a, b)
+		outputs := exec.MustCall(a, b)
 		if len(outputs) != 1 {
 			t.Fatalf("Failed to %q.MustExec(), returned %d elements, wanted exactly 1.", exec.Name(), len(outputs))
 		}
@@ -57,7 +57,7 @@ func TestExec(t *testing.T) {
 		execAdd := MustNewExec(backend, addOneWithGraph)
 		a := []float32{1, 2}
 		b := []float32{3, 4, 5}
-		outputs := execAdd.MustExec(a, b)
+		outputs := execAdd.MustCall(a, b)
 		require.Len(t, outputs, 2)
 
 		gotA := outputs[0].Value().([]float32)
@@ -72,7 +72,7 @@ func TestExec(t *testing.T) {
 		a := []float64{0, 0}
 		b := []float32{1, 1}
 		var results []*tensors.Tensor
-		require.Panicsf(t, func() { results = dist.MustExec(a, b) },
+		require.Panicsf(t, func() { results = dist.MustCall(a, b) },
 			"EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v",
 			reflect.TypeFor[[]float64](), a, reflect.TypeFor[[]float32](), b, results)
 	})
@@ -82,7 +82,7 @@ func TestExec(t *testing.T) {
 		dist := MustNewExec(backend, EuclideanDistance)
 		a := []float32{0, 0, 0}
 		b := []float32{1, 1}
-		results, err := dist.Exec(a, b)
+		results, err := dist.Call(a, b)
 		require.Errorf(t, err,
 			"EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v",
 			reflect.TypeFor[[]float32](), a, reflect.TypeFor[[]float32](), b, results)
@@ -98,7 +98,7 @@ func TestExec(t *testing.T) {
 		// Try with a different dtype (float64) so that we run out of cache.
 		a := []float64{0, 0}
 		b := []float64{1, 1}
-		results, err := dist.Exec(a, b)
+		results, err := dist.Call(a, b)
 		require.Errorf(t, err, "EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v",
 			reflect.TypeFor[[]float64](), a, reflect.TypeFor[[]float64](), b, results)
 		require.ErrorContainsf(t, err, "maximum cache",
@@ -111,7 +111,7 @@ func TestExec(t *testing.T) {
 		dist := MustNewExec(backend, EuclideanDistance)
 		a := [][]float32{{0}, {0}, {0}}
 		b := [][]float32{{0}, {0}, {0, 1}} // Inconsistent shape for b, the conversion to Tensor should fail.
-		results, err := dist.Exec(a, b)
+		results, err := dist.Call(a, b)
 		fmt.Printf("- Expected error: %v\n", err)
 		require.Errorf(t, err,
 			"EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v",
@@ -126,7 +126,7 @@ func TestExec(t *testing.T) {
 		a := []float32{2, 2}
 		b := []float32{1, 1}
 		var outputs []*tensors.Tensor
-		require.NotPanicsf(t, func() { outputs = addAndSub.MustExec(a, b) },
+		require.NotPanicsf(t, func() { outputs = addAndSub.MustCall(a, b) },
 			"%q(%v:%v, %v:%v) failed", addAndSub.Name(), reflect.TypeFor[[]float32](), a, reflect.TypeFor[[]float32](), b)
 		add, sub := outputs[0].Value(), outputs[1].Value()
 		wantAdd, wantSub := []float32{3, 3}, b
@@ -211,19 +211,19 @@ func TestExecWithSideParams(t *testing.T) {
 	addScalar := MustNewExec(backend, addScalarTest).SetSideParamsHook(setSideParams)
 	x := []float64{1, 2}
 	want := []float64{4, 5}
-	got := addScalar.MustExec(x)[0]
+	got := addScalar.MustCall(x)[0]
 	require.Equal(t, want, got.Value(), "addScalar(%v, 3): got %v, wanted %v", x, got, want)
 
 	scalarBuffer, err = tensors.FromValue(10.0).DonateBuffer(backend, 0)
 	require.NoError(t, err)
 	want = []float64{11, 12}
-	got, err = addScalar.Exec1(x)
+	got, err = addScalar.Call1(x)
 	require.NoError(t, err)
 	require.Equal(t, want, got.Value(), "addScalar(%v, 10): got %v, wanted %v", x, got, want)
 
 	x = []float64{0, 1, 2}
 	want = []float64{10, 11, 12}
-	got, err = addScalar.Exec1(x)
+	got, err = addScalar.Call1(x)
 	require.NoError(t, err)
 	require.Equal(t, want, got.Value(), "addScalar(%v, 10): got %v, wanted %v", x, got, want)
 }
@@ -246,28 +246,28 @@ func TestExecWithSlices(t *testing.T) {
 	a := [][]float64{{1, 2}, {3, 4}}
 	b := [][]float64{{10}, {20}}
 	{
-		got := concat.MustExec(a, b)[0]
+		got := concat.MustCall(a, b)[0]
 		want := [][]float64{{1, 2, 10}, {3, 4, 20}}
 		require.Equalf(t, want, got.Value(), "concat([%v, %v]): got %v, wanted %v", a, b, got, want)
 	}
 
 	c := [][]float64{{100, 101}, {200, 201}}
 	{
-		got := concat.MustExec(a, b, c)[0]
+		got := concat.MustCall(a, b, c)[0]
 		want := [][]float64{{1, 2, 10, 100, 101}, {3, 4, 20, 200, 201}}
 		require.Equalf(t, want, got.Value(), "concat([%v, %v, %v]): got %v, wanted %v", a, b, c, got, want)
 	}
 
 	addSub := MustNewExecAny(backend, addSubGraph)
 	{
-		got := addSub.MustExec(c, a)
+		got := addSub.MustCall(c, a)
 		want0 := [][]float64{{101, 103}, {203, 205}}
 		want1 := [][]float64{{99, 99}, {197, 197}}
 		require.Equalf(t, want0, got[0].Value(), "addSub([%v, %v]): got[0]=%v, wanted %v", c, a, got[0], want0)
 		require.Equalf(t, want1, got[1].Value(), "addSub([%v, %v]): got[1]=%v, wanted %v", c, a, got[1], want1)
 
 		// Test that call with list of tensors also work.
-		got = addSub.MustExec([]*tensors.Tensor{tensors.FromValue(c), tensors.FromValue(a)})
+		got = addSub.MustCall([]*tensors.Tensor{tensors.FromValue(c), tensors.FromValue(a)})
 		require.Equalf(t, want0, got[0].Value(), "addSub([%v, %v]): got[0]=%v, wanted %v", c, a, got[0], want0)
 		require.Equalf(t, want1, got[1].Value(), "addSub([%v, %v]): got[1]=%v, wanted %v", c, a, got[1], want1)
 	}
@@ -294,7 +294,7 @@ func TestExecWithLogger(t *testing.T) {
 	a := [][]float64{{1, 2}, {3, 4}}
 	b := [][]float64{{10}, {20}}
 	{
-		got := concat.MustExec(a, b)[0]
+		got := concat.MustCall(a, b)[0]
 		want := [][]float64{{1, 2, 10}, {3, 4, 20}}
 		require.Equalf(t, want, got.Value(), "concat(%v, %v): got %v, wanted %v", a, b, got, want)
 
@@ -308,7 +308,7 @@ func TestExecWithNoInputs(t *testing.T) {
 	matrixInitFn := MustNewExec(backend, func(g *Graph) *Node {
 		return IotaFull(g, shapes.Make(dtypes.Int64, 3, 3))
 	})
-	results := matrixInitFn.MustExec()
+	results := matrixInitFn.MustCall()
 	got := results[0].Value()
 	want := [][]int64{{0, 1, 2}, {3, 4, 5}, {6, 7, 8}}
 	assert.Equal(t, want, got)
@@ -322,13 +322,13 @@ func TestExecUnusedInput(t *testing.T) {
 	unusedInputFn := MustNewExec(backend, func(x, y *Node) *Node {
 		return OnePlus(x)
 	})
-	_, err := unusedInputFn.Exec(0, 1)
+	_, err := unusedInputFn.Call(0, 1)
 	require.NoError(t, err)
 
 	// x is only used to get the Graph object, but not its value.
 	unusedInputFn = MustNewExec(backend, func(x *Node) *Node {
 		return IotaFull(x.Graph(), shapes.Make(dtypes.Int32, 3))
 	})
-	_, err = unusedInputFn.Exec(0)
+	_, err = unusedInputFn.Call(0)
 	require.NoError(t, err)
 }

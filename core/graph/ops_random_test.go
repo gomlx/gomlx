@@ -176,7 +176,7 @@ func TestMultiOutputs(t *testing.T) {
 		rngState, ws := RandomNormal(rngState, x.Shape())
 		fmt.Printf("Graph:\n%s\n", g)
 		return ws // Add(x, ws)
-	}).Exec(0.0)
+	}).Call(0.0)
 	if err != nil {
 		fmt.Printf("Error: %+v\n", err)
 		t.Fail()

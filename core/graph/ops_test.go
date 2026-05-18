@@ -338,7 +338,7 @@ func TestBinaryOps(t *testing.T) {
 			exec := MustNewExec(backend, boolCase.fnGraph)
 			for _, x := range []bool{true, false} {
 				for _, y := range []bool{true, false} {
-					got := tensors.ToScalar[bool](exec.MustExec(x, y)[0])
+					got := tensors.ToScalar[bool](exec.MustCall(x, y)[0])
 					want := boolCase.fnScalar(x, y)
 					require.Equal(t, want, got, "%s(%v,%v)=%v, wanted %v", boolCase.name, x, y, got, want)
 				}

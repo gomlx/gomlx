@@ -560,7 +560,7 @@ func (dec *Decoder) generateSamplingIncremental(
 		})
 
 		concatExec.SetMaxCache(-1)
-		result, err := concatExec.Exec(prompt, firstToken)
+		result, err := concatExec.Call(prompt, firstToken)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "final concatenation failed")
 		}

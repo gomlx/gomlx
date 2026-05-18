@@ -12,7 +12,6 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 )
 
@@ -254,11 +253,11 @@ func (ds *batchedDataset) lockedBatchTensor(parts []*tensors.Tensor) (batched *t
 	for _, part := range parts {
 		partsAny = append(partsAny, part)
 	}
-	err = TryCatch[error](func() { batched = ds.batchExec.MustExec(partsAny...)[0] })
+	batched, err = ds.batchExec.Call1(partsAny...)
 	if err != nil {
-		return
+		return nil, err
 	}
-	return
+	return batched, nil
 }
 
 // batchTensorsGraph builds the computational graph that batches a collection of Nodes

@@ -50,7 +50,7 @@ func ListVariables(scope *model.Scope) {
 		if shape.Size() == 1 {
 			mav = fmt.Sprintf("%8v", must.M1(v.Value()).Value())
 		} else if shape.DType.IsFloat() {
-			metrics := metricsFn.MustExec(must.M1(v.Value()))
+			metrics := metricsFn.MustCall(must.M1(v.Value()))
 			mav = fmt.Sprintf("%.3g", metrics[0].Value().(float64))
 			rms = fmt.Sprintf("%.3g", metrics[1].Value().(float64))
 			maxAV = fmt.Sprintf("%.3g", metrics[2].Value().(float64))

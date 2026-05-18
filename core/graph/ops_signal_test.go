@@ -136,7 +136,7 @@ func realFftExample(backend compute.Backend, realDType dtypes.DType, numPoints i
 		y = RealFFT(x)
 		return
 	})
-	outputs := e.MustExec()
+	outputs := e.MustCall()
 	x, y = outputs[0], outputs[1]
 	return
 }

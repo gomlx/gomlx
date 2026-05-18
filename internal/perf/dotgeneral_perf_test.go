@@ -367,7 +367,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				warmUpStartTime := time.Now()
 
 				for numRuns := 0; time.Since(warmUpStartTime) < *flagPerfMinWarmupDuration || numRuns < minWarmupRuns; numRuns++ {
-					output := testExec.MustExec(lhsTensor, rhsTensor)[0]
+					output := testExec.MustCall(lhsTensor, rhsTensor)[0]
 					output.MustFinalizeAll()
 				}
 
@@ -375,7 +375,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				startTime := time.Now()
 				var numRuns int
 				for numRuns < *flagPerfMinRuns || time.Since(startTime) < *flagPerfDuration {
-					output := testExec.MustExec(lhsTensor, rhsTensor)[0]
+					output := testExec.MustCall(lhsTensor, rhsTensor)[0]
 					output.MustFinalizeAll()
 					numRuns++
 				}

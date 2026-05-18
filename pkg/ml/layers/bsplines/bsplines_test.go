@@ -51,7 +51,9 @@ func TestEvaluateSimple(t *testing.T) {
 		fmt.Printf("output.shape=%s\n", values.Shape())
 		return Reshape(values, -1, 2)
 	})
-	got := exec.MustExec(x, controlPoints)[0].Value().([][]float64)
+	gotT, err := exec.Call1(x, controlPoints)
+	require.NoError(t, err)
+	got := gotT.Value().([][]float64)
 	fmt.Printf("\nB-spline(%v):\n> want=%v\n>  got=%v\n\n", x, want, got)
 	for ii := range numTestPoints {
 		assert.InDeltaSlicef(t, want[ii], got[ii], epsilon, "Got wrong value for example %d: want=%v, got=%v", ii, want[ii], got[ii])
@@ -124,7 +126,9 @@ func TestExtrapolation(t *testing.T) {
 			return Evaluate(b, x, controlPoints)
 		})
 		for ii, x := range xs {
-			got[ii] = exec.MustExec(x, controlPoints)[0].Value().(float64)
+			gotT, err := exec.Call1(x, controlPoints)
+			require.NoError(t, err)
+			got[ii] = gotT.Value().(float64)
 		}
 		return got
 	}

@@ -165,7 +165,7 @@ func TestBSplineKANRegularized(t *testing.T) {
 			require.NotNilf(t, v, "failed to inspect variable scope=%q, name=%q", scopeName, vName)
 			tensor := v.MustValue()
 			fmt.Printf("\t%s : %s -> %v\n", v.Scope(), v.Name(), tensor)
-			tensors.MustConstFlatData[float64](tensor, func(flat []float64) {
+			tensors.MustConstFlatData(tensor, func(flat []float64) {
 				for _, element := range flat {
 					if element == 0.0 {
 						numZeros++

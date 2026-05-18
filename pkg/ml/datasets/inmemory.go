@@ -17,7 +17,6 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/train"
-	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 )
 
@@ -314,14 +313,13 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 				end := min(start+MaxExamplesToConcat, len(allExamples))
 				examplesSlice := allExamples[start:end]
 				examplesAsAny := xslices.Map(examplesSlice, convertToAny)
-				err = TryCatch[error](func() { newAllExamples[jj] = concatenateExec.MustExec(examplesAsAny...)[0] })
+				newAllExamples[jj], err = concatenateExec.Call1(examplesAsAny...)
 				if err != nil {
-					err = errors.WithMessagef(
+					return errors.WithMessagef(
 						err,
 						"while concatenating %s examples into large tensor",
 						getElementDesc(inputsAndLabelsIdx),
 					)
-					return
 				}
 			}
 			// Free immediately intermediary resources no longer needed.
@@ -332,7 +330,11 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 				// loop. This means for the original read tensors, in CPU memory, we have to wait for the
 				// garbage collection to collect them.
 				for _, t := range allExamples {
-					t.MustFinalizeAll()
+					newErr := t.FinalizeAll()
+					if err == nil {
+						// Take first error.
+						err = errors.WithMessage(newErr, "first error while finalizing tensors, other tensors may have failed to finalize also")
+					}
 				}
 			}
 			newAllData[inputsAndLabelsIdx] = newAllExamples
@@ -345,7 +347,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 	for _, allExamples := range allData {
 		mds.inputsAndLabelsData = append(mds.inputsAndLabelsData, allExamples[0])
 	}
-	return
+	return nil
 }
 
 // ByteSize returns an approximation of the memory being used.
@@ -508,7 +510,7 @@ func (mds *InMemoryDataset) Yield() (spec any, inputs []*tensors.Tensor, labels 
 	for _, data := range mds.inputsAndLabelsData {
 		indicesAndData = append(indicesAndData, data)
 	}
-	inputsAndLabels, err = mds.gatherExec.Exec(indicesAndData...)
+	inputsAndLabels, err = mds.gatherExec.Call(indicesAndData...)
 	if err != nil {
 		err = errors.WithMessagef(err, "failed gathering examples from mds data, indices=%v", indices)
 		return
