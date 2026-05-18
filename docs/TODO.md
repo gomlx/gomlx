@@ -13,7 +13,8 @@
 - `ml/checkpoints` -> `model/checkpoint`
 - Move other `pkg/ml/...` to `ml/...`
 - Fix examples and notebooks.
-- Create basic documentation in github.com/gomlx/website
+- Create basic documentation in https://github.com/gomlx/gomlx.github.io.
+- `cmd/gomlx_checkpoints`: listing variables, change color (white/gray) when scope changes, as opposed to alternating at every row.
 
   ---
 
