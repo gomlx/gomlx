@@ -140,10 +140,10 @@ var (
 func main() {
 	// Flags with context settings.
 	scope := createDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseContextSettings(scope, *settings))
+	paramsSet := check1(commandline.ParseSettings(scope, *settings))
 	err := mainWithContext(scope, *flagDataDir, *flagCheckpoint, paramsSet)
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)

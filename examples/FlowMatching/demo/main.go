@@ -28,10 +28,10 @@ var (
 
 func main() {
 	scope := fm.CreateDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseContextSettings(scope, *settings))
+	paramsSet := check1(commandline.ParseSettings(scope, *settings))
 	config := diffusion.NewConfig(backend, scope, *flagDataDir, paramsSet)
 	err := exceptions.TryCatch[error](func() {
 		fm.TrainModel(config, *flagCheckpoint, *flagEval, *flagVerbosity)

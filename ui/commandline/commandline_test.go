@@ -25,7 +25,7 @@ func createTestContext() *model.Scope {
 func TestParseContextSettings(t *testing.T) {
 	scope := createTestContext()
 
-	paramsSet, err := ParseContextSettings(scope, "x=13;/a/z=true;/a/b/y=3;s=bar;list_int=1,3,7;list_float=0.1,1.2,3e3;list_str=a,b;")
+	paramsSet, err := ParseSettings(scope, "x=13;/a/z=true;/a/b/y=3;s=bar;list_int=1,3,7;list_float=0.1,1.2,3e3;list_str=a,b;")
 	require.NoError(t, err)
 	require.Equal(t, []string{"x", "/a/z", "/a/b/y", "s", "list_int", "list_float", "list_str"}, paramsSet)
 	x, found := scope.GetParam("x")
@@ -55,19 +55,19 @@ func TestParseContextSettings(t *testing.T) {
 	assert.Equal(t, []string{"a", "b"}, model.GetParamOr(scope, "list_str", []string{}))
 
 	// Parameter "q" is unknown.
-	_, err = ParseContextSettings(scope, "q=3")
+	_, err = ParseSettings(scope, "q=3")
 	require.Error(t, err)
 
 	// Parameter "q" is still unknown in root.
 	scope.In("c").SetParam("q", 13)
-	_, err = ParseContextSettings(scope, "q=3")
+	_, err = ParseSettings(scope, "q=3")
 	require.Error(t, err)
 
 	// Cannot set the wrong type of value.
-	_, err = ParseContextSettings(scope, "y=3.14")
+	_, err = ParseSettings(scope, "y=3.14")
 	require.Error(t, err)
 
 	// Cannot parse setting with scope not absolute.
-	_, err = ParseContextSettings(scope, "a/abc=3.14")
+	_, err = ParseSettings(scope, "a/abc=3.14")
 	require.Error(t, err)
 }

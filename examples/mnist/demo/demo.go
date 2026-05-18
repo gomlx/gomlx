@@ -44,10 +44,10 @@ var (
 
 func main() {
 	scope := mnist.CreateDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet, err := commandline.ParseContextSettings(scope, *settings)
+	paramsSet, err := commandline.ParseSettings(scope, *settings)
 	if err != nil {
 		klog.Fatal(err)
 	}

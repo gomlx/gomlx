@@ -14,7 +14,7 @@ import (
 )
 
 func TestPoolMessagesWithFixedShape(t *testing.T) {
-	scope := model.NewStore()
+	scope := model.NewStore().RootScope()
 	scope.SetParam(ParamPoolingType, "sum|max")
 	graphtest.RunTestGraphFn(
 		t, "poolMessagesWithFixedShape()",
@@ -42,7 +42,7 @@ func TestPoolMessagesWithFixedShape(t *testing.T) {
 }
 
 func TestPoolMessagesWithAdjacency(t *testing.T) {
-	scope := model.NewStore()
+	scope := model.NewStore().RootScope()
 	scope.SetParam(ParamPoolingType, "sum|mean")
 	graphtest.RunTestGraphFn(
 		t, "poolMessagesWithAdjacency()",

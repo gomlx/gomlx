@@ -21,7 +21,7 @@ var (
 func init() {
 	klog.InitFlags(nil)
 	scope := createDefaultContext()
-	flagSettings = commandline.CreateContextSettingsFlag(scope, "")
+	flagSettings = commandline.CreateSettingsFlag(scope, "")
 	if _, found := os.LookupEnv(compute.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
 		check(os.Setenv(compute.ConfigEnvVar, "xla:cpu"))
@@ -46,6 +46,6 @@ func TestDemo(t *testing.T) {
 
 	scope := createDefaultContext()
 	scope.SetParam("train_steps", 10) // Only 10 steps.
-	paramsSet := check1(commandline.ParseContextSettings(scope, *flagSettings))
+	paramsSet := check1(commandline.ParseSettings(scope, *flagSettings))
 	cifar.TrainCifar10Model(scope, *flagDataDir, "", true, 1, paramsSet)
 }

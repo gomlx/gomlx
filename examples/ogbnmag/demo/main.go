@@ -135,7 +135,7 @@ func main() {
 	scope := createDefaultContext()
 
 	// Flags with context settings.
-	settings := commandline.CreateContextSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
 
@@ -146,7 +146,7 @@ func main() {
 	}
 
 	// Parse hyperparameter settings.
-	paramsSet := check1(commandline.ParseContextSettings(scope, *settings))
+	paramsSet := check1(commandline.ParseSettings(scope, *settings))
 	if *flagVerbose {
 		fmt.Println("Hyperparameters set:")
 		fmt.Println(commandline.SprintModifiedContextSettings(scope, paramsSet))

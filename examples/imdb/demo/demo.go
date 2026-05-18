@@ -27,10 +27,10 @@ var (
 
 func main() {
 	scope := imdb.CreateDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseContextSettings(scope, *settings))
+	paramsSet := check1(commandline.ParseSettings(scope, *settings))
 	err := exceptions.TryCatch[error](func() {
 		imdb.TrainModel(scope, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
 	})

@@ -107,10 +107,10 @@ func createDefaultContext() *model.Scope {
 func main() {
 	// Flags with context settings.
 	scope := createDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseContextSettings(scope, *settings))
+	paramsSet := check1(commandline.ParseSettings(scope, *settings))
 
 	// Train.
 	cifar.TrainCifar10Model(scope, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity, paramsSet)

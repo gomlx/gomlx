@@ -233,9 +233,9 @@ func extractTokens(generated *tensors.Tensor) []int {
 
 func main() {
 	scope := createDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(scope, "")
 	flag.Parse()
-	_, err := commandline.ParseContextSettings(scope, *settings)
+	_, err := commandline.ParseSettings(scope, *settings)
 	if err != nil {
 		log.Fatalf("Failed to parse context settings: %v", err)
 	}

@@ -146,7 +146,7 @@ func TransformerLayers(scope *model.Scope, embed, mask *Node) *Node {
 
 /*
 // MaskedWordTaskGraph builds the computation graph for the predicting a hidden word unsupervised task.
-func MaskedWordTaskGraph(ctx *model.Context, tokens, embed, mask *Node,
+func MaskedWordTaskGraph(scope *model.Scope, tokens, embed, mask *Node,
 	transformerFn func(input, mask *Node) *Node) {
 	g := embed.Graph()
 	batchSize := embed.Shape().Dimensions[0]

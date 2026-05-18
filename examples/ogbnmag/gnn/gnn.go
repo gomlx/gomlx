@@ -96,15 +96,15 @@ var NanLogger *nanlogger.NanLogger
 //
 // Example of a `ModelGraph` function, that describes a model:
 //
-//	func MyGnnModelGraph(ctx *model.Context, spec any, inputs []*Node) []*Node {
+//	func MyGnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 //		g := inputs[0].Graph()
-//		optimizers.CosineAnnealingSchedule(ctx, g, dtypes.Float32)
-//		ctx = ctx.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
+//		optimizers.CosineAnnealingSchedule(scope, g, dtypes.Float32)
+//		scope = scope.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
 //		strategy := spec.(*sampler.Strategy)
-//		graphStates := MyFeaturePreprocessing(ctx, strategy, inputs)
-//		NodePrediction(ctx, strategy, graphStates)
+//		graphStates := MyFeaturePreprocessing(scope, strategy, inputs)
+//		NodePrediction(scope, strategy, graphStates)
 //		readoutState = graphStates["my_seed_nodes"]
-//		logits := layers.DenseWithBias(ctx.In("readout"), readoutState.Value, numClasses)
+//		logits := layers.DenseWithBias(scope.In("readout"), readoutState.Value, numClasses)
 //		return []*Node{logits}
 //	}
 func NodePrediction(scope *model.Scope, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
@@ -123,7 +123,7 @@ func NodePrediction(scope *model.Scope, strategy *sampler.Strategy, graphStates 
 	ctxReadout := scope.In("readout")
 	for _, rule := range strategy.Seeds {
 		seedState := graphStates[rule.Name]
-		seedState.Value = updateState(ctxReadout.In(rule.ConvKernelScopeName), seedState.Value, seedState.Value, seedState.Mask)
+		seedState.Value = updateState(ctxReadout.In("%s", rule.ConvKernelScopeName), seedState.Value, seedState.Value, seedState.Mask)
 	}
 }
 
@@ -233,7 +233,7 @@ func recursivelyApplyGraphConvolution(scope *model.Scope, rule *sampler.Rule,
 		if dependentDegreePair != nil {
 			dependentDegree = dependentDegreePair.Value
 		}
-		convolveCtx := scope.In(dependent.ConvKernelScopeName).In("conv")
+		convolveCtx := scope.In("%s", dependent.ConvKernelScopeName).In("conv")
 		if dependentState.Value != nil {
 			updateInputs = append(updateInputs, sampledConvolveEdgeSet(convolveCtx, dependentState.Value, dependentState.Mask, dependentDegree))
 			hasNewUpdateInputs = true
@@ -245,7 +245,7 @@ func recursivelyApplyGraphConvolution(scope *model.Scope, rule *sampler.Rule,
 
 	// Update state of current rule: only update state if there was any new incoming input.
 	if hasNewUpdateInputs {
-		updateCtx := scope.In(rule.UpdateKernelScopeName).In("update")
+		updateCtx := scope.In("%s", rule.UpdateKernelScopeName).In("update")
 		state.Value = updateState(updateCtx, state.Value, Concatenate(updateInputs, -1), state.Mask)
 	}
 }

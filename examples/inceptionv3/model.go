@@ -47,7 +47,7 @@ const BuildScope = "InceptionV3"
 // See example in the package inceptionv3 documentation.
 //
 // Parameters:
-//   - ctx: model.Context where variables are created and loaded. Variables
+//   - scope: model.Scope where variables are created and loaded. Variables
 //     will be re-used if they were already created before in the current scope.
 //     That means one can call BuildGraph more than once, and have the same
 //     model be used for more than one input -- for instance, for 2-tower models.

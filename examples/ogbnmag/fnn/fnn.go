@@ -62,8 +62,7 @@ func FnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	} else {
 		// Normal FNN
 		for layerNum := range numLayers {
-			layerName := fmt.Sprintf("layer-%d", layerNum)
-			logits = layers.DenseWithBias(scope.In(layerName), logits, numNodes)
+			logits = layers.DenseWithBias(scope.In("layer-%d", layerNum), logits, numNodes)
 			logits = activations.LeakyRelu(logits)
 			dropoutRate := model.GetParamOr(scope, "dropout_rate", 0.0)
 			if dropoutRate > 0 {

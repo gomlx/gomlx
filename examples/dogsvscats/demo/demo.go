@@ -35,10 +35,10 @@ var (
 
 func main() {
 	scope := dogsvscats.CreateDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseContextSettings(scope, *settings))
+	paramsSet := check1(commandline.ParseSettings(scope, *settings))
 
 	// --force_original better set by
 	err := exceptions.TryCatch[error](func() {

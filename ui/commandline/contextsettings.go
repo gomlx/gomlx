@@ -21,29 +21,30 @@ import (
 // The settings are a list separated by ";": e.g.: "param1=value1;param2=value2;...".
 //
 // All the parameters "param1", "param2", etc. must be already set with default values
-// in the context `ctx`. The default values are also used to set the type to which the
+// in the context `scope`. The default values are also used to set the type to which the
 // string values will be parsed to.
 //
-// It updates `ctx` parameters accordingly and returns an error in case a parameter
+// It updates `scope` parameters accordingly and returns an error in case a parameter
 // is unknown or the parsing failed.
 //
 // Note, one can also provide a scope for the parameters: "layer_1/l2_regularization=0.1"
-// will work, as long as a default "l2_regularization" is defined in `ctx`.
+// will work, as long as a default "l2_regularization" is defined in `scope`.
 //
 // For integer types, "_" is removed: it allows one to enter large numbers using it as a separator, like
 // in Go. E.g.: 1_000_000 = 1000000.
 //
-// See the example in CreateContextSettingsFlag, which will create a flag for the settings.
+// See the example in CreateSettingsFlag, which will create a flag for the settings.
 //
 // Example usage:
 //
 //	func main() {
-//		ctx := createDefaultContext()
-//		settings := commandline.CreateContextSettingsFlag(ctx, "")
+//		store := model.NewStore()
+//		scope := store.RootScope()
+//		settings := commandline.CreateSettingsFlag(scope, "")
 //		flag.Parse()
-//		err := commandline.ParseContextSettings(ctx, *settings)
+//		err := commandline.ParseSettings(scope, *settings)
 //		if err != nil { panic(err) }
-//		fmt.Println(commandline.SprintContextSettings(ctx))
+//		fmt.Println(commandline.SprintContextSettings(scope))
 //		...
 //	}
 func ParseContextSettings(scope *model.Scope, settings string) (paramsSet []string, err error) {
@@ -57,6 +58,11 @@ func ParseContextSettings(scope *model.Scope, settings string) (paramsSet []stri
 	return
 }
 
+// ParseSettings is an alias to ParseContextSettings.
+func ParseSettings(scope *model.Scope, settings string) (paramsSet []string, err error) {
+	return ParseContextSettings(scope, settings)
+}
+
 func parseContextSetting(scope *model.Scope, setting string, paramsSet []string) (newParamsSet []string, err error) {
 	newParamsSet = paramsSet
 	if setting == "" {
@@ -65,7 +71,11 @@ func parseContextSetting(scope *model.Scope, setting string, paramsSet []string)
 	if after, ok := strings.CutPrefix(setting, "file:"); ok {
 		// Read parameters from a file.
 		filePath := after
-		filePath = fsutil.MustReplaceTildeInDir(filePath)
+		filePath, err = fsutil.ReplaceTildeInDir(filePath)
+		if err != nil {
+			err = errors.Wrapf(err, "failed to replace tilde in file path %q", filePath)
+			return
+		}
 		var contents []byte
 		contents, err = os.ReadFile(filePath)
 		if err != nil {
@@ -192,23 +202,24 @@ func parseContextSetting(scope *model.Scope, setting string, paramsSet []string)
 	return
 }
 
-// CreateContextSettingsFlag create a string flag with the given flagName (if empty it will be named
-// "set") and with a description of the current defined parameters in the context `ctx`.
+// CreateSettingsFlag create a string flag with the given flagName (if empty it will be named
+// "set") and with a description of the current defined parameters in the context `scope`.
 //
 // The flag should be created before the call to `flags.Parse()`.
 //
 // Example usage:
 //
 //	func main() {
-//		ctx := createDefaultContext()
-//		settings := commandline.CreateContextSettingsFlag(ctx, "")
+//		store := model.NewStore()
+//		scope := store.RootScope()
+//		settings := commandline.CreateSettingsFlag(scope, "")
 //		flag.Parse()
-//		err := commandline.ParseContextSettings(ctx, *settings)
+//		err := commandline.ParseSettings(scope, *settings)
 //		if err != nil { panic(err) }
-//		fmt.Println(commandline.SprintContextSettings(ctx))
+//		fmt.Println(commandline.SprintContextSettings(scope))
 //		...
 //	}
-func CreateContextSettingsFlag(scope *model.Scope, flagName string) *string {
+func CreateSettingsFlag(scope *model.Scope, flagName string) *string {
 	if flagName == "" {
 		flagName = "set"
 	}
@@ -232,6 +243,11 @@ func CreateContextSettingsFlag(scope *model.Scope, flagName string) *string {
 	var settings string
 	flag.StringVar(&settings, flagName, "", usage)
 	return &settings
+}
+
+// CreateContextSettingsFlag is an alias to CreateSettingsFlag.
+func CreateContextSettingsFlag(scope *model.Scope, flagName string) *string {
+	return CreateSettingsFlag(scope, flagName)
 }
 
 // SprintContextSettings pretty-print values for the current hyperparameters settings into a string.

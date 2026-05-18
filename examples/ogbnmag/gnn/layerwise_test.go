@@ -210,27 +210,28 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	withCitation := false
 	manager := testutil.BuildTestBackend()
 	_, strategy := createDenseTestStrategy(withCitation)
-	scope := model.NewStore()
+	store := model.NewStore()
+	scope := store.RootScope()
 	setMinimalTestParams(scope)
 	// Set weights to fixed values, that makes it easier to interpret:
 	{
-		scope := scope.Store().Scope("/model/graph_update_0/gnn:authors/conv/message/dense")
-		_ = scope.VariableWithValue("weights", tensors.FromValue([][]float32{{1.0}}))
-		_ = scope.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
+		s := store.Scope("/model/graph_update_0/gnn:authors/conv/message/dense")
+		_ = s.VariableWithValue("weights", tensors.FromValue([][]float32{{1.0}}))
+		_ = s.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
 	}
 	{
-		scope := scope.Store().Scope("/model/graph_update_0/gnn:seeds/update/dense")
-		_ = scope.VariableWithValue("weights", tensors.FromValue([][]float32{{1000.0}, {1.0}}))
-		_ = scope.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
+		s := store.Scope("/model/graph_update_0/gnn:seeds/update/dense")
+		_ = s.VariableWithValue("weights", tensors.FromValue([][]float32{{1000.0}, {1.0}}))
+		_ = s.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
 	}
 	{
-		scope := scope.Store().Scope("/model/readout/gnn:seeds/dense")
-		_ = scope.VariableWithValue("weights", tensors.FromValue([][]float32{{1.0}}))
-		_ = scope.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
+		s := store.Scope("/model/readout/gnn:seeds/dense")
+		_ = s.VariableWithValue("weights", tensors.FromValue([][]float32{{1.0}}))
+		_ = s.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
 	}
 
 	// Normal GNN executor.
-	execGnn := model.MustNewExec(manager, scope.Reuse(), func(scope *model.Scope, g *Graph) *Node {
+	execGnn := model.MustNewExec(manager, scope, func(scope *model.Scope, g *Graph) *Node {
 		graphStates := createDenseTestStateGraphWithMask(strategy, g, dtypes.Float32, withCitation)
 		NodePrediction(scope.In("model"), strategy, graphStates)
 		return graphStates["seeds"].Value
@@ -254,7 +255,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	// Layer-Wise Inference: should return the same values.
 	lw, err := LayerWiseGNN(scope, strategy)
 	require.NoError(t, err)
-	execLayerWise := model.MustNewExec(manager, scope.Reuse(), func(scope *model.Scope, g *Graph) *Node {
+	execLayerWise := model.MustNewExec(manager, scope, func(scope *model.Scope, g *Graph) *Node {
 		graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
 		lw.NodePrediction(scope.In("model"), graphStates, edges)
 		return graphStates["seeds"]
@@ -271,7 +272,8 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		fmt.Printf("\nwithCitation=%v:\n", withCitation)
 		manager := testutil.BuildTestBackend()
 		_, strategy := createDenseTestStrategy(withCitation)
-		scope := model.NewStore()
+		store := model.NewStore()
+		scope := store.RootScope()
 		setCommonTestParams(scope)
 
 		// Normal GNN executor.
@@ -294,7 +296,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		// Layer-Wise Inference: should return the same values.
 		lw, err := LayerWiseGNN(scope, strategy)
 		require.NoError(t, err)
-		execLayerWise := model.MustNewExec(manager, scope.Reuse(), func(scope *model.Scope, g *Graph) *Node {
+		execLayerWise := model.MustNewExec(manager, scope, func(scope *model.Scope, g *Graph) *Node {
 			graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
 			lw.NodePrediction(scope, graphStates, edges)
 			return graphStates["seeds"]

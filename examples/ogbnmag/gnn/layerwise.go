@@ -88,7 +88,7 @@ func (lw *LayerWiseConfig) NodePrediction(scope *model.Scope, graphStates map[st
 	ctxReadout := scope.In("readout")
 	for _, rule := range lw.strategy.Seeds {
 		seedState := graphStates[rule.Name]
-		seedState = updateState(ctxReadout.In(rule.ConvKernelScopeName), seedState, seedState, nil)
+		seedState = updateState(ctxReadout.In("%s", rule.ConvKernelScopeName), seedState, seedState, nil)
 		graphStates[rule.Name] = seedState
 	}
 }
@@ -128,7 +128,7 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 			lw.recursivelyApplyGraphConvolution(scope, dependent, graphStates, edges)
 		}
 		dependentState := graphStates[dependent.Name]
-		convolveCtx := scope.In(dependent.ConvKernelScopeName).In("conv")
+		convolveCtx := scope.In("%s", dependent.ConvKernelScopeName).In("conv")
 		if dependentState != nil {
 			// Notice that we are sending messages on the reverse order of the sampling.
 			// E.g.: If paper->"HasTopic"->topic, the sampling direction is "paper is source, topic is target".
@@ -142,7 +142,7 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 	}
 
 	// Update state of current rule: only update state if there was any new incoming input.
-	updateCtx := scope.In(rule.UpdateKernelScopeName).In("update")
+	updateCtx := scope.In("%s", rule.UpdateKernelScopeName).In("update")
 	state = updateState(updateCtx, state, Concatenate(updateInputs, -1), nil)
 	graphStates[rule.Name] = state
 }

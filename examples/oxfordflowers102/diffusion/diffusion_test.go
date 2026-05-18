@@ -27,12 +27,12 @@ var (
 
 func init() {
 	scope := CreateDefaultContext()
-	ctxSettings = commandline.CreateContextSettingsFlag(scope, "")
+	ctxSettings = commandline.CreateSettingsFlag(scope, "")
 }
 
 func getTestConfig() *Config {
 	scope := CreateDefaultContext()
-	paramsSet := check1(commandline.ParseContextSettings(scope, *ctxSettings))
+	paramsSet := check1(commandline.ParseSettings(scope, *ctxSettings))
 	backend := testutil.BuildTestBackend()
 	return NewConfig(backend, scope, *flagDataDir, paramsSet)
 }

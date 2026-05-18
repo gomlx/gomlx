@@ -394,7 +394,7 @@ func setContextVariableFromTensor(scope *model.Scope, scopePath []string, varNam
 	// Normal case: set single variable
 	scopeCtx := scope
 	for _, s := range scopePath {
-		scopeCtx = scopeCtx.In(s)
+		scopeCtx = scopeCtx.In("%s", s)
 	}
 
 	scopeCtx.VariableWithValue(varName, t)
@@ -407,7 +407,7 @@ func splitAndSetQKV(scope *model.Scope, scopePath []string, varName string, t *t
 	baseScopePath := scopePath[:len(scopePath)-1]
 	baseCtx := scope
 	for _, s := range baseScopePath {
-		baseCtx = baseCtx.In(s)
+		baseCtx = baseCtx.In("%s", s)
 	}
 	baseCtx = baseCtx.In("MultiHeadAttention")
 

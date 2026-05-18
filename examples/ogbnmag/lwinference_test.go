@@ -140,7 +140,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	for ctxSourceIdx := range 2 {
 		// Create model.
-		scope := model.NewStore()
+		scope := model.NewStore().RootScope()
 		if ctxSourceIdx == 0 {
 			fmt.Printf("\nRandomly initialized context:\n")
 			configureLayerWiseTestContext(scope)
@@ -155,7 +155,6 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 			fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
 			require.NoError(t, err, "Checkpoint loading.")
 			UploadOgbnMagVariables(backend, scope)
-			scope = scope.Reuse()
 		}
 
 		// Execute normal inference model for the inputs.
@@ -170,7 +169,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 
 		// Layer-Wise inference
 		modelFn := BuildLayerWiseInferenceModel(strategy, false) // Function that builds the LW inference model.
-		executor = model.MustNewExec(backend, scope.Reuse(), func(scope *model.Scope, g *Graph) *Node {
+		executor = model.MustNewExec(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 			allPredictions := modelFn(scope, g)
 			return ConvertDType(
 				Slice(allPredictions, AxisElem(seedId), AxisRange()),
@@ -207,7 +206,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 
 	// Create context and load from pre-trained checkpoint.
 	backend := testutil.BuildTestBackend()
-	scope := model.NewStore()
+	scope := model.NewStore().RootScope()
 	_, fileName, _, ok := runtime.Caller(0)
 	require.True(t, ok, "Failed to get caller information to find out test source directory.")
 	baseDir := filepath.Dir(fileName)
@@ -216,7 +215,6 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
 	fmt.Printf("\t%s=%q\n", ParamDType, model.GetParamOr(scope, ParamDType, ""))
 	UploadOgbnMagVariables(backend, scope)
-	scope = scope.Reuse()
 
 	// Execute normal inference model for the inputs.
 	executor := model.MustNewExec(backend, scope, func(scope *model.Scope, inputs []*Node) []*Node {
@@ -262,7 +260,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	// Layer-Wise inference
 	modelFn := BuildLayerWiseInferenceModel(strategy, false) // Function that builds the LW inference model.
 	numToCompare := len(predictionsGNN)
-	executor = model.MustNewExec(backend, scope.Reuse(), func(scope *model.Scope, g *Graph) *Node {
+	executor = model.MustNewExec(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 		logits := modelFn(scope, g)
 		predictions := ArgMax(logits, -1, dtypes.Int32)
 		predictions = Slice(predictions, AxisRange(0, numToCompare))

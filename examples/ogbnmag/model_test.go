@@ -40,7 +40,7 @@ func TestModel(t *testing.T) {
 	checkMemory(t)
 
 	backend := testutil.BuildTestBackend()
-	scope := model.NewStore()
+	scope := model.NewStore().RootScope()
 	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")
 	UploadOgbnMagVariables(backend, scope) // Uploads the Papers frozen embedding table.

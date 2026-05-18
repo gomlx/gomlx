@@ -22,7 +22,7 @@ var (
 
 func init() {
 	scope := CreateDefaultContext()
-	flagSettings = commandline.CreateContextSettingsFlag(scope, "")
+	flagSettings = commandline.CreateSettingsFlag(scope, "")
 	klog.InitFlags(nil)
 	if _, found := os.LookupEnv(compute.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
@@ -40,6 +40,6 @@ func TestTrain(t *testing.T) {
 	scope.SetParam("train_steps", 10)
 	scope.SetParam("plots", false)
 	scope.SetParam(layers.ParamNormalization, "layer")
-	paramsSet := check1(commandline.ParseContextSettings(scope, *flagSettings))
+	paramsSet := check1(commandline.ParseSettings(scope, *flagSettings))
 	TrainModel(scope, *flagDataDir, "", false, paramsSet)
 }
