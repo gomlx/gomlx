@@ -186,7 +186,7 @@ func TestFromValue(t *testing.T) {
 		var tensor *Tensor
 		require.NotPanics(t, func() {
 			// Test with infinite numbers, it should work as well.
-			tensor = FromAnyValue(bfloat16.FromFloat32(float32(math.Inf(-1))))
+			tensor = MustFromAnyValue(bfloat16.FromFloat32(float32(math.Inf(-1))))
 		})
 		require.Equal(t, tensor.Shape().DType, dtypes.BFloat16)
 		require.True(t, tensor.IsScalar())
@@ -200,7 +200,7 @@ func TestFromValue(t *testing.T) {
 func testValueOf[T dtypes.Number | complex64 | complex128](t *testing.T) {
 	want := [][]T{{1, 2, 3}, {10, 11, 12}}
 	var tensor *Tensor
-	require.NotPanics(t, func() { tensor = FromAnyValue(want) })
+	require.NotPanics(t, func() { tensor = MustFromAnyValue(want) })
 	got, ok := tensor.Value().([][]T)
 	require.Truef(
 		t,

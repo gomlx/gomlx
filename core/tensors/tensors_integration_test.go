@@ -20,7 +20,7 @@ func TestFinalizeAfterBackend(t *testing.T) {
 		t.Run(fmt.Sprintf("Shared=%v", share), func(t *testing.T) {
 			backend, err := gobackend.New("")
 			require.NoError(t, err)
-			x := tensors.FromAnyValue([][]float32{{1}, {2}})
+			x := tensors.MustFromAnyValue([][]float32{{1}, {2}})
 			err = x.MaterializeOnDevice(backend, share, deviceNum)
 			require.NoError(t, err)
 			backend.Finalize()
@@ -38,7 +38,7 @@ func TestInvalidAccessAfterBackendFinalized(t *testing.T) {
 		t.Run(fmt.Sprintf("Shared=%v", share), func(t *testing.T) {
 			backend, err := gobackend.New("")
 			require.NoError(t, err)
-			x := tensors.FromAnyValue([][]float32{{1}, {2}})
+			x := tensors.MustFromAnyValue([][]float32{{1}, {2}})
 			require.NoError(t, x.MaterializeOnDevice(backend, share, deviceNum))
 			x.FinalizeLocal()
 			backend.Finalize()

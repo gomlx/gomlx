@@ -797,38 +797,41 @@ func FromFlatDataAndDimensions[T dtypes.Supported](data []T, dimensions ...int) 
 //
 // Notice that FromFlatDataAndDimensions is much faster if speed here is a concern.
 func FromValue[S MultiDimensionSlice](value S) *Tensor {
-	return FromAnyValue(value)
+	return MustFromAnyValue(value)
 }
 
-// FromAnyValue is a non-generic version of FromValue that returns a *tensors.Tensor (not specified if local or on device).
+// MustFromAnyValue is a non-generic version of FromValue that returns a *tensors.Tensor (not specified if local or on device).
 // The input is expected to be either a scalar or a slice of slices with homogeneous dimensions.
 // If the input is a tensor already (Local or Device), it is simply returned.
 // If value is anything but a Device tensor, it will return a Local tensor.
 //
 // It panics with an error if the value type is unsupported or the shape is not regular.
-func FromAnyValue(value any) *Tensor {
+func FromAnyValue(value any) (*Tensor, error) {
 	if valueT, ok := value.(*Tensor); ok {
 		// Input is already a Tensor.
-		return valueT
+		return valueT, nil
 	}
 	shape, err := shapes.FromAnyValue(value)
 	if err != nil {
-		panic(errors.Wrapf(err, "cannot create shape from %T", value))
+		return nil, errors.WithMessagef(err, "cannot create shape from %T", value)
 	}
 	t := FromShape(shape)
-	t.MustMutableFlatData(func(flatAny any) {
+	var innerErr error
+	accessErr := t.MutableFlatData(func(flatAny any) {
 		if baseType(reflect.TypeOf(value)) == reflect.TypeFor[int]() {
 			// Go `int` type can be either an int32 or int64 depending on the architecture (anything else would panic
 			// already). For the copy operation to work, we have to cast flatRefAny (either a []int64 or []int32) as an []int.
 			// This is not pretty (using unsafe), but it avoids individually converting values, which is important for large tensors.
-			if strconv.IntSize == 64 { //nolint:mnd // Standard value.
+			switch strconv.IntSize {
+			case 64: //nolint:mnd // Standard value.
 				flatRef := flatAny.([]int64)
 				flatAny = unsafe.Slice((*int)(unsafe.Pointer(unsafe.SliceData(flatRef))), len(flatRef))
-			} else if strconv.IntSize == 32 { //nolint:mnd // Standard value.
+			case 32: //nolint:mnd // Standard value.
 				flatRef := flatAny.([]int32)
 				flatAny = unsafe.Slice((*int)(unsafe.Pointer(unsafe.SliceData(flatRef))), len(flatRef))
-			} else {
-				exceptions.Panicf("cannot use `int` of %d bits with GoMLX -- try using int32 or int64", strconv.IntSize)
+			default:
+				innerErr = errors.Errorf("cannot use `int` of %d bits with GoMLX -- try using int32 or int64", strconv.IntSize)
+				return
 			}
 		}
 		flatV := reflect.ValueOf(flatAny)
@@ -840,6 +843,22 @@ func FromAnyValue(value any) *Tensor {
 		// Copy over multi-dimensional slice recursively.
 		copySlicesRecursively(flatV, reflect.ValueOf(value), t.LayoutStrides())
 	})
+	if accessErr != nil {
+		return nil, errors.WithMessagef(accessErr, "failed to access flat data of tensor with shape %s", shape)
+	}
+	if innerErr != nil {
+		return nil, innerErr
+	}
+	return t, nil
+}
+
+// MustFromAnyValue converts a value to a Tensor, or panics if it is not able.
+// See deatils in FromAnyValue.
+func MustFromAnyValue(value any) *Tensor {
+	t, err := FromAnyValue(value)
+	if err != nil {
+		panic(err)
+	}
 	return t
 }
 
