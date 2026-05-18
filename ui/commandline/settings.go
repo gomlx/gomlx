@@ -7,13 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path"
-	"slices"
 	"strings"
 
-	"github.com/gomlx/compute/support/xslices"
+	"github.com/gomlx/compute/support/sets"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/fsutil"
+	"github.com/gomlx/gomlx/support/xslices"
 	"github.com/pkg/errors"
 )
 
@@ -33,24 +32,23 @@ import (
 // For integer types, "_" is removed: it allows one to enter large numbers using it as a separator, like
 // in Go. E.g.: 1_000_000 = 1000000.
 //
-// See the example in CreateSettingsFlag, which will create a flag for the settings.
+// See the example in CreateContextSettingsFlag, which will create a flag for the settings.
 //
 // Example usage:
 //
 //	func main() {
-//		store := model.NewStore()
-//		scope := store.RootScope()
-//		settings := commandline.CreateSettingsFlag(scope, "")
+//		store := createDefaultModelStore()
+//		settings := commandline.CreateContextSettingsFlag(store.RootScope(), "")
 //		flag.Parse()
-//		err := commandline.ParseSettings(scope, *settings)
+//		err := commandline.ParseContextSettings(store.RootScope(), *settings)
 //		if err != nil { panic(err) }
 //		fmt.Println(commandline.SprintContextSettings(scope))
 //		...
 //	}
-func ParseContextSettings(scope *model.Scope, settings string) (paramsSet []string, err error) {
+func ParseSettings(store *model.Store, settings string) (modifiedParams []string, err error) {
 	settingsList := strings.SplitSeq(settings, ";")
 	for setting := range settingsList {
-		paramsSet, err = parseContextSetting(scope, setting, paramsSet)
+		modifiedParams, err = parseSetting(store, setting, modifiedParams)
 		if err != nil {
 			return
 		}
@@ -58,13 +56,8 @@ func ParseContextSettings(scope *model.Scope, settings string) (paramsSet []stri
 	return
 }
 
-// ParseSettings is an alias to ParseContextSettings.
-func ParseSettings(scope *model.Scope, settings string) (paramsSet []string, err error) {
-	return ParseContextSettings(scope, settings)
-}
-
-func parseContextSetting(scope *model.Scope, setting string, paramsSet []string) (newParamsSet []string, err error) {
-	newParamsSet = paramsSet
+func parseSetting(store *model.Store, setting string, modifiedParams []string) (newModifiedParams []string, err error) {
+	newModifiedParams = modifiedParams
 	if setting == "" {
 		return
 	}
@@ -90,7 +83,7 @@ func parseContextSetting(scope *model.Scope, setting string, paramsSet []string)
 			}
 			settings := strings.SplitSeq(line, ";")
 			for setting := range settings {
-				newParamsSet, err = parseContextSetting(scope, setting, newParamsSet)
+				newModifiedParams, err = parseSetting(store, setting, newModifiedParams)
 				if err != nil {
 					return
 				}
@@ -103,56 +96,47 @@ func parseContextSetting(scope *model.Scope, setting string, paramsSet []string)
 	if len(parts) != 2 {
 		err = errors.Errorf("can't parse settings %q: each setting requires the format \"<param>=<value>\", got %q",
 			setting, setting)
-		return
+		return nil, err
 	}
 	paramPath, valueStr := parts[0], parts[1]
-	paramScope, paramName := path.Split(paramPath)
-	if paramScope != "" && len(paramScope) > 1 && strings.HasSuffix(paramScope, "/") {
-		paramScope = paramScope[:len(paramScope)-1]
+	paramName := model.BasePath(paramPath)
+	if paramName == "" {
+		return nil, errors.Errorf("can't set parameter named %q (full path=%q) because it's name is empty",
+			paramName, paramPath)
 	}
-	if strings.Contains(paramName, model.ScopeSeparator) {
-		err = errors.Errorf("can't set parameter %q because some scope is set, but it is not absolue (it does not start with %q)",
-			paramPath, model.ScopeSeparator)
-		return
-	}
-	value, found := scope.GetParam(paramName)
+	value, found := store.GetParam(paramName)
 	if !found {
-		err = errors.Errorf("can't set parameter %q (scope=%q) because the param %q is not known in the root context",
-			paramPath, paramScope, paramName)
-		return
-	}
-
-	// Set the new parameter in the selected scope.
-	ctxInScope := scope
-	if paramScope != "" {
-		ctxInScope = ctxInScope.Store().Scope(paramScope)
+		err = errors.Errorf(
+			"can't set parameter %q (full path=%q) because the base parameter %q is not known in the root scope",
+			paramPath, paramPath, paramName)
+		return nil, err
 	}
 
 	// Parse value accordingly.
 	// Is there a better way of doing this using reflection?
 	switch v := value.(type) {
 	case int:
-		valueStr = strings.Replace(valueStr, "_", "", -1)
+		valueStr = strings.ReplaceAll(valueStr, "_", "")
 		err = json.Unmarshal([]byte(valueStr), &v)
 		value = v
 	case int32:
-		valueStr = strings.Replace(valueStr, "_", "", -1)
+		valueStr = strings.ReplaceAll(valueStr, "_", "")
 		err = json.Unmarshal([]byte(valueStr), &v)
 		value = v
 	case int64:
-		valueStr = strings.Replace(valueStr, "_", "", -1)
+		valueStr = strings.ReplaceAll(valueStr, "_", "")
 		err = json.Unmarshal([]byte(valueStr), &v)
 		value = v
 	case uint:
-		valueStr = strings.Replace(valueStr, "_", "", -1)
+		valueStr = strings.ReplaceAll(valueStr, "_", "")
 		err = json.Unmarshal([]byte(valueStr), &v)
 		value = v
 	case uint32:
-		valueStr = strings.Replace(valueStr, "_", "", -1)
+		valueStr = strings.ReplaceAll(valueStr, "_", "")
 		err = json.Unmarshal([]byte(valueStr), &v)
 		value = v
 	case uint64:
-		valueStr = strings.Replace(valueStr, "_", "", -1)
+		valueStr = strings.ReplaceAll(valueStr, "_", "")
 		err = json.Unmarshal([]byte(valueStr), &v)
 		value = v
 	case float64:
@@ -172,7 +156,7 @@ func parseContextSetting(scope *model.Scope, setting string, paramsSet []string)
 		parts := strings.Split(valueStr, ",")
 		value = xslices.Map(parts, func(str string) int {
 			var asInt int
-			str = strings.Replace(str, "_", "", -1)
+			str = strings.ReplaceAll(str, "_", "")
 			newErr := json.Unmarshal([]byte(str), &asInt)
 			if newErr != nil {
 				err = newErr
@@ -195,37 +179,36 @@ func parseContextSetting(scope *model.Scope, setting string, paramsSet []string)
 	}
 	if err != nil {
 		err = errors.Wrapf(err, "failed to parse value %q for parameter %q (default value is %#v)", valueStr, paramPath, value)
-		return
+		return nil, err
 	}
-	ctxInScope.SetParam(paramName, value)
-	newParamsSet = append(newParamsSet, paramPath)
+	store.SetParam(paramPath, value)
+	newModifiedParams = append(newModifiedParams, paramPath)
 	return
 }
 
 // CreateSettingsFlag create a string flag with the given flagName (if empty it will be named
-// "set") and with a description of the current defined parameters in the context `scope`.
+// "set") and with a description of the current defined parameters in the context `ctx`.
 //
 // The flag should be created before the call to `flags.Parse()`.
 //
 // Example usage:
 //
 //	func main() {
-//		store := model.NewStore()
-//		scope := store.RootScope()
-//		settings := commandline.CreateSettingsFlag(scope, "")
+//		store := createModelStore()
+//		settings := commandline.CreateSettingsFlag(store, "")
 //		flag.Parse()
-//		err := commandline.ParseSettings(scope, *settings)
+//		err := commandline.ParseSettings(store, *settings)
 //		if err != nil { panic(err) }
-//		fmt.Println(commandline.SprintContextSettings(scope))
+//		fmt.Println(commandline.SprintSettings(ctx))
 //		...
 //	}
-func CreateSettingsFlag(scope *model.Scope, flagName string) *string {
+func CreateSettingsFlag(store *model.Store, flagName string) *string {
 	if flagName == "" {
 		flagName = "set"
 	}
 	var parts []string
 	parts = append(parts, fmt.Sprintf(
-		`Set context parameters defining the model. `+
+		`Set hyperparameters defining the model. `+
 			`It should be a list of elements "param=value" separated by ";". `+
 			`Scoped settings are allowed, by using %q to separated scopes. `+
 			`It can also be given an entry like: "file:settings_file.txt", in `+
@@ -233,11 +216,12 @@ func CreateSettingsFlag(scope *model.Scope, flagName string) *string {
 			`with new-lines working as ";" to separate settings and lines starting with "#" are considered comments. `+
 			`Current available parameters that can be set:`,
 		model.ScopeSeparator))
-	for p := range scope.IterParams() {
-		if p.Scope != model.RootScopePath {
+	for paramPath, value := range store.IterParams() {
+		scope, name := model.SplitPath(paramPath)
+		if scope != model.RootScopePath && scope != "" {
 			continue
 		}
-		parts = append(parts, fmt.Sprintf("%q: default value is %v", p.Key, p.Value))
+		parts = append(parts, fmt.Sprintf("%q: default value is %v", name, value))
 	}
 	usage := strings.Join(parts, "\n")
 	var settings string
@@ -245,43 +229,21 @@ func CreateSettingsFlag(scope *model.Scope, flagName string) *string {
 	return &settings
 }
 
-// CreateContextSettingsFlag is an alias to CreateSettingsFlag.
-func CreateContextSettingsFlag(scope *model.Scope, flagName string) *string {
-	return CreateSettingsFlag(scope, flagName)
-}
-
-// SprintContextSettings pretty-print values for the current hyperparameters settings into a string.
-func SprintContextSettings(scope *model.Scope) string {
+// SprintSettings pretty-print values for the current hyperparameters settings into a string.
+func SprintSettings(store *model.Store) string {
 	var parts []string
-	for p := range scope.IterParams() {
-		s := p.Scope
-		if s == model.RootScopePath {
-			s = ""
-		}
-		parts = append(parts, fmt.Sprintf("\t\"%s/%s\": (%T) %v", s, p.Key, p.Value, p.Value))
+	for paramPath, value := range store.IterParams() {
+		parts = append(parts, fmt.Sprintf("\t%q: (%T) %v", paramPath, value, value))
 	}
 	return strings.Join(parts, "\n")
 }
 
-func SprintModifiedContextSettings(scope *model.Scope, paramsSet []string) string {
+// SprintModifiedSettings pretty-print values of the modified settings into a string.
+func SprintModifiedSettings(store *model.Store, modifiedParams []string) string {
 	var parts []string
-	paramsSet = slices.Clone(paramsSet)
-	slices.Sort(paramsSet)
-	var lastParamPath string
-	for _, paramPath := range paramsSet {
-		// Remove duplicates.
-		if paramPath == lastParamPath {
-			continue
-		}
-		lastParamPath = paramPath
-		paramScope, paramName := path.Split(paramPath)
-		if paramScope != "" && len(paramScope) > 1 && strings.HasSuffix(paramScope, "/") {
-			paramScope = paramScope[:len(paramScope)-1]
-		}
-		if paramScope == "" {
-			paramScope = model.RootScopePath
-		}
-		value, found := scope.Store().Scope(paramScope).GetParam(paramName)
+	paramsSet := sets.MakeWith(modifiedParams...)
+	for _, paramPath := range xslices.SortedKeys(paramsSet) {
+		value, found := store.GetParam(paramPath)
 		if !found {
 			continue
 		}
