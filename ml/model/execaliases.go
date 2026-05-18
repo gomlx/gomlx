@@ -8,7 +8,6 @@ import (
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
-	"k8s.io/klog/v2"
 )
 
 // NewExec constructs an Exec object for the given scopeOrStore and symbolic computation function ctxGraphFn.
@@ -101,7 +100,6 @@ func (e *Exec) MustExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Gra
 	var err error
 	outputs, g, err = e.ExecWithGraph(args...)
 	if err != nil {
-		klog.Errorf("Error: %+v", err)
 		panic(err)
 	}
 	return

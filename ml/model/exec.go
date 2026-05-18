@@ -508,7 +508,6 @@ func (e *Exec) Store() *Store {
 // SetStore associates the given Store with the Exec object.
 func (e *Exec) SetStore(store *Store) *Exec {
 	e.store = store
-	e.rootScope = store.RootScope()
 	return e
 }
 

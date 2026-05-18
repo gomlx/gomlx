@@ -125,7 +125,7 @@ func TestExec(t *testing.T) {
 	})
 
 	t.Run("WithSlices", func(t *testing.T) {
-		oneLayer, err := model.NewExecAny(backend, nil, oneLayerManyInputsGraph)
+		oneLayer, err := model.NewExecAny(backend, model.NewStore(), oneLayerManyInputsGraph)
 		if err != nil {
 			t.Fatalf("Failed to create model.Exec for oneLayer: %+v", err)
 		}
