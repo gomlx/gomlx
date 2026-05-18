@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 )
@@ -23,10 +24,11 @@ import (
 // And variables updated in the graph (using Variable.SetNodeValue) are updated also during execution.
 // More details see Exec.
 //
-// This is a generic wrapper around NewExecAny that checks that types are
-// correct (but doesn't support all possible types of ctxGraphFn).
+// This is a generic wrapper around NewExecCanonical that checks that types are
+// correct.
 func NewExec[F ExecGraphFn](backend compute.Backend, store *Store, ctxGraphFn F) (*Exec, error) {
-	return NewExecAny(backend, store, ctxGraphFn)
+	canonicalFn, numInputs, numOutputs, inputIsGraph, inputAsSlice, outputAsSlice := convertExecFn(ctxGraphFn)
+	return NewExecCanonical(backend, store, canonicalFn, numInputs, numOutputs, inputIsGraph, inputAsSlice, outputAsSlice)
 }
 
 // MustNewExec constructs an Exec object for the given scopeOrStore and symbolic computation function ctxGraphFn.
@@ -44,11 +46,7 @@ func NewExec[F ExecGraphFn](backend compute.Backend, store *Store, ctxGraphFn F)
 //
 // It panics on error.
 func MustNewExec[F ExecGraphFn](backend compute.Backend, store *Store, ctxGraphFn F) *Exec {
-	e, err := NewExecAny(backend, store, ctxGraphFn)
-	if err != nil {
-		panic(err)
-	}
-	return e
+	return must.M1(NewExec(backend, store, ctxGraphFn))
 }
 
 // DistributedExec is just like Exec, but aggregates the outputs into *dtensor.Tensor.

@@ -30,10 +30,16 @@ type Exec struct {
 
 	// Original function that takes ctx and the converted closure
 	// that only takes *Node as input.
-	modelGraphFn, graphFn                     any
+	modelGraphFn                              CanonicalExecGraphFn
 	inputIsGraph, inputAsSlice, outputAsSlice bool
 	inputShardingSpecs                        []*distributed.ShardingSpec
 	outputShardingSpecs                       []*distributed.ShardingSpec
+
+	// numInputs, numOutputs of graphFn, not counting extra logged nodes, which may vary
+	// per instance of the graph (entry in the cache).
+	// This is relative if inputAsSlice is set to true, in which case graphFn's number of inputs/outputs vary
+	// per cache entry.
+	numInputs, numOutputs int
 
 	// changedVars maps each graph's GraphId to their list of modified variables.
 	// It's used to update the variables in the Store after the graph execution -- these variables are added
@@ -47,90 +53,33 @@ type Exec struct {
 	isInitializeVariablesExec bool
 }
 
-// NewExecAny constructs an Exec object for the given model store and symbolic computation function modelGraphFn.
+// NewExecCanonical constructs an Exec object for the given model store and symbolic computation function modelGraphFn.
 //
-// The modelGraphFn is called to build the computation graphs with a Scope.
-// It must take a *Scope input parameter followed by one or more *Node parameters as input and return one or more *Node.
-// Alternatively, it can, instead of *Node inputs, take a *Graph object, when there are no input tensors.
+// The modelGraphFn must be a CanonicalExecGraphFn.
 //
 // Before the execution of a graph, it initializes the variables as needed, using the configured initializer.
 // And variables updated in the graph (using Variable.SetNodeValue) are updated also during execution.
 // More details see Exec.
-func NewExecAny(backend compute.Backend, store *Store, modelGraphFn any) (*Exec, error) {
+func NewExecCanonical(backend compute.Backend, store *Store, modelGraphFn CanonicalExecGraphFn, numInputs, numOutputs int, inputIsGraph, inputAsSlice, outputAsSlice bool) (*Exec, error) {
 	if store == nil {
 		return nil, errors.Errorf("model.NewExec: store cannot be nil, you can create an empty one with model.NewStore")
 	}
 	e := &Exec{
-		backend:      backend,
-		store:        store,
-		modelGraphFn: modelGraphFn,
-		changedVars:  make(map[graph.GraphId][]*Variable),
-	}
-	modelGraphFnT := reflect.TypeOf(modelGraphFn)
-	if modelGraphFnT.Kind() != reflect.Func {
-		return nil, errors.Errorf("modelGraphFn must be a function")
-	}
-	nodeType := reflect.TypeFor[*Node]()
-	scopeType := reflect.TypeFor[*Scope]()
-	graphType := reflect.TypeFor[*Graph]()
-
-	// Must have at least 2 arguments, and the first must be of type *Scope.
-	if modelGraphFnT.NumIn() < 2 {
-		return nil, errors.Errorf("at least *Scope and one input argument required")
-	}
-	if modelGraphFnT.In(0) != scopeType {
-		return nil, errors.Errorf(
-			"the first argument for modelGraphFn must be a *Scope, got %s instead",
-			modelGraphFnT.In(0),
-		)
+		backend:       backend,
+		store:         store,
+		modelGraphFn:  modelGraphFn,
+		numInputs:     numInputs,
+		numOutputs:    numOutputs,
+		inputIsGraph:  inputIsGraph,
+		inputAsSlice:  inputAsSlice,
+		outputAsSlice: outputAsSlice,
+		changedVars:   make(map[graph.GraphId][]*Variable),
 	}
 
-	// Check other arguments.
-	for ii := 1; ii < modelGraphFnT.NumIn(); ii++ {
-		if modelGraphFnT.In(ii).Kind() == reflect.Slice && modelGraphFnT.In(ii).Elem() == nodeType {
-			// Case 1: []*Node
-			if modelGraphFnT.NumIn() != 2 {
-				return nil, errors.Errorf(
-					"[]*Node parameters are only accepted if they are the only input besides the Scope, got function type %s instead",
-					modelGraphFnT,
-				)
-			}
-			e.inputAsSlice = true
-			break
-		}
-		if modelGraphFnT.In(ii) == graphType {
-			// Case 2: *Graph
-			if modelGraphFnT.NumIn() != 2 {
-				return nil, errors.Errorf(
-					"*Graph argument is only accepted if it is the only input besides the Scope, got function type %s instead",
-					modelGraphFnT,
-				)
-			}
-			e.inputIsGraph = true
-			break
-		}
-		if modelGraphFnT.In(ii) != nodeType {
-			return nil, errors.Errorf("input parameter %d is not of type *Node", ii)
-		}
-	}
-	for ii := 0; ii < modelGraphFnT.NumOut(); ii++ {
-		if modelGraphFnT.Out(ii).Kind() == reflect.Slice && modelGraphFnT.Out(ii).Elem() == nodeType {
-			if modelGraphFnT.NumOut() != 1 {
-				return nil, errors.Errorf(
-					"[]*Node parameters are only accepted as output if they are the only output, got function type %s instead",
-					modelGraphFnT,
-				)
-			}
-			e.outputAsSlice = true
-			break
-		}
-		if modelGraphFnT.Out(ii) != nodeType {
-			return nil, errors.Errorf("output parameter %d is not of type *Node", ii)
-		}
-	}
-
-	e.buildGraphFn()
-	e.exec = graph.MustNewExecAny(backend, e.graphFn)
+	graphFn := e.buildGraphFn()
+	// numInputs, inputIsGraph and inputAsSlice are the same for the wrapped graph.Exec.
+	// But numOutputs is variable (slice) because of the changed variables being prepended.
+	e.exec = graph.MustNewExecCanonical(backend, graphFn, numInputs, -1, inputIsGraph, inputAsSlice, true)
 	funcName := runtime.FuncForPC(reflect.ValueOf(modelGraphFn).Pointer()).Name()
 	e.exec.WithName(fmt.Sprintf("Store.Exec:%s", funcName))
 	e.exec.SetSideParamsHook(e.setSideParams)
@@ -141,60 +90,15 @@ func NewExecAny(backend compute.Backend, store *Store, modelGraphFn any) (*Exec,
 // This function is a closure that will call the modelGraphFn provided by the user with the
 // extra *model.Scope argument, plus it prepends the output with the updated values --
 // so it can behind the scenes update the variables to the user.
-func (e *Exec) buildGraphFn() {
-	modelGraphFnT := reflect.TypeOf(e.modelGraphFn)
-	numIn := modelGraphFnT.NumIn() - 1
-	nodeT := reflect.TypeFor[*Node]()
-	nodeSliceT := reflect.TypeFor[[]*Node]()
-	graphT := reflect.TypeFor[*Graph]()
-
-	// Build input types for new graphFn: same as modelGraphFn, but without the Scope.
-	var inT []reflect.Type
-	if e.inputIsGraph {
-		// The only input is a graph.
-		inT = []reflect.Type{graphT}
-	} else if e.inputAsSlice {
-		// The only input is a []*Node.
-		inT = []reflect.Type{nodeSliceT}
-	} else {
-		inT = make([]reflect.Type, numIn)
-		for ii := range numIn {
-			inT[ii] = nodeT
-		}
-	}
-
-	// Output types for a new graphFn: it is converted to a []*Node, because we will prepend
-	// the changed variables as extra outputs.
-	outT := []reflect.Type{nodeSliceT}
-
-	// Builds the function that will be called without Scope, by computation.Exec. It will take as
-	// input a slice of *Node (or only a *computation.Graph), and as output also a slice of *Node.
-	graphFnT := reflect.FuncOf(inT, outT, false)
-	e.graphFn = reflect.MakeFunc(graphFnT, func(args []reflect.Value) (results []reflect.Value) {
-		// Inputs for the original modelGraphFn: we prepend the scope to the arguments.
-		argsWithScope := make([]reflect.Value, len(args)+1)
-		argsWithScope[0] = reflect.ValueOf(e.store.RootScope())
-		copy(argsWithScope[1:], args)
-
+func (e *Exec) buildGraphFn() graph.CanonicalExecGraphFn {
+	return func(g *graph.Graph, inputs []*graph.Node) []*graph.Node {
 		// Call modelGraphFn, the results will be a slice of *Node.
-		modelGraphFnResults := reflect.ValueOf(e.modelGraphFn).Call(argsWithScope)
-
-		// Find the graph.
-		var g *Graph
-		if e.inputIsGraph {
-			g = args[0].Interface().(*Graph)
-		} else if e.inputAsSlice {
-			nodes := args[0].Interface().([]*Node)
-			g = nodes[0].Graph()
-		} else {
-			node := args[0].Interface().(*Node)
-			g = node.Graph()
-		}
+		modelGraphFnResults := e.modelGraphFn(e.store.RootScope(), g, inputs)
 		graphId := g.GraphId()
 
 		// Find variables that were changed and their updated graph values (*Node).
 		var changedVars []*Variable
-		var allValues []*Node
+		var allValues []*graph.Node
 		for _, v := range e.store.variables {
 			if v.ChangedInGraph(g) {
 				changedVars = append(changedVars, v)
@@ -208,20 +112,11 @@ func (e *Exec) buildGraphFn() {
 			e.muChangedVars.Unlock()
 		}
 		// Append modelGraphFnResults to allValues.
-		if e.outputAsSlice {
-			// cxtGraphResults returns one value, a []*Node, easy to append.
-			allValues = append(allValues, modelGraphFnResults[0].Interface().([]*Node)...)
-		} else {
-			// Append one result at a time (it's ok if there are no results).
-			for _, r := range modelGraphFnResults {
-				allValues = append(allValues, r.Interface().(*Node))
-			}
-		}
+		allValues = append(allValues, modelGraphFnResults...)
 
 		// the results will be a []*Node, which will hold all the values.
-		results = []reflect.Value{reflect.ValueOf(allValues)}
-		return
-	}).Interface()
+		return allValues
+	}
 }
 
 // Finalize clears the cache, finalizing and releasing the memory for all compiled graphs.

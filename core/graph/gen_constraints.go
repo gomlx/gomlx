@@ -2,7 +2,11 @@
 
 package graph
 
+import "fmt"
+
 // For graph/exec.go:
+
+type CanonicalExecGraphFn func(*Graph, []*Node) []*Node
 
 type ExecGraphFnOneOutput interface {
 	func(*Graph) *Node |
@@ -54,4 +58,191 @@ type ExecGraphFnSliceOutputs interface {
 
 type ExecGraphFn interface {
 	ExecGraphFnOneOutput | ExecGraphFnTwoOutputs | ExecGraphFnThreeOutputs | ExecGraphFnSliceOutputs
+}
+
+func convertExecFn[F ExecGraphFn](graphFn F) (canonicalFn CanonicalExecGraphFn, numInputs, numOutputs int, inputIsGraph, inputAsSlice, outputAsSlice bool) {
+	switch f := any(graphFn).(type) {
+	case func(*Graph) *Node:
+		numInputs, numOutputs = 0, 1
+		inputIsGraph, inputAsSlice, outputAsSlice = true, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { return []*Node{f(g)} }
+	case func([]*Node) *Node:
+		numInputs, numOutputs = -1, 1
+		inputIsGraph, inputAsSlice, outputAsSlice = false, true, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { return []*Node{f(inputs)} }
+	case func(*Graph, []*Node) *Node:
+		numInputs, numOutputs = -1, 1
+		inputIsGraph, inputAsSlice, outputAsSlice = true, true, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { return []*Node{f(g, inputs)} }
+	case func(*Node) *Node:
+		numInputs, numOutputs = 1, 1
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { return []*Node{f(inputs[0])} }
+	case func(*Node, *Node) *Node:
+		numInputs, numOutputs = 2, 1
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { return []*Node{f(inputs[0], inputs[1])} }
+	case func(*Node, *Node, *Node) *Node:
+		numInputs, numOutputs = 3, 1
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { return []*Node{f(inputs[0], inputs[1], inputs[2])} }
+	case func(*Node, *Node, *Node, *Node) *Node:
+		numInputs, numOutputs = 4, 1
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { return []*Node{f(inputs[0], inputs[1], inputs[2], inputs[3])} }
+	case func(*Node, *Node, *Node, *Node, *Node) *Node:
+		numInputs, numOutputs = 5, 1
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node {
+			return []*Node{f(inputs[0], inputs[1], inputs[2], inputs[3], inputs[4])}
+		}
+	case func(*Node, *Node, *Node, *Node, *Node, *Node) *Node:
+		numInputs, numOutputs = 6, 1
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node {
+			return []*Node{f(inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5])}
+		}
+	case func(*Graph) (*Node, *Node):
+		numInputs, numOutputs = 0, 2
+		inputIsGraph, inputAsSlice, outputAsSlice = true, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { r0, r1 := f(g); return []*Node{r0, r1} }
+	case func([]*Node) (*Node, *Node):
+		numInputs, numOutputs = -1, 2
+		inputIsGraph, inputAsSlice, outputAsSlice = false, true, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { r0, r1 := f(inputs); return []*Node{r0, r1} }
+	case func(*Graph, []*Node) (*Node, *Node):
+		numInputs, numOutputs = -1, 2
+		inputIsGraph, inputAsSlice, outputAsSlice = true, true, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { r0, r1 := f(g, inputs); return []*Node{r0, r1} }
+	case func(*Node) (*Node, *Node):
+		numInputs, numOutputs = 1, 2
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { r0, r1 := f(inputs[0]); return []*Node{r0, r1} }
+	case func(*Node, *Node) (*Node, *Node):
+		numInputs, numOutputs = 2, 2
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { r0, r1 := f(inputs[0], inputs[1]); return []*Node{r0, r1} }
+	case func(*Node, *Node, *Node) (*Node, *Node):
+		numInputs, numOutputs = 3, 2
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node {
+			r0, r1 := f(inputs[0], inputs[1], inputs[2])
+			return []*Node{r0, r1}
+		}
+	case func(*Node, *Node, *Node, *Node) (*Node, *Node):
+		numInputs, numOutputs = 4, 2
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node {
+			r0, r1 := f(inputs[0], inputs[1], inputs[2], inputs[3])
+			return []*Node{r0, r1}
+		}
+	case func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node):
+		numInputs, numOutputs = 5, 2
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node {
+			r0, r1 := f(inputs[0], inputs[1], inputs[2], inputs[3], inputs[4])
+			return []*Node{r0, r1}
+		}
+	case func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node):
+		numInputs, numOutputs = 6, 2
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node {
+			r0, r1 := f(inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5])
+			return []*Node{r0, r1}
+		}
+	case func(*Graph) (*Node, *Node, *Node):
+		numInputs, numOutputs = 0, 3
+		inputIsGraph, inputAsSlice, outputAsSlice = true, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { r0, r1, r2 := f(g); return []*Node{r0, r1, r2} }
+	case func([]*Node) (*Node, *Node, *Node):
+		numInputs, numOutputs = -1, 3
+		inputIsGraph, inputAsSlice, outputAsSlice = false, true, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { r0, r1, r2 := f(inputs); return []*Node{r0, r1, r2} }
+	case func(*Graph, []*Node) (*Node, *Node, *Node):
+		numInputs, numOutputs = -1, 3
+		inputIsGraph, inputAsSlice, outputAsSlice = true, true, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { r0, r1, r2 := f(g, inputs); return []*Node{r0, r1, r2} }
+	case func(*Node) (*Node, *Node, *Node):
+		numInputs, numOutputs = 1, 3
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { r0, r1, r2 := f(inputs[0]); return []*Node{r0, r1, r2} }
+	case func(*Node, *Node) (*Node, *Node, *Node):
+		numInputs, numOutputs = 2, 3
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node {
+			r0, r1, r2 := f(inputs[0], inputs[1])
+			return []*Node{r0, r1, r2}
+		}
+	case func(*Node, *Node, *Node) (*Node, *Node, *Node):
+		numInputs, numOutputs = 3, 3
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node {
+			r0, r1, r2 := f(inputs[0], inputs[1], inputs[2])
+			return []*Node{r0, r1, r2}
+		}
+	case func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node):
+		numInputs, numOutputs = 4, 3
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node {
+			r0, r1, r2 := f(inputs[0], inputs[1], inputs[2], inputs[3])
+			return []*Node{r0, r1, r2}
+		}
+	case func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node):
+		numInputs, numOutputs = 5, 3
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node {
+			r0, r1, r2 := f(inputs[0], inputs[1], inputs[2], inputs[3], inputs[4])
+			return []*Node{r0, r1, r2}
+		}
+	case func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node):
+		numInputs, numOutputs = 6, 3
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, false
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node {
+			r0, r1, r2 := f(inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5])
+			return []*Node{r0, r1, r2}
+		}
+	case func(*Graph) []*Node:
+		numInputs, numOutputs = 0, -1
+		inputIsGraph, inputAsSlice, outputAsSlice = true, false, true
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { return f(g) }
+	case func([]*Node) []*Node:
+		numInputs, numOutputs = -1, -1
+		inputIsGraph, inputAsSlice, outputAsSlice = false, true, true
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { return f(inputs) }
+	case func(*Graph, []*Node) []*Node:
+		numInputs, numOutputs = -1, -1
+		inputIsGraph, inputAsSlice, outputAsSlice = true, true, true
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { return f(g, inputs) }
+	case func(*Node) []*Node:
+		numInputs, numOutputs = 1, -1
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, true
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { return f(inputs[0]) }
+	case func(*Node, *Node) []*Node:
+		numInputs, numOutputs = 2, -1
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, true
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { return f(inputs[0], inputs[1]) }
+	case func(*Node, *Node, *Node) []*Node:
+		numInputs, numOutputs = 3, -1
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, true
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { return f(inputs[0], inputs[1], inputs[2]) }
+	case func(*Node, *Node, *Node, *Node) []*Node:
+		numInputs, numOutputs = 4, -1
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, true
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node { return f(inputs[0], inputs[1], inputs[2], inputs[3]) }
+	case func(*Node, *Node, *Node, *Node, *Node) []*Node:
+		numInputs, numOutputs = 5, -1
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, true
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node {
+			return f(inputs[0], inputs[1], inputs[2], inputs[3], inputs[4])
+		}
+	case func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node:
+		numInputs, numOutputs = 6, -1
+		inputIsGraph, inputAsSlice, outputAsSlice = false, false, true
+		canonicalFn = func(g *Graph, inputs []*Node) []*Node {
+			return f(inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5])
+		}
+	default:
+		panic(fmt.Sprintf("invalid graphFn type %T", graphFn))
+	}
+	return
 }

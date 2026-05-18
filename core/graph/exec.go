@@ -133,7 +133,7 @@ type Exec struct {
 	numDevices       int
 
 	// graphFn is fixed for all entries in the cache.
-	graphFn any
+	graphFn CanonicalExecGraphFn
 
 	// numInputs, numOutputs of graphFn, not counting extra logged nodes, which may vary
 	// per instance of the graph (entry in the cache).
@@ -191,27 +191,27 @@ type execGraphCacheEntry struct {
 // DefaultExecMaxCacheSize is the value used to initialize the max cache size of new Exec objects.
 const DefaultExecMaxCacheSize = 32
 
-// NewExecAny constructs an Exec object that uses the given graphFn to build
+// NewExecCanonical constructs an Exec object that uses the given graphFn to build
 // computation graphs.
 //
-// The `graphFn` can take only *Node parameters as input and returns one or more *Node.
-// Except if there are no inputs, in which case graphFn needs to take a *Graph as the first parameter.
+// The `graphFn` must be of type CanonicalExecGraphFn.
 //
 // Please use NewExec if possible, it adds a compile-time check for most valid signatures of graphFn.
 //
 // It returns an error if the inputs are invalid.
-func NewExecAny(backend compute.Backend, graphFn any) (*Exec, error) {
-	funcName := runtime.FuncForPC(reflect.ValueOf(graphFn).Pointer()).Name()
+func NewExecCanonical(backend compute.Backend, graphFn CanonicalExecGraphFn, numInputs, numOutputs int, inputIsGraph, inputAsSlice, outputAsSlice bool) (*Exec, error) {
 	e := &Exec{
-		backend:      backend,
-		name:         fmt.Sprintf("Exec:%s", funcName),
-		graphFn:      graphFn,
-		maxCacheSize: DefaultExecMaxCacheSize,
-		loggerFn:     DefaultNodeLogger,
-		numDevices:   1,
-	}
-	if err := e.parseGraphFn(); err != nil {
-		return nil, err
+		backend:       backend,
+		name:          "Exec",
+		graphFn:       graphFn,
+		maxCacheSize:  DefaultExecMaxCacheSize,
+		loggerFn:      DefaultNodeLogger,
+		numDevices:    1,
+		numInputs:     numInputs,
+		numOutputs:    numOutputs,
+		inputIsGraph:  inputIsGraph,
+		inputAsSlice:  inputAsSlice,
+		outputAsSlice: outputAsSlice,
 	}
 	return e, nil
 }
@@ -221,69 +221,16 @@ func NewExecAny(backend compute.Backend, graphFn any) (*Exec, error) {
 // graphFn should take *Node as an input and return a *Node -- except if there are no (Node) inputs,
 // in which case it should take a single *Graph input.
 //
-// It's a wrapper to the NewExecAny, but it uses generics to add a compile-time check for valid graphFn signature.
+// It's a wrapper to the NewExecCanonical, but it uses generics to add a compile-time check for valid graphFn signature.
 func NewExec[F ExecGraphFn](backend compute.Backend, graphFn F) (*Exec, error) {
-	return NewExecAny(backend, graphFn)
-}
-
-// parseGraphFn figures out and validates the inputs and outputs of the graphFn for the Exec object.
-// This should be called in the constructor.
-//
-//nolint:gocognit
-func (e *Exec) parseGraphFn() error {
-	graphFnT := reflect.TypeOf(e.graphFn)
-	e.numInputs = graphFnT.NumIn()
-	e.numOutputs = graphFnT.NumOut()
-
-	// Verify parameters.
-	if graphFnT.Kind() != reflect.Func {
-		return errors.Errorf("graphFn must be a function")
+	canonicalFn, numInputs, numOutputs, inputIsGraph, inputAsSlice, outputAsSlice := convertExecFn(graphFn)
+	exec, err := NewExecCanonical(backend, canonicalFn, numInputs, numOutputs, inputIsGraph, inputAsSlice, outputAsSlice)
+	if err != nil {
+		return nil, err
 	}
-
-	nodeType := reflect.TypeFor[*Node]()
-	graphType := reflect.TypeFor[*Graph]()
-
-	if graphFnT.NumIn() < 1 || graphFnT.NumOut() < 1 {
-		// It requires at least one input and one output.
-		return errors.Errorf("not enough input (%d)/output (%d) parameters, both need to be > 0",
-			graphFnT.NumIn(), graphFnT.NumOut())
-	}
-	for ii := range graphFnT.NumIn() {
-		if graphFnT.In(ii) == graphType {
-			if ii != 0 {
-				return errors.Errorf("*Graph parameter only accepted as the first input, got "+
-					"function type %s instead", graphFnT)
-			}
-			e.inputIsGraph = true
-			e.numInputs-- // Subtract *Graph from the expected number of arguments (which maps to tensor arguments).
-			continue
-		}
-		if graphFnT.In(ii).Kind() == reflect.Slice && graphFnT.In(ii).Elem() == nodeType {
-			if ii != graphFnT.NumIn()-1 || e.numInputs != 1 {
-				return errors.Errorf("[]*Node parameters are only accepted as input if they are the only Node input,"+
-					" got function type %s instead", graphFnT)
-			}
-			e.inputAsSlice = true
-			break
-		}
-		if graphFnT.In(ii) != nodeType {
-			return errors.Errorf("input parameter %d is not of type *Node or []*Node", ii)
-		}
-	}
-	for ii := range graphFnT.NumOut() {
-		if graphFnT.Out(ii).Kind() == reflect.Slice && graphFnT.Out(ii).Elem() == nodeType {
-			if graphFnT.NumOut() != 1 {
-				return errors.Errorf("[]*Node parameters are only accepted as output if they are the only output,"+
-					" got function type %s instead", graphFnT)
-			}
-			e.outputAsSlice = true
-			break
-		}
-		if graphFnT.Out(ii) != nodeType {
-			return errors.Errorf("output parameter %d is not of type *Node", ii)
-		}
-	}
-	return nil
+	funcName := runtime.FuncForPC(reflect.ValueOf(graphFn).Pointer()).Name()
+	exec.WithName(fmt.Sprintf("Exec:%s", funcName))
+	return exec, nil
 }
 
 // WithName sets the name of Exec, used to provide the name to graphs created.
@@ -784,9 +731,6 @@ func (e *Exec) buildAndCompileGraph(argsShapes []shapes.Shape, cacheIndex int) (
 		}
 	}
 
-	var argsV []reflect.Value
-	var args []*Node
-
 	// Calculate the actual args to use for graph creation:
 	// If distributed with AutoSharding or SPMD, the argsShapes contains the shapes for ALL devices (concatenated).
 	// We only want the shapes for the first device (or first replica).
@@ -801,14 +745,7 @@ func (e *Exec) buildAndCompileGraph(argsShapes []shapes.Shape, cacheIndex int) (
 		argsShapesToUse = argsShapes[:numArgsPerDevice]
 	}
 
-	if e.inputIsGraph {
-		argsV = []reflect.Value{reflect.ValueOf(g)}
-	} else {
-		argsV = make([]reflect.Value, 0, len(argsShapesToUse))
-	}
-	if e.inputAsSlice {
-		args = make([]*Node, 0, len(argsShapesToUse))
-	}
+	args := make([]*Node, 0, len(argsShapesToUse))
 	for ii, shape := range argsShapesToUse {
 		var spec *distributed.ShardingSpec
 		if ii < len(e.inputShardingSpecs) {
@@ -823,23 +760,14 @@ func (e *Exec) buildAndCompileGraph(argsShapes []shapes.Shape, cacheIndex int) (
 		}
 
 		arg := ShardedParameter(g, fmt.Sprintf("arg%d", ii), shape, spec)
-		if e.inputAsSlice {
-			args = append(args, arg)
-		} else {
-			argsV = append(argsV, reflect.ValueOf(arg))
-		}
-	}
-	graphFnV := reflect.ValueOf(e.graphFn)
-	if e.inputAsSlice {
-		// If input is a slice of *Node, take argsV to be one parameter, the value of the slice.
-		argsV = append(argsV, reflect.ValueOf(args))
+		args = append(args, arg)
 	}
 
 	// Call graphFn — this is user code that may panic, so we catch panics here.
-	var outputsV []reflect.Value
+	var outputs []*Node
 	err := exceptions.TryCatch[error](func() {
 		start := time.Now()
-		outputsV = graphFnV.Call(argsV)
+		outputs = e.graphFn(g, args)
 		if klog.V(1).Enabled() {
 			elapsed := time.Since(start)
 			klog.Infof("Build graph time for %q: %s", e.name, elapsed)
@@ -849,34 +777,14 @@ func (e *Exec) buildAndCompileGraph(argsShapes []shapes.Shape, cacheIndex int) (
 		return nil, errors.WithMessagef(err, "graphFn for %q panicked", e.Name())
 	}
 
-	var outputs []*Node
 	if e.outputAsSlice {
-		if len(outputsV) != 1 {
-			return nil, errors.Errorf("graphFn for %q returned %d results, as opposed to simply a slice of nodes -- []*Node",
-				e.Name(), len(outputsV))
-		}
-		var ok bool
-		outputs, ok = outputsV[0].Interface().([]*Node)
-		if !ok {
-			return nil, errors.Errorf("graphFn for %q did not return a []*Node, instead it returned %T",
-				e.Name(), outputsV[0].Interface())
-		}
 		entry.numGraphFnOutputs = len(outputs)
 	} else {
 		entry.numGraphFnOutputs = e.numOutputs // Fixed number of outputs.
-		if len(outputsV) != e.numOutputs {
+		if len(outputs) != e.numOutputs {
 			return nil, errors.Errorf(
-				"graphFn for %q returned %d results, as opposed to the actual returned %d results -- []*Node",
-				e.Name(), len(outputsV), e.numOutputs)
-		}
-		outputs = make([]*Node, 0, len(outputsV))
-		for i, outV := range outputsV {
-			outputNode, ok := outV.Interface().(*Node)
-			if !ok {
-				return nil, errors.Errorf("graphFn for %q did not return a *Node for output #%d, instead it returned %T",
-					e.Name(), i, outV.Interface())
-			}
-			outputs = append(outputs, outputNode)
+				"graphFn for %q returned %d results, as opposed to the expected %d results",
+				e.Name(), len(outputs), e.numOutputs)
 		}
 	}
 

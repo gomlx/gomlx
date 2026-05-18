@@ -52,32 +52,73 @@ func GraphExecFnConstraints(w io.Writer, withScope bool) {
 	if withScope {
 		p = "graph."
 	}
-	possibleInputs := []string{"*" + p + "Graph", "[]*" + p + "Node", "*" + p + "Graph, []*" + p + "Node"}
-	nodesParams := "*" + p + "Node"
-	for range 6 {
-		possibleInputs = append(possibleInputs, nodesParams)
-		nodesParams = nodesParams + ", *" + p + "Node"
+	fmt.Fprintf(w, "type CanonicalExecGraphFn func(%s*%sGraph, []*%sNode) []*%sNode\n\n", func() string {
+		if withScope {
+			return "*Scope, "
+		}
+		return ""
+	}(), p, p, p)
+
+	type inputConfig struct {
+		params       string
+		numInputs    int
+		inputIsGraph bool
+		inputAsSlice bool
+		callArgs     string
 	}
-	
+
+	possibleInputs := []inputConfig{
+		{"*" + p + "Graph", 0, true, false, "g"},
+		{"[]*" + p + "Node", -1, false, true, "inputs"},
+		{"*" + p + "Graph, []*" + p + "Node", -1, true, true, "g, inputs"},
+	}
+	for i := 1; i <= 6; i++ {
+		params := ""
+		callArgs := ""
+		for j := 0; j < i; j++ {
+			if j > 0 {
+				params += ", "
+				callArgs += ", "
+			}
+			params += "*" + p + "Node"
+			callArgs += fmt.Sprintf("inputs[%d]", j)
+		}
+		possibleInputs = append(possibleInputs, inputConfig{params, i, false, false, callArgs})
+	}
+
 	type outputConfig struct {
-		name   string
-		output string
+		name          string
+		output        string
+		numOutputs    int
+		outputAsSlice bool
+		wrapOutputs   func(call string) string
 	}
 	possibleOutputs := []outputConfig{}
 	if withScope {
-		possibleOutputs = append(possibleOutputs, outputConfig{"ZeroOutputs", ""})
+		possibleOutputs = append(possibleOutputs, outputConfig{"ZeroOutputs", "", 0, false, func(call string) string {
+			return fmt.Sprintf("%s; return nil", call)
+		}})
 	}
 	possibleOutputs = append(possibleOutputs,
-		outputConfig{"OneOutput", "*" + p + "Node"},
-		outputConfig{"TwoOutputs", "(*" + p + "Node, *" + p + "Node)"},
-		outputConfig{"ThreeOutputs", "(*" + p + "Node, *" + p + "Node, *" + p + "Node)"},
-		outputConfig{"SliceOutputs", "[]*" + p + "Node"},
+		outputConfig{"OneOutput", "*" + p + "Node", 1, false, func(call string) string {
+			return fmt.Sprintf("return []*Node{%s}", call)
+		}},
+		outputConfig{"TwoOutputs", "(*" + p + "Node, *" + p + "Node)", 2, false, func(call string) string {
+			return fmt.Sprintf("r0, r1 := %s; return []*Node{r0, r1}", call)
+		}},
+		outputConfig{"ThreeOutputs", "(*" + p + "Node, *" + p + "Node, *" + p + "Node)", 3, false, func(call string) string {
+			return fmt.Sprintf("r0, r1, r2 := %s; return []*Node{r0, r1, r2}", call)
+		}},
+		outputConfig{"SliceOutputs", "[]*" + p + "Node", -1, true, func(call string) string {
+			return fmt.Sprintf("return %s", call)
+		}},
 	)
+
 	var contextInput string
 	if withScope {
 		contextInput = "*Scope, "
 	}
-	
+
 	var interfaceNames []string
 	for _, outConfig := range possibleOutputs {
 		interfaceName := fmt.Sprintf("ExecGraphFn%s", outConfig.name)
@@ -88,12 +129,39 @@ func GraphExecFnConstraints(w io.Writer, withScope bool) {
 		if outputs != "" {
 			outputs = " " + outputs
 		}
-		for _, inputs := range possibleInputs {
-			parts = append(parts, fmt.Sprintf("\tfunc (%s%s)%s", contextInput, inputs, outputs))
+		for _, inConfig := range possibleInputs {
+			parts = append(parts, fmt.Sprintf("\tfunc (%s%s)%s", contextInput, inConfig.params, outputs))
 		}
 		fmt.Fprintf(w, "%s\n}\n\n", strings.Join(parts, " |\n"))
 	}
-	fmt.Fprintf(w, "type ExecGraphFn interface {\n\t%s\n}\n", strings.Join(interfaceNames, " | "))
+	fmt.Fprintf(w, "type ExecGraphFn interface {\n\t%s\n}\n\n", strings.Join(interfaceNames, " | "))
+
+	// Generate convertExecFn
+	fmt.Fprintf(w, "func convertExecFn[F ExecGraphFn](graphFn F) (canonicalFn CanonicalExecGraphFn, numInputs, numOutputs int, inputIsGraph, inputAsSlice, outputAsSlice bool) {\n")
+	fmt.Fprintf(w, "\tswitch f := any(graphFn).(type) {\n")
+	for _, outConfig := range possibleOutputs {
+		outputs := outConfig.output
+		if outputs != "" {
+			outputs = " " + outputs
+		}
+		for _, inConfig := range possibleInputs {
+			fmt.Fprintf(w, "\tcase func(%s%s)%s:\n", contextInput, inConfig.params, outputs)
+			fmt.Fprintf(w, "\t\tnumInputs, numOutputs = %d, %d\n", inConfig.numInputs, outConfig.numOutputs)
+			fmt.Fprintf(w, "\t\tinputIsGraph, inputAsSlice, outputAsSlice = %v, %v, %v\n",
+				inConfig.inputIsGraph, inConfig.inputAsSlice, outConfig.outputAsSlice)
+			if withScope {
+				fmt.Fprintf(w, "\t\tcanonicalFn = func(s *Scope, g *Graph, inputs []*Node) []*Node { %s }\n",
+					outConfig.wrapOutputs(fmt.Sprintf("f(s, %s)", inConfig.callArgs)))
+			} else {
+				fmt.Fprintf(w, "\t\tcanonicalFn = func(g *Graph, inputs []*Node) []*Node { %s }\n",
+					outConfig.wrapOutputs(fmt.Sprintf("f(%s)", inConfig.callArgs)))
+			}
+		}
+	}
+	fmt.Fprintf(w, "\tdefault:\n\t\tpanic(fmt.Sprintf(\"invalid graphFn type %%T\", graphFn))\n")
+	fmt.Fprintf(w, "\t}\n")
+	fmt.Fprintf(w, "\treturn\n")
+	fmt.Fprintf(w, "}\n")
 }
 
 var (
@@ -146,6 +214,8 @@ func main() {
 	} else if *flagGraph {
 		fmt.Fprintln(f, "package graph")
 		fmt.Fprintln(f)
+		fmt.Fprintln(f, "import \"fmt\"")
+		fmt.Fprintln(f)
 		fmt.Fprintf(f, "// For graph/exec.go:\n\n")
 		GraphExecFnConstraints(f, false)
 		fmt.Fprintln(f)
@@ -153,6 +223,7 @@ func main() {
 		fmt.Fprintln(f, "package model")
 		fmt.Fprintln(f)
 		fmt.Fprintln(f, "import (")
+		fmt.Fprintln(f, "\t\"fmt\"")
 		fmt.Fprintln(f, "\t\"github.com/gomlx/gomlx/core/graph\"")
 		fmt.Fprintln(f, ")")
 		fmt.Fprintln(f)

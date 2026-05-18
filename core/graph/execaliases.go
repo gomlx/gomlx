@@ -145,17 +145,16 @@ func (e *Exec) ExecOnDevice(defaultDevice compute.DeviceNum, args ...any) ([]*te
 	return e.CallOnDevice(defaultDevice, args...)
 }
 
-// MustNewExecAny constructs an Exec object that uses the given graphFn to build
+// MustNewExecCanonical constructs an Exec object that uses the given graphFn to build
 // computation graphs.
 //
-// `graphFn` can take only *Node parameters as input, and it returns one or more *Node.
-// Except if there are no inputs, in which case graphFn needs to take a *Graph as the first parameter.
+// `graphFn` must be of type CanonicalExecGraphFn.
 //
 // It panics if the inputs are invalid.
 //
 // See also the generics MustNewExec (or MustNewExec for returning an error), which checks for valid graphFn in compile time.
-func MustNewExecAny(backend compute.Backend, graphFn any) *Exec {
-	return must.M1(NewExecAny(backend, graphFn))
+func MustNewExecCanonical(backend compute.Backend, graphFn CanonicalExecGraphFn, numInputs, numOutputs int, inputIsGraph, inputAsSlice, outputAsSlice bool) *Exec {
+	return must.M1(NewExecCanonical(backend, graphFn, numInputs, numOutputs, inputIsGraph, inputAsSlice, outputAsSlice))
 }
 
 // MustNewExec constructs an Exec object that uses the given graphFn to build
@@ -164,10 +163,10 @@ func MustNewExecAny(backend compute.Backend, graphFn any) *Exec {
 // graphFn should take *Node as input and return a *Node -- except if there are no (Node) inputs,
 // in which case it should take a single *Graph input.
 //
-// It's a wrapper for MustNewExecAny, but uses generics to type check that
+// It's a wrapper for MustNewExecCanonical, but uses generics to type check that
 // graphFn is valid.
 func MustNewExec[F ExecGraphFn](backend compute.Backend, graphFn F) *Exec {
-	return MustNewExecAny(backend, graphFn)
+	return must.M1(NewExec(backend, graphFn))
 }
 
 // ExecOnce builds the graph and calls it with the given arguments and returns the one output.

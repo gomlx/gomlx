@@ -241,7 +241,7 @@ func addSubGraph(a, b *Node) []*Node {
 
 func TestExecWithSlices(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	concat := MustNewExecAny(backend, concatGraph)
+	concat := MustNewExec(backend, concatGraph)
 
 	a := [][]float64{{1, 2}, {3, 4}}
 	b := [][]float64{{10}, {20}}
@@ -258,7 +258,7 @@ func TestExecWithSlices(t *testing.T) {
 		require.Equalf(t, want, got.Value(), "concat([%v, %v, %v]): got %v, wanted %v", a, b, c, got, want)
 	}
 
-	addSub := MustNewExecAny(backend, addSubGraph)
+	addSub := MustNewExec(backend, addSubGraph)
 	{
 		got := addSub.MustCall(c, a)
 		want0 := [][]float64{{101, 103}, {203, 205}}
@@ -281,7 +281,7 @@ func concatWithLoggedFirstNodeGraph(nodes []*Node) *Node {
 func TestExecWithLogger(t *testing.T) {
 	manager := testutil.BuildTestBackend()
 
-	concat := MustNewExecAny(manager, concatWithLoggedFirstNodeGraph)
+	concat := MustNewExec(manager, concatWithLoggedFirstNodeGraph)
 	var firstNodeValue *tensors.Tensor
 	concat.SetNodeLogger(func(_ *Graph, messages []string, values []*tensors.Tensor, nodes []NodeId) {
 		if len(messages) != 1 {

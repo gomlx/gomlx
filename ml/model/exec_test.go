@@ -81,7 +81,7 @@ func TestExec(t *testing.T) {
 
 	t.Run("DenseLayer", func(t *testing.T) {
 		store := model.NewStore()
-		oneLayer, err := model.NewExecAny(backend, store, oneLayerGraph)
+		oneLayer, err := model.NewExec(backend, store, oneLayerGraph)
 		if err != nil {
 			t.Fatalf("Failed to create model.Exec for oneLayer: %+v", err)
 		}
@@ -125,7 +125,7 @@ func TestExec(t *testing.T) {
 	})
 
 	t.Run("WithSlices", func(t *testing.T) {
-		oneLayer, err := model.NewExecAny(backend, model.NewStore(), oneLayerManyInputsGraph)
+		oneLayer, err := model.NewExec(backend, model.NewStore(), oneLayerManyInputsGraph)
 		if err != nil {
 			t.Fatalf("Failed to create model.Exec for oneLayer: %+v", err)
 		}
