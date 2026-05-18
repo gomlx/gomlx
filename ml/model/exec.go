@@ -280,7 +280,7 @@ func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []compute.Buffer
 			continue
 		}
 		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
-			return errors.Errorf("invalid paramNode for variable %q", v.ParameterName())
+			return errors.Errorf("invalid paramNode for variable %q", v.Path())
 		}
 		handle := nodes.paramNode.GetParameterHandle()
 
@@ -302,9 +302,9 @@ func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []compute.Buffer
 		} else {
 			if !v.HasValue() {
 				if e.isInitializeVariablesExec {
-					Panicf("variable %q used and not initialized during variable initialization", v.ScopeAndName())
+					Panicf("variable %q used and not initialized during variable initialization", v.Path())
 				} else {
-					Panicf("variable %q failed to initialize", v.ScopeAndName())
+					Panicf("variable %q failed to initialize", v.Path())
 				}
 			}
 			value, err := v.Value()
@@ -335,21 +335,21 @@ func (e *Exec) setSideParamsDistributed(g *Graph, inputBuffers []compute.Buffer,
 			continue
 		}
 		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
-			return errors.Errorf("invalid paramNode for variable %q", v.ParameterName())
+			return errors.Errorf("invalid paramNode for variable %q", v.Path())
 		}
 		handle := int(nodes.paramNode.GetParameterHandle())
 
 		if !v.HasValue() {
 			if e.isInitializeVariablesExec {
-				return errors.Errorf("variable %q used and not initialized during variable initialization", v.ScopeAndName())
+				return errors.Errorf("variable %q used and not initialized during variable initialization", v.Path())
 			} else {
-				return errors.Errorf("variable %q failed to initialize", v.ScopeAndName())
+				return errors.Errorf("variable %q failed to initialize", v.Path())
 			}
 		}
 
 		dTensor, err := v.DistributedValue()
 		if err != nil {
-			return errors.WithMessagef(err, "failed to get distributed value for variable %q", v.ScopeAndName())
+			return errors.WithMessagef(err, "failed to get distributed value for variable %q", v.Path())
 		}
 		shards := dTensor.Shards()
 		changedInGraph := v.ChangedInGraph(g)
@@ -364,7 +364,7 @@ func (e *Exec) setSideParamsDistributed(g *Graph, inputBuffers []compute.Buffer,
 				inputBuffers[bufIdx], err = shards[deviceIdx].DonateBuffer(e.backend, deviceNum)
 				if err != nil {
 					return errors.WithMessagef(err, "failed to donate buffer for variable %q on device %d",
-						v.ScopeAndName(), deviceIdx)
+						v.Path(), deviceIdx)
 				}
 				donate[bufIdx] = true
 			}
@@ -383,7 +383,7 @@ func (e *Exec) setSideParamsDistributed(g *Graph, inputBuffers []compute.Buffer,
 				inputBuffers[bufIdx], err = shards[deviceIdx].Buffer(e.backend, deviceNum)
 				if err != nil {
 					return errors.WithMessagef(err, "failed to get buffer for variable %q on device %d",
-						v.ScopeAndName(), deviceIdx)
+						v.Path(), deviceIdx)
 				}
 				donate[bufIdx] = false
 			}
@@ -566,11 +566,11 @@ func (e *Exec) collectOutputs(outputs []*tensors.Tensor, changedVars []*Variable
 	var firstErr error
 	for ii, v := range changedVars {
 		if !v.shape.Equal(outputs[ii].Shape()) {
-			return nil, errors.Errorf("variable %q changed shape in graph execution", v.ScopeAndName())
+			return nil, errors.Errorf("variable %q changed shape in graph execution", v.Path())
 		}
 		err := v.SetValue(outputs[ii])
 		if err != nil {
-			err = errors.WithMessagef(err, "failed updating value for %q", v.ScopeAndName())
+			err = errors.WithMessagef(err, "failed updating value for %q", v.Path())
 			if firstErr == nil {
 				firstErr = err
 			} else {
@@ -601,7 +601,7 @@ func (e *Exec) collectOutputsForDistributed(
 			shardingSpec = e.scope.store.defaultShardingSpec
 		}
 		if shardingSpec == nil {
-			err := errors.Errorf("variable %q has no sharding spec", v.ScopeAndName())
+			err := errors.Errorf("variable %q has no sharding spec", v.Path())
 			if firstErr == nil {
 				firstErr = err
 			} else {
@@ -612,7 +612,7 @@ func (e *Exec) collectOutputsForDistributed(
 
 		distValue, err := dtensor.NewTensor(shardingSpec, shards)
 		if err != nil {
-			err = errors.WithMessagef(err, "failed to create distributed tensor for variable %q", v.ScopeAndName())
+			err = errors.WithMessagef(err, "failed to create distributed tensor for variable %q", v.Path())
 			if firstErr == nil {
 				firstErr = err
 			} else {
@@ -623,7 +623,7 @@ func (e *Exec) collectOutputsForDistributed(
 
 		err = v.SetDistributedValue(distValue)
 		if err != nil {
-			err = errors.WithMessagef(err, "failed updating distributed value for %q", v.ScopeAndName())
+			err = errors.WithMessagef(err, "failed updating distributed value for %q", v.Path())
 			if firstErr == nil {
 				firstErr = err
 			} else {

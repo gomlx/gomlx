@@ -211,7 +211,7 @@ func (s *Scope) IterVariables() iter.Seq[*Variable] {
 	}
 	return func(yield func(*Variable) bool) {
 		for v := range s.store.IterVariables() {
-			p := v.ScopeAndName()
+			p := v.Path()
 			if p == baseScope || strings.HasPrefix(p, baseScopeWithSeparator) {
 				if !yield(v) {
 					return

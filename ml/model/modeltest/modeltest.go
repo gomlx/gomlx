@@ -50,7 +50,7 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, w
 		fmt.Printf("\t======\n")
 	}
 	for v := range store.IterVariables() {
-		fmt.Printf("\tVar %s: ", v.ParameterName())
+		fmt.Printf("\tVar %s: ", v.Path())
 		if v.Shape().Size() > 16 {
 			fmt.Printf("%s\n", v.Shape())
 		} else {

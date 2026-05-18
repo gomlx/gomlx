@@ -113,7 +113,7 @@ func (s *Store) Clone() (*Store, error) {
 	for _, v := range s.variables {
 		_, err := v.CloneToStore(newStore)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "failed to clone variable %q while cloning the Store", v.ScopeAndName())
+			return nil, errors.WithMessagef(err, "failed to clone variable %q while cloning the Store", v.Path())
 		}
 	}
 	return newStore, nil
@@ -157,8 +157,9 @@ func (s *Store) GetVariable(fullPath string) *Variable {
 	}
 
 	v = &Variable{
+		store:        s,
 		name:         name,
-		fullPath:     scopePath,
+		fullPath:     fullPath,
 		shape:        value.Shape(),
 		value:        value,
 		Trainable:    true,
@@ -224,7 +225,7 @@ func (s *Store) DeleteVariablesInScope(fullPath string) error {
 	}
 
 	s.variables = slices.DeleteFunc(s.variables, func(v *Variable) bool {
-		p := v.ScopeAndName()
+		p := v.Path()
 		return p == fullPath || strings.HasPrefix(p, fullPathWithSeparator)
 	})
 
@@ -306,7 +307,7 @@ func (s *Store) InitializeVariables(backend compute.Backend, configExec func(ini
 		initialValues := make([]*Node, 0, len(variablesToInitialize))
 		for _, v := range variablesToInitialize {
 			if v.initializer == nil {
-				Panicf("failed to initialize variable %q: initializer was not configured", v.ScopeAndName())
+				Panicf("failed to initialize variable %q: initializer was not configured", v.Path())
 			}
 			initialValues = append(initialValues, v.initializer(g, v.shape))
 		}
@@ -333,7 +334,7 @@ func (s *Store) InitializeVariables(backend compute.Backend, configExec func(ini
 	}
 	for ii, v := range variablesToInitialize {
 		if !values[ii].Ok() {
-			return errors.Errorf("graph execution to initialize variables failed: variable %q generated value was invalid", v.ScopeAndName())
+			return errors.Errorf("graph execution to initialize variables failed: variable %q generated value was invalid", v.Path())
 		}
 		v.value = values[ii]
 	}

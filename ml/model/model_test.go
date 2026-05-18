@@ -44,8 +44,8 @@ func TestScopeVariables(t *testing.T) {
 	v0 := sA.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	v1 := sB.VariableWithShape("x", shapes.Make(dtypes.Float64))
 
-	assert.Equal(t, "/a/x", v0.ScopeAndName())
-	assert.Equal(t, "/b/x", v1.ScopeAndName())
+	assert.Equal(t, "/a/x", v0.Path())
+	assert.Equal(t, "/b/x", v1.Path())
 
 	// Try to visit same scope again: should panic.
 	require.Panicsf(t, func() { _ = root.In("a") }, "Allowed re-visiting scope %q with In()", "a")

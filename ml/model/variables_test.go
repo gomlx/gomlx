@@ -26,16 +26,16 @@ func TestVariable_CloneToContext(t *testing.T) {
 	store1 := NewStore()
 	v1x, err := v0x.CloneToStore(store1)
 	require.NoError(t, err)
-	fmt.Printf("Cloned variable %q: %s\n", v1x.ScopeAndName(), v1x.MustValue())
+	fmt.Printf("Cloned variable %q: %s\n", v1x.Path(), v1x.MustValue())
 	v1y, err := v0y.CloneToStore(store1)
 	require.NoError(t, err)
 	_, err = v1y.Value()
 	require.Error(t, err, "/a/b/y was created uninitialized, it should have no value")
-	fmt.Printf("Cloned variable %q, with no value, shape=%s\n", v1y.ScopeAndName(), v1y.Shape())
+	fmt.Printf("Cloned variable %q, with no value, shape=%s\n", v1y.Path(), v1y.Shape())
 
 	// Check the new variable has the right name, scope and was properly inserted in to the new model.
-	if v1x.ScopeAndName() != "/a/b/x" {
-		fmt.Printf("Unexpeted scope/name of clone variable: %q\n", v1x.ScopeAndName())
+	if v1x.Path() != "/a/b/x" {
+		fmt.Printf("Unexpeted scope/name of clone variable: %q\n", v1x.Path())
 		t.Fail()
 	}
 	require.Equal(t, 2, store1.NumVariables())

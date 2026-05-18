@@ -3,7 +3,6 @@
 package model
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/gomlx/compute/distributed"
@@ -126,7 +125,7 @@ func (v *Variable) String() string {
 	if v == nil || !v.Shape().Ok() {
 		return "INVALID (NIL) VARIABLE"
 	}
-	return fmt.Sprintf("%s/%s", v.Scope(), v.Name())
+	return v.fullPath
 }
 
 // IsValid returns whether the variable is holding a valid value.
@@ -186,7 +185,8 @@ func (v *Variable) Scope() string {
 	if v == nil {
 		return "<nil>"
 	}
-	return v.fullPath
+	scope, _ := SplitPath(v.fullPath)
+	return scope
 }
 
 // Shape returns the variable shape.
@@ -255,7 +255,7 @@ func (v *Variable) SetShardingSpec(spec *distributed.ShardingSpec) error {
 		if v.distValue.ShardingSpec() != nil {
 			return errors.Errorf(
 				"variable %q cannot change shardingSpec to %s, it already has a shardingSpec spec set to %q",
-				v.ScopeAndName(),
+				v.Path(),
 				spec,
 				v.distValue.ShardingSpec(),
 			)
@@ -273,19 +273,21 @@ func (v *Variable) ShardingSpec() *distributed.ShardingSpec {
 	return v.shardingSpec
 }
 
+// Path returns the absolute path to a variable (the <scope>/<name>).
+func (v *Variable) Path() string {
+	return v.fullPath
+}
+
 // VariableParameterPrefix is used to prefix Graph parameter names for variablesMap.
 const VariableParameterPrefix = "var:"
 
-// ScopeAndName is a quick pretty-print way to refer to a variable.
-func (v *Variable) ScopeAndName() string {
-	return JoinPath(v.fullPath, v.name)
-}
-
 // ParameterName used when creating a parameter node in a Graph to access the variable, or as a key when saving.
 // It is a unique name for the variable that includes the scope and the variable name and is reversible.
+//
+// Deprecated: Use [Variable.Path].
 func (v *Variable) ParameterName() string {
 	v.AssertValid()
-	return VariableParameterNameFromScopeAndName(v.fullPath, v.name)
+	return VariableParameterPrefix + v.fullPath
 }
 
 // VariableScopeAndNameFromParameterName extracts the scope and name from a variable's [GetParameterName].
@@ -337,12 +339,12 @@ func (v *Variable) Value() (*tensors.Tensor, error) {
 		return v.value, nil
 	}
 	if v.distValue == nil {
-		return nil, errors.Errorf("variable %q has no value", v.ScopeAndName())
+		return nil, errors.Errorf("variable %q has no value", v.Path())
 	}
 	var err error
 	v.value, err = v.distValue.Merge()
 	if err != nil {
-		return nil, errors.WithMessagef(err, "failed to merge distributed variable %q", v.ScopeAndName())
+		return nil, errors.WithMessagef(err, "failed to merge distributed variable %q", v.Path())
 	}
 	return v.value, nil
 }
@@ -423,7 +425,7 @@ func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) error {
 func (v *Variable) SetDistributedValue(distValue *dtensor.Tensor) error {
 	err := v.Reset()
 	if err != nil {
-		return errors.WithMessagef(err, "while finalizing previous value of variable %q", v.ScopeAndName())
+		return errors.WithMessagef(err, "while finalizing previous value of variable %q", v.Path())
 	}
 	v.distValue = distValue
 	if distValue != nil {
@@ -449,19 +451,19 @@ func (v *Variable) DistributedValue() (*dtensor.Tensor, error) {
 		return v.distValue, nil
 	}
 	if v.value == nil {
-		return nil, errors.Errorf("variable %q has no distributed (or local) value", v.ScopeAndName())
+		return nil, errors.Errorf("variable %q has no distributed (or local) value", v.Path())
 	}
 	shardingSpec := v.shardingSpec
 	if shardingSpec == nil {
 		shardingSpec = v.store.defaultShardingSpec
 	}
 	if shardingSpec == nil {
-		return nil, errors.Errorf("variable %q has no shardingSpec spec", v.ScopeAndName())
+		return nil, errors.Errorf("variable %q has no shardingSpec spec", v.Path())
 	}
 	var err error
 	v.distValue, err = dtensor.ShardTensor(shardingSpec, v.value)
 	if err != nil {
-		return nil, errors.WithMessagef(err, "failed to distribute variable %q", v.ScopeAndName())
+		return nil, errors.WithMessagef(err, "failed to distribute variable %q", v.Path())
 	}
 	return v.distValue, nil
 }
@@ -607,7 +609,7 @@ func (v *Variable) Finalize() error {
 				firstErr = err
 			} else {
 				// We keep the firstErr but log this error.
-				klog.Errorf("Error finalizing variable %q: %+v", v.ScopeAndName(), err)
+				klog.Errorf("Error finalizing variable %q: %+v", v.Path(), err)
 			}
 		}
 	}

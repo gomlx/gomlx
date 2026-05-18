@@ -31,7 +31,7 @@ func (s *Store) getRNGStateVar() *Variable {
 	}
 	rngStateVar = &Variable{
 		name:         RNGStateVariableName,
-		fullPath:     "/",
+		fullPath:     fullPath,
 		shape:        graph.RNGStateShape,
 		Trainable:    false,
 		shardingSpec: s.defaultShardingSpec,
