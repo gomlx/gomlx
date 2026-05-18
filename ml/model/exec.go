@@ -211,7 +211,7 @@ func (e *Exec) buildGraphFn() {
 		for _, v := range e.scope.store.variables {
 			if v.ChangedInGraph(g) {
 				changedVars = append(changedVars, v)
-				allValues = append(allValues, v.ValueGraph(g))
+				allValues = append(allValues, v.NodeValue(g))
 			}
 		}
 		{

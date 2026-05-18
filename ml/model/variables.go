@@ -12,7 +12,6 @@ import (
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
-	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/xsync"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -32,8 +31,8 @@ import (
 // When building a graph, they are passed as parameters (the corresponding graph node is called ParameterNode)
 // and have their values passed only during the execution of the compiled computation graph.
 type Variable struct {
-	scope         *Scope
-	name, scopePath string
+	store          *Store
+	name, fullPath string
 
 	// Trainable indicates whether the variable is trainable.
 	// If set to false, it won't be touched by trainers.
@@ -74,7 +73,7 @@ type Variable struct {
 func (v *Variable) CloneToStore(toStore *Store) (*Variable, error) {
 	newV := &Variable{
 		name:         v.name,
-		scopePath:    v.scopePath,
+		fullPath:     v.fullPath,
 		shape:        v.shape,
 		Trainable:    v.Trainable,
 		shardingSpec: v.shardingSpec,
@@ -96,20 +95,20 @@ func (v *Variable) CloneToStore(toStore *Store) (*Variable, error) {
 	return newV, nil
 }
 
-func valueToTensor(value any) *tensors.Tensor {
+func valueToTensor(value any) (*tensors.Tensor, error) {
 	if tensorValue, ok := value.(*tensors.Tensor); ok {
-		return tensorValue
+		return tensorValue, nil
 	}
 	if node, ok := value.(*Node); ok {
-		Panicf(
-			"trying to feed a computation graph node (`*computation.Node`) as a concrete value will not work, "+
+		return nil, errors.Errorf(
+			"trying to feed a computation graph node (`*graph.Node`) as a concrete value will not work, "+
 				"you have to provide a Go value or a tensor here -- *Node provided: %s", node)
 	}
-	return tensors.FromAnyValue(value)
+	return tensors.MustFromAnyValue(value), nil
 }
 
 // variableNodes is used to store the variable parameter node (fed to the graph) and current value Node for a given graph.
-// They can be different if the variable value is changed during the graph building with [Variable.SetValueGraph].
+// They can be different if the variable value is changed during the graph building with [Variable.SetNodeValue].
 type variableNodes struct {
 	paramNode, valueNode *Node
 }
@@ -187,7 +186,7 @@ func (v *Variable) Scope() string {
 	if v == nil {
 		return "<nil>"
 	}
-	return v.scopePath
+	return v.fullPath
 }
 
 // Shape returns the variable shape.
@@ -279,14 +278,14 @@ const VariableParameterPrefix = "var:"
 
 // ScopeAndName is a quick pretty-print way to refer to a variable.
 func (v *Variable) ScopeAndName() string {
-	return JoinPath(v.scopePath, v.name)
+	return JoinPath(v.fullPath, v.name)
 }
 
 // ParameterName used when creating a parameter node in a Graph to access the variable, or as a key when saving.
 // It is a unique name for the variable that includes the scope and the variable name and is reversible.
 func (v *Variable) ParameterName() string {
 	v.AssertValid()
-	return VariableParameterNameFromScopeAndName(v.scopePath, v.name)
+	return VariableParameterNameFromScopeAndName(v.fullPath, v.name)
 }
 
 // VariableScopeAndNameFromParameterName extracts the scope and name from a variable's [GetParameterName].
@@ -409,7 +408,7 @@ func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) error {
 	if value != nil {
 		v.shape = value.Shape()
 	} else {
-		v.scope.store.needsInitialization = true
+		v.store.needsInitialization = true
 	}
 	return nil
 }
@@ -432,7 +431,7 @@ func (v *Variable) SetDistributedValue(distValue *dtensor.Tensor) error {
 		v.shardingSpec = distValue.ShardingSpec()
 	} else {
 		// If setting to nil, marks the context as needing initialization.
-		v.scope.store.needsInitialization = true
+		v.store.needsInitialization = true
 	}
 	return nil
 }
@@ -454,7 +453,7 @@ func (v *Variable) DistributedValue() (*dtensor.Tensor, error) {
 	}
 	shardingSpec := v.shardingSpec
 	if shardingSpec == nil {
-		shardingSpec = v.scope.store.defaultShardingSpec
+		shardingSpec = v.store.defaultShardingSpec
 	}
 	if shardingSpec == nil {
 		return nil, errors.Errorf("variable %q has no shardingSpec spec", v.ScopeAndName())
@@ -484,12 +483,13 @@ func (v *Variable) ChangedInGraph(g *Graph) bool {
 	return nodes.paramNode != nodes.valueNode
 }
 
-// ValueGraph returns the Node of the Graph that holds the current value of the variable. It can be changed
+// NodeValue returns the Node of the Graph that holds the current value of the variable. It can be changed
 // for the graph (for instance, when applying a gradient descent) by [SetValueGraph].
 //
 // It's a computation graph building function, and panics on errors.
-func (v *Variable) ValueGraph(g *Graph) *Node {
+func (v *Variable) NodeValue(nodeOrGraph graph.GraphProvider) *Node {
 	v.AssertValid()
+	g := nodeOrGraph.Graph()
 	nodes, found := v.graphToNodes.Load(g.GraphId())
 	if found {
 		return nodes.valueNode
@@ -502,19 +502,19 @@ func (v *Variable) ValueGraph(g *Graph) *Node {
 	return node
 }
 
-// SetValueGraph sets the value (a graph [*Node]) of the variable for the current graph.
+// SetNodeValue sets the value (a graph [*Node]) of the variable for the current graph.
 //
 // This is used to "communicate" among different parts of the graph building that this value Node should
 // be used as the new variable value.
 //
-// [model.Exec] will also use the last value set with [SetValueGraph] and include it as the output of the graph
+// [model.Exec] will also use the last value set with [SetNodeValue] and include it as the output of the graph
 // execution and then update the variables (with [SetValue]) accordingly after each graph execution.
 //
 // So a graph building function can update variable values, for instance, to update weights during gradient
 // descent.
 //
 // It's a computation graph building function, and panics on errors.
-func (v *Variable) SetValueGraph(value *Node) {
+func (v *Variable) SetNodeValue(value *Node) {
 	v.AssertValid()
 	g := value.Graph()
 	g.AssertValid()
@@ -556,7 +556,7 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		// If a shardingSpec spec is present, we need to calculate the shard shape.
 		// If no shardingSpec spec is present, it is assumed replicated, so we use the full shape.
 		if v.shardingSpec == nil {
-			v.shardingSpec = v.scope.store.defaultShardingSpec
+			v.shardingSpec = v.store.defaultShardingSpec
 		}
 		// SPMD uses the shard shape.
 		paramNode = graph.ShardedParameter(g, paramName, v.ShardShape(), v.shardingSpec)
@@ -565,7 +565,7 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		// In AutoSharding, the graph sees the global logical shape.
 		// We attach the shardingSpec spec to the node if available.
 		if v.shardingSpec == nil {
-			v.shardingSpec = v.scope.store.defaultShardingSpec
+			v.shardingSpec = v.store.defaultShardingSpec
 		}
 		// AutoSharding uses the full logical shape as shape.
 		paramNode = graph.ShardedParameter(g, paramName, v.shape, v.shardingSpec)
@@ -613,6 +613,6 @@ func (v *Variable) Finalize() error {
 	}
 	v.shape = shapes.Invalid()
 	v.graphToNodes.Clear()
-	v.scope = nil
+	v.store = nil
 	return firstErr
 }

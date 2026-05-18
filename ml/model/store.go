@@ -9,6 +9,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/distributed"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/internal/scoped"
@@ -70,6 +71,17 @@ func NewStore() *Store {
 		graphParams:  make(map[graph.GraphId]*scoped.Params),
 		variablesMap: make(map[string]*Variable),
 	}
+}
+
+// StoreProvider is an interface for types that provide access to a Store.
+// It works as an meta-type that accepts either a Scope or a Store object.
+type StoreProvider interface {
+	Store() *Store
+}
+
+// Store implements the StoreProvider interface.
+func (s *Store) Store() *Store {
+	return s
 }
 
 // Scope returns a new Scope for the given absolute path.
@@ -146,7 +158,7 @@ func (s *Store) GetVariable(fullPath string) *Variable {
 
 	v = &Variable{
 		name:         name,
-		scopePath:    scopePath,
+		fullPath:     scopePath,
 		shape:        value.Shape(),
 		value:        value,
 		Trainable:    true,
@@ -158,8 +170,7 @@ func (s *Store) GetVariable(fullPath string) *Variable {
 
 // setVariable adds the variable to the store.
 func (s *Store) setVariable(v *Variable) {
-	fullPath := v.ScopeAndName()
-	s.variablesMap[fullPath] = v
+	s.variablesMap[v.fullPath] = v
 	s.variables = append(s.variables, v)
 }
 
@@ -232,8 +243,15 @@ func (s *Store) IterVariables() iter.Seq[*Variable] {
 }
 
 // IterParams returns an iterator that yields each parameter in the store.
-func (s *Store) IterParams() iter.Seq[scoped.ParamValue] {
-	return s.params.Iter()
+func (s *Store) IterParams() iter.Seq2[string, any] {
+	return func(yield func(string, any) bool) {
+		for paramValue := range s.params.Iter() {
+			fullPath := JoinPath(paramValue.Scope, paramValue.Key)
+			if !yield(fullPath, paramValue.Value) {
+				return
+			}
+		}
+	}
 }
 
 // IterGraphParams returns an iterator that yields each parameter in the store for the given graph.
@@ -363,7 +381,113 @@ func (s *Store) SetParam(fullPath string, value any) {
 	s.params.Set(scopePath, baseName, value)
 }
 
+// GetGraphParam returns the value for the given param key for the given graph,
+// searching successively from the current scope back to the root scope ("/").
+func (s *Store) GetGraphParam(g *Graph, fullPath string) (value any, found bool) {
+	graphParams, found := s.graphParams[g.GraphId()]
+	if !found {
+		return
+	}
+	scope, key := SplitPath(fullPath)
+	return graphParams.Get(scope, key)
+}
+
+// SetGraphParam sets the given Graph param in the current scope.
+func (s *Store) SetGraphParam(g *Graph, fullPath string, value any) {
+	graphParams, found := s.graphParams[g.GraphId()]
+	if !found {
+		graphParams = scoped.New(ScopeSeparator)
+		s.graphParams[g.GraphId()] = graphParams
+	}
+	scopePath, baseName := SplitPath(fullPath)
+	graphParams.Set(scopePath, baseName, value)
+}
+
+// GraphParamIsTraining is the name of a graph param that indicates whether is current graph is being
+// used to train models.
+const GraphParamIsTraining = "training"
+
+// IsTraining returns whether current Store (and thus this Scope) is being used for training.
+func (s *Store) IsTraining(g *Graph) bool {
+	return GetGraphParamOr(s.RootScope(), g, GraphParamIsTraining, false)
+}
+
+// SetTraining marks the current Store (and thus this Scope) for the given graph as training.
+func (s *Store) SetTraining(g *Graph, value bool) {
+	s.RootScope().SetGraphParam(g, GraphParamIsTraining, value)
+}
+
+// SetParams sets a collection of parameters in the current scope.
+func (s *Store) SetParamsInScope(pathValues map[string]any) {
+	for fullPath, value := range pathValues {
+		s.SetParam(fullPath, value)
+	}
+}
+
 // EscapeScopeName replaces ScopeSeparator in the string and replaces them by "_".
 func EscapeScopeName(scopeName string) string {
 	return strings.ReplaceAll(scopeName, ScopeSeparator, "_")
+}
+
+// VariableWithShape creates or returns an existing variable with the given shape.
+func (s *Store) VariableWithShape(fullPath string, shape shapes.Shape, initializer VariableInitializer) *Variable {
+	v := s.GetVariable(fullPath)
+	if v != nil {
+		if !shape.Equal(v.shape) {
+			Panicf(
+				"requested to reuse variable %q, but with different shape from original: previous shape=%s, requested shape=%s",
+				fullPath,
+				v.shape,
+				shape,
+			)
+		}
+		v.initializer = initializer
+		return v
+	}
+
+	_, name := SplitPath(fullPath)
+	v = &Variable{
+		store:        s,
+		name:         name,
+		fullPath:     fullPath,
+		shape:        shape,
+		Trainable:    true,
+		shardingSpec: s.defaultShardingSpec,
+	}
+	s.setVariable(v)
+	v.initializer = initializer
+	s.needsInitialization = true
+	return v
+}
+
+// VariableWithValue creates or returns a variable initialized with the given value in the given variable path.
+func (s *Store) VariableWithValue(fullPath string, defaultValue any) *Variable {
+	v := s.GetVariable(fullPath)
+	valueT, err := valueToTensor(defaultValue)
+	if err != nil {
+		panic(errors.WithMessagef(err, "failed to parse value for variable %q", fullPath))
+	}
+
+	if v != nil {
+		if !valueT.Shape().Equal(v.shape) {
+			Panicf(
+				"requested to reuse variable %q, but with defaultValue with different shape from original: previous shape=%s, requested defaultValue shape=%s",
+				fullPath,
+				v.shape,
+				valueT.Shape(),
+			)
+		}
+		return v
+	}
+
+	v = &Variable{
+		store:     s,
+		fullPath:  fullPath,
+		shape:     valueT.Shape(),
+		value:     valueT,
+		Trainable: true,
+	}
+	_, v.name = SplitPath(fullPath)
+	s.setVariable(v)
+	return v
 }

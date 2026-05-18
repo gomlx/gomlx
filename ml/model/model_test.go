@@ -225,7 +225,7 @@ func TestStore_SetLoader(t *testing.T) {
 	e := MustNewExec(backend, store, func(s *Scope, g *graph.Graph) (*graph.Node, *graph.Node) {
 		v0 := s.WithInitializer(initializers.Zero).VariableWithShape("x", shapes.Make(dtypes.Float32))
 		v1 := s.VariableWithValue("y", int32(1))
-		return v0.ValueGraph(g), v1.ValueGraph(g)
+		return v0.NodeValue(g), v1.NodeValue(g)
 	})
 	results := e.MustExec()
 	gotV0 := tensors.ToScalar[float32](results[0])

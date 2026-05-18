@@ -12,7 +12,6 @@ import (
 
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/internal/scoped"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/sets"
@@ -26,9 +25,22 @@ func JoinPath(elements ...string) string {
 }
 
 // SplitPath splits the path into its scope component and the last element name.
+//
+// Examples:
+//
+//	SplitPath("/a/b/c") -> ("/a/b", "c")
+//	SplitPath("/a") -> ("/", "a")
+//	SplitPath("") -> ("/", "")
+//	SplitPath("/a/") -> ("/a", "")
+//
 // It is platform-independent and always uses forward slashes, even on Windows.
 func SplitPath(fullPath string) (scope, name string) {
-	return path.Split(fullPath)
+	scope, name = path.Split(fullPath)
+	scope = strings.TrimSuffix(scope, ScopeSeparator)
+	if scope == "" {
+		scope = RootScopePath
+	}
+	return
 }
 
 // BasePath returns the last element of path.
@@ -210,16 +222,17 @@ func (s *Scope) IterVariables() iter.Seq[*Variable] {
 }
 
 // IterParams returns an iterator that yields each parameter in the model under the current scope (including sub-scopes)
-func (s *Scope) IterParams() iter.Seq[scoped.ParamValue] {
-	baseScope := s.scope
-	baseScopeWithSeparator := baseScope
-	if !strings.HasSuffix(baseScopeWithSeparator, "/") {
-		baseScopeWithSeparator += "/"
-	}
-	return func(yield func(scoped.ParamValue) bool) {
-		for p := range s.store.IterParams() {
-			if p.Scope == baseScope || strings.HasPrefix(p.Scope, baseScopeWithSeparator) {
-				if !yield(p) {
+func (s *Scope) IterParams() iter.Seq2[string, any] {
+	return func(yield func(string, any) bool) {
+		baseScope := s.scope
+		baseScopeWithSeparator := baseScope
+		if !strings.HasSuffix(baseScopeWithSeparator, "/") {
+			baseScopeWithSeparator += "/"
+		}
+		for paramValue := range s.store.params.Iter() {
+			if paramValue.Scope == baseScope || strings.HasPrefix(paramValue.Scope, baseScopeWithSeparator) {
+				fullPath := JoinPath(paramValue.Scope, paramValue.Key)
+				if !yield(fullPath, paramValue.Value) {
 					return
 				}
 			}
@@ -333,141 +346,80 @@ func (s *Scope) SetParams(keyValues map[string]any) {
 // GetGraphParam returns the value for the given param key for the given graph,
 // searching successively from the current scope back to the root scope ("/").
 func (s *Scope) GetGraphParam(g *Graph, key string) (value any, found bool) {
-	graphParams, found := s.store.graphParams[g.GraphId()]
-	if !found {
-		return
-	}
-	return graphParams.Get(s.scope, key)
+	return s.store.GetGraphParam(g, JoinPath(s.scope, key))
 }
 
-// MustGetGraphParam is like GetGraphParam, but panics if the parameter is not found, or if it is not of type T.
-func MustGetGraphParam[T any](s *Scope, g *Graph, key string) T {
+// mustConvert any value into T. Panics if the value cannot be unmarshalled.
+func mustConvert[T any](valueAny any, fullPath string) (T, error) {
 	var t T
-	valueAny, found := s.GetGraphParam(g, key)
-	if !found {
-		Panicf("parameter %q (of type %T) not found in scope %q (and its parents) for graph %v", key, t, s.scope, g)
-	}
-
 	v := reflect.ValueOf(valueAny)
 	typeOfT := reflect.TypeOf(t)
 	valueT := reflect.New(typeOfT)
 	if valueT.Type().Implements(textUnmarshalerType) && v.Kind() == reflect.String {
 		if err := valueT.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(v.String())); err != nil {
-			Panicf("can't UnmarshalText %s to %s", v.String(), typeOfT.String())
+			return t, fmt.Errorf("can't UnmarshalText %s to %s for parameter %q: %w", v.String(), typeOfT.String(), fullPath, err)
 		}
-		return valueT.Elem().Interface().(T)
+		return valueT.Elem().Interface().(T), nil
 	} else if !v.CanConvert(typeOfT) {
-		Panicf("MustGetGraphParam[%T](s, g, %q): s(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T",
-			t, key, s.scope, key, valueAny, valueAny, t)
+		return t, fmt.Errorf("value of param %q (%#v) cannot be converted to %T", fullPath, valueAny, t)
 	}
-	return v.Convert(typeOfT).Interface().(T)
+	return v.Convert(typeOfT).Interface().(T), nil
 }
 
 // GetGraphParamOr either returns the value for the given param key for the given graph,
 // or if the key is not found, or the value is set to nil, it returns the given default value.
+//
+// It panics if the value is not of type T (as it tries to cast to T)
 func GetGraphParamOr[T any](s *Scope, g *Graph, key string, defaultValue T) T {
-	valueAny, found := s.GetGraphParam(g, key)
+	fullPath := JoinPath(s.scope, key)
+	valueAny, found := s.store.GetGraphParam(g, fullPath)
 	if !found || valueAny == nil {
 		return defaultValue
 	}
 	value, ok := valueAny.(T)
-	if ok {
+	if !ok {
 		return value
 	}
-	return MustGetGraphParam[T](s, g, key)
+	value, err := mustConvert[T](valueAny, fullPath)
+	if err != nil {
+		panic(err)
+	}
+	return value
 }
 
 // SetGraphParam sets the given Graph param in the current scope.
 func (s *Scope) SetGraphParam(g *Graph, key string, value any) {
-	graphParams, found := s.store.graphParams[g.GraphId()]
-	if !found {
-		graphParams = scoped.New(ScopeSeparator)
-		s.store.graphParams[g.GraphId()] = graphParams
-	}
-	graphParams.Set(s.scope, key, value)
+	s.store.SetGraphParam(g, JoinPath(s.scope, key), value)
 }
 
 // VariableWithShape creates or returns an existing variable with the given shape in the current scope.
 func (s *Scope) VariableWithShape(name string, shape shapes.Shape) *Variable {
 	s.checkName(name)
 	fullPath := JoinPath(s.scope, name)
-	v := s.store.GetVariable(fullPath)
-
-	if v != nil {
-		if !shape.Equal(v.shape) {
-			Panicf(
-				"requested to reuse variable %q in scope %q, but with different shape from original: previous shape=%s, requested shape=%s",
-				name,
-				s.scope,
-				v.shape,
-				shape,
-			)
-		}
-		v.initializer = s.initializer
-		return v
-	}
-
-	v = &Variable{
-		scope:        s,
-		name:         name,
-		scopePath:    s.scope,
-		shape:        shape,
-		Trainable:    true,
-		shardingSpec: s.store.defaultShardingSpec,
-	}
-	s.store.setVariable(v)
-
-	v.initializer = s.initializer
-	s.store.needsInitialization = true
-	return v
+	return s.store.VariableWithShape(fullPath, shape, s.initializer)
 }
 
 // VariableWithValue creates or returns a variable initialized with the given value in the current scope.
 func (s *Scope) VariableWithValue(name string, defaultValue any) *Variable {
 	s.checkName(name)
 	fullPath := JoinPath(s.scope, name)
-	v := s.store.GetVariable(fullPath)
+	return s.store.VariableWithValue(fullPath, defaultValue)
+}
 
-	var valueT *tensors.Tensor
-	err := TryCatch[error](func() { valueT = valueToTensor(defaultValue) })
-	if err != nil {
-		panic(fmt.Errorf("failed to parse defaultValue %v for variable %q in scope %q: %w", defaultValue, name, s.scope, err))
-	}
-
-	if v != nil {
-		if !valueT.Shape().Equal(v.shape) {
-			Panicf(
-				"requested to reuse variable %q in scope %q, but with defaultValue with different shape from original: previous shape=%s, requested defaultValue shape=%s",
-				name,
-				s.scope,
-				v.shape,
-				valueT.Shape(),
-			)
-		}
-		return v
-	}
-
-	v = &Variable{
-		scope:     s,
-		name:      name,
-		scopePath: s.scope,
-		shape:     valueT.Shape(),
-		value:     valueT,
-		Trainable: true,
-	}
-	s.store.setVariable(v)
+// VariableWithNodeValue creates a variable in the current scope and sets it with graph computed *Node.
+//
+// This should only be used during graph/model building function.
+func (s *Scope) VariableWithNodeValue(name string, value *Node) *Variable {
+	s.checkName(name)
+	zeroScope := s.WithInitializer(graph.Zeros)
+	v := zeroScope.VariableWithShape(name, value.Shape())
+	v.SetNodeValue(value)
 	return v
 }
 
-// VariableWithValueGraph creates a variable in the current scope and sets it with graph computed *Node.
-func (s *Scope) VariableWithValueGraph(name string, value *Node) *Variable {
-	s.checkName(name)
-	zeroCtx := s.WithInitializer(func(g *Graph, shape shapes.Shape) *Node {
-		return graph.Zeros(g, shape)
-	})
-	v := zeroCtx.VariableWithShape(name, value.Shape())
-	v.SetValueGraph(value)
-	return v
+// IsTraining returns whether current Store (and thus this Scope) is being used for training.
+func (s *Scope) IsTraining(g *Graph) bool {
+	return s.Store().IsTraining(g)
 }
 
 // BuildTrainableVariablesGradientsGraph returns the gradient of the loss with respect to each trainable variable
@@ -479,20 +431,8 @@ func (s *Scope) BuildTrainableVariablesGradientsGraph(loss *Node) []*Node {
 	var trainableVars []*Node
 	for v := range s.IterVariables() {
 		if v.Trainable && v.InUseByGraph(g) {
-			trainableVars = append(trainableVars, v.ValueGraph(g))
+			trainableVars = append(trainableVars, v.NodeValue(g))
 		}
 	}
 	return graph.Gradient(loss, trainableVars...)
-}
-
-const GraphParamIsTraining = "training"
-
-// IsTraining returns whether context is being used for training.
-func (s *Scope) IsTraining(g *Graph) bool {
-	return GetGraphParamOr(s, g, GraphParamIsTraining, false)
-}
-
-// SetTraining marks the context for the given graph as training.
-func (s *Scope) SetTraining(g *Graph, value bool) {
-	s.SetGraphParam(g, GraphParamIsTraining, value)
 }

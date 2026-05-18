@@ -109,7 +109,7 @@ const (
 // a checkpoints.Handler that loads (if there are any previously saved checkpoints) and
 // saves checkpoints.
 type Config struct {
-	scope *model.Scope
+	store *model.Store
 
 	err error
 
@@ -147,9 +147,9 @@ type Config struct {
 // gomlx_checkpoints, will want to do that.
 //
 // See Config.Dir, Config.DirFromBase or Config.FromEmbed to specify where to load/save.
-func Build(scope *model.Scope) *Config {
+func Build(store *model.Store) *Config {
 	c := &Config{
-		scope:           scope,
+		store:           store,
 		includeParams:   true,
 		keep:            1,
 		takeMean:        1,
@@ -164,8 +164,8 @@ func Build(scope *model.Scope) *Config {
 //
 // Use Dir or DirWithBase to configure the location of the checkpoint.
 // Once configured, call Config.Done to actually load it.
-func Load(scope *model.Scope) *Config {
-	c := Build(scope)
+func Load(store *model.Store) *Config {
+	c := Build(store)
 	c.mustLoad = true
 	return c
 }
@@ -426,28 +426,31 @@ func (c *Config) Done() (*Handler, error) {
 
 	if c.immediate {
 		for paramName, value := range handler.variableValues {
-			v := c.scope.Store().GetVariable(paramName)
+			v := c.store.GetVariable(paramName)
 			if v != nil {
 				v.MustSetValue(value)
 			} else {
 				scopePath, name := model.VariableScopeAndNameFromParameterName(paramName)
-				c.scope.Store().Scope(scopePath).VariableWithValue(name, value)
+				c.store.Scope(scopePath).VariableWithValue(name, value)
 			}
 		}
 		// Empty remaining variableValues.
 		handler.variableValues = make(map[string]*tensors.Tensor)
 	} else {
 		// Force overwriting variables already present in the context: e.g., global_step.
-		for v := range c.scope.IterVariables() {
+		for v := range c.store.IterVariables() {
 			value, found := handler.LoadedVariables()[v.ParameterName()]
 			if !found {
 				continue
 			}
-			v.MustSetValue(value)
+			err := v.SetValue(value)
+			if err != nil {
+				return nil, errors.WithMessagef(err, "failed to set value for variable %q", v.ParameterName())
+			}
 			delete(handler.variableValues, v.ParameterName())
 		}
 	}
-	handler.attachTo(c.scope)
+	handler.attachTo(c.store)
 	return handler, nil
 }
 
@@ -488,7 +491,7 @@ func (c *Config) MustDone() *Handler {
 // not keep it.
 type Handler struct {
 	config            *Config
-	scope             *model.Scope
+	store             *model.Store
 	prevContextLoader model.Loader
 
 	serialized     *serializedData
@@ -504,6 +507,7 @@ type serializedData struct {
 
 	// Variables maps model.Variable.GetParameterName() to its position in storage.
 	Variables []serializedVar
+
 	// BinFormat describes the format used by the binary file.  It is informative.
 	// The current valid values are "gzip" and "uncompressed"
 	BinFormat string
@@ -682,7 +686,7 @@ func (h *Handler) loadCheckpointFromFile(baseName string, merge bool, mergeWeigh
 	if klog.V(1).Enabled() {
 		klog.Infof("loading: %q\n", baseName)
 	}
-	if h.scope != nil {
+	if h.store != nil {
 		return errors.Errorf(
 			"%s tried to loadCheckpointFromFile(%q) after being attached to a Context, this is not allowed",
 			h, baseName)
@@ -863,22 +867,23 @@ func (h *Handler) Save() error {
 	if h == nil {
 		return nil
 	}
-	if h.scope == nil {
+	if h.store == nil {
 		return errors.Errorf("%s not attached to a model.Context yet.", h)
 	}
 
 	// Read globalStep if one is set.
-	globalStep := optimizers.GetGlobalStep(h.scope)
+	globalStep := optimizers.GetGlobalStep(h.store)
 	// Update the binary format in JSON.
 	h.serialized.BinFormat = h.config.binFormat.String()
 
 	// Copy over Params.
 	if h.config.includeParams {
 		h.serialized.Params = nil
-		for p := range h.scope.IterParams() {
+		for paramPath, value := range h.store.IterParams() {
+			scope, key := model.SplitPath(paramPath)
 			h.serialized.Params = append(h.serialized.Params,
 				serializedParam{
-					Scope: p.Scope, Key: p.Key, Value: p.Value, ValueType: fmt.Sprintf("%T", p.Value)})
+					Scope: scope, Key: key, Value: value, ValueType: fmt.Sprintf("%T", value)})
 		}
 	}
 
@@ -899,7 +904,7 @@ func (h *Handler) Save() error {
 
 	// Copy over and set variables: both from Context and previously loaded ones, that haven't yet
 	// been loaded into model.
-	h.serialized.Variables = make([]serializedVar, 0, h.scope.NumVariables()+len(h.variableValues))
+	h.serialized.Variables = make([]serializedVar, 0, h.store.NumVariables()+len(h.variableValues))
 	pos := 0
 	// * Closure to save the contents of a variable.
 	saveVar := func(name string, tensor *tensors.Tensor) error {
@@ -937,7 +942,7 @@ func (h *Handler) Save() error {
 	}
 
 	// * Loop over variables in model.
-	for v := range h.scope.IterVariables() {
+	for v := range h.store.IterVariables() {
 		if err != nil {
 			return err
 		}
@@ -1053,13 +1058,13 @@ func (h *Handler) keepNCheckpoints() error {
 //
 // attachTo can only be called once. It will fail, and set the given context to an error state if
 // requested to attach more than once.
-func (h *Handler) attachTo(scope *model.Scope) {
-	if h.scope != nil {
-		Panicf("%s already attached to a Context, can not attach to another one", h.config.dir)
+func (h *Handler) attachTo(store *model.Store) {
+	if h.store != nil {
+		Panicf("%s already attached to a model.Store, I cannot attach to another one", h.config.dir)
 	}
-	h.scope = scope
-	h.prevContextLoader = scope.Store().Loader()
-	scope.Store().SetLoader(h)
+	h.store = store
+	h.prevContextLoader = store.Loader()
+	store.SetLoader(h)
 
 	// Sets ctx.Params with values read, if any.
 	if h.config.includeParams {
@@ -1068,8 +1073,7 @@ func (h *Handler) attachTo(scope *model.Scope) {
 			if h.config.paramsToExclude.Has(p.Key) || h.config.paramsToExclude.Has(model.JoinPath(p.Scope, p.Key)) {
 				continue
 			}
-			tmpCtx := scope.Store().Scope(p.Scope)
-			tmpCtx.SetParam(p.Key, p.Value)
+			store.SetParam(model.JoinPath(p.Scope, p.Key), p.Value)
 		}
 	}
 }

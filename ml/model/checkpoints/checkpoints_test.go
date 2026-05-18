@@ -37,12 +37,12 @@ func TestCheckpoints(t *testing.T) {
 	{
 		// Build model, checkpoint a few times.
 		store := model.NewStore()
-		root := store.RootScope()
-		root.SetParam("learning_rate", 0.01)
-		root.SetParam(regularizers.ParamL2, 0.001)
-		root.SetParam(regularizers.ParamL1, 1.0e7)
-		root.In("layer_1").SetParam(regularizers.ParamL2, 0.004)
-		checkpoint := Build(root).TempDir("", "test_checkpoints_").
+		store.SetParam("learning_rate", 0.01)
+		store.SetParam(regularizers.ParamL2, 0.001)
+		store.SetParam(regularizers.ParamL1, 1.0e7)
+		rootScope := store.RootScope()
+		rootScope.In("layer_1").SetParam(regularizers.ParamL2, 0.004)
+		checkpoint := Build(store).TempDir("", "test_checkpoints_").
 			Keep(3).MustDone()
 		assert.Equal(t, 0, checkpoint.checkpointsCount)
 		dir = checkpoint.Dir()
@@ -67,12 +67,13 @@ func TestCheckpoints(t *testing.T) {
 	{
 		// Build model, checkpoint a few times.
 		store := model.NewStore()
+		store.SetParam("learning_rate", 5.0)       // Value should be overwritten when loading.
+		store.SetParam(regularizers.ParamL1, 17.0) // Value should NOT be overwritten when loading.
 		root := store.RootScope()
-		root.SetParam("learning_rate", 5.0)       // Value should be overwritten when loading.
-		root.SetParam(regularizers.ParamL1, 17.0) // Value should NOT be overwritten when loading.
-		checkpoint := Build(root).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).MustDone()
+		root.In("layer_1").SetParam(regularizers.ParamL2, 0.004)
+		checkpoint := Build(store).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).MustDone()
 
-		lr, found := root.GetParam("learning_rate")
+		lr, found := store.GetParam("learning_rate")
 		assert.True(t, found, "learning_rate should be set")
 		assert.Equal(t, 0.01, lr.(float64), "Params[learning_rate]")
 		assert.Equal(t, 17.0, model.GetParamOr(root, regularizers.ParamL1, 0.0))
@@ -112,7 +113,7 @@ func TestCheckpoints(t *testing.T) {
 	{
 		store := model.NewStore()
 		root := store.RootScope()
-		_ = Build(root).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).Immediate().MustDone()
+		_ = Build(store).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).Immediate().MustDone()
 
 		// Check that the only variable ("global_step") is present.
 		count := 0
@@ -138,8 +139,7 @@ func TestCheckpoints(t *testing.T) {
 	{
 		// Read the whole checkpoint to a variable -- similar to embedding it.
 		store := model.NewStore()
-		root := store.RootScope()
-		handler := Build(root).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).Immediate().MustDone()
+		handler := Build(store).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).Immediate().MustDone()
 		checkpoints, err := handler.ListCheckpoints()
 		require.NoError(t, err)
 		lastCheckpoint := checkpoints[len(checkpoints)-1]
@@ -150,13 +150,12 @@ func TestCheckpoints(t *testing.T) {
 	{
 		// Check that reading from the variable works.
 		store := model.NewStore()
-		root := store.RootScope()
-		_, err := Build(root).FromEmbed(string(jsonBlob), binBlob).Immediate().Done()
+		_, err := Build(store).FromEmbed(string(jsonBlob), binBlob).Immediate().Done()
 		require.NoError(t, err)
 
 		// Check that the only variable ("global_step") is present.
 		count := 0
-		for v := range root.IterVariables() {
+		for v := range store.IterVariables() {
 			fmt.Printf("\tFromEmbed: variable %q: %s -> %s\n", v.ScopeAndName(), v.Shape(), v.MustValue())
 			require.NoError(t, v.Shape().Check(dtypes.Int64))
 			require.Equal(t, "/global_step", v.ScopeAndName(), "Variable name")
@@ -179,31 +178,33 @@ func TestMergedCheckpoints(t *testing.T) {
 	var dir string
 	{
 		store := model.NewStore()
-		root := store.RootScope()
-		checkpoint := Build(root).TempDir("", "test_checkpoints_").Keep(2).MustDone()
+		checkpoint := Build(store).TempDir("", "test_checkpoints_").Keep(2).MustDone()
 		dir = checkpoint.Dir()
-		globalStepV := optimizers.GetGlobalStepVar(root)
-		globalStepV.MustSetValue(tensors.FromValue(int64(1)))
-		xV := root.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
-		yV := root.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
+		globalStepV := optimizers.GetGlobalStepVar(store)
+		err := globalStepV.SetValue(tensors.FromValue(int64(1)))
+		require.NoError(t, err)
+		xV := store.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
+		yV := store.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
 		require.NoError(t, checkpoint.Save())
 
-		globalStepV.MustSetValue(tensors.FromValue(int64(10)))
-		xV.MustSetValue(tensors.FromValue([]float64{3.0, 3.0, 3.0}))
-		yV.MustSetValue(tensors.FromValue([][]float32{{6.0}, {6.0}}))
+		err = globalStepV.SetValue(tensors.FromValue(int64(10)))
+		require.NoError(t, err)
+		err = xV.SetValue(tensors.FromValue([]float64{3.0, 3.0, 3.0}))
+		require.NoError(t, err)
+		err = yV.SetValue(tensors.FromValue([][]float32{{6.0}, {6.0}}))
+		require.NoError(t, err)
 		require.NoError(t, checkpoint.Save())
 	}
 	{
 		// Check that the values were averaged:
 		store := model.NewStore()
-		root := store.RootScope()
-		_ = Build(root).Dir(dir).Keep(2).TakeMean(-1, backend).MustDone()
-		globalStep := optimizers.GetGlobalStep(root)
+		_ = Build(store).Dir(dir).Keep(2).TakeMean(-1, backend).MustDone()
+		globalStep := optimizers.GetGlobalStep(store)
 		assert.Equal(t, int64(10), globalStep, "GlobalStep")
-		xV := root.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
+		xV := store.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
 		// Assume X will be loaded with the mean of the previous 2 checkpoints:
 		assert.Equal(t, []float64{2.0, 2.0, 2.0}, xV.MustValue().Value(), "X")
-		yV := root.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
+		yV := store.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
 		assert.Equal(t, [][]float32{{5.0}, {5.0}}, yV.MustValue().Value(), "Y")
 	}
 
@@ -225,16 +226,15 @@ func TestParams(t *testing.T) {
 	{
 		// Build model, checkpoint a few times.
 		store := model.NewStore()
-		root := store.RootScope()
-		root.SetParam("xFloat64", xFloat64)
-		root.SetParam("xFloat32", xFloat32)
-		root.SetParam("xInt", xInt)
-		root.SetParam("xInts", xInts)
-		sFoo := root.In("foo") // Some different scope.
-		sFoo.SetParam("xStr", xStr)
-		sFoo.SetParam("xStrs", xStrs)
+		store.SetParam("xFloat64", xFloat64)
+		store.SetParam("xFloat32", xFloat32)
+		store.SetParam("xInt", xInt)
+		store.SetParam("xInts", xInts)
+		fooScope := store.Scope("foo") // Some different scope.
+		fooScope.SetParam("xStr", xStr)
+		fooScope.SetParam("xStrs", xStrs)
 
-		checkpoint := Build(root).TempDir("", "test_checkpoints_").Keep(3).MustDone()
+		checkpoint := Build(store).TempDir("", "test_checkpoints_").Keep(3).MustDone()
 		dir = checkpoint.Dir()
 		require.NoError(t, checkpoint.Save())
 	}
@@ -243,31 +243,30 @@ func TestParams(t *testing.T) {
 	{
 		// Build model, checkpoint a few times.
 		store := model.NewStore()
-		root := store.RootScope()
-		_ = Build(root).Dir(dir).Keep(3).MustDone()
+		_ = Build(store).Dir(dir).Keep(3).MustDone()
 
-		got, found := root.GetParam("xFloat64")
+		got, found := store.GetParam("xFloat64")
 		require.True(t, found)
 		assert.Equal(t, xFloat64, got)
 
-		got, found = root.GetParam("xFloat32")
+		got, found = store.GetParam("xFloat32")
 		assert.True(t, found)
 		assert.Equal(t, xFloat32, got)
 
-		got, found = root.GetParam("xInt")
+		got, found = store.GetParam("xInt")
 		assert.True(t, found)
 		assert.Equal(t, xInt, got)
 
-		got, found = root.GetParam("xInts")
+		got, found = store.GetParam("xInts")
 		assert.True(t, found)
 		assert.Equal(t, xInts, got)
 
-		sFoo := root.In("foo")
-		got, found = sFoo.GetParam("xStr")
+		fooScope := store.Scope("foo")
+		got, found = fooScope.GetParam("xStr")
 		assert.True(t, found)
 		assert.Equal(t, xStr, got)
 
-		got, found = sFoo.GetParam("xStrs")
+		got, found = fooScope.GetParam("xStrs")
 		assert.True(t, found)
 		assert.Equal(t, xStrs, got)
 	}

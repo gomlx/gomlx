@@ -31,7 +31,7 @@ func (s *Store) getRNGStateVar() *Variable {
 	}
 	rngStateVar = &Variable{
 		name:         RNGStateVariableName,
-		scopePath:    "/",
+		fullPath:     "/",
 		shape:        graph.RNGStateShape,
 		Trainable:    false,
 		shardingSpec: s.defaultShardingSpec,
@@ -99,18 +99,18 @@ func (s *Store) SetRNGStateFromSeed(seed int64) error {
 // and standard deviation 1.0.
 func (s *Store) RandomNormal(g *graph.Graph, shape shapes.Shape) (values *Node) {
 	rngStateVar := s.mustGetRNGStateVarWithValue()
-	rngState := rngStateVar.ValueGraph(g)
+	rngState := rngStateVar.NodeValue(g)
 	rngState, values = graph.RandomNormal(rngState, shape)
-	rngStateVar.SetValueGraph(rngState)
+	rngStateVar.SetNodeValue(rngState)
 	return
 }
 
 // RandomUniform generates random uniform values from 0.0 to 1.0.
 func (s *Store) RandomUniform(g *graph.Graph, shape shapes.Shape) (values *Node) {
 	rngStateVar := s.mustGetRNGStateVarWithValue()
-	rngState := rngStateVar.ValueGraph(g)
+	rngState := rngStateVar.NodeValue(g)
 	rngState, values = graph.RandomUniform(rngState, shape)
-	rngStateVar.SetValueGraph(rngState)
+	rngStateVar.SetNodeValue(rngState)
 	return
 }
 
@@ -146,7 +146,7 @@ func (s *Scope) RandomBernoulli(prob *Node, shape shapes.Shape) *Node {
 // RandomIntN generates random numbers uniformly from 0 to N-1.
 func (s *Store) RandomIntN(g *graph.Graph, N any, shape shapes.Shape) (values *Node) {
 	rngStateVar := s.mustGetRNGStateVarWithValue()
-	rngState := rngStateVar.ValueGraph(g)
+	rngState := rngStateVar.NodeValue(g)
 	switch n := N.(type) {
 	case *Node:
 		rngState, values = graph.RandomIntN(rngState, n, shape)
@@ -167,7 +167,7 @@ func (s *Store) RandomIntN(g *graph.Graph, N any, shape shapes.Shape) (values *N
 	case int64:
 		rngState, values = graph.RandomIntN(rngState, n, shape)
 	}
-	rngStateVar.SetValueGraph(rngState)
+	rngStateVar.SetNodeValue(rngState)
 	return
 }
 

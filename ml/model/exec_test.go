@@ -24,8 +24,8 @@ import (
 func denseWithBias(scope *model.Scope, x *Node, outputDim int) *Node {
 	g := x.Graph()
 	inputDim := x.Shape().Dimensions[x.Shape().Rank()-1]
-	w := scope.VariableWithShape("weights", shapes.Make(x.DType(), inputDim, outputDim)).ValueGraph(g)
-	b := scope.VariableWithShape("biases", shapes.Make(x.DType(), outputDim)).ValueGraph(g)
+	w := scope.VariableWithShape("weights", shapes.Make(x.DType(), inputDim, outputDim)).NodeValue(g)
+	b := scope.VariableWithShape("biases", shapes.Make(x.DType(), outputDim)).NodeValue(g)
 	y := MatMul(x, w)
 	return Add(y, ExpandLeftToRank(b, y.Rank()))
 }
@@ -65,7 +65,7 @@ func TestExec(t *testing.T) {
 		result, err := model.ExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 			v := scope.WithInitializer(initializers.RandomUniformFn(scope, 0.0001, 1.0)).
 				VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
-			return v.ValueGraph(g)
+			return v.NodeValue(g)
 		})
 		require.NoError(t, err)
 		assert.NotNil(t, result)
@@ -152,9 +152,9 @@ func TestExec(t *testing.T) {
 		counter := model.MustNewExec(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 			dtype := dtypes.Int64
 			counterVar := scope.WithInitializer(initializers.Zero).VariableWithShape("counter", shapes.Make(dtype))
-			counterNode := counterVar.ValueGraph(g)
+			counterNode := counterVar.NodeValue(g)
 			counterNode = Add(counterNode, OnesLike(counterNode))
-			counterVar.SetValueGraph(counterNode)
+			counterVar.SetNodeValue(counterNode)
 			return counterNode
 		})
 		results := counter.MustExec()
@@ -189,7 +189,7 @@ func TestAutoSharding(t *testing.T) {
 		store := model.NewStore()
 		xVar := store.RootScope().VariableWithValue("x", []float32{1.0, 2.0, 3.0})
 		e := model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) *Node {
-			return xVar.ValueGraph(g)
+			return xVar.NodeValue(g)
 		})
 		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
 		e = e.AutoSharding(meshFor2).
@@ -259,7 +259,7 @@ func TestAutoSharding(t *testing.T) {
 			// v := ctx.WithInitializer(initializers.RandomUniformFn(ctx, 0.0001, 1.0)).VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
 			// return v.ValueGraph(g)
 			// return ctx.RandomUniform(g, shapes.Make(dtypes.Float32, 10))
-			return scope.Store().GetVariable(model.RNGStateVariableName).ValueGraph(g)
+			return scope.Store().GetVariable(model.RNGStateVariableName).NodeValue(g)
 		})
 		require.NoError(t, err)
 		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
@@ -283,9 +283,9 @@ func TestAutoSharding(t *testing.T) {
 		oneLayerExec, err := model.NewExec(backend, store, func(scope *model.Scope, x *Node) (*Node, *Node) {
 			g := x.Graph()
 			wVar := scope.VariableWithShape("w", shapes.Make(dtypes.F64, 3, 1))
-			w := wVar.ValueGraph(g)
+			w := wVar.NodeValue(g)
 			bVar := scope.VariableWithShape("b", shapes.Make(dtypes.F64, 1))
-			b := bVar.ValueGraph(g)
+			b := bVar.NodeValue(g)
 			y := MatMul(x, w)
 			y = Add(y, ExpandLeftToRank(b, y.Rank()))
 			return y, w
