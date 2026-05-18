@@ -47,6 +47,15 @@ Files that mostly define graph building functions, by convention, should dot-imp
 `github.com/gomlx/gomlx/pkg/core/graph` package: having `graph.` repeated everywhere makes the math harder to read.
 This is commonly the case for libraries under `pkg/core/ml/layers`.
 
+### Testing
+
+Never attempt to test everything (`go test ./...`)! Many of the tests are very long, and parallel testing 
+doesn't work (because the XLA backend for CUDA allocates all the memory on startup, so there can't be more
+than one instance at a time).
+
+Insteat test only one package at a time, or even, preferrably, only the tests related to the code you are 
+currently modifying (`go test <./.../package> -run <test_pattern>`).
+
 ### Executing models and graphs:
 
 If executing a model with variables, those are stored in `ml/model.Context` objects, and require `model.Exec` 
