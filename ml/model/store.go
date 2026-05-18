@@ -346,19 +346,21 @@ func (s *Store) Finalize() {
 
 // GetParam returns the value for the given param key, searching successively from
 // the given absolute path back to the root scope ("/").
-func (s *Store) GetParam(fullPath, key string) (value any, found bool) {
+func (s *Store) GetParam(fullPath string) (value any, found bool) {
 	if !strings.HasPrefix(fullPath, "/") {
 		fullPath = "/" + fullPath
 	}
-	return s.params.Get(fullPath, key)
+	scopePath, baseName := SplitPath(fullPath)
+	return s.params.Get(scopePath, baseName)
 }
 
 // SetParam sets the given param in the given absolute path.
-func (s *Store) SetParam(fullPath, key string, value any) {
+func (s *Store) SetParam(fullPath string, value any) {
 	if !strings.HasPrefix(fullPath, "/") {
 		fullPath = "/" + fullPath
 	}
-	s.params.Set(fullPath, key, value)
+	scopePath, baseName := SplitPath(fullPath)
+	s.params.Set(scopePath, baseName, value)
 }
 
 // EscapeScopeName replaces ScopeSeparator in the string and replaces them by "_".
