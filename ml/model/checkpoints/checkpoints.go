@@ -104,6 +104,27 @@ const (
 	BinUncompressed
 )
 
+const variableParameterPrefix = "var:"
+
+// variableToKey returns the unique id for a variable in a checkpoint.
+func variableToKey(v *model.Variable) string {
+	return variableParameterPrefix + v.Path()
+}
+
+// pathToKey returns the unique id for a variable path in a checkpoint.
+func pathToKey(path string) string {
+	return variableParameterPrefix + path
+}
+
+// keyToScopeAndName extracts the scope and name from a variable's unique id in a checkpoint.
+func keyToScopeAndName(key string) (scope, name string) {
+	if !strings.HasPrefix(key, variableParameterPrefix) {
+		return scope, name
+	}
+	fullPath := key[len(variableParameterPrefix):]
+	return model.SplitPath(fullPath)
+}
+
 // Config for the checkpoints' Handler to be created. This is created with Build() and
 // configured with the various methods. Once finished, call Done() and it will output
 // a checkpoints.Handler that loads (if there are any previously saved checkpoints) and
@@ -430,7 +451,7 @@ func (c *Config) Done() (*Handler, error) {
 			if v != nil {
 				v.MustSetValue(value)
 			} else {
-				scopePath, name := model.VariableScopeAndNameFromParameterName(paramName)
+				scopePath, name := keyToScopeAndName(paramName)
 				c.store.Scope(scopePath).VariableWithValue(name, value)
 			}
 		}
@@ -439,15 +460,15 @@ func (c *Config) Done() (*Handler, error) {
 	} else {
 		// Force overwriting variables already present in the context: e.g., global_step.
 		for v := range c.store.IterVariables() {
-			value, found := handler.LoadedVariables()[v.ParameterName()]
+			value, found := handler.LoadedVariables()[variableToKey(v)]
 			if !found {
 				continue
 			}
 			err := v.SetValue(value)
 			if err != nil {
-				return nil, errors.WithMessagef(err, "failed to set value for variable %q", v.ParameterName())
+				return nil, errors.WithMessagef(err, "failed to set value for variable %q", variableToKey(v))
 			}
-			delete(handler.variableValues, v.ParameterName())
+			delete(handler.variableValues, variableToKey(v))
 		}
 	}
 	handler.attachTo(c.store)
@@ -505,7 +526,7 @@ type Handler struct {
 type serializedData struct {
 	Params []serializedParam
 
-	// Variables maps model.Variable.GetParameterName() to its position in storage.
+	// Variables maps variable to its position in storage.
 	Variables []serializedVar
 
 	// BinFormat describes the format used by the binary file.  It is informative.
@@ -949,7 +970,7 @@ func (h *Handler) Save() error {
 		if h.config.varsToExclude.Has(v) {
 			continue
 		}
-		err = saveVar(v.ParameterName(), v.MustValue())
+		err = saveVar(variableToKey(v), v.MustValue())
 	}
 
 	// * Loop over current loaded variables.
@@ -1103,8 +1124,8 @@ func (h *Handler) LoadVariable(store *model.Store, fullPath string) (value *tens
 	}
 
 	// Try to find variable in our currently loaded checkpoint.
-	// varParamName is VariableParameterPrefix + fullPath
-	varParamName := model.VariableParameterPrefix + fullPath
+	// varParamName is variableParameterPrefix + fullPath
+	varParamName := pathToKey(fullPath)
 	value, found = h.variableValues[varParamName]
 	if !found {
 		return
@@ -1122,7 +1143,7 @@ func (h *Handler) DeleteVariable(store *model.Store, fullPath string) error {
 	if h.prevContextLoader != nil {
 		_ = h.prevContextLoader.DeleteVariable(store, fullPath)
 	}
-	varParamName := model.VariableParameterPrefix + fullPath
+	varParamName := pathToKey(fullPath)
 	delete(h.variableValues, varParamName)
 	return nil
 }

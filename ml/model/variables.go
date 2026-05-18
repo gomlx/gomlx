@@ -3,8 +3,6 @@
 package model
 
 import (
-	"strings"
-
 	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
@@ -278,37 +276,7 @@ func (v *Variable) Path() string {
 	return v.fullPath
 }
 
-// VariableParameterPrefix is used to prefix Graph parameter names for variablesMap.
-const VariableParameterPrefix = "var:"
-
-// ParameterName used when creating a parameter node in a Graph to access the variable, or as a key when saving.
-// It is a unique name for the variable that includes the scope and the variable name and is reversible.
-//
-// Deprecated: Use [Variable.Path].
-func (v *Variable) ParameterName() string {
-	v.AssertValid()
-	return VariableParameterPrefix + v.fullPath
-}
-
-// VariableScopeAndNameFromParameterName extracts the scope and name from a variable's [GetParameterName].
-// It will return empty strings for an invalid parameter name.
-func VariableScopeAndNameFromParameterName(parameterName string) (scope, name string) {
-	if !strings.HasPrefix(parameterName, VariableParameterPrefix) {
-		return scope, name
-	}
-	fullPath := parameterName[len(VariableParameterPrefix):]
-	return SplitPath(fullPath)
-}
-
-// VariableParameterNameFromScopeAndName creates the [Variable.ParameterName] from its scope and name.
-func VariableParameterNameFromScopeAndName(scope, name string) string {
-	return VariableParameterPrefix + JoinPath(scope, name)
-}
-
 // MustValue returns the tensor holding the variable value. Use this to manipulate the value in Go.
-// If building a computation graph, use Variable.ValueGraph().
-//
-// This version panics on error. See details in Variable.Value().
 func (v *Variable) MustValue() *tensors.Tensor {
 	value, err := v.Value()
 	if err != nil {
@@ -547,7 +515,7 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		return nodes.paramNode, nil
 	}
 
-	paramName := v.ParameterName()
+	paramName := v.Path()
 	var paramNode *Node
 
 	// Determine shape and shardingSpec based on strategy.
