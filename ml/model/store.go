@@ -432,6 +432,9 @@ func EscapeScopeName(scopeName string) string {
 
 // VariableWithShape creates or returns an existing variable with the given shape.
 func (s *Store) VariableWithShape(fullPath string, shape shapes.Shape, initializer VariableInitializer) *Variable {
+	if !strings.HasPrefix(fullPath, "/") {
+		fullPath = "/" + fullPath
+	}
 	v := s.GetVariable(fullPath)
 	if v != nil {
 		if !shape.Equal(v.shape) {
@@ -463,6 +466,9 @@ func (s *Store) VariableWithShape(fullPath string, shape shapes.Shape, initializ
 
 // VariableWithValue creates or returns a variable initialized with the given value in the given variable path.
 func (s *Store) VariableWithValue(fullPath string, defaultValue any) *Variable {
+	if !strings.HasPrefix(fullPath, "/") {
+		fullPath = "/" + fullPath
+	}
 	v := s.GetVariable(fullPath)
 	valueT, err := valueToTensor(defaultValue)
 	if err != nil {

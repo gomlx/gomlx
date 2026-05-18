@@ -82,13 +82,13 @@ func TestCheckpoints(t *testing.T) {
 		l2, found = root.GetParam(regularizers.ParamL2)
 		assert.Truef(t, found, "%s should have been set", regularizers.ParamL2)
 		assert.Equal(t, 0.001, l2.(float64), "(Scope=%s) Params[%s]", root.Scope(), regularizers.ParamL2)
-		l2, found = root.In("layer_1").GetParam(regularizers.ParamL2)
+		l2, found = root.At("layer_1").GetParam(regularizers.ParamL2)
 		assert.Truef(t, found, "%s should have been set", regularizers.ParamL2)
 		assert.Equal(t, 0.004, l2.(float64), "Params[%s]", regularizers.ParamL2)
 
 		// If we are lazy loading, no variable should be listed.
 		for v := range root.IterVariables() {
-			fmt.Printf("\tvariable %q -> %s\n", v.ScopeAndName(), v.Shape())
+			fmt.Printf("\tvariable %q -> %s\n", v.Path(), v.Shape())
 			t.Fail()
 		}
 
@@ -156,9 +156,9 @@ func TestCheckpoints(t *testing.T) {
 		// Check that the only variable ("global_step") is present.
 		count := 0
 		for v := range store.IterVariables() {
-			fmt.Printf("\tFromEmbed: variable %q: %s -> %s\n", v.ScopeAndName(), v.Shape(), v.MustValue())
+			fmt.Printf("\tFromEmbed: variable %q: %s -> %s\n", v.Path(), v.Shape(), v.MustValue())
 			require.NoError(t, v.Shape().Check(dtypes.Int64))
-			require.Equal(t, "/global_step", v.ScopeAndName(), "Variable name")
+			require.Equal(t, "/global_step", v.Path(), "Variable name")
 			require.Equal(t, int64(11), tensors.ToScalar[int64](v.MustValue()), "Variable value")
 			count++
 		}
