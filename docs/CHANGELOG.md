@@ -49,6 +49,7 @@ directory, and move the packages to the root:
   - `InspectVariable` -> `Store.GetVariable`
   - `InspectVariableInScope` -> `Scope.GetVariable`
   - `SetValueGraph` -> `SetNodeValue`; `ValueGraph` -> `NodeValue`
+  - `Variable.ParameterName` because a private function in `checkpoints` package.
 
 ## Graph (github.com/gomlx/gomlx/core/graph):
 - `Exec.Exec` -> `Exec.Call` (no change in name, but `Exec` is gone).
