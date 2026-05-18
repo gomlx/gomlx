@@ -472,6 +472,13 @@ func (v *Variable) NodeValue(nodeOrGraph graph.GraphProvider) *Node {
 	return node
 }
 
+// ValueGraph is a deprecated alias to NodeValue.
+//
+// Deprecated: use [NodeValue] instead.
+func (v *Variable) ValueGraph(nodeOrGraph graph.GraphProvider) *Node {
+	return v.NodeValue(nodeOrGraph)
+}
+
 // SetNodeValue sets the value (a graph [*Node]) of the variable for the current graph.
 //
 // This is used to "communicate" among different parts of the graph building that this value Node should
@@ -498,6 +505,13 @@ func (v *Variable) SetNodeValue(value *Node) {
 		nodes, _ = v.graphToNodes.Load(g.GraphId())
 	}
 	nodes.valueNode = value
+}
+
+// SetValueGraph is a deprecated alias to SetNodeValue.
+//
+// Deprecated: use [SetNodeValue] instead.
+func (v *Variable) SetValueGraph(value *Node) {
+	v.SetNodeValue(value)
 }
 
 // paramNode creates a Node in g that corresponds to the parameter that will be fed with
