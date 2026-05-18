@@ -41,6 +41,17 @@ func main() {
 		TypeNameMap: map[string]string{
 			"model.Context": "Scope",
 		},
+		FunctionNameMap: map[string]string{
+			"commandline.CreateContextSettingsFlag":     "CreateSettingsFlag",
+			"commandline.ParseContextSettings":          "ParseSettings",
+			"commandline.SprintContextSettings":         "SprintSettings",
+			"commandline.SprintModifiedContextSettings": "SprintModifiedSettings",
+		},
+		MethodNameMap: map[string]string{
+			"model.Scope.VariableWithValueGraph": "VariableWithNodeValue",
+			"model.Variable.ValueGraph":          "NodeValue",
+			"model.Variable.SetValueGraph":       "SetNodeValue",
+		},
 		VariableNameMap: map[string]importrefactor.VariableRename{
 			"ctx": {NewName: "scope", TypeName: "model.Context"},
 		},
