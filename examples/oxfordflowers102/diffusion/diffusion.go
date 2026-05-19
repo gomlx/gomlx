@@ -79,7 +79,7 @@ func NormalizeLayer(scope *model.Scope, x *Node) *Node {
 	case "batch":
 		x = batchnorm.New(scope, x, -1).Center(false).Scale(false).Done()
 	case "layer":
-		//x = layers.LayerNormalization(ctx, x, -1).Done()
+		//x = layers.LayerNormalization(scope, x, -1).Done()
 		x = layers.LayerNormalization(scope, x, 1, 2).Done()
 	}
 	nanLogger.TraceFirstNaN(x)
@@ -144,7 +144,7 @@ func ResidualBlock(scope *model.Scope, nanLogger *nanlogger.NanLogger, x *Node, 
 	}
 
 	x = layers.DropPathFromContext(scope, x)
-	nanLogger.TraceFirstNaN(x, "x = layers.DropPathFromContext(ctx, x)")
+	nanLogger.TraceFirstNaN(x, "x = layers.DropPathFromContext(scope, x)")
 	x = Add(x, residual)
 	nanLogger.TraceFirstNaN(x, "x = Add(x, residual)")
 	return x
@@ -230,7 +230,7 @@ const IsV1Test = true
 //   - noiseVariance: One value [0.0-1.0] per example in the batch, shaped `[batch_size, 1, 1, 1]`.
 //   - flowerIds: One int32 value between [0, 102] (flower class) per example in the batch, shaped `[batch_size]`.
 //
-// Hyperparameters set in ctx:
+// Hyperparameters set in scope:
 //
 //   - "diffusion_channels_list" (static hyperparameter): number of channels (embedding size) to use in the model.
 //     For each value `diffusion_num_residual_blocks` are applied and then the image is pooled and reduced by a factor of 2 --

@@ -251,7 +251,7 @@ func newTrainer(backend compute.Backend, store *model.Store) *train.Trainer {
 	scope := store.RootScope()
 	trainer := train.NewTrainer(backend, store, MagModelGraph,
 		lossFn,
-		optimizer.FromScope(scope), // Based on `ctx.GetParam("optimizer")`.
+		optimizer.FromScope(scope), // Based on `scope.GetParam("optimizer")`.
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 	if NanLogger != nil {
@@ -299,7 +299,7 @@ func evalWithModelStore(backend compute.Backend, store *model.Store, baseDir str
 	}
 }
 
-// evalSampled evaluates GNN model based on configuration in `ctx` using sampled sub-graphs.
+// evalSampled evaluates GNN model based on configuration in `scope` using sampled sub-graphs.
 func evalSampled(backend compute.Backend, store *model.Store, datasets ...train.Dataset) error {
 	// Evaluation on the various eval datasets.
 	trainer := newTrainer(backend, store)
@@ -315,7 +315,7 @@ func evalSampled(backend compute.Backend, store *model.Store, datasets ...train.
 	return nil
 }
 
-// evalLayerWise evaluates GNN model based on configuration in `ctx` using layer-wise inference.
+// evalLayerWise evaluates GNN model based on configuration in `scope` using layer-wise inference.
 func evalLayerWise(backend compute.Backend, store *model.Store, baseDir string) error {
 	scope := store.RootScope()
 	// Create the OGBN-MAG strategy, used by the layer-wise inference: batch-size is irrelevant.

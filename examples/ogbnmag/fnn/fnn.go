@@ -78,11 +78,11 @@ func FnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 
 var ModelFn = FnnModelGraph
 
-// Train FNN model based on configuration in `ctx`.
+// Train FNN model based on configuration in `scope`.
 func Train(backend compute.Backend, scope *model.Scope) error {
 	trainDS, validDS, testDS, err := mag.PapersSeedDatasets(backend)
 	mag.UploadOgbnMagVariables(backend, scope.Store())
-	//ctx.EnumerateVariables(func(v *model.Variable) {
+	//scope.EnumerateVariables(func(v *model.Variable) {
 	//	fmt.Printf("%s :: %s:\t%s\n", v.Scope(), v.Name(), v.Value().Shape())
 	//})
 

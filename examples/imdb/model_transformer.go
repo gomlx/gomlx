@@ -69,9 +69,9 @@ func TransformerModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node
 	if useMaskWordTask {
 		// Add "masked word" task loss.
 		/*
-			MaskedWordTaskGraph(ctx.In("masked_word_task"), tokens, embed, mask,
+			MaskedWordTaskGraph(scope.In("masked_word_task"), tokens, embed, mask,
 				func(input, mask *Node) *Node {
-					return TransformerLayers(ctx.In("transformer").Reuse(), input, mask)
+					return TransformerLayers(scope.In("transformer").Reuse(), input, mask)
 				})
 		*/
 	}
@@ -160,7 +160,7 @@ func MaskedWordTaskGraph(scope *model.Scope, tokens, embed, mask *Node,
 	//seqSize.SetLogged("0. seqSize")
 
 	// choice: shape=[batch_size]
-	choice := ctx.RandomUniform(g, seqSize.Shape())
+	choice := scope.RandomUniform(g, seqSize.Shape())
 	choice = Mul(seqSize, choice)
 	choice = ConvertDType(choice, dtypes.Int64)
 	//choice.SetLogged("1. choice")
@@ -179,7 +179,7 @@ func MaskedWordTaskGraph(scope *model.Scope, tokens, embed, mask *Node,
 	// wordMaskedEmbed: shape=[batch_size, seq_size, embedding_dim]
 	// It will differ from embed only in chosen masked word position, for which it
 	// takes some learned embedding to represent a masked word.
-	maskedWordEmbeddingVar := ctx.VariableWithShape("masked_embedding", shapes.Make(DType, 1, 1, embedDim))
+	maskedWordEmbeddingVar := scope.VariableWithShape("masked_embedding", shapes.Make(DType, 1, 1, embedDim))
 	maskedWordEmbedding := maskedWordEmbeddingVar.ValueGraph(g)
 	maskedWordEmbedding = BroadcastToShape(maskedWordEmbedding, embed.Shape())
 	embedWithMaskedWord := Where(wordMask, embed, maskedWordEmbedding)
@@ -199,41 +199,41 @@ func MaskedWordTaskGraph(scope *model.Scope, tokens, embed, mask *Node,
 	}
 
 	{
-		ctx := ctx.In("output_dense_0")
+		scope := scope.In("output_dense_0")
 		if *flagDropoutRate > 0 {
-			logits = layers.Dropout(ctx.In("dropout"), logits, dropoutRate)
+			logits = layers.Dropout(scope.In("dropout"), logits, dropoutRate)
 		}
-		logits = layers.DenseWithBias(ctx, logits, *flagNumNodes)
-		logits = Normalize(ctx, logits)
+		logits = layers.DenseWithBias(scope, logits, *flagNumNodes)
+		logits = Normalize(scope, logits)
 	}
 	for ii := 1; ii < *flagNumHiddenLayers; ii++ {
-		ctx := ctx.In("output_dense_%d", ii)
+		scope := scope.In("output_dense_%d", ii)
 		residual := logits
 		// Add layer with residual connection.
 		if *flagDropoutRate > 0 {
-			logits = layers.Dropout(ctx.In("dropout"), logits, dropoutRate)
+			logits = layers.Dropout(scope.In("dropout"), logits, dropoutRate)
 		}
 		logits = Tanh(logits)
-		logits = layers.DenseWithBias(ctx, logits, *flagNumNodes)
-		logits = Normalize(ctx, logits)
+		logits = layers.DenseWithBias(scope, logits, *flagNumNodes)
+		logits = Normalize(scope, logits)
 		logits = Add(logits, residual)
 	}
 
 	// Final logits layer with dimension `[batch, vocabulary_size]`
 	{
-		ctx := ctx.In("readout")
+		scope := scope.In("readout")
 		if *flagDropoutRate > 0 {
-			logits = layers.Dropout(ctx.In("dropout"), logits, dropoutRate)
+			logits = layers.Dropout(scope.In("dropout"), logits, dropoutRate)
 		}
 		logits = Tanh(logits)
 
-		logits = layers.DenseWithBias(ctx, logits, vocabSize)
+		logits = layers.DenseWithBias(scope, logits, vocabSize)
 	}
 
 	// Calculate loss associated to prediction of masked word.
 	theLoss := losses.SparseCategoricalCrossEntropyLogits([]*Node{wordToken}, []*Node{logits})
 	theLoss = ReduceAllMean(theLoss)
 	theLoss = MulScalar(theLoss, *flagMaskWordTask)
-	train.AddLoss(ctx, theLoss)
+	train.AddLoss(scope, theLoss)
 }
 */

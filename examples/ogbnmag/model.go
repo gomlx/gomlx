@@ -41,12 +41,12 @@ func getMagVar(scope *model.Scope, g *Graph, name string) *Node {
 
 // logitsGraph converts the readout state of the seed nodes to its logits.
 func logitsGraph(scope *model.Scope, readout *Node) *Node {
-	//useKan := model.GetParamOr(ctx, "kan", false)
+	//useKan := model.GetParamOr(scope, "kan", false)
 	//if useKan {
-	//	readout = kan.New(ctx.In("logits_kan"), readout, NumLabels).NumHiddenLayers(0, 0).Done()
+	//	readout = kan.New(scope.In("logits_kan"), readout, NumLabels).NumHiddenLayers(0, 0).Done()
 	//} else {
 	//	// Normal FNN
-	//	readout = layers.DenseWithBias(ctx.In("logits"), readout, NumLabels)
+	//	readout = layers.DenseWithBias(scope.In("logits"), readout, NumLabels)
 	//}
 	readout = layers.DenseWithBias(scope.In("logits"), readout, NumLabels)
 	return readout
@@ -79,20 +79,20 @@ func MagModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 
 	// We disable checking for re-use of scopes because we deliberately reuse
 	// kernels in our GNN.
-	ctxModel := scope.In("model")
+	modelScope := scope.In("model")
 
 	strategy := spec.(*sampler.Strategy)
-	graphStates, _ := FeaturePreprocessing(ctxModel, strategy, inputs)
+	graphStates, _ := FeaturePreprocessing(modelScope, strategy, inputs)
 
 	if NanLogger != nil {
 		fmt.Println("*** Using NanLogger ***")
 	}
 	gnn.NanLogger = NanLogger
-	gnn.NodePrediction(ctxModel, strategy, graphStates)
+	gnn.NodePrediction(modelScope, strategy, graphStates)
 
 	// Last layer outputs the logits for the `NumLabels` classes.
 	readoutState := graphStates[strategy.Seeds[0].Name]
-	readoutState.Value = logitsGraph(ctxModel, readoutState.Value)
+	readoutState.Value = logitsGraph(modelScope, readoutState.Value)
 
 	if klog.V(2).Enabled() {
 		// Log the largest non-parameter node.
@@ -138,7 +138,7 @@ func FeaturePreprocessing(scope *model.Scope, strategy *sampler.Strategy, inputs
 	// Learnable embeddings context: it may benefit from dropout to have the model handle well
 	// the cases of unknown (zero) embeddings.
 	// They shouldn't be initialized with GlorotUniform, but instead with small random uniform values.
-	ctxEmbed := scope.In("embeddings").
+	embedScope := scope.In("embeddings").
 		WithInitializer(initializer.RandomUniformFn(scope, -0.05, 0.05))
 	embedDropoutRate := model.GetParamOr(scope, ParamEmbedDropoutRate, 0.0)
 
@@ -170,7 +170,7 @@ func FeaturePreprocessing(scope *model.Scope, strategy *sampler.Strategy, inputs
 		if rule.NodeTypeName == "institutions" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
-			embedded := layers.Embedding(getSubScope(ctxEmbed, "institutions"), indices,
+			embedded := layers.Embedding(getSubScope(embedScope, "institutions"), indices,
 				dtypeEmbed, (NumInstitutions+splitEmbedTables-1)/splitEmbedTables, institutionsEmbedSize, false)
 			if graphInputs[name].Mask != nil {
 				embedMask := layers.DropoutStatic(scope, graphInputs[name].Mask, embedDropoutRate)
@@ -189,7 +189,7 @@ func FeaturePreprocessing(scope *model.Scope, strategy *sampler.Strategy, inputs
 		if rule.NodeTypeName == "fields_of_study" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
-			embedded := layers.Embedding(getSubScope(ctxEmbed, "fields_of_study"),
+			embedded := layers.Embedding(getSubScope(embedScope, "fields_of_study"),
 				indices, dtypeEmbed, (NumFieldsOfStudy+splitEmbedTables-1)/splitEmbedTables,
 				fieldsOfStudyEmbedSize, false)
 

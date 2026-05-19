@@ -31,7 +31,7 @@ type Classifier struct {
 	// backend is created with defaults, which uses GOMLX_BACKEND if it is set.
 	backend compute.Backend
 
-	// ctx with the model's weights.
+	// scope with the model's weights.
 	scope *model.Scope
 
 	// exec is used to execute the model with a model.
