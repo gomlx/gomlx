@@ -11,7 +11,7 @@ import (
 	"io"
 
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/ml/train"
 )
 
 // takeDataset implements a `train.Dataset` that only yields `take` batches.

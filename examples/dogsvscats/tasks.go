@@ -14,7 +14,7 @@ import (
 	"github.com/gomlx/gomlx/examples/inceptionv3"
 	"github.com/gomlx/gomlx/ml/datasets"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/fsutil"
 )
 

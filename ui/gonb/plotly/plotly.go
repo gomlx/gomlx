@@ -25,7 +25,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
-	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/support/sets"
 	"github.com/gomlx/gomlx/ui/plots"

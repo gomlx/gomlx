@@ -36,7 +36,7 @@ import (
 	mg "github.com/erkkah/margaid"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/ml/train"
 	stdplots "github.com/gomlx/gomlx/ui/plots"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/pkg/errors"

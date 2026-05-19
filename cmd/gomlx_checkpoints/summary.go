@@ -10,7 +10,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
 )
 
 func Summary(stores []*model.Store, scopes []*model.Scope, names []string) {

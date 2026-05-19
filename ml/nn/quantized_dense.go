@@ -7,7 +7,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/ggml"
-	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activations"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 

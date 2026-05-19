@@ -11,7 +11,7 @@ import (
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	mldata "github.com/gomlx/gomlx/ml/datasets"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/sets"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"

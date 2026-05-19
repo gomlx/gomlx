@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/gomlx/gomlx/ml/datasets"
-	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/fsutil"
 
 	"io"

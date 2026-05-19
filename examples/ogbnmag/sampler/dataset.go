@@ -9,7 +9,7 @@ import (
 
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/ml/train"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 

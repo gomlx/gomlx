@@ -17,12 +17,12 @@ import (
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
+	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
-	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
@@ -93,6 +93,7 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 	check(flowerIDs.Save(flowerIdsPath))
 	return checkpoint, noise, flowerIDs
 }
+
 // TrainWithStore with hyperparameters given in Store.
 // paramsSet enumerate the context parameters that were set and should override values loaded from a checkpointHandler.
 func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
@@ -105,8 +106,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	config := NewConfig(backend, scope, dataDir, paramsSet)
 
 	// Checkpoints saving.
-	checkpoint, samplesNoise, samplesFlowerIds := config.AttachCheckpoint(checkpointPath)
-...
+	checkpointHandler, samplesNoise, samplesFlowerIds := config.AttachCheckpoint(checkpointPath)
 	if samplesNoise == nil {
 		klog.Exitf("A checkpoint directory name with --checkpoint is required, none given")
 	}

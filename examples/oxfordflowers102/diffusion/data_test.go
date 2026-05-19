@@ -11,7 +11,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/ml/datasets"
-	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/stretchr/testify/require"
 )
 

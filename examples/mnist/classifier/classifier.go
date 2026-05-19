@@ -22,7 +22,7 @@ import (
 	"github.com/gomlx/gomlx/examples/mnist"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
-	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/ml/train"
 )
 
 // Classifier holds the MNIST model compiled.

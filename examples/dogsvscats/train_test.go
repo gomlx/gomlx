@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
 
